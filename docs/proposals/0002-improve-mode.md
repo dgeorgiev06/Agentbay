@@ -1,8 +1,8 @@
 # Proposal 0002: `improve` framework mode
 
-Status: implemented on branch feat/improve (2026-10-27). Approved in principle by the user on 2026-10-27.
-Open points decided at implementation: redaction keeps structure and metadata only (text only with
-`keepText`, after a secret scan); retention default 90d for verified/wontfix findings (config `retention`).
+Status: implemented (see Deferred) on branch feat/improve. Approved by the user on 2026-10-27, with the decisions below.
+Open points decided at implementation: redaction keeps structure and metadata only, always (no conversation text
+is stored, no opt-in); retention default 90d for verified/wontfix findings (config `retention`).
 
 ## Problem
 Failures and waste repeat across sessions: review churn, blockers found late, mid-run spec drift, unapproved scope, slow steps, permission friction. The code and modes also accumulate slop, unused implementation and inefficiency, and can drift from the framework's intent while still passing lint. Nothing collects these with evidence or routes them to a fix.
@@ -79,7 +79,8 @@ id, lens, kind, title, pattern, evidence[] (episode ids, file:line, measurements
 - (must) A recurring pattern needs ≥2 episodes, unless it is marked severe.
 - (must) Unused means both unreferenced and never called.
 - (should) Prefer preventive fixes (a new lint or conformance rule, a test). A recurring category produces a rule proposal.
-- (must_not) Modify artifacts. Implement an item without human approval. Store secrets or personal content from transcripts; excerpts are minimal and redacted.
+- (must_not) Modify artifacts. Implement an item without human approval. Store secrets or personal content from transcripts; nothing but structure and metadata is kept.
+- (should) A recurring category produces a rule proposal (improve.triage DOD-4 / R-3: a category with 2 or more findings gets a check, lint or conformance-rule proposal).
 
 ### Environment `improve-local`
 - **Reads:** project, kit, ledger, `~/.claude/projects` transcripts.
@@ -96,3 +97,11 @@ Richer ledger events: duration, tokens and cost per step; permission prompts and
 ### Open (decide at implementation)
 - Redaction rules for transcripts.
 - The retention window for the improve store.
+
+## Deferred
+- **Quadratic work** (inefficient lens): not implemented. A deterministic detector would need data-flow analysis
+  to tell a nested loop over the same collection from a harmless one; the heuristic version produced mostly noise.
+  Reconsider with measured step timings (slow-step findings) pointing at a specific function.
+- **Config keys nothing reads** (unused lens): only mode config keys are graph nodes; arbitrary
+  `agentbay.config.yaml` keys are not tracked.
+

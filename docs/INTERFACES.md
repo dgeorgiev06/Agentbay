@@ -82,7 +82,7 @@ shims, `.agentbay/guard.json` and the PreToolUse guard hook (Bash and every file
 ## 6. Dispatcher
 `bay call <mode>.<endpoint> '<json>'` -> `{callId, status, output | next, checks, review, cost}`.
 Status: `done | partial | blocked | failed | needs-agent | awaiting-approval`.
-`bay submit <callId> <stepId> '<json>'` resumes an agentic step; `bay show <callId>` prints the current state; approval gates pass only with `bay approve <callId>` in an interactive terminal. A role's generated shim
+`bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic step (usage goes to the step's ledger event); `bay show <callId>` prints the current state; approval gates pass only with `bay approve <callId>` in an interactive terminal. A role's generated shim
 `.agentbay/roles/<role>/use <iface>/v<N>.<ep> '<json>'` (role fixed inside, read-only endpoints in the role's `uses`)
 is the only way an agent reads connector data; the guard hook stops subagents from running anything else. Secret values are redacted from everything it returns or logs.
 
@@ -93,7 +93,7 @@ Plain fenced YAML blocks (```` ```task ```` / ```` ```result ````). One delivera
 Append-only JSONL. Agent runs: `spawned`, `completed`, `failed`, `reclaimed`, `note` (hooks/coordinator; a note
 attaches to a run by runId/taskId or stays standalone, never creating a run; `data.kind` is `note`,
 `instruction-change` or `decision`).
-Guard: `permission.denied`, `permission.prompt` (tool, agent, reason; never the command).
+Guard: `permission.denied` (tool, agent, reason; never the command).
 Optional on any event: `durationMs`, `tokens {input, output, cacheRead, cacheCreation, total}`, `costUsd`.
 Every value is secret-scanned (`bay/secretscan.py`) and redacted (`vault.redact`) before it is written.
 Data: `data.read` (a role read connector data through its use shim; role, env, endpoint, item count).
@@ -103,10 +103,11 @@ with `mode, endpoint, step, role, agent, env, cost`.
 ## 9. improve capability interfaces (framework)
 | interface | endpoints | connector(s) in `improve-local` |
 |---|---|---|
-| `session.events/v1` | `episodes {since, until}` -> `session.episode/v1[]` + stats | `ledger`, `claude-transcripts`, `git` |
+| `session.events/v1` | `episodes {since, until}` -> `session.episode/v1[]` + stats (read-only) | `ledger`, `claude-transcripts`, `git` |
 | `review.verdicts/v1` | `verdicts {since, until}` -> verdicts with round and subject | `ledger` |
 | `artifacts.read/v1` | `files`, `graph` (nodes with refs, edges), `text` (refuses .agentbay/.claude/.git/.env) | `artifact-graph` |
-| `improve.findings/v1` | `scan`, `audit`, `record`, `query`, `triage`, `decide`, `backlog`, `claim`, `handoff`, `verify` | `improve-store` |
+| `improve.detect/v1` | `sessions`, `artifacts`, `resolve`, `recheck` (read-only: candidates, never writes) | `improve-detect` |
+| `improve.findings/v1` | `upsert`, `annotate`, `query`, `get`, `triage`, `decide`, `backlog`, `claim`, `handoff`, `verify` (storage) | `improve-store` |
 
 `improve.finding/v1`: `id, fingerprint, lens, kind, title, pattern, evidence[] {kind: episode|file|measurement|rule|commit,
 ref, detail?, rewrite?, value?}, scope, severity, measure?, costEstimate?, rootCause?, proposedFix?, route, impact?,

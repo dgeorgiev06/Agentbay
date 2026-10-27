@@ -74,8 +74,8 @@ framework/             shipped with the kit, never edited by users:
   roles/               researcher, builder, reviewer, forge-lead, improve-lead, improve-analyst, auditor
   agents/ envs/        worker, critic, author, framework-builder, improve-main, improver /
                        workspace, local-authoring, framework-dev, improve-local
-  interfaces/ connectors/  session.events, review.verdicts, artifacts.read, improve.findings /
-                       ledger, git, claude-transcripts, artifact-graph, improve-store
+  interfaces/ connectors/  session.events, review.verdicts, artifacts.read, improve.detect, improve.findings /
+                       ledger, git, claude-transcripts, artifact-graph, improve-detect, improve-store
 coordinator/           Chief of Staff prompt + slash commands
 bay/                   resolver, lint, dispatcher, connectors runtime, adapter, ledger, hook, CLI;
                        bay/improve/ (transcript parser, detectors, conformance checks, findings store)
@@ -104,10 +104,10 @@ tests/                 python3 tests/run.py
 - **scan** (sessions): turns the ledger, git history and your Claude Code transcripts (`~/.claude/projects`) into
   redacted episodes and runs detectors: review rounds above 1, the same rule failing repeatedly, blockers a check
   could catch, mid-run instruction changes (`bay note <ref> "..." --instruction`), out-of-scope additions, slow or
-  costly steps, repeated identical tool calls, permission prompts/denials, interrupts, reverts and churn.
-  Transcripts are parsed defensively and **redacted by default**: only structure and metadata (counts, tool names,
-  input hashes, durations, tokens, cost) are kept. `connectors.claude-transcripts.keepText: true` keeps short
-  excerpts, always after a secret scan.
+  costly steps, repeated identical tool calls, permission prompts/denials, interrupts, repeated status questions,
+  environment gaps (missing commands/modules, blocked network, sandbox denials), reverts and churn.
+  Transcripts are parsed defensively and **always redacted**: only structure and metadata (counts, tool names,
+  input hashes, durations, tokens, cost) are kept, never conversation text. Symlinks are not followed.
 - **audit** (code and content): slop (filler phrases, duplicate rules, comments that restate code, padded
   messages), unused code and concepts (no reference AND no ledger use), inefficiency (whole-store reads per query,
   calls in loops, oversized role context) and the semantic rules in `framework/rules/conformance.yaml`.
@@ -118,11 +118,16 @@ tests/                 python3 tests/run.py
   **implement** runs only on demand for an approved item, behind an approval gate, and produces a forge.extend
   proposal draft or a mode-fix task envelope. **verify** re-runs the detector after the fix ships.
 
-Weekly run from cron (agentic steps come back as step plans for your next Claude Code session):
+Weekly run from cron:
 
 ```cron
 17 8 * * 1  cd ~/code/my-repo && .agentbay/bay improve weekly >> .agentbay/data/improve/weekly.log 2>&1
 ```
+
+`bay improve weekly` runs scan, audit and triage. Their analysis steps need agents, so it usually stops with
+`"status": "pending"` and lists the pending calls. In your next Claude Code session ask the Chief of Staff to finish
+them (it runs each step plan from `.agentbay/bay show <callId>`), then write the report with
+`.agentbay/bay call improve.backlog '{}'`. If nothing is pending, weekly writes the report itself.
 
 Everything improve writes stays in `.agentbay/data/improve/` (env `improve-local`: no network, no secrets). Its
 roles read findings only through their use shims; transcript files are read only by the dispatcher.

@@ -122,12 +122,22 @@ class Dispatcher:
         conns = model.connectors_of(env.spec["bind"].get(iface))
         if not conns:
             raise CallError(f"role {role}: {iface} is not bound to a connector in env {env.name}")
-        outs = {c: self._invoke(env.name, c, iface, ep, inp or {}, settings={}, caps={}) for c in conns}
+        settings = self._use_settings(r, iface)
+        outs = {c: self._invoke(env.name, c, iface, ep, inp or {}, settings=settings, caps={}) for c in conns}
         out = outs[conns[0]] if len(conns) == 1 else merge_outputs(outs)
         n = len(out.get("posts", [])) if isinstance(out, dict) else None
         ledger.append(self.project, "data.read", f"use:{role}", source="dispatcher", role=role, env=env.name,
                       summary=target, data={"input": inp or {}, **({"items": n} if n is not None else {})})
         return secretscan.scrub_obj(json.loads(vault.redact(json.dumps(out, ensure_ascii=False))))
+
+    def _use_settings(self, role, iface: str) -> dict:
+        """Which mode a role's read belongs to: the one mode of the role that needs `iface`. Per-mode stores
+        (corpus-store) need it; a role serving several such modes is ambiguous until per-mode placement exists."""
+        modes = [m for m in self.sys.modes.values() if role.name in m.roles and iface in m.needs]
+        if len(modes) > 1:
+            raise CallError(f"role {role.name} reads {iface} for several modes ({', '.join(m.name for m in modes)}); "
+                            f"give each mode its own reader role so a read reaches one mode's store")
+        return {"mode": modes[0].name} if modes else {}
 
     def run_capability(self, mode_name: str, run: str, args: dict) -> dict:
         """Run one connector endpoint of a mode's capability outside any workflow, in the env its code steps use.
@@ -256,6 +266,7 @@ class Dispatcher:
 
     def _settings(self, mode) -> dict:
         s = dict(mode.config)
+        s["mode"] = mode.name                     # connectors that keep per-mode data (corpus-store) key on it
         if "lookbackMax" in mode.constraints:
             s["lookbackMax"] = mode.constraints["lookbackMax"]
         return s

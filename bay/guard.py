@@ -60,8 +60,8 @@ GIT_BAD_FLAGS = ("--output", "--ext-diff", "--textconv", "--no-index", "--exec",
                  "--pathspec-from-file", "-O")
 INTERPRETERS = ("sh", "bash", "zsh", "dash", "ksh", "fish", "node", "perl", "ruby", "php", "deno", "bun")
 EVAL_FLAGS = ("-c", "-e", "--eval", "-E", "-r")
-PROBES = (".agentbay/guard.json", ".agentbay/bay", ".agentbay/roles/role/use", ".agentbay/data/feeds/corpus.db",
-          ".agentbay/data/feeds/corpus.db-wal", ".agentbay/calls/C-0.json", ".agentbay/ledger/events.jsonl",
+PROBES = (".agentbay/guard.json", ".agentbay/bay", ".agentbay/roles/role/use", ".agentbay/data/feeds/feed-briefing/corpus.db",
+          ".agentbay/data/feeds/feed-briefing/corpus.db-wal", ".agentbay/calls/C-0.json", ".agentbay/ledger/events.jsonl",
           ".claude/settings.json", ".claude/settings.local.json", ".claude/agents/agent.md")
 
 

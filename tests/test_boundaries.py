@@ -41,8 +41,8 @@ def test_role_shim_reads_only_its_grants_and_cannot_write_spend_or_delete():
         for ep in ("items.store/v1.sync", "items.store/v1.prune", "items.source/v1.fetch"):
             r = sh(p, str(shim), ep, "{}")
             assert r.returncode != 0 and "not granted" in r.stderr, (ep, r.stderr)
-        before = (p / ".agentbay/data/feeds/corpus.db").read_bytes()
-        assert before == (p / ".agentbay/data/feeds/corpus.db").read_bytes()
+        before = (p / ".agentbay/data/feeds/feed-briefing/corpus.db").read_bytes()
+        assert before == (p / ".agentbay/data/feeds/feed-briefing/corpus.db").read_bytes()
     finally:
         cleanup(p)
 
@@ -81,7 +81,7 @@ def test_guard_scopes_bash_per_subagent():
                ("briefing-analyst", f"{shim} items.store/v1.query '{{}}'; .agentbay/bay call feed-briefing.sync"),
                ("briefing-analyst", f"{shim} items.store/v1.query \"$(cat .agentbay/data/feeds/state.json)\""),
                ("briefing-analyst", f"{shim} items.store/v1.query '{{}}' > /tmp/x"),
-               ("briefing-analyst", "cat .agentbay/data/feeds/corpus.db"),
+               ("briefing-analyst", "cat .agentbay/data/feeds/feed-briefing/corpus.db"),
                ("briefing-analyst", "security find-generic-password -s agentbay -a X_REFRESH_TOKEN -w"),
                ("reviewer", "git push origin main"), ("reviewer", "git diff && rm -rf ."),
                ("builder", ".agentbay/bay secret set X_REFRESH_TOKEN"),
@@ -192,7 +192,7 @@ def test_store_is_not_reachable_with_file_tools():
     p = built()
     try:
         sh(p, str(p / ".agentbay/bay"), "call", "feed-briefing.sync", "{}")
-        store = ".agentbay/data/feeds/corpus.db"
+        store = ".agentbay/data/feeds/feed-briefing/corpus.db"
         for agent in ("briefing-analyst", "builder", "reviewer"):
             assert tool(p, agent, "Read", {"file_path": store})[0] == "deny"
             assert tool(p, agent, "Write", {"file_path": store, "content": "{}"})[0] == "deny"
@@ -210,7 +210,7 @@ def test_path_normalization_and_symlinks():
         (p / "docs").mkdir()
         (p / "docs/link").symlink_to(p / ".agentbay")
         for path in ("docs/link/guard.json", "docs/../.agentbay/guard.json", "./.agentbay//guard.json",
-                     f"{p}/docs/./../.agentbay/data/feeds/corpus.db"):
+                     f"{p}/docs/./../.agentbay/data/feeds/feed-briefing/corpus.db"):
             assert tool(p, "builder", "Write", {"file_path": path, "content": "x"})[0] == "deny", path
             assert tool(p, "builder", "Read", {"file_path": path})[0] == "deny", path
     finally:
@@ -258,7 +258,7 @@ def test_missing_agent_type_is_treated_as_an_unknown_subagent():
     try:
         for t, ti in (("Bash", {"command": ".agentbay/bay call feed-briefing.sync '{}'"}),
                       ("Bash", {"command": "./.agentbay/roles/briefing-analyst/use items.store/v1.query '{}'"}),
-                      ("Read", {"file_path": ".agentbay/data/feeds/corpus.db"}),
+                      ("Read", {"file_path": ".agentbay/data/feeds/feed-briefing/corpus.db"}),
                       ("Write", {"file_path": ".agentbay/guard.json", "content": "{}"})):
             assert tool(p, None, t, ti, agent_id="a9")[0] == "deny", (t, ti)
         # an unknown subagent may still do unrelated work
@@ -338,7 +338,7 @@ def test_b1_case_variants_on_case_insensitive_filesystem():
         for path in (".AGENTBAY/guard.json", ".Agentbay/roles/briefing-analyst/use", ".CLAUDE/settings.json",
                      ".Git/config", "src/.GIT/hooks/pre-commit", "claude.MD", ".MCP.json", ".ENV.local"):
             assert decide(g, "builder", "Write", {"file_path": path, "content": "x"}) == "deny", path
-        assert decide(g, "briefing-analyst", "Read", {"file_path": ".AgentBay/data/feeds/corpus.db"}) == "deny"
+        assert decide(g, "briefing-analyst", "Read", {"file_path": ".AgentBay/data/feeds/feed-briefing/corpus.db"}) == "deny"
         assert decide(g, "builder", "Glob", {"pattern": ".AGENT*/**"}) == "deny"
         assert decide(g, "builder", "Write", {"file_path": "src/app.py", "content": "x"}) == "pass"
         g = guard_for(p, ci=False)                    # case-sensitive disk: a different, harmless directory
@@ -426,7 +426,7 @@ def test_sb_unknown_subagents_interpreter_code_and_globs():
         g = guard_for(p)
         for cmd in ("bash -c 'cat x'", "sh -c ls", "zsh -c ls", "python3 -c 'print(1)'", "python -c x",
                     "node -e 'x'", "/usr/bin/python3.12 -c x", "cat .agent*/guard.json", "ls .clau?e/",
-                    "cat .agentbay/data/feeds/corpus.db"):
+                    "cat .agentbay/data/feeds/feed-briefing/corpus.db"):
             assert decide(g, None, "Bash", {"command": cmd}) == "deny", cmd
             assert decide(g, "Explore", "Bash", {"command": cmd}) == "deny", cmd
         for cmd in ("ls src/*.py", "python3 script.py", "cat README.md"):

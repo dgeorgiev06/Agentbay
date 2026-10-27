@@ -1,6 +1,7 @@
 """corpus-store: items.store/v1 on one SQLite file per mode (stdlib sqlite3).
 
-File: <env write path>/corpus.db (e.g. .agentbay/data/feeds/corpus.db), WAL mode, mode 0600.
+File: <env write path>/<mode>/corpus.db (e.g. .agentbay/data/feeds/feed-briefing/corpus.db), one per mode
+so two briefing modes on one env never share selector tags; WAL mode; the file, -wal and -shm are 0600.
 Schema version in PRAGMA user_version (SCHEMA_VERSION); older stores are converted by `forge.migrate`.
 
   items           one row per item, unique on (source, ext_id); kind-specific fields in `ext` (JSON)
@@ -8,7 +9,7 @@ Schema version in PRAGMA user_version (SCHEMA_VERSION); older stores are convert
   items_fts       FTS5 over title, body and author, kept in step by triggers (own content, so agents can
                   query it without being allowed to read `items` directly). Missing when this Python's
                   SQLite has no FTS5: search then falls back to LIKE, and `bay validate` says so.
-  (item title and text are secret-scrubbed before they are stored, and every read is scrubbed again)
+  (every item string but its identity is secret-scrubbed before it is stored; every read is scrubbed again)
   state           key -> JSON: cursors (per connector and native query), coverage, budget (per UTC month),
                   deleted (<source>:<extId> never re-stored), checked (last deletion check), selectors
                   (the set last applied)
@@ -93,10 +94,11 @@ def create_schema(con: sqlite3.Connection) -> bool:
 def open_rw(path: Path) -> sqlite3.Connection:
     """Writer connection (dispatcher code steps only): creates the file and schema on first use."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    new = not path.exists()
+    if not path.exists():
+        # the corpus is the user's mail/posts: owner-only. SQLite creates -wal and -shm with the database
+        # file's permissions, so creating the file 0600 first covers all three
+        os.close(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
     con = sqlite3.connect(path, isolation_level=None)
-    if new:
-        os.chmod(path, 0o600)                      # the corpus is the user's mail/posts: owner-only
     con.execute("PRAGMA journal_mode = WAL")
     con.execute("PRAGMA busy_timeout = 5000")
     ver = con.execute("PRAGMA user_version").fetchone()[0]
@@ -113,7 +115,28 @@ def open_rw(path: Path) -> sqlite3.Connection:
     return con
 
 
+IDENTITY = ("id", "extId", "source", "kind", "createdAt", "fetchedAt")
+
+
+def scrub_item(it: dict) -> dict:
+    """Every string in an item except its identity and timestamps, through vault.redact + the pattern secret
+    scan: author, title, text, url, container, labels, threadId and every string inside kind fields (ext).
+    Done before anything is stored, because scanning only on read can be evaded with SQL transforms
+    (upper(), hex(), substr() pieces); a secret that is never stored cannot be rebuilt."""
+    def walk(v):
+        if isinstance(v, str):
+            return scrub(v)
+        if isinstance(v, list):
+            return [walk(x) for x in v]
+        if isinstance(v, dict):
+            return {k: walk(x) for k, x in v.items()}
+        return v
+    return {k: (v if k in IDENTITY else walk(v)) for k, v in it.items()}
+
+
 def item_row(it: dict) -> dict:
+    """The one way an item becomes an `items` row (sync and `bay migrate` both use it); scrubs first."""
+    it = scrub_item(it)
     au = it.get("author") or {}
     ext = {k: v for k, v in it.items() if k not in ENVELOPE}
     if au.get("email") and au.get("handle"):
@@ -184,7 +207,10 @@ def _max_id(a: str | None, b: str) -> str:
 class CorpusStore:
     def __init__(self, ctx):
         self.ctx = ctx
-        self.path: Path = ctx.data_dir / DB_NAME
+        mode = ctx.settings.get("mode")
+        if not mode:
+            raise StoreError("corpus-store needs the calling mode (settings.mode): it keeps one store per mode")
+        self.path: Path = ctx.data_dir / mode / DB_NAME
         self._schemas: dict[str, dict] = {}
 
     # ------------------------------------------------------------ helpers
@@ -282,9 +308,8 @@ class CorpusStore:
 
     def _upsert(self, con, it: dict, sels: list[dict], now) -> tuple[bool, bool]:
         """(new, kept). Labels union with what is stored; the item is kept only if it matches a selector.
-        Secrets are scrubbed before anything is stored: scanning only on read could be evaded with SQL
-        transforms (upper(), hex(), substr() pieces), and a secret that is never stored cannot be rebuilt."""
-        it = {**it, **{k: scrub(it[k]) for k in ("title", "text") if isinstance(it.get(k), str)}}
+        Secrets are scrubbed before anything is stored (scrub_item)."""
+        it = scrub_item(it)                                      # match on exactly what will be stored
         old = con.execute("SELECT pk, labels, container FROM items WHERE source = ? AND ext_id = ?",
                           (it["source"], it["extId"])).fetchone()
         labels = set(it.get("labels") or []) | ({it["container"]} if it.get("container") else set())
@@ -622,10 +647,8 @@ class CorpusStore:
         try:
             if sbx.has_fts(con):
                 engine = "fts5"
-                sql = (f"SELECT v.id, v.url, v.author, v.createdAt, v.title, v.matched, "
-                       f"snippet(items_fts, 1, '[', ']', '…', 16) AS snippet "
-                       f"FROM items_fts f JOIN v_items v ON v.rid = f.rowid "
-                       f"{_where(['items_fts MATCH ?', *where])} ORDER BY bm25(items_fts), v.createdAt DESC LIMIT ?")
+                sql = (f"SELECT v.id, v.url, v.author, v.createdAt, v.title, v.matched, v.snippet "
+                       f"FROM v_fts v {_where(['v.fts MATCH ?', *where])} ORDER BY v.rank, v.createdAt DESC LIMIT ?")
                 args = [" ".join(f'"{w}"' for w in words), *args]
             else:
                 engine = "like"
@@ -643,12 +666,12 @@ class CorpusStore:
         limits = {"rows": sbx.DEFAULT_ROWS, "maxRows": sbx.MAX_ROWS, "bytes": sbx.MAX_BYTES, "timeMs": sbx.TIME_MS,
                   "cellChars": sbx.CELL_CHARS}
         cols = {v: [{"name": n, "type": t, "description": d} for n, t, d in sbx.COLUMNS[v]] for v in sbx.VIEWS}
-        fts = {"table": sbx.FTS, "columns": ["title", "body", "author"], "join": "items_fts.rowid = v_items.rid",
-               "example": "SELECT v.id, v.url, snippet(items_fts, 1, '[', ']', '…', 12) FROM items_fts "
-                          "JOIN v_items v ON v.rid = items_fts.rowid WHERE items_fts MATCH 'staking' "
-                          "ORDER BY bm25(items_fts) LIMIT 20"}
+        fts = {"view": sbx.FTS_VIEW, "indexes": ["title", "text", "author"],
+               "example": "SELECT id, url, snippet FROM v_fts WHERE fts MATCH 'staking AND custody' "
+                          "ORDER BY rank LIMIT 20"}
+        data_views = [v for v in sbx.VIEWS if v != sbx.FTS_VIEW]
         if not self.path.exists():
-            return {"views": [{"name": v, "columns": cols[v], "rows": 0} for v in sbx.VIEWS],
+            return {"views": [{"name": v, "columns": cols[v], "rows": 0} for v in data_views],
                     "fts": {**fts, "available": sbx.fts5_available()}, "functions": sorted(sbx.FUNCTIONS),
                     "limits": limits}
         con = self._ro()
@@ -656,7 +679,7 @@ class CorpusStore:
             state = load_state(con)
             fts["available"] = sbx.has_fts(con)
             views = []
-            for v in sbx.VIEWS:
+            for v in data_views:
                 n = con.execute(f"SELECT count(*) FROM {v}").fetchone()[0]
                 samples = {}
                 for c in ("source", "kind", "container", "author"):
@@ -669,7 +692,9 @@ class CorpusStore:
                               "createdAt": {"min": span[0], "max": span[1]}})
         finally:
             con.close()
-        if not fts["available"]:
+        if fts["available"]:
+            views.append({"name": sbx.FTS_VIEW, "columns": cols[sbx.FTS_VIEW], "rows": views[0]["rows"]})
+        else:
             fts["note"] = "FTS5 is not available in this Python's SQLite: use search (LIKE) or LIKE in sql"
         return sbx.clean({"views": views, "fts": fts, "functions": sorted(sbx.FUNCTIONS), "limits": limits,
                           "coverage": self.coverage(state)})

@@ -25,11 +25,12 @@ def store(p, caps=None, settings=None, now=clock, fixture=None, env="local-feeds
         cfgp.write_text(yaml.safe_dump(cfg))
     s = system(p)
     return connect.instantiate(s, env, "corpus-store", "items.store/v1", p, caps=caps or {},
-                               settings={"lookbackMax": "30d", "selectors": HOME, **(settings or {})}, clock=now)
+                               settings={"lookbackMax": "30d", "selectors": HOME, "mode": "feed-briefing", **(settings or {})},
+                               clock=now)
 
 
 def db(p) -> Path:
-    return p / ".agentbay/data/feeds/corpus.db"
+    return p / ".agentbay/data/feeds/feed-briefing/corpus.db"
 
 
 def rows(p, sql="SELECT source || ':' || ext_id AS id FROM items ORDER BY ext_id"):
@@ -62,6 +63,13 @@ def test_schema_wal_user_version_fts_and_owner_only_file():
     assert con.execute("SELECT count(*) FROM items_fts WHERE items_fts MATCH 'firedancer'").fetchone()[0] == 0
     con.close()
     assert db(p).stat().st_mode & 0o777 == 0o600
+    con = sqlite3.connect(db(p))                    # a writer brings up -wal and -shm: same mode as the file
+    con.execute("BEGIN IMMEDIATE")
+    con.execute("UPDATE items SET title = 'x' WHERE ext_id = '1009'")
+    side = [Path(str(db(p)) + x) for x in ("-wal", "-shm")]
+    assert all(f.exists() and f.stat().st_mode & 0o777 == 0o600 for f in side), [oct(f.stat().st_mode) for f in side]
+    con.rollback()
+    con.close()
 
 
 def test_newer_schema_is_refused_with_the_fix():
@@ -234,7 +242,7 @@ def test_store_writes_only_inside_env_write_path():
     store(p).sync(lookback="3d")
     written = sorted(str(x.relative_to(p)) for x in p.rglob("*") if x.is_file())
     assert written[-1] == "agentbay.config.yaml"
-    assert written[:-1] and all(w.startswith(".agentbay/data/feeds/corpus.db") for w in written[:-1])
+    assert written[:-1] and all(w.startswith(".agentbay/data/feeds/feed-briefing/corpus.db") for w in written[:-1])
 
 
 def test_reads_return_only_items_from_bound_sources_and_never_write():
@@ -375,3 +383,55 @@ def test_like_fallback_when_fts5_is_missing():
     assert st.status()["engine"] == "like" and st.describe()["fts"]["available"] is False
     err = st.sql("SELECT rowid FROM items_fts")["error"]
     assert "items_fts" in err and "v_items" in err
+
+
+SECRETS = ("sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345", "hunter2hunter2",
+           "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c")
+
+
+def test_every_stored_column_is_scrubbed_at_ingest():
+    p = project()
+    st = store(p)
+    real = st.ctx.sources["fake"].fetch
+
+    def planted(**kw):
+        out = real(**kw)
+        it = out["items"][0]
+        it.update({"author": {"handle": f"h {SECRETS[0]}", "name": f"password={SECRETS[1]}"},
+                   "title": SECRETS[2], "url": f"https://example.com/?access_token={SECRETS[0]}",
+                   "container": f"home {SECRETS[0]}", "labels": ["home", f"api_key={SECRETS[0]}"],
+                   "threadId": SECRETS[2], "metrics": {"like_count": 1},
+                   "lang": f"secret={SECRETS[0]}"})
+        return out
+    st.ctx.sources["fake"].fetch = planted
+    st.sync(lookback="3d")
+    raw = db(p).read_bytes().decode("latin-1")
+    for sec in SECRETS:
+        assert sec not in raw and sec.upper() not in raw.upper()
+    box = store(p)
+    cols = ["id", "source", "extId", "kind", "author", "authorName", "title", "text", "url", "createdAt", "fetchedAt",
+            "container", "labels", "threadId", "matched"]
+    for c in cols:
+        for f in ("hex({})", "upper({})", "{}"):
+            out = json.dumps(box.sql(f"SELECT {f.format(c)} FROM v_items"))
+            for sec in SECRETS:
+                assert sec not in out and sec.upper() not in out.upper() and sec.encode().hex().upper() not in out
+    out = json.dumps(box.sql("SELECT hex(lang), upper(metrics) FROM v_posts"))
+    assert SECRETS[0] not in out and SECRETS[0].encode().hex().upper() not in out
+
+
+def test_two_modes_on_one_env_keep_separate_stores():
+    p = project()
+    a = store(p, settings={"mode": "feed-briefing", "selectors": [{"id": "home"}]})
+    b = store(p, settings={"mode": "news-briefing", "selectors": [{"id": "staking", "text": "staking"}]})
+    a.sync(lookback="3d")
+    b.sync(lookback="3d")
+    base = p / ".agentbay/data/feeds"
+    assert (base / "feed-briefing/corpus.db").exists() and (base / "news-briefing/corpus.db").exists()
+    assert a.status()["selectors"] == {"home": 7} and b.status()["selectors"] == {"staking": 5}
+    assert a.status()["stale"] is False and b.status()["stale"] is False     # neither re-tags the other
+    try:
+        store(p, settings={"mode": None})
+        raise AssertionError("expected StoreError")
+    except Exception as e:
+        assert "one store per mode" in str(e)

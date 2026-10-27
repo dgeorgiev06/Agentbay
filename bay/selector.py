@@ -6,7 +6,13 @@
 
 Fields: from, to, subject, text, in, has, since, not. A field takes one value or a list (any value matches).
 Fields of one selector are ANDed, selectors are ORed, and `not` excludes: an item is excluded when ANY
-field of its `not` block matches.
+field of its `not` block matches. Matching is case-insensitive (casefold).
+  from / to   a handle, a full address or a domain (`example.com`, `@example.com`). `*` is the only wildcard,
+              and only here: `*@bank.example`, `news*` (any run of characters)
+  subject     substring of the title;  text: substring of title or body (no wildcards)
+  in          a container or label, exactly (home, list:<id>, INBOX)
+  has         link | attachment
+  since       relative (7d) or ISO-8601
 
 Each source connector declares which fields its native search handles (connector.yaml spec.selectors:
 `native` or `local`; a field it does not list cannot be expressed). `split()` turns a selector into a
@@ -16,12 +22,14 @@ native query (narrows the fetch) and a local filter. The store always re-applies
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 
 from .util import parse_time
 
 FIELDS = ("from", "to", "subject", "text", "in", "has", "since", "not")
 NOT_FIELDS = ("from", "to", "subject", "text", "in", "has")
+HAS = ("link", "attachment")
 
 
 def _vals(v) -> list[str]:
@@ -31,15 +39,20 @@ def _vals(v) -> list[str]:
 
 
 def _norm(s: str) -> str:
-    return s.strip().lower().lstrip("@")
+    return s.strip().casefold().lstrip("@")
 
 
 def _addr_match(value: str, addrs: list[str]) -> bool:
-    """`value` is a handle, a full address, or a domain (`example.com` or `@example.com`)."""
+    """`value` is a handle, a full address, or a domain (`example.com` or `@example.com`); `*` matches any run
+    of characters (the only wildcard)."""
     v = _norm(value)
     for a in addrs:
         a = _norm(a)
         if not a:
+            continue
+        if "*" in v:              # `*` = any run of characters; everything else is literal
+            if re.fullmatch(".*".join(re.escape(part) for part in v.split("*")), a):
+                return True
             continue
         if a == v or ("@" in a and (a.endswith("@" + v) or a.split("@", 1)[1] == v)):
             return True
@@ -53,11 +66,11 @@ def _field(item: dict, field: str, values: list[str], now: datetime) -> bool:
     if field == "to":
         return any(_addr_match(v, list(item.get("to") or []) + list(item.get("cc") or [])) for v in values)
     if field == "subject":
-        t = (item.get("title") or "").lower()
-        return any(v.lower() in t for v in values)
+        t = (item.get("title") or "").casefold()
+        return any(v.casefold() in t for v in values)
     if field == "text":
-        t = f"{item.get('title') or ''}\n{item.get('text') or ''}".lower()
-        return any(v.lower() in t for v in values)
+        t = f"{item.get('title') or ''}\n{item.get('text') or ''}".casefold()
+        return any(v.casefold() in t for v in values)
     if field == "in":
         have = {_norm(x) for x in [item.get("container") or "", *(item.get("labels") or [])] if x}
         return any(_norm(v) in have for v in values)
@@ -70,12 +83,12 @@ def _field(item: dict, field: str, values: list[str], now: datetime) -> bool:
 
 
 def _has(item: dict, what: str) -> bool:
-    w = what.lower()
+    w = what.casefold()
     if w == "link":
         return "http://" in (item.get("text") or "") or "https://" in (item.get("text") or "")
     if w == "attachment":
         return bool(item.get("attachments"))
-    return bool(item.get(what))
+    raise ValueError(f"selector `has: {what}` is not one of {', '.join(HAS)}")
 
 
 def matches(item: dict, sel: dict, now: datetime) -> bool:

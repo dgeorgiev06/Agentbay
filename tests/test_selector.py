@@ -82,3 +82,22 @@ def test_validate_reports_unexpressible_fields_and_paid_local_fields():
     assert system(project({"modes": {"feed-briefing": {"selectors": [{"id": "s", "text": "staking"}]}}})).warnings == []
     g = gaps(KIT, project({"modes": {"feed-briefing": {"selectors": [{"id": "Bad Id"}]}}}))
     assert any("modes.feed-briefing" in x and "selectors/0/id" in x for x in g), g
+
+
+def test_casefold_wildcards_only_in_from_to_and_has_enum():
+    ger = dict(POST, author={"handle": "Straße"}, text="GROSSE Nachricht")
+    assert m(ger, {"id": "a", "from": "STRASSE"}) and m(ger, {"id": "a", "from": "straße"})   # ß casefolds to ss
+    assert m(ger, {"id": "a", "text": "große"})                        # casefold: ß == ss
+    assert m(MAIL, {"id": "a", "from": "*@bank.example"}) and m(MAIL, {"id": "a", "from": "ali*"})
+    assert m(MAIL, {"id": "a", "to": "*.example"}) and not m(MAIL, {"id": "a", "from": "*@other.example"})
+    assert not m(MAIL, {"id": "a", "from": "a.ice@bank.example"})      # `.` is literal, not a regex
+    assert not m(MAIL, {"id": "a", "subject": "q4*"})                  # no wildcards outside from/to
+    from helpers import model
+    sch = model.inline_refs(model.data_schema("selector/v1"))
+    assert model.schema_errors({"id": "a", "has": ["link", "attachment"]}, sch) == []
+    assert model.schema_errors({"id": "a", "has": "metrics"}, sch)
+    try:
+        m(MAIL, {"id": "a", "has": "metrics"})
+        raise AssertionError("expected ValueError")
+    except ValueError as e:
+        assert "link, attachment" in str(e)

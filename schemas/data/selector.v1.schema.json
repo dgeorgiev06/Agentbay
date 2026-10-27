@@ -28,7 +28,7 @@
           "minItems": 1
         }
       ],
-      "description": "Author handle, address, or domain."
+      "description": "Author handle, address, or domain. `*` matches any run of characters (the only wildcard, only in from/to)."
     },
     "to": {
       "oneOf": [
@@ -45,7 +45,7 @@
           "minItems": 1
         }
       ],
-      "description": "Recipient address or domain (to/cc)."
+      "description": "Recipient address or domain (to/cc). `*` matches any run of characters (the only wildcard, only in from/to)."
     },
     "subject": {
       "oneOf": [
@@ -62,7 +62,7 @@
           "minItems": 1
         }
       ],
-      "description": "Substring of the title/subject."
+      "description": "Substring of the title/subject (case-insensitive; no wildcards)."
     },
     "text": {
       "oneOf": [
@@ -79,7 +79,7 @@
           "minItems": 1
         }
       ],
-      "description": "Substring of title or text."
+      "description": "Substring of title or text (case-insensitive; no wildcards)."
     },
     "in": {
       "oneOf": [
@@ -101,19 +101,23 @@
     "has": {
       "oneOf": [
         {
-          "type": "string",
-          "minLength": 1
+          "enum": [
+            "link",
+            "attachment"
+          ]
         },
         {
           "type": "array",
           "items": {
-            "type": "string",
-            "minLength": 1
+            "enum": [
+              "link",
+              "attachment"
+            ]
           },
           "minItems": 1
         }
       ],
-      "description": "link | attachment | <item field that must be non-empty>."
+      "description": "link | attachment."
     },
     "since": {
       "type": "string",
@@ -208,18 +212,23 @@
         "has": {
           "oneOf": [
             {
-              "type": "string",
-              "minLength": 1
+              "enum": [
+                "link",
+                "attachment"
+              ]
             },
             {
               "type": "array",
               "items": {
-                "type": "string",
-                "minLength": 1
+                "enum": [
+                  "link",
+                  "attachment"
+                ]
               },
               "minItems": 1
             }
-          ]
+          ],
+          "description": "link | attachment."
         }
       }
     }

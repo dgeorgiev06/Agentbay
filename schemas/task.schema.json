@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/v1/Task",
+  "title": "Coordinator <-> worker protocol",
+  "$defs": {
+    "TaskEnvelope": {
+      "description": "What a coordinator hands a worker. Sent as a fenced ```task block at the top of the worker prompt.",
+      "type": "object",
+      "required": ["protocol", "taskId", "goal", "deliverable"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol": { "const": "TaskEnvelope/v1" },
+        "taskId": { "type": "string", "pattern": "^T-[0-9]{8}-[0-9a-z]{4}$" },
+        "parentTaskId": { "type": "string" },
+        "goal": { "type": "string" },
+        "context": { "type": "string" },
+        "inputs": { "type": "array", "items": { "type": "string" }, "description": "Paths, URLs, or prior taskIds." },
+        "constraints": { "type": "array", "items": { "type": "string" } },
+        "deliverable": { "type": "string", "description": "Concrete, checkable: what exists when this is done." },
+        "budget": { "type": "object", "properties": { "maxTurns": { "type": "integer" }, "maxMinutes": { "type": "integer" } } }
+      }
+    },
+    "Result": {
+      "description": "What a worker returns. Sent as a fenced ```result block at the end of its final message.",
+      "type": "object",
+      "required": ["protocol", "taskId", "status", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol": { "const": "Result/v1" },
+        "taskId": { "type": "string" },
+        "status": { "enum": ["done", "partial", "blocked", "failed"] },
+        "summary": { "type": "string", "maxLength": 1200 },
+        "artifacts": { "type": "array", "items": { "type": "string" }, "description": "Paths or URLs produced." },
+        "followups": { "type": "array", "items": { "type": "string" }, "description": "Work the worker saw but did not do." },
+        "blockers": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

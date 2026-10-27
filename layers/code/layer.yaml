@@ -1,0 +1,15 @@
+apiVersion: agentbay/v1
+kind: Layer
+metadata:
+  name: code
+  description: Edit files and run shell commands in the repo.
+  tier: domain
+spec:
+  requires: [base]
+  tools: [Edit, Write, Bash]
+  # Pre-approved command prefixes (Bash(<prefix>:*)). Anything else prompts you.
+  clis: [git status, git diff, git log, git add, git worktree]
+  prompt: |
+    Make the smallest change that meets the deliverable. Run the relevant tests
+    or a smoke check before reporting `done`; if you cannot, report `partial`
+    and say what is unverified. Never commit or push unless the task says so.

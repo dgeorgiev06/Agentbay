@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/v1/LedgerEvent",
+  "title": "LedgerEvent",
+  "description": "One line in .agentbay/ledger/events.jsonl. Append-only. System state is a fold over these events.",
+  "type": "object",
+  "required": ["v", "ts", "type", "runId"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "const": 1 },
+    "ts": { "type": "string", "format": "date-time" },
+    "type": { "enum": ["spawned", "completed", "failed", "reclaimed", "note"] },
+    "runId": { "type": "string", "description": "One agent instance. From the runtime (tool_use_id) or generated." },
+    "agent": { "type": "string" },
+    "taskId": { "type": "string" },
+    "sessionId": { "type": "string" },
+    "source": { "enum": ["hook", "coordinator", "cli"] },
+    "summary": { "type": "string" },
+    "data": { "type": "object" }
+  }
+}

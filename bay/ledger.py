@@ -13,8 +13,8 @@ from pathlib import Path
 RUN_TYPES = {"spawned", "completed", "failed", "reclaimed", "note"}
 STEP_TYPES = {"step.started", "step.completed", "step.failed", "step.skipped", "step.planned", "call.completed"}
 DATA_TYPES = {"data.read"}             # a role read connector data through its use shim
-# the guard hook's decisions for subagent tool calls: denied outright, or left to Claude Code's permission prompt
-PERMISSION_TYPES = {"permission.denied", "permission.prompt"}
+# the guard hook denied a subagent tool call (prompts are read from Claude Code transcripts instead)
+PERMISSION_TYPES = {"permission.denied"}
 TYPES = RUN_TYPES | STEP_TYPES | DATA_TYPES | PERMISSION_TYPES
 NOTE_KINDS = ("note", "instruction-change", "decision")
 

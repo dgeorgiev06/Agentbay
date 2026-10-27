@@ -376,24 +376,22 @@ class Guard:
         return False
 
 
-def record(project: Path, payload: dict, decision: str, reason: str, policy: dict) -> None:
-    """Ledger event for a subagent tool call the guard denied, or left to Claude Code's permission prompt
-    (an agentbay role running one of its env's command prefixes). Never raises: the decision stands regardless."""
+def record_denial(project: Path, payload: dict, reason: str) -> None:
+    """permission.denied ledger event (tool, agent, reason; never the command). Never raises: the decision
+    stands regardless; a failure is appended to .agentbay/ledger/hook-errors.log."""
     try:
-        etype = {"deny": "permission.denied", "pass": "permission.prompt"}.get(decision)
-        agent = payload.get("agent_type")
-        if etype == "permission.prompt" and not (payload.get("tool_name") == "Bash"
-                                                 and agent in policy.get("subagents", {})):
-            return
-        if etype is None:
-            return
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-        from bay import ledger
-        ledger.append(project, etype, payload.get("agent_id") or payload.get("session_id") or "guard",
-                      source="guard", agent=agent, sessionId=payload.get("session_id"),
-                      tool=payload.get("tool_name"), reason=(reason or "left to Claude Code's permission prompt")[:300])
-    except Exception:
-        pass
+        from bay import ledger, secretscan
+        reason = secretscan.scrub(reason or "denied")[:300]      # scrub first, then cut
+        ledger.append(project, "permission.denied", payload.get("agent_id") or payload.get("session_id") or "guard",
+                      source="guard", agent=payload.get("agent_type"), sessionId=payload.get("session_id"),
+                      tool=payload.get("tool_name"), reason=reason)
+    except Exception as e:  # the guard's decision must not depend on the ledger
+        try:
+            with open(project / ".agentbay" / "ledger" / "hook-errors.log", "a") as f:
+                f.write(f"guard: permission.denied not recorded ({type(e).__name__})\n")
+        except OSError:
+            pass
 
 
 def _emit(decision: str, reason: str) -> None:
@@ -413,8 +411,8 @@ def main() -> int:
         project = Path(os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd())
         policy = json.loads((project / POLICY).read_text())
         decision, reason = Guard(policy, project).decide(payload)
-        record(project, payload, decision, reason, policy)
         if decision == "deny":
+            record_denial(project, payload, reason)
             print(reason, file=sys.stderr)
             _emit("deny", reason)
             return 2

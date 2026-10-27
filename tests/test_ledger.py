@@ -98,11 +98,11 @@ def test_guard_decisions_are_ledger_events_without_raw_commands():
             return subprocess.run([sys.executable, str(KIT / "bay/guard.py")], input=json.dumps(payload), text=True,
                                   capture_output=True, env={"CLAUDE_PROJECT_DIR": str(p), "PATH": "/usr/bin:/bin"})
         assert hook("feed-analyst", f"curl -H 'Authorization: Bearer {secret}' x").returncode == 2
-        assert hook("reviewer", "git status").returncode == 0                       # left to Claude Code's prompt
+        assert hook("reviewer", "git status").returncode == 0                       # left to Claude Code's prompt: no event
         assert hook("feed-analyst", ".agentbay/roles/feed-analyst/use feed.store/v1.query '{}'").returncode == 0
         evs = ledger.read(p)
         kinds = [e["type"] for e in evs]
-        assert kinds == ["permission.denied", "permission.prompt"], kinds        # the own shim is not friction
+        assert kinds == ["permission.denied"], kinds         # prompts come from transcripts, not the guard
         assert evs[0]["tool"] == "Bash" and evs[0]["agent"] == "feed-analyst" and evs[0]["source"] == "guard"
         raw = (p / ".agentbay/ledger/events.jsonl").read_text()
         assert secret not in raw

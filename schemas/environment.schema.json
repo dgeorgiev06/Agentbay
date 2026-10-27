@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/v2/Environment",
+  "title": "Environment",
+  "description": "Wiring + hard limits: capability -> connector/tool bindings, secrets (names + provider), network allowlist, filesystem paths, allowed models, allowed effects, limits.",
+  "type": "object",
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "const": "agentbay/v2"
+    },
+    "kind": {
+      "const": "Environment"
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "name",
+        "description"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,40}$"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": [
+        "bind",
+        "models",
+        "effects"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "bind": {
+          "type": "object",
+          "description": "<interface>/v<N> -> connector name | [connector names] | {tools, clis, mcpServers}",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "tools": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "clis": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Narrow command prefixes, compiled to Bash(<prefix>:*)."
+                  },
+                  "mcpServers": {
+                    "type": "object"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "secrets": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "provider": {
+              "enum": [
+                "keychain",
+                "env"
+              ],
+              "default": "keychain"
+            },
+            "allow": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]*$"
+              }
+            }
+          }
+        },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "allow": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "fs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "read": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "write": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "base": {
+              "enum": [
+                "project",
+                "kit"
+              ],
+              "default": "project",
+              "description": "What fs paths are relative to: the target project, or the kit (user content / framework)."
+            }
+          },
+          "description": "Paths are relative to fs.base. Protected kit paths (framework/, bay/, schemas/) are reachable only when listed explicitly; '.' never includes them."
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "haiku",
+              "sonnet",
+              "opus",
+              "inherit"
+            ]
+          },
+          "minItems": 1
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "read",
+              "write",
+              "network",
+              "spend",
+              "delete"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxTurns": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "maxMinutes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "spendUsd": {
+              "type": "number",
+              "minimum": 0
+            },
+            "monthlyPosts": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "maxPostsPerRun": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -376,6 +376,26 @@ class Guard:
         return False
 
 
+def record(project: Path, payload: dict, decision: str, reason: str, policy: dict) -> None:
+    """Ledger event for a subagent tool call the guard denied, or left to Claude Code's permission prompt
+    (an agentbay role running one of its env's command prefixes). Never raises: the decision stands regardless."""
+    try:
+        etype = {"deny": "permission.denied", "pass": "permission.prompt"}.get(decision)
+        agent = payload.get("agent_type")
+        if etype == "permission.prompt" and not (payload.get("tool_name") == "Bash"
+                                                 and agent in policy.get("subagents", {})):
+            return
+        if etype is None:
+            return
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from bay import ledger
+        ledger.append(project, etype, payload.get("agent_id") or payload.get("session_id") or "guard",
+                      source="guard", agent=agent, sessionId=payload.get("session_id"),
+                      tool=payload.get("tool_name"), reason=(reason or "left to Claude Code's permission prompt")[:300])
+    except Exception:
+        pass
+
+
 def _emit(decision: str, reason: str) -> None:
     out = {"hookEventName": "PreToolUse", "permissionDecision": decision}
     if reason:
@@ -393,6 +413,7 @@ def main() -> int:
         project = Path(os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd())
         policy = json.loads((project / POLICY).read_text())
         decision, reason = Guard(policy, project).decide(payload)
+        record(project, payload, decision, reason, policy)
         if decision == "deny":
             print(reason, file=sys.stderr)
             _emit("deny", reason)

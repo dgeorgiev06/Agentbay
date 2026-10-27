@@ -19,6 +19,7 @@
   secret set <NAME>      store a secret in the keychain (value read from stdin, never echoed)
 
   task new | status | log | note | reclaim     ledger
+  note <ref> "text" --instruction              record a mid-run instruction change (read by improve.scan)
 """
 from __future__ import annotations
 
@@ -200,7 +201,8 @@ def cmd_show(args):
 
 def cmd_submit(args):
     d = _dispatcher(args)
-    _run(lambda: d.submit(args.call, args.step, _json_arg(args.output)))
+    usage = _json_arg(args.usage) if args.usage else None
+    _run(lambda: d.submit(args.call, args.step, _json_arg(args.output), usage=usage))
 
 
 def role_use_main(role: str, project: Path, argv: list[str]) -> None:
@@ -286,8 +288,10 @@ def cmd_status(args):
     evs = ledger.read(args.project)
     runs = list(ledger.fold(evs).values())
     calls = list(ledger.fold_calls(evs).values())
+    notes = ledger.standalone_notes(evs)
     if args.json:
-        print(json.dumps({"runs": [r.__dict__ for r in runs], "calls": [c.__dict__ for c in calls]}, indent=2))
+        print(json.dumps({"runs": [r.__dict__ for r in runs], "calls": [c.__dict__ for c in calls],
+                          "notes": notes}, indent=2))
         return
     live = [r for r in runs if r.state == "running"]
     done = [r for r in runs if r.state != "running"][-args.n:]
@@ -301,6 +305,11 @@ def cmd_status(args):
     print(f"\nRECENT AGENTS ({len(done)} of {len(runs) - len(live)})")
     for r in done:
         print(f"  {r.run_id[:14]:<14} {r.agent:<14} {r.task_id or '-':<16} {r.state:<9} {r.summary[:70]}")
+    if notes:
+        print(f"\nNOTES ({len(notes)}, not attached to an agent run)")
+        for n in notes[-args.n:]:
+            kind = (n.get("data") or {}).get("kind", "note")
+            print(f"  {n['runId'][:18]:<18} {kind:<18} {n.get('summary', '')[:70]}")
 
 
 def cmd_log(args):
@@ -312,13 +321,16 @@ def _find_run(project, key) -> str:
     for r in ledger.fold(ledger.read(project)).values():
         if r.run_id.startswith(key) or r.task_id == key:
             return r.run_id
-    return key  # allow notes on tasks or calls not yet spawned
+    return key  # a task, call or anything else: the note stays standalone (it never creates a run)
 
 
 def cmd_note(args):
     rid = _find_run(args.project, args.ref)
+    kind = "instruction-change" if args.instruction else args.kind
     ledger.append(args.project, "note", rid, source="coordinator", summary=args.text,
-                  taskId=args.ref if args.ref.startswith("T-") else None)
+                  taskId=args.ref if args.ref.startswith("T-") else None,
+                  callId=args.ref if args.ref.startswith("C-") else None,
+                  data={"kind": kind} if kind != "note" else None)
     print("noted")
 
 
@@ -362,6 +374,7 @@ def main(argv=None):
     ca = sub.add_parser("call", help="run <mode>.<endpoint> with a JSON input ('-' reads stdin)")
     ca.add_argument("target"); ca.add_argument("input", nargs="?"); ca.set_defaults(fn=cmd_call)
     su = sub.add_parser("submit"); su.add_argument("call"); su.add_argument("step"); su.add_argument("output")
+    su.add_argument("--usage", help='what the runtime reported for the step: \'{"tokens": N, "costUsd": X, "durationMs": N}\'')
     su.set_defaults(fn=cmd_submit)
     sh = sub.add_parser("show"); sh.add_argument("call"); sh.set_defaults(fn=cmd_show)
     ap_ = sub.add_parser("approve", help="pass (or --reject) an approval gate; interactive terminal only")
@@ -388,7 +401,12 @@ def main(argv=None):
     s = sub.add_parser("status"); s.add_argument("-n", type=int, default=10); s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_status)
     lg = sub.add_parser("log"); lg.add_argument("-n", type=int, default=20); lg.set_defaults(fn=cmd_log)
-    no = sub.add_parser("note"); no.add_argument("ref"); no.add_argument("text"); no.set_defaults(fn=cmd_note)
+    no = sub.add_parser("note", help="record a note on a run, task or call (never creates a run)")
+    no.add_argument("ref"); no.add_argument("text")
+    no.add_argument("--kind", choices=ledger.NOTE_KINDS, default="note")
+    no.add_argument("--instruction", action="store_true", help="the user changed the instructions mid-run "
+                    "(same as --kind instruction-change)")
+    no.set_defaults(fn=cmd_note)
     r = sub.add_parser("reclaim"); r.add_argument("run"); r.add_argument("--reason", default="reclaimed by coordinator")
     r.set_defaults(fn=cmd_reclaim)
 

@@ -1,0 +1,33 @@
+apiVersion: agentbay/v2
+kind: Interface
+metadata:
+  name: feed.source
+  description: A source of posts from accounts the user follows (X, Bluesky, ...). Called only by feed.store/v1.sync through the dispatcher.
+spec:
+  version: 1
+  binding: connector
+  endpoints:
+    fetch:
+      description: >-
+        Fetch posts newer than `sinceId` or `startTime`, newest first, at most `maxPosts`.
+        Returns posts as feed.post/v1, the newest id seen, and whether more pages remained.
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          sinceId: { type: string }
+          startTime: { type: string, format: date-time }
+          maxPosts: { type: integer, minimum: 1 }
+          exclude: { type: array, items: { enum: [retweets, replies] } }
+      out:
+        type: object
+        required: [posts, newestId, truncated]
+        additionalProperties: false
+        properties:
+          posts: { type: array, items: { $ref: feed.post/v1 } }
+          newestId: { type: [string, "null"] }
+          truncated: { type: boolean }
+          requests: { type: integer }
+          deleted: { type: array, items: { type: string }, description: "Post ids (without source prefix) the source reports deleted." }
+          warnings: { type: array, items: { type: string } }
+      effects: [network, spend]

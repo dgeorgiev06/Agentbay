@@ -1,0 +1,10 @@
+apiVersion: agentbay/v2
+kind: Interface
+metadata:
+  name: git.read
+  description: Read-only git inspection (status, diff, log, show).
+spec:
+  version: 1
+  binding: tools
+  endpoints:
+    inspect: { description: Read-only git commands., effects: [read] }

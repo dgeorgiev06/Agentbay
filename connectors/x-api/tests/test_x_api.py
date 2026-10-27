@@ -150,11 +150,17 @@ def test_deletion_check_uses_official_lookup_in_batches_and_is_billed():
     assert all(q["host"] == "api.x.com" for q in looks)
     assert sorted(out["deleted"]) == ["120", "7"]
     assert out["billed"] == 1 + 148                   # 1 timeline post + 148 found posts
-    # a small budget checks fewer ids and says so
-    http = FakeHttp(r)
-    out = make(http).fetch(sinceId="1", maxPosts=11, checkIds=stored)
-    assert out["unchecked"] == 140 and any("not re-checked" in w for w in out["warnings"])
-    assert out["billed"] <= 11
+    assert out["checked"] == stored                   # every requested id was verified
+    # rate limited half way: only the first batch counts as checked
+    n = {"i": 0}
+
+    def limited(params, headers, form):
+        n["i"] += 1
+        return lookup(params, headers, form) if n["i"] == 1 else jresp({"title": "Too Many Requests"}, 429)
+    r[("GET", "/2/tweets")] = limited
+    out = make(FakeHttp(r)).fetch(sinceId="1", maxPosts=5, checkIds=stored)
+    assert out["checked"] == stored[:100] and out["deleted"] == ["7"]
+    assert any("deletion check incomplete (50 not checked)" in w for w in out["warnings"])
 
 
 def test_exclude_comes_from_connector_config():

@@ -9,10 +9,10 @@ spec:
   endpoints:
     fetch:
       description: >-
-        Fetch posts newer than `sinceId` or `startTime`, newest first. `maxPosts` is the read budget for this
-        call: the connector never reads (is billed for) more than that, timeline and deletion checks together.
-        `checkIds` are stored post ids (without source prefix) to re-check; ids the source no longer serves are
-        returned in `deleted`. Source-specific filters (e.g. X's exclude) are connector config, not inputs.
+        Fetch posts newer than `sinceId` or `startTime`, newest first. `maxPosts` is the timeline read budget:
+        the connector never reads (is billed for) more timeline posts than that. `checkIds` are stored post ids
+        (without source prefix) to re-check, at most one read each, on top of `maxPosts`; ids it actually
+        verified are returned in `checked`, and those the source no longer serves in `deleted`. Source-specific filters (e.g. X's exclude) are connector config, not inputs.
       in:
         type: object
         additionalProperties: false
@@ -31,7 +31,7 @@ spec:
           truncated: { type: boolean }
           requests: { type: integer }
           billed: { type: integer, minimum: 0, description: "Posts read from the source in this call (what the provider bills), including deletion checks." }
-          unchecked: { type: integer, minimum: 0, description: "checkIds not verified because the budget ran out." }
+          checked: { type: array, items: { type: string }, description: "checkIds actually verified in this call." }
           deleted: { type: array, items: { type: string }, description: "Post ids (without source prefix) the source reports deleted." }
           warnings: { type: array, items: { type: string } }
       effects: [network, spend]

@@ -121,6 +121,11 @@
           "type": "string",
           "pattern": "^[0-9]+[mhdw]$",
           "description": "How far back the source API can reach (feed.source). Older history comes only from the store."
+        },
+        "costPerPostUsd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Price per post this source reads; overrides the mode's costPerPostUsd (e.g. 0 for offline sources)."
         }
       }
     }

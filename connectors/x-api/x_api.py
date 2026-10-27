@@ -134,12 +134,9 @@ class XApi:
               checkIds: list[str] | None = None) -> dict:
         warnings: list[str] = []
         posts, newest, truncated = self._timeline(sinceId, startTime, maxPosts, warnings)
-        deleted, unchecked = self._deleted(checkIds or [], maxPosts - self.billed, warnings)
+        checked, deleted = self._deleted(checkIds or [], warnings)
         out = {"posts": posts, "newestId": newest, "truncated": truncated, "requests": self.ctx.http.requests,
-               "billed": self.billed, "deleted": deleted}
-        if unchecked:
-            out["unchecked"] = unchecked
-            warnings.append(f"x-api: {unchecked} stored post(s) not re-checked for deletion (read budget used up)")
+               "billed": self.billed, "checked": checked, "deleted": deleted}
         if warnings:
             out["warnings"] = warnings
         return out
@@ -182,18 +179,16 @@ class XApi:
         newest = posts[0]["id"] if posts else None       # newest first
         return posts, newest, truncated
 
-    def _deleted(self, ids: list[str], budget: int, warnings: list[str]) -> tuple[list[str], int]:
-        """Stored ids X no longer returns from GET /2/tweets are gone (deleted or made unavailable)."""
-        if not ids:
-            return [], 0
-        check = ids[: max(0, budget)]
+    def _deleted(self, ids: list[str], warnings: list[str]) -> tuple[list[str], list[str]]:
+        """(checked, gone): stored ids X no longer returns from GET /2/tweets are gone (deleted or made
+        unavailable). Each id costs at most one read; the caller reserves that budget."""
         gone: list[str] = []
-        done = 0
-        for i in range(0, len(check), LOOKUP_MAX):
-            batch = check[i:i + LOOKUP_MAX]
+        checked: list[str] = []
+        for i in range(0, len(ids), LOOKUP_MAX):
+            batch = ids[i:i + LOOKUP_MAX]
             r = self._get(f"{API}/tweets", {"ids": ",".join(batch), "tweet.fields": "id"})
             if r.status == 429:
-                warnings.append(_rate_limited(r, "deletion check incomplete"))
+                warnings.append(_rate_limited(r, f"deletion check incomplete ({len(ids) - len(checked)} not checked)"))
                 break
             if r.status != 200:
                 raise ConnectorError(f"x-api: deletion check GET /2/tweets failed (HTTP {r.status})")
@@ -203,8 +198,8 @@ class XApi:
             # X answers missing ids with per-id errors (Not Found / Authorization); either way the
             # post is no longer available to this account, so honor-deletions drops it.
             gone += [x for x in batch if x not in found]
-            done += len(batch)
-        return gone, len(ids) - done
+            checked += batch
+        return checked, gone
 
 
 def _rate_limited(r, what: str) -> str:

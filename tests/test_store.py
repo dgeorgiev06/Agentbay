@@ -16,7 +16,7 @@ def store(p, caps=None, settings=None, now=clock, fixture=None):
         cfg.setdefault("connectors", {})["fake"] = {"fixture": "fx.json"}
         cfgp.write_text(yaml.safe_dump(cfg))
     s = system(p)
-    return connect.instantiate(s, "local-feeds", "local-store", "feed.store/v1", p, caps=caps or {},
+    return connect.instantiate(s, "local-feeds-offline", "local-store", "feed.store/v1", p, caps=caps or {},
                                settings={"lookbackMax": "30d", **(settings or {})}, clock=now)
 
 
@@ -75,9 +75,14 @@ def test_budget_caps_stop_and_report():
     assert out["fetched"] == 3 and "maxPostsPerRun cap reached" in out["stopped"]
     assert out["coverage"]["complete"] is False   # older part of the window was not fetched
     p = project()
-    out = store(p, caps={"spendUsd": 0.02, "costPerPostUsd": 0.005}).sync(lookback="3d")
+
+    def priced(**kw):                      # the fake source is free; price it like a paid API for this test
+        st = store(p, **kw)
+        st.ctx.sources["fake"].ctx.cost_per_post = None
+        return st
+    out = priced(caps={"spendUsd": 0.02, "costPerPostUsd": 0.005}).sync(lookback="3d")
     assert out["fetched"] == 4 and "spendUsd" in out["stopped"] and out["budget"]["usd"] == 0.02
-    out = store(p, caps={"spendUsd": 0.02, "costPerPostUsd": 0.005}).sync(lookback="3d")
+    out = priced(caps={"spendUsd": 0.02, "costPerPostUsd": 0.005}).sync(lookback="3d")
     assert out["fetched"] == 0 and "spendUsd cap reached: nothing fetched" in out["stopped"]
     p = project()
     store(p, caps={"monthlyPosts": 5}).sync(lookback="3d")
@@ -141,7 +146,7 @@ def test_connector_without_source_is_rejected():
     p = project()
     s = system(p)
     from bay import connect
-    st = connect.instantiate(s, "local-feeds", "local-store", "feed.store/v1", p, settings={}, clock=clock)
+    st = connect.instantiate(s, "local-feeds-offline", "local-store", "feed.store/v1", p, settings={}, clock=clock)
     st.ctx.sources["fake"].ctx.source_id = None
     try:
         st.sync(lookback="1d")
@@ -167,3 +172,32 @@ def test_corrupt_line_error_names_file_and_line():
         raise AssertionError("expected StoreError")
     except Exception as e:
         assert "posts.jsonl:8: corrupt line" in str(e)
+
+
+def test_deletion_checks_are_reserved_and_only_checked_ids_are_marked():
+    p = project()
+    store(p).sync(lookback="3d")                      # 7 stored
+    st = store(p, caps={"maxPostsPerRun": 6})
+    out = st.sync(lookback="3d")
+    call = st.ctx.sources["fake"].calls[0]
+    assert len(call["checkIds"]) == 3 and call["maxPosts"] == 3   # share reserved before the timeline
+    state = json.loads((p / ".agentbay/data/feeds/state.json").read_text())
+    assert sorted(state["checked"]) == sorted(f"fake:{i}" for i in call["checkIds"])
+    # a source that verifies only some ids: the rest stay unchecked and come first next time
+    st = store(p, caps={"maxPostsPerRun": 6})
+    real = st.ctx.sources["fake"].fetch
+    st.ctx.sources["fake"].fetch = lambda **kw: {**real(**kw), "checked": kw.get("checkIds", [])[:1]}
+    st.sync(lookback="3d")
+    state = json.loads((p / ".agentbay/data/feeds/state.json").read_text())
+    assert len(state["checked"]) == 4
+    assert out["billed"] == 3
+
+
+def test_query_returns_only_posts_from_bound_sources():
+    p = project()
+    store(p).sync(lookback="3d")
+    s = system(p)
+    from bay import connect
+    online = connect.instantiate(s, "local-feeds", "local-store", "feed.store/v1", p, settings={}, clock=clock)
+    assert online.query()["posts"] == []            # x-api is bound there; the fake posts are not served
+    assert len(store(p).query()["posts"]) == 7

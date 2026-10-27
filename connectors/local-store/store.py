@@ -20,8 +20,6 @@ from pathlib import Path
 from bay.config import COST_PER_POST_USD
 from bay.util import duration, iso, parse_time, read_json, write_json
 
-DEFAULT_LOOKBACK = "3d"
-DEFAULT_RETENTION = "30d"
 DELETION_CHECK_SHARE = 0.5     # at most this share of a run's read budget goes to re-checking stored posts
 
 
@@ -76,10 +74,15 @@ class LocalStore:
     def _usage(self, state: dict) -> dict:
         return state["budget"].setdefault(self._month(), {"posts": 0, "usd": 0.0})
 
-    def _remaining(self, state: dict, run_posts: int, want: int | None) -> tuple[int, str | None]:
+    def _cost(self, src=None) -> float:
+        """Price per post read: the source connector's own price if it declares one, else the caps' price."""
+        if src is not None and src.ctx.cost_per_post is not None:
+            return float(src.ctx.cost_per_post)
+        return float(self.ctx.caps.get("costPerPostUsd", COST_PER_POST_USD))
+
+    def _remaining(self, state: dict, run_posts: int, want: int | None, cost: float) -> tuple[int, str | None]:
         caps = self.ctx.caps
         use = self._usage(state)
-        cost = float(caps.get("costPerPostUsd", COST_PER_POST_USD))
         limits = []
         if "maxPostsPerRun" in caps:
             limits.append((caps["maxPostsPerRun"] - run_posts, "maxPostsPerRun"))
@@ -113,7 +116,9 @@ class LocalStore:
     # ------------------------------------------------------------ endpoints
     def sync(self, lookback: str | None = None, maxPosts: int | None = None) -> dict:
         now = self.ctx.now()
-        lookback = lookback or self.ctx.settings.get("lookback") or DEFAULT_LOOKBACK
+        lookback = lookback or self.ctx.settings.get("lookback")
+        if not lookback:
+            raise StoreError("no lookback: pass one, or give `lookback` a default in the mode's config schema")
         lb = duration(lookback)
         lb_max = self.ctx.settings.get("lookbackMax")
         if lb_max and lb > duration(lb_max):
@@ -121,15 +126,15 @@ class LocalStore:
         state = self._state()
         posts = self._posts()
         deleted = set(state["deleted"])
-        cost = float(self.ctx.caps.get("costPerPostUsd", COST_PER_POST_USD))
         window_from = now - lb
         added = fetched = billed = n_deleted = 0
+        spent = 0.0
         stopped: str | None = None
         warnings: list[str] = []
         sources: dict[str, dict] = {}
         for name, src in self.ctx.sources.items():
             cur = state["cursors"].setdefault(name, {})
-            remaining, why = self._remaining(state, billed, maxPosts)
+            remaining, why = self._remaining(state, billed, maxPosts, self._cost(src))
             if remaining <= 0:
                 stopped = stopped or (f"{why} cap reached: nothing fetched from {name}" if why
                                       else f"maxPosts {maxPosts} reached before {name}")
@@ -140,12 +145,13 @@ class LocalStore:
                 start = now - duration(src.ctx.window)
                 warnings.append(f"{name}: lookback {lookback} is longer than the source API serves "
                                 f"({src.ctx.window}); posts before {iso(start)} come only from the store")
-            req: dict = {"maxPosts": remaining}
+            # reserve the deletion-check share first, the timeline gets the rest (each check reads <= 1 post)
             src_id = src.ctx.source_id
             if not src_id:
                 raise StoreError(f"connector {name} declares no `source`; set spec.source in its connector.yaml "
                                  f"so stored posts and deletions are keyed correctly")
-            check = self._check_ids(state, posts, src_id, start, int(remaining * DELETION_CHECK_SHARE))
+            check = self._check_candidates(state, posts, src_id, start)[: int(remaining * DELETION_CHECK_SHARE)]
+            req: dict = {"maxPosts": remaining - len(check)}
             if check:
                 req["checkIds"] = check
             have_from = parse_time(cur["from"], now) if cur.get("from") else None
@@ -176,13 +182,15 @@ class LocalStore:
             billed += res["billed"]
             use = self._usage(state)
             use["posts"] += res["billed"]                       # bill what the source read, not what we kept
-            use["usd"] = round(use["usd"] + res["billed"] * cost, 6)
+            use["usd"] = round(use["usd"] + res["billed"] * self._cost(src), 6)
+            spent += res["billed"] * self._cost(src)
+            self._mark_checked(state, src_id, res.get("checked", []))
             # contiguous coverage for this source
             src_from = have_from if incremental else start
             if res["truncated"]:
                 # sources return newest first: we hold [oldest fetched, now]; anything older may have a gap
                 src_from = min(parse_time(p["createdAt"], now) for p in got) if got else now
-                rem_after, why_after = self._remaining(state, billed, maxPosts)
+                rem_after, why_after = self._remaining(state, billed, maxPosts, self._cost(src))
                 if rem_after <= 0:
                     stopped = (f"{why_after} cap reached during {name} sync" if why_after
                                else f"maxPosts {maxPosts} reached during {name} sync") \
@@ -196,32 +204,33 @@ class LocalStore:
             sources[name] = {"fetched": len(got), "added": n_new, "billed": res["billed"],
                              "requests": res.get("requests", 0), "truncated": res["truncated"],
                              "mode": "since_id" if incremental else "start_time",
-                             "checked": len(check) - res.get("unchecked", 0), "deleted": len(res.get("deleted", []))}
+                             "checked": len(res.get("checked", [])), "deleted": len(res.get("deleted", []))}
         state["coverage"] = self._overall(state)
         state["deleted"] = sorted(deleted)
         self._write_posts(posts)
         write_json(self.state_path, state)
-        out = {"added": added, "fetched": fetched, "billed": billed, "deleted": n_deleted,
+        out = {"added": added, "fetched": fetched, "billed": billed, "deleted": n_deleted, "spentUsd": round(spent, 6),
                "stopped": stopped, "sources": sources,
                "budget": self._budget(state), "coverage": self.coverage(state, window_from)}
         if warnings:
             out["warnings"] = warnings
         return out
 
-    def _check_ids(self, state: dict, posts: dict, src_id: str, since, limit: int) -> list[str]:
+    def _check_candidates(self, state: dict, posts: dict, src_id: str, since) -> list[str]:
         """Stored ids of this source still inside the API window, least recently checked first."""
-        if limit <= 0:
-            return []
         now = self.ctx.now()
         checked = state.setdefault("checked", {})
-        mine = [k for k, p in posts.items() if p["source"] == src_id and parse_time(p["createdAt"], now) >= since]
-        mine.sort(key=lambda k: (checked.get(k, ""), k))
-        picked = mine[:limit]
-        for k in picked:
-            checked[k] = iso(now)
         for k in [k for k in checked if k not in posts]:
             checked.pop(k)
-        return [posts[k]["id"] for k in picked]
+        mine = [k for k, p in posts.items() if p["source"] == src_id and parse_time(p["createdAt"], now) >= since]
+        mine.sort(key=lambda k: (checked.get(k, ""), k))
+        return [posts[k]["id"] for k in mine]
+
+    def _mark_checked(self, state: dict, src_id: str, ids: list[str]) -> None:
+        """Only ids the source reports as actually verified count as checked."""
+        now = iso(self.ctx.now())
+        for i in ids:
+            state.setdefault("checked", {})[f"{src_id}:{i}"] = now
 
     def _overall(self, state: dict) -> dict:
         """Coverage every bound source can vouch for: latest `from`, earliest `to`."""
@@ -245,8 +254,12 @@ class LocalStore:
         a = author.lower().lstrip("@") if author else None
         t = text.lower() if text else None
         want = set(ids or [])
+        # only posts from the sources bound in this env (offline posts never mix into real digests)
+        bound = {s.ctx.source_id for s in self.ctx.sources.values() if s.ctx.source_id}
         out = []
         for p in self._posts().values():
+            if bound and p["source"] not in bound:
+                continue
             created = parse_time(p["createdAt"], now)
             if lo and created < lo:
                 continue
@@ -264,7 +277,9 @@ class LocalStore:
 
     def prune(self, olderThan=None, deletedIds=None) -> dict:
         now = self.ctx.now()
-        retention = olderThan or self.ctx.settings.get("retention") or self.ctx.settings.get("lookbackMax") or DEFAULT_RETENTION
+        retention = olderThan or self.ctx.settings.get("retention") or self.ctx.settings.get("lookbackMax")
+        if not retention:
+            raise StoreError("no retention: pass olderThan, or give `retention` a default in the mode's config schema")
         cutoff = now - duration(retention)
         state = self._state()
         posts = self._posts()

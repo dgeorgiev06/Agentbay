@@ -65,12 +65,11 @@ class Fake:
             })
         kept = rows[:maxPosts]
         gone = set(self.ctx.config.get("deleted", []))
-        checks = list(checkIds or [])[: max(0, maxPosts - len(kept))]
+        checks = list(checkIds or [])
         deleted = [i for i in checks if i in gone]
         return {"posts": kept, "newestId": kept[0]["id"] if kept else None,
                 "truncated": len(rows) > maxPosts, "requests": 0,
-                "billed": len(kept) + len(checks) - len(deleted),
-                "deleted": deleted, **({"unchecked": len(checkIds) - len(checks)} if checkIds and len(checks) < len(checkIds) else {})}
+                "billed": len(kept) + len(checks) - len(deleted), "checked": checks, "deleted": deleted}
 
 
 def create(ctx) -> Fake:

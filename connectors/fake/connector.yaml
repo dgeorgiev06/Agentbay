@@ -8,6 +8,7 @@ spec:
   implements: feed.source/v1
   entry: fake.py
   source: fake
+  costPerPostUsd: 0      # offline: never billed against spendUsd
   window: 7d
   needs: {}
   config:

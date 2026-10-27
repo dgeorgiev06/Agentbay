@@ -31,8 +31,7 @@
     "costPerPostUsd": {
       "type": "number",
       "minimum": 0,
-      "default": 0.005,
-      "description": "Price per post read, used for the spendUsd cap."
+      "description": "Price per post a source reads (timeline + deletion checks), used for the spendUsd cap. Unset: bay/config.py COST_PER_POST_USD ($0.005); a connector may declare its own (fake: 0)."
     }
   }
 }

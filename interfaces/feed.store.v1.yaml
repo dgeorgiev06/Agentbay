@@ -26,6 +26,7 @@ spec:
           fetched: { type: integer, description: "Posts returned and kept." }
           billed: { type: integer, description: "Posts read from sources (budget usage), including deletion checks." }
           deleted: { type: integer, description: "Stored posts removed because the source no longer serves them." }
+          spentUsd: { type: number, minimum: 0, description: "What this run added to budget usage (per-source prices)." }
           stopped: { type: [string, "null"], description: "Why sync stopped early (budget cap), or null." }
           sources: { type: object }
           budget: { type: object }

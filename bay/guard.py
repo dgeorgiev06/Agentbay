@@ -200,8 +200,8 @@ class Guard:
             fs = [f(x) for x in seq]
             if any(segs[i:i + len(fs)] == fs for i in range(len(segs))):
                 return f"{'/'.join(seq)}/ is never writable by agents"
-        if self.kit and not under(self.kit, self.project) and self.inside(p, self.kit):
-            return "the agentbay kit is not writable by agents"
+        if self.kit and self.kit != self.project and self.inside(p, self.kit):
+            return "the agentbay kit is not writable by agents"   # outside or nested inside the project
         return None
 
     # ---------------------------------------------------------------- decisions
@@ -301,9 +301,9 @@ class Guard:
             for w in words[1:]:
                 if w.startswith("-"):
                     return "deny", f"agentbay: the use shim takes no flags (got {w})"
-            if self.policy.get("autoAllowShim", True):
+            if self.policy.get("autoAllowShim", False):    # old or missing policy: prompt (fail closed)
                 return "allow", ""         # the ONLY auto-allow: the role's own read-only data shim
-            return "pass", ""              # agentbay checkout: roles can edit code the shim runs; prompt
+            return "pass", ""              # kit inside the project: roles might edit code the shim runs; prompt
         for prefix in entry.get("clis", []):
             pw = shlex.split(prefix)
             if words[: len(pw)] != pw:

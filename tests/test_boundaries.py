@@ -557,3 +557,35 @@ def test_shim_is_not_auto_allowed_in_the_agentbay_checkout():
         assert decide(guard_for(k), "feed-analyst", "Bash", {"command": cmd}) == "pass"
     finally:
         cleanup(k)
+
+
+def test_nested_kit_is_protected_and_shim_prompts():
+    """A kit inside the project (e.g. vendor/agentbay) is not writable and the shim is not auto-allowed."""
+    import shutil
+    p = tmpdir() / "proj"
+    p.mkdir()
+    k = p / "vendor" / "agentbay"
+    shutil.copytree(KIT, k, ignore=shutil.ignore_patterns(".git", "__pycache__", ".agentbay"))
+    try:
+        get("claude-code").build(system(p, k), p, k)
+        pol = json.loads((p / ".agentbay/guard.json").read_text())
+        assert pol["autoAllowShim"] is False
+        g = guard_for(p)
+        for f in ("vendor/agentbay/bay/cli.py", "vendor/agentbay/bay/use_shim.py", "vendor/agentbay/connectors/fake/x.py"):
+            assert decide(g, "builder", "Write", {"file_path": f, "content": "x"}) == "deny", f
+        assert decide(g, "feed-analyst", "Bash", {"command": ".agentbay/roles/feed-analyst/use feed.store/v1.query '{}'"}) == "pass"
+        st = json.loads((p / ".claude/settings.json").read_text())
+        assert "Edit(/vendor/agentbay/**)" in st["permissions"]["deny"]
+    finally:
+        cleanup(p.parent)
+
+
+def test_policy_without_auto_allow_key_prompts():
+    p = built()
+    try:
+        pol = json.loads((p / ".agentbay/guard.json").read_text())
+        pol.pop("autoAllowShim")
+        g = Guard(pol, p)
+        assert decide(g, "feed-analyst", "Bash", {"command": ".agentbay/roles/feed-analyst/use feed.store/v1.query '{}'"}) == "pass"
+    finally:
+        cleanup(p)

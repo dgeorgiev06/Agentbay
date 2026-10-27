@@ -122,8 +122,8 @@ it cannot contain code once something runs it. Hard isolation needs an OS sandbo
 
 - **Nothing that runs code is auto-approved.** The only thing agentbay lets run without a prompt is a role's own
   read-only data shim (`.agentbay/roles/<role>/use`), which runs only kit code (an isolated script with
-  `python3 -E`, so files in your project can't be imported); in the agentbay checkout itself, where roles can
-  edit the connectors it runs, even the shim prompts. Every other subagent command (git, `./bay.sh`, test runners,
+  `python3 -E`, so files in your project can't be imported); when the kit is your project or sits inside it,
+  where roles might edit the code it runs, even the shim prompts. Every other subagent command (git, `./bay.sh`, test runners,
   interpreters) prompts you. In the main thread only `bay show|status|log|note|task` are pre-approved;
   `bay call` and `bay submit` run connector code, so Claude Code asks each time.
 - **Approval gates are yours:** `bay approve <callId>` works only in your own terminal.

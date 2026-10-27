@@ -44,7 +44,9 @@ GUARD_TAG = "bay/guard.py"
 BAY = ".agentbay/bay"
 # The only control-plane commands the main thread is pre-approved for. Everything else
 # (build, clean, secret, migrate, mode new, ...) prompts. Subagents get none of these (guard).
-COORDINATOR_CMDS = ("call", "submit", "status", "log", "note", "task")
+COORDINATOR_CMDS = ("call", "submit", "show", "status", "log", "note", "task")
+GUARD_MATCHER = "Bash|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep"
+PROTECTED = ("framework", "bay", "schemas")    # kit dirs only forge.extend may write (when project == kit)
 
 
 def _read_json(p: Path, default):
@@ -59,6 +61,14 @@ def _read_json(p: Path, default):
 def _write_json(p: Path, data) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(data, indent=2) + "\n")
+
+
+def _within(p: Path, root: Path) -> bool:
+    try:
+        p.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
 
 
 def _same(a: str, b: str) -> bool:
@@ -90,11 +100,14 @@ class ClaudeCodeAdapter:
         rep = BuildReport(self.name)
         old = self._manifest(project)
         # files that existed before agentbay first touched the project are merged and restored, never deleted
-        preexisting = old.get("preexisting") or [f for f in ("CLAUDE.md", ".claude/settings.json", ".mcp.json")
-                                                if (project / f).exists()]
-        originals = old.get("originals") or {f: (project / f).read_text() for f in preexisting}
+        # (recorded on the first build; an empty list is a real answer, not "unknown")
+        if "preexisting" in old:
+            preexisting = old["preexisting"]
+        else:
+            preexisting = [f for f in ("CLAUDE.md", ".claude/settings.json", ".mcp.json") if (project / f).exists()]
+        originals = old["originals"] if "originals" in old else {f: (project / f).read_text() for f in preexisting}
         man = {"runtime": self.name, "builtAt": now(), "kit": str(kit), "preexisting": preexisting,
-               "originals": originals, "files": [], "mcpServers": [], "permissions": []}
+               "originals": originals, "files": [], "mcpServers": [], "permissions": [], "denies": []}
 
         placements = system.placements()
         for sub, role in sorted(placements.items()):
@@ -108,17 +121,17 @@ class ClaudeCodeAdapter:
             rep.written.append(str(dst.relative_to(project)) + "/")
         man["files"].append(self._shim(project, kit, rep))
         man["files"] += self._role_shims(placements, project, kit, rep)
-        man["files"].append(self._guard_policy(placements, project, rep))
+        man["files"].append(self._guard_policy(system, placements, project, kit, rep))
         man["files"] += self._commands(project, kit, rep)
         man["mcpServers"] = self._mcp(system, project, old, rep)
-        man["permissions"] = self._settings(placements, project, kit, old, rep)
+        man["permissions"], man["denies"] = self._settings(placements, project, kit, old, rep)
         man["files"] += self._coordinator(system, placements, project, kit, rep)
         man["files"].append(self._catalog(system, placements, project, rep))
+        man["files"].append(self._ensure_gitignore(project))
 
         for f in set(old.get("files", [])) - set(man["files"]):
             self._rm(project / f, rep)
 
-        man["files"].append(self._ensure_gitignore(project))
         _write_json(project / ".agentbay" / "manifest.json", man)
         if placements:
             rep.warnings.append("Per-role Bash scope is enforced by the agentbay guard hook; restart Claude Code "
@@ -128,7 +141,10 @@ class ClaudeCodeAdapter:
     def clean(self, project: Path) -> BuildReport:
         rep = BuildReport(self.name)
         old = self._manifest(project)
+        runtime = [d for d in ("ledger", "data", "calls") if (project / ".agentbay" / d).exists()]
         for f in old.get("files", []):
+            if f == ".agentbay/.gitignore" and runtime:
+                continue                    # keeps your ledger/data/calls out of git while they exist
             self._rm(project / f, rep)
         self._mcp(None, project, old, rep)
         self._settings({}, project, Path(old.get("kit", ".")), old, rep, remove_only=True)
@@ -279,24 +295,33 @@ class ClaudeCodeAdapter:
             out.append(str(rel))
         return out
 
-    def _guard_policy(self, placements, project: Path, rep: BuildReport) -> str:
-        pol = {"subagents": {sub: {"role": r.name, "shim": use_shim(r.name) if r.bay_uses else None,
-                                   "clis": list(r.clis)}
-                             for sub, r in sorted(placements.items())}}
+    def _guard_policy(self, system: System, placements, project: Path, kit: Path, rep: BuildReport) -> str:
+        subs = {}
+        for sub, r in sorted(placements.items()):
+            fs = system.env(r.env).spec.get("fs", {})
+            subs[sub] = {"role": r.name, "env": r.env, "shim": use_shim(r.name) if r.bay_uses else None,
+                         "clis": list(r.clis), "read": list(fs.get("read", ["."])), "write": list(fs.get("write", []))}
+        is_kit = project.resolve() == kit.resolve()
+        pol = {"project": str(project.resolve()), "kit": str(kit.resolve()),
+               "protected": list(PROTECTED) if is_kit else [], "subagents": subs}
         rel = ".agentbay/guard.json"
         _write_json(project / rel, pol)
         rep.written.append(rel)
         return rel
 
     def _settings(self, placements, project: Path, kit: Path, old: dict, rep: BuildReport,
-                  remove_only: bool = False) -> list[str]:
+                  remove_only: bool = False) -> tuple[list[str], list[str]]:
         path = project / ".claude" / "settings.json"
         cfg = _read_json(path, {})
         perms = cfg.setdefault("permissions", {})
         allow = perms.setdefault("allow", [])
+        deny = perms.setdefault("deny", [])
         for p in old.get("permissions", []):
             if p in allow:
                 allow.remove(p)
+        for p in old.get("denies", []):
+            if p in deny:
+                deny.remove(p)
         hooks = cfg.setdefault("hooks", {})
         for event in ("PreToolUse", "PostToolUse"):
             hooks[event] = [h for h in hooks.get(event, [])
@@ -305,7 +330,21 @@ class ClaudeCodeAdapter:
             if not hooks[event]:
                 hooks.pop(event)
         owned: list[str] = []
+        owned_deny: list[str] = []
         if not remove_only:
+            # session-wide floor (main thread and subagents): no file tool edits the control plane,
+            # Claude Code config or the kit; store and call state are not read by file tools.
+            # `Edit(...)` covers every editing tool (Write/MultiEdit/NotebookEdit path rules never match).
+            want_deny = ["Edit(/.agentbay/**)", "Edit(/.claude/**)", "Read(/.agentbay/data/**)",
+                         "Read(/.agentbay/calls/**)"]
+            if not _within(kit, project):
+                want_deny.append(f"Edit(/{kit.resolve()}/**)")
+            for p in want_deny:
+                if p not in deny:
+                    deny.append(p)
+                    owned_deny.append(p)
+                elif p in old.get("denies", []):
+                    owned_deny.append(p)
             # main-thread control plane: explicit subcommands only, never a wildcard over .agentbay/bay.
             # Subagent command prefixes are NOT added here (allow rules are session-wide); the guard
             # hook scopes them per role instead.
@@ -318,20 +357,22 @@ class ClaudeCodeAdapter:
                     owned.append(p)
             guard = f'python3 "{kit / "bay" / "guard.py"}"'
             hooks.setdefault("PreToolUse", []).insert(
-                0, {"matcher": "Bash", "hooks": [{"type": "command", "command": guard, "timeout": 10}]})
+                0, {"matcher": GUARD_MATCHER, "hooks": [{"type": "command", "command": guard, "timeout": 10}]})
             hook = f'python3 "{kit / "bay" / "hook.py"}"'
             for event, phase in (("PreToolUse", "pre"), ("PostToolUse", "post")):
                 hooks.setdefault(event, []).append(
                     {"matcher": "Task|Agent", "hooks": [{"type": "command", "command": f"{hook} {phase}", "timeout": 10}]})
         if not allow:
             perms.pop("allow")
+        if not deny:
+            perms.pop("deny")
         if not perms:
             cfg.pop("permissions")
         if not hooks:
             cfg.pop("hooks")
         _write_json(path, cfg)
         rep.written.append(".claude/settings.json")
-        return owned
+        return owned, owned_deny
 
     def _coordinator(self, system: System, placements, project: Path, kit: Path, rep: BuildReport) -> list[str]:
         cos = (kit / "coordinator" / "chief-of-staff.md").read_text().strip()

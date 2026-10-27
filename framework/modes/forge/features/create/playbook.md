@@ -10,7 +10,7 @@ Turn a plain-language intent into a working, lint-clean mode, feature, role, con
 ## Steps
 1. `scaffold`: the dispatcher renders the forge template for `kind` (same templates as `bay <kind> new`).
 2. `fill`: the builder, placed on agent `author` (env local-authoring, user space only), proposes the content from the intent and fills every TODO: purpose, features with in/out/effects, roles, needed capabilities, constraints and review settings for a mode; endpoint + playbook + rules for a feature; prompt, doneWhen and uses for a role; endpoints and a fake-HTTP test for a connector; bindings and limits for an env.
-3. The builder runs `./bay.sh lint` and the new tests, and returns a Result listing every file.
+3. The builder runs `./bay.sh lint` and `./bay.sh validate` and returns a Result listing every file. The coordinator (main thread, with the user) runs the tests: a subagent that writes code and runs it cannot be contained by the guard.
 4. `review`: the reviewer checks the Definition of Done and rules for this kind.
 
 ## Definition of Done

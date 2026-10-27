@@ -29,7 +29,7 @@ def _line_of(path: Path, pattern: str, default: int = 1) -> int:
 
 
 def _where(path: Path, line: int) -> str:
-    return f"{model._rel(path)}:{line}"
+    return f"{model.rel(path)}:{line}"
 
 
 def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[str]:
@@ -177,10 +177,10 @@ def lint_mode(md: model.Doc, kit: model.Kit) -> list[str]:
         declared = {Path(ep.get("playbook", "")).parent.name for ep in s["endpoints"].values()}
         for d in sorted(p for p in fdir.iterdir() if p.is_dir()):
             if d.name not in declared:
-                out.append(f"{model._rel(d)}: feature folder is not referenced by any endpoint in mode.yaml")
+                out.append(f"{model.rel(d)}: feature folder is not referenced by any endpoint in mode.yaml")
             for need in ("playbook.md", "rules.yaml"):
                 if not (d / need).exists():
-                    out.append(f"{model._rel(d)}: feature folder is missing {need}")
+                    out.append(f"{model.rel(d)}: feature folder is missing {need}")
     return out
 
 
@@ -226,6 +226,16 @@ def warnings(kit: model.Kit) -> list[str]:
                 out.append(f"{_where(md.path, _line_of(md.path, r'schedule:'))}: {md.name}.{ep_name} declares "
                            f"schedule '{ep['schedule']}' but no runtime acts on it; run "
                            f"`.agentbay/bay call {md.name}.{ep_name} '{{}}'` from cron")
+    if kit.project is not None and kit.project.resolve() == kit.root.resolve():
+        for env in kit.docs["Environment"].values():
+            for w in env.spec.get("fs", {}).get("write", []):
+                hits = [d for d in model.PROTECTED if w in (".", "", "./") or Path(d).is_relative_to(Path(w))]
+                hits = [d for d in hits if Path(w) != Path(d) and not Path(w).is_relative_to(Path(d))]
+                if hits:
+                    out.append(f"{env.rel}: env {env.name} write path '{w}' reaches "
+                               f"{', '.join(d + '/' for d in hits)} because the project is the agentbay checkout; "
+                               f"the guard hook denies those writes at runtime unless the env names them explicitly "
+                               f"(only forge.extend's framework-dev does)")
     return out
 
 

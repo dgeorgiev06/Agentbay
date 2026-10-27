@@ -34,10 +34,13 @@ def test_adapter_round_trip():
     assert first == second
     st = json.loads((proj / ".claude/settings.json").read_text())
     assert st["model"] == "opus" and "Bash(ls:*)" in st["permissions"]["allow"]
-    assert [h["matcher"] for h in st["hooks"]["PreToolUse"]] == ["Bash", "Task|Agent"]   # guard first
+    assert [h["matcher"] for h in st["hooks"]["PreToolUse"]] == \
+        ["Bash|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep", "Task|Agent"]               # guard first
     assert_no_wildcards(st)
     ours = [p for p in st["permissions"]["allow"] if p != "Bash(ls:*)"]
-    assert sorted(ours) == sorted(f"Bash(.agentbay/bay {c}:*)" for c in ("call", "submit", "status", "log", "note", "task"))
+    assert sorted(ours) == sorted(f"Bash(.agentbay/bay {c}:*)" for c in ("call", "submit", "show", "status", "log", "note", "task"))
+    assert {"Edit(/.agentbay/**)", "Edit(/.claude/**)", "Read(/.agentbay/data/**)"} <= set(st["permissions"]["deny"])
+    assert any(d.startswith("Edit(//") and d.endswith("/**)") for d in st["permissions"]["deny"])   # kit outside
     agents = {p.stem for p in (proj / ".claude/agents").glob("*.md")}
     assert agents == {"researcher", "builder", "reviewer", "feed-analyst", "builder--author", "builder--framework-builder"}
     assert "feed-lead" not in agents and "forge-lead" not in agents          # coordinators run in main thread
@@ -151,3 +154,24 @@ def test_project_flag_accepted_before_or_after_subcommand():
     assert cli._hoist_project(["build", "--project", "/x"]) == ["--project", "/x", "build"]
     assert cli._hoist_project(["--project=/x", "ls"]) == ["--project", "/x", "ls"]
     assert cli._hoist_project(["call", "m.e", "{}"]) == ["call", "m.e", "{}"]
+
+
+def test_build_twice_then_clean_leaves_an_empty_project_empty():
+    proj = tmpdir()
+    ad = get("claude-code")
+    ad.build(system(None), proj, KIT)
+    ad.build(system(None), proj, KIT)
+    ad.clean(proj)
+    assert sorted(str(p.relative_to(proj)) for p in proj.rglob("*")) == []
+
+
+def test_gitignore_is_stable_across_builds_and_kept_while_runtime_data_exists():
+    proj = tmpdir()
+    ad = get("claude-code")
+    ad.build(system(None), proj, KIT)
+    rep = ad.build(system(None), proj, KIT)
+    assert not any(".gitignore" in r for r in rep.removed)
+    (proj / ".agentbay/ledger").mkdir(exist_ok=True)
+    (proj / ".agentbay/ledger/events.jsonl").write_text("{}\n")
+    ad.clean(proj)
+    assert (proj / ".agentbay/.gitignore").exists()

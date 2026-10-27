@@ -69,7 +69,7 @@ class Dispatcher:
             self._accept_review(state, feat, step, output, base)
         else:
             if step.out:
-                sch = model.type_schema(mode.path, step.out, f"{feat.mode}.{feat.name}", [])
+                sch = model.type_schema(mode.dirs or mode.path, step.out, f"{feat.mode}.{feat.name}", [])
                 errs = model.schema_errors(output, sch)
                 if errs:
                     raise CallError(f"step {step.id}: output does not match {step.out}: " + "; ".join(errs[:5]))
@@ -194,6 +194,8 @@ class Dispatcher:
         iface = step.run.rsplit(".", 1)[0]
         st = self._invoke(step.env, step.connector, iface, "status", {}, settings=self._settings(mode), caps={})
         last = st.get("lastSync")
+        if st.get("stale"):           # the configured selectors changed: the store must re-match first
+            return False
         return bool(last) and (self.clock() - parse_time(last, self.clock())) <= age
 
     def _run_code(self, mode, feat, step, state, base) -> None:
@@ -260,14 +262,19 @@ class Dispatcher:
 
     # ------------------------------------------------------------ checks & review
     def _check_ctx(self) -> checks.CheckContext:
-        def store_urls():
-            urls: set[str] = set()
-            for p in self.project.glob(".agentbay/data/**/posts.jsonl"):
-                for line in p.read_text(encoding="utf-8").splitlines():
-                    if line.strip():
-                        urls.add(json.loads(line).get("url", ""))
-            return urls
-        return checks.CheckContext(store_urls=store_urls, kit=self.sys.kit.root, secrets=vault.redact)
+        def store_refs():
+            """Urls and ids (<source>:<extId>) of every stored item in this project's corpus stores."""
+            import sqlite3
+            refs: set[str] = set()
+            for p in self.project.glob(".agentbay/data/**/corpus.db"):
+                con = sqlite3.connect(p.resolve().as_uri() + "?mode=ro", uri=True)
+                try:
+                    for url, iid in con.execute("SELECT url, source || ':' || ext_id FROM items"):
+                        refs.update(x for x in (url, iid) if x)
+                finally:
+                    con.close()
+            return refs
+        return checks.CheckContext(store_urls=store_refs, kit=self.sys.kit.root, secrets=vault.redact)
 
     def _run_checks(self, feat, state) -> None:
         state["checks_done"] = True

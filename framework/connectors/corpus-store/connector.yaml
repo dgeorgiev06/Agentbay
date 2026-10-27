@@ -1,0 +1,14 @@
+apiVersion: agentbay/v2
+kind: Connector
+metadata:
+  name: corpus-store
+  description: >-
+    items.store/v1 on one SQLite file (corpus.db) in the env's data folder: items with selector tags, FTS5
+    full-text index, cursors, coverage and budget in a state table. Reads are read-only connections over temp
+    views; agent SQL runs in the bay/sqlsandbox.py sandbox.
+  version: 0.1.0
+spec:
+  implements: items.store/v1
+  entry: corpus_store.py
+  needs:
+    capabilities: [items.source/v1]

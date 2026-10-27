@@ -115,23 +115,34 @@ All tracked in `.agentbay/manifest.json` and removed by `clean`; your CLAUDE.md,
 | `.agentbay/roles/<role>/use`, `.agentbay/guard.json` | per-role read-only data shim; per-subagent Bash policy for the guard hook |
 | `.agentbay/{ledger,calls,data}/` | runtime state (gitignored) |
 
-## Honest limits of the Claude Code runtime
+## Safety model
 
-- Claude Code permissions are session-wide and subagent `tools` take bare names, so agentbay adds a
-  guard hook on Bash and every file tool: a subagent may run only its role's use shim
-  (`.agentbay/roles/<role>/use`, read-only grants) and its env's narrow command prefixes, may write only inside
-  its env's `fs.write`, and never touches `.agentbay/`, `.claude/`, `.git/` or the kit. settings.json adds
-  `Edit` deny rules on `.agentbay/**`, `.claude/**` and the kit for everyone, and pre-approves the main thread
-  only for `bay call|submit|show|status|log|note|task`. Approval gates are yours: `bay approve <callId>` works
-  only in your own terminal.
-- Hooks run after you accept the workspace trust prompt, and need a Claude Code version that sends
-  `agent_type`/`agent_id` in hook input (older versions make subagents look like the main thread).
-- The guard cannot contain code an agent writes and then executes (e.g. a test runner). Only the
-  framework-dev env does that, behind the approval gate and mandatory review; use an OS sandbox for hard isolation.
+**The guard is defense in depth, not isolation.** agentbay narrows what Claude Code subagents can ask to do;
+it cannot contain code once something runs it. Hard isolation needs an OS sandbox (next release).
+
+- **Nothing that runs code is auto-approved.** The only thing agentbay lets run without a prompt is a role's own
+  read-only data shim (`.agentbay/roles/<role>/use`). Every other subagent command (git, `./bay.sh`, test runners,
+  interpreters) prompts you. In the main thread only `bay show|status|log|note|task` are pre-approved;
+  `bay call` and `bay submit` run connector code, so Claude Code asks each time.
+- **Approval gates are yours:** `bay approve <callId>` works only in your own terminal.
+- **What subagents cannot touch** (guard hook on Bash and every file tool, plus `Edit` deny rules in
+  settings.json): `.agentbay/` (control plane, store, call state), `.claude/`, `.git`, `CLAUDE.md`, `.mcp.json`,
+  `agentbay.config.yaml`, `.env*`, `.envrc`, `Makefile`, `bay.sh`, `.vscode/`, `.idea/`, `.github/workflows/`,
+  and the kit. Paths are compared case-insensitively where the disk is, and by inode. A role writes only inside
+  its env's `fs.write`, and roles without write tools write nothing.
+- **Fail closed:** a crashing or timed-out guard blocks the call (`onFailure: block`, Claude Code >= 2.1.295).
+- **forge.extend** (changes the framework and runs its tests) is installed only when you build agentbay into
+  its own checkout.
+- Hooks run after you accept the workspace trust prompt and need a Claude Code version that sends
+  `agent_type`/`agent_id` in hook input.
+
+## Other limits of the Claude Code runtime
+
 - Subagents cannot spawn subagents, so mode coordinators run as playbooks in the main thread. A future
   `headless` runtime makes them separate agents without changing mode files.
 - New or changed roles load when Claude Code starts; restart after every `build`.
-- Hooks never block the session; failures go to `.agentbay/ledger/hook-errors.log`.
+- Builders work in the project checkout, not separate worktrees (the guard cannot identify a subagent's worktree).
+- Ledger hooks never block the session; failures go to `.agentbay/ledger/hook-errors.log`.
 
 ## Roadmap
 

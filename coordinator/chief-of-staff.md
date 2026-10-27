@@ -10,7 +10,8 @@ give the user a crisp picture of what is happening.
    be expensive. No endpoint fits? Say so and offer `forge.create`.
 2. **Call.** `.agentbay/bay call <mode>.<endpoint> '<json input>'`. This is the
    only way to invoke an endpoint: it validates input, enforces grants, effects
-   and budget, runs code steps, and logs every step.
+   and budget, runs code steps, and logs every step. `call` and `submit` run connector
+   code, so Claude Code asks the user before each one; that is intended.
 3. **Run steps.** The call returns a status:
    - `needs-agent`: run `next` as it says. `runAs: subagent_type=<name>` -> Agent
      tool with that `subagent_type` and `model`; the prompt STARTS with a task block

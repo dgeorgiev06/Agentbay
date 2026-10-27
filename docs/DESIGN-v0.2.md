@@ -193,10 +193,14 @@ implementation. The fix-round items below are fixes from the two review rounds, 
   `spendUsd`; strictest of mode constraint, project config and env limit wins.
 - Agent `model: inherit` (used by main-thread coordinator agents).
 
+- `envs: { local-feeds: local-feeds-offline }` in agentbay.config.yaml (user decision, 2026-10-27): selects the
+  shipped offline env. Only envs that declare `substitutes: <env>` can be swapped in; capabilities stay bound only
+  in envs/.
+
 **Removed:**
 - The config-level `bindings` override. `envs/<env>.yaml` is the only place capabilities are bound; an
   `agentbay.config.yaml` containing `bindings` is rejected with a message pointing to the env. To run offline,
-  bind `feed.source/v1: [fake]` in `envs/local-feeds.yaml`.
+  select the shipped offline env with `envs: { local-feeds: local-feeds-offline }` (approved below).
 - Env `fs.base`. fs paths are always relative to the project root (the repo agents work in); an env with
   `fs.base` is rejected. The forge envs (`local-authoring`, `framework-dev`) keep the same paths (`modes`, `roles`,
   ..., `framework`, `bay`, `schemas`, ...) and resolve exactly as before because forge's project is the agentbay
@@ -208,7 +212,7 @@ implementation. The fix-round items below are fixes from the two review rounds, 
 - Guard hook: Claude Code permission rules are session-wide and subagent `tools` take bare tool names, so a
   `PreToolUse(Bash)` hook (`bay/guard.py`, policy `.agentbay/guard.json`) scopes each generated subagent to one
   simple command at a time: its own use shim or its env's narrow command prefixes. It fails closed for subagents.
-  `settings.json` carries no wildcard; the main thread is pre-approved only for `bay call|submit|status|log|note|task`.
+  `settings.json` carries no wildcard (round 3 narrowed main-thread pre-approval to `bay show|status|log|note|task`).
   `bay secret set` requires a terminal; keychain values never appear in argv.
 - Deletion re-checks: each sync spends up to half its read budget re-checking stored posts inside the source API
   window (x-api: official `GET /2/tweets?ids=`, batches of 100); posts the source no longer returns are removed
@@ -224,9 +228,16 @@ implementation. The fix-round items below are fixes from the two review rounds, 
   paths are normalized (`..`, symlinks) first. settings.json adds a session-wide floor: `Edit(/.agentbay/**)`,
   `Edit(/.claude/**)`, `Edit(//<kit>/**)` when the kit is outside the project, `Read(/.agentbay/data/**)`,
   `Read(/.agentbay/calls/**)` (`Edit` rules cover every editing tool; `Write(...)`/`NotebookEdit(...)` path
-  rules never match in Claude Code). Callers: no agent fields = main thread (settings.json applies); `agent_id`
-  without a known `agent_type` = unknown subagent, kept off `.agentbay/` entirely. Requires a Claude Code
-  version that sends `agent_type`/`agent_id` in hook input.
+  rules never match in Claude Code). Callers: `agent_type` naming a generated role = that role; otherwise
+  `agent_id` present = unknown subagent; neither (or `agent_type` without `agent_id`, i.e. a `--agent` main
+  session) = main thread, where settings.json applies. For unknown subagents the guard enforces exactly: file
+  tools may not touch a path under `.agentbay/` (by path, case-folded on case-insensitive disks, or inode
+  identity), file writes may not touch the never-write list (below); Glob/Grep patterns that match
+  `.agentbay/` or `.claude/` probe paths are denied; Bash words that resolve under `.agentbay/` or `.claude/`
+  or to the kit CLI, shell globs that match those probes, and inline interpreter code (`sh/bash/zsh -c`,
+  `python* -c`, `node -e`, ...) are denied; commands that cannot be parsed are denied only if they mention
+  `.agentbay` or `.claude`. Everything else from unknown subagents falls through to Claude Code's prompts.
+  Requires a Claude Code version that sends `agent_type`/`agent_id` in hook input.
 - Round 2 - when the project is the agentbay checkout, env write paths such as `.` reach `framework/`, `bay/`,
   `schemas/`: lint warns and the guard denies those writes unless the env names them (framework-dev only).
   `local-authoring` no longer runs the test suite (writing and running code escapes any hook);
@@ -241,4 +252,30 @@ implementation. The fix-round items below are fixes from the two review rounds, 
 - Round 2 - the deletion-check share of the read budget is reserved before the timeline runs; only ids the
   source reports in `checked` are marked. Shim reads are logged as `data.read` ledger events. Mode config
   schema `default`s are the single source of default settings.
+
+## Safety model (round 3, user-approved option B)
+
+The guard hook is **defense in depth, not isolation**. It narrows what Claude Code subagents ask to do; it cannot
+contain code once code runs. Real isolation needs an OS sandbox, planned for the next PR.
+
+- **Nothing that runs code is auto-approved.** The guard emits `allow` only for a role's own read-only data shim
+  (`.agentbay/roles/<role>/use`). Every env command prefix (git, `./bay.sh`, test runners, interpreters, scripts)
+  gets no decision from the guard, so Claude Code asks the user. The main thread is pre-approved only for the
+  read-only `bay show|status|log|note|task`; `bay call` and `bay submit` run connector code and prompt every time.
+- **Fail closed:** the guard hook entries set `"onFailure": "block"` (Claude Code >= 2.1.295), and the guard
+  denies on any internal error for subagent calls.
+- **Path identity:** protected locations (`.agentbay/`, `.claude/`, `.git`, the kit) are compared by path,
+  case-folded on case-insensitive filesystems (detected once per run), and by `os.stat` (st_dev, st_ino) of the
+  path and every existing ancestor.
+- **Never written by any subagent:** `.agentbay/`, `.claude/`, any `.git`, `.vscode/`, `.idea/` segment at any
+  depth, `CLAUDE.md`, `CLAUDE.local.md`, `.mcp.json`, `agentbay.config.yaml`, `.envrc`, `.env*`, `Makefile`,
+  `bay.sh`, `.github/workflows/`, and the kit when it is outside the project. Roles without file-writing tools have
+  no writable paths.
+- **git:** `--output`, `--ext-diff`, `--textconv`, `--no-index`, `--exec*`, `--upload-pack`, `--receive-pack`,
+  `--config*`, `--git-dir`, `--work-tree`, `--open-files-in-pager`, `--pathspec-from-file`, `-O` are refused;
+  `--flag=value` values are path-checked; `git worktree add` takes only relative in-project paths.
+- **forge.extend** (framework-dev, runs the test suite on code it writes) is installed only when the project is the
+  agentbay checkout. Elsewhere it does not exist (no agents, no catalog entry, `bay call` refuses it).
+- **No worktree isolation for builders:** the hook payload does not identify a subagent's worktree, and trusting
+  `cwd` would let an agent `cd` into a protected directory, so `isolation: worktree` was removed from the builder.
 

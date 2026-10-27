@@ -4,12 +4,10 @@ metadata:
   name: builder
   description: >-
     Writes and edits code, docs and config and runs checks. Use for implementing a
-    change, writing a script, drafting a file. Runs in its own git worktree so
-    parallel builders do not collide.
+    change, writing a script, drafting a file. Works in the project checkout itself.
 spec:
   agent: worker
   uses: [workspace.read/v1, workspace.write/v1]
-  isolation: worktree
   budget: { maxTurns: 60 }
   prompt: |
     You are the builder. Read the relevant code first, state your plan in one
@@ -22,4 +20,4 @@ spec:
     - every changed file is listed in artifacts
   rules:
     - never commit or push unless the task says so
-    - only run the pre-approved command prefixes
+    - only run your env's command prefixes; Claude Code asks the user before each one

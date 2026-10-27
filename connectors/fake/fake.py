@@ -6,9 +6,11 @@ relative to the call's clock so demos and tests are deterministic.
 from __future__ import annotations
 
 import json
+import os
 from datetime import timedelta
 from pathlib import Path
 
+from bay.connect import ConnectorError
 from bay.util import iso, parse_time
 
 SAMPLE = [
@@ -39,7 +41,10 @@ class Fake:
         self.calls: list[dict] = []
         fx = ctx.config.get("fixture")
         if fx:
-            p = Path(fx) if Path(fx).is_absolute() else (ctx.project or Path.cwd()) / fx
+            root = Path(os.path.realpath(ctx.project or Path.cwd()))
+            p = Path(os.path.realpath(root / fx))
+            if not p.is_relative_to(root):
+                raise ConnectorError(f"fake: fixture {fx} must be a path inside the project ({root})")
             self.items = json.loads(p.read_text())
         else:
             self.items = SAMPLE

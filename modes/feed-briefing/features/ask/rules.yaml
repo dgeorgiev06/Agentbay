@@ -1,0 +1,6 @@
+apiVersion: agentbay/v2
+kind: Rules
+rules:
+  - { id: R-1, level: must, statement: "Cite only urls of stored posts, exactly as stored.", appliesTo: both, check: citations_resolve, refs: [DOD-2] }
+  - { id: R-2, level: must_not, statement: "Answer from memory or outside sources.", appliesTo: both, refs: [DOD-1] }
+  - { id: R-3, level: must, statement: "Say plainly when the stored posts do not answer the question.", appliesTo: both, refs: [DOD-3] }

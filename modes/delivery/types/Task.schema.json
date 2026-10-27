@@ -1,0 +1,13 @@
+{
+  "description": "Endpoint input; becomes the role's TaskEnvelope/v1.",
+  "type": "object",
+  "required": ["goal", "deliverable"],
+  "additionalProperties": false,
+  "properties": {
+    "goal": { "type": "string", "minLength": 3 },
+    "deliverable": { "type": "string", "minLength": 3 },
+    "context": { "type": "string" },
+    "inputs": { "type": "array", "items": { "type": "string" } },
+    "constraints": { "type": "array", "items": { "type": "string" } }
+  }
+}

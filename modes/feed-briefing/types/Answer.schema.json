@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "required": ["answer", "citations", "coverage"],
+  "additionalProperties": false,
+  "properties": {
+    "answer": { "type": "string", "minLength": 1 },
+    "citations": { "type": "array", "items": { "type": "string", "pattern": "^https://" } },
+    "confidence": { "enum": ["high", "medium", "low", "none"] },
+    "coverage": { "$ref": "feed.coverage/v1" }
+  }
+}

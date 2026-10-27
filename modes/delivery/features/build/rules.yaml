@@ -1,0 +1,7 @@
+apiVersion: agentbay/v2
+kind: Rules
+rules:
+  - { id: R-1, level: must_not, statement: "Commit or push unless the task says so.", appliesTo: both }
+  - { id: R-2, level: must, statement: "Run only pre-approved command prefixes.", appliesTo: executor }
+  - { id: R-3, level: must_not, statement: "Include secrets in code, output or logs.", appliesTo: both, check: no_secrets }
+  - { id: R-4, level: should, statement: "Keep the change to the stated deliverable.", appliesTo: reviewer, refs: [DOD-4] }

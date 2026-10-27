@@ -1,0 +1,16 @@
+apiVersion: agentbay/v2
+kind: Environment
+metadata:
+  name: local-feeds
+  description: Feed sources and the local post store. Only the dispatcher touches connectors and secrets; agents read the store through `bay use`.
+spec:
+  bind:
+    feed.source/v1: [x-api]          # add a source = add a connector here
+    feed.store/v1: local-store
+    workspace.read/v1: { tools: [Read, Glob, Grep] }
+  secrets: { provider: keychain, allow: [X_CLIENT_ID, X_CLIENT_SECRET, X_REFRESH_TOKEN] }
+  network: { allow: [api.x.com] }
+  fs: { read: ["."], write: [".agentbay/data/feeds"] }
+  models: [haiku, sonnet, opus, inherit]
+  effects: [read, write, network, spend, delete]
+  limits: { maxTurns: 40, maxMinutes: 20, spendUsd: 5, monthlyPosts: 3000, maxPostsPerRun: 500 }

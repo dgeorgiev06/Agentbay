@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/data/feed.coverage/v1",
-  "title": "feed.coverage/v1",
+  "$id": "agentbay/data/items.coverage/v1",
+  "title": "items.coverage/v1",
   "description": "What time range the store can actually answer for. `complete` is false when a request reaches before `from`; `note` then says so in plain words.",
   "type": "object",
   "required": ["from", "to", "complete"],

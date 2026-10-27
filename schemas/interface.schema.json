@@ -34,7 +34,7 @@
             "additionalProperties": false,
             "properties": {
               "description": { "type": "string" },
-              "in": { "type": "object", "description": "JSON Schema. {\"$ref\": \"feed.post/v1\"} pulls in a data schema." },
+              "in": { "type": "object", "description": "JSON Schema. {\"$ref\": \"item/v1\"} pulls in a data schema." },
               "out": { "type": "object" },
               "effects": { "type": "array", "items": { "$ref": "#/$defs/effect" }, "uniqueItems": true }
             }

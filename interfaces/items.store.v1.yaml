@@ -1,0 +1,214 @@
+apiVersion: agentbay/v2
+kind: Interface
+metadata:
+  name: items.store
+  description: >-
+    Local corpus of item/v1 items with selector tags, per-query cursors, budget usage and coverage. sync and
+    prune are dispatcher code steps; every other endpoint is read-only and reachable by agents through their
+    role's use shim. Reads return only items from sources bound in the env that match at least one selector.
+spec:
+  version: 1
+  binding: connector
+  endpoints:
+    sync:
+      description: >-
+        Re-match stored items when the configured selectors changed (no refetch), then fetch each distinct
+        native query from every source bound to items.source/v1 (a new selector backfills its lookback window),
+        keep items that match a selector, tag them with `matched`, honor deletions and enforce budget caps
+        (stop and report when a cap would be exceeded).
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          lookback: { type: string, pattern: "^[0-9]+[mhdw]$" }
+          maxItems: { type: integer, minimum: 1 }
+      out:
+        type: object
+        required: [added, fetched, billed, sources, budget, coverage]
+        additionalProperties: false
+        properties:
+          added: { type: integer }
+          fetched: { type: integer, description: "Items the sources returned." }
+          kept: { type: integer, description: "Fetched items that matched a selector and were stored." }
+          billed: { type: integer, description: "Items read from sources (budget usage), including deletion checks." }
+          deleted: { type: integer, description: "Stored items removed because the source no longer serves them." }
+          rematched: { type: integer, description: "Stored items re-tagged because the selectors changed." }
+          spentUsd: { type: number, minimum: 0 }
+          stopped: { type: [string, "null"], description: "Why sync stopped early (budget cap), or null." }
+          sources: { type: object }
+          budget: { type: object }
+          coverage: { $ref: items.coverage/v1 }
+          warnings: { type: array, items: { type: string } }
+      effects: [network, spend, write]
+    prune:
+      description: >-
+        Drop items older than the retention window, items deleted at the source (honor-deletions) and items
+        that no longer match any selector (a selector was removed).
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          olderThan: { type: string, pattern: "^[0-9]+[mhdw]$" }
+          deletedIds: { type: array, items: { type: string, description: "<source>:<extId>" } }
+      out:
+        type: object
+        required: [removed, remaining]
+        additionalProperties: false
+        properties:
+          removed: { type: integer }
+          remaining: { type: integer }
+          deleted: { type: integer }
+          unmatched: { type: integer }
+          cutoff: { type: string }
+      effects: [write, delete]
+    describe:
+      description: What agents can query with `sql` - views, columns, types, row counts, sample values, the full-text table and limits.
+      in: { type: object, additionalProperties: false }
+      out:
+        type: object
+        required: [views, fts, limits]
+        additionalProperties: false
+        properties:
+          views: { type: array, items: { type: object } }
+          fts: { type: object }
+          functions: { type: array, items: { type: string } }
+          limits: { type: object }
+          coverage: { $ref: items.coverage/v1 }
+      effects: [read]
+    sql:
+      description: >-
+        One read-only SELECT over the approved views (v_items, v_posts) and items_fts. Sandboxed: read-only
+        connection, authorizer, time limit, row and byte caps; output is redacted and secret-scanned. Errors say
+        what to change.
+      in:
+        type: object
+        required: [sql]
+        additionalProperties: false
+        properties:
+          sql: { type: string, minLength: 1, maxLength: 20000 }
+          limit: { type: integer, minimum: 1, maximum: 1000 }
+      out:
+        type: object
+        required: [columns, rows, rowCount, truncated]
+        additionalProperties: false
+        properties:
+          columns: { type: array, items: { type: string } }
+          rows: { type: array, items: { type: array } }
+          rowCount: { type: integer }
+          truncated: { type: [string, "null"], description: "Why rows were cut (row or byte cap), or null." }
+          error: { type: string }
+      effects: [read]
+    get:
+      description: Full items for a few ids (<source>:<extId>).
+      in:
+        type: object
+        required: [ids]
+        additionalProperties: false
+        properties:
+          ids: { type: array, items: { type: string }, minItems: 1, maxItems: 50 }
+      out:
+        type: object
+        required: [items, missing]
+        additionalProperties: false
+        properties:
+          items: { type: array, items: { $ref: item/v1 } }
+          missing: { type: array, items: { type: string } }
+      effects: [read]
+    thread:
+      description: Every stored item in the same thread as `id`, oldest first.
+      in:
+        type: object
+        required: [id]
+        additionalProperties: false
+        properties:
+          id: { type: string }
+          limit: { type: integer, minimum: 1, maximum: 200 }
+      out:
+        type: object
+        required: [items]
+        additionalProperties: false
+        properties:
+          threadId: { type: [string, "null"] }
+          items: { type: array, items: { $ref: item/v1 } }
+      effects: [read]
+    facets:
+      description: Counts per value of one field (source, author, container, kind, selector, day), optionally in a window or for one selector.
+      in:
+        type: object
+        required: [field]
+        additionalProperties: false
+        properties:
+          field: { enum: [source, author, container, kind, selector, day] }
+          since: { type: string }
+          until: { type: string }
+          selector: { type: string }
+          limit: { type: integer, minimum: 1, maximum: 200 }
+      out:
+        type: object
+        required: [field, values]
+        additionalProperties: false
+        properties:
+          field: { type: string }
+          values: { type: array, items: { type: object } }
+      effects: [read]
+    search:
+      description: Full-text search (FTS5, ranked, with snippets; LIKE matching when FTS5 is unavailable). Words are ANDed; use `sql` with items_fts MATCH for operators.
+      in:
+        type: object
+        required: [text]
+        additionalProperties: false
+        properties:
+          text: { type: string, minLength: 1 }
+          since: { type: string }
+          until: { type: string }
+          selector: { type: string }
+          limit: { type: integer, minimum: 1, maximum: 200 }
+      out:
+        type: object
+        required: [items, engine]
+        additionalProperties: false
+        properties:
+          items: { type: array, items: { type: object } }
+          engine: { enum: [fts5, like] }
+      effects: [read]
+    query:
+      description: Stored items newest first, filtered by window, author, substring, selector or ids. Times are ISO-8601 or relative (3d, 12h).
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          since: { type: string }
+          until: { type: string }
+          author: { type: string }
+          text: { type: string }
+          selector: { type: string }
+          limit: { type: integer, minimum: 1, maximum: 1000 }
+          ids: { type: array, items: { type: string }, description: "Exact <source>:<extId> ids." }
+      out:
+        type: object
+        required: [items, coverage]
+        additionalProperties: false
+        properties:
+          items: { type: array, items: { $ref: item/v1 } }
+          coverage: { $ref: items.coverage/v1 }
+      effects: [read]
+    status:
+      description: Store freshness, coverage, budget usage, counts per selector and full-text engine; no network. `stale` is true when the configured selectors differ from the ones last applied (the next sync re-matches).
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          since: { type: string, description: "Report coverage against this window start." }
+      out:
+        type: object
+        required: [lastSync, coverage, budget]
+        additionalProperties: false
+        properties:
+          lastSync: { type: [string, "null"] }
+          coverage: { $ref: items.coverage/v1 }
+          budget: { type: object }
+          count: { type: integer }
+          selectors: { type: object }
+          engine: { enum: [fts5, like] }
+          stale: { type: boolean }
+      effects: [read]

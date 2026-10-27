@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/data/post/v1",
+  "title": "post/v1",
+  "description": "item/v1 kind extension for social posts (X, Bluesky, ...): kind `post`, optional lang and engagement metrics.",
+  "allOf": [{ "$ref": "item/v1" }],
+  "properties": {
+    "kind": { "const": "post" },
+    "lang": { "type": "string" },
+    "metrics": { "type": "object", "additionalProperties": { "type": "integer" } }
+  },
+  "unevaluatedProperties": false
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/data/item/v1",
+  "title": "item/v1",
+  "description": "Envelope shared by every briefing source (posts, email, ...). `id` is `<source>:<extId>`, unique in the store and what agents cite. Kind extensions (post/v1, ...) add fields; the store validates each item against `<kind>/v1` when that schema exists. `matched` is set by the store (selector ids the item matches), never by a source.",
+  "type": "object",
+  "required": ["id", "extId", "source", "kind", "author", "text", "createdAt", "fetchedAt"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*:.+$" },
+    "extId": { "type": "string", "minLength": 1, "description": "The source's own id." },
+    "source": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "kind": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "author": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "handle": { "type": "string" }, "name": { "type": "string" }, "email": { "type": "string" } }
+    },
+    "title": { "type": ["string", "null"], "description": "Subject or headline; null for posts." },
+    "text": { "type": "string" },
+    "url": { "type": ["string", "null"], "pattern": "^https://" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "fetchedAt": { "type": "string", "format": "date-time" },
+    "container": { "type": ["string", "null"], "description": "Where it was fetched from (home, list:<id>, a folder)." },
+    "labels": { "type": "array", "items": { "type": "string" }, "description": "Every container, label or folder the item is known to be in (selector `in` matches these and container)." },
+    "threadId": { "type": ["string", "null"] },
+    "matched": { "type": "array", "items": { "type": "string" } }
+  }
+}

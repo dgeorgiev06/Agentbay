@@ -1,0 +1,44 @@
+apiVersion: agentbay/v2
+kind: Interface
+metadata:
+  name: items.source
+  description: >-
+    A source of items (posts, email, ...) in the item/v1 envelope. Called only by items.store/v1.sync through the
+    dispatcher, once per distinct native query. Connectors declare `source`, `window` and their selector
+    capability table (connector.yaml spec.selectors).
+spec:
+  version: 1
+  binding: connector
+  endpoints:
+    fetch:
+      description: >-
+        Fetch items for one native query (the native part of one or more selectors, bay/selector.py split),
+        newest first. With `cursor` (what a previous call returned) only items newer than it; otherwise items
+        created at or after `since`. `maxItems` is the read budget: the connector never reads (is billed for)
+        more items than that. `checkIds` are stored extIds of this source to re-check, at most one read each,
+        on top of `maxItems`; ids actually verified come back in `checked`, those the source no longer serves
+        in `deleted`. The store re-applies the full selectors locally, so a source may return more than its
+        native query asked for (never less).
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          query: { type: object, description: "Native selector fields (from, in, ...); never `since` or `not`." }
+          since: { type: string, format: date-time }
+          cursor: { type: [string, "null"] }
+          maxItems: { type: integer, minimum: 1 }
+          checkIds: { type: array, items: { type: string } }
+      out:
+        type: object
+        required: [items, cursor, truncated, billed]
+        additionalProperties: false
+        properties:
+          items: { type: array, items: { $ref: item/v1 } }
+          cursor: { type: [string, "null"], description: "Pass back as `cursor` next time (e.g. newest id seen)." }
+          truncated: { type: boolean, description: "The source had more than the budget or page limit allowed." }
+          requests: { type: integer }
+          billed: { type: integer, minimum: 0, description: "Items read from the source in this call (what the provider bills), including deletion checks." }
+          checked: { type: array, items: { type: string }, description: "checkIds actually verified in this call." }
+          deleted: { type: array, items: { type: string }, description: "extIds the source reports deleted or no longer available." }
+          warnings: { type: array, items: { type: string } }
+      effects: [network, spend]

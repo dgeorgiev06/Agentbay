@@ -66,7 +66,7 @@
         },
         "source": {
           "type": "string",
-          "description": "Value for feed.post/v1 `source` written by this connector."
+          "description": "Value stamped on every item's `source` by this items.source connector (item ids are <source>:<extId>)."
         },
         "needs": {
           "type": "object",
@@ -120,12 +120,56 @@
         "window": {
           "type": "string",
           "pattern": "^[0-9]+[mhdw]$",
-          "description": "How far back the source API can reach (feed.source). Older history comes only from the store."
+          "description": "How far back the source API can reach (items.source). Older history comes only from the store."
         },
         "costPerPostUsd": {
           "type": "number",
           "minimum": 0,
-          "description": "Price per post this source reads; overrides the mode's costPerPostUsd (e.g. 0 for offline sources)."
+          "description": "Price per item this source reads; overrides the mode's costPerPostUsd (e.g. 0 for offline sources). A source with a price above 0 is paid: validate warns about local-only selector fields on it."
+        },
+        "selectors": {
+          "type": "object",
+          "description": "items.source: which selector fields (bay/selector.py) this source's native search handles. `native` narrows the fetch, `local` is matched by the store after fetching; a field not listed cannot be expressed (bay validate errors). `as` says what a native value means here (e.g. a handle, a List id).",
+          "propertyNames": {
+            "enum": [
+              "from",
+              "to",
+              "subject",
+              "text",
+              "in",
+              "has",
+              "since",
+              "not"
+            ]
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "enum": [
+                  "native",
+                  "local"
+                ]
+              },
+              {
+                "type": "object",
+                "required": [
+                  "mode"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "mode": {
+                    "enum": [
+                      "native",
+                      "local"
+                    ]
+                  },
+                  "as": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
         }
       }
     }

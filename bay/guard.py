@@ -15,7 +15,8 @@ comes from a subagent; the main thread sends neither.
     touch .agentbay/ or the kit CLI in any way; everything else falls through
     to normal permissions.
   * main thread (no agent fields): no decision; settings.json applies (explicit
-    `bay call|submit|status|log|note|task|show` allows, Edit deny rules).
+    `bay show|status|log|note|task` allows, Edit deny rules; `bay call` and
+    `bay submit` always prompt).
     Claude Code versions that do not send agent fields therefore look like the
     main thread; agentbay requires a version that does (documented).
 
@@ -29,8 +30,9 @@ agentbay subagents:
   * Bash: one simple command (no ; && | > < ` $( or newlines) that is the role's
     own shim or one of its env's command prefixes; git file-writing/exec flags
     (--output, --ext-diff, --textconv, --no-index, ...) are refused, and no
-    argument may resolve under .agentbay/ or .claude/. Allowed commands get an
-    explicit "allow" so they do not prompt.
+    argument may resolve under .agentbay/ or .claude/. Only the role's own shim
+    gets an explicit "allow" (and not in the agentbay checkout); everything else
+    that passes the guard still gets Claude Code's normal permission prompt.
 All paths are normalized (.., symlinks) before checking. Errors fail closed for
 subagents.
 """
@@ -299,7 +301,9 @@ class Guard:
             for w in words[1:]:
                 if w.startswith("-"):
                     return "deny", f"agentbay: the use shim takes no flags (got {w})"
-            return "allow", ""             # the ONLY auto-allow: the role's own read-only data shim
+            if self.policy.get("autoAllowShim", True):
+                return "allow", ""         # the ONLY auto-allow: the role's own read-only data shim
+            return "pass", ""              # agentbay checkout: roles can edit code the shim runs; prompt
         for prefix in entry.get("clis", []):
             pw = shlex.split(prefix)
             if words[: len(pw)] != pw:

@@ -200,7 +200,7 @@ implementation. The fix-round items below are fixes from the two review rounds, 
 **Removed:**
 - The config-level `bindings` override. `envs/<env>.yaml` is the only place capabilities are bound; an
   `agentbay.config.yaml` containing `bindings` is rejected with a message pointing to the env. To run offline,
-  select the shipped offline env with `envs: { local-feeds: local-feeds-offline }` (approved below).
+  select the shipped offline env with `envs: { local-feeds: local-feeds-offline }` (approved above).
 - Env `fs.base`. fs paths are always relative to the project root (the repo agents work in); an env with
   `fs.base` is rejected. The forge envs (`local-authoring`, `framework-dev`) keep the same paths (`modes`, `roles`,
   ..., `framework`, `bay`, `schemas`, ...) and resolve exactly as before because forge's project is the agentbay
@@ -231,7 +231,7 @@ implementation. The fix-round items below are fixes from the two review rounds, 
   rules never match in Claude Code). Callers: `agent_type` naming a generated role = that role; otherwise
   `agent_id` present = unknown subagent; neither (or `agent_type` without `agent_id`, i.e. a `--agent` main
   session) = main thread, where settings.json applies. For unknown subagents the guard enforces exactly: file
-  tools may not touch a path under `.agentbay/` (by path, case-folded on case-insensitive disks, or inode
+  tools may not touch a path under `.agentbay/` (by path, case-folded on case-insensitive disks, or inode of symlink aliases; hard links are not detected
   identity), file writes may not touch the never-write list (below); Glob/Grep patterns that match
   `.agentbay/` or `.claude/` probe paths are denied; Bash words that resolve under `.agentbay/` or `.claude/`
   or to the kit CLI, shell globs that match those probes, and inline interpreter code (`sh/bash/zsh -c`,

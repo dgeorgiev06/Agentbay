@@ -528,3 +528,32 @@ def test_n5_fake_fixture_must_stay_inside_the_project():
             assert "must be a path inside the project" in str(e)
     finally:
         cleanup(p)
+
+
+
+# ---------------------------------------------------------------- confirmation review
+def test_use_shim_does_not_import_project_files():
+    """The auto-allowed shim must not import modules an agent wrote in the project (e.g. yaml.py)."""
+    p = built()
+    try:
+        marker = p / "PWNED"
+        (p / "yaml.py").write_text(f"open({str(marker)!r}, 'w').write('x')\n")
+        shim = p / ".agentbay/roles/feed-analyst/use"
+        r = sh(p, str(shim), "feed.store/v1.query", "{}")
+        assert r.returncode == 0, r.stderr
+        assert not marker.exists(), "shim imported a project-root module"
+        assert "python3 -E" in shim.read_text() and "python3 -c" not in shim.read_text()
+    finally:
+        cleanup(p)
+
+
+def test_shim_is_not_auto_allowed_in_the_agentbay_checkout():
+    from helpers import kit_copy
+    k = kit_copy()
+    try:
+        get("claude-code").build(system(k, k), k, k)
+        assert json.loads((k / ".agentbay/guard.json").read_text())["autoAllowShim"] is False
+        cmd = ".agentbay/roles/feed-analyst/use feed.store/v1.query '{}'"
+        assert decide(guard_for(k), "feed-analyst", "Bash", {"command": cmd}) == "pass"
+    finally:
+        cleanup(k)

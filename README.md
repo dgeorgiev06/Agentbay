@@ -121,14 +121,16 @@ All tracked in `.agentbay/manifest.json` and removed by `clean`; your CLAUDE.md,
 it cannot contain code once something runs it. Hard isolation needs an OS sandbox (next release).
 
 - **Nothing that runs code is auto-approved.** The only thing agentbay lets run without a prompt is a role's own
-  read-only data shim (`.agentbay/roles/<role>/use`). Every other subagent command (git, `./bay.sh`, test runners,
+  read-only data shim (`.agentbay/roles/<role>/use`), which runs only kit code (an isolated script with
+  `python3 -E`, so files in your project can't be imported); in the agentbay checkout itself, where roles can
+  edit the connectors it runs, even the shim prompts. Every other subagent command (git, `./bay.sh`, test runners,
   interpreters) prompts you. In the main thread only `bay show|status|log|note|task` are pre-approved;
   `bay call` and `bay submit` run connector code, so Claude Code asks each time.
 - **Approval gates are yours:** `bay approve <callId>` works only in your own terminal.
 - **What subagents cannot touch** (guard hook on Bash and every file tool, plus `Edit` deny rules in
   settings.json): `.agentbay/` (control plane, store, call state), `.claude/`, `.git`, `CLAUDE.md`, `.mcp.json`,
   `agentbay.config.yaml`, `.env*`, `.envrc`, `Makefile`, `bay.sh`, `.vscode/`, `.idea/`, `.github/workflows/`,
-  and the kit. Paths are compared case-insensitively where the disk is, and by inode. A role writes only inside
+  and the kit. Paths are compared case-insensitively where the disk is, and by inode for symlink aliases (hard links are not detected; that needs the OS sandbox). A role writes only inside
   its env's `fs.write`, and roles without write tools write nothing.
 - **Fail closed:** a crashing or timed-out guard blocks the call (`onFailure: block`, Claude Code >= 2.1.295).
 - **forge.extend** (changes the framework and runs its tests) is installed only when you build agentbay into

@@ -14,13 +14,13 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import yaml
+
 SKIP_DIRS = {".git", "__pycache__", ".agentbay", ".claude", "node_modules", ".venv", "venv", ".mypy_cache",
              ".pytest_cache", ".tox", "dist", "build"}
 TEXT_EXT = {".py", ".yaml", ".yml", ".json", ".md", ".tmpl", ".sh", ".txt", ".toml", ".cfg"}
-IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-ENTRY_FILES = {"cli.py", "guard.py", "hook.py", "run.py", "conftest.py", "__init__.py", "setup.py", "__main__.py",
-               "main.py", "manage.py"}
-KEEP_NAMES = {"main", "create", "setUp", "tearDown"}
+ENTRY_FILES = {"conftest.py", "__init__.py", "setup.py", "__main__.py"}
+KEEP_NAMES = {"setUp", "tearDown"}
 
 
 def kind_of(rel: str) -> str:
@@ -233,6 +233,8 @@ def _concepts(g: Graph, kit: Path) -> None:
 
 # ----------------------------------------------------------------------------- python
 def _names(tree: ast.Module) -> set[str]:
+    """Names this module references in code (AST only: names, attributes, imports). Strings, comments and
+    docstrings never count."""
     out: set[str] = set()
     for n in ast.walk(tree):
         if isinstance(n, ast.Name):
@@ -244,8 +246,6 @@ def _names(tree: ast.Module) -> set[str]:
             out.update(n.name.split("."))
         elif isinstance(n, ast.ImportFrom) and n.module:
             out.update(n.module.split("."))
-        elif isinstance(n, ast.Constant) and isinstance(n.value, str):
-            out.update(IDENT.findall(n.value))
     return out
 
 
@@ -259,48 +259,66 @@ def _defs(rel: str, tree: ast.Module):
                         yield f"{n.name}.{m.name}", m.lineno, m.name, m
 
 
-def endpoint_names(texts: dict) -> set[str]:
-    """Capability endpoint names: connectors implement them and the dispatcher calls them via getattr."""
-    out: set[str] = set()
-    for rel, t in texts.items():
-        if "/interfaces/" in f"/{rel}" and rel.endswith(".yaml"):
-            m = re.search(r"^\s{2}endpoints:\s*\n((?:\s{4,}.*\n?)*)", t, re.M)
-            if m:
-                out.update(re.findall(r"^\s{4}([a-z][a-z0-9_-]*):", m.group(1), re.M))
+def is_script(tree: ast.Module) -> bool:
+    """Has an `if __name__ == "__main__":` block (run by path: a root)."""
+    for n in tree.body:
+        if isinstance(n, ast.If) and isinstance(n.test, ast.Compare) and isinstance(n.test.left, ast.Name) \
+                and n.test.left.id == "__name__":
+            return True
+    return False
+
+
+def connector_entries(g: Graph) -> dict[str, set[str]]:
+    """Connector entry modules (loaded by path from connector.yaml: roots) -> the endpoint names their
+    classes implement (called by the dispatcher via getattr: roots too), plus `create`."""
+    ifaces: dict[str, set[str]] = {}
+    conns: list[tuple[str, dict]] = []
+    for rel, t in g.texts.items():
+        if not rel.endswith(".yaml") or "kind:" not in t:
+            continue
+        try:
+            doc = yaml.safe_load(t)
+        except yaml.YAMLError:
+            continue
+        if not isinstance(doc, dict) or not isinstance(doc.get("spec"), dict):
+            continue
+        if doc.get("kind") == "Interface":
+            name = f"{(doc.get('metadata') or {}).get('name')}/v{doc['spec'].get('version')}"
+            ifaces[name] = set((doc["spec"].get("endpoints") or {}).keys())
+        elif doc.get("kind") == "Connector":
+            conns.append((rel, doc["spec"]))
+    out: dict[str, set[str]] = {}
+    for rel, spec in conns:
+        entry = (Path(rel).parent / str(spec.get("entry", ""))).as_posix()
+        impl = spec.get("implements") or []
+        eps = {"create"}
+        for i in [impl] if isinstance(impl, str) else impl:
+            eps |= ifaces.get(i, set())
+        out[entry] = eps
     return out
 
 
 def _python(g: Graph) -> None:
+    """Python definitions and modules count as referenced only through the AST of other code. Roots: tests,
+    scripts with a __main__ block, package/pytest files, connector entry modules with their endpoint methods."""
     names_by_file = {rel: _names(t) for rel, t in g.py.items()}
-    text_tokens: set[str] = set()
-    for rel, t in g.texts.items():
-        if not rel.endswith(".py"):
-            text_tokens.update(IDENT.findall(t))
-    used = set().union(*names_by_file.values()) if names_by_file else set()
-    dynamic = endpoint_names(g.texts)
+    entries = connector_entries(g)
     for rel, tree in g.py.items():
         mid = f"py:{rel}"
         g.node(mid, "module", rel, rel, 1)
         if kind_of(rel) == "test":
             continue
+        used = set().union(*names_by_file.values())
+        roots = entries.get(rel, set())
         for qual, line, short, _ in _defs(rel, tree):
             nid = f"fn:{rel}:{qual}"
             g.node(nid, "function", qual, rel, line)
-            if (short in used or short in text_tokens or short in dynamic or short in KEEP_NAMES
-                    or short.startswith(("test_", "visit_", "__"))):
+            if short in used or short in roots or short in KEEP_NAMES or short.startswith(("test_", "visit_", "__")):
                 g.edges.append(("ref:python", nid, "name"))
-    # module references: imported or named by another file (entry points are referenced by their callers)
-    stems: dict[str, list[str]] = {}
-    for rel in g.py:
-        stems.setdefault(Path(rel).stem, []).append(rel)
-    for rel in g.py:
+    for rel, tree in g.py.items():
         p = Path(rel)
-        script = "__main__" in g.texts.get(rel, "") and "__name__" in g.texts.get(rel, "")
-        if kind_of(rel) == "test" or p.name in ENTRY_FILES or script:
+        if kind_of(rel) == "test" or p.name in ENTRY_FILES or is_script(tree) or rel in entries:
             g.edges.append(("ref:entry", f"py:{rel}", "entry"))
-            continue
-        stem = p.stem
-        hit = any(stem in names for other, names in names_by_file.items() if other != rel) or any(
-            re.search(rf"(?<![\w-]){re.escape(p.name)}(?![\w-])", t) for other, t in g.texts.items() if other != rel)
-        if hit:
+        elif any(p.stem in names for other, names in names_by_file.items() if other != rel):
             g.edges.append(("ref:import", f"py:{rel}", "import"))
+

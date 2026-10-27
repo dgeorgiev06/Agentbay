@@ -48,3 +48,8 @@ def scrub_obj(obj):
     if isinstance(obj, list):
         return [scrub_obj(x) for x in obj]
     return obj
+
+
+def clip(text: str, n: int) -> str:
+    """Scrub, then cut to n chars: cutting first could leave the prefix of a secret the scan no longer sees."""
+    return scrub(text or "")[:n]

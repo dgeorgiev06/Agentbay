@@ -104,6 +104,20 @@ def test_interrupts():
     assert ds.interrupts(data(e[:1]), TH) == []
 
 
+def test_repeated_status_questions():
+    e = [ep(1, id="cc:a", statusQuestions=2), ep(2, id="cc:b", statusQuestions=1)]
+    c = ds.status_questions(data(e), TH)
+    assert kinds(c) == ["status-questions"] and c[0]["measure"] == {"questions": 3, "episodes": 2}
+    assert ds.status_questions(data(e[:1]), TH) == []                               # one session is not recurring
+
+
+def test_environment_gaps():
+    e = [ep(1, id="cc:a", envGaps={"missing-module": 2}), ep(2, id="cc:b", envGaps={"missing-module": 1,
+                                                                                    "network-blocked": 1})]
+    c = ds.env_gaps(data(e), TH)
+    assert [x["detector"]["key"] for x in c] == ["missing-module"] and c[0]["measure"]["errors"] == 3
+
+
 def test_reverts_and_churn_from_git():
     commits = [ep(i, id=f"git:{i:07x}", source="git", kind="commit",
                   commit={"sha": f"{i:07x}", "isRevert": False, "files": ["hot.py"]}) for i in range(5)]
@@ -182,13 +196,26 @@ def test_comments_restating_code_and_padded_messages():
 
 
 def test_unused_needs_no_references_and_no_ledger_uses():
-    root = tree({"pkg/core.py": "def used():\n    return 1\n\ndef dead_helper():\n    return 2\n",
-                 "pkg/main.py": "from pkg.core import used\nprint(used())\n",
-                 "pkg/orphan_mod.py": "X = 1\n"})
+    root = tree({
+        "pkg/core.py": "def used():\n    return 1\n\ndef dead_helper():\n    return 2\n\n"
+                       "def only_in_comments():\n    return 3\n",
+        "pkg/main.py": "# only_in_comments() is mentioned here, but never called\n"
+                       "from pkg.core import used\n\ndef main():\n    print(used(), 'dead_helper')\n\n"
+                       "if __name__ == '__main__':\n    main()\n",
+        "pkg/settings.yaml": "hook: only_in_comments\nalso: orphan_mod\n",
+        "pkg/orphan_mod.py": "X = 1\n",
+        "interfaces/thing.v1.yaml": "apiVersion: agentbay/v2\nkind: Interface\nmetadata: {name: thing}\n"
+                                    "spec: {version: 1, endpoints: {fetch: {effects: [read]}}}\n",
+        "connectors/c/connector.yaml": "apiVersion: agentbay/v2\nkind: Connector\nmetadata: {name: c}\n"
+                                       "spec: {implements: thing/v1, entry: c.py}\n",
+        "connectors/c/c.py": "class C:\n    def fetch(self):\n        return []\n\n    def stale(self):\n"
+                             "        return 0\n\ndef create(ctx):\n    return C()\n"})
     try:
         c = da.unused(arts(root), da.thresholds({}))
         ids = sorted(x["detector"]["key"] for x in c)
-        assert ids == ["fn:pkg/core.py:dead_helper", "py:pkg/orphan_mod.py"]
+        # a string, a comment or a YAML mention is not a reference; scripts and connector entry points are roots
+        assert ids == ["fn:connectors/c/c.py:C.stale", "fn:pkg/core.py:dead_helper", "fn:pkg/core.py:only_in_comments",
+                       "py:pkg/orphan_mod.py"], ids
         assert c[0]["evidence"][1] == {"kind": "measurement", "ref": "ledger", "detail": "0 uses", "value": 0}
     finally:
         cleanup(root.parent)

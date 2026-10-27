@@ -11,10 +11,11 @@ import re
 from collections import Counter, defaultdict
 
 from .. import checks
+from ..secretscan import clip
 
 DEFAULTS = {"reviewRounds": 1, "ruleRepeat": 2, "slowStepMs": 600_000, "costlyStepUsd": 1.0,
             "costlySessionUsd": 10.0, "repeatCalls": 3, "permissionEvents": 3, "interrupts": 2,
-            "churnCommits": 5, "severeFactor": 3}
+            "churnCommits": 5, "severeFactor": 3, "statusQuestions": 2}
 CHECK_CITED = re.compile(r"\b(" + "|".join(sorted(checks.REGISTRY)) + r"|bay lint|\blint\b|validate|tests?/|"
                          r"run\.py|pytest|unit tests?|failing tests?|tests? fail\w*)", re.I)
 SCOPE = re.compile(r"\b(out of scope|out-of-scope|outside (the )?(approved )?(scope|proposal|deliverable)|"
@@ -94,7 +95,7 @@ def rule_repeat(data: dict, th: dict) -> list[dict]:
               for v, it in hits]
         text = next((it.get("text") for _, it in hits if it.get("text")), "")
         out.append(candidate("rule-repeat", f"{target}:{rid}", f"{target} {rid} keeps failing review",
-                             f"{rid} failed in {len(hits)} reviews" + (f": {text[:120]}" if text else ""),
+                             f"{rid} failed in {len(hits)} reviews" + (f": {clip(text, 120)}" if text else ""),
                              ev, {**_scope_of_target(target), "rule": rid}, "high" if len(hits) > 2 else "medium",
                              {"failures": len(hits)},
                              "Make the rule a deterministic check (rules.yaml `check:`) or add the missing step "
@@ -273,6 +274,40 @@ def interrupts(data: dict, th: dict) -> list[dict]:
                       "stop condition or confirmation step.")]
 
 
+def status_questions(data: dict, th: dict) -> list[dict]:
+    """The user keeps asking where things stand: progress is not visible (from transcripts)."""
+    hits = [(e["id"], e["statusQuestions"]) for e in data["episodes"] if e.get("statusQuestions")]
+    total = sum(n for _, n in hits)
+    ev = [{"kind": "episode", "ref": eid, "detail": f"{n} status question(s)", "value": n} for eid, n in hits]
+    if total < th["statusQuestions"] or not _recurring(ev, False):
+        return []
+    return [candidate("status-questions", "user", "The user keeps asking for status",
+                      f"{total} short status questions across {len(hits)} sessions", ev,
+                      {"framework": "claude-code sessions"}, "medium", {"questions": total, "episodes": len(hits)},
+                      "Make progress visible without asking: report step completions (bay status) or have long "
+                      "steps post interim results.")]
+
+
+def env_gaps(data: dict, th: dict) -> list[dict]:
+    """Tool errors that point at the environment (missing command or module, blocked network, sandbox denial)."""
+    groups: dict[str, list] = defaultdict(list)
+    for e in data["episodes"]:
+        for kind, n in (e.get("envGaps") or {}).items():
+            groups[kind].append((e["id"], n))
+    out = []
+    for kind, hits in groups.items():
+        ev = [{"kind": "episode", "ref": eid, "detail": f"{n} {kind} error(s)", "value": n} for eid, n in hits]
+        if not _recurring(ev, False):
+            continue
+        total = sum(n for _, n in hits)
+        out.append(candidate("env-gap", kind, f"Environment gap: {kind}",
+                             f"{total} tool errors of kind {kind} across {len(hits)} sessions", ev,
+                             {"framework": f"environment {kind}"}, "medium", {"errors": total, "episodes": len(hits)},
+                             "Install or bind what is missing in the env (a CLI prefix, a dependency, a network "
+                             "allow entry) or tell the role it is unavailable."))
+    return out
+
+
 def reverts(data: dict, th: dict) -> list[dict]:
     out = []
     commits = [e for e in data["episodes"] if e["kind"] == "commit"]
@@ -310,6 +345,8 @@ DETECTORS = {
     "retry-loop": retries,
     "permission-friction": permission_friction,
     "interrupts": interrupts,
+    "status-questions": status_questions,
+    "env-gap": env_gaps,
     "revert": reverts,
     "churn": reverts,
 }

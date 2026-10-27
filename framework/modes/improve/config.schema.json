@@ -22,6 +22,7 @@
         "permissionEvents": { "type": "integer", "minimum": 1 },
         "interrupts": { "type": "integer", "minimum": 1 },
         "churnCommits": { "type": "integer", "minimum": 2 },
+        "statusQuestions": { "type": "integer", "minimum": 1 },
         "severeFactor": { "type": "number", "minimum": 1 },
         "nearDuplicate": { "type": "number", "minimum": 0.3, "maximum": 1 },
         "contextTokens": { "type": "integer", "minimum": 500 },

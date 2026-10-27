@@ -1,5 +1,0 @@
-apiVersion: agentbay/v2
-kind: Rules
-rules:
-  - { id: R-1, level: must, statement: "Honor deletions: a post deleted at the source is removed and never re-stored.", appliesTo: executor, refs: [DOD-1] }
-  - { id: R-2, level: must_not, statement: "Delete anything outside the feed store directory.", appliesTo: executor }

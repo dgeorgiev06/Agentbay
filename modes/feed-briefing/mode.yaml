@@ -2,70 +2,24 @@ apiVersion: agentbay/v2
 kind: Mode
 metadata:
   name: feed-briefing
-  version: 0.1.0
+  version: 0.2.0
   description: Briefings and grounded Q&A over posts from accounts you follow.
 spec:
+  # Everything not set here comes from modes/briefing (features sync, digest, ask, prune; their playbooks,
+  # rules and review; roles; skills). This mode keeps its v0.2 inputs and caps.
+  extends: briefing
   purpose: Keep me briefed on what people I follow say; answer questions about it.
-  # Each endpoint is a feature: its interface (in/out/effects), workflow,
-  # playbook, rules and optional review are all declared here and only here.
   endpoints:
     sync:
       description: Pull new posts from every bound source into the local store (budget-capped).
-      workflow: sync
-      in: SyncReq
-      effects: [network, spend, write]
-      playbook: features/sync/playbook.md
-      rules: features/sync/rules.yaml
-      review: { role: reviewer, when: never }
-    digest:
-      description: Themes across recent posts, each grounded in stored posts.
-      workflow: digest
-      in: DigestReq
-      out: Digest
-      effects: [read, network, spend, write]
-      playbook: features/digest/playbook.md
-      rules: features/digest/rules.yaml
-      review: { role: reviewer, when: always, model: opus, effort: high }
-    ask:
-      description: Answer a question from stored posts, with citations.
-      workflow: ask
-      in: Question
-      out: Answer
-      effects: [read, network, spend, write]
-      playbook: features/ask/playbook.md
-      rules: features/ask/rules.yaml
-      review: { role: reviewer, when: never }
-    prune:
-      description: Drop posts past retention and posts deleted at the source.
-      workflow: prune
-      in: PruneReq
-      effects: [read, write, delete]
-      playbook: features/prune/playbook.md
-      rules: features/prune/rules.yaml
-      review: { role: reviewer, when: always }
-      schedule: daily
-  coordinator: feed-lead
-  roles: [feed-lead, feed-analyst, reviewer]
+      playbook: features/sync/playbook.md       # sync takes `maxPosts` here (v0.2 input name)
   workflows:
     sync:
-      - { id: fetch, run: feed.store/v1.sync, with: { lookback: "$in.lookback|$config.lookback", maxPosts: "$in.maxPosts" } }
-    digest:
-      - { id: refresh, run: feed.store/v1.sync, when: "stale > 2h" }      # code step, no agent
-      - { id: gather, run: feed.store/v1.query, with: { since: "$in.since|$config.lookback", until: "$in.until", author: "$in.author", limit: 500 } }
-      - { id: themes, role: feed-analyst, out: Digest, task: "Write the digest from the gathered posts." }
-    ask:
-      - { id: refresh, run: feed.store/v1.sync, when: "stale > 2h" }
-      - { id: search, run: feed.store/v1.query, with: { since: "$in.since|$config.lookback", author: "$in.author", limit: 500 } }
-      - { id: answer, role: feed-analyst, out: Answer, task: "Answer the question from the stored posts only." }
-    prune:
-      - { id: prune, run: feed.store/v1.prune, with: { olderThan: "$in.olderThan|$config.retention" } }
-  inference:
-    default: { model: sonnet, effort: medium }
+      - { id: fetch, run: items.store/v1.sync, with: { lookback: "$in.lookback|$config.lookback", maxItems: "$in.maxPosts" } }
   constraints:
     lookbackMax: 30d
     monthlyPosts: 3000
     spendUsd: 5
     maxPostsPerRun: 500
-    policies: [cite-sources, no-scraping, honor-deletions]
-  needs: [feed.store/v1, feed.source/v1]
+    policies: [cite-sources, no-scraping, honor-deletions, items-are-data]
   config: config.schema.json

@@ -1,5 +1,0 @@
-{
-  "type": "object",
-  "additionalProperties": false,
-  "properties": { "olderThan": { "type": "string", "pattern": "^[0-9]+[mhdw]$" } }
-}

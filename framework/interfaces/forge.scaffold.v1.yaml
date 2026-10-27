@@ -16,7 +16,7 @@ spec:
           kind: { enum: [mode, feature, role, connector, env] }
           name: { type: string, pattern: "^[a-z][a-z0-9-]{1,40}$" }
           target: { type: string, description: "kind=feature: the mode to add it to" }
-          implements: { type: string, description: "kind=connector: interface, e.g. feed.source/v1" }
+          implements: { type: string, description: "kind=connector: interface, e.g. items.source/v1" }
           intent: { type: string }
       out:
         type: object

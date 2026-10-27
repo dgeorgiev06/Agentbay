@@ -9,20 +9,22 @@ def test_shipped_kit_resolves():
     assert [st.kind for st in d.steps] == ["code", "code", "role", "review"]
     review = d.steps[-1]
     assert review.role == "reviewer" and review.inference.model == "opus" and review.inference.effort == "high"
-    assert s.roles["feed-analyst"].bay_uses == ["feed.store/v1.query"]
+    assert s.roles["briefing-analyst"].bay_uses == [f"items.store/v1.{e}" for e in (
+        "describe", "sql", "get", "thread", "facets", "search", "query", "status")]
+    assert "briefing" not in s.modes and s.modes["feed-briefing"].extends == "briefing"    # abstract base
     assert "Edit" not in s.roles["reviewer"].tools
 
 
 def test_inference_precedence_step_over_default_over_role_over_agent():
     k = kit_copy()
-    edit_yaml(k / "modes/feed-briefing/mode.yaml",
+    edit_yaml(k / "modes/briefing/mode.yaml",
               lambda d: d["spec"]["inference"].update({"default": {"model": "haiku"}, "steps": {"answer": {"effort": "high"}}}))
     s = model.resolve(model.Kit(k))
     ans = next(st for st in s.modes["feed-briefing"].features["ask"].steps if st.id == "answer")
     assert (ans.inference.model, ans.inference.effort) == ("haiku", "high")
     # role default (no mode inference) beats agent default
-    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"].pop("inference"))
-    edit_yaml(k / "roles/feed-analyst.yaml", lambda d: d["spec"].update({"inference": {"model": "opus"}}))
+    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"].pop("inference"))
+    edit_yaml(k / "roles/briefing-analyst.yaml", lambda d: d["spec"].update({"inference": {"model": "opus"}}))
     s = model.resolve(model.Kit(k))
     ans = next(st for st in s.modes["feed-briefing"].features["ask"].steps if st.id == "answer")
     assert ans.inference.model == "opus"
@@ -30,10 +32,10 @@ def test_inference_precedence_step_over_default_over_role_over_agent():
 
 def test_unbound_capability():
     k = kit_copy()
-    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["bind"].pop("feed.store/v1"))
-    g = assert_gap(k, "feed-briefing.sync step fetch", "feed.store/v1 is not bound in env local-feeds", "unbound capability")
-    assert "add `feed.store/v1: <connector>`" in g
-    assert_gap(k, "role feed-analyst: uses feed.store/v1", "does not bind it")
+    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["bind"].pop("items.store/v1"))
+    g = assert_gap(k, "feed-briefing.sync step fetch", "items.store/v1 is not bound in env local-feeds", "unbound capability")
+    assert "add `items.store/v1: <connector>`" in g
+    assert_gap(k, "role briefing-analyst: uses items.store/v1", "does not bind it")
 
 
 def test_effect_not_allowed_by_env():
@@ -57,12 +59,12 @@ def test_model_not_allowed():
 
 def test_unknown_role_agent_env():
     k = kit_copy()
-    edit_yaml(k / "modes/feed-briefing/mode.yaml",
+    edit_yaml(k / "modes/briefing/mode.yaml",
               lambda d: d["spec"]["workflows"]["ask"][2].update({"role": "ghost"}))
     assert_gap(k, "feed-briefing.ask step answer", "unknown role 'ghost'")
     k = kit_copy()
-    edit_yaml(k / "roles/feed-analyst.yaml", lambda d: d["spec"].update({"agent": "nobody"}))
-    assert_gap(k, "role feed-analyst", "unknown agent 'nobody'")
+    edit_yaml(k / "roles/briefing-analyst.yaml", lambda d: d["spec"].update({"agent": "nobody"}))
+    assert_gap(k, "role briefing-analyst", "unknown agent 'nobody'")
     k = kit_copy()
     edit_yaml(k / "agents/analyst.yaml", lambda d: d["spec"].update({"env": "nowhere"}))
     assert_gap(k, "agent analyst", "unknown env 'nowhere'")
@@ -77,37 +79,38 @@ def test_connector_needs_exceed_env():
     assert_gap(k, "connector x-api needs secret X_REFRESH_TOKEN")
     k = kit_copy()
     edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"].update({"fs": {"read": ["."], "write": ["elsewhere"]}}))
-    assert_gap(k, "connector local-store needs fs.write .agentbay/data/feeds", "outside env fs.write")
+    edit_yaml(k / "connectors/x-api/connector.yaml", lambda d: d["spec"]["needs"].update({"fs": {"write": [".agentbay/data/feeds"]}}))
+    assert_gap(k, "connector x-api needs fs.write .agentbay/data/feeds", "outside env fs.write")
 
 
 def test_unknown_connector_and_wrong_interface():
     k = kit_copy()
-    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["bind"].update({"feed.source/v1": ["bsky"]}))
-    assert_gap(k, "binds feed.source/v1 to unknown connector 'bsky'")
+    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["bind"].update({"items.source/v1": ["bsky"]}))
+    assert_gap(k, "binds items.source/v1 to unknown connector 'bsky'")
     k = kit_copy()
-    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["bind"].update({"feed.source/v1": ["local-store"]}))
-    assert_gap(k, "connector local-store is bound to feed.source/v1 but implements feed.store/v1")
+    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["bind"].update({"items.source/v1": ["corpus-store"]}))
+    assert_gap(k, "connector corpus-store is bound to items.source/v1 but implements items.store/v1")
 
 
 def test_role_cannot_use_write_connector_endpoint():
     k = kit_copy()
-    edit_yaml(k / "roles/feed-analyst.yaml", lambda d: d["spec"].update({"uses": ["feed.store/v1.sync"]}))
-    assert_gap(k, "role feed-analyst: uses feed.store/v1.sync", "agents may only call read-only connector endpoints")
+    edit_yaml(k / "roles/briefing-analyst.yaml", lambda d: d["spec"].update({"uses": ["items.store/v1.sync"]}))
+    assert_gap(k, "role briefing-analyst: uses items.store/v1.sync", "agents may only call read-only connector endpoints")
 
 
 def test_unknown_interface_and_endpoint():
     k = kit_copy()
-    edit_yaml(k / "roles/feed-analyst.yaml", lambda d: d["spec"].update({"uses": ["feed.store/v1.nope"]}))
-    assert_gap(k, "feed.store/v1 has no endpoint 'nope'")
+    edit_yaml(k / "roles/briefing-analyst.yaml", lambda d: d["spec"].update({"uses": ["items.store/v1.nope"]}))
+    assert_gap(k, "items.store/v1 has no endpoint 'nope'")
     k = kit_copy()
-    edit_yaml(k / "roles/feed-analyst.yaml", lambda d: d["spec"].update({"uses": ["mail.read/v1"]}))
+    edit_yaml(k / "roles/briefing-analyst.yaml", lambda d: d["spec"].update({"uses": ["mail.read/v1"]}))
     assert_gap(k, "uses unknown capability interface mail.read/v1")
 
 
 def test_coordinator_must_run_in_main_thread():
     k = kit_copy()
     edit_yaml(k / "agents/lead.yaml", lambda d: d["spec"].update({"runtime": "claude-code-subagent"}))
-    assert_gap(k, "mode feed-briefing: coordinator role feed-lead", "need runtime claude-code-main")
+    assert_gap(k, "mode feed-briefing: coordinator role briefing-lead", "need runtime claude-code-main")
 
 
 def test_all_gaps_reported_at_once():
@@ -131,7 +134,7 @@ def test_config_schema_and_removed_bindings_override():
     assert any("lookback 90d exceeds mode lookbackMax 30d" in g for g in gs), gs
     p = project({"modes": {"feed-briefing": {"bogus": 1}}})
     assert any("modes.feed-briefing" in g and "bogus" in g for g in gaps(KIT, p))
-    p = project({"bindings": {"local-feeds": {"feed.source/v1": ["fake"]}}})
+    p = project({"bindings": {"local-feeds": {"items.source/v1": ["fake"]}}})
     try:
         model.Kit(KIT, p)
         raise AssertionError("expected ConfigError")
@@ -173,7 +176,7 @@ def test_feature_review_block_resolves_to_existing_placeable_reviewer():
                 st = f.steps[-1] if f.steps[-1].kind == "review" else next(x for x in f.steps if x.kind == "review")
                 assert st.role == f.review["role"] and st.role in s.roles and st.env
     k = kit_copy()
-    edit_yaml(k / "modes/feed-briefing/mode.yaml",
+    edit_yaml(k / "modes/briefing/mode.yaml",
               lambda d: d["spec"]["endpoints"]["digest"]["review"].update({"role": "nobody"}))
     assert_gap(k, "feed-briefing.digest review", "unknown review role 'nobody'")
 
@@ -181,8 +184,8 @@ def test_feature_review_block_resolves_to_existing_placeable_reviewer():
 def test_offline_env_switch_selects_a_declared_substitute_only():
     from helpers import OFFLINE, project
     s = model.resolve(model.Kit(KIT, project()))
-    assert s.roles["feed-analyst"].env == "local-feeds-offline"
-    assert s.modes["feed-briefing"].features["sync"].steps[0].connector == "local-store"
+    assert s.roles["briefing-analyst"].env == "local-feeds-offline"
+    assert s.modes["feed-briefing"].features["sync"].steps[0].connector == "corpus-store"
     gs = gaps(KIT, project({"envs": {"local-feeds": "workspace"}}, source="x-api"))
     assert any("env workspace does not declare `substitutes: local-feeds`" in g for g in gs), gs
     gs = gaps(KIT, project({"envs": {"local-feeds": "nope"}}, source="x-api"))

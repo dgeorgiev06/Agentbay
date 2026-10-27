@@ -1,8 +1,15 @@
-"""x-api: feed.source/v1 over the official X API v2.
+"""x-api: items.source/v1 (post/v1 items) over the official X API v2.
 
-  GET https://api.x.com/2/users/{id}/timelines/reverse_chronological
-      max_results (<=100), since_id | start_time, exclude=retweets,replies,
-      pagination_token, expansions=author_id, tweet.fields, user.fields
+Native selector fields (connector.yaml spec.selectors), one stream per value:
+  in: home        GET https://api.x.com/2/users/{id}/timelines/reverse_chronological
+                  max_results (<=100), since_id | start_time, exclude=retweets,replies,
+                  pagination_token, expansions=author_id, tweet.fields, user.fields
+  in: list:<id>   GET https://api.x.com/2/lists/{id}/tweets (needs scope list.read; no since_id/start_time,
+                  so paging stops at the cursor or the `since` boundary)
+  from: <handle>  GET https://api.x.com/2/users/by/username/{handle}, then GET /2/users/{uid}/tweets
+                  (since_id | start_time, exclude); used only when the query has no `in`
+  no in/from      the home timeline (the v0.2 behaviour)
+`text`, `has` and `not` are local: the store matches them after fetching (X bills every post it returns).
   GET https://api.x.com/2/tweets?ids=...      deletion check: stored ids within the API window
                                               that X no longer returns are reported as deleted
   POST https://api.x.com/2/oauth2/token      (grant_type=refresh_token)
@@ -28,11 +35,11 @@ from bay.util import iso
 
 API = "https://api.x.com/2"
 TOKEN_URL = f"{API}/oauth2/token"
-SCOPES = "tweet.read users.read offline.access"
+SCOPES = "tweet.read users.read offline.access"   # + list.read for `in: list:<id>`
 PAGE_MAX = 100
 PAGE_MIN = 5          # the timeline endpoint rejects max_results < 5
 LOOKUP_MAX = 100      # GET /2/tweets accepts up to 100 ids
-TWEET_FIELDS = "created_at,lang,public_metrics,author_id"
+TWEET_FIELDS = "created_at,lang,public_metrics,author_id,conversation_id"
 USER_FIELDS = "username,name"
 EXCLUDE_OK = ("retweets", "replies")
 
@@ -110,41 +117,74 @@ class XApi:
             p["pagination_token"] = pagination_token
         return p
 
-    def _to_post(self, t: dict, users: dict, fetched: str) -> dict:
+    def _to_item(self, t: dict, users: dict, fetched: str, container: str) -> dict:
         u = users.get(t.get("author_id"), {})
         handle = u.get("username", t.get("author_id", "unknown"))
-        post = {
-            "id": str(t["id"]),
-            "source": "x",
+        item = {
+            "id": f"x:{t['id']}", "extId": str(t["id"]), "source": "x", "kind": "post",
             "author": {"handle": handle, "name": u.get("name", handle)},
-            "text": t.get("text", ""),
+            "title": None, "text": t.get("text", ""),
             "url": f"https://x.com/{handle}/status/{t['id']}",
-            "createdAt": _norm(t.get("created_at")) or fetched,
-            "fetchedAt": fetched,
+            "createdAt": _norm(t.get("created_at")) or fetched, "fetchedAt": fetched,
+            "container": container, "labels": [container],
+            "threadId": str(t["conversation_id"]) if t.get("conversation_id") else None,
         }
         if t.get("lang"):
-            post["lang"] = t["lang"]
+            item["lang"] = t["lang"]
         m = t.get("public_metrics")
         if isinstance(m, dict):
-            post["metrics"] = {k: int(v) for k, v in m.items() if isinstance(v, int)}
-        return post
+            item["metrics"] = {k: int(v) for k, v in m.items() if isinstance(v, int)}
+        return item
 
-    # ------------------------------------------------------------ feed.source/v1.fetch
-    def fetch(self, sinceId: str | None = None, startTime: str | None = None, maxPosts: int = 100,
-              checkIds: list[str] | None = None) -> dict:
+    # ------------------------------------------------------------ items.source/v1.fetch
+    def fetch(self, query: dict | None = None, since: str | None = None, cursor: str | None = None,
+              maxItems: int = 100, checkIds: list[str] | None = None) -> dict:
         warnings: list[str] = []
-        posts, newest, truncated = self._timeline(sinceId, startTime, maxPosts, warnings)
+        items: list[dict] = []
+        newest: str | None = None
+        truncated = False
+        for url, container, dated in self._streams(query or {}):
+            got, top, trunc = self._timeline(url, container, dated, cursor, since, maxItems, warnings)
+            items += got
+            truncated = truncated or trunc
+            if top and (newest is None or int(top) > int(newest)):
+                newest = top
         checked, deleted = self._deleted(checkIds or [], warnings)
-        out = {"posts": posts, "newestId": newest, "truncated": truncated, "requests": self.ctx.http.requests,
+        out = {"items": items, "cursor": newest or cursor, "truncated": truncated, "requests": self.ctx.http.requests,
                "billed": self.billed, "checked": checked, "deleted": deleted}
         if warnings:
             out["warnings"] = warnings
         return out
 
-    def _timeline(self, since_id, start_time, budget: int, warnings: list[str]):
-        url = f"{API}/users/{self.user_id()}/timelines/reverse_chronological"
+    def _streams(self, query: dict) -> list[tuple[str, str, bool]]:
+        """(url, container, accepts since_id/start_time) per native value."""
+        ins, froms = _list(query.get("in")), _list(query.get("from"))
+        out = []
+        for v in ins:
+            if v.lower() == "home":
+                out.append((f"{API}/users/{self.user_id()}/timelines/reverse_chronological", "home", True))
+            else:
+                lid = v.split(":", 1)[1] if v.lower().startswith("list:") else v
+                if not lid.isdigit():
+                    raise ConnectorError(f"x-api: `in: {v}` is not home or list:<numeric List id>")
+                out.append((f"{API}/lists/{lid}/tweets", f"list:{lid}", False))
+        if not ins:
+            for h in froms:
+                out.append((f"{API}/users/{self._lookup(h)}/tweets", f"user:{h.lower().lstrip('@')}", True))
+        if not out:
+            out.append((f"{API}/users/{self.user_id()}/timelines/reverse_chronological", "home", True))
+        return out
+
+    def _lookup(self, handle: str) -> str:
+        h = handle.lstrip("@")
+        r = self._get(f"{API}/users/by/username/{h}")
+        if r.status != 200 or not (r.json() or {}).get("data"):
+            raise ConnectorError(f"x-api: cannot resolve handle @{h} (HTTP {r.status}); check the selector's `from`")
+        return str(r.json()["data"]["id"])
+
+    def _timeline(self, url, container, dated, cursor, since, budget: int, warnings: list[str]):
         fetched = iso(self.ctx.now())
-        posts: list[dict] = []
+        items: list[dict] = []
         token: str | None = None
         truncated = False
         pages = 0
@@ -158,26 +198,33 @@ class XApi:
                 truncated = True
                 warnings.append(f"x-api: stopped after maxPages={self.max_pages}")
                 break
-            params = self.build_params(max_results=min(PAGE_MAX, left), since_id=since_id, start_time=start_time,
-                                       exclude=self.exclude, pagination_token=token)
+            params = self.build_params(max_results=min(PAGE_MAX, left), since_id=cursor if dated else None,
+                                       start_time=since if dated else None,
+                                       exclude=self.exclude if dated else None, pagination_token=token)
             r = self._get(url, params)
             pages += 1
             if r.status == 429:
                 truncated = True
-                warnings.append(_rate_limited(r, f"kept {len(posts)} posts, run sync again later"))
+                warnings.append(_rate_limited(r, f"kept {len(items)} posts, run sync again later"))
                 break
             if r.status != 200:
-                raise ConnectorError(f"x-api: timeline request failed (HTTP {r.status})")
+                raise ConnectorError(f"x-api: {container} request failed (HTTP {r.status})")
             body = r.json() or {}
             users = {u["id"]: u for u in (body.get("includes") or {}).get("users", [])}
             page = body.get("data") or []
             self.billed += len(page)                     # X bills what it returns
-            posts += [self._to_post(t, users, fetched) for t in page]
+            done = False
+            for t in page:
+                it = self._to_item(t, users, fetched, container)
+                if not dated and ((cursor and int(t["id"]) <= int(cursor)) or (since and it["createdAt"] < since)):
+                    done = True                          # lists have no since_id/start_time: stop at the boundary
+                    break
+                items.append(it)
             token = (body.get("meta") or {}).get("next_token")
-            if not token:
+            if done or not token:
                 break
-        newest = posts[0]["id"] if posts else None       # newest first
-        return posts, newest, truncated
+        newest = max((i["extId"] for i in items), key=int) if items else None
+        return items, newest, truncated
 
     def _deleted(self, ids: list[str], warnings: list[str]) -> tuple[list[str], list[str]]:
         """(checked, gone): stored ids X no longer returns from GET /2/tweets are gone (deleted or made
@@ -200,6 +247,10 @@ class XApi:
             gone += [x for x in batch if x not in found]
             checked += batch
         return checked, gone
+
+
+def _list(v) -> list[str]:
+    return [] if v is None else [str(x) for x in (v if isinstance(v, list) else [v])]
 
 
 def _rate_limited(r, what: str) -> str:

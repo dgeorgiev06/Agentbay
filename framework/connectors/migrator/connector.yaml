@@ -1,0 +1,10 @@
+apiVersion: agentbay/v2
+kind: Connector
+metadata:
+  name: migrator
+  description: Plans (dry-run diff) and applies migrations of user content. Same code as `bay migrate`.
+spec:
+  implements: forge.migrate/v1
+  entry: migrator.py
+  needs:
+    fs: { write: [modes, roles, agents, envs, connectors] }

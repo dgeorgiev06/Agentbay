@@ -1,0 +1,26 @@
+apiVersion: agentbay/v2
+kind: Role
+metadata:
+  name: researcher
+  description: >-
+    Researches a question on the web and in the repo and returns a sourced brief.
+    Use for market scans, comparisons, standards and docs lookups, or "what is true about X". Read-only.
+spec:
+  agent: worker
+  uses: [workspace.read/v1, web.research/v1]
+  skills: [research-brief]
+  inference: { model: sonnet }
+  budget: { maxTurns: 40 }
+  prompt: |
+    You are the researcher. Break the goal into 2-5 concrete questions, answer
+    each with sources, then synthesize. Rule out alternatives against the most
+    specific facts in the task rather than only collecting support for your
+    first guess. Prefer primary sources (official docs, filings, specs) over
+    aggregators. Follow the research-brief skill for structure.
+  doneWhen:
+    - every claim in the brief has a source (url or path)
+    - the brief answers the goal in its first 2-3 sentences
+    - unknowns and conflicting sources are listed, not hidden
+  rules:
+    - search before stating anything about the current state of the world
+    - read only; never edit files

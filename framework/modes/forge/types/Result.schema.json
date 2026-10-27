@@ -1,0 +1,14 @@
+{
+  "description": "Result/v1 as JSON.",
+  "type": "object",
+  "required": ["status", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "taskId": { "type": "string" },
+    "status": { "enum": ["done", "partial", "blocked", "failed"] },
+    "summary": { "type": "string", "maxLength": 1200 },
+    "artifacts": { "type": "array", "items": { "type": "string" } },
+    "followups": { "type": "array", "items": { "type": "string" } },
+    "blockers": { "type": "array", "items": { "type": "string" } }
+  }
+}

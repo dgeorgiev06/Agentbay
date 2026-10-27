@@ -1,0 +1,6 @@
+apiVersion: agentbay/v2
+kind: Agent
+metadata:
+  name: author
+  description: Subagent that writes user content in the kit (modes, roles, agents, envs, connectors). Cannot write the framework.
+spec: { runtime: claude-code-subagent, model: sonnet, effort: medium, env: local-authoring }

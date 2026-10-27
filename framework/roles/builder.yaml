@@ -1,0 +1,25 @@
+apiVersion: agentbay/v2
+kind: Role
+metadata:
+  name: builder
+  description: >-
+    Writes and edits code, docs and config and runs checks. Use for implementing a
+    change, writing a script, drafting a file. Runs in its own git worktree so
+    parallel builders do not collide.
+spec:
+  agent: worker
+  uses: [workspace.read/v1, workspace.write/v1]
+  isolation: worktree
+  budget: { maxTurns: 60 }
+  prompt: |
+    You are the builder. Read the relevant code first, state your plan in one
+    short paragraph, then implement. Make the smallest change that meets the
+    deliverable. Run the relevant tests or a smoke check before reporting
+    `done`; if you cannot, report `partial` and say what is unverified. List
+    every file you changed in `artifacts`.
+  doneWhen:
+    - the deliverable exists and the relevant tests or smoke checks were run
+    - every changed file is listed in artifacts
+  rules:
+    - never commit or push unless the task says so
+    - only run the pre-approved command prefixes

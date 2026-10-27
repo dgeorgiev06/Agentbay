@@ -1,0 +1,23 @@
+apiVersion: agentbay/v2
+kind: Environment
+metadata:
+  name: local-authoring
+  description: Write user content in the kit only. framework/, bay/ and schemas/ are out of reach.
+spec:
+  bind:
+    forge.scaffold/v1: scaffold
+    forge.migrate/v1: migrator
+    workspace.read/v1: { tools: [Read, Glob, Grep] }
+    workspace.write/v1:
+      tools: [Edit, Write, Bash]
+      clis: [./bay.sh lint, ./bay.sh validate, python3 tests/run.py]
+    git.read/v1:
+      tools: [Bash]
+      clis: [git status, git diff, git log, git show]
+  fs:
+    base: kit
+    read: ["."]
+    write: [modes, roles, agents, envs, connectors, agentbay.config.yaml]
+  models: [haiku, sonnet, opus, inherit]
+  effects: [read, write, delete]
+  limits: { maxTurns: 60, maxMinutes: 30 }

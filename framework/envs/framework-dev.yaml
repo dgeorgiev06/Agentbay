@@ -1,0 +1,21 @@
+apiVersion: agentbay/v2
+kind: Environment
+metadata:
+  name: framework-dev
+  description: Change the agentbay framework itself. Only forge.extend may place roles here.
+spec:
+  bind:
+    workspace.read/v1: { tools: [Read, Glob, Grep] }
+    workspace.write/v1:
+      tools: [Edit, Write, Bash]
+      clis: [./bay.sh lint, ./bay.sh validate, python3 tests/run.py, git status, git diff, git log, git add, git commit]
+    git.read/v1:
+      tools: [Bash]
+      clis: [git status, git diff, git log, git show]
+  fs:
+    base: kit
+    read: ["."]
+    write: [framework, bay, schemas, docs, tests]
+  models: [sonnet, opus]
+  effects: [read, write]
+  limits: { maxTurns: 120, maxMinutes: 60 }

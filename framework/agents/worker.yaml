@@ -1,0 +1,6 @@
+apiVersion: agentbay/v2
+kind: Agent
+metadata:
+  name: worker
+  description: General Claude Code subagent in the project workspace.
+spec: { runtime: claude-code-subagent, model: sonnet, effort: medium, env: workspace }

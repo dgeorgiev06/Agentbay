@@ -1,0 +1,4 @@
+apiVersion: agentbay/v2
+kind: Rules
+rules:
+  - { id: R-1, level: must, statement: "TODO a hard rule for the executor and the reviewer.", appliesTo: both, refs: [DOD-1] }

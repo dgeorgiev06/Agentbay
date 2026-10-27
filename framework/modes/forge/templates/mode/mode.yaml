@@ -1,0 +1,26 @@
+apiVersion: agentbay/v2
+kind: Mode
+metadata:
+  name: {{name}}
+  version: 0.1.0
+  description: "{{intent}}"
+spec:
+  purpose: "{{intent}}"
+  endpoints:
+    run:
+      description: TODO what this feature does, in one line.
+      workflow: run
+      in: RunReq
+      out: RunOut
+      effects: [read, write]
+      playbook: features/run/playbook.md
+      rules: features/run/rules.yaml
+      review: { role: reviewer, when: always }
+  roles: [builder, reviewer]
+  workflows:
+    run:
+      - { id: work, role: builder, out: RunOut, task: "TODO the job this step does" }
+  inference:
+    default: { model: sonnet, effort: medium }
+  constraints:
+    policies: []

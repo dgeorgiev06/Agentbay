@@ -49,7 +49,8 @@ The reviewer returns `review.verdict/v1`: per id `pass|fail|n/a`, evidence, seve
 - Agent: `runtime` (`claude-code-main` for coordinators, `claude-code-subagent` for workers), `model`, `effort`, `env`.
 - Environment: `bind` (interface -> connector(s) or `{tools, clis, mcpServers}`), `secrets {provider, allow}`,
   `network.allow`, `fs {read, write}` (paths relative to the project root), `models`, `effects`, `limits`.
-  Envs are the only place capabilities are bound; `agentbay.config.yaml` cannot rebind them.
+  Envs are the only place capabilities are bound; `agentbay.config.yaml` cannot rebind them. It can select an
+  env that declares `substitutes: <env>` (`envs: { local-feeds: local-feeds-offline }`).
 
 Resolution rules (`bay/model.py`) - every gap is reported at once:
 unknown role/agent/env/connector/interface/endpoint; unbound capability; effect not declared by the
@@ -73,12 +74,14 @@ class Adapter(Protocol):
 ```
 Obligations: idempotent; touches only files recorded in `.agentbay/manifest.json`; merges with
 user-authored CLAUDE.md, `.claude/settings.json`, `.mcp.json`, never clobbers; `clean` restores them;
-writes `.agentbay/catalog.json` (modes, endpoints, roles). Register in `bay/adapters/__init__.py`.
+writes `.agentbay/catalog.json` (modes, endpoints, roles). The claude-code adapter also writes per-role use
+shims, `.agentbay/guard.json` and the PreToolUse guard hook (Bash and every file tool), plus `Edit` deny rules on
+`.agentbay/**`, `.claude/**` and the kit. Register in `bay/adapters/__init__.py`.
 
 ## 6. Dispatcher
 `bay call <mode>.<endpoint> '<json>'` -> `{callId, status, output | next, checks, review, cost}`.
 Status: `done | partial | blocked | failed | needs-agent | awaiting-approval`.
-`bay submit <callId> <stepId> '<json>'` resumes. A role's generated shim
+`bay submit <callId> <stepId> '<json>'` resumes an agentic step; `bay show <callId>` prints the current state; approval gates pass only with `bay approve <callId>` in an interactive terminal. A role's generated shim
 `.agentbay/roles/<role>/use <iface>/v<N>.<ep> '<json>'` (role fixed inside, read-only endpoints in the role's `uses`)
 is the only way an agent reads connector data; the guard hook stops subagents from running anything else. Secret values are redacted from everything it returns or logs.
 
@@ -87,6 +90,7 @@ Plain fenced YAML blocks (```` ```task ```` / ```` ```result ````). One delivera
 
 ## 8. LedgerEvent
 Append-only JSONL. Agent runs: `spawned`, `completed`, `failed`, `reclaimed`, `note` (hooks/coordinator).
+Data: `data.read` (a role read connector data through its use shim; role, env, endpoint, item count).
 Dispatcher: `step.started`, `step.completed`, `step.failed`, `step.skipped`, `step.planned`, `call.completed`
 with `mode, endpoint, step, role, agent, env, cost`.
 

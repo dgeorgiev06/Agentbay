@@ -32,6 +32,13 @@
           ]
         }
       }
+    },
+    "envs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Run agents of env A in env B instead: {A: B}. B must declare `substitutes: A`. Selects between tracked envs; it cannot bind capabilities."
     }
   }
 }

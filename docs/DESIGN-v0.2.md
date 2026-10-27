@@ -79,7 +79,8 @@ spec:
 ```
 
 Step kinds: `run: <capability>/v<N>.<endpoint>` (deterministic code, no agent), `role: <role>` (agentic),
-`gate: <text>` (approval: the call stops with `awaiting-approval`; resumes on `{"approved": true}`),
+`gate: <text>` (approval: the call stops with `awaiting-approval`; only the user passes it with
+`bay approve <callId>` in an interactive terminal),
 and the review step injected from the endpoint's `review` block. `when: "stale > 2h"` or `when: "$in.<field>"`
 skips a step. `with:` substitutes `$in.x`, `$steps.<id>.x`, `$config.x`, with `a|b` fallbacks.
 An endpoint may re-place a role on another agent: `agents: { builder: author }`.
@@ -181,7 +182,8 @@ store; if the request exceeds store coverage, say so.
 
 ## Approved amendments (2026-10-27)
 
-Decided by the user after the independent review of the first implementation.
+The kept items and removals were decided by the user after the independent review of the first
+implementation. The fix-round items below are fixes from the two review rounds, not user decisions.
 
 **Kept (approved as designed):**
 - Role data access through per-role `use` shims: build generates `.agentbay/roles/<role>/use` for every role
@@ -202,7 +204,7 @@ Decided by the user after the independent review of the first implementation.
   connectors refuse to run when the project is not the kit. The framework boundary check flags env write paths
   that name `framework/`, `bay/` or `schemas/` outside `forge.extend`.
 
-**Fix-round changes (review of the first implementation):**
+**Fix-round changes (review fixes, rounds 1 and 2):**
 - Guard hook: Claude Code permission rules are session-wide and subagent `tools` take bare tool names, so a
   `PreToolUse(Bash)` hook (`bay/guard.py`, policy `.agentbay/guard.json`) scopes each generated subagent to one
   simple command at a time: its own use shim or its env's narrow command prefixes. It fails closed for subagents.
@@ -215,4 +217,28 @@ Decided by the user after the independent review of the first implementation.
   lookups), not only posts kept; a call never requests more than its remaining read budget.
 - One spelling for capability endpoints (`feed.store/v1.sync`) in run steps and role `uses`; feed.source
   connectors must declare `source` and `window`; `schedule` is declarative only (lint warns; run it from cron).
+- Round 2 - containment covers file tools: the guard hook matches
+  `Bash|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep`. For agentbay subagents it denies any access under
+  `.agentbay/` (except running the role's own shim), writes outside the env's `fs.write` or under `.agentbay/`,
+  `.claude/`, `.git/` or the kit, reads outside `fs.read`, and git `--output/--ext-diff/--textconv/--no-index/...`;
+  paths are normalized (`..`, symlinks) first. settings.json adds a session-wide floor: `Edit(/.agentbay/**)`,
+  `Edit(/.claude/**)`, `Edit(//<kit>/**)` when the kit is outside the project, `Read(/.agentbay/data/**)`,
+  `Read(/.agentbay/calls/**)` (`Edit` rules cover every editing tool; `Write(...)`/`NotebookEdit(...)` path
+  rules never match in Claude Code). Callers: no agent fields = main thread (settings.json applies); `agent_id`
+  without a known `agent_type` = unknown subagent, kept off `.agentbay/` entirely. Requires a Claude Code
+  version that sends `agent_type`/`agent_id` in hook input.
+- Round 2 - when the project is the agentbay checkout, env write paths such as `.` reach `framework/`, `bay/`,
+  `schemas/`: lint warns and the guard denies those writes unless the env names them (framework-dev only).
+  `local-authoring` no longer runs the test suite (writing and running code escapes any hook);
+  framework-dev does, by design, behind the approval gate and mandatory review.
+- Round 2 - approval gates are passed only with `bay approve <callId>` in an interactive terminal (never
+  pre-approved for Claude Code); `bay submit` refuses gate steps; `bay show <callId>` resumes the coordinator.
+- Round 2 - offline: `envs/local-feeds-offline.yaml` (fake source, no network, declares
+  `substitutes: local-feeds`) is selected with `envs: { local-feeds: local-feeds-offline }` in
+  agentbay.config.yaml. This chooses between tracked envs; capabilities are still bound only in envs/. Store
+  queries return only posts from currently bound sources, so offline posts never mix into real digests. A
+  connector may declare `costPerPostUsd` (fake: 0).
+- Round 2 - the deletion-check share of the read budget is reserved before the timeline runs; only ids the
+  source reports in `checked` are marked. Shim reads are logged as `data.read` ledger events. Mode config
+  schema `default`s are the single source of default settings.
 

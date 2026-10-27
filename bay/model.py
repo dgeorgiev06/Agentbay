@@ -145,38 +145,57 @@ class Kit:
                         self.errors.append(str(e))
         from . import config as cfgmod
         self.config = cfgmod.load(project) if config is None else config
+        self._select_envs()
+
+    def _select_envs(self) -> None:
+        """agentbay.config.yaml `envs: {A: B}` runs every agent of env A in env B, if B declares
+        `substitutes: A`. Capabilities stay bound only in envs/; this only chooses between tracked envs."""
+        for frm, to in (self.config.get("envs") or {}).items():
+            a, b = self.docs["Environment"].get(frm), self.docs["Environment"].get(to)
+            if a is None or b is None:
+                self.errors.append(f"agentbay.config.yaml envs: unknown env '{frm if a is None else to}' "
+                                   f"(have: {', '.join(sorted(self.docs['Environment']))})")
+                continue
+            if b.spec.get("substitutes") != frm:
+                self.errors.append(f"agentbay.config.yaml envs: env {to} does not declare `substitutes: {frm}`, "
+                                   f"so it cannot stand in for {frm}")
+                continue
+            for ag in self.docs["Agent"].values():
+                if ag.spec["env"] == frm:
+                    ag.spec = {**ag.spec, "env": to}
 
     def _load(self, kind: str, root_name: str, f: Path, sch: str) -> None:
         doc = load_yaml(f)
-        rel = _rel(f)
+        where = rel(f)
         if not isinstance(doc, dict):
-            raise SpecError(f"{rel}: expected a mapping")
+            raise SpecError(f"{where}: expected a mapping")
         if doc.get("kind") != kind:
-            raise SpecError(f"{rel}: kind must be {kind} (found {doc.get('kind')!r}); "
+            raise SpecError(f"{where}: kind must be {kind} (found {doc.get('kind')!r}); "
                             f"v0.1 kinds (AgentSpec, Layer) are gone - run `bay migrate`")
         if kind == "Environment" and isinstance((doc.get("spec") or {}).get("fs"), dict) \
                 and "base" in doc["spec"]["fs"]:
-            raise SpecError(f"{rel}: fs.base was removed in v0.2 (approved 2026-10-27); fs paths are always relative "
+            line = next((i for i, ln in enumerate(f.read_text().splitlines(), 1) if ln.strip().startswith("base:")), 1)
+            raise SpecError(f"{where}:{line}: fs.base was removed in v0.2 (approved 2026-10-27); fs paths are always relative "
                             f"to the project root - delete `base:` (forge envs expect the project to be the agentbay "
                             f"checkout)")
         errs = schema_errors(doc, schema(sch))
         if errs:
-            raise SpecError(f"{rel}:\n    " + "\n    ".join(errs))
+            raise SpecError(f"{where}:\n    " + "\n    ".join(errs))
         meta, spec = doc["metadata"], doc["spec"]
         if kind == "Interface":
             name = f"{meta['name']}/v{spec['version']}"
             want = f"{meta['name']}.v{spec['version']}.yaml"
             if f.name != want:
-                raise SpecError(f"{rel}: interface {name} must live in interfaces/{want}")
+                raise SpecError(f"{where}: interface {name} must live in interfaces/{want}")
         else:
             name = meta["name"]
             expect = f.parent.name if f.name in ("mode.yaml", "connector.yaml") else f.stem
             if name != expect:
-                raise SpecError(f"{rel}: metadata.name '{name}' must match '{expect}'")
+                raise SpecError(f"{where}: metadata.name '{name}' must match '{expect}'")
         if name in self.docs[kind]:
             other = self.docs[kind][name]
             self.collisions.append(
-                f"{kind} '{name}' is defined by both the framework ({other.rel}) and you ({rel}); "
+                f"{kind} '{name}' is defined by both the framework ({other.rel}) and you ({where}); "
                 f"rename yours - framework names are reserved")
             return
         self.docs[kind][name] = Doc(kind, name, root_name, f, meta, spec)
@@ -187,7 +206,8 @@ class Kit:
 
 
 
-def _rel(p: Path) -> str:
+def rel(p: Path) -> str:
+    """Kit-relative path for messages (absolute if outside the kit)."""
     try:
         return str(p.relative_to(KIT))
     except ValueError:
@@ -370,7 +390,7 @@ def check_connector(kit: Kit, env: Doc, conn_name: str, iface: str, gaps: list[s
     if iface not in impl:
         gaps.append(f"env {env.name}: connector {conn_name} is bound to {iface} but implements {', '.join(impl)}")
     if not (c.dir / c.spec["entry"]).exists():
-        gaps.append(f"connector {conn_name}: entry {c.spec['entry']} not found in {_rel(c.dir)}")
+        gaps.append(f"connector {conn_name}: entry {c.spec['entry']} not found in {rel(c.dir)}")
     needs = c.spec.get("needs", {})
     allow_net = env.spec.get("network", {}).get("allow", [])
     for host in needs.get("network", []):
@@ -473,7 +493,7 @@ def resolve_role(kit: Kit, name: str, gaps: list[str], where: str, seen_conn: se
     for sk in s.get("skills", []):
         src = r.dir / "skills" / sk
         if not (src / "SKILL.md").exists():
-            gaps.append(f"role {name}: skill '{sk}' not found ({_rel(src)}/SKILL.md)")
+            gaps.append(f"role {name}: skill '{sk}' not found ({rel(src)}/SKILL.md)")
         else:
             skills[sk] = src
     budget = dict(s.get("budget", {}))
@@ -496,7 +516,7 @@ def type_schema(mode_dir: Path, tname: str | None, where: str, gaps: list[str]) 
         return {"type": "object"}
     p = mode_dir / "types" / f"{tname}.schema.json"
     if not p.exists():
-        gaps.append(f"{where}: type {tname} not found (expected {_rel(p)})")
+        gaps.append(f"{where}: type {tname} not found (expected {rel(p)})")
         return {"type": "object"}
     return inline_refs(json.loads(p.read_text()))
 
@@ -571,8 +591,12 @@ def resolve_mode(kit: Kit, md: Doc, roles: dict[str, ResolvedRole], gaps: list[s
         if not cp.exists():
             gaps.append(f"mode {name}: config schema {s['config']} not found")
         else:
-            for e in schema_errors(mcfg, json.loads(cp.read_text())):
+            csch = json.loads(cp.read_text())
+            for e in schema_errors(mcfg, csch):
                 gaps.append(f"agentbay.config.yaml modes.{name}: {e}")
+            # the mode's config schema `default`s are the single source of default settings
+            defaults = {k: v["default"] for k, v in (csch.get("properties") or {}).items() if "default" in v}
+            mcfg = {**defaults, **mcfg}
     elif mcfg:
         gaps.append(f"agentbay.config.yaml modes.{name}: mode {name} declares no config schema, so it takes no settings")
     constraints = cfgmod.effective_constraints(s.get("constraints", {}), mcfg)

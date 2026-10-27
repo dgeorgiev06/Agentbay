@@ -185,6 +185,10 @@
               "minimum": 0
             }
           }
+        },
+        "substitutes": {
+          "type": "string",
+          "description": "This env may stand in for the named env when agentbay.config.yaml selects it with `envs: {<named>: <this>}` (e.g. an offline variant). Bindings still live only in envs/."
         }
       }
     }

@@ -25,8 +25,7 @@ Design: [docs/DESIGN-v0.2.md](docs/DESIGN-v0.2.md). Contracts: [docs/INTERFACES.
 ```bash
 pip install pyyaml jsonschema
 ./bay.sh validate                                   # lint + resolve everything
-# offline first: in envs/local-feeds.yaml change `feed.source/v1: [x-api]` to `feed.source/v1: [fake]`
-cp agentbay.config.example.yaml ~/code/my-repo/agentbay.config.yaml   # optional settings
+cp agentbay.config.example.yaml ~/code/my-repo/agentbay.config.yaml   # selects the offline env (fake source)
 ./bay.sh build --project ~/code/my-repo             # compile into a repo
 cd ~/code/my-repo
 claude                                              # (re)start Claude Code after every build; accept the
@@ -53,8 +52,9 @@ are pure code and finish in one call.
 2. Store the secrets (macOS keychain; values are read from stdin, never echoed):
    `./bay.sh secret set X_CLIENT_ID`, `X_CLIENT_SECRET`, `X_REFRESH_TOKEN`.
    On Linux set `secrets: {provider: env}` and export them instead.
-3. In `envs/local-feeds.yaml` bind `feed.source/v1: [x-api]` (the shipped default; envs are the only place
-   capabilities are bound), set `connectors.x-api.userId` in `agentbay.config.yaml`, and rebuild.
+3. In `agentbay.config.yaml` delete the `envs: { local-feeds: local-feeds-offline }` line (the one offline
+   switch), set `connectors.x-api.userId`, and rebuild. `envs/local-feeds.yaml` already binds `x-api`; envs are
+   the only place capabilities are bound.
 4. Caps: `maxPostsPerRun`, `monthlyPosts`, `spendUsd` (at `costPerPostUsd`, default $0.005). Sync stops and
    says which cap stopped it before exceeding one.
 
@@ -118,9 +118,16 @@ All tracked in `.agentbay/manifest.json` and removed by `clean`; your CLAUDE.md,
 ## Honest limits of the Claude Code runtime
 
 - Claude Code permissions are session-wide and subagent `tools` take bare names, so agentbay adds a
-  guard hook: a subagent may run only its role's use shim (`.agentbay/roles/<role>/use`, read-only grants)
-  and its env's narrow command prefixes. The main thread is pre-approved only for `bay call|submit|status|log|note|task`.
-  Hooks run after you accept the workspace trust prompt.
+  guard hook on Bash and every file tool: a subagent may run only its role's use shim
+  (`.agentbay/roles/<role>/use`, read-only grants) and its env's narrow command prefixes, may write only inside
+  its env's `fs.write`, and never touches `.agentbay/`, `.claude/`, `.git/` or the kit. settings.json adds
+  `Edit` deny rules on `.agentbay/**`, `.claude/**` and the kit for everyone, and pre-approves the main thread
+  only for `bay call|submit|show|status|log|note|task`. Approval gates are yours: `bay approve <callId>` works
+  only in your own terminal.
+- Hooks run after you accept the workspace trust prompt, and need a Claude Code version that sends
+  `agent_type`/`agent_id` in hook input (older versions make subagents look like the main thread).
+- The guard cannot contain code an agent writes and then executes (e.g. a test runner). Only the
+  framework-dev env does that, behind the approval gate and mandatory review; use an OS sandbox for hard isolation.
 - Subagents cannot spawn subagents, so mode coordinators run as playbooks in the main thread. A future
   `headless` runtime makes them separate agents without changing mode files.
 - New or changed roles load when Claude Code starts; restart after every `build`.

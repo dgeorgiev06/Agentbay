@@ -142,7 +142,8 @@ def test_config_schema_and_removed_bindings_override():
 def test_env_fs_base_is_rejected_with_a_clear_message():
     k = kit_copy()
     edit_yaml(k / "framework/envs/local-authoring.yaml", lambda d: d["spec"]["fs"].update({"base": "kit"}))
-    assert_gap(k, "framework/envs/local-authoring.yaml", "fs.base was removed", "relative to the project root")
+    g = assert_gap(k, "framework/envs/local-authoring.yaml:", "fs.base was removed", "relative to the project root")
+    assert g.split(":")[1].isdigit()                  # file:line
 
 
 def test_forge_create_cannot_be_placed_in_framework_writing_env():
@@ -175,3 +176,15 @@ def test_feature_review_block_resolves_to_existing_placeable_reviewer():
     edit_yaml(k / "modes/feed-briefing/mode.yaml",
               lambda d: d["spec"]["endpoints"]["digest"]["review"].update({"role": "nobody"}))
     assert_gap(k, "feed-briefing.digest review", "unknown review role 'nobody'")
+
+
+def test_offline_env_switch_selects_a_declared_substitute_only():
+    from helpers import OFFLINE, project
+    s = model.resolve(model.Kit(KIT, project()))
+    assert s.roles["feed-analyst"].env == "local-feeds-offline"
+    assert s.modes["feed-briefing"].features["sync"].steps[0].connector == "local-store"
+    gs = gaps(KIT, project({"envs": {"local-feeds": "workspace"}}, source="x-api"))
+    assert any("env workspace does not declare `substitutes: local-feeds`" in g for g in gs), gs
+    gs = gaps(KIT, project({"envs": {"local-feeds": "nope"}}, source="x-api"))
+    assert any("unknown env 'nope'" in g for g in gs)
+    assert OFFLINE == {"local-feeds": "local-feeds-offline"}

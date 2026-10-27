@@ -1,0 +1,23 @@
+apiVersion: agentbay/v2
+kind: Environment
+metadata:
+  name: improve-local
+  description: >-
+    improve's wiring. Connectors (dispatcher side only) read the project, the kit, the agentbay ledger and call
+    state, git history and Claude Code transcripts under ~/.claude/projects; the store writes only
+    .agentbay/data/improve/. No network, no secrets. Roles read improve data only through their read-only use
+    shims; `~/` read paths are for connectors and never reach a role's guard policy.
+spec:
+  bind:
+    improve.findings/v1: improve-store
+    session.events/v1: [ledger, claude-transcripts, git]
+    review.verdicts/v1: ledger
+    artifacts.read/v1: artifact-graph
+    workspace.read/v1: { tools: [Read, Glob, Grep] }
+  network: { allow: [] }
+  fs:
+    read: [".", "~/.claude/projects"]
+    write: [.agentbay/data/improve]
+  models: [haiku, sonnet, opus, inherit]
+  effects: [read, write]
+  limits: { maxTurns: 40, maxMinutes: 20 }

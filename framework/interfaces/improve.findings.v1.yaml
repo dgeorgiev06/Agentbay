@@ -1,0 +1,221 @@
+apiVersion: agentbay/v2
+kind: Interface
+metadata:
+  name: improve.findings
+  description: >-
+    The improve store (improve.finding/v1, deduplicated by fingerprint). scan and audit run deterministic
+    detectors over session.events/v1, review.verdicts/v1 and artifacts.read/v1 and write findings; query reads;
+    record, triage, decide, backlog, handoff and verify change status, evidence and reports. Never modifies
+    artifacts outside the store.
+spec:
+  version: 1
+  binding: connector
+  endpoints:
+    scan:
+      description: Session lens - episodes in the window -> session detectors -> findings (and retention pruning).
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          since: { type: string }
+          until: { type: string }
+      out: &runout
+        type: object
+        required: [findings, new, merged, reopened, summary, stats]
+        additionalProperties: false
+        properties:
+          findings: { type: array, items: { type: string }, description: "ids the detectors produced this run" }
+          new: { type: array, items: { type: string } }
+          merged: { type: array, items: { type: string } }
+          reopened: { type: array, items: { type: string } }
+          summary:
+            type: array
+            description: "one line per finding of this run: id, kind, title, severity, priority, status"
+            items: { type: object }
+          stats: { type: object, description: "per-source counts (episodes, verdicts, files, unknown record types, ...)" }
+          window: { type: object }
+          pruned: { type: integer }
+          manual: { type: array, description: "audit: conformance rules without a deterministic check, for the auditor" }
+      effects: [read, write]
+    audit:
+      description: Artifact lens - files and the reference graph -> slop, unused, inefficient and conformance detectors -> findings.
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          root: { enum: [project, kit] }
+      out: *runout
+      effects: [read, write]
+    record:
+      description: >-
+        Add analyst/auditor findings (each must cite evidence that resolves; session patterns need >= 2 episodes
+        unless severe) and apply triage annotations (root cause, proposed fix, route, effort, impact).
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          findings:
+            type: array
+            items:
+              type: object
+              required: [lens, title, pattern, evidence]
+              additionalProperties: false
+              properties:
+                lens: { enum: [sessions, artifacts] }
+                title: { type: string, maxLength: 200 }
+                pattern: { type: string, maxLength: 600 }
+                evidence: { type: array, minItems: 1, items: { type: object } }
+                scope: { type: object }
+                severity: { enum: [low, medium, high, severe] }
+                rootCause: { type: string, maxLength: 800 }
+                proposedFix: { type: string, maxLength: 800 }
+                rule: { type: string, description: "conformance rule id the auditor judged" }
+          annotations:
+            type: array
+            items:
+              type: object
+              required: [id]
+              additionalProperties: false
+              properties:
+                id: { type: string }
+                rootCause: { type: string, maxLength: 800 }
+                proposedFix: { type: string, maxLength: 800 }
+                route: { enum: [forge.extend, mode-fix, config, none] }
+                effort: { type: integer, minimum: 1, maximum: 5 }
+                impact: { type: integer, minimum: 1, maximum: 5 }
+                costEstimate: { type: object }
+                evidenceChecked: { type: array, items: { type: string }, description: "refs the analyst confirmed (the reviewer checks them)" }
+          detected: { type: array, items: { type: string }, description: "ids an earlier step of the same call produced; echoed in summary" }
+      out:
+        type: object
+        additionalProperties: false
+        properties:
+          new: { type: array, items: { type: string } }
+          merged: { type: array, items: { type: string } }
+          reopened: { type: array, items: { type: string } }
+          rejected: { type: array, items: { type: object } }
+          annotated: { type: array, items: { type: string } }
+          missing: { type: array }
+          summary: { type: array, items: { type: object } }
+      effects: [write]
+    query:
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          status: { oneOf: [ { type: string }, { type: array, items: { type: string } } ] }
+          lens: { enum: [sessions, artifacts] }
+          kind: { type: string }
+          ids: { type: array, items: { type: string } }
+          limit: { type: integer, minimum: 1, maximum: 500 }
+      out:
+        type: object
+        required: [findings]
+        additionalProperties: false
+        properties:
+          findings: { type: array, items: { $ref: improve.finding/v1 } }
+      effects: [read]
+    triage:
+      description: Cross-lens links (same file; slow step <-> inefficient code; unused endpoint <-> dead code) and priority = impact x frequency / effort.
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          top: { type: integer, minimum: 1, maximum: 50 }
+      out:
+        type: object
+        required: [findings, links, ranked]
+        additionalProperties: false
+        properties:
+          findings: { type: integer }
+          links: { type: array }
+          ranked: { type: array }
+          top: { type: array, items: { $ref: improve.finding/v1 } }
+      effects: [write]
+    decide:
+      description: Record a human decision. Reached only from `bay improve decide` (approve needs an interactive terminal); no workflow step calls it.
+      in:
+        type: object
+        required: [id, decision, by]
+        additionalProperties: false
+        properties:
+          id: { type: string }
+          decision: { enum: [approve, defer, wontfix] }
+          by: { type: string }
+          note: { type: string, maxLength: 300 }
+      out: { $ref: improve.finding/v1 }
+      effects: [write]
+    backlog:
+      description: Write the weekly report .agentbay/data/improve/reports/<isoweek>.md (top items with evidence and proposed fixes).
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          top: { type: integer, minimum: 1, maximum: 100 }
+          week: { type: string, pattern: "^[0-9]{4}-W[0-9]{2}$" }
+      out:
+        type: object
+        required: [report, week, items]
+        additionalProperties: false
+        properties:
+          report: { type: string }
+          week: { type: string }
+          items: { type: array, items: { type: string } }
+          counts: { type: object }
+      effects: [write]
+    claim:
+      description: The finding, if a human approved it; otherwise `stopped` says why (the call ends blocked).
+      in:
+        type: object
+        required: [id]
+        additionalProperties: false
+        properties:
+          id: { type: string }
+      out:
+        type: object
+        additionalProperties: false
+        properties:
+          finding: { $ref: improve.finding/v1 }
+          stopped: { type: string }
+      effects: [read]
+    handoff:
+      description: >-
+        For an approved finding, write the reviewed draft as a forge.extend proposal draft or a mode-fix task
+        envelope under .agentbay/data/improve/handoffs/ and mark the finding in-progress. Edits no code.
+      in:
+        type: object
+        required: [id, draft]
+        additionalProperties: false
+        properties:
+          id: { type: string }
+          draft: { type: object }
+      out:
+        type: object
+        additionalProperties: false
+        properties:
+          id: { type: string }
+          route: { type: string }
+          draft: { type: string }
+          next: { type: object }
+          stopped: { type: string }
+          finding: { type: object }
+      effects: [write]
+    verify:
+      description: Re-run the finding's detector on data newer than the fix; verified if the pattern is gone, reopened if not.
+      in:
+        type: object
+        required: [id]
+        additionalProperties: false
+        properties:
+          id: { type: string }
+      out:
+        type: object
+        required: [id, result]
+        additionalProperties: false
+        properties:
+          id: { type: string }
+          result: { enum: [verified, reopened, inconclusive, skipped, unknown] }
+          status: { type: [string, "null"] }
+          note: { type: string }
+          newData: { type: integer }
+      effects: [read, write]

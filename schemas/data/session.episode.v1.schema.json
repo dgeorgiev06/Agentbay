@@ -1,0 +1,361 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/data/session.episode/v1",
+  "title": "session.episode/v1",
+  "description": "One unit of work seen by improve: a dispatcher call, an agent run, a Claude Code session or subagent, or a git commit. Structure and metadata only; closed schema so free text cannot slip in. Text appears only in `excerpts`, only when the connector's keepText is on, and only after a secret scan.",
+  "type": "object",
+  "required": [
+    "id",
+    "source",
+    "kind"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^(ab|cc|git):[A-Za-z0-9_.:/-]+$"
+    },
+    "source": {
+      "enum": [
+        "ledger",
+        "claude-transcripts",
+        "git"
+      ]
+    },
+    "kind": {
+      "enum": [
+        "call",
+        "agent-run",
+        "task",
+        "session",
+        "subagent",
+        "commit"
+      ]
+    },
+    "parent": {
+      "type": "string"
+    },
+    "target": {
+      "type": "string",
+      "description": "call: <mode>.<endpoint>"
+    },
+    "status": {
+      "type": "string",
+      "maxLength": 40
+    },
+    "agent": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "agentType": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "taskId": {
+      "type": "string",
+      "maxLength": 40
+    },
+    "subagentFinished": {
+      "type": "boolean"
+    },
+    "project": {
+      "type": "string",
+      "description": "hash of the session cwd (never the path)"
+    },
+    "start": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "end": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "durationMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "model": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "input": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "output": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cacheRead": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cacheCreation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "costUsd": {
+      "type": "number",
+      "minimum": 0
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "status": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "role": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "agent": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "env": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "durationMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "costUsd": {
+            "type": "number",
+            "minimum": 0
+          },
+          "tokens": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "input": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "output": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "cacheRead": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "cacheCreation": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    "toolCalls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "inputHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{6,64}$"
+          },
+          "error": {
+            "type": "boolean"
+          },
+          "denied": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "errors": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "denials": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "tool": {
+            "type": "string",
+            "maxLength": 120
+          }
+        }
+      }
+    },
+    "permissionPrompts": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "interrupts": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "instructionChanges": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "ledger instruction-change notes; transcripts: messages queued while the agent was working"
+    },
+    "turns": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "compaction": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "const": "not-detected"
+        }
+      ]
+    },
+    "subagents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "finished": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "commit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sha",
+        "isRevert",
+        "files"
+      ],
+      "properties": {
+        "sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,40}$"
+        },
+        "isRevert": {
+          "type": "boolean"
+        },
+        "revertOf": {
+          "type": "string"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "added": {
+          "type": "integer"
+        },
+        "removed": {
+          "type": "integer"
+        }
+      }
+    },
+    "excerpts": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "entrypoint": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "records": {
+          "type": "integer"
+        },
+        "badLines": {
+          "type": "integer"
+        },
+        "unknownRecordTypes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "hookMs": {
+          "type": "integer"
+        },
+        "hookErrors": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

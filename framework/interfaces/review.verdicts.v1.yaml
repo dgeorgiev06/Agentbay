@@ -1,0 +1,50 @@
+apiVersion: agentbay/v2
+kind: Interface
+metadata:
+  name: review.verdicts
+  description: Review verdicts (review.verdict/v1) submitted to review steps, with round numbers per target and subject.
+spec:
+  version: 1
+  binding: connector
+  endpoints:
+    verdicts:
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          since: { type: string }
+          until: { type: string }
+      out:
+        type: object
+        required: [verdicts, stats]
+        additionalProperties: false
+        properties:
+          verdicts:
+            type: array
+            items:
+              type: object
+              required: [callId, episode, target, subject, ts, round, items]
+              additionalProperties: false
+              properties:
+                callId: { type: string }
+                episode: { type: string }
+                target: { type: string, description: "<mode>.<endpoint>" }
+                step: { type: string }
+                subject: { type: string, description: "what the call worked on (proposal, id, hashed goal); repeated subjects are review rounds" }
+                ts: { type: string }
+                status: { type: [string, "null"] }
+                round: { type: integer, minimum: 1 }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, verdict]
+                    additionalProperties: false
+                    properties:
+                      id: { type: string }
+                      verdict: { enum: [pass, fail, n/a] }
+                      severity: { enum: [blocker, should-fix, nit] }
+                      evidence: { type: string, maxLength: 400, description: "secret-scanned, truncated" }
+                      text: { type: string, maxLength: 400, description: "the DoD item or rule statement" }
+          stats: { type: object }
+      effects: [read]

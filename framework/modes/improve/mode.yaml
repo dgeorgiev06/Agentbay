@@ -66,18 +66,22 @@ spec:
   roles: [improve-lead, improve-analyst, auditor, reviewer]
   workflows:
     scan:
-      - { id: detect, run: improve.findings/v1.scan, with: { since: "$in.since|$config.window", until: "$in.until" } }
-      - { id: patterns, role: improve-analyst, out: Patterns, task: "Find recurring patterns the detectors missed in the detect results; return only patterns with resolvable evidence (an empty list is a valid answer)." }
-      - { id: record, run: improve.findings/v1.record, with: { findings: "$steps.patterns.findings", detected: "$steps.detect.findings" } }
+      - { id: detect, run: improve.detect/v1.sessions, with: { since: "$in.since|$config.window", until: "$in.until" } }
+      - { id: store, run: improve.findings/v1.upsert, with: { candidates: "$steps.detect.candidates", by: improve.scan } }
+      - { id: patterns, role: improve-analyst, out: Patterns, task: "Find recurring patterns the detectors missed, from the episode summaries in detect.episodes and the stored findings in store.summary; return only patterns whose evidence cites those episode ids (an empty list is a valid answer)." }
+      - { id: resolve, run: improve.detect/v1.resolve, with: { findings: "$steps.patterns.findings" } }
+      - { id: record, run: improve.findings/v1.upsert, with: { candidates: "$steps.resolve.accepted", by: improve-analyst, rejected: "$steps.resolve.rejected", detected: "$steps.store.findings" } }
     audit:
-      - { id: detect, run: improve.findings/v1.audit, with: { root: "$in.root" } }
+      - { id: detect, run: improve.detect/v1.artifacts, with: { root: "$in.root" } }
+      - { id: store, run: improve.findings/v1.upsert, with: { candidates: "$steps.detect.candidates", by: improve.audit } }
       - { id: judge, role: auditor, out: Patterns, task: "Judge the project against the conformance rules listed in detect.manual (no deterministic check); return violations with file:line evidence (an empty list is a valid answer)." }
-      - { id: record, run: improve.findings/v1.record, with: { findings: "$steps.judge.findings", detected: "$steps.detect.findings" } }
+      - { id: resolve, run: improve.detect/v1.resolve, with: { findings: "$steps.judge.findings" } }
+      - { id: record, run: improve.findings/v1.upsert, with: { candidates: "$steps.resolve.accepted", by: auditor, rejected: "$steps.resolve.rejected", detected: "$steps.store.findings" } }
     triage:
       - { id: rank, run: improve.findings/v1.triage, with: { top: "$in.top|$config.triageTop" } }
       - { id: analyze, role: improve-analyst, out: Analysis, task: "For each finding in rank.top: confirm its evidence, state the root cause, propose a fix (prefer preventive: a check, lint or conformance rule, a test), a route and an effort 1-5." }
       - { review: here, id: review }
-      - { id: apply, run: improve.findings/v1.record, with: { annotations: "$steps.analyze.annotations" } }
+      - { id: apply, run: improve.findings/v1.annotate, with: { annotations: "$steps.analyze.annotations" } }
     backlog:
       - { id: report, run: improve.findings/v1.backlog, with: { top: "$in.top|$config.backlogTop", week: "$in.week" } }
     implement:
@@ -87,10 +91,12 @@ spec:
       - { id: approve, gate: "The user approves the reviewed draft before it is handed off." }
       - { id: handoff, run: improve.findings/v1.handoff, with: { id: "$in.id", draft: "$steps.draft" } }
     verify:
-      - { id: check, run: improve.findings/v1.verify, with: { id: "$in.id" } }
+      - { id: finding, run: improve.findings/v1.get, with: { id: "$in.id" } }
+      - { id: recheck, run: improve.detect/v1.recheck, with: { finding: "$steps.finding.finding" } }
+      - { id: apply, run: improve.findings/v1.verify, with: { id: "$in.id", present: "$steps.recheck.present", newData: "$steps.recheck.newData", note: "$steps.recheck.note" } }
   inference:
     default: { model: sonnet, effort: medium }
   constraints:
     policies: [never-modify-artifacts, human-approves-every-fix, redact-transcripts]
-  needs: [improve.findings/v1]
+  needs: [improve.findings/v1, improve.detect/v1]
   config: config.schema.json

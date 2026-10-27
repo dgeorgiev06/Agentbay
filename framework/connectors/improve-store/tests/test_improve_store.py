@@ -92,30 +92,36 @@ def test_priority_is_impact_times_frequency_over_effort():
         cleanup(d)
 
 
-def test_triage_cross_lens_links():
+def test_triage_links_only_same_file_across_lenses():
     d = tmpdir()
     try:
         s = S(d)
+        churn = cand(kind="churn", key="modes/feed-briefing/mode.yaml", scope={"file": "modes/feed-briefing/mode.yaml"})
+        conf = cand(kind="conformance", key="C-6:x", lens="artifacts", refs=(),
+                    evidence=[{"kind": "file", "ref": "modes/feed-briefing/mode.yaml:12"}],
+                    scope={"file": "modes/feed-briefing/mode.yaml"})
         slow = cand(kind="slow-step", key="feed-briefing.digest.gather")
         ineff = cand(kind="inefficient-store-read", key="connectors/local-store/store.py:LocalStore.query",
                      lens="artifacts", refs=(), evidence=[{"kind": "file", "ref": "connectors/local-store/store.py:9"}],
                      scope={"file": "connectors/local-store/store.py"})
-        unused_ep = cand(kind="unused", key="endpoint:feed-briefing.prune", lens="artifacts", refs=(),
-                         evidence=[{"kind": "file", "ref": "modes/feed-briefing/mode.yaml"}],
-                         scope={"file": "modes/feed-briefing/mode.yaml"})
-        dead = cand(kind="unused", key="fn:connectors/local-store/store.py:LocalStore.prune", lens="artifacts", refs=(),
-                    evidence=[{"kind": "file", "ref": "connectors/local-store/store.py:200"}],
-                    scope={"file": "connectors/local-store/store.py"})
-        churn = cand(kind="churn", key="modes/feed-briefing/mode.yaml", scope={"file": "modes/feed-briefing/mode.yaml"})
-        ids = s.upsert([slow, ineff, unused_ep, dead, churn], "x")["new"]
-        res = s.triage({"feed-briefing.digest.gather": "connectors/local-store/",
-                        "endpoint:feed-briefing.prune": "connectors/local-store/"})
-        whys = {(l["a"], l["b"]): l["why"] for l in res["links"]}
-        pair = lambda x, y: whys.get((x, y)) or whys.get((y, x))     # noqa: E731
-        assert pair(ids[0], ids[1]) == "slow step <-> inefficient code"
-        assert pair(ids[2], ids[3]) == "unused endpoint <-> dead code"
-        assert pair(ids[4], ids[2]).startswith("same file")                    # sessions churn <-> artifacts
-        assert ids[1] in s.load()[ids[0]]["links"] and [r["id"] for r in res["ranked"]][0]
+        ids = s.upsert([churn, conf, slow, ineff], "x")["new"]
+        res = s.triage()
+        assert [(l["a"], l["b"]) for l in res["links"]] == [tuple(sorted(ids[:2]))]
+        assert res["links"][0]["why"] == "same file modes/feed-briefing/mode.yaml"
+        assert s.load()[ids[2]]["links"] == []                                   # no slow-step <-> code heuristics
+    finally:
+        cleanup(d)
+
+
+def test_annotate_refuses_findings_that_are_not_open():
+    d = tmpdir()
+    try:
+        s = S(d)
+        a, b = s.upsert([cand(key="a"), cand(key="b")], "scan")["new"]
+        s.decide(b, "defer", "cli")
+        res = s.annotate([{"id": a, "rootCause": "r" * 12}, {"id": b, "rootCause": "r" * 12}, {"id": "F-00000000"}], "x")
+        assert res["annotated"] == [a] and res["missing"] == ["F-00000000"]
+        assert res["refused"][0]["id"] == b and "rootCause" not in s.load()[b]
     finally:
         cleanup(d)
 

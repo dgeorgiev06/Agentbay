@@ -10,6 +10,7 @@ metadata:
 spec:
   bind:
     improve.findings/v1: improve-store
+    improve.detect/v1: improve-detect
     session.events/v1: [ledger, claude-transcripts, git]
     review.verdicts/v1: ledger
     artifacts.read/v1: artifact-graph

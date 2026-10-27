@@ -3,13 +3,11 @@ kind: Connector
 metadata:
   name: improve-store
   description: >-
-    improve.findings/v1 on .agentbay/data/improve/findings.jsonl (dedup by fingerprint). Runs the deterministic
-    session and artifact detectors over its sources and writes findings, reports and handoff drafts - only
-    inside its data folder.
+    improve.findings/v1 on .agentbay/data/improve/ (findings.jsonl deduplicated by fingerprint, weekly reports,
+    handoff drafts). Storage only (bay/improve/store.py); detection runs behind improve.detect/v1.
   version: 0.1.0
 spec:
   implements: improve.findings/v1
   entry: improve_store.py
   needs:
     fs: { write: [.agentbay/data/improve] }
-    capabilities: [session.events/v1, review.verdicts/v1, artifacts.read/v1]

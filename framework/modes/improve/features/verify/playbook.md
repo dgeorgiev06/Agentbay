@@ -7,7 +7,9 @@ After a fix ships, re-run the finding's detector on newer data and close the ite
 - `id` (required): a finding that is `in-progress` or `fixed`.
 
 ## Steps
-1. `check`: the dispatcher runs `improve.findings/v1.verify` (code): session findings are re-detected on episodes since the item went in-progress; artifact findings on the current files. Gone -> `verified`; still present -> reopened (`open`); no new episodes -> `inconclusive`.
+1. `finding`: the dispatcher runs `improve.findings/v1.get` (code) for the finding.
+2. `recheck`: the dispatcher runs `improve.detect/v1.recheck` (code, read-only): session findings are re-detected on episodes since the item went in-progress; artifact findings on the current files.
+3. `apply`: the dispatcher runs `improve.findings/v1.verify` (code): gone -> `verified`; still present -> reopened (`open`); no new data or no detector -> `inconclusive`.
 
 ## Definition of Done
 - [DOD-1] (must) `verified` only when the same detector ran on data newer than the fix and produced no finding with the same fingerprint.

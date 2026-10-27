@@ -1,11 +1,13 @@
-"""The improve store: .agentbay/data/improve/findings.jsonl (one improve.finding/v1 per line).
+"""The improve store: .agentbay/data/improve/findings.jsonl (one improve.finding/v1 per line). Storage only:
+detectors live in bay/improve/detect_*.py and run behind improve.detect/v1; report and handoff text is rendered
+by bay/improve/report.py.
 
-  upsert    candidates from detectors (scan/audit) or analysts (record); dedup by fingerprint, merge evidence,
+  upsert    candidates (detectors or resolved analyst findings); dedup by fingerprint, merge evidence,
             reopen a fixed/verified finding whose pattern comes back
-  triage    cross-lens links and priority = impact x frequency / effort
-  annotate  root cause, proposed fix, route, effort from the analyst (after review)
+  annotate  root cause, proposed fix, route, effort from the analyst (after review); open findings only
+  triage    "same file" links across lenses and priority = impact x frequency / effort
   decide    human decisions (approve | defer | wontfix); approve only via `bay improve decide` in a terminal
-  backlog   weekly markdown report (reports/<isoweek>.md)
+  backlog   write reports/<isoweek>.md
   claim / handoff   implement: only approved items; writes a draft proposal or a task envelope, never code
   verify    close as verified, or reopen
 
@@ -18,7 +20,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from .. import secretscan
-from . import short_hash
+from . import report, short_hash
 
 STATUSES = ("open", "approved", "deferred", "wontfix", "in-progress", "fixed", "verified")
 DECISIONS = {"approve": "approved", "defer": "deferred", "wontfix": "wontfix"}
@@ -135,10 +137,15 @@ class Store:
     def annotate(self, items: list[dict], by: str) -> dict:
         fs = self.load()
         done, missing = [], []
+        refused = []
         for it in items:
             f = fs.get(it.get("id"))
             if f is None:
                 missing.append(it.get("id"))
+                continue
+            if f["status"] != "open":
+                refused.append({"id": f["id"], "status": f["status"],
+                                "reason": "only open findings are annotated; decided or in-flight items keep theirs"})
                 continue
             for k in ("rootCause", "proposedFix", "costEstimate"):
                 if it.get(k):
@@ -152,7 +159,7 @@ class Store:
             self._hist(f, f["status"], by, "triaged: root cause and fix")
             done.append(f["id"])
         self.save(fs)
-        return {"annotated": done, "missing": missing}
+        return {"annotated": done, "missing": missing, "refused": refused}
 
     def prune(self, retention: timedelta) -> int:
         fs = self.load()
@@ -197,9 +204,8 @@ class Store:
         return out[:limit] if limit else out
 
     # ------------------------------------------------------------------ triage
-    def triage(self, connector_dirs: dict[str, str] | None = None) -> dict:
-        """Cross-lens links and priorities for every open/approved finding.
-        connector_dirs: "<mode>.<feature>.<step>" or "endpoint:<mode>.<feature>" -> connector folder (from the kit)."""
+    def triage(self) -> dict:
+        """Links findings of different lenses that point at the same file, and re-scores priority."""
         fs = self.load()
         live = [f for f in fs.values() if f["status"] in ("open", "approved", "deferred")]
         links: set[tuple[str, str, str]] = set()
@@ -213,22 +219,7 @@ class Store:
                 for b in group:
                     if a["id"] < b["id"] and a["lens"] != b["lens"]:
                         links.add((a["id"], b["id"], f"same file {p}"))
-        cd = connector_dirs or {}
-        slow = [f for f in live if f["kind"] in ("slow-step", "costly-step")]
-        ineff = [f for f in live if f["kind"].startswith("inefficient")]
-        for s in slow:
-            d = cd.get(s["detector"]["key"])
-            for i in ineff:
-                if d and (i.get("scope") or {}).get("file", "").startswith(d):
-                    links.add((s["id"], i["id"], "slow step <-> inefficient code"))
-        unused_eps = [f for f in live if f["kind"] == "unused" and f["detector"]["key"].startswith("endpoint:")]
-        dead = [f for f in live if f["kind"] == "unused" and f["detector"]["key"].startswith(("fn:", "py:"))]
-        for u in unused_eps:
-            d = cd.get(u["detector"]["key"])
-            for x in dead:
-                if d and (x.get("scope") or {}).get("file", "").startswith(d):
-                    links.add((u["id"], x["id"], "unused endpoint <-> dead code"))
-        for a, b, why in links:
+        for a, b, _ in links:
             for x, y in ((a, b), (b, a)):
                 if y not in fs[x]["links"]:
                     fs[x]["links"].append(y)
@@ -244,38 +235,11 @@ class Store:
     # ------------------------------------------------------------------ backlog
     def backlog(self, top: int = 10, week: str | None = None) -> dict:
         week = week or isoweek(self.now)
-        fs = self.query(status=["open", "approved"])
-        items = fs[:top]
-        counts = {s: 0 for s in STATUSES}
+        items = self.query(status=["open", "approved"])[:top]
+        counts = {st: 0 for st in STATUSES}
         for f in self.load().values():
             counts[f["status"]] += 1
-        lines = [f"# improve backlog {week}", "",
-                 f"Generated {iso(self.now)}. " + ", ".join(f"{n} {s}" for s, n in counts.items() if n) + ".", "",
-                 "Decide each item in your own terminal: `.agentbay/bay improve decide <id> approve|defer|wontfix`.",
-                 "Approved items are implemented only on demand: `.agentbay/bay call improve.implement "
-                 "'{\"id\": \"<id>\"}'`.", ""]
-        if not items:
-            lines.append("Nothing open. ")
-        for n, f in enumerate(items, 1):
-            lines += [f"## {n}. {f['title']}", "",
-                      f"`{f['id']}` | {f['lens']}/{f['kind']} | severity {f['severity']} | priority {f['priority']} "
-                      f"| status **{f['status']}** | route {f.get('route', '-')}", "",
-                      f"- **Pattern:** {f['pattern']}"]
-            if f.get("measure"):
-                lines.append("- **Measurement:** " + ", ".join(f"{k}={v}" for k, v in f["measure"].items()))
-            lines.append("- **Evidence:**")
-            for e in f["evidence"][:5]:
-                d = f" - {e['detail']}" if e.get("detail") else ""
-                r = f" -> `{e['rewrite']}`" if e.get("rewrite") else ""
-                lines.append(f"  - {e['kind']} `{e['ref']}`{d}{r}")
-            if len(f["evidence"]) > 5:
-                lines.append(f"  - ... {len(f['evidence']) - 5} more (improve.query)")
-            lines.append(f"- **Root cause:** {f.get('rootCause') or 'not analysed yet (improve.triage)'}")
-            lines.append(f"- **Proposed fix:** {f.get('proposedFix') or '-'}")
-            if f.get("links"):
-                lines.append(f"- **Linked:** {', '.join(f['links'])}")
-            lines.append("")
-        text = secretscan.scrub("\n".join(lines) + "\n")
+        text = secretscan.scrub(report.backlog(items, counts, week, iso(self.now)))
         p = self.dir / "reports" / f"{week}.md"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(text, encoding="utf-8")
@@ -297,39 +261,17 @@ class Store:
         c = self.claim(fid)
         if "stopped" in c:
             return c
-        f = c["finding"]
-        route = draft.get("route") or f.get("route") or "mode-fix"
+        name, body, nxt = report.handoff(c["finding"], draft, task_id)
         hdir = self.dir / "handoffs"
         hdir.mkdir(parents=True, exist_ok=True)
-        ev = draft.get("evidence") or [f"{e['kind']} {e['ref']}" for e in f["evidence"][:8]]
-        if route == "forge.extend":
-            body = "\n".join([
-                f"# Proposal draft: {draft['title']}", "",
-                f"Status: draft from improve finding {fid}. File it with forge.extend (its propose step writes "
-                f"docs/proposals/<id>.md); nothing is implemented before that call's approval gate.", "",
-                "## Problem", draft["problem"], "", "## Evidence", *[f"- {x}" for x in ev], "",
-                "## Change", draft["change"], "",
-                "## Compatibility", draft.get("compatibility") or "No contract change expected.", "",
-                "## Tests", *[f"- {t}" for t in draft.get("tests") or ["(to be listed by forge.extend)"]], ""])
-            body = secretscan.scrub(body)
-            path = hdir / f"{fid}.proposal.md"
-            nxt = {"call": "forge.extend", "input": {"goal": draft["title"][:200], "context": body}}
+        body = secretscan.scrub(body)
+        if "input" in nxt:
+            nxt["input"]["context"] = body
         else:
-            env = draft.get("envelope") or {}
-            body = "\n".join([
-                "```task", "protocol: TaskEnvelope/v1", f"taskId: {task_id}",
-                f"goal: {env.get('goal') or draft['title']}", "context: |",
-                *[f"  {ln}" for ln in (draft["problem"] + "\n\nEvidence:\n" + "\n".join(f"- {x}" for x in ev)
-                                       + "\n\nChange:\n" + draft["change"]).splitlines()],
-                "constraints:", *[f"  - {c}" for c in env.get("constraints") or
-                                  ["change only the mode named in the finding", "bay lint and validate stay clean"]],
-                f"deliverable: {env.get('deliverable') or draft['change'][:300]}", "```", ""])
-            body = secretscan.scrub(body)
-            path = hdir / f"{fid}.task.md"
-            nxt = {"envelope": body, "how": "the Chief of Staff hands this to forge.create or the builder role"}
-        path.write_text(body, encoding="utf-8")
-        self.set_status(fid, "in-progress", "improve.implement", f"handoff {path.name}")
-        return {"id": fid, "route": route, "draft": path.name, "next": nxt}
+            nxt["envelope"] = body
+        (hdir / name).write_text(body, encoding="utf-8")
+        self.set_status(fid, "in-progress", "improve.implement", f"handoff {name}")
+        return {"id": fid, "route": draft.get("route") or c["finding"].get("route"), "draft": name, "next": nxt}
 
     def verify(self, fid: str, still_present: bool, new_data: int, by: str = "improve.verify") -> dict:
         f = self.load().get(fid)

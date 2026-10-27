@@ -13,6 +13,7 @@ from pathlib import Path
 import yaml
 
 from .. import model, playbook as pbk, rules as rulesmod
+from ..secretscan import clip
 
 PATH = Path("framework") / "rules" / "conformance.yaml"
 TOOLS = ("Read", "Write", "Edit", "MultiEdit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch", "NotebookEdit")
@@ -196,7 +197,7 @@ def names_no_tools(kit: Path, rule: dict) -> list[dict]:
                 for m in rx.finditer(ln):
                     if m.group(1) in step_ids:          # a step id that happens to share a connector's name
                         continue
-                    out.append({"file": _rel(kit, f), "line": i, "text": ln.strip()[:200],
+                    out.append({"file": _rel(kit, f), "line": i, "text": clip(ln.strip(), 200),
                                 "detail": f"names concrete {'tool' if m.group(1) in TOOLS else 'connector'} "
                                           f"'{m.group(1)}'; name the capability instead"})
     return out
@@ -302,10 +303,10 @@ def vocabulary(kit: Path, rule: dict) -> list[dict]:
             for term, use in terms.items():
                 flags = 0 if term[:1].isupper() else re.I
                 if re.search(rf"(?<![\w-]){re.escape(term)}(?![\w-])", ln, flags):
-                    out.append({"file": _rel(kit, f), "line": i, "text": ln.strip()[:200],
+                    out.append({"file": _rel(kit, f), "line": i, "text": clip(ln.strip(), 200),
                                 "detail": f"'{term}' is not framework vocabulary; use '{use}'",
-                                "rewrite": re.sub(rf"(?<![\w-]){re.escape(term)}(?![\w-])", use, ln.strip(),
-                                                  flags=flags)[:200]})
+                                "rewrite": clip(re.sub(rf"(?<![\w-]){re.escape(term)}(?![\w-])", use, ln.strip(),
+                                                  flags=flags), 200)})
     return out
 
 

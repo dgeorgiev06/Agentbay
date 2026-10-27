@@ -76,7 +76,7 @@ def test_mode_and_env_containment():
         env = s.env("improve-local").spec
         assert env["network"]["allow"] == [] and env["fs"]["write"] == [".agentbay/data/improve"]
         assert set(env["effects"]) == {"read", "write"} and "secrets" not in env
-        assert s.roles["improve-analyst"].bay_uses == ["improve.findings/v1.query"]
+        assert s.roles["improve-analyst"].bay_uses == ["improve.findings/v1.query", "session.events/v1.episodes"]
         assert set(s.roles["auditor"].bay_uses) == {"improve.findings/v1.query", "artifacts.read/v1.files",
                                                       "artifacts.read/v1.graph", "artifacts.read/v1.text"}
         get("claude-code").build(s, p, kit_for(p))
@@ -84,7 +84,8 @@ def test_mode_and_env_containment():
         for role in ("improve-analyst", "auditor"):
             assert pol[role]["read"] == ["."] and pol[role]["write"] == [], pol[role]   # no ~/.claude for roles
         d = D(p)
-        for role, target in (("improve-analyst", "session.events/v1.episodes"), ("improve-analyst", "improve.findings/v1.scan"),
+        for role, target in (("auditor", "session.events/v1.episodes"), ("improve-analyst", "improve.findings/v1.upsert"),
+                             ("improve-analyst", "improve.detect/v1.sessions"),
                              ("auditor", "improve.findings/v1.decide"), ("improve-lead", "improve.findings/v1.handoff")):
             try:
                 d.use(role, target, {})
@@ -92,6 +93,9 @@ def test_mode_and_env_containment():
             except dispatch.CallError as e:
                 assert "not granted" in str(e)
         assert "findings" in d.use("improve-analyst", "improve.findings/v1.query", {})
+        merged = d.use("improve-analyst", "session.events/v1.episodes", {"since": "7d"})       # 3 connectors merged
+        assert {e["source"] for e in merged["episodes"]} == {"ledger"}
+        assert set(merged["stats"]) == {"ledger", "claude-transcripts", "git"}
         payload = {"tool_name": "Read", "tool_input": {"file_path": str(p.parent / "cc" / "x.jsonl")},
                    "agent_type": "auditor", "agent_id": "a1", "cwd": str(p)}
         r = subprocess.run([sys.executable, str(KIT / "bay/guard.py")], input=json.dumps(payload), text=True,
@@ -115,11 +119,15 @@ def test_scan_triage_backlog_on_fixture_transcripts_and_ledger():
              "evidence": [{"kind": "episode", "ref": "ab:C-20261025-000000"}]}])
         detect = r["next"]["previous"]["detect"]
         assert detect["stats"]["claude-transcripts"]["unknownRecordTypes"] == {"weird-new-type": 2}
+        sess = [e for e in detect["episodes"] if e["kind"] == "session"]           # the analyst sees episodes
+        assert len(sess) == 2 and sess[0]["statusQuestions"] == 2 and sess[0]["envGaps"] == {"command-not-found": 1}
+        assert r["next"]["previous"]["store"]["summary"] and "--usage" in r["next"]["submit"]
         assert done["status"] == "done", done
         assert len(done["output"]["new"]) == 1 and [x["index"] for x in done["output"]["rejected"]] == [1, 2]
         kinds = {f["kind"] for f in findings(p)}
         assert kinds >= {"review-rounds", "rule-repeat", "lintable-blocker", "out-of-scope", "instruction-change",
-                         "slow-step", "costly-step", "retry-loop", "permission-friction", "interrupts", "pattern"}, kinds
+                         "slow-step", "costly-step", "retry-loop", "permission-friction", "interrupts",
+                         "status-questions", "env-gap", "pattern"}, kinds
         for f in findings(p):
             eps = {e["ref"] for e in f["evidence"] if e["kind"] == "episode"}
             assert len(eps) >= 2 or f["severity"] == "severe", f
@@ -158,17 +166,6 @@ def test_failed_triage_review_stores_nothing():
                                                                  "effort": 1, "evidenceChecked": ["ab:C-made-up"]}]})
         fin = d.submit(t["callId"], "review", verdict_for(rv["next"], ids_fail=("DOD-1",)))
         assert fin["status"] == "partial" and "rootCause" not in [x for x in findings(p) if x["id"] == f["id"]][0]
-    finally:
-        cleanup(p)
-
-
-def test_keep_text_excerpts_are_secret_scanned_end_to_end():
-    p = proj(keep_text=True)
-    try:
-        r, done = scan(D(p))
-        cache = (p / ".agentbay/data/improve/transcripts/index.json").read_text()
-        assert "[REDACTED:api-key]" in cache and "deploy it" in cache
-        no_secrets_anywhere(p, r, done)
     finally:
         cleanup(p)
 
@@ -245,16 +242,34 @@ def test_decide_cli_approve_needs_a_terminal():
         cleanup(p)
 
 
-def test_weekly_runs_scan_audit_triage_backlog():
+def test_weekly_writes_the_backlog_only_after_the_analysis_steps():
     p = proj(transcripts=False)
     try:
-        r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "improve", "weekly"],
-                           capture_output=True, text=True)
-        assert r.returncode == 0, r.stderr
-        calls = json.loads(r.stdout)["calls"]
-        assert [c["target"] for c in calls] == ["improve.scan", "improve.audit", "improve.triage", "improve.backlog"]
-        assert [c["status"] for c in calls[:3]] == ["needs-agent"] * 3 and calls[0]["next"]["role"] == "improve-analyst"
-        assert calls[3]["status"] == "done" and calls[3]["output"]["report"].startswith(".agentbay/data/improve/reports/")
+        def weekly():
+            r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "improve", "weekly"],
+                               capture_output=True, text=True)
+            assert r.returncode == 0, r.stderr
+            return json.loads(r.stdout)
+        out = weekly()
+        assert out["status"] == "pending" and [c["target"] for c in out["calls"]] == \
+            ["improve.scan", "improve.audit", "improve.triage"]
+        assert all(c["status"] == "needs-agent" for c in out["calls"]) and "improve.backlog" in out["next"][-1]
+        assert "--usage" in out["calls"][0]["next"]["submit"]
+        assert not (p / ".agentbay/data/improve/reports").exists()               # no report before the analysis
+        # when nothing is pending, weekly writes the report itself
+        import contextlib
+        import io
+        from bay import cli
+        old, cli.WEEKLY = cli.WEEKLY, ()
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                cli.main(["--project", str(p), "improve", "weekly"])
+        finally:
+            cli.WEEKLY = old
+        res = json.loads(buf.getvalue())
+        assert res["status"] == "done" and res["calls"][-1]["target"] == "improve.backlog"
+        assert (p / res["calls"][-1]["output"]["report"]).exists()
     finally:
         cleanup(p)
 

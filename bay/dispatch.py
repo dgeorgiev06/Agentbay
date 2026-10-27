@@ -120,10 +120,10 @@ class Dispatcher:
             raise CallError(f"{target} has effects {effects}; agents may only call read-only endpoints")
         env = self.sys.env(r.env)
         conns = model.connectors_of(env.spec["bind"].get(iface))
-        if len(conns) != 1:
-            raise CallError(f"role {role}: {iface} is bound to {len(conns)} connectors in env {env.name} "
-                            f"({', '.join(conns) or 'none'}); `use` needs exactly one - bind one store connector")
-        out = self._invoke(env.name, conns[0], iface, ep, inp or {}, settings={}, caps={})
+        if not conns:
+            raise CallError(f"role {role}: {iface} is not bound to a connector in env {env.name}")
+        outs = {c: self._invoke(env.name, c, iface, ep, inp or {}, settings={}, caps={}) for c in conns}
+        out = outs[conns[0]] if len(conns) == 1 else merge_outputs(outs)
         n = len(out.get("posts", [])) if isinstance(out, dict) else None
         ledger.append(self.project, "data.read", f"use:{role}", source="dispatcher", role=role, env=env.name,
                       summary=target, data={"input": inp or {}, **({"items": n} if n is not None else {})})
@@ -302,7 +302,8 @@ class Dispatcher:
     # ------------------------------------------------------------ plans & output
     def _plan(self, mode, feat, step, state) -> dict:
         role = step.resolved   # the role as placed for this endpoint (agent override applied)
-        submit = f".agentbay/bay submit {state['callId']} {step.id} '<json>'"
+        submit = (f".agentbay/bay submit {state['callId']} {step.id} '<json>' "
+                  f"--usage '{{\"tokens\": <total tokens>, \"costUsd\": <usd>, \"durationMs\": <ms>}}'")
         plan = {"step": step.id, "kind": step.kind}
         if step.kind != "gate":                     # gates are never submitted, only approved by the user
             plan["submit"] = submit
@@ -422,6 +423,19 @@ def _usage_fields(usage: dict | None, planned_at: float | None) -> dict:
     if isinstance(u.get("costUsd"), (int, float)):
         out["costUsd"] = round(float(u["costUsd"]), 6)
     return out
+
+
+def merge_outputs(outs: dict[str, dict]) -> dict:
+    """Several connectors behind one read endpoint (e.g. session.events/v1 from ledger, transcripts and git):
+    list fields are concatenated; every other field is kept per connector."""
+    merged: dict = {}
+    for name, out in outs.items():
+        for k, v in (out or {}).items():
+            if isinstance(v, list):
+                merged.setdefault(k, []).extend(v)
+            else:
+                merged.setdefault(k, {})[name] = v
+    return merged
 
 
 def use_shim(role: str) -> str:

@@ -1,7 +1,9 @@
 # improve (coordinator playbook for improve-lead)
 
 - "what keeps going wrong / what should we fix" -> the weekly run: `.agentbay/bay improve weekly` (scan + audit +
-  triage + backlog). Run every agentic step each call returns, then show the user the backlog report path.
+  triage). It returns `pending` with the calls waiting on agents: run each one (`.agentbay/bay show <callId>`),
+  submit, and when all are done write the report with `.agentbay/bay call improve.backlog '{}'`; show the user
+  its path. If a cron run left pending calls, finish those the same way.
 - "scan my sessions" -> `.agentbay/bay call improve.scan '{"since": "7d"}'`; "audit the code" ->
   `.agentbay/bay call improve.audit '{}'` (`{"root": "kit"}` audits the agentbay kit itself).
 - Decisions are the user's: they run `.agentbay/bay improve decide <id> approve|defer|wontfix` in their own

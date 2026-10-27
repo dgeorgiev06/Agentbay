@@ -7,10 +7,10 @@ Turn open findings into ranked, explained work: dedup, cross-lens links, root ca
 - `top` (optional, default config `triageTop`, 5): how many top open findings the analyst examines.
 
 ## Steps
-1. `rank`: the dispatcher runs `improve.findings/v1.triage` (code): findings are already unique by fingerprint; it links findings across lenses (same file; slow step <-> inefficient code of the connector behind it; unused endpoint <-> dead code of its connector), recomputes priority = impact x frequency / effort and returns the `top` open findings.
+1. `rank`: the dispatcher runs `improve.findings/v1.triage` (code): findings are already unique by fingerprint; it links findings of different lenses that point at the same file, recomputes priority = impact x frequency / effort and returns the `top` open findings.
 2. `analyze`: the improve-analyst examines each finding in `rank.top`: confirms its evidence (`evidenceChecked`), states the root cause, proposes a fix (preferring a preventive one: a deterministic check, a lint or conformance rule, a test, a clearer playbook step), a route (forge.extend for the framework, mode-fix for a user mode) and an effort 1-5.
 3. `review`: the reviewer checks every annotation against the finding's evidence and the DoD and rules below.
-4. `apply`: only after a passing review, the dispatcher runs `improve.findings/v1.record` (code) to store the annotations and re-score priority.
+4. `apply`: only after a passing review, the dispatcher runs `improve.findings/v1.annotate` (code) to store the annotations on findings that are still open and re-score priority.
 
 ## Definition of Done
 - [DOD-1] (must) Every annotation's `evidenceChecked` refs appear in that finding's evidence.
@@ -20,7 +20,7 @@ Turn open findings into ranked, explained work: dedup, cross-lens links, root ca
 - [DOD-5] (must_not) No artifact outside the improve store is changed.
 
 ## Outputs
-`RecordOut`: `{annotated, missing, summary}` after the apply step; links and ranking are in the rank step's result.
+`RecordOut`: `{annotated, missing, refused, summary}` after the apply step; links and ranking are in the rank step's result.
 
 ## Failure handling
 - Review fails a must item or finds a blocker: the call ends `partial` before `apply`; nothing is stored. Re-run triage.

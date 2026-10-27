@@ -29,17 +29,32 @@ def in_window(ts: str | None, since: datetime | None, until: datetime | None) ->
     return (since is None or t >= since) and (until is None or t <= until)
 
 
-def read_events(project: Path) -> list[dict]:
-    p = project / ".agentbay" / "ledger" / "events.jsonl"
+LEDGER = ".agentbay/ledger/events.jsonl"
+MAX_WARNINGS = 20
+
+
+def warn(warnings: list | None, msg: str) -> None:
+    if warnings is not None and len(warnings) < MAX_WARNINGS:
+        warnings.append(msg)
+
+
+def read_events(project: Path, warnings: list | None = None) -> list[dict]:
+    """Ledger events; a line that is not a JSON event is skipped and named (file:line) in `warnings`."""
+    p = project / LEDGER
     out = []
     if p.exists():
-        for line in p.read_text(encoding="utf-8").splitlines():
+        for n, line in enumerate(p.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            if not line.strip():
+                continue
             try:
                 e = json.loads(line)
-            except ValueError:
-                continue
-            if isinstance(e, dict) and isinstance(e.get("type"), str):
+            except (ValueError, RecursionError):
+                e = None
+            if isinstance(e, dict) and isinstance(e.get("type"), str) and isinstance(e.get("ts"), str) \
+                    and isinstance(e.get("runId"), str):
                 out.append(e)
+            else:
+                warn(warnings, f"{LEDGER}:{n}: not a ledger event, skipped")
     return out
 
 
@@ -53,7 +68,8 @@ def _tokens_add(acc: dict, tok) -> None:
 def ledger_episodes(project: Path, since: datetime | None = None, until: datetime | None = None) -> tuple[list[dict], dict]:
     """Calls (one episode per callId, with steps), agent runs (spawned/completed + guard decisions) and
     instruction-change notes."""
-    evs = [e for e in read_events(project) if in_window(e.get("ts"), since, until)]
+    warnings: list[str] = []
+    evs = [e for e in read_events(project, warnings) if in_window(e.get("ts"), since, until)]
     calls: dict[str, dict] = {}
     runs: dict[str, dict] = {}
     by_task: dict[str, list[dict]] = {}
@@ -106,13 +122,10 @@ def ledger_episodes(project: Path, since: datetime | None = None, until: datetim
                 _tokens_add(ep.setdefault("tokens", {}), e.get("tokens"))
                 if t == "failed":
                     ep["errors"] += 1
-        elif t in ("permission.denied", "permission.prompt"):
+        elif t == "permission.denied":
             ep = run(e["runId"], e)
             ep["agent"] = e.get("agent", ep.get("agent"))
-            if t == "permission.denied":
-                ep["denials"].append({"tool": e.get("tool", "?")})
-            else:
-                ep["permissionPrompts"] += 1
+            ep["denials"].append({"tool": e.get("tool", "?")})
         elif t == "note" and (e.get("data") or {}).get("kind") == "instruction-change":
             notes.append(e)
     standalone = 0
@@ -146,7 +159,8 @@ def ledger_episodes(project: Path, since: datetime | None = None, until: datetim
                 ep["durationMs"] = int((b - a).total_seconds() * 1000)
             except (ValueError, KeyError):
                 pass
-    return eps, {"events": len(evs), "calls": len(calls), "runs": len(runs), "instructionNotes": len(notes)}
+    return eps, {"events": len(evs), "calls": len(calls), "runs": len(runs), "instructionNotes": len(notes),
+                 **({"warnings": warnings} if warnings else {})}
 
 
 def _subject(inp: dict, call_id: str) -> str:
@@ -159,7 +173,7 @@ def _subject(inp: dict, call_id: str) -> str:
     return call_id
 
 
-def _texts(kit: Path | None, target: str, cache: dict) -> dict:
+def _texts(kit: Path | None, target: str, cache: dict, warnings: list) -> dict:
     """DoD and rule statements of a feature (id -> text), from the kit, for verdict context."""
     if target in cache:
         return cache[target]
@@ -177,8 +191,8 @@ def _texts(kit: Path | None, target: str, cache: dict) -> dict:
             if e and e.get("rules") and (md.dir / e["rules"]).exists():
                 from .. import rules
                 out.update({r.id: r.statement for r in rules.load(md.dir / e["rules"])})
-        except Exception:
-            pass
+        except Exception as e:     # verdicts stay usable without the DoD text; say which feature failed
+            warn(warnings, f"{target}: DoD/rule texts not loaded ({type(e).__name__}: {str(e)[:120]})")
     cache[target] = out
     return out
 
@@ -187,6 +201,7 @@ def ledger_verdicts(project: Path, kit: Path | None = None, since: datetime | No
                     until: datetime | None = None) -> tuple[list[dict], dict]:
     """Every review.verdict/v1 submitted to a review step, with round numbers per (target, subject)."""
     cdir = project / ".agentbay" / "calls"
+    warnings: list[str] = []
     last_ts: dict[str, str] = {}
     for e in read_events(project):
         if e.get("callId"):
@@ -195,7 +210,11 @@ def ledger_verdicts(project: Path, kit: Path | None = None, since: datetime | No
     for f in sorted(cdir.glob("C-*.json")) if cdir.is_dir() else []:
         try:
             st = json.loads(f.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError) as e:
+            warn(warnings, f".agentbay/calls/{f.name}: unreadable call state ({type(e).__name__}), skipped")
+            continue
+        if not isinstance(st, dict):
+            warn(warnings, f".agentbay/calls/{f.name}: not a call state object, skipped")
             continue
         cid = st.get("callId") or f.stem
         ts = last_ts.get(cid) or datetime.fromtimestamp(f.stat().st_mtime).astimezone().isoformat(timespec="seconds")
@@ -206,16 +225,20 @@ def ledger_verdicts(project: Path, kit: Path | None = None, since: datetime | No
             if not (isinstance(val, dict) and isinstance(val.get("items"), list)
                     and all(isinstance(i, dict) and "verdict" in i for i in val["items"])):
                 continue
-            tx = _texts(kit, target, texts)
+            tx = _texts(kit, target, texts, warnings)
             items = []
-            for i in val["items"]:
-                it = {"id": str(i.get("id", "?")), "verdict": i.get("verdict")}
-                if i.get("severity"):
+            for n, i in enumerate(val["items"]):
+                if i.get("verdict") not in ("pass", "fail", "n/a"):
+                    warn(warnings, f".agentbay/calls/{f.name}: steps.{step}.items[{n}]: verdict "
+                                   f"{str(i.get('verdict'))[:20]!r} is not pass|fail|n/a, skipped")
+                    continue
+                it = {"id": str(i.get("id", "?"))[:40], "verdict": i["verdict"]}
+                if i.get("severity") in ("blocker", "should-fix", "nit"):
                     it["severity"] = i["severity"]
-                if isinstance(i.get("evidence"), str):
-                    it["evidence"] = secretscan.scrub(i["evidence"][:EVIDENCE_CHARS])
+                if isinstance(i.get("evidence"), str):         # scrub first, then cut: no secret prefix survives
+                    it["evidence"] = secretscan.scrub(i["evidence"])[:EVIDENCE_CHARS]
                 if it["id"] in tx:
-                    it["text"] = secretscan.scrub(tx[it["id"]][:EVIDENCE_CHARS])
+                    it["text"] = secretscan.scrub(tx[it["id"]])[:EVIDENCE_CHARS]
                 items.append(it)
             out.append({"callId": cid, "episode": f"ab:{cid}", "target": target, "step": step,
                         "subject": _subject(st.get("input") or {}, cid), "ts": ts, "status": st.get("status"),
@@ -226,7 +249,7 @@ def ledger_verdicts(project: Path, kit: Path | None = None, since: datetime | No
         k = (v["target"], v["subject"])
         rounds[k] = rounds.get(k, 0) + 1
         v["round"] = rounds[k]
-    return out, {"verdicts": len(out)}
+    return out, {"verdicts": len(out), **({"warnings": warnings} if warnings else {})}
 
 
 def git_episodes(project: Path, since: datetime | None = None, until: datetime | None = None,

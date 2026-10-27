@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 import yaml
+from ..secretscan import clip
 
 DEFAULTS = {"nearDuplicate": 0.7, "contextTokens": 6000, "maxFindingsPerDetector": 50}
 FILLER = {
@@ -45,6 +46,8 @@ class Artifacts:
     ledger: list[dict] = field(default_factory=list)
     conformance: list[dict] = field(default_factory=list)
     is_kit: bool = False
+    unreadable: list[str] = field(default_factory=list)   # files the text reader refused or could not read
+    unparsed: list[str] = field(default_factory=list)     # Python files with syntax errors (skipped by AST checks)
 
 
 def candidate(kind: str, key: str, title: str, pattern: str, evidence: list[dict], scope: dict,
@@ -66,9 +69,12 @@ def _py(a: Artifacts):
             if t is None:
                 continue
             try:
-                yield f["path"], t, ast.parse(t)
-            except SyntaxError:
+                tree = ast.parse(t)
+            except (SyntaxError, ValueError, RecursionError) as e:
+                if f["path"] not in a.unparsed:
+                    a.unparsed.append(f"{f['path']}: {type(e).__name__}")
                 continue
+            yield f["path"], t, tree
 
 
 # ----------------------------------------------------------------------------- slop
@@ -91,7 +97,7 @@ def slop_filler(a: Artifacts, th: dict) -> list[dict]:
             ev = []
             for i, ln in occ[:5]:
                 rew = re.sub(r"\s{2,}", " ", FILLER_RX.sub(lambda m: FILLER[m.group(1).lower()], ln)).strip()
-                ev.append({"kind": "file", "ref": f"{f['path']}:{i}", "detail": ln.strip()[:200], "rewrite": rew[:200]})
+                ev.append({"kind": "file", "ref": f"{f['path']}:{i}", "detail": clip(ln.strip(), 200), "rewrite": clip(rew, 200)})
             out.append(candidate("slop-filler", f"{f['path']}:{phrase}", f"Filler '{phrase}' in {f['path']}",
                                  f"'{phrase}' appears {len(occ)} time(s); it adds words, not meaning", ev,
                                  {"file": f["path"]}, "low", {"occurrences": len(occ)},
@@ -148,8 +154,8 @@ def slop_duplicates(a: Artifacts, th: dict) -> list[dict]:
                 key = "|".join(sorted((r1, r2)))
                 out.append(candidate("slop-duplicate-rule", key, "Duplicate or restated rule",
                                      f"two statements are {jac:.0%} the same (3-word shingles)",
-                                     [{"kind": "file", "ref": r1, "detail": t1[:200]},
-                                      {"kind": "file", "ref": r2, "detail": t2[:200]}],
+                                     [{"kind": "file", "ref": r1, "detail": clip(t1, 200)},
+                                      {"kind": "file", "ref": r2, "detail": clip(t2, 200)}],
                                      {"file": r1.split("#")[0].split(":")[0]}, "low", {"jaccard": round(jac, 2)},
                                      "Keep one statement; reference it (refs/check) from the other place."))
     return out
@@ -187,7 +193,7 @@ def slop_comments(a: Artifacts, th: dict) -> list[dict]:
             if ids and all(w in ids or w.rstrip("s") in ids or w + "s" in ids for w in words):
                 out.append(candidate("slop-comment", f"{path}:{tok.string.strip()}", f"Comment restates code in {path}",
                                      "the comment only repeats the identifiers of the code it annotates",
-                                     [{"kind": "file", "ref": f"{path}:{row}", "detail": tok.string.strip()[:200],
+                                     [{"kind": "file", "ref": f"{path}:{row}", "detail": clip(tok.string.strip(), 200),
                                        "rewrite": "(delete the comment, or say why instead of what)"}],
                                      {"file": path}, "low"))
     return out
@@ -211,8 +217,8 @@ def slop_messages(a: Artifacts, th: dict) -> list[dict]:
                 if m:
                     out.append(candidate("slop-message", f"{path}:{m.group(1).lower()}:{msg[:40]}",
                                          f"Padded message in {path}", f"the message pads with '{m.group(1)}'",
-                                         [{"kind": "file", "ref": f"{path}:{n.lineno}", "detail": msg[:200],
-                                           "rewrite": PAD_RX.sub("", msg)[:200].strip()}],
+                                         [{"kind": "file", "ref": f"{path}:{n.lineno}", "detail": clip(msg, 200),
+                                           "rewrite": clip(PAD_RX.sub("", msg).strip(), 200)}],
                                          {"file": path}, "low"))
     return out
 
@@ -349,7 +355,7 @@ def oversized_context(a: Artifacts, th: dict, roles: list[dict] | None = None) -
             out.append(candidate("oversized-context", r["name"], f"Role {r['name']} gets ~{tokens} tokens of context",
                                  f"the largest step plan for {r['name']} carries ~{tokens} tokens of instructions "
                                  f"(limit {th['contextTokens']})",
-                                 [{"kind": "file", "ref": r["path"], "detail": ", ".join(r["parts"])[:200]},
+                                 [{"kind": "file", "ref": r["path"], "detail": clip(", ".join(r["parts"]), 200)},
                                   {"kind": "measurement", "ref": "tokens", "detail": f"~{tokens} tokens",
                                    "value": tokens}],
                                  {"role": r["name"], "file": r["path"]}, "medium", {"tokens": tokens},
@@ -363,11 +369,11 @@ def conformance(a: Artifacts, th: dict) -> list[dict]:
     out = []
     for res in a.conformance:
         for v in res["violations"][: th["maxFindingsPerDetector"]]:
-            ev = [{"kind": "rule", "ref": res["rule"], "detail": res["statement"][:200]},
-                  {"kind": "file", "ref": f"{v['file']}:{v['line']}", "detail": (v.get("text") or v["detail"])[:200],
+            ev = [{"kind": "rule", "ref": res["rule"], "detail": clip(res["statement"], 200)},
+                  {"kind": "file", "ref": f"{v['file']}:{v['line']}", "detail": clip((v.get("text") or v["detail"]), 200),
                    **({"rewrite": v["rewrite"]} if v.get("rewrite") else {})}]
             out.append(candidate("conformance", f"{res['rule']}:{v['file']}:{v['detail']}",
-                                 f"{res['rule']} violated in {v['file']}", v["detail"][:300], ev,
+                                 f"{res['rule']} violated in {v['file']}", clip(v["detail"], 300), ev,
                                  {"file": v["file"], "rule": res["rule"]},
                                  "high" if res["level"] in ("must", "must_not") else "low"))
     return out

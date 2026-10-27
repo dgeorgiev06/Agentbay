@@ -3,73 +3,43 @@ kind: Interface
 metadata:
   name: improve.findings
   description: >-
-    The improve store (improve.finding/v1, deduplicated by fingerprint). scan and audit run deterministic
-    detectors over session.events/v1, review.verdicts/v1 and artifacts.read/v1 and write findings; query reads;
-    record, triage, decide, backlog, handoff and verify change status, evidence and reports. Never modifies
-    artifacts outside the store.
+    The improve store (improve.finding/v1 in .agentbay/data/improve/findings.jsonl, deduplicated by fingerprint),
+    weekly reports and handoff drafts. Storage only: candidates come from improve.detect/v1. Never modifies
+    artifacts outside its data folder.
 spec:
   version: 1
   binding: connector
   endpoints:
-    scan:
-      description: Session lens - episodes in the window -> session detectors -> findings (and retention pruning).
+    upsert:
+      description: Store candidates (dedup by fingerprint, merge evidence, reopen fixed/verified findings that recur); prune closed findings past retention.
       in:
         type: object
+        required: [by]
         additionalProperties: false
         properties:
-          since: { type: string }
-          until: { type: string }
-      out: &runout
+          candidates: { type: array, items: { type: object } }
+          by: { type: string, description: "who produced the candidates (improve.scan, improve.audit, improve-analyst, auditor)" }
+          rejected: { type: array, description: "echoed in the output (findings improve.detect/v1.resolve refused)" }
+          detected: { type: array, items: { type: string }, description: "ids an earlier step of the call stored; included in summary" }
+      out:
         type: object
-        required: [findings, new, merged, reopened, summary, stats]
+        required: [findings, new, merged, reopened, summary]
         additionalProperties: false
         properties:
-          findings: { type: array, items: { type: string }, description: "ids the detectors produced this run" }
+          findings: { type: array, items: { type: string } }
           new: { type: array, items: { type: string } }
           merged: { type: array, items: { type: string } }
           reopened: { type: array, items: { type: string } }
-          summary:
-            type: array
-            description: "one line per finding of this run: id, kind, title, severity, priority, status"
-            items: { type: object }
-          stats: { type: object, description: "per-source counts (episodes, verdicts, files, unknown record types, ...)" }
-          window: { type: object }
+          rejected: { type: array }
+          summary: { type: array, items: { type: object } }
           pruned: { type: integer }
-          manual: { type: array, description: "audit: conformance rules without a deterministic check, for the auditor" }
-      effects: [read, write]
-    audit:
-      description: Artifact lens - files and the reference graph -> slop, unused, inefficient and conformance detectors -> findings.
+      effects: [write]
+    annotate:
+      description: Store triage annotations (root cause, proposed fix, route, effort, impact) on open findings; others are refused.
       in:
         type: object
         additionalProperties: false
         properties:
-          root: { enum: [project, kit] }
-      out: *runout
-      effects: [read, write]
-    record:
-      description: >-
-        Add analyst/auditor findings (each must cite evidence that resolves; session patterns need >= 2 episodes
-        unless severe) and apply triage annotations (root cause, proposed fix, route, effort, impact).
-      in:
-        type: object
-        additionalProperties: false
-        properties:
-          findings:
-            type: array
-            items:
-              type: object
-              required: [lens, title, pattern, evidence]
-              additionalProperties: false
-              properties:
-                lens: { enum: [sessions, artifacts] }
-                title: { type: string, maxLength: 200 }
-                pattern: { type: string, maxLength: 600 }
-                evidence: { type: array, minItems: 1, items: { type: object } }
-                scope: { type: object }
-                severity: { enum: [low, medium, high, severe] }
-                rootCause: { type: string, maxLength: 800 }
-                proposedFix: { type: string, maxLength: 800 }
-                rule: { type: string, description: "conformance rule id the auditor judged" }
           annotations:
             type: array
             items:
@@ -85,17 +55,14 @@ spec:
                 impact: { type: integer, minimum: 1, maximum: 5 }
                 costEstimate: { type: object }
                 evidenceChecked: { type: array, items: { type: string }, description: "refs the analyst confirmed (the reviewer checks them)" }
-          detected: { type: array, items: { type: string }, description: "ids an earlier step of the same call produced; echoed in summary" }
       out:
         type: object
+        required: [annotated, missing, refused]
         additionalProperties: false
         properties:
-          new: { type: array, items: { type: string } }
-          merged: { type: array, items: { type: string } }
-          reopened: { type: array, items: { type: string } }
-          rejected: { type: array, items: { type: object } }
           annotated: { type: array, items: { type: string } }
           missing: { type: array }
+          refused: { type: array }
           summary: { type: array, items: { type: object } }
       effects: [write]
     query:
@@ -115,8 +82,22 @@ spec:
         properties:
           findings: { type: array, items: { $ref: improve.finding/v1 } }
       effects: [read]
+    get:
+      in:
+        type: object
+        required: [id]
+        additionalProperties: false
+        properties:
+          id: { type: string }
+      out:
+        type: object
+        required: [finding]
+        additionalProperties: false
+        properties:
+          finding: { $ref: improve.finding/v1 }
+      effects: [read]
     triage:
-      description: Cross-lens links (same file; slow step <-> inefficient code; unused endpoint <-> dead code) and priority = impact x frequency / effort.
+      description: Link findings of different lenses that point at the same file; priority = impact x frequency / effort; return the top open findings.
       in:
         type: object
         additionalProperties: false
@@ -194,20 +175,23 @@ spec:
         additionalProperties: false
         properties:
           id: { type: string }
-          route: { type: string }
+          route: { type: [string, "null"] }
           draft: { type: string }
           next: { type: object }
           stopped: { type: string }
           finding: { type: object }
       effects: [write]
     verify:
-      description: Re-run the finding's detector on data newer than the fix; verified if the pattern is gone, reopened if not.
+      description: Apply a re-check (from improve.detect/v1.recheck) - verified if the pattern is gone on new data, reopened if not, inconclusive without new data or without a detector.
       in:
         type: object
         required: [id]
         additionalProperties: false
         properties:
           id: { type: string }
+          present: { type: [boolean, "null"] }
+          newData: { type: integer, minimum: 0 }
+          note: { type: string }
       out:
         type: object
         required: [id, result]

@@ -12,11 +12,10 @@ modes:
   feed-briefing:                      # validated against modes/feed-briefing/config.schema.json
     lookback: 3d                      # default window for sync/digest/ask (<= lookbackMax 30d)
     retention: 30d                    # prune drops posts older than this
-    exclude: [retweets, replies]
     maxPostsPerRun: 200
     monthlyPosts: 3000
     spendUsd: 5
-    costPerPostUsd: 0.005             # X API price per post read; used for the spendUsd cap
+    costPerPostUsd: 0.005             # price per post the source reads (timeline + deletion checks); spendUsd cap
     # features:
     #   digest:
     #     extraRules: rules/digest-extra.yaml   # your rules stack on the feature's (strictest wins)
@@ -24,6 +23,7 @@ modes:
 connectors:
   x-api:
     userId: "1234567890"              # your numeric X user id (else looked up via /2/users/me)
+    exclude: [retweets, replies]      # X timeline filter
   # fake:
   #   fixture: fixtures/posts.json    # optional; built-in sample posts otherwise
 

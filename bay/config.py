@@ -24,6 +24,7 @@ import yaml
 
 NAME = "agentbay.config.yaml"
 CAPS = ("monthlyPosts", "spendUsd", "maxPostsPerRun")
+COST_PER_POST_USD = 0.005      # default price per post read (X API pay-per-use); config costPerPostUsd overrides
 
 
 class ConfigError(Exception):
@@ -73,5 +74,5 @@ def caps(constraints: dict, env_limits: dict, settings: dict) -> dict:
         vals = [v for v in (constraints.get(k), env_limits.get(k), settings.get(k)) if v is not None]
         if vals:
             out[k] = min(vals)
-    out["costPerPostUsd"] = settings.get("costPerPostUsd", 0.005)
+    out["costPerPostUsd"] = settings.get("costPerPostUsd", COST_PER_POST_USD)
     return out

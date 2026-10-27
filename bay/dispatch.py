@@ -70,7 +70,7 @@ class Dispatcher:
             self._accept_review(state, feat, step, output, base)
         else:
             if step.out:
-                sch = model._type_schema(mode.path, step.out, f"{feat.mode}.{feat.name}", [])
+                sch = model.type_schema(mode.path, step.out, f"{feat.mode}.{feat.name}", [])
                 errs = model.schema_errors(output, sch)
                 if errs:
                     raise CallError(f"step {step.id}: output does not match {step.out}: " + "; ".join(errs[:5]))
@@ -92,7 +92,7 @@ class Dispatcher:
                             f"add it to the role's `uses`")
         iface, ep = target.rsplit(".", 1)
         env = self.sys.env(r.env)
-        conn = model._connectors_of(env.spec["bind"].get(iface))[0]
+        conn = model.connectors_of(env.spec["bind"].get(iface))[0]
         return self._invoke(env.name, conn, iface, ep, inp or {}, settings={}, caps={})
 
     # ------------------------------------------------------------ engine
@@ -161,14 +161,14 @@ class Dispatcher:
             state["result"] = {"error": f"step {step.id} ({step.run}): {msg}"}
             return
         cost = {}
-        if isinstance(out, dict) and "fetched" in out:
-            cpp = float(caps.get("costPerPostUsd", 0.005))
-            cost = {"posts": out["fetched"], "usd": round(out["fetched"] * cpp, 4)}
+        if isinstance(out, dict) and "billed" in out:
+            cpp = float(caps.get("costPerPostUsd", cfgmod.COST_PER_POST_USD))
+            cost = {"posts": out["billed"], "usd": round(out["billed"] * cpp, 4)}
             state["cost"]["posts"] += cost["posts"]
             state["cost"]["usd"] = round(state["cost"]["usd"] + cost["usd"], 4)
         if isinstance(out, dict) and out.get("stopped"):
             state["stopped"] = out["stopped"]
-            if not out.get("fetched"):
+            if not out.get("billed"):
                 state["status"] = "blocked"
                 state["result"] = {"reason": out["stopped"]}
         state["steps"][step.id] = out

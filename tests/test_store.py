@@ -2,7 +2,7 @@
 import json
 from datetime import timedelta
 
-from helpers import NOW, clock, project, system, tmpdir
+from helpers import NOW, clock, project, system
 
 from bay import connect
 
@@ -113,9 +113,41 @@ def test_prune_retention_and_deletions():
 
 
 def test_source_reported_deletions_are_honored_on_sync():
-    p = project({"connectors": {"fake": {"deleted": ["1008"]}}})
+    p = project()
     store(p).sync(lookback="3d")
-    assert "1008" not in {x["id"] for x in lines(p)}
+    assert "1008" in {x["id"] for x in lines(p)}
+    import yaml
+    cfg = yaml.safe_load((p / "agentbay.config.yaml").read_text())
+    cfg["connectors"] = {"fake": {"deleted": ["1008"]}}          # deleted at the source after the first sync
+    (p / "agentbay.config.yaml").write_text(yaml.safe_dump(cfg))
+    st = store(p)
+    out = st.sync(lookback="3d")
+    assert set(st.ctx.sources["fake"].calls[0]["checkIds"]) >= {"1008", "1009"}   # stored ids in the window
+    assert out["deleted"] == 1 and "1008" not in {x["id"] for x in lines(p)}
+    assert out["billed"] == out["sources"]["fake"]["checked"] - 1   # checks are billed; the missing one is not
+    state = json.loads((p / ".agentbay/data/feeds/state.json").read_text())
+    assert "fake:1008" in state["deleted"]
+
+
+def test_budget_counts_reads_not_kept_posts():
+    p = project()
+    store(p).sync(lookback="3d")
+    out = store(p, caps={"maxPostsPerRun": 4}).sync(lookback="3d")
+    # nothing new on the timeline, but re-checking 2 stored posts (50% of 4) is billed
+    assert out["fetched"] == 0 and out["billed"] == 2 and out["budget"]["posts"] == 7 + 2
+
+
+def test_connector_without_source_is_rejected():
+    p = project()
+    s = system(p)
+    from bay import connect
+    st = connect.instantiate(s, "local-feeds", "local-store", "feed.store/v1", p, settings={}, clock=clock)
+    st.ctx.sources["fake"].ctx.source_id = None
+    try:
+        st.sync(lookback="1d")
+        raise AssertionError("expected StoreError")
+    except Exception as e:
+        assert "declares no `source`" in str(e)
 
 
 def test_store_writes_only_inside_env_write_path():

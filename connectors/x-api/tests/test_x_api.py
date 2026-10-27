@@ -101,15 +101,67 @@ def test_pagination_and_mapping():
                  "fetchedAt": "2026-10-27T12:00:00Z", "lang": "en", "metrics": {"like_count": 100, "retweet_count": 0}}
 
 
-def test_max_posts_truncates_and_cursor_matches_kept():
-    r, _ = routes(pages(3, 3))
+def test_read_budget_is_never_exceeded_and_cursor_matches_kept():
+    served = iter(range(300, 0, -1))
+
+    def honest(params, headers, form):        # like X: returns at most max_results, always more pages
+        n = int(params["max_results"])
+        data = [tweet(next(served), hours=1) for _ in range(n)]
+        return jresp({"data": data, "meta": {"result_count": n, "next_token": "more"}, "includes": {"users": []}})
+    r, _ = routes({})
+    r[("GET", TIMELINE)] = honest
     http = FakeHttp(r)
-    out = make(http).fetch(sinceId="50", maxPosts=4)
-    assert len(out["posts"]) == 4 and out["truncated"] is True
-    assert out["newestId"] == "100"
-    tl = [q for q in http.log if q["path"] == TIMELINE]
-    assert tl[0]["params"]["since_id"] == "50" and tl[0]["params"]["max_results"] == "5"   # API minimum is 5
-    assert len(tl) == 2
+    out = make(http).fetch(sinceId="50", maxPosts=107)
+    sizes = [int(q["params"]["max_results"]) for q in http.log if q["path"] == TIMELINE]
+    assert sizes == [100, 7] and http.log[1]["params"]["since_id"] == "50"
+    assert out["billed"] == 107 == len(out["posts"]) and out["truncated"] is True
+    assert out["newestId"] == "300"
+    out = make(FakeHttp(r)).fetch(maxPosts=3)          # below the API minimum page size: no request at all
+    assert out["billed"] == 0 and out["posts"] == [] and out["truncated"] is True
+
+
+def test_billing_includes_posts_returned_beyond_what_is_kept():
+    def big(params, headers, form):
+        n = int(params["max_results"])
+        data = [tweet(200 - j, hours=1 + j) for j in range(n)]
+        return jresp({"data": data, "meta": {"result_count": n}, "includes": {"users": []}})
+    r, _ = routes({})
+    r[("GET", TIMELINE)] = big
+    out = make(FakeHttp(r)).fetch(maxPosts=12)
+    assert out["billed"] == 12 == len(out["posts"])
+
+
+def test_deletion_check_uses_official_lookup_in_batches_and_is_billed():
+    r, _ = routes(pages(1, 1))
+    stored = [str(i) for i in range(1, 151)]
+    gone = {"7", "120"}
+
+    def lookup(params, headers, form):
+        ids = params["ids"].split(",")
+        assert len(ids) <= 100 and params["tweet.fields"] == "id"
+        data = [{"id": i} for i in ids if i not in gone]
+        errors = [{"resource_id": i, "resource_type": "tweet", "title": "Not Found Error"} for i in ids if i in gone]
+        return jresp({"data": data, **({"errors": errors} if errors else {})})
+    r[("GET", "/2/tweets")] = lookup
+    http = FakeHttp(r)
+    out = make(http).fetch(sinceId="1", maxPosts=500, checkIds=stored)
+    looks = [q for q in http.log if q["path"] == "/2/tweets"]
+    assert [len(q["params"]["ids"].split(",")) for q in looks] == [100, 50]
+    assert all(q["host"] == "api.x.com" for q in looks)
+    assert sorted(out["deleted"]) == ["120", "7"]
+    assert out["billed"] == 1 + 148                   # 1 timeline post + 148 found posts
+    # a small budget checks fewer ids and says so
+    http = FakeHttp(r)
+    out = make(http).fetch(sinceId="1", maxPosts=11, checkIds=stored)
+    assert out["unchecked"] == 140 and any("not re-checked" in w for w in out["warnings"])
+    assert out["billed"] <= 11
+
+
+def test_exclude_comes_from_connector_config():
+    r, _ = routes(pages(1, 1))
+    http = FakeHttp(r)
+    make(http, config={"exclude": ["retweets"]}).fetch(maxPosts=5)
+    assert next(q for q in http.log if q["path"] == TIMELINE)["params"]["exclude"] == "retweets"
 
 
 def test_token_refresh_on_401_and_rotation_is_persisted_not_leaked():

@@ -146,7 +146,7 @@ def instantiate(system: model.System, env_name: str, conn_name: str, iface: str,
     acc = vault.SecretAccessor(prov, env.spec.get("secrets", {}).get("allow", []), needs.get("secrets", []), conn_name)
     sources = {}
     for sub in needs.get("capabilities", []):
-        for cn in model._connectors_of(env.spec["bind"].get(sub)):
+        for cn in model.connectors_of(env.spec["bind"].get(sub)):
             sources[cn] = instantiate(system, env_name, cn, sub, project, transport=transport, provider=provider,
                                       caps=caps, settings=settings, clock=clock)
     ctx = Context(

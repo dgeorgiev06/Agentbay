@@ -21,3 +21,4 @@ spec:
     properties:
       userId: { type: string, description: "Numeric X user id; looked up via /2/users/me when omitted." }
       maxPages: { type: integer, minimum: 1, default: 50 }
+      exclude: { type: array, items: { enum: [retweets, replies] }, default: [retweets, replies], description: "X timeline filter (connector-specific)." }

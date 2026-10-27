@@ -9,8 +9,10 @@ spec:
   endpoints:
     fetch:
       description: >-
-        Fetch posts newer than `sinceId` or `startTime`, newest first, at most `maxPosts`.
-        Returns posts as feed.post/v1, the newest id seen, and whether more pages remained.
+        Fetch posts newer than `sinceId` or `startTime`, newest first. `maxPosts` is the read budget for this
+        call: the connector never reads (is billed for) more than that, timeline and deletion checks together.
+        `checkIds` are stored post ids (without source prefix) to re-check; ids the source no longer serves are
+        returned in `deleted`. Source-specific filters (e.g. X's exclude) are connector config, not inputs.
       in:
         type: object
         additionalProperties: false
@@ -18,16 +20,18 @@ spec:
           sinceId: { type: string }
           startTime: { type: string, format: date-time }
           maxPosts: { type: integer, minimum: 1 }
-          exclude: { type: array, items: { enum: [retweets, replies] } }
+          checkIds: { type: array, items: { type: string } }
       out:
         type: object
-        required: [posts, newestId, truncated]
+        required: [posts, newestId, truncated, billed]
         additionalProperties: false
         properties:
           posts: { type: array, items: { $ref: feed.post/v1 } }
           newestId: { type: [string, "null"] }
           truncated: { type: boolean }
           requests: { type: integer }
+          billed: { type: integer, minimum: 0, description: "Posts read from the source in this call (what the provider bills), including deletion checks." }
+          unchecked: { type: integer, minimum: 0, description: "checkIds not verified because the budget ran out." }
           deleted: { type: array, items: { type: string }, description: "Post ids (without source prefix) the source reports deleted." }
           warnings: { type: array, items: { type: string } }
       effects: [network, spend]

@@ -3,6 +3,8 @@
   GET https://api.x.com/2/users/{id}/timelines/reverse_chronological
       max_results (<=100), since_id | start_time, exclude=retweets,replies,
       pagination_token, expansions=author_id, tweet.fields, user.fields
+  GET https://api.x.com/2/tweets?ids=...      deletion check: stored ids within the API window
+                                              that X no longer returns are reported as deleted
   POST https://api.x.com/2/oauth2/token      (grant_type=refresh_token)
   GET https://api.x.com/2/users/me            (only when config.userId is unset)
 
@@ -11,6 +13,10 @@ Access tokens live in memory for this call only. X rotates refresh tokens;
 the new one is written back through the secrets accessor (keychain), never to
 disk, logs or output. All requests go through ctx.http, which enforces the
 env network allowlist before any request is made.
+
+Billing: X bills every post it returns, so `billed` counts every post in every
+response (timeline pages and deletion lookups), not only the posts kept. The
+call never requests more than its `maxPosts` read budget.
 """
 from __future__ import annotations
 
@@ -24,6 +30,8 @@ API = "https://api.x.com/2"
 TOKEN_URL = f"{API}/oauth2/token"
 SCOPES = "tweet.read users.read offline.access"
 PAGE_MAX = 100
+PAGE_MIN = 5          # the timeline endpoint rejects max_results < 5
+LOOKUP_MAX = 100      # GET /2/tweets accepts up to 100 ids
 TWEET_FIELDS = "created_at,lang,public_metrics,author_id"
 USER_FIELDS = "username,name"
 EXCLUDE_OK = ("retweets", "replies")
@@ -34,6 +42,8 @@ class XApi:
         self.ctx = ctx
         self._access: str | None = None
         self.max_pages = int(ctx.config.get("maxPages", 50))
+        self.exclude = list(ctx.config.get("exclude", EXCLUDE_OK))
+        self.billed = 0
 
     # ------------------------------------------------------------ auth
     def _refresh(self) -> None:
@@ -121,56 +131,85 @@ class XApi:
 
     # ------------------------------------------------------------ feed.source/v1.fetch
     def fetch(self, sinceId: str | None = None, startTime: str | None = None, maxPosts: int = 100,
-              exclude: list[str] | None = None) -> dict:
-        exclude = list(exclude) if exclude is not None else list(EXCLUDE_OK)
+              checkIds: list[str] | None = None) -> dict:
+        warnings: list[str] = []
+        posts, newest, truncated = self._timeline(sinceId, startTime, maxPosts, warnings)
+        deleted, unchecked = self._deleted(checkIds or [], maxPosts - self.billed, warnings)
+        out = {"posts": posts, "newestId": newest, "truncated": truncated, "requests": self.ctx.http.requests,
+               "billed": self.billed, "deleted": deleted}
+        if unchecked:
+            out["unchecked"] = unchecked
+            warnings.append(f"x-api: {unchecked} stored post(s) not re-checked for deletion (read budget used up)")
+        if warnings:
+            out["warnings"] = warnings
+        return out
+
+    def _timeline(self, since_id, start_time, budget: int, warnings: list[str]):
         url = f"{API}/users/{self.user_id()}/timelines/reverse_chronological"
         fetched = iso(self.ctx.now())
         posts: list[dict] = []
-        newest: str | None = None
         token: str | None = None
-        warnings: list[str] = []
         truncated = False
         pages = 0
         while True:
-            want = maxPosts - len(posts)
-            if want <= 0:
-                truncated = token is not None or pages == 0
+            left = budget - self.billed
+            if left < PAGE_MIN:
+                # cannot ask for fewer than PAGE_MIN without risking a bill above the budget
+                truncated = pages == 0 or token is not None
                 break
             if pages >= self.max_pages:
                 truncated = True
                 warnings.append(f"x-api: stopped after maxPages={self.max_pages}")
                 break
-            # X requires max_results >= 5 per page; trim locally if we need fewer
-            params = self.build_params(max_results=max(5, want), since_id=sinceId, start_time=startTime,
-                                       exclude=exclude, pagination_token=token)
+            params = self.build_params(max_results=min(PAGE_MAX, left), since_id=since_id, start_time=start_time,
+                                       exclude=self.exclude, pagination_token=token)
             r = self._get(url, params)
             pages += 1
             if r.status == 429:
                 truncated = True
-                reset = r.headers.get("x-rate-limit-reset") or r.headers.get("X-Rate-Limit-Reset")
-                warnings.append(f"x-api: rate limited (HTTP 429){f', resets at epoch {reset}' if reset else ''}; "
-                                f"kept {len(posts)} posts, run sync again later")
+                warnings.append(_rate_limited(r, f"kept {len(posts)} posts, run sync again later"))
                 break
             if r.status != 200:
                 raise ConnectorError(f"x-api: timeline request failed (HTTP {r.status})")
             body = r.json() or {}
             users = {u["id"]: u for u in (body.get("includes") or {}).get("users", [])}
             page = body.get("data") or []
-            meta = body.get("meta") or {}
-            if meta.get("newest_id") and newest is None:
-                newest = str(meta["newest_id"])
-            for t in page[:want]:
-                posts.append(self._to_post(t, users, fetched))
-            if len(page) > want:
-                truncated = True
-                break
-            token = meta.get("next_token")
+            self.billed += len(page)                     # X bills what it returns
+            posts += [self._to_post(t, users, fetched) for t in page]
+            token = (body.get("meta") or {}).get("next_token")
             if not token:
                 break
-        if posts:
-            newest = posts[0]["id"]  # newest first: advance the cursor only to what we kept
-        return {"posts": posts, "newestId": newest, "truncated": truncated, "requests": self.ctx.http.requests,
-                **({"warnings": warnings} if warnings else {})}
+        newest = posts[0]["id"] if posts else None       # newest first
+        return posts, newest, truncated
+
+    def _deleted(self, ids: list[str], budget: int, warnings: list[str]) -> tuple[list[str], int]:
+        """Stored ids X no longer returns from GET /2/tweets are gone (deleted or made unavailable)."""
+        if not ids:
+            return [], 0
+        check = ids[: max(0, budget)]
+        gone: list[str] = []
+        done = 0
+        for i in range(0, len(check), LOOKUP_MAX):
+            batch = check[i:i + LOOKUP_MAX]
+            r = self._get(f"{API}/tweets", {"ids": ",".join(batch), "tweet.fields": "id"})
+            if r.status == 429:
+                warnings.append(_rate_limited(r, "deletion check incomplete"))
+                break
+            if r.status != 200:
+                raise ConnectorError(f"x-api: deletion check GET /2/tweets failed (HTTP {r.status})")
+            body = r.json() or {}
+            found = {str(x["id"]) for x in body.get("data") or []}
+            self.billed += len(found)
+            # X answers missing ids with per-id errors (Not Found / Authorization); either way the
+            # post is no longer available to this account, so honor-deletions drops it.
+            gone += [x for x in batch if x not in found]
+            done += len(batch)
+        return gone, len(ids) - done
+
+
+def _rate_limited(r, what: str) -> str:
+    reset = r.headers.get("x-rate-limit-reset") or r.headers.get("X-Rate-Limit-Reset")
+    return f"x-api: rate limited (HTTP 429){f', resets at epoch {reset}' if reset else ''}; {what}"
 
 
 def _norm(ts: str | None) -> str | None:

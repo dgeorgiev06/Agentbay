@@ -337,7 +337,7 @@ def _bound(env: Doc, iface: str):
     return env.spec.get("bind", {}).get(iface)
 
 
-def _connectors_of(binding) -> list[str]:
+def connectors_of(binding) -> list[str]:
     if isinstance(binding, str):
         return [binding]
     if isinstance(binding, list):
@@ -405,7 +405,7 @@ def check_connector(kit: Kit, env: Doc, conn_name: str, iface: str, gaps: list[s
         if b is None:
             gaps.append(f"env {env.name}: connector {conn_name} needs capability {sub}, which env {env.name} does not bind")
             continue
-        for cn in _connectors_of(b):
+        for cn in connectors_of(b):
             check_connector(kit, env, cn, sub, gaps, seen)
         for e in endpoint_effects(kit, sub, None):
             if e not in env.spec["effects"]:
@@ -475,7 +475,7 @@ def resolve_role(kit: Kit, name: str, gaps: list[str], where: str, seen_conn: se
                                 f"read-only connector endpoints (the dispatcher runs the rest as code steps)")
                 else:
                     bay_uses.append(f"{iface}.{e}")
-            for cn in _connectors_of(b):
+            for cn in connectors_of(b):
                 check_connector(kit, env, cn, iface, gaps, seen_conn)
     if bay_uses and "Bash" not in tools:
         tools.append("Bash")
@@ -503,7 +503,7 @@ def resolve_role(kit: Kit, name: str, gaps: list[str], where: str, seen_conn: se
         budget=budget, default_agent=s["agent"])
 
 
-def _type_schema(mode_dir: Path, tname: str | None, where: str, gaps: list[str]) -> dict:
+def type_schema(mode_dir: Path, tname: str | None, where: str, gaps: list[str]) -> dict:
     if not tname:
         return {"type": "object"}
     p = mode_dir / "types" / f"{tname}.schema.json"
@@ -648,14 +648,14 @@ def resolve_mode(kit: Kit, md: Doc, roles: dict[str, ResolvedRole], gaps: list[s
         features[ep_name] = Feature(
             mode=name, name=ep_name, workflow=ep["workflow"], steps=steps, effects=ep_eff,
             in_type=ep.get("in"), out_type=ep.get("out"),
-            in_schema=_type_schema(md.dir, ep.get("in"), where, gaps),
-            out_schema=_type_schema(md.dir, ep.get("out"), where, gaps),
+            in_schema=type_schema(md.dir, ep.get("in"), where, gaps),
+            out_schema=type_schema(md.dir, ep.get("out"), where, gaps),
             playbook_path=pb_path, playbook_text=pb_text, dod=dod, rules=rl,
             review=review if review_on else None,
             schedule=ep.get("schedule"), description=ep.get("description", ""))
         for st in steps:
             if st.out and st.kind == "role":
-                _type_schema(md.dir, st.out, f"{where} step {st.id}", gaps)
+                type_schema(md.dir, st.out, f"{where} step {st.id}", gaps)
 
     skills = {}
     for sk in sorted((md.dir / "skills").glob("*/SKILL.md")):
@@ -691,7 +691,7 @@ def _code_step(kit, md, st, sw, ep_eff, roles, gaps, seen_conn) -> Step:
         gaps.append(f"{sw}: capability {iface} is not bound in env {env.name} ({why}); "
                     f"add `{iface}: <connector>` to its bind (unbound capability)")
         return step
-    conns = _connectors_of(b)
+    conns = connectors_of(b)
     if len(conns) != 1:
         gaps.append(f"{sw}: code steps need exactly one connector for {iface} in env {env.name} (found {conns or b})")
         return step

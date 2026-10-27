@@ -9,7 +9,7 @@ import json
 from datetime import timedelta
 from pathlib import Path
 
-from bay.util import iso
+from bay.util import iso, parse_time
 
 SAMPLE = [
     {"id": "1009", "handle": "vitalik", "name": "Vitalik", "ageHours": 2,
@@ -44,12 +44,11 @@ class Fake:
         else:
             self.items = SAMPLE
 
-    def fetch(self, sinceId=None, startTime=None, maxPosts=100, exclude=None) -> dict:
-        self.calls.append({"sinceId": sinceId, "startTime": startTime, "maxPosts": maxPosts})
+    def fetch(self, sinceId=None, startTime=None, maxPosts=100, checkIds=None) -> dict:
+        self.calls.append({"sinceId": sinceId, "startTime": startTime, "maxPosts": maxPosts, "checkIds": checkIds})
         now = self.ctx.now()
         lo = now - timedelta(days=7)
         if startTime:
-            from bay.util import parse_time
             lo = max(lo, parse_time(startTime, now))
         rows = []
         for it in sorted(self.items, key=lambda x: int(x["id"]), reverse=True):
@@ -65,9 +64,13 @@ class Fake:
                 "createdAt": iso(created), "fetchedAt": iso(now),
             })
         kept = rows[:maxPosts]
+        gone = set(self.ctx.config.get("deleted", []))
+        checks = list(checkIds or [])[: max(0, maxPosts - len(kept))]
+        deleted = [i for i in checks if i in gone]
         return {"posts": kept, "newestId": kept[0]["id"] if kept else None,
                 "truncated": len(rows) > maxPosts, "requests": 0,
-                "deleted": list(self.ctx.config.get("deleted", []))}
+                "billed": len(kept) + len(checks) - len(deleted),
+                "deleted": deleted, **({"unchecked": len(checkIds) - len(checks)} if checkIds and len(checks) < len(checkIds) else {})}
 
 
 def create(ctx) -> Fake:

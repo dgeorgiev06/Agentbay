@@ -138,7 +138,8 @@ An endpoint review block may name framework rule sets: `review: { ..., rulesets:
   Kind extensions add fields. `post/v1` adds `lang` and `metrics`, using `allOf` item/v1 and
   `unevaluatedProperties: false`. The store validates each item against `<kind>/v1` when that schema exists.
 - **`selector/v1`**: `{id, from?, to?, subject?, text?, in?, has?, since?, not?}`.
-  - Every field takes one value or a list (any value matches).
+  - Every field takes one value or a list (any value matches). Matching is case-insensitive (casefold); `has` is
+    `link` or `attachment`; `*` is the only wildcard and works only in `from`/`to`.
   - Fields within a selector are ANDed, selectors are ORed, and `not` excludes when any of its fields matches.
   - The matcher is `bay/selector.py` `matches()`. It is the only place that decides which items are kept.
 - **Connector capability table**: `spec.selectors: {<field>: native|local | {mode, as}}`.
@@ -159,8 +160,9 @@ An endpoint review block may name framework rule sets: `review: { ..., rulesets:
 
   `sync` re-matches stored items when the selectors changed. A new selector backfills its lookback. Items no
   selector matches are hidden at once, and `prune` deletes them.
-- **corpus-store** (framework connector) keeps one `corpus.db` per env data folder, mode 0600, in WAL mode,
-  with `user_version` = 1:
+- **corpus-store** (framework connector) keeps one store per mode, `<env data folder>/<mode>/corpus.db`
+  (settings.mode from the dispatcher; use-shim reads resolve the role's one mode). The file, -wal and -shm
+  are 0600; WAL mode, `user_version` = 1:
   - `items` (unique source + ext_id);
   - `item_selectors`;
   - `items_fts` (FTS5 over title, body and author, own content, kept by triggers);
@@ -168,18 +170,26 @@ An endpoint review block may name framework rule sets: `review: { ..., rulesets:
 
   Without FTS5 the store falls back to LIKE matching, and `bay validate` warns.
 - **Agent SQL** (`bay/sqlsandbox.py`):
-  - temp views `v_items` and `v_posts`, limited to the env's bound sources and to items matching a selector;
+  - temp views `v_items`, `v_posts` and `v_fts`, limited to the env's bound sources and to items matching a
+    selector. `v_fts` is the only full-text path: `WHERE fts MATCH '...' ORDER BY rank`, plus a `snippet`
+    column;
   - `mode=ro` + `query_only`;
-  - an authorizer: SELECT/READ on those views, `items_fts` (and its shadow tables), json_each and CTEs, and a
+  - a strict pre-pass (`EXPLAIN <sql>`) that refuses direct `items_fts` and its shadow tables, then the run,
+    with FTS5's own internal reads allowed;
+  - an authorizer: SELECT/READ on those views, json_each and CTEs, and a
     function allowlist; everything else is denied;
   - no WITH clause named like a view or store table;
-  - a 2 s progress-handler limit, a 1 MB value limit, 200/1000 rows, 200 kB per result and 4,000 characters
+  - a 2 s progress-handler limit, a 1 MB value limit, a 256 MB heap cap (temp_store=FILE), 200/1000 rows, 200 kB per result and 4,000 characters
     per cell.
 
-  Errors are returned as `error`, saying what to change. Item text is secret-scrubbed at ingest, and every
+  Errors are returned as `error`, saying what to change. Every item string but its identity is secret-scrubbed at ingest (`item_row`, shared with the migration), and every
   read is redacted and scanned.
-- **Migration**: `bay migrate --project <repo>` (and forge.migrate) converts a v0.2 `posts.jsonl` +
-  `state.json` into `corpus.db`. It shows a dry-run diff first, and `--confirm` applies it.
+- **Migration**: `bay migrate --project <repo>` (the user; forge.migrate migrates kit content only) converts
+  a v0.2 `posts.jsonl` + `state.json` into `<dir>/feed-briefing/corpus.db`. It shows a dry-run diff first, and
+  `--confirm` applies it. Bad lines and state are reported as file:line with the fix.
+- **Deprecated v0.2 names** (0.3.x only, `bay/aliases.py`): feed.source/v1, feed.store/v1, feed.post/v1,
+  feed.coverage/v1, feed-analyst, feed-lead and local-store resolve to the v0.3 names with a lint warning.
+  `bay migrate` rewrites them. Old connector code is a load error asking for a hand port.
 
 ## Extension recipes
 - **New source** -> `bay connector new bsky --implements items.source/v1` (template sets `source`, `window` and a

@@ -44,8 +44,11 @@ Then ask: *"brief me on the last 3 days"*. The Chief of Staff runs the digest:
    `.agentbay/bay status` shows the call, its steps and posts/USD used.
 
 Questions work the same way: *"what did people say about Solana custody?"* runs `feed-briefing.ask`. The
-analyst answers through read-only SQL: it runs `items.store/v1.describe`, narrows with `items.store/v1.sql`
-(`SELECT id, url, ... FROM v_posts WHERE ...`), reads the few posts it relies on with `items.store/v1.get`,
+analyst answers through read-only SQL: it runs `items.store/v1.describe`, narrows with `items.store/v1.sql`,
+whose input is `{"sql": "<one SELECT>", "limit": <optional rows>}`, for example
+`.agentbay/roles/briefing-analyst/use items.store/v1.sql '{"sql": "SELECT id, url FROM v_posts WHERE text LIKE '\''%custody%'\''"}'`
+or full text with `SELECT id, url, snippet FROM v_fts WHERE fts MATCH 'solana AND custody' ORDER BY rank`, then
+reads the few posts it relies on with `items.store/v1.get`,
 and cites item ids (`x:1849...`). The Chief of Staff turns the ids into links when it delivers the answer.
 
 You can drive the same steps by hand from a shell; `feed-briefing.sync` and `feed-briefing.prune`
@@ -65,8 +68,9 @@ modes:
       - { id: vitalik, from: vitalik, not: { text: giveaway } }
 ```
 
-Fields: `from`, `to`, `subject`, `text`, `in` (folder, label, list, channel), `has`, `since`, `not`. Fields
-within a selector are ANDed, selectors are ORed, and `not` excludes. Each source connector declares which
+Fields: `from`, `to`, `subject`, `text`, `in` (folder, label, list, channel), `has` (`link` or `attachment`),
+`since`, `not`. Fields within a selector are ANDed, selectors are ORed, and `not` excludes. Matching is
+case-insensitive. `*` is the only wildcard, and only in `from`/`to` (`*@bank.example`). Each source connector declares which
 fields its own search handles (`spec.selectors` in connector.yaml). The store fetches with that native part
 and then re-applies the whole selector with one shared matcher, so behaviour is the same on every source.
 
@@ -82,10 +86,18 @@ a paid source (for example `text` on X, where every post the native query return
 ### Upgrading a v0.2 store
 
 v0.2 kept posts in `.agentbay/data/feeds/posts.jsonl` + `state.json`; v0.3 uses one SQLite file per mode
-(`corpus.db`, owner-only). Convert it once: `./bay.sh migrate --project ~/code/my-repo` shows a dry-run diff;
-add `--confirm` to apply. Cursors, coverage, monthly budget, deletions and deletion-check times are kept, so the
+(`.agentbay/data/feeds/feed-briefing/corpus.db`, owner-only). Convert it once, yourself (agents never write
+`.agentbay/`): `./bay.sh migrate --project ~/code/my-repo` shows a dry-run diff; add `--confirm` to apply.
+Bad lines or a damaged `state.json` are reported as file:line with the fix, and nothing is converted until
+they are fixed. Cursors, coverage, monthly budget, deletions and deletion-check times are kept, so the
 next sync is incremental and posts deleted at the source never come back. The old files are renamed
 `*.v0.2.bak`, not deleted.
+
+Your own v0.2 modes, roles, envs and connectors keep working in 0.3.x. Their old names resolve to the new
+ones: `feed.source/v1` and `feed.store/v1` become `items.*`, `feed-analyst` and `feed-lead` become
+`briefing-*`, and `local-store` becomes `corpus-store`. `bay lint` warns about each such file. `./bay.sh migrate`
+(then `--confirm`) rewrites those files. A connector you wrote against the old `fetch(sinceId, startTime,
+maxPosts, checkIds)` cannot be rewritten automatically; `bay lint` says how to port it.
 
 ### Real X timeline
 
@@ -222,11 +234,13 @@ it cannot contain code once something runs it. Hard isolation needs an OS sandbo
 - **Approval gates are yours:** `bay approve <callId>` works only in your own terminal.
 - **Agent SQL is sandboxed.** `items.store/v1.sql` is defended in layers:
   - the connection opens read-only (`mode=ro`, `query_only`);
-  - an authorizer allows only SELECT over `v_items`, `v_posts` and `items_fts`, plus an allowlist of functions;
+  - an authorizer allows only SELECT over the views `v_items`, `v_posts` and `v_fts` (full text, scoped like
+    `v_items`), plus an allowlist of functions. Each query is first prepared under a strict pass that refuses
+    `items_fts` and its shadow tables, so full-text results never include items outside the mode's scope;
   - WITH clauses may not reuse a view or table name;
-  - a time limit and row, byte and value-size caps.
+  - a time limit, a 256 MB heap cap (sorts spill to disk), and row, byte and value-size caps.
 
-  Item text is secret-scrubbed when it is stored, and every read is redacted and scanned again.
+  Every stored item string is secret-scrubbed when it is stored, and every read is redacted and scanned again.
 - **What subagents cannot touch** (guard hook on Bash and every file tool, plus `Edit` deny rules in
   settings.json): `.agentbay/` (control plane, store, call state), `.claude/`, `.git`, `CLAUDE.md`, `.mcp.json`,
   `agentbay.config.yaml`, `.env*`, `.envrc`, `Makefile`, `bay.sh`, `.vscode/`, `.idea/`, `.github/workflows/`,

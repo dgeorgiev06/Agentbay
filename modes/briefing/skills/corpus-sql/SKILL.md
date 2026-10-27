@@ -6,13 +6,16 @@ description: Query the corpus store with read-only SQL (items.store/v1.sql) and 
 
 Run every command from the plan's `tools` (your role's use shim), one at a time. Never open store files.
 
-1. `items.store/v1.describe '{}'` once: views (`v_items`, `v_posts`), columns, row counts, sample values, whether
-   full-text (`items_fts`) is available, the allowed functions and the limits.
-2. Narrow with `items.store/v1.sql '{"sql": "SELECT ..."}'`. One SELECT per call; select `id` (and `url`) always;
-   keep text columns short (`substr(text, 1, 200)`). Recipes:
+1. `items.store/v1.describe '{}'` once: views (`v_items`, `v_posts`, and `v_fts` when full-text is available),
+   columns, row counts, sample values, the allowed functions and the limits.
+2. Narrow with `items.store/v1.sql`. The input is one JSON object with the query in `sql` (and an optional
+   `limit`, default 200, max 1000), e.g.
+   `items.store/v1.sql '{"sql": "SELECT id, url FROM v_posts WHERE text LIKE '\''%staking%'\'' LIMIT 20"}'`.
+   (inside the single-quoted shell argument, write each SQL quote `'` as `'\''`). One SELECT per call; select `id` (and `url`) always; keep text columns short (`substr(text, 1, 200)`). Recipes:
    - recent by author: `SELECT id, url, createdAt, substr(text,1,200) FROM v_items WHERE author = 'lido' ORDER BY createdAt DESC LIMIT 20`
-   - full text: `SELECT v.id, v.url, snippet(items_fts, 1, '[', ']', '…', 12) AS s FROM items_fts JOIN v_items v ON v.rid = items_fts.rowid WHERE items_fts MATCH 'staking AND custody' ORDER BY bm25(items_fts) LIMIT 20`
-     (quote phrases: `MATCH '"proof of stake"'`; without FTS use `instr(lower(text), 'staking') > 0`)
+   - full text: `SELECT id, url, snippet FROM v_fts WHERE fts MATCH 'staking AND custody' ORDER BY rank LIMIT 20`
+     (quote phrases: `fts MATCH '"proof of stake"'`; `items_fts` itself is not readable; without FTS5 there is
+     no v_fts: use `instr(lower(text), 'staking') > 0` on v_items)
    - one selector: `... FROM v_items v WHERE EXISTS (SELECT 1 FROM json_each(v.matched) WHERE value = 'home')`
    - who talks most: `SELECT author, count(*) n FROM v_items WHERE createdAt >= '2026-10-24' GROUP BY author ORDER BY n DESC LIMIT 10`
    - per day: `SELECT substr(createdAt, 1, 10) day, count(*) FROM v_items GROUP BY day ORDER BY day`

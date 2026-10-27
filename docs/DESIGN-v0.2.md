@@ -343,14 +343,16 @@ are not part of this amendment.
   missing parents are load errors. A child file is validated with endpoint `workflow`/`effects` optional, and
   the merged mode against the full schema. `abstract: true` (not inherited) marks a base that is linted but
   never resolved, installed or called. In a child, a feature folder may hold only the file it overrides.
-- **Contracts** (`feed.source/v1`, `feed.store/v1` and `feed.post/v1` are retired):
+- **Contracts** (`feed.source/v1`, `feed.store/v1` and `feed.post/v1` are deprecated; see Compatibility below):
   - data `item/v1`, a shared envelope with `id = <source>:<extId>`;
   - kind extension `post/v1`;
   - `selector/v1` and `items.coverage/v1` (renamed from feed.coverage/v1);
   - interfaces `items.source/v1` (one `fetch` per native query) and `items.store/v1` (sync, prune,
     describe, sql, get, thread, facets, search, query, status).
-- **Selectors** (`bay/selector.py`): the vocabulary is from, to, subject, text, in, has, since, not.
-  - Fields are ANDed, selectors ORed, and `not` excludes.
+- **Selectors** (`bay/selector.py`): the vocabulary is from, to, subject, text, in, has (link | attachment),
+  since, not.
+  - Fields are ANDed, selectors ORed, and `not` excludes. Matching is case-insensitive (casefold); `*` is the
+    only wildcard and works only in from/to.
   - Each source declares its capability table in `connector.yaml spec.selectors`.
   - The store splits each selector into a native query and a local filter, and always re-applies the full
     selector with the one shared matcher. Items carry `matched`.
@@ -359,8 +361,11 @@ are not part of this amendment.
   - A removed selector's items are hidden at once, and prune deletes them (sync has no delete effect).
   - Validate errors on fields a source cannot express. It warns on local-only fields when a source is paid.
   - The `stale > 2h` refresh also runs when the configured selectors differ from the applied ones.
-- **corpus-store** (framework connector, so every briefing mode shares it): one `corpus.db` per env data
-  folder, mode 0600, in WAL mode with `user_version` 1. Its tables:
+- **corpus-store** (framework connector, so every briefing mode shares it): one store per mode,
+  `<env data folder>/<mode>/corpus.db`, so two briefing modes on one env never share selector tags. The
+  dispatcher passes the mode; a role's use-shim read resolves the one mode of that role that needs the store.
+  The file is created 0600 before SQLite opens it, so -wal and -shm are 0600 too. WAL mode, `user_version`
+  1. Its tables:
   - `items`;
   - `item_selectors`;
   - `items_fts` (FTS5 with its own content, kept by triggers);
@@ -370,19 +375,29 @@ are not part of this amendment.
   `maxPostsPerRun`, `monthlyPosts` and `costPerPostUsd` are kept and count items. Without FTS5, search
   falls back to LIKE and `bay validate` warns.
 - **Read-only SQL sandbox** (`bay/sqlsandbox.py`):
-  - temp views `v_items` and `v_posts`, limited to the env's bound sources and to items matching a selector;
+  - temp views `v_items`, `v_posts` (built from `items` with the same scope, no re-join) and `v_fts`
+    (`v_items` joined to `items_fts`, with columns `fts` for MATCH, `rank` and `snippet`), limited to the
+    env's bound sources and to items matching a selector;
   - `mode=ro` + `query_only`;
-  - an authorizer: SELECT and READ on those views, `items_fts`, json_each and CTEs only, and a function
-    allowlist. Base tables are readable only from inside an approved view; ATTACH, PRAGMA, writes, DDL,
-    load_extension, sqlite_master and `state` are denied;
+  - an authorizer: SELECT and READ on those views, json_each and CTEs only, and a function allowlist. Base
+    tables and `items_fts` are readable only from inside an approved view; the FTS shadow tables, ATTACH,
+    PRAGMA, writes, DDL, load_extension, sqlite_master and `state` are denied;
+  - **strict pre-pass.** Each query is first prepared as `EXPLAIN <sql>` under the strict authorizer and only
+    then runs. During the run, FTS5's own unattributed reads of its shadow tables are allowed, so a query can
+    never name them itself.
+  - **Residual leak:** a flattened `count(*)` over `v_fts` may count `items_fts` rows (row existence, no
+    data), and only when the statement also reads through `v_fts`;
   - a lexical check forbids WITH clauses named like a view or table: inside a CTE the authorizer reports the
     CTE's name as the enclosing view, so a CTE called `v_items` would otherwise launder base-table reads;
-  - a 2 s progress-handler limit, a 1 MB SQLITE_LIMIT_LENGTH, and row, byte and cell caps;
+  - a 2 s progress-handler limit, a 1 MB SQLITE_LIMIT_LENGTH, `PRAGMA hard_heap_limit` 256 MB (process-wide,
+    only ever lowered) with `temp_store=FILE`, and row, byte and cell caps;
   - fixable error messages.
 
   Two decisions came out of the adversarial tests:
-  - **Secrets are scrubbed at ingest.** Item title and text are secret-scrubbed when stored, because scanning
-    output alone is defeated by `upper()`/`hex()`.
+  - **Secrets are scrubbed at ingest.** Every item string except its identity and timestamps is
+    secret-scrubbed when stored: author, title, text, url, container, labels, threadId and the strings in kind
+    fields. Scanning output alone is defeated by `upper()`/`hex()`. `item_row()` is the one row builder, used
+    by both sync and `bay migrate`.
   - **Reads stay scanned.** Every read is still `vault.redact` + `secretscan`.
 - **`briefing` base mode** (user space, `modes/briefing`, abstract). It ships:
   - features sync, digest, ask and prune, each with a playbook, rules and an id'd DoD;
@@ -407,13 +422,31 @@ are not part of this amendment.
     - x-api: `from` (handle, user timeline), `in` (home | list:<id>, needs `list.read`) and `since` are
       native; text, has and not are local;
     - fake: from, in and since are native; the rest is local.
-  - **Retired:** local-store and roles feed-lead and feed-analyst (replaced by briefing-lead and
-    briefing-analyst). Improve finding F-d70dbfd0 (whole-store reads per query) closes with local-store.
-- **Data migration** (bay/migrate.py `DATA_MIGRATIONS`, version 0.3.0): `bay migrate --project <repo>` and
-  forge.migrate convert a v0.2 `posts.jsonl` + `state.json` to `corpus.db`.
+  - **Deprecated, not removed:** local-store and the roles feed-lead and feed-analyst (replaced by
+    briefing-lead and briefing-analyst). Improve finding F-d70dbfd0 (whole-store reads per query) closes with
+    local-store.
+- **Compatibility (one release, 0.3.x).** `bay/aliases.py` is the single table. When the kit loads, user
+  modes, roles, envs and connectors resolve the v0.2 names:
+  - `feed.source/v1` becomes items.source/v1, and `feed.store/v1[.ep]` becomes items.store/v1 (sync `with
+    maxPosts` becomes maxItems);
+  - `feed-analyst` and `feed-lead` become `briefing-*`, and `local-store` becomes `corpus-store` (only when
+    the user defines no role or connector with that name);
+  - data refs `feed.post/v1` becomes post/v1, and `feed.coverage/v1` becomes items.coverage/v1.
+
+  `bay lint` and `bay validate` warn on each file ("deprecated ...; run `bay migrate`"). A mode that needs
+  items.source/v1 without a selectors setting keeps each source's default stream (`[{id: home}]`).
+  `bay migrate` 0.3.0 (`_v02_names`) rewrites the YAML/JSON/Markdown user files with the same table: dry run
+  first, `--confirm` to apply. A user connector still implementing a feed interface is a load error that
+  names its old fetch signature and the new contract: code is ported by hand, never rewritten.
+- **Data migration** (bay/migrate.py `DATA_MIGRATIONS`, version 0.3.0): `bay migrate --project <repo>`,
+  run by the user, converts a v0.2 `posts.jsonl` + `state.json` to `<dir>/feed-briefing/corpus.db`. It is the
+  only path for user data: forge.migrate migrates kit content only, and neither the migrator connector nor
+  env local-authoring writes `.agentbay/`.
   - It shows a dry-run summary diff first; `--confirm` applies it.
+  - Each line must be JSON with id, source, url and createdAt. Bad lines or a damaged `state.json` are
+    reported as file:line plus the fix, and nothing is migrated.
+  - Duplicates (same source:id) are merged, keeping the last line, and counted in the diff.
+  - Rows go through the store's `item_row` and are scrubbed.
   - Cursors (newestId becomes the `<connector>|{}` cursor), coverage, budget, deletions and check times are
     kept, and posts carry `matched: [home]`.
   - Old files are renamed `*.v0.2.bak`.
-  - The migrator connector and env local-authoring may write `.agentbay/data` for this; the guard still
-    denies `.agentbay/` to every subagent.

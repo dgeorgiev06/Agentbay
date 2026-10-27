@@ -32,14 +32,14 @@ def test_sync_runs_code_step_and_logs_events_with_cost():
     p = project()
     r = D(p).call("feed-briefing.sync", {"lookback": "3d"})
     assert r["status"] == "done" and r["output"]["added"] == 7
-    assert r["cost"] == {"posts": 7, "usd": 0.035}
+    assert r["cost"] == {"posts": 7, "usd": 0.0}   # offline source is free
     evs = ledger.read(p)
     types = [e["type"] for e in evs]
     assert types == ["step.started", "step.completed", "call.completed"]
     done = evs[1]
     assert {k: done[k] for k in ("mode", "endpoint", "step", "env")} == \
-        {"mode": "feed-briefing", "endpoint": "sync", "step": "fetch", "env": "local-feeds"}
-    assert done["cost"] == {"posts": 7, "usd": 0.035}
+        {"mode": "feed-briefing", "endpoint": "sync", "step": "fetch", "env": "local-feeds-offline"}
+    assert done["cost"] == {"posts": 7, "usd": 0.0}
     if model.jsonschema:
         sch = json.loads((KIT / "schemas/event.schema.json").read_text())
         for e in evs:
@@ -55,10 +55,16 @@ def test_config_lookback_default_and_caps_strictest_wins():
 
 
 def test_budget_exhausted_blocks_with_reason():
-    p = project({"modes": {"feed-briefing": {"spendUsd": 0.01}}})
+    p = project({"modes": {"feed-briefing": {"monthlyPosts": 7}}})
     D(p).call("feed-briefing.sync", {})
     r = D(p).call("feed-briefing.sync", {})
-    assert r["status"] == "blocked" and "spendUsd cap reached" in r["reason"]
+    assert r["status"] == "blocked" and "monthlyPosts cap reached" in r["reason"]
+
+
+def test_offline_source_is_never_billed_against_spend():
+    p = project({"modes": {"feed-briefing": {"spendUsd": 0.001}}})
+    r = D(p).call("feed-briefing.sync", {})
+    assert r["status"] == "done" and r["output"]["fetched"] == 7 and r["output"]["budget"]["usd"] == 0
 
 
 def test_agentic_step_returns_plan_then_review_then_partial_on_failed_must():
@@ -130,7 +136,7 @@ def test_use_enforces_role_grants():
 def test_effects_rechecked_at_runtime():
     p = project()
     s = system(p)
-    s.kit.docs["Environment"]["local-feeds"].spec["effects"] = ["read"]   # changed after resolution
+    s.kit.docs["Environment"]["local-feeds-offline"].spec["effects"] = ["read"]   # changed after resolution
     d = dispatch.Dispatcher(s, p, clock=clock)
     err(lambda: d.call("feed-briefing.prune", {}), "effects", "not allowed")
 
@@ -190,17 +196,21 @@ def test_gate_stops_and_resumes_only_on_approval():
     res = {"status": "done", "summary": "proposal written", "artifacts": ["docs/proposals/0002-bsky.md"]}
     r = d.submit(r["callId"], "propose", res)
     assert r["status"] == "awaiting-approval" and r["next"]["kind"] == "gate"
-    assert r["next"]["approve"].endswith("""approve '{"approved": true}'""")
     cid = r["callId"]
-    r = d.submit(cid, "approve", {"approved": True})
+    assert f".agentbay/bay approve {cid}" in r["next"]["approve"] and "own terminal" in r["next"]["approve"]
+    err(lambda: d.submit(cid, "approve", {"approved": True}), "approval gate", "bay approve")   # agents cannot
+    assert d.show(cid)["status"] == "awaiting-approval"
+    r = d.approve(cid, True)
     assert r["next"]["step"] == "implement"
+    assert d.show(cid)["next"]["step"] == "implement"
     r = d.submit(cid, "implement", {"status": "done", "summary": "implemented"})
     assert r["next"]["kind"] == "review" and r["next"]["model"] == "opus"
     # rejection path
     r = d.call("forge.extend", {"goal": "another"})
     r = d.submit(r["callId"], "propose", res)
-    r = d.submit(r["callId"], "approve", {"approved": False, "reason": "not now"})
+    r = d.approve(r["callId"], False, "not now")
     assert r["status"] == "blocked" and r["reason"] == "not now"
+    err(lambda: d.approve(r["callId"], True), "not awaiting approval")
 
 
 def test_failed_review_halts_before_release():
@@ -209,7 +219,7 @@ def test_failed_review_halts_before_release():
     r = d.call("forge.extend", {"goal": "x change"})
     ok = {"status": "done", "summary": "s"}
     r = d.submit(r["callId"], "propose", ok)
-    r = d.submit(r["callId"], "approve", {"approved": True})
+    r = d.approve(r["callId"], True)
     r = d.submit(r["callId"], "implement", ok)
     items = [{"id": x["id"], "verdict": "pass", "evidence": "e"} for x in r["next"]["review"]["definitionOfDone"]]
     items += [{"id": x["id"], "verdict": "pass", "evidence": "e"} for x in r["next"]["review"]["rules"]]

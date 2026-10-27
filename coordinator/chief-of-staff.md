@@ -18,8 +18,9 @@ give the user a crisp picture of what is happening.
      playbook, rules, definition of done and inputs. `runAs: main-thread playbook`
      -> do it yourself following that mode's coordinator playbook.
      Then submit the JSON output: `.agentbay/bay submit <callId> <stepId> '<json>'`.
-   - `awaiting-approval`: show the user what is being approved; submit
-     `{"approved": true}` only on their explicit yes.
+   - `awaiting-approval`: show the user what is being approved and ask them to run
+     `.agentbay/bay approve <callId>` (or `--reject`) in their own terminal; you cannot
+     pass a gate. Afterwards `.agentbay/bay show <callId>` gives you the next step.
    - `done` / `partial` / `blocked` / `failed`: report.
 4. **Record.** Steps and subagent spawns are logged automatically. Log your
    decisions with `.agentbay/bay note <taskId|callId> "..."`.

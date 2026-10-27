@@ -4,7 +4,8 @@ A call walks the feature's workflow:
   code step   -> run the bound connector here (connectors never reach agents)
   role step   -> stop and return a step plan; the coordinator runs the role and
                  resumes with `bay submit <callId> <stepId> '<json>'`
-  gate step   -> stop with status awaiting-approval; resume with {"approved": true}
+  gate step   -> stop with status awaiting-approval; only `bay approve <callId>` (interactive
+                 terminal, never pre-approved) passes or rejects it
   review step -> injected from mode.yaml `review`; gets DoD, reviewer rules and
                  deterministic check results; verdicts decide done vs partial
 
@@ -59,14 +60,9 @@ class Dispatcher:
             raise CallError(f"call {call_id} is waiting for step '{step.id}', not '{step_id}'")
         base = self._event_base(mode, feat, step, call_id)
         if step.kind == "gate":
-            if not (isinstance(output, dict) and output.get("approved") is True):
-                state["status"] = "blocked"
-                state["result"] = {"reason": (output or {}).get("reason", "not approved")}
-                self._ledger("step.completed", base, summary="gate rejected", data={"approved": False})
-                return self._finish(state, mode, feat)
-            state["steps"][step.id] = output
-            self._ledger("step.completed", base, summary="approved", data={"approved": True})
-        elif step.kind == "review":
+            raise CallError(f"step {step.id} is an approval gate; agents and `bay submit` cannot pass it. The user "
+                            f"runs `.agentbay/bay approve {call_id}` (or `--reject`) in their own terminal")
+        if step.kind == "review":
             self._accept_review(state, feat, step, output, base)
         else:
             if step.out:
@@ -81,6 +77,29 @@ class Dispatcher:
             state["output"] = self._endpoint_output(feat, state)
             return self._finish(state, mode, feat)
         return self._advance(mode, feat, state)
+
+    def approve(self, call_id: str, approved: bool, reason: str = "", by: str = "user") -> dict:
+        """Pass or reject the approval gate a call is waiting on. Called only from `bay approve`, which
+        requires an interactive terminal (never pre-approved for Claude Code)."""
+        state = self._load(call_id)
+        mode, feat = self.sys.feature(state["target"])
+        if state["status"] != "awaiting-approval":
+            raise CallError(f"call {call_id} is {state['status']}, not awaiting approval")
+        step = feat.steps[state["cursor"]]
+        base = self._event_base(mode, feat, step, call_id)
+        if not approved:
+            state["status"] = "blocked"
+            state["result"] = {"reason": reason or "rejected at the approval gate"}
+            self._ledger("step.completed", base, summary=f"gate rejected by {by}", data={"approved": False})
+            return self._finish(state, mode, feat)
+        state["steps"][step.id] = {"approved": True, "by": by}
+        self._ledger("step.completed", base, summary=f"gate approved by {by}", data={"approved": True})
+        state["cursor"] += 1
+        return self._advance(mode, feat, state)
+
+    def show(self, call_id: str) -> dict:
+        """Current state of a call (result, or the step it waits on). Read-only."""
+        return self._public(self._load(call_id))
 
     def use(self, role: str, target: str, inp: dict | None = None) -> dict:
         """Read-only connector access for a role. Reached only through the role's own use shim
@@ -100,7 +119,11 @@ class Dispatcher:
         if len(conns) != 1:
             raise CallError(f"role {role}: {iface} is bound to {len(conns)} connectors in env {env.name} "
                             f"({', '.join(conns) or 'none'}); `use` needs exactly one - bind one store connector")
-        return self._invoke(env.name, conns[0], iface, ep, inp or {}, settings={}, caps={})
+        out = self._invoke(env.name, conns[0], iface, ep, inp or {}, settings={}, caps={})
+        n = len(out.get("posts", [])) if isinstance(out, dict) else None
+        ledger.append(self.project, "data.read", f"use:{role}", source="dispatcher", role=role, env=env.name,
+                      summary=target, data={"input": inp or {}, **({"items": n} if n is not None else {})})
+        return out
 
     # ------------------------------------------------------------ engine
     def _advance(self, mode, feat, state) -> dict:
@@ -170,7 +193,8 @@ class Dispatcher:
         cost = {}
         if isinstance(out, dict) and "billed" in out:
             cpp = float(caps.get("costPerPostUsd", cfgmod.COST_PER_POST_USD))
-            cost = {"posts": out["billed"], "usd": round(out["billed"] * cpp, 4)}
+            usd = out["spentUsd"] if "spentUsd" in out else out["billed"] * cpp
+            cost = {"posts": out["billed"], "usd": round(usd, 4)}
             state["cost"]["posts"] += cost["posts"]
             state["cost"]["usd"] = round(state["cost"]["usd"] + cost["usd"], 4)
         if isinstance(out, dict) and out.get("stopped"):
@@ -256,7 +280,9 @@ class Dispatcher:
         submit = f".agentbay/bay submit {state['callId']} {step.id} '<json>'"
         plan = {"step": step.id, "kind": step.kind, "submit": submit}
         if step.kind == "gate":
-            plan.update({"gate": step.task, "approve": submit.replace("<json>", '{"approved": true}'),
+            plan.update({"gate": step.task,
+                         "approve": f"the USER runs in their own terminal: .agentbay/bay approve {state['callId']} "
+                                    f"(or --reject --reason '...'); then `.agentbay/bay show {state['callId']}`",
                          "inputs": {k: v for k, v in state["steps"].items() if v is not None}})
             return plan
         run_as = "main-thread playbook" if role.runtime == "claude-code-main" else f"subagent_type={step.subagent}"

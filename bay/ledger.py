@@ -12,7 +12,8 @@ from pathlib import Path
 
 RUN_TYPES = {"spawned", "completed", "failed", "reclaimed", "note"}
 STEP_TYPES = {"step.started", "step.completed", "step.failed", "step.skipped", "step.planned", "call.completed"}
-TYPES = RUN_TYPES | STEP_TYPES
+DATA_TYPES = {"data.read"}             # a role read connector data through its use shim
+TYPES = RUN_TYPES | STEP_TYPES | DATA_TYPES
 
 
 def ledger_path(project: Path) -> Path:
@@ -66,7 +67,7 @@ class Run:
 def fold(events: list[dict]) -> dict[str, Run]:
     runs: dict[str, Run] = {}
     for e in events:
-        if e.get("type") in STEP_TYPES:
+        if e.get("type") in STEP_TYPES | DATA_TYPES:
             continue
         r = runs.setdefault(e["runId"], Run(e["runId"]))
         r.agent = e.get("agent", r.agent)

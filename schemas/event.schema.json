@@ -31,7 +31,8 @@
         "step.failed",
         "step.skipped",
         "step.planned",
-        "call.completed"
+        "call.completed",
+        "data.read"
       ]
     },
     "runId": {

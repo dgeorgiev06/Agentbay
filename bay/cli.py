@@ -8,7 +8,9 @@
   describe <mode|role>   resolved definition as JSON
 
   call <mode>.<endpoint> '<json>'      run an endpoint (the only way to invoke one)
-  submit <callId> <stepId> '<json>'    hand back an agentic step's output or a gate approval
+  submit <callId> <stepId> '<json>'    hand back an agentic step's output
+  show <callId>                        current state of a call (result or the step it waits on)
+  approve <callId> [--reject]          pass an approval gate (you, in a terminal; never an agent)
   (agents read data only through .agentbay/roles/<role>/use, generated per role by build)
 
   mode new <name> | feature new <name> --mode <m> | role new <name>
@@ -169,6 +171,31 @@ def _run(fn):
 def cmd_call(args):
     d = _dispatcher(args)
     _run(lambda: d.call(args.target, _json_arg(args.input)))
+
+
+def cmd_approve(args):
+    """Approval gates are passed only by a human at a terminal."""
+    if not sys.stdin.isatty():
+        _die("✗ bay approve needs an interactive terminal (stdin is not a TTY). Approval gates are for you, not "
+             "for agents: run it yourself in a terminal.")
+    from bay import dispatch
+    d = _dispatcher(args)
+    try:
+        st = d.show(args.call)
+    except dispatch.CallError as e:
+        _die(f"✗ {e}")
+    if st.get("status") != "awaiting-approval":
+        _die(f"✗ call {args.call} is {st.get('status')}, not awaiting approval")
+    verb = "REJECT" if args.reject else "APPROVE"
+    print(f"{verb} gate '{st['next']['step']}' of {st['target']}: {st['next']['gate']}")
+    if input("Type yes to confirm: ").strip().lower() != "yes":
+        _die("not confirmed; nothing changed")
+    _run(lambda: d.approve(args.call, not args.reject, args.reason or "", by="user@tty"))
+
+
+def cmd_show(args):
+    d = _dispatcher(args)
+    _run(lambda: d.show(args.call))
 
 
 def cmd_submit(args):
@@ -336,6 +363,10 @@ def main(argv=None):
     ca.add_argument("target"); ca.add_argument("input", nargs="?"); ca.set_defaults(fn=cmd_call)
     su = sub.add_parser("submit"); su.add_argument("call"); su.add_argument("step"); su.add_argument("output")
     su.set_defaults(fn=cmd_submit)
+    sh = sub.add_parser("show"); sh.add_argument("call"); sh.set_defaults(fn=cmd_show)
+    ap_ = sub.add_parser("approve", help="pass (or --reject) an approval gate; interactive terminal only")
+    ap_.add_argument("call"); ap_.add_argument("--reject", action="store_true"); ap_.add_argument("--reason")
+    ap_.set_defaults(fn=cmd_approve)
 
     for kind in ("mode", "feature", "role", "connector", "env"):
         k = sub.add_parser(kind, help=f"scaffold {'an' if kind[0] in 'aeiou' else 'a'} {kind}")

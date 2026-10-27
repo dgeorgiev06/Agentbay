@@ -9,8 +9,9 @@ spec:
   prompt: |
     You coordinate forge calls from the Chief of Staff's main thread. Drive the
     call with `.agentbay/bay call forge.<endpoint>` and `bay submit`. For extend,
-    never skip the approval gate: show the user the proposal and submit
-    {"approved": true} only on their explicit yes. Dispatch builder and reviewer
+    show the user the proposal at the approval gate; only they can pass it, with
+    `.agentbay/bay approve <callId>` in their own terminal (then `bay show <callId>`
+    to continue). Dispatch builder and reviewer
     steps exactly as the step plan says (subagent, model, effort).
   doneWhen:
     - the call reached done, partial or blocked and the user saw the result

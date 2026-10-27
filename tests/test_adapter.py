@@ -3,17 +3,16 @@ import json
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
-from helpers import KIT, model, system
+from helpers import KIT, model, system, tmpdir
 
 from bay import ledger
 from bay.adapters import Adapter, get
 
 
 def _proj():
-    d = Path(tempfile.mkdtemp())
+    d = tmpdir()
     (d / ".claude").mkdir()
     (d / ".claude" / "settings.json").write_text(json.dumps({"model": "opus", "permissions": {"allow": ["Bash(ls:*)"]}}))
     (d / "CLAUDE.md").write_text("# mine\n")
@@ -36,14 +35,16 @@ def test_adapter_round_trip():
     assert first == second
     st = json.loads((proj / ".claude/settings.json").read_text())
     assert st["model"] == "opus" and "Bash(ls:*)" in st["permissions"]["allow"]
-    assert len(st["hooks"]["PreToolUse"]) == 1 and "Bash(.agentbay/bay:*)" in st["permissions"]["allow"]
-    assert "Bash(git diff:*)" in st["permissions"]["allow"]       # narrow prefixes from env tool bindings
-    assert not any(p in ("Bash(*)", "Bash") for p in st["permissions"]["allow"])
+    assert [h["matcher"] for h in st["hooks"]["PreToolUse"]] == ["Bash", "Task|Agent"]   # guard first
+    assert_no_wildcards(st)
+    ours = [p for p in st["permissions"]["allow"] if p != "Bash(ls:*)"]
+    assert sorted(ours) == sorted(f"Bash(.agentbay/bay {c}:*)" for c in ("call", "submit", "status", "log", "note", "task"))
     agents = {p.stem for p in (proj / ".claude/agents").glob("*.md")}
     assert agents == {"researcher", "builder", "reviewer", "feed-analyst", "builder--author", "builder--framework-builder"}
     assert "feed-lead" not in agents and "forge-lead" not in agents          # coordinators run in main thread
     fa = (proj / ".claude/agents/feed-analyst.md").read_text()
-    assert "tools: Bash\n" in fa and "bay use --role feed-analyst feed.store/v1.query" in fa and "Result/v1" in fa
+    assert "tools: Bash\n" in fa and ".agentbay/roles/feed-analyst/use feed.store/v1.query" in fa and "Result/v1" in fa
+    assert "--role" not in fa
     rv = (proj / ".claude/agents/reviewer.md").read_text()
     assert "model: opus" in rv and "Edit" not in rv.split("---")[1]
     claude = (proj / "CLAUDE.md").read_text()
@@ -62,9 +63,35 @@ def test_adapter_round_trip():
             assert json.loads((proj / p).read_text()) == json.loads(txt), p
         else:
             assert (proj / p).read_text() == txt, p
-    assert not (proj / ".claude/agents").exists() or not list((proj / ".claude/agents").iterdir())
+    assert not (proj / ".claude/agents").exists()
+    assert not (proj / ".agentbay/roles").exists() and not (proj / ".agentbay/guard.json").exists()
     assert not (proj / ".agentbay/COORDINATOR.md").exists()
     shutil.rmtree(proj)
+
+
+def assert_no_wildcards(settings: dict) -> None:
+    for p in settings["permissions"]["allow"]:
+        assert p not in ("Bash", "Bash(*)", "Bash(*:*)"), p
+        assert not p.startswith("Bash(.agentbay/bay:"), p             # no blanket control plane
+        assert not p.startswith("Bash(.agentbay/roles"), p            # role shims are per role, via the guard
+        assert "*" not in p.split(":")[0], p
+
+
+def test_clean_removes_files_agentbay_created_and_keeps_formatting():
+    proj = tmpdir()
+    try:
+        (proj / ".claude").mkdir()
+        odd = '{"model":   "opus"}\n'
+        (proj / ".claude/settings.json").write_text(odd)
+        ad = get("claude-code")
+        ad.build(system(None), proj, KIT)
+        assert (proj / "CLAUDE.md").exists()
+        ad.clean(proj)
+        assert not (proj / "CLAUDE.md").exists() and not (proj / ".mcp.json").exists()
+        assert (proj / ".claude/settings.json").read_text() == odd     # byte-identical
+        assert sorted(str(p.relative_to(proj)) for p in proj.rglob("*") if p.is_file()) == [".claude/settings.json"]
+    finally:
+        shutil.rmtree(proj)
 
 
 def test_build_removes_stale_files_from_previous_build():
@@ -91,7 +118,7 @@ def test_cli_build_and_clean_on_tmp_repo():
 
 
 def test_ledger_run_events_match_schema():
-    proj = Path(tempfile.mkdtemp())
+    proj = tmpdir()
     ledger.append(proj, "spawned", "r1", agent="builder", taskId="T-20260101-abcd", source="hook", summary="x")
     ledger.append(proj, "completed", "r1", agent="builder", source="hook", data={"status": "partial"})
     evs = ledger.read(proj)
@@ -104,12 +131,12 @@ def test_ledger_run_events_match_schema():
 
 def test_hook_never_fails():
     r = subprocess.run([sys.executable, str(KIT / "bay/hook.py"), "post"], input="not json", text=True,
-                       capture_output=True, cwd=tempfile.mkdtemp())
+                       capture_output=True, cwd=tmpdir())
     assert r.returncode == 0
 
 
 def test_hook_records_spawn_and_result():
-    proj = Path(tempfile.mkdtemp())
+    proj = tmpdir()
     pre = {"tool_name": "Agent", "tool_use_id": "tu1", "session_id": "s",
            "tool_input": {"subagent_type": "feed-analyst", "prompt": "```task\ntaskId: T-20261027-ab12\n```"}}
     post = dict(pre, tool_response="done\n```result\nprotocol: Result/v1\ntaskId: T-20261027-ab12\nstatus: done\nsummary: ok\n```")

@@ -2,7 +2,7 @@ apiVersion: agentbay/v2
 kind: Environment
 metadata:
   name: local-feeds
-  description: Feed sources and the local post store. Only the dispatcher touches connectors and secrets; agents read the store through `bay use`.
+  description: Feed sources and the local post store. Only the dispatcher touches connectors and secrets; agents read the store only through their role's use shim.
 spec:
   bind:
     feed.source/v1: [x-api]          # add a source = add a connector here

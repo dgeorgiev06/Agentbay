@@ -5,7 +5,11 @@ Mapping:
   Chief of Staff + mode
   coordinator playbooks    -> .agentbay/COORDINATOR.md, imported from CLAUDE.md (your main session)
   role skills, mode skills -> .claude/skills/<skill>/
-  tools-capability clis    -> .claude/settings.json permissions.allow  Bash(<cli>:*)
+  role data access         -> .agentbay/roles/<role>/use  (role fixed inside; read-only endpoints only)
+  coordinator commands     -> .claude/settings.json permissions.allow, explicit prefixes only
+                              (Bash(.agentbay/bay call:*), ... status, log, note, submit, task) - no wildcard
+  per-role Bash scope      -> .agentbay/guard.json + PreToolUse(Bash) hook bay/guard.py: a subagent may run
+                              only its own use shim and its env's narrow command prefixes
   ledger hooks             -> .claude/settings.json hooks (Pre/PostToolUse on Task|Agent)
   catalog                  -> .agentbay/catalog.json (modes, endpoints, roles)
 
@@ -14,9 +18,10 @@ Guarantees (unchanged from v0.1): idempotent; only touches files recorded in
 .mcp.json, never clobbers; clean restores the originals.
 
 Known limits of this runtime:
-  * skills, MCP servers and CLI permissions are project-wide in Claude Code;
-    per-role scope is enforced through each subagent's `tools` allowlist and,
-    for connectors, by the dispatcher (`bay use` checks the role's grants)
+  * permissions.allow is session-wide in Claude Code and subagent `tools`
+    takes bare tool names, so per-role Bash scope is enforced by the guard
+    hook (keyed on the hook input's agent_type), and connector access by the
+    dispatcher behind each role's use shim
   * subagents cannot spawn subagents, so mode coordinators run as playbooks in
     the main thread
 """
@@ -28,13 +33,18 @@ from pathlib import Path
 
 from ..ledger import now
 from ..model import ResolvedRole, System
+from ..dispatch import use_shim
 from ..protocol import WORKER_CONTRACT
 from .base import BuildReport
 
 MARK_BEGIN = "<!-- agentbay:begin (generated; run ./bay build) -->"
 MARK_END = "<!-- agentbay:end -->"
 HOOK_TAG = "bay/hook.py"
+GUARD_TAG = "bay/guard.py"
 BAY = ".agentbay/bay"
+# The only control-plane commands the main thread is pre-approved for. Everything else
+# (build, clean, secret, migrate, mode new, ...) prompts. Subagents get none of these (guard).
+COORDINATOR_CMDS = ("call", "submit", "status", "log", "note", "task")
 
 
 def _read_json(p: Path, default):
@@ -51,6 +61,27 @@ def _write_json(p: Path, data) -> None:
     p.write_text(json.dumps(data, indent=2) + "\n")
 
 
+def _same(a: str, b: str) -> bool:
+    """Same content, ignoring JSON formatting."""
+    if a == b:
+        return True
+    try:
+        return json.loads(a) == json.loads(b)
+    except (json.JSONDecodeError, ValueError):
+        return False
+
+
+def _empty(p: Path) -> bool:
+    text = p.read_text().strip()
+    if not text:
+        return True
+    try:
+        d = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    return d in ({}, {"mcpServers": {}})
+
+
 class ClaudeCodeAdapter:
     name = "claude-code"
 
@@ -58,8 +89,12 @@ class ClaudeCodeAdapter:
     def build(self, system: System, project: Path, kit: Path) -> BuildReport:
         rep = BuildReport(self.name)
         old = self._manifest(project)
-        man = {"runtime": self.name, "builtAt": now(), "kit": str(kit),
-               "files": [], "mcpServers": [], "permissions": []}
+        # files that existed before agentbay first touched the project are merged and restored, never deleted
+        preexisting = old.get("preexisting") or [f for f in ("CLAUDE.md", ".claude/settings.json", ".mcp.json")
+                                                if (project / f).exists()]
+        originals = old.get("originals") or {f: (project / f).read_text() for f in preexisting}
+        man = {"runtime": self.name, "builtAt": now(), "kit": str(kit), "preexisting": preexisting,
+               "originals": originals, "files": [], "mcpServers": [], "permissions": []}
 
         placements = system.placements()
         for sub, role in sorted(placements.items()):
@@ -72,6 +107,8 @@ class ClaudeCodeAdapter:
             man["files"].append(str(dst.relative_to(project)))
             rep.written.append(str(dst.relative_to(project)) + "/")
         man["files"].append(self._shim(project, kit, rep))
+        man["files"] += self._role_shims(placements, project, kit, rep)
+        man["files"].append(self._guard_policy(placements, project, rep))
         man["files"] += self._commands(project, kit, rep)
         man["mcpServers"] = self._mcp(system, project, old, rep)
         man["permissions"] = self._settings(placements, project, kit, old, rep)
@@ -81,11 +118,11 @@ class ClaudeCodeAdapter:
         for f in set(old.get("files", [])) - set(man["files"]):
             self._rm(project / f, rep)
 
+        man["files"].append(self._ensure_gitignore(project))
         _write_json(project / ".agentbay" / "manifest.json", man)
-        self._ensure_gitignore(project)
         if placements:
-            rep.warnings.append("Skills and CLI permissions are project-wide in Claude Code; per-role scope is "
-                                "enforced via each subagent's tools allowlist and by the dispatcher for connectors.")
+            rep.warnings.append("Per-role Bash scope is enforced by the agentbay guard hook; restart Claude Code "
+                                "and accept the workspace trust prompt so hooks run.")
         return rep
 
     def clean(self, project: Path) -> BuildReport:
@@ -96,7 +133,27 @@ class ClaudeCodeAdapter:
         self._mcp(None, project, old, rep)
         self._settings({}, project, Path(old.get("kit", ".")), old, rep, remove_only=True)
         self._claude_md(project, None, rep)
+        pre = set(old.get("preexisting", ["CLAUDE.md", ".claude/settings.json", ".mcp.json"]))
+        for f, text in (old.get("originals") or {}).items():
+            p = project / f
+            if p.exists() and _same(p.read_text(), text):
+                p.write_text(text)                     # restore exact original formatting
+        for f in ("CLAUDE.md", ".claude/settings.json", ".mcp.json"):
+            p = project / f
+            if f not in pre and p.exists() and _empty(p):
+                self._rm(p, rep)                       # we created it and nothing of yours is in it
+        roles_dir = project / ".agentbay" / "roles"
+        for d in sorted(roles_dir.glob("*"), reverse=True) if roles_dir.is_dir() else []:
+            if d.is_dir() and not any(d.iterdir()):
+                d.rmdir()
+        for d in (".claude/agents", ".claude/skills", ".claude/commands", ".claude", ".agentbay/roles"):
+            p = project / d
+            if p.is_dir() and not any(p.iterdir()):
+                p.rmdir()
         (project / ".agentbay" / "manifest.json").unlink(missing_ok=True)
+        ab = project / ".agentbay"
+        if ab.is_dir() and not any(ab.iterdir()):
+            ab.rmdir()                      # runtime data (ledger/, data/, calls/) is yours and is kept
         return rep
 
     # ---------- pieces ----------
@@ -128,10 +185,12 @@ class ClaudeCodeAdapter:
         if r.skills:
             extras.append("## Skills\nUse these skills when relevant: " + ", ".join(sorted(r.skills)) + ".")
         if r.bay_uses:
-            extras.append("## Data access\nRead feed data only through the dispatcher, never from files:\n"
-                          + "\n".join(f"- `{BAY} use --role {r.name} {u} '<json>'`" for u in r.bay_uses))
-        if r.clis:
-            extras.append("## Allowed CLIs\nOnly run these commands via Bash: " + ", ".join(r.clis) + ".")
+            extras.append("## Data access\nRead data only through your role's shim, never from files:\n"
+                          + "\n".join(f"- `{use_shim(r.name)} {u} '<json>'`" for u in r.bay_uses))
+        bash = ([use_shim(r.name)] if r.bay_uses else []) + r.clis
+        if bash:
+            extras.append("## Allowed Bash\nA guard hook allows only these, one simple command at a time "
+                          "(no pipes, ;, &&, redirects or $()): " + ", ".join(f"`{c}`" for c in bash) + ".")
         if r.budget:
             b = ", ".join(f"{k}={v}" for k, v in r.budget.items())
             extras.append(f"## Budget\nStay within: {b}. If you cannot finish, return status `partial`.")
@@ -202,6 +261,33 @@ class ClaudeCodeAdapter:
         rep.written.append(str(rel))
         return str(rel)
 
+    def _role_shims(self, placements, project: Path, kit: Path, rep: BuildReport) -> list[str]:
+        out = []
+        for r in sorted({r.name: r for r in placements.values() if r.bay_uses}.values(), key=lambda r: r.name):
+            rel = Path(use_shim(r.name))
+            p = project / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(
+                "#!/bin/sh\n"
+                f"# generated by agentbay: read-only data access for role {r.name}.\n"
+                "# The role is fixed here; arguments are <capability>/v<N>.<endpoint> '<json>' only.\n"
+                f'exec python3 -c \'import sys; sys.path.insert(0, sys.argv[1]); from bay import cli; '
+                f'cli.role_use_main(sys.argv[2], __import__("pathlib").Path(sys.argv[3]), sys.argv[4:])\' '
+                f'"{kit}" "{r.name}" "$(cd "$(dirname "$0")/../../.." && pwd)" "$@"\n')
+            p.chmod(0o755)
+            rep.written.append(str(rel))
+            out.append(str(rel))
+        return out
+
+    def _guard_policy(self, placements, project: Path, rep: BuildReport) -> str:
+        pol = {"subagents": {sub: {"role": r.name, "shim": use_shim(r.name) if r.bay_uses else None,
+                                   "clis": list(r.clis)}
+                             for sub, r in sorted(placements.items())}}
+        rel = ".agentbay/guard.json"
+        _write_json(project / rel, pol)
+        rep.written.append(rel)
+        return rel
+
     def _settings(self, placements, project: Path, kit: Path, old: dict, rep: BuildReport,
                   remove_only: bool = False) -> list[str]:
         path = project / ".claude" / "settings.json"
@@ -214,20 +300,25 @@ class ClaudeCodeAdapter:
         hooks = cfg.setdefault("hooks", {})
         for event in ("PreToolUse", "PostToolUse"):
             hooks[event] = [h for h in hooks.get(event, [])
-                            if not any(HOOK_TAG in x.get("command", "") for x in h.get("hooks", []))]
+                            if not any(tag in x.get("command", "") for x in h.get("hooks", [])
+                                       for tag in (HOOK_TAG, GUARD_TAG))]
             if not hooks[event]:
                 hooks.pop(event)
         owned: list[str] = []
         if not remove_only:
-            want = [f"Bash({BAY}:*)"]
-            for r in placements.values():
-                want += [f"Bash({c}:*)" for c in r.clis]
+            # main-thread control plane: explicit subcommands only, never a wildcard over .agentbay/bay.
+            # Subagent command prefixes are NOT added here (allow rules are session-wide); the guard
+            # hook scopes them per role instead.
+            want = [f"Bash({BAY} {c}:*)" for c in COORDINATOR_CMDS]
             for p in dict.fromkeys(want):
                 if p not in allow:
                     allow.append(p)
                     owned.append(p)
                 elif p in old.get("permissions", []):
                     owned.append(p)
+            guard = f'python3 "{kit / "bay" / "guard.py"}"'
+            hooks.setdefault("PreToolUse", []).insert(
+                0, {"matcher": "Bash", "hooks": [{"type": "command", "command": guard, "timeout": 10}]})
             hook = f'python3 "{kit / "bay" / "hook.py"}"'
             for event, phase in (("PreToolUse", "pre"), ("PostToolUse", "post")):
                 hooks.setdefault(event, []).append(
@@ -279,13 +370,16 @@ Machine-readable: `.agentbay/catalog.json`.
 
 ## Control plane (run via Bash)
 
+Pre-approved: `{BAY} call|submit|status|log|note|task`. Anything else (build, clean, migrate, secret,
+scaffolds) asks the user first. Subagents cannot run `{BAY}` at all.
+
 - `{BAY} call <mode>.<endpoint> '<json>'` -> run an endpoint; returns a result or the next step plan
 - `{BAY} submit <callId> <stepId> '<json>'` -> hand back a step's output (or a gate approval)
 - `{BAY} task new` -> prints a fresh taskId
 - `{BAY} status` / `{BAY} log -n 20` -> calls, steps and agent runs from the ledger
 - `{BAY} note <runId|taskId|callId> "text"` -> record a decision
-- `{BAY} reclaim <runId>` -> mark a stuck run as reclaimed
-- `{BAY} describe <mode|role>` -> full resolved definition
+- `{BAY} reclaim <runId>` -> mark a stuck run as reclaimed (asks)
+- `{BAY} describe <mode|role>` -> full resolved definition (asks)
 """
         rel = Path(".agentbay/COORDINATOR.md")
         (project / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -337,7 +431,8 @@ Machine-readable: `.agentbay/catalog.json`.
         rep.written.append(rel)
         return rel
 
-    def _ensure_gitignore(self, project: Path) -> None:
+    def _ensure_gitignore(self, project: Path) -> str:
         gi = project / ".agentbay" / ".gitignore"
         if not gi.exists():
             gi.write_text("ledger/\ndata/\ncalls/\n")
+        return ".agentbay/.gitignore"

@@ -76,8 +76,9 @@ writes `.agentbay/catalog.json` (modes, endpoints, roles). Register in `bay/adap
 ## 6. Dispatcher
 `bay call <mode>.<endpoint> '<json>'` -> `{callId, status, output | next, checks, review, cost}`.
 Status: `done | partial | blocked | failed | needs-agent | awaiting-approval`.
-`bay submit <callId> <stepId> '<json>'` resumes. `bay use --role <r> <iface>/v<N>.<ep> '<json>'` is the
-only way an agent reads connector data. Secret values are redacted from everything it returns or logs.
+`bay submit <callId> <stepId> '<json>'` resumes. A role's generated shim
+`.agentbay/roles/<role>/use <iface>/v<N>.<ep> '<json>'` (role fixed inside, read-only endpoints in the role's `uses`)
+is the only way an agent reads connector data; the guard hook stops subagents from running anything else. Secret values are redacted from everything it returns or logs.
 
 ## 7. TaskEnvelope/v1 -> Result/v1
 Plain fenced YAML blocks (```` ```task ```` / ```` ```result ````). One deliverable per envelope.

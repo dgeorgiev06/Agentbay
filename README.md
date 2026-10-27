@@ -103,8 +103,10 @@ All tracked in `.agentbay/manifest.json` and removed by `clean`; your CLAUDE.md,
 
 ## Honest limits of the Claude Code runtime
 
-- Skills and CLI permissions are project-wide in Claude Code. Per-role scope is the subagent `tools`
-  allowlist plus the dispatcher (`bay use` checks each role's grants; connectors only run in `bay call`).
+- Claude Code permissions are session-wide and subagent `tools` take bare names, so agentbay adds a
+  guard hook: a subagent may run only its role's use shim (`.agentbay/roles/<role>/use`, read-only grants)
+  and its env's narrow command prefixes. The main thread is pre-approved only for `bay call|submit|status|log|note|task`.
+  Hooks run after you accept the workspace trust prompt.
 - Subagents cannot spawn subagents, so mode coordinators run as playbooks in the main thread. A future
   `headless` runtime makes them separate agents without changing mode files.
 - New or changed roles load when Claude Code starts; restart after `build`.

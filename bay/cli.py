@@ -9,7 +9,7 @@
 
   call <mode>.<endpoint> '<json>'      run an endpoint (the only way to invoke one)
   submit <callId> <stepId> '<json>'    hand back an agentic step's output or a gate approval
-  use --role <role> <iface>.<ep> '<json>'   read-only connector access for a role
+  (agents read data only through .agentbay/roles/<role>/use, generated per role by build)
 
   mode new <name> | feature new <name> --mode <m> | role new <name>
   connector new <name> --implements <iface> | env new <name>     scaffolds (forge templates)
@@ -173,9 +173,20 @@ def cmd_submit(args):
     _run(lambda: d.submit(args.call, args.step, _json_arg(args.output)))
 
 
-def cmd_use(args):
-    d = _dispatcher(args)
-    _run(lambda: d.use(args.role, args.target, _json_arg(args.input)))
+def role_use_main(role: str, project: Path, argv: list[str]) -> None:
+    """Entry point of a generated role shim. The role is fixed by the shim; flags are not parsed."""
+    from bay import dispatch, model
+    if not argv or argv[0].startswith("-"):
+        _die(f"usage: .agentbay/roles/{role}/use <capability>/v<N>.<endpoint> '<json>'  (role {role} is fixed)")
+    target, inp = argv[0], argv[1] if len(argv) > 1 else None
+    if len(argv) > 2:
+        _die("too many arguments: pass exactly <capability>/v<N>.<endpoint> and one JSON argument")
+    try:
+        s = model.resolve(model.Kit(KIT, project))
+    except (model.ResolveError, model.SpecError) as e:
+        _die(f"✗ {e}")
+    d = dispatch.Dispatcher(s, project)
+    _run(lambda: d.use(role, target, _json_arg(inp)))
 
 
 # ------------------------------------------------------------------ scaffolds & migrations
@@ -211,12 +222,19 @@ def cmd_migrate(args):
 
 def cmd_secret(args):
     import getpass
+    if not sys.stdin.isatty():
+        _die("✗ secret set needs an interactive terminal (stdin is not a TTY); it never reads secrets from a "
+             "pipe, so an agent cannot overwrite them. Run it yourself in a terminal.")
     prov = vault.provider(args.provider)
-    value = sys.stdin.readline().rstrip("\n") if not sys.stdin.isatty() else getpass.getpass(f"{args.name}: ")
+    value = getpass.getpass(f"{args.name} (input hidden): ")
     if not value:
         _die("no value given")
     vault.remember(value)
-    if not prov.set(args.name, value):
+    try:
+        ok = prov.set(args.name, value)
+    except vault.SecretError as e:
+        _die(f"✗ {e}")
+    if not ok:
         _die(f"provider '{args.provider}' cannot store secrets; export {args.name} in your shell instead")
     print(f"stored {args.name} in {args.provider}")
 
@@ -280,6 +298,24 @@ def cmd_reclaim(args):
     print(f"reclaimed {rid}")
 
 
+def _hoist_project(argv: list[str]) -> list[str]:
+    """Accept --project anywhere (`bay build --project x` as well as `bay --project x build`)."""
+    out, proj = [], []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--project" and i + 1 < len(argv):
+            proj = ["--project", argv[i + 1]]
+            i += 2
+            continue
+        if a.startswith("--project="):
+            proj = ["--project", a.split("=", 1)[1]]
+        else:
+            out.append(a)
+        i += 1
+    return proj + out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="bay", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--project", type=Path, default=Path.cwd(), help="target project (default: cwd)")
@@ -297,8 +333,6 @@ def main(argv=None):
     ca.add_argument("target"); ca.add_argument("input", nargs="?"); ca.set_defaults(fn=cmd_call)
     su = sub.add_parser("submit"); su.add_argument("call"); su.add_argument("step"); su.add_argument("output")
     su.set_defaults(fn=cmd_submit)
-    us = sub.add_parser("use"); us.add_argument("--role", required=True); us.add_argument("target")
-    us.add_argument("input", nargs="?"); us.set_defaults(fn=cmd_use)
 
     for kind in ("mode", "feature", "role", "connector", "env"):
         k = sub.add_parser(kind, help=f"scaffold a {kind}")
@@ -323,7 +357,7 @@ def main(argv=None):
     r = sub.add_parser("reclaim"); r.add_argument("run"); r.add_argument("--reason", default="reclaimed by coordinator")
     r.set_defaults(fn=cmd_reclaim)
 
-    args = ap.parse_args(argv)
+    args = ap.parse_args(_hoist_project(sys.argv[1:] if argv is None else list(argv)))
     args.project = args.project.resolve()
     args.fn(args)
 

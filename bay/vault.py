@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import re
 import subprocess
 import sys
 from typing import Callable
 
 _SEEN: set[str] = set()
 SERVICE = "agentbay"
+NAME_OK = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
 class SecretError(Exception):
@@ -67,9 +69,16 @@ class KeychainProvider:
         return r.stdout.rstrip("\n") or None
 
     def set(self, name: str, value: str) -> bool:
+        """Store via `security -i` reading the command from stdin, so the value never appears in argv
+        (argv is visible to every local user through ps)."""
         self._check()
-        r = self.run(["security", "add-generic-password", "-U", "-s", SERVICE, "-a", name, "-w", value],
-                     capture_output=True, text=True)
+        if any(c in value for c in '"\\\n\r'):
+            raise SecretError(f"{name}: value contains a quote, backslash or newline, which cannot be passed to "
+                              f"`security -i` safely; store it with Keychain Access instead")
+        if not NAME_OK.match(name):
+            raise SecretError(f"bad secret name {name!r}")
+        cmd = f'add-generic-password -U -s {SERVICE} -a {name} -w "{value}"\n'
+        r = self.run(["security", "-i"], input=cmd, capture_output=True, text=True)
         return r.returncode == 0
 
 

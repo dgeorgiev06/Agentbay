@@ -42,7 +42,7 @@ KINDS = {  # kind -> (folder, glob, schema)
     "Connector": ("connectors", "*/connector.yaml", "connector"),
 }
 EFFECTS = ["read", "write", "network", "spend", "delete"]
-AGENT_SAFE_EFFECTS = {"read"}          # connector endpoints a role may call via `bay use`
+AGENT_SAFE_EFFECTS = {"read"}          # connector endpoints a role may call via its use shim
 LEVEL_RANK = {"should": 1, "must": 2, "must_not": 2}
 PROTECTED = ("framework", "bay", "schemas")       # kit paths only forge.extend may write
 FRAMEWORK_EXTENDER = "forge.extend"

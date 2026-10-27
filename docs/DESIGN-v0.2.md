@@ -141,7 +141,7 @@ For every mode endpoint → workflow step:
 - review steps resolve like role steps (role exists, listed in the mode, agent -> env, model allowed)
 - framework boundary: any step whose env can write the kit's `framework/`, `bay/` or `schemas/` is only
   allowed in `forge.extend`
-- agents may `use` only read-only connector endpoints (via `bay use`, which checks the role's grants);
+- agents may `use` only read-only connector endpoints (via their role's use shim, which fixes the role and checks its grants);
   everything else runs as a code step in the dispatcher
 
 ## Runtime

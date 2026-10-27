@@ -11,7 +11,7 @@ Answer a question using only stored posts, with citations, and say when the post
 ## Steps
 1. `refresh`: the dispatcher syncs the store if it is older than 2h.
 2. `search`: the dispatcher queries the store for the window.
-3. `answer`: feed-analyst reads the posts (and may narrow with `bay use ... feed.store/v1.query --text`), then answers with citations.
+3. `answer`: feed-analyst reads the posts (and may narrow with its use shim: `feed.store/v1.query` with `text`), then answers with citations.
 
 ## Definition of Done
 - [DOD-1] (must) Every factual sentence in `answer` is supported by a cited stored post.

@@ -23,8 +23,16 @@ def clock():
     return NOW
 
 
+_TMP = tempfile.TemporaryDirectory(prefix="agentbay-test-")   # one root per test run, removed at exit
+
+
 def tmpdir() -> Path:
-    return Path(tempfile.mkdtemp(prefix="agentbay-test-"))
+    """A fresh directory under the run's TemporaryDirectory (removed when the process exits)."""
+    return Path(tempfile.mkdtemp(dir=_TMP.name))
+
+
+def cleanup(p: Path) -> None:
+    shutil.rmtree(p.parent if p.name in ("proj", "kit") else p, ignore_errors=True)
 
 
 def kit_copy() -> Path:

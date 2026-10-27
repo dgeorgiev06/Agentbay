@@ -26,7 +26,8 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN-v0
 | 6 | **Dispatcher** (`bay call/submit/use`) | `bay/dispatch.py` | rarely |
 | 7 | **TaskEnvelope / Result** | `schemas/task.schema.json` | rarely; version-bump it |
 | 8 | **LedgerEvent** | `schemas/event.schema.json` | rarely; version-bump it |
-| 9 | **Data**: feed.post/v1, feed.coverage/v1, review.verdict/v1 | `schemas/data/` | version-bump it |
+| 9 | **Data**: feed.post/v1, feed.coverage/v1, review.verdict/v1, session.episode/v1, improve.finding/v1 | `schemas/data/` | version-bump it |
+| 10 | **Conformance rules** | `framework/rules/conformance.yaml`, `schemas/conformance.schema.json` | you change what "fits the framework" means |
 
 ## 1. Mode and features
 `mode.yaml` declares, per endpoint (= feature), everything about it in one place:
@@ -89,10 +90,29 @@ is the only way an agent reads connector data; the guard hook stops subagents fr
 Plain fenced YAML blocks (```` ```task ```` / ```` ```result ````). One deliverable per envelope.
 
 ## 8. LedgerEvent
-Append-only JSONL. Agent runs: `spawned`, `completed`, `failed`, `reclaimed`, `note` (hooks/coordinator).
+Append-only JSONL. Agent runs: `spawned`, `completed`, `failed`, `reclaimed`, `note` (hooks/coordinator; a note
+attaches to a run by runId/taskId or stays standalone, never creating a run; `data.kind` is `note`,
+`instruction-change` or `decision`).
+Guard: `permission.denied`, `permission.prompt` (tool, agent, reason; never the command).
+Optional on any event: `durationMs`, `tokens {input, output, cacheRead, cacheCreation, total}`, `costUsd`.
+Every value is secret-scanned (`bay/secretscan.py`) and redacted (`vault.redact`) before it is written.
 Data: `data.read` (a role read connector data through its use shim; role, env, endpoint, item count).
 Dispatcher: `step.started`, `step.completed`, `step.failed`, `step.skipped`, `step.planned`, `call.completed`
 with `mode, endpoint, step, role, agent, env, cost`.
+
+## 9. improve capability interfaces (framework)
+| interface | endpoints | connector(s) in `improve-local` |
+|---|---|---|
+| `session.events/v1` | `episodes {since, until}` -> `session.episode/v1[]` + stats | `ledger`, `claude-transcripts`, `git` |
+| `review.verdicts/v1` | `verdicts {since, until}` -> verdicts with round and subject | `ledger` |
+| `artifacts.read/v1` | `files`, `graph` (nodes with refs, edges), `text` (refuses .agentbay/.claude/.git/.env) | `artifact-graph` |
+| `improve.findings/v1` | `scan`, `audit`, `record`, `query`, `triage`, `decide`, `backlog`, `claim`, `handoff`, `verify` | `improve-store` |
+
+`improve.finding/v1`: `id, fingerprint, lens, kind, title, pattern, evidence[] {kind: episode|file|measurement|rule|commit,
+ref, detail?, rewrite?, value?}, scope, severity, measure?, costEstimate?, rootCause?, proposedFix?, route, impact?,
+effort?, occurrences, priority (impact x frequency / effort), status (open|approved|deferred|wontfix|in-progress|fixed|
+verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, detector key).
+An endpoint review block may name framework rule sets: `review: { ..., rulesets: [conformance] }`.
 
 ## Extension recipes
 - **New source** -> `bay connector new bsky --implements feed.source/v1` (template sets `source` and

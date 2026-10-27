@@ -69,10 +69,16 @@ roles/  agents/  envs/ feed-lead, feed-analyst / analyst, lead / local-feeds
 connectors/            x-api (official X API v2), local-store (JSONL store), fake (offline)
 framework/             shipped with the kit, never edited by users:
   modes/forge/         create | extend | migrate - agentbay building agentbay
-  roles/               researcher, builder, reviewer, forge-lead
-  agents/ envs/        worker, critic, author, framework-builder / workspace, local-authoring, framework-dev
+  modes/improve/       scan | audit | triage | backlog | implement | verify - evidence-backed improvement backlog
+  rules/conformance.yaml  semantic framework rules (forge reviewers + improve.audit)
+  roles/               researcher, builder, reviewer, forge-lead, improve-lead, improve-analyst, auditor
+  agents/ envs/        worker, critic, author, framework-builder, improve-main, improver /
+                       workspace, local-authoring, framework-dev, improve-local
+  interfaces/ connectors/  session.events, review.verdicts, artifacts.read, improve.findings /
+                       ledger, git, claude-transcripts, artifact-graph, improve-store
 coordinator/           Chief of Staff prompt + slash commands
-bay/                   resolver, lint, dispatcher, connectors runtime, adapter, ledger, hook, CLI
+bay/                   resolver, lint, dispatcher, connectors runtime, adapter, ledger, hook, CLI;
+                       bay/improve/ (transcript parser, detectors, conformance checks, findings store)
 tests/                 python3 tests/run.py
 ```
 
@@ -88,6 +94,38 @@ tests/                 python3 tests/run.py
 | `bay status`, `bay log` | calls, steps, agent runs, cost |
 | `bay mode\|feature\|role\|connector\|env new <name>` | scaffold (same templates as `forge.create`) |
 | `bay migrate [--confirm]` | migrate your content to this version (dry run by default) |
+| `bay note <ref> "text" [--instruction]` | record a note (or a mid-run instruction change) on a run, task or call; never creates a run |
+| `bay improve weekly` / `bay improve decide <id> approve\|defer\|wontfix` | weekly improve pass / your decision on a backlog item (approve: your terminal only) |
+
+## Improving agentbay and your modes (`improve`)
+
+`improve` is a framework mode that finds what keeps going wrong, with evidence, and never edits anything itself.
+
+- **scan** (sessions): turns the ledger, git history and your Claude Code transcripts (`~/.claude/projects`) into
+  redacted episodes and runs detectors: review rounds above 1, the same rule failing repeatedly, blockers a check
+  could catch, mid-run instruction changes (`bay note <ref> "..." --instruction`), out-of-scope additions, slow or
+  costly steps, repeated identical tool calls, permission prompts/denials, interrupts, reverts and churn.
+  Transcripts are parsed defensively and **redacted by default**: only structure and metadata (counts, tool names,
+  input hashes, durations, tokens, cost) are kept. `connectors.claude-transcripts.keepText: true` keeps short
+  excerpts, always after a secret scan.
+- **audit** (code and content): slop (filler phrases, duplicate rules, comments that restate code, padded
+  messages), unused code and concepts (no reference AND no ledger use), inefficiency (whole-store reads per query,
+  calls in loops, oversized role context) and the semantic rules in `framework/rules/conformance.yaml`.
+- **triage** ranks findings (impact x frequency / effort), links them across lenses and has the analyst explain the
+  root cause and propose a fix; a reviewer checks the evidence. **backlog** writes
+  `.agentbay/data/improve/reports/<isoweek>.md`.
+- **You decide** each item in your own terminal: `.agentbay/bay improve decide <id> approve|defer|wontfix`.
+  **implement** runs only on demand for an approved item, behind an approval gate, and produces a forge.extend
+  proposal draft or a mode-fix task envelope. **verify** re-runs the detector after the fix ships.
+
+Weekly run from cron (agentic steps come back as step plans for your next Claude Code session):
+
+```cron
+17 8 * * 1  cd ~/code/my-repo && .agentbay/bay improve weekly >> .agentbay/data/improve/weekly.log 2>&1
+```
+
+Everything improve writes stays in `.agentbay/data/improve/` (env `improve-local`: no network, no secrets). Its
+roles read findings only through their use shims; transcript files are read only by the dispatcher.
 
 ## Adding things
 

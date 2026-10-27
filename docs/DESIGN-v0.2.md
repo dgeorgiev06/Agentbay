@@ -279,3 +279,35 @@ contain code once code runs. Real isolation needs an OS sandbox, planned for the
 - **No worktree isolation for builders:** the hook payload does not identify a subagent's worktree, and trusting
   `cwd` would let an agent `cd` into a protected directory, so `isolation: worktree` was removed from the builder.
 
+
+## Approved amendment: the `improve` framework mode (2026-10-27, proposal 0002)
+
+The user approved proposal 0002 and decided: scan reads raw Claude Code transcripts (redacted on read); approved
+findings go to a weekly backlog; implementation runs only on demand after human approval.
+
+- **Richer ledger events (prerequisite).** `step.*`/`call.completed` carry `durationMs`, `costUsd` and `tokens` when
+  known (code steps are timed; agentic steps from planned to submitted, or as reported with `bay submit --usage`;
+  the Agent hook records the runtime's duration and tokens). The guard writes `permission.denied` and
+  `permission.prompt` (an agentbay subagent's Bash command left to Claude Code's prompt) with tool and reason, never
+  the command. `bay note <ref> --instruction` records a mid-run instruction change (`data.kind`). Notes never create
+  runs: they attach to a run by runId or taskId, or stay standalone. All new fields are optional (`v` stays 1).
+  Every ledger value passes a pattern secret scan (`bay/secretscan.py`) in addition to `vault.redact`.
+- **Capability interfaces:** `session.events/v1` (episodes, data schema `session.episode/v1`), `review.verdicts/v1`,
+  `artifacts.read/v1` (files, text, reference graph), `improve.findings/v1` (the store: scan/audit write, record,
+  query, triage, decide, backlog, claim/handoff, verify); data schema `improve.finding/v1`.
+- **Connectors** (framework): `ledger`, `git`, `claude-transcripts`, `artifact-graph`, `improve-store`. Only the
+  dispatcher runs them; roles reach findings and artifacts through read-only use shims.
+- **Env `improve-local`:** reads the project, the kit, the ledger and call state, git and `~/.claude/projects`
+  (connectors only: `~`/absolute read paths never reach a role's guard policy); writes only
+  `.agentbay/data/improve/`; no network, no secrets; effects read and write.
+- **Mode `improve`** (coordinator `improve-lead`, workers `improve-analyst`, `auditor`, framework `reviewer`):
+  scan, audit, triage (review always), backlog (schedule weekly, declarative), implement (claim -> draft -> review
+  (opus) -> approval gate -> handoff; review always), verify. Detectors are deterministic code in `bay/improve/`.
+  improve never modifies artifacts: implement writes only a handoff file (forge.extend proposal draft or a task
+  envelope) under its data folder. Approving an item (`bay improve decide <id> approve`) and passing the gate
+  (`bay approve`) need an interactive terminal.
+- **Conformance, single source:** `framework/rules/conformance.yaml` (`schemas/conformance.schema.json`, linted by
+  `bay lint`). An endpoint's `review.rulesets: [conformance]` adds those rules to the reviewer's plan (forge.create
+  and forge.extend use it); improve.audit runs every rule that has a `check` and hands the rest to the auditor.
+- **Scheduling:** `bay improve weekly` runs scan + audit + triage + backlog; run it from cron (README). Lint's schedule
+  warning still applies.

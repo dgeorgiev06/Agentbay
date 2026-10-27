@@ -1,96 +1,117 @@
 # agentbay
 
-Container-style agents for Claude Code. Define agents as specs composed from
-layers, compile them into a runtime, and run a **chief-of-staff coordinator**
-that delegates to workers and tracks everything in a ledger.
+Jobs for Claude Code, defined as data. You describe a **mode** (a job with
+endpoints), the **roles** that do its steps, the **agents** that run those roles,
+the **environment** each agent may touch, and the **connectors** that do the
+deterministic work. agentbay checks that it all wires up, compiles it into
+Claude Code, and runs it through one dispatcher that enforces schemas, effects,
+budgets and secrets, and logs every step.
 
-Today's runtime: interactive Claude Code on your desktop. The specs, protocol,
-and ledger are runtime-agnostic, so a Managed Agents or Agent SDK adapter can be
-added later without rewriting agents. See [docs/INTERFACES.md](docs/INTERFACES.md).
+```
+Chief of Staff (your main Claude Code session)
+  └─ bay call feed-briefing.digest ──> Mode feed-briefing, feature digest
+        refresh   run: feed.store.sync   ─ code ─> Env local-feeds ─> Connector local-store ─> Connector x-api (api.x.com)
+        gather    run: feed.store.query  ─ code
+        themes    role: feed-analyst     ─ Agent analyst (subagent, sonnet) in Env local-feeds
+        review    role: reviewer         ─ Agent critic (subagent, opus), from the feature's review block
+```
 
-## Quickstart (5 minutes)
+Read it top to bottom: **mode -> role -> agent -> env -> connector**. Modes name
+capabilities (`feed.source/v1`), never tools. Agents never see secrets or connectors.
+Design: [docs/DESIGN-v0.2.md](docs/DESIGN-v0.2.md). Contracts: [docs/INTERFACES.md](docs/INTERFACES.md).
+
+## Quickstart (5 minutes, offline)
 
 ```bash
-pip install pyyaml jsonschema          # jsonschema optional but recommended
-cd agentbay
-./bay.sh validate                      # check specs + layers
-./bay.sh --project ~/code/my-repo build   # compile into a repo (or omit --project for cwd)
-cd ~/code/my-repo && claude            # start Claude Code; your session is now the Chief of Staff
+pip install pyyaml jsonschema
+./bay.sh validate                                   # lint + resolve everything
+cp agentbay.config.example.yaml ~/code/my-repo/agentbay.config.yaml   # binds the fake source
+./bay.sh --project ~/code/my-repo build             # compile into a repo
+cd ~/code/my-repo
+.agentbay/bay call feed-briefing.sync '{}'          # pulls sample posts into .agentbay/data/feeds
+.agentbay/bay call feed-briefing.ask '{"question": "what is new in staking?"}'
+claude                                              # your session is now the Chief of Staff
 ```
 
-Inside Claude Code:
+`ask` returns `needs-agent` with a step plan; inside Claude Code the Chief of Staff
+runs it as the `feed-analyst` subagent and submits the answer with `bay submit`.
+Try `/bay-team`, `/bay-delegate brief me on this week`, `/bay-status`.
 
-- `/bay-team` – list workers and what they're for
-- `/bay-delegate <request>` – plan and dispatch work
-- `/bay-status` – what's running, finished, blocked
-- `/agents` – Claude Code's own view of the generated subagents
+### Real X timeline
 
-Try: `/bay-delegate research the top 3 open-source agent sandbox runtimes, then draft a one-page comparison in docs/sandboxes.md and have it reviewed`
+1. Create an X app with OAuth 2.0 (scopes `tweet.read users.read offline.access`) and authorize your account.
+2. Store the secrets (macOS keychain; values are read from stdin, never echoed):
+   `./bay.sh secret set X_CLIENT_ID`, `X_CLIENT_SECRET`, `X_REFRESH_TOKEN`.
+   On Linux set `secrets: {provider: env}` and export them instead.
+3. In `agentbay.config.yaml` set `bindings.local-feeds.feed.source/v1: [x-api]` and `connectors.x-api.userId`.
+4. Caps: `maxPostsPerRun`, `monthlyPosts`, `spendUsd` (at `costPerPostUsd`, default $0.005). Sync stops and
+   says which cap stopped it before exceeding one.
 
-## What you get
+## What ships
 
 ```
-agentbay/
-  schemas/          the contracts (JSON Schema)
-  layers/           reusable capability bundles
-    base/           read-only workspace (infrastructure)
-    research/       web search + research-brief skill
-    code/           edit/write/bash + narrow git permissions
-    review/         read-only git + review-checklist skill
-    github/         EXAMPLE MCP layer (unused by default)
-  specs/            agents = layers + model + prompt
-    chief-of-staff  coordinator (your main session)
-    researcher      sonnet, read-only, web
-    builder         sonnet, edits code, worktree isolation
-    reviewer        opus, independent read-only review
-  coordinator/commands/   slash commands installed into the project
-  bay/              resolver, adapters, protocol, ledger, hook, CLI
-  tests/            contract tests (python3 tests/test_contracts.py)
+schemas/               the contracts (agentbay/v2) + data schemas
+interfaces/            feed.source/v1, feed.store/v1
+modes/feed-briefing/   sync, digest, ask, prune (features/<f>/playbook.md + rules.yaml)
+modes/delivery/        research, build (+review): the v0.1 behaviour
+roles/  agents/  envs/ feed-lead, feed-analyst / analyst, lead / local-feeds
+connectors/            x-api (official X API v2), local-store (JSONL store), fake (offline)
+framework/             shipped with the kit, never edited by users:
+  modes/forge/         create | extend | migrate - agentbay building agentbay
+  roles/               researcher, builder, reviewer, forge-lead
+  agents/ envs/        worker, critic, author, framework-builder / workspace, local-authoring, framework-dev
+coordinator/           Chief of Staff prompt + slash commands
+bay/                   resolver, lint, dispatcher, connectors runtime, adapter, ledger, hook, CLI
+tests/                 python3 tests/run.py
 ```
 
-Generated in the target project (all tracked in `.agentbay/manifest.json`,
-removable with `./bay.sh --project <repo> clean`):
+## Everyday commands
+
+| command | does |
+|---|---|
+| `bay validate` / `bay lint` | check everything / just structure (file:line errors) |
+| `bay build` / `bay clean` | compile into a project / remove exactly what was generated |
+| `bay ls`, `bay describe <mode\|role>` | what exists, fully resolved |
+| `bay call <mode>.<endpoint> '<json>'` | run a feature |
+| `bay submit <callId> <step> '<json>'` | hand back a step's output or approve a gate |
+| `bay status`, `bay log` | calls, steps, agent runs, cost |
+| `bay mode\|feature\|role\|connector\|env new <name>` | scaffold (same templates as `forge.create`) |
+| `bay migrate [--confirm]` | migrate your content to this version (dry run by default) |
+
+## Adding things
+
+- **A source** (e.g. Bluesky): `bay connector new bsky --implements feed.source/v1`, implement `fetch`,
+  add `bsky` to `feed.source/v1` in `envs/local-feeds.yaml`. Nothing else changes.
+- **A feature**: `bay feature new weekly --mode feed-briefing --role feed-analyst --effects read`; fill the
+  playbook's Definition of Done and the rules; `bay lint`. Review is on by default for write/spend/delete features.
+- **Your own rules** on a shipped feature: `modes.<mode>.features.<feature>.extraRules: <rules.yaml>` in
+  `agentbay.config.yaml` (strictest wins).
+
+## Generated in the target project
+
+All tracked in `.agentbay/manifest.json` and removed by `clean`; your CLAUDE.md, settings and MCP servers are preserved.
 
 | file | from |
 |---|---|
-| `.claude/agents/<worker>.md` | each worker spec |
-| `.claude/skills/<skill>/` | layer skills |
+| `.claude/agents/<role>.md` | each worker role placement (`<role>--<agent>.md` when a feature re-places it) |
+| `.claude/skills/<skill>/` | role and mode skills |
 | `.claude/commands/bay-*.md` | coordinator commands |
-| `.claude/settings.json` | merged: CLI permissions + ledger hooks |
-| `.mcp.json` | merged: layer MCP servers |
-| `CLAUDE.md` | one marked import line → `.agentbay/COORDINATOR.md` |
-| `.agentbay/catalog.json` | worker catalog for the coordinator |
-| `.agentbay/bay` | project-local control plane shim |
-| `.agentbay/ledger/events.jsonl` | runtime events (gitignored) |
-
-Your existing `CLAUDE.md`, settings, and MCP servers are preserved.
-
-## How it maps to the "container" idea
-
-| container world | agentbay |
-|---|---|
-| image / Dockerfile | AgentSpec |
-| image layers | Layers (infrastructure → domain → product) |
-| runtime (docker, containerd) | Adapter (claude-code now) |
-| `docker ps` / events | `bay status` / ledger |
-| `docker stop` | `bay reclaim` (workers also free their context when they return) |
-| orchestrator | chief-of-staff coordinator |
+| `.claude/settings.json` | merged: narrow `Bash(<prefix>:*)` permissions + ledger hooks |
+| `CLAUDE.md` | one marked import line -> `.agentbay/COORDINATOR.md` (Chief of Staff + mode coordinator playbooks) |
+| `.agentbay/catalog.json`, `.agentbay/bay` | modes/endpoints/roles catalog; project control-plane shim |
+| `.agentbay/{ledger,calls,data}/` | runtime state (gitignored) |
 
 ## Honest limits of the Claude Code runtime
 
-- Skills, MCP servers and CLI permissions are project-wide in Claude Code.
-  Per-agent scope is enforced by each subagent's `tools` allowlist (MCP tools are
-  granted by name, e.g. `mcp__github__get_issue`).
-- Subagents cannot spawn subagents, so there is one coordinator: the main session.
-- New or changed agents load when Claude Code starts; restart after `build`.
-- Spawns and completions are captured by hooks on the `Task|Agent` tool. If your
-  Claude Code version's hook payload differs, the hook logs to
-  `.agentbay/ledger/hook-errors.log` and never blocks the session.
-- The kit path is baked into hooks; rebuild if you move the kit folder.
+- Skills and CLI permissions are project-wide in Claude Code. Per-role scope is the subagent `tools`
+  allowlist plus the dispatcher (`bay use` checks each role's grants; connectors only run in `bay call`).
+- Subagents cannot spawn subagents, so mode coordinators run as playbooks in the main thread. A future
+  `headless` runtime makes them separate agents without changing mode files.
+- New or changed roles load when Claude Code starts; restart after `build`.
+- Hooks never block the session; failures go to `.agentbay/ledger/hook-errors.log`.
 
-## Roadmap to the strategic version
+## Roadmap
 
-1. `managed-agents` adapter: same specs → cloud sessions (and self-hosted sandboxes).
-2. Ledger → SQLite/Postgres behind the same `ledger` API; add cost per run.
-3. Spec versioning + a registry of published layers.
-4. MCP gateway layer for per-agent credentials, egress policy and audit.
+1. `headless` (`claude -p`) and cloud runtimes behind the same Agent/runtime field.
+2. Ledger -> SQLite behind the same API; per-call cost dashboards.
+3. More sources as connectors (Bluesky, RSS) - one binding line each.

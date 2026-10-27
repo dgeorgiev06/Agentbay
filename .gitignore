@@ -1,2 +1,4 @@
 __pycache__/
 *.pyc
+.agentbay/
+agentbay.config.yaml

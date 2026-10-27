@@ -274,9 +274,12 @@ def review_on_side_effects(kit: Path, rule: dict) -> list[dict]:
         on = rv.get("when") == "always"
         line = next((i for i, ln in enumerate(md.path.read_text().splitlines(), 1)
                      if re.match(rf"^\s{{4}}{re.escape(ep_name)}:", ln)), 1)
-        if eff & {"spend", "delete"} and not on:
+        # Spend is exempt when the mode caps it in dollars: only dispatcher code steps can spend (agents reach
+        # read-only endpoints only) and the dispatcher enforces constraints.spendUsd. Delete is never exempt.
+        risky = eff & {"delete"} | (eff & {"spend"} if "spendUsd" not in (md.spec.get("constraints") or {}) else set())
+        if risky and not on:
             out.append({"file": _rel(kit, md.path), "line": line,
-                        "detail": f"{md.name}.{ep_name} has effects {sorted(eff & {'spend', 'delete'})} but review "
+                        "detail": f"{md.name}.{ep_name} has effects {sorted(risky)} but review "
                                   f"is {'off (when: never)' if rv else 'not configured'}"})
         elif "write" in eff and not on and rv.get("when") != "never":
             out.append({"file": _rel(kit, md.path), "line": line,

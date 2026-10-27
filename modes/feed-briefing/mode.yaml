@@ -39,9 +39,10 @@ spec:
       description: Drop posts past retention and posts deleted at the source.
       workflow: prune
       in: PruneReq
-      effects: [write, delete]
+      effects: [read, write, delete]
       playbook: features/prune/playbook.md
       rules: features/prune/rules.yaml
+      review: { role: reviewer, when: always }
       schedule: daily
   coordinator: feed-lead
   roles: [feed-lead, feed-analyst, reviewer]

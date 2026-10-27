@@ -9,6 +9,7 @@ Keep the store within retention and honor deletions made at the source.
 ## Steps
 1. The dispatcher runs `feed.store/v1.prune` (code step, no agent).
 2. The store removes posts older than the cutoff and every post whose `source:id` is on the deleted list.
+3. `review`: the reviewer checks the result (`removed`, `remaining`, `deleted`) against this Definition of Done and the rules before the call completes.
 
 ## Definition of Done
 - [DOD-1] (must) No post deleted at its source remains in the store.
@@ -20,3 +21,4 @@ Keep the store within retention and honor deletions made at the source.
 
 ## Failure handling
 - Corrupt store line: the step fails with file:line; fix or delete the line and re-run.
+- Review fails a must item: the call ends `partial` with the reviewer's evidence; the posts already removed stay removed.

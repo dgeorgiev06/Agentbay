@@ -10,6 +10,7 @@ Failures and waste repeat across sessions: review churn, blockers found late, mi
 ## Decisions (user, 2026-10-27)
 - `scan` reads raw Claude Code session transcripts in addition to the agentbay ledger and git. Transcripts are redacted on read.
 - Approved findings go to a **weekly backlog**. A human reviews it, and items are implemented **on demand**: nothing is dispatched automatically.
+- First audit, C-6 (decided after review): delete effects always need review, so `feed-briefing.prune` now has `review: always`. Spend effects are exempt when the mode caps spend in dollars (`constraints.spendUsd`, enforced by the dispatcher; agents can't spend), which covers `feed-briefing.sync` and `ask`.
 
 ## Mode
 Framework mode `improve`, shipped next to `forge`. It never edits artifacts. Fixes are made through `forge.extend` (framework) or `forge.create`/mode edits (user modes).

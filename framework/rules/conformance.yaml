@@ -36,7 +36,7 @@ rules:
     check: effects_match_code
   - id: C-6
     level: must
-    statement: A feature with spend or delete effects has review on (when always). A feature with write effects has review on unless mode.yaml declares `review when never` explicitly because it writes only its own mode's data store.
+    statement: A feature with delete effects has review on (when always), and so does a feature with spend effects unless its mode caps spend in dollars (constraints.spendUsd, enforced by the dispatcher). A feature with write effects has review on unless mode.yaml declares `review when never` explicitly because it writes only its own mode's data store.
     appliesTo: [mode, feature]
     check: review_on_side_effects
   - id: C-7

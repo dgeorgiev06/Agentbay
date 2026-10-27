@@ -301,8 +301,8 @@ def test_audit_on_the_kit_itself():
             {"lens": "artifacts", "title": "Bad ref", "pattern": "x", "evidence": [{"kind": "file", "ref": "nope.py:3"}]}]})
         assert out["status"] == "done" and len(out["output"]["new"]) == 1 and out["output"]["rejected"][0]["index"] == 1
         fs = findings(k)
-        c6 = [f for f in fs if f["kind"] == "conformance" and f["scope"]["rule"] == "C-6"]
-        assert {f["evidence"][1]["ref"].split(":")[0] for f in c6} == {"modes/feed-briefing/mode.yaml"}
+        # feed-briefing: prune (delete) is reviewed, sync/ask spend is capped by constraints.spendUsd
+        assert not [f for f in fs if f["kind"] == "conformance" and f["scope"]["rule"] == "C-6"]
         assert all(f["lens"] == "artifacts" and f["evidence"] for f in fs)
     finally:
         cleanup(k)

@@ -281,12 +281,18 @@ def test_conformance_checks_on_a_kit_copy():
         st.write_text(st.read_text().replace("    def status(self", "    def status(self, *a, **kw):\n"
                                              "        self.posts_path.write_text('')\n        return self._status()\n\n"
                                              "    def _status(self", 1))
+        # C-6: without a dollar cap, spend needs review (sync and ask); without review, delete is flagged (prune)
+        mode = k / "modes/feed-briefing/mode.yaml"
+        mode.write_text(mode.read_text().replace("    spendUsd: 5\n", "")
+                        .replace("      review: { role: reviewer, when: always }\n      schedule: daily", "      schedule: daily"))
         res = {r["rule"]: r for r in conformance.run(k)}
         assert len(res["C-1"]["violations"]) == base["C-1"] + 1 and "fetch" in res["C-1"]["violations"][-1]["detail"]
         assert any("'Bash'" in v["detail"] for v in res["C-4"]["violations"])
         assert any("sub-agent" in v["detail"] and v["rewrite"].endswith("subagent.") for v in res["C-7"]["violations"])
         assert any("status" in v["detail"] and "write_text" in v["detail"] for v in res["C-5"]["violations"])
-        assert len(res["C-6"]["violations"]) == base["C-6"]
+        assert base["C-6"] == 0
+        assert sorted(v["detail"].split()[0] for v in res["C-6"]["violations"]) == \
+            ["feed-briefing.ask", "feed-briefing.prune", "feed-briefing.sync"]
         cands = da.conformance(da.Artifacts(files=[], text=lambda p: None, graph={}, conformance=list(res.values())),
                                da.thresholds({}))
         assert {c["scope"]["rule"] for c in cands} >= {"C-1", "C-4", "C-5", "C-6", "C-7"}

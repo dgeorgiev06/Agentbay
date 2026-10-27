@@ -1,0 +1,365 @@
+"""`bay call <mode>.<endpoint> '<json>'`: the only way to invoke an endpoint.
+
+A call walks the feature's workflow:
+  code step   -> run the bound connector here (connectors never reach agents)
+  role step   -> stop and return a step plan; the coordinator runs the role and
+                 resumes with `bay submit <callId> <stepId> '<json>'`
+  gate step   -> stop with status awaiting-approval; resume with {"approved": true}
+  review step -> injected from mode.yaml `review`; gets DoD, reviewer rules and
+                 deterministic check results; verdicts decide done vs partial
+
+Every step writes step.started / step.completed (or failed/skipped/planned) to
+the ledger with mode, endpoint, step, role, agent, env and cost. Secret values
+are redacted from everything this module returns or logs.
+"""
+from __future__ import annotations
+
+import json
+import secrets as _rand
+from pathlib import Path
+
+from . import checks, config as cfgmod, connect, ledger, model, vault
+from .util import duration, parse_time, read_json, utcnow, write_json
+
+VERDICT = "review.verdict/v1"
+FAIL_LEVELS = ("must", "must_not")
+
+
+class CallError(Exception):
+    """Bad input, missing grant, unknown target. Message says what to fix."""
+
+
+class Dispatcher:
+    def __init__(self, system: model.System, project: Path, *, transport=None, provider=None, clock=None):
+        self.sys, self.project = system, project
+        self.transport, self.provider, self.clock = transport, provider, clock or utcnow
+
+    # ------------------------------------------------------------ public
+    def call(self, target: str, inp: dict | None = None) -> dict:
+        try:
+            mode, feat = self.sys.feature(target)
+        except model.ResolveError as e:
+            raise CallError(e.gaps[0]) from None
+        inp = inp or {}
+        errs = model.schema_errors(inp, feat.in_schema)
+        if errs:
+            raise CallError(f"{target}: input does not match {feat.in_type or 'schema'}: " + "; ".join(errs))
+        call_id = f"C-{self.clock():%Y%m%d}-{_rand.token_hex(3)}"
+        state = {"callId": call_id, "target": target, "input": inp, "steps": {}, "cursor": 0,
+                 "status": "running", "checks": [], "cost": {"posts": 0, "usd": 0.0}}
+        return self._advance(mode, feat, state)
+
+    def submit(self, call_id: str, step_id: str, output) -> dict:
+        state = self._load(call_id)
+        mode, feat = self.sys.feature(state["target"])
+        if state["status"] not in ("needs-agent", "awaiting-approval"):
+            raise CallError(f"call {call_id} is {state['status']}; nothing to submit")
+        step = feat.steps[state["cursor"]]
+        if step.id != step_id:
+            raise CallError(f"call {call_id} is waiting for step '{step.id}', not '{step_id}'")
+        base = self._event_base(mode, feat, step, call_id)
+        if step.kind == "gate":
+            if not (isinstance(output, dict) and output.get("approved") is True):
+                state["status"] = "blocked"
+                state["result"] = {"reason": (output or {}).get("reason", "not approved")}
+                self._ledger("step.completed", base, summary="gate rejected", data={"approved": False})
+                return self._finish(state, mode, feat)
+            state["steps"][step.id] = output
+            self._ledger("step.completed", base, summary="approved", data={"approved": True})
+        elif step.kind == "review":
+            self._accept_review(state, feat, step, output, base)
+        else:
+            if step.out:
+                sch = model._type_schema(mode.path, step.out, f"{feat.mode}.{feat.name}", [])
+                errs = model.schema_errors(output, sch)
+                if errs:
+                    raise CallError(f"step {step.id}: output does not match {step.out}: " + "; ".join(errs[:5]))
+            state["steps"][step.id] = output
+            self._ledger("step.completed", base, summary=f"{step.role} submitted")
+        state["cursor"] += 1
+        if state.get("halt"):
+            state["output"] = self._endpoint_output(feat, state)
+            return self._finish(state, mode, feat)
+        return self._advance(mode, feat, state)
+
+    def use(self, role: str, target: str, inp: dict | None = None) -> dict:
+        """Dispatcher-mediated, read-only connector access for a role (`bay use`)."""
+        r = self.sys.roles.get(role)
+        if r is None:
+            raise CallError(f"unknown role '{role}'")
+        if target not in r.bay_uses:
+            raise CallError(f"role {role} is not granted {target} (granted: {', '.join(r.bay_uses) or 'none'}); "
+                            f"add it to the role's `uses`")
+        iface, ep = target.rsplit(".", 1)
+        env = self.sys.env(r.env)
+        conn = model._connectors_of(env.spec["bind"].get(iface))[0]
+        return self._invoke(env.name, conn, iface, ep, inp or {}, settings={}, caps={})
+
+    # ------------------------------------------------------------ engine
+    def _advance(self, mode, feat, state) -> dict:
+        while state["cursor"] < len(feat.steps):
+            step = feat.steps[state["cursor"]]
+            base = self._event_base(mode, feat, step, state["callId"])
+            if step.when and self._skip(step, mode, feat, state):
+                state["steps"][step.id] = None
+                self._ledger("step.skipped", base, summary=f"when: {step.when}")
+                state["cursor"] += 1
+                continue
+            if step.kind == "code":
+                self._run_code(mode, feat, step, state, base)
+                if state["status"] in ("blocked", "failed"):
+                    return self._finish(state, mode, feat)
+                state["cursor"] += 1
+                continue
+            if step.kind == "review" and "checks_done" not in state:
+                self._run_checks(feat, state)
+            state["status"] = "awaiting-approval" if step.kind == "gate" else "needs-agent"
+            plan = self._plan(mode, feat, step, state)
+            state["plan"] = plan
+            self._ledger("step.planned", base, summary=f"{step.kind} {step.role or step.id}")
+            self._save(state)
+            return self._public(state)
+        if "checks_done" not in state:
+            self._run_checks(feat, state)
+        output = self._endpoint_output(feat, state)
+        if feat.out_schema and feat.out_type:
+            errs = model.schema_errors(output, feat.out_schema)
+            if errs:
+                state["status"] = "failed"
+                state["result"] = {"error": f"output does not match {feat.out_type}: " + "; ".join(errs[:5])}
+                return self._finish(state, mode, feat)
+        state["output"] = output
+        if state["status"] in ("running", "needs-agent", "awaiting-approval"):
+            failed_checks = [c for c in state["checks"] if not c["ok"] and c["level"] in FAIL_LEVELS]
+            state["status"] = "partial" if (failed_checks or state.get("stopped")) else "done"
+        return self._finish(state, mode, feat)
+
+    def _skip(self, step, mode, feat, state) -> bool:
+        if step.when.startswith("$in."):
+            return not state["input"].get(step.when[4:])
+        age = duration(step.when.split(">")[1].strip())
+        iface = step.run.rsplit(".", 1)[0]
+        st = self._invoke(step.env, step.connector, iface, "status", {}, settings=self._settings(mode), caps={})
+        last = st.get("lastSync")
+        return bool(last) and (self.clock() - parse_time(last, self.clock())) <= age
+
+    def _run_code(self, mode, feat, step, state, base) -> None:
+        env = self.sys.env(step.env)
+        bad = [e for e in step.effects if e not in env.spec["effects"] or e not in feat.effects]
+        if bad:  # resolver guarantees this; re-checked at runtime in case files changed underneath
+            raise CallError(f"{feat.mode}.{feat.name} step {step.id}: effects {bad} not allowed")
+        args = substitute(step.with_, state["input"], state["steps"], mode.config)
+        iface, ep = step.run.rsplit(".", 1)
+        caps = cfgmod.caps(mode.constraints, env.spec.get("limits", {}), mode.config)
+        self._ledger("step.started", base, summary=step.run)
+        try:
+            out = self._invoke(step.env, step.connector, iface, ep, args, settings=self._settings(mode), caps=caps)
+        except Exception as e:  # report, never leak
+            msg = vault.redact(str(e))
+            self._ledger("step.failed", base, summary=msg)
+            state["status"] = "failed"
+            state["result"] = {"error": f"step {step.id} ({step.run}): {msg}"}
+            return
+        cost = {}
+        if isinstance(out, dict) and "fetched" in out:
+            cpp = float(caps.get("costPerPostUsd", 0.005))
+            cost = {"posts": out["fetched"], "usd": round(out["fetched"] * cpp, 4)}
+            state["cost"]["posts"] += cost["posts"]
+            state["cost"]["usd"] = round(state["cost"]["usd"] + cost["usd"], 4)
+        if isinstance(out, dict) and out.get("stopped"):
+            state["stopped"] = out["stopped"]
+            if not out.get("fetched"):
+                state["status"] = "blocked"
+                state["result"] = {"reason": out["stopped"]}
+        state["steps"][step.id] = out
+        summary = (out.get("stopped") or "ok") if isinstance(out, dict) else "ok"
+        self._ledger("step.completed", base, summary=summary, cost=cost)
+
+    def _invoke(self, env_name, conn_name, iface, ep, args, *, settings, caps):
+        idoc = self.sys.interface(iface)
+        spec = idoc.spec["endpoints"][ep]
+        in_s = model.inline_refs(spec.get("in", {"type": "object"}))
+        errs = model.schema_errors(args, in_s)
+        if errs:
+            raise CallError(f"{iface}.{ep}: input invalid: " + "; ".join(errs))
+        inst = connect.instantiate(self.sys, env_name, conn_name, iface, self.project, transport=self.transport,
+                                   provider=self.provider, caps=caps, settings=settings, clock=self.clock)
+        fn = getattr(inst, ep, None)
+        if fn is None:
+            raise CallError(f"connector {conn_name} does not implement {iface}.{ep}")
+        out = fn(**args)
+        errs = model.schema_errors(out, model.inline_refs(spec.get("out", {"type": "object"})))
+        if errs:
+            raise CallError(f"connector {conn_name}: {iface}.{ep} returned invalid output: " + "; ".join(errs[:5]))
+        warn = inst.ctx.secrets.warnings + [w for s in inst.ctx.sources.values() for w in s.ctx.secrets.warnings]
+        if warn and isinstance(out, dict):
+            out.setdefault("warnings", []).extend(warn)
+        return out
+
+    def _settings(self, mode) -> dict:
+        s = dict(mode.config)
+        if "lookbackMax" in mode.constraints:
+            s["lookbackMax"] = mode.constraints["lookbackMax"]
+        return s
+
+    # ------------------------------------------------------------ checks & review
+    def _check_ctx(self) -> checks.CheckContext:
+        def store_urls():
+            urls: set[str] = set()
+            for p in self.project.glob(".agentbay/data/**/posts.jsonl"):
+                for line in p.read_text(encoding="utf-8").splitlines():
+                    if line.strip():
+                        urls.add(json.loads(line).get("url", ""))
+            return urls
+        return checks.CheckContext(store_urls=store_urls, kit=self.sys.kit.root, secrets=vault.redact)
+
+    def _run_checks(self, feat, state) -> None:
+        state["checks_done"] = True
+        output = self._endpoint_output(feat, state)
+        ctx = self._check_ctx()
+        for r in feat.rules:
+            if r.check and r.applies(state["input"]):
+                res = checks.run(r.check, output, ctx)
+                state["checks"].append({"rule": r.id, "check": r.check, "level": r.level, **res})
+
+    def _accept_review(self, state, feat, step, verdict, base) -> None:
+        sch = model.data_schema(VERDICT)
+        errs = model.schema_errors(verdict, sch)
+        if errs:
+            raise CallError(f"review verdict does not match {VERDICT}: " + "; ".join(errs[:5]))
+        need = [d.id for d in feat.dod] + [r.id for r in feat.rules if r.for_reviewer() and r.applies(state["input"])]
+        got = {i["id"]: i for i in verdict["items"]}
+        missing = [i for i in need if i not in got]
+        if missing:
+            raise CallError(f"review verdict is missing ids: {', '.join(missing)} (report pass|fail|n/a for each)")
+        levels = {d.id: d.level for d in feat.dod} | {r.id: r.level for r in feat.rules}
+        failed = [i for i in got.values()
+                  if (i["verdict"] == "fail" and levels.get(i["id"]) in FAIL_LEVELS) or i.get("severity") == "blocker"]
+        state["steps"][step.id] = verdict
+        state["review"] = {"failed": [i["id"] for i in failed], "items": len(got)}
+        if failed:
+            state["status"] = "partial"
+            state["halt"] = True   # a failed must/blocker stops the workflow (e.g. no release after a failed review)
+        self._ledger("step.completed", base, summary=f"review: {len(failed)} failed must/blocker",
+                     data={"failed": [i["id"] for i in failed]})
+
+    # ------------------------------------------------------------ plans & output
+    def _plan(self, mode, feat, step, state) -> dict:
+        role = step.resolved   # the role as placed for this endpoint (agent override applied)
+        submit = f".agentbay/bay submit {state['callId']} {step.id} '<json>'"
+        plan = {"step": step.id, "kind": step.kind, "submit": submit}
+        if step.kind == "gate":
+            plan.update({"gate": step.task, "approve": submit.replace("<json>", '{"approved": true}'),
+                         "inputs": {k: v for k, v in state["steps"].items() if v is not None}})
+            return plan
+        run_as = "main-thread playbook" if role.runtime == "claude-code-main" else f"subagent_type={step.subagent}"
+        plan.update({"role": role.name, "agent": step.agent, "env": step.env, "runAs": run_as,
+                     "model": step.inference.model, "effort": step.inference.effort})
+        if step.kind == "review":
+            plan["review"] = {
+                "task": {"target": state["target"], "input": state["input"]},
+                "definitionOfDone": [{"id": d.id, "level": d.level, "text": d.text} for d in feat.dod],
+                "rules": [r.as_dict() for r in feat.rules if r.for_reviewer() and r.applies(state["input"])],
+                "checks": state["checks"],
+                "output": self._endpoint_output(feat, state),
+                "verdictSchema": VERDICT,
+            }
+            return plan
+        plan.update({
+            "task": step.task or f"Do step '{step.id}' of {state['target']}",
+            "playbook": str(feat.playbook_path.relative_to(self.sys.kit.root)) if feat.playbook_path else None,
+            "playbookText": feat.playbook_text,
+            "rules": [r.as_dict() for r in feat.rules if r.for_executor() and r.applies(state["input"])],
+            "definitionOfDone": [{"id": d.id, "level": d.level, "text": d.text} for d in feat.dod],
+            "input": state["input"],
+            "previous": {k: v for k, v in state["steps"].items() if v is not None},
+            "out": step.out,
+            "tools": [f".agentbay/bay use --role {role.name} {u} '<json>'" for u in role.bay_uses],
+        })
+        return plan
+
+    def _endpoint_output(self, feat, state):
+        for st in reversed(feat.steps):
+            if st.kind in ("review", "gate"):
+                continue
+            if st.id in state["steps"] and state["steps"][st.id] is not None:
+                return state["steps"][st.id]
+        return {}
+
+    def _finish(self, state, mode, feat) -> dict:
+        ledger.append(self.project, "call.completed", state["callId"], source="dispatcher", callId=state["callId"],
+                      mode=mode.name, endpoint=feat.name, cost=state["cost"],
+                      summary=state.get("stopped") or (state.get("result") or {}).get("error") or state["status"],
+                      data={"status": state["status"]})
+        self._save(state)
+        return self._public(state)
+
+    def _public(self, state) -> dict:
+        out = {"callId": state["callId"], "target": state["target"], "status": state["status"]}
+        if state["status"] in ("needs-agent", "awaiting-approval"):
+            out["next"] = state["plan"]
+        else:
+            if "output" in state:
+                out["output"] = state["output"]
+            if state.get("result"):
+                out.update(state["result"])
+            if state.get("stopped"):
+                out["stopped"] = state["stopped"]
+            if state["checks"]:
+                out["checks"] = state["checks"]
+            if state.get("review"):
+                out["review"] = state["review"]
+            out["cost"] = state["cost"]
+        return json.loads(vault.redact(json.dumps(out, ensure_ascii=False)))
+
+    # ------------------------------------------------------------ persistence & ledger
+    def _calls_dir(self) -> Path:
+        return self.project / ".agentbay" / "calls"
+
+    def _save(self, state) -> None:
+        write_json(self._calls_dir() / f"{state['callId']}.json", json.loads(vault.redact(json.dumps(state))))
+
+    def _load(self, call_id: str) -> dict:
+        st = read_json(self._calls_dir() / f"{call_id}.json")
+        if st is None:
+            raise CallError(f"unknown call '{call_id}' (see .agentbay/calls/)")
+        return st
+
+    def _event_base(self, mode, feat, step, call_id) -> dict:
+        return {"run_id": f"{call_id}:{step.id}", "callId": call_id, "mode": mode.name, "endpoint": feat.name,
+                "step": step.id, "role": step.role, "agent": step.agent, "env": step.env}
+
+    def _ledger(self, etype, base, **fields) -> None:
+        b = dict(base)
+        rid = b.pop("run_id")
+        ledger.append(self.project, etype, rid, source="dispatcher", **b, **fields)
+
+
+def substitute(template, inp: dict, steps: dict, settings: dict):
+    """"$in.x", "$steps.id.x", "$config.x", "$in.x|$config.y" (first present) -> values.
+    Keys whose value is missing are dropped."""
+    def val(v):
+        if isinstance(v, str) and v.startswith("$") and "|" in v:
+            for alt in v.split("|"):
+                x = val(alt.strip())
+                if x is not _MISSING:
+                    return x
+            return _MISSING
+        if isinstance(v, str) and v.startswith("$"):
+            head, _, rest = v[1:].partition(".")
+            src = {"in": inp, "steps": steps, "config": settings}.get(head)
+            if src is None:
+                return _MISSING
+            cur = src
+            for part in rest.split("."):
+                if not isinstance(cur, dict) or part not in cur or cur[part] is None:
+                    return _MISSING
+                cur = cur[part]
+            return cur
+        if isinstance(v, dict):
+            return {k: x for k, x in ((k, val(x)) for k, x in v.items()) if x is not _MISSING}
+        return v
+    return val(template or {})
+
+
+_MISSING = object()

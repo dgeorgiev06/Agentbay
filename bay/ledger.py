@@ -10,7 +10,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-TYPES = {"spawned", "completed", "failed", "reclaimed", "note"}
+RUN_TYPES = {"spawned", "completed", "failed", "reclaimed", "note"}
+STEP_TYPES = {"step.started", "step.completed", "step.failed", "step.skipped", "step.planned", "call.completed"}
+TYPES = RUN_TYPES | STEP_TYPES
 
 
 def ledger_path(project: Path) -> Path:
@@ -28,7 +30,8 @@ def append(project: Path, type: str, run_id: str, **fields) -> dict:
         raise ValueError(f"unknown event type {type!r}")
     ev = {"v": 1, "ts": now(), "type": type, "runId": run_id}
     ev.update({k: v for k, v in fields.items() if v not in (None, "", {}, [])})
-    line = json.dumps(ev, ensure_ascii=False)
+    from .vault import redact  # last line of defence: no secret value ever reaches the ledger
+    line = redact(json.dumps(ev, ensure_ascii=False))
     # O_APPEND writes of a single short line are atomic enough for parallel hooks.
     with open(ledger_path(project), "a", encoding="utf-8") as f:
         f.write(line + "\n")
@@ -63,6 +66,8 @@ class Run:
 def fold(events: list[dict]) -> dict[str, Run]:
     runs: dict[str, Run] = {}
     for e in events:
+        if e.get("type") in STEP_TYPES:
+            continue
         r = runs.setdefault(e["runId"], Run(e["runId"]))
         r.agent = e.get("agent", r.agent)
         r.task_id = e.get("taskId", r.task_id)
@@ -82,6 +87,35 @@ def fold(events: list[dict]) -> dict[str, Run]:
         elif t == "note":
             r.notes.append(e.get("summary", ""))
     return runs
+
+
+@dataclass
+class Call:
+    call_id: str
+    mode: str = ""
+    endpoint: str = ""
+    last_step: str = ""
+    state: str = "running"         # running | waiting | done | partial | blocked | failed
+    ts: str = ""
+    cost: dict = field(default_factory=dict)
+
+
+def fold_calls(events: list[dict]) -> dict[str, Call]:
+    """Dispatcher step events -> one Call per callId."""
+    calls: dict[str, Call] = {}
+    for e in events:
+        if e.get("type") not in STEP_TYPES or not e.get("callId"):
+            continue
+        c = calls.setdefault(e["callId"], Call(e["callId"]))
+        c.mode, c.endpoint, c.ts = e.get("mode", c.mode), e.get("endpoint", c.endpoint), e["ts"]
+        if e["type"] == "call.completed":
+            c.state = (e.get("data") or {}).get("status", "done")
+            continue
+        c.last_step = e.get("step", "")
+        c.state = {"step.planned": "waiting", "step.failed": "failed"}.get(e["type"], "running")
+        for k, v in (e.get("cost") or {}).items():
+            c.cost[k] = round(c.cost.get(k, 0) + v, 4)
+    return calls
 
 
 def project_root() -> Path:

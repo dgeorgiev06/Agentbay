@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
-"""agentbay control plane.
+"""agentbay control plane (v0.2).
 
-  build     resolve specs + layers and compile them for a runtime
-  validate  check every spec and layer against the schemas
-  ls        list agents (resolved)
-  describe  show one resolved agent
-  new       scaffold an agent spec or a layer
-  clean     remove everything the adapter generated
+  validate               lint + resolve every mode endpoint (fails with every gap)
+  lint                   structure checks: playbooks, DoD ids, rules, review placement
+  build | clean          compile modes/roles into a runtime (claude-code) / remove it
+  ls                     modes, endpoints and roles
+  describe <mode|role>   resolved definition as JSON
 
-  task new  mint a taskId (coordinator)
-  status    fold the ledger into run states
-  log       tail ledger events
-  note      append a note to a run/task
-  reclaim   mark a run reclaimed
+  call <mode>.<endpoint> '<json>'      run an endpoint (the only way to invoke one)
+  submit <callId> <stepId> '<json>'    hand back an agentic step's output or a gate approval
+  use --role <role> <iface>.<ep> '<json>'   read-only connector access for a role
+
+  mode new <name> | feature new <name> --mode <m> | role new <name>
+  connector new <name> --implements <iface> | env new <name>     scaffolds (forge templates)
+  migrate [--confirm]    migrate user content (dry-run diff by default)
+  secret set <NAME>      store a secret in the keychain (value read from stdin, never echoed)
+
+  task new | status | log | note | reclaim     ledger
 """
 from __future__ import annotations
 
@@ -24,39 +28,70 @@ from pathlib import Path
 KIT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(KIT))
 
-from bay import ledger, protocol  # noqa: E402
+from bay import ledger, protocol, vault  # noqa: E402
 
 
-def _model():
-    from bay import model  # lazy: needs PyYAML
-    return model
+def _out(obj) -> None:
+    print(vault.redact(json.dumps(obj, indent=2, ensure_ascii=False)))
 
 
-def _agents(args):
-    m = _model()
+def _die(msg: str, code: int = 1):
+    print(vault.redact(msg), file=sys.stderr)
+    sys.exit(code)
+
+
+def _system(args):
+    from bay import config, model
     try:
-        return m.resolve_all(KIT / "specs", KIT / "layers")
-    except m.SpecError as e:
-        sys.exit(f"spec error: {e}")
+        kit = model.Kit(KIT, args.project)
+        return model.resolve(kit)
+    except (model.ResolveError, model.SpecError, config.ConfigError) as e:
+        _die(f"✗ {e}")
+
+
+def _json_arg(text: str | None) -> dict:
+    if not text:
+        return {}
+    if text == "-":
+        text = sys.stdin.read()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        _die(f"input is not valid JSON: {e.msg} at char {e.pos}")
+
+
+# ------------------------------------------------------------------ model
+def cmd_lint(args) -> int:
+    from bay import config, lint, model
+    try:
+        problems = lint.run(KIT, args.project)
+    except config.ConfigError as e:
+        _die(f"✗ {e}")
+    for p in problems:
+        print(f"✗ {p}")
+    if problems:
+        print(f"{len(problems)} lint problem(s)")
+        return 1
+    if model.jsonschema is None:
+        print("! jsonschema not installed: schema checks skipped (pip install jsonschema)")
+    print("✓ lint clean")
+    return 0
 
 
 def cmd_validate(args):
-    m = _model()
-    try:
-        layers = m.load_layers(KIT / "layers")
-        agents = m.resolve_all(KIT / "specs", KIT / "layers")
-    except m.SpecError as e:
-        sys.exit(f"✗ {e}")
-    if m.jsonschema is None:
-        print("! jsonschema not installed: only structural checks ran (pip install jsonschema)")
-    print(f"✓ {len(layers)} layers, {len(agents)} agents valid")
+    if cmd_lint(args):
+        sys.exit(1)
+    s = _system(args)
+    n_ep = sum(len(m.features) for m in s.modes.values())
+    print(f"✓ {len(s.modes)} modes, {n_ep} endpoints, {len(s.roles)} roles, "
+          f"{len(s.kit.docs['Environment'])} envs, {len(s.kit.docs['Connector'])} connectors resolve")
 
 
 def cmd_build(args):
     from bay import adapters
-    agents = _agents(args)
-    rep = adapters.get(args.runtime).build(agents, args.project, KIT)
-    print(f"built {len(agents)} agents for {rep.runtime} → {args.project}")
+    s = _system(args)
+    rep = adapters.get(args.runtime).build(s, args.project, KIT)
+    print(f"built {len(s.modes)} modes for {rep.runtime} → {args.project}")
     for f in rep.written:
         print(f"  + {f}")
     for f in rep.removed:
@@ -74,70 +109,119 @@ def cmd_clean(args):
 
 
 def cmd_ls(args):
-    for a in _agents(args):
-        print(f"{a.name:<14} {a.role:<11} {a.model:<7} layers={','.join(a.layers)}  tools={len(a.tools)}")
+    s = _system(args)
+    for m in s.modes.values():
+        print(f"{m.name} ({m.root}) - {m.purpose}")
+        for f in m.features.values():
+            rv = f" review={f.review['role']}" if f.review else ""
+            print(f"  {m.name}.{f.name:<10} effects={','.join(f.effects)}{rv}")
+    print("\nroles:")
+    for r in s.roles.values():
+        print(f"  {r.name:<14} agent={r.agent:<12} env={r.env:<16} model={r.inference.model}")
 
 
 def cmd_describe(args):
-    for a in _agents(args):
-        if a.name == args.agent:
-            d = {k: v for k, v in a.__dict__.items() if k not in ("prompt", "source")}
-            d["skills"] = sorted(a.skills)
-            print(json.dumps(d, indent=2, default=str))
-            if args.prompt:
-                print("\n--- prompt ---\n" + a.prompt)
-            return
-    sys.exit(f"no agent '{args.agent}'")
+    s = _system(args)
+    if args.name in s.modes:
+        m = s.modes[args.name]
+        d = {"name": m.name, "version": m.version, "origin": m.root, "purpose": m.purpose, "coordinator": m.coordinator,
+             "roles": m.roles, "constraints": m.constraints, "config": m.config, "endpoints": {}}
+        for f in m.features.values():
+            d["endpoints"][f.name] = {
+                "effects": f.effects, "in": f.in_type, "out": f.out_type, "review": f.review,
+                "dod": [x.__dict__ for x in f.dod], "rules": [r.as_dict() for r in f.rules],
+                "steps": [{k: v for k, v in st.__dict__.items() if k != "resolved" and v not in (None, [], {}, "")}
+                          for st in f.steps]}
+        print(json.dumps(d, indent=2, default=lambda o: o.__dict__ if hasattr(o, "__dict__") else str(o)))
+        return
+    if args.name in s.roles:
+        r = s.roles[args.name]
+        d = {k: v for k, v in r.__dict__.items() if k != "prompt"}
+        d["skills"] = sorted(r.skills)
+        d["inference"] = r.inference.__dict__
+        print(json.dumps(d, indent=2, default=str))
+        if args.prompt:
+            print("\n--- prompt ---\n" + r.prompt)
+        return
+    _die(f"no mode or role '{args.name}' (modes: {', '.join(s.modes)}; roles: {', '.join(s.roles)})")
 
 
-SPEC_TMPL = """apiVersion: agentbay/v1
-kind: AgentSpec
-metadata:
-  name: {name}
-  description: >-
-    TODO: one sentence telling the coordinator when to pick this agent.
-  version: 0.1.0
-spec:
-  model: sonnet
-  layers: [{layers}]
-  isolation: none
-  budget: {{ maxTurns: 30 }}
-  prompt: |
-    You are the {name} agent. TODO: role, method, quality bar.
-"""
-
-LAYER_TMPL = """apiVersion: agentbay/v1
-kind: Layer
-metadata:
-  name: {name}
-  description: TODO
-  tier: domain   # infrastructure | domain | product
-spec:
-  requires: [base]
-  tools: []
-  mcpServers: {{}}
-  skills: []
-  clis: []
-  prompt: |
-    TODO: what agents with this layer should know.
-"""
+# ------------------------------------------------------------------ runtime
+def _dispatcher(args):
+    from bay import dispatch
+    return dispatch.Dispatcher(_system(args), args.project)
 
 
+def _run(fn):
+    from bay import connect, dispatch, vault as v
+    try:
+        res = fn()
+    except (dispatch.CallError, connect.ConnectorError, v.SecretError) as e:
+        _die(f"✗ {e}")
+    _out(res)
+    if isinstance(res, dict) and res.get("status") in ("failed",):
+        sys.exit(2)
+
+
+def cmd_call(args):
+    d = _dispatcher(args)
+    _run(lambda: d.call(args.target, _json_arg(args.input)))
+
+
+def cmd_submit(args):
+    d = _dispatcher(args)
+    _run(lambda: d.submit(args.call, args.step, _json_arg(args.output)))
+
+
+def cmd_use(args):
+    d = _dispatcher(args)
+    _run(lambda: d.use(args.role, args.target, _json_arg(args.input)))
+
+
+# ------------------------------------------------------------------ scaffolds & migrations
 def cmd_new(args):
-    if args.kind == "agent":
-        p = KIT / "specs" / f"{args.name}.yaml"
-        body = SPEC_TMPL.format(name=args.name, layers=", ".join(args.layers.split(",")) if args.layers else "base")
+    from bay import scaffold
+    try:
+        res = scaffold.create(KIT, args.kind, args.name, target=getattr(args, "mode", None),
+                              implements=getattr(args, "implements", None), intent=args.intent,
+                              effects=args.effects.split(",") if getattr(args, "effects", None) else None,
+                              role=getattr(args, "role", None) or "builder")
+    except scaffold.ScaffoldError as e:
+        _die(f"✗ {e}")
+    for f in res["files"]:
+        print(f"  + {f}")
+    for t in res["todo"]:
+        print(f"  TODO {t}")
+
+
+def cmd_migrate(args):
+    from bay import migrate
+    res = migrate.apply(KIT, args.to) if args.confirm else migrate.plan(KIT, args.to)
+    if not args.confirm:
+        print(res["diff"] or "nothing to migrate")
+        for c in res["changes"]:
+            print(f"  {c['op']:<6} {c['path']}  ({c['note']})")
+        if res["changes"]:
+            print("dry run: nothing written. Re-run with --confirm to apply.")
     else:
-        p = KIT / "layers" / args.name / "layer.yaml"
-        (p.parent / "skills").mkdir(parents=True, exist_ok=True)
-        body = LAYER_TMPL.format(name=args.name)
-    if p.exists():
-        sys.exit(f"{p} exists")
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(body)
-    print(f"created {p.relative_to(KIT)}")
+        print(f"applied {res['applied']} change(s)")
+    for n in res["notes"]:
+        print(f"  ! {n}")
 
 
+def cmd_secret(args):
+    import getpass
+    prov = vault.provider(args.provider)
+    value = sys.stdin.readline().rstrip("\n") if not sys.stdin.isatty() else getpass.getpass(f"{args.name}: ")
+    if not value:
+        _die("no value given")
+    vault.remember(value)
+    if not prov.set(args.name, value):
+        _die(f"provider '{args.provider}' cannot store secrets; export {args.name} in your shell instead")
+    print(f"stored {args.name} in {args.provider}")
+
+
+# ------------------------------------------------------------------ ledger
 def cmd_task(args):
     print(protocol.new_task_id())
 
@@ -151,16 +235,22 @@ def _ago(ts: str) -> str:
 
 
 def cmd_status(args):
-    runs = list(ledger.fold(ledger.read(args.project)).values())
+    evs = ledger.read(args.project)
+    runs = list(ledger.fold(evs).values())
+    calls = list(ledger.fold_calls(evs).values())
     if args.json:
-        print(json.dumps([r.__dict__ for r in runs], indent=2))
+        print(json.dumps({"runs": [r.__dict__ for r in runs], "calls": [c.__dict__ for c in calls]}, indent=2))
         return
     live = [r for r in runs if r.state == "running"]
     done = [r for r in runs if r.state != "running"][-args.n:]
-    print(f"RUNNING ({len(live)})")
+    print(f"CALLS ({len(calls)})")
+    for c in calls[-args.n:]:
+        cost = f"posts={c.cost.get('posts', 0)} usd={c.cost.get('usd', 0)}" if c.cost else ""
+        print(f"  {c.call_id:<18} {c.mode + '.' + c.endpoint:<24} {c.state:<8} step={c.last_step:<10} {_ago(c.ts):>4} {cost}")
+    print(f"\nRUNNING AGENTS ({len(live)})")
     for r in live:
         print(f"  {r.run_id[:14]:<14} {r.agent:<14} {r.task_id or '-':<16} {_ago(r.started):>4}  {r.summary[:60]}")
-    print(f"\nRECENT ({len(done)} of {len(runs) - len(live)})")
+    print(f"\nRECENT AGENTS ({len(done)} of {len(runs) - len(live)})")
     for r in done:
         print(f"  {r.run_id[:14]:<14} {r.agent:<14} {r.task_id or '-':<16} {r.state:<9} {r.summary[:70]}")
 
@@ -171,11 +261,10 @@ def cmd_log(args):
 
 
 def _find_run(project, key) -> str:
-    runs = ledger.fold(ledger.read(project))
-    for r in runs.values():
+    for r in ledger.fold(ledger.read(project)).values():
         if r.run_id.startswith(key) or r.task_id == key:
             return r.run_id
-    return key  # allow notes on tasks not yet spawned
+    return key  # allow notes on tasks or calls not yet spawned
 
 
 def cmd_note(args):
@@ -197,17 +286,42 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("validate").set_defaults(fn=cmd_validate)
+    sub.add_parser("lint").set_defaults(fn=lambda a: sys.exit(cmd_lint(a)))
     b = sub.add_parser("build"); b.add_argument("--runtime", default="claude-code"); b.set_defaults(fn=cmd_build)
     c = sub.add_parser("clean"); c.add_argument("--runtime", default="claude-code"); c.set_defaults(fn=cmd_clean)
     sub.add_parser("ls").set_defaults(fn=cmd_ls)
-    d = sub.add_parser("describe"); d.add_argument("agent"); d.add_argument("--prompt", action="store_true"); d.set_defaults(fn=cmd_describe)
-    n = sub.add_parser("new"); n.add_argument("kind", choices=["agent", "layer"]); n.add_argument("name")
-    n.add_argument("--layers", help="comma-separated, agents only"); n.set_defaults(fn=cmd_new)
+    d = sub.add_parser("describe"); d.add_argument("name"); d.add_argument("--prompt", action="store_true")
+    d.set_defaults(fn=cmd_describe)
+
+    ca = sub.add_parser("call", help="run <mode>.<endpoint> with a JSON input ('-' reads stdin)")
+    ca.add_argument("target"); ca.add_argument("input", nargs="?"); ca.set_defaults(fn=cmd_call)
+    su = sub.add_parser("submit"); su.add_argument("call"); su.add_argument("step"); su.add_argument("output")
+    su.set_defaults(fn=cmd_submit)
+    us = sub.add_parser("use"); us.add_argument("--role", required=True); us.add_argument("target")
+    us.add_argument("input", nargs="?"); us.set_defaults(fn=cmd_use)
+
+    for kind in ("mode", "feature", "role", "connector", "env"):
+        k = sub.add_parser(kind, help=f"scaffold a {kind}")
+        ks = k.add_subparsers(dest="action", required=True)
+        n = ks.add_parser("new"); n.add_argument("name"); n.add_argument("--intent")
+        if kind == "feature":
+            n.add_argument("--mode", required=True); n.add_argument("--role")
+            n.add_argument("--effects", help="comma-separated, default read,write")
+        if kind == "connector":
+            n.add_argument("--implements", required=True)
+        n.set_defaults(fn=cmd_new, kind=kind)
+    mg = sub.add_parser("migrate"); mg.add_argument("--to"); mg.add_argument("--confirm", action="store_true")
+    mg.set_defaults(fn=cmd_migrate)
+    se = sub.add_parser("secret"); se.add_argument("action", choices=["set"]); se.add_argument("name")
+    se.add_argument("--provider", default="keychain"); se.set_defaults(fn=cmd_secret)
+
     t = sub.add_parser("task"); t.add_argument("action", choices=["new"]); t.set_defaults(fn=cmd_task)
-    s = sub.add_parser("status"); s.add_argument("-n", type=int, default=10); s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_status)
-    l = sub.add_parser("log"); l.add_argument("-n", type=int, default=20); l.set_defaults(fn=cmd_log)
+    s = sub.add_parser("status"); s.add_argument("-n", type=int, default=10); s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_status)
+    lg = sub.add_parser("log"); lg.add_argument("-n", type=int, default=20); lg.set_defaults(fn=cmd_log)
     no = sub.add_parser("note"); no.add_argument("ref"); no.add_argument("text"); no.set_defaults(fn=cmd_note)
-    r = sub.add_parser("reclaim"); r.add_argument("run"); r.add_argument("--reason", default="reclaimed by coordinator"); r.set_defaults(fn=cmd_reclaim)
+    r = sub.add_parser("reclaim"); r.add_argument("run"); r.add_argument("--reason", default="reclaimed by coordinator")
+    r.set_defaults(fn=cmd_reclaim)
 
     args = ap.parse_args(argv)
     args.project = args.project.resolve()

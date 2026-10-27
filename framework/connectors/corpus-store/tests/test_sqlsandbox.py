@@ -2,6 +2,7 @@
 internal tables, run away, load code or leak a secret stored in an item; every refusal says what to change."""
 import json
 import sqlite3
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -27,13 +28,14 @@ def setup(extra_fixture=None):
     cfg["connectors"] = {"fake": {"fixture": "fx.json"}}
     (p / "agentbay.config.yaml").write_text(yaml.safe_dump(cfg))
     st = connect.instantiate(system(p), "local-feeds-offline", "corpus-store", "items.store/v1", p,
-                             settings={"lookbackMax": "30d", "selectors": [{"id": "home", "in": "home"}]}, clock=clock)
+                             settings={"lookbackMax": "30d", "selectors": [{"id": "home", "in": "home"}],
+                                       "mode": "feed-briefing"}, clock=clock)
     st.sync(lookback="3d")
     return p, st
 
 
 def dbfile(p):
-    return p / ".agentbay/data/feeds/corpus.db"
+    return p / ".agentbay/data/feeds/feed-briefing/corpus.db"
 
 
 def snapshot(p):
@@ -60,9 +62,8 @@ def test_approved_reads_work():
     assert out["rows"] == [["fake:21", "ops"], ["fake:22", "lido"], ["fake:23", "vitalik"]] and out["truncated"] is None
     assert st.sql("SELECT count(*) FROM v_posts WHERE lang IS NULL")["rows"] == [[3]]
     assert st.sql("SELECT count(*) FROM temp.v_items v, json_each(v.matched) j WHERE j.value = 'home'")["rows"] == [[3]]
-    out = st.sql("SELECT v.id FROM items_fts JOIN v_items v ON v.rid = items_fts.rowid "
-                 "WHERE items_fts MATCH '\"proof of stake\"' ORDER BY bm25(items_fts)")
-    assert out["rows"] == [["fake:23"]]
+    out = st.sql("SELECT id, snippet FROM v_fts WHERE fts MATCH '\"proof of stake\"' ORDER BY rank")
+    assert out["rows"] == [["fake:23", "[Proof of stake] research"]]
     out = st.sql("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 5) SELECT sum(i) FROM n")
     assert out["rows"] == [[15]]                          # bounded recursion is fine
 
@@ -199,8 +200,8 @@ def test_comment_and_quoting_tricks():
 
 def test_fts_match_syntax_errors_say_how_to_quote():
     p, st = setup()
-    err = refused(st, "SELECT rowid FROM items_fts WHERE items_fts MATCH '\"unterminated'", "MATCH", "double quotes")
-    err2 = refused(st, "SELECT rowid FROM items_fts WHERE items_fts MATCH 'AND OR'", "MATCH")
+    err = refused(st, "SELECT id FROM v_fts WHERE fts MATCH '\"unterminated'", "MATCH", "double quotes")
+    err2 = refused(st, "SELECT id FROM v_fts WHERE fts MATCH 'AND OR'", "MATCH")
     assert "proof of stake" in err and err2
     refused(st, "SELECT nope FROM v_items", "no such column", "describe")
     refused(st, "SELECT * FROM nowhere", "no such table", "v_items")
@@ -209,6 +210,86 @@ def test_fts_match_syntax_errors_say_how_to_quote():
 def test_missing_store_is_explained():
     p = project()
     st = connect.instantiate(system(p), "local-feeds-offline", "corpus-store", "items.store/v1", p,
-                             settings={"selectors": [{"id": "home"}]}, clock=clock)
+                             settings={"selectors": [{"id": "home"}], "mode": "feed-briefing"}, clock=clock)
     assert "run the mode's sync endpoint first" in st.sql("SELECT 1")["error"]
     assert not dbfile(p).exists()                                     # reads never create the store
+
+
+def plant_out_of_scope(p):
+    """An item from a source that is not bound offline (x) and a fake item no selector matches, both about
+    staking, written straight into the store (the FTS triggers index them like any other row)."""
+    con = sqlite3.connect(dbfile(p))
+    try:
+        for src, xid, body in (("x", "900", "staking leak from an unbound source"),
+                               ("fake", "901", "staking leak no selector matches")):
+            con.execute("INSERT INTO items (source, ext_id, kind, author, body, created_at, fetched_at) "
+                        "VALUES (?, ?, 'post', 'eve', ?, '2026-10-27T11:30:00Z', '2026-10-27T12:00:00Z')", (src, xid, body))
+        con.commit()
+    finally:
+        con.close()
+
+
+def test_full_text_is_scoped_and_fts_tables_are_unreadable():
+    p, st = setup()
+    plant_out_of_scope(p)
+    out = st.sql("SELECT id FROM v_fts WHERE fts MATCH 'staking OR leak' ORDER BY rank")
+    assert out["rows"] == [["fake:22"]]                                  # never the planted rows
+    assert st.sql("SELECT count(*) FROM v_fts")["rows"] == [[3]]
+    assert [i["id"] for i in st.search("staking leak")["items"]] == []
+    assert [i["id"] for i in st.search("staking")["items"]] == ["fake:22"]
+    for t in ("items_fts", "items_fts_content", "items_fts_data", "items_fts_idx", "items_fts_docsize",
+              "items_fts_config", "main.items_fts", '"items_fts_content"'):
+        refused(st, f"SELECT * FROM {t}", "not allowed")
+    refused(st, "SELECT rowid FROM items_fts WHERE items_fts MATCH 'leak'", "items_fts", "v_fts")
+    refused(st, "SELECT snippet(items_fts, 1, '[', ']', '', 5) FROM items_fts WHERE items_fts MATCH 'leak'", "v_fts")
+    refused(st, "SELECT * FROM items_fts('leak')", "v_fts")
+    refused(st, "SELECT count(*) FROM items_fts", "v_fts")
+    refused(st, "SELECT f.c0 FROM v_items v JOIN items_fts_content f ON f.id = v.rid", "not allowed")
+    refused(st, "WITH v_fts AS (SELECT * FROM items_fts) SELECT * FROM v_fts", "WITH clause")
+    err = refused(st, "SELECT * FROM v_items AS items (SELECT 1)", "SQL error")     # no WITH: plain syntax error
+    assert "WITH clause" not in err
+
+
+def test_every_view_accepts_narrow_projections():
+    p, st = setup()
+    assert st.sql("SELECT id, url FROM v_posts WHERE text LIKE '%stake%'")["rows"] == \
+        [["fake:23", "https://example.com/vitalik/status/23"]]                    # the README example
+    for sql, want in (("SELECT url FROM v_items WHERE author = 'lido'", [["https://example.com/lido/status/22"]]),
+                      ("SELECT likes FROM v_posts WHERE id = 'fake:22'", [[None]]),
+                      ("SELECT count(*) FROM v_posts", [[3]]),
+                      ("SELECT kind FROM v_posts GROUP BY kind", [["post"]]),
+                      ("SELECT rank < 0 FROM v_fts WHERE fts MATCH 'staking'", [[1]]),
+                      ("SELECT snippet FROM v_fts WHERE fts MATCH 'module'", [["Staking [module] update"]]),
+                      ("SELECT p.id FROM v_posts p JOIN v_fts f ON f.id = p.id WHERE f.fts MATCH 'research'",
+                       [["fake:23"]])):
+        out = st.sql(sql)
+        assert out.get("error") is None and out["rows"] == want, (sql, out)
+
+
+def test_big_sort_fails_cleanly():
+    extra = [{"id": str(300 + i), "handle": "bulk", "text": f"row {i} " + "z" * 200, "ageHours": 5} for i in range(60)]
+    p, st = setup(extra)
+    box = sqlsandbox.Sandbox(dbfile(p), ["fake"], time_ms=300)
+    try:
+        try:
+            box.run("SELECT a.text || b.text || c.text || d.text AS t FROM v_items a, v_items b, v_items c, v_items d "
+                    "ORDER BY t DESC")
+            raise AssertionError("expected SqlError")
+        except sqlsandbox.SqlError as e:
+            assert "time limit" in str(e) or "MB of memory" in str(e)
+    finally:
+        box.close()
+    # the memory cap itself, in a child process (hard_heap_limit is process-wide and can only be lowered)
+    code = (f"import sys; sys.path.insert(0, {str(Path(sqlsandbox.__file__).parents[1])!r})\n"
+            "from bay import sqlsandbox as s\n"
+            "s.HEAP_BYTES = 6 * 1024 * 1024\n"
+            f"b = s.Sandbox({str(dbfile(p))!r}, ['fake'], time_ms=20000)\n"
+            "try:\n"
+            "    b.run(\"SELECT group_concat(t) FROM (SELECT a.text || b.text || c.text AS t FROM v_items a, v_items b, "
+            "v_items c ORDER BY t DESC)\")\n"
+            "    print('NO ERROR')\n"
+            "except s.SqlError as e:\n"
+            "    print('ERR', e)\n")
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0 and r.stdout.startswith("ERR"), (r.stdout, r.stderr[-500:])
+    assert "MB of memory" in r.stdout or "exceeded" in r.stdout, r.stdout

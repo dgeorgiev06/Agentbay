@@ -1,0 +1,8 @@
+apiVersion: agentbay/v2
+kind: Rules
+rules:
+  - { id: R-1, level: must, statement: "Cite file:line evidence that exists, with the exact text and a rewrite, a measurement or the rule id.", appliesTo: both, refs: [DOD-1] }
+  - { id: R-2, level: must, statement: "Report unused only when the reference graph has 0 references AND the ledger has 0 uses in the window.", appliesTo: both, refs: [DOD-2] }
+  - { id: R-3, level: must, statement: "Name the conformance rule id (C-n) of every conformance finding.", appliesTo: both, refs: [DOD-3] }
+  - { id: R-4, level: must_not, statement: "Modify any artifact; audit writes only the improve store.", appliesTo: both, refs: [DOD-4] }
+  - { id: R-5, level: should, statement: "Judge only the conformance rules listed in manual; detectors already cover the rest.", appliesTo: executor }

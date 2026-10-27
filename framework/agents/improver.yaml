@@ -1,0 +1,6 @@
+apiVersion: agentbay/v2
+kind: Agent
+metadata:
+  name: improver
+  description: Subagent for improve's analyst and auditor roles; reads findings and artifacts through use shims only.
+spec: { runtime: claude-code-subagent, model: sonnet, effort: medium, env: improve-local }

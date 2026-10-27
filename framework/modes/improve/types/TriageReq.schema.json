@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "top": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20,
+      "description": "how many top open findings the analyst examines (default config triageTop)"
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "new": {
+      "type": "array"
+    },
+    "merged": {
+      "type": "array"
+    },
+    "reopened": {
+      "type": "array"
+    },
+    "rejected": {
+      "type": "array"
+    },
+    "annotated": {
+      "type": "array"
+    },
+    "summary": {
+      "type": "array"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "route": {
+      "type": "string"
+    },
+    "draft": {
+      "type": "string"
+    },
+    "next": {
+      "type": "object"
+    },
+    "stopped": {
+      "type": "string"
+    }
+  }
+}

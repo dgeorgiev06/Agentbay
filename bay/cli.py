@@ -15,6 +15,8 @@
 
   mode new <name> | feature new <name> --mode <m> | role new <name>
   connector new <name> --implements <iface> | env new <name>     scaffolds (forge templates)
+  improve decide <id> approve|defer|wontfix   record your decision on a backlog item (approve: terminal only)
+  improve weekly [--since 7d]                 scan + audit + triage + backlog; cron it weekly
   migrate [--confirm]    migrate user content (dry-run diff by default)
   secret set <NAME>      store a secret in the keychain (value read from stdin, never echoed)
 
@@ -221,6 +223,50 @@ def role_use_main(role: str, project: Path, argv: list[str]) -> None:
     _run(lambda: d.use(role, target, _json_arg(inp)))
 
 
+# ------------------------------------------------------------------ improve
+WEEKLY = ("improve.scan", "improve.audit", "improve.triage", "improve.backlog")
+
+
+def cmd_improve_decide(args):
+    """Human decisions on backlog items. approve needs an interactive terminal (never an agent)."""
+    tty = sys.stdin.isatty()
+    if args.decision == "approve":
+        if not tty:
+            _die("✗ bay improve decide ... approve needs an interactive terminal (stdin is not a TTY). Approving a "
+                 "fix is your decision, not an agent's: run it yourself in a terminal.")
+        if input(f"APPROVE {args.id} for implementation on demand? Type yes to confirm: ").strip().lower() != "yes":
+            _die("not confirmed; nothing changed")
+    d = _dispatcher(args)
+    by = "user@tty" if tty else "cli"
+    _run(lambda: d.run_capability("improve", "improve.findings/v1.decide",
+                                  {"id": args.id, "decision": args.decision, "by": by,
+                                   **({"note": args.note} if args.note else {})}))
+    ledger.append(args.project, "note", args.id, source="cli", summary=f"improve decide {args.id} {args.decision}",
+                  data={"kind": "decision"})
+
+
+def cmd_improve_weekly(args):
+    """scan + audit + triage + backlog. Agentic steps come back as step plans, as with any `bay call`."""
+    from bay import connect, dispatch
+    d = _dispatcher(args)
+    out = []
+    for target in WEEKLY:
+        inp = {"since": args.since} if target == "improve.scan" and args.since else {}
+        try:
+            r = d.call(target, inp)
+        except (dispatch.CallError, connect.ConnectorError) as e:
+            r = {"target": target, "status": "failed", "error": str(e)}
+        item = {k: r[k] for k in ("callId", "target", "status") if k in r}
+        if r.get("next"):
+            item["next"] = {k: r["next"][k] for k in ("step", "role", "runAs", "submit") if k in r["next"]}
+        if r.get("output") is not None and target == "improve.backlog":
+            item["output"] = r["output"]
+        if r.get("error"):
+            item["error"] = r["error"]
+        out.append(item)
+    _out({"calls": out, "note": "run each `next` step plan, then `bay submit`; the report is the backlog output"})
+
+
 # ------------------------------------------------------------------ scaffolds & migrations
 def cmd_new(args):
     from bay import scaffold
@@ -396,6 +442,14 @@ def main(argv=None):
     mg.set_defaults(fn=cmd_migrate)
     se = sub.add_parser("secret"); se.add_argument("action", choices=["set"]); se.add_argument("name")
     se.add_argument("--provider", default="keychain"); se.set_defaults(fn=cmd_secret)
+
+    im = sub.add_parser("improve", help="improve backlog: decide items, run the weekly pass")
+    ims = im.add_subparsers(dest="action", required=True)
+    dc = ims.add_parser("decide", help="approve|defer|wontfix a backlog item (approve: interactive terminal only)")
+    dc.add_argument("id"); dc.add_argument("decision", choices=["approve", "defer", "wontfix"])
+    dc.add_argument("--note"); dc.set_defaults(fn=cmd_improve_decide)
+    wk = ims.add_parser("weekly", help="scan + audit + triage + backlog (cron: see README)")
+    wk.add_argument("--since"); wk.set_defaults(fn=cmd_improve_weekly)
 
     t = sub.add_parser("task"); t.add_argument("action", choices=["new"]); t.set_defaults(fn=cmd_task)
     s = sub.add_parser("status"); s.add_argument("-n", type=int, default=10); s.add_argument("--json", action="store_true")

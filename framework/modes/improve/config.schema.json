@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "improve settings (agentbay.config.yaml modes.improve)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "window": { "type": "string", "pattern": "^[0-9]+[mhdw]$", "default": "7d", "description": "Default scan window (sessions started inside it)." },
+    "retention": { "type": "string", "pattern": "^[0-9]+[mhdw]$", "default": "90d", "description": "Verified and wontfix findings not seen for this long are dropped from the store." },
+    "backlogTop": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10, "description": "Items in the weekly backlog report." },
+    "triageTop": { "type": "integer", "minimum": 1, "maximum": 20, "default": 5, "description": "Top open findings the analyst examines per triage." },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Detector thresholds; defaults in bay/improve/detect_sessions.py and detect_artifacts.py.",
+      "properties": {
+        "reviewRounds": { "type": "integer", "minimum": 1 },
+        "ruleRepeat": { "type": "integer", "minimum": 2 },
+        "slowStepMs": { "type": "integer", "minimum": 1 },
+        "costlyStepUsd": { "type": "number", "minimum": 0 },
+        "costlySessionUsd": { "type": "number", "minimum": 0 },
+        "repeatCalls": { "type": "integer", "minimum": 2 },
+        "permissionEvents": { "type": "integer", "minimum": 1 },
+        "interrupts": { "type": "integer", "minimum": 1 },
+        "churnCommits": { "type": "integer", "minimum": 2 },
+        "severeFactor": { "type": "number", "minimum": 1 },
+        "nearDuplicate": { "type": "number", "minimum": 0.3, "maximum": 1 },
+        "contextTokens": { "type": "integer", "minimum": 500 },
+        "maxFindingsPerDetector": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

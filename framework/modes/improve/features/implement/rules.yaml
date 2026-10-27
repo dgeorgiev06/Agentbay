@@ -1,0 +1,8 @@
+apiVersion: agentbay/v2
+kind: Rules
+rules:
+  - { id: R-1, level: must_not, statement: "Implement an item that the user did not approve, or pass the approval gate for the user.", appliesTo: both, refs: [DOD-1] }
+  - { id: R-2, level: must_not, statement: "Edit code, modes, roles, envs or docs; produce only a proposal draft or a task envelope.", appliesTo: both, refs: [DOD-4] }
+  - { id: R-3, level: must, statement: "Every claim in the draft cites a ref from the finding's evidence.", appliesTo: both, refs: [DOD-2] }
+  - { id: R-4, level: must, statement: "Say how improve.verify will show the pattern is gone after the fix.", appliesTo: both, refs: [DOD-3] }
+  - { id: R-5, level: must_not, statement: "Put secret values or transcript text in the draft.", appliesTo: both, check: no_secrets }

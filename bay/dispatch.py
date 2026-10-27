@@ -129,6 +129,24 @@ class Dispatcher:
                       summary=target, data={"input": inp or {}, **({"items": n} if n is not None else {})})
         return out
 
+    def run_capability(self, mode_name: str, run: str, args: dict) -> dict:
+        """Run one connector endpoint of a mode's capability outside any workflow, in the env its code steps use.
+        CLI only (e.g. `bay improve decide`); there is no agent path to it."""
+        if mode_name not in self.sys.modes:
+            raise CallError(f"unknown mode '{mode_name}'")
+        m = self.sys.modes[mode_name]
+        iface, ep = run.rsplit(".", 1)
+        if iface not in m.needs:
+            raise CallError(f"mode {mode_name} does not need {iface}")
+        env, why = model.code_env(self.sys.kit, self.sys.kit.get("Mode", mode_name), iface, self.sys.roles)
+        conns = model.connectors_of(env.spec["bind"].get(iface)) if env else []
+        if len(conns) != 1:
+            raise CallError(f"{run}: {why} must bind exactly one connector for {iface}")
+        bad = [e for e in model.endpoint_effects(self.sys.kit, iface, ep) if e not in env.spec["effects"]]
+        if bad:
+            raise CallError(f"{run}: effects {bad} are not allowed by env {env.name}")
+        return self._invoke(env.name, conns[0], iface, ep, args, settings=self._settings(m), caps={})
+
     # ------------------------------------------------------------ engine
     def _advance(self, mode, feat, state) -> dict:
         while state["cursor"] < len(feat.steps):

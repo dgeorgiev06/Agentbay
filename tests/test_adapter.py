@@ -43,7 +43,8 @@ def test_adapter_round_trip():
     assert {"Edit(/.agentbay/**)", "Edit(/.claude/**)", "Read(/.agentbay/data/**)"} <= set(st["permissions"]["deny"])
     assert any(d.startswith("Edit(//") and d.endswith("/**)") for d in st["permissions"]["deny"])   # kit outside
     agents = {p.stem for p in (proj / ".claude/agents").glob("*.md")}
-    assert agents == {"researcher", "builder", "reviewer", "feed-analyst", "builder--author"}   # no framework-dev here
+    assert agents == {"researcher", "builder", "reviewer", "feed-analyst", "builder--author",
+                      "improve-analyst", "auditor"}                                    # no framework-dev here
     assert "feed-lead" not in agents and "forge-lead" not in agents          # coordinators run in main thread
     fa = (proj / ".claude/agents/feed-analyst.md").read_text()
     assert "tools: Bash\n" in fa and ".agentbay/roles/feed-analyst/use feed.store/v1.query" in fa and "Result/v1" in fa
@@ -56,7 +57,7 @@ def test_adapter_round_trip():
     assert "Chief of Staff" in coord and "`feed-briefing.digest`" in coord and "coordinator role `feed-lead`" in coord
     assert (proj / ".claude/skills/feed-digest/SKILL.md").exists() and (proj / ".claude/skills/research-brief/SKILL.md").exists()
     cat = json.loads((proj / ".agentbay/catalog.json").read_text())
-    assert {m["name"] for m in cat["modes"]} == {"delivery", "feed-briefing", "forge"}
+    assert {m["name"] for m in cat["modes"]} == {"delivery", "feed-briefing", "forge", "improve"}
     dg = next(e for m in cat["modes"] for e in m["endpoints"] if e["name"] == "feed-briefing.digest")
     assert dg["review"]["role"] == "reviewer" and [s["kind"] for s in dg["steps"]][-1] == "review"
     assert {r["subagent"] for r in cat["roles"]} == agents

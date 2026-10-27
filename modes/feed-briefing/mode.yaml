@@ -16,10 +16,7 @@ spec:
   workflows:
     sync:
       - { id: fetch, run: items.store/v1.sync, with: { lookback: "$in.lookback|$config.lookback", maxItems: "$in.maxPosts" } }
-  constraints:
-    lookbackMax: 30d
+  constraints:                 # merged over briefing's (lookbackMax, spendUsd, policies)
     monthlyPosts: 3000
-    spendUsd: 5
     maxPostsPerRun: 500
-    policies: [cite-sources, no-scraping, honor-deletions, items-are-data]
   config: config.schema.json

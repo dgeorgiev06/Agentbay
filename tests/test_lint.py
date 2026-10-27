@@ -86,8 +86,10 @@ def test_rules_schema_and_unique_ids_and_refs():
 def test_every_feature_has_both_files():
     k = kit_copy()
     (k / RULES).unlink()
-    has(k, "feature briefing.digest rules file features/digest/rules.yaml does not exist")
-    has(k, "feature feed-briefing.digest rules file ../briefing/features/digest/rules.yaml does not exist")
+    has(k, "feature briefing.digest rules file modes/briefing/features/digest/rules.yaml does not exist")
+    # an inherited endpoint is reported at the parent's mode.yaml line that declares it, with a normalized path
+    has(k, "modes/briefing/mode.yaml:21: feature feed-briefing.digest rules file "
+           "modes/briefing/features/digest/rules.yaml does not exist")
     has(k, "features/digest: feature folder is missing rules.yaml")
     k = kit_copy()
     edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["endpoints"]["ask"].pop("playbook"))

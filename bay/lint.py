@@ -5,6 +5,7 @@ Every problem is one line, `file:line: message`, naming the concept and the fix.
 """
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -32,10 +33,24 @@ def _where(path: Path, line: int) -> str:
     return f"{model.rel(path)}:{line}"
 
 
+def _ep_where(md: model.Doc, ep_name: str) -> tuple[Path, int]:
+    """The mode.yaml (own, else the nearest ancestor's) that declares endpoint `ep_name`, and its line."""
+    rx = rf"^\s{{4}}{re.escape(ep_name)}:"
+    for d in md.dirs:
+        line = _line_of(d / "mode.yaml", rx, 0)
+        if line:
+            return d / "mode.yaml", line
+    return md.path, 1
+
+
+def _file(md: model.Doc, relpath: str, kit: model.Kit) -> str:
+    """A mode-relative path (possibly inherited, `../briefing/...`) as a normalized kit-relative path."""
+    return os.path.relpath(os.path.normpath(md.dir / relpath), kit.root)
+
+
 def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[str]:
     out: list[str] = []
-    mfile = md.path
-    ep_line = _line_of(mfile, rf"^\s{{4}}{re.escape(ep_name)}:")
+    mfile, ep_line = _ep_where(md, ep_name)
     target = f"{md.name}.{ep_name}"
     dod_ids: list[str] = []
     for key in ("playbook", "rules"):
@@ -43,7 +58,7 @@ def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[
             out.append(f"{_where(mfile, ep_line)}: feature {target} has no `{key}`; add "
                        f"`{key}: features/{ep_name}/{'playbook.md' if key == 'playbook' else 'rules.yaml'}`")
         elif not (md.dir / ep[key]).exists():
-            out.append(f"{_where(mfile, ep_line)}: feature {target} {key} file {ep[key]} does not exist")
+            out.append(f"{_where(mfile, ep_line)}: feature {target} {key} file {_file(md, ep[key], kit)} does not exist")
 
     if ep.get("playbook") and (md.dir / ep["playbook"]).exists():
         pb = pbk.parse(md.dir / ep["playbook"])
@@ -68,8 +83,6 @@ def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[
                        f"framework/rules/{rs}.yaml does not exist")
     if rv and rv.get("when") == "always":
         rn = rv.get("role")
-        rline = _line_of(mfile, rf"^\s{{4}}{re.escape(ep_name)}:", ep_line)
-        rline = _line_of(mfile, r"review:", rline) if rline else rline
         if rn not in kit.docs["Role"]:
             out.append(f"{_where(mfile, ep_line)}: feature {target} review role '{rn}' does not exist "
                        f"(have: {', '.join(sorted(kit.docs['Role']))})")
@@ -150,7 +163,7 @@ def lint_mode(md: model.Doc, kit: model.Kit) -> list[str]:
     for ep_name, ep in s["endpoints"].items():
         used.add(ep["workflow"])
         if ep["workflow"] not in s["workflows"]:
-            out.append(f"{_where(md.path, _line_of(md.path, rf'^\s{{4}}{re.escape(ep_name)}:'))}: feature "
+            out.append(f"{_where(*_ep_where(md, ep_name))}: feature "
                        f"{md.name}.{ep_name} uses unknown workflow '{ep['workflow']}'")
         out += lint_feature(md, ep_name, ep, kit)
     for wf in s["workflows"]:

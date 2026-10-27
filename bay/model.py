@@ -290,7 +290,7 @@ def merge_mode(parent: dict, child: dict, pdir: Path, cdir: Path) -> dict:
     (playbook, rules, config) are rebased so they still resolve from the child's folder. `abstract` is not
     inherited."""
     def rebase(p: str) -> str:
-        return os.path.relpath(pdir / p, cdir)
+        return os.path.normpath(os.path.relpath(os.path.normpath(pdir / p), cdir))
 
     out = copy.deepcopy(parent)
     out.pop("abstract", None)
@@ -788,7 +788,7 @@ def resolve_mode(kit: Kit, md: Doc, roles: dict[str, ResolvedRole], gaps: list[s
             gaps.append(f"{where}: duplicate step id '{d}'" + (" (the review step is injected from mode.yaml review; "
                         "do not add a step called review)" if d == "review" else ""))
         _check_protected(kit, f"{name}.{ep_name}", steps, gaps)
-        pb_path = md.dir / ep["playbook"] if ep.get("playbook") else None
+        pb_path = Path(os.path.normpath(md.dir / ep["playbook"])) if ep.get("playbook") else None
         pb_text, dod = "", []
         if pb_path and pb_path.exists():
             pb = pbk.parse(pb_path)

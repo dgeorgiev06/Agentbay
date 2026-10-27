@@ -249,6 +249,8 @@ def test_inefficient_store_reads_loop_calls_and_oversized_context():
             def sync(self, ids):
                 for i in ids:
                     subprocess.run(["git", "show", i])
+                for attempt in (1, 2):           # a bounded retry, not per-item work
+                    subprocess.run(["git", "fetch"])
         """})
     try:
         c = da.inefficient(arts(root), da.thresholds({}), read_endpoints={"query"})

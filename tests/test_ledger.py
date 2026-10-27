@@ -137,3 +137,15 @@ def test_ledger_scrubs_secret_shaped_text_and_stays_valid_json():
         assert json.loads(raw)["summary"].startswith("[REDACTED:password]")
     finally:
         cleanup(p)
+
+
+def test_secret_scan_catches_planted_secrets_but_not_code_expressions():
+    from bay import secretscan
+    from improve_fixtures import CORES, SECRETS
+    for kind, value in SECRETS.items():
+        assert not any(c in secretscan.scrub(f"x {value} y") for c in CORES), kind
+    for code in ('secret = self.ctx.secrets.get("X_CLIENT_SECRET", optional=True)', "password = getpass.getpass()",
+                 "pwd = args.password", "token = refresh_token_for(user)"):
+        assert secretscan.scrub(code) == code, code
+    cut = "x" * 290 + " " + SECRETS["api-key"]
+    assert "sk-ant" not in secretscan.clip(cut, 300) and "sk-ant" in cut[:300]       # cutting first would leak

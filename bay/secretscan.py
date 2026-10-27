@@ -17,9 +17,12 @@ PATTERNS: list[tuple[str, re.Pattern]] = [
                            r"gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|xox[abprs]-[A-Za-z0-9-]{10,}|"
                            r"AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20,})")),
     ("connection-string", re.compile(r"\b[a-z][a-z0-9+.-]{1,20}://[^\s:/@'\"]+:[^\s@/'\"]+@[^\s'\"]+", re.I)),
-    ("password", re.compile(r"(?i)\b(?:password|passwd|pwd)\s*[=:]\s*(?:\"[^\"]*\"|'[^']*'|\S+)")),
+    # values: quoted, or a bare token that is not a code expression (a call, an attribute chain)
+    ("password", re.compile(r"(?i)\b(?:password|passwd|pwd)\s*[=:]\s*(?:\"[^\"]*\"|'[^']*'|"
+                            r"(?![A-Za-z_][\w.]*\s*[(\[])(?![A-Za-z_]\w*\.\w)\S+)")),
     ("secret-assignment", re.compile(r"(?i)\b(?:api[_-]?key|secret|access[_-]?token|refresh[_-]?token|client[_-]?secret|"
-                                     r"aws_secret_access_key)\s*[=:]\s*[\"']?[A-Za-z0-9/+_.=-]{12,}")),
+                                     r"aws_secret_access_key)\s*[=:]\s*(?:\"[A-Za-z0-9/+_.=-]{12,}\"|"
+                                     r"'[A-Za-z0-9/+_.=-]{12,}'|(?=[A-Za-z0-9/+_=-]*[0-9])[A-Za-z0-9/+_=-]{12,}(?![\w.(]))")),
 ]
 
 

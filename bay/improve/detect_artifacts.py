@@ -71,8 +71,9 @@ def _py(a: Artifacts):
             try:
                 tree = ast.parse(t)
             except (SyntaxError, ValueError, RecursionError) as e:
-                if f["path"] not in a.unparsed:
-                    a.unparsed.append(f"{f['path']}: {type(e).__name__}")
+                msg = f"{f['path']}: {type(e).__name__}"
+                if msg not in a.unparsed:
+                    a.unparsed.append(msg)
                 continue
             yield f["path"], t, tree
 
@@ -319,7 +320,7 @@ def inefficient(a: Artifacts, th: dict, read_endpoints: set[str] | None = None) 
                                              "Cache the parsed store keyed by file size+mtime, or index it, so a "
                                              "query reads only what changed."))
         for loop in ast.walk(tree):
-            if not isinstance(loop, (ast.For, ast.comprehension)):
+            if not isinstance(loop, (ast.For, ast.comprehension)) or _fixed_iterations(loop.iter):
                 continue
             body = loop.body if isinstance(loop, ast.For) else [loop]
             for node in body:
@@ -343,6 +344,14 @@ def inefficient(a: Artifacts, th: dict, read_endpoints: set[str] | None = None) 
                                              "Batch the calls (one call for all items) or move the call out of "
                                              "the loop."))
     return out
+
+
+def _fixed_iterations(it: ast.AST) -> bool:
+    """A literal tuple/list of constants or range(<constant>): a bounded retry or attempt loop, not per-item work."""
+    if isinstance(it, (ast.Tuple, ast.List)):
+        return all(isinstance(e, ast.Constant) for e in it.elts)
+    return isinstance(it, ast.Call) and isinstance(it.func, ast.Name) and it.func.id == "range" \
+        and all(isinstance(a, ast.Constant) for a in it.args)
 
 
 def oversized_context(a: Artifacts, th: dict, roles: list[dict] | None = None) -> list[dict]:

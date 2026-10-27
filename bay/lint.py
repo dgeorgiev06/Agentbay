@@ -237,7 +237,7 @@ SCHEDULED_BY = {"improve.backlog": "`.agentbay/bay improve weekly` (it runs scan
 
 def warnings(kit: model.Kit) -> list[str]:
     """Non-fatal findings: printed by `bay lint`, never fail it."""
-    out = []
+    out = list(getattr(kit, "deprecations", []))
     for md in kit.docs["Mode"].values():
         if md.spec.get("abstract"):
             continue                    # never installed: its children carry the schedule

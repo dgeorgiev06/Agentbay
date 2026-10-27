@@ -25,6 +25,7 @@ from __future__ import annotations
 import difflib
 import importlib.util
 import json
+import re
 import shutil
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
@@ -99,7 +100,41 @@ def _v1_specs_to_roles(kit: Path) -> tuple[list[Change], list[str]]:
     return changes, notes
 
 
-MIGRATIONS = [("0.2.0", _v1_specs_to_roles)]
+USER_GLOBS = ("modes/*/mode.yaml", "modes/*/types/*.json", "modes/*/playbook.md", "modes/*/features/*/*.md",
+              "modes/*/features/*/*.yaml", "modes/*/skills/*/SKILL.md", "roles/*.yaml", "roles/skills/*/SKILL.md",
+              "agents/*.yaml", "envs/*.yaml", "connectors/*/connector.yaml")
+
+
+def _v02_names(kit: Path) -> tuple[list[Change], list[str]]:
+    """0.3.0: user content naming the v0.2 feed contracts, roles or store gets the v0.3 names (bay/aliases.py,
+    the same table that keeps the old names working for one release). Connector code is never rewritten:
+    connectors still implementing a feed interface are listed as needing a hand port."""
+    from . import aliases
+    changes, notes = [], []
+    roles = {f.stem for f in (kit / "roles").glob("*.yaml")} & set(aliases.ROLES)
+    conns = {f.parent.name for f in (kit / "connectors").glob("*/connector.yaml")} & set(aliases.CONNECTORS)
+    for pat in USER_GLOBS:
+        for f in sorted(kit.glob(pat)):
+            old = f.read_text(encoding="utf-8")
+            new = aliases.rewrite_text(old, roles, conns)
+            if new != old:
+                changes.append(Change("update", _rel(kit, f), new,
+                                      note="v0.2 names -> v0.3 (feed.* -> items.*, feed-* roles -> briefing-*, "
+                                           "local-store -> corpus-store)"))
+            if f.name == "connector.yaml":
+                doc = yaml.safe_load(old) or {}
+                impl = (doc.get("spec") or {}).get("implements")
+                if any(i in aliases.IFACES for i in ([impl] if isinstance(impl, str) else impl or [])):
+                    notes.append(f"{_rel(kit, f)}: connector implements a v0.2 feed interface; its code needs a hand "
+                                 f"port to items.source/v1 or items.store/v1 (bay lint explains how). The YAML is "
+                                 f"renamed, the code is not")
+            if f.suffix == ".md" and re.search(r"\.posts\b|`posts`", new):
+                notes.append(f"{_rel(kit, f)}: mentions `posts` from a store result; items.store/v1 returns `items` "
+                             f"(item/v1, id '<source>:<extId>'); update the wording by hand")
+    return changes, notes
+
+
+MIGRATIONS = [("0.2.0", _v1_specs_to_roles), ("0.3.0", _v02_names)]
 
 # ------------------------------------------------------------------ project data
 FEED_DEFAULT_SELECTORS = [{"id": "home"}]     # modes/feed-briefing/config.schema.json default

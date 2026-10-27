@@ -69,7 +69,8 @@ def schema(name: str) -> dict:
 
 def data_schema(ref: str) -> dict:
     """'post/v1' -> schemas/data/post.v1.schema.json"""
-    name, _, ver = ref.partition("/")
+    from .aliases import data_ref
+    name, _, ver = data_ref(ref).partition("/")
     p = SCHEMAS / "data" / f"{name}.{ver}.schema.json"
     if not p.exists():
         raise SpecError(f"unknown data schema '{ref}' (expected {p.relative_to(KIT)})")
@@ -160,6 +161,8 @@ class Kit:
                         self._load(kind, root_name, f, sch)
                     except SpecError as e:
                         self.errors.append(str(e))
+        from . import aliases
+        self.deprecations: list[str] = aliases.apply(self)     # v0.2 names, kept for one release
         self._apply_extends()
         from . import config as cfgmod
         self.config = cfgmod.load(project) if config is None else config
@@ -743,6 +746,8 @@ def resolve_mode(kit: Kit, md: Doc, roles: dict[str, ResolvedRole], gaps: list[s
             mcfg = {**defaults, **mcfg}
     elif mcfg:
         gaps.append(f"agentbay.config.yaml modes.{name}: mode {name} declares no config schema, so it takes no settings")
+    if SOURCE_IFACE in needs and not mcfg.get("selectors"):
+        mcfg["selectors"] = [{"id": "home"}]     # no selectors setting: keep each source's default stream (v0.2)
     constraints = cfgmod.effective_constraints(s.get("constraints", {}), mcfg)
     if "lookback" in mcfg and "lookbackMax" in constraints:
         from .util import duration
@@ -840,9 +845,6 @@ def _check_selectors(kit: Kit, md: Doc, mcfg: dict, roles, gaps: list[str], warn
     if env is None:
         return
     sels = mcfg.get("selectors") or []
-    if not sels:
-        gaps.append(f"agentbay.config.yaml modes.{md.name}.selectors: no selectors; give the mode's config schema a "
-                    f"default or set at least one selector (e.g. {{id: all}})")
     for cn in connectors_of(_bound(env, SOURCE_IFACE)):
         c = kit.get("Connector", cn)
         if c is None:

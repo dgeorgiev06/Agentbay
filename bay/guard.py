@@ -8,7 +8,7 @@ from a subagent. For every subagent agentbay generated (listed in
 .agentbay/guard.json), a Bash command is allowed only when it is ONE simple
 command (no ; && || | > < ` $( or newlines) whose program is either
   * that role's own use shim  (.agentbay/roles/<role>/use ...), or
-  * one of the role's pre-approved command prefixes (from its env's bindings).
+  * one of the role's pre-approved command prefixes (from its env's tool bindings).
 Everything else (.agentbay/bay, other roles' shims, bay/cli.py, security, ...)
 is denied with a reason the subagent sees.
 

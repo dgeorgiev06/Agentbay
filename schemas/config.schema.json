@@ -2,25 +2,36 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agentbay/v2/Config",
   "title": "agentbay.config.yaml",
-  "description": "Per-project user settings. modes.<name> is validated against that mode's config schema; connectors.<name> against the connector's config schema. Settings can only tighten mode constraints and env limits (strictest wins).",
+  "description": "Per-project user settings. modes.<name> is validated against that mode's config schema; connectors.<name> against the connector's config schema. Settings can only tighten mode constraints and env limits (strictest wins). Capabilities are bound only in envs/<env>.yaml; there is no config-level binding override.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "apiVersion": { "const": "agentbay/v2" },
-    "modes": { "type": "object", "additionalProperties": { "type": "object" } },
-    "connectors": { "type": "object", "additionalProperties": { "type": "object" } },
-    "bindings": {
+    "apiVersion": {
+      "const": "agentbay/v2"
+    },
+    "modes": {
       "type": "object",
-      "description": "Per-env connector rebinding: <env> -> <interface>/v<N> -> connector | [connectors]. Re-validated like the env itself; cannot widen network, secrets or fs.",
       "additionalProperties": {
-        "type": "object",
-        "additionalProperties": { "oneOf": [ { "type": "string" }, { "type": "array", "items": { "type": "string" }, "minItems": 1 } ] }
+        "type": "object"
+      }
+    },
+    "connectors": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object"
       }
     },
     "secrets": {
       "type": "object",
       "additionalProperties": false,
-      "properties": { "provider": { "enum": ["keychain", "env"] } }
+      "properties": {
+        "provider": {
+          "enum": [
+            "keychain",
+            "env"
+          ]
+        }
+      }
     }
   }
 }

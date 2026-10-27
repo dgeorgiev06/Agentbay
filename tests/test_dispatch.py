@@ -6,7 +6,7 @@ from helpers import KIT, SECRETS, FakeHttp, MemProvider, clock, jresp, model, pr
 from bay import dispatch, ledger, vault
 
 
-def D(p, kit=KIT, **kw):
+def D(p, kit=None, **kw):
     return dispatch.Dispatcher(system(p, kit), p, clock=clock, **kw)
 
 

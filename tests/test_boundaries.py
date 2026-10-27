@@ -3,7 +3,7 @@ import json
 import subprocess
 import sys
 
-from helpers import KIT, cleanup, project, system, tmpdir
+from helpers import KIT, cleanup, kit_for, project, system, tmpdir
 
 from bay import guard, vault
 from bay.adapters import get
@@ -11,7 +11,7 @@ from bay.adapters import get
 
 def built(config=None):
     p = project(config)
-    get("claude-code").build(system(p), p, KIT)
+    get("claude-code").build(system(p), p, kit_for(p))
     return p
 
 

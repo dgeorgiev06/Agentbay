@@ -48,7 +48,8 @@ The reviewer returns `review.verdict/v1`: per id `pass|fail|n/a`, evidence, seve
 - Role: `prompt`, `doneWhen`, `uses` (`<iface>/v<N>[.<endpoint>]`), default `agent`, optional `inference`, `rules`, `skills`.
 - Agent: `runtime` (`claude-code-main` for coordinators, `claude-code-subagent` for workers), `model`, `effort`, `env`.
 - Environment: `bind` (interface -> connector(s) or `{tools, clis, mcpServers}`), `secrets {provider, allow}`,
-  `network.allow`, `fs {base, read, write}`, `models`, `effects`, `limits`.
+  `network.allow`, `fs {read, write}` (paths relative to the project root), `models`, `effects`, `limits`.
+  Envs are the only place capabilities are bound; `agentbay.config.yaml` cannot rebind them.
 
 Resolution rules (`bay/model.py`) - every gap is reported at once:
 unknown role/agent/env/connector/interface/endpoint; unbound capability; effect not declared by the

@@ -27,8 +27,5 @@ connectors:
   # fake:
   #   fixture: fixtures/posts.json    # optional; built-in sample posts otherwise
 
-# Rebind a capability per env without editing the env (re-checked like the env itself).
-# Try everything offline first with the fake source:
-bindings:
-  local-feeds:
-    feed.source/v1: [fake]            # switch to [x-api] once the X secrets are stored
+# Capabilities are bound only in envs/<env>.yaml. To try everything offline, set
+# `feed.source/v1: [fake]` in envs/local-feeds.yaml (and back to [x-api] for the real timeline).

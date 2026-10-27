@@ -64,17 +64,38 @@ def assert_gap(kit: Path, *needles: str, project: Path | None = None) -> str:
     raise AssertionError(f"no gap containing {needles}; got:\n  " + "\n  ".join(gs))
 
 
+_SOURCE_KITS: dict[str, Path] = {}
+_PROJECT_SOURCE: dict[Path, str] = {}
+
+
+def source_kit(source: str) -> Path:
+    """A read-only kit copy whose envs/local-feeds.yaml binds feed.source/v1 to `source` (envs are the only
+    place capabilities are bound). The shipped kit binds x-api."""
+    if source == "x-api":
+        return KIT
+    if source not in _SOURCE_KITS:
+        k = kit_copy()
+        edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["bind"].update({"feed.source/v1": [source]}))
+        _SOURCE_KITS[source] = k
+    return _SOURCE_KITS[source]
+
+
 def project(config: dict | None = None, source: str = "fake") -> Path:
     p = tmpdir() / "proj"
     p.mkdir()
-    cfg = {"apiVersion": "agentbay/v2", "bindings": {"local-feeds": {"feed.source/v1": [source]}}}
+    cfg = {"apiVersion": "agentbay/v2"}
     cfg.update(config or {})
     (p / "agentbay.config.yaml").write_text(yaml.safe_dump(cfg))
+    _PROJECT_SOURCE[p] = source
     return p
 
 
-def system(project_dir: Path | None, kit: Path = KIT) -> model.System:
-    return model.resolve(model.Kit(kit, project_dir))
+def kit_for(project_dir: Path | None) -> Path:
+    return source_kit(_PROJECT_SOURCE.get(project_dir, "x-api"))
+
+
+def system(project_dir: Path | None, kit: Path | None = None) -> model.System:
+    return model.resolve(model.Kit(kit or kit_for(project_dir), project_dir))
 
 
 class FakeHttp:

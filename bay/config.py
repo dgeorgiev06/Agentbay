@@ -10,8 +10,8 @@
           digest: { extraRules: rules/digest-extra.yaml }
     connectors:
       x-api: { userId: "12345" }
-    bindings:
-      local-feeds: { feed.source/v1: [x-api] }
+
+Capabilities are bound only in envs/<env>.yaml (no override here).
 
 Settings can only tighten: numeric caps take the minimum of mode constraint,
 config and env limit.
@@ -39,6 +39,9 @@ def load(project: Path | None) -> dict:
         return {}
     from .model import schema, schema_errors
     doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    if isinstance(doc, dict) and "bindings" in doc:
+        raise ConfigError(f"{p}: `bindings` was removed in v0.2 (approved 2026-10-27); bind capabilities only in "
+                          f"envs/<env>.yaml, e.g. `feed.source/v1: [fake]` in envs/local-feeds.yaml")
     errs = schema_errors(doc, schema("config"))
     if errs:
         raise ConfigError(f"{p}:\n    " + "\n    ".join(errs))

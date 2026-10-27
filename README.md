@@ -25,7 +25,8 @@ Design: [docs/DESIGN-v0.2.md](docs/DESIGN-v0.2.md). Contracts: [docs/INTERFACES.
 ```bash
 pip install pyyaml jsonschema
 ./bay.sh validate                                   # lint + resolve everything
-cp agentbay.config.example.yaml ~/code/my-repo/agentbay.config.yaml   # binds the offline fake source
+# offline first: in envs/local-feeds.yaml change `feed.source/v1: [x-api]` to `feed.source/v1: [fake]`
+cp agentbay.config.example.yaml ~/code/my-repo/agentbay.config.yaml   # optional settings
 ./bay.sh build --project ~/code/my-repo             # compile into a repo
 cd ~/code/my-repo
 claude                                              # (re)start Claude Code after every build; accept the
@@ -52,7 +53,8 @@ are pure code and finish in one call.
 2. Store the secrets (macOS keychain; values are read from stdin, never echoed):
    `./bay.sh secret set X_CLIENT_ID`, `X_CLIENT_SECRET`, `X_REFRESH_TOKEN`.
    On Linux set `secrets: {provider: env}` and export them instead.
-3. In `agentbay.config.yaml` set `bindings.local-feeds.feed.source/v1: [x-api]` and `connectors.x-api.userId`.
+3. In `envs/local-feeds.yaml` bind `feed.source/v1: [x-api]` (the shipped default; envs are the only place
+   capabilities are bound), set `connectors.x-api.userId` in `agentbay.config.yaml`, and rebuild.
 4. Caps: `maxPostsPerRun`, `monthlyPosts`, `spendUsd` (at `costPerPostUsd`, default $0.005). Sync stops and
    says which cap stopped it before exceeding one.
 

@@ -131,17 +131,9 @@
               "items": {
                 "type": "string"
               }
-            },
-            "base": {
-              "enum": [
-                "project",
-                "kit"
-              ],
-              "default": "project",
-              "description": "What fs paths are relative to: the target project, or the kit (user content / framework)."
             }
           },
-          "description": "Paths are relative to fs.base. Protected kit paths (framework/, bay/, schemas/) are reachable only when listed explicitly; '.' never includes them."
+          "description": "Paths are relative to the project root (the repo the agents work in; for forge that is the agentbay checkout itself). Protected kit paths (framework/, bay/, schemas/) are reachable only when listed explicitly."
         },
         "models": {
           "type": "array",

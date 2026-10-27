@@ -11,7 +11,7 @@ from bay import dispatch, lint, migrate, scaffold
 def digest_tree(root):
     h = hashlib.sha1()
     for p in sorted(root.rglob("*")):
-        if p.is_file() and ".git" not in p.parts and "__pycache__" not in p.parts:
+        if p.is_file() and not {".git", "__pycache__", ".agentbay"} & set(p.parts):   # content, not runtime state
             h.update(str(p.relative_to(root)).encode() + p.read_bytes())
     return h.hexdigest()
 
@@ -85,8 +85,11 @@ def test_scaffold_refuses_framework_names_and_overwrites():
 
 def test_forge_create_runs_scaffold_then_plans_author_builder():
     k = kit_copy()
-    p = project()
-    d = dispatch.Dispatcher(system(p, k), p)
+    other = project()                       # forge refuses a project that is not the agentbay checkout
+    r = dispatch.Dispatcher(system(other, k), other).call("forge.create", {"kind": "role", "name": "x1", "intent": "xxxxx"})
+    assert r["status"] == "failed" and "forge writes the agentbay checkout" in r["error"]
+    assert not (k / "roles/x1.yaml").exists() and not (other / "roles").exists()
+    d = dispatch.Dispatcher(system(k, k), k)   # the checkout is the project: paths resolve inside the kit
     r = d.call("forge.create", {"kind": "role", "name": "digest-writer", "intent": "Writes digests"})
     assert r["status"] == "needs-agent" and r["next"]["runAs"] == "subagent_type=builder--author"
     assert r["next"]["previous"]["scaffold"]["files"] == ["roles/digest-writer.yaml"]
@@ -112,8 +115,7 @@ def test_migrate_dry_run_produces_diff_and_changes_nothing():
     r = subprocess.run([sys.executable, str(k / "bay/cli.py"), "migrate"], capture_output=True, text=True)
     assert r.returncode == 0 and "dry run: nothing written" in r.stdout and digest_tree(k) == h
     # forge.migrate without confirm is also a dry run
-    p = project()
-    out = dispatch.Dispatcher(system(p, k), p).call("forge.migrate", {})
+    out = dispatch.Dispatcher(system(k, k), k).call("forge.migrate", {})
     assert out["status"] == "needs-agent" and out["next"]["kind"] == "review" and digest_tree(k) == h
     res = migrate.apply(k)
     assert res["applied"] == 3 and not (k / "specs").exists() and not (k / "layers").exists()

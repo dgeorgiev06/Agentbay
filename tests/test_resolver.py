@@ -123,16 +123,26 @@ def test_v1_files_are_rejected_with_migration_hint():
     assert_gap(k, "roles/old.yaml", "kind must be Role", "bay migrate")
 
 
-def test_config_rebinding_and_config_schema():
+def test_config_schema_and_removed_bindings_override():
     from helpers import project
-    p = project()
-    s = model.resolve(model.Kit(KIT, p))
-    assert s.kit.docs["Environment"]["local-feeds"].spec["bind"]["feed.source/v1"] == ["fake"]
+    from bay import config
     p = project({"modes": {"feed-briefing": {"lookback": "90d"}}})
     gs = gaps(KIT, p)
     assert any("lookback 90d exceeds mode lookbackMax 30d" in g for g in gs), gs
     p = project({"modes": {"feed-briefing": {"bogus": 1}}})
     assert any("modes.feed-briefing" in g and "bogus" in g for g in gaps(KIT, p))
+    p = project({"bindings": {"local-feeds": {"feed.source/v1": ["fake"]}}})
+    try:
+        model.Kit(KIT, p)
+        raise AssertionError("expected ConfigError")
+    except config.ConfigError as e:
+        assert "`bindings` was removed" in str(e) and "envs/<env>.yaml" in str(e)
+
+
+def test_env_fs_base_is_rejected_with_a_clear_message():
+    k = kit_copy()
+    edit_yaml(k / "framework/envs/local-authoring.yaml", lambda d: d["spec"]["fs"].update({"base": "kit"}))
+    assert_gap(k, "framework/envs/local-authoring.yaml", "fs.base was removed", "relative to the project root")
 
 
 def test_forge_create_cannot_be_placed_in_framework_writing_env():

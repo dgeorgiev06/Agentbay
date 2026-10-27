@@ -14,7 +14,6 @@ returns is the only thing adapters and the dispatcher consume.
 """
 from __future__ import annotations
 
-import copy
 import fnmatch
 import json
 import re
@@ -146,7 +145,6 @@ class Kit:
                         self.errors.append(str(e))
         from . import config as cfgmod
         self.config = cfgmod.load(project) if config is None else config
-        self._apply_bindings()
 
     def _load(self, kind: str, root_name: str, f: Path, sch: str) -> None:
         doc = load_yaml(f)
@@ -156,6 +154,11 @@ class Kit:
         if doc.get("kind") != kind:
             raise SpecError(f"{rel}: kind must be {kind} (found {doc.get('kind')!r}); "
                             f"v0.1 kinds (AgentSpec, Layer) are gone - run `bay migrate`")
+        if kind == "Environment" and isinstance((doc.get("spec") or {}).get("fs"), dict) \
+                and "base" in doc["spec"]["fs"]:
+            raise SpecError(f"{rel}: fs.base was removed in v0.2 (approved 2026-10-27); fs paths are always relative "
+                            f"to the project root - delete `base:` (forge envs expect the project to be the agentbay "
+                            f"checkout)")
         errs = schema_errors(doc, schema(sch))
         if errs:
             raise SpecError(f"{rel}:\n    " + "\n    ".join(errs))
@@ -177,15 +180,6 @@ class Kit:
                 f"rename yours - framework names are reserved")
             return
         self.docs[kind][name] = Doc(kind, name, root_name, f, meta, spec)
-
-    def _apply_bindings(self) -> None:
-        for env_name, binds in (self.config.get("bindings") or {}).items():
-            env = self.docs["Environment"].get(env_name)
-            if env is None:
-                self.errors.append(f"agentbay.config.yaml bindings: unknown env '{env_name}'")
-                continue
-            env.spec = copy.deepcopy(env.spec)
-            env.spec["bind"].update(binds)
 
     # convenience
     def get(self, kind: str, name: str) -> Doc | None:
@@ -748,14 +742,11 @@ def _placed_roles(kit, ep, roles, gaps, where, seen_conn) -> dict[str, ResolvedR
 
 
 def protected_writes(env: Doc) -> list[str]:
-    """Write paths of env that reach the kit's framework/ or bay/."""
-    fs = env.spec.get("fs", {})
-    if fs.get("base", "project") != "kit":
-        return []
+    """Write paths of env that name the kit's framework/, bay/ or schemas/ explicitly."""
     out = []
-    for w in fs.get("write", []):
+    for w in env.spec.get("fs", {}).get("write", []):
         parts = Path(w).parts
-        if w in (".", "") or (parts and parts[0] in PROTECTED):   # "." reaches everything
+        if parts and parts[0] in PROTECTED:
             out.append(w)
     return out
 

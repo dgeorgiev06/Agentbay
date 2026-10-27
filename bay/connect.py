@@ -125,10 +125,10 @@ def secrets_provider(system: model.System, env: model.Doc, override=None):
 
 
 def data_dir(env: model.Doc, project: Path, kit: Path, conn: model.Doc) -> Path:
+    """Connector data lives under the project root (fs paths are always project-relative)."""
     fs = env.spec.get("fs", {})
-    base = kit if fs.get("base", "project") == "kit" else project
     writes = conn.spec.get("needs", {}).get("fs", {}).get("write") or fs.get("write") or ["."]
-    return base / writes[0]
+    return project / writes[0]
 
 
 def instantiate(system: model.System, env_name: str, conn_name: str, iface: str, project: Path, *,

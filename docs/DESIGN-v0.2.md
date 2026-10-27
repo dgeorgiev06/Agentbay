@@ -33,7 +33,8 @@ roles/<name>.yaml
 agents/<name>.yaml
 envs/<name>.yaml
 connectors/<name>/connector.yaml + code + tests/
-agentbay.config.yaml            per-project user settings (validated against mode config schemas)
+agentbay.config.yaml            per-project user settings (validated against mode config schemas);
+                                never binds capabilities - envs/ are the only place bindings live
 
 framework/{interfaces,modes,roles,agents,envs,connectors}/   same layout, shipped and versioned with
                                 the kit; users never edit it. A user name that collides with a
@@ -74,7 +75,7 @@ spec:
     spendUsd: 5
     policies: [cite-sources, no-scraping, honor-deletions]
   needs: [feed.store/v1, feed.source/v1]
-  config: config.schema.json     # what agentbay.config.yaml may set (lookback, caps, exclude...)
+  config: config.schema.json     # what agentbay.config.yaml may set (lookback, retention, caps)
 ```
 
 Step kinds: `run: <capability>/v<N>.<endpoint>` (deterministic code, no agent), `role: <role>` (agentic),
@@ -177,3 +178,41 @@ One framework mode builds agentbay itself (`framework/modes/forge/`), coordinato
 Store: `.agentbay/data/feeds/posts.jsonl` (dedup by `source:id`), cursor state per connector,
 budget usage per UTC month. Lookback: configurable (`3d`, `12h`); API covers about 7 days, the rest comes from the
 store; if the request exceeds store coverage, say so.
+
+## Approved amendments (2026-10-27)
+
+Decided by the user after the independent review of the first implementation.
+
+**Kept (approved as designed):**
+- Role data access through per-role `use` shims: build generates `.agentbay/roles/<role>/use` for every role
+  whose `uses` include read-only connector endpoints. The role is fixed inside the shim; it serves only those
+  endpoints. There is no generic, caller-chosen `--role` entry point.
+- Budget caps `maxPostsPerRun` and `costPerPostUsd` (default $0.005 per post), alongside `monthlyPosts` and
+  `spendUsd`; strictest of mode constraint, project config and env limit wins.
+- Agent `model: inherit` (used by main-thread coordinator agents).
+
+**Removed:**
+- The config-level `bindings` override. `envs/<env>.yaml` is the only place capabilities are bound; an
+  `agentbay.config.yaml` containing `bindings` is rejected with a message pointing to the env. To run offline,
+  bind `feed.source/v1: [fake]` in `envs/local-feeds.yaml`.
+- Env `fs.base`. fs paths are always relative to the project root (the repo agents work in); an env with
+  `fs.base` is rejected. The forge envs (`local-authoring`, `framework-dev`) keep the same paths (`modes`, `roles`,
+  ..., `framework`, `bay`, `schemas`, ...) and resolve exactly as before because forge's project is the agentbay
+  checkout itself: build the kit into itself (`./bay.sh build --project .`). The forge scaffold and migrate
+  connectors refuse to run when the project is not the kit. The framework boundary check flags env write paths
+  that name `framework/`, `bay/` or `schemas/` outside `forge.extend`.
+
+**Fix-round changes (review of the first implementation):**
+- Guard hook: Claude Code permission rules are session-wide and subagent `tools` take bare tool names, so a
+  `PreToolUse(Bash)` hook (`bay/guard.py`, policy `.agentbay/guard.json`) scopes each generated subagent to one
+  simple command at a time: its own use shim or its env's narrow command prefixes. It fails closed for subagents.
+  `settings.json` carries no wildcard; the main thread is pre-approved only for `bay call|submit|status|log|note|task`.
+  `bay secret set` requires a terminal; keychain values never appear in argv.
+- Deletion re-checks: each sync spends up to half its read budget re-checking stored posts inside the source API
+  window (x-api: official `GET /2/tweets?ids=`, batches of 100); posts the source no longer returns are removed
+  and never re-stored.
+- Billing on posts returned: budget usage counts every post the source returns (timeline pages and deletion
+  lookups), not only posts kept; a call never requests more than its remaining read budget.
+- One spelling for capability endpoints (`feed.store/v1.sync`) in run steps and role `uses`; feed.source
+  connectors must declare `source` and `window`; `schedule` is declarative only (lint warns; run it from cron).
+

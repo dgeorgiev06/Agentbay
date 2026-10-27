@@ -16,10 +16,12 @@ class Migrator:
         self.ctx = ctx
 
     def plan(self, to=None) -> dict:
-        return migrate.plan(kit_project(self.ctx), to)
+        kit = kit_project(self.ctx)
+        return migrate.plan(kit, to, project=kit)
 
     def apply(self, to=None) -> dict:
-        return migrate.apply(kit_project(self.ctx), to)
+        kit = kit_project(self.ctx)
+        return migrate.apply(kit, to, project=kit)
 
 
 def create(ctx):

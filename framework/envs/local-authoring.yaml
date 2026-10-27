@@ -19,7 +19,7 @@ spec:
       clis: [git status, git diff, git log, git show]
   fs:
     read: ["."]
-    write: [modes, roles, agents, envs, connectors, agentbay.config.yaml]
+    write: [modes, roles, agents, envs, connectors, agentbay.config.yaml, .agentbay/data]   # .agentbay/data: migrator only (the guard denies .agentbay/ to every subagent)
   models: [haiku, sonnet, opus, inherit]
   effects: [read, write, delete]
   limits: { maxTurns: 60, maxMinutes: 30 }

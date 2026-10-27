@@ -17,7 +17,7 @@
   connector new <name> --implements <iface> | env new <name>     scaffolds (forge templates)
   improve decide <id> approve|defer|wontfix   record your decision on a backlog item (approve: terminal only)
   improve weekly [--since 7d]                 scan + audit + triage + backlog; cron it weekly
-  migrate [--confirm]    migrate user content (dry-run diff by default)
+  migrate [--confirm]    migrate user content and --project data (dry-run diff by default)
   secret set <NAME>      store a secret in the keychain (value read from stdin, never echoed)
 
   task new | status | log | note | reclaim     ledger
@@ -90,6 +90,8 @@ def cmd_validate(args):
     if cmd_lint(args):
         sys.exit(1)
     s = _system(args)
+    for w in s.warnings:
+        print(f"! {w}")
     n_ep = sum(len(m.features) for m in s.modes.values())
     print(f"✓ {len(s.modes)} modes, {n_ep} endpoints, {len(s.roles)} roles, "
           f"{len(s.kit.docs['Environment'])} envs, {len(s.kit.docs['Connector'])} connectors resolve")
@@ -132,7 +134,8 @@ def cmd_describe(args):
     s = _system(args)
     if args.name in s.modes:
         m = s.modes[args.name]
-        d = {"name": m.name, "version": m.version, "origin": m.root, "purpose": m.purpose, "coordinator": m.coordinator,
+        d = {"name": m.name, "version": m.version, "origin": m.root, "extends": m.extends, "purpose": m.purpose,
+             "coordinator": m.coordinator,
              "roles": m.roles, "constraints": m.constraints, "config": m.config, "endpoints": {}}
         for f in m.features.values():
             d["endpoints"][f.name] = {
@@ -294,7 +297,8 @@ def cmd_new(args):
 
 def cmd_migrate(args):
     from bay import migrate
-    res = migrate.apply(KIT, args.to) if args.confirm else migrate.plan(KIT, args.to)
+    # kit content migrates in the kit; project data (e.g. the v0.2 feed store) in --project
+    res = migrate.apply(KIT, args.to, args.project) if args.confirm else migrate.plan(KIT, args.to, args.project)
     if not args.confirm:
         print(res["diff"] or "nothing to migrate")
         for c in res["changes"]:

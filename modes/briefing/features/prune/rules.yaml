@@ -1,0 +1,6 @@
+apiVersion: agentbay/v2
+kind: Rules
+rules:
+  - { id: R-1, level: must, statement: "Honor deletions: an item deleted at the source is removed and never re-stored.", appliesTo: executor, refs: [DOD-1] }
+  - { id: R-2, level: must_not, statement: "Delete anything outside the mode's store file.", appliesTo: executor }
+  - { id: R-3, level: must, statement: "Remove an item for a removed selector only when no remaining selector matches it.", appliesTo: both, refs: [DOD-4] }

@@ -1,0 +1,25 @@
+{
+  "type": "object",
+  "required": ["period", "themes", "coverage"],
+  "additionalProperties": false,
+  "properties": {
+    "period": {
+      "type": "object", "required": ["from", "to"], "additionalProperties": false,
+      "properties": { "from": { "type": "string" }, "to": { "type": "string" } }
+    },
+    "themes": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["title", "summary", "citations"], "additionalProperties": false,
+        "properties": {
+          "title": { "type": "string", "minLength": 3 },
+          "summary": { "type": "string", "minLength": 10 },
+          "selector": { "type": "string", "description": "Selector id the theme groups under, when grouping by selector." },
+          "citations": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*:.+$", "description": "A stored item's url (https://...) or id (<source>:<extId>)." } }
+        }
+      }
+    },
+    "coverage": { "$ref": "items.coverage/v1" },
+    "notes": { "type": "string" }
+  }
+}

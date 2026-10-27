@@ -1,0 +1,7 @@
+apiVersion: agentbay/v2
+kind: Rules
+rules:
+  - { id: R-1, level: must, statement: "Fetch only through official APIs of bound connectors; never scrape.", appliesTo: executor, refs: [DOD-1] }
+  - { id: R-2, level: must, statement: "Stop before any budget cap would be exceeded and report which cap stopped the run.", appliesTo: both, refs: [DOD-2] }
+  - { id: R-3, level: must_not, statement: "Output, logs or the ledger must not contain secret values.", appliesTo: both, check: no_secrets }
+  - { id: R-4, level: must, statement: "Decide which items are kept only with the shared selector matcher (bay/selector.py).", appliesTo: executor, refs: [DOD-5] }

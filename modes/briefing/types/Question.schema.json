@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "required": ["question"],
+  "additionalProperties": false,
+  "properties": {
+    "question": { "type": "string", "minLength": 3 },
+    "since": { "type": "string" },
+    "author": { "type": "string" },
+    "selector": { "type": "string", "description": "Scope the question to one selector id." }
+  }
+}

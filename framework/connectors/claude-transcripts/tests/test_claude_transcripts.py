@@ -172,3 +172,23 @@ def test_connector_window_and_config_root():
         assert not (p / ".agentbay").exists()
     finally:
         cleanup(base)
+
+
+def test_infinite_and_non_finite_numbers_never_fail_a_scan():
+    """JSON allows 1e999 / Infinity / NaN; they are ignored, not converted (OverflowError)."""
+    lines = ['{"type": "assistant", "message": {"id": "m1", "content": [], '
+             '"usage": {"input_tokens": 1e999, "output_tokens": Infinity, "cache_read_input_tokens": NaN}}}',
+             '{"type": "cost-state", "totalCostUSD": Infinity, "totalDuration": 1e999}',
+             '{"type": "assistant", "message": {"id": "m2", "content": [], "usage": {"input_tokens": true}}}']
+    acc = transcripts.parse_stream(lines)
+    ep = transcripts._episode(acc, "cc:x", "session", None)
+    assert ep["tokens"]["total"] == 0 and "costUsd" not in ep
+    json.dumps(ep, allow_nan=False)                                    # nothing non-finite leaks out
+    base, proj, root, files, src = setup()
+    try:
+        with open(next(iter(files.values())), "a") as fh:
+            fh.write("\n" + lines[0] + "\n" + lines[1] + "\n")
+        eps, stats = src.episodes()
+        assert len([e for e in eps if e["kind"] == "session"]) == 2 and not stats["errors"]
+    finally:
+        cleanup(base)

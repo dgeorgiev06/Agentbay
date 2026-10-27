@@ -324,3 +324,28 @@ def test_improve_role_shims_follow_the_kit_script_pattern():
         assert r.returncode != 0 and "not granted" in r.stderr
     finally:
         cleanup(p)
+
+
+def test_use_output_is_secret_scanned():
+    """Values an agent reads through its use shim are scanned like every other output."""
+    p = proj()
+    try:
+        d = D(p)
+        out = d.use("improve-analyst", "session.events/v1.episodes", {"since": "7d"})
+        no_secrets_anywhere(p, out)
+    finally:
+        cleanup(p.parent)
+
+
+
+def test_evidence_rule_ids_must_exist():
+    from datetime import datetime
+    from bay.improve.pipeline import Pipeline
+    p = proj(transcripts=False)
+    try:
+        pl = Pipeline({}, KIT, p, {}, datetime.now())
+        assert pl._resolves({"kind": "rule", "ref": "C-1"}, set()) is None
+        assert pl._resolves({"kind": "rule", "ref": "C-99999"}, set())
+        assert pl._resolves({"kind": "rule", "ref": "R-424242"}, set())
+    finally:
+        cleanup(p.parent)

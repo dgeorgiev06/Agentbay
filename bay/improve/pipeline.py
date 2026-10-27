@@ -11,6 +11,8 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
+import yaml
+
 from .. import model
 from . import conformance, detect_artifacts, detect_sessions, short_hash
 from .store import fingerprint
@@ -94,7 +96,8 @@ class Pipeline:
 
         def text(p):
             try:
-                return art.text(path=p, root=root)["text"]
+                raw = getattr(art, "raw_text", None)     # dispatcher-side only; outputs are scrubbed
+                return raw(path=p, root=root) if raw else art.text(path=p, root=root)["text"]
             except Exception as e:           # refused or unreadable: counted, named in warnings
                 unreadable.append(f"{p}: {type(e).__name__}")
                 return None
@@ -168,6 +171,27 @@ class Pipeline:
                           "conformanceRules": [c["rule"] for c in a.conformance],
                           "unreadable": len(a.unreadable), "unparsed": len(a.unparsed)}}
 
+    def _known_rule_ids(self) -> set[str]:
+        """C-n from framework/rules/conformance.yaml, R-n from every rules.yaml, DOD-n from every playbook."""
+        if getattr(self, "_rule_ids", None) is None:
+            ids: set[str] = set()
+            for base in {self.kit.resolve(), self.project.resolve()}:
+                for f in list(base.glob("framework/rules/*.yaml")) + list(base.glob("**/features/*/rules.yaml")):
+                    if ".agentbay" in f.parts:
+                        continue
+                    try:
+                        doc = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+                    except (OSError, yaml.YAMLError):
+                        continue
+                    for r in doc.get("rules", []) if isinstance(doc, dict) else []:
+                        if isinstance(r, dict) and isinstance(r.get("id"), str):
+                            ids.add(r["id"])
+                for f in base.glob("**/features/*/playbook.md"):
+                    if ".agentbay" not in f.parts:
+                        ids.update(re.findall(r"\[(DOD-[0-9]+)\]", f.read_text(encoding="utf-8", errors="replace")))
+            self._rule_ids = ids
+        return self._rule_ids
+
     def _commit_exists(self, sha: str) -> bool:
         if not SHA.match(sha):
             return False
@@ -199,7 +223,9 @@ class Pipeline:
                     return None
             return f"file {path} does not exist"
         if kind == "rule":
-            return None if re.match(r"^(C|R|DOD)-[0-9]+$", ref) else f"rule {ref} is not a rule id"
+            if not re.match(r"^(C|R|DOD)-[0-9]+$", ref):
+                return f"rule {ref} is not a rule id"
+            return None if ref in self._known_rule_ids() else f"rule {ref} does not exist in any rules file or playbook"
         if kind == "measurement":
             return None
         return f"unknown evidence kind {kind}"

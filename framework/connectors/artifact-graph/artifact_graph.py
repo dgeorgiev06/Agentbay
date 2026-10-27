@@ -30,6 +30,13 @@ class Artifacts:
         return {"root": root, **self._graphs[root]}
 
     def text(self, path, root="project") -> dict:
+        """Endpoint (agents can reach it via a use shim): secret-scanned text."""
+        t = self.raw_text(path, root)
+        return {"path": path, "text": secretscan.scrub(t), "lines": t.count("\n") + 1}
+
+    def raw_text(self, path, root="project") -> str:
+        """Not an interface endpoint: dispatcher-side detectors parse unmodified source (scrubbing
+        first could make code unparseable). Every finding they emit is scrubbed before it is stored."""
         base = self._root(root).resolve()
         p = (base / path).resolve()
         if Path(path).is_absolute() or not p.is_relative_to(base):
@@ -41,8 +48,7 @@ class Artifacts:
             raise ConnectorError(f"artifact-graph: {path} is not a file")
         if p.stat().st_size > MAX_BYTES:
             raise ConnectorError(f"artifact-graph: {path} is larger than {MAX_BYTES} bytes")
-        t = p.read_text(encoding="utf-8", errors="replace")
-        return {"path": path, "text": secretscan.scrub(t), "lines": t.count("\n") + 1}
+        return p.read_text(encoding="utf-8", errors="replace")
 
 
 def create(ctx):

@@ -139,13 +139,36 @@ def test_ledger_scrubs_secret_shaped_text_and_stays_valid_json():
         cleanup(p)
 
 
-def test_secret_scan_catches_planted_secrets_but_not_code_expressions():
+def test_secret_scan_catches_planted_secrets():
+    """The scan is strict on purpose (it may also redact code like `secret = self.ctx.secrets.get(...)`);
+    detectors that parse source read it unscrubbed on the dispatcher side, see the audit test below."""
     from bay import secretscan
     from improve_fixtures import CORES, SECRETS
     for kind, value in SECRETS.items():
         assert not any(c in secretscan.scrub(f"x {value} y") for c in CORES), kind
-    for code in ('secret = self.ctx.secrets.get("X_CLIENT_SECRET", optional=True)', "password = getpass.getpass()",
-                 "pwd = args.password", "token = refresh_token_for(user)"):
-        assert secretscan.scrub(code) == code, code
     cut = "x" * 290 + " " + SECRETS["api-key"]
     assert "sk-ant" not in secretscan.clip(cut, 300) and "sk-ant" in cut[:300]       # cutting first would leak
+
+
+def test_secretscan_catches_bare_values_with_dots_and_digit_less_secrets():
+    from bay import secretscan
+    for t in ("password=Hunter2.Secret!", "password=s3cr3t.pass",
+              "api_key=abcdefghijklmnopqrstuvwxyzABCD", "client_secret=AbCdEfGhIjKlMnOpQrStUv"):
+        assert "[REDACTED" in secretscan.scrub(t), t
+
+
+
+def test_audit_parses_source_that_contains_secret_shaped_code():
+    """Detectors read source unscrubbed (dispatcher-side raw_text) so x_api.py still parses; the text
+    endpoint agents can reach returns the scrubbed version."""
+    import ast
+    import importlib.util
+    from types import SimpleNamespace
+    spec = importlib.util.spec_from_file_location(
+        "artifact_graph", KIT / "framework/connectors/artifact-graph/artifact_graph.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    a = mod.Artifacts(SimpleNamespace(kit=KIT, project=KIT))
+    raw = a.raw_text("connectors/x-api/x_api.py", "kit")
+    ast.parse(raw)
+    assert "[REDACTED" in a.text("connectors/x-api/x_api.py", "kit")["text"]

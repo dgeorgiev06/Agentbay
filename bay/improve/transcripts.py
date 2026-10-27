@@ -15,6 +15,7 @@ The on-disk format is NOT a stable API (docs/research/claude-code-transcripts.md
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from dataclasses import dataclass, field
@@ -226,13 +227,18 @@ def _record(acc: _Acc, rec: dict) -> None:
         acc.cost = rec                                     # running snapshot: the last one wins
 
 
+def _count(v) -> bool:
+    """A usable non-negative, finite number (JSON allows 1e999 / Infinity / NaN; bool is not a count)."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and 0 <= v < 1e15
+
+
 def _tokens(acc: _Acc) -> dict:
     out = {"input": 0, "output": 0, "cacheRead": 0, "cacheCreation": 0}
     for u in acc.usage.values():
         for k, src in (("input", "input_tokens"), ("output", "output_tokens"),
                        ("cacheRead", "cache_read_input_tokens"), ("cacheCreation", "cache_creation_input_tokens")):
             v = u.get(src)
-            if isinstance(v, (int, float)) and v >= 0:
+            if _count(v):
                 out[k] += int(v)
     out["total"] = sum(out.values())
     return out
@@ -259,9 +265,9 @@ def _episode(acc: _Acc, eid: str, kind: str, project_hash: str | None) -> dict:
         ep["project"] = project_hash
     if acc.cost:
         c = acc.cost
-        if isinstance(c.get("totalCostUSD"), (int, float)) and c["totalCostUSD"] >= 0:
+        if _count(c.get("totalCostUSD")):
             ep["costUsd"] = round(float(c["totalCostUSD"]), 6)
-        if isinstance(c.get("totalDuration"), (int, float)) and c["totalDuration"] >= 0:
+        if _count(c.get("totalDuration")):
             ep["durationMs"] = int(c["totalDuration"])
     if not ep["envGaps"]:
         ep.pop("envGaps")
@@ -434,7 +440,7 @@ class TranscriptSource:
                     stats["skippedOld"] += 1          # mtime prefilter: nothing in it can be in the window
                     continue
                 eps, st = parse_session(path, self.root, self.project)
-            except (OSError, MemoryError, RecursionError) as e:
+            except Exception as e:                 # any failure is one file's problem, never the scan's
                 stats["errors"].append({"file": f"{_id(path.stem)}.jsonl", "error": type(e).__name__})
                 continue
             if st.get("otherProject"):

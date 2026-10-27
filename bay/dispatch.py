@@ -127,7 +127,7 @@ class Dispatcher:
         n = len(out.get("posts", [])) if isinstance(out, dict) else None
         ledger.append(self.project, "data.read", f"use:{role}", source="dispatcher", role=role, env=env.name,
                       summary=target, data={"input": inp or {}, **({"items": n} if n is not None else {})})
-        return out
+        return secretscan.scrub_obj(json.loads(vault.redact(json.dumps(out, ensure_ascii=False))))
 
     def run_capability(self, mode_name: str, run: str, args: dict) -> dict:
         """Run one connector endpoint of a mode's capability outside any workflow, in the env its code steps use.

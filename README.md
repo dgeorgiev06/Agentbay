@@ -9,15 +9,15 @@ budgets and secrets, and logs every step.
 
 ```
 Chief of Staff (your main Claude Code session)
-  └─ bay call feed-briefing.digest ──> Mode feed-briefing, feature digest
-        refresh   run: feed.store/v1.sync   ─ code ─> Env local-feeds ─> Connector local-store ─> Connector x-api (api.x.com)
-        gather    run: feed.store/v1.query  ─ code
-        themes    role: feed-analyst     ─ Agent analyst (subagent, sonnet) in Env local-feeds
-        review    role: reviewer         ─ Agent critic (subagent, opus), from the feature's review block
+  └─ bay call feed-briefing.digest ──> Mode feed-briefing (extends briefing), feature digest
+        refresh   run: items.store/v1.sync   ─ code ─> Env local-feeds ─> Connector corpus-store ─> Connector x-api (api.x.com)
+        gather    run: items.store/v1.query  ─ code
+        themes    role: briefing-analyst  ─ Agent analyst (subagent, sonnet) in Env local-feeds
+        review    role: reviewer          ─ Agent critic (subagent, opus), from the feature's review block
 ```
 
 Read it top to bottom: **mode -> role -> agent -> env -> connector**. Modes name
-capabilities (`feed.source/v1`), never tools. Agents never see secrets or connectors.
+capabilities (`items.source/v1`), never tools. Agents never see secrets or connectors.
 Design: [docs/DESIGN-v0.2.md](docs/DESIGN-v0.2.md). Contracts: [docs/INTERFACES.md](docs/INTERFACES.md).
 
 ## Quickstart (5 minutes, offline)
@@ -34,21 +34,63 @@ claude                                              # (re)start Claude Code afte
 
 Then ask: *"brief me on the last 3 days"*. The Chief of Staff runs the digest:
 
-1. `.agentbay/bay call feed-briefing.digest '{"since": "3d"}'` - the dispatcher syncs the store from the
-   source (code, no agent), gathers stored posts and returns `needs-agent` for step `themes`.
-2. It runs the `feed-analyst` subagent with the plan (playbook, rules, Definition of Done, posts) and
+1. `.agentbay/bay call feed-briefing.digest '{"since": "3d"}'` - the dispatcher syncs the corpus store from
+   the source (code, no agent), gathers stored posts and returns `needs-agent` for step `themes`.
+2. It runs the `briefing-analyst` subagent with the plan (playbook, rules, Definition of Done, posts) and
    submits its Digest: `.agentbay/bay submit <callId> themes '<digest json>'`.
-3. Deterministic checks run (every citation is a stored post), then `needs-agent` for step `review`:
+3. Deterministic checks run (every citation is a stored item's url or id), then `needs-agent` for step `review`:
    the `reviewer` subagent (opus) returns one verdict per DoD/rule id; `.agentbay/bay submit <callId> review '<verdict>'`.
 4. The call ends `done` (or `partial` if a must item failed) with the digest, check results and cost.
    `.agentbay/bay status` shows the call, its steps and posts/USD used.
 
+Questions work the same way: *"what did people say about Solana custody?"* runs `feed-briefing.ask`. The
+analyst answers through read-only SQL: it runs `items.store/v1.describe`, narrows with `items.store/v1.sql`
+(`SELECT id, url, ... FROM v_posts WHERE ...`), reads the few posts it relies on with `items.store/v1.get`,
+and cites item ids (`x:1849...`). The Chief of Staff turns the ids into links when it delivers the answer.
+
 You can drive the same steps by hand from a shell; `feed-briefing.sync` and `feed-briefing.prune`
 are pure code and finish in one call.
 
+### Selectors: what to keep
+
+`modes.feed-briefing.selectors` in agentbay.config.yaml says which posts are kept. The default `[{id: home}]`
+keeps the home timeline, as in v0.2:
+
+```yaml
+modes:
+  feed-briefing:
+    selectors:
+      - { id: home }                                     # the home timeline (default)
+      - { id: staking, in: list:1585430245762441216 }    # an X List (needs scope list.read)
+      - { id: vitalik, from: vitalik, not: { text: giveaway } }
+```
+
+Fields: `from`, `to`, `subject`, `text`, `in` (folder, label, list, channel), `has`, `since`, `not`. Fields
+within a selector are ANDed, selectors are ORed, and `not` excludes. Each source connector declares which
+fields its own search handles (`spec.selectors` in connector.yaml). The store fetches with that native part
+and then re-applies the whole selector with one shared matcher, so behaviour is the same on every source.
+
+Every item records `matched: [selector ids]`, so a digest or question can be scoped with `{"selector": "staking"}`.
+
+- Change a selector and the next sync re-matches stored posts without refetching them.
+- Add one and it backfills its lookback window.
+- Remove one and its posts disappear from answers at once; `prune` deletes them.
+
+`bay validate` errors on a field a source cannot express. It warns when a field is matched only locally on
+a paid source (for example `text` on X, where every post the native query returns is billed).
+
+### Upgrading a v0.2 store
+
+v0.2 kept posts in `.agentbay/data/feeds/posts.jsonl` + `state.json`; v0.3 uses one SQLite file per mode
+(`corpus.db`, owner-only). Convert it once: `./bay.sh migrate --project ~/code/my-repo` shows a dry-run diff;
+add `--confirm` to apply. Cursors, coverage, monthly budget, deletions and deletion-check times are kept, so the
+next sync is incremental and posts deleted at the source never come back. The old files are renamed
+`*.v0.2.bak`, not deleted.
+
 ### Real X timeline
 
-1. Create an X app with OAuth 2.0 (scopes `tweet.read users.read offline.access`) and authorize your account.
+1. Create an X app with OAuth 2.0 (scopes `tweet.read users.read offline.access`, plus `list.read` if you
+   use `in: list:<id>` selectors) and authorize your account.
 2. Store the secrets (macOS keychain; values are read from stdin, never echoed):
    `./bay.sh secret set X_CLIENT_ID`, `X_CLIENT_SECRET`, `X_REFRESH_TOKEN`.
    On Linux set `secrets: {provider: env}` and export them instead.
@@ -62,11 +104,13 @@ are pure code and finish in one call.
 
 ```
 schemas/               the contracts (agentbay/v2) + data schemas
-interfaces/            feed.source/v1, feed.store/v1
-modes/feed-briefing/   sync, digest, ask, prune (features/<f>/playbook.md + rules.yaml)
+interfaces/            items.source/v1, items.store/v1
+modes/briefing/        abstract base: sync, digest, ask, prune (features/<f>/playbook.md + rules.yaml),
+                       skills digest, grounded-qa, corpus-sql
+modes/feed-briefing/   extends briefing: X posts (own purpose, caps, config defaults, sync input)
 modes/delivery/        research, build (+review): the v0.1 behaviour
-roles/  agents/  envs/ feed-lead, feed-analyst / analyst, lead / local-feeds
-connectors/            x-api (official X API v2), local-store (JSONL store), fake (offline)
+roles/  agents/  envs/ briefing-lead, briefing-analyst / analyst, lead / local-feeds(-offline)
+connectors/            x-api (official X API v2: home timeline, Lists, user timelines), fake (offline)
 framework/             shipped with the kit, never edited by users:
   modes/forge/         create | extend | migrate - agentbay building agentbay
   modes/improve/       scan | audit | triage | backlog | implement | verify - evidence-backed improvement backlog
@@ -75,9 +119,11 @@ framework/             shipped with the kit, never edited by users:
   agents/ envs/        worker, critic, author, framework-builder, improve-main, improver /
                        workspace, local-authoring, framework-dev, improve-local
   interfaces/ connectors/  session.events, review.verdicts, artifacts.read, improve.detect, improve.findings /
-                       ledger, git, claude-transcripts, artifact-graph, improve-detect, improve-store
+                       corpus-store (SQLite items store + SQL sandbox), ledger, git, claude-transcripts,
+                       artifact-graph, improve-detect, improve-store, migrator, scaffold
 coordinator/           Chief of Staff prompt + slash commands
-bay/                   resolver, lint, dispatcher, connectors runtime, adapter, ledger, hook, CLI;
+bay/                   resolver (incl. mode `extends`), lint, dispatcher, connectors runtime, adapter, ledger,
+                       hook, CLI, selector.py (shared matcher), sqlsandbox.py (read-only agent SQL);
                        bay/improve/ (transcript parser, detectors, conformance checks, findings store)
 tests/                 python3 tests/run.py
 ```
@@ -93,7 +139,7 @@ tests/                 python3 tests/run.py
 | `bay submit <callId> <step> '<json>'` | hand back a step's output or approve a gate |
 | `bay status`, `bay log` | calls, steps, agent runs, cost |
 | `bay mode\|feature\|role\|connector\|env new <name>` | scaffold (same templates as `forge.create`) |
-| `bay migrate [--confirm]` | migrate your content to this version (dry run by default) |
+| `bay migrate [--confirm] [--project <repo>]` | migrate your content (and that project's v0.2 store) to this version (dry run by default) |
 | `bay note <ref> "text" [--instruction]` | record a note (or a mid-run instruction change) on a run, task or call; never creates a run |
 | `bay improve weekly` / `bay improve decide <id> approve\|defer\|wontfix` | weekly improve pass / your decision on a backlog item (approve: your terminal only) |
 
@@ -134,9 +180,13 @@ roles read findings only through their use shims; transcript files are read only
 
 ## Adding things
 
-- **A source** (e.g. Bluesky): `bay connector new bsky --implements feed.source/v1`, implement `fetch`,
-  then in `envs/local-feeds.yaml` add `bsky` to the `feed.source/v1` binding and add its API host to
+- **A source** (e.g. Bluesky): `bay connector new bsky --implements items.source/v1`, implement `fetch`
+  (return item/v1 items, e.g. post/v1) and fill `spec.selectors` (which selector fields its API handles),
+  then in `envs/local-feeds.yaml` add `bsky` to the `items.source/v1` binding and add its API host to
   `network.allow` and its secret names to `secrets.allow`. Modes, roles and playbooks do not change.
+- **A briefing for another kind of source**: a mode with `extends: briefing` that sets its purpose, constraints
+  and config defaults, and overrides only what differs (an endpoint's review, a workflow, a playbook, roles).
+  Everything else (features, rules, skills, the analyst role) is inherited at build time.
 - **A feature**: `bay feature new weekly --mode feed-briefing --effects read` (role defaults to the mode's
   first worker role); fill the
   playbook's Definition of Done and the rules; `bay lint`. Review is on by default for write/spend/delete features.
@@ -170,6 +220,13 @@ it cannot contain code once something runs it. Hard isolation needs an OS sandbo
   interpreters) prompts you. In the main thread only `bay show|status|log|note|task` are pre-approved;
   `bay call` and `bay submit` run connector code, so Claude Code asks each time.
 - **Approval gates are yours:** `bay approve <callId>` works only in your own terminal.
+- **Agent SQL is sandboxed.** `items.store/v1.sql` is defended in layers:
+  - the connection opens read-only (`mode=ro`, `query_only`);
+  - an authorizer allows only SELECT over `v_items`, `v_posts` and `items_fts`, plus an allowlist of functions;
+  - WITH clauses may not reuse a view or table name;
+  - a time limit and row, byte and value-size caps.
+
+  Item text is secret-scrubbed when it is stored, and every read is redacted and scanned again.
 - **What subagents cannot touch** (guard hook on Bash and every file tool, plus `Edit` deny rules in
   settings.json): `.agentbay/` (control plane, store, call state), `.claude/`, `.git`, `CLAUDE.md`, `.mcp.json`,
   `agentbay.config.yaml`, `.env*`, `.envrc`, `Makefile`, `bay.sh`, `.vscode/`, `.idea/`, `.github/workflows/`,

@@ -1,4 +1,4 @@
-# agentbay interfaces (v0.2)
+# agentbay interfaces (v0.3)
 
 The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN-v0.2.md](DESIGN-v0.2.md).
 
@@ -26,7 +26,8 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN-v0
 | 6 | **Dispatcher** (`bay call/submit/use`) | `bay/dispatch.py` | rarely |
 | 7 | **TaskEnvelope / Result** | `schemas/task.schema.json` | rarely; version-bump it |
 | 8 | **LedgerEvent** | `schemas/event.schema.json` | rarely; version-bump it |
-| 9 | **Data**: feed.post/v1, feed.coverage/v1, review.verdict/v1, session.episode/v1, improve.finding/v1 | `schemas/data/` | version-bump it |
+| 9 | **Data**: item/v1 (+ kind extension post/v1), selector/v1, items.coverage/v1, review.verdict/v1, session.episode/v1, improve.finding/v1 | `schemas/data/` | version-bump it |
+| 11 | **Briefing sources and corpus store**: items.source/v1, items.store/v1, selectors, read-only SQL | `interfaces/items.*.yaml`, `bay/selector.py`, `bay/sqlsandbox.py` | you add a source kind or a view |
 | 10 | **Conformance rules** | `framework/rules/conformance.yaml`, `schemas/conformance.schema.json` | you change what "fits the framework" means |
 
 ## 1. Mode and features
@@ -35,7 +36,18 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN-v0
 `review: {role, when: always|never, model?, effort?}` and optional `agents: {role: agent}` placement.
 Workflows are ordered steps: `run: <capability>/v<N>.<endpoint>` (code), `role: <role>` (agentic),
 `gate: <text>` (approval), `{review: here}` (position of the injected review step).
-Modes name capabilities (`needs: [feed.store/v1]`), never connectors or tools.
+Modes name capabilities (`needs: [items.store/v1]`), never connectors or tools.
+
+**Inheritance.** `extends: <mode>` is resolved when the kit is loaded (`bay/model.py` `merge_mode`), so the
+resolver, lint, conformance, improve and adapters always see a complete mode.
+- **Endpoints** merge key by key, so a child can override one feature's review, in/out, playbook or rules.
+- **Workflows** are replaced per workflow; `roles` and `coordinator` are replaced.
+- **Constraints and inference** merge; `needs` are unioned.
+- **Inherited paths** (playbook, rules, config) are rebased to the child's folder. Types, skills and the
+  coordinator `playbook.md` are looked up in the child first, then its ancestors.
+- **Validation.** A child file may be partial; the merged result is validated against the full schema.
+- **Errors.** Inheritance cycles and missing parents are reported with the file to fix.
+- **`abstract: true`** marks a base that is linted but never resolved, installed or called. It is not inherited.
 
 ## 2. Playbook + rules
 Playbook H2 sections in order: Purpose, Inputs, Steps (numbered), Definition of Done
@@ -64,7 +76,8 @@ Interfaces: named endpoints with JSON-schema `in`/`out` and `effects` (`read|wri
 `binding: connector` (code) or `tools` (runtime tools). A connector is `connector.yaml` + `entry` exposing
 `create(ctx)`; `ctx` gives `config`, `secrets.get/store` (names allowed by env AND connector only),
 `http.request` (env allowlist enforced before every request, HTTPS only), `data_dir`, `caps`, `settings`,
-`sources` (connectors for capabilities it `needs`), `clock`.
+`sources` (connectors for capabilities it `needs`), `clock`, and for items.source connectors `source_id`,
+`window`, `cost_per_post` and `selectors` (the capability table).
 
 ## 5. Adapter
 ```python
@@ -115,10 +128,64 @@ effort?, occurrences, priority (impact x frequency / effort), status (open|appro
 verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, detector key).
 An endpoint review block may name framework rule sets: `review: { ..., rulesets: [conformance] }`.
 
+## 10. Briefing: items, selectors and the corpus store
+- **`item/v1`** is the envelope:
+  - `id` (`<source>:<extId>`, unique, what agents cite), `extId`, `source`, `kind`;
+  - `author {handle?, name?, email?}`, `title`, `text`, `url`, `createdAt`, `fetchedAt`;
+  - `container`, `labels[]`, `threadId`;
+  - `matched[]`, set by the store.
+
+  Kind extensions add fields. `post/v1` adds `lang` and `metrics`, using `allOf` item/v1 and
+  `unevaluatedProperties: false`. The store validates each item against `<kind>/v1` when that schema exists.
+- **`selector/v1`**: `{id, from?, to?, subject?, text?, in?, has?, since?, not?}`.
+  - Every field takes one value or a list (any value matches).
+  - Fields within a selector are ANDed, selectors are ORed, and `not` excludes when any of its fields matches.
+  - The matcher is `bay/selector.py` `matches()`. It is the only place that decides which items are kept.
+- **Connector capability table**: `spec.selectors: {<field>: native|local | {mode, as}}`.
+  - `split()` turns a selector into a native query and a local filter.
+  - Selectors with the same native query share one fetch and one cursor.
+  - A field the source does not list cannot be expressed: `bay validate` errors.
+  - A `local` field on a paid source (`costPerPostUsd` > 0) gets a validate warning.
+- **`items.source/v1.fetch {query, since | cursor, maxItems, checkIds}`** returns
+  `{items, cursor, truncated, billed, checked?, deleted?, requests?, warnings?}`. It makes one call per
+  distinct native query and is never billed beyond `maxItems`.
+- **`items.store/v1`**: sync and prune run as dispatcher code steps, with effects network, spend, write /
+  write, delete. The read endpoints, which agents reach through use shims, are:
+  - `describe`: views, columns, row counts, samples, FTS and limits;
+  - `sql {sql, limit?}`;
+  - `get {ids}`, `thread {id}`;
+  - `facets {field}`, `search {text}`, `query {since, until, author, text, selector, ids}`;
+  - `status {since?}`: coverage, budget, per-selector counts, engine, and `stale` when the selectors changed.
+
+  `sync` re-matches stored items when the selectors changed. A new selector backfills its lookback. Items no
+  selector matches are hidden at once, and `prune` deletes them.
+- **corpus-store** (framework connector) keeps one `corpus.db` per env data folder, mode 0600, in WAL mode,
+  with `user_version` = 1:
+  - `items` (unique source + ext_id);
+  - `item_selectors`;
+  - `items_fts` (FTS5 over title, body and author, own content, kept by triggers);
+  - `state` (cursors per `<connector>|<native query>`, coverage, budget, deleted, checked, selectors).
+
+  Without FTS5 the store falls back to LIKE matching, and `bay validate` warns.
+- **Agent SQL** (`bay/sqlsandbox.py`):
+  - temp views `v_items` and `v_posts`, limited to the env's bound sources and to items matching a selector;
+  - `mode=ro` + `query_only`;
+  - an authorizer: SELECT/READ on those views, `items_fts` (and its shadow tables), json_each and CTEs, and a
+    function allowlist; everything else is denied;
+  - no WITH clause named like a view or store table;
+  - a 2 s progress-handler limit, a 1 MB value limit, 200/1000 rows, 200 kB per result and 4,000 characters
+    per cell.
+
+  Errors are returned as `error`, saying what to change. Item text is secret-scrubbed at ingest, and every
+  read is redacted and scanned.
+- **Migration**: `bay migrate --project <repo>` (and forge.migrate) converts a v0.2 `posts.jsonl` +
+  `state.json` into `corpus.db`. It shows a dry-run diff first, and `--confirm` applies it.
+
 ## Extension recipes
-- **New source** -> `bay connector new bsky --implements feed.source/v1` (template sets `source` and
-  `window`, which lint requires), implement `fetch`, then in the env add `bsky` to the `feed.source/v1`
+- **New source** -> `bay connector new bsky --implements items.source/v1` (template sets `source`, `window` and a
+  `selectors` table, which lint requires), implement `fetch`, then in the env add `bsky` to the `items.source/v1`
   binding and its host/secret names to `network.allow`/`secrets.allow`. Modes, roles and playbooks are untouched.
+- **New kind of briefing** -> a mode with `extends: briefing` (purpose, constraints, config defaults, overrides).
 - **New feature** -> `bay feature new weekly --mode feed-briefing --effects read`, fill the playbook and rules, `bay lint`.
 - **New mode / role / env** -> `bay mode new <name>` / `bay role new <name>` / `bay env new <name>`, or `bay call forge.create`.
 - **New runtime** -> implement `Adapter`, register it, `./bay.sh build --runtime <name>`. Modes do not change.

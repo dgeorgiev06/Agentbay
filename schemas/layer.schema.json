@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/v1/Layer",
+  "title": "Layer",
+  "description": "A reusable bundle of capability (tools, MCP servers, skills, CLIs, prompt fragment). Agents are composed from layers, like image layers.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "agentbay/v1" },
+    "kind": { "const": "Layer" },
+    "metadata": {
+      "type": "object",
+      "required": ["name", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,40}$" },
+        "description": { "type": "string" },
+        "version": { "type": "string", "default": "0.1.0" },
+        "tier": { "enum": ["infrastructure", "domain", "product"], "default": "domain" }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requires": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "tools": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "mcpServers": {
+          "type": "object",
+          "description": "Servers this layer brings. Merged into the runtime's MCP config. Agents still only get the MCP tools listed in `tools` (e.g. mcp__github__get_issue).",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "type": { "enum": ["stdio", "http", "sse"], "default": "stdio" },
+              "command": { "type": "string" },
+              "args": { "type": "array", "items": { "type": "string" } },
+              "url": { "type": "string" },
+              "env": { "type": "object", "additionalProperties": { "type": "string" } }
+            }
+          }
+        },
+        "skills": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Skill folder names under layers/<layer>/skills/." },
+        "clis": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Pre-approved command prefixes, e.g. \"git diff\" or \"jq\". Compiled to Bash(<prefix>:*). Keep them narrow." },
+        "prompt": { "type": "string", "default": "" }
+      }
+    }
+  }
+}

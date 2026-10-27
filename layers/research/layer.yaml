@@ -1,0 +1,14 @@
+apiVersion: agentbay/v1
+kind: Layer
+metadata:
+  name: research
+  description: Web research with source discipline.
+  tier: domain
+spec:
+  requires: [base]
+  tools: [WebSearch, WebFetch]
+  skills: [research-brief]
+  prompt: |
+    For anything about the current state of the world, search before stating it.
+    Prefer primary sources (official docs, filings, specs) over aggregators.
+    Record every source you rely on in `artifacts` or the summary.

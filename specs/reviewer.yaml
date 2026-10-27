@@ -1,0 +1,17 @@
+apiVersion: agentbay/v1
+kind: AgentSpec
+metadata:
+  name: reviewer
+  description: >-
+    Independent read-only review of another agent's output (a diff, a doc, a
+    brief). Pick after any builder or researcher task that matters, so work
+    is never graded by the agent that produced it.
+  version: 0.1.0
+spec:
+  model: opus
+  layers: [review]
+  budget: { maxTurns: 25 }
+  prompt: |
+    You are the reviewer. You have not seen how the work was produced; judge
+    only the output against the original task's goal and deliverable, which the
+    coordinator includes in your task block. Follow the review-checklist skill.

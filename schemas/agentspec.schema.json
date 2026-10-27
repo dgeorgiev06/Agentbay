@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/v1/AgentSpec",
+  "title": "AgentSpec",
+  "description": "The 'image' for an agent: what it is, what it can touch, and what it accepts/returns. Runtime-agnostic; adapters compile it.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "agentbay/v1" },
+    "kind": { "const": "AgentSpec" },
+    "metadata": {
+      "type": "object",
+      "required": ["name", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,40}$" },
+        "description": { "type": "string", "minLength": 10, "description": "When a coordinator should pick this agent. Written for the coordinator, not humans." },
+        "version": { "type": "string", "default": "0.1.0" },
+        "labels": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": ["model", "prompt"],
+      "additionalProperties": false,
+      "properties": {
+        "role": { "enum": ["worker", "coordinator"], "default": "worker" },
+        "model": { "enum": ["haiku", "sonnet", "opus", "inherit"] },
+        "layers": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Ordered capability layers. Dependencies (layer.requires) are pulled in first." },
+        "tools": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Extra tools on top of layers." },
+        "denyTools": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Removed after layers are merged. Deny always wins." },
+        "skills": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "clis": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "isolation": { "enum": ["none", "worktree"], "default": "none", "description": "Hint to the coordinator: run this agent in its own git worktree." },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxTurns": { "type": "integer", "minimum": 1 },
+            "maxMinutes": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "io": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "accepts": { "const": "TaskEnvelope/v1", "default": "TaskEnvelope/v1" },
+            "returns": { "const": "Result/v1", "default": "Result/v1" }
+          }
+        },
+        "prompt": { "type": "string", "minLength": 20 }
+      }
+    }
+  }
+}

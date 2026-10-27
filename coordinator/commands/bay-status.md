@@ -1,6 +1,6 @@
 ---
-description: Show agentbay system state (running and recent agent runs)
+description: Show agentbay system state (calls, steps and agent runs)
 ---
-Run `{{BAY}} status` and `{{BAY}} log -n 10`, then summarize for me: what is running,
-what finished since we last spoke, anything blocked or failed, and what you
-recommend next. Keep it under 10 lines.
+Run `{{BAY}} status` and `{{BAY}} log -n 10`, then summarize for me: which calls
+are waiting on an agent or approval, what finished since we last spoke, budget
+use, anything blocked or failed, and what you recommend next. Keep it under 10 lines.

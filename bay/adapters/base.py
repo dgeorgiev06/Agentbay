@@ -1,10 +1,10 @@
-"""The Adapter contract: ResolvedAgent[] in, runtime config out.
+"""The Adapter contract: a resolved System in, runtime config out.
 
 An adapter must:
   * be idempotent (build twice == build once)
   * only touch files it owns, tracked in .agentbay/manifest.json
   * preserve anything the user wrote by hand (merge, never clobber)
-  * write .agentbay/catalog.json so coordinators can discover agents
+  * write .agentbay/catalog.json so coordinators can discover modes, endpoints and roles
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from ..model import ResolvedAgent
+from ..model import System
 
 
 @dataclass
@@ -27,6 +27,6 @@ class BuildReport:
 class Adapter(Protocol):
     name: str
 
-    def build(self, agents: list[ResolvedAgent], project: Path, kit: Path) -> BuildReport: ...
+    def build(self, system: System, project: Path, kit: Path) -> BuildReport: ...
 
     def clean(self, project: Path) -> BuildReport: ...

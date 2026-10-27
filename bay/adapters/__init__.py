@@ -4,8 +4,8 @@ from .claude_code import ClaudeCodeAdapter
 
 REGISTRY: dict[str, type[Adapter]] = {
     ClaudeCodeAdapter.name: ClaudeCodeAdapter,
-    # "managed-agents": ManagedAgentsAdapter,   # next: same specs, cloud runtime
-    # "agent-sdk": AgentSdkAdapter,             # next: headless workers via Claude Agent SDK
+    # "managed-agents": ManagedAgentsAdapter,   # next: same modes, cloud runtime
+    # "agent-sdk": AgentSdkAdapter,             # next: headless workers (claude -p)
 }
 
 

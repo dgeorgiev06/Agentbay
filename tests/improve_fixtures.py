@@ -52,7 +52,9 @@ def session_records(sid: str, cwd: str, reviewer_spawns: int = 2) -> list:
                      "permissionDecision": {"decision": "accept", "source": "user", "reasonType": "x"},
                      "toolUseResult": {"stdout": SECRETS["password"], "stderr": "", "interrupted": False},
                      "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": f"tu{i}",
-                                                              "content": SECRETS["connection-string"],
+                                                              "content": (f"bash: jq: command not found "
+                                                                          f"{SECRETS['connection-string']}")
+                                                              if i == 0 else SECRETS["connection-string"],
                                                               "is_error": i == 0}]}})
         n += 2
     recs.append({**c(n, 6), "type": "assistant", "message": {"id": "msgE", "model": "claude-opus-5-5", "content": [
@@ -69,6 +71,8 @@ def session_records(sid: str, cwd: str, reviewer_spawns: int = 2) -> list:
         n += 2
     recs += [
         {**c(n, 12), "type": "user", "message": {"content": [{"type": "text", "text": "[Request interrupted by user]"}]}},
+        {**c(n + 1, 12), "type": "user", "message": {"content": "status?"}},
+        {**c(n + 2, 12), "type": "user", "message": {"content": "are you done yet?"}},
         {"type": "queue-operation", "operation": "enqueue", "timestamp": "2026-10-25T10:13:00Z",
          "content": f"also rotate {SECRETS['password']}"},
         {"type": "system", "subtype": "stop_hook_summary", "timestamp": "2026-10-25T10:14:00Z", "hookCount": 1,

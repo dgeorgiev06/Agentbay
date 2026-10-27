@@ -1,24 +1,24 @@
-"""claude-transcripts: defensive parsing, redaction, idempotency, unknown record types. Fixture transcripts only;
-the real ~/.claude/projects is never read."""
+"""claude-transcripts: defensive parsing, structure-only redaction, malformed/oversized lines, symlinks, mtime
+prefilter, status questions and environment gaps. Fixture transcripts only; the real ~/.claude/projects is never
+read."""
 import json
 import os
+from datetime import datetime, timedelta, timezone
 
-from helpers import KIT, cleanup, model, tmpdir
-from improve_fixtures import ALL, CORES, make_transcripts
+from helpers import cleanup, model, tmpdir
+from improve_fixtures import ALL, CORES, make_transcripts, session_records
 
 from bay.improve import transcripts
 
 SCHEMA = model.data_schema("session.episode/v1")
 
 
-def setup(keep_text=False, all_projects=False):
+def setup():
     base = tmpdir()
     proj, root = base / "proj", base / "cc"
     proj.mkdir()
     files = make_transcripts(root, proj)
-    src = transcripts.TranscriptSource(root, proj / ".agentbay/data/improve/transcripts/index.json",
-                                       None if all_projects else proj, keep_text=keep_text)
-    return base, proj, root, files, src
+    return base, proj, root, files, transcripts.TranscriptSource(root, proj)
 
 
 def test_parses_structure_counts_and_links_subagents():
@@ -34,8 +34,8 @@ def test_parses_structure_counts_and_links_subagents():
         assert len({t["inputHash"] for t in s["toolCalls"] if t["name"] == "Bash"}) == 1     # identical calls
         assert s["errors"] == 2 and s["denials"] == [{"tool": "Edit"}]                       # Bash error + denial
         assert s["interrupts"] == 1 and s["instructionChanges"] == 1 and s["permissionPrompts"] == 3
-        assert s["turns"] == 1 and s["compaction"] == "not-detected"
-        assert s["costUsd"] == 2.5 and s["durationMs"] == 900000
+        assert s["turns"] == 3 and s["statusQuestions"] == 2 and s["envGaps"] == {"command-not-found": 1}
+        assert s["compaction"] == "not-detected" and s["costUsd"] == 2.5 and s["durationMs"] == 900000
         assert s["tokens"]["input"] == 300 and s["tokens"]["cacheRead"] == 3000              # last usage per message.id
         assert [x["type"] for x in s["subagents"]] == ["reviewer", "reviewer"]
         assert s["subagents"][0]["id"] == "a0" and s["subagents"][0]["finished"] is True
@@ -50,62 +50,110 @@ def test_parses_structure_counts_and_links_subagents():
         cleanup(base)
 
 
-def test_redaction_by_default_no_text_no_paths_no_secrets():
+def test_structure_only_no_text_no_paths_no_secrets_and_nothing_written():
     base, proj, root, files, src = setup()
     try:
-        eps, _ = src.episodes()
-        blob = json.dumps(eps)
-        cache = (proj / ".agentbay/data/improve/transcripts/index.json").read_text()
-        for text in (blob, cache):
-            for core in CORES:
-                assert core not in text, core
-            assert "deploy it" not in text and "curl" not in text and str(proj) not in text
-            assert "secret-branch" not in text and "github.com" not in text and "excerpts" not in text
-    finally:
-        cleanup(base)
-
-
-def test_keep_text_opt_in_is_secret_scanned():
-    base, proj, root, files, src = setup(keep_text=True)
-    try:
-        eps, _ = src.episodes()
-        s = [e for e in eps if e["kind"] == "session"][0]
-        assert s["excerpts"][0]["role"] == "user" and s["excerpts"][0]["text"].startswith("deploy it, the key is")
-        assert "[REDACTED:api-key]" in s["excerpts"][0]["text"]
-        blob = json.dumps(eps) + (proj / ".agentbay/data/improve/transcripts/index.json").read_text()
+        eps, stats = src.episodes()
+        blob = json.dumps([eps, stats])
         for core in CORES:
             assert core not in blob, core
+        for text in ("deploy it", "curl", "status?", "command not found", str(proj), "secret-branch", "github.com"):
+            assert text not in blob, text
+        assert not (proj / ".agentbay").exists()                                   # read-only: no cache, no files
     finally:
         cleanup(base)
 
 
-def test_idempotent_by_session_id_size_and_mtime():
+def test_malformed_deep_typed_and_oversized_lines_never_fail_a_scan():
+    deep = "[" * 100_000 + "]" * 100_000                                           # RecursionError in json.loads
+    lines = [deep, '{"type": ["user"]}', '{"type": {"a": 1}}', '{"type": "user", "message": 5}',
+             '{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": ["x"]}]}}',
+             '{"type": "assistant", "message": {"content": "x", "usage": {"input_tokens": "lots"}}}',
+             '{"type": "Weird Type!"}', '{"type": "brand-new"}', "not json " + ALL, "[1,2]",
+             b"x" * (transcripts.MAX_LINE_BYTES + 1)]
+    acc = transcripts.parse_stream(lines)
+    assert acc.bad_lines == 4                       # deep JSON, not JSON, a list, oversized
+    assert acc.unknown == {"other": 3, "brand-new": 1}                     # list/dict/odd names -> "other"
+    ep = transcripts._episode(acc, "cc:x", "session", None)
+    assert all(c not in json.dumps(ep) for c in CORES)
+    # a file with an oversized line and a deep line is scanned; its other sessions still count
     base, proj, root, files, src = setup()
     try:
-        _, st1 = src.episodes()
-        eps2, st2 = src.episodes()
-        assert st1["parsed"] == 3 and st2["parsed"] == 0 and st2["cached"] == 3
         f = next(iter(files.values()))
-        with open(f, "a") as fh:                                 # a live session appends
-            fh.write('\n{"type": "user", "timestamp": "2026-10-25T11:00:00Z", "message": {"content": "more"}}\n')
-        os.utime(f, ns=(f.stat().st_atime_ns, f.stat().st_mtime_ns + 10**9))
-        eps3, st3 = src.episodes()
-        assert st3["parsed"] == 1 and st3["cached"] == 2
-        assert sum(e.get("turns", 0) for e in eps3) == sum(e.get("turns", 0) for e in eps2) + 1
+        with open(f, "ab") as fh:
+            fh.write(b"\n" + b"y" * (transcripts.MAX_LINE_BYTES + 10) + b"\n" + deep.encode() + b"\n")
+        eps, stats = src.episodes()
+        assert len([e for e in eps if e["kind"] == "session"]) == 2 and stats["badLines"] == 4
     finally:
         cleanup(base)
 
 
-def test_garbage_never_raises_and_is_never_echoed():
-    base = tmpdir()
+def test_unreadable_file_is_named_not_fatal():
+    base, proj, root, files, src = setup()
+    real = transcripts.parse_session
+    bad = next(iter(files.values()))
+
+    def flaky(path, *a, **kw):
+        if path == bad:
+            raise PermissionError(13, "Permission denied", str(path))
+        return real(path, *a, **kw)
     try:
-        acc = transcripts.parse_stream(["not json " + ALL, "[1,2]", '{"type": "user", "message": 5}',
-                                        '{"type": "assistant", "message": {"content": "x"}}', "", '{"type": 7}'])
-        assert acc.bad_lines == 2 and acc.unknown == {"<other>": 1}
-        ep = transcripts._episode(acc, "cc:x", "session", None)
-        assert all(c not in json.dumps(ep) for c in CORES)
+        transcripts.parse_session = flaky
+        eps, stats = src.episodes()
+        assert stats["errors"] == [{"file": bad.name, "error": "PermissionError"}]
+        assert len([e for e in eps if e["kind"] == "session"]) == 1
+    finally:
+        transcripts.parse_session = real
+        cleanup(base)
+
+
+def test_symlinks_are_never_followed():
+    base, proj, root, files, src = setup()
+    try:
+        outside = base / "outside"
+        (outside / "proj-folder").mkdir(parents=True)
+        recs = session_records("eeeeeeee-0000-4000-8000-000000000001", str(proj))
+        (outside / "secret.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
+        (outside / "proj-folder" / "eeeeeeee-0000-4000-8000-000000000002.jsonl").write_text(
+            (outside / "secret.jsonl").read_text())
+        os.symlink(outside / "secret.jsonl", root / "-encoded-project" / "linked.jsonl")      # symlinked file
+        os.symlink(outside / "proj-folder", root / "-linked-folder")                          # symlinked folder
+        sid = next(iter(files))
+        sub = root / "-encoded-project" / sid / "subagents"
+        os.symlink(outside / "secret.jsonl", sub / "agent-zz.jsonl")                          # symlinked subagent
+        eps, stats = src.episodes()
+        ids = {e["id"] for e in eps}
+        assert not any("eeeeeeee" in i or "linked" in i or "agent-zz" in i for i in ids), ids
+        assert stats["skippedSymlinks"] == 3
+        assert not transcripts.safe_file(root / "-linked-folder" / "eeeeeeee-0000-4000-8000-000000000002.jsonl", root)
     finally:
         cleanup(base)
+
+
+def test_mtime_prefilter_skips_old_files_without_opening_them():
+    base, proj, root, files, src = setup()
+    try:
+        old = datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp()
+        f = next(iter(files.values()))
+        os.utime(f, (old, old))
+        for g in (f.parent / f.stem / "subagents").glob("agent-*"):
+            os.utime(g, (old, old))
+        eps, stats = src.episodes(since=datetime.now(timezone.utc) - timedelta(days=30))
+        assert stats["skippedOld"] == 1 and len([e for e in eps if e["kind"] == "session"]) == 1
+    finally:
+        cleanup(base)
+
+
+def test_status_questions_and_env_gap_classification():
+    acc = transcripts.parse_stream([json.dumps({"type": "user", "message": {"content": t}}) for t in (
+        "status?", "any update?", "how's it going?", "are you done yet?",
+        "please add a status column to the table and update the docs", "what is the progress bar library?")])
+    assert acc.status_questions == 4 and acc.turns == 6
+    assert transcripts.env_gap("ModuleNotFoundError: No module named 'yaml'") == "missing-module"
+    assert transcripts.env_gap("curl: (6) Could not resolve host: api.x.com") == "network-blocked"
+    assert transcripts.env_gap("rm: cannot remove 'x': Operation not permitted") == "sandbox-denied"
+    assert transcripts.env_gap("zsh: command not found: jq") == "command-not-found"
+    assert transcripts.env_gap("AssertionError: 2 != 3") is None
 
 
 def test_connector_window_and_config_root():
@@ -121,6 +169,6 @@ def test_connector_window_and_config_root():
         out = inst.episodes(since="7d")
         assert len([e for e in out["episodes"] if e["kind"] == "session"]) == 2
         assert inst.episodes(since="1d")["episodes"] == []                    # fixture sessions are 2 days old
-        assert (p / ".agentbay/data/improve/transcripts/index.json").exists()
+        assert not (p / ".agentbay").exists()
     finally:
         cleanup(base)

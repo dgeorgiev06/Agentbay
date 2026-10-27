@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agentbay/data/session.episode/v1",
   "title": "session.episode/v1",
-  "description": "One unit of work seen by improve: a dispatcher call, an agent run, a Claude Code session or subagent, or a git commit. Structure and metadata only; closed schema so free text cannot slip in. Text appears only in `excerpts`, only when the connector's keepText is on, and only after a secret scan.",
+  "description": "One unit of work seen by improve: a dispatcher call, an agent run, a Claude Code session or subagent, or a git commit. Structure and metadata only, always; closed schema so free text cannot slip in.",
   "type": "object",
   "required": [
     "id",
@@ -305,26 +305,6 @@
         }
       }
     },
-    "excerpts": {
-      "type": "array",
-      "maxItems": 20,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "role": {
-            "enum": [
-              "user",
-              "assistant"
-            ]
-          },
-          "text": {
-            "type": "string",
-            "maxLength": 200
-          }
-        }
-      }
-    },
     "meta": {
       "type": "object",
       "additionalProperties": false,
@@ -347,6 +327,9 @@
           "type": "object",
           "additionalProperties": {
             "type": "integer"
+          },
+          "propertyNames": {
+            "pattern": "^([a-z][a-z0-9_-]{0,40}|other)$"
           }
         },
         "hookMs": {
@@ -356,6 +339,27 @@
           "type": "integer"
         }
       }
+    },
+    "statusQuestions": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "short user turns that only ask for status"
+    },
+    "envGaps": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "propertyNames": {
+        "enum": [
+          "command-not-found",
+          "missing-module",
+          "network-blocked",
+          "sandbox-denied"
+        ]
+      },
+      "description": "tool errors that point at the environment, by kind"
     }
   }
 }

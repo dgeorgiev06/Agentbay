@@ -11,9 +11,7 @@ spec:
   binding: connector
   endpoints:
     episodes:
-      description: >-
-        Episodes that started inside the window. `write` covers a connector's own parse cache (the transcripts
-        connector re-parses a session only when its size or mtime changed); nothing else is written.
+      description: Episodes that started inside the window. Read-only.
       in:
         type: object
         additionalProperties: false
@@ -27,4 +25,4 @@ spec:
         properties:
           episodes: { type: array, items: { $ref: session.episode/v1 } }
           stats: { type: object, description: "per-source counts: sessions, parsed, cached, badLines, unknownRecordTypes, ..." }
-      effects: [read, write]
+      effects: [read]

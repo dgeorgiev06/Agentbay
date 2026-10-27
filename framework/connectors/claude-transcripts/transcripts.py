@@ -1,4 +1,4 @@
-"""claude-transcripts: session.events/v1 over Claude Code transcripts (bay.improve.transcripts).
+"""claude-transcripts: session.events/v1 over Claude Code transcripts (bay.improve.transcripts). Read-only.
 
 Runs only on the dispatcher side; agents never read transcript files (improve-local gives roles no path to them,
 and the guard denies reads outside the project)."""
@@ -16,19 +16,16 @@ class Transcripts:
 
     def __init__(self, ctx):
         self.ctx = ctx
-        cfg = ctx.config or {}
-        root = Path(cfg.get("root") or DEFAULT_ROOT).expanduser()
+        root = Path((ctx.config or {}).get("root") or DEFAULT_ROOT).expanduser()
         if not root.is_absolute():
             root = (ctx.project or Path.cwd()) / root
-        self.src = TranscriptSource(root, ctx.data_dir / "transcripts" / "index.json",
-                                    None if cfg.get("allProjects") else ctx.project,
-                                    keep_text=bool(cfg.get("keepText")))
+        self.src = TranscriptSource(root, ctx.project)
 
     def episodes(self, since=None, until=None) -> dict:
         now = self.ctx.now()
         s = parse_time(since or self.ctx.settings.get("window") or "7d", now)
         u = parse_time(until, now) if until else None
-        eps, stats = self.src.episodes()
+        eps, stats = self.src.episodes(since=s)
         main = {e["id"] for e in eps if e["kind"] == "session" and sources.in_window(e.get("start"), s, u)}
         eps = [e for e in eps if e["id"] in main or e.get("parent") in main]
         return {"episodes": eps, "stats": stats}

@@ -103,6 +103,8 @@ MIGRATIONS = [("0.2.0", _v1_specs_to_roles)]
 
 # ------------------------------------------------------------------ project data
 FEED_DEFAULT_SELECTORS = [{"id": "home"}]     # modes/feed-briefing/config.schema.json default
+V02_MODE = "feed-briefing"                    # the only mode on the v0.2 feed store
+POST_KEYS = ("id", "source", "url", "createdAt")     # what a v0.2 line must carry to become an item
 
 
 def _corpus_module():
@@ -128,23 +130,46 @@ def _v02_feed_store(project: Path) -> tuple[list[Change], list[str]]:
     for posts_path in sorted((project / ".agentbay" / "data").glob("*/posts.jsonl")):
         d = posts_path.parent
         rel = posts_path.relative_to(project).as_posix()
-        db = d / "corpus.db"
+        db = d / V02_MODE / "corpus.db"            # v0.2 had one feed store, owned by feed-briefing
         if db.exists():
             notes.append(f"{rel}: {db.relative_to(project).as_posix()} already exists; left the v0.2 files alone "
                          f"(move corpus.db aside to migrate again)")
             continue
-        posts, bad = [], []
+        by_key: dict[str, dict] = {}
+        bad: list[str] = []
+        dups = 0
         for n, line in enumerate(posts_path.read_text(encoding="utf-8").splitlines(), 1):
-            if line.strip():
-                try:
-                    posts.append(json.loads(line))
-                except json.JSONDecodeError as e:
-                    bad.append(f"{rel}:{n}: {e.msg}")
+            if not line.strip():
+                continue
+            try:
+                post = json.loads(line)
+            except json.JSONDecodeError as e:
+                bad.append(f"{rel}:{n}: not JSON ({e.msg} at column {e.colno})")
+                continue
+            missing = [k for k in POST_KEYS if not (isinstance(post, dict) and post.get(k))]
+            if missing:
+                bad.append(f"{rel}:{n}: missing {', '.join(missing)}")
+                continue
+            k = f"{post['source']}:{post['id']}"
+            dups += k in by_key
+            by_key[k] = post                        # the last line wins, as in the v0.2 store
         if bad:
-            notes.append(f"{rel}: corrupt line(s), nothing migrated: {'; '.join(bad[:3])}; fix or delete them first")
+            notes.append(f"{rel}: {len(bad)} bad line(s), nothing migrated: {'; '.join(bad[:3])}"
+                         f"{' ...' if len(bad) > 3 else ''}. Fix or delete those lines (each post needs "
+                         f"{', '.join(POST_KEYS)}), then run the migration again")
             continue
+        posts = list(by_key.values())
         state_path = d / "state.json"
-        old = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+        try:
+            old = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+            if not isinstance(old, dict):
+                raise ValueError("expected a JSON object")
+        except (json.JSONDecodeError, ValueError) as e:
+            where = f":{e.lineno}:{e.colno}" if isinstance(e, json.JSONDecodeError) else ""
+            notes.append(f"{state_path.relative_to(project).as_posix()}{where}: not a valid v0.2 state file "
+                         f"({getattr(e, 'msg', e)}); nothing migrated. Fix it, or move it aside to migrate the posts "
+                         f"without cursors, coverage, budget and deletions (the next sync then refetches the window)")
+            continue
         cursors = {}
         for conn, c in (old.get("cursors") or {}).items():
             cursors[f"{conn}|{key}"] = {**{k: c[k] for k in ("from", "to", "lastSync") if k in c},
@@ -159,7 +184,8 @@ def _v02_feed_store(project: Path) -> tuple[list[Change], list[str]]:
         for it in items:
             by_src[it["source"]] = by_src.get(it["source"], 0) + 1
         dbrel = db.relative_to(project).as_posix()
-        lines = [f"--- a/{rel} ({len(posts)} posts) + {state_path.name}",
+        lines = [f"--- a/{rel} ({len(posts)} posts{f', {dups} duplicate line(s) merged' if dups else ''}) + "
+                 f"{state_path.name}",
                  f"+++ b/{dbrel} (corpus store, SQLite schema v1)",
                  f"+items: {len(items)} post/v1 ({', '.join(f'{s}: {n}' for s, n in sorted(by_src.items())) or 'none'}), "
                  f"matched: [home]" + (f"; {len(posts) - len(items)} on the deleted list dropped" if len(posts) != len(items) else "")]

@@ -1,4 +1,4 @@
-"""forge.migrate / `bay migrate --project`: a v0.2 feed store (posts.jsonl + state.json) becomes corpus.db.
+"""`bay migrate --project`: a v0.2 feed store (posts.jsonl + state.json) becomes corpus.db.
 Dry run by default; apply keeps cursors, coverage, budget, deletions and check times; the next sync is
 incremental and deleted posts never come back."""
 import json
@@ -52,7 +52,7 @@ def test_apply_preserves_state_and_the_next_sync_is_incremental():
     assert res["applied"] == 1
     assert (d / "posts.jsonl.v0.2.bak").exists() and (d / "state.json.v0.2.bak").exists()
     assert not (d / "posts.jsonl").exists() and migrate.plan(KIT, project=p)["changes"] == []
-    con = sqlite3.connect(d / "corpus.db")
+    con = sqlite3.connect(d / "feed-briefing/corpus.db")
     st = {k: json.loads(v) for k, v in con.execute("SELECT key, value FROM state")}
     tags = con.execute("SELECT count(*) FROM item_selectors WHERE selector = 'home'").fetchone()[0]
     con.close()
@@ -83,14 +83,60 @@ def test_apply_preserves_state_and_the_next_sync_is_incremental():
     assert "x:4" not in {i["id"] for i in D.use("briefing-analyst", "items.store/v1.query", {})["items"]}
 
 
-def test_forge_migrate_plans_data_in_the_kit_project_and_reports_corrupt_lines():
+def test_forge_migrate_never_touches_project_data():
     k = kit_copy()
-    d = v02(k)
-    (d / "posts.jsonl").write_text((d / "posts.jsonl").read_text() + "{broken\n")
+    v02(k)
     out = dispatch.Dispatcher(system(k, k), k).call("forge.migrate", {})
     plan = out["next"]["review"]["output"] if out["status"] == "needs-agent" else out["output"]
-    assert any("corrupt line(s), nothing migrated" in n and "posts.jsonl:5" in n for n in plan["notes"])
-    (d / "posts.jsonl").write_text("".join(json.dumps(x) + "\n" for x in POSTS))
-    out = dispatch.Dispatcher(system(k, k), k).call("forge.migrate", {})
-    plan = out["next"]["review"]["output"] if out["status"] == "needs-agent" else out["output"]
-    assert any(c["op"] == "convert" for c in plan["changes"]) and not (d / "corpus.db").exists()
+    assert not any(c["op"] == "convert" for c in plan["changes"])
+    assert migrate.plan(k, project=k)["changes"][0]["op"] == "convert"      # `bay migrate --project` does it
+
+
+def bad_lines(p, lines):
+    d = p / ".agentbay/data/feeds"
+    d.mkdir(parents=True)
+    (d / "posts.jsonl").write_text("".join(x + "\n" for x in lines))
+    (d / "state.json").write_text(json.dumps(STATE))
+    return d
+
+
+def test_bad_lines_and_state_are_reported_with_file_line_and_fix():
+    good = json.dumps(POSTS[0])
+    no_source = json.dumps({k: v for k, v in POSTS[1].items() if k != "source"})
+    p = project(source="x-api")
+    bad_lines(p, [good, no_source, "{broken"])
+    plan = migrate.plan(KIT, project=p)
+    assert plan["changes"] == []
+    note = plan["notes"][0]
+    assert ".agentbay/data/feeds/posts.jsonl:2: missing source" in note and "posts.jsonl:3: not JSON" in note
+    assert "Fix or delete those lines" in note
+    p = project(source="x-api")
+    d = bad_lines(p, [good])
+    (d / "state.json").write_text('{"cursors": {"x-api": ')
+    plan = migrate.plan(KIT, project=p)
+    assert plan["changes"] == [] and ".agentbay/data/feeds/state.json:1:" in plan["notes"][0]
+    assert "move it aside" in plan["notes"][0]
+    r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "migrate", "--confirm"],
+                       capture_output=True, text=True)
+    assert r.returncode == 0 and "Traceback" not in r.stderr and "state.json:1:" in r.stdout
+
+
+def test_duplicates_are_merged_and_counted_and_migrated_rows_are_scrubbed():
+    secret = "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345"
+    first = dict(POSTS[0], text="old text")
+    leaky = dict(POSTS[2], author={"handle": f"api_key={secret}", "name": "x"}, text=f"token {secret}",
+                 url=f"https://x.com/a?access_token={secret}")
+    p = project({"connectors": {"x-api": {"userId": "42"}}, "secrets": {"provider": "env"}}, source="x-api")
+    bad_lines(p, [json.dumps(first), json.dumps(POSTS[0]), json.dumps(leaky)])
+    plan = migrate.plan(KIT, project=p)
+    assert "1 duplicate line(s) merged" in plan["diff"] and "+items: 2 post/v1" in plan["diff"]
+    migrate.apply(KIT, project=p)
+    db = p / ".agentbay/data/feeds/feed-briefing/corpus.db"
+    assert secret not in db.read_bytes().decode("latin-1")
+    D = dispatch.Dispatcher(system(p), p, clock=clock)
+    for col in ("text", "author", "url", "title"):
+        for f in ("hex({})", "upper({})"):
+            out = json.dumps(D.use("briefing-analyst", "items.store/v1.sql", {"sql": f"SELECT {f.format(col)} FROM v_items"}))
+            assert secret not in out and secret.upper() not in out and secret.encode().hex().upper() not in out
+    texts = D.use("briefing-analyst", "items.store/v1.sql", {"sql": "SELECT text FROM v_items WHERE id = 'x:3'"})
+    assert texts["rows"] == [["post 3 on staking"]]                        # the last duplicate wins

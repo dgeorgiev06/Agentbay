@@ -20,7 +20,7 @@ import secrets as _rand
 import time
 from pathlib import Path
 
-from . import checks, config as cfgmod, connect, ledger, model, vault
+from . import checks, config as cfgmod, connect, ledger, model, secretscan, vault
 from .util import duration, parse_time, read_json, utcnow, write_json
 
 VERDICT = "review.verdict/v1"
@@ -306,6 +306,9 @@ class Dispatcher:
                 "output": self._endpoint_output(feat, state),
                 "verdictSchema": VERDICT,
             }
+            for name in (feat.review or {}).get("rulesets", []):
+                # framework rule sets (e.g. conformance): judged with the DoD; cite their ids in evidence
+                plan["review"].setdefault("rulesets", {})[name] = model.ruleset(self.sys.kit.root, name)
             return plan
         plan.update({
             "task": step.task or f"Do step '{step.id}' of {state['target']}",
@@ -354,14 +357,15 @@ class Dispatcher:
             if state.get("review"):
                 out["review"] = state["review"]
             out["cost"] = state["cost"]
-        return json.loads(vault.redact(json.dumps(out, ensure_ascii=False)))
+        return secretscan.scrub_obj(json.loads(vault.redact(json.dumps(out, ensure_ascii=False))))
 
     # ------------------------------------------------------------ persistence & ledger
     def _calls_dir(self) -> Path:
         return self.project / ".agentbay" / "calls"
 
     def _save(self, state) -> None:
-        write_json(self._calls_dir() / f"{state['callId']}.json", json.loads(vault.redact(json.dumps(state))))
+        write_json(self._calls_dir() / f"{state['callId']}.json",
+                   secretscan.scrub_obj(json.loads(vault.redact(json.dumps(state)))))
 
     def _load(self, call_id: str) -> dict:
         st = read_json(self._calls_dir() / f"{call_id}.json")

@@ -221,15 +221,21 @@ def lint_connectors(kit: model.Kit) -> list[str]:
     return out
 
 
+# Scheduled endpoints that a CLI command runs together with the steps they depend on.
+SCHEDULED_BY = {"improve.backlog": "`.agentbay/bay improve weekly` (it runs scan, audit and triage first; cron "
+                                   "recipe in README)"}
+
+
 def warnings(kit: model.Kit) -> list[str]:
     """Non-fatal findings: printed by `bay lint`, never fail it."""
     out = []
     for md in kit.docs["Mode"].values():
         for ep_name, ep in md.spec["endpoints"].items():
             if ep.get("schedule"):
-                out.append(f"{_where(md.path, _line_of(md.path, r'schedule:'))}: {md.name}.{ep_name} declares "
-                           f"schedule '{ep['schedule']}' but no runtime acts on it; run "
-                           f"`.agentbay/bay call {md.name}.{ep_name} '{{}}'` from cron")
+                target = f"{md.name}.{ep_name}"
+                run = SCHEDULED_BY.get(target, f"`.agentbay/bay call {target} '{{}}'`")
+                out.append(f"{_where(md.path, _line_of(md.path, r'schedule:'))}: {target} declares "
+                           f"schedule '{ep['schedule']}' but no runtime acts on it; run {run} from cron")
     if kit.project is not None and kit.project.resolve() == kit.root.resolve():
         for env in kit.docs["Environment"].values():
             for w in env.spec.get("fs", {}).get("write", []):

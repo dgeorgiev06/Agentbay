@@ -224,7 +224,7 @@ def role_use_main(role: str, project: Path, argv: list[str]) -> None:
 
 
 # ------------------------------------------------------------------ improve
-WEEKLY = ("improve.scan", "improve.audit", "improve.triage", "improve.backlog")
+WEEKLY = ("improve.scan", "improve.audit", "improve.triage")      # then improve.backlog, once nothing is pending
 
 
 def cmd_improve_decide(args):
@@ -246,25 +246,34 @@ def cmd_improve_decide(args):
 
 
 def cmd_improve_weekly(args):
-    """scan + audit + triage + backlog. Agentic steps come back as step plans, as with any `bay call`."""
+    """scan + audit + triage, then backlog. The report is written only when no analysis step is pending; otherwise
+    this stops and lists the agent steps to finish first (the coordinator runs them, then improve.backlog)."""
     from bay import connect, dispatch
     d = _dispatcher(args)
-    out = []
+    calls, pending = [], []
     for target in WEEKLY:
         inp = {"since": args.since} if target == "improve.scan" and args.since else {}
         try:
             r = d.call(target, inp)
         except (dispatch.CallError, connect.ConnectorError) as e:
             r = {"target": target, "status": "failed", "error": str(e)}
-        item = {k: r[k] for k in ("callId", "target", "status") if k in r}
-        if r.get("next"):
+        item = {k: r[k] for k in ("callId", "target", "status", "error") if k in r}
+        if r.get("status") in ("needs-agent", "awaiting-approval"):
             item["next"] = {k: r["next"][k] for k in ("step", "role", "runAs", "submit") if k in r["next"]}
-        if r.get("output") is not None and target == "improve.backlog":
-            item["output"] = r["output"]
-        if r.get("error"):
-            item["error"] = r["error"]
-        out.append(item)
-    _out({"calls": out, "note": "run each `next` step plan, then `bay submit`; the report is the backlog output"})
+            pending.append(item)
+        calls.append(item)
+    if pending:
+        _out({"status": "pending", "calls": calls,
+              "next": ["Run each pending step plan (`.agentbay/bay show <callId>` prints it) and submit its output; "
+                       "each call continues until it is done.",
+                       "Then write the report: .agentbay/bay call improve.backlog '{}'"]})
+        return
+    try:
+        r = d.call("improve.backlog", {})
+    except (dispatch.CallError, connect.ConnectorError) as e:
+        _die(f"✗ improve.backlog: {e}")
+    calls.append({k: r[k] for k in ("callId", "target", "status", "output") if k in r})
+    _out({"status": r["status"], "calls": calls})
 
 
 # ------------------------------------------------------------------ scaffolds & migrations

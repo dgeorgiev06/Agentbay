@@ -135,7 +135,7 @@ def lint_rules(path: Path, dod_ids: list[str], ep: dict, md: model.Doc) -> list[
 def _kind_enum(md: model.Doc, ep: dict) -> list[str] | None:
     if not ep.get("in"):
         return None
-    p = md.dir / "types" / f"{ep['in']}.schema.json"
+    p = model.type_file(md.dirs, ep["in"])
     if not p.exists():
         return None
     import json
@@ -182,8 +182,11 @@ def lint_mode(md: model.Doc, kit: model.Kit) -> list[str]:
         for d in sorted(p for p in fdir.iterdir() if p.is_dir()):
             if d.name not in declared:
                 out.append(f"{model.rel(d)}: feature folder is not referenced by any endpoint in mode.yaml")
+            have = [n for n in ("playbook.md", "rules.yaml") if (d / n).exists()]
+            if md.parent and have:
+                continue        # an extending mode's folder holds only what it overrides; the rest is inherited
             for need in ("playbook.md", "rules.yaml"):
-                if not (d / need).exists():
+                if need not in have:
                     out.append(f"{model.rel(d)}: feature folder is missing {need}")
     return out
 
@@ -199,9 +202,11 @@ def lint_roles(kit: model.Kit) -> list[str]:
     return out
 
 
-# Interfaces whose connectors must say which `source` they stamp on posts and how far back
-# (`window`) the source API reaches: the store keys posts and deletions on `source`.
-SOURCE_INTERFACES = ("feed.source/v1",)
+# Interfaces whose connectors must say which `source` they stamp on items, how far back (`window`) the
+# source API reaches, and which selector fields its native search handles: the store keys items and
+# deletions on `source` and splits every selector by that table.
+SOURCE_INTERFACES = ("items.source/v1",)
+SELECTOR_MODES = ("native", "local")
 
 
 def lint_connectors(kit: model.Kit) -> list[str]:
@@ -218,6 +223,10 @@ def lint_connectors(kit: model.Kit) -> list[str]:
                     if not c.spec.get(key):
                         out.append(f"{_where(c.path, _line_of(c.path, r'^spec:'))}: connector {c.name} implements "
                                    f"{iface} but declares no spec.{key} ({why})")
+                if not c.spec.get("selectors"):
+                    out.append(f"{_where(c.path, _line_of(c.path, r'^spec:'))}: connector {c.name} implements {iface} "
+                               f"but declares no spec.selectors (which selector fields its native search handles: "
+                               f"`<field>: native|local`; unlisted fields cannot be expressed)")
     return out
 
 
@@ -230,12 +239,22 @@ def warnings(kit: model.Kit) -> list[str]:
     """Non-fatal findings: printed by `bay lint`, never fail it."""
     out = []
     for md in kit.docs["Mode"].values():
+        if md.spec.get("abstract"):
+            continue                    # never installed: its children carry the schedule
         for ep_name, ep in md.spec["endpoints"].items():
             if ep.get("schedule"):
                 target = f"{md.name}.{ep_name}"
                 run = SCHEDULED_BY.get(target, f"`.agentbay/bay call {target} '{{}}'`")
                 out.append(f"{_where(md.path, _line_of(md.path, r'schedule:'))}: {target} declares "
                            f"schedule '{ep['schedule']}' but no runtime acts on it; run {run} from cron")
+    stores = [c.name for c in kit.docs["Connector"].values() if "items.store/v1" in (
+        [c.spec["implements"]] if isinstance(c.spec["implements"], str) else c.spec["implements"])]
+    if stores:
+        from .sqlsandbox import fts5_available
+        if not fts5_available():
+            out.append(f"this Python's SQLite has no FTS5: {', '.join(stores)} falls back to LIKE matching "
+                       f"(search is slower and unranked; items_fts is absent from sql). Use a Python built with "
+                       f"FTS5 (python.org and Homebrew builds have it) for ranked full-text search")
     if kit.project is not None and kit.project.resolve() == kit.root.resolve():
         for env in kit.docs["Environment"].values():
             for w in env.spec.get("fs", {}).get("write", []):

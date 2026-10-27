@@ -17,6 +17,7 @@ from __future__ import annotations
 import copy
 import fnmatch
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -67,7 +68,7 @@ def schema(name: str) -> dict:
 
 
 def data_schema(ref: str) -> dict:
-    """'feed.post/v1' -> schemas/data/feed.post.v1.schema.json"""
+    """'post/v1' -> schemas/data/post.v1.schema.json"""
     name, _, ver = ref.partition("/")
     p = SCHEMAS / "data" / f"{name}.{ver}.schema.json"
     if not p.exists():
@@ -85,7 +86,7 @@ def ruleset(kit: Path, name: str) -> list[dict]:
 
 
 def inline_refs(s):
-    """Replace {"$ref": "feed.post/v1"} with the data schema, recursively."""
+    """Replace {"$ref": "item/v1"} with the data schema, recursively."""
     if isinstance(s, dict):
         ref = s.get("$ref")
         if isinstance(ref, str) and not ref.startswith("#") and "/v" in ref:
@@ -123,10 +124,16 @@ class Doc:
     path: Path
     meta: dict
     spec: dict
+    lineage: list = field(default_factory=list)   # Mode: own folder, then each ancestor's (extends), nearest first
+    parent: str | None = None                      # Mode: the mode it extends
 
     @property
     def dir(self) -> Path:
         return self.path.parent
+
+    @property
+    def dirs(self) -> list[Path]:
+        return self.lineage or [self.dir]
 
     @property
     def rel(self) -> str:
@@ -153,9 +160,53 @@ class Kit:
                         self._load(kind, root_name, f, sch)
                     except SpecError as e:
                         self.errors.append(str(e))
+        self._apply_extends()
         from . import config as cfgmod
         self.config = cfgmod.load(project) if config is None else config
         self._select_envs()
+
+    def _apply_extends(self) -> None:
+        """Resolve `extends:` at load time, so the resolver, lint, conformance and improve always see a complete
+        mode. A mode whose parent is missing or whose chain loops is reported and dropped."""
+        modes = self.docs["Mode"]
+        done: dict[str, bool] = {}
+
+        def resolve(name: str, trail: list[str]) -> None:
+            if name in done:
+                if not done[name]:
+                    raise SpecError(f"{modes[name].rel}: extends a mode that does not resolve")
+                return
+            d = modes[name]
+            parent = d.spec.get("extends")
+            if not parent:
+                done[name] = True
+                return
+            if parent == name or parent in trail:
+                loop = trail[trail.index(parent):] if parent in trail else []
+                chain = " -> ".join([*loop, name, parent])
+                raise SpecError(f"{d.rel}: mode inheritance cycle: {chain}; remove one `extends`")
+            if parent not in modes:
+                raise SpecError(f"{d.rel}: extends unknown mode '{parent}' (have: {', '.join(sorted(modes)) or 'none'})")
+            resolve(parent, [*trail, name])
+            p = modes[parent]
+            d.spec = merge_mode(p.spec, d.spec, p.dir, d.dir)
+            d.lineage, d.parent = [d.dir, *p.dirs], parent
+            full = {"apiVersion": "agentbay/v2", "kind": "Mode", "metadata": d.meta,
+                    "spec": {k: v for k, v in d.spec.items() if k != "extends"}}
+            errs = schema_errors(full, schema("mode"))
+            if errs:
+                raise SpecError(f"{d.rel} (after extends {parent}):\n    " + "\n    ".join(errs))
+            done[name] = True
+
+        for name in sorted(modes):
+            try:
+                resolve(name, [])
+            except SpecError as e:
+                done[name] = False
+                self.errors.append(str(e))
+        for name, ok in done.items():
+            if not ok:
+                modes.pop(name, None)
 
     def _select_envs(self) -> None:
         """agentbay.config.yaml `envs: {A: B}` runs every agent of env A in env B, if B declares
@@ -188,7 +239,12 @@ class Kit:
             raise SpecError(f"{where}:{line}: fs.base was removed in v0.2 (approved 2026-10-27); fs paths are always relative "
                             f"to the project root - delete `base:` (forge envs expect the project to be the agentbay "
                             f"checkout)")
-        errs = schema_errors(doc, schema(sch))
+        sch_doc = schema(sch)
+        if kind == "Mode" and isinstance(doc.get("spec"), dict) and doc["spec"].get("extends"):
+            # a child declares only what it overrides; the merged spec is checked in full after extends
+            sch_doc = copy.deepcopy(sch_doc)
+            sch_doc["properties"]["spec"]["properties"]["endpoints"]["additionalProperties"].pop("required", None)
+        errs = schema_errors(doc, sch_doc)
         if errs:
             raise SpecError(f"{where}:\n    " + "\n    ".join(errs))
         meta, spec = doc["metadata"], doc["spec"]
@@ -208,7 +264,7 @@ class Kit:
                 f"{kind} '{name}' is defined by both the framework ({other.rel}) and you ({where}); "
                 f"rename yours - framework names are reserved")
             return
-        self.docs[kind][name] = Doc(kind, name, root_name, f, meta, spec)
+        self.docs[kind][name] = Doc(kind, name, root_name, f, meta, spec, lineage=[f.parent] if kind == "Mode" else [])
 
     # convenience
     def get(self, kind: str, name: str) -> Doc | None:
@@ -222,6 +278,56 @@ def rel(p: Path) -> str:
         return str(p.relative_to(KIT))
     except ValueError:
         return str(p)
+
+
+def merge_mode(parent: dict, child: dict, pdir: Path, cdir: Path) -> dict:
+    """A child mode spec over its parent's. Endpoints merge key by key (a child may override review, in/out,
+    workflow, playbook, rules, ...); workflows are replaced per workflow; constraints and inference merge;
+    needs are unioned; anything else the child sets replaces the parent's. Paths the child inherits
+    (playbook, rules, config) are rebased so they still resolve from the child's folder. `abstract` is not
+    inherited."""
+    def rebase(p: str) -> str:
+        return os.path.relpath(pdir / p, cdir)
+
+    out = copy.deepcopy(parent)
+    out.pop("abstract", None)
+    out.pop("extends", None)
+    for ep in out.get("endpoints", {}).values():
+        for k in ("playbook", "rules"):
+            if ep.get(k):
+                ep[k] = rebase(ep[k])
+    if out.get("config"):
+        out["config"] = rebase(out["config"])
+    for k, v in child.items():
+        if k == "endpoints":
+            eps = out.setdefault("endpoints", {})
+            for name, e in v.items():
+                eps[name] = {**eps.get(name, {}), **copy.deepcopy(e)}
+        elif k == "workflows":
+            out.setdefault("workflows", {}).update(copy.deepcopy(v))
+        elif k == "constraints":
+            out[k] = {**out.get(k, {}), **copy.deepcopy(v)}
+        elif k == "inference":
+            inf = out.setdefault("inference", {})
+            if "default" in v:
+                inf["default"] = {**inf.get("default", {}), **v["default"]}
+            if "steps" in v:
+                inf["steps"] = {**inf.get("steps", {}), **copy.deepcopy(v["steps"])}
+        elif k == "needs":
+            out[k] = list(dict.fromkeys([*out.get(k, []), *v]))
+        else:
+            out[k] = copy.deepcopy(v)
+    return out
+
+
+def type_file(dirs, tname: str) -> Path:
+    """types/<Name>.schema.json from the mode's folder, else the nearest ancestor that has it (extends)."""
+    dirs = [dirs] if isinstance(dirs, Path) else list(dirs)
+    for d in dirs:
+        p = d / "types" / f"{tname}.schema.json"
+        if p.exists():
+            return p
+    return dirs[0] / "types" / f"{tname}.schema.json"
 
 
 # ----------------------------------------------------------------- resolved model
@@ -246,7 +352,7 @@ class ResolvedRole:
     inference: Inference
     tools: list[str]
     clis: list[str]
-    bay_uses: list[str]              # "feed.store/v1.query": dispatcher-mediated reads
+    bay_uses: list[str]              # "items.store/v1.sql": dispatcher-mediated reads
     skills: dict[str, Path]
     isolation: str
     budget: dict
@@ -258,7 +364,7 @@ class ResolvedRole:
 class Step:
     id: str
     kind: str                         # "code" | "role" | "review"
-    run: str | None = None            # "feed.store/v1.sync"
+    run: str | None = None            # "items.store/v1.sync"
     role: str | None = None
     agent: str | None = None
     env: str | None = None
@@ -316,6 +422,8 @@ class ResolvedMode:
     playbook: str
     skills: dict[str, Path]
     config: dict                      # effective agentbay.config.yaml modes.<name> (minus features)
+    dirs: list = field(default_factory=list)   # mode folder, then ancestors' (extends): types are looked up here
+    extends: str | None = None
 
 
 @dataclass
@@ -331,6 +439,7 @@ class System:
         return self.kit.docs["Interface"][name]
 
     uninstalled: dict = field(default_factory=dict)   # "<mode>.<endpoint>" -> why it is not installed here
+    warnings: list = field(default_factory=list)      # non-fatal findings (bay validate prints them)
 
     def for_project(self, project: Path | None) -> "System":
         """The system as installed into `project`. forge.extend (and its framework-dev placements) is installed
@@ -345,7 +454,7 @@ class System:
         modes = {**self.modes, mode: m}
         why = (f"{FRAMEWORK_EXTENDER} is installed only when the project is the agentbay checkout "
                f"(./bay.sh build --project {self.kit.root})")
-        return System(self.kit, modes, self.roles, {**self.uninstalled, FRAMEWORK_EXTENDER: why})
+        return System(self.kit, modes, self.roles, {**self.uninstalled, FRAMEWORK_EXTENDER: why}, self.warnings)
 
     def placements(self) -> dict[str, "ResolvedRole"]:
         """Every (role, agent) placement used by some step, keyed by subagent name."""
@@ -540,10 +649,11 @@ def resolve_role(kit: Kit, name: str, gaps: list[str], where: str, seen_conn: se
         budget=budget, default_agent=s["agent"])
 
 
-def type_schema(mode_dir: Path, tname: str | None, where: str, gaps: list[str]) -> dict:
+def type_schema(mode_dir, tname: str | None, where: str, gaps: list[str]) -> dict:
+    """mode_dir: the mode folder, or its lineage (own folder first, then ancestors)."""
     if not tname:
         return {"type": "object"}
-    p = mode_dir / "types" / f"{tname}.schema.json"
+    p = type_file(mode_dir, tname)
     if not p.exists():
         gaps.append(f"{where}: type {tname} not found (expected {rel(p)})")
         return {"type": "object"}
@@ -583,16 +693,21 @@ def resolve(kit: Kit) -> System:
         if r:
             roles[name] = r
     modes: dict[str, ResolvedMode] = {}
+    warnings: list[str] = []
     for mname in sorted(kit.docs["Mode"]):
-        m = resolve_mode(kit, kit.docs["Mode"][mname], roles, gaps, seen_conn)
+        md = kit.docs["Mode"][mname]
+        if md.spec.get("abstract"):
+            continue        # a base for `extends` only: linted, never installed or called
+        m = resolve_mode(kit, md, roles, gaps, seen_conn, warnings)
         if m:
             modes[mname] = m
     if gaps:
         raise ResolveError(list(dict.fromkeys(gaps)))
-    return System(kit, modes, roles)
+    return System(kit, modes, roles, warnings=list(dict.fromkeys(warnings)))
 
 
-def resolve_mode(kit: Kit, md: Doc, roles: dict[str, ResolvedRole], gaps: list[str], seen_conn: set) -> ResolvedMode | None:
+def resolve_mode(kit: Kit, md: Doc, roles: dict[str, ResolvedRole], gaps: list[str], seen_conn: set,
+                 warnings: list[str] | None = None) -> ResolvedMode | None:
     from . import config as cfgmod
     s, name = md.spec, md.name
     needs = s.get("needs", [])
@@ -620,7 +735,7 @@ def resolve_mode(kit: Kit, md: Doc, roles: dict[str, ResolvedRole], gaps: list[s
         if not cp.exists():
             gaps.append(f"mode {name}: config schema {s['config']} not found")
         else:
-            csch = json.loads(cp.read_text())
+            csch = inline_refs(json.loads(cp.read_text()))
             for e in schema_errors(mcfg, csch):
                 gaps.append(f"agentbay.config.yaml modes.{name}: {e}")
             # the mode's config schema `default`s are the single source of default settings
@@ -689,23 +804,55 @@ def resolve_mode(kit: Kit, md: Doc, roles: dict[str, ResolvedRole], gaps: list[s
         features[ep_name] = Feature(
             mode=name, name=ep_name, workflow=ep["workflow"], steps=steps, effects=ep_eff,
             in_type=ep.get("in"), out_type=ep.get("out"),
-            in_schema=type_schema(md.dir, ep.get("in"), where, gaps),
-            out_schema=type_schema(md.dir, ep.get("out"), where, gaps),
+            in_schema=type_schema(md.dirs, ep.get("in"), where, gaps),
+            out_schema=type_schema(md.dirs, ep.get("out"), where, gaps),
             playbook_path=pb_path, playbook_text=pb_text, dod=dod, rules=rl,
             review=review if review_on else None,
             schedule=ep.get("schedule"), description=ep.get("description", ""))
         for st in steps:
             if st.out and st.kind == "role":
-                type_schema(md.dir, st.out, f"{where} step {st.id}", gaps)
+                type_schema(md.dirs, st.out, f"{where} step {st.id}", gaps)
 
+    _check_selectors(kit, md, mcfg, roles, gaps, warnings if warnings is not None else [])
     skills = {}
-    for sk in sorted((md.dir / "skills").glob("*/SKILL.md")):
-        skills[sk.parent.name] = sk.parent
-    pb_file = md.dir / "playbook.md"
+    for d in reversed(md.dirs):                     # a child's skill replaces an inherited one of the same name
+        for sk in sorted((d / "skills").glob("*/SKILL.md")):
+            skills[sk.parent.name] = sk.parent
+    pb_file = next((d / "playbook.md" for d in md.dirs if (d / "playbook.md").exists()), md.dir / "playbook.md")
     return ResolvedMode(
         name=name, version=md.meta["version"], root=md.root, purpose=s["purpose"].strip(), path=md.dir,
         coordinator=coord, roles=s["roles"], features=features, constraints=constraints, needs=needs,
-        playbook=pb_file.read_text() if pb_file.exists() else "", skills=skills, config=mcfg)
+        playbook=pb_file.read_text() if pb_file.exists() else "", skills=skills, config=mcfg,
+        dirs=list(md.dirs), extends=md.parent)
+
+
+SOURCE_IFACE = "items.source/v1"
+STORE_IFACE = "items.store/v1"
+
+
+def _check_selectors(kit: Kit, md: Doc, mcfg: dict, roles, gaps: list[str], warnings: list[str]) -> None:
+    """Selectors in the mode's settings against every bound items.source/v1 connector's capability table:
+    a field a source cannot express is a gap; a local-only field on a paid source is a warning."""
+    if SOURCE_IFACE not in md.spec.get("needs", []):
+        return
+    from . import config as cfgmod, selector as selmod
+    env, _ = code_env(kit, md, STORE_IFACE, roles)
+    if env is None:
+        return
+    sels = mcfg.get("selectors") or []
+    if not sels:
+        gaps.append(f"agentbay.config.yaml modes.{md.name}.selectors: no selectors; give the mode's config schema a "
+                    f"default or set at least one selector (e.g. {{id: all}})")
+    for cn in connectors_of(_bound(env, SOURCE_IFACE)):
+        c = kit.get("Connector", cn)
+        if c is None:
+            continue
+        caps = c.spec.get("selectors") or {}
+        price = c.spec.get("costPerPostUsd", mcfg.get("costPerPostUsd", cfgmod.COST_PER_POST_USD))
+        errs, warns = selmod.check(sels, caps, connector=cn, paid=float(price) > 0,
+                                   where=f"agentbay.config.yaml modes.{md.name}.selectors (env {env.name})")
+        gaps += errs
+        warnings += warns
 
 
 def _code_step(kit, md, st, sw, ep_eff, roles, gaps, seen_conn) -> Step:

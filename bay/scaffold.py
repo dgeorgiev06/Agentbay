@@ -90,7 +90,9 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
         if not mfile.exists():
             raise ScaffoldError(f"mode '{target}' not found under modes/ (framework modes are changed via forge.extend)")
         doc = yaml.safe_load(mfile.read_text())
-        spec = doc["spec"]
+        from . import model
+        merged = model.Kit(kit).get("Mode", target)          # a mode that extends another inherits its roles
+        spec = merged.spec if merged is not None else doc["spec"]
         if name in spec["endpoints"] or name in spec["workflows"]:
             raise ScaffoldError(f"mode {target} already has a feature or workflow named '{name}'")
         if role is None:   # default: the mode's first role that is neither its coordinator nor a reviewer
@@ -118,16 +120,18 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
         todo = [f"fill the TODOs in roles/{name}.yaml", "add it to a mode's roles and a workflow step"]
     elif kind == "connector":
         if not implements:
-            raise ScaffoldError("kind=connector needs --implements <interface>/v<N> (e.g. feed.source/v1)")
+            raise ScaffoldError("kind=connector needs --implements <interface>/v<N> (e.g. items.source/v1)")
         iface = _find_interface(kit, implements)
         module = name.replace("-", "_")
         host = "api.example.com"
         methods = "\n".join(_method(ep, spec) for ep, spec in iface["spec"]["endpoints"].items())
         base = f"connectors/{name}"
         src = ""
-        if implements.startswith("feed.source/"):
-            src = (f"  source: {name}       # value stamped on every post's `source`; the store keys deletions on it\n"
-                   f"  window: 7d             # how far back the API serves; older history comes from the store\n")
+        if implements.startswith("items.source/"):
+            src = (f"  source: {name}       # value stamped on every item's `source`; item ids are <source>:<extId>\n"
+                   f"  window: 7d             # how far back the API serves; older history comes from the store\n"
+                   f"  selectors:             # TODO which selector fields the API handles natively; unlisted = unsupported\n"
+                   f"    since: native\n    text: local\n    not: local\n")
         _write(kit, f"{base}/connector.yaml", _render("connector/connector.yaml", name=name, intent=intent,
                                                       implements=implements, module=module, host=host,
                                                       source_fields=src), files)
@@ -167,7 +171,10 @@ def _insert_under(text: str, header: str, block: str) -> str:
     try:
         i = next(n for n, ln in enumerate(lines) if ln.rstrip() == header)
     except StopIteration:
-        raise ScaffoldError(f"mode.yaml has no '{header.strip()}' section")
+        # an extending mode may inherit the whole section: start its own (entries merge with the parent's)
+        if not any(ln.rstrip() == "spec:" for ln in lines):
+            raise ScaffoldError(f"mode.yaml has no '{header.strip()}' section")
+        return text.rstrip("\n") + "\n" + header + "\n" + block.rstrip("\n") + "\n"
     j = i + 1
     while j < len(lines) and (lines[j].startswith("    ") or not lines[j].strip()):
         j += 1

@@ -4,7 +4,7 @@ Mapping:
   worker role placement   -> .claude/agents/<role>.md  (or <role>--<agent>.md when an endpoint re-places it)
   Chief of Staff + mode
   coordinator playbooks    -> .agentbay/COORDINATOR.md, imported from CLAUDE.md (your main session)
-  role skills, mode skills -> .claude/skills/<skill>/
+  role skills, mode skills -> .claude/skills/<skill>/  (a mode's skills include those it inherits via extends)
   role data access         -> .agentbay/roles/<role>/use  (role fixed inside; read-only endpoints only)
   coordinator commands     -> .claude/settings.json permissions.allow, explicit prefixes only
                               (Bash(.agentbay/bay call:*), ... status, log, note, submit, task) - no wildcard
@@ -475,7 +475,7 @@ Subagents cannot run `{BAY}` at all.
         modes = []
         for m in system.modes.values():
             modes.append({
-                "name": m.name, "version": m.version, "origin": m.root, "purpose": m.purpose,
+                "name": m.name, "version": m.version, "origin": m.root, "purpose": m.purpose, "extends": m.extends,
                 "coordinator": m.coordinator, "roles": m.roles, "constraints": m.constraints,
                 "endpoints": [{
                     "name": f"{m.name}.{f.name}", "description": f.description, "in": f.in_type, "out": f.out_type,

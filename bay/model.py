@@ -191,12 +191,6 @@ class Kit:
     def get(self, kind: str, name: str) -> Doc | None:
         return self.docs[kind].get(name)
 
-    def interface_for(self, cap: str, needs: list[str]) -> str | None:
-        """'feed.store' + mode needs -> 'feed.store/v1'."""
-        for n in needs:
-            if n.split("/")[0] == cap:
-                return n
-        return None
 
 
 def _rel(p: Path) -> str:
@@ -668,11 +662,10 @@ def resolve_mode(kit: Kit, md: Doc, roles: dict[str, ResolvedRole], gaps: list[s
 
 
 def _code_step(kit, md, st, sw, ep_eff, roles, gaps, seen_conn) -> Step:
-    cap, _, ep = st["run"].rpartition(".")
-    iface = kit.interface_for(cap, md.spec.get("needs", []))
+    iface, ep = _split_use(st["run"])
     step = Step(id=st["id"], kind="code", with_=st.get("with", {}), when=st.get("when"))
-    if iface is None:
-        gaps.append(f"{sw}: runs {st['run']}, but mode {md.name} does not list a {cap}/v<N> interface in needs")
+    if iface not in md.spec.get("needs", []):
+        gaps.append(f"{sw}: runs {st['run']}, but mode {md.name} does not list {iface} in needs")
         return step
     idoc = kit.get("Interface", iface)
     if idoc is None:

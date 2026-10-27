@@ -47,17 +47,17 @@ spec:
   roles: [feed-lead, feed-analyst, reviewer]
   workflows:
     sync:
-      - { id: fetch, run: feed.store.sync, with: { lookback: "$in.lookback|$config.lookback", maxPosts: "$in.maxPosts" } }
+      - { id: fetch, run: feed.store/v1.sync, with: { lookback: "$in.lookback|$config.lookback", maxPosts: "$in.maxPosts" } }
     digest:
-      - { id: refresh, run: feed.store.sync, when: "stale > 2h" }      # code step, no agent
-      - { id: gather, run: feed.store.query, with: { since: "$in.since|$config.lookback", until: "$in.until", author: "$in.author", limit: 500 } }
+      - { id: refresh, run: feed.store/v1.sync, when: "stale > 2h" }      # code step, no agent
+      - { id: gather, run: feed.store/v1.query, with: { since: "$in.since|$config.lookback", until: "$in.until", author: "$in.author", limit: 500 } }
       - { id: themes, role: feed-analyst, out: Digest, task: "Write the digest from the gathered posts." }
     ask:
-      - { id: refresh, run: feed.store.sync, when: "stale > 2h" }
-      - { id: search, run: feed.store.query, with: { since: "$in.since|$config.lookback", author: "$in.author", limit: 500 } }
+      - { id: refresh, run: feed.store/v1.sync, when: "stale > 2h" }
+      - { id: search, run: feed.store/v1.query, with: { since: "$in.since|$config.lookback", author: "$in.author", limit: 500 } }
       - { id: answer, role: feed-analyst, out: Answer, task: "Answer the question from the stored posts only." }
     prune:
-      - { id: prune, run: feed.store.prune, with: { olderThan: "$in.olderThan|$config.retention" } }
+      - { id: prune, run: feed.store/v1.prune, with: { olderThan: "$in.olderThan|$config.retention" } }
   inference:
     default: { model: sonnet, effort: medium }
   constraints:

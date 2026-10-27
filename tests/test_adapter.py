@@ -3,7 +3,6 @@ import json
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 
 from helpers import KIT, model, system, tmpdir
 
@@ -145,3 +144,10 @@ def test_hook_records_spawn_and_result():
                        env={"CLAUDE_PROJECT_DIR": str(proj), "PATH": "/usr/bin:/bin"}, check=True)
     run = ledger.fold(ledger.read(proj))["tu1"]
     assert run.state == "done" and run.agent == "feed-analyst" and run.task_id == "T-20261027-ab12"
+
+
+def test_project_flag_accepted_before_or_after_subcommand():
+    from bay import cli
+    assert cli._hoist_project(["build", "--project", "/x"]) == ["--project", "/x", "build"]
+    assert cli._hoist_project(["--project=/x", "ls"]) == ["--project", "/x", "ls"]
+    assert cli._hoist_project(["call", "m.e", "{}"]) == ["call", "m.e", "{}"]

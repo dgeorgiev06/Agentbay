@@ -190,8 +190,42 @@ def lint_roles(kit: model.Kit) -> list[str]:
         for d in kit.docs[kind].values():
             raw = yaml.safe_load(d.path.read_text()) or {}
             if "review" in (raw.get("spec") or {}):
-                out.append(f"{_where(d.path, _line_of(d.path, r'^\s+review:'))}: review settings found in a {kind}; "
+                out.append(f"{_where(d.path, _line_of(d.path, r'^\s+review:'))}: review settings found in {'an' if kind[0] in 'AEIOU' else 'a'} {kind}; "
                            f"configure review only in mode.yaml endpoints.<feature>.review")
+    return out
+
+
+# Interfaces whose connectors must say which `source` they stamp on posts and how far back
+# (`window`) the source API reaches: the store keys posts and deletions on `source`.
+SOURCE_INTERFACES = ("feed.source/v1",)
+
+
+def lint_connectors(kit: model.Kit) -> list[str]:
+    out = []
+    for c in kit.docs["Connector"].values():
+        impl = c.spec["implements"]
+        impl = [impl] if isinstance(impl, str) else impl
+        for iface in impl:
+            if iface in SOURCE_INTERFACES:
+                for key, why in (("source", "the value stamped on every post's `source`; the store keys posts "
+                                            "and deletions on it"),
+                                 ("window", "how far back the source API serves (e.g. 7d); older history "
+                                            "comes only from the store")):
+                    if not c.spec.get(key):
+                        out.append(f"{_where(c.path, _line_of(c.path, r'^spec:'))}: connector {c.name} implements "
+                                   f"{iface} but declares no spec.{key} ({why})")
+    return out
+
+
+def warnings(kit: model.Kit) -> list[str]:
+    """Non-fatal findings: printed by `bay lint`, never fail it."""
+    out = []
+    for md in kit.docs["Mode"].values():
+        for ep_name, ep in md.spec["endpoints"].items():
+            if ep.get("schedule"):
+                out.append(f"{_where(md.path, _line_of(md.path, r'schedule:'))}: {md.name}.{ep_name} declares "
+                           f"schedule '{ep['schedule']}' but no runtime acts on it; run "
+                           f"`.agentbay/bay call {md.name}.{ep_name} '{{}}'` from cron")
     return out
 
 
@@ -201,4 +235,5 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     for md in kit.docs["Mode"].values():
         out += lint_mode(md, kit)
     out += lint_roles(kit)
+    out += lint_connectors(kit)
     return list(dict.fromkeys(out))

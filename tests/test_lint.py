@@ -166,7 +166,7 @@ def test_modes_must_not_name_connectors_or_tools():
 def test_orphan_workflow_and_feature_folder():
     k = kit_copy()
     edit_yaml(k / "modes/feed-briefing/mode.yaml",
-              lambda d: d["spec"]["workflows"].update({"unused": [{"id": "x", "run": "feed.store.query"}]}))
+              lambda d: d["spec"]["workflows"].update({"unused": [{"id": "x", "run": "feed.store/v1.query"}]}))
     has(k, "workflow 'unused' is not used by any endpoint")
     k = kit_copy()
     (k / "modes/feed-briefing/features/stray").mkdir()
@@ -204,3 +204,26 @@ def test_extra_rules_stack_strictest_wins():
     (p / "agentbay.config.yaml").write_text(yaml.safe_dump(cfg))
     from helpers import gaps
     assert any("extraRules" in g and "not found" in g for g in gaps(KIT, p))
+
+
+def test_feed_source_connectors_must_declare_source_and_window():
+    k = kit_copy()
+    edit_yaml(k / "connectors/x-api/connector.yaml", lambda d: d["spec"].pop("source"))
+    has(k, "connectors/x-api/connector.yaml:", "connector x-api implements feed.source/v1 but declares no spec.source")
+    k = kit_copy()
+    edit_yaml(k / "connectors/fake/connector.yaml", lambda d: d["spec"].pop("window"))
+    has(k, "connector fake implements feed.source/v1 but declares no spec.window")
+
+
+def test_schedule_is_a_warning_not_an_error():
+    from bay import model
+    kit = model.Kit(KIT)
+    ws = lint.warnings(kit)
+    assert any("feed-briefing.prune declares schedule 'daily' but no runtime acts on it" in w and "cron" in w for w in ws)
+    assert problems(KIT) == []
+
+
+def test_run_steps_use_versioned_capability_spelling():
+    k = kit_copy()
+    sub(k, "modes/feed-briefing/mode.yaml", "run: feed.store/v1.prune", "run: feed.store.prune")
+    has(k, "modes/feed-briefing/mode.yaml", "does not match")

@@ -64,9 +64,12 @@ def _json_arg(text: str | None) -> dict:
 def cmd_lint(args) -> int:
     from bay import config, lint, model
     try:
-        problems = lint.run(KIT, args.project)
+        kit = model.Kit(KIT, args.project)
+        problems = lint.run(kit=kit)
     except config.ConfigError as e:
         _die(f"✗ {e}")
+    for w in lint.warnings(kit):
+        print(f"! {w}")
     for p in problems:
         print(f"✗ {p}")
     if problems:
@@ -196,7 +199,7 @@ def cmd_new(args):
         res = scaffold.create(KIT, args.kind, args.name, target=getattr(args, "mode", None),
                               implements=getattr(args, "implements", None), intent=args.intent,
                               effects=args.effects.split(",") if getattr(args, "effects", None) else None,
-                              role=getattr(args, "role", None) or "builder")
+                              role=getattr(args, "role", None))
     except scaffold.ScaffoldError as e:
         _die(f"✗ {e}")
     for f in res["files"]:
@@ -335,11 +338,12 @@ def main(argv=None):
     su.set_defaults(fn=cmd_submit)
 
     for kind in ("mode", "feature", "role", "connector", "env"):
-        k = sub.add_parser(kind, help=f"scaffold a {kind}")
+        k = sub.add_parser(kind, help=f"scaffold {'an' if kind[0] in 'aeiou' else 'a'} {kind}")
         ks = k.add_subparsers(dest="action", required=True)
         n = ks.add_parser("new"); n.add_argument("name"); n.add_argument("--intent")
         if kind == "feature":
-            n.add_argument("--mode", required=True); n.add_argument("--role")
+            n.add_argument("--mode", required=True)
+            n.add_argument("--role", help="default: the mode's first non-coordinator, non-reviewer role")
             n.add_argument("--effects", help="comma-separated, default read,write")
         if kind == "connector":
             n.add_argument("--implements", required=True)

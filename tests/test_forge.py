@@ -3,7 +3,7 @@ import hashlib
 import subprocess
 import sys
 
-from helpers import KIT, edit_yaml, kit_copy, model, project, system
+from helpers import edit_yaml, kit_copy, model, project, system
 
 from bay import dispatch, lint, migrate, scaffold
 
@@ -41,7 +41,8 @@ def test_feature_role_env_connector_scaffolds_are_lint_clean():
     wk = s.modes["feed-briefing"].features["weekly"]
     assert wk.review is None and [st.role for st in wk.steps] == ["feed-analyst"]   # read-only: review off by default
     # write effects -> review on by default
-    scaffold.create(k, "feature", "export", target="delivery", effects=["read", "write"], intent="Export a file")
+    scaffold.create(k, "feature", "export", target="delivery", role="builder", effects=["read", "write"],
+                    intent="Export a file")
     s = model.resolve(model.Kit(k))
     assert s.modes["delivery"].features["export"].review["when"] == "always"
     # generated connector test runs offline
@@ -118,3 +119,20 @@ def test_migrate_dry_run_produces_diff_and_changes_nothing():
     assert res["applied"] == 3 and not (k / "specs").exists() and not (k / "layers").exists()
     assert model.Kit(k).get("Role", "writer").spec["uses"] == ["workspace.read/v1", "workspace.write/v1"]
     assert migrate.plan(k)["changes"] == []
+
+
+def test_connector_scaffold_for_feed_source_declares_source_and_window():
+    k = kit_copy()
+    scaffold.create(k, "connector", "rss", implements="feed.source/v1", intent="RSS feeds")
+    spec = model.Kit(k).get("Connector", "rss").spec
+    assert spec["source"] == "rss" and spec["window"] == "7d"
+    scaffold.create(k, "connector", "store2", implements="feed.store/v1", intent="Another store")
+    assert "source" not in model.Kit(k).get("Connector", "store2").spec
+    assert lint.run(k) == []
+
+
+def test_feature_new_defaults_to_first_worker_role():
+    k = kit_copy()
+    scaffold.create(k, "feature", "weekly", target="feed-briefing", effects=["read"])
+    s = model.resolve(model.Kit(k))
+    assert [st.role for st in s.modes["feed-briefing"].features["weekly"].steps] == ["feed-analyst"]

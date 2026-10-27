@@ -7,7 +7,7 @@ Keep the store within retention and honor deletions made at the source.
 - `olderThan` (optional, e.g. `30d`). Default: config `retention`, else the mode's `lookbackMax`.
 
 ## Steps
-1. The dispatcher runs `feed.store.prune` (code step, no agent).
+1. The dispatcher runs `feed.store/v1.prune` (code step, no agent).
 2. The store removes posts older than the cutoff and every post whose `source:id` is on the deleted list.
 
 ## Definition of Done

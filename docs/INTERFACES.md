@@ -32,7 +32,7 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN-v0
 `mode.yaml` declares, per endpoint (= feature), everything about it in one place:
 `in`/`out` (type names in `types/`), `effects`, `workflow`, `playbook`, `rules`, optional
 `review: {role, when: always|never, model?, effort?}` and optional `agents: {role: agent}` placement.
-Workflows are ordered steps: `run: <capability>.<endpoint>` (code), `role: <role>` (agentic),
+Workflows are ordered steps: `run: <capability>/v<N>.<endpoint>` (code), `role: <role>` (agentic),
 `gate: <text>` (approval), `{review: here}` (position of the injected review step).
 Modes name capabilities (`needs: [feed.store/v1]`), never connectors or tools.
 
@@ -40,6 +40,7 @@ Modes name capabilities (`needs: [feed.store/v1]`), never connectors or tools.
 Playbook H2 sections in order: Purpose, Inputs, Steps (numbered), Definition of Done
 (`- [DOD-n] (must|should|must_not) ...`), Outputs, Failure handling.
 Rules: `{id: R-n, level, statement, appliesTo: executor|reviewer|both, check?, refs?, when?: {kind}}`.
+Endpoint `schedule` is declarative only (lint warns); run it from cron.
 Deterministic checks (`bay/checks.py`): `citations_resolve`, `citations_min:<n>`, `no_secrets`, `lint_clean`.
 The reviewer returns `review.verdict/v1`: per id `pass|fail|n/a`, evidence, severity.
 
@@ -89,9 +90,10 @@ Dispatcher: `step.started`, `step.completed`, `step.failed`, `step.skipped`, `st
 with `mode, endpoint, step, role, agent, env, cost`.
 
 ## Extension recipes
-- **New source** -> `bay connector new bsky --implements feed.source/v1`, implement `fetch`, add `bsky` to
-  `feed.source/v1` in the env's `bind` (+ its host/secrets). Mode, roles and playbooks are untouched.
-- **New feature** -> `bay feature new weekly --mode feed-briefing --role feed-analyst --effects read`, fill the playbook and rules, `bay lint`.
+- **New source** -> `bay connector new bsky --implements feed.source/v1` (template sets `source` and
+  `window`, which lint requires), implement `fetch`, then in the env add `bsky` to the `feed.source/v1`
+  binding and its host/secret names to `network.allow`/`secrets.allow`. Modes, roles and playbooks are untouched.
+- **New feature** -> `bay feature new weekly --mode feed-briefing --effects read`, fill the playbook and rules, `bay lint`.
 - **New mode / role / env** -> `bay mode new <name>` / `bay role new <name>` / `bay env new <name>`, or `bay call forge.create`.
 - **New runtime** -> implement `Adapter`, register it, `./bay.sh build --runtime <name>`. Modes do not change.
 - **Change the framework** -> `bay call forge.extend '{"goal": "..."}'` (proposal, approval, review mandatory).

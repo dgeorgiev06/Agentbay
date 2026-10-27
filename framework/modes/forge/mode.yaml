@@ -40,7 +40,7 @@ spec:
   roles: [forge-lead, builder, reviewer]
   workflows:
     create:
-      - { id: scaffold, run: forge.scaffold.create, with: { kind: "$in.kind", name: "$in.name", target: "$in.target", implements: "$in.implements", intent: "$in.intent" } }
+      - { id: scaffold, run: forge.scaffold/v1.create, with: { kind: "$in.kind", name: "$in.name", target: "$in.target", implements: "$in.implements", intent: "$in.intent" } }
       - { id: fill, role: builder, out: Result, task: "Fill every TODO the scaffold left so the result matches the intent and passes ./bay.sh lint." }
     extend:
       - { id: propose, role: builder, out: Result, task: "Write the design change proposal to docs/proposals/<id>.md (problem, change to concepts/schemas/CLI, compatibility impact, migration plan)." }
@@ -49,8 +49,8 @@ spec:
       - { review: here, id: review }
       - { id: release, role: builder, out: Result, task: "Changelog entry, version bump in bay/__init__.py (and schema apiVersion if contracts changed); all checks green." }
     migrate:
-      - { id: plan, run: forge.migrate.plan }
-      - { id: apply, run: forge.migrate.apply, when: "$in.confirm" }
+      - { id: plan, run: forge.migrate/v1.plan }
+      - { id: apply, run: forge.migrate/v1.apply, when: "$in.confirm" }
   inference:
     default: { model: sonnet, effort: medium }
   constraints:

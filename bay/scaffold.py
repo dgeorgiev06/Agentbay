@@ -64,7 +64,7 @@ def review_block(effects: list[str], role: str = "reviewer") -> str:
 
 
 def create(kit: Path, kind: str, name: str, *, target: str | None = None, implements: str | None = None,
-           intent: str | None = None, effects: list[str] | None = None, role: str = "builder") -> dict:
+           intent: str | None = None, effects: list[str] | None = None, role: str | None = None) -> dict:
     if kind not in KINDS:
         raise ScaffoldError(f"unknown kind '{kind}' (have: {', '.join(KINDS)})")
     _check_name(kit, kind, name)
@@ -78,7 +78,7 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
         _write(kit, f"{base}/types/RunReq.schema.json", _render("mode/RunReq.schema.json"), files)
         _write(kit, f"{base}/types/RunOut.schema.json", _render("mode/RunOut.schema.json"), files)
         _write(kit, f"{base}/features/run/playbook.md",
-               _render("feature/playbook.md", mode=name, name="run", intent=intent, role="builder"), files)
+               _render("feature/playbook.md", mode=name, name="run", intent=intent, role=role or "builder"), files)
         _write(kit, f"{base}/features/run/rules.yaml", _render("feature/rules.yaml"), files)
         todo = [f"fill the TODOs in {base}/features/run/playbook.md and rules.yaml",
                 f"rename or add features with `bay feature new <name> --mode {name}`", "run `./bay.sh lint`"]
@@ -93,6 +93,10 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
         spec = doc["spec"]
         if name in spec["endpoints"] or name in spec["workflows"]:
             raise ScaffoldError(f"mode {target} already has a feature or workflow named '{name}'")
+        if role is None:   # default: the mode's first role that is neither its coordinator nor a reviewer
+            role = next((r for r in spec["roles"] if r != spec.get("coordinator") and "review" not in r), None)
+            if role is None:
+                raise ScaffoldError(f"mode {target} has no worker role to run the feature; pass --role")
         if role not in spec["roles"]:
             raise ScaffoldError(f"role '{role}' is not in mode {target} roles {spec['roles']}; pass --role")
         effects = effects or ["read", "write"]
@@ -120,8 +124,13 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
         host = "api.example.com"
         methods = "\n".join(_method(ep, spec) for ep, spec in iface["spec"]["endpoints"].items())
         base = f"connectors/{name}"
+        src = ""
+        if implements.startswith("feed.source/"):
+            src = (f"  source: {name}       # value stamped on every post's `source`; the store keys deletions on it\n"
+                   f"  window: 7d             # how far back the API serves; older history comes from the store\n")
         _write(kit, f"{base}/connector.yaml", _render("connector/connector.yaml", name=name, intent=intent,
-                                                      implements=implements, module=module, host=host), files)
+                                                      implements=implements, module=module, host=host,
+                                                      source_fields=src), files)
         _write(kit, f"{base}/{module}.py", _render("connector/module.py.tmpl", name=name, implements=implements,
                                                    host=host, methods=methods), files)
         _write(kit, f"{base}/tests/test_{module}.py", _render("connector/test_module.py.tmpl", name=name,

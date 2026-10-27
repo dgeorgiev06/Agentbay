@@ -61,8 +61,8 @@ spec:
   roles: [feed-lead, feed-analyst, reviewer]
   workflows:
     digest:
-      - { id: refresh, run: feed.store.sync, when: "stale > 2h" }   # code step, no agent
-      - { id: gather,  run: feed.store.query, with: { since: "$in.since|$config.lookback" } }
+      - { id: refresh, run: feed.store/v1.sync, when: "stale > 2h" }   # code step, no agent
+      - { id: gather,  run: feed.store/v1.query, with: { since: "$in.since|$config.lookback" } }
       - { id: themes,  role: feed-analyst, out: Digest }
       # review is injected from endpoints.digest.review (after the last step, or at `{ review: here }`)
   inference:
@@ -77,7 +77,7 @@ spec:
   config: config.schema.json     # what agentbay.config.yaml may set (lookback, caps, exclude...)
 ```
 
-Step kinds: `run: <capability>.<endpoint>` (deterministic code, no agent), `role: <role>` (agentic),
+Step kinds: `run: <capability>/v<N>.<endpoint>` (deterministic code, no agent), `role: <role>` (agentic),
 `gate: <text>` (approval: the call stops with `awaiting-approval`; resumes on `{"approved": true}`),
 and the review step injected from the endpoint's `review` block. `when: "stale > 2h"` or `when: "$in.<field>"`
 skips a step. `with:` substitutes `$in.x`, `$steps.<id>.x`, `$config.x`, with `a|b` fallbacks.
@@ -149,8 +149,12 @@ For every mode endpoint → workflow step:
 - `bay call <mode>.<endpoint> '<json>'` is the only way to invoke endpoints. It validates input/output
   schemas, checks grants and env, runs code steps, returns agentic steps as a step plan for the coordinator,
   enforces budget, and writes ledger events (`step.started`, `step.completed` with mode, endpoint, step, role, agent, env, cost).
-- Connectors are called only by `feed.store.sync` (via the dispatcher), never by agents. Secrets resolved
-  by the dispatcher from the env's provider (keychain via `security find-generic-password` on macOS, env vars as fallback provider `env`), never printed or logged.
+- Agents reach connectors only through read-only store endpoints via their role's use shim
+  (`.agentbay/roles/<role>/use`); feed sources are called only by `feed.store/v1.sync`, which the dispatcher
+  runs as a code step. Secrets are resolved by the dispatcher from the env's provider (keychain via
+  `security find-generic-password` on macOS, env vars as fallback provider `env`), never printed or logged.
+- Endpoint `schedule` is declarative only in v0.2: no runtime acts on it. Run scheduled endpoints from cron
+  or a scheduler, e.g. `0 4 * * * <project>/.agentbay/bay call feed-briefing.prune '{}'`; `bay lint` warns.
 - Claude Code runtime: subagents cannot spawn subagents, so a mode coordinator runs as a playbook in the
   Chief of Staff's main thread; worker roles run as generated subagents (`.claude/agents/<role>.md`).
   A future `headless` runtime (`claude -p` workers) or cloud runtime makes the coordinator a separate agent

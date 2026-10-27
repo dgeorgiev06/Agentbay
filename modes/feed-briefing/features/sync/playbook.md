@@ -8,7 +8,7 @@ Bring the local store up to date with posts from every source bound to feed.sour
 - `maxPosts` (optional): extra per-run cap; the strictest of this, `maxPostsPerRun`, `monthlyPosts` and `spendUsd` wins.
 
 ## Steps
-1. The dispatcher runs `feed.store.sync` (code step, no agent).
+1. The dispatcher runs `feed.store/v1.sync` (code step, no agent).
 2. The store asks each bound source for posts newer than its cursor (or since the lookback start).
 3. The store dedups by `source:id`, drops ids deleted at the source, and updates cursors, coverage and monthly budget usage.
 

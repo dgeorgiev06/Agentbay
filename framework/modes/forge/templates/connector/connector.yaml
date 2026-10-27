@@ -7,6 +7,6 @@ metadata:
 spec:
   implements: {{implements}}
   entry: {{module}}.py
-  needs:
+{{source_fields}}  needs:
     secrets: []          # e.g. [MY_API_TOKEN]; must also be in the env's secrets.allow
     network: [{{host}}]  # must also be in the env's network.allow

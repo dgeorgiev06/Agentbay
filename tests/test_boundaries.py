@@ -74,6 +74,7 @@ def test_guard_scopes_bash_per_subagent():
         for agent, cmd in ok:
             r = hook(p, agent, cmd)
             assert r.returncode == 0 and "deny" not in r.stdout, (agent, cmd, r.stdout)
+            assert ('"allow"' in r.stdout) == ("/use " in cmd), (agent, cmd)   # only the own shim is auto-allowed
         bad = [("feed-analyst", ".agentbay/bay call feed-briefing.prune '{}'"),
                ("feed-analyst", ".agentbay/roles/feed-lead/use feed.store/v1.status '{}'"),
                ("feed-analyst", f"python3 {KIT}/bay/cli.py call feed-briefing.sync '{{}}'"),
@@ -120,7 +121,7 @@ def test_settings_have_no_wildcards():
         for perm in st["permissions"]["allow"]:
             assert "*" not in perm.split(":")[0] and perm not in ("Bash", "Bash(*)")
             assert perm.startswith("Bash(.agentbay/bay ") and perm.split()[1].rstrip(":*)") in \
-                ("call", "submit", "show", "status", "log", "note", "task"), perm
+                ("show", "status", "log", "note", "task"), perm
         assert not any("secret" in x or "build" in x or "roles/" in x for x in st["permissions"]["allow"])
     finally:
         cleanup(p)
@@ -235,7 +236,7 @@ def test_git_file_writing_and_exec_flags_are_refused():
                     "git log --exec-path=/tmp", "git diff -- .agentbay/guard.json", "git add .claude/settings.json"):
             d, r = tool(p, "reviewer", "Bash", {"command": cmd})
             assert d == "deny" and r.returncode == 2, cmd
-        assert tool(p, "reviewer", "Bash", {"command": "git diff HEAD~1 -- src"})[0] == "allow"
+        assert tool(p, "reviewer", "Bash", {"command": "git diff HEAD~1 -- src"})[0] == "pass"   # prompts
     finally:
         cleanup(p)
 
@@ -309,5 +310,221 @@ def test_approve_requires_a_terminal():
         assert r.returncode != 0 and "not a TTY" in r.stderr
         st = json.loads((p / ".claude/settings.json").read_text())
         assert not any("approve" in a for a in st["permissions"]["allow"])
+    finally:
+        cleanup(p)
+
+
+# ---------------------------------------------------------------- round 3 (option B)
+from bay.guard import Guard  # noqa: E402
+
+
+def guard_for(p, ci=None):
+    return Guard(json.loads((p / ".agentbay/guard.json").read_text()), p, ci=ci)
+
+
+def decide(g, agent, tool_name, ti, agent_id="a1"):
+    payload = {"tool_name": tool_name, "tool_input": ti, "cwd": str(g.project)}
+    if agent:
+        payload["agent_type"] = agent
+    if agent_id:
+        payload["agent_id"] = agent_id
+    return g.decide(payload)[0]
+
+
+def test_b1_case_variants_on_case_insensitive_filesystem():
+    p = built()
+    try:
+        g = guard_for(p, ci=True)                     # simulate macOS (APFS default)
+        for path in (".AGENTBAY/guard.json", ".Agentbay/roles/feed-analyst/use", ".CLAUDE/settings.json",
+                     ".Git/config", "src/.GIT/hooks/pre-commit", "claude.MD", ".MCP.json", ".ENV.local"):
+            assert decide(g, "builder", "Write", {"file_path": path, "content": "x"}) == "deny", path
+        assert decide(g, "feed-analyst", "Read", {"file_path": ".AgentBay/data/feeds/posts.jsonl"}) == "deny"
+        assert decide(g, "builder", "Glob", {"pattern": ".AGENT*/**"}) == "deny"
+        assert decide(g, "builder", "Write", {"file_path": "src/app.py", "content": "x"}) == "pass"
+        g = guard_for(p, ci=False)                    # case-sensitive disk: a different, harmless directory
+        assert decide(g, "builder", "Write", {"file_path": ".AGENTBAY/x.txt", "content": "x"}) == "pass"
+    finally:
+        cleanup(p)
+
+
+def test_b1_identity_check_catches_aliases_by_inode():
+    p = built()
+    try:
+        (p / "alias").symlink_to(p / ".agentbay")
+        g = guard_for(p, ci=False)
+        from pathlib import Path as P
+        assert g.inside(P(p / "alias" / "guard.json"), g.agentbay)            # by (st_dev, st_ino), unresolved
+        assert g.inside(P(p / "alias" / "new-file"), g.agentbay)             # tail does not exist yet
+        assert not g.inside(P(p / "src" / "x"), g.agentbay)
+    finally:
+        cleanup(p)
+
+
+def test_b2_forge_extend_installed_only_in_the_agentbay_checkout():
+    from bay import dispatch
+    from helpers import kit_copy
+    p = built()
+    k = kit_copy()
+    try:
+        assert not (p / ".claude/agents/builder--framework-builder.md").exists()
+        cat = json.loads((p / ".agentbay/catalog.json").read_text())
+        assert "forge.extend" not in {e["name"] for m in cat["modes"] for e in m["endpoints"]}
+        assert "forge.extend" not in (p / ".agentbay/COORDINATOR.md").read_text()
+        try:
+            dispatch.Dispatcher(system(p), p).call("forge.extend", {"goal": "change things"})
+            raise AssertionError("expected CallError")
+        except dispatch.CallError as e:
+            assert "installed only when the project is the agentbay checkout" in str(e)
+        get("claude-code").build(system(k, k), k, k)
+        assert (k / ".claude/agents/builder--framework-builder.md").exists()
+    finally:
+        cleanup(p)
+        cleanup(k)
+
+
+def test_safety_rule_only_the_own_shim_is_auto_allowed():
+    p = built()
+    try:
+        g = guard_for(p)
+        assert decide(g, "feed-analyst", "Bash", {"command": ".agentbay/roles/feed-analyst/use feed.store/v1.query '{}'"}) == "allow"
+        for agent, cmd in (("reviewer", "git status"), ("builder", "git add src/a.py"), ("reviewer", "git diff")):
+            assert decide(g, agent, "Bash", {"command": cmd}) == "pass", cmd
+        from helpers import kit_copy
+        k = kit_copy()
+        get("claude-code").build(system(k, k), k, k)
+        gk = guard_for(k)
+        for agent, cmd in (("builder--framework-builder", "python3 tests/run.py"),
+                           ("builder--framework-builder", "./bay.sh validate"), ("builder--author", "./bay.sh lint")):
+            assert decide(gk, agent, "Bash", {"command": cmd}) == "pass", cmd     # code never auto-allowed
+        st = json.loads((p / ".claude/settings.json").read_text())
+        assert not any(c in a for a in st["permissions"]["allow"] for c in ("bay call", "bay submit"))
+        cleanup(k)
+    finally:
+        cleanup(p)
+
+
+def test_sa_grep_glob_patterns_against_control_plane_probes():
+    p = built()
+    try:
+        g = guard_for(p)
+        for ti in ({"pattern": ".agent*/**"}, {"pattern": "**/.agentbay/**/*.jsonl"}, {"pattern": ".claude/*.json"},
+                   {"pattern": "{.agentbay,src}/**"}):
+            assert decide(g, "builder", "Glob", ti) == "deny", ti
+            assert decide(g, None, "Glob", ti) == "deny", ti                  # unknown subagents too
+        assert decide(g, "builder", "Grep", {"pattern": "x", "glob": ".agentbay/**"}) == "deny"
+        assert decide(g, "builder", "Glob", {"pattern": ".*"}) == "deny"       # dot-glob at the project root
+        assert decide(g, "builder", "Glob", {"pattern": "../.agentbay/*", "path": "src"}) == "deny"
+        for ti in ({"pattern": "**/*.md"}, {"pattern": "src/**/*.py"}):
+            assert decide(g, "builder", "Glob", ti) == "pass", ti
+    finally:
+        cleanup(p)
+
+
+def test_sb_unknown_subagents_interpreter_code_and_globs():
+    p = built()
+    try:
+        g = guard_for(p)
+        for cmd in ("bash -c 'cat x'", "sh -c ls", "zsh -c ls", "python3 -c 'print(1)'", "python -c x",
+                    "node -e 'x'", "/usr/bin/python3.12 -c x", "cat .agent*/guard.json", "ls .clau?e/",
+                    "cat .agentbay/data/feeds/posts.jsonl"):
+            assert decide(g, None, "Bash", {"command": cmd}) == "deny", cmd
+            assert decide(g, "Explore", "Bash", {"command": cmd}) == "deny", cmd
+        for cmd in ("ls src/*.py", "python3 script.py", "cat README.md"):
+            assert decide(g, None, "Bash", {"command": cmd}) == "pass", cmd
+    finally:
+        cleanup(p)
+
+
+def test_sd_never_write_list_for_all_subagents():
+    p = built()
+    try:
+        g = guard_for(p, ci=False)
+        for path in ("CLAUDE.md", "docs/CLAUDE.md", "CLAUDE.local.md", ".mcp.json", "agentbay.config.yaml", ".envrc",
+                     ".env", ".env.production", ".vscode/settings.json", ".idea/x.xml", ".github/workflows/ci.yml",
+                     "Makefile", "bay.sh", "vendor/lib/.git/config", "src/.git"):
+            for agent in ("builder", None):
+                assert decide(g, agent, "Write", {"file_path": path, "content": "x"}) == "deny", (agent, path)
+        assert decide(g, "builder", "Write", {"file_path": ".github/README.md", "content": "x"}) == "pass"
+    finally:
+        cleanup(p)
+
+
+def test_se_more_git_flags_and_flag_values_are_path_checked():
+    p = built()
+    try:
+        g = guard_for(p)
+        for cmd in ("git diff --pathspec-from-file=list.txt", "git log -Oorder.txt", "git diff -O order",
+                    "git diff --open-files-in-pager=vi", "git log --format=x --since=.agentbay/x",
+                    "git diff --src-prefix=.claude/x"):
+            assert decide(g, "reviewer", "Bash", {"command": cmd}) == "deny", cmd
+    finally:
+        cleanup(p)
+
+
+def test_sf_builder_has_no_worktree_isolation():
+    p = built()
+    try:
+        s = system(p)
+        assert s.roles["builder"].isolation == "none"
+        assert "worktree" not in (p / ".agentbay/COORDINATOR.md").read_text()
+    finally:
+        cleanup(p)
+
+
+def test_n2_gate_plan_does_not_advertise_submit():
+    from bay import dispatch
+    from helpers import kit_copy
+    k = kit_copy()
+    try:
+        d = dispatch.Dispatcher(system(k, k), k)
+        r = d.call("forge.extend", {"goal": "a change"})
+        r = d.submit(r["callId"], "propose", {"status": "done", "summary": "s"})
+        assert r["status"] == "awaiting-approval" and "submit" not in r["next"]
+        assert "submit" not in r["next"]["approve"]
+    finally:
+        cleanup(k)
+
+
+def test_n3_worktree_add_paths_and_no_writes_without_write_tools():
+    from helpers import kit_copy
+    k = kit_copy()
+    try:
+        get("claude-code").build(system(k, k), k, k)
+        pol = json.loads((k / ".agentbay/guard.json").read_text())
+        assert pol["subagents"]["reviewer"]["write"] == [] and pol["subagents"]["feed-analyst"]["write"] == []
+        assert pol["subagents"]["builder"]["write"] == ["."]
+        g = guard_for(k)
+        agent = "builder--framework-builder"
+        g.policy["subagents"][agent]["clis"].append("git worktree")      # as if the env granted it
+        for cmd in ("git worktree add /tmp/wt", "git worktree add ../outside", "git worktree add .agentbay/wt",
+                    "git worktree add -b x .claude/wt"):
+            assert decide(g, agent, "Bash", {"command": cmd}) == "deny", cmd
+        assert decide(g, agent, "Bash", {"command": "git worktree add -b feat bay/wt-feat"}) == "pass"
+        assert decide(g, "reviewer", "Write", {"file_path": "notes.md", "content": "x"}) == "deny"
+    finally:
+        cleanup(k)
+
+
+def test_n4_agent_type_without_agent_id_is_the_main_thread():
+    p = built()
+    try:
+        g = guard_for(p)
+        assert decide(g, "some-agent", "Bash", {"command": ".agentbay/bay status"}, agent_id=None) == "pass"
+        assert decide(g, "some-agent", "Bash", {"command": ".agentbay/bay status"}, agent_id="a7") == "deny"
+        assert decide(g, "feed-analyst", "Read", {"file_path": ".agentbay/guard.json"}, agent_id=None) == "deny"
+    finally:
+        cleanup(p)
+
+
+def test_n5_fake_fixture_must_stay_inside_the_project():
+    from bay import connect
+    p = project({"connectors": {"fake": {"fixture": "../outside.json"}}})
+    try:
+        (p.parent / "outside.json").write_text("[]")
+        try:
+            connect.instantiate(system(p), "local-feeds-offline", "fake", "feed.source/v1", p)
+            raise AssertionError("expected ConnectorError")
+        except connect.ConnectorError as e:
+            assert "must be a path inside the project" in str(e)
     finally:
         cleanup(p)

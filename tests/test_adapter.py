@@ -38,11 +38,12 @@ def test_adapter_round_trip():
         ["Bash|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep", "Task|Agent"]               # guard first
     assert_no_wildcards(st)
     ours = [p for p in st["permissions"]["allow"] if p != "Bash(ls:*)"]
-    assert sorted(ours) == sorted(f"Bash(.agentbay/bay {c}:*)" for c in ("call", "submit", "show", "status", "log", "note", "task"))
+    assert sorted(ours) == sorted(f"Bash(.agentbay/bay {c}:*)" for c in ("show", "status", "log", "note", "task"))
+    assert st["hooks"]["PreToolUse"][0]["hooks"][0]["onFailure"] == "block"
     assert {"Edit(/.agentbay/**)", "Edit(/.claude/**)", "Read(/.agentbay/data/**)"} <= set(st["permissions"]["deny"])
     assert any(d.startswith("Edit(//") and d.endswith("/**)") for d in st["permissions"]["deny"])   # kit outside
     agents = {p.stem for p in (proj / ".claude/agents").glob("*.md")}
-    assert agents == {"researcher", "builder", "reviewer", "feed-analyst", "builder--author", "builder--framework-builder"}
+    assert agents == {"researcher", "builder", "reviewer", "feed-analyst", "builder--author"}   # no framework-dev here
     assert "feed-lead" not in agents and "forge-lead" not in agents          # coordinators run in main thread
     fa = (proj / ".claude/agents/feed-analyst.md").read_text()
     assert "tools: Bash\n" in fa and ".agentbay/roles/feed-analyst/use feed.store/v1.query" in fa and "Result/v1" in fa

@@ -1,7 +1,7 @@
 """Dispatcher: schemas, grants, effects, budget, step plans, review, ledger, secrets."""
 import json
 
-from helpers import KIT, SECRETS, FakeHttp, MemProvider, clock, jresp, model, project, system
+from helpers import KIT, SECRETS, FakeHttp, MemProvider, clock, jresp, kit_copy, model, project, system
 
 from bay import dispatch, ledger, vault
 
@@ -188,8 +188,8 @@ def test_redact_is_a_last_line_of_defence():
 
 
 def test_gate_stops_and_resumes_only_on_approval():
-    p = project()
-    d = D(p)
+    k = kit_copy()                          # forge.extend exists only in the agentbay checkout
+    d = dispatch.Dispatcher(system(k, k), k, clock=clock)
     r = d.call("forge.extend", {"goal": "add a bluesky source"})
     assert r["status"] == "needs-agent" and r["next"]["step"] == "propose"
     assert r["next"]["runAs"] == "subagent_type=builder--framework-builder"
@@ -214,8 +214,8 @@ def test_gate_stops_and_resumes_only_on_approval():
 
 
 def test_failed_review_halts_before_release():
-    p = project()
-    d = D(p)
+    k = kit_copy()                          # forge.extend exists only in the agentbay checkout
+    d = dispatch.Dispatcher(system(k, k), k, clock=clock)
     r = d.call("forge.extend", {"goal": "x change"})
     ok = {"status": "done", "summary": "s"}
     r = d.submit(r["callId"], "propose", ok)

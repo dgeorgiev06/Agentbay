@@ -32,7 +32,7 @@ class CallError(Exception):
 
 class Dispatcher:
     def __init__(self, system: model.System, project: Path, *, transport=None, provider=None, clock=None):
-        self.sys, self.project = system, project
+        self.sys, self.project = system.for_project(project), project
         self.transport, self.provider, self.clock = transport, provider, clock or utcnow
 
     # ------------------------------------------------------------ public
@@ -278,7 +278,9 @@ class Dispatcher:
     def _plan(self, mode, feat, step, state) -> dict:
         role = step.resolved   # the role as placed for this endpoint (agent override applied)
         submit = f".agentbay/bay submit {state['callId']} {step.id} '<json>'"
-        plan = {"step": step.id, "kind": step.kind, "submit": submit}
+        plan = {"step": step.id, "kind": step.kind}
+        if step.kind != "gate":                     # gates are never submitted, only approved by the user
+            plan["submit"] = submit
         if step.kind == "gate":
             plan.update({"gate": step.task,
                          "approve": f"the USER runs in their own terminal: .agentbay/bay approve {state['callId']} "

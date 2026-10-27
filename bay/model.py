@@ -14,6 +14,7 @@ returns is the only thing adapters and the dispatcher consume.
 """
 from __future__ import annotations
 
+import copy
 import fnmatch
 import json
 import re
@@ -320,6 +321,23 @@ class System:
     def interface(self, name: str) -> Doc:
         return self.kit.docs["Interface"][name]
 
+    uninstalled: dict = field(default_factory=dict)   # "<mode>.<endpoint>" -> why it is not installed here
+
+    def for_project(self, project: Path | None) -> "System":
+        """The system as installed into `project`. forge.extend (and its framework-dev placements) is installed
+        only when the project is the agentbay checkout; everywhere else it does not exist."""
+        if project is not None and Path(project).resolve() == self.kit.root.resolve():
+            return self
+        mode, _, ep = FRAMEWORK_EXTENDER.partition(".")
+        if mode not in self.modes or ep not in self.modes[mode].features:
+            return self
+        m = copy.copy(self.modes[mode])
+        m.features = {k: v for k, v in m.features.items() if k != ep}
+        modes = {**self.modes, mode: m}
+        why = (f"{FRAMEWORK_EXTENDER} is installed only when the project is the agentbay checkout "
+               f"(./bay.sh build --project {self.kit.root})")
+        return System(self.kit, modes, self.roles, {**self.uninstalled, FRAMEWORK_EXTENDER: why})
+
     def placements(self) -> dict[str, "ResolvedRole"]:
         """Every (role, agent) placement used by some step, keyed by subagent name."""
         out: dict[str, ResolvedRole] = {}
@@ -331,6 +349,8 @@ class System:
         return out
 
     def feature(self, target: str) -> tuple[ResolvedMode, Feature]:
+        if target in self.uninstalled:
+            raise ResolveError([self.uninstalled[target]])
         mode, _, ep = target.partition(".")
         if mode not in self.modes:
             raise ResolveError([f"unknown mode '{mode}' (have: {', '.join(sorted(self.modes))})"])

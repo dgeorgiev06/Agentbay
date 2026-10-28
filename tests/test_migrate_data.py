@@ -172,3 +172,46 @@ def test_migrated_store_already_holds_exactly_the_modes_scope():
     out = D.run_capability("feed-briefing", "items.store/v1.prune", {"olderThan": "3650d"})
     assert out["unbound"] == 0 and out["unmatched"] == 0 and out["remaining"] == 3
     assert D.use("briefing-analyst", "items.store/v1.status", {})["stale"] is False
+
+
+def test_wrong_shape_json_is_reported_with_file_line_and_fix_never_a_crash():
+    """Each shape that used to raise (bay/migrate.py at 438ef0e): author as a string (:156, dict()), cursors as a
+    string or a list (:236, .items()), deleted as a number (:246, sorted()), a line that is not UTF-8 (:202,
+    read_text). Each is now a note naming the file (and line) and what to fix; nothing is written."""
+    cfg = {"connectors": {"x-api": {"userId": "42"}}, "secrets": {"provider": "env"}}
+    good = json.dumps(POSTS[0]).encode()
+    cases = [
+        ([good, json.dumps(dict(POSTS[1], author="bob")).encode()], STATE,
+         ['.agentbay/data/feeds/posts.jsonl:2: "author" must be an object, got a string ("bob")']),
+        ([good, b'{"id": "9", "text": "caf\xe9"}'], STATE,
+         [".agentbay/data/feeds/posts.jsonl:2: not UTF-8 (byte 0xe9 at column 25)"]),
+        ([good, json.dumps(dict(POSTS[1], createdAt="yesterday")).encode()], STATE,
+         ['posts.jsonl:2: "createdAt" and "fetchedAt" must be ISO-8601']),
+        ([good, b"[1, 2]"], STATE, ["posts.jsonl:2: expected a JSON object, got a list"]),
+        ([good], dict(STATE, cursors="x-api"),
+         ['.agentbay/data/feeds/state.json: not a valid v0.2 state file ("cursors" must be an object, got a string']),
+        ([good], dict(STATE, cursors=["x-api"]), ['("cursors" must be an object, got a list']),
+        ([good], dict(STATE, cursors={"x-api": "6"}), ['"cursors.x-api" must be an object']),
+        ([good], dict(STATE, deleted=5), ['("deleted" must be a list, got a number (5))']),
+        ([good], dict(STATE, deleted=[4]), ['"deleted" must be a list of "<source>:<id>" strings']),
+        ([good], dict(STATE, budget={"2026-10": 5}), ['"budget.2026-10" must be {"posts": <number>']),
+        ([good], dict(STATE, coverage={"from": 5}), ['"coverage" and "cursors" times must be ISO-8601']),
+    ]
+    for lines, state, needles in cases:
+        p = project(cfg, source="x-api")
+        d = p / ".agentbay/data/feeds"
+        d.mkdir(parents=True)
+        (d / "posts.jsonl").write_bytes(b"\n".join(lines) + b"\n")
+        (d / "state.json").write_text(json.dumps(state))
+        plan = migrate.plan(KIT, project=p)
+        assert plan["changes"] == [], (needles, plan)
+        for n in needles:
+            assert n in plan["notes"][0], (n, plan["notes"])
+        assert "Fix" in plan["notes"][0] or "fix" in plan["notes"][0]
+        r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "migrate", "--confirm"],
+                           capture_output=True, text=True)
+        assert r.returncode == 0 and "Traceback" not in r.stderr and not (d / "feed-briefing").exists(), r.stderr
+    p = project(cfg, source="x-api")                          # a state.json that is not UTF-8
+    d = bad_lines(p, [good.decode()])
+    (d / "state.json").write_bytes(b'{"cursors": "\xff"}')
+    assert "state.json: not a valid v0.2 state file (not UTF-8)" in migrate.plan(KIT, project=p)["notes"][0]

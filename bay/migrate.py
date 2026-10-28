@@ -35,6 +35,7 @@ from typing import Callable
 import yaml
 
 from . import __version__
+from .util import parse_time, utcnow
 
 LAYER_CAPS = {  # v0.1 layer -> v0.2 capability interfaces
     "base": ["workspace.read/v1"],
@@ -158,6 +159,60 @@ def _post_to_item(p: dict) -> dict:
             "container": "home", "labels": ["home"], "threadId": None, **ext}
 
 
+def _kind(v) -> str:
+    return {dict: "an object", list: "a list", str: "a string", bool: "a boolean", type(None): "null"}.get(
+        type(v), "a number")
+
+
+def _post_problem(post) -> str | None:
+    """Why a parsed v0.2 line cannot become an item, or None. Checked before anything reads its fields."""
+    if not isinstance(post, dict):
+        return f"expected a JSON object, got {_kind(post)}"
+    missing = [k for k in POST_KEYS if not post.get(k)]
+    if missing:
+        return f"missing {', '.join(missing)}"
+    for k, kinds in (("id", (str, int)), ("source", str), ("url", str), ("createdAt", str), ("fetchedAt", str),
+                     ("text", str), ("author", dict), ("metrics", dict), ("lang", str)):
+        v = post.get(k)
+        if v is not None and (not isinstance(v, kinds) or isinstance(v, bool)):
+            want = "a string or number" if k == "id" else _kind(kinds())
+            return f'"{k}" must be {want}, got {_kind(v)} ({json.dumps(v)[:40]})'
+    try:
+        parse_time(post["createdAt"], utcnow())
+        if post.get("fetchedAt"):
+            parse_time(post["fetchedAt"], utcnow())
+    except ValueError:
+        return '"createdAt" and "fetchedAt" must be ISO-8601 times like 2026-10-27T10:00:00Z'
+    return None
+
+
+STATE_SHAPE = {"cursors": dict, "coverage": dict, "budget": dict, "deleted": list, "checked": dict}
+
+
+def _state_problem(old) -> str | None:
+    """Why a parsed v0.2 state.json cannot be converted, or None."""
+    if not isinstance(old, dict):
+        return f"expected a JSON object, got {_kind(old)}"
+    for k, kind in STATE_SHAPE.items():
+        if old.get(k) is not None and not isinstance(old[k], kind):
+            return f'"{k}" must be {_kind(kind())}, got {_kind(old[k])} ({json.dumps(old[k])[:40]})'
+    for conn, c in (old.get("cursors") or {}).items():
+        if not isinstance(c, dict):
+            return f'"cursors.{conn}" must be an object ({{newestId, from, to, lastSync}}), got {_kind(c)}'
+    if not all(isinstance(x, str) for x in old.get("deleted") or []):
+        return '"deleted" must be a list of "<source>:<id>" strings'
+    for month, use in (old.get("budget") or {}).items():
+        if not (isinstance(use, dict) and all(isinstance(use.get(k, 0), (int, float)) for k in ("posts", "usd"))):
+            return f'"budget.{month}" must be {{"posts": <number>, "usd": <number>}}'
+    times = [*(old.get("coverage") or {}).values(),
+             *(c.get(k) for c in (old.get("cursors") or {}).values() for k in ("from", "to", "lastSync"))]
+    if not all(t is None or isinstance(t, str) for t in times):
+        return '"coverage" and "cursors" times must be ISO-8601 strings or null'
+    if not all(isinstance(v, str) for v in (old.get("checked") or {}).values()):
+        return '"checked" must map "<source>:<id>" to an ISO-8601 time'
+    return None
+
+
 def _feed_scope(kit: Path, project: Path) -> tuple[dict | None, str]:
     """feed-briefing's scope as installed in `project`: {env, sources (connector -> source id), caps (connector ->
     selector capability table), selectors}, or None and why. The migrated store must already hold exactly
@@ -181,7 +236,6 @@ def _feed_scope(kit: Path, project: Path) -> tuple[dict | None, str]:
 
 def _v02_feed_store(kit: Path, project: Path) -> tuple[list[Change], list[str]]:
     from . import selector as selmod
-    from .util import utcnow
     changes, notes = [], []
     key = selmod.native_key({})
     for posts_path in sorted((project / ".agentbay" / "data").glob("*/posts.jsonl")):
@@ -199,7 +253,12 @@ def _v02_feed_store(kit: Path, project: Path) -> tuple[list[Change], list[str]]:
         by_key: dict[str, dict] = {}
         bad: list[str] = []
         dups = 0
-        for n, line in enumerate(posts_path.read_text(encoding="utf-8").splitlines(), 1):
+        for n, raw in enumerate(posts_path.read_bytes().splitlines(), 1):
+            try:
+                line = raw.decode("utf-8")
+            except UnicodeDecodeError as e:
+                bad.append(f"{rel}:{n}: not UTF-8 (byte 0x{raw[e.start]:02x} at column {e.start + 1})")
+                continue
             if not line.strip():
                 continue
             try:
@@ -207,9 +266,9 @@ def _v02_feed_store(kit: Path, project: Path) -> tuple[list[Change], list[str]]:
             except json.JSONDecodeError as e:
                 bad.append(f"{rel}:{n}: not JSON ({e.msg} at column {e.colno})")
                 continue
-            missing = [k for k in POST_KEYS if not (isinstance(post, dict) and post.get(k))]
-            if missing:
-                bad.append(f"{rel}:{n}: missing {', '.join(missing)}")
+            problem = _post_problem(post)
+            if problem:
+                bad.append(f"{rel}:{n}: {problem}")
                 continue
             k = f"{post['source']}:{post['id']}"
             dups += k in by_key
@@ -223,12 +282,14 @@ def _v02_feed_store(kit: Path, project: Path) -> tuple[list[Change], list[str]]:
         state_path = d / "state.json"
         try:
             old = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
-            if not isinstance(old, dict):
-                raise ValueError("expected a JSON object")
-        except (json.JSONDecodeError, ValueError) as e:
+            problem = _state_problem(old)
+            if problem:
+                raise ValueError(problem)
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as e:
             where = f":{e.lineno}:{e.colno}" if isinstance(e, json.JSONDecodeError) else ""
+            why = "not UTF-8" if isinstance(e, UnicodeDecodeError) else getattr(e, "msg", e)
             notes.append(f"{state_path.relative_to(project).as_posix()}{where}: not a valid v0.2 state file "
-                         f"({getattr(e, 'msg', e)}); nothing migrated. Fix it, or move it aside to migrate the posts "
+                         f"({why}); nothing migrated. Fix it, or move it aside to migrate the posts "
                          f"without cursors, coverage, budget and deletions (the next sync then refetches the window)")
             continue
         sels, sources = scope["selectors"], scope["sources"]

@@ -454,8 +454,10 @@ are not part of this amendment.
   only path for user data: forge.migrate migrates kit content only, and neither the migrator connector nor
   env local-authoring writes `.agentbay/`.
   - It shows a dry-run summary diff first; `--confirm` applies it.
-  - Each line must be JSON with id, source, url and createdAt. Bad lines or a damaged `state.json` are
-    reported as file:line plus the fix, and nothing is migrated.
+  - Each line must be UTF-8 JSON with id, source, url and createdAt, and every field of the expected type
+    (author an object, times ISO-8601); `state.json` must have the v0.2 shape (cursors an object of objects,
+    deleted a list of ids, ...). Bad lines or a damaged `state.json` are reported as file:line plus the fix,
+    and nothing is migrated; a wrong shape never raises.
   - Duplicates (same source:id) are merged, keeping the last line, and counted in the diff.
   - Rows go through the store's `item_row` and are scrubbed.
   - It resolves feed-briefing's env and selectors in the project and writes only the posts the store

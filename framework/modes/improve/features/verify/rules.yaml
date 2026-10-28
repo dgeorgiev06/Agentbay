@@ -1,0 +1,5 @@
+apiVersion: agentbay/v2
+kind: Rules
+rules:
+  - { id: R-1, level: must, statement: "Close an item as verified only when its detector ran on newer data and did not reproduce its fingerprint.", appliesTo: both, refs: [DOD-1] }
+  - { id: R-2, level: must, statement: "Reopen an item whose pattern is still present, with a history entry.", appliesTo: both, refs: [DOD-2] }

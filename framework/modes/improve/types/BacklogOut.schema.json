@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "required": [
+    "report",
+    "week",
+    "items"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "report": {
+      "type": "string"
+    },
+    "week": {
+      "type": "string"
+    },
+    "items": {
+      "type": "array"
+    }
+  }
+}

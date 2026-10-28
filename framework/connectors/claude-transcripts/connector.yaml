@@ -1,0 +1,19 @@
+apiVersion: agentbay/v2
+kind: Connector
+metadata:
+  name: claude-transcripts
+  description: >-
+    Claude Code session transcripts (~/.claude/projects) of this project as session episodes. Defensive parser
+    (the format is not a stable API); structure and metadata only, always - no conversation text is kept.
+    Never follows symlinks; files older than the window are skipped by mtime. Read-only.
+  version: 0.1.0
+spec:
+  implements: session.events/v1
+  entry: transcripts.py
+  needs:
+    fs: { read: ["~/.claude/projects"] }
+  config:
+    type: object
+    additionalProperties: false
+    properties:
+      root: { type: string, description: "Transcripts folder (default ~/.claude/projects); relative paths are relative to the project." }

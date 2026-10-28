@@ -13,7 +13,10 @@ from pathlib import Path
 RUN_TYPES = {"spawned", "completed", "failed", "reclaimed", "note"}
 STEP_TYPES = {"step.started", "step.completed", "step.failed", "step.skipped", "step.planned", "call.completed"}
 DATA_TYPES = {"data.read"}             # a role read connector data through its use shim
-TYPES = RUN_TYPES | STEP_TYPES | DATA_TYPES
+# the guard hook denied a subagent tool call (prompts are read from Claude Code transcripts instead)
+PERMISSION_TYPES = {"permission.denied"}
+TYPES = RUN_TYPES | STEP_TYPES | DATA_TYPES | PERMISSION_TYPES
+NOTE_KINDS = ("note", "instruction-change", "decision")
 
 
 def ledger_path(project: Path) -> Path:
@@ -31,8 +34,9 @@ def append(project: Path, type: str, run_id: str, **fields) -> dict:
         raise ValueError(f"unknown event type {type!r}")
     ev = {"v": 1, "ts": now(), "type": type, "runId": run_id}
     ev.update({k: v for k, v in fields.items() if v not in (None, "", {}, [])})
+    from .secretscan import scrub_obj  # secret-shaped text agentbay never resolved (pasted keys, tokens)
     from .vault import redact  # last line of defence: no secret value ever reaches the ledger
-    line = redact(json.dumps(ev, ensure_ascii=False))
+    line = redact(json.dumps(scrub_obj(ev), ensure_ascii=False))
     # O_APPEND writes of a single short line are atomic enough for parallel hooks.
     with open(ledger_path(project), "a", encoding="utf-8") as f:
         f.write(line + "\n")
@@ -65,9 +69,15 @@ class Run:
 
 
 def fold(events: list[dict]) -> dict[str, Run]:
+    """Agent runs. Only spawned/completed/failed/reclaimed create a run; a note attaches to the run it names
+    (by runId, or by taskId) or stays standalone (see `standalone_notes`). It never creates a run."""
     runs: dict[str, Run] = {}
+    notes: list[dict] = []
     for e in events:
-        if e.get("type") in STEP_TYPES | DATA_TYPES:
+        if e.get("type") not in RUN_TYPES:
+            continue
+        if e["type"] == "note":
+            notes.append(e)
             continue
         r = runs.setdefault(e["runId"], Run(e["runId"]))
         r.agent = e.get("agent", r.agent)
@@ -85,9 +95,23 @@ def fold(events: list[dict]) -> dict[str, Run]:
             r.summary = e.get("summary", r.summary)
         elif t == "reclaimed":
             r.ended, r.state = e["ts"], "reclaimed"
-        elif t == "note":
-            r.notes.append(e.get("summary", ""))
+    for n in notes:
+        for r in _note_targets(n, runs):
+            r.notes.append(n.get("summary", ""))
     return runs
+
+
+def _note_targets(note: dict, runs: dict[str, Run]) -> list[Run]:
+    if note["runId"] in runs:
+        return [runs[note["runId"]]]
+    tid = note.get("taskId") or note["runId"]
+    return [r for r in runs.values() if r.task_id and r.task_id == tid]
+
+
+def standalone_notes(events: list[dict]) -> list[dict]:
+    """Notes that name no known agent run (tasks not spawned yet, calls, findings, free notes)."""
+    runs = fold(events)
+    return [e for e in events if e.get("type") == "note" and not _note_targets(e, runs)]
 
 
 @dataclass
@@ -99,6 +123,7 @@ class Call:
     state: str = "running"         # running | waiting | done | partial | blocked | failed
     ts: str = ""
     cost: dict = field(default_factory=dict)
+    duration_ms: int | None = None
 
 
 def fold_calls(events: list[dict]) -> dict[str, Call]:
@@ -111,6 +136,7 @@ def fold_calls(events: list[dict]) -> dict[str, Call]:
         c.mode, c.endpoint, c.ts = e.get("mode", c.mode), e.get("endpoint", c.endpoint), e["ts"]
         if e["type"] == "call.completed":
             c.state = (e.get("data") or {}).get("status", "done")
+            c.duration_ms = e.get("durationMs", c.duration_ms)
             continue
         c.last_step = e.get("step", "")
         c.state = {"step.planned": "waiting", "step.failed": "failed"}.get(e["type"], "running")

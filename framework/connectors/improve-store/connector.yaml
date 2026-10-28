@@ -1,0 +1,13 @@
+apiVersion: agentbay/v2
+kind: Connector
+metadata:
+  name: improve-store
+  description: >-
+    improve.findings/v1 on .agentbay/data/improve/ (findings.jsonl deduplicated by fingerprint, weekly reports,
+    handoff drafts). Storage only (bay/improve/store.py); detection runs behind improve.detect/v1.
+  version: 0.1.0
+spec:
+  implements: improve.findings/v1
+  entry: improve_store.py
+  needs:
+    fs: { write: [.agentbay/data/improve] }

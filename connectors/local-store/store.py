@@ -3,7 +3,8 @@
 Files (in the env's write path, default .agentbay/data/feeds/):
   posts.jsonl   one feed.post/v1 per line, dedup key `source:id`
   state.json    {cursors: {connector: {newestId, lastSync}}, coverage: {from, to},
-                 budget: {"YYYY-MM": {posts, usd}}, deleted: [source:id, ...]}
+                 budget: {"YYYY-MM": {posts, usd}}, deleted: [source:id, ...], count: N}
+                count is kept in step with posts.jsonl on every write, so status never reads posts
 
 Budget is enforced here, before each source fetch: the run is capped at the
 strictest of maxPostsPerRun, monthlyPosts - used and (spendUsd - spent) /
@@ -58,6 +59,20 @@ class LocalStore:
         tmp = self.posts_path.with_suffix(".jsonl.tmp")
         tmp.write_text("".join(json.dumps(p, ensure_ascii=False) + "\n" for p in ordered), encoding="utf-8")
         tmp.replace(self.posts_path)
+
+    def _save(self, posts: dict[str, dict], state: dict) -> None:
+        """Write posts, then state with the post count (status reads the count, not the posts)."""
+        self._write_posts(posts)
+        state["count"] = len(posts)
+        write_json(self.state_path, state)
+
+    def _count(self, state: dict) -> int:
+        if isinstance(state.get("count"), int):
+            return state["count"]
+        if not self.posts_path.exists():                 # store written before `count` existed: count lines,
+            return 0                                     # without parsing; the next sync or prune records it
+        with self.posts_path.open(encoding="utf-8") as f:
+            return sum(1 for line in f if line.strip())
 
     def _state(self) -> dict:
         s = read_json(self.state_path, {}) or {}
@@ -207,8 +222,7 @@ class LocalStore:
                              "checked": len(res.get("checked", [])), "deleted": len(res.get("deleted", []))}
         state["coverage"] = self._overall(state)
         state["deleted"] = sorted(deleted)
-        self._write_posts(posts)
-        write_json(self.state_path, state)
+        self._save(posts, state)
         out = {"added": added, "fetched": fetched, "billed": billed, "deleted": n_deleted, "spentUsd": round(spent, 6),
                "stopped": stopped, "sources": sources,
                "budget": self._budget(state), "coverage": self.coverage(state, window_from)}
@@ -297,14 +311,13 @@ class LocalStore:
             if cur.get("from") and parse_time(cur["from"], now) < cutoff:
                 cur["from"] = iso(cutoff)
         state["coverage"] = self._overall(state)
-        self._write_posts(posts)
-        write_json(self.state_path, state)
+        self._save(posts, state)
         return {"removed": before - len(posts), "remaining": len(posts), "deleted": n_deleted}
 
     def status(self) -> dict:
         state = self._state()
         return {"lastSync": state["coverage"].get("to"), "coverage": self.coverage(state),
-                "budget": self._budget(state), "count": len(self._posts())}
+                "budget": self._budget(state), "count": self._count(state)}
 
 
 def _max_id(a: str, b: str) -> str:

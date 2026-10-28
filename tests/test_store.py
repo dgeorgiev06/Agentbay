@@ -201,3 +201,20 @@ def test_query_returns_only_posts_from_bound_sources():
     online = connect.instantiate(s, "local-feeds", "local-store", "feed.store/v1", p, settings={}, clock=clock)
     assert online.query()["posts"] == []            # x-api is bound there; the fake posts are not served
     assert len(store(p).query()["posts"]) == 7
+
+
+def test_status_reads_the_recorded_count_not_the_posts():
+    p = project()
+    store(p).sync(lookback="7d")
+    st = store(p)
+    st._posts = lambda: (_ for _ in ()).throw(AssertionError("status must not parse posts"))
+    assert st.status()["count"] == len(lines(p)) == 8
+    store(p).prune(olderThan="2d", deletedIds=["fake:1009"])
+    assert store(p).status()["count"] == 4 == len(lines(p))
+    # a store written before `count` existed: lines are counted without parsing, nothing is written
+    sp = p / ".agentbay/data/feeds/state.json"
+    old = json.loads(sp.read_text())
+    old.pop("count")
+    sp.write_text(json.dumps(old))
+    before = sp.read_text()
+    assert st.status()["count"] == 4 and sp.read_text() == before

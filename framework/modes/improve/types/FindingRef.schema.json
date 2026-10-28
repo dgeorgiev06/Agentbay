@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^F-[0-9a-f]{8}$"
+    }
+  }
+}

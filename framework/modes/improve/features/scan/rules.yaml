@@ -1,0 +1,7 @@
+apiVersion: agentbay/v2
+kind: Rules
+rules:
+  - { id: R-1, level: must, statement: "Cite evidence by the exact episode ids, file:line refs or rule ids given in the plan or the store.", appliesTo: both, refs: [DOD-1] }
+  - { id: R-2, level: must, statement: "A recurring pattern needs at least 2 episodes unless it is marked severe.", appliesTo: both, refs: [DOD-2] }
+  - { id: R-3, level: must_not, statement: "Store, log or output secrets, transcript text or local paths; episodes carry structure and metadata only.", appliesTo: both, check: no_secrets, refs: [DOD-3] }
+  - { id: R-4, level: must_not, statement: "Modify any artifact; scan writes only the improve store.", appliesTo: both }

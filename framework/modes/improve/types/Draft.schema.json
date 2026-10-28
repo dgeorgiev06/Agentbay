@@ -1,0 +1,70 @@
+{
+  "description": "implement: the fix as a forge.extend proposal draft or a mode-fix task envelope. Never code.",
+  "type": "object",
+  "required": [
+    "route",
+    "title",
+    "problem",
+    "change"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "route": {
+      "enum": [
+        "forge.extend",
+        "mode-fix"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 200
+    },
+    "problem": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 3000
+    },
+    "change": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 5000
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 300
+      }
+    },
+    "compatibility": {
+      "type": "string",
+      "maxLength": 2000
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 300
+      }
+    },
+    "envelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "goal": {
+          "type": "string"
+        },
+        "deliverable": {
+          "type": "string"
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

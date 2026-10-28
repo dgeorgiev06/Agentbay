@@ -1,0 +1,11 @@
+apiVersion: agentbay/v2
+kind: Connector
+metadata:
+  name: git
+  description: Commits of the project as session episodes (sha, date, revert flag, files and churn). Commit messages are read only to detect reverts and are never returned. Read-only.
+  version: 0.1.0
+spec:
+  implements: session.events/v1
+  entry: git_history.py
+  needs:
+    fs: { read: [.git] }

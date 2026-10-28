@@ -15,10 +15,13 @@
 
   mode new <name> | feature new <name> --mode <m> | role new <name>
   connector new <name> --implements <iface> | env new <name>     scaffolds (forge templates)
+  improve decide <id> approve|defer|wontfix   record your decision on a backlog item (approve: terminal only)
+  improve weekly [--since 7d]                 scan + audit + triage + backlog; cron it weekly
   migrate [--confirm]    migrate user content (dry-run diff by default)
   secret set <NAME>      store a secret in the keychain (value read from stdin, never echoed)
 
   task new | status | log | note | reclaim     ledger
+  note <ref> "text" --instruction              record a mid-run instruction change (read by improve.scan)
 """
 from __future__ import annotations
 
@@ -200,7 +203,8 @@ def cmd_show(args):
 
 def cmd_submit(args):
     d = _dispatcher(args)
-    _run(lambda: d.submit(args.call, args.step, _json_arg(args.output)))
+    usage = _json_arg(args.usage) if args.usage else None
+    _run(lambda: d.submit(args.call, args.step, _json_arg(args.output), usage=usage))
 
 
 def role_use_main(role: str, project: Path, argv: list[str]) -> None:
@@ -217,6 +221,59 @@ def role_use_main(role: str, project: Path, argv: list[str]) -> None:
         _die(f"✗ {e}")
     d = dispatch.Dispatcher(s, project)
     _run(lambda: d.use(role, target, _json_arg(inp)))
+
+
+# ------------------------------------------------------------------ improve
+WEEKLY = ("improve.scan", "improve.audit", "improve.triage")      # then improve.backlog, once nothing is pending
+
+
+def cmd_improve_decide(args):
+    """Human decisions on backlog items. approve needs an interactive terminal (never an agent)."""
+    tty = sys.stdin.isatty()
+    if args.decision == "approve":
+        if not tty:
+            _die("✗ bay improve decide ... approve needs an interactive terminal (stdin is not a TTY). Approving a "
+                 "fix is your decision, not an agent's: run it yourself in a terminal.")
+        if input(f"APPROVE {args.id} for implementation on demand? Type yes to confirm: ").strip().lower() != "yes":
+            _die("not confirmed; nothing changed")
+    d = _dispatcher(args)
+    by = "user@tty" if tty else "cli"
+    _run(lambda: d.run_capability("improve", "improve.findings/v1.decide",
+                                  {"id": args.id, "decision": args.decision, "by": by,
+                                   **({"note": args.note} if args.note else {})}))
+    ledger.append(args.project, "note", args.id, source="cli", summary=f"improve decide {args.id} {args.decision}",
+                  data={"kind": "decision"})
+
+
+def cmd_improve_weekly(args):
+    """scan + audit + triage, then backlog. The report is written only when no analysis step is pending; otherwise
+    this stops and lists the agent steps to finish first (the coordinator runs them, then improve.backlog)."""
+    from bay import connect, dispatch
+    d = _dispatcher(args)
+    calls, pending = [], []
+    for target in WEEKLY:
+        inp = {"since": args.since} if target == "improve.scan" and args.since else {}
+        try:
+            r = d.call(target, inp)
+        except (dispatch.CallError, connect.ConnectorError) as e:
+            r = {"target": target, "status": "failed", "error": str(e)}
+        item = {k: r[k] for k in ("callId", "target", "status", "error") if k in r}
+        if r.get("status") in ("needs-agent", "awaiting-approval"):
+            item["next"] = {k: r["next"][k] for k in ("step", "role", "runAs", "submit") if k in r["next"]}
+            pending.append(item)
+        calls.append(item)
+    if pending:
+        _out({"status": "pending", "calls": calls,
+              "next": ["Run each pending step plan (`.agentbay/bay show <callId>` prints it) and submit its output; "
+                       "each call continues until it is done.",
+                       "Then write the report: .agentbay/bay call improve.backlog '{}'"]})
+        return
+    try:
+        r = d.call("improve.backlog", {})
+    except (dispatch.CallError, connect.ConnectorError) as e:
+        _die(f"✗ improve.backlog: {e}")
+    calls.append({k: r[k] for k in ("callId", "target", "status", "output") if k in r})
+    _out({"status": r["status"], "calls": calls})
 
 
 # ------------------------------------------------------------------ scaffolds & migrations
@@ -286,8 +343,10 @@ def cmd_status(args):
     evs = ledger.read(args.project)
     runs = list(ledger.fold(evs).values())
     calls = list(ledger.fold_calls(evs).values())
+    notes = ledger.standalone_notes(evs)
     if args.json:
-        print(json.dumps({"runs": [r.__dict__ for r in runs], "calls": [c.__dict__ for c in calls]}, indent=2))
+        print(json.dumps({"runs": [r.__dict__ for r in runs], "calls": [c.__dict__ for c in calls],
+                          "notes": notes}, indent=2))
         return
     live = [r for r in runs if r.state == "running"]
     done = [r for r in runs if r.state != "running"][-args.n:]
@@ -301,6 +360,11 @@ def cmd_status(args):
     print(f"\nRECENT AGENTS ({len(done)} of {len(runs) - len(live)})")
     for r in done:
         print(f"  {r.run_id[:14]:<14} {r.agent:<14} {r.task_id or '-':<16} {r.state:<9} {r.summary[:70]}")
+    if notes:
+        print(f"\nNOTES ({len(notes)}, not attached to an agent run)")
+        for n in notes[-args.n:]:
+            kind = (n.get("data") or {}).get("kind", "note")
+            print(f"  {n['runId'][:18]:<18} {kind:<18} {n.get('summary', '')[:70]}")
 
 
 def cmd_log(args):
@@ -312,13 +376,16 @@ def _find_run(project, key) -> str:
     for r in ledger.fold(ledger.read(project)).values():
         if r.run_id.startswith(key) or r.task_id == key:
             return r.run_id
-    return key  # allow notes on tasks or calls not yet spawned
+    return key  # a task, call or anything else: the note stays standalone (it never creates a run)
 
 
 def cmd_note(args):
     rid = _find_run(args.project, args.ref)
+    kind = "instruction-change" if args.instruction else args.kind
     ledger.append(args.project, "note", rid, source="coordinator", summary=args.text,
-                  taskId=args.ref if args.ref.startswith("T-") else None)
+                  taskId=args.ref if args.ref.startswith("T-") else None,
+                  callId=args.ref if args.ref.startswith("C-") else None,
+                  data={"kind": kind} if kind != "note" else None)
     print("noted")
 
 
@@ -362,6 +429,7 @@ def main(argv=None):
     ca = sub.add_parser("call", help="run <mode>.<endpoint> with a JSON input ('-' reads stdin)")
     ca.add_argument("target"); ca.add_argument("input", nargs="?"); ca.set_defaults(fn=cmd_call)
     su = sub.add_parser("submit"); su.add_argument("call"); su.add_argument("step"); su.add_argument("output")
+    su.add_argument("--usage", help='what the runtime reported for the step: \'{"tokens": N, "costUsd": X, "durationMs": N}\'')
     su.set_defaults(fn=cmd_submit)
     sh = sub.add_parser("show"); sh.add_argument("call"); sh.set_defaults(fn=cmd_show)
     ap_ = sub.add_parser("approve", help="pass (or --reject) an approval gate; interactive terminal only")
@@ -384,11 +452,24 @@ def main(argv=None):
     se = sub.add_parser("secret"); se.add_argument("action", choices=["set"]); se.add_argument("name")
     se.add_argument("--provider", default="keychain"); se.set_defaults(fn=cmd_secret)
 
+    im = sub.add_parser("improve", help="improve backlog: decide items, run the weekly pass")
+    ims = im.add_subparsers(dest="action", required=True)
+    dc = ims.add_parser("decide", help="approve|defer|wontfix a backlog item (approve: interactive terminal only)")
+    dc.add_argument("id"); dc.add_argument("decision", choices=["approve", "defer", "wontfix"])
+    dc.add_argument("--note"); dc.set_defaults(fn=cmd_improve_decide)
+    wk = ims.add_parser("weekly", help="scan + audit + triage + backlog (cron: see README)")
+    wk.add_argument("--since"); wk.set_defaults(fn=cmd_improve_weekly)
+
     t = sub.add_parser("task"); t.add_argument("action", choices=["new"]); t.set_defaults(fn=cmd_task)
     s = sub.add_parser("status"); s.add_argument("-n", type=int, default=10); s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_status)
     lg = sub.add_parser("log"); lg.add_argument("-n", type=int, default=20); lg.set_defaults(fn=cmd_log)
-    no = sub.add_parser("note"); no.add_argument("ref"); no.add_argument("text"); no.set_defaults(fn=cmd_note)
+    no = sub.add_parser("note", help="record a note on a run, task or call (never creates a run)")
+    no.add_argument("ref"); no.add_argument("text")
+    no.add_argument("--kind", choices=ledger.NOTE_KINDS, default="note")
+    no.add_argument("--instruction", action="store_true", help="the user changed the instructions mid-run "
+                    "(same as --kind instruction-change)")
+    no.set_defaults(fn=cmd_note)
     r = sub.add_parser("reclaim"); r.add_argument("run"); r.add_argument("--reason", default="reclaimed by coordinator")
     r.set_defaults(fn=cmd_reclaim)
 

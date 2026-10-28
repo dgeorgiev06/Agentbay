@@ -1,0 +1,8 @@
+apiVersion: agentbay/v2
+kind: Rules
+rules:
+  - { id: R-1, level: must, statement: "Confirm evidence before explaining it; list the refs checked in evidenceChecked.", appliesTo: both, refs: [DOD-1] }
+  - { id: R-2, level: must, statement: "Each root cause names a mechanism (missing check, step, input, rule or test).", appliesTo: both, refs: [DOD-2] }
+  - { id: R-3, level: should, statement: "Prefer preventive fixes; a category with 2 or more findings gets a rule or check proposal.", appliesTo: both, refs: [DOD-4] }
+  - { id: R-4, level: must, statement: "Fail any annotation whose evidence does not appear in the finding or whose root cause restates the symptom.", appliesTo: reviewer, refs: [DOD-1, DOD-2] }
+  - { id: R-5, level: must_not, statement: "Modify any artifact or approve an item; approval is the user's decision.", appliesTo: both, refs: [DOD-5] }

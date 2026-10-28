@@ -127,7 +127,10 @@ def test_wildcard_values_are_matched_locally_never_sent_to_the_source():
     assert sel.split({"id": "a", "from": "lido"}, caps)[0] == {"from": "lido"}
     errs, warns = sel.check([{"id": "a", "from": "vit*"}], caps, connector="x-api", paid=True, where="here")
     assert errs == [] and len(warns) == 1
-    assert "field `from` has a `*` value, which x-api cannot search natively, so it is matched locally" in warns[0]
+    assert "field `from` has a `*` value, which x-api cannot search natively, so the native query is empty and " \
+        "becomes x-api's default stream (the home timeline on X); `from` is matched locally" in warns[0]
+    _, warns = sel.check([{"id": "a", "from": "vit*", "in": "home"}], caps, connector="x-api", paid=True, where="h")
+    assert "so it is matched locally" in warns[0] and "default stream" not in warns[0]   # `in` stays native
     assert sel.check([{"id": "a", "from": "vit*"}], caps, connector="fake", paid=False, where="here") == ([], [])
     # fake: `from: vit*` used to fetch nothing (the source got the pattern as a handle)
     from bay import connect
@@ -146,7 +149,8 @@ def test_wildcard_from_on_x_reads_the_home_timeline_and_validate_warns():
     p = project({"connectors": {"x-api": {"userId": "42"}}, "secrets": {"provider": "env"},
                  "modes": {"feed-briefing": {"selectors": [{"id": "v", "from": "vit*"}]}}}, source="x-api")
     s = system(p)
-    assert any("`from` has a `*` value, which x-api cannot search natively" in w for w in s.warnings), s.warnings
+    assert any("`from` has a `*` value, which x-api cannot search natively, so the native query is empty and "
+               "becomes x-api's default stream (the home timeline on X)" in w for w in s.warnings), s.warnings
 
     def timeline(params, headers, form):
         ts = [{"id": "11", "text": "hello", "author_id": "1", "created_at": "2026-10-27T11:00:00Z"},

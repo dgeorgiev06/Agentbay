@@ -185,6 +185,9 @@ def check(selectors: list[dict], caps: dict, *, connector: str, paid: bool, wher
             elif paid and (m == "local" or f.startswith("not.") or wildcard(s.get(f))) and base != "since":
                 wild = m == "native" and not f.startswith("not.")
                 why = f"has a `*` value, which {connector} cannot search natively, so it is" if wild else "is"
+                if wild and not {k for k in split(s, caps)[0] if k != "since"}:
+                    why = (f"has a `*` value, which {connector} cannot search natively, so the native query is "
+                           f"empty and becomes {connector}'s default stream (the home timeline on X); `{f}` is")
                 fix = f"exact values for `{f}` or " if wild else ""
                 warnings.append(f"{where}: selector '{sid}' field `{f}` {why} matched locally on paid source "
                                 f"{connector}: every item its native query returns is billed, then dropped if it does "

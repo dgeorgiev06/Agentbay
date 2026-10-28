@@ -5,17 +5,19 @@ metadata:
   description: >-
     Local corpus of item/v1 items with selector tags, per-query cursors, budget usage and coverage. sync and
     prune are dispatcher code steps; every other endpoint is read-only and reachable by agents through their
-    role's use shim. Reads return only items from sources bound in the env that match at least one selector.
+    role's use shim. The store holds exactly the mode's scope (items of the sources bound to its env that
+    match at least one current selector); internal state lives in a separate state.json.
 spec:
   version: 1
   binding: connector
   endpoints:
     sync:
       description: >-
-        Re-match stored items when the configured selectors changed (no refetch), then fetch each distinct
-        native query from every source bound to items.source/v1 (a new selector backfills its lookback window),
-        keep items that match a selector, tag them with `matched`, honor deletions and enforce budget caps
-        (stop and report when a cap would be exceeded).
+        Keep the store to exactly the mode's scope: delete items of sources no longer bound, re-match stored
+        items when the selectors changed (no refetch) and delete those no selector matches. Then fetch each
+        distinct native query from every source bound to items.source/v1 (a new selector backfills its
+        lookback window), keep items that match a selector, tag them with `matched`, honor deletions and
+        enforce budget caps (stop and report when a cap would be exceeded).
       in:
         type: object
         additionalProperties: false
@@ -33,6 +35,7 @@ spec:
           billed: { type: integer, description: "Items read from sources (budget usage), including deletion checks." }
           deleted: { type: integer, description: "Stored items removed because the source no longer serves them." }
           rematched: { type: integer, description: "Stored items re-tagged because the selectors changed." }
+          outOfScope: { type: integer, description: "Stored items deleted because they left the mode's scope (their source is no longer bound, or no current selector matches them)." }
           spentUsd: { type: number, minimum: 0 }
           stopped: { type: [string, "null"], description: "Why sync stopped early (budget cap), or null." }
           sources: { type: object }
@@ -42,8 +45,8 @@ spec:
       effects: [network, spend, write]
     prune:
       description: >-
-        Drop items older than the retention window, items deleted at the source (honor-deletions) and items
-        that no longer match any selector (a selector was removed).
+        Drop items older than the retention window, items deleted at the source (honor-deletions), items that
+        no longer match any selector (a selector was removed) and items of sources no longer bound.
       in:
         type: object
         additionalProperties: false
@@ -58,7 +61,8 @@ spec:
           removed: { type: integer }
           remaining: { type: integer }
           deleted: { type: integer }
-          unmatched: { type: integer }
+          unmatched: { type: integer, description: "Items deleted because no current selector matches them." }
+          unbound: { type: integer, description: "Items deleted because their source is no longer bound to the mode's env." }
           cutoff: { type: string }
       effects: [write, delete]
     describe:
@@ -77,9 +81,10 @@ spec:
       effects: [read]
     sql:
       description: >-
-        One read-only SELECT over the approved views (v_items, v_posts) and items_fts. Sandboxed: read-only
-        connection, authorizer, time limit, row and byte caps; output is redacted and secret-scanned. Errors say
-        what to change.
+        One read-only SELECT over the views (v_items, v_posts, v_fts) and the store tables (items,
+        item_selectors, items_fts), which hold only the mode's scope. Sandboxed: read-only connection,
+        authorizer, time limit, row and byte caps; output is redacted and secret-scanned. Errors say what to
+        change.
       in:
         type: object
         required: [sql]
@@ -152,7 +157,7 @@ spec:
           values: { type: array, items: { type: object } }
       effects: [read]
     search:
-      description: Full-text search (FTS5, ranked, with snippets; LIKE matching when FTS5 is unavailable). Words are ANDed; use `sql` with items_fts MATCH for operators.
+      description: Full-text search (FTS5, ranked, with snippets; LIKE matching when FTS5 is unavailable). Words are ANDed; use `sql` with v_fts MATCH for operators.
       in:
         type: object
         required: [text]
@@ -193,7 +198,7 @@ spec:
           coverage: { $ref: items.coverage/v1 }
       effects: [read]
     status:
-      description: Store freshness, coverage, budget usage, counts per selector and full-text engine; no network. `stale` is true when the configured selectors differ from the ones last applied (the next sync re-matches).
+      description: Store freshness, coverage, budget usage, counts per selector and full-text engine; no network. `stale` is true when the configured selectors or the bound sources differ from the ones last applied (the next sync re-scopes the store).
       in:
         type: object
         additionalProperties: false

@@ -14,8 +14,8 @@ Run every command from the plan's `tools` (your role's use shim), one at a time.
    (inside the single-quoted shell argument, write each SQL quote `'` as `'\''`). One SELECT per call; select `id` (and `url`) always; keep text columns short (`substr(text, 1, 200)`). Recipes:
    - recent by author: `SELECT id, url, createdAt, substr(text,1,200) FROM v_items WHERE author = 'lido' ORDER BY createdAt DESC LIMIT 20`
    - full text: `SELECT id, url, snippet FROM v_fts WHERE fts MATCH 'staking AND custody' ORDER BY rank LIMIT 20`
-     (quote phrases: `fts MATCH '"proof of stake"'`; `items_fts` itself is not readable; without FTS5 there is
-     no v_fts: use `instr(lower(text), 'staking') > 0` on v_items)
+     (quote phrases: `fts MATCH '"proof of stake"'`; without FTS5 there is no v_fts: use
+     `instr(lower(text), 'staking') > 0` on v_items)
    - one selector: `... FROM v_items v WHERE EXISTS (SELECT 1 FROM json_each(v.matched) WHERE value = 'home')`
    - who talks most: `SELECT author, count(*) n FROM v_items WHERE createdAt >= '2026-10-24' GROUP BY author ORDER BY n DESC LIMIT 10`
    - per day: `SELECT substr(createdAt, 1, 10) day, count(*) FROM v_items GROUP BY day ORDER BY day`

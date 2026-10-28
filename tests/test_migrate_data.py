@@ -53,11 +53,14 @@ def test_apply_preserves_state_and_the_next_sync_is_incremental():
     assert (d / "posts.jsonl.v0.2.bak").exists() and (d / "state.json.v0.2.bak").exists()
     assert not (d / "posts.jsonl").exists() and migrate.plan(KIT, project=p)["changes"] == []
     con = sqlite3.connect(d / "feed-briefing/corpus.db")
-    st = {k: json.loads(v) for k, v in con.execute("SELECT key, value FROM state")}
     tags = con.execute("SELECT count(*) FROM item_selectors WHERE selector = 'home'").fetchone()[0]
+    tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     con.close()
+    st = json.loads((d / "feed-briefing/state.json").read_text())        # internal state: outside corpus.db
+    assert "state" not in tables and (d / "feed-briefing/state.json").stat().st_mode & 0o777 == 0o600
     assert st["budget"] == STATE["budget"] and st["coverage"] == STATE["coverage"] and st["deleted"] == ["x:4"]
     assert st["checked"] == STATE["checked"] and st["selectors"] == [{"id": "home"}] and tags == 3
+    assert st["sources"] == ["x"]
     assert st["cursors"] == {"x-api|{}": {"cursor": "6", "from": "2026-10-23T10:00:00Z", "to": "2026-10-27T10:00:00Z",
                                           "lastSync": "2026-10-27T10:00:00Z", "selectors": ["home"]}}
     # the migrated store answers through the views, then syncs incrementally from the kept cursor
@@ -140,3 +143,32 @@ def test_duplicates_are_merged_and_counted_and_migrated_rows_are_scrubbed():
             assert secret not in out and secret.upper() not in out and secret.encode().hex().upper() not in out
     texts = D.use("briefing-analyst", "items.store/v1.sql", {"sql": "SELECT text FROM v_items WHERE id = 'x:3'"})
     assert texts["rows"] == [["post 3 on staking"]]                        # the last duplicate wins
+
+
+def test_migrated_store_already_holds_exactly_the_modes_scope():
+    """Posts from a source the env does not bind, and posts no current selector matches, are not written: the
+    store satisfies the corpus-store invariant before any sync or prune runs."""
+    sels = [{"id": "staking", "text": "staking"}]
+    p = project({"connectors": {"x-api": {"userId": "42"}}, "secrets": {"provider": "env"},
+                 "modes": {"feed-briefing": {"selectors": sels}}}, source="x-api")
+    off_topic = dict(POSTS[0], id="7", text="cooking tips")
+    other_src = dict(POSTS[1], id="8", source="fake", url="https://example.com/8")
+    d = bad_lines(p, [json.dumps(x) for x in [*POSTS, off_topic, other_src]])
+    plan = migrate.plan(KIT, project=p)
+    assert "+items: 3 post/v1 (x: 3), matched: [staking]" in plan["diff"]
+    assert "1 on the deleted list dropped" in plan["diff"] and "1 matching no selector dropped" in plan["diff"]
+    assert "1 from sources not bound in env local-feeds (x) dropped" in plan["diff"]
+    migrate.apply(KIT, project=p)
+    con = sqlite3.connect(d / "feed-briefing/corpus.db")
+    got = {r[0] for r in con.execute("SELECT source || ':' || ext_id FROM items")}
+    fts = con.execute("SELECT count(*) FROM items_fts").fetchone()[0]
+    con.close()
+    assert got == {"x:3", "x:5", "x:6"} and fts == 3
+    st = json.loads((d / "feed-briefing/state.json").read_text())
+    assert st["selectors"] == sels and st["sources"] == ["x"]
+    assert st["cursors"]["x-api|{}"]["selectors"] == ["staking"]          # text is local on x: same native query
+    # the next prune finds nothing out of scope, and status does not call the scope stale
+    D = dispatch.Dispatcher(system(p), p, clock=clock)
+    out = D.run_capability("feed-briefing", "items.store/v1.prune", {"olderThan": "3650d"})
+    assert out["unbound"] == 0 and out["unmatched"] == 0 and out["remaining"] == 3
+    assert D.use("briefing-analyst", "items.store/v1.status", {})["stale"] is False

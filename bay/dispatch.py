@@ -204,7 +204,7 @@ class Dispatcher:
         iface = step.run.rsplit(".", 1)[0]
         st = self._invoke(step.env, step.connector, iface, "status", {}, settings=self._settings(mode), caps={})
         last = st.get("lastSync")
-        if st.get("stale"):           # the configured selectors changed: the store must re-match first
+        if st.get("stale"):           # selectors or bound sources changed: sync re-scopes the store first
             return False
         return bool(last) and (self.clock() - parse_time(last, self.clock())) <= age
 

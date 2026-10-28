@@ -78,7 +78,11 @@ Every item records `matched: [selector ids]`, so a digest or question can be sco
 
 - Change a selector and the next sync re-matches stored posts without refetching them.
 - Add one and it backfills its lookback window.
-- Remove one and its posts disappear from answers at once; `prune` deletes them.
+- Remove one and the next sync or prune deletes the posts only it matched (digest and ask sync first when
+  the selectors changed).
+
+The store only ever holds what the mode's selectors match from the sources bound to its env: switching from
+the offline env to the real one, or unbinding a source, removes that source's items on the next sync.
 
 `bay validate` errors on a field a source cannot express. It warns when a field is matched only locally on
 a paid source (for example `text` on X, where every post the native query returns is billed).
@@ -234,9 +238,12 @@ it cannot contain code once something runs it. Hard isolation needs an OS sandbo
 - **Approval gates are yours:** `bay approve <callId>` works only in your own terminal.
 - **Agent SQL is sandboxed.** `items.store/v1.sql` is defended in layers:
   - the connection opens read-only (`mode=ro`, `query_only`);
-  - an authorizer allows only SELECT over the views `v_items`, `v_posts` and `v_fts` (full text, scoped like
-    `v_items`), plus an allowlist of functions. Each query is first prepared under a strict pass that refuses
-    `items_fts` and its shadow tables, so full-text results never include items outside the mode's scope;
+  - the store file holds only the mode's scope (sync and prune delete everything else, from the full-text
+    index too), and cursors, budget and deletions live in a separate `state.json` the connection never opens,
+    so no query can reach anything out of scope;
+  - an authorizer allows only SELECT over the views `v_items`, `v_posts` and `v_fts` and the tables `items`,
+    `item_selectors` and `items_fts`, plus an allowlist of functions; the FTS shadow tables and the schema
+    table are refused;
   - WITH clauses may not reuse a view or table name;
   - a time limit, a 256 MB heap cap (sorts spill to disk), and row, byte and value-size caps.
 

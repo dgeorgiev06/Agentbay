@@ -358,9 +358,10 @@ are not part of this amendment.
     selector with the one shared matcher. Items carry `matched`.
   - A selector change re-matches without refetching. A new selector, including one joining an existing native
     query, backfills its lookback.
-  - A removed selector's items are hidden at once, and prune deletes them (sync has no delete effect).
+  - A removed selector's items are deleted by the next sync or prune (the store invariant below).
   - Validate errors on fields a source cannot express. It warns on local-only fields when a source is paid.
-  - The `stale > 2h` refresh also runs when the configured selectors differ from the applied ones.
+  - The `stale > 2h` refresh also runs when the configured selectors or bound sources differ from the
+    applied ones.
 - **corpus-store** (framework connector, so every briefing mode shares it): one store per mode,
   `<env data folder>/<mode>/corpus.db`, so two briefing modes on one env never share selector tags. The
   dispatcher passes the mode; a role's use-shim read resolves the one mode of that role that needs the store.
@@ -368,27 +369,37 @@ are not part of this amendment.
   1. Its tables:
   - `items`;
   - `item_selectors`;
-  - `items_fts` (FTS5 with its own content, kept by triggers);
-  - `state` (replaces state.json).
+  - `items_fts` (FTS5 with its own content, kept by triggers).
+
+  Internal state (cursors, coverage, budget, deleted ids, deletion-check times, and the selectors and
+  sources last applied) lives next to it in `<mode>/state.json` (0600, written atomically after the items
+  commit), which the agents' read-only connection never opens.
+
+  **Scope invariant.** corpus.db holds exactly the mode's scope: items of the sources bound to the mode's env
+  that match at least one current selector. sync and prune enforce it on every run. They delete rows of
+  sources no longer bound (a swap from the offline env to the real one included) and re-match every stored
+  item without refetching, deleting those no selector matches. sync stores a fetched item only when it
+  matches. The FTS triggers keep `items_fts` in step, and the v0.2 migration writes only in-scope items.
+  Scope is therefore structural: the SQL sandbox does not filter, because there is nothing out of scope to
+  reach.
 
   Sync is one transaction. Budget, deletion re-checks, coverage and caps behave as in v0.2; the cap names
   `maxPostsPerRun`, `monthlyPosts` and `costPerPostUsd` are kept and count items. Without FTS5, search
   falls back to LIKE and `bay validate` warns.
 - **Read-only SQL sandbox** (`bay/sqlsandbox.py`):
-  - temp views `v_items`, `v_posts` (built from `items` with the same scope, no re-join) and `v_fts`
-    (`v_items` joined to `items_fts`, with columns `fts` for MATCH, `rank` and `snippet`), limited to the
-    env's bound sources and to items matching a selector;
+  - plain temp views `v_items`, `v_posts` (built from `items`) and `v_fts` (`v_items` joined to
+    `items_fts`, with columns `fts` for MATCH, `rank` and `snippet`: the documented full-text path);
   - `mode=ro` + `query_only`;
-  - an authorizer: SELECT and READ on those views, json_each and CTEs only, and a function allowlist. Base
-    tables and `items_fts` are readable only from inside an approved view; the FTS shadow tables, ATTACH,
-    PRAGMA, writes, DDL, load_extension, sqlite_master and `state` are denied;
-  - **strict pre-pass.** Each query is first prepared as `EXPLAIN <sql>` under the strict authorizer and only
-    then runs. During the run, FTS5's own unattributed reads of its shadow tables are allowed, so a query can
-    never name them itself.
-  - **Residual leak:** a flattened `count(*)` over `v_fts` may count `items_fts` rows (row existence, no
-    data), and only when the statement also reads through `v_fts`;
-  - a lexical check forbids WITH clauses named like a view or table: inside a CTE the authorizer reports the
-    CTE's name as the enclosing view, so a CTE called `v_items` would otherwise launder base-table reads;
+  - an authorizer: SELECT and READ on those views and the store tables `items`, `item_selectors` and
+    `items_fts`, json_each and CTEs, and a function allowlist. It denies the FTS shadow tables, any other
+    table, sqlite_schema/sqlite_master, writes, DDL, ATTACH, PRAGMA and load_extension. A read of no column
+    (`count(*)`) reaches the authorizer without a database name and meets the same allowlist;
+  - **strict pre-pass.** Each query is first prepared as `EXPLAIN <sql>` under the authorizer and only then
+    runs. During the run, FTS5's own unattributed reads of its shadow tables are allowed, so a query can
+    never name them itself. FTS5 is connected before the authorizer is on, so its config read never trips
+    the pre-pass;
+  - a lexical check forbids WITH clauses named like any view or table in the store, so a name always means
+    the stored object;
   - a 2 s progress-handler limit, a 1 MB SQLITE_LIMIT_LENGTH, `PRAGMA hard_heap_limit` 256 MB (process-wide,
     only ever lowered) with `temp_store=FILE`, and row, byte and cell caps;
   - fixable error messages.
@@ -447,6 +458,9 @@ are not part of this amendment.
     reported as file:line plus the fix, and nothing is migrated.
   - Duplicates (same source:id) are merged, keeping the last line, and counted in the diff.
   - Rows go through the store's `item_row` and are scrubbed.
-  - Cursors (newestId becomes the `<connector>|{}` cursor), coverage, budget, deletions and check times are
-    kept, and posts carry `matched: [home]`.
+  - It resolves feed-briefing's env and selectors in the project and writes only the posts the store
+    would keep (bound source, matching a selector; the diff counts the rest), so the new store already
+    satisfies the scope invariant.
+  - Cursors (newestId becomes the `<connector>|{}` cursor of the selectors with an empty native query),
+    coverage, budget, deletions and check times are kept in `feed-briefing/state.json`.
   - Old files are renamed `*.v0.2.bak`.

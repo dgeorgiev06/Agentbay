@@ -1,5 +1,7 @@
 """Adversarial tests for items.store/v1.sql (bay/sqlsandbox.py): nothing an agent sends can write, read
-internal tables, run away, load code or leak a secret stored in an item; every refusal says what to change."""
+internal tables, run away, load code or leak a secret stored in an item; every refusal says what to change.
+Scope is structural (the store holds only the mode's scope), so every full-text and count form that once
+leaked out-of-scope rows now finds nothing out of scope."""
 import json
 import sqlite3
 import subprocess
@@ -17,7 +19,10 @@ SECRET_TEXT = ("rotate soon: sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345 and p
                "token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c")
 
 
-def setup(extra_fixture=None):
+HOME = [{"id": "home", "in": "home"}]
+
+
+def setup(extra_fixture=None, selectors=None):
     p = project()
     fx = [{"id": "21", "handle": "ops", "text": SECRET_TEXT, "ageHours": 1},
           {"id": "22", "handle": "lido", "text": "Staking module update", "ageHours": 2},
@@ -28,7 +33,7 @@ def setup(extra_fixture=None):
     cfg["connectors"] = {"fake": {"fixture": "fx.json"}}
     (p / "agentbay.config.yaml").write_text(yaml.safe_dump(cfg))
     st = connect.instantiate(system(p), "local-feeds-offline", "corpus-store", "items.store/v1", p,
-                             settings={"lookbackMax": "30d", "selectors": [{"id": "home", "in": "home"}],
+                             settings={"lookbackMax": "30d", "selectors": selectors or HOME,
                                        "mode": "feed-briefing"}, clock=clock)
     st.sync(lookback="3d")
     return p, st
@@ -42,7 +47,7 @@ def snapshot(p):
     con = sqlite3.connect(dbfile(p))
     try:
         return (con.execute("SELECT count(*), group_concat(body) FROM items").fetchone(),
-                con.execute("SELECT group_concat(key || value) FROM state").fetchone(),
+                con.execute("SELECT group_concat(item || selector) FROM item_selectors").fetchone(),
                 con.execute("SELECT group_concat(sql) FROM sqlite_master").fetchone())
     finally:
         con.close()
@@ -71,7 +76,7 @@ def test_approved_reads_work():
 def test_writes_and_ddl_are_refused():
     p, st = setup()
     before = snapshot(p)
-    for sql in ("DELETE FROM items", "UPDATE items SET body = 'x'", "INSERT INTO state VALUES ('k', 'v')",
+    for sql in ("DELETE FROM items", "UPDATE items SET body = 'x'", "INSERT INTO item_selectors VALUES (1, 'k')",
                 "DROP TABLE items", "CREATE TABLE evil (a)", "CREATE TEMP TABLE evil (a)",
                 "CREATE TEMP VIEW v_items2 AS SELECT 1", "DROP VIEW v_items", "ALTER TABLE items ADD COLUMN x",
                 "CREATE TRIGGER t AFTER INSERT ON items BEGIN DELETE FROM items; END", "REINDEX", "ANALYZE",
@@ -88,9 +93,9 @@ def test_attach_pragma_and_load_extension_are_refused():
     refused(st, f"ATTACH DATABASE '{p / 'x.db'}' AS x", "ATTACH")
     assert not (p / "x.db").exists()
     refused(st, "PRAGMA writable_schema = 1", "PRAGMA")
-    refused(st, "PRAGMA table_info(state)", "PRAGMA")
+    refused(st, "PRAGMA table_info(items)", "PRAGMA")
     refused(st, "PRAGMA query_only = 0", "PRAGMA")
-    refused(st, "SELECT * FROM pragma_table_info('state')", "pragma_table_info")
+    refused(st, "SELECT * FROM pragma_table_info('items')", "pragma_table_info")
     refused(st, "SELECT load_extension('/tmp/evil.so')", "load_extension", "not allowed")
     refused(st, "SELECT randomblob(100000000)", "randomblob")
     refused(st, "SELECT printf('%.*c', 100000000, 'x')", "printf")
@@ -98,37 +103,64 @@ def test_attach_pragma_and_load_extension_are_refused():
     assert snapshot(p) == before
 
 
-def test_internal_tables_and_base_tables_are_unreadable():
+def plant_internal_table(p):
+    """A table the sandbox does not know, as an internal table would be (internal state lives in state.json,
+    outside corpus.db; this proves the authorizer is an allowlist, not a list of known names)."""
+    con = sqlite3.connect(dbfile(p))
+    try:
+        con.execute("CREATE TABLE cursors (key TEXT, value TEXT)")
+        con.execute("INSERT INTO cursors VALUES ('fake|{}', '{\"cursor\": \"23\"}')")
+        con.commit()
+    finally:
+        con.close()
+
+
+def test_internal_state_is_not_in_the_store_and_unknown_tables_are_unreadable():
     p, st = setup()
-    for sql, name in (("SELECT * FROM state", "state"), ("SELECT value FROM state WHERE key = 'budget'", "state"),
-                      ("SELECT * FROM main.state", "state"), ('SELECT * FROM "StAtE"', "StAtE"),
-                      ("SELECT * FROM [state]", "state"), ("SELECT * FROM sqlite_master", "sqlite_master"),
-                      ("SELECT * FROM sqlite_temp_master", "sqlite_temp_master"),
-                      ("SELECT * FROM items", "items"), ("SELECT * FROM item_selectors", "item_selectors"),
-                      ("SELECT * FROM v_items WHERE id IN (SELECT key FROM state)", "state"),
-                      ("SELECT (SELECT value FROM state LIMIT 1) FROM v_items", "state"),
-                      ("SELECT * FROM v_items UNION ALL SELECT key, value, 1,1,1,1,1,1,1,1,1,1,1,1,1,1 FROM state", "state")):
+    assert (dbfile(p).parent / "state.json").exists()                  # cursors, budget, ... live here
+    for t in ("state", "budget", "cursors", "coverage", "deleted"):
+        for sql in (f"SELECT count(*) FROM {t}", f"SELECT (SELECT count(*) FROM main.{t}) FROM v_items LIMIT 1",
+                    f"SELECT count(*) FROM v_items WHERE EXISTS (SELECT 1 FROM {t})"):
+            refused(st, sql)
+    plant_internal_table(p)
+    for sql, name in (("SELECT count(*) FROM cursors", "cursors"), ("SELECT * FROM main.cursors", "cursors"),
+                      ('SELECT * FROM "CuRsOrS"', "CuRsOrS"), ("SELECT * FROM [cursors]", "cursors"),
+                      ("SELECT (SELECT count(*) FROM cursors) FROM v_items", "cursors"),
+                      ("SELECT * FROM v_items WHERE id IN (SELECT key FROM cursors)", "cursors"),
+                      ("SELECT * FROM sqlite_master", "sqlite_master"), ("SELECT * FROM sqlite_schema", "sqlite_"),
+                      ("SELECT count(*) FROM sqlite_temp_master", "sqlite_temp_master")):
         err = refused(st, sql, "not allowed")
         assert name.lower() in err.lower() and "describe" in err
-    refused(st, "SELECT * FROM main.v_items", "no such table")      # views are temp-only, limited to bound sources
-    for sql in ("WITH v_items AS (SELECT * FROM items) SELECT * FROM v_items",
-                "WITH v_posts AS (SELECT key FROM state) SELECT * FROM v_posts",
+    # reads of no column (count(*), EXISTS) reach the authorizer without a database: same allowlist
+    for t in ("items_fts_data", "items_fts_idx", "items_fts_config", "items_fts_docsize", "items_fts_content",
+              "sqlite_master", "cursors"):
+        refused(st, f"SELECT count(*) FROM {t}", "not allowed")
+        refused(st, f"SELECT 1 WHERE EXISTS (SELECT 1 FROM {t})", "not allowed")
+        refused(st, f"SELECT count(*) FROM (SELECT 1 FROM {t})", "not allowed")
+    refused(st, "WITH cursors AS (SELECT 1) SELECT count(*) FROM cursors", "WITH clause may not be named")
+    assert st.sql("WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 4) "
+                  "SELECT count(*) FROM r")["rows"] == [[4]]                       # a CTE counted is fine
+    refused(st, "SELECT * FROM main.v_items", "no such table")      # views are temp, built by this code
+    for sql in ("WITH v_items AS (SELECT * FROM cursors) SELECT * FROM v_items",
                 "WITH items AS (SELECT 1) SELECT * FROM items",
+                "WITH items_fts AS (SELECT 1) SELECT * FROM items_fts",
                 'WITH "V_ITEMS"(a, b) AS MATERIALIZED (SELECT pk, body FROM items) SELECT * FROM v_items',
                 "WITH x AS (SELECT 1), [v_items]/* c */AS NOT MATERIALIZED(SELECT * FROM items) SELECT * FROM v_items",
                 "WITH `v_items`\n--c\nAS (SELECT * FROM items) SELECT * FROM v_items"):
         refused(st, sql, "WITH clause may not be named")
     assert st.sql("WITH mine AS (SELECT id FROM v_items) SELECT count(*) FROM mine")["rows"] == [[3]]
     assert st.sql("SELECT count(*) FROM v_items WHERE text != 'v_items AS (x'")["rows"] == [[3]]   # strings are data
+    assert st.sql("SELECT count(*) FROM items")["rows"] == [[3]]     # store tables hold only the scope
 
 
 def test_runaway_queries_hit_the_time_limit():
     p, st = setup()
-    box = sqlsandbox.Sandbox(dbfile(p), ["fake"], time_ms=300)
+    box = sqlsandbox.Sandbox(dbfile(p), time_ms=300)
     try:
         for sql in ("WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r) SELECT count(*) FROM r",
-                    "SELECT count(*) FROM v_items a, v_items b, v_items c, v_items d, v_items e, v_items f, "
-                    "v_items g, v_items h, v_items i, v_items j, v_items k, v_items l, v_items m, v_items n, v_items o"):
+                    "SELECT count(*) FROM v_items a, v_items b, v_items c, v_items d, v_items e, v_items f, v_items p, v_items q, "
+                    "v_items g, v_items h, v_items i, v_items j, v_items k, v_items l, v_items m, v_items n, v_items o, "
+                    "v_items r, v_items s, v_items t"):
             t0 = time.monotonic()
             try:
                 box.run(sql)
@@ -216,38 +248,77 @@ def test_missing_store_is_explained():
 
 
 def plant_out_of_scope(p):
-    """An item from a source that is not bound offline (x) and a fake item no selector matches, both about
-    staking, written straight into the store (the FTS triggers index them like any other row)."""
+    """Rows the reviewer's oracle found, written straight into the store (the FTS triggers index them): one
+    from a source not bound offline (x), one fake item no selector matches."""
     con = sqlite3.connect(dbfile(p))
     try:
-        for src, xid, body in (("x", "900", "staking leak from an unbound source"),
-                               ("fake", "901", "staking leak no selector matches")):
-            con.execute("INSERT INTO items (source, ext_id, kind, author, body, created_at, fetched_at) "
-                        "VALUES (?, ?, 'post', 'eve', ?, '2026-10-27T11:30:00Z', '2026-10-27T12:00:00Z')", (src, xid, body))
+        for src, xid, body in (("x", "900", "acquisition zebra from an unbound source"),
+                               ("fake", "901", "acquisition zebra no selector matches")):
+            pk = con.execute("INSERT INTO items (source, ext_id, kind, author, body, created_at, fetched_at) VALUES "
+                             "(?, ?, 'post', 'eve', ?, '2026-10-27T11:30:00Z', '2026-10-27T12:00:00Z')",
+                             (src, xid, body)).lastrowid
+            con.execute("INSERT INTO item_selectors (item, selector) VALUES (?, 'home')", (pk,))
         con.commit()
     finally:
         con.close()
 
 
-def test_full_text_is_scoped_and_fts_tables_are_unreadable():
-    p, st = setup()
+ZEBRA = [{"id": "home", "in": "home", "not": {"text": "zebra"}}, {"id": "zebra", "text": "zebra"}]
+ORACLES = (   # every form that once counted or matched out-of-scope rows, with what it must return now
+    ("SELECT (SELECT count(*) FROM v_fts), (SELECT count(*) FROM main.items_fts('acquisition AND zebra*'))", [[3, 0]]),
+    ("SELECT count(*) FROM items_fts('zebra')", [[0]]),
+    ("SELECT * FROM items_fts('acquisition')", []),
+    ("SELECT rowid FROM items_fts WHERE items_fts MATCH 'zeb*'", []),
+    ("SELECT count(*) FROM items_fts WHERE items_fts MATCH 'body: zebra'", [[0]]),
+    ("SELECT count(*) FROM items_fts WHERE items_fts MATCH '{title body author}: acqui*'", [[0]]),
+    ("SELECT count(*) FROM items_fts WHERE items_fts MATCH 'author: eve'", [[0]]),
+    ("SELECT count(*) FROM items_fts", [[3]]),
+    ("SELECT count(*), (SELECT count(*) FROM items), (SELECT count(*) FROM item_selectors) FROM v_fts", [[3, 3, 3]]),
+    ("SELECT count(*) FROM v_fts WHERE fts MATCH 'zebra OR acquisition'", [[0]]),
+    ("SELECT count(*) FROM v_fts v JOIN items_fts f ON f.rowid = v.rid WHERE f.items_fts MATCH 'zebra'", [[0]]),
+    ("SELECT count(*) FROM v_fts v, items_fts('acqui*') f", [[0]]),
+    ("SELECT id FROM v_items WHERE rid IN (SELECT rowid FROM items_fts('zebra'))", []),
+    ("SELECT (SELECT count(*) FROM items_fts WHERE items_fts MATCH 'zebra') + (SELECT count(*) FROM items "
+     "WHERE body LIKE '%zebra%')", [[0]]),
+    ("SELECT DISTINCT source FROM items", [["fake"]]),
+    ("SELECT count(*) FROM item_selectors WHERE selector != 'home'", [[0]]),
+    ("SELECT count(*) FROM items i WHERE NOT EXISTS (SELECT 1 FROM item_selectors s WHERE s.item = i.pk)", [[0]]),
+)
+
+
+def test_out_of_scope_rows_are_gone_so_no_oracle_form_finds_them():
+    extra = [{"id": "24", "handle": "lido", "text": "acquisition zebra talks", "ageHours": 2}]
+    p, st = setup(extra, selectors=ZEBRA)
+    assert st.sql("SELECT count(*) FROM v_fts WHERE fts MATCH 'zebra'")["rows"] == [[1]]    # in scope via `zebra`
     plant_out_of_scope(p)
-    out = st.sql("SELECT id FROM v_fts WHERE fts MATCH 'staking OR leak' ORDER BY rank")
-    assert out["rows"] == [["fake:22"]]                                  # never the planted rows
-    assert st.sql("SELECT count(*) FROM v_fts")["rows"] == [[3]]
-    assert [i["id"] for i in st.search("staking leak")["items"]] == []
-    assert [i["id"] for i in st.search("staking")["items"]] == ["fake:22"]
-    for t in ("items_fts", "items_fts_content", "items_fts_data", "items_fts_idx", "items_fts_docsize",
-              "items_fts_config", "main.items_fts", '"items_fts_content"'):
+    # the `zebra` selector is removed; sync deletes its item and the planted rows from items and items_fts
+    st = connect.instantiate(system(p), "local-feeds-offline", "corpus-store", "items.store/v1", p,
+                             settings={"lookbackMax": "30d", "selectors": ZEBRA[:1], "mode": "feed-briefing"},
+                             clock=clock)
+    out = st.sync(lookback="3d")
+    assert out["outOfScope"] == 3 and out["fetched"] == 0                   # the kept items were not refetched
+    for sql, want in ORACLES:
+        res = st.sql(sql)
+        assert res.get("error") is None and res["rows"] == want, (sql, res)
+    assert [i["id"] for i in st.search("acquisition zebra")["items"]] == []
+    assert st.search("staking")["items"][0]["id"] == "fake:22"
+    for t in ("items_fts_content", "items_fts_data", "items_fts_idx", "items_fts_docsize", "items_fts_config",
+              '"items_fts_content"', "main.items_fts_data"):
         refused(st, f"SELECT * FROM {t}", "not allowed")
-    refused(st, "SELECT rowid FROM items_fts WHERE items_fts MATCH 'leak'", "items_fts", "v_fts")
-    refused(st, "SELECT snippet(items_fts, 1, '[', ']', '', 5) FROM items_fts WHERE items_fts MATCH 'leak'", "v_fts")
-    refused(st, "SELECT * FROM items_fts('leak')", "v_fts")
-    refused(st, "SELECT count(*) FROM items_fts", "v_fts")
     refused(st, "SELECT f.c0 FROM v_items v JOIN items_fts_content f ON f.id = v.rid", "not allowed")
     refused(st, "WITH v_fts AS (SELECT * FROM items_fts) SELECT * FROM v_fts", "WITH clause")
     err = refused(st, "SELECT * FROM v_items AS items (SELECT 1)", "SQL error")     # no WITH: plain syntax error
     assert "WITH clause" not in err
+
+
+def test_full_text_on_the_store_table_and_the_view_agree():
+    p, st = setup()
+    via_view = st.sql("SELECT id FROM v_fts WHERE fts MATCH 'stake OR staking' ORDER BY id")["rows"]
+    direct = st.sql("SELECT i.source || ':' || i.ext_id FROM items_fts('stake OR staking') f "
+                    "JOIN items i ON i.pk = f.rowid ORDER BY 1")["rows"]
+    assert via_view == direct == [["fake:22"], ["fake:23"]]
+    assert st.sql("SELECT snippet(items_fts, 1, '[', ']', '', 4) FROM items_fts WHERE items_fts MATCH 'module'"
+                  )["rows"] == [["Staking [module] update"]]
 
 
 def test_every_view_accepts_narrow_projections():
@@ -269,7 +340,7 @@ def test_every_view_accepts_narrow_projections():
 def test_big_sort_fails_cleanly():
     extra = [{"id": str(300 + i), "handle": "bulk", "text": f"row {i} " + "z" * 200, "ageHours": 5} for i in range(60)]
     p, st = setup(extra)
-    box = sqlsandbox.Sandbox(dbfile(p), ["fake"], time_ms=300)
+    box = sqlsandbox.Sandbox(dbfile(p), time_ms=300)
     try:
         try:
             box.run("SELECT a.text || b.text || c.text || d.text AS t FROM v_items a, v_items b, v_items c, v_items d "
@@ -283,7 +354,7 @@ def test_big_sort_fails_cleanly():
     code = (f"import sys; sys.path.insert(0, {str(Path(sqlsandbox.__file__).parents[1])!r})\n"
             "from bay import sqlsandbox as s\n"
             "s.HEAP_BYTES = 6 * 1024 * 1024\n"
-            f"b = s.Sandbox({str(dbfile(p))!r}, ['fake'], time_ms=20000)\n"
+            f"b = s.Sandbox({str(dbfile(p))!r}, time_ms=20000)\n"
             "try:\n"
             "    b.run(\"SELECT group_concat(t) FROM (SELECT a.text || b.text || c.text AS t FROM v_items a, v_items b, "
             "v_items c ORDER BY t DESC)\")\n"

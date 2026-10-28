@@ -156,28 +156,31 @@ An endpoint review block may name framework rule sets: `review: { ..., rulesets:
   - `sql {sql, limit?}`;
   - `get {ids}`, `thread {id}`;
   - `facets {field}`, `search {text}`, `query {since, until, author, text, selector, ids}`;
-  - `status {since?}`: coverage, budget, per-selector counts, engine, and `stale` when the selectors changed.
+  - `status {since?}`: coverage, budget, per-selector counts, engine, and `stale` when the selectors or the
+    bound sources changed.
 
-  `sync` re-matches stored items when the selectors changed. A new selector backfills its lookback. Items no
-  selector matches are hidden at once, and `prune` deletes them.
+  The store holds exactly the mode's scope: items of the sources bound to the mode's env that match at least
+  one current selector. `sync` and `prune` enforce it on every run without refetching (`outOfScope`,
+  `unbound`, `unmatched` in their output); a new selector backfills its lookback.
 - **corpus-store** (framework connector) keeps one store per mode, `<env data folder>/<mode>/corpus.db`
   (settings.mode from the dispatcher; use-shim reads resolve the role's one mode). The file, -wal and -shm
   are 0600; WAL mode, `user_version` = 1:
   - `items` (unique source + ext_id);
   - `item_selectors`;
-  - `items_fts` (FTS5 over title, body and author, own content, kept by triggers);
-  - `state` (cursors per `<connector>|<native query>`, coverage, budget, deleted, checked, selectors).
+  - `items_fts` (FTS5 over title, body and author, own content, kept by triggers).
+
+  Internal state is `<mode>/state.json` (0600, never opened by agents): cursors per
+  `<connector>|<native query>`, coverage, budget, deleted, checked, and the selectors and sources last applied.
 
   Without FTS5 the store falls back to LIKE matching, and `bay validate` warns.
 - **Agent SQL** (`bay/sqlsandbox.py`):
-  - temp views `v_items`, `v_posts` and `v_fts`, limited to the env's bound sources and to items matching a
-    selector. `v_fts` is the only full-text path: `WHERE fts MATCH '...' ORDER BY rank`, plus a `snippet`
-    column;
+  - temp views `v_items`, `v_posts` and `v_fts` over the store, which holds only the mode's scope. `v_fts` is
+    the documented full-text path: `WHERE fts MATCH '...' ORDER BY rank`, plus a `snippet` column;
   - `mode=ro` + `query_only`;
-  - a strict pre-pass (`EXPLAIN <sql>`) that refuses direct `items_fts` and its shadow tables, then the run,
-    with FTS5's own internal reads allowed;
-  - an authorizer: SELECT/READ on those views, json_each and CTEs, and a
-    function allowlist; everything else is denied;
+  - a strict pre-pass (`EXPLAIN <sql>`) that refuses the FTS shadow tables, then the run, with FTS5's own
+    internal reads allowed;
+  - an authorizer: SELECT/READ on those views and on `items`, `item_selectors` and `items_fts`, json_each
+    and CTEs, and a function allowlist; everything else is denied, reads of no column (`count(*)`) included;
   - no WITH clause named like a view or store table;
   - a 2 s progress-handler limit, a 1 MB value limit, a 256 MB heap cap (temp_store=FILE), 200/1000 rows, 200 kB per result and 4,000 characters
     per cell.
@@ -185,8 +188,9 @@ An endpoint review block may name framework rule sets: `review: { ..., rulesets:
   Errors are returned as `error`, saying what to change. Every item string but its identity is secret-scrubbed at ingest (`item_row`, shared with the migration), and every
   read is redacted and scanned.
 - **Migration**: `bay migrate --project <repo>` (the user; forge.migrate migrates kit content only) converts
-  a v0.2 `posts.jsonl` + `state.json` into `<dir>/feed-briefing/corpus.db`. It shows a dry-run diff first, and
-  `--confirm` applies it. Bad lines and state are reported as file:line with the fix.
+  a v0.2 `posts.jsonl` + `state.json` into `<dir>/feed-briefing/corpus.db` + `state.json`, writing only the
+  posts in feed-briefing's scope. It shows a dry-run diff first, and `--confirm` applies it. Bad lines and
+  state are reported as file:line with the fix.
 - **Deprecated v0.2 names** (0.3.x only, `bay/aliases.py`): feed.source/v1, feed.store/v1, feed.post/v1,
   feed.coverage/v1, feed-analyst, feed-lead and local-store resolve to the v0.3 names with a lint warning.
   `bay migrate` rewrites them. Old connector code is a load error asking for a hand port.

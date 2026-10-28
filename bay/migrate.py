@@ -10,8 +10,9 @@ in MIGRATIONS with the version it migrates to.
        interfaces bound in framework envs.
 0.3.0: project data - a v0.2 feed store (.agentbay/data/<dir>/posts.jsonl +
        state.json, local-store) becomes a corpus store (corpus.db, corpus-store,
-       SQLite schema v1). Posts become post/v1 items tagged with feed-briefing's
-       default selector `home`; cursors, coverage, budget, deletions and
+       SQLite schema v1, internal state in state.json). Posts become post/v1
+       items; only those the store would keep (source bound in feed-briefing's env,
+       matching a current selector) are written. Cursors, coverage, budget, deletions and
        deletion-check times are kept, so the next sync is incremental and
        nothing deleted at the source comes back. The old files are renamed
        *.v0.2.bak, never deleted.
@@ -137,7 +138,6 @@ def _v02_names(kit: Path) -> tuple[list[Change], list[str]]:
 MIGRATIONS = [("0.2.0", _v1_specs_to_roles), ("0.3.0", _v02_names)]
 
 # ------------------------------------------------------------------ project data
-FEED_DEFAULT_SELECTORS = [{"id": "home"}]     # modes/feed-briefing/config.schema.json default
 V02_MODE = "feed-briefing"                    # the only mode on the v0.2 feed store
 POST_KEYS = ("id", "source", "url", "createdAt")     # what a v0.2 line must carry to become an item
 
@@ -158,8 +158,30 @@ def _post_to_item(p: dict) -> dict:
             "container": "home", "labels": ["home"], "threadId": None, **ext}
 
 
-def _v02_feed_store(project: Path) -> tuple[list[Change], list[str]]:
+def _feed_scope(kit: Path, project: Path) -> tuple[dict | None, str]:
+    """feed-briefing's scope as installed in `project`: {env, sources (connector -> source id), caps (connector ->
+    selector capability table), selectors}, or None and why. The migrated store must already hold exactly
+    this scope (the corpus-store invariant), so the conversion uses the same env and selectors sync would."""
+    from . import config as cfgmod, model
+    try:
+        system = model.resolve(model.Kit(kit, project))
+    except (model.ResolveError, model.SpecError, cfgmod.ConfigError) as e:
+        first = e.gaps[0] if isinstance(e, model.ResolveError) else str(e)
+        return None, f"the project does not resolve ({first}); fix what `bay validate` reports, then migrate"
+    mode = system.modes.get(V02_MODE)
+    if mode is None:
+        return None, f"mode {V02_MODE} is not installed in this project, so the v0.2 posts have no store to go to"
+    env, why = model.code_env(system.kit, system.kit.get("Mode", V02_MODE), model.STORE_IFACE, system.roles)
+    conns = model.connectors_of(env.spec["bind"].get(model.SOURCE_IFACE)) if env else []
+    docs = {cn: system.kit.get("Connector", cn) for cn in conns}
+    return {"env": env.name if env else why, "selectors": mode.config["selectors"],
+            "sources": {cn: d.spec.get("source") for cn, d in docs.items() if d},
+            "caps": {cn: d.spec.get("selectors") or {} for cn, d in docs.items() if d}}, ""
+
+
+def _v02_feed_store(kit: Path, project: Path) -> tuple[list[Change], list[str]]:
     from . import selector as selmod
+    from .util import utcnow
     changes, notes = [], []
     key = selmod.native_key({})
     for posts_path in sorted((project / ".agentbay" / "data").glob("*/posts.jsonl")):
@@ -169,6 +191,10 @@ def _v02_feed_store(project: Path) -> tuple[list[Change], list[str]]:
         if db.exists():
             notes.append(f"{rel}: {db.relative_to(project).as_posix()} already exists; left the v0.2 files alone "
                          f"(move corpus.db aside to migrate again)")
+            continue
+        scope, why = _feed_scope(kit, project)
+        if scope is None:
+            notes.append(f"{rel}: nothing migrated: {why}")
             continue
         by_key: dict[str, dict] = {}
         bad: list[str] = []
@@ -205,51 +231,75 @@ def _v02_feed_store(project: Path) -> tuple[list[Change], list[str]]:
                          f"({getattr(e, 'msg', e)}); nothing migrated. Fix it, or move it aside to migrate the posts "
                          f"without cursors, coverage, budget and deletions (the next sync then refetches the window)")
             continue
+        sels, sources = scope["selectors"], scope["sources"]
         cursors = {}
         for conn, c in (old.get("cursors") or {}).items():
-            cursors[f"{conn}|{key}"] = {**{k: c[k] for k in ("from", "to", "lastSync") if k in c},
-                                        **({"cursor": c["newestId"]} if c.get("newestId") else {}),
-                                        "selectors": ["home"]}
+            # v0.2 read each source's default stream: its cursor serves the selectors whose native query is empty
+            ids = [s["id"] for s in sels
+                   if conn in sources and selmod.native_key(selmod.split(s, scope["caps"][conn])[0]) == key]
+            if ids:
+                cursors[f"{conn}|{key}"] = {**{k: c[k] for k in ("from", "to", "lastSync") if k in c},
+                                            **({"cursor": c["newestId"]} if c.get("newestId") else {}),
+                                            "selectors": ids}
+        bound = sorted({s for s in sources.values() if s})
         state = {"cursors": cursors, "coverage": old.get("coverage") or {"from": None, "to": None},
                  "budget": old.get("budget") or {}, "deleted": sorted(old.get("deleted") or []),
-                 "checked": old.get("checked") or {}, "selectors": FEED_DEFAULT_SELECTORS}
+                 "checked": old.get("checked") or {}, "selectors": sels, "sources": bound}
         deleted = set(state["deleted"])
-        items = [_post_to_item(p) for p in posts if f"{p['source']}:{p['id']}" not in deleted]
+        cs = _corpus_module()
+        now = utcnow()
+        items, dropped = [], {"deleted": 0, "unbound": 0, "unmatched": 0}
+        for p in posts:
+            it = cs.scrub_item(_post_to_item(p))       # match on exactly what will be stored, as sync does
+            tags = selmod.match_ids(it, sels, now)
+            why = ("deleted" if it["id"] in deleted else "unbound" if it["source"] not in bound
+                   else "unmatched" if not tags else None)
+            if why:
+                dropped[why] += 1
+            else:
+                items.append((it, tags))
         by_src: dict[str, int] = {}
-        for it in items:
+        for it, _ in items:
             by_src[it["source"]] = by_src.get(it["source"], 0) + 1
+        tags_used = sorted({t for _, tags in items for t in tags})
         dbrel = db.relative_to(project).as_posix()
+        drops = [f"{dropped['deleted']} on the deleted list dropped" if dropped["deleted"] else "",
+                 f"{dropped['unbound']} from sources not bound in env {scope['env']} ({', '.join(bound) or 'none'}) "
+                 f"dropped" if dropped["unbound"] else "",
+                 f"{dropped['unmatched']} matching no selector dropped" if dropped["unmatched"] else ""]
         lines = [f"--- a/{rel} ({len(posts)} posts{f', {dups} duplicate line(s) merged' if dups else ''}) + "
                  f"{state_path.name}",
-                 f"+++ b/{dbrel} (corpus store, SQLite schema v1)",
+                 f"+++ b/{dbrel} (corpus store, SQLite schema v1) + {V02_MODE}/state.json",
                  f"+items: {len(items)} post/v1 ({', '.join(f'{s}: {n}' for s, n in sorted(by_src.items())) or 'none'}), "
-                 f"matched: [home]" + (f"; {len(posts) - len(items)} on the deleted list dropped" if len(posts) != len(items) else "")]
+                 f"matched: [{', '.join(tags_used)}]" + "".join(f"; {x}" for x in drops if x)]
         for ck, c in sorted(cursors.items()):
             lines.append(f"+state.cursors[{ck}]: " + json.dumps(c, sort_keys=True))
         lines += [f"+state.coverage: {json.dumps(state['coverage'], sort_keys=True)}",
                   f"+state.budget: {json.dumps(state['budget'], sort_keys=True)}",
                   f"+state.deleted: {len(state['deleted'])} id(s); state.checked: {len(state['checked'])} id(s)",
-                  f"+state.selectors: {json.dumps(FEED_DEFAULT_SELECTORS)}",
+                  f"+state.selectors: {json.dumps(sels)}; state.sources: {json.dumps(bound)}",
                   f"-{rel} -> {rel}.v0.2.bak" + (f"; {state_path.name} -> {state_path.name}.v0.2.bak"
                                                   if state_path.exists() else "")]
 
-        def run(db=db, items=items, state=state, posts_path=posts_path, state_path=state_path):
-            cs = _corpus_module()
+        def run(db=db, items=items, state=state, posts_path=posts_path, state_path=state_path, cs=cs):
+            new_state = db.with_name(cs.STATE_NAME)
             con = cs.open_rw(db)
             try:
                 con.execute("BEGIN IMMEDIATE")
-                for it in items:
+                for it, tags in items:
                     row = cs.item_row(it)
                     pk = con.execute(f"INSERT INTO items ({', '.join(row)}) VALUES ({', '.join('?' * len(row))})",
                                      list(row.values())).lastrowid
-                    con.execute("INSERT INTO item_selectors (item, selector) VALUES (?, 'home')", (pk,))
-                cs.save_state(con, state)
+                    con.executemany("INSERT INTO item_selectors (item, selector) VALUES (?, ?)",
+                                    [(pk, t) for t in tags])
+                cs.save_state(new_state, state)
                 con.execute("COMMIT")
             except BaseException:
                 if con.in_transaction:
                     con.execute("ROLLBACK")
                 con.close()
                 db.unlink(missing_ok=True)
+                new_state.unlink(missing_ok=True)
                 raise
             con.close()
             posts_path.rename(posts_path.with_name(posts_path.name + ".v0.2.bak"))
@@ -298,7 +348,7 @@ def _collect(kit: Path, to: str | None, project: Path | None = None):
     if project is not None:
         for ver, fn in DATA_MIGRATIONS:
             if _vt(ver) <= _vt(to):
-                c, n = fn(Path(project))
+                c, n = fn(kit, Path(project))
                 changes += c
                 notes += n
     return changes, notes

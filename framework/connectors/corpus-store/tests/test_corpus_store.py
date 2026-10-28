@@ -47,7 +47,7 @@ def ids(p) -> set[str]:
 
 
 def state(p) -> dict:
-    return {r["key"]: json.loads(r["value"]) for r in rows(p, "SELECT key, value FROM state")}
+    return json.loads((p / ".agentbay/data/feeds/feed-briefing/state.json").read_text())
 
 
 def test_schema_wal_user_version_fts_and_owner_only_file():
@@ -57,12 +57,14 @@ def test_schema_wal_user_version_fts_and_owner_only_file():
     assert con.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert con.execute("PRAGMA user_version").fetchone()[0] == 1
     names = {r[0] for r in con.execute("SELECT name FROM sqlite_master")}
-    assert {"items", "item_selectors", "state", "items_fts", "items_ai", "items_ad", "items_au"} <= names
+    assert {"items", "item_selectors", "items_fts", "items_ai", "items_ad", "items_au"} <= names
+    assert "state" not in names                                    # internal state lives in state.json
     assert con.execute("SELECT count(*) FROM items_fts WHERE items_fts MATCH 'firedancer'").fetchone()[0] == 1
     con.execute("UPDATE items SET body = 'renamed to frankendancer' WHERE ext_id = '1008'")   # trigger keeps FTS in step
     assert con.execute("SELECT count(*) FROM items_fts WHERE items_fts MATCH 'firedancer'").fetchone()[0] == 0
     con.close()
     assert db(p).stat().st_mode & 0o777 == 0o600
+    assert (db(p).parent / "state.json").stat().st_mode & 0o777 == 0o600
     con = sqlite3.connect(db(p))                    # a writer brings up -wal and -shm: same mode as the file
     con.execute("BEGIN IMMEDIATE")
     con.execute("UPDATE items SET title = 'x' WHERE ext_id = '1009'")
@@ -242,23 +244,24 @@ def test_store_writes_only_inside_env_write_path():
     store(p).sync(lookback="3d")
     written = sorted(str(x.relative_to(p)) for x in p.rglob("*") if x.is_file())
     assert written[-1] == "agentbay.config.yaml"
-    assert written[:-1] and all(w.startswith(".agentbay/data/feeds/feed-briefing/corpus.db") for w in written[:-1])
+    assert set(written[:-1]) == {".agentbay/data/feeds/feed-briefing/corpus.db",
+                                 ".agentbay/data/feeds/feed-briefing/state.json"}
 
 
-def test_reads_return_only_items_from_bound_sources_and_never_write():
+def test_reads_never_write_the_store_or_state():
     p = project()
     store(p).sync(lookback="3d")
     con = sqlite3.connect(db(p))
     con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     con.close()
     before = db(p).read_bytes()
-    online = store(p, env="local-feeds")      # x-api is bound there; the fake items are not served
-    assert online.query()["items"] == [] and online.status()["count"] == 0
-    assert online.sql("SELECT count(*) FROM v_items")["rows"] == [[0]]
+    st_before = (p / ".agentbay/data/feeds/feed-briefing/state.json").read_bytes()
     st = store(p)
     assert len(st.query()["items"]) == 7
     st.describe(), st.search("staking"), st.facets("author"), st.get(["fake:1008"]), st.thread("fake:1008")
+    st.status(), st.sql("SELECT count(*) FROM v_fts")
     assert db(p).read_bytes() == before
+    assert (p / ".agentbay/data/feeds/feed-briefing/state.json").read_bytes() == st_before
 
 
 def test_status_counts_from_sqlite_and_reports_selectors_and_engine():
@@ -322,23 +325,73 @@ def test_selector_change_rematches_without_refetch_and_new_selector_backfills():
     assert "fake:11" in {x["id"] for x in st.query(selector="everything")["items"]}
 
 
-def test_removed_selector_hides_then_prune_removes_items_only_it_matched():
+def test_removed_selector_items_leave_the_store_at_once_without_refetch():
     sels = [{"id": "home", "in": "home", "not": {"text": "staking"}}, {"id": "staking", "in": "home", "text": "staking"}]
     keep = [sels[0]]
     p = project()
     store(p, settings={"selectors": sels}, fixture=FX).sync(lookback="3d")
     assert len(ids(p)) == 4
     st = store(p, settings={"selectors": keep})
-    st.sync(lookback="3d")
-    assert [x["id"] for x in st.query()["items"]] == ["fake:11"]              # hidden right after the change
-    assert len(ids(p)) == 4                                                     # sync never deletes for it
-    out = store(p, settings={"selectors": keep}).prune(olderThan="30d")
-    assert out["unmatched"] == 3 and ids(p) == {"fake:11"}
-    # prune alone also applies a selector change before deleting
+    out = st.sync(lookback="3d")
+    assert out["outOfScope"] == 3 and out["fetched"] == 0 and ids(p) == {"fake:11"}       # gone, not hidden
+    assert st.ctx.sources["fake"].calls[0]["cursor"] == "14"                               # kept item: no refetch
+    con = sqlite3.connect(db(p))
+    assert con.execute("SELECT count(*) FROM items_fts").fetchone()[0] == 1                # FTS follows
+    con.close()
+    # prune alone applies a selector change too
     p = project()
     store(p, settings={"selectors": sels}, fixture=FX).sync(lookback="3d")
     out = store(p, settings={"selectors": keep}).prune(olderThan="30d")
     assert out["unmatched"] == 3 and ids(p) == {"fake:11"}
+
+
+def plant(p, rows_):
+    """Rows written straight into the store, bypassing sync (the FTS triggers index them)."""
+    con = sqlite3.connect(db(p))
+    try:
+        for src, xid, body, tag in rows_:
+            pk = con.execute("INSERT INTO items (source, ext_id, kind, author, body, created_at, fetched_at) VALUES "
+                             "(?, ?, 'post', 'eve', ?, '2026-10-27T11:30:00Z', '2026-10-27T12:00:00Z')",
+                             (src, xid, body)).lastrowid
+            if tag:
+                con.execute("INSERT INTO item_selectors (item, selector) VALUES (?, ?)", (pk, tag))
+        con.commit()
+    finally:
+        con.close()
+
+
+def test_out_of_scope_rows_are_deleted_by_sync_and_prune():
+    for run in ("sync", "prune"):
+        p = project()
+        store(p).sync(lookback="3d")
+        plant(p, [("x", "900", "acquisition zebra unbound source", "home"),       # source not bound offline
+                  ("fake", "901", "acquisition zebra no tag", None),             # matches no selector
+                  ("fake", "902", "acquisition zebra removed selector", "gone")])  # tagged by a removed selector
+        st = store(p)
+        out = st.sync(lookback="3d") if run == "sync" else st.prune(olderThan="30d")
+        if run == "prune":
+            assert out["unbound"] == 1 and out["unmatched"] == 2
+        else:
+            assert out["outOfScope"] == 3
+        assert not {"x:900", "fake:901", "fake:902"} & ids(p) and len(ids(p)) == 7, run
+        con = sqlite3.connect(db(p))
+        try:
+            assert con.execute("SELECT count(*) FROM items_fts WHERE items_fts MATCH 'zebra'").fetchone()[0] == 0
+            assert con.execute("SELECT count(*) FROM items_fts").fetchone()[0] == 7
+            assert con.execute("SELECT count(*) FROM item_selectors WHERE selector != 'home'").fetchone()[0] == 0
+        finally:
+            con.close()
+
+
+def test_unbinding_a_source_removes_its_items_and_cursors():
+    p = project()
+    store(p).sync(lookback="3d")
+    assert len(ids(p)) == 7 and any(k.startswith("fake|") for k in state(p)["cursors"])
+    online = store(p, env="local-feeds")                      # x-api bound instead of the fake source
+    assert online.status()["stale"] is True                   # the next sync changes the scope
+    out = online.prune(olderThan="30d")
+    assert out["unbound"] == 7 and ids(p) == set() and not any(k.startswith("fake|") for k in state(p)["cursors"])
+    assert state(p)["sources"] == ["x"]
 
 
 # ------------------------------------------------------------------ read endpoints

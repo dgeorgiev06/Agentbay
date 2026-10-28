@@ -46,7 +46,8 @@ feed-briefing hard-codes one pattern: pull items from a source, store them, summ
   - `items` (unique on source + ext_id)
   - `item_selectors`
   - `items_fts` (FTS5 over title, body and author, kept in sync by triggers)
-  - `state` (cursors, budget, coverage; replaces state.json)
+- **Internal state:** cursors, budget, coverage, deleted ids and the applied selectors live in `<mode>/state.json`, outside the database agents read.
+- **Scope invariant:** the database holds only items of the sources bound to the mode's env that match a current selector; sync and prune delete everything else.
 - **Views exposed to agents:** `v_items` (base), plus `v_email`, `v_threads` and `v_posts`.
 - **Full-text check:** `bay validate` checks that FTS5 is available and falls back to LIKE matching if it is not.
 

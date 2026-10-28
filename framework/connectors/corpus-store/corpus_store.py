@@ -1,22 +1,24 @@
-"""corpus-store: items.store/v1 on one SQLite file per mode (stdlib sqlite3).
+"""corpus-store: items.store/v1 on one SQLite file per mode (stdlib sqlite3), plus its state file.
 
-File: <env write path>/<mode>/corpus.db (e.g. .agentbay/data/feeds/feed-briefing/corpus.db), one per mode
-so two briefing modes on one env never share selector tags; WAL mode; the file, -wal and -shm are 0600.
-Schema version in PRAGMA user_version (SCHEMA_VERSION); older stores are converted by `forge.migrate`.
+Files, in <env write path>/<mode>/ (e.g. .agentbay/data/feeds/feed-briefing/), one pair per mode so two
+briefing modes on one env never share items or tags. Both are created 0600 (SQLite gives -wal and -shm the
+database file's mode).
+  corpus.db    what agents may read, and nothing else. WAL mode; schema version in PRAGMA user_version.
+    items           one row per item, unique on (source, ext_id); kind-specific fields in `ext` (JSON)
+    item_selectors  (item, selector): the selector ids an item matches (the shared matcher decides)
+    items_fts       FTS5 over title, body and author, kept in step by triggers. Missing when this Python's
+                    SQLite has no FTS5: search then falls back to LIKE, and `bay validate` says so.
+  state.json   cursors (per connector and native query), coverage, budget (per UTC month), deleted
+               (<source>:<extId>, never re-stored), checked (last deletion check), selectors and sources (the
+               scope last applied). Never opened by the read-only connection agents use.
 
-  items           one row per item, unique on (source, ext_id); kind-specific fields in `ext` (JSON)
-  item_selectors  (item, selector): the selector ids an item matches (the shared matcher decides)
-  items_fts       FTS5 over title, body and author, kept in step by triggers (own content, so agents can
-                  query it without being allowed to read `items` directly). Missing when this Python's
-                  SQLite has no FTS5: search then falls back to LIKE, and `bay validate` says so.
-  (every item string but its identity is secret-scrubbed before it is stored; every read is scrubbed again)
-  state           key -> JSON: cursors (per connector and native query), coverage, budget (per UTC month),
-                  deleted (<source>:<extId> never re-stored), checked (last deletion check), selectors
-                  (the set last applied)
-
-sync and prune are dispatcher code steps (write). Every other endpoint is read-only: it opens the file with
-mode=ro and query_only, and reads through temp views limited to the sources bound in the env and to items
-matching at least one selector. `sql` runs agent SQL in bay/sqlsandbox.py.
+Scope invariant: corpus.db holds exactly the mode's scope, meaning items of the sources bound to the mode's
+env that match at least one current selector (bay/selector.py). sync and prune (dispatcher code steps) enforce
+it on every run (_enforce_scope): rows of sources no longer bound are deleted, and every stored item is
+re-matched without refetching (re-tagged, or deleted when no selector matches); sync stores a fetched item
+only when it matches. items_fts follows `items` through triggers. So read-only SQL has nothing out of scope
+to reach. Every item string is secret-scrubbed before it is stored (scrub_item), and every read is scrubbed
+again.
 
 Budget is enforced before each source fetch exactly as before: a run is capped at the strictest of
 maxPostsPerRun, monthlyPosts - used and (spendUsd - spent) / costPerPostUsd (names kept from v0.2; they
@@ -35,10 +37,11 @@ from pathlib import Path
 from bay import model, secretscan, selector as selmod, sqlsandbox as sbx, vault
 from bay.config import COST_PER_POST_USD
 from bay.connect import ConnectorError
-from bay.util import duration, iso, parse_time
+from bay.util import duration, iso, parse_time, read_json
 
 SCHEMA_VERSION = 1
 DB_NAME = "corpus.db"
+STATE_NAME = "state.json"
 DELETION_CHECK_SHARE = 0.5
 ENVELOPE = ("id", "extId", "source", "kind", "author", "title", "text", "url", "createdAt", "fetchedAt",
             "container", "labels", "threadId", "matched")
@@ -65,7 +68,6 @@ def ddl(fts: bool) -> list[str]:
         """CREATE TABLE item_selectors (item INTEGER NOT NULL, selector TEXT NOT NULL,
              PRIMARY KEY (item, selector)) WITHOUT ROWID""",
         "CREATE INDEX item_selectors_selector ON item_selectors (selector)",
-        "CREATE TABLE state (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
         "CREATE TRIGGER items_ad_tags AFTER DELETE ON items BEGIN DELETE FROM item_selectors WHERE item = old.pk; END",
     ]
     if fts:
@@ -112,6 +114,10 @@ def open_rw(path: Path) -> sqlite3.Connection:
     elif ver > SCHEMA_VERSION:
         con.close()
         raise StoreError(f"{path}: store schema v{ver} is newer than this kit (v{SCHEMA_VERSION}); update agentbay")
+    elif con.execute("SELECT 1 FROM sqlite_master WHERE name = 'state'").fetchone():
+        con.close()           # a pre-release store kept state inside corpus.db, where agents could count it
+        raise StoreError(f"{path}: written by a pre-release build (internal state inside corpus.db); move the "
+                         f"folder aside and sync again, or run `bay migrate --project` from the v0.2 files")
     return con
 
 
@@ -174,8 +180,9 @@ def _stored(con: sqlite3.Connection, pk: int) -> dict:
             "threadId": r["thread_id"], **ext}
 
 
-def load_state(con: sqlite3.Connection) -> dict:
-    s = {k: json.loads(v) for k, v in con.execute("SELECT key, value FROM main.state")}
+def load_state(path: Path) -> dict:
+    """The mode's state.json (missing: empty state)."""
+    s = read_json(path, {}) or {}
     s.setdefault("cursors", {})
     s.setdefault("coverage", {"from": None, "to": None})
     s.setdefault("budget", {})
@@ -184,9 +191,14 @@ def load_state(con: sqlite3.Connection) -> dict:
     return s
 
 
-def save_state(con: sqlite3.Connection, state: dict) -> None:
-    con.executemany("INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)",
-                    [(k, json.dumps(v, ensure_ascii=False, sort_keys=True)) for k, v in state.items()])
+def save_state(path: Path, state: dict) -> None:
+    """Atomic, owner-only write of state.json (temp file 0600, then rename)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(json.dumps(state, ensure_ascii=False, sort_keys=True, indent=1))
+    os.replace(tmp, path)
 
 
 def scrub(text: str) -> str:
@@ -211,15 +223,16 @@ class CorpusStore:
         if not mode:
             raise StoreError("corpus-store needs the calling mode (settings.mode): it keeps one store per mode")
         self.path: Path = ctx.data_dir / mode / DB_NAME
+        self.state_path: Path = ctx.data_dir / mode / STATE_NAME
         self._schemas: dict[str, dict] = {}
 
     # ------------------------------------------------------------ helpers
     def _bound(self) -> list[str]:
-        """Sources bound in this env: reads return only their items (offline items never mix into real ones)."""
+        """Sources bound in this env: the store keeps only their items (offline items never mix into real ones)."""
         return sorted({s.ctx.source_id for s in self.ctx.sources.values() if s.ctx.source_id})
 
     def _ro(self) -> sqlite3.Connection:
-        con = sbx.connect_ro(self.path, self._bound())
+        con = sbx.connect_ro(self.path)
         con.row_factory = sqlite3.Row
         return con
 
@@ -317,7 +330,9 @@ class CorpusStore:
             labels |= set(json.loads(old["labels"]))
         merged = {**it, "labels": sorted(labels), "container": (old["container"] if old else None) or it.get("container")}
         tags = selmod.match_ids(merged, sels, now)
-        if old is None and not tags:
+        if not tags:
+            if old is not None:                                  # changed at the source and left the scope
+                con.execute("DELETE FROM items WHERE pk = ?", (old["pk"],))
             return False, False
         row = item_row(merged)
         if old is None:
@@ -329,19 +344,34 @@ class CorpusStore:
             con.execute(f"UPDATE items SET {', '.join(f'{k} = ?' for k in row)} WHERE pk = ?", [*row.values(), pk])
         con.execute("DELETE FROM item_selectors WHERE item = ?", (pk,))
         con.executemany("INSERT INTO item_selectors (item, selector) VALUES (?, ?)", [(pk, t) for t in tags])
-        return old is None, bool(tags)
+        return old is None, True
 
-    def _rematch(self, con, sels: list[dict], now) -> int:
-        """Re-tag every stored item with the shared matcher (selectors changed; nothing is refetched)."""
-        changed = 0
+    def _enforce_scope(self, con, state: dict, sels: list[dict], now) -> dict:
+        """Make the store hold exactly the mode's scope (see module doc); returns what it removed or re-tagged.
+        Every run, without refetching: delete rows of sources not bound now, then re-match every stored item
+        with the shared matcher (selectors may have changed, and `since` moves with the clock). Items that stay
+        in scope get their current tags; the rest are deleted, and the FTS triggers drop them from items_fts.
+        `rematched` counts items whose tags changed (including those that left the scope)."""
+        bound = self._bound()
+        out = {"unbound": 0, "unmatched": 0, "rematched": 0}
+        marks = ", ".join("?" * len(bound))
+        out["unbound"] = con.execute(f"DELETE FROM items WHERE source NOT IN ({marks})" if bound
+                                     else "DELETE FROM items", bound).rowcount
         for (pk,) in con.execute("SELECT pk FROM items").fetchall():
             tags = sorted(selmod.match_ids(_stored(con, pk), sels, now))
             have = sorted(t for (t,) in con.execute("SELECT selector FROM item_selectors WHERE item = ?", (pk,)))
-            if tags != have:
-                changed += 1
+            if not tags:
+                con.execute("DELETE FROM items WHERE pk = ?", (pk,))
+                out["unmatched"] += 1
+            elif tags != have:
                 con.execute("DELETE FROM item_selectors WHERE item = ?", (pk,))
                 con.executemany("INSERT INTO item_selectors (item, selector) VALUES (?, ?)", [(pk, t) for t in tags])
-        return changed
+            out["rematched"] += tags != have
+        names = set(self.ctx.sources)
+        for k in [k for k in state["cursors"] if k.split("|", 1)[0] not in names]:
+            state["cursors"].pop(k)                  # an unbound source's items are gone: re-binding refills
+        state["selectors"], state["sources"] = sels, bound
+        return out
 
     def _check_candidates(self, con, state: dict, src_id: str, since) -> list[str]:
         """Stored extIds of this source still inside the API window, least recently checked first."""
@@ -364,10 +394,11 @@ class CorpusStore:
         if lb_max and lb > duration(lb_max):
             raise StoreError(f"lookback {lookback} exceeds the mode's lookbackMax {lb_max}")
         sels = self._selectors()
+        state = load_state(self.state_path)
         con = self._rw()
         try:
             con.execute("BEGIN IMMEDIATE")
-            out = self._sync(con, sels, now, lookback, lb, maxItems)
+            out = self._sync(con, state, sels, now, lookback, lb, maxItems)
             con.execute("COMMIT")
         except BaseException:
             if con.in_transaction:
@@ -375,19 +406,18 @@ class CorpusStore:
             raise
         finally:
             con.close()
+        save_state(self.state_path, state)       # after the items commit: a crash in between only refetches
         return out
 
-    def _sync(self, con, sels, now, lookback, lb, max_items) -> dict:
-        state = load_state(con)
+    def _sync(self, con, state, sels, now, lookback, lb, max_items) -> dict:
         deleted = set(state["deleted"])
         window_from = now - lb
-        added = fetched = kept = billed = n_deleted = rematched = 0
+        added = fetched = kept = billed = n_deleted = 0
         spent = 0.0
         stopped: str | None = None
         warnings: list[str] = []
         sources: dict[str, dict] = {}
-        if selmod.canonical(state.get("selectors")) != selmod.canonical(sels):
-            rematched = self._rematch(con, sels, now)
+        scope = self._enforce_scope(con, state, sels, now)
         active: set[str] = set()
         for name, src in self.ctx.sources.items():
             src_id = src.ctx.source_id
@@ -489,10 +519,9 @@ class CorpusStore:
             state["cursors"].pop(k)              # a removed selector's query: re-adding it backfills
         state["coverage"] = self._overall(state)
         state["deleted"] = sorted(deleted)
-        state["selectors"] = sels
-        save_state(con, state)
         out = {"added": added, "fetched": fetched, "kept": kept, "billed": billed, "deleted": n_deleted,
-               "rematched": rematched, "spentUsd": round(spent, 6), "stopped": stopped, "sources": sources,
+               "rematched": scope["rematched"], "outOfScope": scope["unbound"] + scope["unmatched"],
+               "spentUsd": round(spent, 6), "stopped": stopped, "sources": sources,
                "budget": self._budget(state), "coverage": self.coverage(state, window_from)}
         if warnings:
             out["warnings"] = warnings
@@ -504,30 +533,25 @@ class CorpusStore:
         if not retention:
             raise StoreError("no retention: pass olderThan, or give `retention` a default in the mode's config schema")
         cutoff = iso(now - duration(retention))
+        sels = self._selectors()
+        state = load_state(self.state_path)
         con = self._rw()
         try:
             con.execute("BEGIN IMMEDIATE")
-            state = load_state(con)
-            sels = self.ctx.settings.get("selectors")
-            if sels and selmod.canonical(state.get("selectors")) != selmod.canonical(sels):
-                self._rematch(con, sels, now)
-                state["selectors"] = sels
             before = con.execute("SELECT count(*) FROM items").fetchone()[0]
+            scope = self._enforce_scope(con, state, sels, now)
             deleted = set(state["deleted"]) | set(deletedIds or [])
             n_deleted = 0
             for k in deleted:
                 src, _, xid = k.partition(":")
                 n_deleted += con.execute("DELETE FROM items WHERE source = ? AND ext_id = ?", (src, xid)).rowcount
             con.execute("DELETE FROM items WHERE created_at < ?", (cutoff,))
-            unmatched = con.execute("DELETE FROM items WHERE NOT EXISTS "
-                                    "(SELECT 1 FROM item_selectors s WHERE s.item = items.pk)").rowcount
             remaining = con.execute("SELECT count(*) FROM items").fetchone()[0]
             state["deleted"] = sorted(deleted)
             for cur in state["cursors"].values():
                 if cur.get("from") and cur["from"] < cutoff:
                     cur["from"] = cutoff
             state["coverage"] = self._overall(state)
-            save_state(con, state)
             con.execute("COMMIT")
         except BaseException:
             if con.in_transaction:
@@ -535,8 +559,9 @@ class CorpusStore:
             raise
         finally:
             con.close()
+        save_state(self.state_path, state)
         return {"removed": before - remaining, "remaining": remaining, "deleted": n_deleted,
-                "unmatched": unmatched, "cutoff": cutoff}
+                "unmatched": scope["unmatched"], "unbound": scope["unbound"], "cutoff": cutoff}
 
     # ------------------------------------------------------------ read endpoints (agents, via use shims)
     def status(self, since=None) -> dict:
@@ -548,16 +573,18 @@ class CorpusStore:
             return {"lastSync": None, "coverage": self.coverage(state, lo), "budget": self._budget(state),
                     "count": 0, "selectors": {}, "engine": "fts5" if sbx.fts5_available() else "like",
                     "stale": bool(sels)}
+        state = load_state(self.state_path)
         con = self._ro()
         try:
-            state = load_state(con)
             count = con.execute("SELECT count(*) FROM v_items").fetchone()[0]
             per = dict(con.execute("SELECT j.value, count(*) FROM v_items v, json_each(v.matched) j "
                                    "GROUP BY j.value ORDER BY j.value").fetchall())
             engine = "fts5" if sbx.has_fts(con) else "like"
         finally:
             con.close()
-        stale = bool(sels) and selmod.canonical(state.get("selectors")) != selmod.canonical(sels)
+        # stale: the next sync changes the store's scope (selectors changed, or a source was bound/unbound)
+        stale = (bool(sels) and selmod.canonical(state.get("selectors")) != selmod.canonical(sels)) \
+            or sorted(state.get("sources") or []) != self._bound()
         return {"lastSync": state["coverage"].get("to"), "coverage": self.coverage(state, lo),
                 "budget": self._budget(state), "count": count, "selectors": per, "engine": engine, "stale": stale}
 
@@ -576,9 +603,9 @@ class CorpusStore:
         if ids:
             where.append(f"v.id IN ({', '.join('?' * len(ids))})")
             args += list(ids)
+        state = load_state(self.state_path)
         con = self._ro()
         try:
-            state = load_state(con)
             rows = con.execute(f"SELECT {ITEM_COLS} FROM v_items v JOIN main.items i ON i.pk = v.rid "
                                f"{_where(where)} ORDER BY v.createdAt DESC, v.id DESC LIMIT ?",
                                [*args, int(limit or 100)]).fetchall()
@@ -674,9 +701,9 @@ class CorpusStore:
             return {"views": [{"name": v, "columns": cols[v], "rows": 0} for v in data_views],
                     "fts": {**fts, "available": sbx.fts5_available()}, "functions": sorted(sbx.FUNCTIONS),
                     "limits": limits}
+        state = load_state(self.state_path)
         con = self._ro()
         try:
-            state = load_state(con)
             fts["available"] = sbx.has_fts(con)
             views = []
             for v in data_views:
@@ -701,7 +728,7 @@ class CorpusStore:
 
     def sql(self, sql, limit=None) -> dict:
         try:
-            box = sbx.Sandbox(self.path, self._bound())
+            box = sbx.Sandbox(self.path)
         except sbx.SqlError as e:
             return {"columns": [], "rows": [], "rowCount": 0, "truncated": None, "error": str(e)}
         try:

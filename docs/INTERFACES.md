@@ -185,7 +185,7 @@ An endpoint review block may name framework rule sets: `review: { ..., rulesets:
   - a 2 s progress-handler limit, a 1 MB value limit, a 256 MB heap cap (temp_store=FILE), 200/1000 rows, 200 kB per result and 4,000 characters
     per cell.
 
-  Errors are returned as `error`, saying what to change. Every item string but its identity is secret-scrubbed at ingest (`item_row`, shared with the migration), and every
+  Errors are returned as `error`, saying what to change. Every item string, extId and dict keys in kind fields included, is secret-scrubbed at ingest (`scrub_item`, shared with the migration), and every
   read is redacted and scanned.
 - **Migration**: `bay migrate --project <repo>` (the user; forge.migrate migrates kit content only) converts
   a v0.2 `posts.jsonl` + `state.json` into `<dir>/feed-briefing/corpus.db` + `state.json`, writing only the

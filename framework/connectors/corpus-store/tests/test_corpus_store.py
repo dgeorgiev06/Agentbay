@@ -473,6 +473,41 @@ def test_every_stored_column_is_scrubbed_at_ingest():
     assert SECRETS[0] not in out and SECRETS[0].encode().hex().upper() not in out
 
 
+def test_dict_keys_and_identity_fields_are_scrubbed_at_ingest():
+    """A secret in a kind field's key (metrics) or in the source's own id (extId, so also id) never reaches
+    corpus.db; the stored id stays <source>:<extId>, and a deletion reported for that raw id still applies."""
+    p = project()
+    st = store(p)
+    real = st.ctx.sources["fake"].fetch
+    leaky_id = f"77-password={SECRETS[1]}"
+
+    def planted(**kw):
+        out = real(**kw)
+        a, b = out["items"][0], out["items"][1]
+        a["metrics"] = {f"api_key={SECRETS[0]}": 1, "like_count": 2}
+        b.update({"extId": leaky_id, "id": f"fake:{leaky_id}"})
+        return out
+    st.ctx.sources["fake"].fetch = planted
+    st.sync(lookback="3d")
+    raw = db(p).read_bytes().decode("latin-1")
+    for sec in SECRETS[:2]:
+        assert sec not in raw and sec.upper() not in raw.upper()
+    rows_ = rows(p, "SELECT source || ':' || ext_id AS id, ext FROM items")
+    leaky = [r for r in rows_ if r["id"].startswith("fake:77-")]
+    assert len(leaky) == 1 and "[REDACTED:password]" in leaky[0]["id"]
+    assert any('"api_key=[REDACTED:api-key]": 1' in r["ext"] and '"like_count": 2' in r["ext"] for r in rows_)
+    got = store(p).query(ids=[leaky[0]["id"]])["items"]
+    assert got and got[0]["id"] == f"fake:{got[0]['extId']}"                     # id rebuilt from the scrubbed parts
+    for sec in SECRETS[:2]:
+        assert sec not in json.dumps(store(p).sql("SELECT hex(id), hex(extId) FROM v_items"))
+    st = store(p)                                                              # the source deletes the leaky item
+    real = st.ctx.sources["fake"].fetch
+    st.ctx.sources["fake"].fetch = lambda **kw: {**real(**kw), "deleted": [leaky_id]}
+    st.sync(lookback="3d")
+    assert not any(i.startswith("fake:77-") for i in ids(p))
+    assert leaky[0]["id"] in state(p)["deleted"] and SECRETS[1] not in json.dumps(state(p))
+
+
 def test_two_modes_on_one_env_keep_separate_stores():
     p = project()
     a = store(p, settings={"mode": "feed-briefing", "selectors": [{"id": "home"}]})

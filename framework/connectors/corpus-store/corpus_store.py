@@ -121,23 +121,23 @@ def open_rw(path: Path) -> sqlite3.Connection:
     return con
 
 
-IDENTITY = ("id", "extId", "source", "kind", "createdAt", "fetchedAt")
-
-
 def scrub_item(it: dict) -> dict:
-    """Every string in an item except its identity and timestamps, through vault.redact + the pattern secret
-    scan: author, title, text, url, container, labels, threadId and every string inside kind fields (ext).
-    Done before anything is stored, because scanning only on read can be evaded with SQL transforms
-    (upper(), hex(), substr() pieces); a secret that is never stored cannot be rebuilt."""
+    """Every string in an item, dict keys and identity fields (extId, ...) included, through vault.redact + the
+    pattern secret scan; `id` is then rebuilt as <source>:<extId> from the scrubbed parts. Done before anything
+    is stored, because scanning only on read can be evaded with SQL transforms (upper(), hex(), substr()
+    pieces); a secret that is never stored cannot be rebuilt."""
     def walk(v):
         if isinstance(v, str):
             return scrub(v)
         if isinstance(v, list):
             return [walk(x) for x in v]
         if isinstance(v, dict):
-            return {k: walk(x) for k, x in v.items()}
+            return {scrub(str(k)): walk(x) for k, x in v.items()}
         return v
-    return {k: (v if k in IDENTITY else walk(v)) for k, v in it.items()}
+    out = walk(it)
+    if "source" in out and "extId" in out:
+        out["id"] = f"{out['source']}:{out['extId']}"
+    return out
 
 
 def item_row(it: dict) -> dict:
@@ -320,9 +320,8 @@ class CorpusStore:
             raise StoreError(f"connector {src_name}: item {it['id']} does not match {kind}/v1: {'; '.join(errs[:3])}")
 
     def _upsert(self, con, it: dict, sels: list[dict], now) -> tuple[bool, bool]:
-        """(new, kept). Labels union with what is stored; the item is kept only if it matches a selector.
-        Secrets are scrubbed before anything is stored (scrub_item)."""
-        it = scrub_item(it)                                      # match on exactly what will be stored
+        """(new, kept) for a scrubbed item (scrub_item), so it matches on exactly what will be stored. Labels
+        union with what is stored; the item is kept only if it matches a selector."""
         old = con.execute("SELECT pk, labels, container FROM items WHERE source = ? AND ext_id = ?",
                           (it["source"], it["extId"])).fetchone()
         labels = set(it.get("labels") or []) | ({it["container"]} if it.get("container") else set())
@@ -472,14 +471,15 @@ class CorpusStore:
                 n_new = n_kept = 0
                 for it in got:
                     self._validate(it, name, src_id)
+                    it = scrub_item(it)
                     if it["id"] in deleted:
                         continue
                     is_new, was_kept = self._upsert(con, it, sels, now)
                     n_new += is_new
                     n_kept += was_kept
                 for xid in res.get("deleted", []):
-                    dk = f"{src_id}:{xid}"
-                    deleted.add(dk)
+                    xid = scrub(str(xid))                           # stored ids are scrubbed too
+                    deleted.add(f"{src_id}:{xid}")
                     n_deleted += con.execute("DELETE FROM items WHERE source = ? AND ext_id = ?",
                                              (src_id, xid)).rowcount
                 fetched += len(got)
@@ -540,7 +540,7 @@ class CorpusStore:
             con.execute("BEGIN IMMEDIATE")
             before = con.execute("SELECT count(*) FROM items").fetchone()[0]
             scope = self._enforce_scope(con, state, sels, now)
-            deleted = set(state["deleted"]) | set(deletedIds or [])
+            deleted = set(state["deleted"]) | {scrub(str(x)) for x in deletedIds or []}   # as stored
             n_deleted = 0
             for k in deleted:
                 src, _, xid = k.partition(":")

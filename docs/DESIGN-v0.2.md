@@ -405,9 +405,9 @@ are not part of this amendment.
   - fixable error messages.
 
   Two decisions came out of the adversarial tests:
-  - **Secrets are scrubbed at ingest.** Every item string except its identity and timestamps is
-    secret-scrubbed when stored: author, title, text, url, container, labels, threadId and the strings in kind
-    fields. Scanning output alone is defeated by `upper()`/`hex()`. `item_row()` is the one row builder, used
+  - **Secrets are scrubbed at ingest.** Every item string is secret-scrubbed when stored: identity fields
+    (extId, with `id` rebuilt from the scrubbed parts), author, title, text, url, container, labels, threadId,
+    and the keys and strings of kind fields. Scanning output alone is defeated by `upper()`/`hex()`. `item_row()` is the one row builder, used
     by both sync and `bay migrate`.
   - **Reads stay scanned.** Every read is still `vault.redact` + `secretscan`.
 - **`briefing` base mode** (user space, `modes/briefing`, abstract). It ships:

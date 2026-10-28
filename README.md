@@ -1,23 +1,48 @@
 # agentbay
 
 Jobs for Claude Code, defined as data. You describe a **mode** (a job with
-endpoints), the **roles** that do its steps, the **agents** that run those roles,
-the **environment** each agent may touch, and the **connectors** that do the
-deterministic work. agentbay checks that it all wires up, compiles it into
+endpoints): which of the framework's **roles** do its steps, the **environment**
+each role works in, the capabilities it needs, and its playbooks, skills and rules.
+**Connectors** do the deterministic work, and one **agent profile** says how an LLM
+product runs the roles. agentbay checks that it all wires up, compiles it into
 Claude Code, and runs it through one dispatcher that enforces schemas, effects,
 budgets and secrets, and logs every step.
+
+**Who owns what.** The framework owns the roles (five generic jobs: `lead`, `analyst`, `researcher`,
+`builder`, `reviewer`) and the agent profile (`framework/agents/claude-code.yaml`, the only file that names
+models). You own modes, envs and connectors: a mode customizes the roles with its playbooks, skills and rules,
+and its `roles:` map says where each one works.
+
+| Concept | Answers | You write it? |
+|---|---|---|
+| Role | what the job is (prompt, doneWhen, default tier: fast, balanced or deep) | no: framework |
+| Mode | what this assignment is, and which env each role works in (`roles:`) | yes |
+| Agent profile | how one LLM product runs roles (tier -> model) | no: framework; pick it with `agent:` |
+| Env | what a role can touch (bindings, secrets, network, files, allowed tiers) | yes |
 
 ```
 Chief of Staff (your main Claude Code session)
   └─ bay call feed-briefing.digest ──> Mode feed-briefing (extends briefing), feature digest
         refresh   run: items.store/v1.sync   ─ code ─> Env local-feeds ─> Connector corpus-store ─> Connector x-api (api.x.com)
         gather    run: items.store/v1.query  ─ code
-        themes    role: briefing-analyst  ─ Agent analyst (subagent, sonnet) in Env local-feeds
-        review    role: reviewer          ─ Agent critic (subagent, opus), from the feature's review block
+        themes    role: analyst    ─ subagent analyst--feed-briefing (balanced: sonnet) in Env local-feeds
+        review    role: reviewer   ─ subagent reviewer--feed-briefing (deep: opus), from the feature's review block
 ```
 
-Read it top to bottom: **mode -> role -> agent -> env -> connector**. Modes name
-capabilities (`items.source/v1`), never tools. Agents never see secrets or connectors.
+Read it top to bottom: **mode -> role (in the env the mode's `roles:` names) -> connector**. Modes name
+capabilities (`items.source/v1`), never tools; a role may read the read-only endpoints of the capabilities its
+mode needs, through its env. Agents never see secrets or connectors.
+
+```yaml
+# modes/briefing/mode.yaml (excerpt)
+coordinator: lead
+roles: { lead: local-feeds, analyst: local-feeds, reviewer: local-feeds }   # role -> env
+needs: [items.store/v1, items.source/v1]
+```
+
+A feature (`endpoints.<f>.roles`) or a workflow step (`roles:` on the step) can put a role in another env for
+just that feature or step; a child mode inherits the map and overrides entries. A step or feature may set
+`tier:`/`effort:`; otherwise the role's default applies, and an env may cap the tiers it allows.
 Design: [docs/DESIGN-v0.2.md](docs/DESIGN-v0.2.md). Contracts: [docs/INTERFACES.md](docs/INTERFACES.md).
 
 ## Quickstart (5 minutes, offline)
@@ -36,7 +61,7 @@ Then ask: *"brief me on the last 3 days"*. The Chief of Staff runs the digest:
 
 1. `.agentbay/bay call feed-briefing.digest '{"since": "3d"}'` - the dispatcher syncs the corpus store from
    the source (code, no agent), gathers stored posts and returns `needs-agent` for step `themes`.
-2. It runs the `briefing-analyst` subagent with the plan (playbook, rules, Definition of Done, posts) and
+2. It runs the `analyst--feed-briefing` subagent (role analyst in mode feed-briefing) with the plan (playbook, rules, Definition of Done, posts) and
    submits its Digest: `.agentbay/bay submit <callId> themes '<digest json>'`.
 3. Deterministic checks run (every citation is a stored item's url or id), then `needs-agent` for step `review`:
    the `reviewer` subagent (opus) returns one verdict per DoD/rule id; `.agentbay/bay submit <callId> review '<verdict>'`.
@@ -46,7 +71,7 @@ Then ask: *"brief me on the last 3 days"*. The Chief of Staff runs the digest:
 Questions work the same way: *"what did people say about Solana custody?"* runs `feed-briefing.ask`. The
 analyst answers through read-only SQL: it runs `items.store/v1.describe`, narrows with `items.store/v1.sql`,
 whose input is `{"sql": "<one SELECT>", "limit": <optional rows>}`, for example
-`.agentbay/roles/briefing-analyst/use items.store/v1.sql '{"sql": "SELECT id, url FROM v_posts WHERE text LIKE '\''%custody%'\''"}'`
+`.agentbay/roles/analyst--feed-briefing/use items.store/v1.sql '{"sql": "SELECT id, url FROM v_posts WHERE text LIKE '\''%custody%'\''"}'`
 or full text with `SELECT id, url, snippet FROM v_fts WHERE fts MATCH 'solana AND custody' ORDER BY rank`, then
 reads the few posts it relies on with `items.store/v1.get`,
 and cites item ids (`x:1849...`). The Chief of Staff turns the ids into links when it delivers the answer.
@@ -100,13 +125,30 @@ they are fixed. Cursors, coverage, monthly budget, deletions and deletion-check 
 next sync is incremental and posts deleted at the source never come back. The old files are renamed
 `*.v0.2.bak`, not deleted.
 
-Your own v0.2 modes, roles, envs and connectors keep working in 0.3.x. Their old names resolve to the new
+Your own v0.2 modes, envs and connectors keep working in 0.4.x. Their old names resolve to the new
 ones: `feed.source/v1` and `feed.store/v1` become `items.*`, `feed-analyst` and `feed-lead` become
-`briefing-*`, and `local-store` becomes `corpus-store`. `bay lint` warns about each such file. `./bay.sh migrate`
+`analyst` and `lead`, and `local-store` becomes `corpus-store`. `bay lint` warns about each such file. `./bay.sh migrate`
 (then `--confirm`) rewrites those files. A connector you wrote against the old `fetch(sinceId, startTime,
 maxPosts, checkIds)` cannot be rewritten automatically. If an env binds it, `bay lint`, `validate` and `build`
 fail and say how to port it. If no env binds it, it is only a warning: the connector is skipped and the rest
 of the kit builds.
+
+### Upgrading 0.3 content (roles, agents, envs)
+
+0.4 keeps the 0.3 shape working for one release, with a `bay lint` warning per file, and
+`./bay.sh migrate` (dry run; `--confirm` applies) rewrites it:
+
+- `roles: [a, b]` and an endpoint's `agents: {role: agent}` become the `roles:` map (the env of each role's
+  0.3 agent), plus the `needs` those roles used (access now comes from the mode);
+- `inference` and a review's `model` become `tier`/`effort` where they changed the outcome; an env's
+  `models` becomes `tiers`;
+- your per-role agent files are folded away (one framework profile runs every role);
+- the old role names become `analyst` (briefing-analyst, improve-analyst, auditor) and `lead`
+  (briefing-lead, improve-lead, forge-lead);
+- a role file of your own is an error (roles are framework-level); migrate turns it into a skill of the mode
+  that uses it, run by the closest framework role, or tells you what to do by hand;
+- the caps `maxPostsPerRun` and `monthlyPosts` are now `maxItemsPerRun` and `monthlyItems` (also in your
+  agentbay.config.yaml with `--project`).
 
 ### Real X timeline
 
@@ -118,7 +160,7 @@ of the kit builds.
 3. In `agentbay.config.yaml` delete the `envs: { local-feeds: local-feeds-offline }` line (the one offline
    switch), set `connectors.x-api.userId`, and rebuild. `envs/local-feeds.yaml` already binds `x-api`; envs are
    the only place capabilities are bound.
-4. Caps: `maxPostsPerRun`, `monthlyPosts`, `spendUsd` (at `costPerPostUsd`, default $0.005). Sync stops and
+4. Caps: `maxItemsPerRun`, `monthlyItems`, `spendUsd` (at `costPerPostUsd`, default $0.005). Sync stops and
    says which cap stopped it before exceeding one.
 
 ## What ships
@@ -128,17 +170,17 @@ schemas/               the contracts (agentbay/v2) + data schemas
 interfaces/            items.source/v1, items.store/v1
 modes/briefing/        abstract base: sync, digest, ask, prune (features/<f>/playbook.md + rules.yaml),
                        skills digest, grounded-qa, corpus-sql
-modes/feed-briefing/   extends briefing: X posts (own purpose, caps, config defaults, sync input)
+modes/feed-briefing/   extends briefing: X posts (own purpose, caps, configDefaults, sync input)
 modes/delivery/        research, build (+review): the v0.1 behaviour
-roles/  agents/  envs/ briefing-lead, briefing-analyst / analyst, lead / local-feeds(-offline)
+envs/                  local-feeds, local-feeds-offline
 connectors/            x-api (official X API v2: home timeline, Lists, user timelines), fake (offline)
 framework/             shipped with the kit, never edited by users:
   modes/forge/         create | extend | migrate - agentbay building agentbay
   modes/improve/       scan | audit | triage | backlog | implement | verify - evidence-backed improvement backlog
   rules/conformance.yaml  semantic framework rules (forge reviewers + improve.audit)
-  roles/               researcher, builder, reviewer, forge-lead, improve-lead, improve-analyst, auditor
-  agents/ envs/        worker, critic, author, framework-builder, improve-main, improver /
-                       workspace, local-authoring, framework-dev, improve-local
+  roles/               lead, analyst, researcher, builder, reviewer (generic jobs; modes customize them)
+  agents/              claude-code (the agent profile: runtime per kind, tier -> model)
+  envs/                workspace, research, local-authoring, framework-dev, improve-local
   interfaces/ connectors/  session.events, review.verdicts, artifacts.read, improve.detect, improve.findings /
                        corpus-store (SQLite items store + SQL sandbox), ledger, git, claude-transcripts,
                        artifact-graph, improve-detect, improve-store, migrator, scaffold
@@ -159,7 +201,7 @@ tests/                 python3 tests/run.py
 | `bay call <mode>.<endpoint> '<json>'` | run a feature (cron it for features with `schedule:`; nothing runs schedules for you) |
 | `bay submit <callId> <step> '<json>'` | hand back a step's output or approve a gate |
 | `bay status`, `bay log` | calls, steps, agent runs, cost |
-| `bay mode\|feature\|role\|connector\|env new <name>` | scaffold (same templates as `forge.create`) |
+| `bay mode\|feature\|connector\|env new <name>` | scaffold (same templates as `forge.create`; roles are framework-level) |
 | `bay migrate [--confirm] [--project <repo>]` | migrate your content (and that project's v0.2 store) to this version (dry run by default) |
 | `bay note <ref> "text" [--instruction]` | record a note (or a mid-run instruction change) on a run, task or call; never creates a run |
 | `bay improve weekly` / `bay improve decide <id> approve\|defer\|wontfix` | weekly improve pass / your decision on a backlog item (approve: your terminal only) |
@@ -206,12 +248,13 @@ roles read findings only through their use shims; transcript files are read only
   then in `envs/local-feeds.yaml` add `bsky` to the `items.source/v1` binding and add its API host to
   `network.allow` and its secret names to `secrets.allow`. Modes, roles and playbooks do not change.
 - **A briefing for another kind of source**: a mode with `extends: briefing` that sets its purpose, constraints
-  and config defaults, and overrides only what differs (an endpoint's review, a workflow, a playbook, roles).
-  Everything else (features, rules, skills, the analyst role) is inherited at build time. For now only one
-  installed mode may use a store-reading role: each mode keeps its own store, and roles are placed once, not
-  per mode, so a second briefing mode next to feed-briefing (or a v0.2 mode of your own that lists
-  feed-analyst/feed-lead) fails `bay validate` naming both modes. Per-mode role placement comes in step 3 of
-  docs/proposals/0003-briefing-sources.md.
+  and `configDefaults` (e.g. its default selectors), points its roles at its own env
+  (`roles: { lead: local-mail, analyst: local-mail, reviewer: local-mail }`) and overrides only what differs
+  (an endpoint's review, a workflow, a playbook, a skill). Everything else is inherited at build time. The
+  analyst of each mode compiles separately (`analyst--feed-briefing`, `analyst--mail-briefing`): its own
+  subagent, shim, guard policy and store.
+- **Behaviour for a role in your mode**: a skill (`modes/<mode>/skills/<name>/SKILL.md`), the feature's
+  playbook or rules. A new kind of job for the framework is a `forge.extend` proposal.
 - **A feature**: `bay feature new weekly --mode feed-briefing --effects read` (role defaults to the mode's
   first worker role); fill the
   playbook's Definition of Done and the rules; `bay lint`. Review is on by default for write/spend/delete features.
@@ -224,13 +267,13 @@ All tracked in `.agentbay/manifest.json` and removed by `clean`; your CLAUDE.md,
 
 | file | from |
 |---|---|
-| `.claude/agents/<role>.md` | each worker role placement (`<role>--<agent>.md` when a feature re-places it) |
+| `.claude/agents/<role>--<mode>.md` | each worker role in each mode (plus `--<env>` when the mode runs it in several envs) |
 | `.claude/skills/<skill>/` | role and mode skills |
 | `.claude/commands/bay-*.md` | coordinator commands |
 | `.claude/settings.json` | merged: narrow `Bash(<prefix>:*)` permissions + ledger hooks |
 | `CLAUDE.md` | one marked import line -> `.agentbay/COORDINATOR.md` (Chief of Staff + mode coordinator playbooks) |
 | `.agentbay/catalog.json`, `.agentbay/bay` | modes/endpoints/roles catalog; project control-plane shim |
-| `.agentbay/roles/<role>/use`, `.agentbay/guard.json` | per-role read-only data shim; per-subagent Bash policy for the guard hook |
+| `.agentbay/roles/<role>--<mode>/use`, `.agentbay/guard.json` | per-unit read-only data shim (its mode's data, its env); per-subagent policy for the guard hook |
 | `.agentbay/{ledger,calls,data}/` | runtime state (gitignored) |
 
 ## Safety model
@@ -239,7 +282,7 @@ All tracked in `.agentbay/manifest.json` and removed by `clean`; your CLAUDE.md,
 it cannot contain code once something runs it. Hard isolation needs an OS sandbox (next release).
 
 - **Nothing that runs code is auto-approved.** The only thing agentbay lets run without a prompt is a role's own
-  read-only data shim (`.agentbay/roles/<role>/use`), which runs only kit code (an isolated script with
+  read-only data shim (`.agentbay/roles/<role>--<mode>/use`), which runs only kit code (an isolated script with
   `python3 -E`, so files in your project can't be imported); when the kit is your project or sits inside it,
   where roles might edit the code it runs, even the shim prompts. Every other subagent command (git, `./bay.sh`, test runners,
   interpreters) prompts you. In the main thread only `bay show|status|log|note|task` are pre-approved;
@@ -278,6 +321,6 @@ it cannot contain code once something runs it. Hard isolation needs an OS sandbo
 
 ## Roadmap
 
-1. `headless` (`claude -p`) and cloud runtimes behind the same Agent/runtime field.
+1. `headless` (`claude -p`) and cloud runtimes as agent profiles: modes, roles and envs do not change.
 2. Ledger -> SQLite behind the same API; per-call cost dashboards.
 3. More sources as connectors (Bluesky, RSS) - one binding line each.

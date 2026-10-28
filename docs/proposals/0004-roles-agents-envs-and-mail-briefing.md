@@ -1,6 +1,6 @@
 # Proposal 0004: simpler roles/agents/envs, and mail-briefing (Gmail)
 
-Status: Part A approved (user, 2026-10-28) and in progress. Part B is a draft that needs the decisions listed at the end.
+Status: Part A implemented (approved by the user 2026-10-28, with the scope change below). Part B is a draft that needs the decisions listed at the end.
 Builds on 0003 (merged): item/v1, selectors, corpus-store with read-only SQL, `briefing` base mode.
 
 ## Goal
@@ -12,13 +12,13 @@ Agreed design (user, 2026-10-28). Each concept answers one question, and only th
 
 | Concept | Answers | Holds | LLM-specific? |
 |---|---|---|---|
-| **Role** | who: a reusable job | prompt, doneWhen, `uses` (capabilities), default `tier` (fast, balanced, deep), optional effort | no |
-| **Mode** | what this assignment is | features, workflows, custom skills/playbooks/rules on top of roles, and **which env each role works in** (the `roles:` map) | no |
+| **Role** | who: a reusable job (framework-level, five generic roles) | prompt, doneWhen, rules, skills, default `tier` (fast, balanced, deep), optional effort, access (read or write) | no |
+| **Mode** | what this assignment is | features, workflows, custom skills/playbooks/rules on top of roles, **which env each role works in** (the `roles:` map) and what its roles may read (`needs`) | no |
 | **Agent** | how one LLM product runs roles | runtime per kind (coordinator, worker), tier→model map, effort mapping, tool-name mapping | **yes, only here** |
 | **Env** | what it can touch (the container) | connector bindings, secrets, network, fs, limits, allowed tiers | no |
 
 ### Changes
-1. **Agent becomes a product profile.** There is one file per LLM product, instead of one file per role. Today's ~9 agent files (analyst, lead, worker, critic, author, framework-builder, forge-main, improve-main, improver) collapse into `agents/claude-code.yaml`:
+1. **Agent becomes a product profile.** There is one file per LLM product, instead of one file per role. Today's ~9 agent files (analyst, lead, worker, critic, author, framework-builder, forge-main, improve-main, improver) collapse into `framework/agents/claude-code.yaml`:
    ```yaml
    runtime: { coordinator: claude-code-main, worker: claude-code-subagent }
    tiers:   { fast: haiku, balanced: sonnet, deep: opus }
@@ -30,19 +30,40 @@ Agreed design (user, 2026-10-28). Each concept answers one question, and only th
    roles: { briefing-analyst: local-mail, briefing-lead: local-mail, reviewer: local-mail }
    ```
    There are three override levels, using the same shape: mode (default), feature, and workflow step. There is one env per step; a role can appear in many steps.
-   - forge uses a feature override: `builder` goes to `local-authoring` for create and `framework-dev` for extend, replacing today's `agents: {builder: author}`.
+   - forge uses a feature override: `builder` works in `local-authoring` (the mode default) for create and in `framework-dev` for extend (`roles: { builder: framework-dev }`), replacing today's `agents: {builder: author}`.
    - Children inherit their parent's `roles:` map and may override it entry by entry.
 4. **Model choice, resolved in one place.**
    - Tier: a feature step's tier, else the role's default tier.
    - Model: the agent profile maps the tier to a model.
    - Env: an env may cap the tiers it allows.
    - Resolver errors name the role, mode, feature, env and tier involved.
-5. **Each (role, mode) pair compiles separately.** It gets its own subagent (e.g. `briefing-analyst--mail-briefing`), use shim, guard policy and store access. briefing-analyst then works under both feed-briefing (X env) and mail-briefing (mail env), with credentials and stores fully separate. This replaces the per-mode design in the earlier draft and removes the validate error that blocked a shared role.
+5. **Each (role, mode, env) compiles separately.** It gets its own subagent (e.g. `analyst--mail-briefing`), use shim, guard policy and store access. The analyst then works under both feed-briefing (X env) and mail-briefing (mail env), with credentials and stores fully separate. This replaces the per-mode design in the earlier draft and removes the validate error that blocked a shared role.
 6. **Migration.** `bay migrate` (dry run first, `--confirm` to apply) does three things:
    - rewrites a role's `agent:` to a `tier` (taken from that agent's model) and moves that agent's env into each using mode's `roles:` map;
    - turns the agent files into the single profile;
    - rewrites `agents: {role: agent}` and list-form `roles: [..]` in mode.yaml to the `roles:` map.
    The old fields keep working for one release, with lint warnings (same pattern as the 0.3 aliases).
+
+### Scope change (user decision 2026-10-28: roles are framework-level; 5 generic roles; access from mode needs)
+Roles belong to the framework and modes customize them. Roles are generic jobs; everything mode-specific lives
+in the mode's playbooks, skills and rules.
+1. **Five framework roles** in `framework/roles/`: `lead` (runs a mode's workflow as its coordinator; replaces
+   briefing-lead, improve-lead and forge-lead), `analyst` (analyzes stored data and cites evidence; replaces
+   briefing-analyst, improve-analyst and auditor), and `researcher`, `builder`, `reviewer`. The behaviour of the
+   old roles moved into the modes: briefing's playbooks and rules, improve's coordinator playbook and its skills
+   `pattern-analysis` and `conformance-audit`, forge's coordinator playbook.
+2. **Data access moves from roles to modes.** Roles carry no `uses:`. A role placed in a mode may read the
+   read-only endpoints of the capabilities that mode declares in `needs:`, through the env its `roles:` entry
+   names. The dispatcher, use shims, guard policy and resolver derive the grants this way; agents still never
+   reach write, spend or delete endpoints. An interface may be marked `dispatcherOnly` (code steps only).
+3. **User space is modes/, envs/ and connectors/** (and interfaces/). The top-level `roles/` folder is gone; a
+   user role file is a lint error ("roles are framework-level; customize behaviour in your mode's
+   playbooks/skills, or propose a new role via forge.extend"). Agent profiles are framework-level too.
+4. **Deprecations** (one release, lint warnings, `bay migrate` rewrites, dry run first): the old role names are
+   aliases of `analyst` and `lead`; a role's `uses:` is ignored with a warning; a user role file becomes
+   playbook/skill content of its mode where possible, otherwise migrate reports it for manual handling.
+5. **Compiled names** stay readable and unique per (role, mode, env), e.g. `analyst--feed-briefing`,
+   `lead--improve`.
 
 ### Small items carried over from the 0003 review
 - **Config defaults override:** a child mode declares `configDefaults:` instead of copying the parent's config schema.

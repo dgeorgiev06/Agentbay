@@ -69,7 +69,7 @@ class Dispatcher:
             self._accept_review(state, feat, step, output, base)
         else:
             if step.out:
-                sch = model.type_schema(mode.path, step.out, f"{feat.mode}.{feat.name}", [])
+                sch = model.type_schema(mode.dirs or mode.path, step.out, f"{feat.mode}.{feat.name}", [])
                 errs = model.schema_errors(output, sch)
                 if errs:
                     raise CallError(f"step {step.id}: output does not match {step.out}: " + "; ".join(errs[:5]))
@@ -122,12 +122,30 @@ class Dispatcher:
         conns = model.connectors_of(env.spec["bind"].get(iface))
         if not conns:
             raise CallError(f"role {role}: {iface} is not bound to a connector in env {env.name}")
-        outs = {c: self._invoke(env.name, c, iface, ep, inp or {}, settings={}, caps={}) for c in conns}
+        settings = self._use_settings(r, iface)
+        outs = {c: self._invoke(env.name, c, iface, ep, inp or {}, settings=settings, caps={}) for c in conns}
         out = outs[conns[0]] if len(conns) == 1 else merge_outputs(outs)
         n = len(out.get("posts", [])) if isinstance(out, dict) else None
         ledger.append(self.project, "data.read", f"use:{role}", source="dispatcher", role=role, env=env.name,
                       summary=target, data={"input": inp or {}, **({"items": n} if n is not None else {})})
         return secretscan.scrub_obj(json.loads(vault.redact(json.dumps(out, ensure_ascii=False))))
+
+    def _use_settings(self, role, iface: str) -> dict:
+        """Which mode a role's read belongs to: the one mode of the role that needs `iface`. Per-mode stores
+        (corpus-store) need it; a role serving several such modes is ambiguous until per-mode placement exists."""
+        modes = [m for m in self.sys.modes.values() if role.name in m.roles and iface in m.needs]
+        if len(modes) > 1:
+            raise CallError(f"role {role.name} reads {iface} for several modes ({', '.join(m.name for m in modes)}); "
+                            f"give each mode its own reader role so a read reaches one mode's store")
+        if not modes:
+            return {}
+        m = modes[0]
+        # the mode's settings (selectors) and the source ids bound where its code steps run: the store checks
+        # its scope against them, since this read runs in the role's env, not the mode's
+        env, _ = model.code_env(self.sys.kit, self.sys.kit.get("Mode", m.name), iface, self.sys.roles)
+        conns = model.connectors_of(env.spec["bind"].get(model.SOURCE_IFACE)) if env else []
+        docs = [self.sys.kit.get("Connector", c) for c in conns]
+        return {**self._settings(m), "sources": sorted({d.spec["source"] for d in docs if d and d.spec.get("source")})}
 
     def run_capability(self, mode_name: str, run: str, args: dict) -> dict:
         """Run one connector endpoint of a mode's capability outside any workflow, in the env its code steps use.
@@ -194,6 +212,8 @@ class Dispatcher:
         iface = step.run.rsplit(".", 1)[0]
         st = self._invoke(step.env, step.connector, iface, "status", {}, settings=self._settings(mode), caps={})
         last = st.get("lastSync")
+        if st.get("stale"):           # selectors or bound sources changed: sync re-scopes the store first
+            return False
         return bool(last) and (self.clock() - parse_time(last, self.clock())) <= age
 
     def _run_code(self, mode, feat, step, state, base) -> None:
@@ -254,20 +274,26 @@ class Dispatcher:
 
     def _settings(self, mode) -> dict:
         s = dict(mode.config)
+        s["mode"] = mode.name                     # connectors that keep per-mode data (corpus-store) key on it
         if "lookbackMax" in mode.constraints:
             s["lookbackMax"] = mode.constraints["lookbackMax"]
         return s
 
     # ------------------------------------------------------------ checks & review
     def _check_ctx(self) -> checks.CheckContext:
-        def store_urls():
-            urls: set[str] = set()
-            for p in self.project.glob(".agentbay/data/**/posts.jsonl"):
-                for line in p.read_text(encoding="utf-8").splitlines():
-                    if line.strip():
-                        urls.add(json.loads(line).get("url", ""))
-            return urls
-        return checks.CheckContext(store_urls=store_urls, kit=self.sys.kit.root, secrets=vault.redact)
+        def store_refs():
+            """Urls and ids (<source>:<extId>) of every stored item in this project's corpus stores."""
+            import sqlite3
+            refs: set[str] = set()
+            for p in self.project.glob(".agentbay/data/**/corpus.db"):
+                con = sqlite3.connect(p.resolve().as_uri() + "?mode=ro", uri=True)
+                try:
+                    for url, iid in con.execute("SELECT url, source || ':' || ext_id FROM items"):
+                        refs.update(x for x in (url, iid) if x)
+                finally:
+                    con.close()
+            return refs
+        return checks.CheckContext(store_urls=store_refs, kit=self.sys.kit.root, secrets=vault.redact)
 
     def _run_checks(self, feat, state) -> None:
         state["checks_done"] = True

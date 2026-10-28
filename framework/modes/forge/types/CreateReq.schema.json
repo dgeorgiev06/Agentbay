@@ -7,7 +7,7 @@
     "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,40}$" },
     "intent": { "type": "string", "minLength": 5 },
     "target": { "type": "string", "description": "kind=feature: existing user mode" },
-    "implements": { "type": "string", "description": "kind=connector: existing interface, e.g. feed.source/v1" }
+    "implements": { "type": "string", "description": "kind=connector: existing interface, e.g. items.source/v1" }
   },
   "allOf": [
     { "if": { "properties": { "kind": { "const": "feature" } } }, "then": { "required": ["target"] } },

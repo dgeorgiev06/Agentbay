@@ -16,6 +16,10 @@ modes:
     monthlyPosts: 3000
     spendUsd: 5
     costPerPostUsd: 0.005             # price per post the source reads (timeline + deletion checks); spendUsd cap
+    selectors:                        # which posts to keep; default: [{id: home}] = the home timeline (as v0.2)
+      - { id: home }
+    # - { id: staking, in: list:1585430245762441216 }       # an X List (scope list.read)
+    # - { id: vitalik, from: vitalik, not: { text: giveaway } }
     # features:
     #   digest:
     #     extraRules: rules/digest-extra.yaml   # your rules stack on the feature's (strictest wins)

@@ -75,9 +75,9 @@ def test_submit_records_reported_usage():
     try:
         d = dispatch.Dispatcher(system(p), p, clock=clock)
         r = d.call("feed-briefing.ask", {"question": "what is new?"})
-        prev = r["next"]["previous"]["search"]
-        d.submit(r["callId"], "answer", {"answer": "x", "citations": [prev["posts"][0]["url"]],
-                                         "coverage": prev["coverage"]},
+        prev = r["next"]["previous"]["context"]
+        first = d.use("briefing-analyst", "items.store/v1.query", {"limit": 1})["items"][0]["id"]
+        d.submit(r["callId"], "answer", {"answer": "x", "citations": [first], "coverage": prev["coverage"]},
                  usage={"tokens": {"input": 1200, "output": 300}, "costUsd": 0.02, "durationMs": 4100})
         ev = [e for e in ledger.read(p) if e["type"] == "step.completed" and e.get("step") == "answer"][0]
         assert ev["tokens"] == {"input": 1200, "output": 300} and ev["costUsd"] == 0.02 and ev["durationMs"] == 4100
@@ -97,13 +97,13 @@ def test_guard_decisions_are_ledger_events_without_raw_commands():
                        "session_id": "s-1", "cwd": str(p)}
             return subprocess.run([sys.executable, str(KIT / "bay/guard.py")], input=json.dumps(payload), text=True,
                                   capture_output=True, env={"CLAUDE_PROJECT_DIR": str(p), "PATH": "/usr/bin:/bin"})
-        assert hook("feed-analyst", f"curl -H 'Authorization: Bearer {secret}' x").returncode == 2
+        assert hook("briefing-analyst", f"curl -H 'Authorization: Bearer {secret}' x").returncode == 2
         assert hook("reviewer", "git status").returncode == 0                       # left to Claude Code's prompt: no event
-        assert hook("feed-analyst", ".agentbay/roles/feed-analyst/use feed.store/v1.query '{}'").returncode == 0
+        assert hook("briefing-analyst", ".agentbay/roles/briefing-analyst/use items.store/v1.query '{}'").returncode == 0
         evs = ledger.read(p)
         kinds = [e["type"] for e in evs]
         assert kinds == ["permission.denied"], kinds         # prompts come from transcripts, not the guard
-        assert evs[0]["tool"] == "Bash" and evs[0]["agent"] == "feed-analyst" and evs[0]["source"] == "guard"
+        assert evs[0]["tool"] == "Bash" and evs[0]["agent"] == "briefing-analyst" and evs[0]["source"] == "guard"
         raw = (p / ".agentbay/ledger/events.jsonl").read_text()
         assert secret not in raw
         valid(evs)

@@ -1,8 +1,0 @@
-apiVersion: agentbay/v2
-kind: Rules
-rules:
-  - { id: R-1, level: must, statement: "Cite only urls of stored posts, exactly as stored.", appliesTo: both, check: citations_resolve, refs: [DOD-2] }
-  - { id: R-2, level: must, statement: "Each theme has at least one citation; prefer two or more.", appliesTo: both, check: "citations_min:1", refs: [DOD-1] }
-  - { id: R-3, level: must_not, statement: "Use knowledge from outside the gathered posts.", appliesTo: both, refs: [DOD-3] }
-  - { id: R-4, level: must, statement: "State coverage gaps plainly instead of implying completeness.", appliesTo: both, refs: [DOD-4] }
-  - { id: R-5, level: should, statement: "Keep each summary under 60 words.", appliesTo: executor }

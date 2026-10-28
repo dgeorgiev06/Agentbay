@@ -16,8 +16,8 @@ def has(k, *needles, p=None):
     raise AssertionError(f"no lint problem with {needles}; got:\n  " + "\n  ".join(ps))
 
 
-PB = "modes/feed-briefing/features/digest/playbook.md"
-RULES = "modes/feed-briefing/features/digest/rules.yaml"
+PB = "modes/briefing/features/digest/playbook.md"
+RULES = "modes/briefing/features/digest/rules.yaml"
 
 
 def sub(k, rel, old, new):
@@ -86,10 +86,14 @@ def test_rules_schema_and_unique_ids_and_refs():
 def test_every_feature_has_both_files():
     k = kit_copy()
     (k / RULES).unlink()
-    has(k, "feature feed-briefing.digest rules file features/digest/rules.yaml does not exist")
+    has(k, "feature briefing.digest rules file modes/briefing/features/digest/rules.yaml does not exist")
+    # an inherited endpoint is reported at the parent's mode.yaml line that declares it, with a normalized path
+    has(k, "modes/briefing/mode.yaml:21: feature feed-briefing.digest rules file "
+           "modes/briefing/features/digest/rules.yaml does not exist")
     has(k, "features/digest: feature folder is missing rules.yaml")
     k = kit_copy()
-    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"]["endpoints"]["ask"].pop("playbook"))
+    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["endpoints"]["ask"].pop("playbook"))
+    has(k, "feature briefing.ask has no `playbook`")
     has(k, "feature feed-briefing.ask has no `playbook`")
 
 
@@ -101,17 +105,17 @@ def test_review_settings_only_in_mode_yaml():
     (k / RULES).write_text((k / RULES).read_text() + "review: { when: never }\n")
     has(k, RULES, "review settings found in rules file")
     k = kit_copy()
-    edit_yaml(k / "roles/feed-analyst.yaml", lambda d: d["spec"].update({"review": {"when": "always"}}))
-    has(k, "roles/feed-analyst.yaml")   # schema rejects it (additionalProperties) - reported at load
+    edit_yaml(k / "roles/briefing-analyst.yaml", lambda d: d["spec"].update({"review": {"when": "always"}}))
+    has(k, "roles/briefing-analyst.yaml")   # schema rejects it (additionalProperties) - reported at load
 
 
 def test_review_role_must_exist_be_listed_and_placeable():
     k = kit_copy()
-    edit_yaml(k / "modes/feed-briefing/mode.yaml",
+    edit_yaml(k / "modes/briefing/mode.yaml",
               lambda d: d["spec"]["endpoints"]["digest"]["review"].update({"role": "ghost"}))
     has(k, "feed-briefing.digest review role 'ghost' does not exist")
     k = kit_copy()
-    edit_yaml(k / "modes/feed-briefing/mode.yaml",
+    edit_yaml(k / "modes/briefing/mode.yaml",
               lambda d: d["spec"]["endpoints"]["digest"]["review"].update({"role": "researcher"}))
     has(k, "review role 'researcher' is not listed in mode feed-briefing roles")
     k = kit_copy()
@@ -155,21 +159,21 @@ def test_name_collision_between_user_and_framework():
 
 def test_modes_must_not_name_connectors_or_tools():
     k = kit_copy()
-    sub(k, "modes/feed-briefing/mode.yaml", "needs: [feed.store/v1, feed.source/v1]",
-        "needs: [feed.store/v1, feed.source/v1]   # ok comment mentions x-api\n  # x-api in comment is fine")
+    sub(k, "modes/briefing/mode.yaml", "needs: [items.store/v1, items.source/v1]",
+        "needs: [items.store/v1, items.source/v1]   # ok comment mentions x-api\n  # x-api in comment is fine")
     assert problems(k) == []
     k = kit_copy()
-    sub(k, "modes/feed-briefing/mode.yaml", "with: { olderThan:", "with: { source: x-api, olderThan:")
+    sub(k, "modes/briefing/mode.yaml", "with: { olderThan:", "with: { source: x-api, olderThan:")
     has(k, "mode names connector 'x-api'")
 
 
 def test_orphan_workflow_and_feature_folder():
     k = kit_copy()
     edit_yaml(k / "modes/feed-briefing/mode.yaml",
-              lambda d: d["spec"]["workflows"].update({"unused": [{"id": "x", "run": "feed.store/v1.query"}]}))
+              lambda d: d["spec"]["workflows"].update({"unused": [{"id": "x", "run": "items.store/v1.query"}]}))
     has(k, "workflow 'unused' is not used by any endpoint")
     k = kit_copy()
-    (k / "modes/feed-briefing/features/stray").mkdir()
+    (k / "modes/briefing/features/stray").mkdir()
     has(k, "features/stray: feature folder is not referenced by any endpoint")
 
 
@@ -209,10 +213,10 @@ def test_extra_rules_stack_strictest_wins():
 def test_feed_source_connectors_must_declare_source_and_window():
     k = kit_copy()
     edit_yaml(k / "connectors/x-api/connector.yaml", lambda d: d["spec"].pop("source"))
-    has(k, "connectors/x-api/connector.yaml:", "connector x-api implements feed.source/v1 but declares no spec.source")
+    has(k, "connectors/x-api/connector.yaml:", "connector x-api implements items.source/v1 but declares no spec.source")
     k = kit_copy()
     edit_yaml(k / "connectors/fake/connector.yaml", lambda d: d["spec"].pop("window"))
-    has(k, "connector fake implements feed.source/v1 but declares no spec.window")
+    has(k, "connector fake implements items.source/v1 but declares no spec.window")
 
 
 def test_schedule_is_a_warning_not_an_error():
@@ -225,5 +229,5 @@ def test_schedule_is_a_warning_not_an_error():
 
 def test_run_steps_use_versioned_capability_spelling():
     k = kit_copy()
-    sub(k, "modes/feed-briefing/mode.yaml", "run: feed.store/v1.prune", "run: feed.store.prune")
-    has(k, "modes/feed-briefing/mode.yaml", "does not match")
+    sub(k, "modes/briefing/mode.yaml", "run: items.store/v1.prune", "run: feed.store.prune")
+    has(k, "modes/briefing/mode.yaml", "does not match")

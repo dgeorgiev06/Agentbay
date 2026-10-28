@@ -15,6 +15,8 @@ class Migrator:
     def __init__(self, ctx):
         self.ctx = ctx
 
+    # Kit content only. Project data (e.g. the v0.2 feed store) is migrated by `bay migrate --project <repo>`,
+    # run by the user: this connector's env writes user-space kit folders, never .agentbay/.
     def plan(self, to=None) -> dict:
         return migrate.plan(kit_project(self.ctx), to)
 

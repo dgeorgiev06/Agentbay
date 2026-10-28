@@ -73,11 +73,12 @@ def test_agentic_step_returns_plan_then_review_then_partial_on_failed_must():
     r = d.call("feed-briefing.digest", {"since": "3d"})
     assert r["status"] == "needs-agent"
     nxt = r["next"]
-    assert nxt["role"] == "feed-analyst" and nxt["runAs"] == "subagent_type=feed-analyst"
+    assert nxt["role"] == "briefing-analyst" and nxt["runAs"] == "subagent_type=briefing-analyst"
     assert "## Definition of Done" in nxt["playbookText"]
-    assert {x["id"] for x in nxt["rules"]} == {"R-1", "R-2", "R-3", "R-4", "R-5"}       # executor|both
-    posts = nxt["previous"]["gather"]["posts"]
-    assert len(posts) == 7 and nxt["tools"][0].endswith("feed.store/v1.query '<json>'")
+    assert {x["id"] for x in nxt["rules"]} == {"R-1", "R-2", "R-3", "R-4", "R-5", "R-6"}  # executor|both
+    posts = nxt["previous"]["gather"]["items"]
+    assert len(posts) == 7 and all(p["matched"] == ["home"] for p in posts)
+    assert any(t.endswith("items.store/v1.sql '<json>'") for t in nxt["tools"])
     urls = [x["url"] for x in posts]
     digest = {"period": {"from": "2026-10-24T12:00:00Z", "to": "2026-10-27T12:00:00Z"},
               "themes": [{"title": "Institutional staking", "summary": "Banks and custodians add staking.",
@@ -89,11 +90,11 @@ def test_agentic_step_returns_plan_then_review_then_partial_on_failed_must():
     assert r2["status"] == "needs-agent" and r2["next"]["kind"] == "review"
     rv = r2["next"]
     assert rv["model"] == "opus" and rv["effort"] == "high" and rv["role"] == "reviewer"
-    assert {x["id"] for x in rv["review"]["rules"]} == {"R-1", "R-2", "R-3", "R-4"}    # reviewer|both
+    assert {x["id"] for x in rv["review"]["rules"]} == {"R-1", "R-2", "R-3", "R-4", "R-6"}    # reviewer|both
     chk = {c["rule"]: c for c in rv["review"]["checks"]}
-    assert chk["R-1"]["ok"] is False and "not stored posts" in chk["R-1"]["detail"]
+    assert chk["R-1"]["ok"] is False and "not stored items" in chk["R-1"]["detail"]
     verdict = {"items": [{"id": i, "verdict": "pass", "evidence": "ok"}
-                         for i in ["DOD-1", "DOD-3", "DOD-4", "DOD-5", "R-2", "R-3", "R-4"]]}
+                         for i in ["DOD-1", "DOD-3", "DOD-4", "DOD-5", "R-2", "R-3", "R-4", "R-6"]]}
     err(lambda: d.submit(r["callId"], "review", verdict), "missing ids: DOD-2", "R-1")
     verdict["items"] += [{"id": "DOD-2", "verdict": "fail", "evidence": "evil.example is not stored", "severity": "blocker"},
                          {"id": "R-1", "verdict": "fail", "evidence": "check R-1 failed", "severity": "blocker"}]
@@ -107,9 +108,10 @@ def test_digest_done_when_review_passes():
     d = D(p)
     r = d.call("feed-briefing.digest", {})
     g = r["next"]["previous"]["gather"]
-    urls = [x["url"] for x in g["posts"]]
-    digest = {"period": {"from": "a", "to": "b"}, "coverage": g["coverage"],
-              "themes": [{"title": "Staking", "summary": "Staking keeps growing.", "citations": urls[:2]}]}
+    urls = [x["url"] for x in g["items"]]
+    digest = {"period": {"from": "a", "to": "b"}, "coverage": g["coverage"],      # a url and an item id both resolve
+              "themes": [{"title": "Staking", "summary": "Staking keeps growing.",
+                          "citations": [urls[0], g["items"][1]["id"]]}]}
     r = d.submit(r["callId"], "themes", digest)
     ids = [x["id"] for x in r["next"]["review"]["definitionOfDone"]] + [x["id"] for x in r["next"]["review"]["rules"]]
     r = d.submit(r["callId"], "review", {"items": [{"id": i, "verdict": "pass", "evidence": "checked"} for i in ids]})
@@ -127,10 +129,10 @@ def test_stale_refresh_is_skipped_when_fresh():
 def test_use_enforces_role_grants():
     p = project()
     D(p).call("feed-briefing.sync", {})
-    out = D(p).use("feed-analyst", "feed.store/v1.query", {"author": "lido"})
-    assert {x["author"]["handle"] for x in out["posts"]} == {"lido"}
-    err(lambda: D(p).use("reviewer", "feed.store/v1.query", {}), "not granted feed.store/v1.query")
-    err(lambda: D(p).use("feed-analyst", "feed.store/v1.sync", {}), "not granted feed.store/v1.sync")
+    out = D(p).use("briefing-analyst", "items.store/v1.query", {"author": "lido"})
+    assert {x["author"]["handle"] for x in out["items"]} == {"lido"}
+    err(lambda: D(p).use("reviewer", "items.store/v1.query", {}), "not granted items.store/v1.query")
+    err(lambda: D(p).use("briefing-analyst", "items.store/v1.sync", {}), "not granted items.store/v1.sync")
 
 
 def test_effects_rechecked_at_runtime():
@@ -172,7 +174,7 @@ def test_secrets_never_in_ledger_output_or_store_on_success():
     blob = json.dumps(res)
     for f in p.rglob("*"):
         if f.is_file():
-            blob += f.read_text()
+            blob += f.read_bytes().decode("latin-1")      # corpus.db is binary; secrets would still show
     for v in (*SECRETS.values(), "at-SECRET-1", "rt-ROTATED-SECRET-1"):
         assert v not in blob, v
     # but the requests did carry them (the connector really used them)
@@ -226,3 +228,17 @@ def test_failed_review_halts_before_release():
     items[0] = {"id": items[0]["id"], "verdict": "fail", "evidence": "vocabulary drift", "severity": "blocker"}
     r = d.submit(r["callId"], "review", {"items": items})
     assert r["status"] == "partial" and "next" not in r
+
+
+def test_selector_change_forces_refresh_even_when_fresh():
+    p = project()
+    D(p).call("feed-briefing.sync", {})
+    cfgp = p / "agentbay.config.yaml"
+    import yaml
+    cfg = yaml.safe_load(cfgp.read_text())
+    cfg["modes"] = {"feed-briefing": {"selectors": [{"id": "home", "text": "staking"}]}}
+    cfgp.write_text(yaml.safe_dump(cfg))
+    r = D(p).call("feed-briefing.digest", {})
+    assert r["next"]["previous"]["refresh"]["rematched"] == 2            # re-matched, not skipped as fresh
+    assert {i["id"] for i in r["next"]["previous"]["gather"]["items"]} == \
+        {"fake:1008", "fake:1007", "fake:1006", "fake:1005", "fake:1003"}

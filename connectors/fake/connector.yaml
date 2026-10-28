@@ -2,18 +2,26 @@ apiVersion: agentbay/v2
 kind: Connector
 metadata:
   name: fake
-  description: Offline feed.source/v1 for tests and demos. Serves posts from a JSON fixture (or a built-in sample) with no network and no secrets.
-  version: 0.1.0
+  description: Offline items.source/v1 for tests and demos. Serves post/v1 items from a JSON fixture (or a built-in sample) with no network and no secrets.
+  version: 0.2.0
 spec:
-  implements: feed.source/v1
+  implements: items.source/v1
   entry: fake.py
   source: fake
   costPerPostUsd: 0      # offline: never billed against spendUsd
   window: 7d
+  selectors:
+    from: { mode: native, as: handle }
+    in: { mode: native, as: "home, or list:<id> (fixture `list`)" }
+    since: native
+    text: local
+    subject: local
+    has: local
+    not: local
   needs: {}
   config:
     type: object
     additionalProperties: false
     properties:
-      fixture: { type: string, description: "Path (relative to the project) of a JSON list of {id, handle, name, text, ageHours}." }
+      fixture: { type: string, description: "Path (relative to the project) of a JSON list of {id, handle, name, text, ageHours, list?}." }
       deleted: { type: array, items: { type: string } }

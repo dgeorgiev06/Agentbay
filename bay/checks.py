@@ -16,24 +16,38 @@ URL = re.compile(r"https://[^\s\"'<>)\]]+")
 
 @dataclass
 class CheckContext:
-    store_urls: Callable[[], set[str]] | None = None   # urls of stored posts
+    store_urls: Callable[[], set[str]] | None = None   # urls and ids (<source>:<extId>) of stored items
     kit: Path | None = None
     secrets: Callable[[str], str] | None = None          # redact function
 
 
 def _cited(output) -> list[str]:
-    return sorted(set(URL.findall(json.dumps(output, ensure_ascii=False))))
+    """Every url anywhere in the output, plus every entry of a `citations` list (item ids or urls)."""
+    found = set(URL.findall(json.dumps(output, ensure_ascii=False)))
+
+    def walk(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if k == "citations" and isinstance(v, list):
+                    found.update(x for x in v if isinstance(x, str))
+                else:
+                    walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+    walk(output)
+    return sorted(found)
 
 
 def citations_resolve(output, ctx: CheckContext, arg=None) -> dict:
-    urls = _cited(output)
-    if not urls:
+    refs = _cited(output)
+    if not refs:
         return {"ok": False, "detail": "no citations found in output"}
     known = ctx.store_urls() if ctx.store_urls else set()
-    missing = [u for u in urls if u not in known]
+    missing = [u for u in refs if u not in known]
     if missing:
-        return {"ok": False, "detail": f"{len(missing)} cited url(s) are not stored posts: {', '.join(missing[:5])}"}
-    return {"ok": True, "detail": f"all {len(urls)} cited url(s) resolve to stored posts"}
+        return {"ok": False, "detail": f"{len(missing)} citation(s) are not stored items: {', '.join(missing[:5])}"}
+    return {"ok": True, "detail": f"all {len(refs)} citation(s) resolve to stored items"}
 
 
 def citations_min(output, ctx: CheckContext, arg=None) -> dict:

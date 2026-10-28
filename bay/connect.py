@@ -97,7 +97,8 @@ class Context:
     clock: Callable[[], datetime] = utcnow
     window: str | None = None                         # how far back the source API reaches
     source_id: str | None = None
-    cost_per_post: float | None = None                # connector-declared price per post read (None: use caps)
+    cost_per_post: float | None = None                # connector-declared price per item read (None: use caps)
+    selectors: dict = field(default_factory=dict)     # items.source: selector capability table (field -> native|local)
     kit: Path | None = None
     project: Path | None = None
     warnings: list[str] = field(default_factory=list)
@@ -156,6 +157,7 @@ def instantiate(system: model.System, env_name: str, conn_name: str, iface: str,
         secrets=acc, http=Http(net, transport, conn_name), data_dir=data_dir(env, project, system.kit.root, c),
         caps=dict(caps or {}), settings=dict(settings or {}), sources=sources, clock=clock or utcnow,
         window=c.spec.get("window"), source_id=c.spec.get("source"), cost_per_post=c.spec.get("costPerPostUsd"),
+        selectors=dict(c.spec.get("selectors") or {}),
         kit=system.kit.root, project=project)
     inst = mod.create(ctx)
     inst.ctx = ctx

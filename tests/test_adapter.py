@@ -43,21 +43,22 @@ def test_adapter_round_trip():
     assert {"Edit(/.agentbay/**)", "Edit(/.claude/**)", "Read(/.agentbay/data/**)"} <= set(st["permissions"]["deny"])
     assert any(d.startswith("Edit(//") and d.endswith("/**)") for d in st["permissions"]["deny"])   # kit outside
     agents = {p.stem for p in (proj / ".claude/agents").glob("*.md")}
-    assert agents == {"researcher", "builder", "reviewer", "feed-analyst", "builder--author",
+    assert agents == {"researcher", "builder", "reviewer", "briefing-analyst", "builder--author",
                       "improve-analyst", "auditor"}                                    # no framework-dev here
-    assert "feed-lead" not in agents and "forge-lead" not in agents          # coordinators run in main thread
-    fa = (proj / ".claude/agents/feed-analyst.md").read_text()
-    assert "tools: Bash\n" in fa and ".agentbay/roles/feed-analyst/use feed.store/v1.query" in fa and "Result/v1" in fa
+    assert "briefing-lead" not in agents and "forge-lead" not in agents          # coordinators run in main thread
+    fa = (proj / ".claude/agents/briefing-analyst.md").read_text()
+    assert "tools: Bash\n" in fa and ".agentbay/roles/briefing-analyst/use items.store/v1.query" in fa and "Result/v1" in fa
     assert "--role" not in fa
     rv = (proj / ".claude/agents/reviewer.md").read_text()
     assert "model: opus" in rv and "Edit" not in rv.split("---")[1]
     claude = (proj / "CLAUDE.md").read_text()
     assert claude.startswith("<!-- agentbay:begin") and "@.agentbay/COORDINATOR.md" in claude and "# mine" in claude
     coord = (proj / ".agentbay/COORDINATOR.md").read_text()
-    assert "Chief of Staff" in coord and "`feed-briefing.digest`" in coord and "coordinator role `feed-lead`" in coord
-    assert (proj / ".claude/skills/feed-digest/SKILL.md").exists() and (proj / ".claude/skills/research-brief/SKILL.md").exists()
+    assert "Chief of Staff" in coord and "`feed-briefing.digest`" in coord and "coordinator role `briefing-lead`" in coord
+    assert (proj / ".claude/skills/digest/SKILL.md").exists() and (proj / ".claude/skills/corpus-sql/SKILL.md").exists() and (proj / ".claude/skills/research-brief/SKILL.md").exists()
     cat = json.loads((proj / ".agentbay/catalog.json").read_text())
-    assert {m["name"] for m in cat["modes"]} == {"delivery", "feed-briefing", "forge", "improve"}
+    assert {m["name"] for m in cat["modes"]} == {"delivery", "feed-briefing", "forge", "improve"}   # briefing is abstract
+    assert next(m for m in cat["modes"] if m["name"] == "feed-briefing")["extends"] == "briefing"
     dg = next(e for m in cat["modes"] for e in m["endpoints"] if e["name"] == "feed-briefing.digest")
     assert dg["review"]["role"] == "reviewer" and [s["kind"] for s in dg["steps"]][-1] == "review"
     assert {r["subagent"] for r in cat["roles"]} == agents
@@ -142,13 +143,13 @@ def test_hook_never_fails():
 def test_hook_records_spawn_and_result():
     proj = tmpdir()
     pre = {"tool_name": "Agent", "tool_use_id": "tu1", "session_id": "s",
-           "tool_input": {"subagent_type": "feed-analyst", "prompt": "```task\ntaskId: T-20261027-ab12\n```"}}
+           "tool_input": {"subagent_type": "briefing-analyst", "prompt": "```task\ntaskId: T-20261027-ab12\n```"}}
     post = dict(pre, tool_response="done\n```result\nprotocol: Result/v1\ntaskId: T-20261027-ab12\nstatus: done\nsummary: ok\n```")
     for phase, payload in (("pre", pre), ("post", post)):
         subprocess.run([sys.executable, str(KIT / "bay/hook.py"), phase], input=json.dumps(payload), text=True,
                        env={"CLAUDE_PROJECT_DIR": str(proj), "PATH": "/usr/bin:/bin"}, check=True)
     run = ledger.fold(ledger.read(proj))["tu1"]
-    assert run.state == "done" and run.agent == "feed-analyst" and run.task_id == "T-20261027-ab12"
+    assert run.state == "done" and run.agent == "briefing-analyst" and run.task_id == "T-20261027-ab12"
 
 
 def test_project_flag_accepted_before_or_after_subcommand():

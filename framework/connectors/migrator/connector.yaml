@@ -2,7 +2,7 @@ apiVersion: agentbay/v2
 kind: Connector
 metadata:
   name: migrator
-  description: Plans (dry-run diff) and applies migrations of user content. Same code as `bay migrate`.
+  description: Plans (dry-run diff) and applies migrations of user content (modes, roles, agents, envs, connectors). Same code as `bay migrate`; project data is migrated only by `bay migrate --project <repo>`.
 spec:
   implements: forge.migrate/v1
   entry: migrator.py

@@ -3,15 +3,23 @@ kind: Connector
 metadata:
   name: x-api
   description: >-
-    Home timeline of the authorized X account via the official X API v2
-    (GET /2/users/{id}/timelines/reverse_chronological), OAuth 2.0 user token
-    with scopes tweet.read users.read offline.access.
-  version: 0.1.0
+    Posts from X via the official X API v2: the authorized account's home timeline
+    (GET /2/users/{id}/timelines/reverse_chronological), X Lists (GET /2/lists/{id}/tweets) and user timelines
+    (GET /2/users/{id}/tweets). OAuth 2.0 user token with scopes tweet.read users.read offline.access
+    (+ list.read for Lists).
+  version: 0.2.0
 spec:
-  implements: feed.source/v1
+  implements: items.source/v1
   entry: x_api.py
   source: x
   window: 7d
+  selectors:
+    from: { mode: native, as: "handle (user timeline; matched locally when the query also has `in`)" }
+    in: { mode: native, as: "home (home timeline) or list:<List id>" }
+    since: native
+    text: local          # X bills every post the native query returns; text only filters after that
+    has: local
+    not: local
   needs:
     secrets: [X_CLIENT_ID, X_CLIENT_SECRET, X_REFRESH_TOKEN]
     network: [api.x.com]

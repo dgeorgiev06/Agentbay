@@ -63,7 +63,7 @@ def make(transport, provider=None, config=None, allow=None):
     s = system(p)
     if allow is not None:
         s.kit.docs["Environment"]["local-feeds"].spec["network"]["allow"] = allow
-    return connect.instantiate(s, "local-feeds", "x-api", "feed.source/v1", p, transport=transport,
+    return connect.instantiate(s, "local-feeds", "x-api", "items.source/v1", p, transport=transport,
                                provider=provider or MemProvider(SECRETS), clock=clock)
 
 
@@ -88,17 +88,21 @@ def test_pagination_and_mapping():
     r, st = routes(pages(3, 3))
     http = FakeHttp(r)
     x = make(http)
-    out = x.fetch(startTime="2026-10-20T00:00:00Z", maxPosts=100)
-    assert len(out["posts"]) == 9 and out["truncated"] is False
-    assert out["newestId"] == "100"
+    out = x.fetch(since="2026-10-20T00:00:00Z", maxItems=100)
+    assert len(out["items"]) == 9 and out["truncated"] is False
+    assert out["cursor"] == "100"
     tl = [q for q in http.log if q["path"] == TIMELINE]
     assert [q["params"].get("pagination_token") for q in tl] == [None, "tok1", "tok2"]
     assert all(q["host"] == "api.x.com" and q["params"]["exclude"] == "retweets,replies" for q in tl)
     assert tl[0]["headers"]["Authorization"] == "Bearer at-SECRET-1"
-    p = out["posts"][0]
-    assert p == {"id": "100", "source": "x", "author": {"handle": "alice", "name": "Alice"}, "text": "post 100",
+    p = out["items"][0]
+    assert p == {"id": "x:100", "extId": "100", "source": "x", "kind": "post",
+                 "author": {"handle": "alice", "name": "Alice"}, "title": None, "text": "post 100",
                  "url": "https://x.com/alice/status/100", "createdAt": "2026-10-27T11:00:00Z",
-                 "fetchedAt": "2026-10-27T12:00:00Z", "lang": "en", "metrics": {"like_count": 100, "retweet_count": 0}}
+                 "fetchedAt": "2026-10-27T12:00:00Z", "container": "home", "labels": ["home"], "threadId": None,
+                 "lang": "en", "metrics": {"like_count": 100, "retweet_count": 0}}
+    from bay import model
+    assert model.schema_errors(p, model.inline_refs(model.data_schema("post/v1"))) == []
 
 
 def test_read_budget_is_never_exceeded_and_cursor_matches_kept():
@@ -111,13 +115,13 @@ def test_read_budget_is_never_exceeded_and_cursor_matches_kept():
     r, _ = routes({})
     r[("GET", TIMELINE)] = honest
     http = FakeHttp(r)
-    out = make(http).fetch(sinceId="50", maxPosts=107)
+    out = make(http).fetch(cursor="50", maxItems=107)
     sizes = [int(q["params"]["max_results"]) for q in http.log if q["path"] == TIMELINE]
     assert sizes == [100, 7] and http.log[1]["params"]["since_id"] == "50"
-    assert out["billed"] == 107 == len(out["posts"]) and out["truncated"] is True
-    assert out["newestId"] == "300"
-    out = make(FakeHttp(r)).fetch(maxPosts=3)          # below the API minimum page size: no request at all
-    assert out["billed"] == 0 and out["posts"] == [] and out["truncated"] is True
+    assert out["billed"] == 107 == len(out["items"]) and out["truncated"] is True
+    assert out["cursor"] == "300"
+    out = make(FakeHttp(r)).fetch(maxItems=3)          # below the API minimum page size: no request at all
+    assert out["billed"] == 0 and out["items"] == [] and out["truncated"] is True
 
 
 def test_billing_includes_posts_returned_beyond_what_is_kept():
@@ -127,8 +131,8 @@ def test_billing_includes_posts_returned_beyond_what_is_kept():
         return jresp({"data": data, "meta": {"result_count": n}, "includes": {"users": []}})
     r, _ = routes({})
     r[("GET", TIMELINE)] = big
-    out = make(FakeHttp(r)).fetch(maxPosts=12)
-    assert out["billed"] == 12 == len(out["posts"])
+    out = make(FakeHttp(r)).fetch(maxItems=12)
+    assert out["billed"] == 12 == len(out["items"])
 
 
 def test_deletion_check_uses_official_lookup_in_batches_and_is_billed():
@@ -144,7 +148,7 @@ def test_deletion_check_uses_official_lookup_in_batches_and_is_billed():
         return jresp({"data": data, **({"errors": errors} if errors else {})})
     r[("GET", "/2/tweets")] = lookup
     http = FakeHttp(r)
-    out = make(http).fetch(sinceId="1", maxPosts=500, checkIds=stored)
+    out = make(http).fetch(cursor="1", maxItems=500, checkIds=stored)
     looks = [q for q in http.log if q["path"] == "/2/tweets"]
     assert [len(q["params"]["ids"].split(",")) for q in looks] == [100, 50]
     assert all(q["host"] == "api.x.com" for q in looks)
@@ -158,7 +162,7 @@ def test_deletion_check_uses_official_lookup_in_batches_and_is_billed():
         n["i"] += 1
         return lookup(params, headers, form) if n["i"] == 1 else jresp({"title": "Too Many Requests"}, 429)
     r[("GET", "/2/tweets")] = limited
-    out = make(FakeHttp(r)).fetch(sinceId="1", maxPosts=5, checkIds=stored)
+    out = make(FakeHttp(r)).fetch(cursor="1", maxItems=5, checkIds=stored)
     assert out["checked"] == stored[:100] and out["deleted"] == ["7"]
     assert any("deletion check incomplete (50 not checked)" in w for w in out["warnings"])
 
@@ -166,7 +170,7 @@ def test_deletion_check_uses_official_lookup_in_batches_and_is_billed():
 def test_exclude_comes_from_connector_config():
     r, _ = routes(pages(1, 1))
     http = FakeHttp(r)
-    make(http, config={"exclude": ["retweets"]}).fetch(maxPosts=5)
+    make(http, config={"exclude": ["retweets"]}).fetch(maxItems=5)
     assert next(q for q in http.log if q["path"] == TIMELINE)["params"]["exclude"] == "retweets"
 
 
@@ -174,8 +178,8 @@ def test_token_refresh_on_401_and_rotation_is_persisted_not_leaked():
     r, st = routes(pages(1, 2), expire_first=True)
     prov = MemProvider(SECRETS)
     x = make(FakeHttp(r), provider=prov)
-    out = x.fetch(maxPosts=10)
-    assert len(out["posts"]) == 2 and st["tokens"] == 2       # initial + refresh after 401
+    out = x.fetch(maxItems=10)
+    assert len(out["items"]) == 2 and st["tokens"] == 2       # initial + refresh after 401
     assert prov.environ["X_REFRESH_TOKEN"] == "rt-ROTATED-SECRET-2"
     blob = json.dumps(out)
     for v in (*SECRETS.values(), "at-SECRET-1", "at-SECRET-2", "rt-ROTATED-SECRET-2"):
@@ -185,7 +189,7 @@ def test_token_refresh_on_401_and_rotation_is_persisted_not_leaked():
 def test_confidential_client_uses_basic_auth():
     r, _ = routes(pages(1, 1))
     http = FakeHttp(r)
-    make(http).fetch(maxPosts=5)
+    make(http).fetch(maxItems=5)
     tok = next(q for q in http.log if q["path"] == "/2/oauth2/token")
     assert tok["headers"]["Authorization"].startswith("Basic ")
     assert tok["form"]["refresh_token"] == SECRETS["X_REFRESH_TOKEN"]
@@ -194,7 +198,7 @@ def test_confidential_client_uses_basic_auth():
 def test_refresh_failure_is_actionable_and_secret_free():
     r, _ = routes(pages(1, 1), token_status=400)
     try:
-        make(FakeHttp(r)).fetch(maxPosts=5)
+        make(FakeHttp(r)).fetch(maxItems=5)
         raise AssertionError("expected ConnectorError")
     except connect.ConnectorError as e:
         msg = str(e)
@@ -211,7 +215,7 @@ def test_allowlist_enforced_before_any_request():
 
     x = make(transport, allow=["example.com"])
     try:
-        x.fetch(maxPosts=5)
+        x.fetch(maxItems=5)
         raise AssertionError("expected NetworkDenied")
     except NetworkDenied as e:
         assert "api.x.com is not in the env network allowlist" in str(e)
@@ -239,8 +243,8 @@ def test_rate_limit_keeps_posts_and_warns():
         return first(params, headers, form)
 
     r[("GET", TIMELINE)] = limited
-    out = make(FakeHttp(r)).fetch(maxPosts=50)
-    assert len(out["posts"]) == 2 and out["truncated"] is True
+    out = make(FakeHttp(r)).fetch(maxItems=50)
+    assert len(out["items"]) == 2 and out["truncated"] is True
     assert "rate limited" in out["warnings"][0]
 
 
@@ -269,3 +273,39 @@ def test_keychain_provider_command():
         raise AssertionError("expected SecretError")
     except vault.SecretError as e:
         assert "provider: env" in str(e)
+
+
+def test_list_selector_pages_until_cursor_or_since_without_time_params():
+    r, _ = routes({})
+    seen = []
+
+    def lst(params, headers, form):
+        seen.append(params)
+        data = [tweet(i, hours=h) for i, h in ((60, 1), (55, 2), (50, 3), (40, 200))]
+        return jresp({"data": data, "meta": {"result_count": 4, "next_token": "more"}, "includes": {"users": []}})
+    r[("GET", "/2/lists/777/tweets")] = lst
+    out = make(FakeHttp(r)).fetch(query={"in": "list:777"}, cursor="50", maxItems=100)
+    assert [i["extId"] for i in out["items"]] == ["60", "55"] and len(seen) == 1     # stopped at the cursor
+    assert "since_id" not in seen[0] and "start_time" not in seen[0] and "exclude" not in seen[0]
+    assert out["items"][0]["container"] == "list:777" and out["cursor"] == "60"
+    out = make(FakeHttp(r)).fetch(query={"in": ["list:777"]}, since="2026-10-20T00:00:00Z", maxItems=100)
+    assert [i["extId"] for i in out["items"]] == ["60", "55", "50"]                 # 40 is older than since
+
+
+def test_from_selector_uses_user_timeline_and_in_wins_over_from():
+    r, _ = routes(pages(1, 2))
+    r[("GET", "/2/users/by/username/vitalik")] = lambda p, h, f: jresp({"data": {"id": "9", "username": "vitalik"}})
+    r[("GET", "/2/users/9/tweets")] = lambda p, h, f: jresp(pages(1, 2)[None])
+    http = FakeHttp(r)
+    out = make(http).fetch(query={"from": "@vitalik"}, since="2026-10-20T00:00:00Z", maxItems=50)
+    ut = [q for q in http.log if q["path"] == "/2/users/9/tweets"]
+    assert len(ut) == 1 and ut[0]["params"]["start_time"] == "2026-10-20T00:00:00Z"
+    assert {i["container"] for i in out["items"]} == {"user:vitalik"}
+    http = FakeHttp(r)
+    make(http).fetch(query={"from": "vitalik", "in": "home"}, maxItems=50)
+    assert {q["path"] for q in http.log if q["method"] == "GET"} == {TIMELINE}     # from is matched locally
+    try:
+        make(FakeHttp(r)).fetch(query={"in": "favorites"}, maxItems=50)
+        raise AssertionError("expected ConnectorError")
+    except connect.ConnectorError as e:
+        assert "list:<numeric List id>" in str(e)

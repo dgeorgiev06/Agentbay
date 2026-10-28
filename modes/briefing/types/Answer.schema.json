@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "required": ["answer", "citations", "coverage"],
+  "additionalProperties": false,
+  "properties": {
+    "answer": { "type": "string", "minLength": 1 },
+    "citations": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*:.+$", "description": "A stored item's id (<source>:<extId>) or url." } },
+    "confidence": { "enum": ["high", "medium", "low", "none"] },
+    "coverage": { "$ref": "items.coverage/v1" }
+  }
+}

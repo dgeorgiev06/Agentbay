@@ -8,8 +8,8 @@ metadata:
 spec:
   substitutes: local-feeds
   bind:
-    feed.source/v1: [fake]
-    feed.store/v1: local-store
+    items.source/v1: [fake]
+    items.store/v1: corpus-store
     workspace.read/v1: { tools: [Read, Glob, Grep] }
   network: { allow: [] }
   fs: { read: ["."], write: [".agentbay/data/feeds"] }

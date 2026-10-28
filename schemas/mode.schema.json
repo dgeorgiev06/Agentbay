@@ -40,14 +40,17 @@
     },
     "spec": {
       "type": "object",
-      "required": [
-        "purpose",
-        "endpoints",
-        "roles",
-        "workflows"
-      ],
       "additionalProperties": false,
       "properties": {
+        "extends": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,40}$",
+          "description": "Parent mode, resolved at build time: the child inherits endpoints, workflows, playbooks, rules, review settings, roles, constraints, inference, needs, config, types, skills and the coordinator playbook, and overrides any of them (endpoints merge key by key, workflows are replaced per workflow). Inheritance cycles and missing parents are errors."
+        },
+        "abstract": {
+          "type": "boolean",
+          "description": "A base for `extends` only: linted, never resolved, installed or called. Not inherited."
+        },
         "purpose": {
           "type": "string"
         },
@@ -220,7 +223,7 @@
                 "run": {
                   "type": "string",
                   "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)*/v[0-9]+\\.[a-z][a-z0-9-]*$",
-                  "description": "Code step: <capability>/v<N>.<endpoint>, e.g. feed.store/v1.sync (same spelling as role `uses`)."
+                  "description": "Code step: <capability>/v<N>.<endpoint>, e.g. items.store/v1.sync (same spelling as role `uses`)."
                 },
                 "role": {
                   "type": "string"
@@ -310,6 +313,21 @@
           "type": "string",
           "description": "JSON Schema file (in the mode folder) for agentbay.config.yaml modes.<name>."
         }
+      },
+      "if": {
+        "not": {
+          "required": [
+            "extends"
+          ]
+        }
+      },
+      "then": {
+        "required": [
+          "purpose",
+          "endpoints",
+          "roles",
+          "workflows"
+        ]
       }
     }
   },

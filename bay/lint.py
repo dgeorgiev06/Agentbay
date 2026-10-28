@@ -5,6 +5,7 @@ Every problem is one line, `file:line: message`, naming the concept and the fix.
 """
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -32,10 +33,61 @@ def _where(path: Path, line: int) -> str:
     return f"{model.rel(path)}:{line}"
 
 
+def _entry_line(path: Path, section: str, name: str) -> int | None:
+    """0-based index of `    <name>:` inside the `  <section>:` block of a mode.yaml, or None."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    inside = False
+    for i, ln in enumerate(lines):
+        if re.match(r"^\s{2}\S", ln):
+            inside = ln.strip().startswith(f"{section}:")
+        elif inside and re.match(rf"^\s{{4}}{re.escape(name)}:", ln):
+            return i
+    return None
+
+
+def _lineage_where(md: model.Doc, section: str, name: str) -> tuple[Path, int]:
+    """The mode.yaml (own, else the nearest ancestor's) whose `section` (endpoints, workflows) declares `name`,
+    and that line: inherited parts are reported where they are written."""
+    for d in md.dirs:
+        i = _entry_line(d / "mode.yaml", section, name)
+        if i is not None:
+            return d / "mode.yaml", i + 1
+    return md.path, 1
+
+
+def _ep_where(md: model.Doc, ep_name: str) -> tuple[Path, int]:
+    return _lineage_where(md, "endpoints", ep_name)
+
+
+def _ep_key_where(md: model.Doc, ep_name: str, key: str) -> tuple[Path, int]:
+    """The mode.yaml (own, else the nearest ancestor's) whose endpoint `ep_name` sets `key`, and that line;
+    falls back to where the endpoint is declared."""
+    rx_key = re.compile(rf"\b{re.escape(key)}:")
+    for d in md.dirs:
+        start = _entry_line(d / "mode.yaml", "endpoints", ep_name)
+        if start is None:
+            continue
+        lines = (d / "mode.yaml").read_text(encoding="utf-8").splitlines()
+        for i in range(start, len(lines)):
+            ln = lines[i]
+            if i > start and ln.strip() and len(ln) - len(ln.lstrip()) <= 4:
+                break                                    # the next endpoint (or section) starts
+            if rx_key.search(ln.split("#", 1)[0]):
+                return d / "mode.yaml", i + 1
+    return _ep_where(md, ep_name)
+
+
+def _file(md: model.Doc, relpath: str, kit: model.Kit) -> str:
+    """A mode-relative path (possibly inherited, `../briefing/...`) as a normalized kit-relative path."""
+    return os.path.relpath(os.path.normpath(md.dir / relpath), kit.root)
+
+
 def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[str]:
     out: list[str] = []
-    mfile = md.path
-    ep_line = _line_of(mfile, rf"^\s{{4}}{re.escape(ep_name)}:")
+    mfile, ep_line = _ep_where(md, ep_name)
     target = f"{md.name}.{ep_name}"
     dod_ids: list[str] = []
     for key in ("playbook", "rules"):
@@ -43,7 +95,7 @@ def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[
             out.append(f"{_where(mfile, ep_line)}: feature {target} has no `{key}`; add "
                        f"`{key}: features/{ep_name}/{'playbook.md' if key == 'playbook' else 'rules.yaml'}`")
         elif not (md.dir / ep[key]).exists():
-            out.append(f"{_where(mfile, ep_line)}: feature {target} {key} file {ep[key]} does not exist")
+            out.append(f"{_where(mfile, ep_line)}: feature {target} {key} file {_file(md, ep[key], kit)} does not exist")
 
     if ep.get("playbook") and (md.dir / ep["playbook"]).exists():
         pb = pbk.parse(md.dir / ep["playbook"])
@@ -68,8 +120,6 @@ def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[
                        f"framework/rules/{rs}.yaml does not exist")
     if rv and rv.get("when") == "always":
         rn = rv.get("role")
-        rline = _line_of(mfile, rf"^\s{{4}}{re.escape(ep_name)}:", ep_line)
-        rline = _line_of(mfile, r"review:", rline) if rline else rline
         if rn not in kit.docs["Role"]:
             out.append(f"{_where(mfile, ep_line)}: feature {target} review role '{rn}' does not exist "
                        f"(have: {', '.join(sorted(kit.docs['Role']))})")
@@ -135,7 +185,7 @@ def lint_rules(path: Path, dod_ids: list[str], ep: dict, md: model.Doc) -> list[
 def _kind_enum(md: model.Doc, ep: dict) -> list[str] | None:
     if not ep.get("in"):
         return None
-    p = md.dir / "types" / f"{ep['in']}.schema.json"
+    p = model.type_file(md.dirs, ep["in"])
     if not p.exists():
         return None
     import json
@@ -150,12 +200,12 @@ def lint_mode(md: model.Doc, kit: model.Kit) -> list[str]:
     for ep_name, ep in s["endpoints"].items():
         used.add(ep["workflow"])
         if ep["workflow"] not in s["workflows"]:
-            out.append(f"{_where(md.path, _line_of(md.path, rf'^\s{{4}}{re.escape(ep_name)}:'))}: feature "
+            out.append(f"{_where(*_ep_where(md, ep_name))}: feature "
                        f"{md.name}.{ep_name} uses unknown workflow '{ep['workflow']}'")
         out += lint_feature(md, ep_name, ep, kit)
     for wf in s["workflows"]:
         if wf not in used:
-            out.append(f"{_where(md.path, _line_of(md.path, rf'^\s{{4}}{re.escape(wf)}:'))}: workflow '{wf}' is not "
+            out.append(f"{_where(*_lineage_where(md, 'workflows', wf))}: workflow '{wf}' is not "
                        f"used by any endpoint; remove it or add an endpoint")
     # modes name capabilities, never concrete tools or connectors
     text = md.path.read_text(encoding="utf-8")
@@ -182,8 +232,11 @@ def lint_mode(md: model.Doc, kit: model.Kit) -> list[str]:
         for d in sorted(p for p in fdir.iterdir() if p.is_dir()):
             if d.name not in declared:
                 out.append(f"{model.rel(d)}: feature folder is not referenced by any endpoint in mode.yaml")
+            have = [n for n in ("playbook.md", "rules.yaml") if (d / n).exists()]
+            if md.parent and have:
+                continue        # an extending mode's folder holds only what it overrides; the rest is inherited
             for need in ("playbook.md", "rules.yaml"):
-                if not (d / need).exists():
+                if need not in have:
                     out.append(f"{model.rel(d)}: feature folder is missing {need}")
     return out
 
@@ -199,9 +252,11 @@ def lint_roles(kit: model.Kit) -> list[str]:
     return out
 
 
-# Interfaces whose connectors must say which `source` they stamp on posts and how far back
-# (`window`) the source API reaches: the store keys posts and deletions on `source`.
-SOURCE_INTERFACES = ("feed.source/v1",)
+# Interfaces whose connectors must say which `source` they stamp on items, how far back (`window`) the
+# source API reaches, and which selector fields its native search handles: the store keys items and
+# deletions on `source` and splits every selector by that table.
+SOURCE_INTERFACES = ("items.source/v1",)
+SELECTOR_MODES = ("native", "local")
 
 
 def lint_connectors(kit: model.Kit) -> list[str]:
@@ -218,6 +273,10 @@ def lint_connectors(kit: model.Kit) -> list[str]:
                     if not c.spec.get(key):
                         out.append(f"{_where(c.path, _line_of(c.path, r'^spec:'))}: connector {c.name} implements "
                                    f"{iface} but declares no spec.{key} ({why})")
+                if not c.spec.get("selectors"):
+                    out.append(f"{_where(c.path, _line_of(c.path, r'^spec:'))}: connector {c.name} implements {iface} "
+                               f"but declares no spec.selectors (which selector fields its native search handles: "
+                               f"`<field>: native|local`; unlisted fields cannot be expressed)")
     return out
 
 
@@ -228,14 +287,24 @@ SCHEDULED_BY = {"improve.backlog": "`.agentbay/bay improve weekly` (it runs scan
 
 def warnings(kit: model.Kit) -> list[str]:
     """Non-fatal findings: printed by `bay lint`, never fail it."""
-    out = []
+    out = list(getattr(kit, "deprecations", []))
     for md in kit.docs["Mode"].values():
+        if md.spec.get("abstract"):
+            continue                    # never installed: its children carry the schedule
         for ep_name, ep in md.spec["endpoints"].items():
             if ep.get("schedule"):
                 target = f"{md.name}.{ep_name}"
                 run = SCHEDULED_BY.get(target, f"`.agentbay/bay call {target} '{{}}'`")
-                out.append(f"{_where(md.path, _line_of(md.path, r'schedule:'))}: {target} declares "
+                out.append(f"{_where(*_ep_key_where(md, ep_name, 'schedule'))}: {target} declares "
                            f"schedule '{ep['schedule']}' but no runtime acts on it; run {run} from cron")
+    stores = [c.name for c in kit.docs["Connector"].values() if "items.store/v1" in (
+        [c.spec["implements"]] if isinstance(c.spec["implements"], str) else c.spec["implements"])]
+    if stores:
+        from .sqlsandbox import fts5_available
+        if not fts5_available():
+            out.append(f"this Python's SQLite has no FTS5: {', '.join(stores)} falls back to LIKE matching "
+                       f"(search is slower and unranked; items_fts is absent from sql). Use a Python built with "
+                       f"FTS5 (python.org and Homebrew builds have it) for ranked full-text search")
     if kit.project is not None and kit.project.resolve() == kit.root.resolve():
         for env in kit.docs["Environment"].values():
             for w in env.spec.get("fs", {}).get("write", []):

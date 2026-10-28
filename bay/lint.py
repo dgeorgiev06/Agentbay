@@ -162,6 +162,26 @@ def lint_role_envs(md: model.Doc, kit: model.Kit) -> list[str]:
     return out
 
 
+def lint_env_bindings(kit: model.Kit) -> list[str]:
+    """A tools binding under a capability without the `write` effect may not list file-writing tools or any CLI
+    beyond the read-only ones (git status/diff/log/show): roles of every access level get read capabilities."""
+    out = []
+    for env in kit.docs["Environment"].values():
+        for iface, b in (env.spec.get("bind") or {}).items():
+            idoc = kit.get("Interface", iface)
+            if not isinstance(b, dict) or idoc is None or "write" in model.endpoint_effects(kit, iface, None):
+                continue
+            bad = [x for x in b.get("tools", []) if x in model.WRITE_TOOLS]
+            bad += [c for c in b.get("clis", []) if c not in model.READ_ONLY_CLIS]
+            if bad:
+                line = _line_of(env.path, rf"^\s+{re.escape(iface)}:")
+                out.append(f"{_where(env.path, line)}: env {env.name} binds {', '.join(bad)} under {iface}, which has "
+                           f"no `write` effect; file-writing tools and CLIs other than "
+                           f"{', '.join(model.READ_ONLY_CLIS)} belong under a capability with the write effect "
+                           f"(e.g. workspace.write/v1)")
+    return out
+
+
 def lint_rules(path: Path, dod_ids: list[str], ep: dict, md: model.Doc) -> list[str]:
     out: list[str] = []
     try:
@@ -348,6 +368,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     for md in kit.docs["Mode"].values():
         out += lint_mode(md, kit)
     out += lint_roles(kit)
+    out += lint_env_bindings(kit)
     out += lint_connectors(kit)
     out += lint_rulesets(kit)
     return list(dict.fromkeys(out))

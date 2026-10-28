@@ -78,11 +78,15 @@ playbooks/skills, or propose a new role via forge.extend").
   `limits`.
 - Grants of a unit (role, mode, env): the read-only connector endpoints of the mode's `needs` that the env binds
   (never an interface marked `dispatcherOnly`), plus the tools of the mode's tools capabilities whose effects
-  are read or network (any, with `access: write`).
+  are read or network (any, with `access: write`). Only `access: write` roles get file-writing tools (Edit,
+  Write, MultiEdit, NotebookEdit), CLIs beyond read-only git, and the env's `fs.write` paths in their guard
+  entry. `bay lint` rejects a tools binding that lists file-writing tools or such CLIs under a capability without
+  the `write` effect.
 - Tier: step (a review: its review block) > feature > role default; the profile maps it to a model; the env's
-  `tiers` cap it.
+  `tiers` cap it. The env also caps the role's default tier, which is the model its unit is compiled with.
   Envs are the only place capabilities are bound; `agentbay.config.yaml` cannot rebind them. It can select an
   env that declares `substitutes: <env>` (`envs: { local-feeds: local-feeds-offline }`).
+- User modes may put roles only in their own envs (`envs/`) and the framework envs `workspace` and `research`.
 
 Resolution rules (`bay/model.py`) - every gap is reported at once:
 unknown role/agent profile/env/connector/interface/endpoint; unbound capability; effect not declared by the

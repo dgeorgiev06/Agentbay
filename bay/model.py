@@ -52,6 +52,9 @@ TIERS = ("fast", "balanced", "deep")
 DEFAULT_AGENT = "claude-code"          # the agent profile when agentbay.config.yaml sets no `agent:`
 AGENT_SAFE_EFFECTS = {"read"}          # connector endpoints a role may call via its use shim
 READ_TOOL_EFFECTS = {"read", "network"}  # tools capabilities every role may get; others need `access: write`
+WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}   # file-writing tools: `access: write` roles only
+READ_ONLY_CLIS = ("git status", "git diff", "git log", "git show")   # the only CLIs a read-only capability may bind
+USER_FRAMEWORK_ENVS = ("workspace", "research")   # the framework envs a user mode may put roles in
 LEVEL_RANK = {"should": 1, "must": 2, "must_not": 2}
 PROTECTED = ("framework", "bay", "schemas")       # kit paths only forge.extend may write
 FRAMEWORK_EXTENDER = "forge.extend"
@@ -430,6 +433,7 @@ class ResolvedRole:
     skills: dict[str, Path]
     isolation: str
     budget: dict
+    access: str = "read"             # the role's access: only "write" gets file-writing tools and write paths
 
 
 @dataclass
@@ -774,6 +778,16 @@ class _Ctx:
             gaps.append(f"{who}: unknown env '{env_name}' (have: {', '.join(sorted(kit.docs['Environment']))}); "
                         f"fix mode {mode} `roles:`")
             return None
+        if md.root == "user" and env.root == "framework" and env.name not in USER_FRAMEWORK_ENVS:
+            gaps.append(f"mode {mode}: role {rd.name} works in the framework env {env.name} ({where}); user modes "
+                        f"may put roles only in their own envs (envs/) or the framework envs "
+                        f"{' and '.join(USER_FRAMEWORK_ENVS)}")
+            return None
+        allowed = env.spec.get("tiers")
+        if allowed and rd.tier not in allowed:
+            gaps.append(f"mode {mode}: role {rd.name} in env {env.name}: its default tier '{rd.tier}' (the model its "
+                        f"subagent is compiled with) is not allowed by env {env.name} (allows: {', '.join(allowed)}); "
+                        f"add '{rd.tier}' to `tiers` in envs/{env.name}.yaml or put the role in another env")
         tools: list[str] = []
         clis: list[str] = []
         bay_uses: list[str] = []
@@ -791,8 +805,14 @@ class _Ctx:
                 if not effs <= set(env.spec["effects"]) or (rd.access != "write" and not effs <= READ_TOOL_EFFECTS):
                     continue
                 uses.append(iface)
-                tools += [t for t in b.get("tools", []) if t not in tools]
-                clis += [c for c in b.get("clis", []) if c not in clis]
+                b_tools, b_clis = b.get("tools", []), b.get("clis", [])
+                if rd.access != "write":       # whatever the binding lists, read-only roles never write
+                    b_tools = [x for x in b_tools if x not in WRITE_TOOLS]
+                    b_clis = [c for c in b_clis if c in READ_ONLY_CLIS]
+                    if not b_clis:             # Bash only for the CLIs that survive (or the use shim, below)
+                        b_tools = [x for x in b_tools if x != "Bash"]
+                tools += [x for x in b_tools if x not in tools]
+                clis += [c for c in b_clis if c not in clis]
             else:
                 eps = [e for e, spec in idoc.spec["endpoints"].items() if set(spec["effects"]) <= AGENT_SAFE_EFFECTS]
                 if not eps or "read" not in env.spec["effects"]:
@@ -813,7 +833,8 @@ class _Ctx:
             name=rd.name, unit=f"{rd.name}--{mode}", mode=mode, env=env.name, kind=kind, runtime=runtime,
             agent=self.agent, description=rd.description, root=rd.root, prompt=rd.prompt, done_when=rd.done_when,
             rules=rd.rules, uses=uses, inference=self.inference(rd.tier, rd.effort), tools=tools, clis=clis,
-            bay_uses=bay_uses, skills={**mode_skills(md), **rd.skills}, isolation=rd.isolation, budget=budget)
+            bay_uses=bay_uses, skills={**mode_skills(md), **rd.skills}, isolation=rd.isolation, budget=budget,
+            access=rd.access)
 
 
 def name_units(modes: dict, gaps: list[str] | None = None) -> None:

@@ -187,7 +187,11 @@ def test_forge_create_cannot_be_placed_in_framework_writing_env():
 def test_user_mode_cannot_write_framework():
     k = kit_copy()
     edit_yaml(k / "modes/delivery/mode.yaml", lambda d: d["spec"]["roles"].update({"builder": "framework-dev"}))
-    assert_gap(k, "delivery.build step implement", "only forge.extend may change the framework")
+    assert_gap(k, "mode delivery: role builder works in the framework env framework-dev",
+               "delivery.build step implement", "user modes may put roles only in their own envs")
+    # a framework mode is still checked for the framework boundary
+    edit_yaml(k / "framework/modes/improve/mode.yaml", lambda d: d["spec"]["roles"].update({"analyst": "framework-dev"}))
+    assert_gap(k, "improve.scan step patterns", "env framework-dev", "only forge.extend may change the framework")
 
 
 def test_feature_review_block_resolves_to_existing_placeable_reviewer():

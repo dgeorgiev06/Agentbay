@@ -324,8 +324,9 @@ class ClaudeCodeAdapter:
                          "clis": list(r.clis),
                          # `~/...` or absolute read paths are for the env's connectors (e.g. transcripts), never roles
                          "read": [x for x in fs.get("read", ["."]) if not x.startswith(("~", "/"))],
-                         # roles without file-writing tools get no writable paths at all
-                         "write": list(fs.get("write", [])) if WRITE_TOOLS & set(r.tools) else []}
+                         # only `access: write` roles with file-writing tools get writable paths
+                         "write": list(fs.get("write", [])) if r.access == "write" and WRITE_TOOLS & set(r.tools)
+                         else []}
         is_kit = project.resolve() == kit.resolve()
         # The shim is auto-allowed only when the kit is outside the project. If the kit is the project
         # or sits inside it, roles may be able to edit code the shim runs, so it prompts instead.

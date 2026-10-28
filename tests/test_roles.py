@@ -186,3 +186,77 @@ def test_swapping_the_agent_profile_changes_only_the_model_names():
     assert "model: big-3" in b[".claude/agents/reviewer--delivery.md"]
     from helpers import gaps
     assert any("agent profile 'nope' not found" in g for g in gaps(k, project({"agent": "nope"})))
+
+
+# ------------------------------------------------------------------ grants, envs and tier caps
+NOTES_IFACE = """apiVersion: agentbay/v2
+kind: Interface
+metadata: { name: notes.edit, description: notes }
+spec:
+  version: 1
+  binding: tools
+  endpoints:
+    open: { description: open notes, effects: [read] }
+"""
+
+
+def test_a_read_capability_never_gives_read_roles_write_tools_or_paths():
+    """Review case t6: a read-effect tools capability bound to Edit/Write and arbitrary CLIs."""
+    from bay import lint
+    k = kit_copy()
+    (k / "interfaces/notes.edit.v1.yaml").write_text(NOTES_IFACE)
+    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["bind"].update(
+        {"notes.edit/v1": {"tools": ["Edit", "Write", "Bash"], "clis": ["rm", "git push"]}}))
+    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["needs"].append("notes.edit/v1"))
+    env = k / "envs/local-feeds.yaml"
+    line = next(i for i, ln in enumerate(env.read_text().splitlines(), 1) if "notes.edit/v1:" in ln)
+    ps = lint.run(k)
+    assert any(p.endswith(f"envs/local-feeds.yaml:{line}: env local-feeds binds Edit, Write, rm, git push under "
+                          f"notes.edit/v1, which has no `write` effect; file-writing tools and CLIs other than git "
+                          f"status, git diff, git log, git show belong under a capability with the write effect "
+                          f"(e.g. workspace.write/v1)") for p in ps), ps
+    # even without lint (bay build does not lint), read-only roles get neither the tools nor write paths
+    p = project(source="x-api")
+    s = system(p, k)
+    for unit in ("analyst--feed-briefing", "reviewer--feed-briefing"):
+        u = s.units()[unit]
+        assert u.access == "read" and not set(u.tools) & {"Edit", "Write"} and u.clis == [], (unit, u.tools, u.clis)
+    get("claude-code").build(s, p, k)
+    pol = json.loads((p / ".agentbay/guard.json").read_text())["subagents"]
+    assert pol["analyst--feed-briefing"]["write"] == [] and pol["reviewer--feed-briefing"]["write"] == []
+    assert pol["builder--delivery"]["write"] == ["."]                                # access: write keeps them
+    fm = (p / ".claude/agents/analyst--feed-briefing.md").read_text().split("---")[1]
+    assert "Edit" not in fm and "Write" not in fm
+
+
+def test_user_modes_may_not_put_roles_in_framework_envs_other_than_workspace_and_research():
+    """Review case t7: a user mode reading improve's findings and episodes through env improve-local."""
+    from helpers import assert_gap
+    k = kit_copy()
+    d = k / "modes/spy"
+    d.mkdir()
+    (d / "mode.yaml").write_text(yaml.safe_dump({
+        "apiVersion": "agentbay/v2", "kind": "Mode", "metadata": {"name": "spy", "version": "0.1.0"},
+        "spec": {"purpose": "read improve findings", "coordinator": "lead",
+                 "roles": {"lead": "improve-local", "analyst": "improve-local"},
+                 "needs": ["improve.findings/v1", "session.events/v1"],
+                 "endpoints": {"look": {"workflow": "look", "effects": ["read"], "review": {"when": "never"}}},
+                 "workflows": {"look": [{"id": "a", "role": "analyst", "task": "x"}]}}}))
+    assert_gap(k, "mode spy: role analyst works in the framework env improve-local (spy.look step a)",
+               "user modes may put roles only in their own envs (envs/) or the framework envs workspace and research")
+    assert_gap(k, "mode spy: role lead works in the framework env improve-local")
+    # workspace and research stay open to user modes (delivery uses both); framework modes are unaffected
+    assert system(None).modes["delivery"].roles == {"researcher": "research", "builder": "workspace",
+                                                    "reviewer": "workspace"}
+    assert system(None).units()["analyst--improve"].env == "improve-local"
+
+
+def test_a_units_default_tier_is_checked_against_the_env_cap():
+    """Review case t1: the reviewer's subagent compiled with opus (deep) in an env capped to fast, balanced."""
+    from helpers import assert_gap
+    k = kit_copy()
+    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"].update({"tiers": ["fast", "balanced"]}))
+    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["endpoints"]["digest"]["review"].update(
+        {"tier": "balanced"}))
+    assert_gap(k, "mode feed-briefing: role reviewer in env local-feeds: its default tier 'deep' (the model its "
+                  "subagent is compiled with) is not allowed by env local-feeds (allows: fast, balanced)")

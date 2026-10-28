@@ -11,7 +11,7 @@ Answer a question using only stored items, found with read-only SQL, with citati
 ## Steps
 1. `refresh`: the dispatcher syncs the store if it is older than 2h or the selectors changed.
 2. `context`: the dispatcher reads the store status for the window (`items.store/v1.status`).
-3. `answer`: briefing-analyst follows the corpus-sql skill: `describe`, then narrow with `sql` (or `search`/`facets`), then read full content of the few relevant items with `get`/`thread`, and answers citing item ids.
+3. `answer`: the analyst follows the corpus-sql skill: `describe`, then narrow with `sql` (or `search`/`facets`), then read full content of the few relevant items with `get`/`thread`, and answers citing item ids.
 
 ## Definition of Done
 - [DOD-1] (must) Every factual sentence in `answer` is supported by a cited stored item.

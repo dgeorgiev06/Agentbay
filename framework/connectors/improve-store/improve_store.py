@@ -36,7 +36,7 @@ class ImproveStore:
                 "pruned": pruned}
 
     def annotate(self, annotations=None) -> dict:
-        res = self._do(self.store.annotate, annotations or [], "improve-analyst")
+        res = self._do(self.store.annotate, annotations or [], "analyst")
         return {**res, "summary": self._summary(res["annotated"])}
 
     def query(self, status=None, lens=None, kind=None, ids=None, limit=None) -> dict:

@@ -1,6 +1,0 @@
-apiVersion: agentbay/v2
-kind: Agent
-metadata:
-  name: framework-builder
-  description: Subagent that changes the framework itself. Only forge.extend places roles here.
-spec: { runtime: claude-code-subagent, model: opus, effort: high, env: framework-dev }

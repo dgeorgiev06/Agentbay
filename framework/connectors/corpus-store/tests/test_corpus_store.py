@@ -589,30 +589,30 @@ def test_swapping_offline_for_real_refuses_role_reads_until_a_rescope():
     p = project()
     dispatch.Dispatcher(system(p), p, clock=clock).call("feed-briefing.sync", {})
     D = dispatch.Dispatcher(system(p), p, clock=clock)
-    assert len(D.use("briefing-analyst", "items.store/v1.query", {})["items"]) == 7
+    assert len(D.use("analyst--feed-briefing", "items.store/v1.query", {})["items"]) == 7
     cfgp = p / "agentbay.config.yaml"                    # swap to the real env (x-api)
     cfg = yaml.safe_load(cfgp.read_text())
     cfg.pop("envs")
     cfg.update({"connectors": {"x-api": {"userId": "42"}}, "secrets": {"provider": "env"}})
     cfgp.write_text(yaml.safe_dump(cfg))
     D = dispatch.Dispatcher(system(p), p, clock=clock)
-    assert D.use("briefing-analyst", "items.store/v1.status", {})["stale"] is True
+    assert D.use("analyst--feed-briefing", "items.store/v1.status", {})["stale"] is True
     for target, inp in (("items.store/v1.query", {}), ("items.store/v1.search", {"text": "staking"}),
                         ("items.store/v1.get", {"ids": ["fake:1009"]})):
         try:
-            D.use("briefing-analyst", target, inp)
+            D.use("analyst--feed-briefing", target, inp)
             raise AssertionError(f"{target} served a stale scope")
         except Exception as e:
             assert "bound sources are now x (was fake)" in str(e), e
-    assert "bound sources are now x" in D.use("briefing-analyst", "items.store/v1.sql",
+    assert "bound sources are now x" in D.use("analyst--feed-briefing", "items.store/v1.sql",
                                                {"sql": "SELECT count(*) FROM v_items"})["error"]
     # the real source is down (token refused): the sync fails, but the offline items are gone and reads work
     http = FakeHttp({("POST", "/2/oauth2/token"): lambda *a: jresp({"error": "invalid_grant"}, 400)})
     r = dispatch.Dispatcher(system(p), p, transport=http, provider=MemProvider(SECRETS), clock=clock).call(
         "feed-briefing.sync", {})
     assert r["status"] == "failed"
-    assert D.use("briefing-analyst", "items.store/v1.query", {})["items"] == []
-    assert D.use("briefing-analyst", "items.store/v1.status", {})["stale"] is False
+    assert D.use("analyst--feed-briefing", "items.store/v1.query", {})["items"] == []
+    assert D.use("analyst--feed-briefing", "items.store/v1.status", {})["stale"] is False
 
 
 def test_concurrent_sync_and_prune_keep_every_billed_item():

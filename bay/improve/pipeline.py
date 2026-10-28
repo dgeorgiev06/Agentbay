@@ -231,7 +231,7 @@ class Pipeline:
         return f"unknown evidence kind {kind}"
 
     def resolve(self, findings: list[dict]) -> dict:
-        """Analyst/auditor findings -> candidates whose evidence resolves; the rest rejected with reasons."""
+        """Analyst findings -> candidates whose evidence resolves; the rest rejected with reasons."""
         accepted, rejected = [], []
         known: set[str] = set()
         if any(e.get("kind") == "episode" for f in findings for e in f["evidence"]):

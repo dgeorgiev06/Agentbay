@@ -15,12 +15,11 @@ spec:
       effects: [read, write]
       playbook: features/run/playbook.md
       rules: features/run/rules.yaml
-      review: { role: reviewer, when: always }
-  roles: [builder, reviewer]
+      review: { role: reviewer, when: always, tier: balanced, effort: medium }
+  roles: { builder: workspace, reviewer: workspace }      # role -> the env it works in
   workflows:
     run:
       - { id: work, role: builder, out: RunOut, task: "TODO the job this step does" }
-  inference:
-    default: { model: sonnet, effort: medium }
   constraints:
     policies: []
+  needs: [workspace.read/v1, workspace.write/v1, git.read/v1]   # what its roles may use, in their envs

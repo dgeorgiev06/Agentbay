@@ -8,15 +8,14 @@ spec:
   purpose: Create modes, features, roles, connectors and envs; extend the framework through a reviewed proposal; migrate user content across versions.
   endpoints:
     create:
-      description: Scaffold and fill a mode, feature, role, connector or env in user space from a plain-language intent.
+      description: Scaffold and fill a mode, feature, connector or env in user space from a plain-language intent.
       workflow: create
       in: CreateReq
       out: Result
       effects: [read, write]
       playbook: features/create/playbook.md
       rules: features/create/rules.yaml
-      agents: { builder: author }                 # user space only (env local-authoring)
-      review: { role: reviewer, when: always, model: sonnet, effort: medium, rulesets: [conformance] }
+      review: { role: reviewer, when: always, tier: balanced, effort: medium, rulesets: [conformance] }
     extend:
       description: Change the framework - proposal, approval gate, implementation, review, release.
       workflow: extend
@@ -25,8 +24,8 @@ spec:
       effects: [read, write]
       playbook: features/extend/playbook.md
       rules: features/extend/rules.yaml
-      agents: { builder: framework-builder }      # env framework-dev
-      review: { role: reviewer, when: always, model: opus, effort: high, rulesets: [conformance] }
+      roles: { builder: framework-dev }           # the only feature whose env writes framework/, bay/, schemas/
+      review: { role: reviewer, when: always, tier: deep, effort: high, rulesets: [conformance] }
     migrate:
       description: Migrate user content to the current framework version; dry-run diff unless confirm is true.
       workflow: migrate
@@ -35,9 +34,9 @@ spec:
       effects: [read, write, delete]
       playbook: features/migrate/playbook.md
       rules: features/migrate/rules.yaml
-      review: { role: reviewer, when: always }
-  coordinator: forge-lead
-  roles: [forge-lead, builder, reviewer]
+      review: { role: reviewer, when: always, tier: balanced, effort: medium }
+  coordinator: lead
+  roles: { lead: local-authoring, builder: local-authoring, reviewer: workspace }   # user space only
   workflows:
     create:
       - { id: scaffold, run: forge.scaffold/v1.create, with: { kind: "$in.kind", name: "$in.name", target: "$in.target", implements: "$in.implements", intent: "$in.intent" } }
@@ -51,8 +50,6 @@ spec:
     migrate:
       - { id: plan, run: forge.migrate/v1.plan }
       - { id: apply, run: forge.migrate/v1.apply, when: "$in.confirm" }
-  inference:
-    default: { model: sonnet, effort: medium }
   constraints:
     policies: [framework-is-read-only-outside-extend, dry-run-first]
-  needs: [forge.scaffold/v1, forge.migrate/v1]
+  needs: [forge.scaffold/v1, forge.migrate/v1, workspace.read/v1, workspace.write/v1, git.read/v1]

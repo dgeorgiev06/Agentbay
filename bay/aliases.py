@@ -11,8 +11,8 @@ a warning (the connector is skipped) when none does, so one leftover file does n
     feed.store/v1[.<ep>]    -> items.store/v1[.<ep>]   (sync input maxPosts -> maxItems)
     feed.post/v1            -> post/v1               (data schema $ref)
     feed.coverage/v1        -> items.coverage/v1     (data schema $ref)
-    role feed-analyst       -> briefing-analyst      (unless you define a role with the old name)
-    role feed-lead          -> briefing-lead         (same)
+    role feed-analyst       -> analyst               (0.3 named it briefing-analyst; roles are framework-level since 0.4)
+    role feed-lead          -> lead                  (0.3: briefing-lead)
     connector local-store   -> corpus-store          (unless you define a connector with the old name)
 """
 from __future__ import annotations
@@ -22,11 +22,15 @@ import re
 
 IFACES = {"feed.source/v1": "items.source/v1", "feed.store/v1": "items.store/v1"}
 DATA = {"feed.post/v1": "post/v1", "feed.coverage/v1": "items.coverage/v1"}
-ROLES = {"feed-analyst": "briefing-analyst", "feed-lead": "briefing-lead"}
+ROLES = {"feed-analyst": "analyst", "feed-lead": "lead"}
 CONNECTORS = {"local-store": "corpus-store"}
 SYNC = "items.store/v1.sync"
 OLD_FETCH = {"sinceId", "startTime", "maxPosts"}
 HINT = "run `bay migrate` to see the rewrite and `bay migrate --confirm` to apply it"
+HINT_04 = "run `bay migrate` to see the 0.4 rewrite and `bay migrate --confirm` to apply it"
+# 0.3 roles merged into the five framework roles in 0.4 (lead, analyst, researcher, builder, reviewer)
+ROLES_04 = {"briefing-analyst": "analyst", "improve-analyst": "analyst", "auditor": "analyst",
+            "briefing-lead": "lead", "improve-lead": "lead", "forge-lead": "lead"}
 
 
 def _iface(v: str) -> str | None:
@@ -61,6 +65,7 @@ def apply(kit) -> list[str]:
     """Resolve deprecated names in user docs in place; return one warning per file (and old name)."""
     names = {old: new for old, new in ROLES.items() if old not in kit.docs["Role"]}
     names.update({old: new for old, new in CONNECTORS.items() if old not in kit.docs["Connector"]})
+    names.update({old: new for old, new in ROLES_04.items() if old not in kit.docs["Role"]})
     warnings: list[str] = []
     for kind in ("Mode", "Role", "Environment", "Connector"):
         for d in list(kit.docs[kind].values()):
@@ -86,7 +91,14 @@ def apply(kit) -> list[str]:
                             st["with"] = {("maxItems" if k == "maxPosts" else k): v for k, v in w.items()}
                             r.used["with: { maxPosts }"] = "with: { maxItems }"
             for old, new in sorted(r.used.items()):
-                warnings.append(f"{d.rel}: `{old}` is deprecated (v0.2) and now resolves to `{new}`; {HINT}")
+                if kind == "Mode" and old in {**ROLES, **ROLES_04}:
+                    d.renamed[new] = old
+                if old in ROLES_04:
+                    warnings.append(f"{d.rel}: role `{old}` is deprecated (0.3) and now resolves to the framework "
+                                    f"role `{new}`; roles are framework-level since 0.4 and modes customize them "
+                                    f"(playbooks, skills, rules); {HINT_04}")
+                else:
+                    warnings.append(f"{d.rel}: `{old}` is deprecated (v0.2) and now resolves to `{new}`; {HINT}")
     return warnings
 
 
@@ -175,7 +187,6 @@ def _rename_sync_input(block: list[str]) -> str:
 # The budget caps count items, not posts, since 0.3. 0.4 names them so; the 0.3 names keep working for one
 # release (0.4.x) in mode constraints, env limits, mode config schemas and agentbay.config.yaml.
 ITEM_CAPS = {"maxPostsPerRun": "maxItemsPerRun", "monthlyPosts": "monthlyItems"}
-HINT_04 = "run `bay migrate` to see the 0.4 rewrite and `bay migrate --confirm` to apply it"
 
 
 def rename_caps(d) -> list[str]:
@@ -229,4 +240,188 @@ def config_caps(config: dict) -> list[str]:
         used = rename_caps(settings)
         if used:
             warnings.append(_cap_warning(f"agentbay.config.yaml modes.{mode}", used))
+    return warnings
+
+
+# ------------------------------------------------------------------ 0.3 roles/agents/envs shape (bay migrate 0.4.0)
+# 0.4 (proposal 0004 Part A): roles are five generic framework roles; a mode's `roles:` map says which env each
+# works in (feature and step overrides of the same shape); one framework agent profile maps tiers to models;
+# an env may cap tiers. The 0.3 shape keeps working for one release (0.4.x): `apply_shape` translates it when
+# the kit loads, with a warning per file, and `bay migrate` (bay/migrate.py `_v03_shape`) rewrites it.
+#
+#    mode `roles: [a, b]`                 -> `roles: {a: <env of a's 0.3 agent>, ...}`
+#    endpoint `agents: {role: agent}`     -> endpoint `roles: {role: <that agent's env>}` (+ tier from its model)
+#    review `model`, mode `inference`     -> `tier` / `effort` on the review block and the role steps they changed
+#    env `models: [...]`                  -> `tiers: [...]`
+#    agents/<a>.yaml {runtime, model, env} (user space) -> read for the above, then folded away by bay migrate
+#    a role's `uses`                      -> ignored: a role reads the read-only endpoints of its mode's needs
+#    old role names                       -> lead / analyst (ROLES_04); user role files -> mode skills (migrate)
+
+LEGACY_TIERS = {"haiku": "fast", "sonnet": "balanced", "opus": "deep"}
+# The 0.3 agents shipped with the kit: name -> (model, effort, env)
+SHIPPED_AGENTS = {
+    "analyst": ("sonnet", "medium", "local-feeds"), "lead": ("inherit", "medium", "local-feeds"),
+    "author": ("sonnet", "medium", "local-authoring"), "critic": ("opus", "high", "workspace"),
+    "forge-main": ("inherit", "medium", "local-authoring"), "framework-builder": ("opus", "high", "framework-dev"),
+    "improve-main": ("inherit", "medium", "improve-local"), "improver": ("sonnet", "medium", "improve-local"),
+    "worker": ("sonnet", "medium", "workspace"),
+}
+# The 0.3 roles shipped with the kit: name -> (agent, inference model, inference effort)
+OLD_ROLES = {
+    "briefing-analyst": ("analyst", None, None), "briefing-lead": ("lead", None, None),
+    "feed-analyst": ("analyst", None, None), "feed-lead": ("lead", None, None),
+    "auditor": ("improver", None, None), "improve-analyst": ("improver", None, None),
+    "improve-lead": ("improve-main", None, None), "forge-lead": ("forge-main", None, None),
+    "builder": ("worker", None, None), "researcher": ("worker", "sonnet", None), "reviewer": ("critic", "opus", "high"),
+}
+OLD_ROLE_ENV = {"researcher": "research"}    # 0.4 moved web research out of env workspace
+# What those roles read or used (their `uses`); since 0.4 access comes from the mode's needs
+OLD_ROLE_USES = {
+    "briefing-analyst": ["items.store/v1"], "briefing-lead": ["items.store/v1"], "feed-analyst": ["items.store/v1"],
+    "feed-lead": ["items.store/v1"], "auditor": ["improve.findings/v1", "artifacts.read/v1", "workspace.read/v1"],
+    "improve-analyst": ["improve.findings/v1", "session.events/v1"], "improve-lead": ["improve.findings/v1"],
+    "forge-lead": ["workspace.read/v1"], "builder": ["workspace.read/v1", "workspace.write/v1"],
+    "researcher": ["workspace.read/v1", "web.research/v1"], "reviewer": ["workspace.read/v1", "git.read/v1"],
+}
+
+
+def agents_table(kit) -> dict[str, tuple]:
+    """0.3 agents: the shipped ones and the user's per-role agent files (which win)."""
+    out = dict(SHIPPED_AGENTS)
+    for n, d in kit.legacy_agents.items():
+        out[n] = (d.spec["model"], d.spec.get("effort", "medium"), d.spec["env"])
+    return out
+
+
+def old_role(kit, name: str) -> tuple:
+    """(agent, inference model, inference effort) a 0.3 role had: a user role file, else the shipped table."""
+    if name in kit.user_roles:
+        s = kit.user_roles[name]["doc"].get("spec") or {}
+        inf = s.get("inference") or {}
+        return s.get("agent"), inf.get("model"), inf.get("effort")
+    return OLD_ROLES.get(name, (None, None, None))
+
+
+def old_uses(kit, name: str) -> list[str]:
+    """Capability interfaces a 0.3 role used (its `uses`, without endpoints)."""
+    if name in kit.user_roles:
+        uses = (kit.user_roles[name]["doc"].get("spec") or {}).get("uses") or []
+        return [re.sub(r"(/v[0-9]+)\..*$", r"\1", u) for u in uses]
+    return list(OLD_ROLE_USES.get(name, []))
+
+
+def old_env(kit, name: str, agents: dict) -> str | None:
+    if name in OLD_ROLE_ENV:
+        return OLD_ROLE_ENV[name]
+    a = agents.get(old_role(kit, name)[0] or "")
+    return a[2] if a else None
+
+
+def _renamed(kit, d) -> dict:
+    """new role name -> 0.3 name, for the mode and its ancestors."""
+    out, cur = {}, d
+    while cur is not None:
+        out = {**cur.renamed, **out}
+        cur = kit.docs["Mode"].get(cur.parent) if cur.parent else None
+    return out
+
+
+def legacy_keys(spec: dict) -> list[str]:
+    """The 0.3 shape keys a (raw) mode spec uses."""
+    found = []
+    if isinstance(spec.get("roles"), list):
+        found.append("`roles:` list form")
+    for ep_name, e in (spec.get("endpoints") or {}).items():
+        if "agents" in (e or {}):
+            found.append(f"endpoint {ep_name} `agents:`")
+        if "model" in ((e or {}).get("review") or {}):
+            found.append(f"endpoint {ep_name} review `model`")
+    if "inference" in spec:
+        found.append("`inference`")
+    return found
+
+
+def shape_mode(kit, d, agents: dict) -> bool:
+    """Translate a merged mode spec from the 0.3 shape in place. Step and review tiers are set only where the
+    0.3 rule (mode step > mode default > role > agent) picked another model or effort than the 0.4 rule (step >
+    feature > role default) now does."""
+    s = d.spec
+    if not legacy_keys(s):
+        return False
+    import copy
+    d.before_shape = copy.deepcopy(s)
+    renamed = _renamed(kit, d)
+    if isinstance(s.get("roles"), list):
+        s["roles"] = {rn: old_env(kit, renamed.get(rn, rn), agents) for rn in s["roles"]}
+    # 0.3 roles carried their own `uses`; 0.4 grants a mode's needs, so the mode needs what its roles used
+    s["needs"] = list(dict.fromkeys([*(s.get("needs") or []),
+                                     *(u for rn in s["roles"] for u in old_uses(kit, renamed.get(rn, rn)))]))
+    inf = s.pop("inference", None) or {}
+    roles = kit.docs["Role"]
+
+    def was(rn, sid, agent=None, model=None, effort=None):
+        ag, r_model, r_effort = old_role(kit, renamed.get(rn, rn))
+        a = agents.get(agent or ag or "")
+        st, df = (inf.get("steps") or {}).get(sid) or {}, inf.get("default") or {}
+        return (model or st.get("model") or df.get("model") or r_model or (a[0] if a else None),
+                effort or st.get("effort") or df.get("effort") or r_effort or (a[1] if a else None) or "medium")
+
+    def settle(target, rn, model, effort, feature=None):
+        spec = roles[rn].spec if rn in roles else {}
+        tier = LEGACY_TIERS.get(model or "")
+        now_tier = (feature or {}).get("tier") or spec.get("tier")
+        now_effort = (feature or {}).get("effort") or spec.get("effort", "medium")
+        if tier and tier != now_tier and "tier" not in target:
+            target["tier"] = tier
+        if effort != now_effort and "effort" not in target:
+            target["effort"] = effort
+
+    done: set[int] = set()
+    for e in (s.get("endpoints") or {}).values():
+        over = e.pop("agents", None) or {}
+        if over:
+            e["roles"] = {**{rn: (agents.get(ag) or (None, None, None))[2] for rn, ag in over.items()},
+                          **(e.get("roles") or {})}
+        steps = (s.get("workflows") or {}).get(e.get("workflow"), [])
+        for st in steps:
+            if "role" in st and id(st) not in done:
+                done.add(id(st))
+                settle(st, st["role"], *was(st["role"], st["id"], over.get(st["role"])), feature=e)
+        rv = e.get("review") or {}
+        model = rv.pop("model", None)
+        if rv.get("role") and rv.get("when") == "always":
+            sid = next((x["id"] for x in steps if "review" in x), "review")
+            settle(rv, rv["role"], *was(rv["role"], sid, over.get(rv["role"]), model, rv.get("effort")))
+    return True
+
+
+def apply_shape(kit) -> list[str]:
+    """Translate the 0.3 shape (after extends) in place; one warning per file."""
+    warnings: list[str] = []
+    agents = agents_table(kit)
+    for n, d in sorted(kit.legacy_agents.items()):
+        warnings.append(f"{d.rel}: per-role agent files are deprecated (0.3); agent {n} now only gives env "
+                        f"{d.spec['env']} to the modes whose roles named it and model {d.spec['model']} as a tier. "
+                        f"The framework agent profile runs every role (`agent:` in agentbay.config.yaml); {HINT_04}")
+    for d in kit.docs["Role"].values():
+        if "uses" in d.spec:
+            d.spec.pop("uses")
+            warnings.append(f"{d.rel}: `uses` is deprecated and ignored (0.4): a role reads the read-only endpoints "
+                            f"of the needs of the mode it works in, through its env")
+    for d in kit.docs["Environment"].values():
+        if "models" in d.spec:
+            models = d.spec.pop("models")
+            tiers = [t for t in ("fast", "balanced", "deep") if any(LEGACY_TIERS.get(m) == t for m in models)]
+            if len(tiers) < 3 and "tiers" not in d.spec:
+                d.spec["tiers"] = tiers or ["fast"]
+            warnings.append(f"{d.rel}: `models` is deprecated (0.3): model names belong to the agent profile; it "
+                            f"now resolves to `tiers: [{', '.join(d.spec.get('tiers', tiers))}]`; {HINT_04}")
+    for d in kit.docs["Mode"].values():
+        shape_mode(kit, d, agents)
+        found = legacy_keys(d.raw)
+        if found:
+            envs = ", ".join(f"{k}: {v}" for k, v in (d.spec.get("roles") or {}).items())
+            warnings.append(f"{d.rel}: {', '.join(found)} is deprecated (0.3 shape) and now resolves to "
+                            f"`roles: {{{envs}}}` (role -> env; features and steps may override it) and tiers; "
+                            f"{HINT_04}")
     return warnings

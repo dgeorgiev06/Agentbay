@@ -13,6 +13,5 @@ spec:
     workspace.read/v1: { tools: [Read, Glob, Grep] }
   network: { allow: [] }
   fs: { read: ["."], write: [".agentbay/data/feeds"] }
-  models: [haiku, sonnet, opus, inherit]
   effects: [read, write, network, spend, delete]
   limits: { maxTurns: 40, maxMinutes: 20, spendUsd: 5, monthlyItems: 3000, maxItemsPerRun: 500 }

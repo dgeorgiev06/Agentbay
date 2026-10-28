@@ -7,9 +7,8 @@ metadata:
     of Done and rules. Injected by a feature's `review` block in mode.yaml; never
     grades its own work.
 spec:
-  agent: critic
-  uses: [workspace.read/v1, git.read/v1]
-  inference: { model: opus, effort: high }
+  tier: deep
+  effort: high
   budget: { maxTurns: 25 }
   prompt: |
     You are the reviewer. This prompt is HOW to review; WHAT to check always

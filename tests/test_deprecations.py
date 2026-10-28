@@ -22,31 +22,17 @@ spec:
     ask:   { workflow: ask, in: Question, out: Answer, effects: [read, network, spend, write],
              playbook: features/ask/playbook.md, rules: features/ask/rules.yaml, review: { role: reviewer, when: never } }
   coordinator: feed-lead
-  roles: [feed-lead, feed-analyst, my-reader, reviewer]
+  roles: { feed-lead: my-env, feed-analyst: my-env, reviewer: my-env }
   workflows:
     sync:
       - { id: fetch, run: feed.store/v1.sync, with: { lookback: "$in.lookback|$config.lookback", maxPosts: "$in.maxPosts" } }
     ask:
       - { id: refresh, run: feed.store/v1.sync, when: "stale > 2h" }
       - { id: context, run: feed.store/v1.status, with: { since: "$in.since|$config.lookback" } }
-      - { id: answer, role: my-reader, out: Answer, task: "Answer from stored posts." }
+      - { id: answer, role: feed-analyst, out: Answer, task: "Answer from stored posts." }
   constraints: { lookbackMax: 30d, spendUsd: 5 }
   needs: [feed.store/v1, feed.source/v1]
   config: config.schema.json
-"""
-V02_ROLE = """apiVersion: agentbay/v2
-kind: Role
-metadata: { name: my-reader, description: Reads my posts. }
-spec:
-  agent: my-agent
-  uses: [feed.store/v1.query, feed.store/v1.status]
-  prompt: Read posts with your use shim.
-  doneWhen: [every claim cites a stored post]
-"""
-V02_AGENT = """apiVersion: agentbay/v2
-kind: Agent
-metadata: { name: my-agent, description: Subagent for my-reader. }
-spec: { runtime: claude-code-subagent, model: sonnet, effort: medium, env: my-env }
 """
 V02_ENV = """apiVersion: agentbay/v2
 kind: Environment
@@ -57,7 +43,6 @@ spec:
     feed.store/v1: local-store      # the v0.2 JSONL store
   network: { allow: [] }
   fs: { read: ["."], write: [".agentbay/data/feeds"] }
-  models: [haiku, sonnet, opus, inherit]
   effects: [read, write, network, spend, delete]
 """
 OLD_CONNECTOR_PY = '''def create(ctx):
@@ -86,12 +71,7 @@ def v02_kit():
     answer = (base / "types/Answer.schema.json").read_text().replace("items.coverage/v1", "feed.coverage/v1")
     (d / "types/Answer.schema.json").write_text(answer)
     (d / "mode.yaml").write_text(V02_MODE)
-    (k / "roles/my-reader.yaml").write_text(V02_ROLE)
-    (k / "agents/my-agent.yaml").write_text(V02_AGENT)
     (k / "envs/my-env.yaml").write_text(V02_ENV)
-    # the user's own v0.2 feed mode takes feed-briefing's place: both would list briefing-lead/-analyst (the
-    # aliases of feed-lead/-analyst), and one role cannot read two modes' stores until step 3
-    shutil.rmtree(k / "modes/feed-briefing")
     return k
 
 
@@ -103,16 +83,16 @@ def test_v02_user_content_resolves_with_deprecation_warnings():
     for needle in ("modes/my-feed/mode.yaml: `feed.store/v1.sync` is deprecated (v0.2) and now resolves to "
                    "`items.store/v1.sync`; run `bay migrate`",
                    "modes/my-feed/mode.yaml: `feed-lead` is deprecated", "modes/my-feed/mode.yaml: `feed-analyst`",
-                   "modes/my-feed/mode.yaml: `with: { maxPosts }`", "roles/my-reader.yaml: `feed.store/v1.query`",
+                   "modes/my-feed/mode.yaml: `with: { maxPosts }`",
                    "envs/my-env.yaml: `local-store` is deprecated (v0.2) and now resolves to `corpus-store`",
                    "envs/my-env.yaml: `feed.source/v1`"):
         assert any(needle in w for w in ws), (needle, ws)
     s = model.resolve(kit)
     m = s.modes["my-feed"]
-    assert m.coordinator == "briefing-lead" and "briefing-analyst" in m.roles and m.needs == ["items.store/v1", "items.source/v1"]
+    assert m.coordinator == "lead" and "analyst" in m.roles and m.needs == ["items.store/v1", "items.source/v1"]
     assert m.features["sync"].steps[0].with_ == {"lookback": "$in.lookback|$config.lookback", "maxItems": "$in.maxPosts"}
     assert m.config["selectors"] == [{"id": "home"}]                 # no selectors setting: v0.2 behaviour
-    assert s.roles["my-reader"].bay_uses == ["items.store/v1.query", "items.store/v1.status"]
+    assert "items.store/v1.query" in s.units()["analyst--my-feed"].bay_uses
     assert kit.get("Environment", "my-env").spec["bind"]["items.store/v1"] == "corpus-store"
     # it runs: sync offline into its own store, and its reader reads it through the aliased grant
     p = project()
@@ -121,7 +101,7 @@ def test_v02_user_content_resolves_with_deprecation_warnings():
     r = d.call("my-feed.sync", {"maxPosts": 3})
     assert r["status"] == "partial" and r["output"]["fetched"] == 3 and "maxItems 3" in r["output"]["stopped"]
     assert (p / ".agentbay/data/feeds/my-feed/corpus.db").exists()
-    assert len(d.use("my-reader", "items.store/v1.query", {})["items"]) == 3
+    assert len(d.use("analyst--my-feed", "items.store/v1.query", {})["items"]) == 3
 
 
 def test_bay_migrate_rewrites_v02_user_content_cleanly():
@@ -129,8 +109,7 @@ def test_bay_migrate_rewrites_v02_user_content_cleanly():
     before = (k / "modes/my-feed/mode.yaml").read_text()
     plan = migrate.plan(k)
     paths = {c["path"] for c in plan["changes"]}
-    assert {"modes/my-feed/mode.yaml", "modes/my-feed/types/Answer.schema.json", "roles/my-reader.yaml",
-            "envs/my-env.yaml"} <= paths
+    assert {"modes/my-feed/mode.yaml", "modes/my-feed/types/Answer.schema.json", "envs/my-env.yaml"} <= paths
     assert "+    items.store/v1: corpus-store      # the v0.2 JSONL store" in plan["diff"]
     assert (k / "modes/my-feed/mode.yaml").read_text() == before                   # dry run
     r = subprocess.run([sys.executable, str(k / "bay/cli.py"), "migrate"], capture_output=True, text=True)
@@ -138,7 +117,8 @@ def test_bay_migrate_rewrites_v02_user_content_cleanly():
     migrate.apply(k)
     mode = (k / "modes/my-feed/mode.yaml").read_text()
     assert "feed." not in mode and "feed-lead" not in mode and "maxPosts:" not in mode
-    assert "coordinator: briefing-lead" in mode and 'maxItems: "$in.maxPosts"' in mode
+    assert "coordinator: lead" in mode and "feed-analyst: my-env" not in mode and "analyst: my-env" in mode
+    assert 'maxItems: "$in.maxPosts"' in mode
     assert "items.coverage/v1" in (k / "modes/my-feed/types/Answer.schema.json").read_text()
     kit = model.Kit(k)
     assert [w for w in lint.warnings(kit) if "deprecated" in w] == [] and lint.run(kit=kit) == []

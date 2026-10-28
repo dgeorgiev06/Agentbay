@@ -226,9 +226,9 @@ def test_unused_role_is_kept_when_the_ledger_used_it():
     k = kit_copy()
     try:
         import yaml
-        (k / f"roles/{name}.yaml").write_text(yaml.safe_dump({
+        (k / f"framework/roles/{name}.yaml").write_text(yaml.safe_dump({
             "apiVersion": "agentbay/v2", "kind": "Role", "metadata": {"name": name, "description": "never placed"},
-            "spec": {"agent": "analyst", "prompt": "Never placed in any mode; exists to test the unused detector.", "doneWhen": ["x"], "uses": []}}))
+            "spec": {"tier": "fast", "prompt": "Never placed in any mode; exists to test the unused detector.", "doneWhen": ["x"]}}))
         g = graph.build(k, k).as_dict()
         a = da.Artifacts(files=graph.files(k), text=lambda p: (k / p).read_text(), graph=g)
         assert f"role:{name}" in [x["detector"]["key"] for x in da.unused(a, da.thresholds({}))]
@@ -287,7 +287,7 @@ def test_conformance_checks_on_a_kit_copy():
         mode.write_text(mode.read_text().replace("    spendUsd: 5\n", ""))
         base_mode = k / "modes/briefing/mode.yaml"
         base_mode.write_text(base_mode.read_text().replace("    spendUsd: 5          # dollar cap enforced by the dispatcher (C-6 spend exemption for sync)\n", "")
-                             .replace("      review: { role: reviewer, when: always }\n      schedule: daily", "      schedule: daily"))
+                             .replace("      review: { role: reviewer, when: always, tier: balanced, effort: medium }\n      schedule: daily", "      schedule: daily"))
         res = {r["rule"]: r for r in conformance.run(k)}
         assert len(res["C-1"]["violations"]) == base["C-1"] + 1 and "fetch" in res["C-1"]["violations"][-1]["detail"]
         assert any("'Bash'" in v["detail"] for v in res["C-4"]["violations"])

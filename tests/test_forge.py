@@ -30,16 +30,15 @@ def test_bay_mode_new_is_lint_clean_and_resolves():
 
 def test_feature_role_env_connector_scaffolds_are_lint_clean():
     k = kit_copy()
-    scaffold.create(k, "feature", "weekly", target="feed-briefing", role="briefing-analyst",
+    scaffold.create(k, "feature", "weekly", target="feed-briefing", role="analyst",
                     effects=["read"], intent="Weekly roundup")
-    scaffold.create(k, "role", "summarizer", intent="Summarizes things")
     scaffold.create(k, "env", "sandbox", intent="A sandbox")
     res = scaffold.create(k, "connector", "bsky", implements="items.source/v1", intent="Bluesky timeline")
     assert "connectors/bsky/tests/test_bsky.py" in res["files"]
     assert lint.run(k) == [], lint.run(k)
     s = model.resolve(model.Kit(k))
     wk = s.modes["feed-briefing"].features["weekly"]
-    assert wk.review is None and [st.role for st in wk.steps] == ["briefing-analyst"]   # read-only: review off by default
+    assert wk.review is None and [st.role for st in wk.steps] == ["analyst"]   # read-only: review off by default
     # write effects -> review on by default
     scaffold.create(k, "feature", "export", target="delivery", role="builder", effects=["read", "write"],
                     intent="Export a file")
@@ -53,7 +52,7 @@ def test_feature_role_env_connector_scaffolds_are_lint_clean():
 
 def test_adding_a_source_is_connector_plus_one_binding():
     k = kit_copy()
-    before = {p: (k / p).read_text() for p in ("modes/feed-briefing/mode.yaml", "roles/briefing-analyst.yaml")}
+    before = {p: (k / p).read_text() for p in ("modes/feed-briefing/mode.yaml", "framework/roles/analyst.yaml")}
     scaffold.create(k, "connector", "bsky", implements="items.source/v1", intent="Bluesky timeline")
     edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["bind"].update({"items.source/v1": ["x-api", "bsky"]}))
     edit_yaml(k / "connectors/bsky/connector.yaml", lambda d: d["spec"]["needs"].update({"network": ["api.x.com"]}))
@@ -64,20 +63,25 @@ def test_adding_a_source_is_connector_plus_one_binding():
 
 def test_scaffold_refuses_framework_names_and_overwrites():
     k = kit_copy()
-    for kind, name in (("mode", "forge"), ("role", "reviewer"), ("env", "workspace")):
+    for kind, name in (("mode", "forge"), ("env", "workspace")):
         try:
             scaffold.create(k, kind, name)
             raise AssertionError("expected ScaffoldError")
         except scaffold.ScaffoldError as e:
             assert "framework name" in str(e)
     try:
+        scaffold.create(k, "role", "summarizer")                 # roles are framework-level since 0.4
+        raise AssertionError("expected ScaffoldError")
+    except scaffold.ScaffoldError as e:
+        assert "roles are framework-level" in str(e) and "forge.extend" in str(e)
+    try:
         scaffold.create(k, "feature", "xx", target="forge")
         raise AssertionError("expected ScaffoldError")
     except scaffold.ScaffoldError as e:
         assert "forge.extend" in str(e)
-    scaffold.create(k, "role", "dup")
+    scaffold.create(k, "env", "dup")
     try:
-        scaffold.create(k, "role", "dup")
+        scaffold.create(k, "env", "dup")
         raise AssertionError("expected ScaffoldError")
     except scaffold.ScaffoldError as e:
         assert "never overwrite" in str(e)
@@ -86,16 +90,22 @@ def test_scaffold_refuses_framework_names_and_overwrites():
 def test_forge_create_runs_scaffold_then_plans_author_builder():
     k = kit_copy()
     other = project()                       # forge refuses a project that is not the agentbay checkout
-    r = dispatch.Dispatcher(system(other, k), other).call("forge.create", {"kind": "role", "name": "x1", "intent": "xxxxx"})
+    r = dispatch.Dispatcher(system(other, k), other).call("forge.create", {"kind": "env", "name": "x1", "intent": "xxxxx"})
     assert r["status"] == "failed" and "forge writes the agentbay checkout" in r["error"]
-    assert not (k / "roles/x1.yaml").exists() and not (other / "roles").exists()
+    assert not (k / "envs/x1.yaml").exists() and not (other / "envs").exists()
     d = dispatch.Dispatcher(system(k, k), k)   # the checkout is the project: paths resolve inside the kit
-    r = d.call("forge.create", {"kind": "role", "name": "digest-writer", "intent": "Writes digests"})
-    assert r["status"] == "needs-agent" and r["next"]["runAs"] == "subagent_type=builder--author"
-    assert r["next"]["previous"]["scaffold"]["files"] == ["roles/digest-writer.yaml"]
-    assert (k / "roles/digest-writer.yaml").exists()
+    err = None
+    try:
+        d.call("forge.create", {"kind": "role", "name": "digest-writer", "intent": "Writes digests"})
+    except dispatch.CallError as e:
+        err = str(e)
+    assert err and "kind" in err                                            # roles are framework-level: no kind
+    r = d.call("forge.create", {"kind": "env", "name": "digest-env", "intent": "Where digests are written"})
+    assert r["status"] == "needs-agent" and r["next"]["runAs"] == "subagent_type=builder--forge--local-authoring"
+    assert r["next"]["previous"]["scaffold"]["files"] == ["envs/digest-env.yaml"]
+    assert (k / "envs/digest-env.yaml").exists()
     ids = {x["id"] for x in r["next"]["rules"]}
-    assert "R-6" in ids and "R-3" not in ids and "R-7" not in ids          # kind-scoped rules
+    assert "R-8" in ids and "R-3" not in ids and "R-6" not in ids and "R-7" not in ids     # kind-scoped rules
 
 
 def test_migrate_dry_run_produces_diff_and_changes_nothing():
@@ -109,17 +119,15 @@ def test_migrate_dry_run_produces_diff_and_changes_nothing():
     h = digest_tree(k)
     plan = migrate.plan(k)
     assert digest_tree(k) == h
-    assert "+++ b/roles/writer.yaml" in plan["diff"] and "--- a/specs/writer.yaml" in plan["diff"]
-    assert {(c["op"], c["path"]) for c in plan["changes"]} == {
-        ("create", "roles/writer.yaml"), ("delete", "specs/writer.yaml"), ("delete", "layers/code")}
+    assert {(c["op"], c["path"]) for c in plan["changes"]} == {("delete", "layers/code")}
+    assert any("specs/writer.yaml" in n and "roles are framework-level" in n for n in plan["notes"])
     r = subprocess.run([sys.executable, str(k / "bay/cli.py"), "migrate"], capture_output=True, text=True)
     assert r.returncode == 0 and "dry run: nothing written" in r.stdout and digest_tree(k) == h
     # forge.migrate without confirm is also a dry run
     out = dispatch.Dispatcher(system(k, k), k).call("forge.migrate", {})
     assert out["status"] == "needs-agent" and out["next"]["kind"] == "review" and digest_tree(k) == h
     res = migrate.apply(k)
-    assert res["applied"] == 3 and not (k / "specs").exists() and not (k / "layers").exists()
-    assert model.Kit(k).get("Role", "writer").spec["uses"] == ["workspace.read/v1", "workspace.write/v1"]
+    assert res["applied"] == 1 and (k / "specs/writer.yaml").exists() and not (k / "layers").exists()
     assert migrate.plan(k)["changes"] == []
 
 
@@ -137,4 +145,4 @@ def test_feature_new_defaults_to_first_worker_role():
     k = kit_copy()
     scaffold.create(k, "feature", "weekly", target="feed-briefing", effects=["read"])
     s = model.resolve(model.Kit(k))
-    assert [st.role for st in s.modes["feed-briefing"].features["weekly"].steps] == ["briefing-analyst"]
+    assert [st.role for st in s.modes["feed-briefing"].features["weekly"].steps] == ["analyst"]

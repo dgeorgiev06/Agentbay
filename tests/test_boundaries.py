@@ -30,14 +30,14 @@ def hook(p, agent, command):
 def test_role_shim_reads_only_its_grants_and_cannot_write_spend_or_delete():
     p = built()
     try:
-        shim = p / ".agentbay/roles/briefing-analyst/use"
-        assert shim.exists() and not (p / ".agentbay/roles/reviewer/use").exists()   # no grants -> no shim
+        shim = p / ".agentbay/roles/analyst--feed-briefing/use"
+        assert shim.exists() and not (p / ".agentbay/roles/reviewer--delivery/use").exists()   # no grants -> no shim
         sh(p, str(p / ".agentbay/bay"), "call", "feed-briefing.sync", "{}")
         r = sh(p, str(shim), "items.store/v1.query", '{"author": "lido"}')
         assert r.returncode == 0 and {x["author"]["handle"] for x in json.loads(r.stdout)["items"]} == {"lido"}
         reads = [json.loads(x) for x in (p / ".agentbay/ledger/events.jsonl").read_text().splitlines()
                  if '"data.read"' in x]
-        assert reads and reads[-1]["role"] == "briefing-analyst" and reads[-1]["summary"] == "items.store/v1.query"
+        assert reads and reads[-1]["role"] == "analyst" and reads[-1]["mode"] == "feed-briefing" and reads[-1]["summary"] == "items.store/v1.query"
         for ep in ("items.store/v1.sync", "items.store/v1.prune", "items.source/v1.fetch"):
             r = sh(p, str(shim), ep, "{}")
             assert r.returncode != 0 and "not granted" in r.stderr, (ep, r.stderr)
@@ -50,7 +50,7 @@ def test_role_shim_reads_only_its_grants_and_cannot_write_spend_or_delete():
 def test_role_shim_cannot_impersonate_another_role():
     p = built()
     try:
-        shim = str(p / ".agentbay/roles/briefing-analyst/use")
+        shim = str(p / ".agentbay/roles/analyst--feed-briefing/use")
         for argv in (["--role", "briefing-lead", "items.store/v1.status", "{}"],
                      ["items.store/v1.status", "{}", "--role", "briefing-lead"],
                      ["--role=briefing-lead", "items.store/v1.status"]):
@@ -67,24 +67,24 @@ def test_role_shim_cannot_impersonate_another_role():
 def test_guard_scopes_bash_per_subagent():
     p = built()
     try:
-        shim = ".agentbay/roles/briefing-analyst/use"
-        ok = [("briefing-analyst", f"{shim} items.store/v1.query '{{\"text\": \"x\"}}'"),
-              ("briefing-analyst", f"{p}/{shim} items.store/v1.query '{{}}'"),
-              ("reviewer", "git diff HEAD~1"), ("builder", "git status")]
+        shim = ".agentbay/roles/analyst--feed-briefing/use"
+        ok = [("analyst--feed-briefing", f"{shim} items.store/v1.query '{{\"text\": \"x\"}}'"),
+              ("analyst--feed-briefing", f"{p}/{shim} items.store/v1.query '{{}}'"),
+              ("reviewer--delivery", "git diff HEAD~1"), ("builder--delivery", "git status")]
         for agent, cmd in ok:
             r = hook(p, agent, cmd)
             assert r.returncode == 0 and "deny" not in r.stdout, (agent, cmd, r.stdout)
             assert ('"allow"' in r.stdout) == ("/use " in cmd), (agent, cmd)   # only the own shim is auto-allowed
-        bad = [("briefing-analyst", ".agentbay/bay call feed-briefing.prune '{}'"),
-               ("briefing-analyst", ".agentbay/roles/briefing-lead/use items.store/v1.status '{}'"),
-               ("briefing-analyst", f"python3 {KIT}/bay/cli.py call feed-briefing.sync '{{}}'"),
-               ("briefing-analyst", f"{shim} items.store/v1.query '{{}}'; .agentbay/bay call feed-briefing.sync"),
-               ("briefing-analyst", f"{shim} items.store/v1.query \"$(cat .agentbay/data/feeds/state.json)\""),
-               ("briefing-analyst", f"{shim} items.store/v1.query '{{}}' > /tmp/x"),
-               ("briefing-analyst", "cat .agentbay/data/feeds/feed-briefing/corpus.db"),
-               ("briefing-analyst", "security find-generic-password -s agentbay -a X_REFRESH_TOKEN -w"),
-               ("reviewer", "git push origin main"), ("reviewer", "git diff && rm -rf ."),
-               ("builder", ".agentbay/bay secret set X_REFRESH_TOKEN"),
+        bad = [("analyst--feed-briefing", ".agentbay/bay call feed-briefing.prune '{}'"),
+               ("analyst--feed-briefing", ".agentbay/roles/lead--feed-briefing/use items.store/v1.status '{}'"),
+               ("analyst--feed-briefing", f"python3 {KIT}/bay/cli.py call feed-briefing.sync '{{}}'"),
+               ("analyst--feed-briefing", f"{shim} items.store/v1.query '{{}}'; .agentbay/bay call feed-briefing.sync"),
+               ("analyst--feed-briefing", f"{shim} items.store/v1.query \"$(cat .agentbay/data/feeds/state.json)\""),
+               ("analyst--feed-briefing", f"{shim} items.store/v1.query '{{}}' > /tmp/x"),
+               ("analyst--feed-briefing", "cat .agentbay/data/feeds/feed-briefing/corpus.db"),
+               ("analyst--feed-briefing", "security find-generic-password -s agentbay -a X_REFRESH_TOKEN -w"),
+               ("reviewer--delivery", "git push origin main"), ("reviewer--delivery", "git diff && rm -rf ."),
+               ("builder--delivery", ".agentbay/bay secret set X_REFRESH_TOKEN"),
                ("Explore", ".agentbay/bay call feed-briefing.sync '{}'")]   # non-agentbay subagent
         for agent, cmd in bad:
             r = hook(p, agent, cmd)
@@ -102,7 +102,7 @@ def test_guard_scopes_bash_per_subagent():
 def test_guard_fails_closed_for_subagents():
     p = tmpdir()
     try:
-        r = hook(p, "briefing-analyst", "ls")           # no guard.json -> deny, not allow
+        r = hook(p, "analyst--feed-briefing", "ls")           # no guard.json -> deny, not allow
         assert r.returncode == 2 and "guard error" in r.stderr
     finally:
         cleanup(p)
@@ -172,15 +172,15 @@ def tool(p, agent, tool_name, tool_input, agent_id="a1"):
 def test_builder_cannot_edit_guard_policy_or_shims_or_settings():
     p = built()
     try:
-        for path in (".agentbay/guard.json", ".agentbay/roles/briefing-analyst/use", ".agentbay/bay",
+        for path in (".agentbay/guard.json", ".agentbay/roles/analyst--feed-briefing/use", ".agentbay/bay",
                      ".claude/settings.json", ".claude/agents/builder.md", ".git/config",
                      f"{p}/.agentbay/guard.json", "src/../.agentbay/guard.json"):
             for t in ("Write", "Edit", "MultiEdit"):
-                d, r = tool(p, "builder", t, {"file_path": path, "content": "x"})
+                d, r = tool(p, "builder--delivery", t, {"file_path": path, "content": "x"})
                 assert d == "deny" and r.returncode == 2, (t, path)
-        d, _ = tool(p, "builder", "NotebookEdit", {"notebook_path": ".agentbay/x.ipynb", "new_source": "x"})
+        d, _ = tool(p, "builder--delivery", "NotebookEdit", {"notebook_path": ".agentbay/x.ipynb", "new_source": "x"})
         assert d == "deny"
-        d, _ = tool(p, "builder", "Write", {"file_path": "src/app.py", "content": "ok"})   # normal work still fine
+        d, _ = tool(p, "builder--delivery", "Write", {"file_path": "src/app.py", "content": "ok"})   # normal work still fine
         assert d == "pass"
         st = json.loads((p / ".claude/settings.json").read_text())
         assert {"Edit(/.agentbay/**)", "Edit(/.claude/**)"} <= set(st["permissions"]["deny"])   # floor for all
@@ -193,13 +193,13 @@ def test_store_is_not_reachable_with_file_tools():
     try:
         sh(p, str(p / ".agentbay/bay"), "call", "feed-briefing.sync", "{}")
         store = ".agentbay/data/feeds/feed-briefing/corpus.db"
-        for agent in ("briefing-analyst", "builder", "reviewer"):
+        for agent in ("analyst--feed-briefing", "builder", "reviewer"):
             assert tool(p, agent, "Read", {"file_path": store})[0] == "deny"
             assert tool(p, agent, "Write", {"file_path": store, "content": "{}"})[0] == "deny"
             assert tool(p, agent, "Grep", {"pattern": "x", "path": ".agentbay/data"})[0] == "deny"
             assert tool(p, agent, "Glob", {"pattern": ".agentbay/**/*.jsonl"})[0] == "deny"
             assert tool(p, agent, "Grep", {"pattern": "x", "glob": "**/.agentbay/**"})[0] == "deny"
-        assert tool(p, "briefing-analyst", "Read", {"file_path": "README.md"})[0] == "pass"
+        assert tool(p, "analyst--feed-briefing", "Read", {"file_path": "README.md"})[0] == "pass"
     finally:
         cleanup(p)
 
@@ -211,8 +211,8 @@ def test_path_normalization_and_symlinks():
         (p / "docs/link").symlink_to(p / ".agentbay")
         for path in ("docs/link/guard.json", "docs/../.agentbay/guard.json", "./.agentbay//guard.json",
                      f"{p}/docs/./../.agentbay/data/feeds/feed-briefing/corpus.db"):
-            assert tool(p, "builder", "Write", {"file_path": path, "content": "x"})[0] == "deny", path
-            assert tool(p, "builder", "Read", {"file_path": path})[0] == "deny", path
+            assert tool(p, "builder--delivery", "Write", {"file_path": path, "content": "x"})[0] == "deny", path
+            assert tool(p, "builder--delivery", "Read", {"file_path": path})[0] == "deny", path
     finally:
         cleanup(p)
 
@@ -221,9 +221,9 @@ def test_writes_limited_to_env_fs_write_and_kit_is_off_limits():
     p = built()
     try:
         # analyst's env (local-feeds-offline) writes only .agentbay/data/feeds, which is itself control plane
-        assert tool(p, "briefing-analyst", "Write", {"file_path": "notes.md", "content": "x"})[0] == "deny"
-        assert tool(p, "builder", "Write", {"file_path": str(KIT / "bay/guard.py"), "content": "x"})[0] == "deny"
-        assert tool(p, "builder", "Write", {"file_path": "/etc/x", "content": "x"})[0] == "deny"
+        assert tool(p, "analyst--feed-briefing", "Write", {"file_path": "notes.md", "content": "x"})[0] == "deny"
+        assert tool(p, "builder--delivery", "Write", {"file_path": str(KIT / "bay/guard.py"), "content": "x"})[0] == "deny"
+        assert tool(p, "builder--delivery", "Write", {"file_path": "/etc/x", "content": "x"})[0] == "deny"
     finally:
         cleanup(p)
 
@@ -234,9 +234,9 @@ def test_git_file_writing_and_exec_flags_are_refused():
         for cmd in ("git diff --output=.agentbay/guard.json", "git diff --output .agentbay/x", "git log --output=x",
                     "git diff --ext-diff", "git log -p --textconv", "git diff --no-index /etc/passwd x",
                     "git log --exec-path=/tmp", "git diff -- .agentbay/guard.json", "git add .claude/settings.json"):
-            d, r = tool(p, "reviewer", "Bash", {"command": cmd})
+            d, r = tool(p, "reviewer--delivery", "Bash", {"command": cmd})
             assert d == "deny" and r.returncode == 2, cmd
-        assert tool(p, "reviewer", "Bash", {"command": "git diff HEAD~1 -- src"})[0] == "pass"   # prompts
+        assert tool(p, "reviewer--delivery", "Bash", {"command": "git diff HEAD~1 -- src"})[0] == "pass"   # prompts
     finally:
         cleanup(p)
 
@@ -246,9 +246,9 @@ def test_guard_policy_tampering_does_not_reach_coordinator_commands():
     even with a tampered policy file, the session-wide deny rules still block the write path."""
     p = built()
     try:
-        d, _ = tool(p, "builder", "Edit", {"file_path": ".agentbay/guard.json", "old_string": "x", "new_string": "y"})
+        d, _ = tool(p, "builder--delivery", "Edit", {"file_path": ".agentbay/guard.json", "old_string": "x", "new_string": "y"})
         assert d == "deny"
-        assert tool(p, "builder", "Bash", {"command": ".agentbay/bay call feed-briefing.prune '{}'"})[0] == "deny"
+        assert tool(p, "builder--delivery", "Bash", {"command": ".agentbay/bay call feed-briefing.prune '{}'"})[0] == "deny"
     finally:
         cleanup(p)
 
@@ -257,7 +257,7 @@ def test_missing_agent_type_is_treated_as_an_unknown_subagent():
     p = built()
     try:
         for t, ti in (("Bash", {"command": ".agentbay/bay call feed-briefing.sync '{}'"}),
-                      ("Bash", {"command": "./.agentbay/roles/briefing-analyst/use items.store/v1.query '{}'"}),
+                      ("Bash", {"command": "./.agentbay/roles/analyst--feed-briefing/use items.store/v1.query '{}'"}),
                       ("Read", {"file_path": ".agentbay/data/feeds/feed-briefing/corpus.db"}),
                       ("Write", {"file_path": ".agentbay/guard.json", "content": "{}"})):
             assert tool(p, None, t, ti, agent_id="a9")[0] == "deny", (t, ti)
@@ -274,10 +274,10 @@ def test_missing_agent_type_is_treated_as_an_unknown_subagent():
 def test_role_shim_is_auto_allowed_and_takes_no_flags():
     p = built()
     try:
-        d, r = tool(p, "briefing-analyst", "Bash", {"command": ".agentbay/roles/briefing-analyst/use items.store/v1.query '{}'"})
+        d, r = tool(p, "analyst--feed-briefing", "Bash", {"command": ".agentbay/roles/analyst--feed-briefing/use items.store/v1.query '{}'"})
         assert d == "allow" and r.returncode == 0
-        assert tool(p, "briefing-analyst", "Bash",
-                    {"command": ".agentbay/roles/briefing-analyst/use --role briefing-lead items.store/v1.status '{}'"})[0] == "deny"
+        assert tool(p, "analyst--feed-briefing", "Bash",
+                    {"command": ".agentbay/roles/analyst--feed-briefing/use --role briefing-lead items.store/v1.status '{}'"})[0] == "deny"
     finally:
         cleanup(p)
 
@@ -289,11 +289,11 @@ def test_protected_kit_dirs_when_the_project_is_the_kit():
         get("claude-code").build(system(k, k), k, k)
         pol = json.loads((k / ".agentbay/guard.json").read_text())
         assert pol["protected"] == ["framework", "bay", "schemas"]
-        assert tool(k, "builder", "Write", {"file_path": "bay/guard.py", "content": "x"})[0] == "deny"
-        assert tool(k, "builder", "Write", {"file_path": "framework/roles/x.yaml", "content": "x"})[0] == "deny"
-        assert tool(k, "builder--author", "Write", {"file_path": "roles/x.yaml", "content": "x"})[0] == "pass"
-        assert tool(k, "builder--author", "Write", {"file_path": "bay.sh", "content": "x"})[0] == "deny"
-        assert tool(k, "builder--framework-builder", "Write", {"file_path": "bay/x.py", "content": "x"})[0] == "pass"
+        assert tool(k, "builder--delivery", "Write", {"file_path": "bay/guard.py", "content": "x"})[0] == "deny"
+        assert tool(k, "builder--delivery", "Write", {"file_path": "framework/roles/x.yaml", "content": "x"})[0] == "deny"
+        assert tool(k, "builder--forge--local-authoring", "Write", {"file_path": "roles/x.yaml", "content": "x"})[0] == "pass"
+        assert tool(k, "builder--forge--local-authoring", "Write", {"file_path": "bay.sh", "content": "x"})[0] == "deny"
+        assert tool(k, "builder--forge--framework-dev", "Write", {"file_path": "bay/x.py", "content": "x"})[0] == "pass"
         st = json.loads((k / ".claude/settings.json").read_text())
         assert not any(d.startswith("Edit(//") for d in st["permissions"]["deny"])   # kit inside project
         from bay import lint, model
@@ -337,12 +337,12 @@ def test_b1_case_variants_on_case_insensitive_filesystem():
         g = guard_for(p, ci=True)                     # simulate macOS (APFS default)
         for path in (".AGENTBAY/guard.json", ".Agentbay/roles/briefing-analyst/use", ".CLAUDE/settings.json",
                      ".Git/config", "src/.GIT/hooks/pre-commit", "claude.MD", ".MCP.json", ".ENV.local"):
-            assert decide(g, "builder", "Write", {"file_path": path, "content": "x"}) == "deny", path
-        assert decide(g, "briefing-analyst", "Read", {"file_path": ".AgentBay/data/feeds/feed-briefing/corpus.db"}) == "deny"
-        assert decide(g, "builder", "Glob", {"pattern": ".AGENT*/**"}) == "deny"
-        assert decide(g, "builder", "Write", {"file_path": "src/app.py", "content": "x"}) == "pass"
+            assert decide(g, "builder--delivery", "Write", {"file_path": path, "content": "x"}) == "deny", path
+        assert decide(g, "analyst--feed-briefing", "Read", {"file_path": ".AgentBay/data/feeds/feed-briefing/corpus.db"}) == "deny"
+        assert decide(g, "builder--delivery", "Glob", {"pattern": ".AGENT*/**"}) == "deny"
+        assert decide(g, "builder--delivery", "Write", {"file_path": "src/app.py", "content": "x"}) == "pass"
         g = guard_for(p, ci=False)                    # case-sensitive disk: a different, harmless directory
-        assert decide(g, "builder", "Write", {"file_path": ".AGENTBAY/x.txt", "content": "x"}) == "pass"
+        assert decide(g, "builder--delivery", "Write", {"file_path": ".AGENTBAY/x.txt", "content": "x"}) == "pass"
     finally:
         cleanup(p)
 
@@ -366,7 +366,7 @@ def test_b2_forge_extend_installed_only_in_the_agentbay_checkout():
     p = built()
     k = kit_copy()
     try:
-        assert not (p / ".claude/agents/builder--framework-builder.md").exists()
+        assert not (p / ".claude/agents/builder--forge--framework-dev.md").exists()
         cat = json.loads((p / ".agentbay/catalog.json").read_text())
         assert "forge.extend" not in {e["name"] for m in cat["modes"] for e in m["endpoints"]}
         assert "forge.extend" not in (p / ".agentbay/COORDINATOR.md").read_text()
@@ -376,7 +376,7 @@ def test_b2_forge_extend_installed_only_in_the_agentbay_checkout():
         except dispatch.CallError as e:
             assert "installed only when the project is the agentbay checkout" in str(e)
         get("claude-code").build(system(k, k), k, k)
-        assert (k / ".claude/agents/builder--framework-builder.md").exists()
+        assert (k / ".claude/agents/builder--forge--framework-dev.md").exists()
     finally:
         cleanup(p)
         cleanup(k)
@@ -386,15 +386,15 @@ def test_safety_rule_only_the_own_shim_is_auto_allowed():
     p = built()
     try:
         g = guard_for(p)
-        assert decide(g, "briefing-analyst", "Bash", {"command": ".agentbay/roles/briefing-analyst/use items.store/v1.query '{}'"}) == "allow"
-        for agent, cmd in (("reviewer", "git status"), ("builder", "git add src/a.py"), ("reviewer", "git diff")):
+        assert decide(g, "analyst--feed-briefing", "Bash", {"command": ".agentbay/roles/analyst--feed-briefing/use items.store/v1.query '{}'"}) == "allow"
+        for agent, cmd in (("reviewer--delivery", "git status"), ("builder--delivery", "git add src/a.py"), ("reviewer--delivery", "git diff")):
             assert decide(g, agent, "Bash", {"command": cmd}) == "pass", cmd
         from helpers import kit_copy
         k = kit_copy()
         get("claude-code").build(system(k, k), k, k)
         gk = guard_for(k)
-        for agent, cmd in (("builder--framework-builder", "python3 tests/run.py"),
-                           ("builder--framework-builder", "./bay.sh validate"), ("builder--author", "./bay.sh lint")):
+        for agent, cmd in (("builder--forge--framework-dev", "python3 tests/run.py"),
+                           ("builder--forge--framework-dev", "./bay.sh validate"), ("builder--forge--local-authoring", "./bay.sh lint")):
             assert decide(gk, agent, "Bash", {"command": cmd}) == "pass", cmd     # code never auto-allowed
         st = json.loads((p / ".claude/settings.json").read_text())
         assert not any(c in a for a in st["permissions"]["allow"] for c in ("bay call", "bay submit"))
@@ -409,13 +409,13 @@ def test_sa_grep_glob_patterns_against_control_plane_probes():
         g = guard_for(p)
         for ti in ({"pattern": ".agent*/**"}, {"pattern": "**/.agentbay/**/*.jsonl"}, {"pattern": ".claude/*.json"},
                    {"pattern": "{.agentbay,src}/**"}):
-            assert decide(g, "builder", "Glob", ti) == "deny", ti
+            assert decide(g, "builder--delivery", "Glob", ti) == "deny", ti
             assert decide(g, None, "Glob", ti) == "deny", ti                  # unknown subagents too
-        assert decide(g, "builder", "Grep", {"pattern": "x", "glob": ".agentbay/**"}) == "deny"
-        assert decide(g, "builder", "Glob", {"pattern": ".*"}) == "deny"       # dot-glob at the project root
-        assert decide(g, "builder", "Glob", {"pattern": "../.agentbay/*", "path": "src"}) == "deny"
+        assert decide(g, "builder--delivery", "Grep", {"pattern": "x", "glob": ".agentbay/**"}) == "deny"
+        assert decide(g, "builder--delivery", "Glob", {"pattern": ".*"}) == "deny"       # dot-glob at the project root
+        assert decide(g, "builder--delivery", "Glob", {"pattern": "../.agentbay/*", "path": "src"}) == "deny"
         for ti in ({"pattern": "**/*.md"}, {"pattern": "src/**/*.py"}):
-            assert decide(g, "builder", "Glob", ti) == "pass", ti
+            assert decide(g, "builder--delivery", "Glob", ti) == "pass", ti
     finally:
         cleanup(p)
 
@@ -442,9 +442,9 @@ def test_sd_never_write_list_for_all_subagents():
         for path in ("CLAUDE.md", "docs/CLAUDE.md", "CLAUDE.local.md", ".mcp.json", "agentbay.config.yaml", ".envrc",
                      ".env", ".env.production", ".vscode/settings.json", ".idea/x.xml", ".github/workflows/ci.yml",
                      "Makefile", "bay.sh", "vendor/lib/.git/config", "src/.git"):
-            for agent in ("builder", None):
+            for agent in ("builder--delivery", None):
                 assert decide(g, agent, "Write", {"file_path": path, "content": "x"}) == "deny", (agent, path)
-        assert decide(g, "builder", "Write", {"file_path": ".github/README.md", "content": "x"}) == "pass"
+        assert decide(g, "builder--delivery", "Write", {"file_path": ".github/README.md", "content": "x"}) == "pass"
     finally:
         cleanup(p)
 
@@ -456,7 +456,7 @@ def test_se_more_git_flags_and_flag_values_are_path_checked():
         for cmd in ("git diff --pathspec-from-file=list.txt", "git log -Oorder.txt", "git diff -O order",
                     "git diff --open-files-in-pager=vi", "git log --format=x --since=.agentbay/x",
                     "git diff --src-prefix=.claude/x"):
-            assert decide(g, "reviewer", "Bash", {"command": cmd}) == "deny", cmd
+            assert decide(g, "reviewer--delivery", "Bash", {"command": cmd}) == "deny", cmd
     finally:
         cleanup(p)
 
@@ -491,16 +491,16 @@ def test_n3_worktree_add_paths_and_no_writes_without_write_tools():
     try:
         get("claude-code").build(system(k, k), k, k)
         pol = json.loads((k / ".agentbay/guard.json").read_text())
-        assert pol["subagents"]["reviewer"]["write"] == [] and pol["subagents"]["briefing-analyst"]["write"] == []
-        assert pol["subagents"]["builder"]["write"] == ["."]
+        assert pol["subagents"]["reviewer--delivery"]["write"] == [] and pol["subagents"]["analyst--feed-briefing"]["write"] == []
+        assert pol["subagents"]["builder--delivery"]["write"] == ["."]
         g = guard_for(k)
-        agent = "builder--framework-builder"
+        agent = "builder--forge--framework-dev"
         g.policy["subagents"][agent]["clis"].append("git worktree")      # as if the env granted it
         for cmd in ("git worktree add /tmp/wt", "git worktree add ../outside", "git worktree add .agentbay/wt",
                     "git worktree add -b x .claude/wt"):
             assert decide(g, agent, "Bash", {"command": cmd}) == "deny", cmd
         assert decide(g, agent, "Bash", {"command": "git worktree add -b feat bay/wt-feat"}) == "pass"
-        assert decide(g, "reviewer", "Write", {"file_path": "notes.md", "content": "x"}) == "deny"
+        assert decide(g, "reviewer--delivery", "Write", {"file_path": "notes.md", "content": "x"}) == "deny"
     finally:
         cleanup(k)
 
@@ -511,7 +511,7 @@ def test_n4_agent_type_without_agent_id_is_the_main_thread():
         g = guard_for(p)
         assert decide(g, "some-agent", "Bash", {"command": ".agentbay/bay status"}, agent_id=None) == "pass"
         assert decide(g, "some-agent", "Bash", {"command": ".agentbay/bay status"}, agent_id="a7") == "deny"
-        assert decide(g, "briefing-analyst", "Read", {"file_path": ".agentbay/guard.json"}, agent_id=None) == "deny"
+        assert decide(g, "analyst--feed-briefing", "Read", {"file_path": ".agentbay/guard.json"}, agent_id=None) == "deny"
     finally:
         cleanup(p)
 
@@ -538,7 +538,7 @@ def test_use_shim_does_not_import_project_files():
     try:
         marker = p / "PWNED"
         (p / "yaml.py").write_text(f"open({str(marker)!r}, 'w').write('x')\n")
-        shim = p / ".agentbay/roles/briefing-analyst/use"
+        shim = p / ".agentbay/roles/analyst--feed-briefing/use"
         r = sh(p, str(shim), "items.store/v1.query", "{}")
         assert r.returncode == 0, r.stderr
         assert not marker.exists(), "shim imported a project-root module"
@@ -553,8 +553,8 @@ def test_shim_is_not_auto_allowed_in_the_agentbay_checkout():
     try:
         get("claude-code").build(system(k, k), k, k)
         assert json.loads((k / ".agentbay/guard.json").read_text())["autoAllowShim"] is False
-        cmd = ".agentbay/roles/briefing-analyst/use items.store/v1.query '{}'"
-        assert decide(guard_for(k), "briefing-analyst", "Bash", {"command": cmd}) == "pass"
+        cmd = ".agentbay/roles/analyst--feed-briefing/use items.store/v1.query '{}'"
+        assert decide(guard_for(k), "analyst--feed-briefing", "Bash", {"command": cmd}) == "pass"
     finally:
         cleanup(k)
 
@@ -572,8 +572,8 @@ def test_nested_kit_is_protected_and_shim_prompts():
         assert pol["autoAllowShim"] is False
         g = guard_for(p)
         for f in ("vendor/agentbay/bay/cli.py", "vendor/agentbay/bay/use_shim.py", "vendor/agentbay/connectors/fake/x.py"):
-            assert decide(g, "builder", "Write", {"file_path": f, "content": "x"}) == "deny", f
-        assert decide(g, "briefing-analyst", "Bash", {"command": ".agentbay/roles/briefing-analyst/use items.store/v1.query '{}'"}) == "pass"
+            assert decide(g, "builder--delivery", "Write", {"file_path": f, "content": "x"}) == "deny", f
+        assert decide(g, "analyst--feed-briefing", "Bash", {"command": ".agentbay/roles/analyst--feed-briefing/use items.store/v1.query '{}'"}) == "pass"
         st = json.loads((p / ".claude/settings.json").read_text())
         assert "Edit(/vendor/agentbay/**)" in st["permissions"]["deny"]
     finally:
@@ -586,6 +586,6 @@ def test_policy_without_auto_allow_key_prompts():
         pol = json.loads((p / ".agentbay/guard.json").read_text())
         pol.pop("autoAllowShim")
         g = Guard(pol, p)
-        assert decide(g, "briefing-analyst", "Bash", {"command": ".agentbay/roles/briefing-analyst/use items.store/v1.query '{}'"}) == "pass"
+        assert decide(g, "analyst--feed-briefing", "Bash", {"command": ".agentbay/roles/analyst--feed-briefing/use items.store/v1.query '{}'"}) == "pass"
     finally:
         cleanup(p)

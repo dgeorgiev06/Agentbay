@@ -65,7 +65,7 @@ def test_apply_preserves_state_and_the_next_sync_is_incremental():
                                           "lastSync": "2026-10-27T10:00:00Z", "selectors": ["home"]}}
     # the migrated store answers through the views, then syncs incrementally from the kept cursor
     D = dispatch.Dispatcher(system(p), p, clock=clock)
-    out = D.use("briefing-analyst", "items.store/v1.sql", {"sql": "SELECT id, likes FROM v_posts ORDER BY id"})
+    out = D.use("analyst--feed-briefing", "items.store/v1.sql", {"sql": "SELECT id, likes FROM v_posts ORDER BY id"})
     assert out["rows"] == [["x:3", 3], ["x:5", 5], ["x:6", 6]]
     seen = []
 
@@ -83,7 +83,7 @@ def test_apply_preserves_state_and_the_next_sync_is_incremental():
     assert r["status"] == "done" and r["output"]["added"] == 1 and r["output"]["rematched"] == 0
     assert seen[0]["since_id"] == "6" and "start_time" not in seen[0]
     assert r["output"]["budget"]["posts"] == 120 + r["output"]["billed"]
-    assert "x:4" not in {i["id"] for i in D.use("briefing-analyst", "items.store/v1.query", {})["items"]}
+    assert "x:4" not in {i["id"] for i in D.use("analyst--feed-briefing", "items.store/v1.query", {})["items"]}
 
 
 def test_forge_migrate_never_touches_project_data():
@@ -139,9 +139,9 @@ def test_duplicates_are_merged_and_counted_and_migrated_rows_are_scrubbed():
     D = dispatch.Dispatcher(system(p), p, clock=clock)
     for col in ("text", "author", "url", "title"):
         for f in ("hex({})", "upper({})"):
-            out = json.dumps(D.use("briefing-analyst", "items.store/v1.sql", {"sql": f"SELECT {f.format(col)} FROM v_items"}))
+            out = json.dumps(D.use("analyst--feed-briefing", "items.store/v1.sql", {"sql": f"SELECT {f.format(col)} FROM v_items"}))
             assert secret not in out and secret.upper() not in out and secret.encode().hex().upper() not in out
-    texts = D.use("briefing-analyst", "items.store/v1.sql", {"sql": "SELECT text FROM v_items WHERE id = 'x:3'"})
+    texts = D.use("analyst--feed-briefing", "items.store/v1.sql", {"sql": "SELECT text FROM v_items WHERE id = 'x:3'"})
     assert texts["rows"] == [["post 3 on staking"]]                        # the last duplicate wins
 
 
@@ -171,7 +171,7 @@ def test_migrated_store_already_holds_exactly_the_modes_scope():
     D = dispatch.Dispatcher(system(p), p, clock=clock)
     out = D.run_capability("feed-briefing", "items.store/v1.prune", {"olderThan": "3650d"})
     assert out["unbound"] == 0 and out["unmatched"] == 0 and out["remaining"] == 3
-    assert D.use("briefing-analyst", "items.store/v1.status", {})["stale"] is False
+    assert D.use("analyst--feed-briefing", "items.store/v1.status", {})["stale"] is False
 
 
 def test_wrong_shape_json_is_reported_with_file_line_and_fix_never_a_crash():

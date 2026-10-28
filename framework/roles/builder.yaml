@@ -6,8 +6,8 @@ metadata:
     Writes and edits code, docs and config and runs checks. Use for implementing a
     change, writing a script, drafting a file. Works in the project checkout itself.
 spec:
-  agent: worker
-  uses: [workspace.read/v1, workspace.write/v1]
+  tier: balanced
+  access: write           # the only role that edits files (tools capabilities with write effects)
   budget: { maxTurns: 60 }
   prompt: |
     You are the builder. Read the relevant code first, state your plan in one

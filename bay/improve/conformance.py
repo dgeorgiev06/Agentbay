@@ -1,7 +1,7 @@
 """framework/rules/conformance.yaml: load, validate and run its deterministic checks.
 
 Each check takes (kit, rule) and returns violations: {file, line, detail, text?, rewrite?}.
-Rules without a `check` are returned by `manual()` for the auditor (improve.audit) and reviewers
+Rules without a `check` are returned by `manual()` for the analyst (improve.audit) and reviewers
 (forge.create / forge.extend review plans).
 """
 from __future__ import annotations

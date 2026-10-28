@@ -1,6 +1,0 @@
-apiVersion: agentbay/v2
-kind: Agent
-metadata:
-  name: analyst
-  description: Subagent that reads a local corpus store through its role use shim (never the sources) and writes grounded analysis.
-spec: { runtime: claude-code-subagent, model: sonnet, effort: medium, env: local-feeds }

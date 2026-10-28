@@ -19,6 +19,5 @@ spec:
   fs:
     read: [".", "~/.claude/projects"]
     write: [.agentbay/data/improve]
-  models: [haiku, sonnet, opus, inherit]
   effects: [read, write]
   limits: { maxTurns: 40, maxMinutes: 20 }

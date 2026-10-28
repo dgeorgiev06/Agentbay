@@ -6,10 +6,8 @@ metadata:
     Researches a question on the web and in the repo and returns a sourced brief.
     Use for market scans, comparisons, standards and docs lookups, or "what is true about X". Read-only.
 spec:
-  agent: worker
-  uses: [workspace.read/v1, web.research/v1]
+  tier: balanced
   skills: [research-brief]
-  inference: { model: sonnet }
   budget: { maxTurns: 40 }
   prompt: |
     You are the researcher. Break the goal into 2-5 concrete questions, answer

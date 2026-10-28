@@ -2,7 +2,7 @@
 
 Nodes are agentbay concepts (modes, endpoints, roles, agents, envs, connectors, interfaces, data schemas,
 mode types, skills, mode config keys) and Python modules and definitions. A node's `refs` counts what
-references it: graph edges (mode -> role, role -> agent, env -> connector, ...), Python name/attribute uses
+references it: graph edges (mode -> role, mode -> env, mode -> agent profile, env -> connector, ...), Python name/attribute uses
 (AST) and mentions in code, config or playbooks. Docs (docs/, README) never count as references.
 """
 from __future__ import annotations
@@ -135,6 +135,7 @@ def build(root: Path, kit: Path | None = None) -> Graph:
 def _concepts(g: Graph, kit: Path) -> None:
     from .. import model
     k = model.Kit(kit)
+    profile = k.profile()[1]                  # the agent profile that runs every role
     rel = lambda p: Path(p).resolve().relative_to(kit.resolve()).as_posix()   # noqa: E731
     for name, d in k.docs["Interface"].items():
         g.node(f"interface:{name}", "interface", name, rel(d.path))
@@ -162,8 +163,11 @@ def _concepts(g: Graph, kit: Path) -> None:
             props = (json.loads((d.dir / cfg).read_text()).get("properties") or {})
             for key in props:
                 g.node(f"config:{name}.{key}", "config-key", key, rel(d.dir / cfg))
-        for rn in d.spec["roles"]:
+        for rn, env in (d.spec["roles"] if isinstance(d.spec["roles"], dict) else {}).items():
             g.edge(f"mode:{name}", f"role:{rn}", "role")
+            if env:
+                g.edge(f"mode:{name}", f"env:{env}", "role-env")
+        g.edge(f"mode:{name}", f"agent:{profile}", "agent")
         if d.spec.get("coordinator"):
             g.edge(f"mode:{name}", f"role:{d.spec['coordinator']}", "coordinator")
         for iface in d.spec.get("needs", []):
@@ -177,9 +181,11 @@ def _concepts(g: Graph, kit: Path) -> None:
                     g.edge(eid, f"type:{name}/{t}", "type")
             if (e.get("review") or {}).get("role"):
                 g.edge(eid, f"role:{e['review']['role']}", "review")
-            for rn, ag in (e.get("agents") or {}).items():
-                g.edge(eid, f"agent:{ag}", "places")
+            for env in (e.get("roles") or {}).values():
+                g.edge(eid, f"env:{env}", "role-env")
             for st in d.spec["workflows"].get(e["workflow"], []):
+                for env in (st.get("roles") or {}).values():
+                    g.edge(eid, f"env:{env}", "role-env")
                 if st.get("role"):
                     g.edge(eid, f"role:{st['role']}", "step")
                 if st.get("out"):
@@ -190,12 +196,6 @@ def _concepts(g: Graph, kit: Path) -> None:
                 for key in [n.split(".", 1)[1] for n in g.nodes if n.startswith(f"config:{name}.")]:
                     if f"$config.{key}" in json.dumps(d.spec["workflows"].get(e["workflow"], [])):
                         g.edge(eid, f"config:{name}.{key}", "reads-config")
-    for name, d in k.docs["Role"].items():
-        g.edge(f"role:{name}", f"agent:{d.spec['agent']}", "agent")
-        for u in d.spec.get("uses", []):
-            g.edge(f"role:{name}", f"interface:{model._split_use(u)[0]}", "uses")
-    for name, d in k.docs["Agent"].items():
-        g.edge(f"agent:{name}", f"env:{d.spec['env']}", "env")
     for name, d in k.docs["Environment"].items():
         if d.spec.get("substitutes"):
             g.edge(f"env:{name}", f"env:{d.spec['substitutes']}", "substitutes")

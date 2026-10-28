@@ -2,10 +2,11 @@ apiVersion: agentbay/v2
 kind: Interface
 metadata:
   name: forge.scaffold
-  description: Render a forge template (mode, feature, role, connector, env) into user space. Shared by `bay <kind> new` and forge.create.
+  description: Render a forge template (mode, feature, connector, env) into user space. Shared by `bay <kind> new` and forge.create.
 spec:
   version: 1
   binding: connector
+  dispatcherOnly: true        # code steps only: no role reads it, even in a mode that needs it
   endpoints:
     create:
       in:
@@ -13,7 +14,7 @@ spec:
         required: [kind, name]
         additionalProperties: false
         properties:
-          kind: { enum: [mode, feature, role, connector, env] }
+          kind: { enum: [mode, feature, connector, env] }
           name: { type: string, pattern: "^[a-z][a-z0-9-]{1,40}$" }
           target: { type: string, description: "kind=feature: the mode to add it to" }
           implements: { type: string, description: "kind=connector: interface, e.g. items.source/v1" }

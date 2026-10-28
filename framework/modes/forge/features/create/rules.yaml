@@ -6,7 +6,7 @@ rules:
   - { id: R-3, level: must_not, statement: "Name concrete tools, connectors or hosts in mode.yaml, playbooks or feature rules.", appliesTo: both, refs: [DOD-4], when: { kind: [mode, feature] } }
   - { id: R-4, level: must, statement: "Every feature declares in/out schemas, effects, playbook and rules in mode.yaml.", appliesTo: both, refs: [DOD-5], when: { kind: [mode, feature] } }
   - { id: R-5, level: must, statement: "Review defaults to when: always for features with write, spend, delete or external-write effects.", appliesTo: both, refs: [DOD-6], when: { kind: [mode, feature] } }
-  - { id: R-6, level: must, statement: "A role has a prompt, checkable doneWhen items, and uses only capabilities its agent's env binds.", appliesTo: both, when: { kind: role } }
+  - { id: R-6, level: must, statement: "A mode places only framework roles (lead, analyst, researcher, builder, reviewer), each in one env, and puts mode-specific behaviour in its playbooks, skills and rules.", appliesTo: both, when: { kind: [mode, feature] } }
   - { id: R-7, level: must, statement: "A connector implements an existing interface, does all HTTP through ctx.http, reads secrets only through ctx.secrets, and has an offline fake-HTTP test.", appliesTo: both, refs: [DOD-7], when: { kind: connector } }
   - { id: R-8, level: must, statement: "An env lists only the secrets, hosts and write paths its connectors need.", appliesTo: both, when: { kind: env } }
   - { id: R-9, level: must_not, statement: "Put secret values in any file.", appliesTo: both, check: no_secrets }

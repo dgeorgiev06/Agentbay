@@ -14,7 +14,7 @@ import yaml
 from . import checks, model, playbook as pbk, rules as rulesmod
 
 # Features whose review can never be turned off, with the settings they must use.
-MANDATORY_REVIEW = {"forge.extend": {"when": "always", "model": "opus", "effort": "high"}}
+MANDATORY_REVIEW = {"forge.extend": {"when": "always", "tier": "deep", "effort": "high"}}
 TOOL_NAMES = {"Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch", "Task", "Agent"}
 
 
@@ -112,30 +112,53 @@ def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[
     if must:
         if not rv or any(rv.get(k) != v for k, v in must.items()):
             out.append(f"{_where(mfile, ep_line)}: feature {target} must declare review "
-                       f"{{ role: <reviewer>, when: always, model: opus, effort: high }}; review is mandatory and cannot "
+                       f"{{ role: <reviewer>, when: always, tier: deep, effort: high }}; review is mandatory and cannot "
                        f"be disabled or weakened here")
     for rs in (rv or {}).get("rulesets", []):
         if not (kit.root / "framework" / "rules" / f"{rs}.yaml").exists():
             out.append(f"{_where(mfile, ep_line)}: feature {target} review names rule set '{rs}', but "
                        f"framework/rules/{rs}.yaml does not exist")
-    if rv and rv.get("when") == "always":
-        rn = rv.get("role")
-        if rn not in kit.docs["Role"]:
-            out.append(f"{_where(mfile, ep_line)}: feature {target} review role '{rn}' does not exist "
-                       f"(have: {', '.join(sorted(kit.docs['Role']))})")
-        elif rn not in md.spec["roles"]:
-            out.append(f"{_where(mfile, ep_line)}: feature {target} review role '{rn}' is not listed in "
-                       f"mode {md.name} roles {md.spec['roles']}")
+    if rv and rv.get("when") == "always" and rv.get("role") not in kit.docs["Role"]:
+        out.append(f"{_where(mfile, ep_line)}: feature {target} review role '{rv.get('role')}' does not exist "
+                   f"(have: {', '.join(sorted(kit.docs['Role']))})")
+    return out
+
+
+def _step_where(md: model.Doc, ep_name: str, sid: str | None) -> tuple[Path, int]:
+    """Where a workflow step of a feature is written (own mode.yaml, else the nearest ancestor's)."""
+    wf = (md.spec.get("endpoints") or {}).get(ep_name, {}).get("workflow")
+    rx = re.compile(rf"\bid:\s*{re.escape(sid or '')}(?![\w-])")
+    for d in md.dirs:
+        start = _entry_line(d / "mode.yaml", "workflows", wf) if wf and sid else None
+        if start is None:
+            continue
+        lines = (d / "mode.yaml").read_text(encoding="utf-8").splitlines()
+        for i in range(start + 1, len(lines)):
+            if lines[i].strip() and len(lines[i]) - len(lines[i].lstrip()) <= 4:
+                break
+            if rx.search(lines[i]):
+                return d / "mode.yaml", i + 1
+    return _ep_key_where(md, ep_name, "roles")
+
+
+def lint_role_envs(md: model.Doc, kit: model.Kit) -> list[str]:
+    """Each role of the mode is a framework role; each step's role is in the mode and has exactly one env
+    (step > feature > mode `roles:`)."""
+    out = []
+    roles = md.spec.get("roles") if isinstance(md.spec.get("roles"), dict) else {}
+    problems = [(None, None, f"mode {md.name}: `roles:` names unknown role '{rn}' (framework roles: "
+                             f"{', '.join(sorted(kit.docs['Role']))}); {model.USER_ROLE.split(' (`bay migrate`')[0]}")
+                for rn in roles if rn not in kit.docs["Role"]]
+    for ep_name, sid, msg in problems + model.role_env_problems(md):
+        if ep_name and sid:
+            where = _step_where(md, ep_name, sid)
+        elif ep_name:
+            where = _ep_key_where(md, ep_name, "roles")
         else:
-            gaps: list[str] = []
-            r = model.resolve_role(kit, rn, gaps, f"{target} review", set(), agent=(ep.get("agents") or {}).get(rn))
-            if r is not None:
-                env = kit.get("Environment", r.env)
-                mdl = model.step_inference(md, "review", r, rv).model
-                if mdl not in env.spec["models"]:
-                    gaps.append(f"review model '{mdl}' is not allowed by env {env.name} (allows: {', '.join(env.spec['models'])})")
-            for g in gaps:
-                out.append(f"{_where(mfile, ep_line)}: feature {target} review role {rn} cannot be placed: {g}")
+            where = next(((d / "mode.yaml", i + 1) for d in md.dirs
+                          for i, ln in enumerate((d / "mode.yaml").read_text(encoding="utf-8").splitlines())
+                          if re.match(r"^\s{2}roles:", ln)), (md.path, 1))
+        out.append(f"{_where(*where)}: {msg}")
     return out
 
 
@@ -203,6 +226,7 @@ def lint_mode(md: model.Doc, kit: model.Kit) -> list[str]:
             out.append(f"{_where(*_ep_where(md, ep_name))}: feature "
                        f"{md.name}.{ep_name} uses unknown workflow '{ep['workflow']}'")
         out += lint_feature(md, ep_name, ep, kit)
+    out += lint_role_envs(md, kit)
     for wf in s["workflows"]:
         if wf not in used:
             out.append(f"{_where(*_lineage_where(md, 'workflows', wf))}: workflow '{wf}' is not "
@@ -213,7 +237,7 @@ def lint_mode(md: model.Doc, kit: model.Kit) -> list[str]:
         # structured values only: drop comments, quoted prose and step ids
         code = re.sub(r"\bid:\s*[\w-]+", "", re.sub(r"\"[^\"]*\"", "", ln.split("#", 1)[0]))
         for c in kit.docs["Connector"]:
-            if re.search(rf"(?<![\w.-]){re.escape(c)}(?![\w-])", code):
+            if re.search(rf"(?<![\w.-]){re.escape(c)}(?![\w-]|\.[a-z][\w.-]*/v[0-9])", code):     # not a capability name
                 out.append(f"{_where(md.path, i)}: mode names connector '{c}'; modes name capabilities only "
                            f"(bind connectors in an env)")
         for t in TOOL_NAMES:

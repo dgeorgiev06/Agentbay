@@ -1,5 +1,5 @@
 {
-  "description": "Analyst/auditor output: findings the detectors did not produce. Each cites evidence that resolves.",
+  "description": "Analyst output: findings the detectors did not produce. Each cites evidence that resolves.",
   "type": "object",
   "required": [
     "findings"

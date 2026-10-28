@@ -44,8 +44,8 @@ def test_adapter_round_trip():
     assert any(d.startswith("Edit(//") and d.endswith("/**)") for d in st["permissions"]["deny"])   # kit outside
     agents = {p.stem for p in (proj / ".claude/agents").glob("*.md")}
     assert agents == {"researcher--delivery", "builder--delivery", "reviewer--delivery", "analyst--feed-briefing",
-                      "reviewer--feed-briefing", "builder--forge--local-authoring", "reviewer--forge",
-                      "analyst--improve", "reviewer--improve"}                         # no framework-dev here
+                      "reviewer--feed-briefing", "builder--forge", "reviewer--forge",
+                      "analyst--improve", "reviewer--improve"}       # no framework-dev here, so no --<env> suffix
     assert not any(a.startswith("lead--") for a in agents)                      # coordinators run in main thread
     fa = (proj / ".claude/agents/analyst--feed-briefing.md").read_text()
     assert "tools: Bash\n" in fa and ".agentbay/roles/analyst--feed-briefing/use items.store/v1.query" in fa

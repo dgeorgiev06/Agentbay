@@ -520,9 +520,9 @@ class System:
         mode, _, ep = FRAMEWORK_EXTENDER.partition(".")
         if mode not in self.modes or ep not in self.modes[mode].features:
             return self
-        m = copy.copy(self.modes[mode])
-        m.features = {k: v for k, v in m.features.items() if k != ep}
-        modes = {**self.modes, mode: m}
+        modes = copy.deepcopy(self.modes)              # unit names change below; the kit-wide system keeps its own
+        modes[mode].features = {k: v for k, v in modes[mode].features.items() if k != ep}
+        name_units(modes)                              # e.g. builder--forge, not builder--forge--local-authoring
         why = (f"{FRAMEWORK_EXTENDER} is installed only when the project is the agentbay checkout "
                f"(./bay.sh build --project {self.kit.root})")
         return System(self.kit, modes, self.roles, {**self.uninstalled, FRAMEWORK_EXTENDER: why}, self.warnings,
@@ -557,7 +557,6 @@ class System:
         return m, m.features[ep]
 
 
-# ----------------------------------------------------------------- resolution
 # ----------------------------------------------------------------- resolution
 def _bound(env: Doc, iface: str):
     return env.spec.get("bind", {}).get(iface)
@@ -816,20 +815,25 @@ class _Ctx:
             rules=rd.rules, uses=uses, inference=self.inference(rd.tier, rd.effort), tools=tools, clis=clis,
             bay_uses=bay_uses, skills={**mode_skills(md), **rd.skills}, isolation=rd.isolation, budget=budget)
 
-    def name_units(self) -> None:
-        """`<role>--<mode>`, plus `--<env>` when the mode runs that role in more than one env."""
-        envs: dict[tuple[str, str], set[str]] = {}
-        for rn, mode, env in self.units:
-            envs.setdefault((rn, mode), set()).add(env)
-        seen: dict[str, tuple] = {}
-        for (rn, mode, env), u in self.units.items():
-            if u is None:
-                continue
-            u.unit = f"{rn}--{mode}" + (f"--{env}" if len(envs[(rn, mode)]) > 1 else "")
-            if u.unit in seen and seen[u.unit] != (rn, mode, env):
-                self.gaps.append(f"two units are both named {u.unit} ({seen[u.unit]} and {(rn, mode, env)}); rename "
-                                 f"a role or mode so `<role>--<mode>` stays unique")
-            seen[u.unit] = (rn, mode, env)
+
+def name_units(modes: dict, gaps: list[str] | None = None) -> None:
+    """`<role>--<mode>`, plus `--<env>` when the mode runs that role in more than one env among its installed
+    features. Run by resolve and again by System.for_project."""
+    units: dict[int, ResolvedRole] = {}
+    for m in modes.values():
+        for u in [m.coordinator_unit, *(st.resolved for f in m.features.values() for st in f.steps)]:
+            if u is not None:
+                units[id(u)] = u
+    envs: dict[tuple[str, str], set[str]] = {}
+    for u in units.values():
+        envs.setdefault((u.name, u.mode), set()).add(u.env)
+    seen: dict[str, tuple] = {}
+    for u in units.values():
+        u.unit = f"{u.name}--{u.mode}" + (f"--{u.env}" if len(envs[(u.name, u.mode)]) > 1 else "")
+        if gaps is not None and u.unit in seen and seen[u.unit] != (u.name, u.mode, u.env):
+            gaps.append(f"two units are both named {u.unit} ({seen[u.unit]} and {(u.name, u.mode, u.env)}); rename "
+                        f"a role or mode so `<role>--<mode>` stays unique")
+        seen[u.unit] = (u.name, u.mode, u.env)
 
 
 def mode_skills(md: Doc) -> dict[str, Path]:
@@ -880,7 +884,7 @@ def resolve(kit: Kit) -> System:
         m = resolve_mode(kit, md, ctx, warnings)
         if m:
             modes[mname] = m
-    ctx.name_units()
+    name_units(modes, gaps)
     coord_rt = ((ctx.profile.spec.get("runtime") or {}).get("coordinator") if ctx.profile else None)
     if coord_rt and coord_rt != "claude-code-main" and any(m.coordinator for m in modes.values()):
         gaps.append(f"agent profile {ctx.agent}: coordinators run on runtime {coord_rt}, but mode coordinators need "

@@ -1,0 +1,6 @@
+apiVersion: agentbay/v2
+kind: Agent
+metadata:
+  name: critic
+  description: Independent reviewer subagent; read-only tools by its roles' uses.
+spec: { runtime: claude-code-subagent, model: opus, effort: high, env: workspace }

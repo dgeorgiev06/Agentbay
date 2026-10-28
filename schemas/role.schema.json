@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/v2/Role",
+  "title": "Role",
+  "description": "A responsibility inside mode workflows; reusable across modes. Prompt, definition of done, capabilities it uses, default agent.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "agentbay/v2" },
+    "kind": { "const": "Role" },
+    "metadata": {
+      "type": "object",
+      "required": ["name", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,40}$" },
+        "description": { "type": "string", "minLength": 10, "description": "When a coordinator should use this role. Written for the coordinator." },
+        "version": { "type": "string" }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": ["prompt", "doneWhen", "uses", "agent"],
+      "additionalProperties": false,
+      "properties": {
+        "prompt": { "type": "string", "minLength": 20 },
+        "doneWhen": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "uses": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z0-9.-]*/v[0-9]+(\\.[a-z][a-z0-9-]*)?$" }, "description": "<interface>/v<N> or <interface>/v<N>.<endpoint>" },
+        "agent": { "type": "string" },
+        "inference": { "$ref": "#/$defs/inference" },
+        "rules": { "type": "array", "items": { "type": "string" } },
+        "skills": { "type": "array", "items": { "type": "string" } },
+        "isolation": { "enum": ["none", "worktree"], "default": "none" },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "maxTurns": { "type": "integer", "minimum": 1 }, "maxMinutes": { "type": "integer", "minimum": 1 } }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "inference": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "model": { "enum": ["haiku", "sonnet", "opus", "inherit"] }, "effort": { "enum": ["low", "medium", "high"] } }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+apiVersion: agentbay/v2
+kind: Rules
+rules:
+  - { id: R-1, level: must, statement: "Search before stating anything about the current state of the world.", appliesTo: executor, refs: [DOD-2] }
+  - { id: R-2, level: must_not, statement: "Edit repository files.", appliesTo: executor }
+  - { id: R-3, level: should, statement: "Prefer primary sources over aggregators.", appliesTo: both }

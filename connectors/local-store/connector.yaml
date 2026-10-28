@@ -1,0 +1,12 @@
+apiVersion: agentbay/v2
+kind: Connector
+metadata:
+  name: local-store
+  description: feed.store/v1 on local JSONL files with per-source cursors, coverage and monthly budget usage.
+  version: 0.1.0
+spec:
+  implements: feed.store/v1
+  entry: store.py
+  needs:
+    fs: { write: [.agentbay/data/feeds] }
+    capabilities: [feed.source/v1]

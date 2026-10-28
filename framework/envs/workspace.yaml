@@ -1,0 +1,20 @@
+apiVersion: agentbay/v2
+kind: Environment
+metadata:
+  name: workspace
+  description: The project checkout. Read/edit files, narrow git commands, public web research. No secrets, no spend.
+spec:
+  bind:
+    workspace.read/v1: { tools: [Read, Glob, Grep] }
+    workspace.write/v1:
+      tools: [Edit, Write, Bash]
+      clis: [git status, git diff, git log, git add, git worktree]
+    git.read/v1:
+      tools: [Bash]
+      clis: [git status, git diff, git log, git show]
+    web.research/v1: { tools: [WebSearch, WebFetch] }
+  network: { allow: ["*"] }
+  fs: { read: ["."], write: ["."] }
+  models: [haiku, sonnet, opus, inherit]
+  effects: [read, write, network]
+  limits: { maxTurns: 60, maxMinutes: 30 }

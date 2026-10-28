@@ -1,0 +1,10 @@
+apiVersion: agentbay/v2
+kind: Interface
+metadata:
+  name: web.research
+  description: Search the web and fetch public pages.
+spec:
+  version: 1
+  binding: tools
+  endpoints:
+    search: { description: Web search and page fetch., effects: [network] }

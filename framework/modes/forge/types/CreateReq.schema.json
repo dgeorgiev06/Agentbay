@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "required": ["kind", "name", "intent"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "enum": ["mode", "feature", "role", "connector", "env"] },
+    "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,40}$" },
+    "intent": { "type": "string", "minLength": 5 },
+    "target": { "type": "string", "description": "kind=feature: existing user mode" },
+    "implements": { "type": "string", "description": "kind=connector: existing interface, e.g. feed.source/v1" }
+  },
+  "allOf": [
+    { "if": { "properties": { "kind": { "const": "feature" } } }, "then": { "required": ["target"] } },
+    { "if": { "properties": { "kind": { "const": "connector" } } }, "then": { "required": ["implements"] } }
+  ]
+}

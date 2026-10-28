@@ -1,0 +1,10 @@
+apiVersion: agentbay/v2
+kind: Interface
+metadata:
+  name: workspace.read
+  description: Read files in the project workspace. Satisfied by runtime tools bound in the environment.
+spec:
+  version: 1
+  binding: tools
+  endpoints:
+    read: { description: "Read, list and search files.", effects: [read] }

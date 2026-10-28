@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "feed-briefing settings (agentbay.config.yaml modes.feed-briefing)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "lookback": {
+      "type": "string",
+      "pattern": "^[0-9]+[mhdw]$",
+      "default": "3d",
+      "description": "Default window for sync, digest and ask (e.g. 3d, 12h). Capped by lookbackMax."
+    },
+    "retention": {
+      "type": "string",
+      "pattern": "^[0-9]+[mhdw]$",
+      "default": "30d",
+      "description": "prune drops posts older than this."
+    },
+    "maxPostsPerRun": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "monthlyPosts": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "spendUsd": {
+      "type": "number",
+      "minimum": 0
+    },
+    "costPerPostUsd": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Price per post a source reads (timeline + deletion checks), used for the spendUsd cap. Unset: bay/config.py COST_PER_POST_USD ($0.005); a connector may declare its own (fake: 0)."
+    }
+  }
+}

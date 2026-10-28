@@ -1,0 +1,32 @@
+# Copy to <your project>/agentbay.config.yaml. Every setting is optional.
+# Settings can only tighten limits: caps take the strictest of mode constraint,
+# this file and the env's hard limits.
+apiVersion: agentbay/v2
+
+# Where connector secrets come from. keychain (macOS, default) reads
+#   security find-generic-password -s agentbay -a <NAME> -w
+# env reads environment variables of the same name (use on Linux / CI).
+secrets: { provider: keychain }
+
+modes:
+  feed-briefing:                      # validated against modes/feed-briefing/config.schema.json
+    lookback: 3d                      # default window for sync/digest/ask (<= lookbackMax 30d)
+    retention: 30d                    # prune drops posts older than this
+    maxPostsPerRun: 200
+    monthlyPosts: 3000
+    spendUsd: 5
+    costPerPostUsd: 0.005             # price per post the source reads (timeline + deletion checks); spendUsd cap
+    # features:
+    #   digest:
+    #     extraRules: rules/digest-extra.yaml   # your rules stack on the feature's (strictest wins)
+
+connectors:
+  x-api:
+    userId: "1234567890"              # your numeric X user id (else looked up via /2/users/me)
+    exclude: [retweets, replies]      # X timeline filter
+  # fake:
+  #   fixture: fixtures/posts.json    # optional; built-in sample posts otherwise
+
+# Offline switch: run every agent of env local-feeds in the shipped offline env (fake source, no network,
+# $0). Delete this line for the real X timeline. Capabilities stay bound only in envs/<env>.yaml.
+envs: { local-feeds: local-feeds-offline }

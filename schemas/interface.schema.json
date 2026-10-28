@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/v2/Interface",
+  "title": "Capability interface",
+  "description": "Versioned contract: named endpoints with in/out JSON schemas and declared effects. File: interfaces/<name>.v<N>.yaml. binding=connector: implemented by connector code called by the dispatcher. binding=tools: satisfied by runtime tools (Read, Bash, ...) bound in an environment.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "agentbay/v2" },
+    "kind": { "const": "Interface" },
+    "metadata": {
+      "type": "object",
+      "required": ["name", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$" },
+        "description": { "type": "string" }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": ["version", "endpoints"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "minimum": 1 },
+        "binding": { "enum": ["connector", "tools"], "default": "connector" },
+        "endpoints": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "object",
+            "required": ["effects"],
+            "additionalProperties": false,
+            "properties": {
+              "description": { "type": "string" },
+              "in": { "type": "object", "description": "JSON Schema. {\"$ref\": \"feed.post/v1\"} pulls in a data schema." },
+              "out": { "type": "object" },
+              "effects": { "type": "array", "items": { "$ref": "#/$defs/effect" }, "uniqueItems": true }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": { "effect": { "enum": ["read", "write", "network", "spend", "delete"] } }
+}

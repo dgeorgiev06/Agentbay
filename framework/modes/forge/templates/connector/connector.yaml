@@ -1,0 +1,12 @@
+apiVersion: agentbay/v2
+kind: Connector
+metadata:
+  name: {{name}}
+  description: "{{intent}}"
+  version: 0.1.0
+spec:
+  implements: {{implements}}
+  entry: {{module}}.py
+{{source_fields}}  needs:
+    secrets: []          # e.g. [MY_API_TOKEN]; must also be in the env's secrets.allow
+    network: [{{host}}]  # must also be in the env's network.allow

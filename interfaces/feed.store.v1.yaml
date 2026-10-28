@@ -1,0 +1,85 @@
+apiVersion: agentbay/v2
+kind: Interface
+metadata:
+  name: feed.store
+  description: Local store of feed.post/v1 posts with per-source cursors, budget usage and coverage.
+spec:
+  version: 1
+  binding: connector
+  endpoints:
+    sync:
+      description: >-
+        Pull new posts from every connector bound to feed.source/v1, dedup by source:id,
+        enforce budget caps (stop and report when a cap would be exceeded), update cursors.
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          lookback: { type: string, pattern: "^[0-9]+[mhdw]$" }
+          maxPosts: { type: integer, minimum: 1 }
+      out:
+        type: object
+        required: [added, fetched, billed, sources, budget, coverage]
+        additionalProperties: false
+        properties:
+          added: { type: integer }
+          fetched: { type: integer, description: "Posts returned and kept." }
+          billed: { type: integer, description: "Posts read from sources (budget usage), including deletion checks." }
+          deleted: { type: integer, description: "Stored posts removed because the source no longer serves them." }
+          spentUsd: { type: number, minimum: 0, description: "What this run added to budget usage (per-source prices)." }
+          stopped: { type: [string, "null"], description: "Why sync stopped early (budget cap), or null." }
+          sources: { type: object }
+          budget: { type: object }
+          coverage: { $ref: feed.coverage/v1 }
+          warnings: { type: array, items: { type: string } }
+      effects: [network, spend, write]
+    query:
+      description: Read stored posts. Times are ISO-8601 or relative (3d, 12h).
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          since: { type: string }
+          until: { type: string }
+          author: { type: string }
+          text: { type: string }
+          limit: { type: integer, minimum: 1, maximum: 1000 }
+          ids: { type: array, items: { type: string }, description: "Exact source:id keys." }
+      out:
+        type: object
+        required: [posts, coverage]
+        additionalProperties: false
+        properties:
+          posts: { type: array, items: { $ref: feed.post/v1 } }
+          coverage: { $ref: feed.coverage/v1 }
+      effects: [read]
+    prune:
+      description: Drop posts older than the retention window and posts deleted at the source (honor-deletions).
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          olderThan: { type: string, pattern: "^[0-9]+[mhdw]$" }
+          deletedIds: { type: array, items: { type: string, description: "source:id" } }
+      out:
+        type: object
+        required: [removed, remaining]
+        additionalProperties: false
+        properties:
+          removed: { type: integer }
+          remaining: { type: integer }
+          deleted: { type: integer }
+      effects: [write, delete]
+    status:
+      description: Store freshness, coverage and budget usage, no network.
+      in: { type: object, additionalProperties: false }
+      out:
+        type: object
+        required: [lastSync, coverage, budget]
+        additionalProperties: false
+        properties:
+          lastSync: { type: [string, "null"] }
+          coverage: { $ref: feed.coverage/v1 }
+          budget: { type: object }
+          count: { type: integer }
+      effects: [read]

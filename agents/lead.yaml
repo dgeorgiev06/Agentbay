@@ -1,0 +1,6 @@
+apiVersion: agentbay/v2
+kind: Agent
+metadata:
+  name: lead
+  description: Main-thread executor for mode coordinators that work with feeds; code steps run in its env.
+spec: { runtime: claude-code-main, model: inherit, effort: medium, env: local-feeds }

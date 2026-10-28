@@ -1,0 +1,2 @@
+    {{name}}:
+      - { id: work, role: {{role}}, task: "TODO the job this step does" }

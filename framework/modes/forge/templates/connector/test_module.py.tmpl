@@ -1,0 +1,20 @@
+"""Offline test for {{name}}: a fake HTTP layer is injected, no network."""
+import sys
+from pathlib import Path
+
+KIT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(KIT))
+
+from bay.connect import Http, NetworkDenied, Response  # noqa: E402
+
+
+def test_{{module}}_allowlist_is_enforced_before_any_request():
+    calls = []
+    http = Http(["{{host}}"], lambda m, u, h, b: calls.append(u) or Response(200, {}, b"{}"), "{{name}}")
+    assert http.request("GET", "https://{{host}}/ping").status == 200
+    try:
+        http.request("GET", "https://elsewhere.example/ping")
+        raise AssertionError("expected NetworkDenied")
+    except NetworkDenied:
+        pass
+    assert calls == ["https://{{host}}/ping"]

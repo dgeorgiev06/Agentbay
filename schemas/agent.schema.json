@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/v2/Agent",
+  "title": "Agent",
+  "description": "Executor abstraction over Claude agents: runtime, default model/effort, bound environment.",
+  "type": "object",
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "const": "agentbay/v2"
+    },
+    "kind": {
+      "const": "Agent"
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "name",
+        "description"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,40}$"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": [
+        "runtime",
+        "model",
+        "env"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "runtime": {
+          "enum": [
+            "claude-code-main",
+            "claude-code-subagent",
+            "headless",
+            "cloud"
+          ],
+          "description": "claude-code-main: runs as a playbook in the Chief of Staff's main thread (coordinator roles); claude-code-subagent: generated .claude/agents/<role>.md."
+        },
+        "model": {
+          "enum": [
+            "haiku",
+            "sonnet",
+            "opus",
+            "inherit"
+          ]
+        },
+        "effort": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "default": "medium"
+        },
+        "env": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

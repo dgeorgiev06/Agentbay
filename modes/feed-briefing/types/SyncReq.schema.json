@@ -1,0 +1,8 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "lookback": { "type": "string", "pattern": "^[0-9]+[mhdw]$" },
+    "maxPosts": { "type": "integer", "minimum": 1 }
+  }
+}

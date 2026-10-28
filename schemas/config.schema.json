@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/v2/Config",
+  "title": "agentbay.config.yaml",
+  "description": "Per-project user settings. modes.<name> is validated against that mode's config schema; connectors.<name> against the connector's config schema. Settings can only tighten mode constraints and env limits (strictest wins). Capabilities are bound only in envs/<env>.yaml; there is no config-level binding override.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "const": "agentbay/v2"
+    },
+    "modes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object"
+      }
+    },
+    "connectors": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object"
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "enum": [
+            "keychain",
+            "env"
+          ]
+        }
+      }
+    },
+    "envs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Run agents of env A in env B instead: {A: B}. B must declare `substitutes: A`. Selects between tracked envs; it cannot bind capabilities."
+    }
+  }
+}

@@ -1,21 +1,88 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v1/LedgerEvent",
+  "$id": "agentbay/v2/LedgerEvent",
   "title": "LedgerEvent",
   "description": "One line in .agentbay/ledger/events.jsonl. Append-only. System state is a fold over these events.",
   "type": "object",
-  "required": ["v", "ts", "type", "runId"],
+  "required": [
+    "v",
+    "ts",
+    "type",
+    "runId"
+  ],
   "additionalProperties": false,
   "properties": {
-    "v": { "const": 1 },
-    "ts": { "type": "string", "format": "date-time" },
-    "type": { "enum": ["spawned", "completed", "failed", "reclaimed", "note"] },
-    "runId": { "type": "string", "description": "One agent instance. From the runtime (tool_use_id) or generated." },
-    "agent": { "type": "string" },
-    "taskId": { "type": "string" },
-    "sessionId": { "type": "string" },
-    "source": { "enum": ["hook", "coordinator", "cli"] },
-    "summary": { "type": "string" },
-    "data": { "type": "object" }
+    "v": {
+      "const": 1
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "type": {
+      "enum": [
+        "spawned",
+        "completed",
+        "failed",
+        "reclaimed",
+        "note",
+        "step.started",
+        "step.completed",
+        "step.failed",
+        "step.skipped",
+        "step.planned",
+        "call.completed",
+        "data.read"
+      ]
+    },
+    "runId": {
+      "type": "string",
+      "description": "One agent instance or one dispatcher step (<callId>:<step>)."
+    },
+    "agent": {
+      "type": "string"
+    },
+    "taskId": {
+      "type": "string"
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "hook",
+        "coordinator",
+        "cli",
+        "dispatcher"
+      ]
+    },
+    "summary": {
+      "type": "string"
+    },
+    "data": {
+      "type": "object"
+    },
+    "mode": {
+      "type": "string"
+    },
+    "endpoint": {
+      "type": "string"
+    },
+    "step": {
+      "type": "string"
+    },
+    "role": {
+      "type": "string"
+    },
+    "env": {
+      "type": "string"
+    },
+    "callId": {
+      "type": "string"
+    },
+    "cost": {
+      "type": "object",
+      "description": "e.g. {posts, usd}"
+    }
   }
 }

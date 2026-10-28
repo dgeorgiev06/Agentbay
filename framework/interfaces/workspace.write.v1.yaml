@@ -1,0 +1,11 @@
+apiVersion: agentbay/v2
+kind: Interface
+metadata:
+  name: workspace.write
+  description: Edit and create files and run narrow, pre-approved shell commands in the workspace.
+spec:
+  version: 1
+  binding: tools
+  endpoints:
+    edit: { description: Create and edit files., effects: [write] }
+    shell: { description: Run pre-approved command prefixes., effects: [write] }

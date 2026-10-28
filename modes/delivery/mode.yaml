@@ -1,0 +1,37 @@
+apiVersion: agentbay/v2
+kind: Mode
+metadata:
+  name: delivery
+  version: 0.2.0
+  description: General delegation (the v0.1 behaviour) - research a question, or build a change and have it independently reviewed.
+spec:
+  purpose: Turn a request into a sourced brief or a reviewed change, delegated to the right worker.
+  endpoints:
+    research:
+      description: Research a question and return a sourced brief.
+      workflow: research
+      in: Task
+      out: Result
+      effects: [read, network]
+      playbook: features/research/playbook.md
+      rules: features/research/rules.yaml
+      review: { role: reviewer, when: never }
+    build:
+      description: Implement a change in the repo, then review it independently.
+      workflow: build
+      in: Task
+      out: Result
+      effects: [read, write]
+      playbook: features/build/playbook.md
+      rules: features/build/rules.yaml
+      review: { role: reviewer, when: always }
+  roles: [researcher, builder, reviewer]
+  workflows:
+    research:
+      - { id: brief, role: researcher, out: Result, task: "Research the goal and return a Result with the brief." }
+    build:
+      - { id: implement, role: builder, out: Result, task: "Implement the deliverable and return a Result." }
+  inference:
+    default: { model: sonnet, effort: medium }
+  constraints:
+    policies: [one-deliverable-per-task, independent-review]

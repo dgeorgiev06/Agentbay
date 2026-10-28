@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/v2/Connector",
+  "title": "Connector",
+  "description": "Concrete code implementing one or more capability interfaces. Only the dispatcher instantiates connectors; agents never see them or their secrets.",
+  "type": "object",
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "const": "agentbay/v2"
+    },
+    "kind": {
+      "const": "Connector"
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "name",
+        "description"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,40}$"
+        },
+        "description": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": [
+        "implements",
+        "entry"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "implements": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1
+            }
+          ]
+        },
+        "entry": {
+          "type": "string",
+          "description": "Python file in the connector folder exposing create(ctx)."
+        },
+        "source": {
+          "type": "string",
+          "description": "Value for feed.post/v1 `source` written by this connector."
+        },
+        "needs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "secrets": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Secret names or globs (X_*). Each must be allowed by the environment."
+            },
+            "network": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Hosts. Each must be in env network.allow."
+            },
+            "fs": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "read": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "write": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "capabilities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Other interfaces this connector calls (bound in the same env)."
+            }
+          }
+        },
+        "config": {
+          "type": "object",
+          "description": "JSON Schema for agentbay.config.yaml connectors.<name>."
+        },
+        "window": {
+          "type": "string",
+          "pattern": "^[0-9]+[mhdw]$",
+          "description": "How far back the source API can reach (feed.source). Older history comes only from the store."
+        },
+        "costPerPostUsd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Price per post this source reads; overrides the mode's costPerPostUsd (e.g. 0 for offline sources)."
+        }
+      }
+    }
+  }
+}

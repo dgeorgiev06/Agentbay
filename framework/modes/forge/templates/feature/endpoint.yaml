@@ -1,0 +1,7 @@
+    {{name}}:
+      description: "{{intent}}"
+      workflow: {{name}}
+      effects: [{{effects}}]
+      playbook: features/{{name}}/playbook.md
+      rules: features/{{name}}/rules.yaml
+{{review}}

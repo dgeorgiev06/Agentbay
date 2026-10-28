@@ -1,0 +1,18 @@
+apiVersion: agentbay/v2
+kind: Environment
+metadata:
+  name: local-feeds-offline
+  description: >-
+    Offline stand-in for local-feeds: the fake source instead of x-api, no secrets, no network, $0.
+    Select it with `envs: { local-feeds: local-feeds-offline }` in agentbay.config.yaml.
+spec:
+  substitutes: local-feeds
+  bind:
+    feed.source/v1: [fake]
+    feed.store/v1: local-store
+    workspace.read/v1: { tools: [Read, Glob, Grep] }
+  network: { allow: [] }
+  fs: { read: ["."], write: [".agentbay/data/feeds"] }
+  models: [haiku, sonnet, opus, inherit]
+  effects: [read, write, network, spend, delete]
+  limits: { maxTurns: 40, maxMinutes: 20, spendUsd: 5, monthlyPosts: 3000, maxPostsPerRun: 500 }

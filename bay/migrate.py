@@ -17,7 +17,10 @@ in MIGRATIONS with the version it migrates to.
        nothing deleted at the source comes back. The old files are renamed
        *.v0.2.bak, never deleted.
 0.4.0: cap names maxPostsPerRun / monthlyPosts -> maxItemsPerRun / monthlyItems (user modes, envs,
-       mode config schemas and the project's agentbay.config.yaml).
+       mode config schemas and the project's agentbay.config.yaml); the 0.3 roles/agents/envs shape ->
+       the mode `roles:` map, tiers and framework roles (proposal 0004 Part A): `roles: [..]` and endpoint
+       `agents:` -> role -> env maps, `inference` and review `model` -> tiers, env `models` -> `tiers`, user
+       agent files folded away, user role files -> mode skills, old role names -> lead / analyst.
 
 Data migrations (DATA_MIGRATIONS) work on the project given to plan()/apply()
 (`bay migrate --project <repo>`); their changes are op `convert` with a
@@ -125,7 +128,174 @@ def _v03_caps(kit: Path) -> tuple[list[Change], list[str]]:
     return changes, []
 
 
-MIGRATIONS = [("0.2.0", _v1_specs_to_roles), ("0.3.0", _v02_names), ("0.4.0", _v03_caps)]
+def _dump(doc: dict) -> str:
+    return yaml.safe_dump(doc, sort_keys=False, width=110, default_flow_style=None, allow_unicode=True)
+
+
+def _pick_role(spec: dict, coordinator: bool, reviewer: bool) -> str:
+    """The framework role a 0.3 user role becomes, from what it did."""
+    uses = " ".join(spec.get("uses") or [])
+    if coordinator:
+        return "lead"
+    if reviewer:
+        return "reviewer"
+    if "workspace.write/v1" in uses:
+        return "builder"
+    if "web.research/v1" in uses:
+        return "researcher"
+    return "analyst"
+
+
+def _v03_shape(kit: Path) -> tuple[list[Change], list[str]]:
+    """0.4.0 (proposal 0004 Part A): user modes in the 0.3 shape get the role -> env map and tiers (the same
+    translation bay/aliases.py applies when the kit loads); user env `models` become `tiers`; user per-role agent
+    files are folded away; user role files become skills of the modes that use them, run by a framework role
+    (or are reported for manual handling)."""
+    import copy
+    from . import aliases, model
+    k = model.Kit(kit)
+    changes, notes, docs = [], [], {}
+    names = {**aliases.ROLES, **aliases.ROLES_04}
+    rename = aliases.Resolver(names)
+    agents = aliases.agents_table(k)
+    for d in sorted(k.docs["Mode"].values(), key=lambda x: x.name):
+        if d.root != "user" or not aliases.legacy_keys(d.raw):
+            continue
+        doc = yaml.safe_load(d.path.read_text(encoding="utf-8"))
+        spec, conv, before = doc["spec"], d.spec, getattr(d, "before_shape", d.spec)
+        if isinstance(spec.get("roles"), list):
+            spec["roles"] = {names.get(rn, rn): conv["roles"].get(names.get(rn, rn)) for rn in spec["roles"]}
+        own_inference = spec.pop("inference", None) is not None
+        for ep_name, ce in conv.get("endpoints", {}).items():
+            e = (spec.get("endpoints") or {}).get(ep_name)
+            if e is not None and "agents" in e:
+                e.pop("agents")
+                e["roles"] = dict(ce.get("roles") or {})
+            if (e is not None and "review" in e) or (own_inference and ce.get("review") != before["endpoints"][ep_name].get("review")):
+                spec.setdefault("endpoints", {}).setdefault(ep_name, {})["review"] = copy.deepcopy(ce.get("review"))
+        if conv.get("needs") != before.get("needs"):
+            spec["needs"] = list(conv["needs"])
+        for wf, steps in (conv.get("workflows") or {}).items():
+            if wf in (spec.get("workflows") or {}) or (own_inference and steps != before["workflows"].get(wf)):
+                spec.setdefault("workflows", {})[wf] = copy.deepcopy(steps)
+        doc["spec"] = rename.value(spec)
+        docs[d.path] = doc
+    for name, info in sorted(k.user_roles.items()):
+        rspec = info["doc"].get("spec") or {}
+        users = []
+        for d in k.docs["Mode"].values():
+            if d.root != "user":
+                continue
+            doc = docs.get(d.path) or yaml.safe_load(d.path.read_text(encoding="utf-8"))
+            s = doc["spec"]
+            roles = s.get("roles")
+            steps = [st for wf in (s.get("workflows") or {}).values() for st in wf]
+            reviews = [e.get("review") or {} for e in (s.get("endpoints") or {}).values()]
+            if name in (roles or []) or any(st.get("role") == name for st in steps) or s.get("coordinator") == name \
+                    or any(rv.get("role") == name for rv in reviews):
+                users.append((d, doc))
+        rel = _rel(kit, info["path"])
+        if name in names:                       # a role the kit shipped in 0.3, now a framework role
+            changes.append(Change("delete", rel, note=f"0.3 role {name} is the framework role {names[name]} since "
+                                                      f"0.4; its mode-specific guidance lives in the modes' playbooks"))
+            notes.append(f"{rel}: replaced by the framework role {names[name]}; if you changed this file, carry "
+                         f"those changes into your mode's playbooks or skills")
+            continue
+        if not users:
+            notes.append(f"{rel}: role {name} is used by no mode; roles are framework-level since 0.4: move what it "
+                         f"does into a mode's skills or playbooks, or propose a framework role via forge.extend")
+            continue
+        manual = []
+        for d, doc in users:
+            s = doc["spec"]
+            new = _pick_role(rspec, s.get("coordinator") == name,
+                             any((e.get("review") or {}).get("role") == name for e in (s.get("endpoints") or {}).values()))
+            roles = s.get("roles")
+            if isinstance(roles, list):
+                roles = {rn: aliases.old_env(k, rn, agents) for rn in roles}
+            env = (roles or {}).get(name) or aliases.old_env(k, name, agents)
+            # the mode already runs `new` in another env: this role's steps get a step-level env override
+            step_env = new in (roles or {}) and (roles or {}).get(new) != env
+            if step_env and (s.get("coordinator") == name or any(
+                    (e.get("review") or {}).get("role") == name for e in (s.get("endpoints") or {}).values())):
+                manual.append(f"mode {d.name} already runs {new} in env {roles[new]} and {name} in env {env}")
+                continue
+            s["roles"] = {(new if rn == name else rn): v for rn, v in (roles or {}).items() if rn != name or not step_env}
+            s["roles"].setdefault(new, env)
+            if s.get("coordinator") == name:
+                s["coordinator"] = new
+            tier = aliases.LEGACY_TIERS.get((rspec.get("inference") or {}).get("model")
+                                            or (agents.get(rspec.get("agent") or "") or (None,))[0] or "")
+            new_tier = (k.docs["Role"][new].spec.get("tier") if new in k.docs["Role"] else None)
+            for wf in (s.get("workflows") or {}).values():
+                for st in wf:
+                    if st.get("role") == name:
+                        st["role"] = new
+                        if step_env:
+                            st["roles"] = {new: env}
+                        st["task"] = (st.get("task", "") + f" Follow the {name} skill.").strip()
+                        if tier and tier != new_tier and "tier" not in st:
+                            st["tier"] = tier
+            for e in (s.get("endpoints") or {}).values():
+                if (e.get("review") or {}).get("role") == name:
+                    e["review"]["role"] = new
+                if name in (e.get("roles") or {}):
+                    e["roles"][new] = e["roles"].pop(name)
+            needs = s.setdefault("needs", [])
+            for use in rspec.get("uses") or []:
+                iface = model._split_use(use)[0]
+                if iface not in needs:
+                    needs.append(iface)
+            docs[d.path] = doc
+            body = "\n".join([
+                "---", f"name: {name}",
+                f"description: {json.dumps(' '.join(str((info['doc'].get('metadata') or {}).get('description', name)).split()))}",
+                "---", f"# {name}", "", f"Migrated from the 0.3 role `{name}` (run by the framework role `{new}`).",
+                "", str(rspec.get("prompt", "")).strip(), "", "## Done when",
+                *[f"- {x}" for x in rspec.get("doneWhen") or []],
+                *(["", "## Rules", *[f"- {x}" for x in rspec.get("rules") or []]] if rspec.get("rules") else []), ""])
+            sk = d.dir / "skills" / name / "SKILL.md"
+            changes.append(Change("create", _rel(kit, sk), body,
+                                  note=f"0.3 role {name} -> skill of mode {d.name}, run by framework role {new}"))
+        if manual:
+            notes.append(f"{rel}: role {name} needs manual handling: {'; '.join(manual)}. Roles are framework-level "
+                         f"since 0.4: put what it does into that mode's skills or playbooks")
+        else:
+            changes.append(Change("delete", rel, note=f"0.3 user role {name} moved into its modes as a skill"))
+    for path, doc in docs.items():
+        changes.append(Change("update", _rel(kit, path), _dump(doc),
+                              note="0.3 shape -> role -> env map and tiers (comments in this file are not kept)"))
+    for d in k.docs["Environment"].values():
+        if d.root == "user" and "models" in d.raw:
+            old = d.path.read_text(encoding="utf-8")
+            tiers = d.spec.get("tiers")
+            new = re.sub(r"(?m)^(\s*)models:\s*\[[^\]\n]*\]([ \t]*#[^\n]*)?\n",
+                         (lambda m: f"{m.group(1)}tiers: [{', '.join(tiers)}]{m.group(2) or ''}\n") if tiers else "",
+                         old, count=1)
+            changes.append(Change("update", _rel(kit, d.path), new, note="env `models` -> `tiers` (0.4)"))
+    for n, d in sorted(k.legacy_agents.items()):
+        changes.append(Change("delete", _rel(kit, d.path),
+                              note=f"0.3 agent {n}: its env and model now live in the modes' `roles:` and tiers"))
+    return changes, notes
+
+
+def _v03_role_names(kit: Path) -> tuple[list[Change], list[str]]:
+    """0.4.0: the 0.3 role names (briefing-*, improve-*, auditor, forge-lead) become lead / analyst in user files."""
+    from . import aliases
+    changes = []
+    for pat in USER_GLOBS:
+        for f in sorted(kit.glob(pat)):
+            old = f.read_text(encoding="utf-8")
+            new = old
+            for o, n in aliases.ROLES_04.items():
+                new = re.sub(aliases._WORD.format(re.escape(o)), n, new)
+            if new != old:
+                changes.append(Change("update", _rel(kit, f), new, note="0.3 role names -> lead / analyst (0.4)"))
+    return changes, []
+
+
+MIGRATIONS = [("0.2.0", _v1_specs_to_roles), ("0.3.0", _v02_names), ("0.4.0", _v03_caps), ("0.4.0", _v03_shape),
+              ("0.4.0", _v03_role_names)]
 
 # ------------------------------------------------------------------ project data
 V02_MODE = "feed-briefing"                    # the only mode on the v0.2 feed store
@@ -443,13 +613,34 @@ def _diff(kit: Path, changes: list[Change]) -> str:
 
 
 def _collect(kit: Path, to: str | None, project: Path | None = None):
+    """Run the kit migrations in order on a scratch copy of the kit, so each one sees what the earlier ones
+    wrote; the result is one change per path (its final content). Data migrations then plan against the
+    project."""
+    import tempfile
     to = to or __version__
-    changes, notes = [], []
-    for ver, fn in MIGRATIONS:
-        if _vt(ver) <= _vt(to):
-            c, n = fn(kit)
-            changes += c
+    merged: dict[str, Change] = {}
+    notes: list[str] = []
+    with tempfile.TemporaryDirectory(prefix="agentbay-migrate-") as tmp:
+        clone = Path(tmp) / "kit"
+        shutil.copytree(kit, clone, ignore=shutil.ignore_patterns(".git", ".agentbay", "__pycache__"), symlinks=True)
+        for ver, fn in MIGRATIONS:
+            if _vt(ver) > _vt(to):
+                continue
+            c, n = fn(clone)
             notes += n
+            _write(clone, c)
+            for ch in c:
+                prev = merged.get(ch.path)
+                if ch.op != "delete" and prev is not None and prev.op != "delete":
+                    ch = Change("create" if prev.op == "create" else "update", ch.path, ch.content,
+                                note=f"{prev.note}; {ch.note}")
+                elif ch.op != "delete" and not (kit / ch.path).exists():
+                    ch = Change("create", ch.path, ch.content, note=ch.note)
+                merged[ch.path] = ch
+        for ch in merged.values():
+            if ch.op != "delete":
+                ch.content = (clone / ch.path).read_text(encoding="utf-8")
+    changes = list(merged.values())
     if project is not None:
         for ver, fn in DATA_MIGRATIONS:
             if _vt(ver) <= _vt(to):
@@ -457,6 +648,21 @@ def _collect(kit: Path, to: str | None, project: Path | None = None):
                 changes += c
                 notes += n
     return changes, notes
+
+
+def _write(root: Path, changes: list[Change]) -> None:
+    for c in changes:
+        p = root / c.path
+        if c.op == "convert":
+            c.run()
+        elif c.op == "delete":
+            if p.is_dir():
+                shutil.rmtree(p)
+            elif p.exists():
+                p.unlink()
+        else:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(c.content)
 
 
 def _vt(v: str) -> tuple:
@@ -472,19 +678,8 @@ def plan(kit: Path, to: str | None = None, project: Path | None = None) -> dict:
 
 def apply(kit: Path, to: str | None = None, project: Path | None = None) -> dict:
     changes, notes = _collect(kit, to, project)
-    for c in changes:
-        p = kit / c.path
-        if c.op == "convert":
-            c.run()
-        elif c.op == "delete":
-            if p.is_dir():
-                shutil.rmtree(p)
-            elif p.exists():
-                p.unlink()
-        else:
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(c.content)
-    for d in ("specs", "layers"):
+    _write(kit, changes)
+    for d in ("specs", "layers", "roles", "agents"):
         if (kit / d).is_dir() and not any((kit / d).iterdir()):
             (kit / d).rmdir()
     return {"changes": [{"op": c.op, "path": c.path, "note": c.note} for c in changes],

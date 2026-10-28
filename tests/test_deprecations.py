@@ -215,3 +215,178 @@ def test_03_cap_names_keep_working_with_warnings_and_migrate_renames_them():
     kit = model.Kit(k, p)
     assert not [w for w in lint.warnings(kit) if "deprecated" in w]
     assert migrate.plan(k, project=p)["changes"] == []
+
+
+# ------------------------------------------------------------------ 0.3 roles/agents/envs shape (0.4 aliases)
+V03_MODE = """apiVersion: agentbay/v2
+kind: Mode
+metadata: { name: my-brief, version: 0.1.0 }
+spec:
+  purpose: My 0.3 briefing mode.
+  endpoints:
+    sync:  { workflow: sync, in: SyncReq, effects: [network, spend, write], playbook: features/sync/playbook.md,
+             rules: features/sync/rules.yaml, review: { role: reviewer, when: never } }
+    ask:   { workflow: ask, in: Question, out: Answer, effects: [read, network, spend, write],
+             playbook: features/ask/playbook.md, rules: features/ask/rules.yaml,
+             agents: { briefing-analyst: my-agent },
+             review: { role: reviewer, when: always, model: sonnet } }
+  coordinator: briefing-lead
+  roles: [briefing-lead, briefing-analyst, reviewer]
+  workflows:
+    sync:
+      - { id: fetch, run: items.store/v1.sync, with: { lookback: "$in.lookback|$config.lookback" } }
+    ask:
+      - { id: context, run: items.store/v1.status, with: { since: "$in.since|$config.lookback" } }
+      - { id: answer, role: briefing-analyst, out: Answer, task: "Answer from stored items." }
+  inference:
+    default: { model: sonnet, effort: medium }
+    steps: { answer: { effort: high } }
+  constraints: { lookbackMax: 30d, spendUsd: 5, maxPostsPerRun: 50 }
+  needs: [items.store/v1, items.source/v1]
+  config: config.schema.json
+"""
+V03_AGENT = """apiVersion: agentbay/v2
+kind: Agent
+metadata: { name: my-agent, description: Subagent for the analyst in my env. }
+spec: { runtime: claude-code-subagent, model: haiku, effort: medium, env: my-env }
+"""
+V03_ENV = """apiVersion: agentbay/v2
+kind: Environment
+metadata: { name: my-env, description: My 0.3 env. }
+spec:
+  bind:
+    items.source/v1: [fake]
+    items.store/v1: corpus-store
+  network: { allow: [] }
+  fs: { read: ["."], write: [".agentbay/data/mine"] }
+  models: [haiku, sonnet]      # my cap
+  effects: [read, write, network, spend, delete]
+"""
+V03_ROLE = """apiVersion: agentbay/v2
+kind: Role
+metadata: { name: my-summarizer, description: Summarizes stored items in three bullets. }
+spec:
+  agent: my-agent
+  uses: [items.store/v1.query]
+  prompt: Summarize the stored items in exactly three bullets, each citing an item id.
+  doneWhen: [three bullets, each with a citation]
+  rules: [never more than three bullets]
+"""
+
+
+def v03_kit(user_role: bool = False):
+    k = kit_copy()
+    d = k / "modes/my-brief"
+    for sub in ("features/sync", "features/ask", "types"):
+        (d / sub).mkdir(parents=True)
+    base = k / "modes/briefing"
+    for f in ("features/sync/playbook.md", "features/sync/rules.yaml", "features/ask/playbook.md",
+              "features/ask/rules.yaml", "types/Question.schema.json", "types/Answer.schema.json",
+              "types/SyncReq.schema.json", "config.schema.json"):
+        shutil.copy(base / f, d / f)
+    mode = V03_MODE
+    if user_role:
+        mode = mode.replace("      - { id: answer, role: briefing-analyst,",
+                            "      - { id: sum, role: my-summarizer, out: Answer, task: \"Summarize.\" }\n"
+                            "      - { id: answer, role: briefing-analyst,")
+        mode = mode.replace("roles: [briefing-lead, briefing-analyst, reviewer]",
+                            "roles: [briefing-lead, briefing-analyst, reviewer, my-summarizer]")
+        (k / "roles").mkdir()
+        (k / "roles/my-summarizer.yaml").write_text(V03_ROLE)
+    (d / "mode.yaml").write_text(mode)
+    (k / "agents").mkdir()
+    (k / "agents/my-agent.yaml").write_text(V03_AGENT)
+    (k / "envs/my-env.yaml").write_text(V03_ENV)
+    return k
+
+
+def _shape(s):
+    m = s.modes["my-brief"]
+    ask = m.features["ask"]
+    ans = next(st for st in ask.steps if st.id == "answer")
+    rv = ask.steps[-1]
+    return {"roles": m.roles, "coordinator": m.coordinator, "answer": (ans.env, ans.subagent, ans.inference.tier,
+            ans.inference.effort), "review": (rv.env, rv.inference.tier, rv.inference.effort),
+            "tiers": s.env("my-env").spec.get("tiers"), "caps": m.constraints.get("maxItemsPerRun")}
+
+
+def test_03_shape_resolves_with_deprecation_warnings():
+    k = v03_kit()
+    kit = model.Kit(k)
+    assert lint.run(kit=kit) == [], lint.run(kit=kit)
+    ws = [w for w in lint.warnings(kit) if "deprecated" in w]
+    for needle in ("modes/my-brief/mode.yaml: `roles:` list form, endpoint ask `agents:`, endpoint ask review "
+                   "`model`, `inference` is deprecated (0.3 shape) and now resolves to `roles: {lead: local-feeds, "
+                   "analyst: local-feeds, reviewer: workspace}`",
+                   "modes/my-brief/mode.yaml: role `briefing-analyst` is deprecated (0.3) and now resolves to the "
+                   "framework role `analyst`",
+                   "modes/my-brief/mode.yaml: role `briefing-lead` is deprecated",
+                   "agents/my-agent.yaml: per-role agent files are deprecated (0.3); agent my-agent now only gives "
+                   "env my-env",
+                   "envs/my-env.yaml: `models` is deprecated (0.3)", "`tiers: [fast, balanced]`",
+                   "modes/my-brief/mode.yaml constraints: `maxPostsPerRun` -> `maxItemsPerRun`"):
+        assert any(needle in w and "bay migrate" in w for w in ws), (needle, ws)
+    s = model.resolve(kit)
+    got = _shape(s)
+    # 0.3: answer ran on my-agent (env my-env) at the mode default sonnet with the step's effort high; the review
+    # at sonnet (its own model) in the reviewer's 0.3 env (critic: workspace)
+    assert got == {"roles": {"lead": "local-feeds", "analyst": "local-feeds", "reviewer": "workspace"},
+                   "coordinator": "lead", "answer": ("my-env", "analyst--my-brief", "balanced", "high"),
+                   "review": ("workspace", "balanced", "medium"), "tiers": ["fast", "balanced"], "caps": 50}, got
+    # it runs: the coordinator's env syncs, the analyst reads its own env's store through its unit
+    p = project()
+    d = dispatch.Dispatcher(model.resolve(model.Kit(k, p)), p, clock=clock)
+    assert d.call("my-brief.sync", {})["status"] in ("done", "partial")
+    plan = d.call("my-brief.ask", {"question": "what is new?"})["next"]
+    assert plan["runAs"] == "subagent_type=analyst--my-brief" and plan["env"] == "my-env" and plan["effort"] == "high"
+    return got
+
+
+def test_bay_migrate_rewrites_the_03_shape_and_leaves_nothing_to_migrate():
+    k = v03_kit()
+    before = {p: (k / p).read_text() for p in ("modes/my-brief/mode.yaml", "envs/my-env.yaml", "agents/my-agent.yaml")}
+    got = _shape(model.resolve(model.Kit(k)))
+    plan = migrate.plan(k)
+    changes = {(c["op"], c["path"]) for c in plan["changes"]}
+    assert {("update", "modes/my-brief/mode.yaml"), ("update", "envs/my-env.yaml"),
+            ("delete", "agents/my-agent.yaml")} <= changes, changes
+    assert all((k / p).read_text() == t for p, t in before.items())                  # dry run writes nothing
+    r = subprocess.run([sys.executable, str(k / "bay/cli.py"), "migrate"], capture_output=True, text=True)
+    assert r.returncode == 0 and "dry run: nothing written" in r.stdout
+    migrate.apply(k)
+    mode = (k / "modes/my-brief/mode.yaml").read_text()
+    for gone in ("inference", "agents:", "model:", "briefing-", "maxPostsPerRun", "roles: ["):
+        assert gone not in mode, (gone, mode)
+    assert "tiers: [fast, balanced]      # my cap" in (k / "envs/my-env.yaml").read_text()   # comment kept
+    assert not (k / "agents").exists()
+    kit = model.Kit(k)
+    assert [w for w in lint.warnings(kit) if "deprecated" in w] == [] and lint.run(kit=kit) == []
+    assert _shape(model.resolve(kit)) == got                                       # same behaviour, new shape
+    assert migrate.plan(k)["changes"] == []
+
+
+def test_a_user_role_file_is_an_error_and_migrate_moves_it_into_its_mode_as_a_skill():
+    k = v03_kit(user_role=True)
+    kit = model.Kit(k)
+    errs = lint.run(kit=kit)
+    assert any("roles/my-summarizer.yaml: roles are framework-level; customize behaviour in your mode's "
+               "playbooks/skills, or propose a new role via forge.extend" in e for e in errs), errs
+    plan = migrate.plan(k)
+    changes = {(c["op"], c["path"]) for c in plan["changes"]}
+    assert {("create", "modes/my-brief/skills/my-summarizer/SKILL.md"), ("delete", "roles/my-summarizer.yaml"),
+            ("update", "modes/my-brief/mode.yaml")} <= changes, changes
+    migrate.apply(k)
+    skill = (k / "modes/my-brief/skills/my-summarizer/SKILL.md").read_text()
+    assert "name: my-summarizer" in skill and "exactly three bullets" in skill and "never more than three" in skill
+    assert not (k / "roles").exists()
+    kit = model.Kit(k)
+    assert lint.run(kit=kit) == [] and not [w for w in lint.warnings(kit) if "deprecated" in w]
+    s = model.resolve(kit)
+    st = next(x for x in s.modes["my-brief"].features["ask"].steps if x.id == "sum")
+    # read-only uses -> analyst; its 0.3 agent's env is kept (a step override: the mode runs analyst in
+    # local-feeds) and so is its 0.3 model (the mode's inference default sonnet beat the agent's haiku); the
+    # step follows the skill
+    assert (st.role, st.env, st.inference.tier) == ("analyst", "my-env", "balanced"), (st.role, st.env, st.inference)
+    assert "roles: {analyst: my-env}" in (k / "modes/my-brief/mode.yaml").read_text()
+    assert "Follow the my-summarizer skill" in st.task and "my-summarizer" in st.resolved.skills
+    assert migrate.plan(k)["changes"] == []

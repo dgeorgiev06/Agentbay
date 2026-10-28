@@ -23,6 +23,8 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN-v0
 | 3 | **Role / Agent / Environment** | `schemas/{role,agent,environment}.schema.json` | you add a responsibility, executor or wiring |
 | 4 | **Capability interface + Connector** | `schemas/{interface,connector}.schema.json`, `bay/connect.py` | you add a capability or a concrete tool |
 | 5 | **Adapter** | `bay/adapters/base.py` | you add a runtime |
+| 5b | **Registry** (`.agentbay/catalog.json`: modes, endpoints with resolved in/out schemas, roles, project workflows) | `bay/registry.py` | you add something a coordinator must discover |
+| 5c | **Project workflow** (user-configured stages composing `<mode>.<endpoint>`) | `schemas/config.schema.json` `workflows`, `bay/workflows.py` | you compose modes differently |
 | 6 | **Dispatcher** (`bay call/submit/use`) | `bay/dispatch.py` | rarely |
 | 7 | **TaskEnvelope / Result** | `schemas/task.schema.json` | rarely; version-bump it |
 | 8 | **LedgerEvent** | `schemas/event.schema.json` | rarely; version-bump it |
@@ -88,16 +90,41 @@ class Adapter(Protocol):
 ```
 Obligations: idempotent; touches only files recorded in `.agentbay/manifest.json`; merges with
 user-authored CLAUDE.md, `.claude/settings.json`, `.mcp.json`, never clobbers; `clean` restores them;
-writes `.agentbay/catalog.json` (modes, endpoints, roles). The claude-code adapter also writes per-role use
+writes the registry via `bay.registry.write`. The catalog's content is runtime-neutral system truth - an adapter
+supplies only its own `runtime` name - so a second runtime discovers the same modes, endpoints (with resolved
+input/output schemas), roles and project workflows. The claude-code adapter also writes per-role use
 shims, `.agentbay/guard.json` and the PreToolUse guard hook (Bash and every file tool), plus `Edit` deny rules on
 `.agentbay/**`, `.claude/**` and the kit. Register in `bay/adapters/__init__.py`.
+
+## 5c. Project workflows and the root coordinator
+
+`cos` is a framework mode like any other: `framework/modes/cos/` holds the Chief of Staff playbook (the preamble
+of the generated `.agentbay/COORDINATOR.md`) and three endpoints over the `workflow.run/v1` capability -
+`cos.run`, `cos.next`, `cos.status`. Its coordinator role `chief-of-staff` runs on `cos-main`
+(`runtime: claude-code-main`), so the root coordinator is resolved, linted and listed in the registry rather
+than being a special case.
+
+A project workflow is stages in `agentbay.config.yaml` (`workflows.<name>.steps`), each `call: <mode>.<endpoint>`
+or `gate: <text>`. Composition does not recurse into the dispatcher: `cos.run` and `cos.next` return the call to
+make (`nextCall`), the coordinator drives that call the ordinary way, and `cos.next` records it. Consequences,
+all intended:
+
+- a stage keeps its own grants, effects, budget, review and gates - the parent declares no union of them
+- there are no cycles to detect, because no endpoint can invoke another
+- a stage's cost and duration are its own call's ledger events, so `improve` reads them unchanged
+- what a workflow may do is reported, not enforced anew: `bay validate` prints the union of stage effects
+
+`bay lint` checks structure (ids, `$steps` order, gate references); `bay validate` checks targets against the
+registry and each `with` against the endpoint's input schema. Run state lives in `.agentbay/data/workflows/`,
+written only by the `workflow-runner` connector.
 
 ## 6. Dispatcher
 `bay call <mode>.<endpoint> '<json>'` -> `{callId, status, output | next, checks, review, cost}`.
 Status: `done | partial | blocked | failed | needs-agent | awaiting-approval`.
-`bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic step (usage goes to the step's ledger event); `bay show <callId>` prints the current state; approval gates pass only with `bay approve <callId>` in an interactive terminal. A role's generated shim
+`bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic step (usage goes to the step's ledger event); `bay show <callId>` prints the current state; approval gates pass only with `bay approve <callId>` in an interactive terminal (a project workflow's gate the same way, with its `W-...` run id). A role's generated shim
 `.agentbay/roles/<role>/use <iface>/v<N>.<ep> '<json>'` (role fixed inside, read-only endpoints in the role's `uses`)
 is the only way an agent reads connector data; the guard hook stops subagents from running anything else. Secret values are redacted from everything it returns or logs.
+
 
 ## 7. TaskEnvelope/v1 -> Result/v1
 Plain fenced YAML blocks (```` ```task ```` / ```` ```result ````). One deliverable per envelope.

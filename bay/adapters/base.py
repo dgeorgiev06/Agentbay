@@ -4,7 +4,9 @@ An adapter must:
   * be idempotent (build twice == build once)
   * only touch files it owns, tracked in .agentbay/manifest.json
   * preserve anything the user wrote by hand (merge, never clobber)
-  * write .agentbay/catalog.json so coordinators can discover modes, endpoints and roles
+  * write the registry (bay.registry.write) so coordinators can discover modes, endpoints,
+    roles and project workflows. The catalog's content is runtime-neutral system truth; an
+    adapter supplies only its own `runtime` name, it does not decide what goes in.
 """
 from __future__ import annotations
 

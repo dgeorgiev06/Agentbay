@@ -39,6 +39,76 @@
         "type": "string"
       },
       "description": "Run agents of env A in env B instead: {A: B}. B must declare `substitutes: A`. Selects between tracked envs; it cannot bind capabilities."
+    },
+    "workflows": {
+      "type": "object",
+      "description": "Project workflows: ordered stages composing mode endpoints, run via cos.run. Stage kinds are `call` (<mode>.<endpoint>) and `gate` (approval). `with`, `when`, $in.<field> and $steps.<id>.<field> mean what they mean in a mode workflow. `bay lint` checks every target against the registry and every `with` against that endpoint's input schema.",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "steps"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "in": {
+            "type": "object",
+            "description": "JSON Schema for this workflow's own input, referenced as $in.<field>."
+          },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "id"
+              ],
+              "additionalProperties": false,
+              "oneOf": [
+                {
+                  "required": [
+                    "call"
+                  ]
+                },
+                {
+                  "required": [
+                    "gate"
+                  ]
+                }
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]*$"
+                },
+                "call": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+                  "description": "The endpoint this stage runs, as `bay call` spells it."
+                },
+                "with": {
+                  "type": "object",
+                  "description": "Input for the endpoint. $in.<field> and $steps.<id>.<field> are substituted; keys whose value is missing are dropped."
+                },
+                "when": {
+                  "type": "string",
+                  "pattern": "^\\$(in|steps)\\.[A-Za-z][A-Za-z0-9-]*(\\.[A-Za-z][A-Za-z0-9-]*)*$",
+                  "description": "Skip the stage unless this value is truthy."
+                },
+                "gate": {
+                  "type": "string",
+                  "description": "Approval gate: the run stops and only `bay approve` passes it."
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

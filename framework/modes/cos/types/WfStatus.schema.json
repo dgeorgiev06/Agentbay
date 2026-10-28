@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/v2/cos/WfStatus",
+  "title": "WfStatus",
+  "description": "Workflow runs and the state of each stage. Per-stage endpoint output is not included; `bay show <callId>` has it.",
+  "type": "object",
+  "required": ["runs"],
+  "additionalProperties": false,
+  "properties": {
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["runId", "workflow", "status", "stages"],
+        "additionalProperties": false,
+        "properties": {
+          "runId": { "type": "string" },
+          "workflow": { "type": "string" },
+          "status": { "type": "string" },
+          "startedAt": { "type": "string" },
+          "endedAt": { "type": "string" },
+          "cursor": { "type": "integer" },
+          "input": { "type": "object" },
+          "reason": { "type": "string" },
+          "stages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "state"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string" },
+                "kind": { "type": "string" },
+                "call": { "type": "string" },
+                "state": { "type": "string" },
+                "callId": { "type": "string" },
+                "status": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

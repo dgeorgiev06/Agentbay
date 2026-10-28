@@ -1,0 +1,55 @@
+apiVersion: agentbay/v2
+kind: Mode
+metadata:
+  name: cos
+  version: 0.1.0
+  description: "Chief of Staff: route a request to the right mode endpoint, and run the project workflows that compose several."
+spec:
+  purpose: >-
+    Be the one place the user talks to. Route each request to a mode endpoint from the registry, run the steps the
+    dispatcher hands back, and compose endpoints into project workflows the user configured. cos does no domain work
+    of its own: every effect belongs to the endpoint it calls.
+  coordinator: chief-of-staff
+  roles: [chief-of-staff]
+  needs: [workflow.run/v1]
+  endpoints:
+    run:
+      description: "Start a project workflow (agentbay.config.yaml workflows.<name>); returns its first stage."
+      workflow: run
+      playbook: features/run/playbook.md
+      rules: features/run/rules.yaml
+      in: RunReq
+      out: StageOut
+      effects: [read, write]
+      review: { when: never }
+    next:
+      description: "Record the stage call that just finished and return the next stage, gate, or the run's result."
+      workflow: next
+      playbook: features/next/playbook.md
+      rules: features/next/rules.yaml
+      in: NextReq
+      out: StageOut
+      effects: [read, write]
+      review: { when: never }
+    status:
+      description: "Where workflow runs stand, stage by stage. Read-only."
+      workflow: status
+      playbook: features/status/playbook.md
+      rules: features/status/rules.yaml
+      in: StatusReq
+      out: WfStatus
+      effects: [read]
+      review: { when: never }
+  workflows:
+    run:
+      - id: start
+        run: workflow.run/v1.start
+        with: { workflow: $in.workflow, input: $in.input }
+    next:
+      - id: advance
+        run: workflow.run/v1.next
+        with: { runId: $in.runId, callId: $in.callId, output: $in.output, status: $in.status }
+    status:
+      - id: show
+        run: workflow.run/v1.show
+        with: { runId: $in.runId, open: $in.open }

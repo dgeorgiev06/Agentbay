@@ -47,6 +47,7 @@ AGENT_SAFE_EFFECTS = {"read"}          # connector endpoints a role may call via
 LEVEL_RANK = {"should": 1, "must": 2, "must_not": 2}
 PROTECTED = ("framework", "bay", "schemas")       # kit paths only forge.extend may write
 FRAMEWORK_EXTENDER = "forge.extend"
+ROOT_COORDINATOR = "cos"      # the mode whose coordinator owns the main thread; its playbook is the preamble
 STALE = re.compile(r"^stale\s*>\s*([0-9]+[mhdw])$")
 
 

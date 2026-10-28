@@ -8,6 +8,7 @@ from helpers import KIT, model, system, tmpdir
 
 from bay import ledger
 from bay.adapters import Adapter, get
+from bay.adapters.claude_code import COORDINATOR_CMDS
 
 
 def _proj():
@@ -38,7 +39,7 @@ def test_adapter_round_trip():
         ["Bash|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep", "Task|Agent"]               # guard first
     assert_no_wildcards(st)
     ours = [p for p in st["permissions"]["allow"] if p != "Bash(ls:*)"]
-    assert sorted(ours) == sorted(f"Bash(.agentbay/bay {c}:*)" for c in ("show", "status", "log", "note", "task"))
+    assert sorted(ours) == sorted(f"Bash(.agentbay/bay {c}:*)" for c in COORDINATOR_CMDS)
     assert st["hooks"]["PreToolUse"][0]["hooks"][0]["onFailure"] == "block"
     assert {"Edit(/.agentbay/**)", "Edit(/.claude/**)", "Read(/.agentbay/data/**)"} <= set(st["permissions"]["deny"])
     assert any(d.startswith("Edit(//") and d.endswith("/**)") for d in st["permissions"]["deny"])   # kit outside
@@ -55,9 +56,13 @@ def test_adapter_round_trip():
     assert claude.startswith("<!-- agentbay:begin") and "@.agentbay/COORDINATOR.md" in claude and "# mine" in claude
     coord = (proj / ".agentbay/COORDINATOR.md").read_text()
     assert "Chief of Staff" in coord and "`feed-briefing.digest`" in coord and "coordinator role `briefing-lead`" in coord
+    assert coord.count("# You are the Chief of Staff") == 1          # preamble only, not also a mode section
+    assert "coordinator role `chief-of-staff`" not in coord
+    assert "`cos.run`" in coord                                      # but its endpoints are in the table
     assert (proj / ".claude/skills/digest/SKILL.md").exists() and (proj / ".claude/skills/corpus-sql/SKILL.md").exists() and (proj / ".claude/skills/research-brief/SKILL.md").exists()
     cat = json.loads((proj / ".agentbay/catalog.json").read_text())
-    assert {m["name"] for m in cat["modes"]} == {"delivery", "feed-briefing", "forge", "improve"}   # briefing is abstract
+    assert {m["name"] for m in cat["modes"]} == {"cos", "delivery", "feed-briefing", "forge", "improve"}
+    #  ^ briefing is abstract; cos is the root coordinator's own mode
     assert next(m for m in cat["modes"] if m["name"] == "feed-briefing")["extends"] == "briefing"
     dg = next(e for m in cat["modes"] for e in m["endpoints"] if e["name"] == "feed-briefing.digest")
     assert dg["review"]["role"] == "reviewer" and [s["kind"] for s in dg["steps"]][-1] == "review"

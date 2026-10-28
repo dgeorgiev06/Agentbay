@@ -1,0 +1,6 @@
+apiVersion: agentbay/v2
+kind: Rules
+rules:
+  - { id: R-1, level: must_not, statement: "This endpoint must not write; it reports run state only.", appliesTo: both, refs: [DOD-3] }
+  - { id: R-2, level: must_not, statement: "Per-stage endpoint output must not be returned here; report progress and point at `bay show <callId>`.", appliesTo: both, refs: [DOD-2] }
+  - { id: R-3, level: must_not, statement: "Output, logs or the ledger must not contain secret values.", appliesTo: both, check: no_secrets }

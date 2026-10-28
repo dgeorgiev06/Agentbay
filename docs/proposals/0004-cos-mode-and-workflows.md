@@ -1,6 +1,8 @@
 # 0004 - Chief of Staff as a mode, a registry contract, and project workflows
 
-- Status: proposed 2026-10-28, awaiting approval. Decisions below taken with the user on 2026-10-28.
+- Status: approved 2026-10-28, implemented on branch feat/cos-workflows (all three phases). Decisions
+  below taken with the user on 2026-10-28; deviations found during implementation are recorded under
+  *Deviations found during implementation*.
 - Design: docs/DESIGN-v0.2.md, proposal 0001 (modes, roles, envs, connectors)
 - Feature: forge.extend (framework change)
 
@@ -191,6 +193,24 @@ that must survive a machine going away. Temporal is the candidate then, not Airf
 workflows **declarative YAML validated by lint**, with a thin interpreter, is what keeps that migration a
 compile step rather than a rewrite: execution semantics must not live only in imperative Python.
 
+## Deviations found during implementation
+
+- **Phases 2 and 3 could not be separated.** `schemas/mode.schema.json` requires `endpoints` (minProperties 1)
+  and `workflows` for any non-abstract mode, so `cos` cannot exist as a mode without its endpoints, and its
+  endpoints need `workflow.run/v1`. Phase 2 shipped with phase 3 rather than before it.
+- **No new ledger event types.** The proposal added `wf.started`, `wf.stage.completed` and `wf.completed` to
+  `ledger.TYPES`. Implementing that honestly turned out to need one of two bad things: the `workflow-runner`
+  connector writing to `.agentbay/ledger/` although its env grants it only `.agentbay/data/workflows`, or the
+  dispatcher special-casing cos targets although it is mode-agnostic. Neither is worth it, because the linkage
+  already exists: every stage is an ordinary call with its own `step.*` and `call.completed` events, and
+  `cos.run`/`cos.next` are themselves calls carrying the `runId`. Stage-by-stage state is the runner's own
+  record, read through `cos.status`. `improve` therefore reads stage cost and duration unchanged.
+- **`bay status` was left alone** for the same reason it is pre-approved: it must stay a pure ledger read. Making
+  it show workflow runs would have meant running connector code inside a command that never asks the user.
+  Workflow state is reached with `bay call cos.status`, which asks like any other call.
+- **`bay approve` also takes a `W-...` run id**, routed to `workflow.run/v1.approve`. The proposal implied gates
+  would work but did not say how a workflow-run gate is passed; a call id was not enough.
+
 ## Compatibility impact
 
 Breaking: none. `agentbay.config.yaml` without `workflows:` is unchanged; `.agentbay/catalog.json` gains
@@ -204,12 +224,16 @@ behaviour, adapter guarantees (merge, manifest, idempotent, clean restores origi
 
 ## Phases
 
-1. **Registry contract** - `bay/registry.py`, resolved schemas and `needs` in the catalog, `bay catalog`
-   command, adapter delegates. Stands alone; no new concepts.
-2. **cos as a mode** - mode, role, agent, env; playbook moved; adapter sources `COORDINATOR.md` from it.
-   Stands alone; no endpoints yet.
-3. **Project workflows** - config schema, lint, `workflow.run/v1` + connector, `cos.run`/`next`/`status`,
-   ledger event types, tests, README and `docs/INTERFACES.md`.
+1. **Registry contract** (shipped) - `bay/registry.py`, resolved `inSchema`/`outSchema`, `needs` and
+   `constraints` in the catalog, `bay catalog [<name>] [--json]`, added to the pre-approved coordinator
+   commands; the adapter delegates and supplies only its `runtime` name.
+2. **cos as a mode** (shipped) - `framework/modes/cos/` (playbook moved from `coordinator/`, three endpoints,
+   feature playbooks and rules), role `chief-of-staff` on agent `cos-main` in env `cos-local`; the adapter
+   renders the cos playbook as the preamble of `COORDINATOR.md` and excludes it from the per-mode sections.
+3. **Project workflows** (shipped) - `workflows:` in `schemas/config.schema.json`, `bay/workflows.py`,
+   `framework/interfaces/workflow.run.v1.yaml`, the `workflow-runner` connector, structural checks in
+   `bay lint` and target/`with` checks in `bay validate`, `bay approve <runId>`, `tests/test_workflows.py`,
+   README, `docs/INTERFACES.md` and `agentbay.config.example.yaml`.
 
 ## Deferred
 

@@ -136,13 +136,16 @@ framework/             shipped with the kit, never edited by users:
   modes/forge/         create | extend | migrate - agentbay building agentbay
   modes/improve/       scan | audit | triage | backlog | implement | verify - evidence-backed improvement backlog
   rules/conformance.yaml  semantic framework rules (forge reviewers + improve.audit)
-  roles/               researcher, builder, reviewer, forge-lead, improve-lead, improve-analyst, auditor
-  agents/ envs/        worker, critic, author, framework-builder, improve-main, improver /
-                       workspace, local-authoring, framework-dev, improve-local
-  interfaces/ connectors/  session.events, review.verdicts, artifacts.read, improve.detect, improve.findings /
+  modes/cos/           the Chief of Staff: routing playbook + run/next/status for project workflows
+  roles/               chief-of-staff, researcher, builder, reviewer, forge-lead, improve-lead,
+                       improve-analyst, auditor
+  agents/ envs/        cos-main, worker, critic, author, framework-builder, improve-main, improver /
+                       cos-local, workspace, local-authoring, framework-dev, improve-local
+  interfaces/ connectors/  workflow.run, session.events, review.verdicts, artifacts.read, improve.detect,
+                       improve.findings / workflow-runner (project-workflow stage cursor),
                        corpus-store (SQLite items store + SQL sandbox), ledger, git, claude-transcripts,
                        artifact-graph, improve-detect, improve-store, migrator, scaffold
-coordinator/           Chief of Staff prompt + slash commands
+coordinator/           Chief of Staff slash commands (its playbook lives in framework/modes/cos/)
 bay/                   resolver (incl. mode `extends`), lint, dispatcher, connectors runtime, adapter, ledger,
                        hook, CLI, selector.py (shared matcher), sqlsandbox.py (read-only agent SQL);
                        bay/improve/ (transcript parser, detectors, conformance checks, findings store)
@@ -156,13 +159,63 @@ tests/                 python3 tests/run.py
 | `bay validate` / `bay lint` | check everything / just structure (file:line errors) |
 | `bay build` / `bay clean` | compile into a project / remove exactly what was generated |
 | `bay ls`, `bay describe <mode\|role>` | what exists, fully resolved |
+| `bay catalog [<name>]` | the registry a coordinator reads: endpoints with input/output schemas, project workflows |
 | `bay call <mode>.<endpoint> '<json>'` | run a feature (cron it for features with `schedule:`; nothing runs schedules for you) |
 | `bay submit <callId> <step> '<json>'` | hand back a step's output or approve a gate |
+| `bay approve <callId\|runId> [--reject]` | pass a call's gate, or a workflow run's gate (your terminal only) |
 | `bay status`, `bay log` | calls, steps, agent runs, cost |
 | `bay mode\|feature\|role\|connector\|env new <name>` | scaffold (same templates as `forge.create`) |
 | `bay migrate [--confirm] [--project <repo>]` | migrate your content (and that project's v0.2 store) to this version (dry run by default) |
 | `bay note <ref> "text" [--instruction]` | record a note (or a mid-run instruction change) on a run, task or call; never creates a run |
 | `bay improve weekly` / `bay improve decide <id> approve\|defer\|wontfix` | weekly improve pass / your decision on a backlog item (approve: your terminal only) |
+
+## Composing modes: project workflows
+
+One endpoint does one job. When a job is several endpoints in a row, you configure a **project workflow** in
+`agentbay.config.yaml` and the Chief of Staff runs it stage by stage:
+
+```yaml
+workflows:
+  morning:
+    description: refresh the feed, then digest it
+    in: { type: object, properties: { lookback: { type: string } } }
+    steps:
+      - id: sync
+        call: feed-briefing.sync
+        with: { lookback: "$in.lookback" }
+      - id: digest
+        call: feed-briefing.digest
+        with: { since: "$steps.sync.until" }
+        when: $steps.sync.added          # skip the digest if nothing arrived
+      - id: ship
+        gate: "send the digest?"         # only `bay approve <runId>` passes this
+```
+
+`call` is one `<mode>.<endpoint>`, exactly as `bay call` spells it. `with`, `when`, `$in.<field>` and
+`$steps.<id>.<field>` mean what they mean inside a mode's own workflow - it is one substitution language.
+
+Ask for it in your session (*"run my morning workflow"*) and the Chief of Staff drives it:
+
+```
+bay call cos.run  '{"workflow": "morning", "input": {"lookback": "1d"}}'   -> stage 1: the call to make
+bay call <that call>                                                        -> driven the ordinary way
+bay call cos.next '{"runId": "W-...", "callId": "C-...", "status": "done", "output": {...}}'
+bay call cos.status '{"open": true}'                                        -> where every run stands
+```
+
+**A stage is not run inside `bay call`.** `cos.run` and `cos.next` hand back the endpoint to call; the
+coordinator calls it the ordinary way. So every stage keeps its own grants, effects, budget, review and
+approval gates, the dispatcher never recurses, and there is nothing to make cycle-safe. What a workflow may
+do is the union of its stages' effects, which `bay validate` prints:
+
+```
+$ bay validate
+✓ workflow morning: 3 stages, effects read, write, network, spend
+```
+
+`bay lint` checks the structure (stage ids, reference order, a `$steps` reference that points at a later stage
+or at a gate); `bay validate` additionally checks every `call` target against the registry and every `with`
+against that endpoint's input schema, so a typo is a lint error rather than a failure three stages in.
 
 ## Improving agentbay and your modes (`improve`)
 
@@ -228,8 +281,8 @@ All tracked in `.agentbay/manifest.json` and removed by `clean`; your CLAUDE.md,
 | `.claude/skills/<skill>/` | role and mode skills |
 | `.claude/commands/bay-*.md` | coordinator commands |
 | `.claude/settings.json` | merged: narrow `Bash(<prefix>:*)` permissions + ledger hooks |
-| `CLAUDE.md` | one marked import line -> `.agentbay/COORDINATOR.md` (Chief of Staff + mode coordinator playbooks) |
-| `.agentbay/catalog.json`, `.agentbay/bay` | modes/endpoints/roles catalog; project control-plane shim |
+| `CLAUDE.md` | one marked import line -> `.agentbay/COORDINATOR.md` (the `cos` playbook + mode coordinator playbooks) |
+| `.agentbay/catalog.json`, `.agentbay/bay` | the registry (modes, endpoints with resolved schemas, roles, project workflows); project control-plane shim |
 | `.agentbay/roles/<role>/use`, `.agentbay/guard.json` | per-role read-only data shim; per-subagent Bash policy for the guard hook |
 | `.agentbay/{ledger,calls,data}/` | runtime state (gitignored) |
 

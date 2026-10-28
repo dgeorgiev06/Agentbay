@@ -1,0 +1,118 @@
+apiVersion: agentbay/v2
+kind: Interface
+metadata:
+  name: workflow.run
+  description: >-
+    Runs of project workflows (agentbay.config.yaml workflows.<name>): the stage cursor and its state. A stage is
+    never executed here - start and next return the `<mode>.<endpoint>` call the coordinator is to make, so each
+    stage keeps its own grants, effects, budget, review and approval gates, and nothing recurses into the
+    dispatcher. State lives in .agentbay/data/workflows/.
+spec:
+  version: 1
+  binding: connector
+  endpoints:
+    start:
+      description: Begin a run of a named workflow. Returns its id and the first stage to call.
+      in:
+        type: object
+        required: [workflow]
+        additionalProperties: false
+        properties:
+          workflow: { type: string, description: "workflows.<name> in agentbay.config.yaml" }
+          input: { type: object, description: "the run's own input, referenced as $in.<field>" }
+      out: &stage
+        type: object
+        required: [runId, workflow, status]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          workflow: { type: string }
+          status:
+            type: string
+            enum: [stage-ready, awaiting-approval, done, blocked, failed]
+            description: >-
+              stage-ready: run `nextCall`, then come back to workflow.run/v1.next. awaiting-approval: a gate,
+              passed only by `bay approve`. done/blocked/failed: the run is over.
+          stage: { type: string, description: "id of the stage this refers to" }
+          nextCall:
+            type: object
+            required: [target, input]
+            additionalProperties: false
+            properties:
+              target: { type: string, description: "<mode>.<endpoint>, as `bay call` spells it" }
+              input: { type: object }
+          gate: { type: string, description: "the approval text, when status is awaiting-approval" }
+          skipped: { type: array, items: { type: string }, description: "stages whose `when` was falsy" }
+          reason: { type: string }
+          results: { type: object, description: "per-stage output so far" }
+      effects: [read, write]
+    next:
+      description: >-
+        Record the stage that just finished and return the next one. The coordinator passes the callId it drove
+        and that call's output; a skipped stage records no output.
+      in:
+        type: object
+        required: [runId]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          callId: { type: string, description: "the call the coordinator ran for the current stage" }
+          output: { type: object, description: "that call's output, for later stages' $steps.<id>" }
+          status: { type: string, enum: [done, partial, blocked, failed], description: "how that call ended" }
+      out: *stage
+      effects: [read, write]
+    approve:
+      description: Pass or reject the gate a run waits on. Reached only from `bay approve` (interactive terminal).
+      in:
+        type: object
+        required: [runId, approved]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          approved: { type: boolean }
+          by: { type: string }
+          reason: { type: string }
+      out: *stage
+      effects: [read, write]
+    show:
+      description: State of one run, or of every run. Read-only.
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          open: { type: boolean, description: "only runs that have not ended" }
+      out:
+        type: object
+        required: [runs]
+        additionalProperties: false
+        properties:
+          runs:
+            type: array
+            items:
+              type: object
+              required: [runId, workflow, status, stages]
+              additionalProperties: false
+              properties:
+                runId: { type: string }
+                workflow: { type: string }
+                status: { type: string }
+                startedAt: { type: string }
+                endedAt: { type: string }
+                cursor: { type: integer }
+                input: { type: object }
+                reason: { type: string }
+                stages:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, state]
+                    additionalProperties: false
+                    properties:
+                      id: { type: string }
+                      kind: { type: string }
+                      call: { type: string }
+                      state: { type: string, enum: [pending, running, completed, skipped, blocked, failed] }
+                      callId: { type: string }
+                      status: { type: string }
+      effects: [read]

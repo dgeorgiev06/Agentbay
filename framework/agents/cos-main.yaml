@@ -1,0 +1,6 @@
+apiVersion: agentbay/v2
+kind: Agent
+metadata:
+  name: cos-main
+  description: The user's main Claude Code thread, where the Chief of Staff runs.
+spec: { runtime: claude-code-main, model: inherit, effort: medium, env: cos-local }

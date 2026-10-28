@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from . import checks, model, playbook as pbk, rules as rulesmod
+from . import checks, model, playbook as pbk, rules as rulesmod, workflows as wfmod
 
 # Features whose review can never be turned off, with the settings they must use.
 MANDATORY_REVIEW = {"forge.extend": {"when": "always", "model": "opus", "effort": "high"}}
@@ -288,6 +288,11 @@ SCHEDULED_BY = {"improve.backlog": "`.agentbay/bay improve weekly` (it runs scan
 def warnings(kit: model.Kit) -> list[str]:
     """Non-fatal findings: printed by `bay lint`, never fail it."""
     out = list(getattr(kit, "deprecations", []))
+    stale = kit.root / "coordinator" / "chief-of-staff.md"
+    if stale.exists():
+        out.append(f"{model.rel(stale)}: the Chief of Staff playbook moved to "
+                   f"framework/modes/{model.ROOT_COORDINATOR}/playbook.md; this file is no longer read. Move your "
+                   f"edits there and delete it.")
     for md in kit.docs["Mode"].values():
         if md.spec.get("abstract"):
             continue                    # never installed: its children carry the schedule
@@ -326,6 +331,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     out += lint_roles(kit)
     out += lint_connectors(kit)
     out += lint_rulesets(kit)
+    out += wfmod.structure_problems(kit)        # project workflows; targets are checked by `bay validate`
     return list(dict.fromkeys(out))
 
 

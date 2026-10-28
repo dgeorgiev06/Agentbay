@@ -1,6 +1,0 @@
-apiVersion: agentbay/v2
-kind: Agent
-metadata:
-  name: improve-main
-  description: Main-thread executor for the improve coordinator; improve's code steps run in its env.
-spec: { runtime: claude-code-main, model: inherit, effort: medium, env: improve-local }

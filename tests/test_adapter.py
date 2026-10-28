@@ -44,20 +44,22 @@ def test_adapter_round_trip():
     assert {"Edit(/.agentbay/**)", "Edit(/.claude/**)", "Read(/.agentbay/data/**)"} <= set(st["permissions"]["deny"])
     assert any(d.startswith("Edit(//") and d.endswith("/**)") for d in st["permissions"]["deny"])   # kit outside
     agents = {p.stem for p in (proj / ".claude/agents").glob("*.md")}
-    assert agents == {"researcher", "builder", "reviewer", "briefing-analyst", "builder--author",
-                      "improve-analyst", "auditor"}                                    # no framework-dev here
-    assert "briefing-lead" not in agents and "forge-lead" not in agents          # coordinators run in main thread
-    fa = (proj / ".claude/agents/briefing-analyst.md").read_text()
-    assert "tools: Bash\n" in fa and ".agentbay/roles/briefing-analyst/use items.store/v1.query" in fa and "Result/v1" in fa
-    assert "--role" not in fa
-    rv = (proj / ".claude/agents/reviewer.md").read_text()
+    assert agents == {"researcher--delivery", "builder--delivery", "reviewer--delivery", "analyst--feed-briefing",
+                      "reviewer--feed-briefing", "builder--forge", "reviewer--forge",
+                      "analyst--improve", "reviewer--improve"}       # no framework-dev here, so no --<env> suffix
+    assert not any(a.startswith("lead--") for a in agents)                      # coordinators run in main thread
+    fa = (proj / ".claude/agents/analyst--feed-briefing.md").read_text()
+    assert "tools: Bash\n" in fa and ".agentbay/roles/analyst--feed-briefing/use items.store/v1.query" in fa
+    assert "Result/v1" in fa and "--role" not in fa and "mode `feed-briefing`, env `local-feeds`" in fa
+    assert "corpus-sql" in fa                                                   # the mode's skills
+    rv = (proj / ".claude/agents/reviewer--delivery.md").read_text()
     assert "model: opus" in rv and "Edit" not in rv.split("---")[1]
     claude = (proj / "CLAUDE.md").read_text()
     assert claude.startswith("<!-- agentbay:begin") and "@.agentbay/COORDINATOR.md" in claude and "# mine" in claude
     coord = (proj / ".agentbay/COORDINATOR.md").read_text()
-    assert "Chief of Staff" in coord and "`feed-briefing.digest`" in coord and "coordinator role `briefing-lead`" in coord
+    assert "Chief of Staff" in coord and "`feed-briefing.digest`" in coord and "coordinator role `lead`" in coord
     assert coord.count("# You are the Chief of Staff") == 1          # preamble only, not also a mode section
-    assert "coordinator role `chief-of-staff`" not in coord
+    assert "### Mode `cos`" not in coord
     assert "`cos.run`" in coord                                      # but its endpoints are in the table
     assert (proj / ".claude/skills/digest/SKILL.md").exists() and (proj / ".claude/skills/corpus-sql/SKILL.md").exists() and (proj / ".claude/skills/research-brief/SKILL.md").exists()
     cat = json.loads((proj / ".agentbay/catalog.json").read_text())

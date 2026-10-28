@@ -1,4 +1,4 @@
-# briefing (coordinator playbook for briefing-lead)
+# briefing (coordinator playbook, run by the lead role)
 
 You run a mode that extends briefing from the Chief of Staff's main thread (`<mode>` below).
 

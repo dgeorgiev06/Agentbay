@@ -1,0 +1,13 @@
+apiVersion: agentbay/v2
+kind: Environment
+metadata:
+  name: research
+  description: Read the project checkout and research the public web. No file writes, no secrets, no spend.
+spec:
+  bind:
+    workspace.read/v1: { tools: [Read, Glob, Grep] }
+    web.research/v1: { tools: [WebSearch, WebFetch] }
+  network: { allow: ["*"] }
+  fs: { read: ["."], write: [] }
+  effects: [read, network]
+  limits: { maxTurns: 40, maxMinutes: 30 }

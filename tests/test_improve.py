@@ -53,7 +53,7 @@ def no_secrets_anywhere(p, *outputs):
 
 def scan(d, patterns=None):
     r = d.call("improve.scan", {"since": "7d"})
-    assert r["status"] == "needs-agent" and r["next"]["role"] == "improve-analyst", r
+    assert r["status"] == "needs-agent" and r["next"]["role"] == "analyst", r
     return r, d.submit(r["callId"], "patterns", {"findings": patterns or []})
 
 
@@ -70,34 +70,33 @@ def test_mode_and_env_containment():
         s = system(p)
         m = s.modes["improve"]
         assert set(m.features) == {"scan", "audit", "triage", "backlog", "implement", "verify"}
-        assert m.features["triage"].review["when"] == "always" and m.features["implement"].review["model"] == "opus"
+        assert m.features["triage"].review["when"] == "always" and m.features["implement"].review["tier"] == "deep"
         assert [st.kind for st in m.features["implement"].steps] == ["code", "role", "review", "gate", "code"]
-        assert m.features["scan"].review is None and m.coordinator == "improve-lead"
+        assert m.features["scan"].review is None and m.coordinator == "lead"
         env = s.env("improve-local").spec
         assert env["network"]["allow"] == [] and env["fs"]["write"] == [".agentbay/data/improve"]
         assert set(env["effects"]) == {"read", "write"} and "secrets" not in env
-        assert s.roles["improve-analyst"].bay_uses == ["improve.findings/v1.query", "session.events/v1.episodes"]
-        assert set(s.roles["auditor"].bay_uses) == {"improve.findings/v1.query", "artifacts.read/v1.files",
-                                                      "artifacts.read/v1.graph", "artifacts.read/v1.text"}
         get("claude-code").build(s, p, kit_for(p))
         pol = json.loads((p / ".agentbay/guard.json").read_text())["subagents"]
-        for role in ("improve-analyst", "auditor"):
-            assert pol[role]["read"] == ["."] and pol[role]["write"] == [], pol[role]   # no ~/.claude for roles
+        role = "analyst--improve"
+        assert pol[role]["read"] == ["."] and pol[role]["write"] == [], pol[role]   # no ~/.claude for roles
         d = D(p)
-        for role, target in (("auditor", "session.events/v1.episodes"), ("improve-analyst", "improve.findings/v1.upsert"),
-                             ("improve-analyst", "improve.detect/v1.sessions"),
-                             ("auditor", "improve.findings/v1.decide"), ("improve-lead", "improve.findings/v1.handoff")):
+        for role, target in (("analyst--improve", "improve.findings/v1.upsert"),
+                             ("analyst--improve", "improve.detect/v1.sessions"),       # dispatcherOnly
+                             ("analyst--improve", "improve.findings/v1.decide"),
+                             ("analyst--improve", "improve.findings/v1.handoff"),
+                             ("reviewer--improve", "improve.findings/v1.query")):
             try:
                 d.use(role, target, {})
                 raise AssertionError(f"{role} reached {target}")
             except dispatch.CallError as e:
                 assert "not granted" in str(e)
-        assert "findings" in d.use("improve-analyst", "improve.findings/v1.query", {})
-        merged = d.use("improve-analyst", "session.events/v1.episodes", {"since": "7d"})       # 3 connectors merged
+        assert "findings" in d.use("analyst--improve", "improve.findings/v1.query", {})
+        merged = d.use("analyst--improve", "session.events/v1.episodes", {"since": "7d"})       # 3 connectors merged
         assert {e["source"] for e in merged["episodes"]} == {"ledger"}
         assert set(merged["stats"]) == {"ledger", "claude-transcripts", "git"}
         payload = {"tool_name": "Read", "tool_input": {"file_path": str(p.parent / "cc" / "x.jsonl")},
-                   "agent_type": "auditor", "agent_id": "a1", "cwd": str(p)}
+                   "agent_type": "analyst--improve", "agent_id": "a1", "cwd": str(p)}
         r = subprocess.run([sys.executable, str(KIT / "bay/guard.py")], input=json.dumps(payload), text=True,
                            capture_output=True, env={"CLAUDE_PROJECT_DIR": str(p), "PATH": "/usr/bin:/bin"})
         assert r.returncode == 2 and "may only read inside" in r.stdout          # transcripts unreachable for roles
@@ -278,8 +277,8 @@ def test_forge_reviewers_get_the_conformance_rules():
     k = kit_copy()
     try:
         d = dispatch.Dispatcher(system(k, k), k, clock=clock)
-        r = d.call("forge.create", {"kind": "role", "name": "summarizer", "intent": "Summarizes things"})
-        rv = d.submit(r["callId"], "fill", {"status": "done", "summary": "filled the role"})
+        r = d.call("forge.create", {"kind": "env", "name": "summaries", "intent": "Where summaries are written"})
+        rv = d.submit(r["callId"], "fill", {"status": "done", "summary": "filled the env"})
         conf = rv["next"]["review"]["rulesets"]["conformance"]
         assert [c["id"] for c in conf][:2] == ["C-1", "C-2"] and conf[0]["check"] == "playbook_matches_workflow"
     finally:
@@ -291,7 +290,7 @@ def test_audit_on_the_kit_itself():
     try:
         d = dispatch.Dispatcher(system(k, k), k, clock=clock)
         r = d.call("improve.audit", {})
-        assert r["status"] == "needs-agent" and r["next"]["role"] == "auditor"
+        assert r["status"] == "needs-agent" and r["next"]["role"] == "analyst" and r["next"]["runAs"] == "subagent_type=analyst--improve"
         detect = r["next"]["previous"]["detect"]
         assert {m["id"] for m in detect["manual"]} == {"C-8", "C-9", "C-10"}
         assert detect["stats"]["conformanceRules"] == ["C-1", "C-2", "C-3", "C-4", "C-5", "C-6", "C-7"]
@@ -312,14 +311,14 @@ def test_improve_role_shims_follow_the_kit_script_pattern():
     p = proj(transcripts=False)
     try:
         get("claude-code").build(system(p), p, kit_for(p))
-        for role in ("improve-analyst", "auditor"):
-            sh = (p / f".agentbay/roles/{role}/use").read_text()
+        for unit in ("analyst--improve",):
+            sh = (p / f".agentbay/roles/{unit}/use").read_text()
             assert "python3 -E" in sh and "bay/use_shim.py" in sh and "python3 -c" not in sh, sh
         (p / "yaml.py").write_text("raise SystemExit('project code ran')\n")    # must never be imported
-        r = subprocess.run([str(p / ".agentbay/roles/improve-analyst/use"), "improve.findings/v1.query", "{}"],
+        r = subprocess.run([str(p / ".agentbay/roles/analyst--improve/use"), "improve.findings/v1.query", "{}"],
                            cwd=p, capture_output=True, text=True)
         assert r.returncode == 0 and json.loads(r.stdout)["findings"] == [], r.stderr
-        r = subprocess.run([str(p / ".agentbay/roles/improve-analyst/use"), "improve.findings/v1.scan", "{}"],
+        r = subprocess.run([str(p / ".agentbay/roles/analyst--improve/use"), "improve.findings/v1.scan", "{}"],
                            cwd=p, capture_output=True, text=True)
         assert r.returncode != 0 and "not granted" in r.stderr
     finally:
@@ -331,7 +330,7 @@ def test_use_output_is_secret_scanned():
     p = proj()
     try:
         d = D(p)
-        out = d.use("improve-analyst", "session.events/v1.episodes", {"since": "7d"})
+        out = d.use("analyst--improve", "session.events/v1.episodes", {"since": "7d"})
         no_secrets_anywhere(p, out)
     finally:
         cleanup(p.parent)

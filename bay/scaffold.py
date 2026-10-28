@@ -2,8 +2,7 @@
 and are shared by `bay <kind> new` and the forge.create feature (via the
 scaffold connector), so code scaffolding and the agentic flow cannot drift.
 
-Scaffolds only ever write user space (modes/, roles/, agents/, envs/,
-connectors/) and never overwrite an existing file.
+Scaffolds only ever write user space (modes/, envs/, connectors/) and never overwrite an existing file.
 """
 from __future__ import annotations
 
@@ -13,7 +12,7 @@ from pathlib import Path
 import yaml
 
 TEMPLATES = Path(__file__).resolve().parent.parent / "framework" / "modes" / "forge" / "templates"
-KINDS = ("mode", "feature", "role", "connector", "env")
+KINDS = ("mode", "feature", "connector", "env")
 NAME = re.compile(r"^[a-z][a-z0-9-]{1,40}$")
 REVIEW_EFFECTS = {"write", "spend", "delete"}   # features with these get review on by default
 
@@ -50,7 +49,6 @@ def _check_name(kit: Path, kind: str, name: str) -> None:
         raise ScaffoldError(f"{kind} name '{name}' must be lowercase letters, digits and dashes (2-41 chars)")
     reserved = {
         "mode": kit / "framework" / "modes" / name,
-        "role": kit / "framework" / "roles" / f"{name}.yaml",
         "env": kit / "framework" / "envs" / f"{name}.yaml",
         "connector": kit / "framework" / "connectors" / name,
     }.get(kind)
@@ -65,6 +63,9 @@ def review_block(effects: list[str], role: str = "reviewer") -> str:
 
 def create(kit: Path, kind: str, name: str, *, target: str | None = None, implements: str | None = None,
            intent: str | None = None, effects: list[str] | None = None, role: str | None = None) -> dict:
+    if kind == "role":
+        from .model import USER_ROLE
+        raise ScaffoldError(USER_ROLE.split(" (`bay migrate`")[0])
     if kind not in KINDS:
         raise ScaffoldError(f"unknown kind '{kind}' (have: {', '.join(KINDS)})")
     _check_name(kit, kind, name)
@@ -115,9 +116,6 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
         mfile.write_text(text)
         files.append(f"modes/{target}/mode.yaml")
         todo = [f"fill the TODOs in modes/{target}/features/{name}/", "run `./bay.sh lint`"]
-    elif kind == "role":
-        _write(kit, f"roles/{name}.yaml", _render("role/role.yaml", name=name, intent=intent), files)
-        todo = [f"fill the TODOs in roles/{name}.yaml", "add it to a mode's roles and a workflow step"]
     elif kind == "connector":
         if not implements:
             raise ScaffoldError("kind=connector needs --implements <interface>/v<N> (e.g. items.source/v1)")
@@ -144,7 +142,7 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
                 f"bind it in an env: `{implements}: [{name}]` and allow its host and secrets"]
     elif kind == "env":
         _write(kit, f"envs/{name}.yaml", _render("env/env.yaml", name=name, intent=intent), files)
-        todo = [f"bind capabilities in envs/{name}.yaml", "point an agent at it (spec.env)"]
+        todo = [f"bind capabilities in envs/{name}.yaml", f"put roles in it from a mode's `roles:` (<role>: {name})"]
     return {"kind": kind, "name": name, "files": files, "todo": todo}
 
 

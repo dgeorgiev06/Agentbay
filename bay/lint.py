@@ -14,7 +14,7 @@ import yaml
 from . import checks, model, playbook as pbk, rules as rulesmod, workflows as wfmod
 
 # Features whose review can never be turned off, with the settings they must use.
-MANDATORY_REVIEW = {"forge.extend": {"when": "always", "model": "opus", "effort": "high"}}
+MANDATORY_REVIEW = {"forge.extend": {"when": "always", "tier": "deep", "effort": "high"}}
 TOOL_NAMES = {"Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch", "Task", "Agent"}
 
 
@@ -112,30 +112,85 @@ def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[
     if must:
         if not rv or any(rv.get(k) != v for k, v in must.items()):
             out.append(f"{_where(mfile, ep_line)}: feature {target} must declare review "
-                       f"{{ role: <reviewer>, when: always, model: opus, effort: high }}; review is mandatory and cannot "
+                       f"{{ role: <reviewer>, when: always, tier: deep, effort: high }}; review is mandatory and cannot "
                        f"be disabled or weakened here")
     for rs in (rv or {}).get("rulesets", []):
         if not (kit.root / "framework" / "rules" / f"{rs}.yaml").exists():
             out.append(f"{_where(mfile, ep_line)}: feature {target} review names rule set '{rs}', but "
                        f"framework/rules/{rs}.yaml does not exist")
-    if rv and rv.get("when") == "always":
-        rn = rv.get("role")
-        if rn not in kit.docs["Role"]:
-            out.append(f"{_where(mfile, ep_line)}: feature {target} review role '{rn}' does not exist "
-                       f"(have: {', '.join(sorted(kit.docs['Role']))})")
-        elif rn not in md.spec["roles"]:
-            out.append(f"{_where(mfile, ep_line)}: feature {target} review role '{rn}' is not listed in "
-                       f"mode {md.name} roles {md.spec['roles']}")
+    if rv and rv.get("when") == "always" and rv.get("role") not in kit.docs["Role"]:
+        out.append(f"{_where(mfile, ep_line)}: feature {target} review role '{rv.get('role')}' does not exist "
+                   f"(have: {', '.join(sorted(kit.docs['Role']))})")
+    return out
+
+
+def _step_where(md: model.Doc, ep_name: str, sid: str | None) -> tuple[Path, int]:
+    """Where a workflow step of a feature is written (own mode.yaml, else the nearest ancestor's)."""
+    wf = (md.spec.get("endpoints") or {}).get(ep_name, {}).get("workflow")
+    rx = re.compile(rf"\bid:\s*{re.escape(sid or '')}(?![\w-])")
+    for d in md.dirs:
+        start = _entry_line(d / "mode.yaml", "workflows", wf) if wf and sid else None
+        if start is None:
+            continue
+        lines = (d / "mode.yaml").read_text(encoding="utf-8").splitlines()
+        for i in range(start + 1, len(lines)):
+            if lines[i].strip() and len(lines[i]) - len(lines[i].lstrip()) <= 4:
+                break
+            if rx.search(lines[i]):
+                return d / "mode.yaml", i + 1
+    return _ep_key_where(md, ep_name, "roles")
+
+
+def lint_role_envs(md: model.Doc, kit: model.Kit) -> list[str]:
+    """Each role of the mode is a framework role; each step's role is in the mode and has exactly one env
+    (step > feature > mode `roles:`)."""
+    out = []
+    roles = md.spec.get("roles") if isinstance(md.spec.get("roles"), dict) else {}
+    problems = [(None, None, f"mode {md.name}: `roles:` names unknown role '{rn}' (framework roles: "
+                             f"{', '.join(sorted(kit.docs['Role']))}); {model.USER_ROLE.split(' (`bay migrate`')[0]}")
+                for rn in roles if rn not in kit.docs["Role"]]
+    envs = kit.docs["Environment"]
+    have = ", ".join(sorted(envs))
+
+    def unknown(where, mapping):
+        return [f"{where}: `roles:` puts role {rn} in unknown env '{env}' (have: {have})"
+                for rn, env in (mapping or {}).items() if env and env not in envs]
+    problems += [(None, None, m) for m in unknown(f"mode {md.name}", roles)]
+    for ep_name, ep in (md.spec.get("endpoints") or {}).items():
+        problems += [(ep_name, None, m) for m in unknown(f"{md.name}.{ep_name}", ep.get("roles"))]
+        for st in (md.spec.get("workflows") or {}).get(ep.get("workflow"), []):
+            problems += [(ep_name, st.get("id"), m)
+                         for m in unknown(f"{md.name}.{ep_name} step {st.get('id')}", st.get("roles"))]
+    for ep_name, sid, msg in problems + model.role_env_problems(md):
+        if ep_name and sid:
+            where = _step_where(md, ep_name, sid)
+        elif ep_name:
+            where = _ep_key_where(md, ep_name, "roles")
         else:
-            gaps: list[str] = []
-            r = model.resolve_role(kit, rn, gaps, f"{target} review", set(), agent=(ep.get("agents") or {}).get(rn))
-            if r is not None:
-                env = kit.get("Environment", r.env)
-                mdl = model.step_inference(md, "review", r, rv).model
-                if mdl not in env.spec["models"]:
-                    gaps.append(f"review model '{mdl}' is not allowed by env {env.name} (allows: {', '.join(env.spec['models'])})")
-            for g in gaps:
-                out.append(f"{_where(mfile, ep_line)}: feature {target} review role {rn} cannot be placed: {g}")
+            where = next(((d / "mode.yaml", i + 1) for d in md.dirs
+                          for i, ln in enumerate((d / "mode.yaml").read_text(encoding="utf-8").splitlines())
+                          if re.match(r"^\s{2}roles:", ln)), (md.path, 1))
+        out.append(f"{_where(*where)}: {msg}")
+    return out
+
+
+def lint_env_bindings(kit: model.Kit) -> list[str]:
+    """A tools binding under a capability without the `write` effect may not list file-writing tools or any CLI
+    beyond the read-only ones (git status/diff/log/show): roles of every access level get read capabilities."""
+    out = []
+    for env in kit.docs["Environment"].values():
+        for iface, b in (env.spec.get("bind") or {}).items():
+            idoc = kit.get("Interface", iface)
+            if not isinstance(b, dict) or idoc is None or "write" in model.endpoint_effects(kit, iface, None):
+                continue
+            bad = [x for x in b.get("tools", []) if x in model.WRITE_TOOLS]
+            bad += [c for c in b.get("clis", []) if c not in model.READ_ONLY_CLIS]
+            if bad:
+                line = _line_of(env.path, rf"^\s+{re.escape(iface)}:")
+                out.append(f"{_where(env.path, line)}: env {env.name} binds {', '.join(bad)} under {iface}, which has "
+                           f"no `write` effect; file-writing tools and CLIs other than "
+                           f"{', '.join(model.READ_ONLY_CLIS)} belong under a capability with the write effect "
+                           f"(e.g. workspace.write/v1)")
     return out
 
 
@@ -203,6 +258,7 @@ def lint_mode(md: model.Doc, kit: model.Kit) -> list[str]:
             out.append(f"{_where(*_ep_where(md, ep_name))}: feature "
                        f"{md.name}.{ep_name} uses unknown workflow '{ep['workflow']}'")
         out += lint_feature(md, ep_name, ep, kit)
+    out += lint_role_envs(md, kit)
     for wf in s["workflows"]:
         if wf not in used:
             out.append(f"{_where(*_lineage_where(md, 'workflows', wf))}: workflow '{wf}' is not "
@@ -213,7 +269,7 @@ def lint_mode(md: model.Doc, kit: model.Kit) -> list[str]:
         # structured values only: drop comments, quoted prose and step ids
         code = re.sub(r"\bid:\s*[\w-]+", "", re.sub(r"\"[^\"]*\"", "", ln.split("#", 1)[0]))
         for c in kit.docs["Connector"]:
-            if re.search(rf"(?<![\w.-]){re.escape(c)}(?![\w-])", code):
+            if re.search(rf"(?<![\w.-]){re.escape(c)}(?![\w-]|\.[a-z][\w.-]*/v[0-9])", code):     # not a capability name
                 out.append(f"{_where(md.path, i)}: mode names connector '{c}'; modes name capabilities only "
                            f"(bind connectors in an env)")
         for t in TOOL_NAMES:
@@ -302,6 +358,7 @@ def warnings(kit: model.Kit) -> list[str]:
                 run = SCHEDULED_BY.get(target, f"`.agentbay/bay call {target} '{{}}'`")
                 out.append(f"{_where(*_ep_key_where(md, ep_name, 'schedule'))}: {target} declares "
                            f"schedule '{ep['schedule']}' but no runtime acts on it; run {run} from cron")
+    out += split_store_warnings(kit)
     stores = [c.name for c in kit.docs["Connector"].values() if "items.store/v1" in (
         [c.spec["implements"]] if isinstance(c.spec["implements"], str) else c.spec["implements"])]
     if stores:
@@ -323,12 +380,63 @@ def warnings(kit: model.Kit) -> list[str]:
     return out
 
 
+def split_store_warnings(kit: model.Kit) -> list[str]:
+    """Code steps (sync, prune) run in the env of the mode's coordinator. A role of a store-reading mode put in an
+    env whose items.store/items.source bindings differ reads a store that the mode's sync never fills: a partial
+    `roles:` override silently splits the mode."""
+    out = []
+    keys = (model.STORE_IFACE, model.SOURCE_IFACE)
+    for md in kit.docs["Mode"].values():
+        if md.spec.get("abstract") or model.STORE_IFACE not in md.spec.get("needs", []):
+            continue
+        s = md.spec
+        maps = [(None, None, s.get("roles"))] + [(ep, None, e.get("roles")) for ep, e in (s.get("endpoints") or {}).items()]
+        maps += [(ep, st.get("id"), st.get("roles")) for ep, e in (s.get("endpoints") or {}).items()
+                 for st in (s.get("workflows") or {}).get(e.get("workflow"), [])]
+        for ep_name, sid, mapping in maps:
+            code, _ = model.code_env(kit, md, model.STORE_IFACE, (s.get("endpoints") or {}).get(ep_name))
+            if code is None or not isinstance(mapping, dict):
+                continue
+            want = [code.spec["bind"].get(k) for k in keys]
+            for rn, env_name in mapping.items():
+                env = kit.get("Environment", kit.env_name(env_name) or "")
+                if env is None or env.name == code.name or model.STORE_IFACE not in env.spec.get("bind", {}):
+                    continue
+                if [env.spec["bind"].get(k) for k in keys] != want:
+                    where = (_step_where(md, ep_name, sid) if sid else _ep_key_where(md, ep_name, "roles") if ep_name
+                             else next(((d / "mode.yaml", i + 1) for d in md.dirs for i, ln in enumerate(
+                                 (d / "mode.yaml").read_text(encoding="utf-8").splitlines())
+                                 if re.match(r"^\s{2}roles:", ln)), (md.path, 1)))
+                    out.append(f"{_where(*where)}: mode {md.name} puts role {rn} in env {env.name}, whose "
+                               f"items.store/items.source bindings differ from env {code.name}, where its code steps "
+                               f"(sync, prune) run (the coordinator's env): {rn} would read a store this mode's sync "
+                               f"never fills. Put {rn} in {code.name}, or move the coordinator too")
+    return list(dict.fromkeys(out))
+
+
 def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Kit | None = None) -> list[str]:
     kit = kit or model.Kit(kit_root or model.KIT, project)
     out = list(kit.errors) + list(kit.collisions)
-    for md in kit.docs["Mode"].values():
-        out += lint_mode(md, kit)
+    seen: set[str] = set()
+    # parents first; a child's problem that is its parent's problem (same file:line, the same message with the
+    # child's mode name) is reported once, as the parent's
+    for md in sorted(kit.docs["Mode"].values(), key=lambda d: (len(d.dirs), d.name)):
+        ancestors, cur = [], md
+        while cur.parent and cur.parent not in ancestors:
+            ancestors.append(cur.parent)
+            cur = kit.docs["Mode"].get(cur.parent)
+            if cur is None:
+                break
+        for p in lint_mode(md, kit):
+            loc, msg = (p.split(": ", 1) + [""])[:2] if re.match(r"^\S+:\d+: ", p) else ("", p)
+            same = {(f"{loc}: " if loc else "") + re.sub(rf"(?<![\w-]){re.escape(md.name)}(?![\w-])", a, msg)
+                    for a in ancestors}
+            if p in seen or same & seen:
+                continue
+            seen.add(p)
+            out.append(p)
     out += lint_roles(kit)
+    out += lint_env_bindings(kit)
     out += lint_connectors(kit)
     out += lint_rulesets(kit)
     out += wfmod.structure_problems(kit)        # project workflows; targets are checked by `bay validate`

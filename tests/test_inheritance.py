@@ -13,10 +13,7 @@ def problems(k):
 
 
 def child(k, name="mail-briefing", spec=None):
-    """A second mode extending briefing. It replaces feed-briefing: until per-mode role placement (proposal
-    0003 step 3) two such modes would share briefing-analyst, which validate refuses (see the last test)."""
-    import shutil
-    shutil.rmtree(k / "modes/feed-briefing", ignore_errors=True)
+    """A second mode extending briefing, next to feed-briefing (each (role, mode, env) compiles on its own)."""
     d = k / "modes" / name
     d.mkdir(parents=True)
     doc = {"apiVersion": "agentbay/v2", "kind": "Mode", "metadata": {"name": name, "version": "0.1.0"},
@@ -30,13 +27,13 @@ def test_feed_briefing_is_complete_after_extends():
     md = k.get("Mode", "feed-briefing")
     assert md.parent == "briefing" and md.dirs == [KIT / "modes/feed-briefing", KIT / "modes/briefing"]
     s = md.spec
-    assert set(s["endpoints"]) == {"sync", "digest", "ask", "prune"} and s["coordinator"] == "briefing-lead"
+    assert set(s["endpoints"]) == {"sync", "digest", "ask", "prune"} and s["coordinator"] == "lead"
     assert s["endpoints"]["digest"]["playbook"] == "../briefing/features/digest/playbook.md"     # rebased
     assert s["endpoints"]["sync"]["playbook"] == "features/sync/playbook.md"                    # own override
     assert s["endpoints"]["sync"]["rules"] == "../briefing/features/sync/rules.yaml"            # inherited
     assert s["endpoints"]["sync"]["effects"] == ["network", "spend", "write"]                   # merged per key
-    assert s["config"] == "config.schema.json" and "abstract" not in s and "extends" in s
-    assert s["constraints"]["maxPostsPerRun"] == 500 and s["constraints"]["lookbackMax"] == "30d"
+    assert s["config"] == "../briefing/config.schema.json" and "abstract" not in s and "extends" in s
+    assert s["constraints"]["maxItemsPerRun"] == 500 and s["constraints"]["lookbackMax"] == "30d"
     sysm = model.resolve(k)
     m = sysm.modes["feed-briefing"]
     assert m.features["sync"].in_schema["properties"].keys() == {"lookback", "maxPosts"}       # child type
@@ -50,19 +47,24 @@ def test_feed_briefing_is_complete_after_extends():
 def test_child_overrides_review_workflow_roles_and_inherits_the_rest():
     k = kit_copy()
     edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"]["endpoints"].update(
-        {"ask": {"review": {"role": "reviewer", "when": "always", "model": "sonnet"}}}))
+        {"ask": {"review": {"role": "reviewer", "when": "always", "tier": "balanced"}}}))
     edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"]["workflows"].update(
         {"prune": [{"id": "trim", "run": "items.store/v1.prune", "with": {"olderThan": "7d"}}]}))
     s = model.resolve(model.Kit(k))
     ask = s.modes["feed-briefing"].features["ask"]
-    assert ask.review["model"] == "sonnet" and ask.steps[-1].kind == "review"
+    assert ask.review["tier"] == "balanced" and ask.steps[-1].kind == "review"
+    assert ask.steps[-1].inference.model == "sonnet"
     assert ask.playbook_path.resolve() == (k / "modes/briefing/features/ask/playbook.md").resolve()
     assert [st.id for st in s.modes["feed-briefing"].features["prune"].steps] == ["trim", "review"]
     # a second child of the same base keeps the base behaviour
-    child(k, spec={"purpose": "Mail.", "roles": ["briefing-lead", "briefing-analyst", "reviewer", "researcher"]})
+    child(k, spec={"purpose": "Mail.", "roles": {"analyst": "local-feeds-offline", "researcher": "research"}})
     s = model.resolve(model.Kit(k))
     mail = s.modes["mail-briefing"]
-    assert mail.features["ask"].review is None and mail.roles[-1] == "researcher" and mail.extends == "briefing"
+    assert mail.features["ask"].review is None and mail.extends == "briefing"
+    # the roles map is inherited and overridden entry by entry
+    assert mail.roles == {"lead": "local-feeds", "analyst": "local-feeds-offline", "reviewer": "local-feeds",
+                          "researcher": "research"}
+    assert s.modes["feed-briefing"].roles["analyst"] == "local-feeds"
     assert problems(k) == []
 
 
@@ -121,24 +123,6 @@ def test_abstract_base_is_linted_not_installed():
     assert not any("briefing.prune declares schedule" in w and "feed" not in w for w in lint.warnings(model.Kit(k)))
 
 
-def test_a_second_briefing_mode_fails_validate_naming_the_modes_and_step_3():
-    """Two modes extending briefing share briefing-analyst; each keeps its own store and a role's read reaches
-    one, so every analyst read would fail at runtime (dispatch: "reads items.store/v1 for several modes").
-    validate says so up front instead."""
-    import subprocess
-    k = kit_copy()
-    d = k / "modes/news-briefing"
-    d.mkdir()
-    (d / "mode.yaml").write_text("apiVersion: agentbay/v2\nkind: Mode\nmetadata: { name: news-briefing, version: "
-                                 "0.1.0, description: News. }\nspec:\n  extends: briefing\n  purpose: Brief me on "
-                                 "the news.\n")
-    g = assert_gap(k, "role briefing-analyst reads items.store/v1 for several modes (feed-briefing, news-briefing)")
-    assert "step 3 of docs/proposals/0003-briefing-sources.md" in g and "own reader roles" in g
-    assert_gap(k, "role briefing-lead reads items.store/v1 for several modes")
-    r = subprocess.run([str(k / "bay.sh"), "validate"], capture_output=True, text=True)
-    assert r.returncode != 0 and "several modes (feed-briefing, news-briefing)" in r.stdout + r.stderr
-
-
 def test_lint_lines_of_inherited_parts_point_at_the_parent_mode_yaml():
     def line_of(path, prefix, after=0):
         return next(i for i, ln in enumerate(path.read_text().splitlines(), 1) if i > after and ln.startswith(prefix))
@@ -163,3 +147,23 @@ def test_lint_lines_of_inherited_parts_point_at_the_parent_mode_yaml():
     wf = line_of(kbase, "    prune:", after=line_of(kbase, "  workflows:"))
     ps = problems(k)
     assert any(f"modes/briefing/mode.yaml:{wf}: workflow 'prune' is not used" in p for p in ps), ps
+
+
+def test_child_sets_config_defaults_instead_of_copying_the_config_schema():
+    from helpers import project
+    k = model.Kit(KIT)
+    md = k.get("Mode", "feed-briefing")
+    assert not (KIT / "modes/feed-briefing/config.schema.json").exists()          # no copy of briefing's
+    assert md.spec["configDefaults"] == {"selectors": [{"id": "home"}]}
+    m = model.resolve(k).modes["feed-briefing"]
+    assert m.config["selectors"] == [{"id": "home"}] and m.config["lookback"] == "3d"   # child + parent defaults
+    # the user's settings still win over configDefaults
+    p = project({"modes": {"feed-briefing": {"selectors": [{"id": "staking", "text": "staking"}]}}})
+    assert model.resolve(model.Kit(KIT, p)).modes["feed-briefing"].config["selectors"][0]["id"] == "staking"
+    # a key the config schema does not declare, or a value it rejects, is a gap naming the mode
+    kc = kit_copy()
+    edit_yaml(kc / "modes/feed-briefing/mode.yaml", lambda d: d["spec"]["configDefaults"].update(
+        {"lookback": "forever", "colour": "blue"}))
+    assert_gap(kc, "mode feed-briefing: configDefaults.colour is not a setting of its config schema",
+               "modes/briefing/config.schema.json")
+    assert_gap(kc, "mode feed-briefing: configDefaults.lookback:", "does not match")

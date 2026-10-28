@@ -86,15 +86,15 @@ def test_rules_schema_and_unique_ids_and_refs():
 def test_every_feature_has_both_files():
     k = kit_copy()
     (k / RULES).unlink()
-    has(k, "feature briefing.digest rules file modes/briefing/features/digest/rules.yaml does not exist")
-    # an inherited endpoint is reported at the parent's mode.yaml line that declares it, with a normalized path
-    has(k, "modes/briefing/mode.yaml:21: feature feed-briefing.digest rules file "
+    # an inherited endpoint is reported once, as the parent's, at the parent's mode.yaml line, normalized path
+    has(k, "modes/briefing/mode.yaml:21: feature briefing.digest rules file "
            "modes/briefing/features/digest/rules.yaml does not exist")
+    assert not [x for x in problems(k) if "feed-briefing.digest rules file" in x]
     has(k, "features/digest: feature folder is missing rules.yaml")
     k = kit_copy()
     edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["endpoints"]["ask"].pop("playbook"))
     has(k, "feature briefing.ask has no `playbook`")
-    has(k, "feature feed-briefing.ask has no `playbook`")
+    assert len([x for x in problems(k) if "ask has no `playbook`" in x]) == 1
 
 
 def test_review_settings_only_in_mode_yaml():
@@ -105,26 +105,79 @@ def test_review_settings_only_in_mode_yaml():
     (k / RULES).write_text((k / RULES).read_text() + "review: { when: never }\n")
     has(k, RULES, "review settings found in rules file")
     k = kit_copy()
-    edit_yaml(k / "roles/briefing-analyst.yaml", lambda d: d["spec"].update({"review": {"when": "always"}}))
-    has(k, "roles/briefing-analyst.yaml")   # schema rejects it (additionalProperties) - reported at load
+    edit_yaml(k / "framework/roles/analyst.yaml", lambda d: d["spec"].update({"review": {"when": "always"}}))
+    has(k, "framework/roles/analyst.yaml")   # schema rejects it (additionalProperties) - reported at load
 
 
-def test_review_role_must_exist_be_listed_and_placeable():
+def test_review_role_must_exist_and_be_in_the_mode():
     k = kit_copy()
     edit_yaml(k / "modes/briefing/mode.yaml",
               lambda d: d["spec"]["endpoints"]["digest"]["review"].update({"role": "ghost"}))
-    has(k, "feed-briefing.digest review role 'ghost' does not exist")
+    has(k, "briefing.digest review role 'ghost' does not exist")
+    assert len([x for x in problems(k) if "review role 'ghost' does not exist" in x]) == 1
     k = kit_copy()
     edit_yaml(k / "modes/briefing/mode.yaml",
               lambda d: d["spec"]["endpoints"]["digest"]["review"].update({"role": "researcher"}))
-    has(k, "review role 'researcher' is not listed in mode feed-briefing roles")
+    has(k, "briefing.digest review: role researcher is not in mode briefing `roles:`", "add `researcher: <env>`")
+
+
+def line_of(path, needle):
+    return next(i for i, ln in enumerate(path.read_text().splitlines(), 1) if needle in ln)
+
+
+def test_role_env_errors_name_mode_feature_and_step():
+    base = "modes/briefing/mode.yaml"
+    # a step naming a role that is not in the mode
     k = kit_copy()
-    edit_yaml(k / "framework/envs/workspace.yaml", lambda d: d["spec"].update({"models": ["haiku", "sonnet"]}))
-    has(k, "feed-briefing.digest review role reviewer cannot be placed", "review model 'opus' is not allowed")
+    sub(k, base, "{ id: answer, role: analyst,", "{ id: answer, role: researcher,")
+    has(k, f"{base}:{line_of(k / base, '{ id: answer, role: researcher,')}: briefing.ask step answer: role "
+           "researcher is not in mode briefing `roles:` (lead, analyst, reviewer); add `researcher: <env>` there")
+    # reported once, for the abstract base that declares it, not again for each child (same file:line)
+    assert len([x for x in problems(k) if "step answer: role researcher is not in mode" in x]) == 1
+    # a role with no env
+    k = kit_copy()
+    sub(k, base, "analyst: local-feeds,", "analyst: ,")
+    has(k, f"{base}:{line_of(k / base, 'role: analyst, out: Digest')}: briefing.digest step themes: role analyst "
+           "has no env; give it one in mode briefing `roles:` (`analyst: <env>`)")
+    # two envs for one step
+    k = kit_copy()
+    sub(k, base, "{ id: answer, role: analyst,", "{ id: answer, role: analyst, roles: { analyst: local-feeds, reviewer: workspace },")
+    has(k, "briefing.ask step answer: two envs for one step (analyst: local-feeds, reviewer: workspace)",
+        "keep only `analyst: <env>`")
+    # a step override naming another role, `roles:` on a code step, a feature override of a role not in the mode
+    k = kit_copy()
+    sub(k, base, "{ id: answer, role: analyst,", "{ id: answer, role: analyst, roles: { reviewer: workspace },")
+    sub(k, base, "{ id: prune, run: items.store/v1.prune,", "{ id: prune, roles: { lead: workspace }, run: items.store/v1.prune,")
+    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["endpoints"]["ask"].update({"roles": {"builder": "workspace"}}))
+    has(k, "briefing.ask step answer: `roles:` names reviewer, but this step runs role analyst")
+    has(k, "briefing.prune step prune: `roles:` applies to role and review steps only")
+    has(k, "briefing.ask: `roles:` gives role builder an env, but mode briefing does not list builder")
+    # an unknown (or user-defined) role
+    k = kit_copy()
+    edit_yaml(k / base, lambda d: d["spec"]["roles"].update({"briefing-writer": "local-feeds"}))
+    has(k, "mode briefing: `roles:` names unknown role 'briefing-writer' (framework roles: analyst, builder, lead, "
+           "researcher, reviewer)", "roles are framework-level")
+    # the same problems are resolve gaps (bay build does not lint)
+    from helpers import assert_gap
+    k = kit_copy()
+    sub(k, base, "analyst: local-feeds,", "analyst: ,")
+    assert_gap(k, "feed-briefing.digest step themes: role analyst has no env")
+
+
+def test_a_user_space_role_or_agent_profile_is_an_error():
+    k = kit_copy()
+    (k / "roles").mkdir()
+    (k / "roles/summarizer.yaml").write_text((k / "framework/roles/analyst.yaml").read_text().replace("analyst", "summarizer"))
+    has(k, "roles/summarizer.yaml: roles are framework-level; customize behaviour in your mode's playbooks/skills, or "
+           "propose a new role via forge.extend")
+    k = kit_copy()
+    (k / "agents").mkdir()
+    (k / "agents/other.yaml").write_text((k / "framework/agents/claude-code.yaml").read_text().replace("name: claude-code", "name: other"))
+    has(k, "agents/other.yaml: agent profiles are framework-level")
 
 
 def test_forge_extend_review_cannot_be_disabled_or_weakened():
-    for change in ({"when": "never"}, {"model": "sonnet"}, None):
+    for change in ({"when": "never"}, {"tier": "balanced"}, {"effort": "medium"}, None):
         k = kit_copy()
 
         def f(d, change=change):
@@ -139,8 +192,8 @@ def test_forge_extend_review_cannot_be_disabled_or_weakened():
 
 def test_kind_scoped_rules_are_linted():
     k = kit_copy()
-    sub(k, "framework/modes/forge/features/create/rules.yaml", "when: { kind: role }", "when: { kind: plugin }")
-    has(k, "rule R-6 when.kind 'plugin' is not one of")
+    sub(k, "framework/modes/forge/features/create/rules.yaml", "when: { kind: env }", "when: { kind: plugin }")
+    has(k, "rule R-8 when.kind 'plugin' is not one of")
     k = kit_copy()
     (k / RULES).write_text((k / RULES).read_text().rstrip() + "\n  - { id: R-9, level: must, statement: \"x y z\", "
                            "appliesTo: both, when: { kind: mode } }\n")
@@ -153,8 +206,8 @@ def test_name_collision_between_user_and_framework():
     (k / "modes/forge/mode.yaml").write_text((k / "modes/delivery/mode.yaml").read_text().replace("name: delivery", "name: forge"))
     has(k, "Mode 'forge' is defined by both the framework", "modes/forge/mode.yaml", "rename yours")
     k = kit_copy()
-    (k / "roles/reviewer.yaml").write_text((k / "framework/roles/reviewer.yaml").read_text())
-    has(k, "Role 'reviewer' is defined by both the framework")
+    (k / "envs/workspace.yaml").write_text((k / "framework/envs/workspace.yaml").read_text())
+    has(k, "Environment 'workspace' is defined by both the framework")
 
 
 def test_modes_must_not_name_connectors_or_tools():

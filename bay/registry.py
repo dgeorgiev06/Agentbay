@@ -1,7 +1,7 @@
 """The registry: resolved system truth as JSON, the same for every runtime.
 
 `.agentbay/catalog.json` is how a coordinator discovers what it can call: modes, their endpoints
-with resolved input/output schemas, the roles placed behind agentic steps, and the project
+with resolved input/output schemas, the role units (role, mode, env) behind agentic steps, and the project
 workflows that compose endpoints. Nothing here is specific to a runtime - an adapter writes the
 file and names itself in `runtime`, but the content is a fold of the resolved System.
 
@@ -50,7 +50,7 @@ def _under(p: Path, root: Path) -> bool:
     return True
 
 
-def catalog(system: System, placements: dict[str, ResolvedRole], *, runtime: str,
+def catalog(system: System, units: dict[str, ResolvedRole], *, runtime: str,
             workflows: dict | None = None) -> dict:
     modes = [{
         "name": m.name, "version": m.version, "origin": m.root, "purpose": m.purpose, "extends": m.extends,
@@ -58,26 +58,25 @@ def catalog(system: System, placements: dict[str, ResolvedRole], *, runtime: str
         "endpoints": [endpoint(m, f, system.kit.root) for f in m.features.values()],
     } for m in system.modes.values()]
     roles = [{
-        "subagent": sub, "role": r.name, "agent": r.agent, "env": r.env, "runtime": r.runtime,
-        "model": r.inference.model, "effort": r.inference.effort, "description": r.description,
-        "tools": r.tools, "uses": r.uses, "skills": sorted(r.skills), "clis": r.clis,
-        "budget": r.budget, "modes": r.modes,
-        "io": {"accepts": "TaskEnvelope/v1", "returns": "Result/v1"},
-    } for sub, r in sorted(placements.items())]
-    coords = [{"role": r.name, "modes": r.modes, "runtime": r.runtime}
-              for r in system.roles.values() if r.runtime == "claude-code-main" and r.modes]
+        "subagent": sub, "role": r.name, "mode": r.mode, "env": r.env, "agent": r.agent, "runtime": r.runtime,
+        "tier": r.inference.tier, "model": r.inference.model, "effort": r.inference.effort,
+        "description": r.description, "tools": r.tools, "uses": r.uses, "skills": sorted(r.skills),
+        "clis": r.clis, "budget": r.budget, "io": {"accepts": "TaskEnvelope/v1", "returns": "Result/v1"},
+    } for sub, r in sorted(units.items())]
+    coords = [{"role": r.name, "mode": r.mode, "env": r.env, "runtime": r.runtime}
+              for r in system.units().values() if r.kind == "coordinator"]
     out = {"runtime": runtime, "builtAt": now(), "modes": modes, "roles": roles, "coordinators": coords}
     if workflows is not None:
         out["workflows"] = workflows
     return out
 
 
-def write(system: System, placements: dict[str, ResolvedRole], project: Path, *, runtime: str,
+def write(system: System, units: dict[str, ResolvedRole], project: Path, *, runtime: str,
           workflows: dict | None = None) -> str:
     """Write the catalog and return its project-relative path."""
     path = project / CATALOG
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(catalog(system, placements, runtime=runtime, workflows=workflows),
+    path.write_text(json.dumps(catalog(system, units, runtime=runtime, workflows=workflows),
                                indent=2, ensure_ascii=False) + "\n")
     return CATALOG
 

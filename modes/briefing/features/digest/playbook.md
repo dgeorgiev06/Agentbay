@@ -12,7 +12,7 @@ Summarize what my sources said in a period as a few themes, every one grounded i
 ## Steps
 1. `refresh`: the dispatcher syncs the store if it is older than 2h or the selectors changed.
 2. `gather`: the dispatcher queries the store for the period (`items.store/v1.query`).
-3. `themes`: briefing-analyst groups the gathered items into 3-7 themes (or by selector when there are several), each with a short summary and the items it rests on, and returns a Digest.
+3. `themes`: the analyst groups the gathered items (narrowing with the corpus-sql skill and reading the few items it relies on in full with `get`/`thread` when the gathered ones are not enough) into 3-7 themes (or by selector when there are several), each with a short summary and the items it rests on, and returns a Digest.
 4. `review`: the reviewer checks the digest against this Definition of Done and the rules.
 
 ## Definition of Done

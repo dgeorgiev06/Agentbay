@@ -9,11 +9,11 @@ apiVersion: agentbay/v2
 secrets: { provider: keychain }
 
 modes:
-  feed-briefing:                      # validated against modes/feed-briefing/config.schema.json
+  feed-briefing:                      # validated against modes/briefing/config.schema.json
     lookback: 3d                      # default window for sync/digest/ask (<= lookbackMax 30d)
     retention: 30d                    # prune drops posts older than this
-    maxPostsPerRun: 200
-    monthlyPosts: 3000
+    maxItemsPerRun: 200
+    monthlyItems: 3000
     spendUsd: 5
     costPerPostUsd: 0.005             # price per post the source reads (timeline + deletion checks); spendUsd cap
     selectors:                        # which posts to keep; default: [{id: home}] = the home timeline (as v0.2)

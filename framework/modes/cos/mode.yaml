@@ -9,8 +9,8 @@ spec:
     Be the one place the user talks to. Route each request to a mode endpoint from the registry, run the steps the
     dispatcher hands back, and compose endpoints into project workflows the user configured. cos does no domain work
     of its own: every effect belongs to the endpoint it calls.
-  coordinator: chief-of-staff
-  roles: [chief-of-staff]
+  coordinator: lead
+  roles: { lead: cos-local }
   needs: [workflow.run/v1]
   endpoints:
     run:

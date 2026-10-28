@@ -234,7 +234,7 @@ def _ledger_uses(a: Artifacts) -> dict[tuple, int]:
         if e.get("target"):
             uses[("endpoint", e["target"])] += 1
         if e.get("agent"):
-            uses[("role", e["agent"])] += 1           # agentbay subagents are named after their role
+            uses[("role", e["agent"].split("--")[0])] += 1      # agentbay subagents: <role>--<mode>[--<env>]
             uses[("agent", e["agent"])] += 1
         for st in e.get("steps", []):
             for k in ("role", "agent", "env"):

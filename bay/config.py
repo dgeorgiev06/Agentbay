@@ -5,7 +5,7 @@
     modes:
       feed-briefing:
         lookback: 3d
-        maxPostsPerRun: 200
+        maxItemsPerRun: 200
         features:
           digest: { extraRules: rules/digest-extra.yaml }
     connectors:
@@ -23,7 +23,7 @@ from pathlib import Path
 import yaml
 
 NAME = "agentbay.config.yaml"
-CAPS = ("monthlyPosts", "spendUsd", "maxPostsPerRun")
+CAPS = ("monthlyItems", "spendUsd", "maxItemsPerRun")
 COST_PER_POST_USD = 0.005      # default price per post read (X API pay-per-use); config costPerPostUsd overrides
 
 

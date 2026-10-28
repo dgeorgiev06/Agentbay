@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agentbay/v2/Role",
   "title": "Role",
-  "description": "A responsibility inside mode workflows; reusable across modes. Prompt, definition of done, capabilities it uses, default agent.",
+  "description": "A generic job, shipped with the framework (framework/roles/ only): prompt, definition of done, rules, skills, a default tier and its access. It names neither an agent (the LLM product), nor an env, nor data: each mode says which env a role works in (`roles:`), its role units read the read-only endpoints of the mode's `needs`, and the mode's playbooks, skills and rules say what to do.",
   "type": "object",
   "required": ["apiVersion", "kind", "metadata", "spec"],
   "additionalProperties": false,
@@ -21,14 +21,15 @@
     },
     "spec": {
       "type": "object",
-      "required": ["prompt", "doneWhen", "uses", "agent"],
+      "required": ["prompt", "doneWhen", "tier"],
       "additionalProperties": false,
       "properties": {
         "prompt": { "type": "string", "minLength": 20 },
         "doneWhen": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
-        "uses": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z0-9.-]*/v[0-9]+(\\.[a-z][a-z0-9-]*)?$" }, "description": "<interface>/v<N> or <interface>/v<N>.<endpoint>" },
-        "agent": { "type": "string" },
-        "inference": { "$ref": "#/$defs/inference" },
+        "uses": { "type": "array", "deprecated": true, "description": "Deprecated (0.3) and ignored: a role reads the read-only endpoints of the needs of the mode it works in." },
+        "access": { "enum": ["read", "write"], "default": "read", "description": "read: tools of read-only capabilities (and web research) only; write: also tools of capabilities with write effects (edit files, shell). Connector endpoints are always read-only for roles." },
+        "tier": { "enum": ["fast", "balanced", "deep"], "description": "Default tier of this role's steps; a feature or step may set another. The agent profile maps it to a model." },
+        "effort": { "enum": ["low", "medium", "high"], "description": "Default effort (default medium); a feature or step may set another." },
         "rules": { "type": "array", "items": { "type": "string" } },
         "skills": { "type": "array", "items": { "type": "string" } },
         "isolation": { "enum": ["none", "worktree"], "default": "none" },
@@ -38,13 +39,6 @@
           "properties": { "maxTurns": { "type": "integer", "minimum": 1 }, "maxMinutes": { "type": "integer", "minimum": 1 } }
         }
       }
-    }
-  },
-  "$defs": {
-    "inference": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": { "model": { "enum": ["haiku", "sonnet", "opus", "inherit"] }, "effort": { "enum": ["low", "medium", "high"] } }
     }
   }
 }

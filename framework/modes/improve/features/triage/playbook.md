@@ -8,7 +8,7 @@ Turn open findings into ranked, explained work: dedup, cross-lens links, root ca
 
 ## Steps
 1. `rank`: the dispatcher runs `improve.findings/v1.triage` (code): findings are already unique by fingerprint; it links findings of different lenses that point at the same file, recomputes priority = impact x frequency / effort and returns the `top` open findings.
-2. `analyze`: the improve-analyst examines each finding in `rank.top`: confirms its evidence (`evidenceChecked`), states the root cause, proposes a fix (preferring a preventive one: a deterministic check, a lint or conformance rule, a test, a clearer playbook step), a route (forge.extend for the framework, mode-fix for a user mode) and an effort 1-5.
+2. `analyze`: the analyst (pattern-analysis skill) examines each finding in `rank.top`: confirms its evidence (`evidenceChecked`), states the root cause, proposes a fix (preferring a preventive one: a deterministic check, a lint or conformance rule, a test, a clearer playbook step), a route (forge.extend for the framework, mode-fix for a user mode) and an effort 1-5.
 3. `review`: the reviewer checks every annotation against the finding's evidence and the DoD and rules below.
 4. `apply`: only after a passing review, the dispatcher runs `improve.findings/v1.annotate` (code) to store the annotations on findings that are still open and re-score priority.
 

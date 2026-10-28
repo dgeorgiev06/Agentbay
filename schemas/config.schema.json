@@ -9,6 +9,10 @@
     "apiVersion": {
       "const": "agentbay/v2"
     },
+    "agent": {
+      "type": "string",
+      "description": "The agent profile (agents/<name>.yaml) that runs every role: how one LLM product maps tiers to models. Default: claude-code."
+    },
     "modes": {
       "type": "object",
       "additionalProperties": {
@@ -38,7 +42,7 @@
       "additionalProperties": {
         "type": "string"
       },
-      "description": "Run agents of env A in env B instead: {A: B}. B must declare `substitutes: A`. Selects between tracked envs; it cannot bind capabilities."
+      "description": "Every role a mode runs in env A runs in env B instead: {A: B}. B must declare `substitutes: A`. Selects between tracked envs; it cannot bind capabilities."
     },
     "workflows": {
       "type": "object",

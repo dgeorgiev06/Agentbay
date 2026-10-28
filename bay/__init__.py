@@ -1,2 +1,2 @@
 """agentbay: modes, roles, agents, environments and connectors -> runtime configs, with a dispatcher and ledger."""
-__version__ = "0.3.0"
+__version__ = "0.4.0"

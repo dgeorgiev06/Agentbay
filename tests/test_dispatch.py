@@ -47,18 +47,18 @@ def test_sync_runs_code_step_and_logs_events_with_cost():
 
 
 def test_config_lookback_default_and_caps_strictest_wins():
-    p = project({"modes": {"feed-briefing": {"lookback": "1d", "maxPostsPerRun": 2}}})
+    p = project({"modes": {"feed-briefing": {"lookback": "1d", "maxItemsPerRun": 2}}})
     r = D(p).call("feed-briefing.sync", {})
     assert r["status"] == "partial" and r["output"]["fetched"] == 2
-    assert r["output"]["budget"]["caps"]["maxPostsPerRun"] == 2        # config (2) < mode (500)
-    assert "maxPostsPerRun" in r["stopped"]
+    assert r["output"]["budget"]["caps"]["maxItemsPerRun"] == 2        # config (2) < mode (500)
+    assert "maxItemsPerRun" in r["stopped"]
 
 
 def test_budget_exhausted_blocks_with_reason():
-    p = project({"modes": {"feed-briefing": {"monthlyPosts": 7}}})
+    p = project({"modes": {"feed-briefing": {"monthlyItems": 7}}})
     D(p).call("feed-briefing.sync", {})
     r = D(p).call("feed-briefing.sync", {})
-    assert r["status"] == "blocked" and "monthlyPosts cap reached" in r["reason"]
+    assert r["status"] == "blocked" and "monthlyItems cap reached" in r["reason"]
 
 
 def test_offline_source_is_never_billed_against_spend():
@@ -73,9 +73,10 @@ def test_agentic_step_returns_plan_then_review_then_partial_on_failed_must():
     r = d.call("feed-briefing.digest", {"since": "3d"})
     assert r["status"] == "needs-agent"
     nxt = r["next"]
-    assert nxt["role"] == "briefing-analyst" and nxt["runAs"] == "subagent_type=briefing-analyst"
+    assert nxt["role"] == "analyst" and nxt["runAs"] == "subagent_type=analyst--feed-briefing"
+    assert (nxt["env"], nxt["agent"], nxt["tier"], nxt["model"]) == ("local-feeds-offline", "claude-code", "balanced", "sonnet")
     assert "## Definition of Done" in nxt["playbookText"]
-    assert {x["id"] for x in nxt["rules"]} == {"R-1", "R-2", "R-3", "R-4", "R-5", "R-6"}  # executor|both
+    assert {x["id"] for x in nxt["rules"]} == {"R-1", "R-2", "R-3", "R-4", "R-5", "R-6", "R-7"}  # executor|both
     posts = nxt["previous"]["gather"]["items"]
     assert len(posts) == 7 and all(p["matched"] == ["home"] for p in posts)
     assert any(t.endswith("items.store/v1.sql '<json>'") for t in nxt["tools"])
@@ -129,10 +130,11 @@ def test_stale_refresh_is_skipped_when_fresh():
 def test_use_enforces_role_grants():
     p = project()
     D(p).call("feed-briefing.sync", {})
-    out = D(p).use("briefing-analyst", "items.store/v1.query", {"author": "lido"})
+    out = D(p).use("analyst--feed-briefing", "items.store/v1.query", {"author": "lido"})
     assert {x["author"]["handle"] for x in out["items"]} == {"lido"}
-    err(lambda: D(p).use("reviewer", "items.store/v1.query", {}), "not granted items.store/v1.query")
-    err(lambda: D(p).use("briefing-analyst", "items.store/v1.sync", {}), "not granted items.store/v1.sync")
+    err(lambda: D(p).use("reviewer--delivery", "items.store/v1.query", {}), "not granted items.store/v1.query")
+    err(lambda: D(p).use("analyst", "items.store/v1.query", {}), "unknown role unit 'analyst'")
+    err(lambda: D(p).use("analyst--feed-briefing", "items.store/v1.sync", {}), "not granted items.store/v1.sync")
 
 
 def test_effects_rechecked_at_runtime():
@@ -194,7 +196,7 @@ def test_gate_stops_and_resumes_only_on_approval():
     d = dispatch.Dispatcher(system(k, k), k, clock=clock)
     r = d.call("forge.extend", {"goal": "add a bluesky source"})
     assert r["status"] == "needs-agent" and r["next"]["step"] == "propose"
-    assert r["next"]["runAs"] == "subagent_type=builder--framework-builder"
+    assert r["next"]["runAs"] == "subagent_type=builder--forge--framework-dev"
     res = {"status": "done", "summary": "proposal written", "artifacts": ["docs/proposals/0002-bsky.md"]}
     r = d.submit(r["callId"], "propose", res)
     assert r["status"] == "awaiting-approval" and r["next"]["kind"] == "gate"

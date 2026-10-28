@@ -3,7 +3,7 @@
   "required": ["kind", "name", "intent"],
   "additionalProperties": false,
   "properties": {
-    "kind": { "enum": ["mode", "feature", "role", "connector", "env"] },
+    "kind": { "enum": ["mode", "feature", "connector", "env"] },
     "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,40}$" },
     "intent": { "type": "string", "minLength": 5 },
     "target": { "type": "string", "description": "kind=feature: existing user mode" },

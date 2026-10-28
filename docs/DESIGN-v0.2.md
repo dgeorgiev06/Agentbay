@@ -1,4 +1,4 @@
-# agentbay v0.2 design (approved 2026-10-26; amended 2026-10-27)
+# agentbay v0.2 design (approved 2026-10-26; amended 2026-10-27 and 2026-10-28)
 
 Amendments approved 2026-10-27 are folded in below: features (per-endpoint playbook,
 rules, optional review declared only in mode.yaml), `bay lint`, framework vs user
@@ -6,16 +6,19 @@ content, and the `forge` framework mode. Recorded as docs/proposals/0001-v0.2-mo
 
 Replaces v0.1's AgentSpec + Layer model. Vocabulary is fixed; do not rename.
 
+The 2026-10-28 amendment (proposal 0005 Part A, at the end of this document) changed roles, agents and
+environments; the Concepts table and the shapes below show the current design.
+
 ## Concepts (top to bottom)
 
 | Concept | Is | Owns |
 |---|---|---|
 | **Chief of Staff** | system coordinator (the main Claude Code session) | routing user intent to mode endpoints, global status, the ledger |
-| **Mode** | a job playbook: one logical job | purpose, endpoints (= features), workflows, optional coordinator role, roles used, inference settings, constraints, needed capabilities, playbook.md |
+| **Mode** | a job playbook: one logical job (user space) | purpose, endpoints (= features), workflows, optional coordinator role, the roles it uses and the env each works in (`roles:`), constraints, needed capabilities (what its roles may read), playbook.md, skills, rules |
 | **Feature** | one mode endpoint | in/out schemas, effects, workflow, playbook (with id'd Definition of Done), rules, optional review - all declared in mode.yaml |
-| **Role** | a responsibility inside mode workflows; reusable across modes | prompt, definition of done (`doneWhen`), capabilities it uses, default agent |
-| **Agent** | executor abstraction over Claude agents | runtime, default model/effort, bound environment |
-| **Environment** | wiring + hard limits | capability → connector/tool bindings, secrets (names + provider), network allowlist, filesystem read/write paths, allowed models, limits |
+| **Role** | a generic job, shipped by the framework (lead, analyst, researcher, builder, reviewer); modes customize it | prompt, definition of done (`doneWhen`), rules, skills, default tier (fast, balanced, deep), access (read or write) |
+| **Agent** | profile of one LLM product, shipped by the framework; selected once (`agent:` in agentbay.config.yaml) | runtime per kind of role (coordinator, worker), tier -> model, effort values, tool names |
+| **Environment** | the container (user space) | capability → connector/tool bindings, secrets (names + provider), network allowlist, filesystem read/write paths, allowed tiers, limits |
 | **Connector** | concrete tool implementing a capability interface | code, its own secrets/network usage |
 | **Capability interface** | versioned contract: named endpoints with in/out JSON schemas and declared effects | — |
 
@@ -29,15 +32,13 @@ mode, roles and playbook untouched.
 interfaces/<name>.v<N>.yaml     capability interfaces (endpoints, schemas, effects)
 modes/<name>/mode.yaml          + playbook.md (coordinator), types/, skills/, config.schema.json
 modes/<name>/features/<feature>/{playbook.md, rules.yaml}
-roles/<name>.yaml
-agents/<name>.yaml
 envs/<name>.yaml
 connectors/<name>/connector.yaml + code + tests/
 agentbay.config.yaml            per-project user settings (validated against mode config schemas);
                                 never binds capabilities - envs/ are the only place bindings live
 
 framework/{interfaces,modes,roles,agents,envs,connectors}/   same layout, shipped and versioned with
-                                the kit; users never edit it. A user name that collides with a
+                                the kit; users never edit it. roles/ and agents/ exist only here (2026-10-28). A user name that collides with a
                                 framework name is a lint error. Users add project rules via
                                 agentbay.config.yaml modes.<mode>.features.<feature>.extraRules.
 ```
@@ -58,20 +59,17 @@ spec:
               review: { role: reviewer, when: always, model: opus, effort: high } }
     ask:    { workflow: ask, in: Question, out: Answer, ... }
     prune:  { workflow: prune, schedule: daily, ... }
-  coordinator: feed-lead         # optional role
-  roles: [feed-lead, feed-analyst, reviewer]
+  coordinator: lead              # optional role
+  roles: { lead: local-feeds, analyst: local-feeds, reviewer: local-feeds }   # role -> env (2026-10-28)
   workflows:
     digest:
       - { id: refresh, run: feed.store/v1.sync, when: "stale > 2h" }   # code step, no agent
       - { id: gather,  run: feed.store/v1.query, with: { since: "$in.since|$config.lookback" } }
-      - { id: themes,  role: feed-analyst, out: Digest }
+      - { id: themes,  role: analyst, out: Digest }
       # review is injected from endpoints.digest.review (after the last step, or at `{ review: here }`)
-  inference:
-    default: { model: sonnet, effort: medium }
-    steps: { check: { model: opus, effort: high } }
   constraints:
     lookbackMax: 30d
-    monthlyPosts: 3000
+    monthlyItems: 3000
     spendUsd: 5
     policies: [cite-sources, no-scraping, honor-deletions]
   needs: [feed.store/v1, feed.source/v1]
@@ -83,7 +81,8 @@ Step kinds: `run: <capability>/v<N>.<endpoint>` (deterministic code, no agent), 
 `bay approve <callId>` in an interactive terminal),
 and the review step injected from the endpoint's `review` block. `when: "stale > 2h"` or `when: "$in.<field>"`
 skips a step. `with:` substitutes `$in.x`, `$steps.<id>.x`, `$config.x`, with `a|b` fallbacks.
-An endpoint may re-place a role on another agent: `agents: { builder: author }`.
+An endpoint, or a single workflow step, may put a role in another env with `roles: { builder: framework-dev }`
+(one env per step), and set `tier:`/`effort:` (2026-10-28).
 
 ## Features: playbook, rules, review
 
@@ -93,7 +92,7 @@ An endpoint may re-place a role on another agent: `agents: { builder: author }`.
 - **Rules** (`features/<f>/rules.yaml`, schema `schemas/rules.schema.json`): `{id: R-n, level: must|should|must_not,
   statement, appliesTo: executor|reviewer|both, check?: <deterministic check>, refs?: [DOD ids], when?: {kind: ...}}`.
   Mode constraints, role rules, feature rules and project extraRules stack; strictest wins.
-- **Review** is configured ONLY in mode.yaml: `review: { role, when: always|never, model?, effort? }`.
+- **Review** is configured ONLY in mode.yaml: `review: { role, when: always|never, tier?, effort? }`.
   Omitted or `never` = no review step. Playbooks, rules, roles, agents and envs must not contain review settings.
 - **Use:** the executing role's step plan carries the playbook and the rules with appliesTo executor|both.
   Deterministic `check`s run in code before review. The reviewer gets the original task, the DoD, the rules
@@ -103,29 +102,33 @@ An endpoint may re-place a role on another agent: `agents: { builder: author }`.
 - The framework ships one generic `reviewer` role: HOW to review. WHAT to check always comes from the
   feature's DoD and rules. Modes may define their own reviewer roles.
 - **`bay lint`** (also run by `bay validate`): section presence/order, numbered steps, DoD format and unique ids,
-  rules schema, unique rule ids, refs to existing DoD ids, known checks, `when.kind` values, review role exists,
-  is in the mode and is placeable (agent/env/model), review settings only in mode.yaml, both files per feature,
+  rules schema, unique rule ids, refs to existing DoD ids, known checks, `when.kind` values, review role exists
+  and is in the mode, every step's role is a framework role in the mode with exactly one env, review settings
+  only in mode.yaml, both files per feature,
   orphan workflows/feature folders, modes naming connectors or tools, framework/user name collisions,
   mandatory review on `forge.extend`. Errors are `file:line: message`.
 
 ## Role / Agent / Environment / Connector (shapes)
 
 ```yaml
-kind: Role
-spec: { prompt: ..., doneWhen: [...], uses: [feed.store/v1.query], agent: analyst }
+kind: Role            # framework/roles/ only
+spec: { prompt: ..., doneWhen: [...], rules: [...], tier: balanced, effort: medium, access: read }
 
-kind: Agent
-spec: { runtime: claude-code-subagent, model: sonnet, effort: medium, env: local-feeds }
+kind: Agent           # framework/agents/ only: one profile per LLM product
+spec:
+  runtime: { coordinator: claude-code-main, worker: claude-code-subagent }
+  tiers: { fast: haiku, balanced: sonnet, deep: opus }
+  effort: { low: low, medium: medium, high: high }
 
 kind: Environment
 spec:
   bind:
-    feed.source/v1: [x-api]          # connectors implementing the interface
-    feed.store/v1: local-store
+    items.source/v1: [x-api]         # connectors implementing the interface
+    items.store/v1: corpus-store
   secrets: { provider: keychain, allow: [X_CLIENT_ID, X_CLIENT_SECRET, X_REFRESH_TOKEN] }
   network: { allow: [api.x.com] }
   fs: { read: ["."], write: [".agentbay/data/feeds"] }
-  models: [haiku, sonnet, opus]
+  tiers: [fast, balanced, deep]      # optional cap
   limits: { maxTurns: 40, maxMinutes: 20 }
 
 kind: Connector
@@ -135,15 +138,16 @@ spec: { implements: feed.source/v1, entry: connector.py, needs: { secrets: [X_*]
 ## Resolution (build time) - fail loudly with the exact gap
 
 For every mode endpoint → workflow step:
-- code step: capability bound in the environment of the mode's coordinator/agent set; connector's needs ⊆ env allows
-- role step: role exists; role → agent → env; every capability the role `uses` is bound in that env; step model ∈ env.models
+- code step: capability bound in the env of the mode's coordinator (for that feature); connector's needs ⊆ env allows
+- role step: role exists and is in the mode; env = the step's `roles:`, else the feature's, else the mode's;
+  the role's grants = the read-only endpoints (and tools) of the mode's needs that env binds; tier = step >
+  feature > role default (review: its review block), mapped to a model by the agent profile; tier ∈ env.tiers
 - effects of every endpoint used ⊆ env allows (network hosts, write paths, spend, delete)
-- inference precedence: mode step > mode default > role default > agent default; env caps
 - constraints stack: mode policies + role rules + feature rules + project extraRules + env hard limits; strictest wins
-- review steps resolve like role steps (role exists, listed in the mode, agent -> env, model allowed)
+- review steps resolve like role steps (role exists, in the mode, one env, tier allowed)
 - framework boundary: any step whose env can write the kit's `framework/`, `bay/` or `schemas/` is only
   allowed in `forge.extend`
-- agents may `use` only read-only connector endpoints (via their role's use shim, which fixes the role and checks its grants);
+- agents may call only read-only connector endpoints (via their unit's use shim, which fixes role, mode and env and checks the grants);
   everything else runs as a code step in the dispatcher
 
 ## Runtime
@@ -151,26 +155,26 @@ For every mode endpoint → workflow step:
 - `bay call <mode>.<endpoint> '<json>'` is the only way to invoke endpoints. It validates input/output
   schemas, checks grants and env, runs code steps, returns agentic steps as a step plan for the coordinator,
   enforces budget, and writes ledger events (`step.started`, `step.completed` with mode, endpoint, step, role, agent, env, cost).
-- Agents reach connectors only through read-only store endpoints via their role's use shim
-  (`.agentbay/roles/<role>/use`); feed sources are called only by `feed.store/v1.sync`, which the dispatcher
+- Agents reach connectors only through read-only store endpoints via their unit's use shim
+  (`.agentbay/roles/<role>--<mode>/use`); feed sources are called only by `feed.store/v1.sync`, which the dispatcher
   runs as a code step. Secrets are resolved by the dispatcher from the env's provider (keychain via
   `security find-generic-password` on macOS, env vars as fallback provider `env`), never printed or logged.
 - Endpoint `schedule` is declarative only in v0.2: no runtime acts on it. Run scheduled endpoints from cron
   or a scheduler, e.g. `0 4 * * * <project>/.agentbay/bay call feed-briefing.prune '{}'`; `bay lint` warns.
 - Claude Code runtime: subagents cannot spawn subagents, so a mode coordinator runs as a playbook in the
-  Chief of Staff's main thread; worker roles run as generated subagents (`.claude/agents/<role>.md`).
+  Chief of Staff's main thread; worker roles run as generated subagents (`.claude/agents/<role>--<mode>.md`).
   A future `headless` runtime (`claude -p` workers) or cloud runtime makes the coordinator a separate agent
   without changing mode files.
 
 ## Framework mode: forge
 
-One framework mode builds agentbay itself (`framework/modes/forge/`), coordinator `forge-lead`, workers
+One framework mode builds agentbay itself (`framework/modes/forge/`), coordinator `lead`, workers
 `builder` and `reviewer`.
 
-| endpoint | does | placement | review |
+| endpoint | does | builder works in | review |
 |---|---|---|---|
-| `create` | `kind: mode/feature/role/connector/env` + intent: scaffold (the same templates as `bay <kind> new`), then fill; kind-scoped rules via `when: {kind}` | builder on agent `author`, env `local-authoring` (writes modes/, roles/, agents/, envs/, connectors/ only) | always (sonnet/medium) |
-| `extend` | propose (docs/proposals/<id>.md) -> approval gate -> implement -> review -> release; DoD/rules hold the full code-review criteria | builder on agent `framework-builder`, env `framework-dev` (writes framework/, bay/, schemas/, docs/, tests/) | always, opus/high; lint forbids disabling it |
+| `create` | `kind: mode/feature/connector/env` + intent: scaffold (the same templates as `bay <kind> new`), then fill; kind-scoped rules via `when: {kind}` | env `local-authoring`, the mode's default (writes modes/, envs/, connectors/ only) | always (balanced/medium) |
+| `extend` | propose (docs/proposals/<id>.md) -> approval gate -> implement -> review -> release; DoD/rules hold the full code-review criteria | env `framework-dev`, the feature's `roles: { builder: framework-dev }` (writes framework/, bay/, schemas/, docs/, tests/) | always, deep/high; lint forbids disabling it |
 | `migrate` | `bay migrate` plan (dry-run diff) and apply only with `confirm: true` | code steps in `local-authoring` | always |
 
 ## Data contract
@@ -306,7 +310,8 @@ Proposal 0002 was approved by the user on 2026-10-27, with these decisions: scan
 - **Env `improve-local`:** reads the project, the kit, the ledger and call state, git and `~/.claude/projects`
   (connectors only: `~`/absolute read paths never reach a role's guard policy); writes only
   `.agentbay/data/improve/`; no network, no secrets; effects read and write.
-- **Mode `improve`** (coordinator `improve-lead`, workers `improve-analyst`, `auditor`, framework `reviewer`):
+- **Mode `improve`** (coordinator `lead`, worker `analyst` with the skills pattern-analysis and
+  conformance-audit, framework `reviewer`; before 2026-10-28 improve-lead, improve-analyst and auditor):
   scan, audit, triage (review always), backlog (schedule weekly, declarative), implement (claim -> draft -> review
   (opus) -> approval gate -> handoff; review always), verify. Detectors are deterministic code in `bay/improve/`.
   improve never modifies artifacts: implement writes only a handoff file (forge.extend proposal draft or a task
@@ -314,7 +319,7 @@ Proposal 0002 was approved by the user on 2026-10-27, with these decisions: scan
   (`bay approve`) need an interactive terminal.
 - **Conformance, single source:** `framework/rules/conformance.yaml` (`schemas/conformance.schema.json`, linted by
   `bay lint`). An endpoint's `review.rulesets: [conformance]` adds those rules to the reviewer's plan (forge.create
-  and forge.extend use it); improve.audit runs every rule that has a `check` and hands the rest to the auditor.
+  and forge.extend use it); improve.audit runs every rule that has a `check` and hands the rest to the analyst.
 - **Scheduling:** `bay improve weekly` runs scan + audit + triage and writes the backlog report only when no agent
   step is pending; otherwise it lists the pending steps and stops (the coordinator finishes them, then runs
   improve.backlog). Run it from cron (README); lint's schedule warning for improve.backlog points to it.
@@ -334,7 +339,7 @@ are not part of this amendment.
 - **Mode inheritance.** `extends: <mode>` is merged into the child when the kit loads (`bay/model.py`
   `merge_mode`):
   - endpoints merge key by key;
-  - workflows, roles and coordinator are replaced;
+  - workflows and coordinator are replaced; the `roles:` map merges entry by entry (2026-10-28);
   - constraints and inference merge; needs are unioned;
   - inherited playbook, rules and config paths are rebased to the child's folder;
   - types, skills and the coordinator playbook are looked up child first, then ancestors.
@@ -366,10 +371,8 @@ are not part of this amendment.
     applied ones.
 - **corpus-store** (framework connector, so every briefing mode shares it): one store per mode,
   `<env data folder>/<mode>/corpus.db`, so two briefing modes on one env never share selector tags. The
-  dispatcher passes the mode; a role's use-shim read resolves the one mode of that role that needs the store.
-  **Limitation until step 3:** roles are placed once, not per mode, so a role listed by two modes that need
-  the store (a second mode extending briefing shares briefing-analyst and briefing-lead) could reach neither
-  store. `bay validate` fails on that, naming the modes; per-mode role placement comes in step 3.
+  dispatcher passes the mode; a use-shim read belongs to the shim's unit, which fixes its mode and env
+  (2026-10-28: the earlier limitation of one store-reading mode per role, and its validate error, are gone).
   The file is created 0600 before SQLite opens it, so -wal and -shm are 0600 too. WAL mode, `user_version`
   1. Its tables:
   - `items`;
@@ -427,8 +430,8 @@ are not part of this amendment.
 - **`briefing` base mode** (user space, `modes/briefing`, abstract). It ships:
   - features sync, digest, ask and prune, each with a playbook, rules and an id'd DoD;
   - skills digest, grounded-qa and corpus-sql (query recipes; cite item ids);
-  - roles `briefing-lead` (coordinator) and `briefing-analyst` (describe, sql, get, thread, facets, search,
-    query, status);
+  - roles `lead` (coordinator) and `analyst`, which reads the store's read-only endpoints (describe, sql,
+    get, thread, facets, search, query, status) because the mode needs items.store/v1;
   - review: digest always (opus/high), prune always;
   - the C-6 spend exemption via `constraints.spendUsd`;
   - `ask` answers via SQL (status context step, then the analyst queries);
@@ -438,9 +441,9 @@ are not part of this amendment.
   is domain content that users extend with forge.create. The security-relevant parts (matcher, sandbox,
   inheritance, corpus-store) live in `bay/` and `framework/`.
 - **feed-briefing** is a thin child.
-  - **Own settings:** purpose, constraints, a config schema with the default selector `[{id: home}]` (no
-    fields, so each source's default stream, the X home timeline, as in v0.2), and its coordinator
-    playbook.md.
+  - **Own settings:** purpose, constraints, `configDefaults` with the default selector `[{id: home}]` (no
+    fields, so each source's default stream, the X home timeline, as in v0.2; 2026-10-28: no copy of the
+    config schema), and its coordinator playbook.md.
   - **Unchanged sync input:** the `sync` input `maxPosts` (own SyncReq type, sync workflow and sync
     playbook).
   - **Sources:**
@@ -448,8 +451,8 @@ are not part of this amendment.
       native; text, has and not are local;
     - fake: from, in and since are native; the rest is local.
   - **Deprecated, not removed:** local-store and the roles feed-lead and feed-analyst (replaced by
-    briefing-lead and briefing-analyst). Improve finding F-d70dbfd0 (whole-store reads per query) closes with
-    local-store.
+    briefing-lead and briefing-analyst in 0.3, by lead and analyst in 0.4). Improve finding F-d70dbfd0
+    (whole-store reads per query) closes with local-store.
 - **Compatibility (one release, 0.3.x).** `bay/aliases.py` is the single table. When the kit loads, user
   modes, roles, envs and connectors resolve the v0.2 names:
   - `feed.source/v1` becomes items.source/v1, and `feed.store/v1[.ep]` becomes items.store/v1 (sync `with
@@ -484,3 +487,57 @@ are not part of this amendment.
   - Cursors (newestId becomes the `<connector>|{}` cursor of the selectors with an empty native query),
     coverage, budget, deletions and check times are kept in `feed-briefing/state.json`.
   - Old files are renamed `*.v0.2.bak`.
+
+
+## Approved amendment: roles, agents and environments (2026-10-28, proposal 0005 Part A)
+
+Proposal 0005 Part A was approved by the user on 2026-10-28, with two decisions the same day: no separate key
+for where a role works (a mode's `roles:` becomes a map), and roles are framework-level (five generic roles;
+access comes from the mode's needs). Each concept answers one question, and only the agent profile knows the
+LLM product.
+
+**Ownership.** The framework owns the roles and the agent profile. The user owns modes, envs and connectors
+(and interfaces, if any). A role file or agent profile in user space is an error that names the fix:
+customize behaviour in the mode's playbooks, skills or rules, or propose a framework role through
+forge.extend.
+
+- **Roles** (`framework/roles/`): `lead` (runs a mode's workflow as its coordinator), `analyst` (analyzes the
+  data its mode gives it and cites evidence), `researcher`, `builder`, `reviewer`. A role is the job only:
+  prompt, doneWhen, rules, skills, a default `tier` (fast | balanced | deep), optional `effort`, and `access`
+  (`read`, or `write` for builder). It names no agent, env or data. What was mode-specific in the 0.3 roles
+  now lives in the modes: briefing's playbooks and rules (SQL first, read through the shim, cite stored ids),
+  improve's coordinator playbook and its skills `pattern-analysis` and `conformance-audit`, and forge's
+  coordinator playbook (sequencing).
+- **Modes place roles in envs** with `roles: { analyst: local-feeds, ... }`. A feature's `roles:` overrides
+  entries for that feature's steps and a workflow step's `roles:` for that step only (forge: `extend` has
+  `roles: { builder: framework-dev }`; `create` uses the mode's `local-authoring`). One env per step. `extends`
+  inherits the map; a child overrides it entry by entry. Code steps run in the env of the mode's coordinator.
+- **Access comes from the mode.** A role in a mode may read the read-only endpoints of the capabilities the mode
+  declares in `needs:` that its env binds, through its use shim, and gets the tools of the mode's tools
+  capabilities whose effects are read or network (all of them with `access: write`). An interface marked
+  `dispatcherOnly` (improve.detect, forge.migrate, forge.scaffold) is used by code steps only. Agents still never
+  reach write, spend or delete endpoints: those are code steps.
+- **Agent profile** (`framework/agents/claude-code.yaml`): runtime per kind (`coordinator: claude-code-main`,
+  `worker: claude-code-subagent`), `tiers: { fast: haiku, balanced: sonnet, deep: opus }`, an effort mapping
+  and an optional tool-name mapping. `agent:` in agentbay.config.yaml selects it (default `claude-code`).
+- **Model resolution:** tier = the step's (a review step: its review block), else the feature's, else the role's
+  default; the profile maps it to a model; an env may cap tiers (`tiers: [...]`). Errors name the mode, feature,
+  step, role, env and tier.
+- **Compilation:** each distinct (role, mode, env) is a unit named `<role>--<mode>`, plus `--<env>` when one
+  mode runs that role in several envs (e.g. `analyst--feed-briefing`, `lead--improve`). Each unit has its own
+  subagent, use shim, guard policy entry and mode-scoped store access, so one role works in several modes and
+  envs with separate credentials and stores.
+- **Lint** names the mode, feature and step for: a role that is not a framework role, a step's role missing
+  from the mode, a role with no env, two envs for one step, a feature override of a role the mode does not
+  list, and `roles:` on a code or gate step.
+- **Carried over from 0003:** a child sets `configDefaults:` instead of copying its parent's config schema; the
+  caps are `maxItemsPerRun` and `monthlyItems`; validate warns when X `from` and `in` are combined on a paid
+  source (capability `localWith`).
+- **Compatibility (one release, 0.4.x)**, `bay/aliases.py`, with a lint warning per file: the old role names
+  (briefing-analyst, improve-analyst, auditor -> analyst; briefing-lead, improve-lead, forge-lead -> lead),
+  list-form `roles: [..]` (envs from the 0.3 agents, needs from the 0.3 roles' uses), endpoint `agents:`,
+  `inference` and review `model` (-> tiers), env `models` (-> tiers), user per-role agent files, a role's
+  `uses` (ignored), and the `*Posts` caps. `bay migrate` 0.4.0 (dry run first, `--confirm`) rewrites all of them;
+  a user role file becomes a skill of the mode that uses it, run by the closest framework role, or is reported
+  for manual handling.
+

@@ -9,6 +9,7 @@ metadata:
 spec:
   version: 1
   binding: connector
+  dispatcherOnly: true        # code steps only: no role reads it, even in a mode that needs it
   endpoints:
     sessions:
       description: Session lens - episodes in the window -> session detectors. Also returns episode summaries (counts and names only) for the analyst.
@@ -43,13 +44,13 @@ spec:
         additionalProperties: false
         properties:
           candidates: { type: array, items: { type: object } }
-          manual: { type: array, description: "conformance rules without a deterministic check, for the auditor" }
+          manual: { type: array, description: "conformance rules without a deterministic check, for the analyst (audit)" }
           stats: { type: object }
           warnings: { type: array, items: { type: string } }
       effects: [read]
     resolve:
       description: >-
-        Check analyst/auditor findings: every evidence ref must resolve (episode in the sources, file and line that
+        Check analyst findings: every evidence ref must resolve (episode in the sources, file and line that
         exist, commit in git, rule id); measurement-only evidence is refused; session patterns need >= 2 episodes
         unless severe. Accepted findings come back as candidates.
       in:

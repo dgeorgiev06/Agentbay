@@ -1,4 +1,4 @@
-# feed-briefing (coordinator playbook for briefing-lead; overrides modes/briefing/playbook.md)
+# feed-briefing (coordinator playbook, run by the lead role; overrides modes/briefing/playbook.md)
 
 You run this mode from the Chief of Staff's main thread.
 

@@ -13,6 +13,5 @@ spec:
   fs:
     read: ["."]
     write: [.agentbay/data/workflows]
-  models: [haiku, sonnet, opus, inherit]
   effects: [read, write]
   limits: { maxTurns: 60, maxMinutes: 30 }

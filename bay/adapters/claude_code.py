@@ -1,15 +1,17 @@
 """Claude Code (interactive) runtime adapter, v2.
 
-Mapping:
-  worker role placement   -> .claude/agents/<role>.md  (or <role>--<agent>.md when an endpoint re-places it)
+Mapping (a unit is one role in one mode and one env: <role>--<mode>, plus --<env> when the mode runs that
+role in several envs):
+  worker role unit         -> .claude/agents/<unit>.md (model from the agent profile's tier map)
   Chief of Staff + mode
   coordinator playbooks    -> .agentbay/COORDINATOR.md, imported from CLAUDE.md (your main session)
   role skills, mode skills -> .claude/skills/<skill>/  (a mode's skills include those it inherits via extends)
-  role data access         -> .agentbay/roles/<role>/use  (role fixed inside; read-only endpoints only)
+  role data access         -> .agentbay/roles/<unit>/use  (unit fixed inside; read-only endpoints only; its
+                              mode's data in its env only)
   coordinator commands     -> .claude/settings.json permissions.allow, explicit prefixes only
                               (Bash(.agentbay/bay call:*), ... status, log, note, submit, task,
                               catalog) - no wildcard
-  per-role Bash scope      -> .agentbay/guard.json + PreToolUse(Bash) hook bay/guard.py: a subagent may run
+  per-unit Bash scope      -> .agentbay/guard.json + PreToolUse(Bash) hook bay/guard.py: a subagent may run
                               only its own use shim and its env's narrow command prefixes
   ledger hooks             -> .claude/settings.json hooks (Pre/PostToolUse on Task|Agent)
   catalog                  -> .agentbay/catalog.json, built by bay.registry (runtime-neutral:
@@ -129,10 +131,10 @@ class ClaudeCodeAdapter:
                "originals": originals, "files": [], "mcpServers": [], "permissions": [], "denies": []}
 
         system = system.for_project(project)            # forge.extend only into the agentbay checkout
-        placements = system.placements()
-        for sub, role in sorted(placements.items()):
+        units = system.subagents()                 # unit name -> worker unit
+        for sub, role in sorted(units.items()):
             man["files"].append(self._write_agent(sub, role, system, project, rep))
-        for sk, src in sorted(self._skills(system, placements).items()):
+        for sk, src in sorted(self._skills(system, units).items()):
             dst = project / ".claude" / "skills" / sk
             if dst.exists():
                 shutil.rmtree(dst)
@@ -140,20 +142,20 @@ class ClaudeCodeAdapter:
             man["files"].append(str(dst.relative_to(project)))
             rep.written.append(str(dst.relative_to(project)) + "/")
         man["files"].append(self._shim(project, kit, rep))
-        man["files"] += self._role_shims(placements, project, kit, rep)
-        man["files"].append(self._guard_policy(system, placements, project, kit, rep))
+        man["files"] += self._role_shims(units, project, kit, rep)
+        man["files"].append(self._guard_policy(system, units, project, kit, rep))
         man["files"] += self._commands(project, kit, rep)
         man["mcpServers"] = self._mcp(system, project, old, rep)
-        man["permissions"], man["denies"] = self._settings(placements, project, kit, old, rep)
-        man["files"] += self._coordinator(system, placements, project, kit, rep)
-        man["files"].append(self._catalog(system, placements, project, rep))
+        man["permissions"], man["denies"] = self._settings(units, project, kit, old, rep)
+        man["files"] += self._coordinator(system, units, project, kit, rep)
+        man["files"].append(self._catalog(system, units, project, rep))
         man["files"].append(self._ensure_gitignore(project))
 
         for f in set(old.get("files", [])) - set(man["files"]):
             self._rm(project / f, rep)
 
         _write_json(project / ".agentbay" / "manifest.json", man)
-        if placements:
+        if units:
             rep.warnings.append("Per-role Bash scope is enforced by the agentbay guard hook; restart Claude Code "
                                 "and accept the workspace trust prompt so hooks run.")
         return rep
@@ -209,10 +211,11 @@ class ClaudeCodeAdapter:
         tools = r.tools or ["Read"]
         if not r.tools:
             rep.warnings.append(f"{sub}: no tools resolved; defaulting to Read only (empty would inherit ALL tools)")
-        modes = ", ".join(r.modes) or "-"
+        prof, _ = system.kit.profile()
+        names = (prof.spec.get("tools") or {}) if prof else {}          # the profile's tool-name mapping
         fm = ["---", f"name: {sub}", f"description: {json.dumps(r.description)}",
-              f"tools: {', '.join(tools)}", f"model: {r.inference.model}", "---"]
-        extras = [f"## Placement\nRole `{r.name}` on agent `{r.agent}` in env `{r.env}` (modes: {modes}). "
+              f"tools: {', '.join(names.get(x, x) for x in tools)}", f"model: {r.inference.model}", "---"]
+        extras = [f"## Where you work\nRole `{r.name}` in mode `{r.mode}`, env `{r.env}`. "
                   f"Your step plan (in the task block) gives the feature's playbook, rules and definition of done; "
                   f"they are your definition of done for that step."]
         extras.append("## Done when\n" + "\n".join(f"- {d}" for d in r.done_when))
@@ -222,8 +225,8 @@ class ClaudeCodeAdapter:
             extras.append("## Skills\nUse these skills when relevant: " + ", ".join(sorted(r.skills)) + ".")
         if r.bay_uses:
             extras.append("## Data access\nRead data only through your role's shim, never from files:\n"
-                          + "\n".join(f"- `{use_shim(r.name)} {u} '<json>'`" for u in r.bay_uses))
-        bash = ([use_shim(r.name)] if r.bay_uses else []) + r.clis
+                          + "\n".join(f"- `{use_shim(r.unit)} {u} '<json>'`" for u in r.bay_uses))
+        bash = ([use_shim(r.unit)] if r.bay_uses else []) + r.clis
         if bash:
             extras.append("## Allowed Bash\nA guard hook allows only these, one simple command at a time "
                           "(no pipes, ;, &&, redirects or $()): " + ", ".join(f"`{c}`" for c in bash) + ".")
@@ -238,9 +241,9 @@ class ClaudeCodeAdapter:
         rep.written.append(str(rel))
         return str(rel)
 
-    def _skills(self, system: System, placements) -> dict[str, Path]:
+    def _skills(self, system: System, units) -> dict[str, Path]:
         out: dict[str, Path] = {}
-        for r in placements.values():
+        for r in units.values():
             out.update(r.skills)
         for m in system.modes.values():
             out.update(m.skills)
@@ -297,33 +300,36 @@ class ClaudeCodeAdapter:
         rep.written.append(str(rel))
         return str(rel)
 
-    def _role_shims(self, placements, project: Path, kit: Path, rep: BuildReport) -> list[str]:
+    def _role_shims(self, units, project: Path, kit: Path, rep: BuildReport) -> list[str]:
         out = []
-        for r in sorted({r.name: r for r in placements.values() if r.bay_uses}.values(), key=lambda r: r.name):
-            rel = Path(use_shim(r.name))
+        for sub, r in sorted(units.items()):
+            if not r.bay_uses:
+                continue
+            rel = Path(use_shim(sub))
             p = project / rel
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(
                 "#!/bin/sh\n"
-                f"# generated by agentbay: read-only data access for role {r.name}.\n"
-                "# The role is fixed here; arguments are <capability>/v<N>.<endpoint> '<json>' only.\n"
+                f"# generated by agentbay: read-only data access for role {r.name} in mode {r.mode}, env {r.env}.\n"
+                "# The unit is fixed here; arguments are <capability>/v<N>.<endpoint> '<json>' only.\n"
                 f'exec python3 -E {shlex.quote(str(kit / "bay" / "use_shim.py"))} '
-                f'{shlex.quote(r.name)} "$(cd "$(dirname "$0")/../../.." && pwd)" "$@"\n')
+                f'{shlex.quote(sub)} "$(cd "$(dirname "$0")/../../.." && pwd)" "$@"\n')
             p.chmod(0o755)
             rep.written.append(str(rel))
             out.append(str(rel))
         return out
 
-    def _guard_policy(self, system: System, placements, project: Path, kit: Path, rep: BuildReport) -> str:
+    def _guard_policy(self, system: System, units, project: Path, kit: Path, rep: BuildReport) -> str:
         subs = {}
-        for sub, r in sorted(placements.items()):
+        for sub, r in sorted(units.items()):
             fs = system.env(r.env).spec.get("fs", {})
-            subs[sub] = {"role": r.name, "env": r.env, "shim": use_shim(r.name) if r.bay_uses else None,
+            subs[sub] = {"role": r.name, "mode": r.mode, "env": r.env, "shim": use_shim(sub) if r.bay_uses else None,
                          "clis": list(r.clis),
                          # `~/...` or absolute read paths are for the env's connectors (e.g. transcripts), never roles
                          "read": [x for x in fs.get("read", ["."]) if not x.startswith(("~", "/"))],
-                         # roles without file-writing tools get no writable paths at all
-                         "write": list(fs.get("write", [])) if WRITE_TOOLS & set(r.tools) else []}
+                         # only `access: write` roles with file-writing tools get writable paths
+                         "write": list(fs.get("write", [])) if r.access == "write" and WRITE_TOOLS & set(r.tools)
+                         else []}
         is_kit = project.resolve() == kit.resolve()
         # The shim is auto-allowed only when the kit is outside the project. If the kit is the project
         # or sits inside it, roles may be able to edit code the shim runs, so it prompts instead.
@@ -335,7 +341,7 @@ class ClaudeCodeAdapter:
         rep.written.append(rel)
         return rel
 
-    def _settings(self, placements, project: Path, kit: Path, old: dict, rep: BuildReport,
+    def _settings(self, units, project: Path, kit: Path, old: dict, rep: BuildReport,
                   remove_only: bool = False) -> tuple[list[str], list[str]]:
         path = project / ".claude" / "settings.json"
         cfg = _read_json(path, {})
@@ -404,7 +410,7 @@ class ClaudeCodeAdapter:
         rep.written.append(".claude/settings.json")
         return owned, owned_deny
 
-    def _coordinator(self, system: System, placements, project: Path, kit: Path, rep: BuildReport) -> list[str]:
+    def _coordinator(self, system: System, units, project: Path, kit: Path, rep: BuildReport) -> list[str]:
         # The root coordinator is a mode like any other; its playbook is this document's preamble, so it is
         # excluded from the per-mode sections below (otherwise its prose would be emitted twice).
         root = system.modes.get(ROOT_COORDINATOR)
@@ -416,15 +422,17 @@ class ClaudeCodeAdapter:
         ep_rows, role_rows, books = [], [], []
         for m in system.modes.values():
             for f in m.features.values():
-                review = f"{f.review['role']} ({f.review.get('model', 'default')})" if f.review else "-"
+                rv = next((s for s in f.steps if s.kind == "review"), None)
+                review = f"{f.review['role']} ({rv.inference.tier}, {rv.inference.model})" if f.review and rv \
+                    and rv.inference else "-"
                 ep_rows.append(f"| `{m.name}.{f.name}` | {f.in_type or '-'} -> {f.out_type or '-'} | "
                                f"{', '.join(f.effects)} | {review} | {f.description or m.purpose} |")
             if m.coordinator and m.playbook and m.name != ROOT_COORDINATOR:
                 coord = system.roles[m.coordinator]
                 books.append(f"### Mode `{m.name}` - coordinator role `{coord.name}`\n\n{coord.prompt}\n\n"
                              + _without(m.playbook, system.uninstalled).strip().replace("# ", "#### ", 1))
-        for sub, r in sorted(placements.items()):
-            role_rows.append(f"| `{sub}` | {r.inference.model} | {r.env} | {r.description} |")
+        for sub, r in sorted(units.items()):
+            role_rows.append(f"| `{sub}` | {r.inference.model} | {r.mode} | {r.env} | {r.description} |")
         doc = f"""<!-- generated by agentbay; edit framework/modes/cos/, modes/ and roles/, not this file -->
 {cos}
 
@@ -436,8 +444,8 @@ class ClaudeCodeAdapter:
 
 ## Worker subagents (generated)
 
-| subagent_type | model | env | role |
-|---|---|---|---|
+| subagent_type | model | mode | env | role |
+|---|---|---|---|---|
 {chr(10).join(role_rows)}
 
 Machine-readable: `.agentbay/catalog.json`.
@@ -481,9 +489,9 @@ Subagents cannot run `{BAY}` at all.
             path.write_text(text)
             rep.written.append("CLAUDE.md")
 
-    def _catalog(self, system: System, placements, project: Path, rep: BuildReport) -> str:
+    def _catalog(self, system: System, units, project: Path, rep: BuildReport) -> str:
         """The catalog is runtime-neutral system truth: bay.registry builds and writes it."""
-        rel = registry.write(system, placements, project, runtime=self.name,
+        rel = registry.write(system, units, project, runtime=self.name,
                              workflows=workflows.catalog_entries(system))
         rep.written.append(rel)
         return rel

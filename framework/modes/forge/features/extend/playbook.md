@@ -8,7 +8,7 @@ Change the agentbay framework itself (concepts, schemas, CLI, runtime, framework
 - `proposal` (optional): an existing docs/proposals/<id>.md to implement; `context` (optional).
 
 ## Steps
-1. `propose`: the builder (agent framework-builder, env framework-dev) writes docs/proposals/<id>.md: problem, change to concepts/schemas/CLI, compatibility impact, migration plan.
+1. `propose`: the builder, in env framework-dev, writes docs/proposals/<id>.md: problem, change to concepts/schemas/CLI, compatibility impact, migration plan.
 2. `approve`: approval gate. The call stops with `awaiting-approval`; only the user passes it, with `bay approve <callId>` in an interactive terminal.
 3. `implement`: the builder implements the approved proposal on a branch: code, schemas, framework modes, docs and tests.
 4. `review`: the reviewer (opus, high effort) checks every DoD item and rule below.

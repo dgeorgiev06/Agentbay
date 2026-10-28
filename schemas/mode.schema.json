@@ -45,7 +45,7 @@
         "extends": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9-]{1,40}$",
-          "description": "Parent mode, resolved at build time: the child inherits endpoints, workflows, playbooks, rules, review settings, roles, constraints, inference, needs, config, types, skills and the coordinator playbook, and overrides any of them (endpoints merge key by key, workflows are replaced per workflow). Inheritance cycles and missing parents are errors."
+          "description": "Parent mode, resolved at build time: the child inherits endpoints, workflows, playbooks, rules, review settings, roles (the role -> env map, overridden entry by entry), coordinator, constraints, configDefaults, needs, config, types, skills and the coordinator playbook, and overrides any of them (endpoints merge key by key, workflows are replaced per workflow). Inheritance cycles and missing parents are errors."
         },
         "abstract": {
           "type": "boolean",
@@ -119,13 +119,9 @@
                       "never"
                     ]
                   },
-                  "model": {
-                    "enum": [
-                      "haiku",
-                      "sonnet",
-                      "opus",
-                      "inherit"
-                    ]
+                  "tier": {
+                    "$ref": "#/$defs/tier",
+                    "description": "Tier of the review step (default: the review role's tier)."
                   },
                   "effort": {
                     "enum": [
@@ -142,6 +138,16 @@
                       "pattern": "^[a-z][a-z0-9-]*$"
                     },
                     "description": "Framework rule sets (framework/rules/<name>.yaml, e.g. conformance) added to the reviewer's plan next to the feature's DoD and rules."
+                  },
+                  "model": {
+                    "enum": [
+                      "haiku",
+                      "sonnet",
+                      "opus",
+                      "inherit"
+                    ],
+                    "deprecated": true,
+                    "description": "Deprecated (0.3): use `tier`. Run `bay migrate`."
                   }
                 },
                 "if": {
@@ -162,12 +168,25 @@
               "schedule": {
                 "type": "string"
               },
+              "roles": {
+                "$ref": "#/$defs/roleEnvs",
+                "description": "This feature's role -> env overrides over the mode's `roles` (e.g. forge.extend: {builder: framework-dev}). Only roles the mode lists."
+              },
+              "tier": {
+                "$ref": "#/$defs/tier",
+                "description": "Tier of this feature's role steps (default: each role's tier). A step's own `tier` wins; review steps take theirs from `review`."
+              },
+              "effort": {
+                "$ref": "#/$defs/effort",
+                "description": "Effort of this feature's role steps (default: each role's effort). A step's own `effort` wins."
+              },
               "agents": {
                 "type": "object",
                 "additionalProperties": {
                   "type": "string"
                 },
-                "description": "Per-endpoint placement: role -> agent override (e.g. builder: author)."
+                "deprecated": true,
+                "description": "Deprecated (0.3): role -> agent; the agent's env becomes this feature's `roles:` entry and its model a tier. Run `bay migrate`."
               }
             }
           }
@@ -176,11 +195,21 @@
           "type": "string"
         },
         "roles": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1
+          "oneOf": [
+            {
+              "$ref": "#/$defs/roleEnvs"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "deprecated": true,
+              "description": "Deprecated (0.3) list form: each role's env comes from its 0.3 agent; `bay migrate` rewrites it to the map."
+            }
+          ],
+          "description": "The roles this mode uses and the env each one works in: {role: env}. Features and workflow steps may override entries (`roles:` of the same shape); one env per step. Children inherit the map and override it entry by entry."
         },
         "workflows": {
           "type": "object",
@@ -251,27 +280,24 @@
                 "review": {
                   "const": "here",
                   "description": "Position marker for the review step configured on the endpoint (mode.yaml endpoints.<f>.review). Without a marker, review runs after the last step."
+                },
+                "roles": {
+                  "$ref": "#/$defs/roleEnvs",
+                  "description": "This step's env for its role ({<role>: <env>}, one entry), over the feature's and the mode's."
+                },
+                "tier": {
+                  "$ref": "#/$defs/tier",
+                  "description": "Tier of this role step (over the feature's and the role's)."
+                },
+                "effort": {
+                  "$ref": "#/$defs/effort",
+                  "description": "Effort of this role step (over the feature's and the role's)."
                 }
               }
             }
           },
           "propertyNames": {
             "pattern": "^[a-z][a-z0-9-]*$"
-          }
-        },
-        "inference": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "default": {
-              "$ref": "#/$defs/inference"
-            },
-            "steps": {
-              "type": "object",
-              "additionalProperties": {
-                "$ref": "#/$defs/inference"
-              }
-            }
           }
         },
         "constraints": {
@@ -282,17 +308,31 @@
               "type": "string",
               "pattern": "^[0-9]+[mhdw]$"
             },
-            "monthlyPosts": {
-              "type": "integer",
-              "minimum": 0
-            },
             "spendUsd": {
               "type": "number",
               "minimum": 0
             },
+            "monthlyItems": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Items a source may read per UTC month."
+            },
+            "maxItemsPerRun": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Items one sync may read."
+            },
+            "monthlyPosts": {
+              "type": "integer",
+              "minimum": 0,
+              "deprecated": true,
+              "description": "Deprecated (0.3) name of monthlyItems; `bay migrate` renames it."
+            },
             "maxPostsPerRun": {
               "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "deprecated": true,
+              "description": "Deprecated (0.3) name of maxItemsPerRun; `bay migrate` renames it."
             },
             "policies": {
               "type": "array",
@@ -312,6 +352,27 @@
         "config": {
           "type": "string",
           "description": "JSON Schema file (in the mode folder) for agentbay.config.yaml modes.<name>."
+        },
+        "configDefaults": {
+          "type": "object",
+          "description": "Defaults that replace the config schema's `default`s for this mode (e.g. a child's own default selectors), so a child never copies its parent's config schema. Merged key by key over the parent's; each key must be a property of the config schema and its value must match it."
+        },
+        "inference": {
+          "type": "object",
+          "additionalProperties": false,
+          "deprecated": true,
+          "description": "Deprecated (0.3): model names belong to the agent profile; becomes `tier`/`effort` on the role steps it changed. Run `bay migrate`.",
+          "properties": {
+            "default": {
+              "$ref": "#/$defs/inference"
+            },
+            "steps": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/inference"
+              }
+            }
+          }
         }
       },
       "if": {
@@ -332,6 +393,34 @@
     }
   },
   "$defs": {
+    "roleEnvs": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9-]{1,40}$"
+      },
+      "additionalProperties": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "tier": {
+      "enum": [
+        "fast",
+        "balanced",
+        "deep"
+      ],
+      "description": "fast | balanced | deep; the agent profile maps it to a model."
+    },
+    "effort": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
     "inference": {
       "type": "object",
       "additionalProperties": false,

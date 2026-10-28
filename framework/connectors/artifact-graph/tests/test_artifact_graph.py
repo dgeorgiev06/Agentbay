@@ -36,14 +36,14 @@ def test_kit_graph_has_concepts_edges_and_reference_counts():
     try:
         g = inst(p).graph(root="kit")
         nodes = {n["id"]: n for n in g["nodes"]}
-        for nid in ("mode:improve", "endpoint:improve.scan", "role:auditor", "agent:improver", "env:improve-local",
+        for nid in ("mode:improve", "endpoint:improve.scan", "role:analyst", "agent:claude-code", "env:improve-local",
                     "connector:claude-transcripts", "interface:session.events/v1", "schema:improve.finding/v1",
                     "type:improve/Draft", "config:improve.window", "fn:bay/dispatch.py:Dispatcher.call"):
             assert nid in nodes, nid
         edges = {(e["from"], e["to"]) for e in g["edges"]}
         assert ("env:improve-local", "connector:claude-transcripts") in edges
-        assert ("agent:improver", "env:improve-local") in edges
+        assert ("mode:improve", "env:improve-local") in edges and ("mode:improve", "agent:claude-code") in edges
         assert ("interface:improve.findings/v1", "schema:improve.finding/v1") in edges
-        assert nodes["role:auditor"]["refs"] >= 1 and nodes["fn:bay/dispatch.py:Dispatcher.call"]["refs"] >= 1
+        assert nodes["role:analyst"]["refs"] >= 1 and nodes["fn:bay/dispatch.py:Dispatcher.call"]["refs"] >= 1
     finally:
         cleanup(p)

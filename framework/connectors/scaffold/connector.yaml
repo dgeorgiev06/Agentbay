@@ -7,4 +7,4 @@ spec:
   implements: forge.scaffold/v1
   entry: scaffold.py
   needs:
-    fs: { write: [modes, roles, agents, envs, connectors] }
+    fs: { write: [modes, envs, connectors] }

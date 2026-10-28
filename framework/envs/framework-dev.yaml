@@ -19,6 +19,6 @@ spec:
   fs:
     read: ["."]
     write: [framework, bay, schemas, docs, tests]
-  models: [sonnet, opus]
+  tiers: [balanced, deep]          # no fast tier for framework changes
   effects: [read, write]
   limits: { maxTurns: 120, maxMinutes: 60 }

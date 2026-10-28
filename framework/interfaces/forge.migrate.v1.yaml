@@ -2,10 +2,11 @@ apiVersion: agentbay/v2
 kind: Interface
 metadata:
   name: forge.migrate
-  description: Migrate user content (modes, roles, agents, envs, connectors) across framework versions. Dry-run diff first; apply only on confirm.
+  description: Migrate user content (modes, envs, connectors; and 0.3 roles and agents into them) across framework versions. Dry-run diff first; apply only on confirm.
 spec:
   version: 1
   binding: connector
+  dispatcherOnly: true        # code steps only: no role reads it, even in a mode that needs it
   endpoints:
     plan:
       in: { type: object, additionalProperties: false, properties: { to: { type: string } } }

@@ -5,7 +5,7 @@ Bring the corpus store up to date with posts from every source bound to items.so
 
 ## Inputs
 - `lookback` (optional, e.g. `3d`): how far back to fill on a first, gapped or new-selector sync. Default: config `lookback`, capped by `lookbackMax`.
-- `maxPosts` (optional): extra per-run cap (passed to the store as `maxItems`); the strictest of this, `maxPostsPerRun`, `monthlyPosts` and `spendUsd` wins.
+- `maxPosts` (optional): extra per-run cap (passed to the store as `maxItems`); the strictest of this, `maxItemsPerRun`, `monthlyItems` and `spendUsd` wins.
 - Config `selectors`: which items to keep.
 
 ## Steps

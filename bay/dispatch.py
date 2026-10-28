@@ -10,7 +10,7 @@ A call walks the feature's workflow:
                  deterministic check results; verdicts decide done vs partial
 
 Every step writes step.started / step.completed (or failed/skipped/planned) to
-the ledger with mode, endpoint, step, role, agent, env and cost. Secret values
+the ledger with mode, endpoint, step, role, agent (the profile), env and cost. Secret values
 are redacted from everything this module returns or logs.
 """
 from __future__ import annotations
@@ -105,15 +105,18 @@ class Dispatcher:
         """Current state of a call (result, or the step it waits on). Read-only."""
         return self._public(self._load(call_id))
 
-    def use(self, role: str, target: str, inp: dict | None = None) -> dict:
-        """Read-only connector access for a role. Reached only through the role's own use shim
-        (.agentbay/roles/<role>/use), which fixes `role`; there is no CLI flag to choose it."""
-        r = self.sys.roles.get(role)
+    def use(self, unit: str, target: str, inp: dict | None = None) -> dict:
+        """Read-only connector access for one compiled unit (a role in one mode and one env). Reached only
+        through the unit's own use shim (.agentbay/roles/<unit>/use), which fixes `unit`; there is no CLI flag
+        to choose it. The read runs in the unit's env and reaches only its mode's data."""
+        r = self.sys.units().get(unit)
         if r is None:
-            raise CallError(f"unknown role '{role}'")
+            raise CallError(f"unknown role unit '{unit}' (have: {', '.join(sorted(self.sys.units()))})")
+        role = r.name
         if target not in r.bay_uses:
-            raise CallError(f"role {role} is not granted {target} (granted: {', '.join(r.bay_uses) or 'none'}); "
-                            f"only read-only endpoints listed in the role's `uses` can be called")
+            raise CallError(f"role {role} in mode {r.mode} is not granted {target} (granted: "
+                            f"{', '.join(r.bay_uses) or 'none'}); a role may call only the read-only endpoints of the "
+                            f"capabilities its mode needs that its env ({r.env}) binds")
         iface, ep = target.rsplit(".", 1)
         effects = model.endpoint_effects(self.sys.kit, iface, ep)
         if set(effects) - model.AGENT_SAFE_EFFECTS:      # re-checked at runtime
@@ -126,24 +129,19 @@ class Dispatcher:
         outs = {c: self._invoke(env.name, c, iface, ep, inp or {}, settings=settings, caps={}) for c in conns}
         out = outs[conns[0]] if len(conns) == 1 else merge_outputs(outs)
         n = len(out.get("posts", [])) if isinstance(out, dict) else None
-        ledger.append(self.project, "data.read", f"use:{role}", source="dispatcher", role=role, env=env.name,
-                      summary=target, data={"input": inp or {}, **({"items": n} if n is not None else {})})
+        ledger.append(self.project, "data.read", f"use:{unit}", source="dispatcher", role=role, mode=r.mode,
+                      env=env.name, summary=target,
+                      data={"input": inp or {}, **({"items": n} if n is not None else {})})
         return secretscan.scrub_obj(json.loads(vault.redact(json.dumps(out, ensure_ascii=False))))
 
-    def _use_settings(self, role, iface: str) -> dict:
-        """Which mode a role's read belongs to: the one mode of the role that needs `iface`. Per-mode stores
-        (corpus-store) need it; a role serving several such modes is ambiguous until per-mode placement exists."""
-        modes = [m for m in self.sys.modes.values() if role.name in m.roles and iface in m.needs]
-        if len(modes) > 1:
-            raise CallError(f"role {role.name} reads {iface} for several modes ({', '.join(m.name for m in modes)}); "
-                            f"give each mode its own reader role so a read reaches one mode's store")
-        if not modes:
+    def _use_settings(self, unit, iface: str) -> dict:
+        """The unit's mode settings when its mode needs `iface` (per-mode stores such as corpus-store key on the
+        mode), plus the source ids bound in the unit's env: the store in that env holds what syncs there fetched,
+        and refuses reads when its applied scope differs."""
+        m = self.sys.modes.get(unit.mode)
+        if m is None or iface not in m.needs:
             return {}
-        m = modes[0]
-        # the mode's settings (selectors) and the source ids bound where its code steps run: the store checks
-        # its scope against them, since this read runs in the role's env, not the mode's
-        env, _ = model.code_env(self.sys.kit, self.sys.kit.get("Mode", m.name), iface, self.sys.roles)
-        conns = model.connectors_of(env.spec["bind"].get(model.SOURCE_IFACE)) if env else []
+        conns = model.connectors_of(self.sys.env(unit.env).spec["bind"].get(model.SOURCE_IFACE))
         docs = [self.sys.kit.get("Connector", c) for c in conns]
         return {**self._settings(m), "sources": sorted({d.spec["source"] for d in docs if d and d.spec.get("source")})}
 
@@ -156,7 +154,7 @@ class Dispatcher:
         iface, ep = run.rsplit(".", 1)
         if iface not in m.needs:
             raise CallError(f"mode {mode_name} does not need {iface}")
-        env, why = model.code_env(self.sys.kit, self.sys.kit.get("Mode", mode_name), iface, self.sys.roles)
+        env, why = model.code_env(self.sys.kit, self.sys.kit.get("Mode", mode_name), iface)
         conns = model.connectors_of(env.spec["bind"].get(iface)) if env else []
         if len(conns) != 1:
             raise CallError(f"{run}: {why} must bind exactly one connector for {iface}")
@@ -327,7 +325,7 @@ class Dispatcher:
 
     # ------------------------------------------------------------ plans & output
     def _plan(self, mode, feat, step, state) -> dict:
-        role = step.resolved   # the role as placed for this endpoint (agent override applied)
+        role = step.resolved   # the compiled unit: this role in this mode and env
         submit = (f".agentbay/bay submit {state['callId']} {step.id} '<json>' "
                   f"--usage '{{\"tokens\": <total tokens>, \"costUsd\": <usd>, \"durationMs\": <ms>}}'")
         plan = {"step": step.id, "kind": step.kind}
@@ -341,7 +339,7 @@ class Dispatcher:
             return plan
         run_as = "main-thread playbook" if role.runtime == "claude-code-main" else f"subagent_type={step.subagent}"
         plan.update({"role": role.name, "agent": step.agent, "env": step.env, "runAs": run_as,
-                     "model": step.inference.model, "effort": step.inference.effort})
+                     "tier": step.inference.tier, "model": step.inference.model, "effort": step.inference.effort})
         if step.kind == "review":
             plan["review"] = {
                 "task": {"target": state["target"], "input": state["input"]},
@@ -364,7 +362,7 @@ class Dispatcher:
             "input": state["input"],
             "previous": {k: v for k, v in state["steps"].items() if v is not None},
             "out": step.out,
-            "tools": [f"{use_shim(role.name)} {u} '<json>'" for u in role.bay_uses],
+            "tools": [f"{use_shim(role.unit)} {u} '<json>'" for u in role.bay_uses],
         })
         return plan
 
@@ -464,9 +462,9 @@ def merge_outputs(outs: dict[str, dict]) -> dict:
     return merged
 
 
-def use_shim(role: str) -> str:
-    """Project-relative path of a role's use shim (generated by the adapter)."""
-    return f".agentbay/roles/{role}/use"
+def use_shim(unit: str) -> str:
+    """Project-relative path of a unit's use shim (generated by the adapter; unit = <role>--<mode>[--<env>])."""
+    return f".agentbay/roles/{unit}/use"
 
 
 def substitute(template, inp: dict, steps: dict, settings: dict):

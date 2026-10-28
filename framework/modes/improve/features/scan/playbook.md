@@ -10,7 +10,7 @@ Turn the sessions of a window into redacted episodes and find recurring failures
 ## Steps
 1. `detect`: the dispatcher runs `improve.detect/v1.sessions` (code, read-only). It reads episodes from every bound session.events/v1 source (agentbay ledger, Claude Code transcripts as structure only, git) and review verdicts, and runs the deterministic session detectors (review rounds, repeated rule failures, lintable blockers, mid-run instruction changes, out-of-scope additions, slow or costly steps, retries, permission friction, interrupts, repeated status questions, environment gaps, reverts and churn). It returns candidates and episode summaries.
 2. `store`: the dispatcher runs `improve.findings/v1.upsert` (code): candidates are stored (dedup by fingerprint) and closed findings past `retention` are pruned.
-3. `patterns`: the improve-analyst reads the episode summaries and stored findings in its plan (and more through its use shims) and returns only recurring patterns the detectors missed, each citing episode ids from the plan. An empty list is a valid answer.
+3. `patterns`: the analyst (pattern-analysis skill) reads the episode summaries and stored findings in its plan (and more through its use shims) and returns only recurring patterns the detectors missed, each citing episode ids from the plan. An empty list is a valid answer.
 4. `resolve`: the dispatcher runs `improve.detect/v1.resolve` (code): findings whose evidence does not resolve, that rely on measurements only, or session patterns with fewer than 2 episodes that are not severe, are rejected with a reason.
 5. `record`: the dispatcher runs `improve.findings/v1.upsert` (code) for the accepted findings.
 

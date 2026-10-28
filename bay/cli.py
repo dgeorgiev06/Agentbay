@@ -2,7 +2,7 @@
 """agentbay control plane (v0.2).
 
   validate               lint + resolve every mode endpoint (fails with every gap)
-  lint                   structure checks: playbooks, DoD ids, rules, review placement
+  lint                   structure checks: playbooks, DoD ids, rules, review, role envs
   build | clean          compile modes/roles into a runtime (claude-code) / remove it
   ls                     modes, endpoints and roles
   catalog [<name>]       the registry (.agentbay/catalog.json): endpoints with schemas, workflows
@@ -13,9 +13,9 @@
   show <callId>                        current state of a call (result or the step it waits on)
   approve <callId|runId> [--reject]    pass an approval gate of a call, or of a workflow run (W-...)
                                        (you, in a terminal; never an agent)
-  (agents read data only through .agentbay/roles/<role>/use, generated per role by build)
+  (agents read data only through .agentbay/roles/<role>--<mode>/use, generated per role unit by build)
 
-  mode new <name> | feature new <name> --mode <m> | role new <name>
+  mode new <name> | feature new <name> --mode <m>
   connector new <name> --implements <iface> | env new <name>     scaffolds (forge templates)
   improve decide <id> approve|defer|wontfix   record your decision on a backlog item (approve: terminal only)
   improve weekly [--since 7d]                 scan + audit + triage + backlog; cron it weekly
@@ -102,8 +102,9 @@ def cmd_validate(args):
         print(f"{len(wf_problems)} workflow problem(s)")
         sys.exit(1)
     n_ep = sum(len(m.features) for m in s.modes.values())
-    print(f"✓ {len(s.modes)} modes, {n_ep} endpoints, {len(s.roles)} roles, "
-          f"{len(s.kit.docs['Environment'])} envs, {len(s.kit.docs['Connector'])} connectors resolve")
+    print(f"✓ {len(s.modes)} modes, {n_ep} endpoints, {len(s.roles)} roles ({len(s.units())} role units), "
+          f"{len(s.kit.docs['Environment'])} envs, {len(s.kit.docs['Connector'])} connectors resolve "
+          f"(agent profile {s.agent})")
     for name, wf in wfmod.load(s.kit).items():
         eff = ", ".join(wfmod.effects(s, wf)) or "none"
         print(f"✓ workflow {name}: {len(wf.stages)} stages, effects {eff}")
@@ -137,9 +138,10 @@ def cmd_ls(args):
         for f in m.features.values():
             rv = f" review={f.review['role']}" if f.review else ""
             print(f"  {m.name}.{f.name:<10} effects={','.join(f.effects)}{rv}")
-    print("\nroles:")
-    for r in s.roles.values():
-        print(f"  {r.name:<14} agent={r.agent:<12} env={r.env:<16} model={r.inference.model}")
+    print(f"\nrole units (<role>--<mode>[--<env>], agent profile {s.agent}):")
+    for name, u in sorted(s.units().items()):
+        run = "main thread" if u.runtime == "claude-code-main" else f"tier={u.inference.tier} model={u.inference.model}"
+        print(f"  {name:<40} {u.kind:<11} env={u.env:<20} {run}")
 
 
 def cmd_catalog(args):
@@ -209,7 +211,10 @@ def cmd_describe(args):
         r = s.roles[args.name]
         d = {k: v for k, v in r.__dict__.items() if k != "prompt"}
         d["skills"] = sorted(r.skills)
-        d["inference"] = r.inference.__dict__
+        d["units"] = [{"unit": u.unit, "mode": u.mode, "env": u.env, "kind": u.kind, "runtime": u.runtime,
+                       "model": u.inference.model, "effort": u.inference.effort, "tools": u.tools, "clis": u.clis,
+                       "bayUses": u.bay_uses, "budget": u.budget}
+                      for u in s.units().values() if u.name == r.name]
         print(json.dumps(d, indent=2, default=str))
         if args.prompt:
             print("\n--- prompt ---\n" + r.prompt)
@@ -297,11 +302,12 @@ def cmd_submit(args):
     _run(lambda: d.submit(args.call, args.step, _json_arg(args.output), usage=usage))
 
 
-def role_use_main(role: str, project: Path, argv: list[str]) -> None:
-    """Entry point of a generated role shim. The role is fixed by the shim; flags are not parsed."""
+def role_use_main(unit: str, project: Path, argv: list[str]) -> None:
+    """Entry point of a generated role shim. The unit (role, mode, env) is fixed by the shim; flags are not
+    parsed."""
     from bay import dispatch, model
     if not argv or argv[0].startswith("-"):
-        _die(f"usage: .agentbay/roles/{role}/use <capability>/v<N>.<endpoint> '<json>'  (role {role} is fixed)")
+        _die(f"usage: .agentbay/roles/{unit}/use <capability>/v<N>.<endpoint> '<json>'  (role unit {unit} is fixed)")
     target, inp = argv[0], argv[1] if len(argv) > 1 else None
     if len(argv) > 2:
         _die("too many arguments: pass exactly <capability>/v<N>.<endpoint> and one JSON argument")
@@ -310,7 +316,7 @@ def role_use_main(role: str, project: Path, argv: list[str]) -> None:
     except (model.ResolveError, model.SpecError) as e:
         _die(f"✗ {e}")
     d = dispatch.Dispatcher(s, project)
-    _run(lambda: d.use(role, target, _json_arg(inp)))
+    _run(lambda: d.use(unit, target, _json_arg(inp)))
 
 
 # ------------------------------------------------------------------ improve
@@ -531,7 +537,7 @@ def main(argv=None):
     ap_.add_argument("call"); ap_.add_argument("--reject", action="store_true"); ap_.add_argument("--reason")
     ap_.set_defaults(fn=cmd_approve)
 
-    for kind in ("mode", "feature", "role", "connector", "env"):
+    for kind in ("mode", "feature", "connector", "env"):
         k = sub.add_parser(kind, help=f"scaffold {'an' if kind[0] in 'aeiou' else 'a'} {kind}")
         ks = k.add_subparsers(dest="action", required=True)
         n = ks.add_parser("new"); n.add_argument("name"); n.add_argument("--intent")

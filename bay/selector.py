@@ -129,6 +129,12 @@ def match_ids(item: dict, selectors: list[dict], now: datetime) -> list[str]:
 
 
 # ------------------------------------------------------------------ capabilities
+def local_with(caps: dict, field: str, sel: dict) -> list[str]:
+    """Fields of `sel` that make a native `field` local on this source (capability `localWith`)."""
+    c = caps.get(field)
+    return [f for f in (c.get("localWith") or []) if f in sel] if isinstance(c, dict) else []
+
+
 def mode_of(caps: dict, field: str) -> str | None:
     """'native' | 'local' | None (the source cannot express the field)."""
     c = caps.get(field)
@@ -166,7 +172,8 @@ def canonical(selectors: list[dict]) -> str:
 
 def check(selectors: list[dict], caps: dict, *, connector: str, paid: bool, where: str) -> tuple[list[str], list[str]]:
     """(errors, warnings) for one bound source. Errors: duplicate ids, fields the source cannot express.
-    Warnings: local-only fields on a paid source (you pay for items that are then dropped)."""
+    Warnings: local-only fields on a paid source (you pay for items that are then dropped), including a native
+    field the source matches locally when combined with another (`localWith`, e.g. X `from` with `in`)."""
     errors, warnings = [], []
     seen: set[str] = set()
     for s in selectors or []:
@@ -193,4 +200,10 @@ def check(selectors: list[dict], caps: dict, *, connector: str, paid: bool, wher
                                 f"{connector}: every item its native query returns is billed, then dropped if it does "
                                 f"not match; narrow it with {fix}native fields "
                                 f"({', '.join(k for k in caps if mode_of(caps, k) == 'native')})")
+            elif paid and m == "native" and not f.startswith("not.") and local_with(caps, base, s):
+                both = ", ".join(f"`{x}`" for x in local_with(caps, base, s))
+                warnings.append(f"{where}: selector '{sid}' combines `{f}` with {both}; {connector} then reads the "
+                                f"{both} stream and matches `{f}` locally, so on this paid source every item of that "
+                                f"stream is billed, then dropped unless it matches. Split it into two selectors "
+                                f"(one with `{f}` only) to fetch `{f}` natively")
     return errors, warnings

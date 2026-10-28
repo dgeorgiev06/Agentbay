@@ -19,7 +19,6 @@ spec:
       clis: [git status, git diff, git log, git show]
   fs:
     read: ["."]
-    write: [modes, roles, agents, envs, connectors, agentbay.config.yaml]
-  models: [haiku, sonnet, opus, inherit]
+    write: [modes, envs, connectors, agentbay.config.yaml, roles, agents]   # roles/, agents/: only so forge.migrate can move 0.3 files into modes
   effects: [read, write, delete]
   limits: { maxTurns: 60, maxMinutes: 30 }

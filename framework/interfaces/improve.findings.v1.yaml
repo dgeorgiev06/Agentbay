@@ -18,7 +18,7 @@ spec:
         additionalProperties: false
         properties:
           candidates: { type: array, items: { type: object } }
-          by: { type: string, description: "who produced the candidates (improve.scan, improve.audit, improve-analyst, auditor)" }
+          by: { type: string, description: "who produced the candidates (improve.scan, improve.audit, analyst)" }
           rejected: { type: array, description: "echoed in the output (findings improve.detect/v1.resolve refused)" }
           detected: { type: array, items: { type: string }, description: "ids an earlier step of the call stored; included in summary" }
       out:

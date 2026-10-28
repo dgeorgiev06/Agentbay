@@ -14,7 +14,7 @@ spec:
   source: x
   window: 7d
   selectors:
-    from: { mode: native, as: "handle (user timeline; matched locally when the query also has `in`)" }
+    from: { mode: native, as: "handle (user timeline)", localWith: [in] }   # with `in`, the in stream is read and filtered
     in: { mode: native, as: "home (home timeline) or list:<List id>" }
     since: native
     text: local          # X bills every post the native query returns; text only filters after that

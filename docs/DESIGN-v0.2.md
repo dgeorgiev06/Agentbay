@@ -377,8 +377,13 @@ are not part of this amendment.
   - `items_fts` (FTS5 with its own content, kept by triggers).
 
   Internal state (cursors, coverage, budget, deleted ids, deletion-check times, and the selectors and
-  sources last applied) lives next to it in `<mode>/state.json` (0600, written atomically after the items
-  commit), which the agents' read-only connection never opens.
+  sources last applied) lives next to it in `<mode>/state.json` (0600, written atomically), which the agents'
+  read-only connection never opens. sync and prune hold an exclusive per-mode lock (`corpus.lock`) from
+  reading state.json until they have saved it, so concurrent runs never lose each other's updates. Spend,
+  deletions and check times are saved before the items commit (and again if the transaction fails), and
+  cursors, coverage and the applied scope after it. A crash at any point can therefore only over-count
+  spend (the next sync refetches from the old cursor), never lose it, and a cursor never covers items that
+  were not committed.
 
   **Scope invariant.** corpus.db holds exactly the mode's scope: items of the sources bound to the mode's env
   that match at least one current selector. sync and prune enforce it on every run. They delete rows of
@@ -386,7 +391,11 @@ are not part of this amendment.
   item without refetching, deleting those no selector matches. sync stores a fetched item only when it
   matches. The FTS triggers keep `items_fts` in step, and the v0.2 migration writes only in-scope items.
   Scope is therefore structural: the SQL sandbox does not filter, because there is nothing out of scope to
-  reach.
+  reach. When the configured selectors or bound sources change, sync applies the new scope in its own
+  transaction before any fetch, so a failing source cannot keep old items. Until a sync or prune has done
+  that, every read endpoint refuses with the fix (run sync) and `status` reports `stale`. The dispatcher
+  passes a use-shim read the mode's selectors and the sources bound in the mode's code-step env, because the
+  read itself runs in the role's env.
 
   Sync is one transaction. Budget, deletion re-checks, coverage and caps behave as in v0.2; the cap names
   `maxPostsPerRun`, `monthlyPosts` and `costPerPostUsd` are kept and count items. Without FTS5, search

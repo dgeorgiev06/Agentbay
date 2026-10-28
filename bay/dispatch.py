@@ -137,7 +137,15 @@ class Dispatcher:
         if len(modes) > 1:
             raise CallError(f"role {role.name} reads {iface} for several modes ({', '.join(m.name for m in modes)}); "
                             f"give each mode its own reader role so a read reaches one mode's store")
-        return {"mode": modes[0].name} if modes else {}
+        if not modes:
+            return {}
+        m = modes[0]
+        # the mode's settings (selectors) and the source ids bound where its code steps run: the store checks
+        # its scope against them, since this read runs in the role's env, not the mode's
+        env, _ = model.code_env(self.sys.kit, self.sys.kit.get("Mode", m.name), iface, self.sys.roles)
+        conns = model.connectors_of(env.spec["bind"].get(model.SOURCE_IFACE)) if env else []
+        docs = [self.sys.kit.get("Connector", c) for c in conns]
+        return {**self._settings(m), "sources": sorted({d.spec["source"] for d in docs if d and d.spec.get("source")})}
 
     def run_capability(self, mode_name: str, run: str, args: dict) -> dict:
         """Run one connector endpoint of a mode's capability outside any workflow, in the env its code steps use.

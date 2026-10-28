@@ -12,13 +12,20 @@ database file's mode).
                (<source>:<extId>, never re-stored), checked (last deletion check), selectors and sources (the
                scope last applied). Never opened by the read-only connection agents use.
 
+Writers: sync and prune hold an exclusive lock (corpus.lock) from reading state.json until they have saved
+it, so two runs never overwrite each other's budget. Spend, deletions and check times are saved before the
+items commit (and again if it fails), the rest of the state after it: a crash can only over-count spend (the
+next sync refetches from the old cursor), never lose it, and a cursor never claims uncommitted items.
+
 Scope invariant: corpus.db holds exactly the mode's scope, meaning items of the sources bound to the mode's
 env that match at least one current selector (bay/selector.py). sync and prune (dispatcher code steps) enforce
 it on every run (_enforce_scope): rows of sources no longer bound are deleted, and every stored item is
 re-matched without refetching (re-tagged, or deleted when no selector matches); sync stores a fetched item
 only when it matches. items_fts follows `items` through triggers. So read-only SQL has nothing out of scope
-to reach. Every item string is secret-scrubbed before it is stored (scrub_item), and every read is scrubbed
-again.
+to reach. When the configured selectors or bound sources change, sync first applies the new scope in its own
+transaction, before and regardless of any fetch, and until a sync or prune has done so every read endpoint
+refuses (status reports `stale`), so a config change never leaves out-of-scope items readable. Every item
+string is secret-scrubbed before it is stored (scrub_item), and every read is scrubbed again.
 
 Budget is enforced before each source fetch exactly as before: a run is capped at the strictest of
 maxPostsPerRun, monthlyPosts - used and (spendUsd - spent) / costPerPostUsd (names kept from v0.2; they
@@ -26,11 +33,14 @@ count items). Up to DELETION_CHECK_SHARE of a source's budget re-checks stored i
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import math
 import os
 import re
 import sqlite3
+import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -42,6 +52,9 @@ from bay.util import duration, iso, parse_time, read_json
 SCHEMA_VERSION = 1
 DB_NAME = "corpus.db"
 STATE_NAME = "state.json"
+LOCK_NAME = "corpus.lock"
+LOCK_WAIT_S = 30
+DURABLE = ("budget", "deleted", "checked")     # state saved before the items commit (see _transact)
 DELETION_CHECK_SHARE = 0.5
 ENVELOPE = ("id", "extId", "source", "kind", "author", "title", "text", "url", "createdAt", "fetchedAt",
             "container", "labels", "threadId", "matched")
@@ -228,10 +241,81 @@ class CorpusStore:
 
     # ------------------------------------------------------------ helpers
     def _bound(self) -> list[str]:
-        """Sources bound in this env: the store keeps only their items (offline items never mix into real ones)."""
+        """Source ids bound to the mode's env: the store keeps only their items (offline items never mix into real
+        ones). A use-shim read runs in the role's env, so the dispatcher passes the mode's own as settings.sources."""
+        if "sources" in self.ctx.settings:
+            return sorted(set(self.ctx.settings["sources"]))
         return sorted({s.ctx.source_id for s in self.ctx.sources.values() if s.ctx.source_id})
 
-    def _ro(self) -> sqlite3.Connection:
+    def _stale(self, state: dict, sels: list[dict] | None) -> str | None:
+        """What differs between the scope the store was last given and the configured one, or None."""
+        why = []
+        if selmod.canonical(state.get("selectors")) != selmod.canonical(sels):
+            why.append("the selectors changed")
+        if sorted(state.get("sources") or []) != self._bound():
+            why.append(f"the bound sources are now {', '.join(self._bound()) or 'none'} "
+                       f"(was {', '.join(sorted(state.get('sources') or [])) or 'none'})")
+        return " and ".join(why) or None
+
+    def _require_scope(self) -> None:
+        """Reads refuse a store whose scope is not the configured one, so items outside the current scope (a
+        removed selector, an unbound or swapped source) are never readable, even while syncs keep failing."""
+        why = self._stale(load_state(self.state_path), self.ctx.settings.get("selectors"))
+        if why:
+            mode = self.ctx.settings.get("mode")
+            raise StoreError(f"the {mode} store was scoped for another configuration ({why}); run "
+                             f"`.agentbay/bay call {mode}.sync '{{}}'` (or {mode}.prune) to re-scope it. Reads are "
+                             f"refused until then so items outside the current scope never show")
+
+    @contextmanager
+    def _exclusive(self):
+        """One writer per mode: sync and prune hold this lock from reading state.json until they saved it."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(self.path.parent / LOCK_NAME, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            deadline = time.monotonic() + LOCK_WAIT_S
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() > deadline:
+                        raise StoreError(f"another sync or prune of mode {self.ctx.settings.get('mode')} is still "
+                                         f"running (waited {LOCK_WAIT_S}s); run this again when it has finished") from None
+                    time.sleep(0.05)
+            yield
+        finally:
+            os.close(fd)                                     # closing releases the lock
+
+    def _transact(self, work, state: dict, base: dict):
+        """work(con) in one write transaction. DURABLE parts of state (spend, deletions, check times) are saved
+        before the commit and again if it fails; the rest (cursors, coverage, applied scope) after it."""
+        con = self._rw()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            out = work(con)
+            save_state(self.state_path, {**base, **{k: state[k] for k in DURABLE}})
+            con.execute("COMMIT")
+        except BaseException:
+            if con.in_transaction:
+                con.execute("ROLLBACK")
+            save_state(self.state_path, {**base, **{k: state[k] for k in DURABLE}})   # what was billed stays billed
+            raise
+        finally:
+            con.close()
+        save_state(self.state_path, state)
+        return out
+
+    def _rescope(self, state: dict, sels: list[dict], now) -> dict:
+        """Apply a changed scope in its own transaction and record it, before (and whatever then happens to) the
+        fetch."""
+        base = json.loads(json.dumps(state))
+        return self._transact(lambda con: self._enforce_scope(con, state, sels, now), state, base)
+
+    def _ro(self, scoped: bool = True) -> sqlite3.Connection:
+        """Read-only connection; refuses (StoreError) while the store's scope is stale, except for status."""
+        if scoped:
+            self._require_scope()
         con = sbx.connect_ro(self.path)
         con.row_factory = sqlite3.Row
         return con
@@ -393,19 +477,14 @@ class CorpusStore:
         if lb_max and lb > duration(lb_max):
             raise StoreError(f"lookback {lookback} exceeds the mode's lookbackMax {lb_max}")
         sels = self._selectors()
-        state = load_state(self.state_path)
-        con = self._rw()
-        try:
-            con.execute("BEGIN IMMEDIATE")
-            out = self._sync(con, state, sels, now, lookback, lb, maxItems)
-            con.execute("COMMIT")
-        except BaseException:
-            if con.in_transaction:
-                con.execute("ROLLBACK")
-            raise
-        finally:
-            con.close()
-        save_state(self.state_path, state)       # after the items commit: a crash in between only refetches
+        with self._exclusive():
+            state = load_state(self.state_path)
+            scope = self._rescope(state, sels, now) if self._stale(state, sels) else None
+            base = json.loads(json.dumps(state))
+            out = self._transact(lambda con: self._sync(con, state, sels, now, lookback, lb, maxItems), state, base)
+        if scope:
+            out["outOfScope"] += scope["unbound"] + scope["unmatched"]
+            out["rematched"] += scope["rematched"]
         return out
 
     def _sync(self, con, state, sels, now, lookback, lb, max_items) -> dict:
@@ -534,32 +613,26 @@ class CorpusStore:
             raise StoreError("no retention: pass olderThan, or give `retention` a default in the mode's config schema")
         cutoff = iso(now - duration(retention))
         sels = self._selectors()
-        state = load_state(self.state_path)
-        con = self._rw()
-        try:
-            con.execute("BEGIN IMMEDIATE")
-            before = con.execute("SELECT count(*) FROM items").fetchone()[0]
-            scope = self._enforce_scope(con, state, sels, now)
-            deleted = set(state["deleted"]) | {scrub(str(x)) for x in deletedIds or []}   # as stored
-            n_deleted = 0
-            for k in deleted:
-                src, _, xid = k.partition(":")
-                n_deleted += con.execute("DELETE FROM items WHERE source = ? AND ext_id = ?", (src, xid)).rowcount
-            con.execute("DELETE FROM items WHERE created_at < ?", (cutoff,))
-            remaining = con.execute("SELECT count(*) FROM items").fetchone()[0]
-            state["deleted"] = sorted(deleted)
-            for cur in state["cursors"].values():
-                if cur.get("from") and cur["from"] < cutoff:
-                    cur["from"] = cutoff
-            state["coverage"] = self._overall(state)
-            con.execute("COMMIT")
-        except BaseException:
-            if con.in_transaction:
-                con.execute("ROLLBACK")
-            raise
-        finally:
-            con.close()
-        save_state(self.state_path, state)
+        with self._exclusive():
+            state = load_state(self.state_path)
+            base = json.loads(json.dumps(state))
+            return self._transact(lambda con: self._prune(con, state, sels, now, cutoff, deletedIds), state, base)
+
+    def _prune(self, con, state, sels, now, cutoff, deleted_ids) -> dict:
+        before = con.execute("SELECT count(*) FROM items").fetchone()[0]
+        scope = self._enforce_scope(con, state, sels, now)
+        deleted = set(state["deleted"]) | {scrub(str(x)) for x in deleted_ids or []}   # as stored
+        n_deleted = 0
+        for k in deleted:
+            src, _, xid = k.partition(":")
+            n_deleted += con.execute("DELETE FROM items WHERE source = ? AND ext_id = ?", (src, xid)).rowcount
+        con.execute("DELETE FROM items WHERE created_at < ?", (cutoff,))
+        remaining = con.execute("SELECT count(*) FROM items").fetchone()[0]
+        state["deleted"] = sorted(deleted)
+        for cur in state["cursors"].values():
+            if cur.get("from") and cur["from"] < cutoff:
+                cur["from"] = cutoff
+        state["coverage"] = self._overall(state)
         return {"removed": before - remaining, "remaining": remaining, "deleted": n_deleted,
                 "unmatched": scope["unmatched"], "unbound": scope["unbound"], "cutoff": cutoff}
 
@@ -574,7 +647,7 @@ class CorpusStore:
                     "count": 0, "selectors": {}, "engine": "fts5" if sbx.fts5_available() else "like",
                     "stale": bool(sels)}
         state = load_state(self.state_path)
-        con = self._ro()
+        con = self._ro(scoped=False)
         try:
             count = con.execute("SELECT count(*) FROM v_items").fetchone()[0]
             per = dict(con.execute("SELECT j.value, count(*) FROM v_items v, json_each(v.matched) j "
@@ -582,9 +655,7 @@ class CorpusStore:
             engine = "fts5" if sbx.has_fts(con) else "like"
         finally:
             con.close()
-        # stale: the next sync changes the store's scope (selectors changed, or a source was bound/unbound)
-        stale = (bool(sels) and selmod.canonical(state.get("selectors")) != selmod.canonical(sels)) \
-            or sorted(state.get("sources") or []) != self._bound()
+        stale = bool(self._stale(state, sels))   # reads refuse until a sync or prune re-scopes the store
         return {"lastSync": state["coverage"].get("to"), "coverage": self.coverage(state, lo),
                 "budget": self._budget(state), "count": count, "selectors": per, "engine": engine, "stale": stale}
 
@@ -728,8 +799,10 @@ class CorpusStore:
 
     def sql(self, sql, limit=None) -> dict:
         try:
+            if self.path.exists():
+                self._require_scope()
             box = sbx.Sandbox(self.path)
-        except sbx.SqlError as e:
+        except (sbx.SqlError, StoreError) as e:
             return {"columns": [], "rows": [], "rowCount": 0, "truncated": None, "error": str(e)}
         try:
             return box.run(sql, limit)

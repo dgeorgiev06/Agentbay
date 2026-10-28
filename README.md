@@ -83,7 +83,9 @@ Every item records `matched: [selector ids]`, so a digest or question can be sco
   the selectors changed).
 
 The store only ever holds what the mode's selectors match from the sources bound to its env: switching from
-the offline env to the real one, or unbinding a source, removes that source's items on the next sync.
+the offline env to the real one, or unbinding a source, removes that source's items on the next sync, even
+if the fetch itself then fails. Until then every read is refused with a message saying to run
+`feed-briefing.sync`, so posts outside the new scope never show up in an answer.
 
 `bay validate` errors on a field a source cannot express. It warns when a field is matched only locally on
 a paid source (for example `text` on X, where every post the native query returns is billed).

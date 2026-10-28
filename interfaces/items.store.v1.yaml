@@ -6,7 +6,9 @@ metadata:
     Local corpus of item/v1 items with selector tags, per-query cursors, budget usage and coverage. sync and
     prune are dispatcher code steps; every other endpoint is read-only and reachable by agents through their
     role's use shim. The store holds exactly the mode's scope (items of the sources bound to its env that
-    match at least one current selector); internal state lives in a separate state.json.
+    match at least one current selector); internal state lives in a separate state.json. While the
+    configured selectors or bound sources differ from the scope last applied, every read endpoint except
+    status refuses with an error saying to run sync (status reports `stale`).
 spec:
   version: 1
   binding: connector

@@ -245,7 +245,8 @@ def test_store_writes_only_inside_env_write_path():
     written = sorted(str(x.relative_to(p)) for x in p.rglob("*") if x.is_file())
     assert written[-1] == "agentbay.config.yaml"
     assert set(written[:-1]) == {".agentbay/data/feeds/feed-briefing/corpus.db",
-                                 ".agentbay/data/feeds/feed-briefing/state.json"}
+                                 ".agentbay/data/feeds/feed-briefing/state.json",
+                                 ".agentbay/data/feeds/feed-briefing/corpus.lock"}
 
 
 def test_reads_never_write_the_store_or_state():
@@ -523,3 +524,176 @@ def test_two_modes_on_one_env_keep_separate_stores():
         raise AssertionError("expected StoreError")
     except Exception as e:
         assert "one store per mode" in str(e)
+
+
+# ------------------------------------------------------------------ stale scope, concurrency, crash safety
+def refused_reads(st) -> list[str]:
+    """Every read endpoint, as an agent would call it; returns the refusal messages (empty: all served)."""
+    out = []
+    for call in (lambda: st.query(), lambda: st.get(["fake:11"]), lambda: st.thread("fake:11"),
+                 lambda: st.facets("author"), lambda: st.search("staking"), lambda: st.describe()):
+        try:
+            call()
+        except Exception as e:
+            out.append(str(e))
+    for sql in ("SELECT count(*) FROM v_items", "SELECT count(*) FROM items_fts('staking')"):
+        err = st.sql(sql).get("error")
+        if err:
+            out.append(err)
+    return out
+
+
+def test_reads_refuse_a_stale_scope_until_sync_rescopes():
+    sels = [{"id": "home", "in": "home", "not": {"text": "staking"}}, {"id": "staking", "in": "home", "text": "staking"}]
+    p = project()
+    store(p, settings={"selectors": sels}, fixture=FX).sync(lookback="3d")
+    st = store(p, settings={"selectors": sels[:1]})                      # a selector is removed
+    errs = refused_reads(st)
+    assert len(errs) == 8 and all("the selectors changed" in e and "feed-briefing.sync" in e for e in errs), errs
+    assert st.status()["stale"] is True                                  # status still answers
+    st.sync(lookback="3d")
+    assert refused_reads(st) == [] and [i["id"] for i in st.query()["items"]] == ["fake:11"]
+    # unbinding the source (the env now binds x-api instead): refused until a prune re-scopes it
+    online = store(p, env="local-feeds", settings={"selectors": sels[:1]})
+    errs = refused_reads(online)
+    assert len(errs) == 8 and all("bound sources are now x (was fake)" in e for e in errs), errs
+    online.prune(olderThan="30d")
+    assert refused_reads(online) == [] and online.query()["items"] == []
+
+
+def test_a_failing_source_still_rescopes_first():
+    sels = [{"id": "home", "in": "home", "not": {"text": "staking"}}, {"id": "staking", "in": "home", "text": "staking"}]
+    p = project()
+    store(p, settings={"selectors": sels}, fixture=FX).sync(lookback="3d")
+    st = store(p, settings={"selectors": sels[:1]})
+
+    def down(**kw):
+        raise RuntimeError("source down")
+    st.ctx.sources["fake"].fetch = down
+    try:
+        st.sync(lookback="3d")
+        raise AssertionError("expected the fetch to fail")
+    except RuntimeError:
+        pass
+    assert ids(p) == {"fake:11"} and state(p)["selectors"] == sels[:1]   # re-scoped although nothing was fetched
+    con = sqlite3.connect(db(p))
+    assert con.execute("SELECT count(*) FROM items_fts").fetchone()[0] == 1
+    con.close()
+    assert refused_reads(st) == [] and st.status()["stale"] is False
+
+
+def test_swapping_offline_for_real_refuses_role_reads_until_a_rescope():
+    import yaml
+    from helpers import SECRETS, FakeHttp, MemProvider, jresp
+    from bay import dispatch
+    p = project()
+    dispatch.Dispatcher(system(p), p, clock=clock).call("feed-briefing.sync", {})
+    D = dispatch.Dispatcher(system(p), p, clock=clock)
+    assert len(D.use("briefing-analyst", "items.store/v1.query", {})["items"]) == 7
+    cfgp = p / "agentbay.config.yaml"                    # swap to the real env (x-api)
+    cfg = yaml.safe_load(cfgp.read_text())
+    cfg.pop("envs")
+    cfg.update({"connectors": {"x-api": {"userId": "42"}}, "secrets": {"provider": "env"}})
+    cfgp.write_text(yaml.safe_dump(cfg))
+    D = dispatch.Dispatcher(system(p), p, clock=clock)
+    assert D.use("briefing-analyst", "items.store/v1.status", {})["stale"] is True
+    for target, inp in (("items.store/v1.query", {}), ("items.store/v1.search", {"text": "staking"}),
+                        ("items.store/v1.get", {"ids": ["fake:1009"]})):
+        try:
+            D.use("briefing-analyst", target, inp)
+            raise AssertionError(f"{target} served a stale scope")
+        except Exception as e:
+            assert "bound sources are now x (was fake)" in str(e), e
+    assert "bound sources are now x" in D.use("briefing-analyst", "items.store/v1.sql",
+                                               {"sql": "SELECT count(*) FROM v_items"})["error"]
+    # the real source is down (token refused): the sync fails, but the offline items are gone and reads work
+    http = FakeHttp({("POST", "/2/oauth2/token"): lambda *a: jresp({"error": "invalid_grant"}, 400)})
+    r = dispatch.Dispatcher(system(p), p, transport=http, provider=MemProvider(SECRETS), clock=clock).call(
+        "feed-briefing.sync", {})
+    assert r["status"] == "failed"
+    assert D.use("briefing-analyst", "items.store/v1.query", {})["items"] == []
+    assert D.use("briefing-analyst", "items.store/v1.status", {})["stale"] is False
+
+
+def test_concurrent_sync_and_prune_keep_every_billed_item():
+    """The reviewer's probe: a slow sync and a prune at the same time used to leave budget.posts at the first
+    run's 7 (each read state.json before any lock and saved it whole)."""
+    import threading
+    import time as _t
+    p = project()
+    caps = {"monthlyPosts": 3000}
+    first = store(p, caps=caps).sync(lookback="3d")["billed"]
+    s = store(p, caps=caps, settings={"retention": "30d"})
+    real = s.ctx.sources["fake"].fetch
+
+    def slow(**kw):
+        _t.sleep(0.6)
+        return real(**kw)
+    s.ctx.sources["fake"].fetch = slow
+    got = {}
+    t = threading.Thread(target=lambda: got.update(sync=s.sync(lookback="3d", maxItems=50)))
+    t.start()
+    _t.sleep(0.2)
+    got["prune"] = store(p, caps=caps, settings={"retention": "30d"}).prune()
+    t.join()
+    assert got["sync"]["billed"] > 0 and got["prune"]["remaining"] == 7
+    assert state(p)["budget"]["2026-10"]["posts"] == first + got["sync"]["billed"]
+    assert all(c.get("lastSync") for c in state(p)["cursors"].values())
+
+
+class Crash(BaseException):
+    """The process dies here."""
+
+
+def test_a_crash_around_the_commit_never_loses_spend():
+    import sys as _sys
+    p = project()
+    store(p).sync(lookback="3d")
+    before = state(p)
+    spent0 = before["budget"]["2026-10"]["posts"]
+    # (a) dies after the items commit, before the final state save: spend kept, cursors not advanced past it
+    st = store(p, fixture=FX + [{"id": "2001", "handle": "lido", "text": "new staking post", "ageHours": 1}])
+    mod = _sys.modules[type(st).__module__]
+    real_save, calls = mod.save_state, []
+
+    def dying_save(path, data):
+        calls.append(1)
+        if len(calls) == 2:                     # 1: before the commit (spend), 2: after it (everything else)
+            raise Crash()
+        real_save(path, data)
+    mod.save_state = dying_save
+    try:
+        try:
+            st.sync(lookback="3d")
+        except Crash:
+            pass
+    finally:
+        mod.save_state = real_save
+    after = state(p)
+    billed = after["budget"]["2026-10"]["posts"] - spent0
+    assert billed > 0 and "fake:2001" in ids(p)                           # committed and billed
+    assert after["cursors"] == before["cursors"]                          # not advanced: next sync refetches
+    out = store(p).sync(lookback="3d")
+    assert state(p)["budget"]["2026-10"]["posts"] == spent0 + billed + out["billed"]   # over-counts, never loses
+    # (b) dies between the spend save and the commit: nothing committed, spend still kept
+    spent1 = state(p)["budget"]["2026-10"]["posts"]
+    st = store(p, fixture=FX + [{"id": "2002", "handle": "lido", "text": "another post", "ageHours": 1}])
+    real_rw = st._rw
+
+    class DyingCommit:
+        def __init__(self, con):
+            self.con = con
+
+        def execute(self, sql, *a):
+            if sql == "COMMIT":
+                raise Crash()
+            return self.con.execute(sql, *a)
+
+        def __getattr__(self, name):
+            return getattr(self.con, name)
+    st._rw = lambda: DyingCommit(real_rw())
+    try:
+        st.sync(lookback="3d")
+    except Crash:
+        pass
+    assert "fake:2002" not in ids(p) and state(p)["budget"]["2026-10"]["posts"] > spent1

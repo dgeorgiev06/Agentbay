@@ -161,7 +161,10 @@ An endpoint review block may name framework rule sets: `review: { ..., rulesets:
 
   The store holds exactly the mode's scope: items of the sources bound to the mode's env that match at least
   one current selector. `sync` and `prune` enforce it on every run without refetching (`outOfScope`,
-  `unbound`, `unmatched` in their output); a new selector backfills its lookback.
+  `unbound`, `unmatched` in their output); a new selector backfills its lookback. After a change of
+  selectors or bound sources, sync re-scopes in its own transaction before fetching, and until a sync or
+  prune has run every read endpoint except `status` refuses with an error saying to run sync. sync and
+  prune of one mode never run at once (a per-mode lock), and spend is saved before the items commit.
 - **corpus-store** (framework connector) keeps one store per mode, `<env data folder>/<mode>/corpus.db`
   (settings.mode from the dispatcher; use-shim reads resolve the role's one mode). The file, -wal and -shm
   are 0600; WAL mode, `user_version` = 1:

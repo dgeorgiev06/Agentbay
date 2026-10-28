@@ -33,14 +33,51 @@ def _where(path: Path, line: int) -> str:
     return f"{model.rel(path)}:{line}"
 
 
-def _ep_where(md: model.Doc, ep_name: str) -> tuple[Path, int]:
-    """The mode.yaml (own, else the nearest ancestor's) that declares endpoint `ep_name`, and its line."""
-    rx = rf"^\s{{4}}{re.escape(ep_name)}:"
+def _entry_line(path: Path, section: str, name: str) -> int | None:
+    """0-based index of `    <name>:` inside the `  <section>:` block of a mode.yaml, or None."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    inside = False
+    for i, ln in enumerate(lines):
+        if re.match(r"^\s{2}\S", ln):
+            inside = ln.strip().startswith(f"{section}:")
+        elif inside and re.match(rf"^\s{{4}}{re.escape(name)}:", ln):
+            return i
+    return None
+
+
+def _lineage_where(md: model.Doc, section: str, name: str) -> tuple[Path, int]:
+    """The mode.yaml (own, else the nearest ancestor's) whose `section` (endpoints, workflows) declares `name`,
+    and that line: inherited parts are reported where they are written."""
     for d in md.dirs:
-        line = _line_of(d / "mode.yaml", rx, 0)
-        if line:
-            return d / "mode.yaml", line
+        i = _entry_line(d / "mode.yaml", section, name)
+        if i is not None:
+            return d / "mode.yaml", i + 1
     return md.path, 1
+
+
+def _ep_where(md: model.Doc, ep_name: str) -> tuple[Path, int]:
+    return _lineage_where(md, "endpoints", ep_name)
+
+
+def _ep_key_where(md: model.Doc, ep_name: str, key: str) -> tuple[Path, int]:
+    """The mode.yaml (own, else the nearest ancestor's) whose endpoint `ep_name` sets `key`, and that line;
+    falls back to where the endpoint is declared."""
+    rx_key = re.compile(rf"\b{re.escape(key)}:")
+    for d in md.dirs:
+        start = _entry_line(d / "mode.yaml", "endpoints", ep_name)
+        if start is None:
+            continue
+        lines = (d / "mode.yaml").read_text(encoding="utf-8").splitlines()
+        for i in range(start, len(lines)):
+            ln = lines[i]
+            if i > start and ln.strip() and len(ln) - len(ln.lstrip()) <= 4:
+                break                                    # the next endpoint (or section) starts
+            if rx_key.search(ln.split("#", 1)[0]):
+                return d / "mode.yaml", i + 1
+    return _ep_where(md, ep_name)
 
 
 def _file(md: model.Doc, relpath: str, kit: model.Kit) -> str:
@@ -168,7 +205,7 @@ def lint_mode(md: model.Doc, kit: model.Kit) -> list[str]:
         out += lint_feature(md, ep_name, ep, kit)
     for wf in s["workflows"]:
         if wf not in used:
-            out.append(f"{_where(md.path, _line_of(md.path, rf'^\s{{4}}{re.escape(wf)}:'))}: workflow '{wf}' is not "
+            out.append(f"{_where(*_lineage_where(md, 'workflows', wf))}: workflow '{wf}' is not "
                        f"used by any endpoint; remove it or add an endpoint")
     # modes name capabilities, never concrete tools or connectors
     text = md.path.read_text(encoding="utf-8")
@@ -258,7 +295,7 @@ def warnings(kit: model.Kit) -> list[str]:
             if ep.get("schedule"):
                 target = f"{md.name}.{ep_name}"
                 run = SCHEDULED_BY.get(target, f"`.agentbay/bay call {target} '{{}}'`")
-                out.append(f"{_where(md.path, _line_of(md.path, r'schedule:'))}: {target} declares "
+                out.append(f"{_where(*_ep_key_where(md, ep_name, 'schedule'))}: {target} declares "
                            f"schedule '{ep['schedule']}' but no runtime acts on it; run {run} from cron")
     stores = [c.name for c in kit.docs["Connector"].values() if "items.store/v1" in (
         [c.spec["implements"]] if isinstance(c.spec["implements"], str) else c.spec["implements"])]

@@ -137,3 +137,29 @@ def test_a_second_briefing_mode_fails_validate_naming_the_modes_and_step_3():
     assert_gap(k, "role briefing-lead reads items.store/v1 for several modes")
     r = subprocess.run([str(k / "bay.sh"), "validate"], capture_output=True, text=True)
     assert r.returncode != 0 and "several modes (feed-briefing, news-briefing)" in r.stdout + r.stderr
+
+
+def test_lint_lines_of_inherited_parts_point_at_the_parent_mode_yaml():
+    def line_of(path, prefix, after=0):
+        return next(i for i, ln in enumerate(path.read_text().splitlines(), 1) if i > after and ln.startswith(prefix))
+    base = KIT / "modes/briefing/mode.yaml"
+    ws = lint.warnings(model.Kit(KIT))
+    want = f"modes/briefing/mode.yaml:{line_of(base, '      schedule: daily')}: feed-briefing.prune declares schedule"
+    assert any(w.startswith(want) for w in ws), ws
+    assert not any("modes/feed-briefing/mode.yaml:1:" in w for w in ws)
+    # a child that sets the schedule itself is reported at its own line
+    k = kit_copy()
+    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"]["endpoints"].update(
+        {"prune": {"schedule": "weekly"}}))
+    own = line_of(k / "modes/feed-briefing/mode.yaml", "      schedule: weekly")
+    ws = lint.warnings(model.Kit(k))
+    assert any(f"modes/feed-briefing/mode.yaml:{own}: feed-briefing.prune declares" in w for w in ws), ws
+    # an inherited workflow no endpoint uses any more is reported where the parent defines it
+    k = kit_copy()
+    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: (
+        d["spec"]["endpoints"].update({"prune": {"workflow": "trim"}}),
+        d["spec"]["workflows"].update({"trim": [{"id": "trim", "run": "items.store/v1.prune"}]})))
+    kbase = k / "modes/briefing/mode.yaml"
+    wf = line_of(kbase, "    prune:", after=line_of(kbase, "  workflows:"))
+    ps = problems(k)
+    assert any(f"modes/briefing/mode.yaml:{wf}: workflow 'prune' is not used" in p for p in ps), ps

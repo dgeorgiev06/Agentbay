@@ -287,7 +287,8 @@ def rel(p: Path) -> str:
 
 def merge_mode(parent: dict, child: dict, pdir: Path, cdir: Path) -> dict:
     """A child mode spec over its parent's. Endpoints merge key by key (a child may override review, in/out,
-    workflow, playbook, rules, ...); workflows are replaced per workflow; constraints and inference merge;
+    workflow, playbook, rules, ...); workflows are replaced per workflow; constraints, configDefaults and
+    inference merge;
     needs are unioned; anything else the child sets replaces the parent's. Paths the child inherits
     (playbook, rules, config) are rebased so they still resolve from the child's folder. `abstract` is not
     inherited."""
@@ -310,7 +311,7 @@ def merge_mode(parent: dict, child: dict, pdir: Path, cdir: Path) -> dict:
                 eps[name] = {**eps.get(name, {}), **copy.deepcopy(e)}
         elif k == "workflows":
             out.setdefault("workflows", {}).update(copy.deepcopy(v))
-        elif k == "constraints":
+        elif k in ("constraints", "configDefaults"):
             out[k] = {**out.get(k, {}), **copy.deepcopy(v)}
         elif k == "inference":
             inf = out.setdefault("inference", {})
@@ -746,11 +747,24 @@ def resolve_mode(kit: Kit, md: Doc, roles: dict[str, ResolvedRole], gaps: list[s
             rename_caps(csch.get("properties"))       # a 0.3 schema declaring maxPostsPerRun / monthlyPosts
             for e in schema_errors(mcfg, csch):
                 gaps.append(f"agentbay.config.yaml modes.{name}: {e}")
-            # the mode's config schema `default`s are the single source of default settings
-            defaults = {k: v["default"] for k, v in (csch.get("properties") or {}).items() if "default" in v}
+            # the mode's config schema `default`s are the single source of default settings; a mode (a child,
+            # usually) replaces some of them with `configDefaults` instead of copying the schema
+            props = csch.get("properties") or {}
+            defaults = {k: v["default"] for k, v in props.items() if "default" in v}
+            for k, v in (s.get("configDefaults") or {}).items():
+                if k not in props:
+                    gaps.append(f"mode {name}: configDefaults.{k} is not a setting of its config schema "
+                                f"{os.path.relpath(os.path.normpath(cp), kit.root)} (has: {', '.join(props) or 'none'})")
+                    continue
+                errs = schema_errors(v, props[k])
+                gaps += [f"mode {name}: configDefaults.{k}: {e.removeprefix('<root>: ')}" for e in errs]
+                if not errs:
+                    defaults[k] = v
             mcfg = {**defaults, **mcfg}
     elif mcfg:
         gaps.append(f"agentbay.config.yaml modes.{name}: mode {name} declares no config schema, so it takes no settings")
+    if s.get("configDefaults") and not s.get("config"):
+        gaps.append(f"mode {name}: configDefaults needs a config schema (`config:`, own or inherited)")
     if SOURCE_IFACE in needs and not mcfg.get("selectors"):
         mcfg["selectors"] = [{"id": "home"}]     # no selectors setting: keep each source's default stream (v0.2)
     constraints = cfgmod.effective_constraints(s.get("constraints", {}), mcfg)

@@ -19,4 +19,5 @@ spec:
   constraints:                 # merged over briefing's (lookbackMax, spendUsd, policies)
     monthlyItems: 3000
     maxItemsPerRun: 500
-  config: config.schema.json
+  configDefaults:              # briefing's config schema, with this mode's default selector
+    selectors: [{ id: home }]  # no fields: each source's default stream (the X home timeline), as in v0.2

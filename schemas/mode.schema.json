@@ -326,6 +326,10 @@
         "config": {
           "type": "string",
           "description": "JSON Schema file (in the mode folder) for agentbay.config.yaml modes.<name>."
+        },
+        "configDefaults": {
+          "type": "object",
+          "description": "Defaults that replace the config schema's `default`s for this mode (e.g. a child's own default selectors), so a child never copies its parent's config schema. Merged key by key over the parent's; each key must be a property of the config schema and its value must match it."
         }
       },
       "if": {

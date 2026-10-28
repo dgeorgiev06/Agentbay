@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "briefing settings (agentbay.config.yaml modes.<mode>); modes that extend briefing ship their own copy with their defaults",
+  "title": "briefing settings (agentbay.config.yaml modes.<mode>); modes that extend briefing inherit it and change defaults with configDefaults",
   "type": "object",
   "additionalProperties": false,
   "properties": {

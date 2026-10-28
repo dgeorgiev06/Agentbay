@@ -79,7 +79,7 @@ def v02_kit():
     for f in ("features/sync/playbook.md", "features/sync/rules.yaml", "features/ask/playbook.md",
               "features/ask/rules.yaml", "types/Question.schema.json"):
         shutil.copy(base / f, d / f)
-    cfg = json.loads((k / "modes/feed-briefing/config.schema.json").read_text())
+    cfg = json.loads((k / "modes/briefing/config.schema.json").read_text())
     cfg["properties"].pop("selectors")                                   # v0.2 had no selectors
     (d / "config.schema.json").write_text(json.dumps(cfg))
     shutil.copy(k / "modes/feed-briefing/types/SyncReq.schema.json", d / "types/SyncReq.schema.json")

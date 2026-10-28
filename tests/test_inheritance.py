@@ -35,7 +35,7 @@ def test_feed_briefing_is_complete_after_extends():
     assert s["endpoints"]["sync"]["playbook"] == "features/sync/playbook.md"                    # own override
     assert s["endpoints"]["sync"]["rules"] == "../briefing/features/sync/rules.yaml"            # inherited
     assert s["endpoints"]["sync"]["effects"] == ["network", "spend", "write"]                   # merged per key
-    assert s["config"] == "config.schema.json" and "abstract" not in s and "extends" in s
+    assert s["config"] == "../briefing/config.schema.json" and "abstract" not in s and "extends" in s
     assert s["constraints"]["maxItemsPerRun"] == 500 and s["constraints"]["lookbackMax"] == "30d"
     sysm = model.resolve(k)
     m = sysm.modes["feed-briefing"]
@@ -163,3 +163,23 @@ def test_lint_lines_of_inherited_parts_point_at_the_parent_mode_yaml():
     wf = line_of(kbase, "    prune:", after=line_of(kbase, "  workflows:"))
     ps = problems(k)
     assert any(f"modes/briefing/mode.yaml:{wf}: workflow 'prune' is not used" in p for p in ps), ps
+
+
+def test_child_sets_config_defaults_instead_of_copying_the_config_schema():
+    from helpers import project
+    k = model.Kit(KIT)
+    md = k.get("Mode", "feed-briefing")
+    assert not (KIT / "modes/feed-briefing/config.schema.json").exists()          # no copy of briefing's
+    assert md.spec["configDefaults"] == {"selectors": [{"id": "home"}]}
+    m = model.resolve(k).modes["feed-briefing"]
+    assert m.config["selectors"] == [{"id": "home"}] and m.config["lookback"] == "3d"   # child + parent defaults
+    # the user's settings still win over configDefaults
+    p = project({"modes": {"feed-briefing": {"selectors": [{"id": "staking", "text": "staking"}]}}})
+    assert model.resolve(model.Kit(KIT, p)).modes["feed-briefing"].config["selectors"][0]["id"] == "staking"
+    # a key the config schema does not declare, or a value it rejects, is a gap naming the mode
+    kc = kit_copy()
+    edit_yaml(kc / "modes/feed-briefing/mode.yaml", lambda d: d["spec"]["configDefaults"].update(
+        {"lookback": "forever", "colour": "blue"}))
+    assert_gap(kc, "mode feed-briefing: configDefaults.colour is not a setting of its config schema",
+               "modes/briefing/config.schema.json")
+    assert_gap(kc, "mode feed-briefing: configDefaults.lookback:", "does not match")

@@ -41,7 +41,7 @@ feed-briefing hard-codes one pattern: pull items from a source, store them, summ
 | facets, search, query, status | read | agents: shortcuts |
 
 ### 4. Corpus store (connector `corpus-store`, SQLite, stdlib)
-- **Database:** one file per mode, under that mode's data folder. WAL mode. The schema version lives in `PRAGMA user_version` and is migrated by `forge.migrate`.
+- **Database:** one file per mode, under that mode's data folder. WAL mode. The schema version lives in `PRAGMA user_version`; data migrations run through `bay migrate --project <repo>` (the user, dry run first), never `forge.migrate`, which migrates kit content only.
 - **Tables:**
   - `items` (unique on source + ext_id)
   - `item_selectors`
@@ -68,7 +68,7 @@ feed-briefing hard-codes one pattern: pull items from a source, store them, summ
 - **Spend:** C-6 spend exemption via `spendUsd`, as already decided.
 
 ### 7. Per-source modes
-- **feed-briefing:** extends briefing; `x-api` moves onto `items.source/v1`. Existing posts are migrated from JSONL to SQLite with `forge.migrate` (dry-run first).
+- **feed-briefing:** extends briefing; `x-api` moves onto `items.source/v1`. Existing posts are migrated from JSONL to SQLite with `bay migrate --project <repo>` (dry run first, `--confirm` to apply).
 - **mail-briefing:** extends briefing.
   - Digest is thread-based, with action items (replies owed, deadlines) and sender weighting.
   - Connectors:

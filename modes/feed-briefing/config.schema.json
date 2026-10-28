@@ -29,11 +29,11 @@
       ],
       "description": "Which posts to keep (bay/selector.py). The default `{id: home}` has no fields: it keeps everything each bound source's default stream returns (X: the home timeline), exactly as v0.2. Add e.g. {id: staking, in: list:123} or {id: vitalik, from: vitalik}; X handles from, in (home, list:<id>) and since natively, text locally (billed before it filters)."
     },
-    "maxPostsPerRun": {
+    "maxItemsPerRun": {
       "type": "integer",
       "minimum": 1
     },
-    "monthlyPosts": {
+    "monthlyItems": {
       "type": "integer",
       "minimum": 0
     },

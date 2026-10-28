@@ -282,17 +282,31 @@
               "type": "string",
               "pattern": "^[0-9]+[mhdw]$"
             },
-            "monthlyPosts": {
-              "type": "integer",
-              "minimum": 0
-            },
             "spendUsd": {
               "type": "number",
               "minimum": 0
             },
+            "monthlyItems": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Items a source may read per UTC month."
+            },
+            "maxItemsPerRun": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Items one sync may read."
+            },
+            "monthlyPosts": {
+              "type": "integer",
+              "minimum": 0,
+              "deprecated": true,
+              "description": "Deprecated (0.3) name of monthlyItems; `bay migrate` renames it."
+            },
             "maxPostsPerRun": {
               "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "deprecated": true,
+              "description": "Deprecated (0.3) name of maxItemsPerRun; `bay migrate` renames it."
             },
             "policies": {
               "type": "array",

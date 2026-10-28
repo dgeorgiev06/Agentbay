@@ -134,8 +134,8 @@ def test_query_filters():
 
 def test_budget_caps_stop_and_report():
     p = project()
-    out = store(p, caps={"maxPostsPerRun": 3}).sync(lookback="3d")
-    assert out["fetched"] == 3 and "maxPostsPerRun cap reached" in out["stopped"]
+    out = store(p, caps={"maxItemsPerRun": 3}).sync(lookback="3d")
+    assert out["fetched"] == 3 and "maxItemsPerRun cap reached" in out["stopped"]
     assert out["coverage"]["complete"] is False
     p = project()
 
@@ -148,17 +148,17 @@ def test_budget_caps_stop_and_report():
     out = priced(caps={"spendUsd": 0.02, "costPerPostUsd": 0.005}).sync(lookback="3d")
     assert out["fetched"] == 0 and "spendUsd cap reached: nothing fetched" in out["stopped"]
     p = project()
-    store(p, caps={"monthlyPosts": 5}).sync(lookback="3d")
-    out = store(p, caps={"monthlyPosts": 5}).sync(lookback="3d")
-    assert out["fetched"] == 0 and "monthlyPosts" in out["stopped"]
-    out = store(p, caps={"monthlyPosts": 5}, now=lambda: NOW + timedelta(days=10)).sync(lookback="3d")
+    store(p, caps={"monthlyItems": 5}).sync(lookback="3d")
+    out = store(p, caps={"monthlyItems": 5}).sync(lookback="3d")
+    assert out["fetched"] == 0 and "monthlyItems" in out["stopped"]
+    out = store(p, caps={"monthlyItems": 5}, now=lambda: NOW + timedelta(days=10)).sync(lookback="3d")
     assert out["budget"]["month"] == "2026-11" and out["stopped"] is None
     assert out["budget"]["posts"] == out["billed"]
 
 
 def test_gap_after_capped_run_refetches_window():
     p = project()
-    store(p, caps={"maxPostsPerRun": 2}).sync(lookback="3d")
+    store(p, caps={"maxItemsPerRun": 2}).sync(lookback="3d")
     st = store(p)
     out = st.sync(lookback="3d")
     assert st.ctx.sources["fake"].calls[0]["since"] is not None      # coverage gap -> refetch by time
@@ -196,19 +196,19 @@ def test_source_reported_deletions_are_honored_on_sync():
 def test_budget_counts_reads_not_kept_items():
     p = project()
     store(p).sync(lookback="3d")
-    out = store(p, caps={"maxPostsPerRun": 4}).sync(lookback="3d")
+    out = store(p, caps={"maxItemsPerRun": 4}).sync(lookback="3d")
     assert out["fetched"] == 0 and out["billed"] == 2 and out["budget"]["posts"] == 7 + 2
 
 
 def test_deletion_checks_are_reserved_and_only_checked_ids_are_marked():
     p = project()
     store(p).sync(lookback="3d")
-    st = store(p, caps={"maxPostsPerRun": 6})
+    st = store(p, caps={"maxItemsPerRun": 6})
     out = st.sync(lookback="3d")
     call = st.ctx.sources["fake"].calls[0]
     assert len(call["checkIds"]) == 3 and call["maxItems"] == 3
     assert sorted(state(p)["checked"]) == sorted(f"fake:{i}" for i in call["checkIds"])
-    st = store(p, caps={"maxPostsPerRun": 6})
+    st = store(p, caps={"maxItemsPerRun": 6})
     real = st.ctx.sources["fake"].fetch
     st.ctx.sources["fake"].fetch = lambda **kw: {**real(**kw), "checked": kw.get("checkIds", [])[:1]}
     st.sync(lookback="3d")
@@ -621,7 +621,7 @@ def test_concurrent_sync_and_prune_keep_every_billed_item():
     import threading
     import time as _t
     p = project()
-    caps = {"monthlyPosts": 3000}
+    caps = {"monthlyItems": 3000}
     first = store(p, caps=caps).sync(lookback="3d")["billed"]
     s = store(p, caps=caps, settings={"retention": "30d"})
     real = s.ctx.sources["fake"].fetch

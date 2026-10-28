@@ -163,9 +163,11 @@ class Kit:
                         self.errors.append(str(e))
         from . import aliases
         self.deprecations: list[str] = aliases.apply(self)     # v0.2 names, kept for one release
+        self.deprecations += aliases.apply_caps(self)          # 0.3 cap names, kept for one release
         self._apply_extends()
         from . import config as cfgmod
-        self.config = cfgmod.load(project) if config is None else config
+        self.config = copy.deepcopy(cfgmod.load(project) if config is None else config)
+        self.deprecations += aliases.config_caps(self.config)
         self._select_envs()
 
     def _apply_extends(self) -> None:
@@ -740,6 +742,8 @@ def resolve_mode(kit: Kit, md: Doc, roles: dict[str, ResolvedRole], gaps: list[s
             gaps.append(f"mode {name}: config schema {s['config']} not found")
         else:
             csch = inline_refs(json.loads(cp.read_text()))
+            from .aliases import rename_caps
+            rename_caps(csch.get("properties"))       # a 0.3 schema declaring maxPostsPerRun / monthlyPosts
             for e in schema_errors(mcfg, csch):
                 gaps.append(f"agentbay.config.yaml modes.{name}: {e}")
             # the mode's config schema `default`s are the single source of default settings

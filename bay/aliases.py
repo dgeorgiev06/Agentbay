@@ -169,3 +169,64 @@ def _list_items(lines: list[str]) -> list[list[str]]:
 def _rename_sync_input(block: list[str]) -> str:
     text = "".join(block)
     return re.sub(r"\bmaxPosts(\s*:)", r"maxItems\1", text) if SYNC in text else text
+
+
+# ------------------------------------------------------------------ 0.3 cap names (bay migrate 0.4.0)
+# The budget caps count items, not posts, since 0.3. 0.4 names them so; the 0.3 names keep working for one
+# release (0.4.x) in mode constraints, env limits, mode config schemas and agentbay.config.yaml.
+ITEM_CAPS = {"maxPostsPerRun": "maxItemsPerRun", "monthlyPosts": "monthlyItems"}
+HINT_04 = "run `bay migrate` to see the 0.4 rewrite and `bay migrate --confirm` to apply it"
+
+
+def rename_caps(d) -> list[str]:
+    """In place: the 0.3 cap names of one mapping become the item names (the stricter value wins if both are
+    set). Returns the old names found."""
+    used = []
+    if isinstance(d, dict):
+        for old, new in ITEM_CAPS.items():
+            if old in d:
+                v = d.pop(old)
+                d[new] = min(d[new], v) if isinstance(d.get(new), (int, float)) else v
+                used.append(old)
+    return used
+
+
+def _cap_warning(where: str, used: list[str]) -> str:
+    names = ", ".join(f"`{o}` -> `{ITEM_CAPS[o]}`" for o in used)
+    return f"{where}: {names} (cap names counting posts are deprecated since 0.4; the caps count items); {HINT_04}"
+
+
+def apply_caps(kit) -> list[str]:
+    """Rename 0.3 cap names in mode constraints and env limits (raw docs, before extends) and flag mode config
+    schemas that still declare them (renamed in memory when a mode resolves)."""
+    import json
+    warnings = []
+    for d in kit.docs["Mode"].values():
+        used = rename_caps(d.spec.get("constraints"))
+        if used:
+            warnings.append(_cap_warning(f"{d.rel} constraints", used))
+        cfg = d.dir / d.spec["config"] if d.spec.get("config") else None
+        if cfg and cfg.exists() and d.dir in cfg.parents:
+            try:
+                props = (json.loads(cfg.read_text(encoding="utf-8")).get("properties") or {})
+            except ValueError:
+                props = {}
+            used = [o for o in ITEM_CAPS if o in props]
+            if used:
+                warnings.append(_cap_warning(str(cfg.relative_to(kit.root)) if kit.root in cfg.parents else str(cfg),
+                                             used))
+    for d in kit.docs["Environment"].values():
+        used = rename_caps(d.spec.get("limits"))
+        if used:
+            warnings.append(_cap_warning(f"{d.rel} limits", used))
+    return warnings
+
+
+def config_caps(config: dict) -> list[str]:
+    """The same renaming in agentbay.config.yaml modes.<mode> settings."""
+    warnings = []
+    for mode, settings in ((config or {}).get("modes") or {}).items():
+        used = rename_caps(settings)
+        if used:
+            warnings.append(_cap_warning(f"agentbay.config.yaml modes.{mode}", used))
+    return warnings

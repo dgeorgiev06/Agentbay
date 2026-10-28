@@ -16,6 +16,8 @@ in MIGRATIONS with the version it migrates to.
        deletion-check times are kept, so the next sync is incremental and
        nothing deleted at the source comes back. The old files are renamed
        *.v0.2.bak, never deleted.
+0.4.0: cap names maxPostsPerRun / monthlyPosts -> maxItemsPerRun / monthlyItems (user modes, envs,
+       mode config schemas and the project's agentbay.config.yaml).
 
 Data migrations (DATA_MIGRATIONS) work on the project given to plan()/apply()
 (`bay migrate --project <repo>`); their changes are op `convert` with a
@@ -136,7 +138,31 @@ def _v02_names(kit: Path) -> tuple[list[Change], list[str]]:
     return changes, notes
 
 
-MIGRATIONS = [("0.2.0", _v1_specs_to_roles), ("0.3.0", _v02_names)]
+CAP_GLOBS = ("modes/*/mode.yaml", "modes/*/config.schema.json", "envs/*.yaml")
+
+
+def _cap_text(text: str) -> str:
+    from .aliases import ITEM_CAPS
+    for old, new in ITEM_CAPS.items():
+        text = re.sub(rf"(?<![\w-]){old}(?![\w-])", new, text)
+    return text
+
+
+def _v03_caps(kit: Path) -> tuple[list[Change], list[str]]:
+    """0.4.0: the cap names maxPostsPerRun / monthlyPosts become maxItemsPerRun / monthlyItems in user mode
+    constraints, mode config schemas and env limits (bay/aliases.py ITEM_CAPS)."""
+    changes = []
+    for pat in CAP_GLOBS:
+        for f in sorted(kit.glob(pat)):
+            old = f.read_text(encoding="utf-8")
+            new = _cap_text(old)
+            if new != old:
+                changes.append(Change("update", _rel(kit, f), new,
+                                      note="cap names -> maxItemsPerRun / monthlyItems (0.4)"))
+    return changes, []
+
+
+MIGRATIONS = [("0.2.0", _v1_specs_to_roles), ("0.3.0", _v02_names), ("0.4.0", _v03_caps)]
 
 # ------------------------------------------------------------------ project data
 V02_MODE = "feed-briefing"                    # the only mode on the v0.2 feed store
@@ -407,11 +433,31 @@ def _remove_partial(db: Path, state: Path, made_dir: bool) -> None:
         db.parent.rmdir()
 
 
-DATA_MIGRATIONS = [("0.3.0", _v02_feed_store)]
+def _v03_config_caps(kit: Path, project: Path) -> tuple[list[Change], list[str]]:
+    """0.4.0: the same cap renaming in the project's agentbay.config.yaml (modes.<mode> settings)."""
+    f = project / "agentbay.config.yaml"
+    if not f.exists():
+        return [], []
+    old = f.read_text(encoding="utf-8")
+    new = _cap_text(old)
+    if new == old:
+        return [], []
+    return [Change("update", _path(kit, f), new, note="cap names -> maxItemsPerRun / monthlyItems (0.4)")], []
+
+
+DATA_MIGRATIONS = [("0.3.0", _v02_feed_store), ("0.4.0", _v03_config_caps)]
 
 
 def _rel(kit: Path, p: Path) -> str:
     return str(p.relative_to(kit))
+
+
+def _path(kit: Path, p: Path) -> str:
+    """Kit-relative when inside the kit, else absolute (a project's own files)."""
+    try:
+        return str(p.resolve().relative_to(kit.resolve()))
+    except ValueError:
+        return str(p.resolve())
 
 
 def _diff(kit: Path, changes: list[Change]) -> str:

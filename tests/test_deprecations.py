@@ -203,3 +203,35 @@ def test_migrate_renames_max_posts_in_a_block_form_with():
     migrate.apply(k)
     mode = (k / "modes/my-feed/mode.yaml").read_text()
     assert '          maxItems: "$in.maxPosts"' in mode and "# block form, keys before and after run" in mode
+
+
+def test_03_cap_names_keep_working_with_warnings_and_migrate_renames_them():
+    """maxPostsPerRun / monthlyPosts (0.3) are the deprecated names of maxItemsPerRun / monthlyItems (0.4) in
+    mode constraints, env limits, mode config schemas and agentbay.config.yaml."""
+    from helpers import edit_yaml
+    k = kit_copy()
+    edit_yaml(k / "envs/local-feeds-offline.yaml", lambda d: d["spec"]["limits"].update(
+        {"monthlyPosts": d["spec"]["limits"].pop("monthlyItems")}))
+    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"]["constraints"].update(
+        {"maxPostsPerRun": d["spec"]["constraints"].pop("maxItemsPerRun")}))
+    p = project({"modes": {"feed-briefing": {"maxPostsPerRun": 2}}})
+    kit = model.Kit(k, p)
+    ws = [w for w in lint.warnings(kit) if "deprecated" in w]
+    for needle in ("envs/local-feeds-offline.yaml limits: `monthlyPosts` -> `monthlyItems`",
+                   "modes/feed-briefing/mode.yaml constraints: `maxPostsPerRun` -> `maxItemsPerRun`",
+                   "agentbay.config.yaml modes.feed-briefing: `maxPostsPerRun` -> `maxItemsPerRun`"):
+        assert any(needle in w and "bay migrate" in w for w in ws), (needle, ws)
+    assert lint.run(kit=kit) == []
+    r = dispatch.Dispatcher(model.resolve(kit), p, clock=clock).call("feed-briefing.sync", {})
+    assert r["output"]["fetched"] == 2 and "maxItemsPerRun" in r["stopped"]       # config (2) < mode (500)
+    before = (p / "agentbay.config.yaml").read_text()
+    plan = migrate.plan(k, project=p)
+    paths = {c["path"] for c in plan["changes"]}
+    assert {"envs/local-feeds-offline.yaml", "modes/feed-briefing/mode.yaml",
+            str((p / "agentbay.config.yaml").resolve())} <= paths, paths
+    assert (p / "agentbay.config.yaml").read_text() == before                    # dry run
+    migrate.apply(k, project=p)
+    assert "maxItemsPerRun: 2" in (p / "agentbay.config.yaml").read_text()
+    kit = model.Kit(k, p)
+    assert not [w for w in lint.warnings(kit) if "deprecated" in w]
+    assert migrate.plan(k, project=p)["changes"] == []

@@ -36,7 +36,7 @@ def test_feed_briefing_is_complete_after_extends():
     assert s["endpoints"]["sync"]["rules"] == "../briefing/features/sync/rules.yaml"            # inherited
     assert s["endpoints"]["sync"]["effects"] == ["network", "spend", "write"]                   # merged per key
     assert s["config"] == "config.schema.json" and "abstract" not in s and "extends" in s
-    assert s["constraints"]["maxPostsPerRun"] == 500 and s["constraints"]["lookbackMax"] == "30d"
+    assert s["constraints"]["maxItemsPerRun"] == 500 and s["constraints"]["lookbackMax"] == "30d"
     sysm = model.resolve(k)
     m = sysm.modes["feed-briefing"]
     assert m.features["sync"].in_schema["properties"].keys() == {"lookback", "maxPosts"}       # child type

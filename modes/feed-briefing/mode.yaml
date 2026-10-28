@@ -17,6 +17,6 @@ spec:
     sync:
       - { id: fetch, run: items.store/v1.sync, with: { lookback: "$in.lookback|$config.lookback", maxItems: "$in.maxPosts" } }
   constraints:                 # merged over briefing's (lookbackMax, spendUsd, policies)
-    monthlyPosts: 3000
-    maxPostsPerRun: 500
+    monthlyItems: 3000
+    maxItemsPerRun: 500
   config: config.schema.json

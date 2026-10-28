@@ -28,8 +28,7 @@ refuses (status reports `stale`), so a config change never leaves out-of-scope i
 string is secret-scrubbed before it is stored (scrub_item), and every read is scrubbed again.
 
 Budget is enforced before each source fetch exactly as before: a run is capped at the strictest of
-maxPostsPerRun, monthlyPosts - used and (spendUsd - spent) / costPerPostUsd (names kept from v0.2; they
-count items). Up to DELETION_CHECK_SHARE of a source's budget re-checks stored items still in its window.
+maxItemsPerRun, monthlyItems - used and (spendUsd - spent) / costPerPostUsd. Up to DELETION_CHECK_SHARE of a source's budget re-checks stored items still in its window.
 """
 from __future__ import annotations
 
@@ -347,10 +346,10 @@ class CorpusStore:
         caps = self.ctx.caps
         use = self._usage(state)
         limits = []
-        if "maxPostsPerRun" in caps:
-            limits.append((caps["maxPostsPerRun"] - run_items, "maxPostsPerRun"))
-        if "monthlyPosts" in caps:
-            limits.append((caps["monthlyPosts"] - use["posts"], "monthlyPosts"))
+        if "maxItemsPerRun" in caps:
+            limits.append((caps["maxItemsPerRun"] - run_items, "maxItemsPerRun"))
+        if "monthlyItems" in caps:
+            limits.append((caps["monthlyItems"] - use["posts"], "monthlyItems"))
         if "spendUsd" in caps and cost > 0:
             limits.append((math.floor(round((caps["spendUsd"] - use["usd"]) / cost, 6)), "spendUsd"))
         if want is not None:

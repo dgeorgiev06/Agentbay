@@ -47,18 +47,18 @@ def test_sync_runs_code_step_and_logs_events_with_cost():
 
 
 def test_config_lookback_default_and_caps_strictest_wins():
-    p = project({"modes": {"feed-briefing": {"lookback": "1d", "maxPostsPerRun": 2}}})
+    p = project({"modes": {"feed-briefing": {"lookback": "1d", "maxItemsPerRun": 2}}})
     r = D(p).call("feed-briefing.sync", {})
     assert r["status"] == "partial" and r["output"]["fetched"] == 2
-    assert r["output"]["budget"]["caps"]["maxPostsPerRun"] == 2        # config (2) < mode (500)
-    assert "maxPostsPerRun" in r["stopped"]
+    assert r["output"]["budget"]["caps"]["maxItemsPerRun"] == 2        # config (2) < mode (500)
+    assert "maxItemsPerRun" in r["stopped"]
 
 
 def test_budget_exhausted_blocks_with_reason():
-    p = project({"modes": {"feed-briefing": {"monthlyPosts": 7}}})
+    p = project({"modes": {"feed-briefing": {"monthlyItems": 7}}})
     D(p).call("feed-briefing.sync", {})
     r = D(p).call("feed-briefing.sync", {})
-    assert r["status"] == "blocked" and "monthlyPosts cap reached" in r["reason"]
+    assert r["status"] == "blocked" and "monthlyItems cap reached" in r["reason"]
 
 
 def test_offline_source_is_never_billed_against_spend():

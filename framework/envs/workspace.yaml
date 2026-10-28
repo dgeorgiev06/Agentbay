@@ -2,7 +2,7 @@ apiVersion: agentbay/v2
 kind: Environment
 metadata:
   name: workspace
-  description: The project checkout. Read/edit files, narrow git commands. No secrets, no spend; web research is env research.
+  description: The project checkout. Read/edit files, narrow git commands. No network, no secrets, no spend; web research is env research.
 spec:
   bind:
     workspace.read/v1: { tools: [Read, Glob, Grep] }
@@ -12,7 +12,6 @@ spec:
     git.read/v1:
       tools: [Bash]
       clis: [git status, git diff, git log, git show]
-  network: { allow: ["*"] }
   fs: { read: ["."], write: ["."] }
-  effects: [read, write, network]
+  effects: [read, write]
   limits: { maxTurns: 60, maxMinutes: 30 }

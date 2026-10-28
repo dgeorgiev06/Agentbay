@@ -114,8 +114,9 @@ class Dispatcher:
             raise CallError(f"unknown role unit '{unit}' (have: {', '.join(sorted(self.sys.units()))})")
         role = r.name
         if target not in r.bay_uses:
-            raise CallError(f"role {role} is not granted {target} (granted: {', '.join(r.bay_uses) or 'none'}); "
-                            f"only read-only endpoints listed in the role's `uses` can be called")
+            raise CallError(f"role {role} in mode {r.mode} is not granted {target} (granted: "
+                            f"{', '.join(r.bay_uses) or 'none'}); a role may call only the read-only endpoints of the "
+                            f"capabilities its mode needs that its env ({r.env}) binds")
         iface, ep = target.rsplit(".", 1)
         effects = model.endpoint_effects(self.sys.kit, iface, ep)
         if set(effects) - model.AGENT_SAFE_EFFECTS:      # re-checked at runtime

@@ -159,3 +159,28 @@ def test_connector_on_the_old_fetch_signature_needs_a_hand_port():
     assert any("connectors/bsky/connector.yaml: connector implements a v0.2 feed interface" in n for n in plan["notes"])
     assert any(c["path"] == "connectors/bsky/connector.yaml" for c in plan["changes"])
     assert not any(c["path"].endswith(".py") for c in plan["changes"])               # code is never rewritten
+
+
+def test_migrate_renames_max_posts_in_a_block_form_with():
+    from bay import aliases
+    k = v02_kit()
+    block = V02_MODE.replace(
+        '      - { id: fetch, run: feed.store/v1.sync, with: { lookback: "$in.lookback|$config.lookback", '
+        'maxPosts: "$in.maxPosts" } }\n',
+        '      - id: fetch\n'
+        '        with:                        # block form, keys before and after run\n'
+        '          lookback: "$in.lookback|$config.lookback"\n'
+        '          maxPosts: "$in.maxPosts"\n'
+        '        run: feed.store/v1.sync\n'
+        '      - id: other\n'
+        '        run: feed.store/v1.status\n'
+        '        with:\n'
+        '          maxPosts: 1                # not a sync step: left alone\n')
+    assert block != V02_MODE
+    (k / "modes/my-feed/mode.yaml").write_text(block)
+    new = aliases.rewrite_text(block, set(), set())
+    assert '          maxItems: "$in.maxPosts"\n        run: items.store/v1.sync' in new
+    assert "          maxPosts: 1" in new and new.count("maxPosts:") == 1
+    migrate.apply(k)
+    mode = (k / "modes/my-feed/mode.yaml").read_text()
+    assert '          maxItems: "$in.maxPosts"' in mode and "# block form, keys before and after run" in mode

@@ -129,9 +129,26 @@ def rewrite_text(text: str, roles: set[str], connectors: set[str]) -> str:
         for old, new in table.items():
             if old not in mine:
                 text = re.sub(_WORD.format(re.escape(old)), new, text)
-    lines = []
-    for ln in text.splitlines(keepends=True):
-        if SYNC in ln:
-            ln = re.sub(r"\bmaxPosts(\s*:)", r"maxItems\1", ln)
-        lines.append(ln)
-    return "".join(lines)
+    return "".join(_rename_sync_input(block) for block in _list_items(text.splitlines(keepends=True)))
+
+
+def _list_items(lines: list[str]) -> list[list[str]]:
+    """Lines grouped by YAML list item (`- ...` plus every deeper or blank line after it), so a workflow
+    step's keys stay together whether `with:` is flow-form or block-form. Lines outside items are their own
+    group."""
+    blocks: list[list[str]] = []
+    indent = None                            # indent of the `-` that opened the current item
+    for ln in lines:
+        m = re.match(r"(\s*)(-\s|\S)?", ln)
+        here = len(m.group(1))
+        if indent is not None and (not ln.strip() or here > indent):
+            blocks[-1].append(ln)
+            continue
+        indent = here if (m.group(2) or "").startswith("-") else None
+        blocks.append([ln])
+    return blocks
+
+
+def _rename_sync_input(block: list[str]) -> str:
+    text = "".join(block)
+    return re.sub(r"\bmaxPosts(\s*:)", r"maxItems\1", text) if SYNC in text else text

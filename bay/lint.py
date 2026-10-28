@@ -341,6 +341,7 @@ def warnings(kit: model.Kit) -> list[str]:
                 run = SCHEDULED_BY.get(target, f"`.agentbay/bay call {target} '{{}}'`")
                 out.append(f"{_where(*_ep_key_where(md, ep_name, 'schedule'))}: {target} declares "
                            f"schedule '{ep['schedule']}' but no runtime acts on it; run {run} from cron")
+    out += split_store_warnings(kit)
     stores = [c.name for c in kit.docs["Connector"].values() if "items.store/v1" in (
         [c.spec["implements"]] if isinstance(c.spec["implements"], str) else c.spec["implements"])]
     if stores:
@@ -360,6 +361,40 @@ def warnings(kit: model.Kit) -> list[str]:
                                f"the guard hook denies those writes at runtime unless the env names them explicitly "
                                f"(only forge.extend's framework-dev does)")
     return out
+
+
+def split_store_warnings(kit: model.Kit) -> list[str]:
+    """Code steps (sync, prune) run in the env of the mode's coordinator. A role of a store-reading mode put in an
+    env whose items.store/items.source bindings differ reads a store that the mode's sync never fills: a partial
+    `roles:` override silently splits the mode."""
+    out = []
+    keys = (model.STORE_IFACE, model.SOURCE_IFACE)
+    for md in kit.docs["Mode"].values():
+        if md.spec.get("abstract") or model.STORE_IFACE not in md.spec.get("needs", []):
+            continue
+        s = md.spec
+        maps = [(None, None, s.get("roles"))] + [(ep, None, e.get("roles")) for ep, e in (s.get("endpoints") or {}).items()]
+        maps += [(ep, st.get("id"), st.get("roles")) for ep, e in (s.get("endpoints") or {}).items()
+                 for st in (s.get("workflows") or {}).get(e.get("workflow"), [])]
+        for ep_name, sid, mapping in maps:
+            code, _ = model.code_env(kit, md, model.STORE_IFACE, (s.get("endpoints") or {}).get(ep_name))
+            if code is None or not isinstance(mapping, dict):
+                continue
+            want = [code.spec["bind"].get(k) for k in keys]
+            for rn, env_name in mapping.items():
+                env = kit.get("Environment", kit.env_name(env_name) or "")
+                if env is None or env.name == code.name or model.STORE_IFACE not in env.spec.get("bind", {}):
+                    continue
+                if [env.spec["bind"].get(k) for k in keys] != want:
+                    where = (_step_where(md, ep_name, sid) if sid else _ep_key_where(md, ep_name, "roles") if ep_name
+                             else next(((d / "mode.yaml", i + 1) for d in md.dirs for i, ln in enumerate(
+                                 (d / "mode.yaml").read_text(encoding="utf-8").splitlines())
+                                 if re.match(r"^\s{2}roles:", ln)), (md.path, 1)))
+                    out.append(f"{_where(*where)}: mode {md.name} puts role {rn} in env {env.name}, whose "
+                               f"items.store/items.source bindings differ from env {code.name}, where its code steps "
+                               f"(sync, prune) run (the coordinator's env): {rn} would read a store this mode's sync "
+                               f"never fills. Put {rn} in {code.name}, or move the coordinator too")
+    return list(dict.fromkeys(out))
 
 
 def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Kit | None = None) -> list[str]:

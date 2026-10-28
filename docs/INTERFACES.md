@@ -87,6 +87,10 @@ playbooks/skills, or propose a new role via forge.extend").
   Envs are the only place capabilities are bound; `agentbay.config.yaml` cannot rebind them. It can select an
   env that declares `substitutes: <env>` (`envs: { local-feeds: local-feeds-offline }`).
 - User modes may put roles only in their own envs (`envs/`) and the framework envs `workspace` and `research`.
+- Code steps (`run:`, e.g. `items.store/v1.sync`, `.prune`) run in the coordinator's (lead's) env for that
+  feature, so a store-reading mode's roles read the store bound there. `bay lint` warns when a mode that needs
+  `items.store/v1` puts a role in an env whose `items.store`/`items.source` bindings differ from that code env
+  (a partial `roles:` override silently splits the mode).
 
 Resolution rules (`bay/model.py`) - every gap is reported at once:
 unknown role/agent profile/env/connector/interface/endpoint; unbound capability; effect not declared by the

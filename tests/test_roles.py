@@ -260,3 +260,21 @@ def test_a_units_default_tier_is_checked_against_the_env_cap():
         {"tier": "balanced"}))
     assert_gap(k, "mode feed-briefing: role reviewer in env local-feeds: its default tier 'deep' (the model its "
                   "subagent is compiled with) is not allowed by env local-feeds (allows: fast, balanced)")
+
+
+def test_lint_warns_when_a_partial_roles_override_splits_a_store_reading_mode():
+    """Review case t10: a child moves lead and analyst to the offline env but inherits reviewer in local-feeds."""
+    from bay import lint
+    k = kit_copy()
+    d = k / "modes/news-briefing"
+    d.mkdir()
+    (d / "mode.yaml").write_text(
+        "apiVersion: agentbay/v2\nkind: Mode\nmetadata: { name: news-briefing, version: 0.1.0, description: news }\n"
+        "spec:\n  extends: briefing\n  purpose: Brief me on news from my sources for testing.\n"
+        "  roles: { lead: local-feeds-offline, analyst: local-feeds-offline }\n")
+    ws = lint.warnings(model.Kit(k))
+    assert any("modes/news-briefing/mode.yaml:7: mode news-briefing puts role reviewer in env local-feeds, whose "
+               "items.store/items.source bindings differ from env local-feeds-offline, where its code steps (sync, "
+               "prune) run" in w for w in ws), ws
+    assert not any("mode feed-briefing puts role" in w for w in lint.warnings(model.Kit(KIT)))   # shipped: no split
+    assert lint.run(k) == []                                                                       # a warning only

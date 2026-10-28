@@ -43,6 +43,10 @@ needs: [items.store/v1, items.source/v1]
 A feature (`endpoints.<f>.roles`) or a workflow step (`roles:` on the step) can put a role in another env for
 just that feature or step; a child mode inherits the map and overrides entries. A step or feature may set
 `tier:`/`effort:`; otherwise the role's default applies, and an env may cap the tiers it allows.
+Code steps (e.g. `sync`, `prune`) run in the coordinator's (lead's) env, so the store a mode fills is the one
+bound there. To move a store-reading mode to another env, move the lead together with its other roles; `bay lint`
+warns when a partial `roles:` override puts a role in an env with different `items.store`/`items.source`
+bindings.
 Design: [docs/DESIGN-v0.2.md](docs/DESIGN-v0.2.md). Contracts: [docs/INTERFACES.md](docs/INTERFACES.md).
 
 ## Quickstart (5 minutes, offline)

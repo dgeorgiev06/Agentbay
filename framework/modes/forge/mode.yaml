@@ -5,7 +5,7 @@ metadata:
   version: 0.2.0
   description: Build agentbay itself - create user content, extend the framework, migrate across versions.
 spec:
-  purpose: Create modes, features, roles, connectors and envs; extend the framework through a reviewed proposal; migrate user content across versions.
+  purpose: Create modes, features, connectors and envs; extend the framework (including its roles) through a reviewed proposal; migrate user content across versions.
   endpoints:
     create:
       description: Scaffold and fill a mode, feature, connector or env in user space from a plain-language intent.

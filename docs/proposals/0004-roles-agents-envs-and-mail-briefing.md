@@ -12,7 +12,7 @@ Agreed design (user, 2026-10-28). Each concept answers one question, and only th
 
 | Concept | Answers | Holds | LLM-specific? |
 |---|---|---|---|
-| **Role** | who: a reusable job (framework-level, five generic roles) | prompt, doneWhen, rules, skills, default `tier` (fast, balanced, deep), optional effort, access (read or write) | no |
+| **Role** | who: a reusable job (framework-level, five generic roles) | prompt, doneWhen, rules, skills, default `tier` (fast, balanced, deep), optional effort | no |
 | **Mode** | what this assignment is | features, workflows, custom skills/playbooks/rules on top of roles, **which env each role works in** (the `roles:` map) and what its roles may read (`needs`) | no |
 | **Agent** | how one LLM product runs roles | runtime per kind (coordinator, worker), tier→model map, effort mapping, tool-name mapping | **yes, only here** |
 | **Env** | what it can touch (the container) | connector bindings, secrets, network, fs, limits, allowed tiers | no |
@@ -27,7 +27,7 @@ Agreed design (user, 2026-10-28). Each concept answers one question, and only th
 2. **Roles name neither an agent nor an env.** A role keeps prompt, doneWhen, `uses`, skills and rules, plus a default `tier` and optional `effort`.
 3. **Modes place roles into envs through `roles:`** (user decision, 2026-10-28: no separate key). A mode's `roles:` is a map from role to env:
    ```yaml
-   roles: { briefing-analyst: local-mail, briefing-lead: local-mail, reviewer: local-mail }
+   roles: { lead: local-mail, analyst: local-mail, reviewer: local-mail }
    ```
    There are three override levels, using the same shape: mode (default), feature, and workflow step. There is one env per step; a role can appear in many steps.
    - forge uses a feature override: `builder` works in `local-authoring` (the mode default) for create and in `framework-dev` for extend (`roles: { builder: framework-dev }`), replacing today's `agents: {builder: author}`.
@@ -55,7 +55,7 @@ in the mode's playbooks, skills and rules.
 2. **Data access moves from roles to modes.** Roles carry no `uses:`. A role placed in a mode may read the
    read-only endpoints of the capabilities that mode declares in `needs:`, through the env its `roles:` entry
    names. The dispatcher, use shims, guard policy and resolver derive the grants this way; agents still never
-   reach write, spend or delete endpoints. An interface may be marked `dispatcherOnly` (code steps only).
+   reach write, spend or delete endpoints.
 3. **User space is modes/, envs/ and connectors/** (and interfaces/). The top-level `roles/` folder is gone; a
    user role file is a lint error ("roles are framework-level; customize behaviour in your mode's
    playbooks/skills, or propose a new role via forge.extend"). Agent profiles are framework-level too.
@@ -64,6 +64,22 @@ in the mode's playbooks, skills and rules.
    playbook/skill content of its mode where possible, otherwise migrate reports it for manual handling.
 5. **Compiled names** stay readable and unique per (role, mode, env), e.g. `analyst--feed-briefing`,
    `lead--improve`.
+
+### Implementation decisions (approved by the user, 2026-10-28)
+The builder made these decisions while implementing Part A; the user approved all five.
+1. **`access: read|write` on roles.** Only `access: write` roles (builder) get file-writing tools, CLIs beyond
+   read-only git, and the env's write paths in their guard entry; every other role gets read capabilities only,
+   whatever the env binds.
+2. **`dispatcherOnly` on interfaces.** An interface marked `dispatcherOnly` (improve.detect, forge.scaffold,
+   forge.migrate) is run by code steps only; no role reads it, even in a mode that needs it.
+3. **The `research` env.** A framework env for web research (workspace read plus WebSearch/WebFetch, no file
+   writes); `workspace` has no network. User modes may place roles in `workspace` and `research`, and in no other
+   framework env.
+4. **The briefing reviewer works in `local-feeds`.** briefing's `roles:` puts `reviewer` in the same env as lead
+   and analyst, so the reviewer reads the same store through its own use shim.
+5. **Code steps run in the coordinator's env.** A mode's code steps (sync, prune) run in the env of its
+   coordinator (lead) for that feature; a role placed in an env with different store/source bindings reads a
+   store this mode never fills, so `bay lint` warns about it.
 
 ### Small items carried over from the 0003 review
 - **Config defaults override:** a child mode declares `configDefaults:` instead of copying the parent's config schema.

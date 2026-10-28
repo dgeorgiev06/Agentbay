@@ -145,6 +145,9 @@ def connect_ro(path: Path) -> sqlite3.Connection:
         if not cur or cur > HEAP_BYTES:
             con.execute(f"PRAGMA hard_heap_limit = {HEAP_BYTES}")
         con.execute("PRAGMA temp_store = FILE")
+        if con.execute("SELECT 1 FROM main.sqlite_master WHERE name = 'state'").fetchone():
+            raise SqlError(f"{path}: written by a pre-release build (internal state inside corpus.db); move the "
+                           f"folder aside and sync again, or run `bay migrate --project` from the v0.2 files")
         fts = has_fts(con)
         for stmt in view_sql(fts):
             con.execute(stmt)
@@ -153,6 +156,9 @@ def connect_ro(path: Path) -> sqlite3.Connection:
             # prepared: connect it now, so a query naming items_fts never trips the strict pre-pass over that
             con.execute(f"SELECT 1 FROM main.{FTS} LIMIT 0").fetchall()
         con.execute("PRAGMA query_only = ON")
+    except SqlError:
+        con.close()
+        raise
     except sqlite3.Error as e:
         con.close()
         raise SqlError(f"the store at {path.name} is not readable ({e}); run `bay migrate` or sync") from None

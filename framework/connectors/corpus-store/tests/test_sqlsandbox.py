@@ -364,3 +364,23 @@ def test_big_sort_fails_cleanly():
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
     assert r.returncode == 0 and r.stdout.startswith("ERR"), (r.stdout, r.stderr[-500:])
     assert "MB of memory" in r.stdout or "exceeded" in r.stdout, r.stdout
+
+
+def test_pre_release_store_with_a_state_table_is_refused_by_readers_too():
+    p, st = setup()
+    con = sqlite3.connect(dbfile(p))
+    con.execute("CREATE TABLE state (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    con.commit()
+    con.close()
+    for open_ in (lambda: sqlsandbox.connect_ro(dbfile(p)), lambda: sqlsandbox.Sandbox(dbfile(p))):
+        try:
+            open_()
+            raise AssertionError("expected SqlError")
+        except sqlsandbox.SqlError as e:
+            assert "pre-release build" in str(e) and "move the folder aside" in str(e)
+    assert "pre-release build" in st.sql("SELECT count(*) FROM v_items")["error"]
+    try:
+        st.query()
+        raise AssertionError("expected a refusal")
+    except sqlsandbox.SqlError as e:
+        assert "pre-release build" in str(e)

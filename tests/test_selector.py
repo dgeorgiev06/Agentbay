@@ -101,3 +101,61 @@ def test_casefold_wildcards_only_in_from_to_and_has_enum():
         raise AssertionError("expected ValueError")
     except ValueError as e:
         assert "link, attachment" in str(e)
+
+
+def test_glob_is_linear_with_many_stars_on_long_strings():
+    import time
+    assert sel.glob("*@bank.example", "alice@bank.example") and sel.glob("a*e", "ae") and sel.glob("*", "")
+    assert sel.glob("a*b*c", "aXbYc") and not sel.glob("a*b*c", "aXcYb") and not sel.glob("ab*ba", "aba")
+    assert sel.glob("**x**", "x") and sel.glob("news*", "news") and not sel.glob("news", "newsroom")
+    assert sel.glob("a.b", "a.b") and not sel.glob("a.b", "axb")                      # `.` is literal
+    t0 = time.monotonic()
+    for pattern, text, want in (("*a" * 200 + "*b", "a" * 50_000, False),           # regex: catastrophic
+                                ("*a" * 200 + "*", "a" * 50_000, True),
+                                ("a*" * 2_000 + "c", "ab" * 50_000, False),
+                                ("*" * 5_000 + "x", "y" * 100_000 + "x", True)):
+        assert sel.glob(pattern, text) is want
+        assert sel.matches({"author": {"handle": text}}, {"id": "w", "from": pattern}, NOW) is want
+    assert time.monotonic() - t0 < 1.0
+
+
+def test_wildcard_values_are_matched_locally_never_sent_to_the_source():
+    caps = {"from": "native", "in": "native", "since": "native", "text": "local"}
+    assert sel.split({"id": "a", "from": "vit*", "in": "home"}, caps) == ({"in": "home"}, {"from": "vit*"})
+    assert sel.split({"id": "a", "from": ["lido", "*@bank.example"]}, caps) == \
+        ({}, {"from": ["lido", "*@bank.example"]})                    # values are ORed: the whole field goes local
+    assert sel.split({"id": "a", "from": "lido"}, caps)[0] == {"from": "lido"}
+    errs, warns = sel.check([{"id": "a", "from": "vit*"}], caps, connector="x-api", paid=True, where="here")
+    assert errs == [] and len(warns) == 1
+    assert "field `from` has a `*` value, which x-api cannot search natively, so it is matched locally" in warns[0]
+    assert sel.check([{"id": "a", "from": "vit*"}], caps, connector="fake", paid=False, where="here") == ([], [])
+    # fake: `from: vit*` used to fetch nothing (the source got the pattern as a handle)
+    from bay import connect
+    p = project()
+    st = connect.instantiate(system(p), "local-feeds-offline", "corpus-store", "items.store/v1", p,
+                             settings={"lookbackMax": "30d", "selectors": [{"id": "v", "from": "vit*"}],
+                                       "mode": "feed-briefing"}, clock=lambda: NOW)
+    out = st.sync(lookback="3d")
+    assert [c["query"] for c in st.ctx.sources["fake"].calls] == [{}]
+    assert out["added"] == 2 and {i["author"]["handle"] for i in st.query()["items"]} == {"vitalik"}
+
+
+def test_wildcard_from_on_x_reads_the_home_timeline_and_validate_warns():
+    from helpers import SECRETS, FakeHttp, MemProvider, clock, jresp
+    from bay import dispatch
+    p = project({"connectors": {"x-api": {"userId": "42"}}, "secrets": {"provider": "env"},
+                 "modes": {"feed-briefing": {"selectors": [{"id": "v", "from": "vit*"}]}}}, source="x-api")
+    s = system(p)
+    assert any("`from` has a `*` value, which x-api cannot search natively" in w for w in s.warnings), s.warnings
+
+    def timeline(params, headers, form):
+        ts = [{"id": "11", "text": "hello", "author_id": "1", "created_at": "2026-10-27T11:00:00Z"},
+              {"id": "10", "text": "other", "author_id": "2", "created_at": "2026-10-27T10:00:00Z"}]
+        users = [{"id": "1", "username": "vitalik"}, {"id": "2", "username": "lido"}]
+        return jresp({"data": ts, "meta": {"result_count": 2}, "includes": {"users": users}})
+    http = FakeHttp({("POST", "/2/oauth2/token"): lambda *a: jresp({"access_token": "at-1"}),
+                     ("GET", "/2/users/42/timelines/reverse_chronological"): timeline})
+    r = dispatch.Dispatcher(s, p, transport=http, provider=MemProvider(SECRETS), clock=clock).call("feed-briefing.sync", {})
+    assert r["status"] == "done" and r["output"]["added"] == 1, r
+    assert not any("/users/by/username/" in q["path"] for q in http.log)
+    assert {q["path"] for q in http.log if q["method"] == "GET"} == {"/2/users/42/timelines/reverse_chronological"}

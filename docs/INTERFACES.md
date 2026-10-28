@@ -139,7 +139,7 @@ An endpoint review block may name framework rule sets: `review: { ..., rulesets:
   `unevaluatedProperties: false`. The store validates each item against `<kind>/v1` when that schema exists.
 - **`selector/v1`**: `{id, from?, to?, subject?, text?, in?, has?, since?, not?}`.
   - Every field takes one value or a list (any value matches). Matching is case-insensitive (casefold); `has` is
-    `link` or `attachment`; `*` is the only wildcard and works only in `from`/`to`.
+    `link` or `attachment`; `*` is the only wildcard and works only in `from`/`to`; a field with a `*` value is matched locally, never sent to the source's search.
   - Fields within a selector are ANDed, selectors are ORed, and `not` excludes when any of its fields matches.
   - The matcher is `bay/selector.py` `matches()`. It is the only place that decides which items are kept.
 - **Connector capability table**: `spec.selectors: {<field>: native|local | {mode, as}}`.

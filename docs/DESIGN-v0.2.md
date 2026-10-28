@@ -352,7 +352,9 @@ are not part of this amendment.
 - **Selectors** (`bay/selector.py`): the vocabulary is from, to, subject, text, in, has (link | attachment),
   since, not.
   - Fields are ANDed, selectors ORed, and `not` excludes. Matching is case-insensitive (casefold); `*` is the
-    only wildcard and works only in from/to.
+    only wildcard and works only in from/to. It is matched by a linear glob (no regex, no backtracking),
+    and a field with a `*` value is always matched locally, never sent to the source's search (validate
+    warns when that makes the field local-only on a paid source).
   - Each source declares its capability table in `connector.yaml spec.selectors`.
   - The store splits each selector into a native query and a local filter, and always re-applies the full
     selector with the one shared matcher. Items carry `matched`.

@@ -70,7 +70,8 @@ modes:
 
 Fields: `from`, `to`, `subject`, `text`, `in` (folder, label, list, channel), `has` (`link` or `attachment`),
 `since`, `not`. Fields within a selector are ANDed, selectors are ORed, and `not` excludes. Matching is
-case-insensitive. `*` is the only wildcard, and only in `from`/`to` (`*@bank.example`). Each source connector declares which
+case-insensitive. `*` is the only wildcard, and only in `from`/`to` (`*@bank.example`); such a field is matched
+locally, after the fetch. Each source connector declares which
 fields its own search handles (`spec.selectors` in connector.yaml). The store fetches with that native part
 and then re-applies the whole selector with one shared matcher, so behaviour is the same on every source.
 

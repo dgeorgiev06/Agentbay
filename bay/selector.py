@@ -8,7 +8,8 @@ Fields: from, to, subject, text, in, has, since, not. A field takes one value or
 Fields of one selector are ANDed, selectors are ORed, and `not` excludes: an item is excluded when ANY
 field of its `not` block matches. Matching is case-insensitive (casefold).
   from / to   a handle, a full address or a domain (`example.com`, `@example.com`). `*` is the only wildcard,
-              and only here: `*@bank.example`, `news*` (any run of characters)
+              and only here: `*@bank.example`, `news*` (any run of characters). A field with a `*` value is
+              matched locally, never sent to the source's search
   subject     substring of the title;  text: substring of title or body (no wildcards)
   in          a container or label, exactly (home, list:<id>, INBOX)
   has         link | attachment
@@ -22,7 +23,6 @@ native query (narrows the fetch) and a local filter. The store always re-applies
 from __future__ import annotations
 
 import json
-import re
 from datetime import datetime
 
 from .util import parse_time
@@ -50,13 +50,33 @@ def _addr_match(value: str, addrs: list[str]) -> bool:
         a = _norm(a)
         if not a:
             continue
-        if "*" in v:              # `*` = any run of characters; everything else is literal
-            if re.fullmatch(".*".join(re.escape(part) for part in v.split("*")), a):
+        if "*" in v:
+            if glob(v, a):
                 return True
             continue
         if a == v or ("@" in a and (a.endswith("@" + v) or a.split("@", 1)[1] == v)):
             return True
     return False
+
+
+def glob(pattern: str, text: str) -> bool:
+    """`*` matches any run of characters; everything else is literal. No regex and no backtracking: the
+    literal parts between stars are found left to right (for `*`-only patterns the leftmost occurrence is
+    always a safe choice), so the cost is a few str.find calls over `text`, whatever the number of stars."""
+    head, *mid = pattern.split("*")
+    if not mid:
+        return pattern == text
+    tail = mid.pop()
+    if len(head) + len(tail) > len(text) or not text.startswith(head) or not text.endswith(tail):
+        return False
+    pos, end = len(head), len(text) - len(tail)
+    for part in mid:
+        if part:
+            i = text.find(part, pos, end)
+            if i < 0:
+                return False
+            pos = i + len(part)
+    return True
 
 
 def _field(item: dict, field: str, values: list[str], now: datetime) -> bool:
@@ -117,13 +137,20 @@ def mode_of(caps: dict, field: str) -> str | None:
     return c if c in ("native", "local") else None
 
 
+def wildcard(v) -> bool:
+    """Whether a field value (one or a list) has a `*` value. Source APIs search exact handles and addresses,
+    so such a field is matched locally only (all its values: they are ORed)."""
+    return any("*" in x for x in _vals(v))
+
+
 def split(sel: dict, caps: dict) -> tuple[dict, dict]:
-    """(native query, local filter). `not` is always local; the store re-applies the whole selector anyway."""
+    """(native query, local filter). `not` and wildcard values are always local; the store re-applies the
+    whole selector anyway."""
     native, local = {}, {}
     for f in FIELDS:
         if f == "id" or f not in sel:
             continue
-        (native if f != "not" and mode_of(caps, f) == "native" else local)[f] = sel[f]
+        (native if f != "not" and mode_of(caps, f) == "native" and not wildcard(sel[f]) else local)[f] = sel[f]
     return native, local
 
 
@@ -155,8 +182,12 @@ def check(selectors: list[dict], caps: dict, *, connector: str, paid: bool, wher
                 have = ", ".join(f"{k} ({mode_of(caps, k)})" for k in caps) or "none"
                 errors.append(f"{where}: selector '{sid}' uses `{f}`, which source connector {connector} cannot "
                               f"express (it declares: {have}); remove the field or bind a source that supports it")
-            elif paid and (m == "local" or f.startswith("not.")) and base != "since":
-                warnings.append(f"{where}: selector '{sid}' field `{f}` is matched locally on paid source {connector}: "
-                                f"every item its native query returns is billed, then dropped if it does not match; "
-                                f"narrow it with native fields ({', '.join(k for k in caps if mode_of(caps, k) == 'native')})")
+            elif paid and (m == "local" or f.startswith("not.") or wildcard(s.get(f))) and base != "since":
+                wild = m == "native" and not f.startswith("not.")
+                why = f"has a `*` value, which {connector} cannot search natively, so it is" if wild else "is"
+                fix = f"exact values for `{f}` or " if wild else ""
+                warnings.append(f"{where}: selector '{sid}' field `{f}` {why} matched locally on paid source "
+                                f"{connector}: every item its native query returns is billed, then dropped if it does "
+                                f"not match; narrow it with {fix}native fields "
+                                f"({', '.join(k for k in caps if mode_of(caps, k) == 'native')})")
     return errors, warnings

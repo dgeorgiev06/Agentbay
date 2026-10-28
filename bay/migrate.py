@@ -35,7 +35,7 @@ from typing import Callable
 import yaml
 
 from . import __version__
-from .util import parse_time, utcnow
+from .util import iso, parse_time, utcnow
 
 LAYER_CAPS = {  # v0.1 layer -> v0.2 capability interfaces
     "base": ["workspace.read/v1"],
@@ -152,11 +152,14 @@ def _corpus_module():
 
 
 def _post_to_item(p: dict) -> dict:
+    """A shape-checked v0.2 post (_post_problem) as post/v1; times normalized to UTC ISO-8601 (`...Z`), as sync
+    stores them, so ordering and `since` comparisons on createdAt hold."""
     ext = {k: p[k] for k in ("lang", "metrics") if k in p}
+    created = iso(parse_time(p["createdAt"], utcnow()))
     return {"id": f"{p['source']}:{p['id']}", "extId": str(p["id"]), "source": p["source"], "kind": "post",
             "author": dict(p.get("author") or {}), "title": None, "text": p.get("text", ""), "url": p.get("url"),
-            "createdAt": p["createdAt"], "fetchedAt": p.get("fetchedAt", p["createdAt"]),
-            "container": "home", "labels": ["home"], "threadId": None, **ext}
+            "createdAt": created, "fetchedAt": iso(parse_time(p["fetchedAt"], utcnow())) if p.get("fetchedAt")
+            else created, "container": "home", "labels": ["home"], "threadId": None, **ext}
 
 
 def _kind(v) -> str:
@@ -177,6 +180,12 @@ def _post_problem(post) -> str | None:
         if v is not None and (not isinstance(v, kinds) or isinstance(v, bool)):
             want = "a string or number" if k == "id" else _kind(kinds())
             return f'"{k}" must be {want}, got {_kind(v)} ({json.dumps(v)[:40]})'
+    for k, v in (post.get("author") or {}).items():
+        if not isinstance(v, str):
+            return f'"author.{k}" must be a string, got {_kind(v)} ({json.dumps(v)[:40]})'
+    for k, v in (post.get("metrics") or {}).items():
+        if not isinstance(v, int) or isinstance(v, bool):
+            return f'"metrics.{k}" must be a whole number, got {_kind(v)} ({json.dumps(v)[:40]})'
     try:
         parse_time(post["createdAt"], utcnow())
         if post.get("fetchedAt"):
@@ -266,6 +275,9 @@ def _v02_feed_store(kit: Path, project: Path) -> tuple[list[Change], list[str]]:
             except json.JSONDecodeError as e:
                 bad.append(f"{rel}:{n}: not JSON ({e.msg} at column {e.colno})")
                 continue
+            except RecursionError:
+                bad.append(f"{rel}:{n}: JSON nested too deeply to be a v0.2 post")
+                continue
             problem = _post_problem(post)
             if problem:
                 bad.append(f"{rel}:{n}: {problem}")
@@ -281,7 +293,10 @@ def _v02_feed_store(kit: Path, project: Path) -> tuple[list[Change], list[str]]:
         posts = list(by_key.values())
         state_path = d / "state.json"
         try:
-            old = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+            try:
+                old = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+            except RecursionError:
+                raise ValueError("JSON nested too deeply") from None
             problem = _state_problem(old)
             if problem:
                 raise ValueError(problem)
@@ -309,7 +324,9 @@ def _v02_feed_store(kit: Path, project: Path) -> tuple[list[Change], list[str]]:
         deleted = set(state["deleted"])
         cs = _corpus_module()
         now = utcnow()
-        items, dropped = [], {"deleted": 0, "unbound": 0, "unmatched": 0}
+        kept: dict[str, tuple[dict, list[str]]] = {}
+        dropped = {"deleted": 0, "unbound": 0, "unmatched": 0}
+        scrub_dups = 0
         for p in posts:
             it = cs.scrub_item(_post_to_item(p))       # match on exactly what will be stored, as sync does
             tags = selmod.match_ids(it, sels, now)
@@ -318,7 +335,9 @@ def _v02_feed_store(kit: Path, project: Path) -> tuple[list[Change], list[str]]:
             if why:
                 dropped[why] += 1
             else:
-                items.append((it, tags))
+                scrub_dups += it["id"] in kept          # two ids that differ only in a secret: one row, the last
+                kept[it["id"]] = (it, tags)
+        items = list(kept.values())
         by_src: dict[str, int] = {}
         for it, _ in items:
             by_src[it["source"]] = by_src.get(it["source"], 0) + 1
@@ -327,7 +346,9 @@ def _v02_feed_store(kit: Path, project: Path) -> tuple[list[Change], list[str]]:
         drops = [f"{dropped['deleted']} on the deleted list dropped" if dropped["deleted"] else "",
                  f"{dropped['unbound']} from sources not bound in env {scope['env']} ({', '.join(bound) or 'none'}) "
                  f"dropped" if dropped["unbound"] else "",
-                 f"{dropped['unmatched']} matching no selector dropped" if dropped["unmatched"] else ""]
+                 f"{dropped['unmatched']} matching no selector dropped" if dropped["unmatched"] else "",
+                 f"{scrub_dups} merged because their ids are the same once secrets are scrubbed"
+                 if scrub_dups else ""]
         lines = [f"--- a/{rel} ({len(posts)} posts{f', {dups} duplicate line(s) merged' if dups else ''}) + "
                  f"{state_path.name}",
                  f"+++ b/{dbrel} (corpus store, SQLite schema v1) + {V02_MODE}/state.json",
@@ -344,7 +365,12 @@ def _v02_feed_store(kit: Path, project: Path) -> tuple[list[Change], list[str]]:
 
         def run(db=db, items=items, state=state, posts_path=posts_path, state_path=state_path, cs=cs):
             new_state = db.with_name(cs.STATE_NAME)
-            con = cs.open_rw(db)
+            made_dir = not db.parent.exists()
+            try:
+                con = cs.open_rw(db)
+            except BaseException:
+                _remove_partial(db, new_state, made_dir)
+                raise
             try:
                 con.execute("BEGIN IMMEDIATE")
                 for it, tags in items:
@@ -359,8 +385,7 @@ def _v02_feed_store(kit: Path, project: Path) -> tuple[list[Change], list[str]]:
                 if con.in_transaction:
                     con.execute("ROLLBACK")
                 con.close()
-                db.unlink(missing_ok=True)
-                new_state.unlink(missing_ok=True)
+                _remove_partial(db, new_state, made_dir)
                 raise
             con.close()
             posts_path.rename(posts_path.with_name(posts_path.name + ".v0.2.bak"))
@@ -370,6 +395,16 @@ def _v02_feed_store(kit: Path, project: Path) -> tuple[list[Change], list[str]]:
         changes.append(Change("convert", rel, "\n".join(lines) + "\n",
                               note=f"v0.2 feed store -> {dbrel} (cursors, coverage, budget and deletions kept)", run=run))
     return changes, notes
+
+
+def _remove_partial(db: Path, state: Path, made_dir: bool) -> None:
+    """A failed conversion leaves nothing behind: the database with its -wal/-shm, the state file (and its
+    temp file), and the mode folder when this run created it."""
+    for f in (db, db.with_name(db.name + "-wal"), db.with_name(db.name + "-shm"), state,
+              state.with_name(state.name + ".tmp")):
+        f.unlink(missing_ok=True)
+    if made_dir and db.parent.exists() and not any(db.parent.iterdir()):
+        db.parent.rmdir()
 
 
 DATA_MIGRATIONS = [("0.3.0", _v02_feed_store)]

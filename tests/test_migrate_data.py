@@ -215,3 +215,73 @@ def test_wrong_shape_json_is_reported_with_file_line_and_fix_never_a_crash():
     d = bad_lines(p, [good.decode()])
     (d / "state.json").write_bytes(b'{"cursors": "\xff"}')
     assert "state.json: not a valid v0.2 state file (not UTF-8)" in migrate.plan(KIT, project=p)["notes"][0]
+
+
+def test_inner_author_fields_deep_nesting_and_scrub_collisions_never_crash():
+    cfg = {"connectors": {"x-api": {"userId": "42"}}, "secrets": {"provider": "env"}}
+    deep = '{"id": "9", "source": "x", "url": "u", "createdAt": "2026-10-26T10:00:00Z", "x": ' + \
+        "[" * 100_000 + "]" * 100_000 + "}"
+    for lines, needle in (
+            ([json.dumps(dict(POSTS[0], author={"handle": ["a"]}))],
+             'posts.jsonl:1: "author.handle" must be a string, got a list (["a"])'),
+            ([json.dumps(dict(POSTS[0], author={"handle": "a", "name": {"first": "A"}}))],
+             'posts.jsonl:1: "author.name" must be a string, got an object'),
+            ([json.dumps(dict(POSTS[0], metrics={"like_count": [1]}))], '"metrics.like_count" must be a whole number'),
+            ([json.dumps(POSTS[0]), deep], "posts.jsonl:2: JSON nested too deeply")):
+        p = project(cfg, source="x-api")
+        d = bad_lines(p, lines)
+        plan = migrate.plan(KIT, project=p)
+        assert plan["changes"] == [] and needle in plan["notes"][0], (needle, plan["notes"])
+        r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "migrate", "--confirm"],
+                           capture_output=True, text=True)
+        assert r.returncode == 0 and "Traceback" not in r.stderr and not (d / "feed-briefing").exists(), r.stderr
+    p = project(cfg, source="x-api")                         # a state.json nested too deeply
+    d = bad_lines(p, [json.dumps(POSTS[0])])
+    (d / "state.json").write_text('{"cursors": ' + "[" * 100_000 + "]" * 100_000 + "}")
+    assert "state.json: not a valid v0.2 state file (JSON nested too deeply)" in migrate.plan(KIT, project=p)["notes"][0]
+    # two ids that differ only in a secret scrub to one id: one row (the last), counted, no UNIQUE error
+    p = project(cfg, source="x-api")
+    d = bad_lines(p, [json.dumps(dict(POSTS[0], id="password=hunter2hunter2a", text="first")),
+                      json.dumps(dict(POSTS[1], id="password=hunter2hunter2b", text="second"))])
+    plan = migrate.plan(KIT, project=p)
+    assert "+items: 1 post/v1 (x: 1)" in plan["diff"]
+    assert "1 merged because their ids are the same once secrets are scrubbed" in plan["diff"]
+    assert migrate.apply(KIT, project=p)["applied"] == 1
+    con = sqlite3.connect(d / "feed-briefing/corpus.db")
+    rows_ = con.execute("SELECT ext_id, body FROM items").fetchall()
+    con.close()
+    assert rows_ == [("[REDACTED:password]", "second")]
+
+
+def test_a_failed_conversion_leaves_no_partial_folder():
+    p = project({"connectors": {"x-api": {"userId": "42"}}, "secrets": {"provider": "env"}}, source="x-api")
+    d = v02(p)
+    real = migrate._corpus_module
+
+    def failing():
+        cs = real()
+
+        def boom(path, state):
+            raise OSError("disk full")
+        cs.save_state = boom
+        return cs
+    migrate._corpus_module = failing
+    try:
+        migrate.apply(KIT, project=p)
+        raise AssertionError("expected the conversion to fail")
+    except OSError:
+        pass
+    finally:
+        migrate._corpus_module = real
+    assert sorted(f.name for f in d.iterdir()) == ["posts.jsonl", "state.json"]       # untouched, nothing new
+    assert migrate.apply(KIT, project=p)["applied"] == 1                                # and it can run again
+
+
+def test_created_at_is_normalized_to_utc():
+    p = project({"connectors": {"x-api": {"userId": "42"}}, "secrets": {"provider": "env"}}, source="x-api")
+    d = bad_lines(p, [json.dumps(dict(POSTS[0], createdAt="2026-10-24T12:00:00+02:00", fetchedAt="2026-10-27T10:00:00"))])
+    migrate.apply(KIT, project=p)
+    con = sqlite3.connect(d / "feed-briefing/corpus.db")
+    got = con.execute("SELECT created_at, fetched_at FROM items").fetchone()
+    con.close()
+    assert got == ("2026-10-24T10:00:00Z", "2026-10-27T10:00:00Z")

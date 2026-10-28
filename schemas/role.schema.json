@@ -26,7 +26,6 @@
       "properties": {
         "prompt": { "type": "string", "minLength": 20 },
         "doneWhen": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
-        "uses": { "type": "array", "deprecated": true, "description": "Deprecated (0.3) and ignored: a role reads the read-only endpoints of the needs of the mode it works in." },
         "access": { "enum": ["read", "write"], "default": "read", "description": "read: tools of read-only capabilities (and web research) only; write: also tools of capabilities with write effects (edit files, shell). Connector endpoints are always read-only for roles." },
         "tier": { "enum": ["fast", "balanced", "deep"], "description": "Default tier of this role's steps; a feature or step may set another. The agent profile maps it to a model." },
         "effort": { "enum": ["low", "medium", "high"], "description": "Default effort (default medium); a feature or step may set another." },

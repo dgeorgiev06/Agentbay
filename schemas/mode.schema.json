@@ -138,16 +138,6 @@
                       "pattern": "^[a-z][a-z0-9-]*$"
                     },
                     "description": "Framework rule sets (framework/rules/<name>.yaml, e.g. conformance) added to the reviewer's plan next to the feature's DoD and rules."
-                  },
-                  "model": {
-                    "enum": [
-                      "haiku",
-                      "sonnet",
-                      "opus",
-                      "inherit"
-                    ],
-                    "deprecated": true,
-                    "description": "Deprecated (0.3): use `tier`. Run `bay migrate`."
                   }
                 },
                 "if": {
@@ -179,14 +169,6 @@
               "effort": {
                 "$ref": "#/$defs/effort",
                 "description": "Effort of this feature's role steps (default: each role's effort). A step's own `effort` wins."
-              },
-              "agents": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                },
-                "deprecated": true,
-                "description": "Deprecated (0.3): role -> agent; the agent's env becomes this feature's `roles:` entry and its model a tier. Run `bay migrate`."
               }
             }
           }
@@ -195,20 +177,7 @@
           "type": "string"
         },
         "roles": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/roleEnvs"
-            },
-            {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "minItems": 1,
-              "deprecated": true,
-              "description": "Deprecated (0.3) list form: each role's env comes from its 0.3 agent; `bay migrate` rewrites it to the map."
-            }
-          ],
+          "$ref": "#/$defs/roleEnvs",
           "description": "The roles this mode uses and the env each one works in: {role: env}. Features and workflow steps may override entries (`roles:` of the same shape); one env per step. Children inherit the map and override it entry by entry."
         },
         "workflows": {
@@ -322,18 +291,6 @@
               "minimum": 0,
               "description": "Items one sync may read."
             },
-            "monthlyPosts": {
-              "type": "integer",
-              "minimum": 0,
-              "deprecated": true,
-              "description": "Deprecated (0.3) name of monthlyItems; `bay migrate` renames it."
-            },
-            "maxPostsPerRun": {
-              "type": "integer",
-              "minimum": 0,
-              "deprecated": true,
-              "description": "Deprecated (0.3) name of maxItemsPerRun; `bay migrate` renames it."
-            },
             "policies": {
               "type": "array",
               "items": {
@@ -356,23 +313,6 @@
         "configDefaults": {
           "type": "object",
           "description": "Defaults that replace the config schema's `default`s for this mode (e.g. a child's own default selectors), so a child never copies its parent's config schema. Merged key by key over the parent's; each key must be a property of the config schema and its value must match it."
-        },
-        "inference": {
-          "type": "object",
-          "additionalProperties": false,
-          "deprecated": true,
-          "description": "Deprecated (0.3): model names belong to the agent profile; becomes `tier`/`effort` on the role steps it changed. Run `bay migrate`.",
-          "properties": {
-            "default": {
-              "$ref": "#/$defs/inference"
-            },
-            "steps": {
-              "type": "object",
-              "additionalProperties": {
-                "$ref": "#/$defs/inference"
-              }
-            }
-          }
         }
       },
       "if": {
@@ -420,27 +360,6 @@
         "medium",
         "high"
       ]
-    },
-    "inference": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "model": {
-          "enum": [
-            "haiku",
-            "sonnet",
-            "opus",
-            "inherit"
-          ]
-        },
-        "effort": {
-          "enum": [
-            "low",
-            "medium",
-            "high"
-          ]
-        }
-      }
     }
   }
 }

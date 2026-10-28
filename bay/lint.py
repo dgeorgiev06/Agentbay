@@ -145,9 +145,9 @@ def lint_role_envs(md: model.Doc, kit: model.Kit) -> list[str]:
     """Each role of the mode is a framework role; each step's role is in the mode and has exactly one env
     (step > feature > mode `roles:`)."""
     out = []
-    roles = md.spec.get("roles") if isinstance(md.spec.get("roles"), dict) else {}
+    roles = md.spec.get("roles") or {}
     problems = [(None, None, f"mode {md.name}: `roles:` names unknown role '{rn}' (framework roles: "
-                             f"{', '.join(sorted(kit.docs['Role']))}); {model.USER_ROLE.split(' (`bay migrate`')[0]}")
+                             f"{', '.join(sorted(kit.docs['Role']))}); {model.USER_ROLE}")
                 for rn in roles if rn not in kit.docs["Role"]]
     envs = kit.docs["Environment"]
     have = ", ".join(sorted(envs))
@@ -312,7 +312,6 @@ def lint_roles(kit: model.Kit) -> list[str]:
 # source API reaches, and which selector fields its native search handles: the store keys items and
 # deletions on `source` and splits every selector by that table.
 SOURCE_INTERFACES = ("items.source/v1",)
-SELECTOR_MODES = ("native", "local")
 
 
 def lint_connectors(kit: model.Kit) -> list[str]:
@@ -343,12 +342,7 @@ SCHEDULED_BY = {"improve.backlog": "`.agentbay/bay improve weekly` (it runs scan
 
 def warnings(kit: model.Kit) -> list[str]:
     """Non-fatal findings: printed by `bay lint`, never fail it."""
-    out = list(getattr(kit, "deprecations", []))
-    stale = kit.root / "coordinator" / "chief-of-staff.md"
-    if stale.exists():
-        out.append(f"{model.rel(stale)}: the Chief of Staff playbook moved to "
-                   f"framework/modes/{model.ROOT_COORDINATOR}/playbook.md; this file is no longer read. Move your "
-                   f"edits there and delete it.")
+    out = []
     for md in kit.docs["Mode"].values():
         if md.spec.get("abstract"):
             continue                    # never installed: its children carry the schedule

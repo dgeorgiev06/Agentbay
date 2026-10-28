@@ -49,7 +49,7 @@ HOOK_TAG = "bay/hook.py"
 GUARD_TAG = "bay/guard.py"
 BAY = ".agentbay/bay"
 # The only control-plane commands the main thread is pre-approved for. Everything else
-# (build, clean, secret, migrate, mode new, ...) prompts. Subagents get none of these (guard).
+# (build, clean, secret, mode new, ...) prompts. Subagents get none of these (guard).
 # Safety rule: nothing that runs code is pre-approved. call/submit run connector code, so they prompt.
 COORDINATOR_CMDS = ("show", "status", "log", "note", "task", "catalog")
 WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
@@ -457,7 +457,7 @@ Machine-readable: `.agentbay/catalog.json`.
 ## Control plane (run via Bash)
 
 Pre-approved (read-only): `{BAY} show|status|log|note|task`. `call` and `submit` run connector code, so
-Claude Code asks the user each time; so does everything else (build, clean, migrate, secret, scaffolds).
+Claude Code asks the user each time; so does everything else (build, clean, secret, scaffolds).
 Subagents cannot run `{BAY}` at all.
 
 - `{BAY} call <mode>.<endpoint> '<json>'` -> run an endpoint; returns a result or the next step plan

@@ -1,11 +1,11 @@
-"""forge: scaffolds share templates with the CLI and are lint-clean; migrate dry-run changes nothing."""
+"""forge: scaffolds share templates with the CLI and are lint-clean."""
 import hashlib
 import subprocess
 import sys
 
 from helpers import edit_yaml, kit_copy, model, project, system
 
-from bay import dispatch, lint, migrate, scaffold
+from bay import dispatch, lint, scaffold
 
 
 def digest_tree(root):
@@ -70,7 +70,7 @@ def test_scaffold_refuses_framework_names_and_overwrites():
         except scaffold.ScaffoldError as e:
             assert "framework name" in str(e)
     try:
-        scaffold.create(k, "role", "summarizer")                 # roles are framework-level since 0.4
+        scaffold.create(k, "role", "summarizer")                 # roles are framework-level
         raise AssertionError("expected ScaffoldError")
     except scaffold.ScaffoldError as e:
         assert "roles are framework-level" in str(e) and "forge.extend" in str(e)
@@ -106,29 +106,6 @@ def test_forge_create_runs_scaffold_then_plans_author_builder():
     assert (k / "envs/digest-env.yaml").exists()
     ids = {x["id"] for x in r["next"]["rules"]}
     assert "R-8" in ids and "R-3" not in ids and "R-6" not in ids and "R-7" not in ids     # kind-scoped rules
-
-
-def test_migrate_dry_run_produces_diff_and_changes_nothing():
-    k = kit_copy()
-    (k / "specs").mkdir()
-    (k / "layers/code").mkdir(parents=True)
-    (k / "layers/code/layer.yaml").write_text("apiVersion: agentbay/v1\nkind: Layer\n")
-    (k / "specs/writer.yaml").write_text(
-        "apiVersion: agentbay/v1\nkind: AgentSpec\nmetadata: {name: writer, description: 'writes docs well'}\n"
-        "spec: {model: sonnet, layers: [code], prompt: 'you are the writer, write docs'}\n")
-    h = digest_tree(k)
-    plan = migrate.plan(k)
-    assert digest_tree(k) == h
-    assert {(c["op"], c["path"]) for c in plan["changes"]} == {("delete", "layers/code")}
-    assert any("specs/writer.yaml" in n and "roles are framework-level" in n for n in plan["notes"])
-    r = subprocess.run([sys.executable, str(k / "bay/cli.py"), "migrate"], capture_output=True, text=True)
-    assert r.returncode == 0 and "dry run: nothing written" in r.stdout and digest_tree(k) == h
-    # forge.migrate without confirm is also a dry run
-    out = dispatch.Dispatcher(system(k, k), k).call("forge.migrate", {})
-    assert out["status"] == "needs-agent" and out["next"]["kind"] == "review" and digest_tree(k) == h
-    res = migrate.apply(k)
-    assert res["applied"] == 1 and (k / "specs/writer.yaml").exists() and not (k / "layers").exists()
-    assert migrate.plan(k)["changes"] == []
 
 
 def test_connector_scaffold_for_feed_source_declares_source_and_window():

@@ -83,7 +83,7 @@ def test_effect_not_allowed_by_env():
 def test_effect_not_declared_by_endpoint():
     k = kit_copy()
     edit_yaml(k / "modes/feed-briefing/mode.yaml",
-              lambda d: d["spec"]["endpoints"]["sync"].update({"effects": ["network", "write"]}))
+              lambda d: d["spec"].setdefault("endpoints", {}).setdefault("sync", {}).update({"effects": ["network", "write"]}))
     assert_gap(k, "feed-briefing.sync step fetch", "effect 'spend'", "not declared by the endpoint")
 
 
@@ -138,17 +138,14 @@ def test_all_gaps_reported_at_once():
     assert any("tier 'balanced'" in g for g in gs) and any("api.x.com" in g for g in gs)
 
 
-def test_v1_files_are_rejected_with_migration_hint():
+def test_wrong_kind_is_rejected():
     k = kit_copy()
-    (k / "roles").mkdir()
-    (k / "roles/old.yaml").write_text("apiVersion: agentbay/v1\nkind: AgentSpec\nmetadata: {name: old}\nspec: {}\n")
-    assert_gap(k, "roles/old.yaml", "roles are framework-level", "bay migrate")
     (k / "modes/old").mkdir()
     (k / "modes/old/mode.yaml").write_text("apiVersion: agentbay/v1\nkind: Layer\nmetadata: {name: old}\nspec: {}\n")
-    assert_gap(k, "modes/old/mode.yaml", "kind must be Mode", "bay migrate")
+    assert_gap(k, "modes/old/mode.yaml", "kind must be Mode")
 
 
-def test_config_schema_and_removed_bindings_override():
+def test_config_schema_rejects_unknown_settings():
     from helpers import project
     from bay import config
     p = project({"modes": {"feed-briefing": {"lookback": "90d"}}})
@@ -161,14 +158,7 @@ def test_config_schema_and_removed_bindings_override():
         model.Kit(KIT, p)
         raise AssertionError("expected ConfigError")
     except config.ConfigError as e:
-        assert "`bindings` was removed" in str(e) and "envs/<env>.yaml" in str(e)
-
-
-def test_env_fs_base_is_rejected_with_a_clear_message():
-    k = kit_copy()
-    edit_yaml(k / "framework/envs/local-authoring.yaml", lambda d: d["spec"]["fs"].update({"base": "kit"}))
-    g = assert_gap(k, "framework/envs/local-authoring.yaml:", "fs.base was removed", "relative to the project root")
-    assert g.split(":")[1].isdigit()                  # file:line
+        assert "bindings" in str(e)
 
 
 def test_forge_create_cannot_be_placed_in_framework_writing_env():

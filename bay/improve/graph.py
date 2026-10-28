@@ -163,7 +163,7 @@ def _concepts(g: Graph, kit: Path) -> None:
             props = (json.loads((d.dir / cfg).read_text()).get("properties") or {})
             for key in props:
                 g.node(f"config:{name}.{key}", "config-key", key, rel(d.dir / cfg))
-        for rn, env in (d.spec["roles"] if isinstance(d.spec["roles"], dict) else {}).items():
+        for rn, env in (d.spec.get("roles") or {}).items():
             g.edge(f"mode:{name}", f"role:{rn}", "role")
             if env:
                 g.edge(f"mode:{name}", f"env:{env}", "role-env")

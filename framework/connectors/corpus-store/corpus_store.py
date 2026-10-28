@@ -129,7 +129,7 @@ def open_rw(path: Path) -> sqlite3.Connection:
     elif con.execute("SELECT 1 FROM sqlite_master WHERE name = 'state'").fetchone():
         con.close()           # a pre-release store kept state inside corpus.db, where agents could count it
         raise StoreError(f"{path}: written by a pre-release build (internal state inside corpus.db); move the "
-                         f"folder aside and sync again, or run `bay migrate --project` from the v0.2 files")
+                         f"folder aside and sync again")
     return con
 
 
@@ -153,7 +153,7 @@ def scrub_item(it: dict) -> dict:
 
 
 def item_row(it: dict) -> dict:
-    """The one way an item becomes an `items` row (sync and `bay migrate` both use it); scrubs first."""
+    """The one way an item becomes an `items` row (sync uses it); scrubs first."""
     it = scrub_item(it)
     au = it.get("author") or {}
     ext = {k: v for k, v in it.items() if k not in ENVELOPE}

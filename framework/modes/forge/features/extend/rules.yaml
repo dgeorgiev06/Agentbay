@@ -2,7 +2,7 @@ apiVersion: agentbay/v2
 kind: Rules
 rules:
   - { id: R-1, level: must, statement: "Review is mandatory on every forge.extend run (when: always, opus, high); it is never disabled.", appliesTo: both }
-  - { id: R-2, level: must_not, statement: "Make a breaking contract change without an apiVersion bump and a migration.", appliesTo: both, refs: [DOD-11] }
+  - { id: R-2, level: must_not, statement: "Make a breaking contract change without an apiVersion bump.", appliesTo: both, refs: [DOD-11] }
   - { id: R-3, level: must, statement: "Framework modes still pass bay lint and their tests after the change.", appliesTo: both, check: lint_clean, refs: [DOD-12] }
   - { id: R-4, level: must, statement: "Update README, docs/INTERFACES.md and docs/DESIGN-v0.2.md in the same change.", appliesTo: both, refs: [DOD-13] }
   - { id: R-5, level: must_not, statement: "Put secret values in prompts, logs, the ledger, output or committed files.", appliesTo: both, check: no_secrets, refs: [DOD-2] }

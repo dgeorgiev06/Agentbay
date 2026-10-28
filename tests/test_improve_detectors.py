@@ -289,7 +289,7 @@ def test_conformance_checks_on_a_kit_copy():
         base_mode.write_text(base_mode.read_text().replace("    spendUsd: 5          # dollar cap enforced by the dispatcher (C-6 spend exemption for sync)\n", "")
                              .replace("      review: { role: reviewer, when: always, tier: balanced, effort: medium }\n      schedule: daily", "      schedule: daily"))
         res = {r["rule"]: r for r in conformance.run(k)}
-        assert len(res["C-1"]["violations"]) == base["C-1"] + 1 and "fetch" in res["C-1"]["violations"][-1]["detail"]
+        assert len(res["C-1"]["violations"]) == base["C-1"] + 2 and "fetch" in res["C-1"]["violations"][-1]["detail"]   # briefing and feed-briefing
         assert any("'Bash'" in v["detail"] for v in res["C-4"]["violations"])
         assert any("sub-agent" in v["detail"] and v["rewrite"].endswith("subagent.") for v in res["C-7"]["violations"])
         assert any("status" in v["detail"] and "write_text" in v["detail"] for v in res["C-5"]["violations"])

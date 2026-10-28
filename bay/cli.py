@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""agentbay control plane (v0.2).
+"""agentbay control plane.
 
   validate               lint + resolve every mode endpoint (fails with every gap)
   lint                   structure checks: playbooks, DoD ids, rules, review, role envs
@@ -19,7 +19,6 @@
   connector new <name> --implements <iface> | env new <name>     scaffolds (forge templates)
   improve decide <id> approve|defer|wontfix   record your decision on a backlog item (approve: terminal only)
   improve weekly [--since 7d]                 scan + audit + triage + backlog; cron it weekly
-  migrate [--confirm]    migrate user content and --project data (dry-run diff by default)
   secret set <NAME>      store a secret in the keychain (value read from stdin, never echoed)
 
   task new | status | log | note | reclaim     ledger
@@ -372,7 +371,7 @@ def cmd_improve_weekly(args):
     _out({"status": r["status"], "calls": calls})
 
 
-# ------------------------------------------------------------------ scaffolds & migrations
+# ------------------------------------------------------------------ scaffolds & secrets
 def cmd_new(args):
     from bay import scaffold
     try:
@@ -386,22 +385,6 @@ def cmd_new(args):
         print(f"  + {f}")
     for t in res["todo"]:
         print(f"  TODO {t}")
-
-
-def cmd_migrate(args):
-    from bay import migrate
-    # kit content migrates in the kit; project data (e.g. the v0.2 feed store) in --project
-    res = migrate.apply(KIT, args.to, args.project) if args.confirm else migrate.plan(KIT, args.to, args.project)
-    if not args.confirm:
-        print(res["diff"] or "nothing to migrate")
-        for c in res["changes"]:
-            print(f"  {c['op']:<6} {c['path']}  ({c['note']})")
-        if res["changes"]:
-            print("dry run: nothing written. Re-run with --confirm to apply.")
-    else:
-        print(f"applied {res['applied']} change(s)")
-    for n in res["notes"]:
-        print(f"  ! {n}")
 
 
 def cmd_secret(args):
@@ -548,8 +531,6 @@ def main(argv=None):
         if kind == "connector":
             n.add_argument("--implements", required=True)
         n.set_defaults(fn=cmd_new, kind=kind)
-    mg = sub.add_parser("migrate"); mg.add_argument("--to"); mg.add_argument("--confirm", action="store_true")
-    mg.set_defaults(fn=cmd_migrate)
     se = sub.add_parser("secret"); se.add_argument("action", choices=["set"]); se.add_argument("name")
     se.add_argument("--provider", default="keychain"); se.set_defaults(fn=cmd_secret)
 

@@ -21,5 +21,5 @@ Keep the store within retention, honor deletions made at the source, and drop it
 `{removed, remaining, deleted, unmatched, cutoff}`.
 
 ## Failure handling
-- Store file unreadable or from a newer kit: the step fails naming the file; run `bay migrate` or update agentbay.
+- Store file unreadable or from a newer kit: the step fails naming the file; move it aside and sync again, or update agentbay.
 - Review fails a must item: the call ends `partial` with the reviewer's evidence; the items already removed stay removed.

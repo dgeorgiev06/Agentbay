@@ -86,7 +86,7 @@ are pure code and finish in one call.
 ### Selectors: what to keep
 
 `modes.feed-briefing.selectors` in agentbay.config.yaml says which posts are kept. The default `[{id: home}]`
-keeps the home timeline, as in v0.2:
+keeps the home timeline:
 
 ```yaml
 modes:
@@ -119,41 +119,6 @@ if the fetch itself then fails. Until then every read is refused with a message 
 `bay validate` errors on a field a source cannot express. It warns when a field is matched only locally on
 a paid source (for example `text` on X, where every post the native query returns is billed).
 
-### Upgrading a v0.2 store
-
-v0.2 kept posts in `.agentbay/data/feeds/posts.jsonl` + `state.json`; v0.3 uses one SQLite file per mode
-(`.agentbay/data/feeds/feed-briefing/corpus.db`, owner-only). Convert it once, yourself (agents never write
-`.agentbay/`): `./bay.sh migrate --project ~/code/my-repo` shows a dry-run diff; add `--confirm` to apply.
-Bad lines or a damaged `state.json` are reported as file:line with the fix, and nothing is converted until
-they are fixed. Cursors, coverage, monthly budget, deletions and deletion-check times are kept, so the
-next sync is incremental and posts deleted at the source never come back. The old files are renamed
-`*.v0.2.bak`, not deleted.
-
-Your own v0.2 modes, envs and connectors keep working in 0.4.x. Their old names resolve to the new
-ones: `feed.source/v1` and `feed.store/v1` become `items.*`, `feed-analyst` and `feed-lead` become
-`analyst` and `lead`, and `local-store` becomes `corpus-store`. `bay lint` warns about each such file. `./bay.sh migrate`
-(then `--confirm`) rewrites those files. A connector you wrote against the old `fetch(sinceId, startTime,
-maxPosts, checkIds)` cannot be rewritten automatically. If an env binds it, `bay lint`, `validate` and `build`
-fail and say how to port it. If no env binds it, it is only a warning: the connector is skipped and the rest
-of the kit builds.
-
-### Upgrading 0.3 content (roles, agents, envs)
-
-0.4 keeps the 0.3 shape working for one release, with a `bay lint` warning per file, and
-`./bay.sh migrate` (dry run; `--confirm` applies) rewrites it:
-
-- `roles: [a, b]` and an endpoint's `agents: {role: agent}` become the `roles:` map (the env of each role's
-  0.3 agent), plus the `needs` those roles used (access now comes from the mode);
-- `inference` and a review's `model` become `tier`/`effort` where they changed the outcome; an env's
-  `models` becomes `tiers`;
-- your per-role agent files are folded away (one framework profile runs every role);
-- the old role names become `analyst` (briefing-analyst, improve-analyst, auditor) and `lead`
-  (briefing-lead, improve-lead, forge-lead);
-- a role file of your own is an error (roles are framework-level); migrate turns it into a skill of the mode
-  that uses it, run by the closest framework role, or tells you what to do by hand;
-- the caps `maxPostsPerRun` and `monthlyPosts` are now `maxItemsPerRun` and `monthlyItems` (also in your
-  agentbay.config.yaml with `--project`).
-
 ### Real X timeline
 
 1. Create an X app with OAuth 2.0 (scopes `tweet.read users.read offline.access`, plus `list.read` if you
@@ -179,7 +144,7 @@ modes/delivery/        research, build (+review): the v0.1 behaviour
 envs/                  local-feeds, local-feeds-offline
 connectors/            x-api (official X API v2: home timeline, Lists, user timelines), fake (offline)
 framework/             shipped with the kit, never edited by users:
-  modes/forge/         create | extend | migrate - agentbay building agentbay
+  modes/forge/         create | extend - agentbay building agentbay
   modes/improve/       scan | audit | triage | backlog | implement | verify - evidence-backed improvement backlog
   rules/conformance.yaml  semantic framework rules (forge reviewers + improve.audit)
   modes/cos/           the Chief of Staff: routing playbook + run/next/status for project workflows
@@ -189,7 +154,7 @@ framework/             shipped with the kit, never edited by users:
   interfaces/ connectors/  workflow.run, session.events, review.verdicts, artifacts.read, improve.detect,
                        improve.findings / workflow-runner (project-workflow stage cursor),
                        corpus-store (SQLite items store + SQL sandbox), ledger, git, claude-transcripts,
-                       artifact-graph, improve-detect, improve-store, migrator, scaffold
+                       artifact-graph, improve-detect, improve-store, scaffold
 coordinator/           Chief of Staff slash commands (its playbook lives in framework/modes/cos/)
 bay/                   resolver (incl. mode `extends`), lint, dispatcher, connectors runtime, adapter, ledger,
                        hook, CLI, selector.py (shared matcher), sqlsandbox.py (read-only agent SQL);
@@ -210,7 +175,6 @@ tests/                 python3 tests/run.py
 | `bay approve <callId\|runId> [--reject]` | pass a call's gate, or a workflow run's gate (your terminal only) |
 | `bay status`, `bay log` | calls, steps, agent runs, cost |
 | `bay mode\|feature\|connector\|env new <name>` | scaffold (same templates as `forge.create`; roles are framework-level) |
-| `bay migrate [--confirm] [--project <repo>]` | migrate your content (and that project's v0.2 store) to this version (dry run by default) |
 | `bay note <ref> "text" [--instruction]` | record a note (or a mid-run instruction change) on a run, task or call; never creates a run |
 | `bay improve weekly` / `bay improve decide <id> approve\|defer\|wontfix` | weekly improve pass / your decision on a backlog item (approve: your terminal only) |
 

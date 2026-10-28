@@ -29,26 +29,25 @@ def test_feed_briefing_is_complete_after_extends():
     s = md.spec
     assert set(s["endpoints"]) == {"sync", "digest", "ask", "prune"} and s["coordinator"] == "lead"
     assert s["endpoints"]["digest"]["playbook"] == "../briefing/features/digest/playbook.md"     # rebased
-    assert s["endpoints"]["sync"]["playbook"] == "features/sync/playbook.md"                    # own override
+    assert s["endpoints"]["sync"]["playbook"] == "../briefing/features/sync/playbook.md"        # inherited
     assert s["endpoints"]["sync"]["rules"] == "../briefing/features/sync/rules.yaml"            # inherited
     assert s["endpoints"]["sync"]["effects"] == ["network", "spend", "write"]                   # merged per key
     assert s["config"] == "../briefing/config.schema.json" and "abstract" not in s and "extends" in s
     assert s["constraints"]["maxItemsPerRun"] == 500 and s["constraints"]["lookbackMax"] == "30d"
     sysm = model.resolve(k)
     m = sysm.modes["feed-briefing"]
-    assert m.features["sync"].in_schema["properties"].keys() == {"lookback", "maxPosts"}       # child type
+    assert m.features["sync"].in_schema["properties"].keys() == {"lookback", "maxItems"}       # parent type
     assert "question" in m.features["ask"].in_schema["properties"]                             # parent type
     assert {"digest", "grounded-qa", "corpus-sql"} <= set(m.skills)
     assert m.playbook.startswith("# feed-briefing (coordinator playbook")                      # own playbook.md
     assert m.config["selectors"] == [{"id": "home"}]
-    assert m.features["sync"].steps[0].with_ == {"lookback": "$in.lookback|$config.lookback", "maxItems": "$in.maxPosts"}
 
 
 def test_child_overrides_review_workflow_roles_and_inherits_the_rest():
     k = kit_copy()
-    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"]["endpoints"].update(
+    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("endpoints", {}).update(
         {"ask": {"review": {"role": "reviewer", "when": "always", "tier": "balanced"}}}))
-    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"]["workflows"].update(
+    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("workflows", {}).update(
         {"prune": [{"id": "trim", "run": "items.store/v1.prune", "with": {"olderThan": "7d"}}]}))
     s = model.resolve(model.Kit(k))
     ask = s.modes["feed-briefing"].features["ask"]
@@ -133,7 +132,7 @@ def test_lint_lines_of_inherited_parts_point_at_the_parent_mode_yaml():
     assert not any("modes/feed-briefing/mode.yaml:1:" in w for w in ws)
     # a child that sets the schedule itself is reported at its own line
     k = kit_copy()
-    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"]["endpoints"].update(
+    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("endpoints", {}).update(
         {"prune": {"schedule": "weekly"}}))
     own = line_of(k / "modes/feed-briefing/mode.yaml", "      schedule: weekly")
     ws = lint.warnings(model.Kit(k))
@@ -141,8 +140,8 @@ def test_lint_lines_of_inherited_parts_point_at_the_parent_mode_yaml():
     # an inherited workflow no endpoint uses any more is reported where the parent defines it
     k = kit_copy()
     edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: (
-        d["spec"]["endpoints"].update({"prune": {"workflow": "trim"}}),
-        d["spec"]["workflows"].update({"trim": [{"id": "trim", "run": "items.store/v1.prune"}]})))
+        d["spec"].setdefault("endpoints", {}).update({"prune": {"workflow": "trim"}}),
+        d["spec"].setdefault("workflows", {}).update({"trim": [{"id": "trim", "run": "items.store/v1.prune"}]})))
     kbase = k / "modes/briefing/mode.yaml"
     wf = line_of(kbase, "    prune:", after=line_of(kbase, "  workflows:"))
     ps = problems(k)

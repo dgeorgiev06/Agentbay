@@ -223,7 +223,7 @@ def test_modes_must_not_name_connectors_or_tools():
 def test_orphan_workflow_and_feature_folder():
     k = kit_copy()
     edit_yaml(k / "modes/feed-briefing/mode.yaml",
-              lambda d: d["spec"]["workflows"].update({"unused": [{"id": "x", "run": "items.store/v1.query"}]}))
+              lambda d: d["spec"].setdefault("workflows", {}).update({"unused": [{"id": "x", "run": "items.store/v1.query"}]}))
     has(k, "workflow 'unused' is not used by any endpoint")
     k = kit_copy()
     (k / "modes/briefing/features/stray").mkdir()

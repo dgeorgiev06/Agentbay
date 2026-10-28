@@ -8,7 +8,7 @@ Native selector fields (connector.yaml spec.selectors), one stream per value:
                   so paging stops at the cursor or the `since` boundary)
   from: <handle>  GET https://api.x.com/2/users/by/username/{handle}, then GET /2/users/{uid}/tweets
                   (since_id | start_time, exclude); used only when the query has no `in`
-  no in/from      the home timeline (the v0.2 behaviour)
+  no in/from      the home timeline
 `text`, `has` and `not` are local: the store matches them after fetching (X bills every post it returns).
   GET https://api.x.com/2/tweets?ids=...      deletion check: stored ids within the API window
                                               that X no longer returns are reported as deleted
@@ -23,7 +23,7 @@ env network allowlist before any request is made.
 
 Billing: X bills every post it returns, so `billed` counts every post in every
 response (timeline pages and deletion lookups), not only the posts kept. The
-call never requests more than its `maxPosts` read budget.
+call never requests more than its `maxItems` read budget.
 """
 from __future__ import annotations
 

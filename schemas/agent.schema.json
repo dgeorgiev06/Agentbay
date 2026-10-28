@@ -39,14 +39,7 @@
       }
     },
     "spec": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/profile"
-        },
-        {
-          "$ref": "#/$defs/legacy"
-        }
-      ]
+      "$ref": "#/$defs/profile"
     }
   },
   "$defs": {
@@ -133,40 +126,6 @@
             "minLength": 1
           },
           "description": "Optional: agentbay tool name (as bound in envs) -> the product's tool name (default: the same name)."
-        }
-      }
-    },
-    "legacy": {
-      "type": "object",
-      "required": [
-        "runtime",
-        "model",
-        "env"
-      ],
-      "additionalProperties": false,
-      "deprecated": true,
-      "description": "Deprecated (0.3) per-role agent in user space: its env goes into each using mode's `roles:`, its model becomes a tier. `bay migrate` folds it into the modes and deletes it.",
-      "properties": {
-        "runtime": {
-          "$ref": "#/$defs/runtime"
-        },
-        "model": {
-          "enum": [
-            "haiku",
-            "sonnet",
-            "opus",
-            "inherit"
-          ]
-        },
-        "effort": {
-          "enum": [
-            "low",
-            "medium",
-            "high"
-          ]
-        },
-        "env": {
-          "type": "string"
         }
       }
     }

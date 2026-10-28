@@ -8,7 +8,7 @@ Change the agentbay framework itself (concepts, schemas, CLI, runtime, framework
 - `proposal` (optional): an existing docs/proposals/<id>.md to implement; `context` (optional).
 
 ## Steps
-1. `propose`: the builder, in env framework-dev, writes docs/proposals/<id>.md: problem, change to concepts/schemas/CLI, compatibility impact, migration plan.
+1. `propose`: the builder, in env framework-dev, writes docs/proposals/<id>.md: problem, change to concepts/schemas/CLI, compatibility impact.
 2. `approve`: approval gate. The call stops with `awaiting-approval`; only the user passes it, with `bay approve <callId>` in an interactive terminal.
 3. `implement`: the builder implements the approved proposal on a branch: code, schemas, framework modes, docs and tests.
 4. `review`: the reviewer (opus, high effort) checks every DoD item and rule below.
@@ -25,7 +25,7 @@ Change the agentbay framework itself (concepts, schemas, CLI, runtime, framework
 - [DOD-8] (should) Code quality: small single-purpose modules, clear names, type hints, no duplication, explicit actionable errors, no silent failures or bare excepts (except the never-block hook), deterministic offline tests, safe subprocess and file handling, minimal dependencies.
 - [DOD-9] (should) Framework clarity: one job per concept; a newcomer can explain mode -> role -> agent -> env -> connector from the README; vocabulary is consistent across files, schemas and CLI; errors name the concept and the fix.
 - [DOD-10] (should) Simplicity for users: few commands from clone to first result; few files and steps to add a feature, mode, role or connector; scaffolds generate the boilerplate; sensible defaults and minimal config; status and ledger make activity obvious; overengineering is flagged.
-- [DOD-11] (must) Contracts: no breaking contract change without an apiVersion bump and a migration in `bay migrate`.
+- [DOD-11] (must) Contracts: no breaking contract change without an apiVersion bump.
 - [DOD-12] (must) Framework modes still pass `bay lint` and their tests after the change.
 - [DOD-13] (must) README, docs/INTERFACES.md and docs/DESIGN-v0.2.md are updated in the same change.
 

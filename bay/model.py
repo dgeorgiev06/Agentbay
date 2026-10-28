@@ -10,8 +10,11 @@ the mode runs that role in several envs): its own subagent, use shim, guard poli
 Two roots are loaded: `framework/` (shipped with the kit, never edited by users)
 and the kit root (user content). Both have the same layout:
 
-    interfaces/<name>.v<N>.yaml   modes/<name>/mode.yaml   roles/<name>.yaml
-    agents/<name>.yaml            envs/<name>.yaml         connectors/<name>/connector.yaml
+    interfaces/<name>.v<N>.yaml   modes/<name>/mode.yaml   envs/<name>.yaml
+    connectors/<name>/connector.yaml
+
+Roles (roles/<name>.yaml) and agent profiles (agents/<name>.yaml) exist only under framework/; a user file of
+either kind is an error.
 
 `resolve(kit)` walks every endpoint and fails with ALL gaps at once, each one a
 human-readable sentence naming the concept and what to fix. The `System` it
@@ -59,13 +62,12 @@ LEVEL_RANK = {"should": 1, "must": 2, "must_not": 2}
 PROTECTED = ("framework", "bay", "schemas")       # kit paths only forge.extend may write
 FRAMEWORK_EXTENDER = "forge.extend"
 USER_ROLE = ("roles are framework-level; customize behaviour in your mode's playbooks/skills, or propose a new "
-             "role via forge.extend (`bay migrate` moves this role into its mode as a skill)")
-# Framework owns roles and agent profiles; user space is modes/, envs/, connectors/ (and interfaces/).
+             "role via forge.extend")
+# Kinds loaded from framework/ only; user space is modes/, envs/, connectors/ (and interfaces/).
 FRAMEWORK_ONLY = {"Role": USER_ROLE,
                   "Agent": "agent profiles are framework-level (framework/agents/); select one with `agent:` in "
                            "agentbay.config.yaml, or propose a new profile via forge.extend"}
 ROOT_COORDINATOR = "cos"      # the mode whose coordinator owns the main thread; its playbook is the preamble
-STALE = re.compile(r"^stale\s*>\s*([0-9]+[mhdw])$")
 
 
 class SpecError(Exception):
@@ -87,8 +89,7 @@ def schema(name: str) -> dict:
 
 def data_schema(ref: str) -> dict:
     """'post/v1' -> schemas/data/post.v1.schema.json"""
-    from .aliases import data_ref
-    name, _, ver = data_ref(ref).partition("/")
+    name, _, ver = ref.partition("/")
     p = SCHEMAS / "data" / f"{name}.{ver}.schema.json"
     if not p.exists():
         raise SpecError(f"unknown data schema '{ref}' (expected {p.relative_to(KIT)})")
@@ -145,8 +146,6 @@ class Doc:
     spec: dict
     lineage: list = field(default_factory=list)   # Mode: own folder, then each ancestor's (extends), nearest first
     parent: str | None = None                      # Mode: the mode it extends
-    raw: dict = field(default_factory=dict)        # the spec as written in the file (before aliases and extends)
-    renamed: dict = field(default_factory=dict)    # deprecated role name aliases applied: new name -> old name
 
     @property
     def dir(self) -> Path:
@@ -172,28 +171,21 @@ class Kit:
         self.roots = {"framework": kit / "framework", "user": kit}
         self.project = project
         self.docs: dict[str, dict[str, Doc]] = {k: {} for k in KINDS}
-        self.legacy_agents: dict[str, Doc] = {}     # 0.3 per-role agent files in user space (deprecated)
-        self.user_roles: dict[str, dict] = {}       # 0.3 user role files (an error; read for bay migrate)
         self.collisions: list[str] = []
         self.errors: list[str] = []
         for root_name, base in self.roots.items():
             for kind, (folder, glob, sch) in KINDS.items():
                 for f in sorted((base / folder).glob(glob)):
-                    if kind in FRAMEWORK_ONLY and root_name == "user" and not self._legacy(kind, f):
+                    if root_name == "user" and kind in FRAMEWORK_ONLY:
                         self.errors.append(f"{rel(f)}: {FRAMEWORK_ONLY[kind]}")
                         continue
                     try:
                         self._load(kind, root_name, f, sch)
                     except SpecError as e:
                         self.errors.append(str(e))
-        from . import aliases
-        self.deprecations: list[str] = aliases.apply(self)     # v0.2 names, kept for one release
-        self.deprecations += aliases.apply_caps(self)          # 0.3 cap names, kept for one release
         self._apply_extends()
         from . import config as cfgmod
         self.config = copy.deepcopy(cfgmod.load(project) if config is None else config)
-        self.deprecations += aliases.config_caps(self.config)
-        self.deprecations += aliases.apply_shape(self)         # 0.3 roles/agents/envs shape, kept for one release
         self.env_swap: dict[str, str] = {}
         self._select_envs()
 
@@ -264,32 +256,13 @@ class Kit:
         name = self.config.get("agent") or DEFAULT_AGENT
         return self.docs["Agent"].get(name), name
 
-    def _legacy(self, kind: str, f: Path) -> bool:
-        """A 0.3 user agent file ({runtime: <name>, model, env}) keeps working for one release; any other user
-        role or agent file is an error (and a user role is remembered for `bay migrate`)."""
-        try:
-            doc = load_yaml(f)
-        except SpecError:
-            return False
-        spec = doc.get("spec") if isinstance(doc, dict) else None
-        if kind == "Role" and isinstance(spec, dict):
-            self.user_roles[f.stem] = {"path": f, "doc": doc}
-        return kind == "Agent" and isinstance(spec, dict) and isinstance(spec.get("runtime"), str)
-
     def _load(self, kind: str, root_name: str, f: Path, sch: str) -> None:
         doc = load_yaml(f)
         where = rel(f)
         if not isinstance(doc, dict):
             raise SpecError(f"{where}: expected a mapping")
         if doc.get("kind") != kind:
-            raise SpecError(f"{where}: kind must be {kind} (found {doc.get('kind')!r}); "
-                            f"v0.1 kinds (AgentSpec, Layer) are gone - run `bay migrate`")
-        if kind == "Environment" and isinstance((doc.get("spec") or {}).get("fs"), dict) \
-                and "base" in doc["spec"]["fs"]:
-            line = next((i for i, ln in enumerate(f.read_text().splitlines(), 1) if ln.strip().startswith("base:")), 1)
-            raise SpecError(f"{where}:{line}: fs.base was removed in v0.2 (approved 2026-10-27); fs paths are always relative "
-                            f"to the project root - delete `base:` (forge envs expect the project to be the agentbay "
-                            f"checkout)")
+            raise SpecError(f"{where}: kind must be {kind} (found {doc.get('kind')!r})")
         sch_doc = schema(sch)
         if kind == "Mode" and isinstance(doc.get("spec"), dict) and doc["spec"].get("extends"):
             # a child declares only what it overrides; the merged spec is checked in full after extends
@@ -309,17 +282,13 @@ class Kit:
             expect = f.parent.name if f.name in ("mode.yaml", "connector.yaml") else f.stem
             if name != expect:
                 raise SpecError(f"{where}: metadata.name '{name}' must match '{expect}'")
-        if kind == "Agent" and root_name == "user":        # a 0.3 per-role agent (see _legacy)
-            self.legacy_agents[name] = Doc(kind, name, root_name, f, meta, spec)
-            return
         if name in self.docs[kind]:
             other = self.docs[kind][name]
             self.collisions.append(
                 f"{kind} '{name}' is defined by both the framework ({other.rel}) and you ({where}); "
                 f"rename yours - framework names are reserved")
             return
-        self.docs[kind][name] = Doc(kind, name, root_name, f, meta, spec, lineage=[f.parent] if kind == "Mode" else [],
-                                    raw=copy.deepcopy(spec))
+        self.docs[kind][name] = Doc(kind, name, root_name, f, meta, spec, lineage=[f.parent] if kind == "Mode" else [])
 
     # convenience
     def get(self, kind: str, name: str) -> Doc | None:
@@ -359,13 +328,12 @@ def merge_mode(parent: dict, child: dict, pdir: Path, cdir: Path) -> dict:
             eps = out.setdefault("endpoints", {})
             for name, e in v.items():
                 merged = {**eps.get(name, {}), **copy.deepcopy(e)}
-                if isinstance(e.get("roles"), dict) and isinstance(eps.get(name, {}).get("roles"), dict):
+                if e.get("roles") and eps.get(name, {}).get("roles"):
                     merged["roles"] = {**eps[name]["roles"], **e["roles"]}
                 eps[name] = merged
         elif k == "workflows":
             out.setdefault("workflows", {}).update(copy.deepcopy(v))
-        elif k in ("constraints", "configDefaults") or (k == "roles" and isinstance(v, dict)
-                                                         and isinstance(out.get(k), dict)):
+        elif k in ("constraints", "configDefaults", "roles"):
             out[k] = {**out.get(k, {}), **copy.deepcopy(v)}
         elif k == "needs":
             out[k] = list(dict.fromkeys([*out.get(k, []), *v]))
@@ -691,7 +659,7 @@ def role_env_problems(md: Doc) -> list[tuple[str | None, str | None, str]]:
     `roles:` on code or gate steps. `bay lint` reports them with file:line, resolve as gaps."""
     s, name = md.spec, md.name
     roles = s.get("roles")
-    if not isinstance(roles, dict):
+    if not roles:
         return []
     out: list[tuple[str | None, str | None, str]] = []
     have = ", ".join(roles) or "none"
@@ -882,7 +850,7 @@ def code_env(kit: Kit, mode: Doc, iface: str, ep: dict | None = None) -> tuple[D
     """Env that runs a code step: the coordinator's env (for this feature), else the first role env of the mode
     that binds the capability."""
     s = mode.spec
-    roles = s.get("roles") if isinstance(s.get("roles"), dict) else {}
+    roles = s.get("roles") or {}
     coord = s.get("coordinator")
     if coord:
         name = kit.env_name(role_env(s, ep, None, coord))
@@ -924,7 +892,7 @@ def resolve_mode(kit: Kit, md: Doc, ctx: _Ctx, warnings: list[str] | None = None
     for n in needs:
         if kit.get("Interface", n) is None:
             gaps.append(f"mode {name}: needs unknown capability interface {n}")
-    roles = s["roles"] if isinstance(s.get("roles"), dict) else {}
+    roles = s.get("roles") or {}
     for rn in roles:
         if rn not in kit.docs["Role"]:
             gaps.append(f"mode {name}: roles lists unknown role '{rn}' (have: {', '.join(sorted(kit.docs['Role']))})")
@@ -943,8 +911,6 @@ def resolve_mode(kit: Kit, md: Doc, ctx: _Ctx, warnings: list[str] | None = None
             gaps.append(f"mode {name}: config schema {s['config']} not found")
         else:
             csch = inline_refs(json.loads(cp.read_text()))
-            from .aliases import rename_caps
-            rename_caps(csch.get("properties"))       # a 0.3 schema declaring maxPostsPerRun / monthlyPosts
             for e in schema_errors(mcfg, csch):
                 gaps.append(f"agentbay.config.yaml modes.{name}: {e}")
             # the mode's config schema `default`s are the single source of default settings; a mode (a child,
@@ -966,7 +932,7 @@ def resolve_mode(kit: Kit, md: Doc, ctx: _Ctx, warnings: list[str] | None = None
     if s.get("configDefaults") and not s.get("config"):
         gaps.append(f"mode {name}: configDefaults needs a config schema (`config:`, own or inherited)")
     if SOURCE_IFACE in needs and not mcfg.get("selectors"):
-        mcfg["selectors"] = [{"id": "home"}]     # no selectors setting: keep each source's default stream (v0.2)
+        mcfg["selectors"] = [{"id": "home"}]     # no selectors setting: keep each source's default stream
     constraints = cfgmod.effective_constraints(s.get("constraints", {}), mcfg)
     if "lookback" in mcfg and "lookbackMax" in constraints:
         from .util import duration

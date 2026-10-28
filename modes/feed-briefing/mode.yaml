@@ -6,18 +6,11 @@ metadata:
   description: Briefings and grounded Q&A over posts from accounts you follow.
 spec:
   # Everything not set here comes from modes/briefing (features sync, digest, ask, prune; their playbooks,
-  # rules and review; roles; skills). This mode keeps its v0.2 inputs and caps.
+  # rules and review; roles; skills).
   extends: briefing
   purpose: Keep me briefed on what people I follow say; answer questions about it.
-  endpoints:
-    sync:
-      description: Pull new posts from every bound source into the local store (budget-capped).
-      playbook: features/sync/playbook.md       # sync takes `maxPosts` here (v0.2 input name)
-  workflows:
-    sync:
-      - { id: fetch, run: items.store/v1.sync, with: { lookback: "$in.lookback|$config.lookback", maxItems: "$in.maxPosts" } }
   constraints:                 # merged over briefing's (lookbackMax, spendUsd, policies)
     monthlyItems: 3000
     maxItemsPerRun: 500
   configDefaults:              # briefing's config schema, with this mode's default selector
-    selectors: [{ id: home }]  # no fields: each source's default stream (the X home timeline), as in v0.2
+    selectors: [{ id: home }]  # no fields: each source's default stream (the X home timeline)

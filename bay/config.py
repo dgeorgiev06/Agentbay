@@ -39,10 +39,6 @@ def load(project: Path | None) -> dict:
         return {}
     from .model import schema, schema_errors
     doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    if isinstance(doc, dict) and "bindings" in doc:
-        raise ConfigError(f"{p}: `bindings` was removed in v0.2 (approved 2026-10-27); capabilities are bound only "
-                          f"in envs/<env>.yaml. To run offline, select the shipped offline env instead: "
-                          f"`envs: {{ local-feeds: local-feeds-offline }}`")
     errs = schema_errors(doc, schema("config"))
     if errs:
         raise ConfigError(f"{p}:\n    " + "\n    ".join(errs))

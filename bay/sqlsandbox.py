@@ -147,7 +147,7 @@ def connect_ro(path: Path) -> sqlite3.Connection:
         con.execute("PRAGMA temp_store = FILE")
         if con.execute("SELECT 1 FROM main.sqlite_master WHERE name = 'state'").fetchone():
             raise SqlError(f"{path}: written by a pre-release build (internal state inside corpus.db); move the "
-                           f"folder aside and sync again, or run `bay migrate --project` from the v0.2 files")
+                           f"folder aside and sync again")
         fts = has_fts(con)
         for stmt in view_sql(fts):
             con.execute(stmt)
@@ -161,7 +161,7 @@ def connect_ro(path: Path) -> sqlite3.Connection:
         raise
     except sqlite3.Error as e:
         con.close()
-        raise SqlError(f"the store at {path.name} is not readable ({e}); run `bay migrate` or sync") from None
+        raise SqlError(f"the store at {path.name} is not readable ({e}); move it aside and sync again") from None
     return con
 
 

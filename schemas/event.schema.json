@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agentbay/v2/LedgerEvent",
   "title": "LedgerEvent",
-  "description": "One line in .agentbay/ledger/events.jsonl. Append-only. System state is a fold over these events.",
+  "description": "One line in .agentbay/ledger/events.jsonl. Append-only. System state is a fold over these events. v1 fields added in v0.2.1 (durationMs, tokens, costUsd, tool, reason, permission.denied) are optional, so older lines stay valid.",
   "type": "object",
   "required": [
     "v",
@@ -32,7 +32,8 @@
         "step.skipped",
         "step.planned",
         "call.completed",
-        "data.read"
+        "data.read",
+        "permission.denied"
       ]
     },
     "runId": {
@@ -53,14 +54,16 @@
         "hook",
         "coordinator",
         "cli",
-        "dispatcher"
+        "dispatcher",
+        "guard"
       ]
     },
     "summary": {
       "type": "string"
     },
     "data": {
-      "type": "object"
+      "type": "object",
+      "description": "Event-specific detail. note: {kind: note|instruction-change|decision}; call.completed: {status}."
     },
     "mode": {
       "type": "string"
@@ -83,6 +86,52 @@
     "cost": {
       "type": "object",
       "description": "e.g. {posts, usd}"
+    },
+    "durationMs": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Wall time of the step, call or agent run, when known."
+    },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Token usage when known.",
+      "properties": {
+        "input": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "output": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cacheRead": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cacheCreation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "costUsd": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Spend of this step or run in USD, when known."
+    },
+    "tool": {
+      "type": "string",
+      "description": "permission.denied: the tool the guard denied (Bash, Read, Edit, ...)."
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 300,
+      "description": "permission.denied: why (secret-scanned, truncated)."
     }
   }
 }

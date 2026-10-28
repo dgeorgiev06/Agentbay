@@ -62,6 +62,10 @@ def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[
             out.append(f"{_where(mfile, ep_line)}: feature {target} must declare review "
                        f"{{ role: <reviewer>, when: always, model: opus, effort: high }}; review is mandatory and cannot "
                        f"be disabled or weakened here")
+    for rs in (rv or {}).get("rulesets", []):
+        if not (kit.root / "framework" / "rules" / f"{rs}.yaml").exists():
+            out.append(f"{_where(mfile, ep_line)}: feature {target} review names rule set '{rs}', but "
+                       f"framework/rules/{rs}.yaml does not exist")
     if rv and rv.get("when") == "always":
         rn = rv.get("role")
         rline = _line_of(mfile, rf"^\s{{4}}{re.escape(ep_name)}:", ep_line)
@@ -217,15 +221,21 @@ def lint_connectors(kit: model.Kit) -> list[str]:
     return out
 
 
+# Scheduled endpoints that a CLI command runs together with the steps they depend on.
+SCHEDULED_BY = {"improve.backlog": "`.agentbay/bay improve weekly` (it runs scan, audit and triage first; cron "
+                                   "recipe in README)"}
+
+
 def warnings(kit: model.Kit) -> list[str]:
     """Non-fatal findings: printed by `bay lint`, never fail it."""
     out = []
     for md in kit.docs["Mode"].values():
         for ep_name, ep in md.spec["endpoints"].items():
             if ep.get("schedule"):
-                out.append(f"{_where(md.path, _line_of(md.path, r'schedule:'))}: {md.name}.{ep_name} declares "
-                           f"schedule '{ep['schedule']}' but no runtime acts on it; run "
-                           f"`.agentbay/bay call {md.name}.{ep_name} '{{}}'` from cron")
+                target = f"{md.name}.{ep_name}"
+                run = SCHEDULED_BY.get(target, f"`.agentbay/bay call {target} '{{}}'`")
+                out.append(f"{_where(md.path, _line_of(md.path, r'schedule:'))}: {target} declares "
+                           f"schedule '{ep['schedule']}' but no runtime acts on it; run {run} from cron")
     if kit.project is not None and kit.project.resolve() == kit.root.resolve():
         for env in kit.docs["Environment"].values():
             for w in env.spec.get("fs", {}).get("write", []):
@@ -246,4 +256,13 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
         out += lint_mode(md, kit)
     out += lint_roles(kit)
     out += lint_connectors(kit)
+    out += lint_rulesets(kit)
     return list(dict.fromkeys(out))
+
+
+def lint_rulesets(kit: model.Kit) -> list[str]:
+    """framework/rules/conformance.yaml: schema, unique ids, known checks (bay/improve/conformance.py)."""
+    if not (kit.root / "framework" / "rules").is_dir():
+        return []
+    from .improve import conformance
+    return conformance.lint(kit.root)

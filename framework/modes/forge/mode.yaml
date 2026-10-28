@@ -16,7 +16,7 @@ spec:
       playbook: features/create/playbook.md
       rules: features/create/rules.yaml
       agents: { builder: author }                 # user space only (env local-authoring)
-      review: { role: reviewer, when: always, model: sonnet, effort: medium }
+      review: { role: reviewer, when: always, model: sonnet, effort: medium, rulesets: [conformance] }
     extend:
       description: Change the framework - proposal, approval gate, implementation, review, release.
       workflow: extend
@@ -26,7 +26,7 @@ spec:
       playbook: features/extend/playbook.md
       rules: features/extend/rules.yaml
       agents: { builder: framework-builder }      # env framework-dev
-      review: { role: reviewer, when: always, model: opus, effort: high }
+      review: { role: reviewer, when: always, model: opus, effort: high, rulesets: [conformance] }
     migrate:
       description: Migrate user content to the current framework version; dry-run diff unless confirm is true.
       workflow: migrate

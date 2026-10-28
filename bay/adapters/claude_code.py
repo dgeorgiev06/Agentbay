@@ -316,7 +316,9 @@ class ClaudeCodeAdapter:
         for sub, r in sorted(placements.items()):
             fs = system.env(r.env).spec.get("fs", {})
             subs[sub] = {"role": r.name, "env": r.env, "shim": use_shim(r.name) if r.bay_uses else None,
-                         "clis": list(r.clis), "read": list(fs.get("read", ["."])),
+                         "clis": list(r.clis),
+                         # `~/...` or absolute read paths are for the env's connectors (e.g. transcripts), never roles
+                         "read": [x for x in fs.get("read", ["."]) if not x.startswith(("~", "/"))],
                          # roles without file-writing tools get no writable paths at all
                          "write": list(fs.get("write", [])) if WRITE_TOOLS & set(r.tools) else []}
         is_kit = project.resolve() == kit.resolve()

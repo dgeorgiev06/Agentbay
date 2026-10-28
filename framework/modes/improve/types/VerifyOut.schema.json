@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "required": [
+    "id",
+    "result"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "result": {
+      "enum": [
+        "verified",
+        "reopened",
+        "inconclusive",
+        "skipped",
+        "unknown"
+      ]
+    }
+  }
+}

@@ -17,9 +17,10 @@ from __future__ import annotations
 
 import json
 import secrets as _rand
+import time
 from pathlib import Path
 
-from . import checks, config as cfgmod, connect, ledger, model, vault
+from . import checks, config as cfgmod, connect, ledger, model, secretscan, vault
 from .util import duration, parse_time, read_json, utcnow, write_json
 
 VERDICT = "review.verdict/v1"
@@ -47,10 +48,11 @@ class Dispatcher:
             raise CallError(f"{target}: input does not match {feat.in_type or 'schema'}: " + "; ".join(errs))
         call_id = f"C-{self.clock():%Y%m%d}-{_rand.token_hex(3)}"
         state = {"callId": call_id, "target": target, "input": inp, "steps": {}, "cursor": 0,
-                 "status": "running", "checks": [], "cost": {"posts": 0, "usd": 0.0}}
+                 "status": "running", "checks": [], "cost": {"posts": 0, "usd": 0.0}, "t0": time.time()}
         return self._advance(mode, feat, state)
 
-    def submit(self, call_id: str, step_id: str, output) -> dict:
+    def submit(self, call_id: str, step_id: str, output, usage: dict | None = None) -> dict:
+        """`usage` (optional, from the runtime that ran the step): {tokens: {...}|int, costUsd, durationMs}."""
         state = self._load(call_id)
         mode, feat = self.sys.feature(state["target"])
         if state["status"] not in ("needs-agent", "awaiting-approval"):
@@ -62,6 +64,7 @@ class Dispatcher:
         if step.kind == "gate":
             raise CallError(f"step {step.id} is an approval gate; agents and `bay submit` cannot pass it. The user "
                             f"runs `.agentbay/bay approve {call_id}` (or `--reject`) in their own terminal")
+        base.update(_usage_fields(usage, state.get("plannedAt")))
         if step.kind == "review":
             self._accept_review(state, feat, step, output, base)
         else:
@@ -87,6 +90,7 @@ class Dispatcher:
             raise CallError(f"call {call_id} is {state['status']}, not awaiting approval")
         step = feat.steps[state["cursor"]]
         base = self._event_base(mode, feat, step, call_id)
+        base.update(_usage_fields(None, state.get("plannedAt")))
         if not approved:
             state["status"] = "blocked"
             state["result"] = {"reason": reason or "rejected at the approval gate"}
@@ -116,14 +120,32 @@ class Dispatcher:
             raise CallError(f"{target} has effects {effects}; agents may only call read-only endpoints")
         env = self.sys.env(r.env)
         conns = model.connectors_of(env.spec["bind"].get(iface))
-        if len(conns) != 1:
-            raise CallError(f"role {role}: {iface} is bound to {len(conns)} connectors in env {env.name} "
-                            f"({', '.join(conns) or 'none'}); `use` needs exactly one - bind one store connector")
-        out = self._invoke(env.name, conns[0], iface, ep, inp or {}, settings={}, caps={})
+        if not conns:
+            raise CallError(f"role {role}: {iface} is not bound to a connector in env {env.name}")
+        outs = {c: self._invoke(env.name, c, iface, ep, inp or {}, settings={}, caps={}) for c in conns}
+        out = outs[conns[0]] if len(conns) == 1 else merge_outputs(outs)
         n = len(out.get("posts", [])) if isinstance(out, dict) else None
         ledger.append(self.project, "data.read", f"use:{role}", source="dispatcher", role=role, env=env.name,
                       summary=target, data={"input": inp or {}, **({"items": n} if n is not None else {})})
-        return out
+        return secretscan.scrub_obj(json.loads(vault.redact(json.dumps(out, ensure_ascii=False))))
+
+    def run_capability(self, mode_name: str, run: str, args: dict) -> dict:
+        """Run one connector endpoint of a mode's capability outside any workflow, in the env its code steps use.
+        CLI only (e.g. `bay improve decide`); there is no agent path to it."""
+        if mode_name not in self.sys.modes:
+            raise CallError(f"unknown mode '{mode_name}'")
+        m = self.sys.modes[mode_name]
+        iface, ep = run.rsplit(".", 1)
+        if iface not in m.needs:
+            raise CallError(f"mode {mode_name} does not need {iface}")
+        env, why = model.code_env(self.sys.kit, self.sys.kit.get("Mode", mode_name), iface, self.sys.roles)
+        conns = model.connectors_of(env.spec["bind"].get(iface)) if env else []
+        if len(conns) != 1:
+            raise CallError(f"{run}: {why} must bind exactly one connector for {iface}")
+        bad = [e for e in model.endpoint_effects(self.sys.kit, iface, ep) if e not in env.spec["effects"]]
+        if bad:
+            raise CallError(f"{run}: effects {bad} are not allowed by env {env.name}")
+        return self._invoke(env.name, conns[0], iface, ep, args, settings=self._settings(m), caps={})
 
     # ------------------------------------------------------------ engine
     def _advance(self, mode, feat, state) -> dict:
@@ -146,6 +168,7 @@ class Dispatcher:
             state["status"] = "awaiting-approval" if step.kind == "gate" else "needs-agent"
             plan = self._plan(mode, feat, step, state)
             state["plan"] = plan
+            state["plannedAt"] = time.time()
             self._ledger("step.planned", base, summary=f"{step.kind} {step.role or step.id}")
             self._save(state)
             return self._public(state)
@@ -182,11 +205,12 @@ class Dispatcher:
         iface, ep = step.run.rsplit(".", 1)
         caps = cfgmod.caps(mode.constraints, env.spec.get("limits", {}), mode.config)
         self._ledger("step.started", base, summary=step.run)
+        t0 = time.monotonic()
         try:
             out = self._invoke(step.env, step.connector, iface, ep, args, settings=self._settings(mode), caps=caps)
         except Exception as e:  # report, never leak
             msg = vault.redact(str(e))
-            self._ledger("step.failed", base, summary=msg)
+            self._ledger("step.failed", base, summary=msg, durationMs=_ms(t0))
             state["status"] = "failed"
             state["result"] = {"error": f"step {step.id} ({step.run}): {msg}"}
             return
@@ -204,7 +228,8 @@ class Dispatcher:
                 state["result"] = {"reason": out["stopped"]}
         state["steps"][step.id] = out
         summary = (out.get("stopped") or "ok") if isinstance(out, dict) else "ok"
-        self._ledger("step.completed", base, summary=summary, cost=cost)
+        self._ledger("step.completed", base, summary=summary, cost=cost, durationMs=_ms(t0),
+                     costUsd=cost.get("usd") if cost else None)
 
     def _invoke(self, env_name, conn_name, iface, ep, args, *, settings, caps):
         idoc = self.sys.interface(iface)
@@ -277,7 +302,8 @@ class Dispatcher:
     # ------------------------------------------------------------ plans & output
     def _plan(self, mode, feat, step, state) -> dict:
         role = step.resolved   # the role as placed for this endpoint (agent override applied)
-        submit = f".agentbay/bay submit {state['callId']} {step.id} '<json>'"
+        submit = (f".agentbay/bay submit {state['callId']} {step.id} '<json>' "
+                  f"--usage '{{\"tokens\": <total tokens>, \"costUsd\": <usd>, \"durationMs\": <ms>}}'")
         plan = {"step": step.id, "kind": step.kind}
         if step.kind != "gate":                     # gates are never submitted, only approved by the user
             plan["submit"] = submit
@@ -299,6 +325,9 @@ class Dispatcher:
                 "output": self._endpoint_output(feat, state),
                 "verdictSchema": VERDICT,
             }
+            for name in (feat.review or {}).get("rulesets", []):
+                # framework rule sets (e.g. conformance): judged with the DoD; cite their ids in evidence
+                plan["review"].setdefault("rulesets", {})[name] = model.ruleset(self.sys.kit.root, name)
             return plan
         plan.update({
             "task": step.task or f"Do step '{step.id}' of {state['target']}",
@@ -325,7 +354,9 @@ class Dispatcher:
         ledger.append(self.project, "call.completed", state["callId"], source="dispatcher", callId=state["callId"],
                       mode=mode.name, endpoint=feat.name, cost=state["cost"],
                       summary=state.get("stopped") or (state.get("result") or {}).get("error") or state["status"],
-                      data={"status": state["status"]})
+                      data={"status": state["status"]},
+                      durationMs=int((time.time() - state["t0"]) * 1000) if state.get("t0") else None,
+                      costUsd=state["cost"].get("usd") or None)
         self._save(state)
         return self._public(state)
 
@@ -345,14 +376,15 @@ class Dispatcher:
             if state.get("review"):
                 out["review"] = state["review"]
             out["cost"] = state["cost"]
-        return json.loads(vault.redact(json.dumps(out, ensure_ascii=False)))
+        return secretscan.scrub_obj(json.loads(vault.redact(json.dumps(out, ensure_ascii=False))))
 
     # ------------------------------------------------------------ persistence & ledger
     def _calls_dir(self) -> Path:
         return self.project / ".agentbay" / "calls"
 
     def _save(self, state) -> None:
-        write_json(self._calls_dir() / f"{state['callId']}.json", json.loads(vault.redact(json.dumps(state))))
+        write_json(self._calls_dir() / f"{state['callId']}.json",
+                   secretscan.scrub_obj(json.loads(vault.redact(json.dumps(state)))))
 
     def _load(self, call_id: str) -> dict:
         st = read_json(self._calls_dir() / f"{call_id}.json")
@@ -368,6 +400,42 @@ class Dispatcher:
         b = dict(base)
         rid = b.pop("run_id")
         ledger.append(self.project, etype, rid, source="dispatcher", **b, **fields)
+
+
+def _ms(t0: float) -> int:
+    return max(0, int((time.monotonic() - t0) * 1000))
+
+
+def _usage_fields(usage: dict | None, planned_at: float | None) -> dict:
+    """Ledger fields for an agentic step: wall time since it was planned, plus what the runtime reported."""
+    out: dict = {}
+    u = usage or {}
+    if u.get("durationMs") is not None:
+        out["durationMs"] = max(0, int(u["durationMs"]))
+    elif planned_at:
+        out["durationMs"] = max(0, int((time.time() - planned_at) * 1000))
+    tok = u.get("tokens")
+    if isinstance(tok, int):
+        out["tokens"] = {"total": max(0, tok)}
+    elif isinstance(tok, dict):
+        out["tokens"] = {k: int(v) for k, v in tok.items()
+                         if k in ("input", "output", "cacheRead", "cacheCreation", "total") and isinstance(v, (int, float))}
+    if isinstance(u.get("costUsd"), (int, float)):
+        out["costUsd"] = round(float(u["costUsd"]), 6)
+    return out
+
+
+def merge_outputs(outs: dict[str, dict]) -> dict:
+    """Several connectors behind one read endpoint (e.g. session.events/v1 from ledger, transcripts and git):
+    list fields are concatenated; every other field is kept per connector."""
+    merged: dict = {}
+    for name, out in outs.items():
+        for k, v in (out or {}).items():
+            if isinstance(v, list):
+                merged.setdefault(k, []).extend(v)
+            else:
+                merged.setdefault(k, {})[name] = v
+    return merged
 
 
 def use_shim(role: str) -> str:

@@ -75,6 +75,15 @@ def data_schema(ref: str) -> dict:
     return json.loads(p.read_text())
 
 
+def ruleset(kit: Path, name: str) -> list[dict]:
+    """framework/rules/<name>.yaml rules (e.g. conformance), for reviewer plans."""
+    p = kit / "framework" / "rules" / f"{name}.yaml"
+    if not p.exists():
+        raise SpecError(f"unknown rule set '{name}' (expected {rel(p)})")
+    doc = load_yaml(p) or {}
+    return [{k: r[k] for k in ("id", "level", "statement", "check") if k in r} for r in doc.get("rules") or []]
+
+
 def inline_refs(s):
     """Replace {"$ref": "feed.post/v1"} with the data schema, recursively."""
     if isinstance(s, dict):

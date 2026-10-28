@@ -1,0 +1,13 @@
+apiVersion: agentbay/v2
+kind: Connector
+metadata:
+  name: improve-detect
+  description: >-
+    improve.detect/v1: reads the bound session, verdict and artifact sources and runs improve's deterministic
+    detectors (bay/improve/pipeline.py). Read-only; findings are stored by improve-store.
+  version: 0.1.0
+spec:
+  implements: improve.detect/v1
+  entry: improve_detect.py
+  needs:
+    capabilities: [session.events/v1, review.verdicts/v1, artifacts.read/v1]

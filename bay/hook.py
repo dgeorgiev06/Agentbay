@@ -46,7 +46,8 @@ def handle(phase: str, payload: dict) -> None:
                       summary=ti.get("description", ""))
         return
 
-    text = _text(payload.get("tool_response"))
+    resp = payload.get("tool_response")
+    text = _text(resp)
     blocks = protocol.parse_blocks(text.replace("\\n", "\n"))
     res = blocks.get("result", {})
     status = res.get("status", "unknown").split()[0] if res else "unknown"
@@ -54,7 +55,26 @@ def handle(phase: str, payload: dict) -> None:
     ledger.append(project, etype, run_id, agent=agent, taskId=task_id or res.get("taskId"),
                   sessionId=payload.get("session_id"), source="hook",
                   summary=res.get("summary") or ti.get("description", ""),
-                  data={"status": status})
+                  data={"status": status}, **usage(resp))
+
+
+def usage(resp) -> dict:
+    """durationMs / tokens the runtime reports for an Agent run, read defensively (shape is not a stable API)."""
+    if not isinstance(resp, dict):
+        return {}
+    out: dict = {}
+    if isinstance(resp.get("totalDurationMs"), (int, float)):
+        out["durationMs"] = int(resp["totalDurationMs"])
+    u = resp.get("usage") if isinstance(resp.get("usage"), dict) else {}
+    tok = {k: int(u[src]) for k, src in (("input", "input_tokens"), ("output", "output_tokens"),
+                                         ("cacheRead", "cache_read_input_tokens"),
+                                         ("cacheCreation", "cache_creation_input_tokens"))
+           if isinstance(u.get(src), (int, float))}
+    if isinstance(resp.get("totalTokens"), (int, float)):
+        tok["total"] = int(resp["totalTokens"])
+    if tok:
+        out["tokens"] = tok
+    return out
 
 
 def main() -> int:

@@ -1,0 +1,205 @@
+apiVersion: agentbay/v2
+kind: Interface
+metadata:
+  name: improve.findings
+  description: >-
+    The improve store (improve.finding/v1 in .agentbay/data/improve/findings.jsonl, deduplicated by fingerprint),
+    weekly reports and handoff drafts. Storage only: candidates come from improve.detect/v1. Never modifies
+    artifacts outside its data folder.
+spec:
+  version: 1
+  binding: connector
+  endpoints:
+    upsert:
+      description: Store candidates (dedup by fingerprint, merge evidence, reopen fixed/verified findings that recur); prune closed findings past retention.
+      in:
+        type: object
+        required: [by]
+        additionalProperties: false
+        properties:
+          candidates: { type: array, items: { type: object } }
+          by: { type: string, description: "who produced the candidates (improve.scan, improve.audit, improve-analyst, auditor)" }
+          rejected: { type: array, description: "echoed in the output (findings improve.detect/v1.resolve refused)" }
+          detected: { type: array, items: { type: string }, description: "ids an earlier step of the call stored; included in summary" }
+      out:
+        type: object
+        required: [findings, new, merged, reopened, summary]
+        additionalProperties: false
+        properties:
+          findings: { type: array, items: { type: string } }
+          new: { type: array, items: { type: string } }
+          merged: { type: array, items: { type: string } }
+          reopened: { type: array, items: { type: string } }
+          rejected: { type: array }
+          summary: { type: array, items: { type: object } }
+          pruned: { type: integer }
+      effects: [write]
+    annotate:
+      description: Store triage annotations (root cause, proposed fix, route, effort, impact) on open findings; others are refused.
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          annotations:
+            type: array
+            items:
+              type: object
+              required: [id]
+              additionalProperties: false
+              properties:
+                id: { type: string }
+                rootCause: { type: string, maxLength: 800 }
+                proposedFix: { type: string, maxLength: 800 }
+                route: { enum: [forge.extend, mode-fix, config, none] }
+                effort: { type: integer, minimum: 1, maximum: 5 }
+                impact: { type: integer, minimum: 1, maximum: 5 }
+                costEstimate: { type: object }
+                evidenceChecked: { type: array, items: { type: string }, description: "refs the analyst confirmed (the reviewer checks them)" }
+      out:
+        type: object
+        required: [annotated, missing, refused]
+        additionalProperties: false
+        properties:
+          annotated: { type: array, items: { type: string } }
+          missing: { type: array }
+          refused: { type: array }
+          summary: { type: array, items: { type: object } }
+      effects: [write]
+    query:
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          status: { oneOf: [ { type: string }, { type: array, items: { type: string } } ] }
+          lens: { enum: [sessions, artifacts] }
+          kind: { type: string }
+          ids: { type: array, items: { type: string } }
+          limit: { type: integer, minimum: 1, maximum: 500 }
+      out:
+        type: object
+        required: [findings]
+        additionalProperties: false
+        properties:
+          findings: { type: array, items: { $ref: improve.finding/v1 } }
+      effects: [read]
+    get:
+      in:
+        type: object
+        required: [id]
+        additionalProperties: false
+        properties:
+          id: { type: string }
+      out:
+        type: object
+        required: [finding]
+        additionalProperties: false
+        properties:
+          finding: { $ref: improve.finding/v1 }
+      effects: [read]
+    triage:
+      description: Link findings of different lenses that point at the same file; priority = impact x frequency / effort; return the top open findings.
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          top: { type: integer, minimum: 1, maximum: 50 }
+      out:
+        type: object
+        required: [findings, links, ranked]
+        additionalProperties: false
+        properties:
+          findings: { type: integer }
+          links: { type: array }
+          ranked: { type: array }
+          top: { type: array, items: { $ref: improve.finding/v1 } }
+      effects: [write]
+    decide:
+      description: Record a human decision. Reached only from `bay improve decide` (approve needs an interactive terminal); no workflow step calls it.
+      in:
+        type: object
+        required: [id, decision, by]
+        additionalProperties: false
+        properties:
+          id: { type: string }
+          decision: { enum: [approve, defer, wontfix] }
+          by: { type: string }
+          note: { type: string, maxLength: 300 }
+      out: { $ref: improve.finding/v1 }
+      effects: [write]
+    backlog:
+      description: Write the weekly report .agentbay/data/improve/reports/<isoweek>.md (top items with evidence and proposed fixes).
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          top: { type: integer, minimum: 1, maximum: 100 }
+          week: { type: string, pattern: "^[0-9]{4}-W[0-9]{2}$" }
+      out:
+        type: object
+        required: [report, week, items]
+        additionalProperties: false
+        properties:
+          report: { type: string }
+          week: { type: string }
+          items: { type: array, items: { type: string } }
+          counts: { type: object }
+      effects: [write]
+    claim:
+      description: The finding, if a human approved it; otherwise `stopped` says why (the call ends blocked).
+      in:
+        type: object
+        required: [id]
+        additionalProperties: false
+        properties:
+          id: { type: string }
+      out:
+        type: object
+        additionalProperties: false
+        properties:
+          finding: { $ref: improve.finding/v1 }
+          stopped: { type: string }
+      effects: [read]
+    handoff:
+      description: >-
+        For an approved finding, write the reviewed draft as a forge.extend proposal draft or a mode-fix task
+        envelope under .agentbay/data/improve/handoffs/ and mark the finding in-progress. Edits no code.
+      in:
+        type: object
+        required: [id, draft]
+        additionalProperties: false
+        properties:
+          id: { type: string }
+          draft: { type: object }
+      out:
+        type: object
+        additionalProperties: false
+        properties:
+          id: { type: string }
+          route: { type: [string, "null"] }
+          draft: { type: string }
+          next: { type: object }
+          stopped: { type: string }
+          finding: { type: object }
+      effects: [write]
+    verify:
+      description: Apply a re-check (from improve.detect/v1.recheck) - verified if the pattern is gone on new data, reopened if not, inconclusive without new data or without a detector.
+      in:
+        type: object
+        required: [id]
+        additionalProperties: false
+        properties:
+          id: { type: string }
+          present: { type: [boolean, "null"] }
+          newData: { type: integer, minimum: 0 }
+          note: { type: string }
+      out:
+        type: object
+        required: [id, result]
+        additionalProperties: false
+        properties:
+          id: { type: string }
+          result: { enum: [verified, reopened, inconclusive, skipped, unknown] }
+          status: { type: [string, "null"] }
+          note: { type: string }
+          newData: { type: integer }
+      effects: [read, write]

@@ -130,6 +130,15 @@
                       "medium",
                       "high"
                     ]
+                  },
+                  "rulesets": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9-]*$"
+                    },
+                    "description": "Framework rule sets (framework/rules/<name>.yaml, e.g. conformance) added to the reviewer's plan next to the feature's DoD and rules."
                   }
                 },
                 "if": {

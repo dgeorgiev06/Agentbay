@@ -376,6 +376,24 @@ class Guard:
         return False
 
 
+def record_denial(project: Path, payload: dict, reason: str) -> None:
+    """permission.denied ledger event (tool, agent, reason; never the command). Never raises: the decision
+    stands regardless; a failure is appended to .agentbay/ledger/hook-errors.log."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from bay import ledger, secretscan
+        reason = secretscan.scrub(reason or "denied")[:300]      # scrub first, then cut
+        ledger.append(project, "permission.denied", payload.get("agent_id") or payload.get("session_id") or "guard",
+                      source="guard", agent=payload.get("agent_type"), sessionId=payload.get("session_id"),
+                      tool=payload.get("tool_name"), reason=reason)
+    except Exception as e:  # the guard's decision must not depend on the ledger
+        try:
+            with open(project / ".agentbay" / "ledger" / "hook-errors.log", "a") as f:
+                f.write(f"guard: permission.denied not recorded ({type(e).__name__})\n")
+        except OSError:
+            pass
+
+
 def _emit(decision: str, reason: str) -> None:
     out = {"hookEventName": "PreToolUse", "permissionDecision": decision}
     if reason:
@@ -394,6 +412,7 @@ def main() -> int:
         policy = json.loads((project / POLICY).read_text())
         decision, reason = Guard(policy, project).decide(payload)
         if decision == "deny":
+            record_denial(project, payload, reason)
             print(reason, file=sys.stderr)
             _emit("deny", reason)
             return 2

@@ -18,7 +18,10 @@ give the user a crisp picture of what is happening.
      (mint the id with `.agentbay/bay task new`) and includes the plan's task,
      playbook, rules, definition of done and inputs. `runAs: main-thread playbook`
      -> do it yourself following that mode's coordinator playbook.
-     Then submit the JSON output: `.agentbay/bay submit <callId> <stepId> '<json>'`.
+     Then submit the JSON output with what the run cost, from the Agent tool result (total tokens,
+     duration) when it reports them: `.agentbay/bay submit <callId> <stepId> '<json>' --usage
+     '{"tokens": <n>, "costUsd": <usd>, "durationMs": <ms>}'` (omit fields you do not know). improve reads
+     these from the ledger to find slow and costly steps.
    - `awaiting-approval`: show the user what is being approved and ask them to run
      `.agentbay/bay approve <callId>` (or `--reject`) in their own terminal; you cannot
      pass a gate. Afterwards `.agentbay/bay show <callId>` gives you the next step.

@@ -1,0 +1,11 @@
+apiVersion: agentbay/v2
+kind: Connector
+metadata:
+  name: ledger
+  description: agentbay's own records as session episodes (dispatcher calls, agent runs, guard decisions, instruction-change notes) and review verdicts (from call state). Read-only.
+  version: 0.1.0
+spec:
+  implements: [session.events/v1, review.verdicts/v1]
+  entry: ledger.py
+  needs:
+    fs: { read: [.agentbay/ledger, .agentbay/calls] }

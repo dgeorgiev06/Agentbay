@@ -1,0 +1,88 @@
+apiVersion: agentbay/v2
+kind: Interface
+metadata:
+  name: artifacts.read
+  description: >-
+    Read the project's (or the kit's) files and the reference graph: agentbay concepts (modes, endpoints, roles,
+    agents, envs, connectors, interfaces, schemas, types, skills, config keys) and Python modules/definitions,
+    each with how often it is referenced.
+spec:
+  version: 1
+  binding: connector
+  endpoints:
+    files:
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          root: { enum: [project, kit], default: project }
+      out:
+        type: object
+        required: [root, files]
+        additionalProperties: false
+        properties:
+          root: { enum: [project, kit] }
+          files:
+            type: array
+            items:
+              type: object
+              required: [path, kind, size]
+              additionalProperties: false
+              properties:
+                path: { type: string }
+                kind: { type: string }
+                size: { type: integer }
+                lines: { type: integer }
+      effects: [read]
+    graph:
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          root: { enum: [project, kit], default: project }
+      out:
+        type: object
+        required: [root, nodes, edges]
+        additionalProperties: false
+        properties:
+          root: { enum: [project, kit] }
+          nodes:
+            type: array
+            items:
+              type: object
+              required: [id, kind, name, refs]
+              properties:
+                id: { type: string }
+                kind: { type: string }
+                name: { type: string }
+                path: { type: string }
+                line: { type: integer }
+                refs: { type: integer, description: "graph edges + code/config mentions + AST name uses pointing here" }
+          edges:
+            type: array
+            items:
+              type: object
+              required: [from, to, kind]
+              properties:
+                from: { type: string }
+                to: { type: string }
+                kind: { type: string }
+      effects: [read]
+    text:
+      description: One text file under the root. Control-plane and secret files (.agentbay/, .claude/, .git/, .env*) are refused; output is secret-scanned.
+      in:
+        type: object
+        required: [path]
+        additionalProperties: false
+        properties:
+          path: { type: string }
+          root: { enum: [project, kit], default: project }
+      out:
+        type: object
+        required: [path, text]
+        additionalProperties: false
+        properties:
+          path: { type: string }
+          text: { type: string }
+          lines: { type: integer }
+      effects: [read]

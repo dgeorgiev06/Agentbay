@@ -163,3 +163,25 @@ def test_wildcard_from_on_x_reads_the_home_timeline_and_validate_warns():
     assert r["status"] == "done" and r["output"]["added"] == 1, r
     assert not any("/users/by/username/" in q["path"] for q in http.log)
     assert {q["path"] for q in http.log if q["method"] == "GET"} == {"/2/users/42/timelines/reverse_chronological"}
+
+
+def test_x_from_combined_with_in_on_a_paid_source_warns_in_validate():
+    """x-api fetches `from` natively (user timeline) only without `in`; together it reads the `in` stream and
+    matches `from` locally (capability `localWith: [in]`), so every post of that stream is billed."""
+    caps = {"from": {"mode": "native", "localWith": ["in"]}, "in": "native", "since": "native"}
+    _, warns = sel.check([{"id": "a", "from": "vitalik", "in": "list:9"}], caps, connector="x-api", paid=True,
+                         where="here")
+    assert len(warns) == 1 and "combines `from` with `in`" in warns[0] and "billed" in warns[0]
+    assert "Split it into two selectors" in warns[0]
+    assert sel.check([{"id": "a", "from": "vitalik"}], caps, connector="x-api", paid=True, where="here") == ([], [])
+    assert sel.check([{"id": "a", "from": "v", "in": "home"}], caps, connector="fake", paid=False,
+                     where="here") == ([], [])                                      # free source: no warning
+    p = project({"modes": {"feed-briefing": {"selectors": [{"id": "s", "from": "vitalik", "in": "list:9"}]}}},
+                source="x-api")
+    s = system(p)
+    assert any("selector 's' combines `from` with `in`" in w and "x-api" in w for w in s.warnings), s.warnings
+    r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "validate"],
+                       capture_output=True, text=True)
+    assert r.returncode == 0 and "combines `from` with `in`" in r.stdout
+    offline = project({"modes": {"feed-briefing": {"selectors": [{"id": "s", "from": "vitalik", "in": "home"}]}}})
+    assert system(offline).warnings == []

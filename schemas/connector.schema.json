@@ -165,6 +165,21 @@
                   },
                   "as": {
                     "type": "string"
+                  },
+                  "localWith": {
+                    "type": "array",
+                    "items": {
+                      "enum": [
+                        "from",
+                        "to",
+                        "subject",
+                        "text",
+                        "in",
+                        "has"
+                      ]
+                    },
+                    "minItems": 1,
+                    "description": "Native fields only: the source matches this field locally when the same selector also sets one of these fields (x-api: `from` together with `in`). Validate warns on a paid source."
                   }
                 }
               }

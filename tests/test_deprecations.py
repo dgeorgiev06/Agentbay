@@ -151,10 +151,26 @@ def test_connector_on_the_old_fetch_signature_needs_a_hand_port():
     (c / "connector.yaml").write_text("apiVersion: agentbay/v2\nkind: Connector\nmetadata: { name: bsky, description: "
                                       "Bluesky. }\nspec: { implements: feed.source/v1, entry: bsky.py, source: bsky, "
                                       "window: 7d }\n")
+    # unbound: a warning, and the rest of the kit still validates and builds
+    kit = model.Kit(k)
+    assert lint.run(kit=kit) == []
+    msg = next(w for w in lint.warnings(kit) if "connectors/bsky/connector.yaml" in w and "hand port" in w)
+    assert "fetch(sinceId, startTime, maxPosts, checkIds) is the v0.2 signature" in msg and "No env binds it" in msg
+    assert "fetch(query, since, cursor, maxItems, checkIds)" in msg and "connectors/fake/fake.py" in msg
+    model.resolve(kit)
+    r = subprocess.run([str(k / "bay.sh"), "validate"], capture_output=True, text=True)
+    assert r.returncode == 0 and "! connectors/bsky/connector.yaml" in r.stdout, r.stdout + r.stderr
+    proj = project()
+    r = subprocess.run([str(k / "bay.sh"), "build", "--project", str(proj)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    # bound: an error naming the env, since a sync would run the old code
+    env = (k / "envs/my-env.yaml").read_text()
+    (k / "envs/my-env.yaml").write_text(env.replace("feed.source/v1: [fake]", "feed.source/v1: [fake, bsky]"))
     ps = lint.run(k)
     msg = next(p for p in ps if "connectors/bsky/connector.yaml" in p and "hand port" in p)
-    assert "fetch(sinceId, startTime, maxPosts, checkIds) is the v0.2 signature" in msg
-    assert "fetch(query, since, cursor, maxItems, checkIds)" in msg and "connectors/fake/fake.py" in msg
+    assert "It is bound in env my-env." in msg
+    r = subprocess.run([str(k / "bay.sh"), "validate"], capture_output=True, text=True)
+    assert r.returncode == 1 and "bound in env my-env" in r.stdout
     plan = migrate.plan(k)
     assert any("connectors/bsky/connector.yaml: connector implements a v0.2 feed interface" in n for n in plan["notes"])
     assert any(c["path"] == "connectors/bsky/connector.yaml" for c in plan["changes"])

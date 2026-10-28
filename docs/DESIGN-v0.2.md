@@ -447,8 +447,9 @@ are not part of this amendment.
   `bay lint` and `bay validate` warn on each file ("deprecated ...; run `bay migrate`"). A mode that needs
   items.source/v1 without a selectors setting keeps each source's default stream (`[{id: home}]`).
   `bay migrate` 0.3.0 (`_v02_names`) rewrites the YAML/JSON/Markdown user files with the same table: dry run
-  first, `--confirm` to apply. A user connector still implementing a feed interface is a load error that
-  names its old fetch signature and the new contract: code is ported by hand, never rewritten.
+  first, `--confirm` to apply. A user connector still implementing a feed interface names its old fetch
+  signature and the new contract: code is ported by hand, never rewritten. It is a load error when an env
+  binds it and a warning when none does (the connector is skipped), so one leftover file never stops the kit.
 - **Data migration** (bay/migrate.py `DATA_MIGRATIONS`, version 0.3.0): `bay migrate --project <repo>`,
   run by the user, converts a v0.2 `posts.jsonl` + `state.json` to `<dir>/feed-briefing/corpus.db`. It is the
   only path for user data: forge.migrate migrates kit content only, and neither the migrator connector nor

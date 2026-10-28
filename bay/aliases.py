@@ -4,7 +4,8 @@ v0.3 replaced the feed contracts with the shared briefing layer. User content wr
 the old names resolve to the new ones when the kit is loaded, and `bay lint` / `bay validate` warn on every
 file that uses one. `bay migrate` (dry run; `--confirm` to apply) rewrites the files for good, using the same
 table (`rewrite_text`). Connector *code* cannot be rewritten: a connector still implementing the old
-feed.source/v1 or feed.store/v1 is a load error that says how to port it by hand.
+feed.source/v1 or feed.store/v1 says how to port it by hand. That is a load error when an env binds it, and
+a warning (the connector is skipped) when none does, so one leftover file does not stop the kit.
 
     feed.source/v1          -> items.source/v1
     feed.store/v1[.<ep>]    -> items.store/v1[.<ep>]   (sync input maxPosts -> maxItems)
@@ -62,13 +63,18 @@ def apply(kit) -> list[str]:
     names.update({old: new for old, new in CONNECTORS.items() if old not in kit.docs["Connector"]})
     warnings: list[str] = []
     for kind in ("Mode", "Role", "Environment", "Connector"):
-        for d in kit.docs[kind].values():
+        for d in list(kit.docs[kind].values()):
             if d.root != "user":
                 continue
             if kind == "Connector":
                 err = old_connector(d)
                 if err:
-                    kit.errors.append(err)
+                    binders = _binders(kit, d.name)
+                    if binders:                      # an env would run it: the kit cannot work until it is ported
+                        kit.errors.append(f"{err} It is bound in env {', '.join(binders)}.")
+                    else:                            # nothing runs it: the rest of the kit still builds
+                        warnings.append(f"{err} No env binds it, so it is skipped until it is ported.")
+                        del kit.docs[kind][d.name]
                     continue
             r = Resolver(names if kind in ("Mode", "Environment") else {})
             d.spec = r.value(d.spec)
@@ -82,6 +88,17 @@ def apply(kit) -> list[str]:
             for old, new in sorted(r.used.items()):
                 warnings.append(f"{d.rel}: `{old}` is deprecated (v0.2) and now resolves to `{new}`; {HINT}")
     return warnings
+
+
+def _binders(kit, name: str) -> list[str]:
+    """Envs (after alias resolution) that bind connector `name` to any capability."""
+    out = []
+    for env in kit.docs["Environment"].values():
+        for b in (env.spec.get("bind") or {}).values():
+            if name in ([b] if isinstance(b, str) else list(b or [])):
+                out.append(env.name)
+                break
+    return sorted(out)
 
 
 def old_connector(d) -> str | None:

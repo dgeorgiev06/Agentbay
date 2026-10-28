@@ -193,7 +193,8 @@ An endpoint review block may name framework rule sets: `review: { ..., rulesets:
   state are reported as file:line with the fix.
 - **Deprecated v0.2 names** (0.3.x only, `bay/aliases.py`): feed.source/v1, feed.store/v1, feed.post/v1,
   feed.coverage/v1, feed-analyst, feed-lead and local-store resolve to the v0.3 names with a lint warning.
-  `bay migrate` rewrites them. Old connector code is a load error asking for a hand port.
+  `bay migrate` rewrites them. Old connector code needs a hand port: a load error when an env binds the
+  connector, a warning (connector skipped) when none does.
 
 ## Extension recipes
 - **New source** -> `bay connector new bsky --implements items.source/v1` (template sets `source`, `window` and a

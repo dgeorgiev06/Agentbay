@@ -101,7 +101,9 @@ Your own v0.2 modes, roles, envs and connectors keep working in 0.3.x. Their old
 ones: `feed.source/v1` and `feed.store/v1` become `items.*`, `feed-analyst` and `feed-lead` become
 `briefing-*`, and `local-store` becomes `corpus-store`. `bay lint` warns about each such file. `./bay.sh migrate`
 (then `--confirm`) rewrites those files. A connector you wrote against the old `fetch(sinceId, startTime,
-maxPosts, checkIds)` cannot be rewritten automatically; `bay lint` says how to port it.
+maxPosts, checkIds)` cannot be rewritten automatically. If an env binds it, `bay lint`, `validate` and `build`
+fail and say how to port it. If no env binds it, it is only a warning: the connector is skipped and the rest
+of the kit builds.
 
 ### Real X timeline
 

@@ -704,6 +704,7 @@ def resolve(kit: Kit) -> System:
         m = resolve_mode(kit, md, roles, gaps, seen_conn, warnings)
         if m:
             modes[mname] = m
+    _check_shared_store_readers(modes, roles, gaps)
     if gaps:
         raise ResolveError(list(dict.fromkeys(gaps)))
     return System(kit, modes, roles, warnings=list(dict.fromkeys(warnings)))
@@ -833,6 +834,21 @@ def resolve_mode(kit: Kit, md: Doc, roles: dict[str, ResolvedRole], gaps: list[s
 
 SOURCE_IFACE = "items.source/v1"
 STORE_IFACE = "items.store/v1"
+
+
+def _check_shared_store_readers(modes: dict, roles: dict, gaps: list[str]) -> None:
+    """Each mode needing items.store/v1 keeps its own store, and a role's use-shim read reaches the one mode of
+    that role that needs it. A role listed by several such modes (two modes extending briefing, say) would
+    resolve but fail every read at runtime, so it is a gap now."""
+    for r in roles.values():
+        if not any(u.startswith(STORE_IFACE + ".") for u in r.bay_uses):
+            continue
+        ms = sorted(m.name for m in modes.values() if r.name in m.roles and STORE_IFACE in m.needs)
+        if len(ms) > 1:
+            gaps.append(f"role {r.name} reads {STORE_IFACE} for several modes ({', '.join(ms)}), but each of them "
+                        f"keeps its own store and a role's reads reach one store only, so every read by {r.name} "
+                        f"would fail. Keep one of these modes for now (per-mode role placement comes in step 3 of "
+                        f"docs/proposals/0003-briefing-sources.md), or give the others their own reader roles")
 
 
 def _check_selectors(kit: Kit, md: Doc, mcfg: dict, roles, gaps: list[str], warnings: list[str]) -> None:

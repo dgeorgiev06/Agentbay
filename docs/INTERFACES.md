@@ -201,6 +201,8 @@ An endpoint review block may name framework rule sets: `review: { ..., rulesets:
   `selectors` table, which lint requires), implement `fetch`, then in the env add `bsky` to the `items.source/v1`
   binding and its host/secret names to `network.allow`/`secrets.allow`. Modes, roles and playbooks are untouched.
 - **New kind of briefing** -> a mode with `extends: briefing` (purpose, constraints, config defaults, overrides).
+  Until per-mode role placement (proposal 0003 step 3), only one installed mode may list a role that reads
+  items.store/v1: a second briefing mode fails `bay validate` with the mode names unless it brings its own roles.
 - **New feature** -> `bay feature new weekly --mode feed-briefing --effects read`, fill the playbook and rules, `bay lint`.
 - **New mode / role / env** -> `bay mode new <name>` / `bay role new <name>` / `bay env new <name>`, or `bay call forge.create`.
 - **New runtime** -> implement `Adapter`, register it, `./bay.sh build --runtime <name>`. Modes do not change.

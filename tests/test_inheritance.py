@@ -13,6 +13,10 @@ def problems(k):
 
 
 def child(k, name="mail-briefing", spec=None):
+    """A second mode extending briefing. It replaces feed-briefing: until per-mode role placement (proposal
+    0003 step 3) two such modes would share briefing-analyst, which validate refuses (see the last test)."""
+    import shutil
+    shutil.rmtree(k / "modes/feed-briefing", ignore_errors=True)
     d = k / "modes" / name
     d.mkdir(parents=True)
     doc = {"apiVersion": "agentbay/v2", "kind": "Mode", "metadata": {"name": name, "version": "0.1.0"},
@@ -115,3 +119,21 @@ def test_abstract_base_is_linted_not_installed():
     ps = problems(k)
     assert any("modes/briefing/features/digest/playbook.md" in p for p in ps)        # still linted
     assert not any("briefing.prune declares schedule" in w and "feed" not in w for w in lint.warnings(model.Kit(k)))
+
+
+def test_a_second_briefing_mode_fails_validate_naming_the_modes_and_step_3():
+    """Two modes extending briefing share briefing-analyst; each keeps its own store and a role's read reaches
+    one, so every analyst read would fail at runtime (dispatch: "reads items.store/v1 for several modes").
+    validate says so up front instead."""
+    import subprocess
+    k = kit_copy()
+    d = k / "modes/news-briefing"
+    d.mkdir()
+    (d / "mode.yaml").write_text("apiVersion: agentbay/v2\nkind: Mode\nmetadata: { name: news-briefing, version: "
+                                 "0.1.0, description: News. }\nspec:\n  extends: briefing\n  purpose: Brief me on "
+                                 "the news.\n")
+    g = assert_gap(k, "role briefing-analyst reads items.store/v1 for several modes (feed-briefing, news-briefing)")
+    assert "step 3 of docs/proposals/0003-briefing-sources.md" in g and "own reader roles" in g
+    assert_gap(k, "role briefing-lead reads items.store/v1 for several modes")
+    r = subprocess.run([str(k / "bay.sh"), "validate"], capture_output=True, text=True)
+    assert r.returncode != 0 and "several modes (feed-briefing, news-briefing)" in r.stdout + r.stderr

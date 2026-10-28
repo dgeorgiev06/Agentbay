@@ -89,6 +89,9 @@ def v02_kit():
     (k / "roles/my-reader.yaml").write_text(V02_ROLE)
     (k / "agents/my-agent.yaml").write_text(V02_AGENT)
     (k / "envs/my-env.yaml").write_text(V02_ENV)
+    # the user's own v0.2 feed mode takes feed-briefing's place: both would list briefing-lead/-analyst (the
+    # aliases of feed-lead/-analyst), and one role cannot read two modes' stores until step 3
+    shutil.rmtree(k / "modes/feed-briefing")
     return k
 
 

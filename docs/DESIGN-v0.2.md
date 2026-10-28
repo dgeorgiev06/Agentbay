@@ -367,6 +367,9 @@ are not part of this amendment.
 - **corpus-store** (framework connector, so every briefing mode shares it): one store per mode,
   `<env data folder>/<mode>/corpus.db`, so two briefing modes on one env never share selector tags. The
   dispatcher passes the mode; a role's use-shim read resolves the one mode of that role that needs the store.
+  **Limitation until step 3:** roles are placed once, not per mode, so a role listed by two modes that need
+  the store (a second mode extending briefing shares briefing-analyst and briefing-lead) could reach neither
+  store. `bay validate` fails on that, naming the modes; per-mode role placement comes in step 3.
   The file is created 0600 before SQLite opens it, so -wal and -shm are 0600 too. WAL mode, `user_version`
   1. Its tables:
   - `items`;

@@ -205,7 +205,11 @@ roles read findings only through their use shims; transcript files are read only
   `network.allow` and its secret names to `secrets.allow`. Modes, roles and playbooks do not change.
 - **A briefing for another kind of source**: a mode with `extends: briefing` that sets its purpose, constraints
   and config defaults, and overrides only what differs (an endpoint's review, a workflow, a playbook, roles).
-  Everything else (features, rules, skills, the analyst role) is inherited at build time.
+  Everything else (features, rules, skills, the analyst role) is inherited at build time. For now only one
+  installed mode may use a store-reading role: each mode keeps its own store, and roles are placed once, not
+  per mode, so a second briefing mode next to feed-briefing (or a v0.2 mode of your own that lists
+  feed-analyst/feed-lead) fails `bay validate` naming both modes. Per-mode role placement comes in step 3 of
+  docs/proposals/0003-briefing-sources.md.
 - **A feature**: `bay feature new weekly --mode feed-briefing --effects read` (role defaults to the mode's
   first worker role); fill the
   playbook's Definition of Done and the rules; `bay lint`. Review is on by default for write/spend/delete features.

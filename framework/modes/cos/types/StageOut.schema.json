@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/v2/cos/StageOut",
+  "title": "StageOut",
+  "description": "Where a workflow run stands, and what to do next. status stage-ready: make `nextCall` with `bay call`, drive it to a terminal status, then call cos.next with its callId, output and status. awaiting-approval: the user runs `bay approve <runId>`. done/blocked/failed: the run is over.",
+  "type": "object",
+  "required": ["runId", "workflow", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "runId": { "type": "string" },
+    "workflow": { "type": "string" },
+    "status": { "type": "string", "enum": ["stage-ready", "awaiting-approval", "done", "blocked", "failed"] },
+    "stage": { "type": "string" },
+    "nextCall": {
+      "type": "object",
+      "required": ["target", "input"],
+      "additionalProperties": false,
+      "properties": {
+        "target": { "type": "string" },
+        "input": { "type": "object" }
+      }
+    },
+    "gate": { "type": "string" },
+    "skipped": { "type": "array", "items": { "type": "string" } },
+    "reason": { "type": "string" },
+    "results": { "type": "object" }
+  }
+}

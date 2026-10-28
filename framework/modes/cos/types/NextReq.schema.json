@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/v2/cos/NextReq",
+  "title": "NextReq",
+  "description": "Record the stage call that just finished and get the next stage.",
+  "type": "object",
+  "required": ["runId"],
+  "additionalProperties": false,
+  "properties": {
+    "runId": { "type": "string" },
+    "callId": { "type": "string", "description": "the call you drove for the current stage" },
+    "output": { "type": "object", "description": "that call's output, so later stages can read $steps.<id>" },
+    "status": { "type": "string", "enum": ["done", "partial", "blocked", "failed"] }
+  }
+}

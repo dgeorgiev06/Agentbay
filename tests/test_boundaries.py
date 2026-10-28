@@ -7,6 +7,7 @@ from helpers import KIT, cleanup, kit_for, project, system, tmpdir
 
 from bay import guard, vault
 from bay.adapters import get
+from bay.adapters.claude_code import COORDINATOR_CMDS
 
 
 def built(config=None):
@@ -121,7 +122,10 @@ def test_settings_have_no_wildcards():
         for perm in st["permissions"]["allow"]:
             assert "*" not in perm.split(":")[0] and perm not in ("Bash", "Bash(*)")
             assert perm.startswith("Bash(.agentbay/bay ") and perm.split()[1].rstrip(":*)") in \
-                ("show", "status", "log", "note", "task"), perm
+                COORDINATOR_CMDS, perm
+        # the invariant behind the list: every pre-approved command is read-only
+        assert not ({"call", "submit", "approve", "build", "clean", "secret", "migrate", "improve", "reclaim"}
+                    & set(COORDINATOR_CMDS))
         assert not any("secret" in x or "build" in x or "roles/" in x for x in st["permissions"]["allow"])
     finally:
         cleanup(p)

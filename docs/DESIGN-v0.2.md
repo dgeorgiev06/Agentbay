@@ -6,7 +6,7 @@ content, and the `forge` framework mode. Recorded as docs/proposals/0001-v0.2-mo
 
 Replaces v0.1's AgentSpec + Layer model. Vocabulary is fixed; do not rename.
 
-The 2026-10-28 amendment (proposal 0004 Part A, at the end of this document) changed roles, agents and
+The 2026-10-28 amendment (proposal 0005 Part A, at the end of this document) changed roles, agents and
 environments; the Concepts table and the shapes below show the current design.
 
 ## Concepts (top to bottom)
@@ -489,9 +489,9 @@ are not part of this amendment.
   - Old files are renamed `*.v0.2.bak`.
 
 
-## Approved amendment: roles, agents and environments (2026-10-28, proposal 0004 Part A)
+## Approved amendment: roles, agents and environments (2026-10-28, proposal 0005 Part A)
 
-Proposal 0004 Part A was approved by the user on 2026-10-28, with two decisions the same day: no separate key
+Proposal 0005 Part A was approved by the user on 2026-10-28, with two decisions the same day: no separate key
 for where a role works (a mode's `roles:` becomes a map), and roles are framework-level (five generic roles;
 access comes from the mode's needs). Each concept answers one question, and only the agent profile knows the
 LLM product.

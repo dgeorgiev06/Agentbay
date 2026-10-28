@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/v2/cos/RunReq",
+  "title": "RunReq",
+  "description": "Start a run of a project workflow (agentbay.config.yaml workflows.<name>).",
+  "type": "object",
+  "required": ["workflow"],
+  "additionalProperties": false,
+  "properties": {
+    "workflow": { "type": "string", "description": "the workflow's name, as `bay catalog` lists it" },
+    "input": { "type": "object", "description": "the run's own input, referenced by stages as $in.<field>" }
+  }
+}

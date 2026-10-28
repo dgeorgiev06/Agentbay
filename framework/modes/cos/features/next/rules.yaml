@@ -1,0 +1,7 @@
+apiVersion: agentbay/v2
+kind: Rules
+rules:
+  - { id: R-1, level: must_not, statement: "An approval gate must not be passed by this endpoint or any agent; only `bay approve` passes one.", appliesTo: both, refs: [DOD-4] }
+  - { id: R-2, level: must, statement: "Record the finished stage's callId and status before advancing the cursor, so the ledger and the run state agree.", appliesTo: both, refs: [DOD-1] }
+  - { id: R-3, level: must, statement: "Carry a stage's output forward unchanged for later $steps references; never summarise or re-shape it.", appliesTo: both, refs: [DOD-3] }
+  - { id: R-4, level: must_not, statement: "Output, logs or the ledger must not contain secret values.", appliesTo: both, check: no_secrets }

@@ -1,4 +1,4 @@
-# Proposal 0004: simpler roles/agents/envs, and mail-briefing (Gmail)
+# Proposal 0005: simpler roles/agents/envs, and mail-briefing (Gmail)
 
 Status: Part A implemented (approved by the user 2026-10-28, with the scope change below). Part B is a draft that needs the decisions listed at the end.
 Builds on 0003 (merged): item/v1, selectors, corpus-store with read-only SQL, `briefing` base mode.

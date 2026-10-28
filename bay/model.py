@@ -64,6 +64,7 @@ USER_ROLE = ("roles are framework-level; customize behaviour in your mode's play
 FRAMEWORK_ONLY = {"Role": USER_ROLE,
                   "Agent": "agent profiles are framework-level (framework/agents/); select one with `agent:` in "
                            "agentbay.config.yaml, or propose a new profile via forge.extend"}
+ROOT_COORDINATOR = "cos"      # the mode whose coordinator owns the main thread; its playbook is the preamble
 STALE = re.compile(r"^stale\s*>\s*([0-9]+[mhdw])$")
 
 

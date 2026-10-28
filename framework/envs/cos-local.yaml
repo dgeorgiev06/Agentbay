@@ -1,0 +1,17 @@
+apiVersion: agentbay/v2
+kind: Environment
+metadata:
+  name: cos-local
+  description: >-
+    The Chief of Staff's wiring. One capability: the workflow stage cursor, which writes only
+    .agentbay/data/workflows/. No network, no secrets, no source or store access - cos reaches every effect through
+    the endpoint it calls, never directly.
+spec:
+  bind:
+    workflow.run/v1: workflow-runner
+  network: { allow: [] }
+  fs:
+    read: ["."]
+    write: [.agentbay/data/workflows]
+  effects: [read, write]
+  limits: { maxTurns: 60, maxMinutes: 30 }

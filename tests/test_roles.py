@@ -288,5 +288,5 @@ def test_lint_reports_an_unknown_env_in_a_roles_map_with_file_and_line():
     line = next(i for i, ln in enumerate(base.read_text().splitlines(), 1) if ln.startswith("  roles:"))
     ps = lint.run(k)
     assert any(p.endswith(f"modes/briefing/mode.yaml:{line}: mode briefing: `roles:` puts role reviewer in unknown "
-                          f"env 'nowhere' (have: framework-dev, improve-local, local-authoring, local-feeds, "
+                          f"env 'nowhere' (have: cos-local, framework-dev, improve-local, local-authoring, local-feeds, "
                           f"local-feeds-offline, research, workspace)") for p in ps), ps

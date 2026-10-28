@@ -244,7 +244,7 @@ def config_caps(config: dict) -> list[str]:
 
 
 # ------------------------------------------------------------------ 0.3 roles/agents/envs shape (bay migrate 0.4.0)
-# 0.4 (proposal 0004 Part A): roles are five generic framework roles; a mode's `roles:` map says which env each
+# 0.4 (proposal 0005 Part A): roles are five generic framework roles; a mode's `roles:` map says which env each
 # works in (feature and step overrides of the same shape); one framework agent profile maps tiers to models;
 # an env may cap tiers. The 0.3 shape keeps working for one release (0.4.x): `apply_shape` translates it when
 # the kit loads, with a warning per file, and `bay migrate` (bay/migrate.py `_v03_shape`) rewrites it.

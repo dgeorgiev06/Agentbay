@@ -24,6 +24,18 @@ modes:
     #   digest:
     #     extraRules: rules/digest-extra.yaml   # your rules stack on the feature's (strictest wins)
 
+# Project workflows: your own sequences of endpoints, run by the Chief of Staff (`cos.run`), one stage at a
+# time. `call` is a <mode>.<endpoint>; `with`/`when`/$in/$steps work as they do inside a mode's workflow.
+# `bay validate` prints each workflow's stages and the effects it may use.
+# workflows:
+#   morning:
+#     description: refresh the feed, then digest it
+#     in: { type: object, properties: { lookback: { type: string } } }
+#     steps:
+#       - { id: sync,   call: feed-briefing.sync,   with: { lookback: "$in.lookback" } }
+#       - { id: digest, call: feed-briefing.digest, when: $steps.sync.added }
+#       - { id: ship,   gate: "send the digest?" }     # only `bay approve <runId>` passes this
+
 connectors:
   x-api:
     userId: "1234567890"              # your numeric X user id (else looked up via /2/users/me)

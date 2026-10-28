@@ -5,12 +5,14 @@
   lint                   structure checks: playbooks, DoD ids, rules, review, role envs
   build | clean          compile modes/roles into a runtime (claude-code) / remove it
   ls                     modes, endpoints and roles
+  catalog [<name>]       the registry (.agentbay/catalog.json): endpoints with schemas, workflows
   describe <mode|role>   resolved definition as JSON
 
   call <mode>.<endpoint> '<json>'      run an endpoint (the only way to invoke one)
   submit <callId> <stepId> '<json>'    hand back an agentic step's output
   show <callId>                        current state of a call (result or the step it waits on)
-  approve <callId> [--reject]          pass an approval gate (you, in a terminal; never an agent)
+  approve <callId|runId> [--reject]    pass an approval gate of a call, or of a workflow run (W-...)
+                                       (you, in a terminal; never an agent)
   (agents read data only through .agentbay/roles/<role>--<mode>/use, generated per role unit by build)
 
   mode new <name> | feature new <name> --mode <m>
@@ -90,12 +92,22 @@ def cmd_validate(args):
     if cmd_lint(args):
         sys.exit(1)
     s = _system(args)
+    from bay import workflows as wfmod
+    wf_problems = wfmod.target_problems(s.kit, s)
+    for p in wf_problems:
+        print(f"✗ {p}")
     for w in s.warnings:
         print(f"! {w}")
+    if wf_problems:
+        print(f"{len(wf_problems)} workflow problem(s)")
+        sys.exit(1)
     n_ep = sum(len(m.features) for m in s.modes.values())
     print(f"✓ {len(s.modes)} modes, {n_ep} endpoints, {len(s.roles)} roles ({len(s.units())} role units), "
           f"{len(s.kit.docs['Environment'])} envs, {len(s.kit.docs['Connector'])} connectors resolve "
           f"(agent profile {s.agent})")
+    for name, wf in wfmod.load(s.kit).items():
+        eff = ", ".join(wfmod.effects(s, wf)) or "none"
+        print(f"✓ workflow {name}: {len(wf.stages)} stages, effects {eff}")
 
 
 def cmd_build(args):
@@ -130,6 +142,54 @@ def cmd_ls(args):
     for name, u in sorted(s.units().items()):
         run = "main thread" if u.runtime == "claude-code-main" else f"tier={u.inference.tier} model={u.inference.model}"
         print(f"  {name:<40} {u.kind:<11} env={u.env:<20} {run}")
+
+
+def cmd_catalog(args):
+    """The registry, as the coordinator reads it: a pure read of .agentbay/catalog.json (pre-approved)."""
+    from bay import registry
+    try:
+        cat = registry.load(args.project)
+    except FileNotFoundError as e:
+        _die(f"✗ {e}")
+    name = args.name
+    if args.json:
+        if not name:
+            _out(cat)
+            return
+        _out(_catalog_pick(cat, name))
+        return
+    if name:
+        _out(_catalog_pick(cat, name))
+        return
+    print(f"registry built {cat['builtAt']} for {cat['runtime']}\n")
+    for m in cat["modes"]:
+        print(f"{m['name']} ({m['origin']}) - {m['purpose']}")
+        for e in m["endpoints"]:
+            rv = f" review={e['review']['role']}" if e.get("review") else ""
+            io = f"{e.get('in') or '-'} -> {e.get('out') or '-'}"
+            print(f"  {e['name']:<24} {io:<28} effects={','.join(e['effects'])}{rv}")
+    wfs = cat.get("workflows") or {}
+    print("\nproject workflows:" if wfs else "\nproject workflows: none (agentbay.config.yaml workflows:)")
+    for w in wfs.values():
+        stages = " -> ".join(s["call"] or f"gate:{s['id']}" for s in w["stages"])
+        print(f"  {w['name']:<16} effects={','.join(w['effects']) or '-'}  {stages}")
+        if w.get("description"):
+            print(f"  {'':<16} {w['description']}")
+
+
+def _catalog_pick(cat: dict, name: str):
+    """One mode, one endpoint (<mode>.<endpoint>) or one workflow, by name."""
+    if name in (cat.get("workflows") or {}):
+        return cat["workflows"][name]
+    for m in cat["modes"]:
+        if m["name"] == name:
+            return m
+        for e in m["endpoints"]:
+            if e["name"] == name:
+                return e
+    eps = [e["name"] for m in cat["modes"] for e in m["endpoints"]]
+    _die(f"✗ no mode, endpoint or workflow '{name}' in the registry (endpoints: {', '.join(eps)}"
+         + (f"; workflows: {', '.join(cat['workflows'])}" if cat.get("workflows") else "") + ")")
 
 
 def cmd_describe(args):
@@ -190,6 +250,8 @@ def cmd_approve(args):
         _die("✗ bay approve needs an interactive terminal (stdin is not a TTY). Approval gates are for you, not "
              "for agents: run it yourself in a terminal.")
     from bay import dispatch
+    if args.call.startswith("W-"):
+        return _approve_workflow(args)
     d = _dispatcher(args)
     try:
         st = d.show(args.call)
@@ -202,6 +264,31 @@ def cmd_approve(args):
     if input("Type yes to confirm: ").strip().lower() != "yes":
         _die("not confirmed; nothing changed")
     _run(lambda: d.approve(args.call, not args.reject, args.reason or "", by="user@tty"))
+
+
+def _approve_workflow(args):
+    """Pass or reject the gate a workflow run waits on (`bay approve W-...`)."""
+    from bay import dispatch, workflows as wfmod
+    s = _system(args)
+    d = dispatch.Dispatcher(s, args.project)
+    try:
+        runs = d.run_capability("cos", "workflow.run/v1.show", {"runId": args.call})["runs"]
+    except dispatch.CallError as e:
+        _die(f"✗ {e}")
+    run = runs[0]
+    if run["status"] != "awaiting-approval":
+        _die(f"✗ workflow run {args.call} is {run['status']}, not awaiting approval")
+    sid = run["stages"][run["cursor"]]["id"]
+    wf = wfmod.load(s.kit).get(run["workflow"])
+    stage = wf.stage(sid) if wf else None
+    verb = "REJECT" if args.reject else "APPROVE"
+    print(f"{verb} gate '{sid}' of workflow {run['workflow']} (run {args.call}): "
+          f"{(stage.gate if stage else '') or '(gate text unavailable)'}")
+    if input("Type yes to confirm: ").strip().lower() != "yes":
+        _die("not confirmed; nothing changed")
+    _run(lambda: d.run_capability("cos", "workflow.run/v1.approve", {
+        "runId": args.call, "approved": not args.reject, "by": "user@tty",
+        **({"reason": args.reason} if args.reason else {})}))
 
 
 def cmd_show(args):
@@ -433,6 +520,10 @@ def main(argv=None):
     b = sub.add_parser("build"); b.add_argument("--runtime", default="claude-code"); b.set_defaults(fn=cmd_build)
     c = sub.add_parser("clean"); c.add_argument("--runtime", default="claude-code"); c.set_defaults(fn=cmd_clean)
     sub.add_parser("ls").set_defaults(fn=cmd_ls)
+    ct = sub.add_parser("catalog", help="the registry: modes, endpoints, schemas, project workflows")
+    ct.add_argument("name", nargs="?", help="<mode>, <mode>.<endpoint> or a workflow name")
+    ct.add_argument("--json", action="store_true")
+    ct.set_defaults(fn=cmd_catalog)
     d = sub.add_parser("describe"); d.add_argument("name"); d.add_argument("--prompt", action="store_true")
     d.set_defaults(fn=cmd_describe)
 

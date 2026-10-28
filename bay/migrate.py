@@ -18,7 +18,7 @@ in MIGRATIONS with the version it migrates to.
        *.v0.2.bak, never deleted.
 0.4.0: cap names maxPostsPerRun / monthlyPosts -> maxItemsPerRun / monthlyItems (user modes, envs,
        mode config schemas and the project's agentbay.config.yaml); the 0.3 roles/agents/envs shape ->
-       the mode `roles:` map, tiers and framework roles (proposal 0004 Part A): `roles: [..]` and endpoint
+       the mode `roles:` map, tiers and framework roles (proposal 0005 Part A): `roles: [..]` and endpoint
        `agents:` -> role -> env maps, `inference` and review `model` -> tiers, env `models` -> `tiers`, user
        agent files folded away, user role files -> mode skills, old role names -> lead / analyst.
 
@@ -147,7 +147,7 @@ def _pick_role(spec: dict, coordinator: bool, reviewer: bool) -> str:
 
 
 def _v03_shape(kit: Path) -> tuple[list[Change], list[str]]:
-    """0.4.0 (proposal 0004 Part A): user modes in the 0.3 shape get the role -> env map and tiers (the same
+    """0.4.0 (proposal 0005 Part A): user modes in the 0.3 shape get the role -> env map and tiers (the same
     translation bay/aliases.py applies when the kit loads); user env `models` become `tiers`; user per-role agent
     files are folded away; user role files become skills of the modes that use them, run by a framework role
     (or are reported for manual handling)."""

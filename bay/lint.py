@@ -149,6 +149,18 @@ def lint_role_envs(md: model.Doc, kit: model.Kit) -> list[str]:
     problems = [(None, None, f"mode {md.name}: `roles:` names unknown role '{rn}' (framework roles: "
                              f"{', '.join(sorted(kit.docs['Role']))}); {model.USER_ROLE.split(' (`bay migrate`')[0]}")
                 for rn in roles if rn not in kit.docs["Role"]]
+    envs = kit.docs["Environment"]
+    have = ", ".join(sorted(envs))
+
+    def unknown(where, mapping):
+        return [f"{where}: `roles:` puts role {rn} in unknown env '{env}' (have: {have})"
+                for rn, env in (mapping or {}).items() if env and env not in envs]
+    problems += [(None, None, m) for m in unknown(f"mode {md.name}", roles)]
+    for ep_name, ep in (md.spec.get("endpoints") or {}).items():
+        problems += [(ep_name, None, m) for m in unknown(f"{md.name}.{ep_name}", ep.get("roles"))]
+        for st in (md.spec.get("workflows") or {}).get(ep.get("workflow"), []):
+            problems += [(ep_name, st.get("id"), m)
+                         for m in unknown(f"{md.name}.{ep_name} step {st.get('id')}", st.get("roles"))]
     for ep_name, sid, msg in problems + model.role_env_problems(md):
         if ep_name and sid:
             where = _step_where(md, ep_name, sid)
@@ -400,8 +412,24 @@ def split_store_warnings(kit: model.Kit) -> list[str]:
 def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Kit | None = None) -> list[str]:
     kit = kit or model.Kit(kit_root or model.KIT, project)
     out = list(kit.errors) + list(kit.collisions)
-    for md in kit.docs["Mode"].values():
-        out += lint_mode(md, kit)
+    seen: set[str] = set()
+    # parents first; a child's problem that is its parent's problem (same file:line, the same message with the
+    # child's mode name) is reported once, as the parent's
+    for md in sorted(kit.docs["Mode"].values(), key=lambda d: (len(d.dirs), d.name)):
+        ancestors, cur = [], md
+        while cur.parent and cur.parent not in ancestors:
+            ancestors.append(cur.parent)
+            cur = kit.docs["Mode"].get(cur.parent)
+            if cur is None:
+                break
+        for p in lint_mode(md, kit):
+            loc, msg = (p.split(": ", 1) + [""])[:2] if re.match(r"^\S+:\d+: ", p) else ("", p)
+            same = {(f"{loc}: " if loc else "") + re.sub(rf"(?<![\w-]){re.escape(md.name)}(?![\w-])", a, msg)
+                    for a in ancestors}
+            if p in seen or same & seen:
+                continue
+            seen.add(p)
+            out.append(p)
     out += lint_roles(kit)
     out += lint_env_bindings(kit)
     out += lint_connectors(kit)

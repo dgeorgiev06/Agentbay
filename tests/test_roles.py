@@ -278,3 +278,15 @@ def test_lint_warns_when_a_partial_roles_override_splits_a_store_reading_mode():
                "prune) run" in w for w in ws), ws
     assert not any("mode feed-briefing puts role" in w for w in lint.warnings(model.Kit(KIT)))   # shipped: no split
     assert lint.run(k) == []                                                                       # a warning only
+
+
+def test_lint_reports_an_unknown_env_in_a_roles_map_with_file_and_line():
+    from bay import lint
+    k = kit_copy()
+    base = k / "modes/briefing/mode.yaml"
+    base.write_text(base.read_text().replace("reviewer: local-feeds }", "reviewer: nowhere }"))
+    line = next(i for i, ln in enumerate(base.read_text().splitlines(), 1) if ln.startswith("  roles:"))
+    ps = lint.run(k)
+    assert any(p.endswith(f"modes/briefing/mode.yaml:{line}: mode briefing: `roles:` puts role reviewer in unknown "
+                          f"env 'nowhere' (have: framework-dev, improve-local, local-authoring, local-feeds, "
+                          f"local-feeds-offline, research, workspace)") for p in ps), ps

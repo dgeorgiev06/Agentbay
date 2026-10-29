@@ -145,6 +145,7 @@ def connect_ro(path: Path) -> sqlite3.Connection:
         if not cur or cur > HEAP_BYTES:
             con.execute(f"PRAGMA hard_heap_limit = {HEAP_BYTES}")
         con.execute("PRAGMA temp_store = FILE")
+        # kept on purpose: refusing a pre-release store fails closed for the scope invariant
         if con.execute("SELECT 1 FROM main.sqlite_master WHERE name = 'state'").fetchone():
             raise SqlError(f"{path}: written by a pre-release build (internal state inside corpus.db); move the "
                            f"folder aside and sync again")

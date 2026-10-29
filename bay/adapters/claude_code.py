@@ -17,7 +17,7 @@ role in several envs):
   catalog                  -> .agentbay/catalog.json, built by bay.registry (runtime-neutral:
                               modes, endpoints with resolved schemas, roles, project workflows)
 
-Guarantees (unchanged from v0.1): idempotent; only touches files recorded in
+Guarantees: idempotent; only touches files recorded in
 .agentbay/manifest.json; merges with user CLAUDE.md, .claude/settings.json and
 .mcp.json, never clobbers; clean restores the originals.
 

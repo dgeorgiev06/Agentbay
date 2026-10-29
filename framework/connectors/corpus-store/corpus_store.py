@@ -128,6 +128,7 @@ def open_rw(path: Path) -> sqlite3.Connection:
         con.close()
         raise StoreError(f"{path}: store schema v{ver} is newer than this kit (v{SCHEMA_VERSION}); update agentbay")
     elif con.execute("SELECT 1 FROM sqlite_master WHERE name = 'state'").fetchone():
+        # kept on purpose: refusing a pre-release store fails closed for the scope invariant
         con.close()           # a pre-release store kept state inside corpus.db, where agents could count it
         raise StoreError(f"{path}: written by a pre-release build (internal state inside corpus.db); move the "
                          f"folder aside and sync again")

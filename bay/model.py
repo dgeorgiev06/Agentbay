@@ -327,12 +327,13 @@ def merge_mode(parent: dict, child: dict, pdir: Path, cdir: Path) -> dict:
             eps = out.setdefault("endpoints", {})
             for name, e in v.items():
                 merged = {**eps.get(name, {}), **copy.deepcopy(e)}
-                if e.get("roles") and eps.get(name, {}).get("roles"):
+                if isinstance(e.get("roles"), dict) and isinstance(eps.get(name, {}).get("roles"), dict):
                     merged["roles"] = {**eps[name]["roles"], **e["roles"]}
                 eps[name] = merged
         elif k == "workflows":
             out.setdefault("workflows", {}).update(copy.deepcopy(v))
-        elif k in ("constraints", "configDefaults", "roles"):
+        elif k in ("constraints", "configDefaults") or (k == "roles" and isinstance(v, dict)
+                                                         and isinstance(out.get(k), dict)):
             out[k] = {**out.get(k, {}), **copy.deepcopy(v)}
         elif k == "needs":
             out[k] = list(dict.fromkeys([*out.get(k, []), *v]))

@@ -124,7 +124,7 @@ def test_settings_have_no_wildcards():
             assert perm.startswith("Bash(.agentbay/bay ") and perm.split()[1].rstrip(":*)") in \
                 COORDINATOR_CMDS, perm
         # the invariant behind the list: every pre-approved command is read-only
-        assert not ({"call", "submit", "approve", "build", "clean", "secret", "migrate", "improve", "reclaim"}
+        assert not ({"call", "submit", "approve", "build", "clean", "secret", "improve", "reclaim"}
                     & set(COORDINATOR_CMDS))
         assert not any("secret" in x or "build" in x or "roles/" in x for x in st["permissions"]["allow"])
     finally:

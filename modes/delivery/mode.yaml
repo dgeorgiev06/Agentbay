@@ -3,7 +3,7 @@ kind: Mode
 metadata:
   name: delivery
   version: 0.2.0
-  description: General delegation (the v0.1 behaviour) - research a question, or build a change and have it independently reviewed.
+  description: General delegation - research a question, or build a change and have it independently reviewed.
 spec:
   purpose: Turn a request into a sourced brief or a reviewed change, delegated to the right worker.
   endpoints:

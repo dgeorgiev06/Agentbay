@@ -9,7 +9,7 @@ import json
 from helpers import KIT, clock, cleanup, project, system, tmpdir
 
 from bay import dispatch, lint, registry, workflows as wfmod
-from bay.adapters import get
+from bay.adapter import get
 from bay.model import Kit
 
 MORNING = {

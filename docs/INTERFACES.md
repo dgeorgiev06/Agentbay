@@ -23,7 +23,7 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN.md
 | 2 | **Feature playbook + rules** | `bay/playbook.py`, `schemas/rules.schema.json` | you change a feature's definition of done |
 | 3 | **Role / Agent profile / Environment** | `schemas/{role,agent,environment}.schema.json` | the framework adds a job or an LLM product; you add wiring |
 | 4 | **Capability interface + Connector** | `schemas/{interface,connector}.schema.json`, `bay/connect.py` | you add a capability or a concrete tool |
-| 5 | **Adapter + registry** (`.agentbay/catalog.json`) | `bay/adapters/base.py`, `bay/registry.py` | you add a runtime, or something a coordinator must discover |
+| 5 | **Adapter + registry** (`.agentbay/catalog.json`) | `bay/adapter.py`, `bay/registry.py` | you add a runtime, or something a coordinator must discover |
 | 6 | **Project workflow** (stages composing `<mode>.<endpoint>`) | `schemas/config.schema.json` `workflows`, `bay/workflows.py` | you compose modes differently |
 | 7 | **Dispatcher** (`bay call/submit/use`) | `bay/dispatch.py` | rarely |
 | 8 | **TaskEnvelope / Result** | `schemas/task.schema.json` | rarely; version-bump it |
@@ -117,7 +117,7 @@ writes the registry via `bay.registry.write`. The catalog's content is runtime-n
 supplies only its own `runtime` name - so a second runtime discovers the same modes, endpoints (with resolved
 input/output schemas), roles and project workflows. The claude-code adapter also writes per-unit use
 shims (one per unit `<role>--<mode>[--<env>]`), `.agentbay/guard.json` (one entry per unit) and the PreToolUse guard hook (Bash and every file tool), plus `Edit` deny rules on
-`.agentbay/**`, `.claude/**` and the kit. Register in `bay/adapters/__init__.py`.
+`.agentbay/**`, `.claude/**` and the kit. A runtime is a folder `adapters/<name>/` with `adapter.yaml` (name, module, class), discovered by folder.
 
 ## 6. Project workflows and the root coordinator
 `cos` (`framework/modes/cos/`) is the root mode: its playbook is the preamble of the generated

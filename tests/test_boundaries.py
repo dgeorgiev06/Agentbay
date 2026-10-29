@@ -6,8 +6,9 @@ import sys
 from helpers import KIT, cleanup, kit_for, project, system, tmpdir
 
 from bay import guard, vault
-from bay.adapters import get
-from bay.adapters.claude_code import COORDINATOR_CMDS
+from bay.adapter import get, module
+
+COORDINATOR_CMDS = module("claude-code").COORDINATOR_CMDS
 
 
 def built(config=None):

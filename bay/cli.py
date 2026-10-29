@@ -113,9 +113,9 @@ def cmd_validate(args):
 
 
 def cmd_build(args):
-    from bay import adapters
+    from bay import adapter
     s = _system(args)
-    rep = adapters.get(args.runtime).build(s, args.project, KIT)
+    rep = adapter.get(args.runtime).build(s, args.project, KIT)
     print(f"built {len(s.modes)} modes for {rep.runtime} → {args.project}")
     for f in rep.written:
         print(f"  + {f}")
@@ -126,8 +126,8 @@ def cmd_build(args):
 
 
 def cmd_clean(args):
-    from bay import adapters
-    rep = adapters.get(args.runtime).clean(args.project)
+    from bay import adapter
+    rep = adapter.get(args.runtime).clean(args.project)
     for f in rep.removed:
         print(f"  - {f}")
     print("clean")

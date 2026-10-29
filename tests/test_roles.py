@@ -10,7 +10,7 @@ import yaml
 from helpers import KIT, clock, edit_yaml, kit_copy, model, project, system
 
 from bay import dispatch
-from bay.adapters import get
+from bay.adapter import get
 
 NEWS_ENV = """apiVersion: agentbay/v2
 kind: Environment

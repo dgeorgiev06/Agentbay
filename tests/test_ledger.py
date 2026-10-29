@@ -7,7 +7,7 @@ import sys
 from helpers import KIT, clock, cleanup, kit_for, model, project, system
 
 from bay import dispatch, ledger
-from bay.adapters import get
+from bay.adapter import get
 
 SCHEMA = json.loads((KIT / "schemas/event.schema.json").read_text())
 

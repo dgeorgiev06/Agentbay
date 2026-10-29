@@ -1,0 +1,5 @@
+# A runtime adapter (contract: framework/components.yaml `adapter`, protocol bay/adapter.py).
+name: claude-code
+module: claude_code.py
+class: ClaudeCodeAdapter
+description: Claude Code (interactive) - subagents, skills, settings, guard hook and use shims under .claude/ and .agentbay/

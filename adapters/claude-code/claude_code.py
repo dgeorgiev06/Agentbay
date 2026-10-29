@@ -36,12 +36,12 @@ import shlex
 import shutil
 from pathlib import Path
 
-from .. import registry, workflows
-from ..ledger import now
-from ..model import ROOT_COORDINATOR, ResolvedRole, System
-from ..dispatch import use_shim
-from ..protocol import WORKER_CONTRACT
-from .base import BuildReport
+from bay import registry, workflows
+from bay.adapter import BuildReport
+from bay.dispatch import use_shim
+from bay.ledger import now
+from bay.model import ROOT_COORDINATOR, ResolvedRole, System
+from bay.protocol import WORKER_CONTRACT
 
 MARK_BEGIN = "<!-- agentbay:begin (generated; run ./bay build) -->"
 MARK_END = "<!-- agentbay:end -->"

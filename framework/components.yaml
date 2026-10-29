@@ -20,7 +20,7 @@ components:
       env:       { at: ["envs/<name>.yaml", "framework/envs/<name>.yaml"], schema: schemas/environment.schema.json }
       connector: { at: ["connectors/<name>/", "framework/connectors/<name>/"], schema: schemas/connector.schema.json, tests: tests/contracts/connector.py }
       interface: { at: ["interfaces/<name>.yaml"], schema: schemas/interface.schema.json }
-      adapter:   { at: ["bay/adapters/<name>.py"], protocol: bay/adapters/base.py }   # moves in slice 2
+      adapter:   { at: ["adapters/<name>/"], protocol: bay/adapter.py }
   briefing:          # corpus store, SQL sandbox, selector matcher, the briefing base mode
     owns:
       - framework/connectors/corpus-store/

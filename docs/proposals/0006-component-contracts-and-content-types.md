@@ -10,8 +10,9 @@ touches:
   - { path: bay/cli.py, reason: "`bay boundary`; slice 2 adds `bay auth <connector>` and `bay config example`", slice: 1 }
   - { path: bay/lint.py, reason: "validates framework/components.yaml; later slices add B-4, B-6, B-7, B-8", slice: 1 }
   # slice 2: ownership by folder, discovery, self-describing extensions, docs describe contracts only
-  - { path: bay/adapters/, reason: adapters move to adapters/ (B-4), slice: 2, planned: true }
-  - { path: adapters/, reason: the new adapters folder, slice: 2, planned: true }
+  - { path: bay/adapters/, reason: adapters move to adapters/ (B-4), slice: 2 }
+  - { path: bay/adapter.py, reason: the Adapter protocol and discovery by folder (no registry dict), slice: 2 }
+  - { path: adapters/, reason: the new adapters folder, slice: 2 }
   - { path: framework/interfaces/, reason: core interfaces live under framework/interfaces/ (B-4), slice: 2, planned: true }
   - { path: interfaces/items.*, reason: items.* move to framework/interfaces/, slice: 2, planned: true }
   - { path: bay/model.py, reason: discovery by folder; config schemas that extend; versioned reads/produces; feature.yaml, slice: 2, planned: true }

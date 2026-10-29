@@ -7,8 +7,9 @@ import sys
 from helpers import KIT, model, system, tmpdir
 
 from bay import ledger
-from bay.adapters import Adapter, get
-from bay.adapters.claude_code import COORDINATOR_CMDS
+from bay.adapter import Adapter, get, module
+
+COORDINATOR_CMDS = module("claude-code").COORDINATOR_CMDS
 
 
 def _proj():
@@ -193,3 +194,24 @@ def test_gitignore_is_stable_across_builds_and_kept_while_runtime_data_exists():
     (proj / ".agentbay/ledger/events.jsonl").write_text("{}\n")
     ad.clean(proj)
     assert (proj / ".agentbay/.gitignore").exists()
+
+
+def test_adapters_are_discovered_by_folder_with_no_registry():
+    from bay import adapter
+    assert "claude-code" in adapter.discover()
+    root = tmpdir()
+    (root / "echo").mkdir()
+    (root / "echo/adapter.yaml").write_text("name: echo\nmodule: echo.py\nclass: Echo\n")
+    (root / "echo/echo.py").write_text(
+        "from bay.adapter import BuildReport\n"
+        "class Echo:\n    name = 'echo'\n"
+        "    def build(self, system, project, kit): return BuildReport('echo')\n"
+        "    def clean(self, project): return BuildReport('echo')\n")
+    assert sorted(adapter.discover(root)) == ["echo"]
+    ad = adapter.get("echo", root)
+    assert isinstance(ad, Adapter) and ad.clean(root).runtime == "echo"
+    try:
+        adapter.get("nope", root)
+        raise AssertionError("unknown runtime accepted")
+    except KeyError as e:
+        assert "adapters/<name>/adapter.yaml" in str(e)

@@ -8,6 +8,7 @@ spec:
   # Everything not set here comes from modes/briefing (features sync, digest, ask, prune; their playbooks,
   # rules and review; roles; skills).
   extends: briefing
+  reads: [post/v1]          # the item kind its features read (B-6)
   purpose: Keep me briefed on what people I follow say; answer questions about it.
   constraints:                 # merged over briefing's (lookbackMax, spendUsd, policies)
     monthlyItems: 3000

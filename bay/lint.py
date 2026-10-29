@@ -336,6 +336,94 @@ def lint_connectors(kit: model.Kit) -> list[str]:
     return out
 
 
+def _as_list(v) -> list:
+    return [v] if isinstance(v, str) else list(v or [])
+
+
+def lint_contract_versions(kit: model.Kit) -> list[str]:
+    """B-6 (proposal 0006, Part F): contracts are versioned and agree. `needs:`, `implements:`, `reads:` and
+    `produces:` name `<name>/v<N>`; `reads:`/`produces:` name a known item kind; an items.source connector says
+    what it produces and a mode that needs items.source says what it reads; and every kind a mode reads is
+    produced, at that version, by the items.source connectors bound in each env its roles use (and in each env
+    that can stand in for one)."""
+    out, kinds = [], model.item_kinds(kit.root)
+    known = ", ".join(f"{k}/v{v}" for k in sorted(kinds) for v in sorted(kinds[k])) or "none"
+
+    def kind_problems(where, owner, key, names):
+        for n in names:
+            if not model.VERSIONED.match(n):
+                out.append(f"{where}: {owner} {key}: '{n}' is unversioned; name the contract version, "
+                           f"`<kind>/v<N>` (known: {known})")
+                continue
+            k, _, v = n.partition("/v")
+            if k not in kinds:
+                out.append(f"{where}: {owner} {key}: unknown item kind '{n}' (known: {known}); add the kind's "
+                           f"schema to schemas/data/ or fix the name")
+            elif int(v) not in kinds[k]:
+                out.append(f"{where}: {owner} {key}: item kind {k} has no version {v} (known: {known})")
+
+    for c in sorted(kit.docs["Connector"].values(), key=lambda d: d.name):
+        where = _where(c.path, _line_of(c.path, r"^\s+implements:"))
+        impl = _as_list(c.spec["implements"])
+        for i in impl:
+            if not model.VERSIONED.match(i):
+                out.append(f"{where}: connector {c.name} implements '{i}', which is unversioned; write "
+                           f"`<interface>/v<N>` (e.g. items.source/v1)")
+        kind_problems(_where(c.path, _line_of(c.path, r"^\s+produces:")), f"connector {c.name}", "produces",
+                      _as_list(c.spec.get("produces")))
+        if model.SOURCE_IFACE in impl and not c.spec.get("produces"):
+            out.append(f"{where}: connector {c.name} implements {model.SOURCE_IFACE} but declares no "
+                       f"spec.produces (the item kinds its items carry, e.g. `produces: [post/v1]`; known: {known})")
+    envs = kit.docs["Environment"]
+    for md in sorted(kit.docs["Mode"].values(), key=lambda d: d.name):
+        path, line = md.path, _line_of(md.path, r"^\s+needs:")
+        for n in md.spec.get("needs", []):
+            if not model.VERSIONED.match(n):
+                out.append(f"{_where(path, line)}: mode {md.name} needs '{n}', which is unversioned; write "
+                           f"`<interface>/v<N>`")
+        reads = _as_list(md.spec.get("reads"))
+        rpath = next((d / "mode.yaml" for d in md.dirs if re.search(r"(?m)^\s+reads:", (d / "mode.yaml").read_text())),
+                     md.path)
+        rwhere = _where(rpath, _line_of(rpath, r"^\s+reads:"))
+        kind_problems(rwhere, f"mode {md.name}", "reads", reads)
+        if model.SOURCE_IFACE not in md.spec.get("needs", []) or md.spec.get("abstract"):
+            continue
+        if not reads:
+            out.append(f"{_where(md.path, _line_of(md.path, r'^spec:'))}: mode {md.name} needs {model.SOURCE_IFACE} "
+                       f"but declares no spec.reads (the item kinds its features read, e.g. `reads: [post/v1]`; "
+                       f"known: {known})")
+            continue
+        names = model.mode_envs(md)
+        names += [e.name for e in envs.values() if e.spec.get("substitutes") in names]
+        for en in dict.fromkeys(names):
+            env = envs.get(en)
+            if env is None:
+                continue                                    # unknown envs are lint_role_envs' problem
+            bound = model.connectors_of(model._bound(env, model.SOURCE_IFACE))
+            if not bound:
+                continue
+            made: dict[str, dict[int, list[str]]] = {}
+            for cn in bound:
+                c = kit.docs["Connector"].get(cn)
+                for p in _as_list(c.spec.get("produces")) if c else []:
+                    k, _, v = p.partition("/v")
+                    if v.isdigit():
+                        made.setdefault(k, {}).setdefault(int(v), []).append(cn)
+            for r in reads:
+                k, _, v = r.partition("/v")
+                if not v.isdigit():
+                    continue
+                if k not in made:
+                    out.append(f"{rwhere}: mode {md.name} reads {r}, but no {model.SOURCE_IFACE} connector env {en} "
+                               f"binds ({', '.join(bound)}) produces {k}. Bind a connector that produces {r} in "
+                               f"env {en}, or make one with forge.connect")
+                elif int(v) not in made[k]:
+                    have = "; ".join(f"{', '.join(cs)} produce {k}/v{n}" for n, cs in sorted(made[k].items()))
+                    out.append(f"{rwhere}: mode {md.name} reads {r}, but in env {en} {have}: version mismatch. "
+                               f"Update the mode's reads: or the connector to the same version")
+    return out
+
+
 # Scheduled endpoints that a CLI command runs together with the steps they depend on.
 SCHEDULED_BY = {"improve.backlog": "`.agentbay/bay improve weekly` (it runs scan, audit and triage first; cron "
                                    "recipe in docs/DESIGN.md)"}
@@ -482,6 +570,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     out += lint_roles(kit)
     out += lint_env_bindings(kit)
     out += lint_connectors(kit)
+    out += lint_contract_versions(kit)
     out += lint_rulesets(kit)
     out += lint_components(kit)
     out += lint_ownership(kit)

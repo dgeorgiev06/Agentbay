@@ -271,7 +271,7 @@ def test_lint_warns_when_a_partial_roles_override_splits_a_store_reading_mode():
     (d / "mode.yaml").write_text(
         "apiVersion: agentbay/v2\nkind: Mode\nmetadata: { name: news-briefing, version: 0.1.0, description: news }\n"
         "spec:\n  extends: briefing\n  purpose: Brief me on news from my sources for testing.\n"
-        "  roles: { lead: local-feeds-offline, analyst: local-feeds-offline }\n")
+        "  roles: { lead: local-feeds-offline, analyst: local-feeds-offline }\n  reads: [post/v1]\n")
     from helpers import self_describe
     self_describe(k, d)
     ws = lint.warnings(model.Kit(k))

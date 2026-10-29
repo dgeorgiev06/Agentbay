@@ -128,7 +128,8 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
         base = f"connectors/{name}"
         src = ""
         if implements.startswith("items.source/"):
-            src = (f"  source: {name}       # value stamped on every item's `source`; item ids are <source>:<extId>\n"
+            src = (f"  produces: [post/v1]    # TODO the item kind(s) its items carry: <kind>/v<N> (schemas/data/)\n"
+                   f"  source: {name}       # value stamped on every item's `source`; item ids are <source>:<extId>\n"
                    f"  window: 7d             # how far back the API serves; older history comes from the store\n"
                    f"  selectors:             # TODO which selector fields the API handles natively; unlisted = unsupported\n"
                    f"    since: native\n    text: local\n    not: local\n")

@@ -60,6 +60,13 @@
             }
           ]
         },
+        "produces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Item kinds (content types) this connector's items carry, versioned (`<kind>/v<N>`, e.g. email/v1). Required for an items.source connector; `bay lint` checks it against the `reads:` of every mode whose env binds it (B-6)."
+        },
         "entry": {
           "type": "string",
           "description": "Python file in the connector folder exposing create(ctx)."

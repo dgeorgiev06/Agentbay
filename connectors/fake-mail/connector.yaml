@@ -9,6 +9,7 @@ metadata:
   version: 0.1.0
 spec:
   implements: items.source/v1
+  produces: [email/v1]
   entry: fake_mail.py
   source: fake-mail
   costPerPostUsd: 0      # offline: never billed against spendUsd

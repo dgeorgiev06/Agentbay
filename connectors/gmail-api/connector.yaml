@@ -14,6 +14,7 @@ metadata:
   version: 0.1.0
 spec:
   implements: items.source/v1
+  produces: [email/v1]
   entry: gmail_api.py
   login: cli_login        # `bay auth gmail-api`: browser OAuth login that stores GMAIL_REFRESH_TOKEN
   source: gmail

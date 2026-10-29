@@ -17,7 +17,7 @@ def child(k, name="news-briefing", spec=None):
     d = k / "modes" / name
     d.mkdir(parents=True)
     doc = {"apiVersion": "agentbay/v2", "kind": "Mode", "metadata": {"name": name, "version": "0.1.0"},
-           "spec": {"extends": "briefing", **(spec or {})}}
+           "spec": {"extends": "briefing", "reads": ["post/v1"], **(spec or {})}}   # a briefing child says what it reads (B-6)
     (d / "mode.yaml").write_text(json.dumps(doc))
     self_describe(k, d)
     return d

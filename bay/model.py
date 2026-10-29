@@ -95,6 +95,33 @@ def data_schema(ref: str) -> dict:
     return json.loads(p.read_text())
 
 
+VERSIONED = re.compile(r"^[a-z][a-z0-9.-]*/v[0-9]+$")   # `<name>/v<N>`: interfaces and item kinds (B-6)
+
+
+def item_kinds(kit: Path = KIT) -> dict[str, set[int]]:
+    """Known item kinds (content types): `<kind>/v<N>` data schemas that extend item/v1. kind -> versions."""
+    out: dict[str, set[int]] = {}
+    for f in sorted((kit / "schemas" / "data").glob("*.v*.schema.json")):
+        try:
+            doc = json.loads(f.read_text())
+        except ValueError:
+            continue
+        if any(isinstance(a, dict) and a.get("$ref") == "item/v1" for a in doc.get("allOf", [])):
+            name, _, ver = doc.get("title", "").partition("/v")
+            if name and ver.isdigit():
+                out.setdefault(name, set()).add(int(ver))
+    return out
+
+
+def mode_envs(md: Doc) -> list[str]:
+    """Every env a mode's `roles:` maps (mode-wide and per endpoint), in order."""
+    s, out = md.spec, []
+    for m in [s.get("roles"), *((ep or {}).get("roles") for ep in (s.get("endpoints") or {}).values())]:
+        if isinstance(m, dict):
+            out += [e for e in m.values() if isinstance(e, str)]
+    return list(dict.fromkeys(out))
+
+
 def ruleset(kit: Path, name: str) -> list[dict]:
     """framework/rules/<name>.yaml rules (e.g. conformance), for reviewer plans."""
     p = kit / "framework" / "rules" / f"{name}.yaml"

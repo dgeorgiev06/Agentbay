@@ -8,6 +8,7 @@ spec:
   # Everything not set here comes from modes/briefing (features sync, digest, ask, prune; their review; the
   # sync and prune playbooks and rules; skills it does not override).
   extends: briefing
+  reads: [email/v1]          # the item kind its features read (B-6)
   purpose: >-
     Keep me briefed on my email: what needs my reply, the deadlines and asks, what important senders wrote and
     which attachments matter; answer questions about it from the stored messages only.

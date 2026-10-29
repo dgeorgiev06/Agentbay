@@ -3,8 +3,8 @@
 Files, in <env write path>/<mode>/ (e.g. .agentbay/data/feeds/feed-briefing/), one pair per mode so two
 briefing modes on one env never share items or tags. Both are created 0600 (SQLite gives -wal and -shm the
 database file's mode).
-  corpus.db    what agents may read, and nothing else. WAL mode; schema version in PRAGMA user_version (2; a v1
-               store gains the attachments tables on its next write).
+  corpus.db    what agents may read, and nothing else. WAL mode; schema version in PRAGMA user_version
+               (sqlsandbox.SCHEMA_VERSION); a store of any other version is refused, never converted.
     items           one row per item, unique on (source, ext_id); kind-specific fields in `ext` (JSON)
     item_selectors  (item, selector): the selector ids an item matches (the shared matcher decides)
     attachments     (item, n): an email attachment's metadata and extracted text (email/v1 attachments[]);
@@ -60,7 +60,7 @@ from bay.config import COST_PER_POST_USD
 from bay.connect import ConnectorError
 from bay.util import duration, iso, parse_time, read_json
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = sbx.SCHEMA_VERSION
 DB_NAME = "corpus.db"
 STATE_NAME = "state.json"
 LOCK_NAME = "corpus.lock"
@@ -110,7 +110,7 @@ def ddl(fts: bool) -> list[str]:
 
 
 def attachments_ddl(fts: bool) -> list[str]:
-    """Schema v2: the attachments table (+ attachments_fts with FTS5). A row dies with its item."""
+    """The attachments table (+ attachments_fts with FTS5). A row dies with its item."""
     out = [
         """CREATE TABLE attachments (
              pk INTEGER PRIMARY KEY, item INTEGER NOT NULL, n INTEGER NOT NULL, name TEXT NOT NULL DEFAULT '',
@@ -128,15 +128,6 @@ def attachments_ddl(fts: bool) -> list[str]:
             "DELETE FROM attachments_fts WHERE rowid = old.pk; END",
         ]
     return out
-
-
-def migrate(con: sqlite3.Connection, ver: int) -> None:
-    """Bring an older store to SCHEMA_VERSION inside the caller's transaction. v1 -> v2 adds the attachments
-    tables (a v1 store has no attachment rows to move)."""
-    if ver < 2:
-        for stmt in attachments_ddl(sbx.has_fts(con)):
-            con.execute(stmt)
-    con.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 
 def create_schema(con: sqlite3.Connection) -> bool:
@@ -166,18 +157,14 @@ def open_rw(path: Path) -> sqlite3.Connection:
         con.execute("BEGIN IMMEDIATE")
         create_schema(con)
         con.execute("COMMIT")
-    elif ver > SCHEMA_VERSION:
+    elif ver != SCHEMA_VERSION:
         con.close()
-        raise StoreError(f"{path}: store schema v{ver} is newer than this kit (v{SCHEMA_VERSION}); update agentbay")
+        raise StoreError(sbx.version_error(path, ver))
     elif con.execute("SELECT 1 FROM sqlite_master WHERE name = 'state'").fetchone():
         # kept on purpose: refusing a pre-release store fails closed for the scope invariant
         con.close()           # a pre-release store kept state inside corpus.db, where agents could count it
         raise StoreError(f"{path}: written by a pre-release build (internal state inside corpus.db); move the "
                          f"folder aside and sync again")
-    elif ver < SCHEMA_VERSION:
-        con.execute("BEGIN IMMEDIATE")
-        migrate(con, ver)
-        con.execute("COMMIT")
     return con
 
 
@@ -498,12 +485,12 @@ class CorpusStore:
         return cov
 
     def _overall(self, state: dict) -> dict:
-        """Coverage every bound source query can vouch for: latest `covers` (else `from`), earliest `to`."""
+        """Coverage every bound source query can vouch for: latest `covers`, earliest `to`."""
         names = set(self.ctx.sources)
         curs = [c for k, c in state["cursors"].items() if not names or k.split("|", 1)[0] in names]
         if not curs or any(not c.get("from") for c in curs):
             return {"from": None, "to": None}
-        return {"from": max(c.get("covers") or c["from"] for c in curs), "to": min(c["to"] for c in curs)}
+        return {"from": max(c["covers"] for c in curs), "to": min(c["to"] for c in curs)}
 
     def _budget(self, state: dict) -> dict:
         use = self._usage(state)
@@ -910,17 +897,16 @@ class CorpusStore:
         return sbx.clean({"items": items, "engine": engine})
 
     def describe(self) -> dict:
+        """Views, columns, row counts and samples. The mail views (v_email, v_threads, v_attachments,
+        v_attachment_fts) and the attachments full-text example are listed only when the store holds email."""
         limits = {"rows": sbx.DEFAULT_ROWS, "maxRows": sbx.MAX_ROWS, "bytes": sbx.MAX_BYTES, "timeMs": sbx.TIME_MS,
                   "cellChars": sbx.CELL_CHARS}
         cols = {v: [{"name": n, "type": t, "description": d} for n, t, d in sbx.COLUMNS[v]] for v in sbx.VIEWS}
         fts = {"view": sbx.FTS_VIEW, "indexes": ["title", "text", "author"],
                "example": "SELECT id, url, snippet FROM v_fts WHERE fts MATCH 'staking AND custody' "
-                          "ORDER BY rank LIMIT 20",
-               "attachments": {"view": sbx.ATT_FTS_VIEW, "indexes": ["name", "text"],
-                               "example": "SELECT id, name, snippet FROM v_attachment_fts WHERE fts MATCH 'invoice' "
-                                          "ORDER BY rank LIMIT 20"}}
+                          "ORDER BY rank LIMIT 20"}
         if not self.path.exists():
-            data_views = [v for v in sbx.VIEWS if v not in sbx.FTS_VIEWS]
+            data_views = [v for v in sbx.VIEWS if v not in sbx.FTS_VIEWS and v not in sbx.MAIL_VIEWS]
             return {"views": [{"name": v, "columns": cols[v], "rows": 0} for v in data_views],
                     "fts": {**fts, "available": sbx.fts5_available()}, "functions": sorted(sbx.FUNCTIONS),
                     "limits": limits}
@@ -928,7 +914,8 @@ class CorpusStore:
         con = self._ro()
         try:
             fts["available"] = sbx.has_fts(con)
-            present = sbx.present_views(con)
+            mail = con.execute("SELECT 1 FROM v_items WHERE kind = 'email' LIMIT 1").fetchone() is not None
+            present = [v for v in sbx.views_of(fts["available"]) if mail or v not in sbx.MAIL_VIEWS]
             views, rows = [], {}
             for v in present:
                 if v in sbx.FTS_VIEWS:
@@ -951,6 +938,10 @@ class CorpusStore:
         for v in present:
             if v in sbx.FTS_VIEWS:
                 views.append({"name": v, "columns": cols[v], "rows": rows.get(base[v], 0)})
+        if mail:
+            fts["attachments"] = {"view": sbx.ATT_FTS_VIEW, "indexes": ["name", "text"],
+                                  "example": "SELECT id, name, snippet FROM v_attachment_fts WHERE fts MATCH "
+                                             "'invoice' ORDER BY rank LIMIT 20"}
         if not fts["available"]:
             fts["note"] = "FTS5 is not available in this Python's SQLite: use search (LIKE) or LIKE in sql"
         return sbx.clean({"views": views, "fts": fts, "functions": sorted(sbx.FUNCTIONS), "limits": limits,
@@ -977,7 +968,6 @@ class CorpusStore:
         con = self._ro()
         out = []
         try:
-            atts = "v_attachments" in sbx.present_views(con)
             rows = con.execute(f"SELECT t.* FROM v_threads t {_where(where)} ORDER BY t.lastDate DESC, t.threadId "
                                f"LIMIT ?", [*args, int(limit or 100)]).fetchall()
             for r in rows:
@@ -993,7 +983,7 @@ class CorpusStore:
                 t["lastText"] = last[0] if last else ""
                 t["attachments"] = [dict(a) for a in con.execute(
                     "SELECT id, name, mime, size, textChars, reason FROM v_attachments WHERE source = ? AND "
-                    "threadId = ? ORDER BY createdAt, n LIMIT 20", key)] if atts else []
+                    "threadId = ? ORDER BY createdAt, n LIMIT 20", key)]
                 t["important"] = any(selmod.addr_matches(important or [], a) for a in t["senders"])
                 out.append(t)
         finally:

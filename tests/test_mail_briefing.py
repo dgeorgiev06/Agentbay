@@ -1,6 +1,6 @@
 """mail-briefing on the offline fake-mail source (env local-mail-offline): resolution, the offline end-to-end
 path, separate stores and units next to feed-briefing, the mail views and threads endpoint, exact labels,
-removed ids, a blocked source, the v1 -> v2 store migration and the sandbox over the new tables."""
+removed ids, a blocked source, refusing other schema versions and the sandbox over the new tables."""
 from __future__ import annotations
 
 import json
@@ -224,30 +224,27 @@ def test_a_blocked_source_keeps_cursors_and_reads_and_blocks_the_call():
 
 
 # ------------------------------------------------------------------ schema v2, sandbox
-def test_a_v1_store_migrates_to_v2_and_reads_work_before_it_does():
+def test_a_store_of_another_schema_version_is_refused_not_converted():
     p = project()
     store(p).sync()
-    con = sqlite3.connect(db(p))
-    for t in ("attachments_ai", "attachments_ad", "items_ad_attachments"):
-        con.execute(f"DROP TRIGGER {t}")
-    con.execute("DROP TABLE attachments_fts")
-    con.execute("DROP TABLE attachments")
-    con.execute("PRAGMA user_version = 1")
-    con.commit()
-    con.close()
-    st = store(p)
-    views = {v["name"] for v in st.describe()["views"]}
-    assert {"v_email", "v_threads"} <= views and "v_attachments" not in views    # a v1 store: no attachment views
-    assert st.sql("SELECT count(*) FROM v_threads")["rows"] == [[4]]
-    assert "v_attachments" in st.sql("SELECT * FROM v_attachments")["error"]
-    st.sync()                                                                    # the writer migrates
-    con = sqlite3.connect(db(p))
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 2
-    con.close()
-    st = store(p)
-    st.ctx.sources["fake-mail"].fetch.__self__.messages[0]["ageHours"] = 49      # changed: re-stored with text
-    st.sync(lookback="30d")
-    assert {v["name"] for v in store(p).describe()["views"]} >= {"v_attachments", "v_attachment_fts"}
+    for ver, fix in ((1, "move the folder aside and sync again"), (3, "update agentbay")):
+        con = sqlite3.connect(db(p))
+        con.execute(f"PRAGMA user_version = {ver}")
+        con.commit()
+        con.close()
+        st = store(p)
+        for call in (st.query, st.describe, lambda: st.threads(since="30d"), st.sync):
+            try:
+                call()
+                raise AssertionError("expected a refusal")
+            except (connect.ConnectorError, sbx.SqlError) as e:
+                assert f"schema v{ver}" in str(e) and fix in str(e), e
+        assert fix in st.sql("SELECT 1")["error"]
+        con = sqlite3.connect(db(p))
+        assert con.execute("PRAGMA user_version").fetchone()[0] == ver           # left as it was
+        con.close()
+    src = (KIT / "framework/connectors/corpus-store/corpus_store.py").read_text()
+    assert "def migrate" not in src and "v1 store" not in src
 
 
 def test_sandbox_reads_the_mail_views_and_refuses_shadow_tables_and_writes():

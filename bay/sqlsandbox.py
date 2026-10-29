@@ -32,6 +32,7 @@ from pathlib import Path
 
 from . import secretscan, vault
 
+SCHEMA_VERSION = 2          # PRAGMA user_version of a corpus store; any other version is refused
 VIEWS = ("v_items", "v_posts", "v_email", "v_threads", "v_attachments", "v_fts", "v_attachment_fts")
 FTS = "items_fts"
 FTS_VIEW = "v_fts"
@@ -39,6 +40,7 @@ ATT_FTS = "attachments_fts"
 ATT_FTS_VIEW = "v_attachment_fts"
 FTS_VIEWS = {FTS_VIEW: FTS, ATT_FTS_VIEW: ATT_FTS}        # full-text view -> the FTS5 table it needs
 ITEM_VIEWS = ("v_items", "v_posts", "v_email")           # one row per item (describe samples these)
+MAIL_VIEWS = ("v_email", "v_threads", "v_attachments", ATT_FTS_VIEW)   # describe lists them for stores with email
 FTS_SHADOW = tuple(f"{t}_{x}" for t in (FTS, ATT_FTS) for x in ("data", "idx", "content", "docsize", "config"))
 # the store tables: every row in them is in the mode's scope (attachments rows die with their item)
 TABLES = ("items", "item_selectors", "attachments", FTS, ATT_FTS)
@@ -169,10 +171,9 @@ def _last(col: str) -> str:
             f"ORDER BY l.createdAt DESC, l.id DESC LIMIT 1)")
 
 
-def email_view_sql(attachments: bool, att_fts: bool) -> list[str]:
-    """v_email (one row per message), v_threads (one row per thread) and, on a store with the attachments
-    table, v_attachments (+ v_attachment_fts with FTS5). Only allowlisted functions: the authorizer checks the
-    views' own expressions too."""
+def email_view_sql(fts: bool) -> list[str]:
+    """v_email (one row per message), v_threads (one row per thread), v_attachments and, with FTS5,
+    v_attachment_fts. Only allowlisted functions: the authorizer checks the views' own expressions too."""
     acct = "lower(json_extract(i.ext, '$.account'))"
     out = [
         f"""CREATE TEMP VIEW v_email AS {_item_select()}, i.title AS subject,
@@ -204,17 +205,16 @@ def email_view_sql(attachments: bool, att_fts: bool) -> list[str]:
                 JOIN main.item_selectors s ON s.item = f.pk WHERE {_thread_rows('f')} ORDER BY sel)) AS matched,
               max(e.hasAttachments) AS hasAttachments, sum(e.attachmentCount) AS attachmentCount
             FROM temp.v_email e WHERE e.threadId IS NOT NULL GROUP BY e.source, e.threadId) t""",
-    ]
-    if attachments:
-        out.append("""CREATE TEMP VIEW v_attachments AS SELECT
-            i.source || ':' || i.ext_id AS id, i.source AS source, a.n AS n, a.name AS name, a.mime AS mime, a.size AS size,
-            a.text_chars AS textChars, a.reason AS reason, a.text AS text, i.thread_id AS threadId,
+        """CREATE TEMP VIEW v_attachments AS SELECT
+            i.source || ':' || i.ext_id AS id, i.source AS source, a.n AS n, a.name AS name, a.mime AS mime,
+            a.size AS size, a.text_chars AS textChars, a.reason AS reason, a.text AS text, i.thread_id AS threadId,
             i.author AS sender, i.title AS subject, i.created_at AS createdAt, i.url AS url,
             (SELECT json_group_array(selector) FROM
                (SELECT s.selector FROM main.item_selectors s WHERE s.item = i.pk ORDER BY s.selector)) AS matched,
             a.pk AS rid
-          FROM main.attachments a JOIN main.items i ON i.pk = a.item""")
-    if attachments and att_fts:
+          FROM main.attachments a JOIN main.items i ON i.pk = a.item""",
+    ]
+    if fts:
         out.append(f"""CREATE TEMP VIEW {ATT_FTS_VIEW} AS SELECT v.*, f.{ATT_FTS} AS fts, f.rank AS rank,
             snippet({ATT_FTS}, 1, '[', ']', '…', 16) AS snippet
           FROM main.{ATT_FTS} f JOIN temp.v_attachments v ON v.rid = f.rowid""")
@@ -251,19 +251,20 @@ def connect_ro(path: Path) -> sqlite3.Connection:
         if not cur or cur > HEAP_BYTES:
             con.execute(f"PRAGMA hard_heap_limit = {HEAP_BYTES}")
         con.execute("PRAGMA temp_store = FILE")
+        ver = con.execute("PRAGMA main.user_version").fetchone()[0]
+        if ver != SCHEMA_VERSION:
+            raise SqlError(version_error(path, ver))
         # kept on purpose: refusing a pre-release store fails closed for the scope invariant
         if con.execute("SELECT 1 FROM main.sqlite_master WHERE name = 'state'").fetchone():
             raise SqlError(f"{path}: written by a pre-release build (internal state inside corpus.db); move the "
                            f"folder aside and sync again")
         fts = has_fts(con)
-        atts, att_fts = has_table(con, "attachments"), has_table(con, ATT_FTS)
-        for stmt in view_sql(fts) + email_view_sql(atts, att_fts):
+        for stmt in view_sql(fts) + email_view_sql(fts):
             con.execute(stmt)
-        for t, present in ((FTS, fts), (ATT_FTS, att_fts)):
-            if present:
-                # FTS5 reads its config table when the table first connects, which happens while a statement is
-                # prepared: connect it now, so a query naming an FTS table never trips the strict pre-pass
-                con.execute(f"SELECT 1 FROM main.{t} LIMIT 0").fetchall()
+        for t in (FTS, ATT_FTS) if fts else ():
+            # FTS5 reads its config table when the table first connects, which happens while a statement is
+            # prepared: connect it now, so a query naming an FTS table never trips the strict pre-pass
+            con.execute(f"SELECT 1 FROM main.{t} LIMIT 0").fetchall()
         con.execute("PRAGMA query_only = ON")
     except SqlError:
         con.close()
@@ -274,19 +275,27 @@ def connect_ro(path: Path) -> sqlite3.Connection:
     return con
 
 
-def has_table(con: sqlite3.Connection, name: str) -> bool:
-    return con.execute("SELECT 1 FROM main.sqlite_master WHERE name = ?", (name,)).fetchone() is not None
+def version_error(path, ver: int) -> str:
+    """Why a store of another schema version is refused (stores are never converted)."""
+    if ver > SCHEMA_VERSION:
+        return f"{path}: store schema v{ver} is newer than this kit (v{SCHEMA_VERSION}); update agentbay"
+    return (f"{path}: store schema v{ver} is older than this kit (v{SCHEMA_VERSION}) and is never converted; move "
+            f"the folder aside and sync again")
 
 
 def has_fts(con: sqlite3.Connection) -> bool:
-    return has_table(con, FTS)
+    """Whether the store was created with FTS5 (items_fts and attachments_fts); without it the full-text views
+    are missing and search falls back to LIKE."""
+    return con.execute("SELECT 1 FROM main.sqlite_master WHERE name = ?", (FTS,)).fetchone() is not None
 
 
-def present_views(con: sqlite3.Connection) -> list[str]:
-    """The views a read-only connection created (a store without FTS5 or without the attachments table has
-    fewer), in VIEWS order."""
-    have = {n for (n,) in con.execute("SELECT name FROM temp.sqlite_master WHERE type = 'view'")}
-    return [v for v in VIEWS if v in have]
+def views_of(fts: bool) -> list[str]:
+    """The views a read-only connection has, in VIEWS order (no full-text views without FTS5)."""
+    return [v for v in VIEWS if fts or v not in FTS_VIEWS]
+
+
+def tables_of(fts: bool) -> list[str]:
+    return [t for t in TABLES if fts or t not in (FTS, ATT_FTS)]
 
 
 class Sandbox:
@@ -295,8 +304,8 @@ class Sandbox:
     def __init__(self, path: Path, *, time_ms: int = TIME_MS, max_bytes: int = MAX_BYTES):
         self.con = connect_ro(path)
         self.fts = has_fts(self.con)
-        self.views = present_views(self.con)
-        self.tables = [t for t in TABLES if has_table(self.con, t)]
+        self.views = views_of(self.fts)
+        self.tables = tables_of(self.fts)
         self.time_ms, self.max_bytes = time_ms, max_bytes
         # every name the file and the temp views define, read before the authorizer is on. A read of no column
         # reports db None both for a stored table and for a CTE; a CTE may not take a stored name (shadowing),

@@ -222,7 +222,8 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
   prune of one mode never run at once (a per-mode lock), and spend is saved before the items commit.
 - **corpus-store** (framework connector) keeps one store per mode, `<env data folder>/<mode>/corpus.db`
   (settings.mode from the dispatcher; a use-shim read uses its unit's mode and env). The file, -wal and -shm
-  are 0600; WAL mode, `user_version` = 2 (a v1 store gains the attachment tables on its next write):
+  are 0600; WAL mode, `user_version` = 2. A store of any other version is refused (move the folder aside and sync
+  again); stores are never converted:
   - `items` (unique source + ext_id);
   - `item_selectors`;
   - `attachments` (item, n, name, mime, size, text_chars, reason, text), deleted with its item by a trigger;

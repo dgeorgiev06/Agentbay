@@ -25,3 +25,4 @@ spec:
     properties:
       fixture: { type: string, description: "Path (relative to the project) of a JSON list of {id, handle, name, text, ageHours, list?}." }
       deleted: { type: array, items: { type: string } }
+      blocked: { type: string, description: "Simulate a source that cannot be read (an expired login): every fetch returns this as `blocked`." }

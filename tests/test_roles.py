@@ -56,7 +56,7 @@ def test_access_comes_from_the_mode_needs_through_the_env():
     u = s.units()
     feed, imp = u["analyst--feed-briefing"], u["analyst--improve"]
     assert feed.bay_uses == [f"items.store/v1.{e}" for e in
-                             ("describe", "sql", "get", "thread", "facets", "search", "query", "status")]
+                             ("describe", "sql", "get", "thread", "threads", "facets", "search", "query", "status")]
     assert {x.rsplit(".", 1)[0] for x in imp.bay_uses} == {"improve.findings/v1", "session.events/v1",
                                                             "review.verdicts/v1", "artifacts.read/v1"}
     assert "improve.findings/v1.upsert" not in imp.bay_uses and "improve.findings/v1.verify" not in imp.bay_uses
@@ -289,4 +289,4 @@ def test_lint_reports_an_unknown_env_in_a_roles_map_with_file_and_line():
     ps = lint.run(k)
     assert any(p.endswith(f"modes/briefing/mode.yaml:{line}: mode briefing: `roles:` puts role reviewer in unknown "
                           f"env 'nowhere' (have: cos-local, framework-dev, improve-local, local-authoring, local-feeds, "
-                          f"local-feeds-offline, research, workspace)") for p in ps), ps
+                          f"local-feeds-offline, local-mail, local-mail-offline, research, workspace)") for p in ps), ps

@@ -54,6 +54,9 @@ class Fake:
     def fetch(self, query=None, since=None, cursor=None, maxItems=100, checkIds=None) -> dict:
         query = query or {}
         self.calls.append({"query": query, "since": since, "cursor": cursor, "maxItems": maxItems, "checkIds": checkIds})
+        if self.ctx.config.get("blocked"):
+            return {"items": [], "cursor": cursor, "truncated": True, "billed": 0, "requests": 0,
+                    "blocked": str(self.ctx.config["blocked"])}
         now = self.ctx.now()
         lo = now - timedelta(days=7)
         if since:

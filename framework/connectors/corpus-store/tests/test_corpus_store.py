@@ -55,9 +55,10 @@ def test_schema_wal_user_version_fts_and_owner_only_file():
     store(p).sync(lookback="3d")
     con = sqlite3.connect(db(p))
     assert con.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 2
     names = {r[0] for r in con.execute("SELECT name FROM sqlite_master")}
     assert {"items", "item_selectors", "items_fts", "items_ai", "items_ad", "items_au"} <= names
+    assert {"attachments", "attachments_fts", "attachments_ai", "attachments_ad", "items_ad_attachments"} <= names
     assert "state" not in names                                    # internal state lives in state.json
     assert con.execute("SELECT count(*) FROM items_fts WHERE items_fts MATCH 'firedancer'").fetchone()[0] == 1
     con.execute("UPDATE items SET body = 'renamed to frankendancer' WHERE ext_id = '1008'")   # trigger keeps FTS in step
@@ -84,7 +85,7 @@ def test_newer_schema_is_refused_with_the_fix():
         store(p).sync(lookback="3d")
         raise AssertionError("expected StoreError")
     except Exception as e:
-        assert "schema v9 is newer than this kit (v1)" in str(e)
+        assert "schema v9 is newer than this kit (v2)" in str(e)
 
 
 def test_sync_dedups_and_is_incremental():

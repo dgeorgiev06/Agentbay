@@ -105,7 +105,9 @@ cannot contain code once something runs it. Hard isolation needs an OS sandbox.
 
 ## Briefings: corpus store and read-only SQL
 
-`modes/briefing` is an abstract base (sync, digest, ask, prune); `feed-briefing` extends it for X posts.
+`modes/briefing` is an abstract base (sync, digest, ask, prune); `feed-briefing` extends it for X posts and
+`mail-briefing` for Gmail, each in its own env (`local-feeds`, `local-mail`) with its own store, secrets and
+role units.
 Sources implement `items.source/v1` and return `item/v1` items (`id` is `<source>:<extId>`; `post/v1` adds
 fields). A connector declares which selector fields its search handles; the store fetches with that native
 part and re-applies the whole selector with one shared matcher (`bay/selector.py`), so behaviour is the same
@@ -118,10 +120,28 @@ to the mode's env that match a current selector. Every sync and prune enforces i
 a change of selectors or sources every read except `status` is refused until a sync re-scopes. Billing
 counts every item a source returns, and spend is saved before the items commit.
 
-Agents query with `items.store/v1.sql`: one SELECT over the views `v_items`, `v_posts` and `v_fts` and the
-store tables, on a read-only connection, behind an authorizer with a function allowlist, a pre-pass that
+Agents query with `items.store/v1.sql`: one SELECT over the views (`v_items`, `v_posts`, `v_email`,
+`v_threads`, `v_attachments`, `v_fts`, `v_attachment_fts`) and the store tables, on a read-only connection, behind an authorizer with a function allowlist, a pre-pass that
 refuses FTS shadow tables, and time, heap, row, byte and cell limits. Item text is secret-scrubbed at ingest
 and every read is redacted and scanned again.
+
+**Mail.** `gmail-api` reads Gmail with the `gmail.readonly` scope only and calls only GET endpoints on
+gmail.googleapis.com plus the token endpoint, so nothing can send, label, move or delete mail; a test greps
+the connector for any other call. The first sync lists the lookback window with the native Gmail query; later
+syncs replay `history.list` from the stored historyId (the connector is a `changeFeed`), and while the stored
+window does not yet reach back to the lookback (a first sync cut by the per-run cap) a backfill lists the older
+part with `before:`, skipping messages already stored, so each message is read once. Every change to a stored
+message is read again with its full label set, at any age, so the store keeps exactly the scope; label-only
+changes to other messages are read only when they can bring one into scope. When Gmail no longer has the
+history the store re-lists its window. Only from/to/in/has/since go to Gmail search, because a source may return
+more than the local matcher keeps but never less. An expired or missing login makes the source `blocked` with
+the one command to run, `bay auth gmail` (an interactive-terminal OAuth login with PKCE and a loopback
+redirect); a digest or ask then goes on with the stored mail and ends `partial`, the gap in its coverage. Attachment text (docx, txt, csv, md) is
+extracted in a separate `python3 -I` process fed on stdin, with a timeout and memory, CPU and file-size
+limits, under size and text caps (docx XML must be UTF-8 and is parsed with expat, which refuses any DTD or
+entity, so nothing expands); PDFs and other files are metadata only, and a failure records a reason. Mail
+bodies and attachment text are secret-scrubbed at ingest like every item, and the mail rules make email
+content data, never instructions.
 
 ## cos and project workflows
 

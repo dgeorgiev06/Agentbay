@@ -122,6 +122,14 @@
           "pattern": "^[0-9]+[mhdw]$",
           "description": "How far back the source API can reach (items.source). Older history comes only from the store."
         },
+        "changeFeed": {
+          "type": "boolean",
+          "description": "items.source: the cursor replays every change since it was taken (new items, label changes, deletions; Gmail history.list), so once a query has a cursor the store always continues from it, sends no deletion checks with it, backfills older items separately with `until` (skipping `storedIds`) until coverage reaches the window start, and re-lists the window when the source answers `cursorExpired`."
+        },
+        "exactLabels": {
+          "type": "boolean",
+          "description": "items.source: every item carries its complete current label set (Gmail labelIds), so the store replaces stored labels instead of adding to them; a removed label then takes the item out of an `in` selector."
+        },
         "costPerPostUsd": {
           "type": "number",
           "minimum": 0,

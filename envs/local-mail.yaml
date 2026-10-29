@@ -1,0 +1,17 @@
+apiVersion: agentbay/v2
+kind: Environment
+metadata:
+  name: local-mail
+  description: >-
+    Your Gmail (read-only scope) and the local mail corpus store. Only the dispatcher touches the connector and
+    its secrets; agents read the store only through their role's use shim.
+spec:
+  bind:
+    items.source/v1: [gmail-api]
+    items.store/v1: corpus-store
+    workspace.read/v1: { tools: [Read, Glob, Grep] }
+  secrets: { provider: keychain, allow: [GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN] }
+  network: { allow: [oauth2.googleapis.com, gmail.googleapis.com] }   # token refresh; Gmail API reads
+  fs: { read: ["."], write: [".agentbay/data/mail"] }
+  effects: [read, write, network, spend, delete]
+  limits: { maxTurns: 40, maxMinutes: 20, spendUsd: 0, monthlyItems: 20000, maxItemsPerRun: 500 }

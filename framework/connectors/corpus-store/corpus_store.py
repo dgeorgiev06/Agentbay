@@ -3,14 +3,18 @@
 Files, in <env write path>/<mode>/ (e.g. .agentbay/data/feeds/feed-briefing/), one pair per mode so two
 briefing modes on one env never share items or tags. Both are created 0600 (SQLite gives -wal and -shm the
 database file's mode).
-  corpus.db    what agents may read, and nothing else. WAL mode; schema version in PRAGMA user_version.
+  corpus.db    what agents may read, and nothing else. WAL mode; schema version in PRAGMA user_version
+               (sqlsandbox.SCHEMA_VERSION); a store of any other version is refused, never converted.
     items           one row per item, unique on (source, ext_id); kind-specific fields in `ext` (JSON)
     item_selectors  (item, selector): the selector ids an item matches (the shared matcher decides)
+    attachments     (item, n): an email attachment's metadata and extracted text (email/v1 attachments[]);
+                    `ext` keeps the metadata only. Rows are deleted with their item (trigger).
     items_fts       FTS5 over title, body and author, kept in step by triggers. Missing when this Python's
                     SQLite has no FTS5: search then falls back to LIKE, and `bay validate` says so.
+    attachments_fts FTS5 over attachment name and text, kept in step by triggers (FTS5 only).
   state.json   cursors (per connector and native query), coverage, budget (per UTC month), deleted
                (<source>:<extId>, never re-stored), checked (last deletion check), selectors and sources (the
-               scope last applied). Never opened by the read-only connection agents use.
+               scope last applied), recheck (stored ids to re-read after a cursorExpired re-list). Never opened by the read-only connection agents use.
 
 Writers: sync and prune hold an exclusive lock (corpus.lock) from reading state.json until they have saved
 it, so two runs never overwrite each other's budget. Spend, deletions and check times are saved before the
@@ -21,11 +25,30 @@ Scope invariant: corpus.db holds exactly the mode's scope, meaning items of the 
 env that match at least one current selector (bay/selector.py). sync and prune (dispatcher code steps) enforce
 it on every run (_enforce_scope): rows of sources no longer bound are deleted, and every stored item is
 re-matched without refetching (re-tagged, or deleted when no selector matches); sync stores a fetched item
-only when it matches. items_fts follows `items` through triggers. So read-only SQL has nothing out of scope
-to reach. When the configured selectors or bound sources change, sync first applies the new scope in its own
+only when it matches. A source that declares `exactLabels` sends each item's complete label set, so a
+removed label replaces the stored set (and can take the item out of scope); ids a source reports `removed`
+(trash, spam) are deleted without being remembered, ids it reports `deleted` are deleted and never re-stored.
+items_fts and attachments (with attachments_fts) follow `items` through triggers. So read-only SQL has nothing
+out of scope to reach. When the configured selectors or bound sources change, sync first applies the new scope in its own
 transaction, before and regardless of any fetch, and until a sync or prune has done so every read endpoint
 refuses (status reports `stale`), so a config change never leaves out-of-scope items readable. Every item
 string is secret-scrubbed before it is stored (scrub_item), and every read is scrubbed again.
+
+A `changeFeed` source (Gmail history) is followed: once a query has a cursor every sync replays the changes
+since it (no deletion checks; the feed reports deletions and label changes, and every change to a stored item
+is re-read whatever its age), and while that query's coverage starts after the window start a second fetch
+backfills the older part (`since` = window start, `until` = start of coverage, skipping the ids already stored),
+so a first sync stopped by a cap is completed over the next syncs and no message is read twice. A cursor the
+source no longer has (`cursorExpired`) is dropped and the window re-listed with deletion checks; every stored id
+that re-list did not read goes into state.json `recheck` (per source), which later syncs re-read within the
+deletion-check share of the budget until it is empty, and status reports `stale` until then. A selector that
+joins a followed query first replays the feed from the old cursor, then re-lists the window for it without
+moving the cursor, so the cursor never passes a change that was not replayed. An item the store does not hold
+is stored only when it is inside the source's window.
+
+A source that returns `blocked` (an expired login) leaves its cursors and stored items as they are; state.json
+records it under `blocked` until that source is read again, status reports `stale` and `blocked`, coverage
+names the gap, and sync reports it as `stopped` (the dispatcher makes a sync that read nothing `blocked`).
 
 Budget is enforced before each source fetch exactly as before: a run is capped at the strictest of
 maxItemsPerRun, monthlyItems - used and (spendUsd - spent) / costPerPostUsd. Up to DELETION_CHECK_SHARE of a source's budget re-checks stored items still in its window.
@@ -49,7 +72,7 @@ from bay.config import COST_PER_POST_USD
 from bay.connect import ConnectorError
 from bay.util import duration, iso, parse_time, read_json
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = sbx.SCHEMA_VERSION
 DB_NAME = "corpus.db"
 STATE_NAME = "state.json"
 LOCK_NAME = "corpus.lock"
@@ -83,6 +106,7 @@ def ddl(fts: bool) -> list[str]:
         "CREATE INDEX item_selectors_selector ON item_selectors (selector)",
         "CREATE TRIGGER items_ad_tags AFTER DELETE ON items BEGIN DELETE FROM item_selectors WHERE item = old.pk; END",
     ]
+    out += attachments_ddl(fts)
     if fts:
         cols = "coalesce(new.title, ''), new.body, coalesce(new.author, '') || ' ' || coalesce(new.author_name, '')"
         out += [
@@ -97,8 +121,29 @@ def ddl(fts: bool) -> list[str]:
     return out
 
 
+def attachments_ddl(fts: bool) -> list[str]:
+    """The attachments table (+ attachments_fts with FTS5). A row dies with its item."""
+    out = [
+        """CREATE TABLE attachments (
+             pk INTEGER PRIMARY KEY, item INTEGER NOT NULL, n INTEGER NOT NULL, name TEXT NOT NULL DEFAULT '',
+             mime TEXT NOT NULL DEFAULT '', size INTEGER NOT NULL DEFAULT 0, text_chars INTEGER NOT NULL DEFAULT 0,
+             reason TEXT, text TEXT NOT NULL DEFAULT '', UNIQUE (item, n))""",
+        "CREATE TRIGGER items_ad_attachments AFTER DELETE ON items BEGIN "
+        "DELETE FROM attachments WHERE item = old.pk; END",
+    ]
+    if fts:
+        out += [
+            "CREATE VIRTUAL TABLE attachments_fts USING fts5(name, text)",
+            "CREATE TRIGGER attachments_ai AFTER INSERT ON attachments BEGIN "
+            "INSERT INTO attachments_fts (rowid, name, text) VALUES (new.pk, new.name, new.text); END",
+            "CREATE TRIGGER attachments_ad AFTER DELETE ON attachments BEGIN "
+            "DELETE FROM attachments_fts WHERE rowid = old.pk; END",
+        ]
+    return out
+
+
 def create_schema(con: sqlite3.Connection) -> bool:
-    """Create the v1 schema in an empty database. Returns whether FTS5 is in use."""
+    """Create the current schema in an empty database. Returns whether FTS5 is in use."""
     fts = sbx.fts5_available()
     for stmt in ddl(fts):
         con.execute(stmt)
@@ -124,9 +169,9 @@ def open_rw(path: Path) -> sqlite3.Connection:
         con.execute("BEGIN IMMEDIATE")
         create_schema(con)
         con.execute("COMMIT")
-    elif ver > SCHEMA_VERSION:
+    elif ver != SCHEMA_VERSION:
         con.close()
-        raise StoreError(f"{path}: store schema v{ver} is newer than this kit (v{SCHEMA_VERSION}); update agentbay")
+        raise StoreError(sbx.version_error(path, ver))
     elif con.execute("SELECT 1 FROM sqlite_master WHERE name = 'state'").fetchone():
         # kept on purpose: refusing a pre-release store fails closed for the scope invariant
         con.close()           # a pre-release store kept state inside corpus.db, where agents could count it
@@ -155,10 +200,14 @@ def scrub_item(it: dict) -> dict:
 
 
 def item_row(it: dict) -> dict:
-    """The one way an item becomes an `items` row (sync uses it); scrubs first."""
+    """The one way an item becomes an `items` row (sync uses it); scrubs first. Attachment text goes to the
+    attachments table (attachment_rows), not into `ext`."""
     it = scrub_item(it)
     au = it.get("author") or {}
     ext = {k: v for k, v in it.items() if k not in ENVELOPE}
+    if isinstance(ext.get("attachments"), list):
+        ext["attachments"] = [{k: v for k, v in a.items() if k != "text"} if isinstance(a, dict) else a
+                              for a in ext["attachments"]]
     if au.get("email") and au.get("handle"):
         ext["author"] = au
     return {"source": it["source"], "ext_id": it["extId"], "kind": it["kind"],
@@ -167,6 +216,18 @@ def item_row(it: dict) -> dict:
             "created_at": it["createdAt"], "fetched_at": it["fetchedAt"], "container": it.get("container"),
             "labels": json.dumps(sorted(set(it.get("labels") or []))), "thread_id": it.get("threadId"),
             "ext": json.dumps(ext, ensure_ascii=False, sort_keys=True)}
+
+
+def attachment_rows(it: dict) -> list[tuple]:
+    """(n, name, mime, size, textChars, reason, text) per attachment of a scrubbed item."""
+    out = []
+    for n, a in enumerate(it.get("attachments") or []):
+        if not isinstance(a, dict):
+            continue
+        text = a.get("text") or ""
+        out.append((n, str(a.get("name") or ""), str(a.get("mime") or ""), int(a.get("size") or 0),
+                    int(a.get("textChars") or len(text)) if text else 0, a.get("reason"), text))
+    return out
 
 
 def row_item(r: sqlite3.Row) -> dict:
@@ -249,19 +310,35 @@ class _SyncRun:
 
 
 @dataclass
+class _SourceRun:
+    """One source within a sync: its report entry and every cursor key it owns."""
+    name: str
+    src: object
+    src_id: str
+    rep: dict
+    keys: list
+    start: datetime
+
+
+@dataclass
 class _Query:
     req: dict
     start: datetime
     have_from: datetime | None
     incremental: bool
     mode: str
+    window: datetime | None = None    # the source's window start; differs from `start` when every selector of
+                                      # the query has its own `since` (items before it are out of scope anyway)
+    hold: bool = False                # a re-list after a replay: the cursor stays where the replay left it
+    local_in: list = field(default_factory=list)   # `in` values the native query does not carry (changeFeed)
 
 
 def _query_request(cur: dict, native: dict, group: list[dict], ids: list[str], start_src: datetime, remaining: int,
-                   check: list[str], now) -> _Query:
-    """The fetch arguments for one native query: newer than its cursor when the stored window already reaches
-    back far enough and no selector joined it; otherwise everything since the window start (a backfill when a
-    selector joined an existing query)."""
+                   check: list[str], now, feed: bool = False) -> _Query:
+    """The fetch arguments for one native query: newer than its cursor when no selector joined it and the
+    stored window already reaches back far enough (a `changeFeed` source: always, the older part is backfilled
+    separately); otherwise everything since the window start (a backfill when a selector joined an existing
+    query)."""
     start = start_src
     sinces = [parse_time(s["since"], now) for s in group if s.get("since")]
     if len(sinces) == len(group):
@@ -272,13 +349,13 @@ def _query_request(cur: dict, native: dict, group: list[dict], ids: list[str], s
         req["checkIds"] = check
     have_from = parse_time(cur["from"], now) if cur.get("from") else None
     new_sel = set(ids) - set(cur.get("selectors") or [])
-    incremental = bool(cur.get("cursor")) and have_from is not None and have_from <= start and not new_sel
+    incremental = bool(cur.get("cursor")) and have_from is not None and not new_sel and (feed or have_from <= start)
     mode = "cursor" if incremental else ("backfill" if new_sel and cur.get("selectors") else "since")
     if incremental:
         req["cursor"] = cur["cursor"]
     else:
         req["since"] = iso(start)
-    return _Query(req, start, have_from, incremental, mode)
+    return _Query(req, start, have_from, incremental, mode, start_src)
 
 
 class CorpusStore:
@@ -422,18 +499,24 @@ class CorpusStore:
             complete = False
             note = (f"requested from {iso(requested_from)} but the store only covers from {cov['from']}; "
                     f"older items are not available (source API window or budget limited the history)")
+        blocked = state.get("blocked") or {}
+        if blocked:
+            complete = False
+            gap = "; ".join(f"{n} has not been read since {b.get('since')}: {b.get('reason')}"
+                            for n, b in sorted(blocked.items()))
+            note = f"{note}; {gap}" if note else gap
         cov["complete"] = complete
         if note:
             cov["note"] = note
         return cov
 
     def _overall(self, state: dict) -> dict:
-        """Coverage every bound source query can vouch for: latest `from`, earliest `to`."""
+        """Coverage every bound source query can vouch for: latest `covers`, earliest `to`."""
         names = set(self.ctx.sources)
         curs = [c for k, c in state["cursors"].items() if not names or k.split("|", 1)[0] in names]
         if not curs or any(not c.get("from") for c in curs):
             return {"from": None, "to": None}
-        return {"from": max(c["from"] for c in curs), "to": min(c["to"] for c in curs)}
+        return {"from": max(c["covers"] for c in curs), "to": min(c["to"] for c in curs)}
 
     def _budget(self, state: dict) -> dict:
         use = self._usage(state)
@@ -455,13 +538,14 @@ class CorpusStore:
         if errs:
             raise StoreError(f"connector {src_name}: item {it['id']} does not match {kind}/v1: {'; '.join(errs[:3])}")
 
-    def _upsert(self, con, it: dict, sels: list[dict], now) -> tuple[bool, bool]:
+    def _upsert(self, con, it: dict, sels: list[dict], now, exact: bool = False) -> tuple[bool, bool]:
         """(new, kept) for a scrubbed item (scrub_item), so it matches on exactly what will be stored. Labels
-        union with what is stored; the item is kept only if it matches a selector."""
+        union with what is stored, unless the source sends complete label sets (`exact`); the item is kept only
+        if it matches a selector."""
         old = con.execute("SELECT pk, labels, container FROM items WHERE source = ? AND ext_id = ?",
                           (it["source"], it["extId"])).fetchone()
         labels = set(it.get("labels") or []) | ({it["container"]} if it.get("container") else set())
-        if old is not None:
+        if old is not None and not exact:
             labels |= set(json.loads(old["labels"]))
         merged = {**it, "labels": sorted(labels), "container": (old["container"] if old else None) or it.get("container")}
         tags = selmod.match_ids(merged, sels, now)
@@ -479,6 +563,9 @@ class CorpusStore:
             con.execute(f"UPDATE items SET {', '.join(f'{k} = ?' for k in row)} WHERE pk = ?", [*row.values(), pk])
         con.execute("DELETE FROM item_selectors WHERE item = ?", (pk,))
         con.executemany("INSERT INTO item_selectors (item, selector) VALUES (?, ?)", [(pk, t) for t in tags])
+        con.execute("DELETE FROM attachments WHERE item = ?", (pk,))
+        con.executemany("INSERT INTO attachments (item, n, name, mime, size, text_chars, reason, text) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [(pk, *a) for a in attachment_rows(merged)])
         return old is None, True
 
     def _enforce_scope(self, con, state: dict, sels: list[dict], now) -> dict:
@@ -505,6 +592,8 @@ class CorpusStore:
         names = set(self.ctx.sources)
         for k in [k for k in state["cursors"] if k.split("|", 1)[0] not in names]:
             state["cursors"].pop(k)                  # an unbound source's items are gone: re-binding refills
+        for k in [k for k in state.get("recheck") or {} if k not in names]:
+            self._set_recheck(state, k, [])
         state["selectors"], state["sources"] = sels, bound
         return out
 
@@ -553,17 +642,22 @@ class CorpusStore:
                "outOfScope": scope["unbound"] + scope["unmatched"], "spentUsd": round(run.spent, 6),
                "stopped": run.stopped, "sources": run.sources, "budget": self._budget(state),
                "coverage": self.coverage(state, run.window_from)}
+        if state.get("blocked"):
+            out["blocked"] = {n: b["reason"] for n, b in sorted(state["blocked"].items())}
         if run.warnings:
             out["warnings"] = run.warnings
         return out
 
     def _sync_source(self, con, state, sels, now, lookback, run: "_SyncRun", name: str, src) -> None:
         """Fetch each distinct native query of one source (its selectors split by the source's capability
-        table), newest first, within the remaining budget; one deletion pass per source."""
+        table), newest first, within the remaining budget; one deletion pass per source. A `changeFeed` source
+        (Gmail history) always continues from its cursor, gets no deletion checks with it (the feed reports
+        deletions and label changes), and has the window before what is stored backfilled with `until`."""
         src_id = src.ctx.source_id
         if not src_id:
             raise StoreError(f"connector {name} declares no `source`; set spec.source in its connector.yaml "
                              f"so stored items and deletions are keyed correctly")
+        feed = src.ctx.change_feed
         groups: dict[str, tuple[dict, list[dict]]] = {}
         for s in sels:
             native, _ = selmod.split(s, src.ctx.selectors)
@@ -576,6 +670,7 @@ class CorpusStore:
         rep = run.sources.setdefault(name, {"fetched": 0, "added": 0, "billed": 0, "requests": 0, "truncated": False,
                                             "checked": 0, "deleted": 0, "queries": []})
         check_pending = self._check_candidates(con, state, src_id, start_src)
+        sr = _SourceRun(name, src, src_id, rep, list(groups), start_src)
         for nkey, (native, group) in groups.items():
             ck = f"{name}|{nkey}"
             run.active.add(ck)
@@ -587,39 +682,167 @@ class CorpusStore:
                                               else f"maxItems {run.max_items} reached before {name}")
                 rep["queries"].append({"selectors": ids, "skipped": "budget"})
                 continue
-            check = check_pending[: int(remaining * DELETION_CHECK_SHARE)]
-            check_pending = []                                  # one deletion pass per source per sync
-            q = _query_request(cur, native, group, ids, start_src, remaining, check, now)
-            res = src.fetch(**q.req)
-            run.warnings += res.get("warnings", [])
-            n_new, n_kept = self._store_fetched(con, run, res, name, src_id, sels, now)
-            self._bill(state, run, res, src)
-            for xid in res.get("checked", []):
-                state["checked"][f"{src_id}:{xid}"] = iso(now)
-            self._advance_cursor(state, run, cur, q, res, name, src, now)
-            cur["selectors"] = ids
-            if res.get("cursor"):
-                cur["cursor"] = _max_id(cur.get("cursor"), res["cursor"])
-            got = res["items"]
-            for k in ("fetched", "added", "billed"):
-                rep[k] += {"fetched": len(got), "added": n_new, "billed": res["billed"]}[k]
-            rep["requests"] += res.get("requests", 0)
-            rep["truncated"] = rep["truncated"] or res["truncated"]
-            rep["checked"] += len(res.get("checked", []))
-            rep["deleted"] += len(res.get("deleted", []))
-            rep["queries"].append({"selectors": ids, "native": q.req["query"], "fetched": len(got), "kept": n_kept,
-                                   "mode": q.mode})
+            followed = feed and bool(cur.get("cursor")) and bool(cur.get("from"))
+            follow = followed and not set(ids) - set(cur.get("selectors") or [])
+            # a selector joining a followed query: replay the feed under the old selectors first, so the cursor
+            # never moves past a change that was not replayed; the re-list for the new selector comes after
+            run_ids = ids if follow or not followed else sorted(cur.get("selectors") or [])
+            if followed:
+                check = self._recheck_batch(con, state, name, src_id, remaining)
+            else:
+                check = check_pending[: int(remaining * DELETION_CHECK_SHARE)]
+                check_pending = []                              # one deletion pass per source per sync
+            local_in = sorted({v for s in group for v in selmod._vals(selmod.split(s, src.ctx.selectors)[1].get("in"))})
+            q = _query_request(cur, native, group, run_ids, start_src, remaining, check, now, feed)
+            q.local_in = local_in
+            res = self._fetch(con, src, src_id, q)
+            expired = bool(res.get("cursorExpired")) and not res.get("blocked")
+            if expired:
+                run.warnings += res.get("warnings", [])
+                run.warnings.append(f"{name}: the source no longer has the changes since the last sync; re-listed "
+                                    f"the window from {iso(q.start)}")
+                cur.pop("cursor", None)
+                check = check_pending[: int(remaining * DELETION_CHECK_SHARE)]
+                check_pending = []
+                run_ids = ids
+                q = _query_request(cur, native, group, ids, start_src, remaining, check, now, feed)
+                res = self._fetch(con, src, src_id, q)
+            if not self._apply(con, state, run, sr, cur, q, res, run_ids, sels, now):
+                return                                          # blocked: no other query of this source either
+            if feed:
+                self._recheck_update(con, state, name, src_id, res, relisted=expired)
+            if run_ids != ids:
+                if not self._join(con, state, run, sr, cur, q, res, native, group, ids, sels, now):
+                    return
+                continue
+            have = parse_time(cur["from"], now)
+            if not (feed and q.incremental and have > q.start):
+                continue
+            remaining, why = self._remaining(state, run.billed, run.max_items, self._cost(src))
+            if remaining <= 0:
+                run.stopped = run.stopped or (f"{why or 'maxItems'} cap reached before {name} backfilled the window; "
+                                              f"coverage still starts {cur['from']}")
+                continue
+            bq = _Query({"query": q.req["query"], "since": iso(q.start), "until": cur["from"], "maxItems": remaining},
+                        q.start, have, False, "older", q.window)
+            if not self._apply(con, state, run, sr, cur, bq, self._fetch(con, src, src_id, bq), ids, sels, now):
+                return
 
-    def _store_fetched(self, con, run: "_SyncRun", res: dict, name: str, src_id: str, sels, now) -> tuple[int, int]:
+    def _join(self, con, state, run: "_SyncRun", sr: "_SourceRun", cur: dict, replay: "_Query", res: dict,
+              native: dict, group: list[dict], ids: list[str], sels, now) -> bool:
+        """After a complete replay of a followed query, re-list its window for the selectors that joined it. The
+        re-list never moves the cursor (the replay left it where the changes were read up to); a truncated replay
+        or an exhausted budget leaves the join for the next sync. False when the source is blocked."""
+        if res["truncated"]:
+            run.stopped = run.stopped or f"{sr.name}: more changes than the per-run budget; the new selectors " \
+                                         f"are listed once the rest are read"
+            return True
+        remaining, why = self._remaining(state, run.billed, run.max_items, self._cost(sr.src))
+        if remaining <= 0:
+            run.stopped = run.stopped or (f"{why or 'maxItems'} cap reached before {sr.name} listed the new "
+                                          f"selectors; they are listed on the next sync")
+            return True
+        q = _query_request(cur, native, group, ids, sr.start, remaining, [], now, True)
+        q.hold = True
+        return self._apply(con, state, run, sr, cur, q, self._fetch(con, sr.src, sr.src_id, q), ids, sels, now)
+
+    def _recheck_batch(self, con, state: dict, name: str, src_id: str, remaining: int) -> list[str]:
+        """The next stored ids to re-read after a cursorExpired re-list (state.json `recheck`, per source), within
+        the deletion-check share of the budget. Ids no longer stored are dropped first."""
+        pend = (state.get("recheck") or {}).get(name)
+        if not pend:
+            return []
+        held = {r[0] for r in con.execute("SELECT ext_id FROM items WHERE source = ?", (src_id,))}
+        pend = [x for x in pend if x in held]
+        self._set_recheck(state, name, pend)
+        return pend[: int(remaining * DELETION_CHECK_SHARE)]
+
+    def _recheck_update(self, con, state: dict, name: str, src_id: str, res: dict, relisted: bool) -> None:
+        """Drop the ids a fetch re-read from the source's recheck set; after a cursorExpired re-list, add every
+        stored id it did not list (its changes in the lost stretch of history are unknown)."""
+        done = {scrub(str(x)) for x in [*res.get("checked", []), *res.get("deleted", []), *res.get("removed", [])]}
+        done |= {scrub(str(x["extId"])) for x in res["items"]}
+        pend = set((state.get("recheck") or {}).get(name) or [])
+        if relisted:
+            pend |= {r[0] for r in con.execute("SELECT ext_id FROM items WHERE source = ?", (src_id,))}
+        self._set_recheck(state, name, sorted(pend - done))
+
+    @staticmethod
+    def _set_recheck(state: dict, name: str, ids: list[str]) -> None:
+        rc = state.setdefault("recheck", {})
+        if ids:
+            rc[name] = ids
+        else:
+            rc.pop(name, None)
+        if not rc:
+            state.pop("recheck")
+
+    def _fetch(self, con, src, src_id: str, q: "_Query") -> dict:
+        """One source fetch; a changeFeed source also gets the extIds the store holds (storedIds)."""
+        req = dict(q.req)
+        if src.ctx.change_feed:
+            req["storedIds"] = [r[0] for r in con.execute("SELECT ext_id FROM items WHERE source = ? ORDER BY ext_id",
+                                                          (src_id,))]
+            if q.local_in:
+                req["localIn"] = q.local_in
+        return src.fetch(**req)
+
+    def _apply(self, con, state, run: "_SyncRun", sr: "_SourceRun", cur: dict, q: "_Query", res: dict,
+               ids: list[str], sels, now) -> bool:
+        """Store one fetch's result, bill it, record checks and coverage and report it. False when the source
+        is blocked (its cursors and items are kept)."""
+        run.warnings += res.get("warnings", [])
+        if res.get("blocked"):
+            self._blocked(state, run, sr.rep, sr.name, ids, scrub(str(res["blocked"])), now)
+            run.active.update(f"{sr.name}|{k}" for k in sr.keys)       # keep every cursor of this source
+            return False
+        state.setdefault("blocked", {}).pop(sr.name, None)
+        n_new, n_kept = self._store_fetched(con, run, res, sr.name, sr.src_id, sels, now, sr.src.ctx.exact_labels,
+                                            sr.start)
+        self._bill(state, run, res, sr.src)
+        for xid in res.get("checked", []):
+            state["checked"][f"{sr.src_id}:{xid}"] = iso(now)
+        self._advance_cursor(state, run, cur, q, res, sr.name, sr.src, now)
+        cur["selectors"] = ids
+        if res.get("cursor") and q.mode != "older" and not q.hold:   # a backfill never moves the change cursor
+            cur["cursor"] = _max_id(cur.get("cursor"), res["cursor"])
+        got, rep = res["items"], sr.rep
+        for k in ("fetched", "added", "billed"):
+            rep[k] += {"fetched": len(got), "added": n_new, "billed": res["billed"]}[k]
+        rep["requests"] += res.get("requests", 0)
+        rep["truncated"] = rep["truncated"] or res["truncated"]
+        rep["checked"] += len(res.get("checked", []))
+        rep["deleted"] += len(res.get("deleted", []))
+        rep["queries"].append({"selectors": ids, "native": q.req["query"], "fetched": len(got), "kept": n_kept,
+                               "mode": q.mode})
+        return True
+
+    def _blocked(self, state, run: "_SyncRun", rep: dict, name: str, ids: list[str], reason: str, now) -> None:
+        """A source that could not be read: keep its cursors and items, record why, report the gap."""
+        prev = (state.get("blocked") or {}).get(name) or {}
+        state.setdefault("blocked", {})[name] = {"reason": reason, "since": prev.get("since") or iso(now)}
+        run.stopped = run.stopped or reason
+        rep["blocked"] = reason
+        rep["queries"].append({"selectors": ids, "skipped": "blocked"})
+
+    def _store_fetched(self, con, run: "_SyncRun", res: dict, name: str, src_id: str, sels, now,
+                       exact: bool = False, start: datetime | None = None) -> tuple[int, int]:
         """Validate, scrub and upsert the fetched items (skipping ids deleted at the source), then apply the
-        deletions the source reported. Returns (new, kept)."""
+        deletions and removals the source reported. An item the store does not hold is stored only when it was
+        created at or after `start` (the source's window start: a change feed also reports old messages that were
+        relabeled); a stored item is always updated, so a relabeled one is re-matched and may leave the scope.
+        Returns (new, kept)."""
         n_new = n_kept = 0
+        lo = iso(start) if start else None
         for it in res["items"]:
             self._validate(it, name, src_id)
             it = scrub_item(it)
             if it["id"] in run.deleted:
                 continue
-            is_new, was_kept = self._upsert(con, it, sels, now)
+            if lo and it["createdAt"] < lo and con.execute(
+                    "SELECT 1 FROM items WHERE source = ? AND ext_id = ?", (it["source"], it["extId"])).fetchone() is None:
+                continue
+            is_new, was_kept = self._upsert(con, it, sels, now, exact)
             n_new += is_new
             n_kept += was_kept
         for xid in res.get("deleted", []):
@@ -627,6 +850,9 @@ class CorpusStore:
             run.deleted.add(f"{src_id}:{xid}")
             run.n_deleted += con.execute("DELETE FROM items WHERE source = ? AND ext_id = ?",
                                          (src_id, xid)).rowcount
+        for xid in res.get("removed", []):                   # left the source's scope (trash, spam): may come back
+            run.n_deleted += con.execute("DELETE FROM items WHERE source = ? AND ext_id = ?",
+                                         (src_id, scrub(str(xid)))).rowcount
         run.fetched += len(res["items"])
         run.kept += n_kept
         run.added += n_new
@@ -642,11 +868,35 @@ class CorpusStore:
     def _advance_cursor(self, state: dict, run: "_SyncRun", cur: dict, q: "_Query", res: dict, name: str, src,
                         now) -> None:
         """Record the window this query now covers. A truncated fetch holds only [oldest fetched, now]
-        (sources return newest first), and says which cap stopped it."""
+        (sources return newest first), and says which cap stopped it. A changeFeed source's cursor fetch never
+        moves the start of coverage (a truncated replay continues from its cursor next time); its backfill
+        (`older`) extends it back to the oldest item read, or to the window start when it was not truncated."""
+        if src.ctx.change_feed and q.incremental:
+            cur["to"] = cur["lastSync"] = iso(now)
+            cur.pop("behind", None)
+            if res["truncated"]:
+                cur["behind"] = True                        # stored items may lag: status is stale until caught up
+                run.stopped = run.stopped or (f"{name}: more changes than the per-run budget; the rest are read "
+                                              f"on the next sync")
+            return
+        if q.mode == "older":
+            covers = min(q.start, q.window) if q.window else q.start
+            src_from = q.start
+            if res["truncated"]:
+                got = [parse_time(x["createdAt"], now) for x in res["items"]]
+                got += [parse_time(res["oldest"], now)] if res.get("oldest") else []
+                src_from = covers = min([*got, q.have_from])
+                run.stopped = run.stopped or (f"{name}: per-run budget reached while backfilling; coverage now starts "
+                                              f"{iso(src_from)} and the next sync continues from there")
+            cur["from"], cur["covers"] = iso(src_from), iso(covers)
+            cur["to"] = cur["lastSync"] = iso(now)
+            return
         src_from = q.have_from if q.incremental else q.start
+        covers = min(src_from, q.window) if q.window and src_from else src_from   # `since` narrowing is no gap
         if res["truncated"]:
-            got = res["items"]
-            src_from = min(parse_time(x["createdAt"], now) for x in got) if got else now
+            got = [parse_time(x["createdAt"], now) for x in res["items"]]
+            got += [parse_time(res["oldest"], now)] if res.get("oldest") else []   # a non-item never stalls it
+            src_from = covers = min(got) if got else now
             rem_after, why_after = self._remaining(state, run.billed, run.max_items, self._cost(src))
             if rem_after <= 0:
                 run.stopped = (f"{why_after} cap reached during {name} sync" if why_after
@@ -655,6 +905,7 @@ class CorpusStore:
             else:
                 run.stopped = run.stopped or f"{name} stopped early; see warnings"
         cur["from"], cur["to"], cur["lastSync"] = iso(src_from), iso(now), iso(now)
+        cur["covers"] = iso(covers)          # what coverage reports; `from` is what was fetched (backfill decisions)
 
     def prune(self, olderThan=None, deletedIds=None) -> dict:
         now = self.ctx.now()
@@ -680,8 +931,9 @@ class CorpusStore:
         remaining = con.execute("SELECT count(*) FROM items").fetchone()[0]
         state["deleted"] = sorted(deleted)
         for cur in state["cursors"].values():
-            if cur.get("from") and cur["from"] < cutoff:
-                cur["from"] = cutoff
+            for k in ("from", "covers"):
+                if cur.get(k) and cur[k] < cutoff:
+                    cur[k] = cutoff
         state["coverage"] = self._overall(state)
         return {"removed": before - remaining, "remaining": remaining, "deleted": n_deleted,
                 "unmatched": scope["unmatched"], "unbound": scope["unbound"], "cutoff": cutoff}
@@ -705,9 +957,19 @@ class CorpusStore:
             engine = "fts5" if sbx.has_fts(con) else "like"
         finally:
             con.close()
-        stale = bool(self._stale(state, sels))   # reads refuse until a sync or prune re-scopes the store
-        return {"lastSync": state["coverage"].get("to"), "coverage": self.coverage(state, lo),
-                "budget": self._budget(state), "count": count, "selectors": per, "engine": engine, "stale": stale}
+        # reads refuse until a sync or prune re-scopes the store; a blocked source makes the store stale too
+        # (its items are older than they look), but reads go on working on what is stored
+        # so do a recheck set left by a cursorExpired re-list and a change feed not yet replayed to its end (stored
+        # items whose changes were not read yet)
+        stale = bool(self._stale(state, sels)) or bool(state.get("blocked")) or bool(state.get("recheck")) \
+            or any(c.get("behind") for c in state["cursors"].values())
+        out = {"lastSync": state["coverage"].get("to"), "coverage": self.coverage(state, lo),
+               "budget": self._budget(state), "count": count, "selectors": per, "engine": engine, "stale": stale}
+        if state.get("blocked"):
+            out["blocked"] = state["blocked"]
+        if state.get("recheck"):
+            out["rechecking"] = sum(len(v) for v in state["recheck"].values())
+        return sbx.clean(out)
 
     def query(self, since=None, until=None, author=None, text=None, selector=None, limit=100, ids=None) -> dict:
         now = self.ctx.now()
@@ -811,41 +1073,98 @@ class CorpusStore:
         return sbx.clean({"items": items, "engine": engine})
 
     def describe(self) -> dict:
+        """Views, columns, row counts and samples. The mail views (v_email, v_threads, v_attachments,
+        v_attachment_fts) and the attachments full-text example are listed only when the store holds email."""
         limits = {"rows": sbx.DEFAULT_ROWS, "maxRows": sbx.MAX_ROWS, "bytes": sbx.MAX_BYTES, "timeMs": sbx.TIME_MS,
                   "cellChars": sbx.CELL_CHARS}
         cols = {v: [{"name": n, "type": t, "description": d} for n, t, d in sbx.COLUMNS[v]] for v in sbx.VIEWS}
         fts = {"view": sbx.FTS_VIEW, "indexes": ["title", "text", "author"],
                "example": "SELECT id, url, snippet FROM v_fts WHERE fts MATCH 'staking AND custody' "
                           "ORDER BY rank LIMIT 20"}
-        data_views = [v for v in sbx.VIEWS if v != sbx.FTS_VIEW]
         if not self.path.exists():
+            data_views = [v for v in sbx.VIEWS if v not in sbx.FTS_VIEWS and v not in sbx.MAIL_VIEWS]
             return {"views": [{"name": v, "columns": cols[v], "rows": 0} for v in data_views],
-                    "fts": {**fts, "available": sbx.fts5_available()}, "functions": sorted(sbx.FUNCTIONS),
+                    "fts": {**fts, "available": sbx.fts5_available()}, "functions": _functions(False),
                     "limits": limits}
         state = load_state(self.state_path)
         con = self._ro()
         try:
             fts["available"] = sbx.has_fts(con)
-            views = []
-            for v in data_views:
-                n = con.execute(f"SELECT count(*) FROM {v}").fetchone()[0]
-                samples = {}
-                for c in ("source", "kind", "container", "author"):
-                    samples[c] = [r[0] for r in con.execute(
-                        f"SELECT {c}, count(*) AS n FROM {v} WHERE {c} IS NOT NULL GROUP BY 1 ORDER BY n DESC LIMIT 5")]
-                samples["matched"] = [r[0] for r in con.execute(
-                    f"SELECT DISTINCT j.value FROM {v}, json_each({v}.matched) j ORDER BY 1 LIMIT 20")]
-                span = con.execute(f"SELECT min(createdAt), max(createdAt) FROM {v}").fetchone()
-                views.append({"name": v, "columns": cols[v], "rows": n, "samples": samples,
-                              "createdAt": {"min": span[0], "max": span[1]}})
+            mail = con.execute("SELECT 1 FROM v_items WHERE kind = 'email' LIMIT 1").fetchone() is not None
+            present = [v for v in sbx.views_of(fts["available"]) if mail or v not in sbx.MAIL_VIEWS]
+            views, rows = [], {}
+            for v in present:
+                if v in sbx.FTS_VIEWS:
+                    continue
+                rows[v] = n = con.execute(f"SELECT count(*) FROM {v}").fetchone()[0]
+                entry = {"name": v, "columns": cols[v], "rows": n}
+                if v in sbx.ITEM_VIEWS:
+                    samples = {}
+                    for c in ("source", "kind", "container", "author"):
+                        samples[c] = [r[0] for r in con.execute(
+                            f"SELECT {c}, count(*) AS n FROM {v} WHERE {c} IS NOT NULL GROUP BY 1 ORDER BY n DESC LIMIT 5")]
+                    samples["matched"] = [r[0] for r in con.execute(
+                        f"SELECT DISTINCT j.value FROM {v}, json_each({v}.matched) j ORDER BY 1 LIMIT 20")]
+                    span = con.execute(f"SELECT min(createdAt), max(createdAt) FROM {v}").fetchone()
+                    entry.update({"samples": samples, "createdAt": {"min": span[0], "max": span[1]}})
+                views.append(entry)
         finally:
             con.close()
-        if fts["available"]:
-            views.append({"name": sbx.FTS_VIEW, "columns": cols[sbx.FTS_VIEW], "rows": views[0]["rows"]})
-        else:
+        base = {sbx.FTS_VIEW: "v_items", sbx.ATT_FTS_VIEW: "v_attachments"}
+        for v in present:
+            if v in sbx.FTS_VIEWS:
+                views.append({"name": v, "columns": cols[v], "rows": rows.get(base[v], 0)})
+        if mail:
+            fts["attachments"] = {"view": sbx.ATT_FTS_VIEW, "indexes": ["name", "text"],
+                                  "example": "SELECT id, name, snippet FROM v_attachment_fts WHERE fts MATCH "
+                                             "'invoice' ORDER BY rank LIMIT 20"}
+        if not fts["available"]:
             fts["note"] = "FTS5 is not available in this Python's SQLite: use search (LIKE) or LIKE in sql"
-        return sbx.clean({"views": views, "fts": fts, "functions": sorted(sbx.FUNCTIONS), "limits": limits,
+        return sbx.clean({"views": views, "fts": fts, "functions": _functions(mail), "limits": limits,
                           "coverage": self.coverage(state)})
+
+    def threads(self, since=None, until=None, selector=None, important=None, limit=100) -> dict:
+        """Email threads active in the window (v_threads), newest first, with their message ids, the start of the
+        last message, attachment metadata and `important` (a sender matches one of the patterns)."""
+        now = self.ctx.now()
+        lo = parse_time(since, now) if since else None
+        if not self.path.exists():
+            return {"threads": [], "coverage": self.coverage(load_state(self.state_path), lo)}
+        where, args = [], []
+        if since:
+            where.append("t.lastDate >= ?")
+            args.append(iso(lo))
+        if until:
+            where.append("t.lastDate <= ?")
+            args.append(iso(parse_time(until, now)))
+        if selector:
+            where.append("EXISTS (SELECT 1 FROM json_each(t.matched) WHERE value = ?)")
+            args.append(selector)
+        state = load_state(self.state_path)
+        con = self._ro()
+        out = []
+        try:
+            rows = con.execute(f"SELECT t.* FROM v_threads t {_where(where)} ORDER BY t.lastDate DESC, t.threadId "
+                               f"LIMIT ?", [*args, int(limit or 100)]).fetchall()
+            for r in rows:
+                t = dict(r)
+                for k in ("participants", "senders", "matched"):
+                    t[k] = json.loads(t[k] or "[]")
+                for k in ("lastFromMe", "lastToMe", "lastBulk", "needsReply", "hasAttachments"):
+                    t[k] = bool(t[k])
+                key = (t["source"], t["threadId"])
+                t["ids"] = [x for (x,) in con.execute(
+                    "SELECT id FROM v_email WHERE source = ? AND threadId = ? ORDER BY createdAt, id LIMIT 50", key)]
+                last = con.execute("SELECT substr(text, 1, 500) FROM v_email WHERE id = ?", (t["lastId"],)).fetchone()
+                t["lastText"] = last[0] if last else ""
+                t["attachments"] = [dict(a) for a in con.execute(
+                    "SELECT id, name, mime, size, textChars, reason FROM v_attachments WHERE source = ? AND "
+                    "threadId = ? ORDER BY createdAt, n LIMIT 20", key)]
+                t["important"] = any(selmod.addr_matches(important or [], a) for a in t["senders"])
+                out.append(t)
+        finally:
+            con.close()
+        return sbx.clean({"threads": out, "coverage": self.coverage(state, lo)})
 
     def sql(self, sql, limit=None) -> dict:
         try:
@@ -873,6 +1192,11 @@ class CorpusStore:
             where.append("EXISTS (SELECT 1 FROM json_each(v.matched) WHERE value = ?)")
             args.append(selector)
         return where, args
+
+
+def _functions(mail: bool) -> list[str]:
+    """The SQL functions describe lists: the mail-only ones (addr_key) only for a store that holds email."""
+    return sorted(f for f in sbx.FUNCTIONS if mail or f not in sbx.MAIL_FUNCTIONS)
 
 
 def _where(conds: list[str]) -> str:

@@ -114,7 +114,9 @@ def test_review_role_must_exist_and_be_in_the_mode():
     edit_yaml(k / "modes/briefing/mode.yaml",
               lambda d: d["spec"]["endpoints"]["digest"]["review"].update({"role": "ghost"}))
     has(k, "briefing.digest review role 'ghost' does not exist")
-    assert len([x for x in problems(k) if "review role 'ghost' does not exist" in x]) == 1
+    # once for the base and its children that inherit the endpoint (mail-briefing declares its own digest)
+    assert len([x for x in problems(k) if "review role 'ghost' does not exist" in x
+                and "modes/briefing/mode.yaml" in x]) == 1
     k = kit_copy()
     edit_yaml(k / "modes/briefing/mode.yaml",
               lambda d: d["spec"]["endpoints"]["digest"]["review"].update({"role": "researcher"}))
@@ -284,3 +286,17 @@ def test_run_steps_use_versioned_capability_spelling():
     k = kit_copy()
     sub(k, "modes/briefing/mode.yaml", "run: items.store/v1.prune", "run: feed.store.prune")
     has(k, "modes/briefing/mode.yaml", "does not match")
+
+
+def test_two_modes_writing_the_same_skill_name_with_different_content():
+    k = kit_copy()
+    d = k / "modes/mail-briefing/skills/digest"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text("---\nname: digest\ndescription: a different digest\n---\n# Other\n")
+    x = has(k, "skill 'digest'", "modes/mail-briefing/skills/digest/SKILL.md", "modes/briefing/skills/digest/SKILL.md",
+            "Rename")
+    assert "mail-briefing" in x
+    d2 = k / "modes/mail-briefing/skills/grounded-qa"            # the same content under the same name is fine
+    d2.mkdir()
+    (d2 / "SKILL.md").write_text((k / "modes/briefing/skills/grounded-qa/SKILL.md").read_text())
+    assert not [p for p in problems(k) if "grounded-qa" in p]

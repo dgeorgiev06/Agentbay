@@ -1,0 +1,48 @@
+apiVersion: agentbay/v2
+kind: Connector
+metadata:
+  name: gmail-api
+  description: >-
+    Your Gmail, read-only, via the official Gmail API v1 with the gmail.readonly scope only: messages.list with
+    a Gmail search query for the first sync (and to backfill older mail when a run's cap stopped it), then
+    history.list from the stored historyId (a re-list of the window when Gmail no longer has that history),
+    messages.get (format=full) and attachments.get.
+    Bodies are text/plain or HTML converted to text, with quoted reply chains trimmed. Attachment text (docx,
+    txt, csv, md) is extracted in a separate, resource-limited subprocess; PDFs and everything else are kept as
+    metadata only. Nothing can send, label, move or delete mail: the connector calls only GET endpoints on
+    gmail.googleapis.com, plus the token endpoint. Log in with `bay auth gmail`.
+  version: 0.1.0
+spec:
+  implements: items.source/v1
+  entry: gmail_api.py
+  source: gmail
+  window: 520w           # the API reaches the whole mailbox; the mode's lookbackMax (30d) is the real bound
+  costPerPostUsd: 0      # Gmail API reads are free (quota only): never billed against spendUsd
+  exactLabels: true      # messages.get returns a message's complete labelIds
+  changeFeed: true       # history.list replays every change since the historyId: the store follows it, sends no
+                         # deletion checks with it and backfills older mail with `until`
+  # A field is native only where Gmail search returns at least what the local matcher keeps (a source may return
+  # more, never less). Gmail matches subject: and free terms by whole word (`pil` misses "pilot") and its
+  # negation also matches display names (`-from:ruiz` drops dana@kiln.fi sent as "Dana Ruiz"), so subject, text
+  # and not are matched locally on what from/to/in/has/since fetched.
+  selectors:
+    from: { mode: native, as: "address or domain (from:, which Gmail also matches on the display name)" }
+    to: { mode: native, as: "address or domain (to:, which Gmail also matches on Cc)" }
+    subject: local
+    text: local
+    in: { mode: native, as: "label name (label:) or system label inbox, sent, starred, important, ... (in:)" }
+    since: native        # after:<epoch>
+    has: { mode: native, as: "attachment (has:attachment); link is matched locally" }
+    not: local
+  needs:
+    secrets: [GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN]
+    network: [oauth2.googleapis.com, gmail.googleapis.com]
+  config:
+    type: object
+    additionalProperties: false
+    properties:
+      attachmentMaxBytes: { type: integer, minimum: 0, maximum: 10485760, default: 10485760, description: "Attachments larger than this keep metadata only (cap 10 MB)." }
+      attachmentMaxChars: { type: integer, minimum: 0, maximum: 200000, default: 200000, description: "Extracted text longer than this keeps metadata only (cap 200k characters)." }
+      extractTimeoutS: { type: integer, minimum: 1, maximum: 60, default: 20, description: "Wall-clock limit of one extraction subprocess." }
+      extractMemoryMB: { type: integer, minimum: 64, maximum: 1024, default: 512, description: "Address-space limit of the extraction subprocess (where the OS supports it)." }
+      maxRetries: { type: integer, minimum: 0, maximum: 8, default: 5, description: "Retries with exponential backoff on HTTP 429, 5xx and Gmail rate-limit 403s." }

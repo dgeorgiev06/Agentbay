@@ -12,7 +12,7 @@ def problems(k):
     return lint.run(k)
 
 
-def child(k, name="mail-briefing", spec=None):
+def child(k, name="news-briefing", spec=None):
     """A second mode extending briefing, next to feed-briefing (each (role, mode, env) compiles on its own)."""
     d = k / "modes" / name
     d.mkdir(parents=True)
@@ -58,7 +58,7 @@ def test_child_overrides_review_workflow_roles_and_inherits_the_rest():
     # a second child of the same base keeps the base behaviour
     child(k, spec={"purpose": "Mail.", "roles": {"analyst": "local-feeds-offline", "researcher": "research"}})
     s = model.resolve(model.Kit(k))
-    mail = s.modes["mail-briefing"]
+    mail = s.modes["news-briefing"]
     assert mail.features["ask"].review is None and mail.extends == "briefing"
     # the roles map is inherited and overridden entry by entry
     assert mail.roles == {"lead": "local-feeds", "analyst": "local-feeds-offline", "reviewer": "local-feeds",
@@ -76,12 +76,12 @@ def test_child_can_add_its_own_feature_and_type():
     (d / "types").mkdir()
     (d / "types/TriageReq.schema.json").write_text('{"type": "object"}')
     (d / "features/triage").mkdir(parents=True)
-    pb = (k / "modes/briefing/features/prune/playbook.md").read_text().replace("briefing.prune", "mail-briefing.triage")
+    pb = (k / "modes/briefing/features/prune/playbook.md").read_text().replace("briefing.prune", "news-briefing.triage")
     (d / "features/triage/playbook.md").write_text(pb.replace("`prune`: the dispatcher runs `items.store/v1.prune`",
                                                               "`look`: the dispatcher runs `items.store/v1.query`"))
     (d / "features/triage/rules.yaml").write_text((k / "modes/briefing/features/prune/rules.yaml").read_text())
     s = model.resolve(model.Kit(k))
-    assert set(s.modes["mail-briefing"].features) == {"sync", "digest", "ask", "prune", "triage"}
+    assert set(s.modes["news-briefing"].features) == {"sync", "digest", "ask", "prune", "triage"}
     assert problems(k) == []
 
 
@@ -119,7 +119,7 @@ def test_abstract_base_is_linted_not_installed():
     (k / "modes/briefing/features/digest/playbook.md").write_text("# nothing\n")
     ps = problems(k)
     assert any("modes/briefing/features/digest/playbook.md" in p for p in ps)        # still linted
-    assert not any("briefing.prune declares schedule" in w and "feed" not in w for w in lint.warnings(model.Kit(k)))
+    assert not any(": briefing.prune declares schedule" in w for w in lint.warnings(model.Kit(k)))   # children only
 
 
 def test_lint_lines_of_inherited_parts_point_at_the_parent_mode_yaml():

@@ -433,8 +433,28 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     out += lint_env_bindings(kit)
     out += lint_connectors(kit)
     out += lint_rulesets(kit)
+    out += lint_skill_names(kit)
     out += wfmod.structure_problems(kit)        # project workflows; targets are checked by `bay validate`
     return list(dict.fromkeys(out))
+
+
+def _skill_content(d: Path) -> list[tuple[str, bytes]]:
+    return [(str(f.relative_to(d)), f.read_bytes()) for f in sorted(d.rglob("*")) if f.is_file()
+            and "__pycache__" not in f.parts]
+
+
+def lint_skill_names(kit: model.Kit) -> list[str]:
+    """Project skills are keyed by name only (.claude/skills/<name>): two modes that would write the same skill
+    name with different content overwrite each other's, so one mode's agents get the other's skill."""
+    out, first = [], {}
+    for md in sorted(kit.docs["Mode"].values(), key=lambda d: (len(d.dirs), d.name)):
+        for name, d in sorted(model.mode_skills(md).items()):
+            prev = first.setdefault(name, (md.name, d))
+            if prev[1] != d and _skill_content(prev[1]) != _skill_content(d):
+                out.append(f"{_where(d / 'SKILL.md', 2)}: skill '{name}' of mode {md.name} has the same name as "
+                           f"{_where(prev[1] / 'SKILL.md', 2)} (mode {prev[0]}) but different content; project skills are "
+                           f"keyed by name, so one would overwrite the other. Rename one (e.g. {md.name}-{name})")
+    return out
 
 
 def lint_rulesets(kit: model.Kit) -> list[str]:

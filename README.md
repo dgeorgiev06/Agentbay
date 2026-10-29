@@ -96,7 +96,7 @@ tests/           python3 tests/run.py (connector tests live next to each connect
 | `bay submit <callId> <step> '<json>'`, `bay show <callId>` | hand back a step's output; current state |
 | `bay approve <callId\|runId> [--reject]` | pass an approval gate (your terminal only) |
 | `bay status`, `bay log`, `bay note <ref> "text"` | calls and cost; the run log; a note |
-| `bay mode\|feature\|connector\|env new <name>` | scaffold an extension |
+| `bay mode\|feature\|connector\|env new <name>` | create an extension from a template |
 | `bay secret set <NAME>` | store a secret (read from your terminal, never echoed) |
 | `bay auth <connector>` | a connector's browser login (again when a sync says it expired) |
 | `bay config example` | regenerate agentbay.config.example.yaml |

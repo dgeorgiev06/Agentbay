@@ -52,6 +52,9 @@ about custody?"*) run `feed-briefing.ask`, where the analyst answers through rea
 `envs: { local-feeds: local-feeds-offline }` line in agentbay.config.yaml, set `connectors.x-api.userId` and
 rebuild. Caps `maxItemsPerRun`, `monthlyItems` and `spendUsd` stop a sync before it exceeds one.
 
+**Your email** works the same way: `mail-briefing` keeps the messages your selectors match (offline it uses a
+sample mailbox), and *"what needs my reply?"* runs `mail-briefing.digest`. See [Gmail setup](#gmail-setup).
+
 **What to keep** is a list of selectors in `modes.feed-briefing.selectors` (default `[{id: home}]`):
 
 ```yaml
@@ -63,13 +66,37 @@ modes:
       - { id: vitalik, from: vitalik, not: { text: giveaway } }
 ```
 
+## Gmail setup
+
+`mail-briefing` reads your Gmail through your own Google Cloud OAuth client with the `gmail.readonly` scope:
+it can read mail, never send, label, move or delete it. Attachment text is extracted for docx, txt, csv and md
+(PDFs and other files are kept as name, type and size only).
+
+1. In the [Google Cloud console](https://console.cloud.google.com/) create or pick a project and enable the
+   **Gmail API**.
+2. **OAuth consent screen:** user type *External*, leave the app in **Testing**, add the scope
+   `https://www.googleapis.com/auth/gmail.readonly` (only that one) and add your Gmail address as a
+   **test user**.
+3. **Credentials -> Create credentials -> OAuth client ID**, application type **Desktop app**. Store its id and
+   secret: `./bay.sh secret set GMAIL_CLIENT_ID` and `./bay.sh secret set GMAIL_CLIENT_SECRET` (macOS keychain).
+4. Sign in: `./bay.sh auth gmail` (or `.agentbay/bay auth gmail` in a built project). It opens your browser,
+   receives Google's answer on `127.0.0.1` and stores `GMAIL_REFRESH_TOKEN` in the keychain.
+5. Remove `local-mail: local-mail-offline` from the `envs:` line of agentbay.config.yaml, set your selectors
+   under `modes.mail-briefing` (see agentbay.config.example.yaml: the first sync reads the last 30 days) and
+   rebuild.
+
+**Weekly re-login:** Google expires the login of an app in Testing after 7 days. A sync then ends `blocked`
+with the reason and the one command to run, `bay auth gmail`; stored mail stays readable and the coverage note
+says how old it is.
+
 ## Folder map
 
 ```
 modes/           your modes: briefing (abstract base: sync, digest, ask, prune), feed-briefing (X posts),
-                 delivery (research, build + review)
-envs/            your envs: local-feeds, local-feeds-offline
-connectors/      your connectors: x-api (official X API v2), fake (offline)
+                 mail-briefing (Gmail, read-only), delivery (research, build + review)
+envs/            your envs: local-feeds, local-feeds-offline, local-mail, local-mail-offline
+connectors/      your connectors: x-api (official X API v2), gmail-api (Gmail API, read-only), fake and
+                 fake-mail (offline)
 interfaces/      items.source/v1, items.store/v1
 framework/       shipped with the kit, never edited by users:
   roles/ agents/   the five roles and the claude-code agent profile
@@ -98,6 +125,7 @@ tests/           python3 tests/run.py (connector tests live next to each connect
 | `bay mode\|feature\|connector\|env new <name>` | scaffold (same templates as `forge.create`) |
 | `bay improve weekly`, `bay improve decide <id> approve\|defer\|wontfix` | weekly improve pass; your decision on a backlog item |
 | `bay secret set <NAME>` | store a secret (read from your terminal, never echoed) |
+| `bay auth gmail` | sign in to Gmail in your browser (read-only scope); again whenever a sync says the login expired |
 
 Run them as `./bay.sh <command>` in the kit, or `.agentbay/bay <command>` in a built project.
 
@@ -113,5 +141,5 @@ The guard hook is defense in depth, not isolation: it narrows what subagents can
 code once something runs it. Nothing that runs code is auto-approved: subagents get no auto-approval except
 their own role's read-only data shim, and the main thread is pre-approved only for the read and notes commands
 `bay show|status|log|note|task|catalog`. `bay call`, `bay submit` and `bay approve` always prompt. Approval
-gates, secrets and backlog approvals need your terminal.
+gates, secrets, the Gmail login and backlog approvals need your terminal.
 Details: [docs/DESIGN.md#safety-model](docs/DESIGN.md#safety-model).

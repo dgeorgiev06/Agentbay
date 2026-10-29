@@ -176,26 +176,40 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
   - `container`, `labels[]`, `threadId`;
   - `matched[]`, set by the store.
 
-  Kind extensions add fields. `post/v1` adds `lang` and `metrics`, using `allOf` item/v1 and
-  `unevaluatedProperties: false`. The store validates each item against `<kind>/v1` when that schema exists.
+  Kind extensions add fields, using `allOf` item/v1 and `unevaluatedProperties: false`. `post/v1` adds `lang`
+  and `metrics`. `email/v1` adds `from`, `to[]`, `cc[]` (lower-case addresses), `subject`, `messageId`,
+  `inReplyTo`, `account` (the mailbox it was read from: how the views know "me"), `hasAttachments` and
+  `attachments[] {name, mime, size, textChars, reason?, text?}`; `text` travels from the source to the store
+  only and is read through `v_attachments`. The store validates each item against `<kind>/v1` when that schema
+  exists.
 - **`selector/v1`**: `{id, from?, to?, subject?, text?, in?, has?, since?, not?}`.
   - Every field takes one value or a list (any value matches). Matching is case-insensitive (casefold); `has` is
-    `link` or `attachment`; `*` is the only wildcard and works only in `from`/`to`; a field with a `*` value is matched locally, never sent to the source's search.
+    `link` or `attachment`; `*` is the only wildcard and works only in `from`/`to`; a field with a `*` value is matched locally, never sent to the source's search. `in` ignores a `label:` or `in:` prefix (`label:Work` matches the label `Work`).
   - Fields within a selector are ANDed, selectors are ORed, and `not` excludes when any of its fields matches.
   - The matcher is `bay/selector.py` `matches()`. It is the only place that decides which items are kept.
 - **Connector capability table**: `spec.selectors: {<field>: native|local | {mode, as}}`.
-  - `split()` turns a selector into a native query and a local filter.
+  - `split()` turns a selector into a native query and a local filter. `not` goes to the source only when it
+    declares `not: native` and handles every field inside the block natively (Gmail's `-` prefix).
   - Selectors with the same native query share one fetch and one cursor.
   - A field the source does not list cannot be expressed: `bay validate` errors.
   - A `local` field on a paid source (`costPerPostUsd` > 0) gets a validate warning.
 - **`items.source/v1.fetch {query, since | cursor, maxItems, checkIds}`** returns
-  `{items, cursor, truncated, billed, checked?, deleted?, requests?, warnings?}`. It makes one call per
-  distinct native query and is never billed beyond `maxItems`.
+  `{items, cursor, truncated, billed, checked?, deleted?, removed?, blocked?, requests?, warnings?}`. It makes
+  one call per distinct native query and is never billed beyond `maxItems`.
+  - `deleted`: gone at the source; the store deletes them and never stores them again.
+  - `removed`: left the source's scope but may come back (Gmail trash, spam); deleted, not remembered.
+  - `blocked`: nothing could be read (an expired login), with the command that fixes it. The store keeps that
+    source's cursors and items, records it in state.json, reports it as `stopped` (a sync that read nothing is
+    `blocked` in the dispatcher), and `status` reports `stale` and `blocked` with the gap in the coverage note.
+  - A connector that declares `exactLabels: true` sends each item's complete label set, so the store replaces
+    the stored labels instead of adding to them.
 - **`items.store/v1`**: sync and prune run as dispatcher code steps, with effects network, spend, write /
   write, delete. The read endpoints, which agents reach through use shims, are:
   - `describe`: views, columns, row counts, samples, FTS and limits;
   - `sql {sql, limit?}`;
-  - `get {ids}`, `thread {id}`;
+  - `get {ids}`, `thread {id}`, `threads {since, until, selector, important, limit}` (email threads active in
+    the window from `v_threads`, with message ids, the start of the last message, attachment metadata and
+    `important` when a sender matches one of the patterns);
   - `facets {field}`, `search {text}`, `query {since, until, author, text, selector, ids}`;
   - `status {since?}`: coverage, budget, per-selector counts, engine, and `stale` when the selectors or the
     bound sources changed.
@@ -208,22 +222,29 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
   prune of one mode never run at once (a per-mode lock), and spend is saved before the items commit.
 - **corpus-store** (framework connector) keeps one store per mode, `<env data folder>/<mode>/corpus.db`
   (settings.mode from the dispatcher; a use-shim read uses its unit's mode and env). The file, -wal and -shm
-  are 0600; WAL mode, `user_version` = 1:
+  are 0600; WAL mode, `user_version` = 2 (a v1 store gains the attachment tables on its next write):
   - `items` (unique source + ext_id);
   - `item_selectors`;
-  - `items_fts` (FTS5 over title, body and author, own content, kept by triggers).
+  - `attachments` (item, n, name, mime, size, text_chars, reason, text), deleted with its item by a trigger;
+  - `items_fts` (FTS5 over title, body and author, own content, kept by triggers);
+  - `attachments_fts` (FTS5 over attachment name and text, kept by triggers).
 
   Internal state is `<mode>/state.json` (0600, never opened by agents): cursors per
   `<connector>|<native query>`, coverage, budget, deleted, checked, and the selectors and sources last applied.
 
   Without FTS5 the store falls back to LIKE matching, and `bay validate` warns.
 - **Agent SQL** (`bay/sqlsandbox.py`):
-  - temp views `v_items`, `v_posts` and `v_fts` over the store, which holds only the mode's scope. `v_fts` is
-    the documented full-text path: `WHERE fts MATCH '...' ORDER BY rank`, plus a `snippet` column;
+  - temp views over the store, which holds only the mode's scope: `v_items`, `v_posts`, `v_email` (one row per
+    message: sender, toList, ccList, messageId, inReplyTo, account, fromMe, toMe, hasAttachments),
+    `v_threads` (one row per thread: subject, messages, firstDate, lastDate, lastId, lastSender, lastFromMe,
+    lastToMe, needsReply, participants, senders, matched), `v_attachments` (one row per attachment, `id` is
+    its message's id) and the full-text views `v_fts` and `v_attachment_fts` (`WHERE fts MATCH '...' ORDER
+    BY rank`, plus a `snippet` column);
   - `mode=ro` + `query_only`;
   - a strict pre-pass (`EXPLAIN <sql>`) that refuses the FTS shadow tables, then the run, with FTS5's own
     internal reads allowed;
-  - an authorizer: SELECT/READ on those views and on `items`, `item_selectors` and `items_fts`, json_each
+  - an authorizer: SELECT/READ on those views and on `items`, `item_selectors`, `attachments`, `items_fts`
+    and `attachments_fts`, json_each
     and CTEs, and a function allowlist; everything else is denied, reads of no column (`count(*)`) included;
   - no WITH clause named like a view or store table;
   - a 2 s progress-handler limit, a 1 MB value limit, a 256 MB heap cap (temp_store=FILE), 200/1000 rows, 200 kB per result and 4,000 characters

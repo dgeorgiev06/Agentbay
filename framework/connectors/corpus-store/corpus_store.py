@@ -1001,7 +1001,7 @@ class CorpusStore:
         if not self.path.exists():
             data_views = [v for v in sbx.VIEWS if v not in sbx.FTS_VIEWS and v not in sbx.MAIL_VIEWS]
             return {"views": [{"name": v, "columns": cols[v], "rows": 0} for v in data_views],
-                    "fts": {**fts, "available": sbx.fts5_available()}, "functions": sorted(sbx.FUNCTIONS),
+                    "fts": {**fts, "available": sbx.fts5_available()}, "functions": _functions(False),
                     "limits": limits}
         state = load_state(self.state_path)
         con = self._ro()
@@ -1037,7 +1037,7 @@ class CorpusStore:
                                              "'invoice' ORDER BY rank LIMIT 20"}
         if not fts["available"]:
             fts["note"] = "FTS5 is not available in this Python's SQLite: use search (LIKE) or LIKE in sql"
-        return sbx.clean({"views": views, "fts": fts, "functions": sorted(sbx.FUNCTIONS), "limits": limits,
+        return sbx.clean({"views": views, "fts": fts, "functions": _functions(mail), "limits": limits,
                           "coverage": self.coverage(state)})
 
     def threads(self, since=None, until=None, selector=None, important=None, limit=100) -> dict:
@@ -1109,6 +1109,11 @@ class CorpusStore:
             where.append("EXISTS (SELECT 1 FROM json_each(v.matched) WHERE value = ?)")
             args.append(selector)
         return where, args
+
+
+def _functions(mail: bool) -> list[str]:
+    """The SQL functions describe lists: the mail-only ones (addr_key) only for a store that holds email."""
+    return sorted(f for f in sbx.FUNCTIONS if mail or f not in sbx.MAIL_FUNCTIONS)
 
 
 def _where(conds: list[str]) -> str:

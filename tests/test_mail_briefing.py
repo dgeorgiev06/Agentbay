@@ -129,6 +129,9 @@ def test_two_modes_on_separate_envs_keep_separate_stores_and_units():
     feed = d.use("analyst--feed-briefing", "items.store/v1.sql", {"sql": "SELECT DISTINCT kind, source FROM v_items"})
     mail = d.use("analyst--mail-briefing", "items.store/v1.sql", {"sql": "SELECT DISTINCT kind, source FROM v_items"})
     assert feed["rows"] == [["post", "fake"]] and mail["rows"] == [["email", "fake-mail"]]
+    fd = d.use("analyst--feed-briefing", "items.store/v1.describe", {})          # feed-briefing's describe: no mail
+    assert [v["name"] for v in fd["views"]] == ["v_items", "v_posts", "v_fts"]
+    assert "attachments" not in fd["fts"] and "addr_key" not in fd["functions"]
     feed_env = s.kit.docs["Environment"]["local-feeds"].spec
     mail_env = s.kit.docs["Environment"]["local-mail"].spec
     assert not set(feed_env["secrets"]["allow"]) & set(mail_env["secrets"]["allow"])
@@ -306,6 +309,7 @@ def test_sandbox_reads_the_mail_views_and_refuses_shadow_tables_and_writes():
     assert names == ["v_items", "v_posts", "v_email", "v_threads", "v_attachments", "v_fts", "v_attachment_fts"]
     assert {v["name"]: v["rows"] for v in d["views"]}["v_threads"] == 4
     assert d["fts"]["attachments"]["view"] == "v_attachment_fts" and set(sbx.COLUMNS) == set(sbx.VIEWS)
+    assert "addr_key" in d["functions"]
 
 
 def test_attachments_and_their_full_text_rows_go_with_their_message():

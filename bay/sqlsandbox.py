@@ -42,6 +42,7 @@ ATT_FTS_VIEW = "v_attachment_fts"
 FTS_VIEWS = {FTS_VIEW: FTS, ATT_FTS_VIEW: ATT_FTS}        # full-text view -> the FTS5 table it needs
 ITEM_VIEWS = ("v_items", "v_posts", "v_email")           # one row per item (describe samples these)
 MAIL_VIEWS = ("v_email", "v_threads", "v_attachments", ATT_FTS_VIEW)   # describe lists them for stores with email
+MAIL_FUNCTIONS = ("addr_key",)                                         # likewise
 FTS_SHADOW = tuple(f"{t}_{x}" for t in (FTS, ATT_FTS) for x in ("data", "idx", "content", "docsize", "config"))
 # the store tables: every row in them is in the mode's scope (attachments rows die with their item)
 TABLES = ("items", "item_selectors", "attachments", FTS, ATT_FTS)

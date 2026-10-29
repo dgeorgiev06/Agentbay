@@ -185,38 +185,12 @@
               "type": "integer",
               "minimum": 0,
               "description": "Items one sync may read."
-            },
-            "monthlyPosts": {
-              "type": "integer",
-              "minimum": 0,
-              "deprecated": true,
-              "description": "Deprecated (0.3) name of monthlyItems; `bay migrate` renames it."
-            },
-            "maxPostsPerRun": {
-              "type": "integer",
-              "minimum": 0,
-              "deprecated": true,
-              "description": "Deprecated (0.3) name of maxItemsPerRun; `bay migrate` renames it."
             }
           }
         },
         "substitutes": {
           "type": "string",
           "description": "This env may stand in for the named env when agentbay.config.yaml selects it with `envs: {<named>: <this>}` (e.g. an offline variant). Bindings still live only in envs/."
-        },
-        "models": {
-          "type": "array",
-          "items": {
-            "enum": [
-              "haiku",
-              "sonnet",
-              "opus",
-              "inherit"
-            ]
-          },
-          "minItems": 1,
-          "deprecated": true,
-          "description": "Deprecated (0.3): model names belong to the agent profile; becomes `tiers`. Run `bay migrate`."
         }
       }
     }

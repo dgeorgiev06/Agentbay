@@ -65,102 +65,124 @@ def _tokens_add(acc: dict, tok) -> None:
                 acc[k] = acc.get(k, 0) + int(v)
 
 
+def _episode(eid: str, kind: str, ts: str, **extra) -> dict:
+    return {"id": eid, "source": "ledger", "kind": kind, "start": ts, "end": ts, **extra, "steps": [],
+            "toolCalls": [], "errors": 0, "denials": [], "permissionPrompts": 0, "interrupts": 0,
+            "instructionChanges": 0, "subagents": []}
+
+
+class _LedgerFold:
+    """Folds ledger events into call episodes (keyed by callId) and agent-run episodes (keyed by runId)."""
+
+    def __init__(self):
+        self.calls: dict[str, dict] = {}
+        self.runs: dict[str, dict] = {}
+        self.by_task: dict[str, list[dict]] = {}
+        self.notes: list[dict] = []
+
+    def run(self, rid: str, e: dict) -> dict:
+        ep = self.runs.setdefault(rid, _episode(f"ab:run:{rid}", "agent-run", e["ts"]))
+        ep["end"] = max(ep["end"], e["ts"])
+        return ep
+
+    def event(self, e: dict) -> None:
+        t = e["type"]
+        if e.get("callId") and (t.startswith("step.") or t == "call.completed"):
+            self._call_event(e, t)
+        elif t in ("spawned", "completed", "failed", "reclaimed"):
+            self._run_event(e, t)
+        elif t == "permission.denied":
+            ep = self.run(e["runId"], e)
+            ep["agent"] = e.get("agent", ep.get("agent"))
+            ep["denials"].append({"tool": e.get("tool", "?")})
+        elif t == "note" and (e.get("data") or {}).get("kind") == "instruction-change":
+            self.notes.append(e)
+
+    def _call_event(self, e: dict, t: str) -> None:
+        c = self.calls.setdefault(e["callId"], _episode(
+            f"ab:{e['callId']}", "call", e["ts"], target=f"{e.get('mode', '?')}.{e.get('endpoint', '?')}"))
+        c["end"] = max(c["end"], e["ts"])
+        if t == "call.completed":
+            c["status"] = (e.get("data") or {}).get("status", "done")
+            if isinstance(e.get("durationMs"), int):
+                c["durationMs"] = e["durationMs"]
+            if isinstance(e.get("costUsd"), (int, float)):
+                c["costUsd"] = e["costUsd"]
+            return
+        if t in ("step.completed", "step.failed"):
+            st = {"id": e.get("step", "?"), "name": f"{c['target']}.{e.get('step', '?')}",
+                  "status": "failed" if t == "step.failed" else "done"}
+            for k in ("role", "agent", "env", "durationMs", "costUsd", "tokens"):
+                if e.get(k) is not None:
+                    st[k] = e[k]
+            c["steps"].append(st)
+            if t == "step.failed":
+                c["errors"] += 1
+            _tokens_add(c.setdefault("tokens", {}), e.get("tokens"))
+
+    def _run_event(self, e: dict, t: str) -> None:
+        ep = self.run(e["runId"], e)
+        ep["agent"] = e.get("agent", ep.get("agent"))
+        if e.get("taskId"):
+            ep["taskId"] = e["taskId"]
+            self.by_task.setdefault(e["taskId"], []).append(ep)
+        if t in ("completed", "failed"):
+            ep["status"] = (e.get("data") or {}).get("status", "failed" if t == "failed" else "done")
+            if isinstance(e.get("durationMs"), int):
+                ep["durationMs"] = e["durationMs"]
+            _tokens_add(ep.setdefault("tokens", {}), e.get("tokens"))
+            if t == "failed":
+                ep["errors"] += 1
+
+    def attach_notes(self) -> None:
+        """An instruction change counts on the call, run or task it names; a note naming none of them becomes
+        its own task episode."""
+        for n in self.notes:
+            targets = []
+            if n.get("callId") and n["callId"] in self.calls:
+                targets = [self.calls[n["callId"]]]
+            elif n["runId"] in self.runs:
+                targets = [self.runs[n["runId"]]]
+            elif n.get("taskId") in self.by_task:
+                targets = self.by_task[n["taskId"]]
+            if not targets:
+                ref = n.get("callId") or n.get("taskId") or n["runId"]
+                key = f"ab:note:{short_hash(ref, 10)}"
+                ep = next((x for x in self.runs.values() if x["id"] == key), None)
+                if ep is None:
+                    ep = self.run(f"note:{short_hash(ref, 10)}", n)
+                    ep["id"], ep["kind"] = key, "task"
+                targets = [ep]
+            for t in targets:
+                t["instructionChanges"] += 1
+
+    def episodes(self) -> list[dict]:
+        eps = list(self.calls.values()) + list(self.runs.values())
+        for ep in eps:
+            if ep.get("tokens") == {}:
+                ep.pop("tokens")
+            if "durationMs" not in ep:
+                try:
+                    a = datetime.fromisoformat(ep["start"].replace("Z", "+00:00"))
+                    b = datetime.fromisoformat(ep["end"].replace("Z", "+00:00"))
+                    ep["durationMs"] = int((b - a).total_seconds() * 1000)
+                except (ValueError, KeyError):
+                    pass
+        return eps
+
+
 def ledger_episodes(project: Path, since: datetime | None = None, until: datetime | None = None) -> tuple[list[dict], dict]:
     """Calls (one episode per callId, with steps), agent runs (spawned/completed + guard decisions) and
     instruction-change notes."""
     warnings: list[str] = []
     evs = [e for e in read_events(project, warnings) if in_window(e.get("ts"), since, until)]
-    calls: dict[str, dict] = {}
-    runs: dict[str, dict] = {}
-    by_task: dict[str, list[dict]] = {}
-    notes: list[dict] = []
-
-    def run(rid: str, e: dict) -> dict:
-        ep = runs.setdefault(rid, {"id": f"ab:run:{rid}", "source": "ledger", "kind": "agent-run",
-                                   "start": e["ts"], "end": e["ts"], "steps": [], "toolCalls": [], "errors": 0,
-                                   "denials": [], "permissionPrompts": 0, "interrupts": 0, "instructionChanges": 0,
-                                   "subagents": []})
-        ep["end"] = max(ep["end"], e["ts"])
-        return ep
-
+    fold = _LedgerFold()
     for e in evs:
-        t = e["type"]
-        if e.get("callId") and (t.startswith("step.") or t == "call.completed"):
-            c = calls.setdefault(e["callId"], {
-                "id": f"ab:{e['callId']}", "source": "ledger", "kind": "call", "start": e["ts"], "end": e["ts"],
-                "target": f"{e.get('mode', '?')}.{e.get('endpoint', '?')}", "steps": [], "toolCalls": [],
-                "errors": 0, "denials": [], "permissionPrompts": 0, "interrupts": 0, "instructionChanges": 0,
-                "subagents": []})
-            c["end"] = max(c["end"], e["ts"])
-            if t == "call.completed":
-                c["status"] = (e.get("data") or {}).get("status", "done")
-                if isinstance(e.get("durationMs"), int):
-                    c["durationMs"] = e["durationMs"]
-                if isinstance(e.get("costUsd"), (int, float)):
-                    c["costUsd"] = e["costUsd"]
-                continue
-            if t in ("step.completed", "step.failed"):
-                st = {"id": e.get("step", "?"), "name": f"{c['target']}.{e.get('step', '?')}",
-                      "status": "failed" if t == "step.failed" else "done"}
-                for k in ("role", "agent", "env", "durationMs", "costUsd", "tokens"):
-                    if e.get(k) is not None:
-                        st[k] = e[k]
-                c["steps"].append(st)
-                if t == "step.failed":
-                    c["errors"] += 1
-                _tokens_add(c.setdefault("tokens", {}), e.get("tokens"))
-        elif t in ("spawned", "completed", "failed", "reclaimed"):
-            ep = run(e["runId"], e)
-            ep["agent"] = e.get("agent", ep.get("agent"))
-            if e.get("taskId"):
-                ep["taskId"] = e["taskId"]
-                by_task.setdefault(e["taskId"], []).append(ep)
-            if t in ("completed", "failed"):
-                ep["status"] = (e.get("data") or {}).get("status", "failed" if t == "failed" else "done")
-                if isinstance(e.get("durationMs"), int):
-                    ep["durationMs"] = e["durationMs"]
-                _tokens_add(ep.setdefault("tokens", {}), e.get("tokens"))
-                if t == "failed":
-                    ep["errors"] += 1
-        elif t == "permission.denied":
-            ep = run(e["runId"], e)
-            ep["agent"] = e.get("agent", ep.get("agent"))
-            ep["denials"].append({"tool": e.get("tool", "?")})
-        elif t == "note" and (e.get("data") or {}).get("kind") == "instruction-change":
-            notes.append(e)
-    standalone = 0
-    for n in notes:
-        targets = []
-        if n.get("callId") and n["callId"] in calls:
-            targets = [calls[n["callId"]]]
-        elif n["runId"] in runs:
-            targets = [runs[n["runId"]]]
-        elif n.get("taskId") in by_task:
-            targets = by_task[n["taskId"]]
-        if not targets:
-            ref = n.get("callId") or n.get("taskId") or n["runId"]
-            key = f"ab:note:{short_hash(ref, 10)}"
-            ep = next((x for x in runs.values() if x["id"] == key), None)
-            if ep is None:
-                ep = run(f"note:{short_hash(ref, 10)}", n)
-                ep["id"], ep["kind"] = key, "task"
-                standalone += 1
-            targets = [ep]
-        for t in targets:
-            t["instructionChanges"] += 1
-    eps = list(calls.values()) + list(runs.values())
-    for ep in eps:
-        if ep.get("tokens") == {}:
-            ep.pop("tokens")
-        if "durationMs" not in ep:
-            try:
-                a = datetime.fromisoformat(ep["start"].replace("Z", "+00:00"))
-                b = datetime.fromisoformat(ep["end"].replace("Z", "+00:00"))
-                ep["durationMs"] = int((b - a).total_seconds() * 1000)
-            except (ValueError, KeyError):
-                pass
-    return eps, {"events": len(evs), "calls": len(calls), "runs": len(runs), "instructionNotes": len(notes),
-                 **({"warnings": warnings} if warnings else {})}
+        fold.event(e)
+    fold.attach_notes()
+    eps = fold.episodes()
+    return eps, {"events": len(evs), "calls": len(fold.calls), "runs": len(fold.runs),
+                 "instructionNotes": len(fold.notes), **({"warnings": warnings} if warnings else {})}
 
 
 def _subject(inp: dict, call_id: str) -> str:

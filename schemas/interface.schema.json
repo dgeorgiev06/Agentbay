@@ -25,7 +25,7 @@
       "properties": {
         "version": { "type": "integer", "minimum": 1 },
         "binding": { "enum": ["connector", "tools"], "default": "connector" },
-        "dispatcherOnly": { "type": "boolean", "default": false, "description": "Run by code steps only: agents never read it, even when a mode needs it (e.g. improve.detect, forge.migrate). Other read-only connector endpoints of a mode's needs are readable by the roles of that mode through their use shims." },
+        "dispatcherOnly": { "type": "boolean", "default": false, "description": "Run by code steps only: agents never read it, even when a mode needs it (e.g. improve.detect). Other read-only connector endpoints of a mode's needs are readable by the roles of that mode through their use shims." },
         "endpoints": {
           "type": "object",
           "minProperties": 1,

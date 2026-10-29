@@ -101,9 +101,9 @@ def test_triage_links_only_same_file_across_lenses():
                     evidence=[{"kind": "file", "ref": "modes/feed-briefing/mode.yaml:12"}],
                     scope={"file": "modes/feed-briefing/mode.yaml"})
         slow = cand(kind="slow-step", key="feed-briefing.digest.gather")
-        ineff = cand(kind="inefficient-store-read", key="connectors/local-store/store.py:LocalStore.query",
-                     lens="artifacts", refs=(), evidence=[{"kind": "file", "ref": "connectors/local-store/store.py:9"}],
-                     scope={"file": "connectors/local-store/store.py"})
+        ineff = cand(kind="inefficient-store-read", key="framework/connectors/corpus-store/corpus_store.py:CorpusStore.query",
+                     lens="artifacts", refs=(), evidence=[{"kind": "file", "ref": "framework/connectors/corpus-store/corpus_store.py:9"}],
+                     scope={"file": "framework/connectors/corpus-store/corpus_store.py"})
         ids = s.upsert([churn, conf, slow, ineff], "x")["new"]
         res = s.triage()
         assert [(l["a"], l["b"]) for l in res["links"]] == [tuple(sorted(ids[:2]))]

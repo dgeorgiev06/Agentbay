@@ -140,8 +140,13 @@ def _user_text(acc: _Acc, text: str, is_meta: bool) -> None:
             acc.status_questions += 1
 
 
-def _record(acc: _Acc, rec: dict) -> None:
-    t = rec["type"]
+def _dict(rec: dict, key: str) -> dict:
+    v = rec.get(key)
+    return v if isinstance(v, dict) else {}
+
+
+def _record_meta(acc: _Acc, rec: dict) -> None:
+    """Fields any record type may carry: time span, cwd, version, entrypoint, compaction marker."""
     ts = _ts(rec.get("timestamp"))
     if ts:
         acc.start = min(acc.start or ts, ts)
@@ -155,76 +160,100 @@ def _record(acc: _Acc, rec: dict) -> None:
         acc.entrypoint = _name(rec["entrypoint"], None)
     if rec.get("isCompactSummary") is True:
         acc.compaction += 1
-    if t == "user":
-        msg = rec.get("message") if isinstance(rec.get("message"), dict) else {}
-        content = msg.get("content")
-        meta = rec.get("isMeta") is True
-        tur = rec.get("toolUseResult") if isinstance(rec.get("toolUseResult"), dict) else {}
-        if tur.get("interrupted") is True:
-            acc.interrupts += 1
-        pd = rec.get("permissionDecision") if isinstance(rec.get("permissionDecision"), dict) else {}
-        if "user" in str(pd.get("source", "")).lower():
-            acc.prompts += 1
-        denied = bool(rec.get("toolDenialKind"))
-        if isinstance(content, str):
-            _user_text(acc, content, meta)
-        elif isinstance(content, list):
-            for b in content:
-                if not isinstance(b, dict):
-                    continue
-                if b.get("type") == "text" and isinstance(b.get("text"), str):
-                    _user_text(acc, b["text"], meta)
-                elif b.get("type") == "tool_result" and isinstance(b.get("tool_use_id"), str):
-                    call = acc.calls.get(b["tool_use_id"])
-                    if call is None:
-                        continue
-                    is_err = b.get("is_error") is True
-                    call["error"] = call["error"] or is_err
-                    call["denied"] = call["denied"] or (denied and is_err)
-                    if is_err and not denied:
-                        gap = env_gap(_text_of(b.get("content")) + " " + str(tur.get("stderr", ""))[:5000])
-                        if gap:
-                            acc.env_gaps[gap] = acc.env_gaps.get(gap, 0) + 1
-                    sub = acc.subagents.get(b["tool_use_id"])
-                    if sub is not None:
-                        sub["finished"] = tur.get("status") in ("completed", "done", "success") or sub["finished"]
-                        if isinstance(tur.get("agentId"), str):
-                            sub["agentId"] = _id(tur["agentId"].removeprefix("agent-"))
-    elif t == "assistant":
-        msg = rec.get("message") if isinstance(rec.get("message"), dict) else {}
-        mid = msg.get("id") if isinstance(msg.get("id"), str) else f"rec{acc.records}"
-        if isinstance(msg.get("model"), str):
-            m = _name(msg["model"])
-            acc.models[m] = acc.models.get(m, 0) + 1
-        if isinstance(msg.get("usage"), dict):
-            acc.usage[mid] = msg["usage"]                 # one response is split across records: last usage wins
-        content = msg.get("content")
-        for b in content if isinstance(content, list) else []:
-            if isinstance(b, dict) and b.get("type") == "tool_use" and isinstance(b.get("id"), str):
-                name = _name(b.get("name"))
-                call = {"name": name, "inputHash": short_hash(b.get("input")), "error": False, "denied": False}
-                acc.calls[b["id"]] = call
-                acc.order.append(call)
-                if name in SUBAGENT_TOOLS:
-                    inp = b.get("input") if isinstance(b.get("input"), dict) else {}
-                    acc.subagents[b["id"]] = {"type": _name(inp.get("subagent_type"), "general-purpose"),
-                                              "finished": False}
-    elif t == "queue-operation":
-        if rec.get("operation") == "enqueue":           # the user typed while the agent was working
-            acc.queued += 1
-    elif t == "system":
-        st = rec.get("subtype")
-        if st == "stop_hook_summary":
-            infos = rec.get("hookInfos")
-            for h in infos if isinstance(infos, list) else []:
-                if isinstance(h, dict) and isinstance(h.get("durationMs"), (int, float)):
-                    acc.hook_ms += int(h["durationMs"])
-            errs = rec.get("hookErrors")
-            acc.hook_errors += len(errs) if isinstance(errs, list) else 0
-        elif isinstance(st, str) and "compact" in st:
-            acc.compaction += 1
-    elif t == "cost-state":
-        acc.cost = rec                                     # running snapshot: the last one wins
+
+
+def _tool_result(acc: _Acc, b: dict, tur: dict, denied: bool) -> None:
+    """A tool_result block: marks its call errored/denied, classifies environment gaps, finishes subagents."""
+    call = acc.calls.get(b["tool_use_id"])
+    if call is None:
+        return
+    is_err = b.get("is_error") is True
+    call["error"] = call["error"] or is_err
+    call["denied"] = call["denied"] or (denied and is_err)
+    if is_err and not denied:
+        gap = env_gap(_text_of(b.get("content")) + " " + str(tur.get("stderr", ""))[:5000])
+        if gap:
+            acc.env_gaps[gap] = acc.env_gaps.get(gap, 0) + 1
+    sub = acc.subagents.get(b["tool_use_id"])
+    if sub is not None:
+        sub["finished"] = tur.get("status") in ("completed", "done", "success") or sub["finished"]
+        if isinstance(tur.get("agentId"), str):
+            sub["agentId"] = _id(tur["agentId"].removeprefix("agent-"))
+
+
+def _record_user(acc: _Acc, rec: dict) -> None:
+    content = _dict(rec, "message").get("content")
+    meta = rec.get("isMeta") is True
+    tur = _dict(rec, "toolUseResult")
+    if tur.get("interrupted") is True:
+        acc.interrupts += 1
+    if "user" in str(_dict(rec, "permissionDecision").get("source", "")).lower():
+        acc.prompts += 1
+    denied = bool(rec.get("toolDenialKind"))
+    if isinstance(content, str):
+        _user_text(acc, content, meta)
+        return
+    for b in content if isinstance(content, list) else []:
+        if not isinstance(b, dict):
+            continue
+        if b.get("type") == "text" and isinstance(b.get("text"), str):
+            _user_text(acc, b["text"], meta)
+        elif b.get("type") == "tool_result" and isinstance(b.get("tool_use_id"), str):
+            _tool_result(acc, b, tur, denied)
+
+
+def _record_assistant(acc: _Acc, rec: dict) -> None:
+    msg = _dict(rec, "message")
+    mid = msg.get("id") if isinstance(msg.get("id"), str) else f"rec{acc.records}"
+    if isinstance(msg.get("model"), str):
+        m = _name(msg["model"])
+        acc.models[m] = acc.models.get(m, 0) + 1
+    if isinstance(msg.get("usage"), dict):
+        acc.usage[mid] = msg["usage"]                 # one response is split across records: last usage wins
+    content = msg.get("content")
+    for b in content if isinstance(content, list) else []:
+        if isinstance(b, dict) and b.get("type") == "tool_use" and isinstance(b.get("id"), str):
+            name = _name(b.get("name"))
+            call = {"name": name, "inputHash": short_hash(b.get("input")), "error": False, "denied": False}
+            acc.calls[b["id"]] = call
+            acc.order.append(call)
+            if name in SUBAGENT_TOOLS:
+                inp = b.get("input") if isinstance(b.get("input"), dict) else {}
+                acc.subagents[b["id"]] = {"type": _name(inp.get("subagent_type"), "general-purpose"),
+                                          "finished": False}
+
+
+def _record_queue(acc: _Acc, rec: dict) -> None:
+    if rec.get("operation") == "enqueue":           # the user typed while the agent was working
+        acc.queued += 1
+
+
+def _record_system(acc: _Acc, rec: dict) -> None:
+    st = rec.get("subtype")
+    if st == "stop_hook_summary":
+        infos = rec.get("hookInfos")
+        for h in infos if isinstance(infos, list) else []:
+            if isinstance(h, dict) and isinstance(h.get("durationMs"), (int, float)):
+                acc.hook_ms += int(h["durationMs"])
+        errs = rec.get("hookErrors")
+        acc.hook_errors += len(errs) if isinstance(errs, list) else 0
+    elif isinstance(st, str) and "compact" in st:
+        acc.compaction += 1
+
+
+def _record_cost(acc: _Acc, rec: dict) -> None:
+    acc.cost = rec                                     # running snapshot: the last one wins
+
+
+_RECORDS = {"user": _record_user, "assistant": _record_assistant, "queue-operation": _record_queue,
+            "system": _record_system, "cost-state": _record_cost}
+
+
+def _record(acc: _Acc, rec: dict) -> None:
+    _record_meta(acc, rec)
+    fold = _RECORDS.get(rec["type"])
+    if fold:
+        fold(acc, rec)
 
 
 def _count(v) -> bool:

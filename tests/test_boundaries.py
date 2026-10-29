@@ -124,7 +124,7 @@ def test_settings_have_no_wildcards():
             assert perm.startswith("Bash(.agentbay/bay ") and perm.split()[1].rstrip(":*)") in \
                 COORDINATOR_CMDS, perm
         # the invariant behind the list: every pre-approved command is read-only
-        assert not ({"call", "submit", "approve", "build", "clean", "secret", "migrate", "improve", "reclaim"}
+        assert not ({"call", "submit", "approve", "build", "clean", "secret", "improve", "reclaim"}
                     & set(COORDINATOR_CMDS))
         assert not any("secret" in x or "build" in x or "roles/" in x for x in st["permissions"]["allow"])
     finally:
@@ -295,7 +295,8 @@ def test_protected_kit_dirs_when_the_project_is_the_kit():
         assert pol["protected"] == ["framework", "bay", "schemas"]
         assert tool(k, "builder--delivery", "Write", {"file_path": "bay/guard.py", "content": "x"})[0] == "deny"
         assert tool(k, "builder--delivery", "Write", {"file_path": "framework/roles/x.yaml", "content": "x"})[0] == "deny"
-        assert tool(k, "builder--forge--local-authoring", "Write", {"file_path": "roles/x.yaml", "content": "x"})[0] == "pass"
+        assert tool(k, "builder--forge--local-authoring", "Write", {"file_path": "modes/x.yaml", "content": "x"})[0] == "pass"
+        assert tool(k, "builder--forge--local-authoring", "Write", {"file_path": "roles/x.yaml", "content": "x"})[0] == "deny"
         assert tool(k, "builder--forge--local-authoring", "Write", {"file_path": "bay.sh", "content": "x"})[0] == "deny"
         assert tool(k, "builder--forge--framework-dev", "Write", {"file_path": "bay/x.py", "content": "x"})[0] == "pass"
         st = json.loads((k / ".claude/settings.json").read_text())

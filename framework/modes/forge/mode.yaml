@@ -3,9 +3,9 @@ kind: Mode
 metadata:
   name: forge
   version: 0.2.0
-  description: Build agentbay itself - create user content, extend the framework, migrate across versions.
+  description: Build agentbay itself - create user content, extend the framework.
 spec:
-  purpose: Create modes, features, connectors and envs; extend the framework (including its roles) through a reviewed proposal; migrate user content across versions.
+  purpose: Create modes, features, connectors and envs; extend the framework (including its roles) through a reviewed proposal.
   endpoints:
     create:
       description: Scaffold and fill a mode, feature, connector or env in user space from a plain-language intent.
@@ -26,15 +26,6 @@ spec:
       rules: features/extend/rules.yaml
       roles: { builder: framework-dev }           # the only feature whose env writes framework/, bay/, schemas/
       review: { role: reviewer, when: always, tier: deep, effort: high, rulesets: [conformance] }
-    migrate:
-      description: Migrate user content to the current framework version; dry-run diff unless confirm is true.
-      workflow: migrate
-      in: MigrateReq
-      out: MigrateOut
-      effects: [read, write, delete]
-      playbook: features/migrate/playbook.md
-      rules: features/migrate/rules.yaml
-      review: { role: reviewer, when: always, tier: balanced, effort: medium }
   coordinator: lead
   roles: { lead: local-authoring, builder: local-authoring, reviewer: workspace }   # user space only
   workflows:
@@ -42,14 +33,11 @@ spec:
       - { id: scaffold, run: forge.scaffold/v1.create, with: { kind: "$in.kind", name: "$in.name", target: "$in.target", implements: "$in.implements", intent: "$in.intent" } }
       - { id: fill, role: builder, out: Result, task: "Fill every TODO the scaffold left so the result matches the intent and passes ./bay.sh lint." }
     extend:
-      - { id: propose, role: builder, out: Result, task: "Write the design change proposal to docs/proposals/<id>.md (problem, change to concepts/schemas/CLI, compatibility impact, migration plan)." }
+      - { id: propose, role: builder, out: Result, task: "Write the design change proposal to docs/proposals/<id>.md (problem, change to concepts/schemas/CLI, compatibility impact)." }
       - { id: approve, gate: "The user approves the proposal in docs/proposals/ before anything is implemented." }
       - { id: implement, role: builder, out: Result, task: "Implement the approved proposal on a branch: code, schemas, framework modes, docs, tests." }
       - { review: here, id: review }
       - { id: release, role: builder, out: Result, task: "Changelog entry, version bump in bay/__init__.py (and schema apiVersion if contracts changed); all checks green." }
-    migrate:
-      - { id: plan, run: forge.migrate/v1.plan }
-      - { id: apply, run: forge.migrate/v1.apply, when: "$in.confirm" }
   constraints:
-    policies: [framework-is-read-only-outside-extend, dry-run-first]
-  needs: [forge.scaffold/v1, forge.migrate/v1, workspace.read/v1, workspace.write/v1, git.read/v1]
+    policies: [framework-is-read-only-outside-extend]
+  needs: [forge.scaffold/v1, workspace.read/v1, workspace.write/v1, git.read/v1]

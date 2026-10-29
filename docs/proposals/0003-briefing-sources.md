@@ -1,6 +1,6 @@
 # Proposal 0003: shared briefing infrastructure, mail-briefing, forge.connect
 
-Status: approved (user, 2026-10-27). Step 1 (shared layer) and step 2 (feed-briefing migrated onto it) implemented on feat/briefing (DESIGN amendment "shared briefing layer"); steps 3-4 follow as separate PRs.
+Status: approved (user, 2026-10-27). Step 1 (shared layer) and step 2 (feed-briefing migrated onto it) implemented on feat/briefing (amendment "shared briefing layer" in docs/proposals/0001a-design-amendments.md); steps 3-4 follow as separate PRs.
 
 ## Problem
 feed-briefing hard-codes one pattern: pull items from a source, store them, summarize, and chat over them. Email needs the same pattern, as will future sources (RSS, Slack). Copying it per source would duplicate storage, query, digest and Q&A logic. Separately, the current JSONL store re-reads every file on each query (improve finding F-d70dbfd0).

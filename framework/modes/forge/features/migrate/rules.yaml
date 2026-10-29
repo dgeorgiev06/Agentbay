@@ -1,6 +1,0 @@
-apiVersion: agentbay/v2
-kind: Rules
-rules:
-  - { id: R-1, level: must, statement: "Dry run by default; apply only with confirm true.", appliesTo: both, refs: [DOD-1] }
-  - { id: R-2, level: must_not, statement: "Touch framework/, bay/ or schemas/.", appliesTo: both }
-  - { id: R-3, level: must, statement: "Migrated content passes bay lint.", appliesTo: reviewer, check: lint_clean, refs: [DOD-3] }

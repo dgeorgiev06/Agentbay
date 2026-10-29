@@ -7,7 +7,6 @@ implement -> review -> release, and a failed review stops it before release.
 - "change how agentbay works" (including a new framework role) -> `.agentbay/bay call forge.extend '{"goal": "..."}'`.
   When the call returns `awaiting-approval`, show the user the proposal; they run
   `.agentbay/bay approve <callId>` in their own terminal. Continue with `.agentbay/bay show <callId>`.
-- "upgrade my content" -> `.agentbay/bay call forge.migrate '{}'` (dry run), then with `{"confirm": true}`.
 
 Run each builder and reviewer step exactly as the plan says (subagent name, model, effort) and submit its
 output. Done when the call reached done, partial or blocked and the user saw the result.

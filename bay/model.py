@@ -10,8 +10,11 @@ the mode runs that role in several envs): its own subagent, use shim, guard poli
 Two roots are loaded: `framework/` (shipped with the kit, never edited by users)
 and the kit root (user content). Both have the same layout:
 
-    interfaces/<name>.v<N>.yaml   modes/<name>/mode.yaml   roles/<name>.yaml
-    agents/<name>.yaml            envs/<name>.yaml         connectors/<name>/connector.yaml
+    interfaces/<name>.v<N>.yaml   modes/<name>/mode.yaml   envs/<name>.yaml
+    connectors/<name>/connector.yaml
+
+Roles (roles/<name>.yaml) and agent profiles (agents/<name>.yaml) exist only under framework/; a user file of
+either kind is an error.
 
 `resolve(kit)` walks every endpoint and fails with ALL gaps at once, each one a
 human-readable sentence naming the concept and what to fix. The `System` it
@@ -48,7 +51,6 @@ KINDS = {  # kind -> (folder, glob, schema)
     "Connector": ("connectors", "*/connector.yaml", "connector"),
 }
 EFFECTS = ["read", "write", "network", "spend", "delete"]
-TIERS = ("fast", "balanced", "deep")
 DEFAULT_AGENT = "claude-code"          # the agent profile when agentbay.config.yaml sets no `agent:`
 AGENT_SAFE_EFFECTS = {"read"}          # connector endpoints a role may call via its use shim
 READ_TOOL_EFFECTS = {"read", "network"}  # tools capabilities every role may get; others need `access: write`
@@ -59,13 +61,12 @@ LEVEL_RANK = {"should": 1, "must": 2, "must_not": 2}
 PROTECTED = ("framework", "bay", "schemas")       # kit paths only forge.extend may write
 FRAMEWORK_EXTENDER = "forge.extend"
 USER_ROLE = ("roles are framework-level; customize behaviour in your mode's playbooks/skills, or propose a new "
-             "role via forge.extend (`bay migrate` moves this role into its mode as a skill)")
-# Framework owns roles and agent profiles; user space is modes/, envs/, connectors/ (and interfaces/).
+             "role via forge.extend")
+# Kinds loaded from framework/ only; user space is modes/, envs/, connectors/ (and interfaces/).
 FRAMEWORK_ONLY = {"Role": USER_ROLE,
                   "Agent": "agent profiles are framework-level (framework/agents/); select one with `agent:` in "
                            "agentbay.config.yaml, or propose a new profile via forge.extend"}
 ROOT_COORDINATOR = "cos"      # the mode whose coordinator owns the main thread; its playbook is the preamble
-STALE = re.compile(r"^stale\s*>\s*([0-9]+[mhdw])$")
 
 
 class SpecError(Exception):
@@ -87,8 +88,7 @@ def schema(name: str) -> dict:
 
 def data_schema(ref: str) -> dict:
     """'post/v1' -> schemas/data/post.v1.schema.json"""
-    from .aliases import data_ref
-    name, _, ver = data_ref(ref).partition("/")
+    name, _, ver = ref.partition("/")
     p = SCHEMAS / "data" / f"{name}.{ver}.schema.json"
     if not p.exists():
         raise SpecError(f"unknown data schema '{ref}' (expected {p.relative_to(KIT)})")
@@ -145,8 +145,6 @@ class Doc:
     spec: dict
     lineage: list = field(default_factory=list)   # Mode: own folder, then each ancestor's (extends), nearest first
     parent: str | None = None                      # Mode: the mode it extends
-    raw: dict = field(default_factory=dict)        # the spec as written in the file (before aliases and extends)
-    renamed: dict = field(default_factory=dict)    # deprecated role name aliases applied: new name -> old name
 
     @property
     def dir(self) -> Path:
@@ -172,28 +170,21 @@ class Kit:
         self.roots = {"framework": kit / "framework", "user": kit}
         self.project = project
         self.docs: dict[str, dict[str, Doc]] = {k: {} for k in KINDS}
-        self.legacy_agents: dict[str, Doc] = {}     # 0.3 per-role agent files in user space (deprecated)
-        self.user_roles: dict[str, dict] = {}       # 0.3 user role files (an error; read for bay migrate)
         self.collisions: list[str] = []
         self.errors: list[str] = []
         for root_name, base in self.roots.items():
             for kind, (folder, glob, sch) in KINDS.items():
                 for f in sorted((base / folder).glob(glob)):
-                    if kind in FRAMEWORK_ONLY and root_name == "user" and not self._legacy(kind, f):
+                    if root_name == "user" and kind in FRAMEWORK_ONLY:
                         self.errors.append(f"{rel(f)}: {FRAMEWORK_ONLY[kind]}")
                         continue
                     try:
                         self._load(kind, root_name, f, sch)
                     except SpecError as e:
                         self.errors.append(str(e))
-        from . import aliases
-        self.deprecations: list[str] = aliases.apply(self)     # v0.2 names, kept for one release
-        self.deprecations += aliases.apply_caps(self)          # 0.3 cap names, kept for one release
         self._apply_extends()
         from . import config as cfgmod
         self.config = copy.deepcopy(cfgmod.load(project) if config is None else config)
-        self.deprecations += aliases.config_caps(self.config)
-        self.deprecations += aliases.apply_shape(self)         # 0.3 roles/agents/envs shape, kept for one release
         self.env_swap: dict[str, str] = {}
         self._select_envs()
 
@@ -264,32 +255,13 @@ class Kit:
         name = self.config.get("agent") or DEFAULT_AGENT
         return self.docs["Agent"].get(name), name
 
-    def _legacy(self, kind: str, f: Path) -> bool:
-        """A 0.3 user agent file ({runtime: <name>, model, env}) keeps working for one release; any other user
-        role or agent file is an error (and a user role is remembered for `bay migrate`)."""
-        try:
-            doc = load_yaml(f)
-        except SpecError:
-            return False
-        spec = doc.get("spec") if isinstance(doc, dict) else None
-        if kind == "Role" and isinstance(spec, dict):
-            self.user_roles[f.stem] = {"path": f, "doc": doc}
-        return kind == "Agent" and isinstance(spec, dict) and isinstance(spec.get("runtime"), str)
-
     def _load(self, kind: str, root_name: str, f: Path, sch: str) -> None:
         doc = load_yaml(f)
         where = rel(f)
         if not isinstance(doc, dict):
             raise SpecError(f"{where}: expected a mapping")
         if doc.get("kind") != kind:
-            raise SpecError(f"{where}: kind must be {kind} (found {doc.get('kind')!r}); "
-                            f"v0.1 kinds (AgentSpec, Layer) are gone - run `bay migrate`")
-        if kind == "Environment" and isinstance((doc.get("spec") or {}).get("fs"), dict) \
-                and "base" in doc["spec"]["fs"]:
-            line = next((i for i, ln in enumerate(f.read_text().splitlines(), 1) if ln.strip().startswith("base:")), 1)
-            raise SpecError(f"{where}:{line}: fs.base was removed in v0.2 (approved 2026-10-27); fs paths are always relative "
-                            f"to the project root - delete `base:` (forge envs expect the project to be the agentbay "
-                            f"checkout)")
+            raise SpecError(f"{where}: kind must be {kind} (found {doc.get('kind')!r})")
         sch_doc = schema(sch)
         if kind == "Mode" and isinstance(doc.get("spec"), dict) and doc["spec"].get("extends"):
             # a child declares only what it overrides; the merged spec is checked in full after extends
@@ -309,17 +281,13 @@ class Kit:
             expect = f.parent.name if f.name in ("mode.yaml", "connector.yaml") else f.stem
             if name != expect:
                 raise SpecError(f"{where}: metadata.name '{name}' must match '{expect}'")
-        if kind == "Agent" and root_name == "user":        # a 0.3 per-role agent (see _legacy)
-            self.legacy_agents[name] = Doc(kind, name, root_name, f, meta, spec)
-            return
         if name in self.docs[kind]:
             other = self.docs[kind][name]
             self.collisions.append(
                 f"{kind} '{name}' is defined by both the framework ({other.rel}) and you ({where}); "
                 f"rename yours - framework names are reserved")
             return
-        self.docs[kind][name] = Doc(kind, name, root_name, f, meta, spec, lineage=[f.parent] if kind == "Mode" else [],
-                                    raw=copy.deepcopy(spec))
+        self.docs[kind][name] = Doc(kind, name, root_name, f, meta, spec, lineage=[f.parent] if kind == "Mode" else [])
 
     # convenience
     def get(self, kind: str, name: str) -> Doc | None:
@@ -691,7 +659,7 @@ def role_env_problems(md: Doc) -> list[tuple[str | None, str | None, str]]:
     `roles:` on code or gate steps. `bay lint` reports them with file:line, resolve as gaps."""
     s, name = md.spec, md.name
     roles = s.get("roles")
-    if not isinstance(roles, dict):
+    if not roles:
         return []
     out: list[tuple[str | None, str | None, str]] = []
     have = ", ".join(roles) or "none"
@@ -882,7 +850,7 @@ def code_env(kit: Kit, mode: Doc, iface: str, ep: dict | None = None) -> tuple[D
     """Env that runs a code step: the coordinator's env (for this feature), else the first role env of the mode
     that binds the capability."""
     s = mode.spec
-    roles = s.get("roles") if isinstance(s.get("roles"), dict) else {}
+    roles = s.get("roles") or {}
     coord = s.get("coordinator")
     if coord:
         name = kit.env_name(role_env(s, ep, None, coord))
@@ -917,135 +885,177 @@ def resolve(kit: Kit) -> System:
 
 
 def resolve_mode(kit: Kit, md: Doc, ctx: _Ctx, warnings: list[str] | None = None) -> ResolvedMode | None:
-    from . import config as cfgmod
     gaps = ctx.gaps
     s, name = md.spec, md.name
     needs = s.get("needs", [])
     for n in needs:
         if kit.get("Interface", n) is None:
             gaps.append(f"mode {name}: needs unknown capability interface {n}")
-    roles = s["roles"] if isinstance(s.get("roles"), dict) else {}
+    roles = s.get("roles") or {}
+    coord_unit = _mode_roles(kit, md, ctx, roles)
+    mcfg, feat_cfg = _mode_config(kit, md, gaps)
+    constraints = _mode_constraints(md, mcfg, gaps)
+    features: dict[str, Feature] = {}
+    for ep_name, ep in s["endpoints"].items():
+        feat = _feature(kit, md, ctx, ep_name, ep, feat_cfg)
+        if feat:
+            features[ep_name] = feat
+    _check_selectors(kit, md, mcfg, gaps, warnings if warnings is not None else [])
+    pb_file = next((d / "playbook.md" for d in md.dirs if (d / "playbook.md").exists()), md.dir / "playbook.md")
+    return ResolvedMode(
+        name=name, version=md.meta["version"], root=md.root, purpose=s["purpose"].strip(), path=md.dir,
+        coordinator=s.get("coordinator"), roles={rn: kit.env_name(env) for rn, env in roles.items()},
+        features=features, constraints=constraints, needs=needs,
+        playbook=pb_file.read_text() if pb_file.exists() else "", skills=mode_skills(md), config=mcfg,
+        dirs=list(md.dirs), extends=md.parent, coordinator_unit=coord_unit)
+
+
+def _mode_roles(kit: Kit, md: Doc, ctx: _Ctx, roles: dict) -> ResolvedRole | None:
+    """Check the mode's `roles:` map and role -> env problems; return the coordinator's unit, if any."""
+    name = md.name
     for rn in roles:
         if rn not in kit.docs["Role"]:
-            gaps.append(f"mode {name}: roles lists unknown role '{rn}' (have: {', '.join(sorted(kit.docs['Role']))})")
+            ctx.gaps.append(f"mode {name}: roles lists unknown role '{rn}' (have: {', '.join(sorted(kit.docs['Role']))})")
         elif rn in ctx.roles and name not in ctx.roles[rn].modes:
             ctx.roles[rn].modes.append(name)
-    gaps += [msg for _, _, msg in role_env_problems(md)]
-    coord = s.get("coordinator")
-    coord_unit = None
+    ctx.gaps += [msg for _, _, msg in role_env_problems(md)]
+    coord = md.spec.get("coordinator")
     if coord and coord in ctx.roles and roles.get(coord):
-        coord_unit = ctx.unit(coord, md, kit.env_name(roles[coord]), "coordinator", f"mode {name} coordinator")
+        return ctx.unit(coord, md, kit.env_name(roles[coord]), "coordinator", f"mode {name} coordinator")
+    return None
 
+
+def _mode_config(kit: Kit, md: Doc, gaps: list[str]) -> tuple[dict, dict]:
+    """The mode's effective settings (agentbay.config.yaml over the config schema's defaults and the mode's
+    configDefaults) and its per-feature settings."""
+    from . import config as cfgmod
+    s, name = md.spec, md.name
     mcfg, feat_cfg = cfgmod.mode_settings(kit.config, name)
     if s.get("config"):
         cp = md.dir / s["config"]
         if not cp.exists():
             gaps.append(f"mode {name}: config schema {s['config']} not found")
         else:
-            csch = inline_refs(json.loads(cp.read_text()))
-            from .aliases import rename_caps
-            rename_caps(csch.get("properties"))       # a 0.3 schema declaring maxPostsPerRun / monthlyPosts
-            for e in schema_errors(mcfg, csch):
-                gaps.append(f"agentbay.config.yaml modes.{name}: {e}")
-            # the mode's config schema `default`s are the single source of default settings; a mode (a child,
-            # usually) replaces some of them with `configDefaults` instead of copying the schema
-            props = csch.get("properties") or {}
-            defaults = {k: v["default"] for k, v in props.items() if "default" in v}
-            for k, v in (s.get("configDefaults") or {}).items():
-                if k not in props:
-                    gaps.append(f"mode {name}: configDefaults.{k} is not a setting of its config schema "
-                                f"{os.path.relpath(os.path.normpath(cp), kit.root)} (has: {', '.join(props) or 'none'})")
-                    continue
-                errs = schema_errors(v, props[k])
-                gaps += [f"mode {name}: configDefaults.{k}: {e.removeprefix('<root>: ')}" for e in errs]
-                if not errs:
-                    defaults[k] = v
-            mcfg = {**defaults, **mcfg}
+            mcfg = {**_config_defaults(kit, md, cp, mcfg, gaps), **mcfg}
     elif mcfg:
         gaps.append(f"agentbay.config.yaml modes.{name}: mode {name} declares no config schema, so it takes no settings")
     if s.get("configDefaults") and not s.get("config"):
         gaps.append(f"mode {name}: configDefaults needs a config schema (`config:`, own or inherited)")
-    if SOURCE_IFACE in needs and not mcfg.get("selectors"):
-        mcfg["selectors"] = [{"id": "home"}]     # no selectors setting: keep each source's default stream (v0.2)
-    constraints = cfgmod.effective_constraints(s.get("constraints", {}), mcfg)
+    if SOURCE_IFACE in s.get("needs", []) and not mcfg.get("selectors"):
+        mcfg["selectors"] = [{"id": "home"}]     # no selectors setting: keep each source's default stream
+    return mcfg, feat_cfg
+
+
+def _config_defaults(kit: Kit, md: Doc, cp: Path, mcfg: dict, gaps: list[str]) -> dict:
+    """Check the settings against the config schema; return its `default`s, with the mode's configDefaults
+    (a child, usually, replacing some of them instead of copying the schema) applied."""
+    name = md.name
+    csch = inline_refs(json.loads(cp.read_text()))
+    for e in schema_errors(mcfg, csch):
+        gaps.append(f"agentbay.config.yaml modes.{name}: {e}")
+    props = csch.get("properties") or {}
+    defaults = {k: v["default"] for k, v in props.items() if "default" in v}
+    for k, v in (md.spec.get("configDefaults") or {}).items():
+        if k not in props:
+            gaps.append(f"mode {name}: configDefaults.{k} is not a setting of its config schema "
+                        f"{os.path.relpath(os.path.normpath(cp), kit.root)} (has: {', '.join(props) or 'none'})")
+            continue
+        errs = schema_errors(v, props[k])
+        gaps += [f"mode {name}: configDefaults.{k}: {e.removeprefix('<root>: ')}" for e in errs]
+        if not errs:
+            defaults[k] = v
+    return defaults
+
+
+def _mode_constraints(md: Doc, mcfg: dict, gaps: list[str]) -> dict:
+    from . import config as cfgmod
+    constraints = cfgmod.effective_constraints(md.spec.get("constraints", {}), mcfg)
     if "lookback" in mcfg and "lookbackMax" in constraints:
         from .util import duration
         if duration(mcfg["lookback"]) > duration(constraints["lookbackMax"]):
-            gaps.append(f"agentbay.config.yaml modes.{name}.lookback {mcfg['lookback']} exceeds mode "
+            gaps.append(f"agentbay.config.yaml modes.{md.name}.lookback {mcfg['lookback']} exceeds mode "
                         f"lookbackMax {constraints['lookbackMax']}")
+    return constraints
 
-    features: dict[str, Feature] = {}
-    for ep_name, ep in s["endpoints"].items():
-        where = f"{name}.{ep_name}"
-        wf = s["workflows"].get(ep["workflow"])
-        if wf is None:
-            gaps.append(f"{where}: unknown workflow '{ep['workflow']}' (have: {', '.join(s['workflows'])})")
-            continue
-        ep_eff = ep["effects"]
-        steps: list[Step] = []
-        review = ep.get("review")
-        review_on = bool(review and review.get("when") == "always")
-        marker = False
-        for st in wf:
-            sw = f"{where} step {st['id']}"
-            if "review" in st:
-                marker = True
-                if review_on:
-                    steps.append(_role_step(ctx, md, ep, {**st, "role": review["role"]}, f"{where} review",
-                                            ep_eff, review=review))
-                continue
-            if "run" in st:
-                steps.append(_code_step(kit, md, ep, st, sw, ep_eff, gaps, ctx.seen_conn))
-            elif "gate" in st:
-                steps.append(Step(id=st["id"], kind="gate", task=st["gate"], when=st.get("when")))
-            else:
-                steps.append(_role_step(ctx, md, ep, st, sw, ep_eff))
-        if review_on and not marker:
-            steps.append(_role_step(ctx, md, ep, {"id": "review", "role": review["role"]}, f"{where} review",
-                                    ep_eff, review=review))
-        ids = [x.id for x in steps]
-        for d in {i for i in ids if ids.count(i) > 1}:
-            gaps.append(f"{where}: duplicate step id '{d}'" + (" (the review step is injected from mode.yaml review; "
+
+def _feature_steps(kit: Kit, md: Doc, ctx: _Ctx, ep: dict, wf: list, where: str) -> list[Step]:
+    """The workflow's steps, with the review step injected at its `{review: here}` marker (else at the end)."""
+    ep_eff = ep["effects"]
+    review = ep.get("review")
+    review_on = bool(review and review.get("when") == "always")
+    steps: list[Step] = []
+    marker = False
+    for st in wf:
+        sw = f"{where} step {st['id']}"
+        if "review" in st:
+            marker = True
+            if review_on:
+                steps.append(_role_step(ctx, md, ep, {**st, "role": review["role"]}, f"{where} review",
+                                        ep_eff, review=review))
+        elif "run" in st:
+            steps.append(_code_step(kit, md, ep, st, sw, ep_eff, ctx.gaps, ctx.seen_conn))
+        elif "gate" in st:
+            steps.append(Step(id=st["id"], kind="gate", task=st["gate"], when=st.get("when")))
+        else:
+            steps.append(_role_step(ctx, md, ep, st, sw, ep_eff))
+    if review_on and not marker:
+        steps.append(_role_step(ctx, md, ep, {"id": "review", "role": review["role"]}, f"{where} review",
+                                ep_eff, review=review))
+    ids = [x.id for x in steps]
+    for d in {i for i in ids if ids.count(i) > 1}:
+        ctx.gaps.append(f"{where}: duplicate step id '{d}'" + (" (the review step is injected from mode.yaml review; "
                         "do not add a step called review)" if d == "review" else ""))
-        _check_protected(kit, f"{name}.{ep_name}", steps, gaps)
-        pb_path = Path(os.path.normpath(md.dir / ep["playbook"])) if ep.get("playbook") else None
-        pb_text, dod = "", []
-        if pb_path and pb_path.exists():
-            pb = pbk.parse(pb_path)
-            pb_text, dod = pb.text, pb.dod
-        rl: list[rulesmod.Rule] = []
-        if ep.get("rules") and (md.dir / ep["rules"]).exists():
-            try:
-                rl = rulesmod.load(md.dir / ep["rules"])
-            except rulesmod.RulesError as e:
-                gaps.append(str(e))
-        extra = (feat_cfg.get(ep_name) or {}).get("extraRules")
-        if extra:
-            p = cfgmod.config_path(kit.project, extra)
-            try:
-                rl = rulesmod.stack(rl, rulesmod.load(p))
-            except (rulesmod.RulesError, FileNotFoundError) as e:
-                gaps.append(f"agentbay.config.yaml modes.{name}.features.{ep_name}.extraRules: {e}")
-        features[ep_name] = Feature(
-            mode=name, name=ep_name, workflow=ep["workflow"], steps=steps, effects=ep_eff,
-            in_type=ep.get("in"), out_type=ep.get("out"),
-            in_schema=type_schema(md.dirs, ep.get("in"), where, gaps),
-            out_schema=type_schema(md.dirs, ep.get("out"), where, gaps),
-            playbook_path=pb_path, playbook_text=pb_text, dod=dod, rules=rl,
-            review=review if review_on else None,
-            schedule=ep.get("schedule"), description=ep.get("description", ""))
-        for st in steps:
-            if st.out and st.kind == "role":
-                type_schema(md.dirs, st.out, f"{where} step {st.id}", gaps)
+    return steps
 
-    _check_selectors(kit, md, mcfg, gaps, warnings if warnings is not None else [])
-    skills = mode_skills(md)
-    pb_file = next((d / "playbook.md" for d in md.dirs if (d / "playbook.md").exists()), md.dir / "playbook.md")
-    return ResolvedMode(
-        name=name, version=md.meta["version"], root=md.root, purpose=s["purpose"].strip(), path=md.dir,
-        coordinator=coord, roles={rn: kit.env_name(env) for rn, env in roles.items()}, features=features,
-        constraints=constraints, needs=needs, playbook=pb_file.read_text() if pb_file.exists() else "",
-        skills=skills, config=mcfg, dirs=list(md.dirs), extends=md.parent, coordinator_unit=coord_unit)
+
+def _feature_rules(kit: Kit, md: Doc, ep_name: str, ep: dict, feat_cfg: dict, gaps: list[str]) -> list:
+    """The feature's rules, with the project's extraRules (agentbay.config.yaml) stacked on top."""
+    from . import config as cfgmod
+    rl: list[rulesmod.Rule] = []
+    if ep.get("rules") and (md.dir / ep["rules"]).exists():
+        try:
+            rl = rulesmod.load(md.dir / ep["rules"])
+        except rulesmod.RulesError as e:
+            gaps.append(str(e))
+    extra = (feat_cfg.get(ep_name) or {}).get("extraRules")
+    if extra:
+        p = cfgmod.config_path(kit.project, extra)
+        try:
+            rl = rulesmod.stack(rl, rulesmod.load(p))
+        except (rulesmod.RulesError, FileNotFoundError) as e:
+            gaps.append(f"agentbay.config.yaml modes.{md.name}.features.{ep_name}.extraRules: {e}")
+    return rl
+
+
+def _feature(kit: Kit, md: Doc, ctx: _Ctx, ep_name: str, ep: dict, feat_cfg: dict) -> Feature | None:
+    gaps, name = ctx.gaps, md.name
+    where = f"{name}.{ep_name}"
+    wf = md.spec["workflows"].get(ep["workflow"])
+    if wf is None:
+        gaps.append(f"{where}: unknown workflow '{ep['workflow']}' (have: {', '.join(md.spec['workflows'])})")
+        return None
+    steps = _feature_steps(kit, md, ctx, ep, wf, where)
+    _check_protected(kit, where, steps, gaps)
+    pb_path = Path(os.path.normpath(md.dir / ep["playbook"])) if ep.get("playbook") else None
+    pb_text, dod = "", []
+    if pb_path and pb_path.exists():
+        pb = pbk.parse(pb_path)
+        pb_text, dod = pb.text, pb.dod
+    rules = _feature_rules(kit, md, ep_name, ep, feat_cfg, gaps)
+    review = ep.get("review")
+    feat = Feature(
+        mode=name, name=ep_name, workflow=ep["workflow"], steps=steps, effects=ep["effects"],
+        in_type=ep.get("in"), out_type=ep.get("out"),
+        in_schema=type_schema(md.dirs, ep.get("in"), where, gaps),
+        out_schema=type_schema(md.dirs, ep.get("out"), where, gaps),
+        playbook_path=pb_path, playbook_text=pb_text, dod=dod,
+        rules=rules,
+        review=review if review and review.get("when") == "always" else None,
+        schedule=ep.get("schedule"), description=ep.get("description", ""))
+    for st in steps:
+        if st.out and st.kind == "role":
+            type_schema(md.dirs, st.out, f"{where} step {st.id}", gaps)
+    return feat
 
 
 SOURCE_IFACE = "items.source/v1"

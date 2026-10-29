@@ -1,4 +1,4 @@
-"""0.4 roles: five framework roles, placed per mode in an env by the mode's `roles:` map; access comes from the
+"""Roles: five framework roles, placed per mode in an env by the mode's `roles:` map; access comes from the
 mode's `needs`; each (role, mode, env) compiles to its own subagent, use shim, guard entry and store; one agent
 profile maps tiers to models."""
 import json

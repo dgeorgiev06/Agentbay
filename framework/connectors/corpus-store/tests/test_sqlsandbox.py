@@ -324,7 +324,7 @@ def test_full_text_on_the_store_table_and_the_view_agree():
 def test_every_view_accepts_narrow_projections():
     p, st = setup()
     assert st.sql("SELECT id, url FROM v_posts WHERE text LIKE '%stake%'")["rows"] == \
-        [["fake:23", "https://example.com/vitalik/status/23"]]                    # the README example
+        [["fake:23", "https://example.com/vitalik/status/23"]]                    # an example query
     for sql, want in (("SELECT url FROM v_items WHERE author = 'lido'", [["https://example.com/lido/status/22"]]),
                       ("SELECT likes FROM v_posts WHERE id = 'fake:22'", [[None]]),
                       ("SELECT count(*) FROM v_posts", [[3]]),

@@ -105,7 +105,7 @@ def fts5_available() -> bool:
 
 
 def _item_select() -> str:
-    return f"""SELECT
+    return """SELECT
             i.source || ':' || i.ext_id AS id, i.source AS source, i.ext_id AS extId, i.kind AS kind,
             i.author AS author, i.author_name AS authorName, i.title AS title, i.body AS text, i.url AS url,
             i.created_at AS createdAt, i.fetched_at AS fetchedAt, i.container AS container, i.labels AS labels,
@@ -145,9 +145,10 @@ def connect_ro(path: Path) -> sqlite3.Connection:
         if not cur or cur > HEAP_BYTES:
             con.execute(f"PRAGMA hard_heap_limit = {HEAP_BYTES}")
         con.execute("PRAGMA temp_store = FILE")
+        # kept on purpose: refusing a pre-release store fails closed for the scope invariant
         if con.execute("SELECT 1 FROM main.sqlite_master WHERE name = 'state'").fetchone():
             raise SqlError(f"{path}: written by a pre-release build (internal state inside corpus.db); move the "
-                           f"folder aside and sync again, or run `bay migrate --project` from the v0.2 files")
+                           f"folder aside and sync again")
         fts = has_fts(con)
         for stmt in view_sql(fts):
             con.execute(stmt)
@@ -161,7 +162,7 @@ def connect_ro(path: Path) -> sqlite3.Connection:
         raise
     except sqlite3.Error as e:
         con.close()
-        raise SqlError(f"the store at {path.name} is not readable ({e}); run `bay migrate` or sync") from None
+        raise SqlError(f"the store at {path.name} is not readable ({e}); move it aside and sync again") from None
     return con
 
 
@@ -200,7 +201,7 @@ class Sandbox:
     def _only(self) -> str:
         return ", ".join([*self.views, *[t for t in TABLES if t != FTS or self.fts]])
 
-    def _authorize(self, action, a1, a2, db, view) -> int:
+    def _authorize(self, action, a1, a2, db, _trigger) -> int:
         if action == sqlite3.SQLITE_SELECT or action == 33:          # SELECT, WITH RECURSIVE (time-limited)
             return sqlite3.SQLITE_OK
         if action == sqlite3.SQLITE_READ:

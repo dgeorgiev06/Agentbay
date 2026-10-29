@@ -65,7 +65,7 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
            intent: str | None = None, effects: list[str] | None = None, role: str | None = None) -> dict:
     if kind == "role":
         from .model import USER_ROLE
-        raise ScaffoldError(USER_ROLE.split(" (`bay migrate`")[0])
+        raise ScaffoldError(USER_ROLE)
     if kind not in KINDS:
         raise ScaffoldError(f"unknown kind '{kind}' (have: {', '.join(KINDS)})")
     _check_name(kit, kind, name)

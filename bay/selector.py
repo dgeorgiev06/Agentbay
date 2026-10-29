@@ -28,7 +28,6 @@ from datetime import datetime
 from .util import parse_time
 
 FIELDS = ("from", "to", "subject", "text", "in", "has", "since", "not")
-NOT_FIELDS = ("from", "to", "subject", "text", "in", "has")
 HAS = ("link", "attachment")
 
 

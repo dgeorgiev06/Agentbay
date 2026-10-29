@@ -40,6 +40,7 @@ import re
 import sqlite3
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -127,9 +128,10 @@ def open_rw(path: Path) -> sqlite3.Connection:
         con.close()
         raise StoreError(f"{path}: store schema v{ver} is newer than this kit (v{SCHEMA_VERSION}); update agentbay")
     elif con.execute("SELECT 1 FROM sqlite_master WHERE name = 'state'").fetchone():
+        # kept on purpose: refusing a pre-release store fails closed for the scope invariant
         con.close()           # a pre-release store kept state inside corpus.db, where agents could count it
         raise StoreError(f"{path}: written by a pre-release build (internal state inside corpus.db); move the "
-                         f"folder aside and sync again, or run `bay migrate --project` from the v0.2 files")
+                         f"folder aside and sync again")
     return con
 
 
@@ -153,7 +155,7 @@ def scrub_item(it: dict) -> dict:
 
 
 def item_row(it: dict) -> dict:
-    """The one way an item becomes an `items` row (sync and `bay migrate` both use it); scrubs first."""
+    """The one way an item becomes an `items` row (sync uses it); scrubs first."""
     it = scrub_item(it)
     au = it.get("author") or {}
     ext = {k: v for k, v in it.items() if k not in ENVELOPE}
@@ -226,6 +228,57 @@ def _max_id(a: str | None, b: str) -> str:
         return a if int(a) >= int(b) else b
     except ValueError:
         return max(a, b)
+
+
+@dataclass
+class _SyncRun:
+    """Totals and outcome of one sync, across sources."""
+    deleted: set
+    window_from: datetime
+    max_items: int | None
+    added: int = 0
+    fetched: int = 0
+    kept: int = 0
+    billed: int = 0
+    n_deleted: int = 0
+    spent: float = 0.0
+    stopped: str | None = None
+    warnings: list = field(default_factory=list)
+    sources: dict = field(default_factory=dict)
+    active: set = field(default_factory=set)          # cursor keys of the queries this sync ran
+
+
+@dataclass
+class _Query:
+    req: dict
+    start: datetime
+    have_from: datetime | None
+    incremental: bool
+    mode: str
+
+
+def _query_request(cur: dict, native: dict, group: list[dict], ids: list[str], start_src: datetime, remaining: int,
+                   check: list[str], now) -> _Query:
+    """The fetch arguments for one native query: newer than its cursor when the stored window already reaches
+    back far enough and no selector joined it; otherwise everything since the window start (a backfill when a
+    selector joined an existing query)."""
+    start = start_src
+    sinces = [parse_time(s["since"], now) for s in group if s.get("since")]
+    if len(sinces) == len(group):
+        start = max(start, min(sinces))
+    req: dict = {"query": {k: v for k, v in native.items() if k != "since"},
+                 "maxItems": max(1, remaining - len(check))}
+    if check:
+        req["checkIds"] = check
+    have_from = parse_time(cur["from"], now) if cur.get("from") else None
+    new_sel = set(ids) - set(cur.get("selectors") or [])
+    incremental = bool(cur.get("cursor")) and have_from is not None and have_from <= start and not new_sel
+    mode = "cursor" if incremental else ("backfill" if new_sel and cur.get("selectors") else "since")
+    if incremental:
+        req["cursor"] = cur["cursor"]
+    else:
+        req["since"] = iso(start)
+    return _Query(req, start, have_from, incremental, mode)
 
 
 class CorpusStore:
@@ -487,123 +540,121 @@ class CorpusStore:
         return out
 
     def _sync(self, con, state, sels, now, lookback, lb, max_items) -> dict:
-        deleted = set(state["deleted"])
-        window_from = now - lb
-        added = fetched = kept = billed = n_deleted = 0
-        spent = 0.0
-        stopped: str | None = None
-        warnings: list[str] = []
-        sources: dict[str, dict] = {}
+        run = _SyncRun(deleted=set(state["deleted"]), window_from=now - lb, max_items=max_items)
         scope = self._enforce_scope(con, state, sels, now)
-        active: set[str] = set()
         for name, src in self.ctx.sources.items():
-            src_id = src.ctx.source_id
-            if not src_id:
-                raise StoreError(f"connector {name} declares no `source`; set spec.source in its connector.yaml "
-                                 f"so stored items and deletions are keyed correctly")
-            groups: dict[str, tuple[dict, list[dict]]] = {}
-            for s in sels:
-                native, _ = selmod.split(s, src.ctx.selectors)
-                groups.setdefault(selmod.native_key(native), (native, []))[1].append(s)
-            start_src = window_from
-            if src.ctx.window and now - duration(src.ctx.window) > start_src:
-                start_src = now - duration(src.ctx.window)
-                warnings.append(f"{name}: lookback {lookback} is longer than the source API serves "
-                                f"({src.ctx.window}); items before {iso(start_src)} come only from the store")
-            rep = sources.setdefault(name, {"fetched": 0, "added": 0, "billed": 0, "requests": 0, "truncated": False,
-                                            "checked": 0, "deleted": 0, "queries": []})
-            check_pending = self._check_candidates(con, state, src_id, start_src)
-            for nkey, (native, group) in groups.items():
-                ck = f"{name}|{nkey}"
-                active.add(ck)
-                cur = state["cursors"].setdefault(ck, {})
-                ids = sorted(s["id"] for s in group)
-                remaining, why = self._remaining(state, billed, max_items, self._cost(src))
-                if remaining <= 0:
-                    stopped = stopped or (f"{why} cap reached: nothing fetched from {name}" if why
-                                          else f"maxItems {max_items} reached before {name}")
-                    rep["queries"].append({"selectors": ids, "skipped": "budget"})
-                    continue
-                start = start_src
-                sinces = [parse_time(s["since"], now) for s in group if s.get("since")]
-                if len(sinces) == len(group):
-                    start = max(start, min(sinces))
-                check = check_pending[: int(remaining * DELETION_CHECK_SHARE)]
-                check_pending = []                                  # one deletion pass per source per sync
-                req: dict = {"query": {k: v for k, v in native.items() if k != "since"},
-                             "maxItems": max(1, remaining - len(check))}
-                if check:
-                    req["checkIds"] = check
-                have_from = parse_time(cur["from"], now) if cur.get("from") else None
-                new_sel = set(ids) - set(cur.get("selectors") or [])
-                incremental = bool(cur.get("cursor")) and have_from is not None and have_from <= start and not new_sel
-                # cursor: only what is newer; backfill: a selector joined this query, so refill its window
-                mode = "cursor" if incremental else ("backfill" if new_sel and cur.get("selectors") else "since")
-                if incremental:
-                    req["cursor"] = cur["cursor"]
-                else:
-                    req["since"] = iso(start)
-                res = src.fetch(**req)
-                warnings += res.get("warnings", [])
-                got = res["items"]
-                n_new = n_kept = 0
-                for it in got:
-                    self._validate(it, name, src_id)
-                    it = scrub_item(it)
-                    if it["id"] in deleted:
-                        continue
-                    is_new, was_kept = self._upsert(con, it, sels, now)
-                    n_new += is_new
-                    n_kept += was_kept
-                for xid in res.get("deleted", []):
-                    xid = scrub(str(xid))                           # stored ids are scrubbed too
-                    deleted.add(f"{src_id}:{xid}")
-                    n_deleted += con.execute("DELETE FROM items WHERE source = ? AND ext_id = ?",
-                                             (src_id, xid)).rowcount
-                fetched += len(got)
-                kept += n_kept
-                added += n_new
-                billed += res["billed"]
-                use = self._usage(state)
-                use["posts"] += res["billed"]                       # bill what the source read, not what we kept
-                use["usd"] = round(use["usd"] + res["billed"] * self._cost(src), 6)
-                spent += res["billed"] * self._cost(src)
-                for xid in res.get("checked", []):
-                    state["checked"][f"{src_id}:{xid}"] = iso(now)
-                src_from = have_from if incremental else start
-                if res["truncated"]:
-                    # sources return newest first: we hold [oldest fetched, now]; anything older may have a gap
-                    src_from = min(parse_time(x["createdAt"], now) for x in got) if got else now
-                    rem_after, why_after = self._remaining(state, billed, max_items, self._cost(src))
-                    if rem_after <= 0:
-                        stopped = (f"{why_after} cap reached during {name} sync" if why_after
-                                   else f"maxItems {max_items} reached during {name} sync") \
-                            + f"; kept the newest items, coverage now starts {iso(src_from)}"
-                    else:
-                        stopped = stopped or f"{name} stopped early; see warnings"
-                cur["from"], cur["to"], cur["lastSync"] = iso(src_from), iso(now), iso(now)
-                cur["selectors"] = ids
-                if res.get("cursor"):
-                    cur["cursor"] = _max_id(cur.get("cursor"), res["cursor"])
-                for k in ("fetched", "added", "billed"):
-                    rep[k] += {"fetched": len(got), "added": n_new, "billed": res["billed"]}[k]
-                rep["requests"] += res.get("requests", 0)
-                rep["truncated"] = rep["truncated"] or res["truncated"]
-                rep["checked"] += len(res.get("checked", []))
-                rep["deleted"] += len(res.get("deleted", []))
-                rep["queries"].append({"selectors": ids, "native": req["query"], "fetched": len(got), "kept": n_kept,
-                                       "mode": mode})
-        for k in [k for k in state["cursors"] if k.split("|", 1)[0] in self.ctx.sources and k not in active]:
+            self._sync_source(con, state, sels, now, lookback, run, name, src)
+        for k in [k for k in state["cursors"] if k.split("|", 1)[0] in self.ctx.sources and k not in run.active]:
             state["cursors"].pop(k)              # a removed selector's query: re-adding it backfills
         state["coverage"] = self._overall(state)
-        state["deleted"] = sorted(deleted)
-        out = {"added": added, "fetched": fetched, "kept": kept, "billed": billed, "deleted": n_deleted,
-               "rematched": scope["rematched"], "outOfScope": scope["unbound"] + scope["unmatched"],
-               "spentUsd": round(spent, 6), "stopped": stopped, "sources": sources,
-               "budget": self._budget(state), "coverage": self.coverage(state, window_from)}
-        if warnings:
-            out["warnings"] = warnings
+        state["deleted"] = sorted(run.deleted)
+        out = {"added": run.added, "fetched": run.fetched, "kept": run.kept, "billed": run.billed,
+               "deleted": run.n_deleted, "rematched": scope["rematched"],
+               "outOfScope": scope["unbound"] + scope["unmatched"], "spentUsd": round(run.spent, 6),
+               "stopped": run.stopped, "sources": run.sources, "budget": self._budget(state),
+               "coverage": self.coverage(state, run.window_from)}
+        if run.warnings:
+            out["warnings"] = run.warnings
         return out
+
+    def _sync_source(self, con, state, sels, now, lookback, run: "_SyncRun", name: str, src) -> None:
+        """Fetch each distinct native query of one source (its selectors split by the source's capability
+        table), newest first, within the remaining budget; one deletion pass per source."""
+        src_id = src.ctx.source_id
+        if not src_id:
+            raise StoreError(f"connector {name} declares no `source`; set spec.source in its connector.yaml "
+                             f"so stored items and deletions are keyed correctly")
+        groups: dict[str, tuple[dict, list[dict]]] = {}
+        for s in sels:
+            native, _ = selmod.split(s, src.ctx.selectors)
+            groups.setdefault(selmod.native_key(native), (native, []))[1].append(s)
+        start_src = run.window_from
+        if src.ctx.window and now - duration(src.ctx.window) > start_src:
+            start_src = now - duration(src.ctx.window)
+            run.warnings.append(f"{name}: lookback {lookback} is longer than the source API serves "
+                                f"({src.ctx.window}); items before {iso(start_src)} come only from the store")
+        rep = run.sources.setdefault(name, {"fetched": 0, "added": 0, "billed": 0, "requests": 0, "truncated": False,
+                                            "checked": 0, "deleted": 0, "queries": []})
+        check_pending = self._check_candidates(con, state, src_id, start_src)
+        for nkey, (native, group) in groups.items():
+            ck = f"{name}|{nkey}"
+            run.active.add(ck)
+            cur = state["cursors"].setdefault(ck, {})
+            ids = sorted(s["id"] for s in group)
+            remaining, why = self._remaining(state, run.billed, run.max_items, self._cost(src))
+            if remaining <= 0:
+                run.stopped = run.stopped or (f"{why} cap reached: nothing fetched from {name}" if why
+                                              else f"maxItems {run.max_items} reached before {name}")
+                rep["queries"].append({"selectors": ids, "skipped": "budget"})
+                continue
+            check = check_pending[: int(remaining * DELETION_CHECK_SHARE)]
+            check_pending = []                                  # one deletion pass per source per sync
+            q = _query_request(cur, native, group, ids, start_src, remaining, check, now)
+            res = src.fetch(**q.req)
+            run.warnings += res.get("warnings", [])
+            n_new, n_kept = self._store_fetched(con, run, res, name, src_id, sels, now)
+            self._bill(state, run, res, src)
+            for xid in res.get("checked", []):
+                state["checked"][f"{src_id}:{xid}"] = iso(now)
+            self._advance_cursor(state, run, cur, q, res, name, src, now)
+            cur["selectors"] = ids
+            if res.get("cursor"):
+                cur["cursor"] = _max_id(cur.get("cursor"), res["cursor"])
+            got = res["items"]
+            for k in ("fetched", "added", "billed"):
+                rep[k] += {"fetched": len(got), "added": n_new, "billed": res["billed"]}[k]
+            rep["requests"] += res.get("requests", 0)
+            rep["truncated"] = rep["truncated"] or res["truncated"]
+            rep["checked"] += len(res.get("checked", []))
+            rep["deleted"] += len(res.get("deleted", []))
+            rep["queries"].append({"selectors": ids, "native": q.req["query"], "fetched": len(got), "kept": n_kept,
+                                   "mode": q.mode})
+
+    def _store_fetched(self, con, run: "_SyncRun", res: dict, name: str, src_id: str, sels, now) -> tuple[int, int]:
+        """Validate, scrub and upsert the fetched items (skipping ids deleted at the source), then apply the
+        deletions the source reported. Returns (new, kept)."""
+        n_new = n_kept = 0
+        for it in res["items"]:
+            self._validate(it, name, src_id)
+            it = scrub_item(it)
+            if it["id"] in run.deleted:
+                continue
+            is_new, was_kept = self._upsert(con, it, sels, now)
+            n_new += is_new
+            n_kept += was_kept
+        for xid in res.get("deleted", []):
+            xid = scrub(str(xid))                           # stored ids are scrubbed too
+            run.deleted.add(f"{src_id}:{xid}")
+            run.n_deleted += con.execute("DELETE FROM items WHERE source = ? AND ext_id = ?",
+                                         (src_id, xid)).rowcount
+        run.fetched += len(res["items"])
+        run.kept += n_kept
+        run.added += n_new
+        return n_new, n_kept
+
+    def _bill(self, state: dict, run: "_SyncRun", res: dict, src) -> None:
+        run.billed += res["billed"]
+        use = self._usage(state)
+        use["posts"] += res["billed"]                       # bill what the source read, not what we kept
+        use["usd"] = round(use["usd"] + res["billed"] * self._cost(src), 6)
+        run.spent += res["billed"] * self._cost(src)
+
+    def _advance_cursor(self, state: dict, run: "_SyncRun", cur: dict, q: "_Query", res: dict, name: str, src,
+                        now) -> None:
+        """Record the window this query now covers. A truncated fetch holds only [oldest fetched, now]
+        (sources return newest first), and says which cap stopped it."""
+        src_from = q.have_from if q.incremental else q.start
+        if res["truncated"]:
+            got = res["items"]
+            src_from = min(parse_time(x["createdAt"], now) for x in got) if got else now
+            rem_after, why_after = self._remaining(state, run.billed, run.max_items, self._cost(src))
+            if rem_after <= 0:
+                run.stopped = (f"{why_after} cap reached during {name} sync" if why_after
+                               else f"maxItems {run.max_items} reached during {name} sync") \
+                    + f"; kept the newest items, coverage now starts {iso(src_from)}"
+            else:
+                run.stopped = run.stopped or f"{name} stopped early; see warnings"
+        cur["from"], cur["to"], cur["lastSync"] = iso(src_from), iso(now), iso(now)
 
     def prune(self, olderThan=None, deletedIds=None) -> dict:
         now = self.ctx.now()
@@ -749,7 +800,7 @@ class CorpusStore:
                 args = [" ".join(f'"{w}"' for w in words), *args]
             else:
                 engine = "like"
-                like = [f"instr(lower(coalesce(v.title, '') || ' ' || v.text), ?) > 0" for _ in words]
+                like = ["instr(lower(coalesce(v.title, '') || ' ' || v.text), ?) > 0" for _ in words]
                 sql = (f"SELECT v.id, v.url, v.author, v.createdAt, v.title, v.matched, substr(v.text, 1, 200) AS snippet "
                        f"FROM v_items v {_where([*like, *where])} ORDER BY v.createdAt DESC LIMIT ?")
                 args = [*[w.lower() for w in words], *args]

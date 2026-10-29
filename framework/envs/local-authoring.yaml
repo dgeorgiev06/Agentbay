@@ -8,7 +8,6 @@ metadata:
 spec:
   bind:
     forge.scaffold/v1: scaffold
-    forge.migrate/v1: migrator
     workspace.read/v1: { tools: [Read, Glob, Grep] }
     workspace.write/v1:
       tools: [Edit, Write, Bash]
@@ -19,6 +18,6 @@ spec:
       clis: [git status, git diff, git log, git show]
   fs:
     read: ["."]
-    write: [modes, envs, connectors, agentbay.config.yaml, roles, agents]   # roles/, agents/: only so forge.migrate can move 0.3 files into modes
-  effects: [read, write, delete]
+    write: [modes, envs, connectors, agentbay.config.yaml]
+  effects: [read, write]
   limits: { maxTurns: 60, maxMinutes: 30 }

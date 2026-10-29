@@ -52,7 +52,7 @@ rules:
       persona: role
   - id: C-8
     level: must
-    statement: Layering holds - mode -> role -> agent -> env -> connector. Roles name capabilities, agents name one env, only envs bind connectors, and agents reach connector data only through read-only use shims.
+    statement: Layering holds - mode -> role -> agent -> env -> connector. Roles name capabilities, modes place roles in envs, one agent profile runs them, only envs bind connectors, and agents reach connector data only through read-only use shims.
     appliesTo: [mode, role, env, connector]
   - id: C-9
     level: should

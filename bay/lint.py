@@ -7,11 +7,12 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 from pathlib import Path
 
 import yaml
 
-from . import checks, model, playbook as pbk, rules as rulesmod, workflows as wfmod
+from . import boundary, checks, model, playbook as pbk, rules as rulesmod, workflows as wfmod
 
 # Features whose review can never be turned off, with the settings they must use.
 MANDATORY_REVIEW = {"forge.extend": {"when": "always", "tier": "deep", "effort": "high"}}
@@ -483,6 +484,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     out += lint_connectors(kit)
     out += lint_rulesets(kit)
     out += lint_components(kit)
+    out += lint_ownership(kit)
     out += lint_config_schemas(kit)
     out += lint_self_description(kit)
     out += lint_skill_names(kit)
@@ -527,6 +529,19 @@ def lint_components(kit: model.Kit) -> list[str]:
                 out.append(f"{_where(path, _line_of(path, re.escape(g)))}: component {comp} owns '{g}', which matches "
                            f"no path in the kit. Fix the path or remove it")
     return out
+
+
+def lint_ownership(kit: model.Kit) -> list[str]:
+    """B-4 (proposal 0006, Part F): every tracked file of the kit is under a core `owns:` path, an extension
+    folder (`at:`) or the boundary's other set. Runs only when the kit is a git checkout."""
+    path = kit.root / "framework" / "components.yaml"
+    r = subprocess.run(["git", "-C", str(kit.root), "ls-files", "-z"], capture_output=True)
+    if not path.exists() or r.returncode:
+        return []
+    files = [f for f in r.stdout.decode("utf-8", "replace").split("\0") if f]
+    return [f"{f}: not under a core owns: path, an extension folder or the boundary's other set (B-4). Move it "
+            f"into the folder of the component or extension it belongs to, or add it to that component's owns: "
+            f"in framework/components.yaml" for f in boundary.stray(files, boundary.ComponentMap.load(path))]
 
 
 def lint_rulesets(kit: model.Kit) -> list[str]:

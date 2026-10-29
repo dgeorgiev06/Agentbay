@@ -1,6 +1,6 @@
 # 0006 - Components that own their contracts, and content types as plug-ins
 
-- Status: draft for approval, revision 3 (2026-10-29). Nothing is implemented.
+- Status: draft for approval, revision 4 (2026-10-29). Nothing is implemented.
 - Revision 2 follows review by the user:
   - no registration edits;
   - core components own their contracts;
@@ -8,6 +8,8 @@
   - "kind" renamed and explained.
 - Revision 3: named **content type** (user decision 2026-10-29); views split between the content type
   and the mode; content types are user space, created with `forge.connect`.
+- Revision 4: Part C, a new forge.extend (slices, handoff file, check step, observable DoD), added at
+  the user's request.
 - Blocks: PR #9 (mail-briefing) is held until steps 1-3 land; it is then rebased onto them.
 - Feature: forge.extend (framework change)
 
@@ -41,6 +43,10 @@ lines) to add one source. On main, X's posts already leak in the same way.
 - 0005 followed that pattern.
 - The build brief said to "add them to the SQL sandbox allowlist the same way the existing views are".
 - Builders ran as plain subagents with hand-written briefs, not through `bay call forge.extend`.
+
+**4. Builders run out of room.** forge.extend's `implement` is one builder run for a whole proposal.
+The last three builders each used 370-420k tokens over about 100 tool calls. On top of that, the test
+runner prints one line per test (300+ lines), and builders run it 10-20 times.
 
 ## Principle
 
@@ -223,14 +229,78 @@ The sync additions in #9 (`changeFeed`, `until`, `storedIds`, `cursorExpired`, `
 - They become optional, declared capabilities of `items.source/v1`, covered by the source contract tests.
 - #9 lists them in `touches:`.
 
+## C. forge.extend, rewritten
+
+forge.extend encodes Parts A and B, so the framework's own rules govern framework changes rather
+than hand-written briefs. Three things change.
+
+- **Steps:**
+  - Implementation is split into small slices, each built by a fresh builder.
+  - Checks run as code.
+  - The builder's brief is generated from the playbook, the DoD and the proposal.
+- **Definition of Done:** every item can be checked by a command or a detector. Quality words go, since conformance C-2 forbids them; their intent is covered by review and improve's detectors.
+- **Rules:** they keep only what the DoD cannot express, so the duplicates go.
+
+### Steps
+
+| Step | Kind | What happens |
+|---|---|---|
+| `propose` | builder | Writes `docs/proposals/<id>.md`: problem, change, `touches:` (core paths, a reason each) and `slices:`. Slices are ordered; each is about 40 tool calls or fewer and ends with tests green. |
+| `approve` | gate | Only the user passes it, with `bay approve <callId>` in a terminal. |
+| `implement` | builder, once per slice | A fresh builder per slice. It starts from the proposal section and `HANDOFF.md`, and ends with tests green, a commit, a push and `HANDOFF.md` updated. No slice continues another's conversation. |
+| `check` | code (dispatcher) | `bay boundary` against `touches:`, the contract tests, `tests/run.py -q`, lint, validate, and build + clean in a scratch project. |
+| `review` | reviewer (deep, high) | Gets the diff and the proposal only, never the builder's conversation. Checks the DoD and the rules. |
+| `release` | builder | Version bump; schema apiVersion when a contract changed. |
+
+**`HANDOFF.md`** lives on the branch and is the only state passed between slices:
+- what is done (commit shas);
+- decisions and why;
+- what is next;
+- test status;
+- open problems.
+
+Each slice also writes one ledger note, so `bay status` shows progress.
+
+**Workflow support:** the dispatcher learns to run a role step once per entry of a list from an earlier
+step's output: `foreach: $steps.propose.slices`. The step completes when every slice has.
+
+### Definition of Done
+
+- [DOD-1] (must) `bay boundary` passes: every changed core path is listed in `touches:`.
+- [DOD-2] (must) Contract tests pass for every discovered instance of a changed contract.
+- [DOD-3] (must) Tests, lint, validate and build + clean pass; the `check` step's output is quoted.
+- [DOD-4] (must) Adding a source of a new content type is one content-type folder plus its connector folder(s), with `touches: []`, as shown by the contract-test fixtures.
+- [DOD-5] (must) Every deliverable in the proposal is marked pass/fail with a file reference.
+- [DOD-6] (must) No secret value in any prompt, log, ledger line, output or committed file.
+- [DOD-7] (must) DESIGN.md and INTERFACES.md describe every changed contract; no doc lists instances.
+- [DOD-8] (must_not) Compatibility code: no aliases, migrations or deprecation shims.
+- [DOD-9] (should) No function over improve's complexity threshold is added.
+
+### Rules
+
+- **R-1:** review is always on (deep, high) and never disabled.
+- **R-2:** nothing is implemented before the user passes the gate.
+- **R-3:** nothing outside the approved proposal changes.
+- **R-4:** a breaking contract change bumps the schema apiVersion.
+- **R-5:** a builder reads by search and line range, not whole files, and runs checks in quiet mode.
+
+### Shared by every forge feature
+
+The slice-and-handoff protocol and quiet checks go into the forge mode's playbook, not only extend's.
+`forge.create` and `forge.connect` build things too, and work the same way.
+
 ## Steps (each through forge.extend: proposal → approval → build → independent review)
 
-1. **Contracts and the boundary check, on main:**
+1. **Contracts, the boundary check and the new forge.extend, on main:**
    - the component map, the discovery changes (adapters, `bay auth <connector>`), config extension, per-extension README and example config, and docs that describe contracts only;
    - the `boundary` check, R-10, C-11, the new DOD-4 and the improve detector;
    - contract tests for connector and source (run against x-api and fake), and for mode;
-   - envelopes generated from forge.extend.
-   - Acceptance: run against #9 as it stands, the check fails and lists its shared-code edits.
+   - Part C: the new forge.extend (steps, `foreach:` slices, `HANDOFF.md`, the `check` step, DoD and rules), the shared forge protocol, and `tests/run.py -q`;
+   - builder briefs generated from forge.extend.
+   - Acceptance:
+     - run against #9 as it stands, the check fails and lists its shared-code edits;
+     - a dry run of `bay call forge.extend` on a small sample proposal produces the per-slice step plans and a generated brief.
+   - Built by hand, the last time: it is the step that creates the process. Every later step runs through it.
 2. **Content types, on main:**
    - the loader, generic child tables, view validation, `produces:`/`reads:` and computed fields;
    - move posts into `content-types/post/`;
@@ -239,10 +309,12 @@ The sync additions in #9 (`changeFeed`, `until`, `storedIds`, `cursorExpired`, `
      - feed-briefing's sync, describe and status output is identical to today's;
      - a test asserts that no core file names an content type or connector;
      - every security test passes unchanged.
-3. **Rebase #9:**
+3. **Change-feed sync, a core change in its own PR:** the generic additions Gmail needed (history replay, backfill, expired cursors, exact labels, removed), split out of #9 and tested with a fake change-feed source.
+4. **mail-briefing, rebuilt from #9:**
    - `content-types/email/`, Gmail specifics in `connectors/gmail-api/`;
    - "needs reply" and important-sender weighting in mail-briefing's own views; its config holds only `important`.
-   - Acceptance: the contract tests pass for gmail-api and fake-mail, and `bay boundary` passes with `touches:` listing only the generic sync-protocol additions.
+   - Acceptance: the contract tests pass for gmail-api and fake-mail, and `bay boundary` passes with `touches: []`: a pure extension.
+5. **forge.connect** (proposal 0003 step 4): scaffolds a content type plus a connector. It is proven by adding RSS with `touches: []`.
 
 ## Decided
 - **Name:** content type (user, 2026-10-29). The stored unit is still called an item in code and interface names (`items.source/v1`); renaming those is not part of this proposal.
@@ -252,4 +324,4 @@ The sync additions in #9 (`changeFeed`, `until`, `storedIds`, `cursorExpired`, `
 1. **Computed fields at store time** (recommended), or allow content types to add SQL functions to the read sandbox.
 2. **Strictness:** the boundary check fails the step, with an approved `touches:` as the only way through (recommended), or it only warns the reviewer.
 3. **Contract tests are mandatory for every source connector**, so each must ship an offline transport with fixtures (recommended), or they are optional.
-4. **Order:** hold #9 until steps 1-3 are done (recommended), or merge #9 now and refactor after.
+4. **Order:** hold #9 until steps 1-4 are done (recommended), or merge #9 now and refactor after.

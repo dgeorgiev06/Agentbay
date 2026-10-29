@@ -1,6 +1,6 @@
 # 0006 - Components that own their contracts, and content types as plug-ins
 
-- Status: approved by the user 2026-10-29 (revision 6: all decisions taken). Nothing is implemented yet.
+- Status: approved by the user 2026-10-29 (revision 7: four boundary gaps added at the user's request). Nothing is implemented yet.
 - Revision 2 follows review by the user:
   - no registration edits;
   - core components own their contracts;
@@ -291,6 +291,24 @@ step's output: `foreach: $steps.propose.slices`. The step completes when every s
 The slice-and-handoff protocol and quiet checks go into the forge mode's playbook, not only extend's.
 `forge.create` and `forge.connect` build things too, and work the same way.
 
+## D. Four more boundary gaps (found by drawing the architecture)
+
+1. **Skills are namespaced per mode.** Skills live in a mode's folder, so they must not leak out of it.
+   - Today every mode's skills are written into one global `.claude/skills/` by name, and the last mode wins. That is how mail-briefing's skills overwrote feed-briefing's (#9 review, N-2).
+   - The build writes them as `<mode>:<skill>`.
+   - A child mode's skill of the same name overrides its parent's, for that child only.
+   - Lint fails on any remaining clash.
+2. **Adapters get their own folder.** Runtime adapters move from `bay/adapters/` (inside the kernel's folder) to a top-level `adapters/`, discovered like the other extensions. A new runtime is then a new folder, with no kernel edit.
+3. **Core-owned interfaces move under `framework/interfaces/`.** These are the briefing core's `items.*` and cos's `workflow.run`. `interfaces/` holds only user interfaces, so where a file lives always tells you who owns it.
+4. **Consumers name contract versions.**
+   - A mode says `reads: [email/v1]`, as it already says `needs: [items.source/v1]`.
+   - A connector says `produces: [email/v1]`.
+   - Lint refuses a version mismatch, so a content-type change can never break a mode silently.
+
+Two smaller additions:
+- "content type" joins the fixed vocabulary in conformance rule C-7;
+- the boundary check also covers skills and the generated `.claude/` layout.
+
 ## Steps (each through forge.extend: proposal → approval → build → independent review)
 
 1. **Contracts, the boundary check and the new forge.extend, on main:**
@@ -298,6 +316,7 @@ The slice-and-handoff protocol and quiet checks go into the forge mode's playboo
    - the `boundary` check (failing), R-10, C-11, the new DOD-4 and the improve detector;
    - contract tests for connector, source and mode, mandatory and run against x-api, fake, gmail-api and fake-mail;
    - the change-feed additions #9 brought (`changeFeed`, `until`, `storedIds`, `cursorExpired`, `exactLabels`, `removed`) declared as optional `items.source/v1` capabilities and covered by the source contract tests;
+   - Part D: per-mode skill namespaces, `adapters/` as its own folder, core interfaces under `framework/interfaces/`, versioned `reads:`/`produces:`, and C-7 vocabulary;
    - Part C: the new forge.extend (steps, `foreach:` slices, `HANDOFF.md`, the `check` step, DoD and rules), the shared forge protocol, and `tests/run.py -q`;
    - builder briefs generated from forge.extend.
    - Acceptance:

@@ -3,6 +3,7 @@
 
   validate               lint + resolve every mode endpoint (fails with every gap)
   lint                   structure checks: playbooks, DoD ids, rules, review, role envs
+  boundary --base <ref>  check a change against framework/components.yaml and a proposal's touches:
   build | clean          compile modes/roles into a runtime (claude-code) / remove it
   ls                     modes, endpoints and roles
   catalog [<name>]       the registry (.agentbay/catalog.json): endpoints with schemas, workflows
@@ -520,6 +521,27 @@ def cmd_reclaim(args):
     print(f"reclaimed {rid}")
 
 
+def cmd_boundary(args) -> int:
+    from bay import boundary, proposal
+    touches, prop = [], None
+    if args.proposal:
+        pp = Path(args.proposal).resolve()
+        try:
+            touches = proposal.load_touches(pp)
+        except (OSError, proposal.ProposalError) as e:
+            _die(f"✗ {e}")
+        prop = str(pp.relative_to(KIT)) if pp.is_relative_to(KIT) else str(pp)
+    try:
+        rep = boundary.check(KIT, args.base, args.head, prop, touches, docs=args.docs)
+    except RuntimeError as e:
+        _die(f"✗ {e}")
+    if args.json:
+        _out(rep.to_json())
+    else:
+        print("\n".join(rep.lines()))
+    return rep.exit_code
+
+
 def _hoist_project(argv: list[str]) -> list[str]:
     """Accept --project anywhere (`bay build --project x` as well as `bay --project x build`)."""
     out, proj = [], []
@@ -545,6 +567,13 @@ def main(argv=None):
 
     sub.add_parser("validate").set_defaults(fn=cmd_validate)
     sub.add_parser("lint").set_defaults(fn=lambda a: sys.exit(cmd_lint(a)))
+    bd = sub.add_parser("boundary", help="check a change's paths against core ownership and the proposal's touches:")
+    bd.add_argument("--base", required=True, help="the ref the change starts from (git diff <base>...<head>)")
+    bd.add_argument("--head", default="HEAD")
+    bd.add_argument("--proposal", help="the proposal whose front-matter touches: lists the allowed crossings")
+    bd.add_argument("--docs", action="store_true", help="also run B-11 on the core docs (reported, not yet counted)")
+    bd.add_argument("--json", action="store_true")
+    bd.set_defaults(fn=lambda a: sys.exit(cmd_boundary(a)))
     b = sub.add_parser("build"); b.add_argument("--runtime", default="claude-code"); b.set_defaults(fn=cmd_build)
     c = sub.add_parser("clean"); c.add_argument("--runtime", default="claude-code"); c.set_defaults(fn=cmd_clean)
     sub.add_parser("ls").set_defaults(fn=cmd_ls)

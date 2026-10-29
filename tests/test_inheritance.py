@@ -195,5 +195,7 @@ def test_redefining_a_parent_config_key_is_a_lint_error():
     doc = json.loads(sch.read_text())
     doc["properties"]["lookback"] = {"type": "string", "default": "1d"}
     sch.write_text(json.dumps(doc))
-    assert_gap(k, "mode mail-briefing: config schema modes/mail-briefing/config.schema.json redefines inherited "
-                  "setting 'lookback'", "configDefaults")
+    want = ("mode mail-briefing: config schema modes/mail-briefing/config.schema.json redefines inherited "
+            "setting 'lookback'")
+    assert_gap(k, want, "configDefaults")
+    assert any(want in e for e in problems(k))                                       # `bay lint` reports it too

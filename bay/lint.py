@@ -408,6 +408,17 @@ def split_store_warnings(kit: model.Kit) -> list[str]:
     return list(dict.fromkeys(out))
 
 
+def lint_config_schemas(kit: model.Kit) -> list[str]:
+    """A child mode's config schema only adds settings to its parent's (0006 Part A): redefining one is an error."""
+    out: list[str] = []
+    for md in sorted(kit.docs["Mode"].values(), key=lambda d: d.name):
+        if md.spec.get("config") and len(md.config_files) > 1:
+            gaps: list[str] = []
+            model.config_schema(kit, md, gaps)
+            out += [g for g in gaps if "redefines inherited" in g]
+    return out
+
+
 def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Kit | None = None) -> list[str]:
     kit = kit or model.Kit(kit_root or model.KIT, project)
     out = list(kit.errors) + list(kit.collisions)
@@ -434,6 +445,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     out += lint_connectors(kit)
     out += lint_rulesets(kit)
     out += lint_components(kit)
+    out += lint_config_schemas(kit)
     out += lint_skill_names(kit)
     out += wfmod.structure_problems(kit)        # project workflows; targets are checked by `bay validate`
     return list(dict.fromkeys(out))

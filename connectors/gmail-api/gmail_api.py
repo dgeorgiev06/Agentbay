@@ -235,17 +235,19 @@ def _limits(mem_mb: int, cpu_s: int):
             import resource
         except ImportError:                              # pragma: no cover - not POSIX
             return
-        for lim, val in (("RLIMIT_AS", mem_mb * 1024 * 1024), ("RLIMIT_CPU", cpu_s), ("RLIMIT_FSIZE", 0),
+        mem = mem_mb * 1024 * 1024
+        for lim, val in (("RLIMIT_AS", mem), ("RLIMIT_DATA", mem), ("RLIMIT_CPU", cpu_s), ("RLIMIT_FSIZE", 0),
                          ("RLIMIT_CORE", 0)):
             if hasattr(resource, lim):
                 try:
                     resource.setrlimit(getattr(resource, lim), (val, val))
-                except (ValueError, OSError):            # e.g. RLIMIT_AS on macOS: the timeout still applies
-                    pass
+                except (ValueError, OSError):            # e.g. RLIMIT_AS on macOS: extract.py's input cap (no
+                    pass                                 # entity expansion) and the timeout still bound it
     return apply
 
 
 EXTRACT_ERRORS = {"not-docx": "not a readable docx file", "dtd": "docx with a DTD refused",
+                  "encoding": "docx that is not UTF-8 refused",
                   "too-large": "docx expands beyond the size cap", "parse": "the file could not be parsed",
                   "kind": "internal error: unknown extractor"}
 

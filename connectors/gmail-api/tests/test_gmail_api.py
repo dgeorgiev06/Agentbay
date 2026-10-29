@@ -184,6 +184,50 @@ def test_docx_with_a_dtd_or_zip_bomb_is_refused():
     assert "beyond the size cap" in gm.extract_text(buf.getvalue(), "docx", max_chars=1000)[1]
 
 
+def _docx(xml: bytes) -> bytes:
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("word/document.xml", xml)
+    return buf.getvalue()
+
+
+def test_docx_entities_are_refused_by_the_parser_in_any_encoding():
+    """Review repro mk.py: a byte search for <!DOCTYPE missed UTF-16, and xml.etree expanded the entities."""
+    import time
+    gm = sys.modules[type(make(FakeGmail(NOW))).__module__]
+    w = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    ent = ('<?xml version="1.0" encoding="{enc}"?><!DOCTYPE d [<!ENTITY a "SECRETENT">]><w:document %s><w:body>'
+           '<w:p><w:r><w:t>&a;</w:t></w:r></w:p></w:body></w:document>' % w)
+    laughs = ('<?xml version="1.0" encoding="{enc}"?><!DOCTYPE d [<!ENTITY l0 "lollollol">'
+              + "".join('<!ENTITY l%d "%s">' % (i, ("&l%d;" % (i - 1)) * 10) for i in range(1, 10))
+              + ']><w:document %s><w:body><w:p><w:r><w:t>&l9;</w:t></w:r></w:p></w:body></w:document>' % w)
+    xxe = ('<?xml version="1.0" encoding="{enc}"?><!DOCTYPE d [<!ENTITY x SYSTEM "file:///etc/passwd">]>'
+           '<w:document %s><w:body><w:p><w:r><w:t>&x;</w:t></w:r></w:p></w:body></w:document>' % w)
+    for doc in (ent, laughs, xxe):
+        for enc, codec, why in (("UTF-16", "utf-16", "not UTF-8 refused"), ("UTF-8", "utf-8", "DTD refused"),
+                                ("UTF-8", "utf-16-le", "not UTF-8 refused"), ("ISO-8859-1", "latin-1", "not UTF-8")):
+            text, reason = gm.extract_text(_docx(doc.format(enc=enc).encode(codec)), "docx", max_chars=200_000)
+            assert text == "" and why in reason, (enc, codec, reason)
+    # quad.py: a 2 MB entity referenced 200 times (400M characters if expanded), refused before any expansion,
+    # quickly and within a 64 MB memory limit (the limit is not enforced on macOS; the parser refusal is)
+    big = "A" * 2_000_000
+    for enc, codec in (("UTF-16", "utf-16"), ("UTF-8", "utf-8")):
+        xml = ('<?xml version="1.0" encoding="%s"?><!DOCTYPE d [<!ENTITY e "%s">]><w:document %s><w:body><w:p>'
+               '<w:r><w:t>%s</w:t></w:r></w:p></w:body></w:document>' % (enc, big, w, "&e;" * 200))
+        t0 = time.monotonic()
+        text, reason = gm.extract_text(_docx(xml.encode(codec)), "docx", max_chars=200_000, mem_mb=64)
+        assert text == "" and "refused" in reason and time.monotonic() - t0 < 10, reason
+    src = (CONN.parent / "extract.py").read_text()
+    assert "XML_PARAM_ENTITY_PARSING_NEVER" in src and "StartDoctypeDeclHandler" in src and "ElementTree" not in src
+    ok = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document %s><w:body><w:p><w:r><w:t>Fee</w:t>'
+          '</w:r><w:r><w:tab/><w:t>8%% &amp; more</w:t></w:r></w:p><w:p><w:r><w:t>Line 2</w:t></w:r></w:p>'
+          '</w:body></w:document>' % w)
+    assert gm.extract_text(_docx(ok.encode()), "docx", max_chars=1000) == ("Fee\t8% & more\nLine 2", None)
+    assert gm.extract_text(_docx(b"\xef\xbb\xbf" + ok.encode()), "docx", max_chars=1000)[0] == "Fee\t8% & more\nLine 2"
+
+
 def test_messages_per_run_cap_truncates_newest_first():
     fake = FakeGmail(NOW)
     out = make(fake).fetch(since=SINCE, maxItems=2)

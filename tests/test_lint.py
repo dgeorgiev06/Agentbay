@@ -114,7 +114,9 @@ def test_review_role_must_exist_and_be_in_the_mode():
     edit_yaml(k / "modes/briefing/mode.yaml",
               lambda d: d["spec"]["endpoints"]["digest"]["review"].update({"role": "ghost"}))
     has(k, "briefing.digest review role 'ghost' does not exist")
-    assert len([x for x in problems(k) if "review role 'ghost' does not exist" in x]) == 1
+    # once for the base and its children that inherit the endpoint (mail-briefing declares its own digest)
+    assert len([x for x in problems(k) if "review role 'ghost' does not exist" in x
+                and "modes/briefing/mode.yaml" in x]) == 1
     k = kit_copy()
     edit_yaml(k / "modes/briefing/mode.yaml",
               lambda d: d["spec"]["endpoints"]["digest"]["review"].update({"role": "researcher"}))

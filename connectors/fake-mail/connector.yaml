@@ -1,0 +1,35 @@
+apiVersion: agentbay/v2
+kind: Connector
+metadata:
+  name: fake-mail
+  description: >-
+    Offline items.source/v1 for mail: serves email/v1 items from a JSON fixture (or a built-in sample mailbox)
+    with no network and no secrets. It stands in for gmail-api in env local-mail-offline and declares the same
+    selector capability table, so `bay validate` judges selectors the same way.
+  version: 0.1.0
+spec:
+  implements: items.source/v1
+  entry: fake_mail.py
+  source: fake-mail
+  costPerPostUsd: 0      # offline: never billed against spendUsd
+  window: 30d
+  exactLabels: true      # like Gmail: every item carries its complete label set
+  selectors:
+    from: { mode: native, as: "address or domain" }
+    to: { mode: native, as: "address or domain (To or Cc)" }
+    subject: native
+    text: native
+    in: { mode: native, as: "label name or system label (inbox, sent, ...); label:<name> and in:<name> also work" }
+    since: native
+    has: native
+    not: native
+  needs: {}
+  config:
+    type: object
+    additionalProperties: false
+    properties:
+      fixture: { type: string, description: "Path (relative to the project) of a JSON list of messages: {id, threadId, from, fromName?, to, cc?, subject, text, ageHours, labels, messageId?, inReplyTo?, attachments?}." }
+      account: { type: string, description: "The mailbox address (me). Default me@example.com." }
+      deleted: { type: array, items: { type: string }, description: "Message ids to report deleted." }
+      removed: { type: array, items: { type: string }, description: "Message ids to report removed (trash, spam)." }
+      blocked: { type: string, description: "Simulate an expired login: every fetch returns this as `blocked`." }

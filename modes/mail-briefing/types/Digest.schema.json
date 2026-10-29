@@ -1,0 +1,73 @@
+{
+  "type": "object",
+  "required": ["period", "needsReply", "asks", "groups", "attachments", "coverage"],
+  "additionalProperties": false,
+  "properties": {
+    "period": {
+      "type": "object", "required": ["from", "to"], "additionalProperties": false,
+      "properties": { "from": { "type": "string" }, "to": { "type": "string" } }
+    },
+    "needsReply": {
+      "type": "array",
+      "description": "Threads whose last message is from someone else, addressed to me, and not answered.",
+      "items": {
+        "type": "object", "required": ["subject", "from", "date", "summary", "citations"], "additionalProperties": false,
+        "properties": {
+          "subject": { "type": "string" },
+          "from": { "type": "string", "description": "Sender of the message that needs a reply." },
+          "date": { "type": "string", "description": "Date of that message (ISO-8601)." },
+          "summary": { "type": "string", "minLength": 5, "description": "What they want from me." },
+          "important": { "type": "boolean" },
+          "citations": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*:.+$", "description": "A stored message id (<source>:<extId>)." } }
+        }
+      }
+    },
+    "asks": {
+      "type": "array",
+      "description": "Deadlines and requests found in the messages, each citing the message it comes from.",
+      "items": {
+        "type": "object", "required": ["what", "from", "date", "citations"], "additionalProperties": false,
+        "properties": {
+          "what": { "type": "string", "minLength": 5 },
+          "kind": { "enum": ["deadline", "ask"] },
+          "due": { "type": ["string", "null"], "description": "The due date or time as the message states it, or null." },
+          "from": { "type": "string" },
+          "date": { "type": "string", "description": "Date of the message (ISO-8601)." },
+          "citations": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*:.+$" } }
+        }
+      }
+    },
+    "groups": {
+      "type": "array",
+      "description": "The rest of the period, grouped by selector or by sender; important senders first.",
+      "items": {
+        "type": "object", "required": ["title", "summary", "important", "citations"], "additionalProperties": false,
+        "properties": {
+          "title": { "type": "string", "minLength": 3 },
+          "selector": { "type": "string", "description": "Selector id the group is about, when grouped by selector." },
+          "sender": { "type": "string", "description": "Sender address or domain, when grouped by sender." },
+          "important": { "type": "boolean", "description": "A message in it is from a sender on the `important` list." },
+          "summary": { "type": "string", "minLength": 10 },
+          "citations": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*:.+$" } }
+        }
+      }
+    },
+    "attachments": {
+      "type": "array",
+      "description": "Attachments worth opening, each citing the message that carries it.",
+      "items": {
+        "type": "object", "required": ["name", "from", "date", "why", "citations"], "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "from": { "type": "string" },
+          "date": { "type": "string" },
+          "why": { "type": "string", "minLength": 5 },
+          "textExtracted": { "type": "boolean", "description": "Whether its text was extracted (false: metadata only, e.g. PDF)." },
+          "citations": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*:.+$" } }
+        }
+      }
+    },
+    "coverage": { "$ref": "items.coverage/v1" },
+    "notes": { "type": "string" }
+  }
+}

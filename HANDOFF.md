@@ -9,7 +9,7 @@ commit and a push, and updates this file. This file is removed in the last slice
 | # | Slice | Proposal parts | Boundaries | Status |
 |---|---|---|---|---|
 | 1 | Quiet checks + component map + `bay boundary` (+ proposal `touches:` parsing) | A, F | B-1, B-2, B-3, B-11 | done |
-| 2 | Ownership by folder: `adapters/`, `framework/interfaces/`, discovery, `bay auth <connector>`, per-extension README + `config.example.yaml`, `bay config example`, config schemas that extend, docs describe contracts only | A, D | B-4, B-11 | partial (items 1-4 of 7 done) |
+| 2 | Ownership by folder: `adapters/`, `framework/interfaces/`, discovery, `bay auth <connector>`, per-extension README + `config.example.yaml`, `bay config example`, config schemas that extend, docs describe contracts only | A, D | B-4, B-11 | partial (items 0, 1-5 done; 6 README part done) |
 | 3 | Versioned `reads:`/`produces:`/`needs:`/`implements:`, no extension names another, per-mode skill namespaces, C-7 vocabulary | D | B-6, B-7, B-8 | todo |
 | 4 | `feature.yaml` (workflow, skills, `uses:`), whole-feature override, `bay show <mode> --resolved` | E | B-3, B-8 | todo |
 | 5 | Per-feature `uses:` enforced in the use shim (security) | E | B-9 | todo |
@@ -61,6 +61,28 @@ Slice 2, items 1-4 (e769955, 902b7bf, 7419371, 3ae26b7, 463e662):
    improve's graph reads config keys from the chain.
 Tests added: tests/test_auth.py (4), test_adapter discovery, gmail cli_login, two in test_inheritance.
 
+Slice 2, item 0 and item 5, and item 6 README part (5b15c98, 4a595a0, fca12db, 4127fdb):
+0. `adapters` is in `model.PROTECTED` again (owner decision); the claude-code adapter uses `model.PROTECTED`
+   (its own copy is gone). Pinned list in tests/test_boundaries.py is `["framework", "bay", "schemas",
+   "adapters"]`; new test `test_adapter_code_is_protected_when_the_project_is_the_kit`. framework-dev's
+   `fs.write` gains `adapters` (it could write `bay/adapters/` before the move; without it forge.extend could
+   not edit adapter code at all).
+5. Every settings-taker has `config.example.yaml` (its settings body, no `<name>:` key): feed-briefing,
+   mail-briefing, x-api, gmail-api, fake, fake-mail, framework improve and claude-transcripts. READMEs for
+   modes briefing, feed-briefing, mail-briefing, delivery; connectors x-api, gmail-api (Gmail setup moved here),
+   fake, fake-mail; framework improve, claude-transcripts. `bay/config.py`: `KERNEL_HEADER`,
+   `KERNEL_WORKFLOWS`, `OFFLINE_SWITCH`, `takes_settings`, `fragment`, `example(kit)`. `bay config example
+   [--stdout]` writes/prints agentbay.config.example.yaml (user extensions first, then framework, by name; envs
+   offline switch from `substitutes:`). `lint.lint_self_description`: user modes/connectors need README.md;
+   settings-takers need a config.example.yaml their schema accepts (`features` ignored); the example file must
+   equal `config.example(kit)` ("agentbay.config.example.yaml is stale; run bay config example").
+   Scaffolds write README.md (templates `framework/modes/forge/templates/{mode,connector}/README.md`).
+   tests/test_config_example.py (4); helper `helpers.self_describe` for hand-written test modes.
+6. (README part) README.md rewritten to contracts only (911 words): instance names only inside fenced
+   examples; Settings section; `bay auth <connector>`, `bay config example`, `bay boundary` in the table;
+   framework-mode commands (`bay improve ...`) are listed in that mode's README. B-11 now skips instances
+   under a core `owns:` path (briefing base mode, corpus-store): they are core, not extensions.
+
 ## Decisions
 - Classification order: other (tests/, HANDOFF.md, docs/proposals/, docs/research/, repo meta, the
   proposal) → core docs → core `owns:` (most specific glob wins, so bay/selector.py is briefing) →
@@ -69,7 +91,7 @@ Tests added: tests/test_auth.py (4), test_adapter discovery, gmail cli_login, tw
 - Extension `at:` is a list, so framework instances (framework/modes/, framework/connectors/,
   framework/envs/) are extensions of the same contracts. `framework/interfaces/` is kernel-owned (core
   interfaces); `interfaces/<name>.yaml` is the extension interface contract.
-- Kernel also owns coordinator/, bay.sh, requirements.txt, agentbay.config.example.yaml,
+- Kernel also owns coordinator/, bay.sh, requirements.txt,
   framework/components.yaml.
 - B-3: a feature path of an existing mode passes only if a `touches:` glob matches it AND the glob's
   literal prefix reaches `<mode>/features/` (so `modes/x/` covers mode-wide files but not features;
@@ -95,31 +117,46 @@ Tests added: tests/test_auth.py (4), test_adapter discovery, gmail cli_login, tw
 - (slice 2) Envs are single files (`envs/<name>.yaml`), not folders, so "per-env README" has no place; the
   offline switch in the generated example should be derived from envs' `substitutes:` (planned, item 5).
 
+- (slice 2) The config example is keyed by installable mode: an abstract mode (briefing) has a README but no
+  config.example.yaml; each child ships its own (feed-briefing does, though its schema is briefing's).
+- (slice 2) agentbay.config.example.yaml is generated, so `bay boundary` classifies it as other (not kernel):
+  adding a settings-taking extension regenerates it and must stay `touches: []` (DOD-4). Lint guarantees it
+  holds no hand edits. Removed from kernel `owns:` in framework/components.yaml.
+- (slice 2) README.md is required for user modes/connectors only; framework instances get one when touched
+  (improve, claude-transcripts so far). Envs are files, so no README.
+- (slice 2) Touches added: framework/envs/framework-dev.yaml, framework/modes/improve/,
+  framework/connectors/claude-transcripts/, framework/modes/forge/templates/, bay/scaffold.py (now slice 2;
+  its slice-3 planned entry merged into it). `planned` flipped off: bay/config.py,
+  agentbay.config.example.yaml, README.md.
+
 ## Next
-Resume slice 2 at item 5 (items 1-4 are done and pushed; the boundary check is at 0 failing). In order:
-5. Per-extension README.md + config.example.yaml. Settings-takers: modes briefing, mail-briefing (and give
-   feed-briefing, delivery a README), connectors x-api, gmail-api, fake, fake-mail, framework/modes/improve,
-   framework/connectors/claude-transcripts (add touches entries for the two framework folders). Move
-   README "Gmail setup" to connectors/gmail-api/README.md, X setup to connectors/x-api/README.md. Plan
-   for `bay config example` (bay/config.py + cli): fragment = YAML body of that extension's settings,
-   indented under `modes:`/`connectors:` + `<name>:` (an all-comment fragment gets `# <name>:`); kernel header
-   (secrets, workflows) as a constant in bay/config.py; `envs:` offline switch derived from envs'
-   `substitutes:`. `bay config example` writes the kit's agentbay.config.example.yaml (`--stdout` prints);
-   lint check `agentbay.config.example.yaml is stale; run bay config example`. The current file is the
-   content to reproduce.
-6. Docs describe contracts only (B-11): then `DOCS_COUNTS = True` and update
-   `test_docs_check_names_instances_outside_fences_and_is_not_counted`. Note README/DESIGN/INTERFACES got
-   small path fixes in items 1-3 (adapter path, items.* path, `bay auth gmail-api`).
+Resume slice 2 at item 6 (DESIGN/INTERFACES), then item 7. Boundary check is at 0 failing; `--docs` has 49 hits,
+all in docs/DESIGN.md (24) and docs/INTERFACES.md (25). See them with
+`python3 -m bay.cli boundary --base 07aae9e --proposal docs/proposals/0006-component-contracts-and-content-types.md --docs`.
+6. DESIGN/INTERFACES describe contracts only. Most hits are framework instances: move the cos / forge /
+   improve sections of DESIGN (lines ~146-184) into framework/modes/<m>/README.md (improve's exists; add touches
+   for framework/modes/cos/ and framework/modes/forge/), and INTERFACES' framework binding table (lines
+   ~123-165: workflow-runner, ledger, artifact-graph, improve-detect, improve-store, claude-transcripts) into
+   those connectors' READMEs (touches per folder). Word collisions: connector `ledger` and `git`, envs
+   `research`, `workspace` match ordinary words ("the ledger", "git diff", "workspace trust"); rephrase
+   (README uses "run log") or put the example in a fence. Then `DOCS_COUNTS = True`, update
+   `test_docs_check_names_instances_outside_fences_and_is_not_counted`, flip `planned` off for
+   docs/DESIGN.md and docs/INTERFACES.md. README is ~900 words (target ~800; trim if more can go).
 7. B-4 lint (core files only under core `owns:`; any file neither core, extension `at:` nor "other" fails,
-   naming the file and the fix). Watch: `interfaces/` is empty now; framework/ root files.
-Then: flip `planned` on the remaining slice-2 touches you land (registry.py, config.py,
-agentbay.config.example.yaml, README/DESIGN/INTERFACES, corpus-store, envs if touched), update this file.
+   naming the file and the fix). Reuse `bay/boundary.py` classification (`OTHER`, `ComponentMap.owner`,
+   `extension`). Watch: `interfaces/` is empty; framework/ root files; adapters/ (adapter contract `at:`).
+Then flip `planned` on the remaining slice-2 touches you land (registry.py, envs, mode.yaml, corpus-store, if
+touched) and close slice 2 in this file.
+
+Slice 3 (after slice 2): versioned `reads:`/`produces:`/`needs:`/`implements:`, no extension names another,
+per-mode skill namespaces, C-7 vocabulary; boundaries B-6, B-7, B-8. Note mail-briefing's
+config.example.yaml and selectors name Gmail-specific syntax (`label:Work`): B-7 may need a judgement there.
 
 ## Test status
-`python3 tests/run.py -q`: 363 passed, 0 failed (the suite takes ~2-3 min; use a long timeout).
+`python3 tests/run.py -q`: 368 passed, 0 failed (the suite takes ~2-3 min; use a long timeout).
 `bay lint` clean, `bay validate` ok.
 
 ## Open problems
 - B-4 (lint that core files live only under core paths) is not built; slice 2 item 7 owns it.
-- B-11 still report-only (`DOCS_COUNTS = False`); slice 2 item 6.
+- B-11 still report-only (`DOCS_COUNTS = False`); slice 2 item 6 (README done; 49 hits left in DESIGN/INTERFACES).
 - The `boundary-crossing` improve detector (B-1..B-3 over history) is slice 7.

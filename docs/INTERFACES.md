@@ -188,8 +188,10 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
   - Fields within a selector are ANDed, selectors are ORed, and `not` excludes when any of its fields matches.
   - The matcher is `bay/selector.py` `matches()`. It is the only place that decides which items are kept.
 - **Connector capability table**: `spec.selectors: {<field>: native|local | {mode, as}}`.
-  - `split()` turns a selector into a native query and a local filter. `not` goes to the source only when it
-    declares `not: native` and handles every field inside the block natively (Gmail's `-` prefix).
+  - `split()` turns a selector into a native query and a local filter. A source may return more than the local
+    matcher keeps, never less, so a field is `native` only where the source's search is at least as broad:
+    `not` and `*` values are always local, and Gmail keeps `subject` and `text` local too (its search matches
+    whole words, and its negation also matches display names).
   - Selectors with the same native query share one fetch and one cursor.
   - A field the source does not list cannot be expressed: `bay validate` errors.
   - A `local` field on a paid source (`costPerPostUsd` > 0) gets a validate warning.

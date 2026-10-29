@@ -62,37 +62,68 @@ def by_id(out):
 
 
 # ------------------------------------------------------------------ query mapping
-def test_selector_fields_map_to_gmail_search():
+def _gm():
     from importlib import util
     spec = util.spec_from_file_location("gm", CONN)
     gm = util.module_from_spec(spec)
     spec.loader.exec_module(gm)
+    return gm
+
+
+def test_selector_fields_map_to_gmail_search():
+    gm = _gm()
     assert gm.native_query({"from": "dana@partner.example"}) == "from:dana@partner.example"
     assert gm.native_query({"from": ["a@x.example", "@bank.example"]}) == "{from:a@x.example from:bank.example}"
-    assert gm.native_query({"to": "me@example.com", "subject": "staking pilot"}) == \
-        'to:me@example.com subject:"staking pilot"'
-    assert gm.native_query({"text": ["custody", "proof of stake"]}) == '{custody "proof of stake"}'
+    assert gm.native_query({"to": "me@example.com", "in": "inbox"}) == "to:me@example.com in:inbox"
     assert gm.native_query({"in": "label:Work"}) == "label:Work"
     assert gm.native_query({"in": "Client Updates/Q4"}) == "label:Client-Updates-Q4"
     assert gm.native_query({"in": ["inbox", "in:Sent"]}) == "{in:inbox in:sent}"
     assert gm.native_query({"has": ["attachment", "link"]}) == "has:attachment"     # link stays local
-    assert gm.native_query({"not": {"from": "newsletter@weekly.example", "subject": "digest"}}) == \
-        "-from:newsletter@weekly.example -subject:digest"
     assert gm.native_query({}, since="2026-10-20T00:00:00Z") == "after:1792454400"
+    assert gm.native_query({}, since="2026-10-20T00:00:00Z", until="2026-10-21T00:00:00Z") == \
+        "after:1792454400 before:1792540801"                                       # until is inclusive
 
 
 def test_selector_split_with_the_gmail_capability_table():
     caps = model.Kit(KIT).get("Connector", "gmail-api").spec["selectors"]
     native, local = selmod.split({"id": "p", "from": "*@kiln.fi", "subject": "staking"}, caps)
-    assert native == {"subject": "staking"} and local == {"from": "*@kiln.fi"}       # wildcards matched locally
-    native, local = selmod.split({"id": "n", "in": "Newsletters", "not": {"from": "a@b.example"}}, caps)
-    assert native == {"in": "Newsletters", "not": {"from": "a@b.example"}} and local == {}
-    native, local = selmod.split({"id": "n", "in": "x", "not": {"from": "*@b.example"}}, caps)
-    assert "not" in local and "not" not in native                                    # a wildcard keeps `not` local
-    x_caps = model.Kit(KIT).get("Connector", "x-api").spec["selectors"]
-    assert "not" in selmod.split({"id": "x", "from": "a", "not": {"text": "b"}}, x_caps)[1]   # X: unchanged
+    assert native == {} and local == {"from": "*@kiln.fi", "subject": "staking"}     # wildcards, subject: local
+    native, local = selmod.split({"id": "n", "in": "Newsletters", "text": "pil", "not": {"from": "a@b.example"}}, caps)
+    assert native == {"in": "Newsletters"} and local == {"text": "pil", "not": {"from": "a@b.example"}}
+    native, _ = selmod.split({"id": "a", "from": "a@x.example", "to": "me@x.example", "in": "inbox",
+                              "has": "attachment", "since": "7d"}, caps)
+    assert set(native) == {"from", "to", "in", "has", "since"}
+    fake_caps = model.Kit(KIT).get("Connector", "fake-mail").spec["selectors"]
+    assert {k: selmod.mode_of(fake_caps, k) for k in fake_caps} == {k: selmod.mode_of(caps, k) for k in caps}
     item = {"labels": ["INBOX", "Work"], "container": None, "createdAt": "2026-10-27T00:00:00Z"}
     assert selmod.matches(item, {"id": "w", "in": "label:Work"}, NOW) and selmod.matches(item, {"id": "i", "in": "in:inbox"}, NOW)
+
+
+def test_the_gmail_query_is_never_narrower_than_the_local_match():
+    """Review cases: Gmail's -from: also matches display names, negated and free terms and subject: match whole
+    words. Whatever the store keeps locally must be among what the generated Gmail query returns."""
+    gm = _gm()
+    caps = model.Kit(KIT).get("Connector", "gmail-api").spec["selectors"]
+    fake = FakeGmail(NOW)
+    msg = new_msg("19d0001", frm="Dana Ruiz <dana@kiln.fi>")
+    msg["headers"]["Subject"] = "Staking pilot timeline"
+    msg["parts"] = [{"mimeType": "text/plain", "text": "The pilot starts Monday."}]
+    fake.messages[msg["id"]] = msg
+    g = make(fake)
+    item = g._to_item(fake.render(msg))
+    sels = [{"id": "a", "in": "inbox", "not": {"from": "ruiz"}}, {"id": "b", "in": "inbox", "not": {"text": "kiln"}},
+            {"id": "c", "text": "pil"}, {"id": "d", "subject": "pil"}, {"id": "e", "from": "kiln.fi", "text": "pilot"},
+            {"id": "f", "not": {"subject": "ruiz"}}, {"id": "g", "from": "dana@kiln.fi", "in": "label:Newsletters"},
+            {"id": "h", "to": "me@example.com", "not": {"from": "*@other.example"}}]
+    kept = 0
+    for sel in sels:
+        local = selmod.matches(item, sel, NOW)
+        q = gm.native_query(selmod.split(sel, caps)[0])
+        assert not local or fake.matches(q, msg), (sel, q)                     # never less than the local match
+        kept += local
+    assert kept == 7                                                           # every case but g (not labelled Newsletters)
+    old = {"a": "in:inbox -from:ruiz", "b": "in:inbox -kiln", "c": "pil", "d": "subject:pil"}
+    assert not any(fake.matches(q, msg) for q in old.values())                 # what the old table sent: too narrow
 
 
 # ------------------------------------------------------------------ full sync, bodies, attachments

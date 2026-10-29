@@ -18,8 +18,9 @@ user's own Google Cloud OAuth client; GMAIL_REFRESH_TOKEN comes from `bay auth g
 An app in Google's "Testing" status gets refresh tokens that expire after 7 days: an expired or revoked login
 (invalid_grant) makes fetch return `blocked` naming `bay auth gmail`; it never raises.
 
-Selector -> Gmail search: from from:, to to:, subject subject:, text free terms, in label:/in:, since after:,
-has: attachment has:attachment, not the - prefix. Values with `*` never reach here (split() keeps them local).
+Selector -> Gmail search: from from:, to to:, in label:/in:, since after:, has: attachment has:attachment. Only
+fields where Gmail returns at least what the local matcher keeps are native (connector.yaml): subject, text and
+not, and values with `*`, are matched locally by the store (bay/selector.py split) and never reach here.
 
 Sync: without a cursor, messages.list with the native query and after:<since> (newest first, up to maxItems),
 then messages.get for each; the cursor is the mailbox historyId read before listing. With a cursor,
@@ -126,10 +127,6 @@ def _terms(field: str, v) -> list[str]:
     for x in _vals(v):
         if field in ("from", "to"):
             out.append(f"{field}:{_q(x.lstrip('@'))}")
-        elif field == "subject":
-            out.append(f"subject:{_q(x)}")
-        elif field == "text":
-            out.append(_q(x))
         elif field == "in":
             out.append(_in_term(x))
         elif field == "has" and x.lower() == "attachment":
@@ -137,21 +134,23 @@ def _terms(field: str, v) -> list[str]:
     return out
 
 
-def native_query(query: dict | None, since: str | None = None) -> str:
+def native_query(query: dict | None, since: str | None = None, until: str | None = None) -> str:
     """The native part of a selector (bay/selector.py split) as a Gmail search string. Values of one field are
-    ORed ({a b}), fields ANDed, `not` fields negated with -. `has: link` is left to the store's local match."""
+    ORed ({a b}), fields ANDed. `has: link` is left to the store's local match. `until` (inclusive, to the
+    second) becomes before:<epoch + 1>."""
     parts = []
-    for field in ("from", "to", "subject", "text", "in", "has"):
+    for field in ("from", "to", "in", "has"):
         t = _terms(field, (query or {}).get(field))
         if len(t) == 1:
             parts.append(t[0])
         elif t:
             parts.append("{" + " ".join(t) + "}")
-    for field, v in ((query or {}).get("not") or {}).items():
-        parts += [f"-{t}" for t in _terms(field, v)]
     if since:
         ts = datetime.fromisoformat(since.replace("Z", "+00:00"))
         parts.append(f"after:{int(ts.timestamp())}")
+    if until:
+        ts = datetime.fromisoformat(until.replace("Z", "+00:00"))
+        parts.append(f"before:{int(ts.timestamp()) + 1}")
     return " ".join(parts)
 
 

@@ -38,6 +38,22 @@ def make_docx(paragraphs: list[str]) -> bytes:
     return buf.getvalue()
 
 
+def _tokens(q: str) -> list[str]:
+    """Split a Gmail query on spaces, keeping "quoted phrases" and {or groups} whole."""
+    return re.findall(r'-?\{[^}]*\}|-?[\w.@+-]+:"[^"]*"|-?"[^"]*"|\S+', q or "")
+
+
+def _words(phrase: str, text: str) -> bool:
+    """Whole-word match: the phrase's words appear consecutively among the text's words."""
+    want = re.findall(r"[a-z0-9]+", phrase.lower())
+    have = re.findall(r"[a-z0-9]+", text.lower())
+    return bool(want) and any(have[i:i + len(want)] == want for i in range(len(have) - len(want) + 1))
+
+
+def _dash(v: str) -> str:
+    return re.sub(r"[\s/]+", "-", v.strip().lower())
+
+
 def jr(obj, status=200, headers=None) -> Response:
     return Response(status, headers or {}, json.dumps(obj).encode())
 
@@ -173,11 +189,47 @@ class FakeGmail:
         return jr({"access_token": f"ya29.ACCESS-{self.tokens}", "expires_in": 3599, "scope": self.scope,
                    "token_type": "Bearer"})
 
+    def matches(self, q: str, m: dict) -> bool:
+        """Gmail search semantics, on the narrow side: from:/to: match the address, its domain or whole words of
+        the header (display name included), subject: and free terms match whole words, - negates, {a b} ORs,
+        label:/in: match label names (spaces and slashes as dashes), after:/before: are epoch seconds."""
+        return all(self._term(t, m) for t in _tokens(q))
+
+    def _term(self, t: str, m: dict) -> bool:
+        if t.startswith("-"):
+            return not self._term(t[1:], m)
+        if t.startswith("{") and t.endswith("}"):
+            return any(self._term(x, m) for x in _tokens(t[1:-1]))
+        key, sep, val = t.partition(":")
+        val = val.strip('"').lower()
+        h = {k.lower(): v for k, v in m["headers"].items()}
+        if sep and key in ("from", "to"):
+            hv = h.get("from", "") if key == "from" else h.get("to", "") + "," + h.get("cc", "")
+            addrs = [a.lower() for a in re.findall(r"[\w.+-]+@[\w.-]+", hv)]
+            return any(val in (a, a.split("@")[1]) for a in addrs) or _words(val, hv)
+        if sep and key == "subject":
+            return _words(val, h.get("subject", ""))
+        if sep and key in ("label", "in"):
+            if key == "in" and val == "anywhere":
+                return True
+            names = {_dash(self._label_name(x)) for x in m["labelIds"]} | {x.lower() for x in m["labelIds"]}
+            return _dash(val) in names
+        if sep and key == "has":
+            return val == "attachment" and any(p.get("filename") for p in m.get("parts") or [])
+        if sep and key in ("after", "before"):
+            ms = self._created_ms(m)
+            return ms >= int(val) * 1000 if key == "after" else ms < int(val) * 1000
+        text = " ".join([h.get("from", ""), h.get("to", ""), h.get("subject", "")]
+                        + [p.get("text", "") for p in m.get("parts") or [] if not p.get("filename")])
+        return _words(t.strip('"').lower(), text)
+
+    def _label_name(self, lid: str) -> str:
+        return next((x.get("name") or lid for x in self.labels if x["id"] == lid), lid)
+
     def _list(self, params: dict) -> Response:
-        after = re.search(r"after:(\d+)", params.get("q", ""))
-        lo = int(after.group(1)) * 1000 if after else 0
+        q = params.get("q") or ""
         rows = [m for m in self.messages.values()
-                if not ({"TRASH", "SPAM"} & set(m["labelIds"])) and self._created_ms(m) >= lo]
+                if not ({"TRASH", "SPAM"} & set(m["labelIds"])) and self.matches(q, m)]
         rows.sort(key=lambda m: -self._created_ms(m))
         start = int(params.get("pageToken") or 0)
         n = int(params.get("maxResults") or 100)

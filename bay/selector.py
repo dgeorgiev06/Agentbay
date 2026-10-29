@@ -18,10 +18,11 @@ field of its `not` block matches. Matching is case-insensitive (casefold).
 
 Each source connector declares which fields its native search handles (connector.yaml spec.selectors:
 `native` or `local`; a field it does not list cannot be expressed). `split()` turns a selector into a
-native query (narrows the fetch) and a local filter. `not` is native only on a source that declares
-`not: native` and handles every field inside it natively (Gmail's `-` prefix). The store always re-applies
-the FULL selector with `matches()`, so behaviour is the same on every source no matter what the native
-query did.
+native query (narrows the fetch) and a local filter. A source may return more than its native query asks
+for, never less, so a field is native only where the source's search matches at least what `matches()`
+does: `not` is always local (a source's negation can exclude more, e.g. Gmail's `-from:` also matches display
+names), and so are wildcard values. The store always re-applies the FULL selector with `matches()`, so
+behaviour is the same on every source no matter what the native query did.
 """
 from __future__ import annotations
 
@@ -165,32 +166,20 @@ def wildcard(v) -> bool:
     return any("*" in x for x in _vals(v))
 
 
-def _native_not(block, caps: dict) -> bool:
-    """A `not` block goes to the source only when the source declares `not: native` and handles every field in
-    it natively without wildcards (Gmail `-from:x`); otherwise it is matched locally."""
-    return (mode_of(caps, "not") == "native" and isinstance(block, dict) and bool(block)
-            and all(f != "since" and mode_of(caps, f) == "native" and not wildcard(v) for f, v in block.items()))
-
-
 def split(sel: dict, caps: dict) -> tuple[dict, dict]:
-    """(native query, local filter). Wildcard values are always local, and `not` is local unless the source
-    can express all of it (`_native_not`); the store re-applies the whole selector anyway."""
+    """(native query, local filter). `not` and wildcard values are always local; the store re-applies the
+    whole selector anyway."""
     native, local = {}, {}
     for f in FIELDS:
         if f == "id" or f not in sel:
             continue
-        if f == "not":
-            (native if _native_not(sel[f], caps) else local)[f] = sel[f]
-            continue
-        (native if mode_of(caps, f) == "native" and not wildcard(sel[f]) else local)[f] = sel[f]
+        (native if f != "not" and mode_of(caps, f) == "native" and not wildcard(sel[f]) else local)[f] = sel[f]
     return native, local
 
 
 def native_key(native: dict) -> str:
     """Canonical text of a native query: selectors with the same native query share one fetch and cursor."""
-    def norm(v):
-        return {k: sorted(_vals(x)) for k, x in sorted(v.items())} if isinstance(v, dict) else sorted(_vals(v))
-    return json.dumps({k: norm(v) for k, v in sorted(native.items()) if k != "since"},
+    return json.dumps({k: sorted(_vals(v)) for k, v in sorted(native.items()) if k != "since"},
                       sort_keys=True, separators=(",", ":"))
 
 

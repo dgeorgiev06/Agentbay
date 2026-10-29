@@ -17,12 +17,12 @@ spec:
   selectors:
     from: { mode: native, as: "address or domain" }
     to: { mode: native, as: "address or domain (To or Cc)" }
-    subject: native
-    text: native
+    subject: local
+    text: local
     in: { mode: native, as: "label name or system label (inbox, sent, ...); label:<name> and in:<name> also work" }
     since: native
     has: native
-    not: native
+    not: local
   needs: {}
   config:
     type: object

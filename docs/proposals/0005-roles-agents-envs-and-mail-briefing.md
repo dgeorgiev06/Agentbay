@@ -103,14 +103,15 @@ The builder made these decisions while implementing Part A; the user approved al
 |---|---|
 | from | `from:` |
 | to | `to:` |
-| subject | `subject:` |
-| text | free terms |
+| subject | local (Gmail's `subject:` matches whole words: `pil` misses "pilot") |
+| text | local (free terms match whole words) |
 | in | `label:` / `in:` |
 | since | `after:` |
 | has: attachment | `has:attachment` |
-| not | `-` prefix |
+| not | local (Gmail's `-from:ruiz` also drops "Dana Ruiz <dana@kiln.fi>") |
 
-  Wildcards are matched locally (from 0003).
+  Wildcards are matched locally (from 0003). A source may return more than the local match, never less, so a
+  field is native only where Gmail search is at least as broad as the matcher (review of PR #9).
 - **Sync:**
   - **First run:** a full sync within lookback, using `messages.list` with the native query, then `messages.get` (format=full) in batches.
   - **After that:** incremental, using `history.list` from the stored `historyId` (messages added, labels added or removed, messages deleted).

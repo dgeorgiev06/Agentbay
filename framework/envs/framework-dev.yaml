@@ -18,7 +18,7 @@ spec:
       clis: [git status, git diff, git log, git show]
   fs:
     read: ["."]
-    write: [framework, bay, schemas, docs, tests]
+    write: [framework, bay, schemas, adapters, docs, tests]
   tiers: [balanced, deep]          # no fast tier for framework changes
   effects: [read, write]
   limits: { maxTurns: 120, maxMinutes: 60 }

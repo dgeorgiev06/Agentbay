@@ -13,6 +13,7 @@ touches:
   - { path: bay/adapters/, reason: adapters move to adapters/ (B-4), slice: 2 }
   - { path: bay/adapter.py, reason: the Adapter protocol and discovery by folder (no registry dict), slice: 2 }
   - { path: adapters/, reason: the new adapters folder, slice: 2 }
+  - { path: framework/envs/framework-dev.yaml, reason: "forge.extend may write adapters/ (it could write bay/adapters/ before the move)", slice: 2 }
   - { path: framework/interfaces/, reason: core interfaces live under framework/interfaces/ (B-4), slice: 2 }
   - { path: interfaces/items.*, reason: items.* move to framework/interfaces/, slice: 2 }
   - { path: bay/model.py, reason: discovery by folder; config schemas that extend; versioned reads/produces; feature.yaml, slice: 2 }

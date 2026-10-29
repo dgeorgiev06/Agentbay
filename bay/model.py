@@ -58,7 +58,7 @@ WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}   # file-writing to
 READ_ONLY_CLIS = ("git status", "git diff", "git log", "git show")   # the only CLIs a read-only capability may bind
 USER_FRAMEWORK_ENVS = ("workspace", "research")   # the framework envs a user mode may put roles in
 LEVEL_RANK = {"should": 1, "must": 2, "must_not": 2}
-PROTECTED = ("framework", "bay", "schemas")       # kit paths only forge.extend may write
+PROTECTED = ("framework", "bay", "schemas", "adapters")   # kit paths only forge.extend may write
 FRAMEWORK_EXTENDER = "forge.extend"
 USER_ROLE = ("roles are framework-level; customize behaviour in your mode's playbooks/skills, or propose a new "
              "role via forge.extend")
@@ -1201,7 +1201,7 @@ def _role_step(ctx: _Ctx, md: Doc, ep: dict, st: dict, sw: str, ep_eff, review: 
 
 
 def protected_writes(env: Doc) -> list[str]:
-    """Write paths of env that name the kit's framework/, bay/ or schemas/ explicitly."""
+    """Write paths of env that name a protected kit folder (PROTECTED) explicitly."""
     out = []
     for w in env.spec.get("fs", {}).get("write", []):
         parts = Path(w).parts

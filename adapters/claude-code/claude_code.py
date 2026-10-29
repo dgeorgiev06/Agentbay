@@ -40,7 +40,7 @@ from bay import registry, workflows
 from bay.adapter import BuildReport
 from bay.dispatch import use_shim
 from bay.ledger import now
-from bay.model import ROOT_COORDINATOR, ResolvedRole, System
+from bay.model import PROTECTED, ROOT_COORDINATOR, ResolvedRole, System
 from bay.protocol import WORKER_CONTRACT
 
 MARK_BEGIN = "<!-- agentbay:begin (generated; run ./bay build) -->"
@@ -54,7 +54,6 @@ BAY = ".agentbay/bay"
 COORDINATOR_CMDS = ("show", "status", "log", "note", "task", "catalog")
 WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 GUARD_MATCHER = "Bash|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep"
-PROTECTED = ("framework", "bay", "schemas")    # kit dirs only forge.extend may write (when project == kit)
 
 
 def _read_json(p: Path, default):

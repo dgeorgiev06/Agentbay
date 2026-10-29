@@ -122,7 +122,4 @@ agentbay.config.example.yaml, README/DESIGN/INTERFACES, corpus-store, envs if to
 ## Open problems
 - B-4 (lint that core files live only under core paths) is not built; slice 2 item 7 owns it.
 - B-11 still report-only (`DOCS_COUNTS = False`); slice 2 item 6.
-- Security, for the user to decide: `adapters/` is not in `model.PROTECTED`, so with project == kit a role
-  env writing `.` could edit adapter code the build runs (the guard still denies framework/, bay/, schemas/).
-  Adding it changes the pinned `protected` list in tests/test_boundaries.py, so it was left as is.
 - The `boundary-crossing` improve detector (B-1..B-3 over history) is slice 7.

@@ -655,22 +655,69 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     return list(dict.fromkeys(out))
 
 
-def _skill_content(d: Path) -> list[tuple[str, bytes]]:
-    return [(str(f.relative_to(d)), f.read_bytes()) for f in sorted(d.rglob("*")) if f.is_file()
-            and "__pycache__" not in f.parts]
+SKILL_REF = re.compile(r"(?:\bthe\s+|\()`?([a-z0-9]+(?:-[a-z0-9]+)*)`?\s+skill\b")
+SKILL_SHORT = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+def _skill_refs(text: str) -> list[tuple[int, str]]:
+    """Skills a playbook or prompt names by short name ("the corpus-sql skill", "(research-brief skill)")."""
+    return [(i, m.group(1)) for i, ln in enumerate(text.splitlines(), 1) for m in SKILL_REF.finditer(ln)]
 
 
 def lint_skill_names(kit: model.Kit) -> list[str]:
-    """Project skills are keyed by name only (.claude/skills/<name>): two modes that would write the same skill
-    name with different content overwrite each other's, so one mode's agents get the other's skill."""
-    out, first = [], {}
-    for md in sorted(kit.docs["Mode"].values(), key=lambda d: (len(d.dirs), d.name)):
-        for name, d in sorted(model.mode_skills(md).items()):
-            prev = first.setdefault(name, (md.name, d))
-            if prev[1] != d and _skill_content(prev[1]) != _skill_content(d):
-                out.append(f"{_where(d / 'SKILL.md', 2)}: skill '{name}' of mode {md.name} has the same name as "
-                           f"{_where(prev[1] / 'SKILL.md', 2)} (mode {prev[0]}) but different content; project skills are "
-                           f"keyed by name, so one would overwrite the other. Rename one (e.g. {md.name}-{name})")
+    """B-8. The build writes a mode's skills as `<mode>--<skill>` and a role's as `<role>--<skill>`, so each name
+    must stay a valid runtime name (a-z, 0-9, '-', at most 64), two sources never share one, and every skill a
+    playbook or role prompt names by short name is in that mode's chain (or the roles it maps)."""
+    out: list[str] = []
+    ids: dict[str, Path] = {}
+
+    def add(owner: str, kind: str, sk: str, src: Path) -> None:
+        sid = model.skill_id(owner, sk)
+        where = _where(src / "SKILL.md", 1)
+        if not SKILL_SHORT.match(sk):
+            out.append(f"{where}: skill folder '{sk}' must be lowercase letters, digits and single hyphens")
+        if len(sid) > model.SKILL_NAME_MAX:
+            out.append(f"{where}: skill name '{sid}' ({kind} {owner}) is {len(sid)} characters, over the "
+                       f"{model.SKILL_NAME_MAX} a runtime skill name allows; shorten the skill folder name "
+                       f"(or the {kind} name) by {len(sid) - model.SKILL_NAME_MAX}")
+        prev = ids.setdefault(sid, src)
+        if prev != src:
+            out.append(f"{where}: skill name '{sid}' is also built from {model.rel(prev)}; rename one")
+
+    roles = {n: d for n, d in kit.docs["Role"].items()}
+    role_skills = {n: list(d.spec.get("skills", [])) for n, d in roles.items()}
+    for rn, sks in sorted(role_skills.items()):
+        for sk in sks:
+            add(rn, "role", sk, roles[rn].dir / "skills" / sk)
+    for md in sorted(kit.docs["Mode"].values(), key=lambda d: d.name):
+        chain = model.mode_skills(md)
+        if not md.spec.get("abstract"):
+            for sk, src in sorted(chain.items()):
+                add(md.name, "mode", sk, src)
+        mapped = set((md.spec.get("roles") or {})) | ({md.spec["coordinator"]} if md.spec.get("coordinator") else set())
+        known = set(chain) | {sk for rn in mapped for sk in role_skills.get(rn, [])}
+        files = [next((d / "playbook.md" for d in md.dirs if (d / "playbook.md").exists()), None)]
+        for ep in (md.spec.get("endpoints") or {}).values():
+            if ep.get("playbook"):
+                files.append(next((d / ep["playbook"] for d in md.dirs if (d / ep["playbook"]).exists()), None))
+        for f in dict.fromkeys(x for x in files if x is not None):
+            for i, sk in _skill_refs(f.read_text(encoding="utf-8")):
+                if sk not in known:
+                    out.append(f"{_where(f, i)}: names skill '{sk}', which is not in mode {md.name}'s chain "
+                               f"({', '.join(sorted(known)) or 'none'}); add skills/{sk}/SKILL.md to the mode or "
+                               f"fix the name")
+    users: dict[str, list] = {}
+    for md in kit.docs["Mode"].values():
+        if not md.spec.get("abstract"):
+            for rn in md.spec.get("roles") or {}:
+                users.setdefault(rn, []).append(md)
+    for rn, rd in sorted(roles.items()):
+        for i, sk in _skill_refs(rd.spec.get("prompt", "")):
+            missing = [m.name for m in users.get(rn, []) if sk not in model.mode_skills(m)]
+            if sk not in role_skills[rn] and (missing or not users.get(rn)):
+                out.append(f"{_where(rd.path, 1)}: role {rn}'s prompt names skill '{sk}', which is neither the "
+                           f"role's own (`skills:`) nor in the chain of mode(s) {', '.join(missing) or '-'} that "
+                           f"map it; add it to the role's skills or name it in the mode's playbook instead")
     return out
 
 

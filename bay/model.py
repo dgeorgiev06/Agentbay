@@ -431,10 +431,11 @@ class ResolvedRole:
     tools: list[str]
     clis: list[str]
     bay_uses: list[str]              # "items.store/v1.sql": dispatcher-mediated reads
-    skills: dict[str, Path]
+    skills: dict[str, Path]          # skill name in the runtime (`<mode>--<skill>`, `<role>--<skill>`) -> folder
     isolation: str
     budget: dict
     access: str = "read"             # the role's access: only "write" gets file-writing tools and write paths
+    skill_names: dict[str, str] = field(default_factory=dict)   # short name (playbooks, prompts) -> runtime name
 
 
 @dataclass
@@ -495,7 +496,7 @@ class ResolvedMode:
     constraints: dict
     needs: list[str]
     playbook: str
-    skills: dict[str, Path]
+    skills: dict[str, Path]           # runtime name `<mode>--<skill>` -> folder (own, then inherited via extends)
     config: dict                      # effective agentbay.config.yaml modes.<name> (minus features)
     dirs: list = field(default_factory=list)   # mode folder, then ancestors' (extends): types are looked up here
     extends: str | None = None
@@ -830,12 +831,13 @@ class _Ctx:
             if lim is not None:
                 budget[k] = min(budget.get(k, lim), lim)
         runtime = ((self.profile.spec.get("runtime") or {}).get(kind) if self.profile else None) or "?"
+        names = role_skill_names(md, rd)
         return ResolvedRole(
             name=rd.name, unit=f"{rd.name}--{mode}", mode=mode, env=env.name, kind=kind, runtime=runtime,
             agent=self.agent, description=rd.description, root=rd.root, prompt=rd.prompt, done_when=rd.done_when,
             rules=rd.rules, uses=uses, inference=self.inference(rd.tier, rd.effort), tools=tools, clis=clis,
-            bay_uses=bay_uses, skills={**mode_skills(md), **rd.skills}, isolation=rd.isolation, budget=budget,
-            access=rd.access)
+            bay_uses=bay_uses, skills={names[sk]: src for sk, src in {**mode_skills(md), **rd.skills}.items()},
+            isolation=rd.isolation, budget=budget, access=rd.access, skill_names=names)
 
 
 def name_units(modes: dict, gaps: list[str] | None = None) -> None:
@@ -856,6 +858,20 @@ def name_units(modes: dict, gaps: list[str] | None = None) -> None:
             gaps.append(f"two units are both named {u.unit} ({seen[u.unit]} and {(u.name, u.mode, u.env)}); rename "
                         f"a role or mode so `<role>--<mode>` stays unique")
         seen[u.unit] = (u.name, u.mode, u.env)
+
+
+SKILL_NAME_MAX = 64        # Claude Code: a skill name (its folder and SKILL.md `name:`) is [a-z0-9-], at most 64
+
+
+def skill_id(owner: str, short: str) -> str:
+    """A skill's runtime name: `<mode>--<skill>` for a mode's skills (own and inherited, so each mode has its own
+    namespace and two modes' same-named skills never overwrite each other), `<role>--<skill>` for a role's."""
+    return f"{owner}--{short}"
+
+
+def role_skill_names(md: Doc, rd) -> dict[str, str]:
+    """Short name -> runtime name for a role in a mode: the mode's skills, the role's own replacing same-named ones."""
+    return {**{sk: skill_id(md.name, sk) for sk in mode_skills(md)}, **{sk: skill_id(rd.name, sk) for sk in rd.skills}}
 
 
 def mode_skills(md: Doc) -> dict[str, Path]:
@@ -938,7 +954,8 @@ def resolve_mode(kit: Kit, md: Doc, ctx: _Ctx, warnings: list[str] | None = None
         name=name, version=md.meta["version"], root=md.root, purpose=s["purpose"].strip(), path=md.dir,
         coordinator=s.get("coordinator"), roles={rn: kit.env_name(env) for rn, env in roles.items()},
         features=features, constraints=constraints, needs=needs,
-        playbook=pb_file.read_text() if pb_file.exists() else "", skills=mode_skills(md), config=mcfg,
+        playbook=pb_file.read_text() if pb_file.exists() else "",
+        skills={skill_id(name, sk): src for sk, src in mode_skills(md).items()}, config=mcfg,
         dirs=list(md.dirs), extends=md.parent, coordinator_unit=coord_unit)
 
 

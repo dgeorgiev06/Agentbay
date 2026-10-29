@@ -288,15 +288,28 @@ def test_run_steps_use_versioned_capability_spelling():
     has(k, "modes/briefing/mode.yaml", "does not match")
 
 
-def test_two_modes_writing_the_same_skill_name_with_different_content():
+def test_same_skill_name_in_two_modes_is_fine_b8():
+    k = kit_copy()        # briefing and mail-briefing both ship corpus-sql and digest: namespaced, no clash
+    assert (k / "modes/mail-briefing/skills/digest/SKILL.md").exists() and (k / "modes/briefing/skills/digest").exists()
+    assert not [p for p in problems(k) if "skill" in p]
+
+
+def test_unknown_skill_reference_fails_lint_b8():
     k = kit_copy()
-    d = k / "modes/mail-briefing/skills/digest"
-    d.mkdir(parents=True)
-    (d / "SKILL.md").write_text("---\nname: digest\ndescription: a different digest\n---\n# Other\n")
-    x = has(k, "skill 'digest'", "modes/mail-briefing/skills/digest/SKILL.md", "modes/briefing/skills/digest/SKILL.md",
-            "Rename")
-    assert "mail-briefing" in x
-    d2 = k / "modes/mail-briefing/skills/grounded-qa"            # the same content under the same name is fine
-    d2.mkdir()
-    (d2 / "SKILL.md").write_text((k / "modes/briefing/skills/grounded-qa/SKILL.md").read_text())
-    assert not [p for p in problems(k) if "grounded-qa" in p]
+    sub(k, "modes/mail-briefing/features/ask/playbook.md", "the corpus-sql skill", "the mail-sql skill")
+    x = has(k, "modes/mail-briefing/features/ask/playbook.md:14", "names skill 'mail-sql'",
+            "not in mode mail-briefing's chain", "corpus-sql")
+    assert "skills/mail-sql/SKILL.md" in x
+    sub(k, "framework/roles/researcher.yaml", "Follow the research-brief skill", "Follow the brief-x skill")
+    has(k, "framework/roles/researcher.yaml", "role researcher's prompt names skill 'brief-x'")
+
+
+def test_skill_name_over_64_characters_fails_lint_b8():
+    k = kit_copy()
+    long = "a" * (64 - len("mail-briefing--") + 1)
+    d = k / "modes/mail-briefing/skills" / long
+    d.mkdir()
+    (d / "SKILL.md").write_text(f"---\nname: {long}\ndescription: too long once namespaced\n---\n# Long\n")
+    x = has(k, f"skill name 'mail-briefing--{long}'", "65 characters", "shorten the skill folder name")
+    assert "by 1" in x
+    assert not [p for p in problems(k) if f"feed-briefing--{long}" in p]     # only mail-briefing has it

@@ -349,6 +349,8 @@ class Dispatcher:
         run_as = "main-thread playbook" if role.runtime == "claude-code-main" else f"subagent_type={step.subagent}"
         plan.update({"role": role.name, "agent": step.agent, "env": step.env, "runAs": run_as,
                      "tier": step.inference.tier, "model": step.inference.model, "effort": step.inference.effort})
+        if role.skills:                             # the playbook's short skill names -> the namespaced skills
+            plan["skills"] = {sk: sid for sk, sid in sorted(role.skill_names.items()) if sid in role.skills}
         if step.kind == "review":
             plan["review"] = {
                 "task": {"target": state["target"], "input": state["input"]},

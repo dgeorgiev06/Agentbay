@@ -1,5 +1,5 @@
 ---
-name: mail-sql
+name: corpus-sql
 description: Query the mail store with read-only SQL (items.store/v1.sql) over v_email, v_threads and v_attachments, and cite message ids. Use whenever a mail-briefing step needs to find messages beyond what the plan gave you.
 ---
 # Mail SQL

@@ -39,7 +39,7 @@ def test_feed_briefing_is_complete_after_extends():
     m = sysm.modes["feed-briefing"]
     assert m.features["sync"].in_schema["properties"].keys() == {"lookback", "maxItems"}       # parent type
     assert "question" in m.features["ask"].in_schema["properties"]                             # parent type
-    assert {"digest", "grounded-qa", "corpus-sql"} <= set(m.skills)
+    assert {"feed-briefing--digest", "feed-briefing--grounded-qa", "feed-briefing--corpus-sql"} <= set(m.skills)
     assert m.playbook.startswith("# feed-briefing (coordinator playbook")                      # own playbook.md
     assert m.config["selectors"] == [{"id": "home"}]
 

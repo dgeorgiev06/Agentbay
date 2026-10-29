@@ -39,13 +39,13 @@ touches:
   - { path: framework/rules/conformance.yaml, reason: "C-7 vocabulary (content type, item); C-4 and C-8 name B-7", slice: 3 }
   - { path: framework/modes/forge/features/create/playbook.md, reason: "B-7: `fake HTTP layer` named the fake connector; now `stubbed`", slice: 3 }
   - { path: bay/improve/, reason: "conformance checks (slice 3); `boundary-crossing` detector (slice 7)", slice: 3, planned: true }
-  - { path: "modes/*/skills/", reason: per-mode skill namespaces, slice: 3, planned: true }
+  - { path: "modes/*/skills/", reason: "per-mode skill namespaces (B-8); mail-briefing skills back to corpus-sql, digest", slice: 3 }
   # slice 4: feature.yaml and whole-feature override
   - { path: "modes/*/features/*/", reason: feature.yaml per feature (workflow, skills, uses:), slice: 4, planned: true }
   - { path: "framework/modes/*/features/*/", reason: feature.yaml per framework-mode feature, slice: 4, planned: true }
   # slice 5: per-feature uses: in the use shim (security)
   - { path: bay/use_shim.py, reason: "enforces a feature's uses: (B-9)", slice: 5, planned: true }
-  - { path: bay/dispatch.py, reason: passes the step's feature to the use shim, slice: 5, planned: true }
+  - { path: bay/dispatch.py, reason: "step plans map short skill names to namespaced ones (B-8, slice 3); passes the step's feature to the use shim (slice 5)", slice: 3 }
   # slice 7: forge.extend rewrite
   - { path: framework/modes/forge/mode.yaml, reason: "extend's steps: foreach slices, code check step", slice: 7, planned: true }
   - { path: framework/modes/forge/playbook.md, reason: the shared slice-and-handoff protocol and quiet checks (Part C), slice: 7, planned: true }

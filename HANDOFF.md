@@ -9,7 +9,7 @@ commit and a push, and updates this file. This file is removed in the last slice
 | # | Slice | Proposal parts | Boundaries | Status |
 |---|---|---|---|---|
 | 1 | Quiet checks + component map + `bay boundary` (+ proposal `touches:` parsing) | A, F | B-1, B-2, B-3, B-11 | done |
-| 2 | Ownership by folder: `adapters/`, `framework/interfaces/`, discovery, `bay auth <connector>`, per-extension README + `config.example.yaml`, `bay config example`, config schemas that extend, docs describe contracts only | A, D | B-4, B-11 | partial (items 0, 1-5 done; 6 README part done) |
+| 2 | Ownership by folder: `adapters/`, `framework/interfaces/`, discovery, `bay auth <connector>`, per-extension README + `config.example.yaml`, `bay config example`, config schemas that extend, docs describe contracts only | A, D | B-4, B-11 | done |
 | 3 | Versioned `reads:`/`produces:`/`needs:`/`implements:`, no extension names another, per-mode skill namespaces, C-7 vocabulary | D | B-6, B-7, B-8 | todo |
 | 4 | `feature.yaml` (workflow, skills, `uses:`), whole-feature override, `bay show <mode> --resolved` | E | B-3, B-8 | todo |
 | 5 | Per-feature `uses:` enforced in the use shim (security) | E | B-9 | todo |
@@ -83,6 +83,19 @@ Slice 2, item 0 and item 5, and item 6 README part (5b15c98, 4a595a0, fca12db, 4
    framework-mode commands (`bay improve ...`) are listed in that mode's README. B-11 now skips instances
    under a core `owns:` path (briefing base mode, corpus-store): they are core, not extensions.
 
+Slice 2, item 6 (rest) and item 7 (9bd9f51, d7e728c):
+6. DESIGN.md (1603 words) and INTERFACES.md describe contracts only. Instance text moved to READMEs:
+   framework/modes/cos/ and forge/ (new), improve (detectors, interface/connector table, cron);
+   framework/connectors/{workflow-runner,ledger,git,artifact-graph,improve-detect,improve-store}/README.md (new);
+   connectors/gmail-api/README.md "How it reads" (the DESIGN mail paragraph). Word collisions reworded
+   ("run log", "version control", `bay/model.py` `USER_FRAMEWORK_ENVS` for the shareable framework envs,
+   `<env>: <offline env>`). B-11 now counts: the `DOCS_COUNTS` switch is removed (always on, no dead
+   toggle); hit lines say the fix. `--docs` 0 hits. README.md trimmed to 858 words, setup steps kept.
+7. B-4: `lint.lint_ownership` runs `git ls-files` in the kit (skipped when not a checkout) and fails every
+   tracked file that is not core docs, other, under a core `owns:` or in an extension `at:` folder
+   (`boundary.stray`), naming the file and the fix. The shipped kit has no stray file. Test:
+   `test_ownership_lint_names_stray_tracked_files_b4`.
+
 ## Decisions
 - Classification order: other (tests/, HANDOFF.md, docs/proposals/, docs/research/, repo meta, the
   proposal) → core docs → core `owns:` (most specific glob wins, so bay/selector.py is briefing) →
@@ -129,34 +142,31 @@ Slice 2, item 0 and item 5, and item 6 README part (5b15c98, 4a595a0, fca12db, 4
   its slice-3 planned entry merged into it). `planned` flipped off: bay/config.py,
   agentbay.config.example.yaml, README.md.
 
-## Next
-Resume slice 2 at item 6 (DESIGN/INTERFACES), then item 7. Boundary check is at 0 failing; `--docs` has 49 hits,
-all in docs/DESIGN.md (24) and docs/INTERFACES.md (25). See them with
-`python3 -m bay.cli boundary --base 07aae9e --proposal docs/proposals/0006-component-contracts-and-content-types.md --docs`.
-6. DESIGN/INTERFACES describe contracts only. Most hits are framework instances: move the cos / forge /
-   improve sections of DESIGN (lines ~146-184) into framework/modes/<m>/README.md (improve's exists; add touches
-   for framework/modes/cos/ and framework/modes/forge/), and INTERFACES' framework binding table (lines
-   ~123-165: workflow-runner, ledger, artifact-graph, improve-detect, improve-store, claude-transcripts) into
-   those connectors' READMEs (touches per folder). Word collisions: connector `ledger` and `git`, envs
-   `research`, `workspace` match ordinary words ("the ledger", "git diff", "workspace trust"); rephrase
-   (README uses "run log") or put the example in a fence. Then `DOCS_COUNTS = True`, update
-   `test_docs_check_names_instances_outside_fences_and_is_not_counted`, flip `planned` off for
-   docs/DESIGN.md and docs/INTERFACES.md. README is ~900 words (target ~800; trim if more can go).
-7. B-4 lint (core files only under core `owns:`; any file neither core, extension `at:` nor "other" fails,
-   naming the file and the fix). Reuse `bay/boundary.py` classification (`OTHER`, `ComponentMap.owner`,
-   `extension`). Watch: `interfaces/` is empty; framework/ root files; adapters/ (adapter contract `at:`).
-Then flip `planned` on the remaining slice-2 touches you land (registry.py, envs, mode.yaml, corpus-store, if
-touched) and close slice 2 in this file.
+- (slice 2) B-4 checks tracked files only (an untracked scratch file is not the kit's). It reuses the boundary
+  classification, so a file is "owned" exactly when `bay boundary` would classify it.
+- (slice 2) Touches added: `framework/modes/*/README.md`, `framework/connectors/*/README.md`. Removed, as slice 2
+  did not need them: bay/registry.py (the catalog already lists discovered extensions), `envs/*.yaml` (bindings
+  name interfaces, not paths), framework/connectors/corpus-store/. `planned` off: docs/DESIGN.md,
+  docs/INTERFACES.md, `modes/*/mode.yaml`.
+- (slice 2) B-11 is word-bounded on dotted names, so `forge.extend`, `cos.run` in the docs do not hit; the docs
+  still avoid instance endpoints where a contract sentence does the job.
 
-Slice 3 (after slice 2): versioned `reads:`/`produces:`/`needs:`/`implements:`, no extension names another,
-per-mode skill namespaces, C-7 vocabulary; boundaries B-6, B-7, B-8. Note mail-briefing's
-config.example.yaml and selectors name Gmail-specific syntax (`label:Work`): B-7 may need a judgement there.
+## Next
+Slice 2 is done. Slice 3: versioned `reads:`/`produces:`/`needs:`/`implements:` that agree (B-6), no extension
+names another (B-7: modes never name connectors, connectors never name modes; lint C-4, C-8 + an import scan),
+per-mode skill namespaces `<mode>:<skill>` (B-8; fold in `lint_skill_names`), C-7 vocabulary in
+framework/rules/conformance.yaml. Touches for slice 3 are already in 0006 (`planned: true`); set
+`SLICES_BUILT = 3` in tests/test_boundary.py and flip `planned` as entries land.
+Notes: mail-briefing's config.example.yaml and selectors name Gmail-specific syntax (`label:Work`): B-7 may
+need a judgement there. framework READMEs now name instances (they are the instances' own docs); B-7's
+"no extension names another" must decide whether a framework mode's README naming its connectors counts
+(it describes bindings in its own env, so probably allowed for README, not for code).
 
 ## Test status
-`python3 tests/run.py -q`: 368 passed, 0 failed (the suite takes ~2-3 min; use a long timeout).
-`bay lint` clean, `bay validate` ok.
+`python3 tests/run.py -q`: 369 passed, 0 failed (the suite takes ~2-3 min; use a long timeout).
+`bay lint` clean, `bay validate` ok, build + clean on a scratch project ok. `bay boundary --base 07aae9e
+--proposal docs/proposals/0006-...md --docs`: 0 failing, 0 B-11 hits.
 
 ## Open problems
-- B-4 (lint that core files live only under core paths) is not built; slice 2 item 7 owns it.
-- B-11 still report-only (`DOCS_COUNTS = False`); slice 2 item 6 (README done; 49 hits left in DESIGN/INTERFACES).
+- DESIGN.md is 1603 words (target ~1.5k); further trimming would cut contract text (safety, store invariants).
 - The `boundary-crossing` improve detector (B-1..B-3 over history) is slice 7.

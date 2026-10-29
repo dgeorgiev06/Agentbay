@@ -10,13 +10,13 @@ host outside the env network allowlist before the request is made):
   /history?startHistoryId=...       changes since the stored cursor (messages added, labels added or removed,
                                     messages deleted)
 plus POST https://oauth2.googleapis.com/token (refresh_token grant; the authorization_code grant in `login`, run
-by `bay auth gmail`). No other method or endpoint is used: nothing can send, label, move or delete mail.
+by `bay auth gmail-api`). No other method or endpoint is used: nothing can send, label, move or delete mail.
 
 Auth: OAuth 2.0 installed app, scope gmail.readonly only. GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET are the
-user's own Google Cloud OAuth client; GMAIL_REFRESH_TOKEN comes from `bay auth gmail` (loopback redirect on
+user's own Google Cloud OAuth client; GMAIL_REFRESH_TOKEN comes from `bay auth gmail-api` (loopback redirect on
 127.0.0.1 with PKCE) and lives in the secrets provider (keychain). Access tokens stay in memory for this call.
 An app in Google's "Testing" status gets refresh tokens that expire after 7 days: an expired or revoked login
-(invalid_grant) makes fetch return `blocked` naming `bay auth gmail`; it never raises.
+(invalid_grant) makes fetch return `blocked` naming `bay auth gmail-api`; it never raises.
 
 Selector -> Gmail search: from from:, to to:, in label:/in:, since after:, has: attachment has:attachment. Only
 fields where Gmail returns at least what the local matcher keeps are native (connector.yaml): subject, text and
@@ -81,7 +81,7 @@ DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 TEXT_MIME = {"text/plain", "text/csv", "text/markdown", "text/x-markdown"}
 TEXT_EXT = (".txt", ".csv", ".md", ".markdown")
 MSG_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-FIX = "run `bay auth gmail` in your terminal (it opens your browser), then sync again"
+FIX = "run `bay auth gmail-api` in your terminal (it opens your browser), then sync again"
 
 
 class LoginNeeded(ConnectorError):
@@ -742,7 +742,7 @@ def _walk(part: dict, plain: list[str], html: list[str], atts: list[dict], skipp
     (plain if mt == "text/plain" else html).append(_decode(raw, _charset(part)))
 
 
-# ------------------------------------------------------------------ login (bay auth gmail)
+# ------------------------------------------------------------------ login (bay auth gmail-api)
 def pkce() -> tuple[str, str]:
     """(code_verifier, S256 code_challenge), RFC 7636."""
     verifier = _rand.token_urlsafe(64)
@@ -774,7 +774,7 @@ def wait_for_code(server, state: str, timeout_s: float) -> str:
             raise ConnectorError(f"Google did not grant access ({got['error']})")
         if got.get("code"):
             return got["code"]
-    raise ConnectorError(f"no answer from the browser within {int(timeout_s)}s; run `bay auth gmail` again")
+    raise ConnectorError(f"no answer from the browser within {int(timeout_s)}s; run `bay auth gmail-api` again")
 
 
 def loopback_server(port: int = 0):
@@ -835,7 +835,7 @@ def login(http, client_id: str, client_secret: str, *, open_browser, timeout_s: 
         raise ConnectorError(f"Google granted {sorted(granted) or 'no scopes'}, not only {SCOPE}; nothing was stored")
     if not body.get("refresh_token"):
         raise ConnectorError("Google returned no refresh token; remove agentbay's access at "
-                             "https://myaccount.google.com/permissions and run `bay auth gmail` again")
+                             "https://myaccount.google.com/permissions and run `bay auth gmail-api` again")
     vault.remember(body["refresh_token"])
     return body
 
@@ -844,6 +844,22 @@ def account_of(http, access_token: str) -> str | None:
     """The signed-in address (users.getProfile), to confirm the login works."""
     r = http.request("GET", f"{API}/profile", headers={"Authorization": f"Bearer {access_token}"})
     return (r.json() or {}).get("emailAddress") if r.status == 200 else None
+
+
+def cli_login(ctx) -> None:
+    """The connector's declared `login` entry, run by `bay auth gmail-api` (interactive terminal only). ctx gives
+    this connector's declared secrets through the env's provider, an Http limited to its hosts, and the browser."""
+    cid, csec = ctx.secret(CLIENT_ID), ctx.secret(CLIENT_SECRET)
+    if not cid or not csec:
+        raise ConnectorError(f"store your Google OAuth client first (a 'Desktop app' client in your Google Cloud "
+                             f"project): `bay secret set {CLIENT_ID}` and `bay secret set {CLIENT_SECRET}`")
+    body = login(ctx.http, cid, csec, open_browser=ctx.open_browser, say=ctx.say)
+    if not ctx.store_secret(REFRESH_TOKEN, body["refresh_token"]):
+        raise ConnectorError(f"secrets provider '{ctx.provider}' cannot store {REFRESH_TOKEN}; use provider keychain (macOS)")
+    who = account_of(ctx.http, body["access_token"])
+    ctx.say(f"stored {REFRESH_TOKEN} in {ctx.provider}" + (f"; signed in to Gmail as {who} (read-only)" if who else ""))
+    ctx.say("Google expires this login after 7 days while the OAuth app is in Testing: when a sync is blocked, run "
+            "`bay auth gmail-api` again.")
 
 
 def create(ctx) -> GmailApi:

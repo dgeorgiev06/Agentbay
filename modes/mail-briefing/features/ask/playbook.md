@@ -27,5 +27,5 @@ An `Answer`: `{answer, citations, confidence, coverage}`.
 ## Failure handling
 - Nothing relevant stored: answer "The stored messages do not cover this" with `confidence: none` and empty citations.
 - A query is refused or times out: the error says what to change; fix the SQL and retry.
-- The source is blocked (expired login): answer from what is stored and say that newer mail is missing until `bay auth gmail` is run (the call ends `partial`).
+- The source is blocked (expired login): answer from what is stored and say that newer mail is missing until the `bay auth <connector>` command the reason names is run (the call ends `partial`).
 - Question outside the lookback: suggest a wider `since`, capped by `lookbackMax`.

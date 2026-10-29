@@ -447,7 +447,7 @@ def test_invalid_grant_blocks_with_the_one_command_and_never_crashes():
     assert len(st2.query()["items"]) == 4                                           # stored mail stays readable
     state = json.loads((p / ".agentbay/data/mail/mail-briefing/state.json").read_text())
     assert all(c.get("cursor") == "5000" for c in state["cursors"].values())         # cursors kept
-    fake.token_error = None                                                          # after `bay auth gmail`
+    fake.token_error = None                                                          # after `bay auth gmail-api`
     st3, _ = store(fake, INBOX, p=p)
     assert st3.sync()["stopped"] is None and "blocked" not in st3.status() and st3.status()["stale"] is False
 
@@ -553,7 +553,7 @@ def test_a_broader_grant_is_refused():
     assert out["items"] == [] and "more than gmail.readonly" in out["blocked"]
 
 
-# ------------------------------------------------------------------ login (bay auth gmail)
+# ------------------------------------------------------------------ login (bay auth gmail-api)
 def test_login_uses_pkce_a_loopback_redirect_and_only_the_readonly_scope():
     gm = sys.modules[type(make(FakeGmail(NOW))).__module__]
     seen = {}
@@ -590,6 +590,46 @@ def test_login_uses_pkce_a_loopback_redirect_and_only_the_readonly_scope():
         raise AssertionError("expected ConnectorError")
     except connect.ConnectorError as e:
         assert "nothing was stored" in str(e)
+
+
+def test_cli_login_is_the_declared_entry_and_stores_the_refresh_token():
+    gm = sys.modules[type(make(FakeGmail(NOW))).__module__]
+    assert yaml.safe_load((KIT / "connectors/gmail-api/connector.yaml").read_text())["spec"]["login"] == "cli_login"
+
+    def api(method, url, headers, body):
+        if url.endswith("/token"):
+            return jr({"access_token": "ya29.CLI", "refresh_token": "1//CLI-REFRESH", "scope": SCOPE})
+        return jr({"emailAddress": "me@example.com"})
+
+    def browser(url):
+        q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
+        redirect = f"{q['redirect_uri']}/?state={q['state']}&code=4/CODE&scope={urllib.parse.quote(SCOPE)}"
+        threading.Thread(target=lambda: urllib.request.urlopen(redirect, timeout=5).read(), daemon=True).start()
+
+    class Ctx:
+        provider, said, stored = "mem", [], {}
+        http = connect.Http(["oauth2.googleapis.com", "gmail.googleapis.com"], api, "test")
+        open_browser = staticmethod(browser)
+
+        def say(self, m):
+            self.said.append(m)
+
+        def secret(self, name):
+            return SECRETS.get(name)
+
+        def store_secret(self, name, value):
+            self.stored[name] = value
+            return True
+
+    ctx = Ctx()
+    gm.cli_login(ctx)
+    assert ctx.stored == {"GMAIL_REFRESH_TOKEN": "1//CLI-REFRESH"} and "me@example.com" in ctx.said[-2]
+    ctx.secret = lambda name: None
+    try:
+        gm.cli_login(ctx)
+        raise AssertionError("expected ConnectorError")
+    except connect.ConnectorError as e:
+        assert "bay secret set GMAIL_CLIENT_ID" in str(e)
 
 
 def test_login_ignores_a_redirect_with_another_state_and_keeps_waiting():

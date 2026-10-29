@@ -21,8 +21,8 @@
   improve decide <id> approve|defer|wontfix   record your decision on a backlog item (approve: terminal only)
   improve weekly [--since 7d]                 scan + audit + triage + backlog; cron it weekly
   secret set <NAME>      store a secret in the keychain (value read from stdin, never echoed)
-  auth gmail             sign in to Gmail (read-only) in your browser; stores GMAIL_REFRESH_TOKEN (first login,
-                         and again whenever a sync says the login expired: weekly for an app in Testing)
+  auth <connector>       run a connector's declared login (e.g. a browser sign-in that stores its token);
+                         interactive terminal only
 
   task new | status | log | note | reclaim     ledger
   note <ref> "text" --instruction              record a mid-run instruction change (read by improve.scan)
@@ -409,47 +409,83 @@ def cmd_secret(args):
     print(f"stored {args.name} in {args.provider}")
 
 
+class LoginContext:
+    """What a connector's `login` entry gets from `bay auth <connector>`: its own declared secrets (read and
+    store, through the env's provider), an Http limited to its declared hosts that the env allows, the browser
+    and the terminal. Nothing else."""
+
+    def __init__(self, conn, env, prov, http, open_browser, say=print):
+        self.connector, self.env, self.http, self.open_browser, self.say = conn.name, env.name, http, open_browser, say
+        self._prov = prov
+        self._declared = set(conn.spec.get("needs", {}).get("secrets", []))
+        self.provider = prov.name
+
+    def _check(self, name: str) -> None:
+        if name not in self._declared:
+            raise vault.SecretError(f"connector {self.connector} does not declare secret {name} (needs.secrets)")
+
+    def secret(self, name: str) -> str | None:
+        self._check(name)
+        v = self._prov.get(name)
+        if v:
+            vault.remember(v)
+        return v
+
+    def store_secret(self, name: str, value: str) -> bool:
+        self._check(name)
+        return self._prov.set(name, value)
+
+
+def _login_env(s, conn, name: str | None):
+    """The env to log in through: --env, else the one env that binds the connector."""
+    def binds(env) -> bool:
+        for v in (env.spec.get("bind") or {}).values():
+            vals = v if isinstance(v, list) else [v] if isinstance(v, str) else []
+            if conn.name in vals:
+                return True
+        return False
+    envs = s.kit.docs["Environment"]
+    if name:
+        if name not in envs:
+            _die(f"✗ unknown env '{name}'")
+        return envs[name]
+    found = [e for e in envs.values() if binds(e)]
+    if len(found) != 1:
+        which = ", ".join(e.name for e in found) or "none"
+        _die(f"✗ {len(found)} envs bind connector {conn.name} ({which}); name one with --env")
+    return found[0]
+
+
 def cmd_auth(args):
-    """`bay auth gmail`: the OAuth installed-app login (PKCE, loopback redirect on 127.0.0.1, gmail.readonly).
-    Interactive terminal only, like `secret set`: an agent can neither start a login nor replace the token."""
+    """`bay auth <connector>`: runs the connector's declared `login` entry (e.g. an OAuth browser login that stores
+    a refresh token). Interactive terminal only, like `secret set`: an agent can neither start a login nor replace
+    a token."""
     import webbrowser
     from bay import connect
     if not sys.stdin.isatty():
-        _die("✗ bay auth gmail needs an interactive terminal (stdin is not a TTY) and your browser; run it yourself "
-             "in a terminal.")
+        _die(f"✗ bay auth {args.connector} needs an interactive terminal (stdin is not a TTY) and your browser; "
+             f"run it yourself in a terminal.")
     s = _system(args)
-    env = s.kit.docs["Environment"].get("local-mail")
-    conn = s.kit.get("Connector", "gmail-api")
-    if env is None or conn is None:
-        _die("✗ env local-mail or connector gmail-api is missing from this kit")
+    conn = s.kit.get("Connector", args.connector)
+    if conn is None:
+        _die(f"✗ unknown connector '{args.connector}' (`bay ls` lists them)")
+    entry = conn.spec.get("login")
+    if not entry:
+        have = sorted(c.name for c in s.kit.docs["Connector"].values() if c.spec.get("login"))
+        _die(f"✗ connector {conn.name} declares no `login` entry (connectors with one: {', '.join(have) or 'none'})")
+    env = _login_env(s, conn, args.env)
     mod = connect._load_module(conn)
-    prov = connect.secrets_provider(s, env)
-    try:
-        cid, csec = prov.get(mod.CLIENT_ID), prov.get(mod.CLIENT_SECRET)
-    except vault.SecretError as e:
-        _die(f"✗ {e}")
-    if not cid or not csec:
-        _die(f"✗ store your Google OAuth client first (a 'Desktop app' client in your Google Cloud project): "
-             f"`bay secret set {mod.CLIENT_ID}` and `bay secret set {mod.CLIENT_SECRET}`")
-    vault.remember(cid)
-    vault.remember(csec)
-    allow = [h for h in ("oauth2.googleapis.com", "gmail.googleapis.com")
+    fn = getattr(mod, entry, None)
+    if not callable(fn):
+        _die(f"✗ connector {conn.name}: {conn.spec['entry']} has no function {entry} (its declared `login`)")
+    allow = [h for h in conn.spec.get("needs", {}).get("network", [])
              if connect.model.host_allowed(h, env.spec.get("network", {}).get("allow", []))]
-    http = connect.Http(allow, who="bay auth gmail")
+    http = connect.Http(allow, who=f"bay auth {conn.name}")
+    ctx = LoginContext(conn, env, connect.secrets_provider(s, env), http, webbrowser.open)
     try:
-        body = mod.login(http, cid, csec, open_browser=webbrowser.open)
-    except connect.ConnectorError as e:
+        fn(ctx)
+    except (connect.ConnectorError, vault.SecretError) as e:
         _die(f"✗ {e}")
-    try:
-        ok = prov.set(mod.REFRESH_TOKEN, body["refresh_token"])
-    except vault.SecretError as e:
-        _die(f"✗ {e}")
-    if not ok:
-        _die(f"✗ secrets provider '{prov.name}' cannot store {mod.REFRESH_TOKEN}; use provider keychain (macOS)")
-    who = mod.account_of(http, body["access_token"])
-    print(f"stored {mod.REFRESH_TOKEN} in {prov.name}" + (f"; signed in to Gmail as {who} (read-only)" if who else ""))
-    print("Google expires this login after 7 days while the OAuth app is in Testing: when a sync is blocked, run "
-          "`bay auth gmail` again.")
 
 
 # ------------------------------------------------------------------ ledger
@@ -608,7 +644,8 @@ def main(argv=None):
     se = sub.add_parser("secret"); se.add_argument("action", choices=["set"]); se.add_argument("name")
     se.add_argument("--provider", default="keychain"); se.set_defaults(fn=cmd_secret)
     au = sub.add_parser("auth", help="sign in to a source in your browser (interactive terminal only)")
-    au.add_argument("source", choices=["gmail"]); au.set_defaults(fn=cmd_auth)
+    au.add_argument("connector"); au.add_argument("--env", help="env to log in through (default: the one binding it)")
+    au.set_defaults(fn=cmd_auth)
 
     im = sub.add_parser("improve", help="improve backlog: decide items, run the weekly pass")
     ims = im.add_subparsers(dest="action", required=True)

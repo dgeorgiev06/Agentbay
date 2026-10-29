@@ -135,7 +135,7 @@ message is read again with its full label set, at any age, so the store keeps ex
 changes to other messages are read only when they can bring one into scope. When Gmail no longer has the
 history the store re-lists its window. Only from/to/in/has/since go to Gmail search, because a source may return
 more than the local matcher keeps but never less. An expired or missing login makes the source `blocked` with
-the one command to run, `bay auth gmail` (an interactive-terminal OAuth login with PKCE and a loopback
+the one command to run, `bay auth gmail-api` (an interactive-terminal OAuth login with PKCE and a loopback
 redirect); a digest or ask then goes on with the stored mail and ends `partial`, the gap in its coverage. Attachment text (docx, txt, csv, md) is
 extracted in a separate `python3 -I` process fed on stdin, with a timeout and memory, CPU and file-size
 limits, under size and text caps (docx XML must be UTF-8 and is parsed with expat, which refuses any DTD or

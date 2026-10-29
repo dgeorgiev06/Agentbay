@@ -64,6 +64,11 @@
           "type": "string",
           "description": "Python file in the connector folder exposing create(ctx)."
         },
+        "login": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "Function in `entry` that `bay auth <connector>` calls (interactive terminal only) with a login context: the connector's declared secrets via the env's provider (secret, store_secret), an Http limited to its declared hosts, open_browser and say."
+        },
         "source": {
           "type": "string",
           "description": "Value stamped on every item's `source` by this items.source connector (item ids are <source>:<extId>)."

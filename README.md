@@ -72,7 +72,7 @@ modes:
 it can read mail, never send, label, move or delete it. Attachment text is extracted for docx, txt, csv and md
 (PDFs and other files are kept as name, type and size only).
 
-**Requirement:** `bay auth gmail` stores the login in the **macOS keychain** (secrets provider `keychain`, the
+**Requirement:** `bay auth gmail-api` stores the login in the **macOS keychain** (secrets provider `keychain`, the
 default on macOS). It does not work with the `env` provider or on another OS: those cannot store the refresh
 token it receives.
 
@@ -86,7 +86,7 @@ token it receives.
    - **Data access:** add the scope `https://www.googleapis.com/auth/gmail.readonly`, and only that one.
    - **Clients:** create a client of application type **Desktop app**. Store its id and secret:
      `./bay.sh secret set GMAIL_CLIENT_ID` and `./bay.sh secret set GMAIL_CLIENT_SECRET`.
-3. Sign in: `./bay.sh auth gmail` (or `.agentbay/bay auth gmail` in a built project), in your own terminal. It
+3. Sign in: `./bay.sh auth gmail-api` (or `.agentbay/bay auth gmail-api` in a built project), in your own terminal. It
    opens your browser, receives Google's answer on `127.0.0.1` and stores `GMAIL_REFRESH_TOKEN` in the keychain.
 4. Remove `local-mail: local-mail-offline` from the `envs:` line of agentbay.config.yaml, set your selectors
    under `modes.mail-briefing` (see agentbay.config.example.yaml: the first sync reads the last 30 days, up to
@@ -94,8 +94,8 @@ token it receives.
    rebuild.
 
 **Weekly re-login:** Google expires the login of an app in Testing after 7 days. `mail-briefing.sync` then ends
-`blocked` with the reason and the one command to run, `bay auth gmail`. A digest or question still runs on the
-stored mail: the call ends `partial`, its coverage note says Gmail was not read and names `bay auth gmail`, and
+`blocked` with the reason and the one command to run, `bay auth gmail-api`. A digest or question still runs on the
+stored mail: the call ends `partial`, its coverage note says Gmail was not read and names `bay auth gmail-api`, and
 the status stays `stale` until you sign in again.
 
 ## Folder map
@@ -134,7 +134,7 @@ tests/           python3 tests/run.py (connector tests live next to each connect
 | `bay mode\|feature\|connector\|env new <name>` | scaffold (same templates as `forge.create`) |
 | `bay improve weekly`, `bay improve decide <id> approve\|defer\|wontfix` | weekly improve pass; your decision on a backlog item |
 | `bay secret set <NAME>` | store a secret (read from your terminal, never echoed) |
-| `bay auth gmail` | sign in to Gmail in your browser (read-only scope); again whenever a sync says the login expired |
+| `bay auth gmail-api` | sign in to Gmail in your browser (read-only scope); again whenever a sync says the login expired |
 
 Run them as `./bay.sh <command>` in the kit, or `.agentbay/bay <command>` in a built project.
 

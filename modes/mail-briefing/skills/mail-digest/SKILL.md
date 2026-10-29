@@ -24,5 +24,5 @@ description: Turn stored email threads into a grounded mail digest (needs reply,
 6. Citations are message ids (`<source>:<extId>`), copied exactly. Never cite an id you did not read.
 7. Never repeat a secret, password, token or one-time code, even a scrubbed placeholder.
 8. Copy `previous.gather.coverage` to `coverage`. If `coverage.complete` is false, put `coverage.note` in `notes`
-   (a blocked source means the user must run `bay auth gmail`).
+   (a blocked source means the user must run the `bay auth <connector>` command its reason names).
 9. Return only the Digest JSON and submit it with the plan's `submit` command.

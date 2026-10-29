@@ -47,6 +47,7 @@ def test_mail_briefing_extends_briefing_and_places_roles_in_local_mail():
                                                                       "reviewer": "local-mail"}
     assert m.roles == {"lead": "local-mail-offline", "analyst": "local-mail-offline", "reviewer": "local-mail-offline"}
     assert m.config["lookback"] == "30d" and m.config["selectors"] == SELS and m.config["important"] == []
+    assert "important" not in s.modes["feed-briefing"].config                  # mail-only setting, not shared
     dig = m.features["digest"]
     assert [st.id for st in dig.steps] == ["refresh", "gather", "digest", "review"]
     assert dig.steps[1].run == "items.store/v1.threads" and dig.out_type == "Digest"

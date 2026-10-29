@@ -230,7 +230,8 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
   - `attachments_fts` (FTS5 over attachment name and text, kept by triggers).
 
   Internal state is `<mode>/state.json` (0600, never opened by agents): cursors per
-  `<connector>|<native query>`, coverage, budget, deleted, checked, and the selectors and sources last applied.
+  `<connector>|<native query>` (`from` is what was fetched; `covers` is what coverage reports, the window
+  start when every selector of the query has its own `since`), coverage, budget, deleted, checked, and the selectors and sources last applied.
 
   Without FTS5 the store falls back to LIKE matching, and `bay validate` warns.
 - **Agent SQL** (`bay/sqlsandbox.py`):

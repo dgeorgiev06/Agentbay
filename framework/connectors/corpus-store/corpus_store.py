@@ -317,6 +317,8 @@ class _Query:
     have_from: datetime | None
     incremental: bool
     mode: str
+    window: datetime | None = None    # the source's window start; differs from `start` when every selector of
+                                      # the query has its own `since` (items before it are out of scope anyway)
 
 
 def _query_request(cur: dict, native: dict, group: list[dict], ids: list[str], start_src: datetime, remaining: int,
@@ -340,7 +342,7 @@ def _query_request(cur: dict, native: dict, group: list[dict], ids: list[str], s
         req["cursor"] = cur["cursor"]
     else:
         req["since"] = iso(start)
-    return _Query(req, start, have_from, incremental, mode)
+    return _Query(req, start, have_from, incremental, mode, start_src)
 
 
 class CorpusStore:
@@ -496,12 +498,12 @@ class CorpusStore:
         return cov
 
     def _overall(self, state: dict) -> dict:
-        """Coverage every bound source query can vouch for: latest `from`, earliest `to`."""
+        """Coverage every bound source query can vouch for: latest `covers` (else `from`), earliest `to`."""
         names = set(self.ctx.sources)
         curs = [c for k, c in state["cursors"].items() if not names or k.split("|", 1)[0] in names]
         if not curs or any(not c.get("from") for c in curs):
             return {"from": None, "to": None}
-        return {"from": max(c["from"] for c in curs), "to": min(c["to"] for c in curs)}
+        return {"from": max(c.get("covers") or c["from"] for c in curs), "to": min(c["to"] for c in curs)}
 
     def _budget(self, state: dict) -> dict:
         use = self._usage(state)
@@ -733,9 +735,10 @@ class CorpusStore:
         """Record the window this query now covers. A truncated fetch holds only [oldest fetched, now]
         (sources return newest first), and says which cap stopped it."""
         src_from = q.have_from if q.incremental else q.start
+        covers = min(src_from, q.window) if q.window and src_from else src_from   # `since` narrowing is no gap
         if res["truncated"]:
             got = res["items"]
-            src_from = min(parse_time(x["createdAt"], now) for x in got) if got else now
+            src_from = covers = min(parse_time(x["createdAt"], now) for x in got) if got else now
             rem_after, why_after = self._remaining(state, run.billed, run.max_items, self._cost(src))
             if rem_after <= 0:
                 run.stopped = (f"{why_after} cap reached during {name} sync" if why_after
@@ -744,6 +747,7 @@ class CorpusStore:
             else:
                 run.stopped = run.stopped or f"{name} stopped early; see warnings"
         cur["from"], cur["to"], cur["lastSync"] = iso(src_from), iso(now), iso(now)
+        cur["covers"] = iso(covers)          # what coverage reports; `from` is what was fetched (backfill decisions)
 
     def prune(self, olderThan=None, deletedIds=None) -> dict:
         now = self.ctx.now()
@@ -769,8 +773,9 @@ class CorpusStore:
         remaining = con.execute("SELECT count(*) FROM items").fetchone()[0]
         state["deleted"] = sorted(deleted)
         for cur in state["cursors"].values():
-            if cur.get("from") and cur["from"] < cutoff:
-                cur["from"] = cutoff
+            for k in ("from", "covers"):
+                if cur.get(k) and cur[k] < cutoff:
+                    cur[k] = cutoff
         state["coverage"] = self._overall(state)
         return {"removed": before - remaining, "remaining": remaining, "deleted": n_deleted,
                 "unmatched": scope["unmatched"], "unbound": scope["unbound"], "cutoff": cutoff}

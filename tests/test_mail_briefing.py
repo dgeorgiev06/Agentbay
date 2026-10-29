@@ -282,3 +282,16 @@ def test_attachments_and_their_full_text_rows_go_with_their_message():
     assert con.execute("SELECT count(*) FROM attachments_fts WHERE attachments_fts MATCH 'commitment'").fetchone()[0] == 0
     con.close()
     assert st.sql("SELECT count(*) FROM v_attachment_fts WHERE fts MATCH 'commitment'")["rows"] == [[0]]
+
+
+def test_a_selector_since_is_not_a_coverage_gap_and_dropping_it_backfills():
+    p = project()
+    news = [{"id": "news", "in": "Newsletters", "since": "7d"}]
+    out = store(p, news).sync(lookback="30d")
+    assert out["coverage"]["complete"] is True and out["coverage"]["from"] == "2026-09-27T12:00:00Z"
+    assert out["sources"]["fake-mail"]["queries"][0]["mode"] == "since"
+    st = store(p, news)
+    assert st.sync(lookback="30d")["sources"]["fake-mail"]["queries"][0]["mode"] == "cursor"
+    out = store(p, [{"id": "news", "in": "Newsletters"}]).sync(lookback="30d")     # the since is dropped
+    q = out["sources"]["fake-mail"]["queries"][0]
+    assert q["mode"] == "since" and out["coverage"]["complete"] is True             # re-reads the whole window

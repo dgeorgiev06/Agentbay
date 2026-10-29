@@ -68,6 +68,25 @@ def addr_matches(patterns, addr: str) -> bool:
     return any(_addr_match(p, [addr or ""]) for p in _vals(patterns))
 
 
+GMAIL_DOMAINS = ("gmail.com", "googlemail.com")
+
+
+def addr_key(addr) -> str | None:
+    """One mailbox's identity: lower case, without a +tag; for Gmail (gmail.com, googlemail.com) the dots of the
+    local part are ignored and googlemail.com is gmail.com. `Dana.Ruiz+work@GoogleMail.com` -> `danaruiz@gmail.com`.
+    Used to tell which messages are mine (the views' fromMe/toMe, SQL function addr_key)."""
+    if addr is None:
+        return None
+    a = str(addr).strip().lower()
+    local, at, domain = a.rpartition("@")
+    if not at or not local:
+        return a
+    local = local.split("+", 1)[0] or local
+    if domain in GMAIL_DOMAINS:
+        local, domain = local.replace(".", ""), "gmail.com"
+    return f"{local}@{domain}"
+
+
 def _container(v: str) -> str:
     v = _norm(v)
     for prefix in ("label:", "in:"):

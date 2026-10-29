@@ -1065,7 +1065,7 @@ class CorpusStore:
                 t = dict(r)
                 for k in ("participants", "senders", "matched"):
                     t[k] = json.loads(t[k] or "[]")
-                for k in ("lastFromMe", "lastToMe", "needsReply", "hasAttachments"):
+                for k in ("lastFromMe", "lastToMe", "lastBulk", "needsReply", "hasAttachments"):
                     t[k] = bool(t[k])
                 key = (t["source"], t["threadId"])
                 t["ids"] = [x for (x,) in con.execute(

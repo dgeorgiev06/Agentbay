@@ -146,7 +146,7 @@ spec:
         Email threads with activity in a window (last message at or after `since`), newest first, from the
         v_threads view: subject, participants, first and last date, message count, last sender, whether the
         last message is from me or addressed to me, `needsReply` (last message from someone else, addressed to
-        me), the selector ids its messages match, its message ids (oldest first), the start of the last
+        me, not bulk mail), the selector ids its messages match, its message ids (oldest first), the start of the last
         message and its attachments' metadata. `important` (sender patterns, the `from` matching rules) marks
         threads with a message from a matching sender.
       in:

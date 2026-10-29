@@ -225,6 +225,11 @@ def trim_quoted(text: str) -> str:
     return out or text.strip()
 
 
+def is_bulk(headers: dict[str, str]) -> bool:
+    """Bulk mail (lower-cased header names): a List-Unsubscribe header, or Precedence: bulk or list."""
+    return bool(headers.get("list-unsubscribe")) or headers.get("precedence", "").strip().lower() in ("bulk", "list")
+
+
 def text_kind(name: str, mime: str) -> tuple[str | None, str | None]:
     """(extractor kind, reason when none): docx and plain text are extracted; PDF and the rest are not."""
     n, m = (name or "").lower(), (mime or "").lower().split(";")[0].strip()
@@ -644,7 +649,7 @@ class GmailApi:
             "threadId": str(m.get("threadId") or m["id"]),
             "from": addr.lower(), "to": to, "cc": cc, "subject": subject,
             "messageId": hdr.get("message-id") or None, "inReplyTo": hdr.get("in-reply-to") or None,
-            "hasAttachments": bool(atts), "attachments": atts,
+            "hasAttachments": bool(atts), "attachments": atts, "bulk": is_bulk(hdr),
         }
         if account:
             item["account"] = account

@@ -112,8 +112,7 @@ def test_offline_sync_digest_and_ask():
     out = d.use("analyst--mail-briefing", "items.store/v1.sql",
                 {"sql": "SELECT id, sender, needsReply FROM v_threads t JOIN v_email e ON e.id = t.lastId "
                         "WHERE t.needsReply = 1 ORDER BY id"})
-    assert [r_[0] for r_ in out["rows"]] == ["fake-mail:m003", "fake-mail:m004", "fake-mail:m005",
-                                                 "fake-mail:m006"]
+    assert [r_[0] for r_ in out["rows"]] == ["fake-mail:m003", "fake-mail:m004", "fake-mail:m006"]   # m005: bulk
 
 
 def test_two_modes_on_separate_envs_keep_separate_stores_and_units():

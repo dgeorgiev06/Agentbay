@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agentbay/data/email/v1",
   "title": "email/v1",
-  "description": "item/v1 kind extension for email (Gmail, ...): kind `email`. The envelope carries the subject (`title`), body (`text`, quoted reply chains trimmed), labels and threadId; this adds the addresses, message headers and attachments. Addresses are lower-case bare addresses. `account` is the mailbox the message was read from (how the views know which messages are from or to me). An attachment's `text` (extracted text, secret-scrubbed) is stored in the store's attachments table and read through v_attachments; get/query return attachment metadata only.",
+  "description": "item/v1 kind extension for email (Gmail, ...): kind `email`. The envelope carries the subject (`title`), body (`text`, quoted reply chains trimmed), labels and threadId; this adds the addresses, message headers and attachments. Addresses are lower-case bare addresses. `account` is the mailbox the message was read from (how the views know which messages are from or to me; addresses are compared with addr_key: case, +tags and Gmail dots ignored). An attachment's `text` (extracted text, secret-scrubbed) is stored in the store's attachments table and read through v_attachments; get/query return attachment metadata only.",
   "allOf": [{ "$ref": "item/v1" }],
   "required": ["from", "to", "hasAttachments"],
   "properties": {
@@ -15,6 +15,7 @@
     "inReplyTo": { "type": ["string", "null"], "description": "RFC 5322 In-Reply-To header." },
     "account": { "type": "string", "description": "The mailbox address this message was read from." },
     "hasAttachments": { "type": "boolean" },
+    "bulk": { "type": "boolean", "description": "Bulk mail: the message has a List-Unsubscribe header, or Precedence: bulk or list (newsletters, notifications). A thread whose last message is bulk never needs a reply." },
     "attachments": {
       "type": "array",
       "items": {

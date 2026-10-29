@@ -28,7 +28,7 @@ spec:
     type: object
     additionalProperties: false
     properties:
-      fixture: { type: string, description: "Path (relative to the project) of a JSON list of messages: {id, threadId, from, fromName?, to, cc?, subject, text, ageHours, labels, messageId?, inReplyTo?, attachments?}." }
+      fixture: { type: string, description: "Path (relative to the project) of a JSON list of messages: {id, threadId, from, fromName?, to, cc?, subject, text, ageHours, labels, messageId?, inReplyTo?, attachments?, bulk?}." }
       account: { type: string, description: "The mailbox address (me). Default me@example.com." }
       deleted: { type: array, items: { type: string }, description: "Message ids to report deleted." }
       removed: { type: array, items: { type: string }, description: "Message ids to report removed (trash, spam)." }

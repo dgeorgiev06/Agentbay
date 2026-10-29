@@ -178,7 +178,8 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
 
   Kind extensions add fields, using `allOf` item/v1 and `unevaluatedProperties: false`. `post/v1` adds `lang`
   and `metrics`. `email/v1` adds `from`, `to[]`, `cc[]` (lower-case addresses), `subject`, `messageId`,
-  `inReplyTo`, `account` (the mailbox it was read from: how the views know "me"), `hasAttachments` and
+  `inReplyTo`, `account` (the mailbox it was read from: how the views know "me"), `bulk` (List-Unsubscribe, or
+  Precedence: bulk or list; such a thread never needs a reply), `hasAttachments` and
   `attachments[] {name, mime, size, textChars, reason?, text?}`; `text` travels from the source to the store
   only and is read through `v_attachments`. The store validates each item against `<kind>/v1` when that schema
   exists.
@@ -239,9 +240,11 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
   Without FTS5 the store falls back to LIKE matching, and `bay validate` warns.
 - **Agent SQL** (`bay/sqlsandbox.py`):
   - temp views over the store, which holds only the mode's scope: `v_items`, `v_posts`, `v_email` (one row per
-    message: sender, toList, ccList, messageId, inReplyTo, account, fromMe, toMe, hasAttachments),
-    `v_threads` (one row per thread: subject, messages, firstDate, lastDate, lastId, lastSender, lastFromMe,
-    lastToMe, needsReply, participants, senders, matched), `v_attachments` (one row per attachment, `id` is
+    message: sender, toList, ccList, messageId, inReplyTo, account, fromMe, toMe, bulk, hasAttachments; "me"
+    compares addresses with the SQL function `addr_key`: lower case, no +tag, Gmail dots ignored, googlemail.com
+    = gmail.com), `v_threads` (one row per thread: subject, messages, firstDate, lastDate, lastId, lastSender,
+    lastFromMe, lastToMe, lastBulk, needsReply (last message from someone else, to me, not bulk), participants,
+    senders, matched), `v_attachments` (one row per attachment, `id` is
     its message's id) and the full-text views `v_fts` and `v_attachment_fts` (`WHERE fts MATCH '...' ORDER
     BY rank`, plus a `snippet` column);
   - `mode=ro` + `query_only`;

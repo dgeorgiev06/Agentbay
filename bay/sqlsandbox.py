@@ -31,6 +31,7 @@ import time
 from pathlib import Path
 
 from . import secretscan, vault
+from .selector import addr_key
 
 SCHEMA_VERSION = 2          # PRAGMA user_version of a corpus store; any other version is refused
 VIEWS = ("v_items", "v_posts", "v_email", "v_threads", "v_attachments", "v_fts", "v_attachment_fts")
@@ -51,7 +52,7 @@ abs avg bm25 char coalesce count date datetime glob group_concat hex highlight i
 json_array_length json_extract json_group_array json_group_object json_object json_quote json_type json_valid
 julianday length like likelihood lower ltrim match max min nullif round rtrim snippet strftime substr substring
 sum time total trim typeof unicode unixepoch upper replace -> ->> row_number rank dense_rank percent_rank
-cume_dist ntile lag lead first_value last_value nth_value
+cume_dist ntile lag lead first_value last_value nth_value addr_key
 """.split())
 # deliberately absent: load_extension, randomblob/zeroblob (memory), printf/format (width bombs), sqlite_*.
 
@@ -97,8 +98,9 @@ COLUMNS = {   # what describe tells agents; keep in step with view_sql()
         ("messageId", "TEXT", "RFC Message-ID header"), ("inReplyTo", "TEXT", "RFC In-Reply-To header"),
         ("account", "TEXT", "the mailbox the message was read from (me)"),
         ("hasAttachments", "INTEGER", "1 when it has attachments"), ("attachmentCount", "INTEGER", ""),
-        ("fromMe", "INTEGER", "1 when I sent it (label SENT, or sender = account)"),
-        ("toMe", "INTEGER", "1 when my address is in To or Cc"),
+        ("fromMe", "INTEGER", "1 when I sent it (label SENT, or sender = account, compared with addr_key)"),
+        ("toMe", "INTEGER", "1 when my address is in To or Cc (addr_key: case, +tags and Gmail dots ignored)"),
+        ("bulk", "INTEGER", "1 for bulk mail (a List-Unsubscribe header, or Precedence: bulk or list)"),
     ],
     "v_threads": [
         ("source", "TEXT", ""), ("threadId", "TEXT", "thread id; v_email.threadId"),
@@ -107,7 +109,8 @@ COLUMNS = {   # what describe tells agents; keep in step with view_sql()
         ("lastId", "TEXT", "id of the last message; cite it"), ("lastSender", "TEXT", "sender of the last message"),
         ("lastFromMe", "INTEGER", "1 when I sent the last message"),
         ("lastToMe", "INTEGER", "1 when the last message is addressed to me (To/Cc)"),
-        ("needsReply", "INTEGER", "1 when the last message is from someone else and addressed to me"),
+        ("lastBulk", "INTEGER", "1 when the last message is bulk mail (newsletters, notifications)"),
+        ("needsReply", "INTEGER", "1 when the last message is from someone else, addressed to me and not bulk"),
         ("participants", "JSON", "array of every from/to/cc address"), ("senders", "JSON", "array of sender addresses"),
         ("matched", "JSON", "selector ids any message matches"),
         ("hasAttachments", "INTEGER", ""), ("attachmentCount", "INTEGER", ""),
@@ -174,7 +177,7 @@ def _last(col: str) -> str:
 def email_view_sql(fts: bool) -> list[str]:
     """v_email (one row per message), v_threads (one row per thread), v_attachments and, with FTS5,
     v_attachment_fts. Only allowlisted functions: the authorizer checks the views' own expressions too."""
-    acct = "lower(json_extract(i.ext, '$.account'))"
+    acct = "addr_key(json_extract(i.ext, '$.account'))"
     out = [
         f"""CREATE TEMP VIEW v_email AS {_item_select()}, i.title AS subject,
             json_extract(i.ext, '$.from') AS sender, json_extract(i.ext, '$.to') AS toList,
@@ -183,17 +186,19 @@ def email_view_sql(fts: bool) -> list[str]:
             coalesce(json_extract(i.ext, '$.hasAttachments'), 0) AS hasAttachments,
             coalesce(json_array_length(i.ext, '$.attachments'), 0) AS attachmentCount,
             (EXISTS (SELECT 1 FROM json_each(i.labels) WHERE value = 'SENT')
-              OR lower(coalesce(json_extract(i.ext, '$.from'), '')) = coalesce({acct}, '')) AS fromMe,
-            (EXISTS (SELECT 1 FROM json_each(i.ext, '$.to') WHERE lower(value) = {acct})
-              OR EXISTS (SELECT 1 FROM json_each(i.ext, '$.cc') WHERE lower(value) = {acct})) AS toMe
+              OR addr_key(coalesce(json_extract(i.ext, '$.from'), '')) = coalesce({acct}, '')) AS fromMe,
+            (EXISTS (SELECT 1 FROM json_each(i.ext, '$.to') WHERE addr_key(value) = {acct})
+              OR EXISTS (SELECT 1 FROM json_each(i.ext, '$.cc') WHERE addr_key(value) = {acct})) AS toMe,
+            coalesce(json_extract(i.ext, '$.bulk'), 0) AS bulk
           FROM main.items i WHERE i.kind = 'email'""",
-        f"""CREATE TEMP VIEW v_threads AS SELECT t.*, (t.lastFromMe = 0 AND t.lastToMe = 1) AS needsReply FROM (
+        f"""CREATE TEMP VIEW v_threads AS SELECT t.*,
+              (t.lastFromMe = 0 AND t.lastToMe = 1 AND t.lastBulk = 0) AS needsReply FROM (
             SELECT e.source AS source, e.threadId AS threadId,
               (SELECT f.title FROM main.items f WHERE {_thread_rows('f')} ORDER BY f.created_at, f.ext_id LIMIT 1)
                 AS subject,
               count(*) AS messages, min(e.createdAt) AS firstDate, max(e.createdAt) AS lastDate,
               {_last('id')} AS lastId, {_last('sender')} AS lastSender,
-              {_last('fromMe')} AS lastFromMe, {_last('toMe')} AS lastToMe,
+              {_last('fromMe')} AS lastFromMe, {_last('toMe')} AS lastToMe, {_last('bulk')} AS lastBulk,
               (SELECT json_group_array(p) FROM (SELECT DISTINCT p FROM (
                   SELECT lower(f.author) AS p FROM main.items f WHERE {_thread_rows('f')}
                   UNION SELECT lower(j.value) FROM main.items f, json_each(f.ext, '$.to') j WHERE {_thread_rows('f')}
@@ -247,6 +252,7 @@ def connect_ro(path: Path) -> sqlite3.Connection:
         raise SqlError("the store is empty: run the mode's sync endpoint first")
     con = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, check_same_thread=False)
     try:
+        con.create_function("addr_key", 1, addr_key, deterministic=True)
         cur = con.execute("PRAGMA hard_heap_limit").fetchone()[0]
         if not cur or cur > HEAP_BYTES:
             con.execute(f"PRAGMA hard_heap_limit = {HEAP_BYTES}")

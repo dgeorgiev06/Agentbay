@@ -698,6 +698,32 @@ def test_views_threads_and_needs_reply_from_gmail():
     assert all("text" not in x for x in got["attachments"]) and got["attachments"][0]["textChars"] > 0
 
 
+def test_me_is_matched_on_normalized_gmail_addresses_and_bulk_mail_never_needs_a_reply():
+    assert selmod.addr_key("Dana.Ruiz+work@GoogleMail.com") == "danaruiz@gmail.com"
+    assert selmod.addr_key("d.r+x@Example.COM") == "d.r@example.com"              # dots matter outside Gmail
+    fake = FakeGmail(NOW)
+    fake.account = "meself@gmail.com"
+    a = new_msg("19g0001", hours=3, frm="Ana <ana@kiln.fi>")
+    a["threadId"], a["headers"]["To"] = "ta", "Me <Me.Self+work@GoogleMail.com>"
+    b = new_msg("19g0002", labels=("Label_1",), hours=2, frm="Me <me.self@gmail.com>")   # sent elsewhere, no SENT
+    b["threadId"], b["headers"]["To"] = "tb", "ana@kiln.fi"
+    c = new_msg("19g0003", hours=1, frm="News <news@list.example>")
+    c["threadId"], c["headers"]["To"] = "tc", "meself@gmail.com"
+    c["headers"]["List-Unsubscribe"] = "<mailto:u@list.example>"
+    d = new_msg("19g0004", hours=1, frm="Bot <bot@ci.example>")
+    d["threadId"], d["headers"]["To"], d["headers"]["Precedence"] = "td", "meself@gmail.com", "Bulk"
+    for m in (a, b, c, d):
+        fake.messages[m["id"]] = m
+    st, _ = store(fake, [{"id": "all", "in": ["inbox", "label:Work"]}])
+    st.sync()
+    e = {r[0]: r[1:] for r in st.sql("SELECT extId, fromMe, toMe, bulk FROM v_email WHERE extId LIKE '19g%'")["rows"]}
+    assert e == {"19g0001": [0, 1, 0], "19g0002": [1, 0, 0], "19g0003": [0, 1, 1], "19g0004": [0, 1, 1]}
+    t = {x["threadId"]: x for x in st.threads(since="30d")["threads"]}
+    assert t["ta"]["needsReply"] and not t["tb"]["needsReply"]
+    assert t["tc"]["lastBulk"] and not t["tc"]["needsReply"] and not t["td"]["needsReply"]
+    assert st.sql("SELECT addr_key('A.B+c@gmail.com')")["rows"] == [["ab@gmail.com"]]
+
+
 def test_prompt_injection_in_a_body_stays_data():
     fake = FakeGmail(NOW)
     st, _ = store(fake, INBOX)

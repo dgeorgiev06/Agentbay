@@ -349,7 +349,7 @@ The slice-and-handoff protocol and quiet checks go into the forge mode's playboo
 
 1. **Skills are namespaced per mode.** Skills live in a mode's folder, so they must not leak out of it.
    - Today every mode's skills are written into one global `.claude/skills/` by name, and the last mode wins. That is how mail-briefing's skills overwrote feed-briefing's (#9 review, N-2).
-   - The build writes them as `<mode>:<skill>`.
+   - The build writes them as `<mode>--<skill>` (Claude Code skill names allow only lowercase letters, digits and hyphens).
    - A child mode's skill of the same name overrides its parent's, for that child only.
    - Lint fails on any remaining clash.
 2. **Adapters get their own folder.** Runtime adapters move from `bay/adapters/` (inside the kernel's folder) to a top-level `adapters/`, discovered like the other extensions. A new runtime is then a new folder, with no kernel edit.
@@ -401,7 +401,7 @@ deterministic check. forge.extend's `check` step runs all of them, and so do `fo
 | B-5 | Contracts are honoured: shape and behaviour | schemas (lint) + contract tests for every discovered instance | every build, `check` step |
 | B-6 | Contracts are versioned: `reads:`/`produces:`/`needs:`/`implements:` agree | lint | every build |
 | B-7 | No extension depends on another: modes never name connectors, connectors never name modes | lint (C-4, C-8) + an import scan of connector and mode code | every build |
-| B-8 | Skills stay in their mode and feature | build writes `<mode>:<skill>`; lint fails on a clash or on an undeclared skill reference | every build |
+| B-8 | Skills stay in their mode and feature | build writes `<mode>--<skill>` (Claude Code skill names allow only lowercase letters, digits and hyphens); lint fails on a clash or on an undeclared skill reference | every build |
 | B-9 | Least privilege per feature: a role step reaches only its feature's `uses:` | use shim at runtime; contract test calls an undeclared endpoint and expects a refusal | runtime, `check` step |
 | B-10 | No extension code on the read path: views are SQL only, functions from the fixed allowlist | sandbox view validation (authorizer) | every build |
 | B-11 | No hand-kept lists of extensions in core docs | `bay boundary` + doc-stale detector | `check` step |

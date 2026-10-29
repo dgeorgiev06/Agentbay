@@ -106,7 +106,7 @@ modes/           your modes: briefing (abstract base: sync, digest, ask, prune),
 envs/            your envs: local-feeds, local-feeds-offline, local-mail, local-mail-offline
 connectors/      your connectors: x-api (official X API v2), gmail-api (Gmail API, read-only), fake and
                  fake-mail (offline)
-interfaces/      items.source/v1, items.store/v1
+framework/interfaces/  items.source/v1, items.store/v1
 framework/       shipped with the kit, never edited by users:
   roles/ agents/   the five roles and the claude-code agent profile
   modes/           cos (Chief of Staff, project workflows), forge (create, extend), improve (findings backlog)

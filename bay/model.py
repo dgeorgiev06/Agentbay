@@ -275,7 +275,7 @@ class Kit:
             name = f"{meta['name']}/v{spec['version']}"
             want = f"{meta['name']}.v{spec['version']}.yaml"
             if f.name != want:
-                raise SpecError(f"{where}: interface {name} must live in interfaces/{want}")
+                raise SpecError(f"{where}: interface {name} must be in a file named {want}")
         else:
             name = meta["name"]
             expect = f.parent.name if f.name in ("mode.yaml", "connector.yaml") else f.stem

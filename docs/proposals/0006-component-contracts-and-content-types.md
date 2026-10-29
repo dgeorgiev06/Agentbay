@@ -13,9 +13,9 @@ touches:
   - { path: bay/adapters/, reason: adapters move to adapters/ (B-4), slice: 2 }
   - { path: bay/adapter.py, reason: the Adapter protocol and discovery by folder (no registry dict), slice: 2 }
   - { path: adapters/, reason: the new adapters folder, slice: 2 }
-  - { path: framework/interfaces/, reason: core interfaces live under framework/interfaces/ (B-4), slice: 2, planned: true }
-  - { path: interfaces/items.*, reason: items.* move to framework/interfaces/, slice: 2, planned: true }
-  - { path: bay/model.py, reason: discovery by folder; config schemas that extend; versioned reads/produces; feature.yaml, slice: 2, planned: true }
+  - { path: framework/interfaces/, reason: core interfaces live under framework/interfaces/ (B-4), slice: 2 }
+  - { path: interfaces/items.*, reason: items.* move to framework/interfaces/, slice: 2 }
+  - { path: bay/model.py, reason: discovery by folder; config schemas that extend; versioned reads/produces; feature.yaml, slice: 2 }
   - { path: bay/registry.py, reason: catalog lists discovered extensions, slice: 2, planned: true }
   - { path: bay/config.py, reason: "`bay config example` assembles per-extension config.example.yaml", slice: 2, planned: true }
   - { path: schemas/, reason: config schemas extend (slice 2), versioned contracts (slice 3), feature.yaml (slice 4), slice: 2, planned: true }

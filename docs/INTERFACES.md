@@ -29,7 +29,7 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN.md
 | 8 | **TaskEnvelope / Result** | `schemas/task.schema.json` | rarely; version-bump it |
 | 9 | **LedgerEvent** | `schemas/event.schema.json` | rarely; version-bump it |
 | 10 | **improve capabilities and findings** | `framework/interfaces/`, `schemas/data/improve.finding.v1.schema.json` | you add a detector source or finding field |
-| 11 | **Briefing: items, selectors, corpus store, read-only SQL** | `interfaces/items.*.yaml`, `schemas/data/`, `bay/selector.py`, `bay/sqlsandbox.py` | you add a source kind or a view |
+| 11 | **Briefing: items, selectors, corpus store, read-only SQL** | `framework/interfaces/items.*.yaml`, `schemas/data/`, `bay/selector.py`, `bay/sqlsandbox.py` | you add a source kind or a view |
 | 12 | **Conformance rules** | `framework/rules/conformance.yaml`, `schemas/conformance.schema.json` | you change what "fits the framework" means |
 
 ## 1. Mode and features

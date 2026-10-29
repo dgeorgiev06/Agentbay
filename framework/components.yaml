@@ -1,6 +1,6 @@
 # The component map (proposal 0006, Part A). Core components own paths and define contracts;
 # extensions are instances of a contract, each in its own folder (`at:`). `bay boundary` reads this map.
-# Paths are as they are today. `owns:` entries are path globs: a trailing `/` owns everything below it.
+# Core files live only under core `owns:` paths (B-4, checked by lint). `owns:` entries are path globs: a trailing `/` owns everything below it.
 components:
   kernel:            # loader, resolver, lint, registry, dispatcher, ledger, guard, CLI
     owns:
@@ -26,7 +26,7 @@ components:
       - framework/connectors/corpus-store/
       - bay/sqlsandbox.py
       - bay/selector.py
-      - interfaces/items.*   # moves in slice 2
+      - framework/interfaces/items.*
       - modes/briefing/
     contracts:
       contentType: { at: ["content-types/<name>/"], schema: schemas/content-type.schema.json, tests: tests/contracts/content_type.py }

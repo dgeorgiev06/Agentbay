@@ -41,7 +41,8 @@ spec:
           rematched: { type: integer, description: "Stored items re-tagged because the selectors changed." }
           outOfScope: { type: integer, description: "Stored items deleted because they left the mode's scope (their source is no longer bound, or no current selector matches them)." }
           spentUsd: { type: number, minimum: 0 }
-          stopped: { type: [string, "null"], description: "Why sync stopped early (budget cap), or null." }
+          stopped: { type: [string, "null"], description: "Why sync stopped early (budget cap, a blocked source), or null." }
+          blocked: { type: object, additionalProperties: { type: string }, description: "Sources that could not be read (an expired login): name -> reason naming the fix. Their cursors and items are kept; a refresh step then lets the call go on with what is stored (ending partial)." }
           sources: { type: object }
           budget: { type: object }
           coverage: { $ref: items.coverage/v1 }

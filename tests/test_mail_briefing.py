@@ -200,26 +200,67 @@ def test_removed_ids_leave_the_store_but_are_not_remembered():
     assert "fake-mail:m005" in {i["id"] for i in store(p2).query()["items"]}    # back from trash: stored again
 
 
-def test_a_blocked_source_keeps_cursors_and_reads_and_blocks_the_call():
+def _block(p, connector: str, reason: str) -> None:
+    cfgp = p / "agentbay.config.yaml"
+    cfg = yaml.safe_load(cfgp.read_text())
+    cfg.setdefault("connectors", {})[connector] = {"blocked": reason}
+    cfgp.write_text(yaml.safe_dump(cfg))
+
+
+def test_a_blocked_source_keeps_cursors_and_reads_and_digest_and_ask_go_on_partial():
     p = project()
     st = store(p)
     st.sync()
     before = json.loads((p / ".agentbay/data/mail/mail-briefing/state.json").read_text())["cursors"]
-    cfgp = p / "agentbay.config.yaml"
-    cfg = yaml.safe_load(cfgp.read_text())
-    cfg.update(fake_cfg(blocked="gmail-api: the Gmail login has expired; run `bay auth gmail`"))
-    cfgp.write_text(yaml.safe_dump(cfg))
+    _block(p, "fake-mail", "gmail-api: the Gmail login has expired; run `bay auth gmail`")
     st = store(p)
     out = st.sync()
     assert "bay auth gmail" in out["stopped"] and out["sources"]["fake-mail"]["blocked"]
+    assert "bay auth gmail" in out["blocked"]["fake-mail"]
     state = json.loads((p / ".agentbay/data/mail/mail-briefing/state.json").read_text())
     assert state["cursors"] == before and "fake-mail" in state["blocked"]
     s = st.status()
     assert s["stale"] is True and s["coverage"]["complete"] is False and "bay auth gmail" in s["coverage"]["note"]
     assert len(st.query()["items"]) == 6 and st.sql("SELECT count(*) FROM v_email")["rows"] == [[6]]
     d = dispatch.Dispatcher(system(p), p, clock=clock)
+    assert d.call("mail-briefing.sync", {})["status"] == "blocked"            # the sync endpoint itself: blocked
+    r = d.call("mail-briefing.digest", {"since": "7d"})                         # stale: the refresh runs, is blocked
+    assert r["status"] == "needs-agent" and r["next"]["step"] == "digest"      # ... and the digest reads what is stored
+    gather = r["next"]["previous"]["gather"]
+    assert len(gather["threads"]) == 4 and "bay auth gmail" in gather["coverage"]["note"]
+    assert gather["coverage"]["complete"] is False
+    digest = {"period": {"from": "2026-10-20T12:00:00Z", "to": "2026-10-27T12:00:00Z"}, "needsReply": [], "asks": [],
+              "groups": [], "attachments": [], "coverage": gather["coverage"],
+              "notes": "Gmail was not read: the login expired; run `bay auth gmail`. Stored mail only."}
+    r = d.submit(r["callId"], "digest", digest)
+    ids = [x["id"] for x in r["next"]["review"]["definitionOfDone"]] + [x["id"] for x in r["next"]["review"]["rules"]]
+    r = d.submit(r["callId"], "review", {"items": [{"id": i, "verdict": "pass", "evidence": "ok"} for i in ids]})
+    assert r["status"] == "partial" and "bay auth gmail" in r["stopped"]
+    r = d.call("mail-briefing.ask", {"question": "What did Dana ask for?"})
+    assert r["status"] == "needs-agent" and r["next"]["step"] == "answer"
+    ctx = r["next"]["previous"]["context"]
+    assert ctx["count"] == 6 and ctx["stale"] is True and "bay auth gmail" in ctx["coverage"]["note"]
+    answer = {"answer": "Dana asked for the withdrawal address (stored mail only; run `bay auth gmail`).",
+              "citations": ["fake-mail:m001"], "confidence": "medium", "coverage": ctx["coverage"]}
+    assert d.submit(r["callId"], "answer", answer)["status"] == "partial"
+
+
+def test_a_blocked_source_with_an_empty_store_blocks_digest_and_feed_briefing_behaves_the_same():
+    p = project()
+    _block(p, "fake-mail", "gmail-api: there is no Gmail login yet; run `bay auth gmail`")
+    d = dispatch.Dispatcher(system(p), p, clock=clock)
     r = d.call("mail-briefing.digest", {})
-    assert r["status"] == "blocked" and "bay auth gmail" in r["reason"]     # stale: the refresh runs and is blocked
+    assert r["status"] == "blocked" and "bay auth gmail" in r["reason"]       # nothing stored to read
+    p = project()
+    d = dispatch.Dispatcher(system(p), p, clock=clock)
+    assert d.call("feed-briefing.sync", {})["status"] == "done"
+    _block(p, "fake", "fake: the X login has expired; run `bay secret set X_REFRESH_TOKEN`")
+    d = dispatch.Dispatcher(system(p), p, clock=clock)
+    assert d.call("feed-briefing.sync", {})["status"] == "blocked"
+    r = d.call("feed-briefing.digest", {})
+    assert r["status"] == "needs-agent" and "X_REFRESH_TOKEN" in r["next"]["previous"]["gather"]["coverage"]["note"]
+    r = d.call("feed-briefing.ask", {"question": "anything on staking?"})
+    assert r["status"] == "needs-agent" and r["next"]["previous"]["context"]["stale"] is True
 
 
 # ------------------------------------------------------------------ schema v2, sandbox

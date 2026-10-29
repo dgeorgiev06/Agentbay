@@ -634,6 +634,8 @@ class CorpusStore:
                "outOfScope": scope["unbound"] + scope["unmatched"], "spentUsd": round(run.spent, 6),
                "stopped": run.stopped, "sources": run.sources, "budget": self._budget(state),
                "coverage": self.coverage(state, run.window_from)}
+        if state.get("blocked"):
+            out["blocked"] = {n: b["reason"] for n, b in sorted(state["blocked"].items())}
         if run.warnings:
             out["warnings"] = run.warnings
         return out

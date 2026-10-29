@@ -26,5 +26,6 @@ Bring the corpus store up to date with items from every source bound to items.so
 
 ## Failure handling
 - Budget cap with nothing fetched: status `blocked`, reason names the cap. Raise the cap in agentbay.config.yaml or wait for the next month.
-- Source error (auth, rate limit): the step fails or warns; nothing already stored is lost (the sync is one transaction). Re-run later.
+- Source blocked (an expired login): this sync ends `blocked` with the reason and the fix; the source's cursors and items are kept and status is `stale`. A digest or ask whose refresh step is blocked goes on with the stored items and ends `partial`, the gap in its coverage (unless nothing is stored yet: then it is `blocked` too).
+- Source error (rate limit, server): the step fails or warns; nothing already stored is lost (the sync is one transaction). Re-run later.
 - Selector a source cannot express: `bay validate` names the field; fix the selector.

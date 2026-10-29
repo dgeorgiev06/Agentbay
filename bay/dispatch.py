@@ -31,6 +31,15 @@ class CallError(Exception):
     """Bad input, missing grant, unknown target. Message says what to fix."""
 
 
+
+def _reads_stored(step, out: dict) -> bool:
+    """A refresh step (a sync run only when the store is stale: `when: stale > ...`) that could not read a
+    source because it is blocked (an expired login) does not stop the call when the store already holds items:
+    the later steps work on what is stored, the call ends `partial`, and the store's coverage names the gap and
+    its fix. A sync endpoint's own step, or a store that was never filled, still ends the call `blocked`."""
+    return bool(step.when and str(step.when).startswith("stale") and out.get("blocked")
+                and (out.get("coverage") or {}).get("from"))
+
 class Dispatcher:
     def __init__(self, system: model.System, project: Path, *, transport=None, provider=None, clock=None):
         self.sys, self.project = system.for_project(project), project
@@ -241,7 +250,7 @@ class Dispatcher:
             state["cost"]["usd"] = round(state["cost"]["usd"] + cost["usd"], 4)
         if isinstance(out, dict) and out.get("stopped"):
             state["stopped"] = out["stopped"]
-            if not out.get("billed"):
+            if not out.get("billed") and not _reads_stored(step, out):
                 state["status"] = "blocked"
                 state["result"] = {"reason": out["stopped"]}
         state["steps"][step.id] = out

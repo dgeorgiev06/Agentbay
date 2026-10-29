@@ -202,8 +202,10 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
   - `deleted`: gone at the source; the store deletes them and never stores them again.
   - `removed`: left the source's scope but may come back (Gmail trash, spam); deleted, not remembered.
   - `blocked`: nothing could be read (an expired login), with the command that fixes it. The store keeps that
-    source's cursors and items, records it in state.json, reports it as `stopped` (a sync that read nothing is
-    `blocked` in the dispatcher), and `status` reports `stale` and `blocked` with the gap in the coverage note.
+    source's cursors and items, records it in state.json, reports it as `stopped` and in sync's `blocked`, and
+    `status` reports `stale` and `blocked` with the gap in the coverage note. In the dispatcher a sync endpoint
+    that read nothing ends `blocked`; a refresh step (`when: stale > ...`) that is blocked lets the call go on
+    with the stored items (when there are any) and the call ends `partial`.
   - A connector that declares `exactLabels: true` sends each item's complete label set, so the store replaces
     the stored labels instead of adding to them.
 - **`items.store/v1`**: sync and prune run as dispatcher code steps, with effects network, spend, write /

@@ -135,14 +135,29 @@ def build(root: Path, kit: Path | None = None) -> Graph:
 def _concepts(g: Graph, kit: Path) -> None:
     from .. import model
     k = model.Kit(kit)
-    profile = k.profile()[1]                  # the agent profile that runs every role
     rel = lambda p: Path(p).resolve().relative_to(kit.resolve()).as_posix()   # noqa: E731
+    _concept_nodes(g, k, kit, rel)
+    profile = k.profile()[1]                  # the agent profile that runs every role
+    for name, d in k.docs["Mode"].items():
+        _mode(g, name, d, profile, rel)
+    _binding_edges(g, k, model.connectors_of)
+    _schema_ref_edges(g, k, kit)
+    _mention_edges(g)
+
+
+def _data_schemas(kit: Path):
+    """(node id, path) of each schemas/data/<name>.v<N>.schema.json."""
+    for p in sorted((kit / "schemas" / "data").glob("*.schema.json")):
+        base, _, ver = p.name.removesuffix(".schema.json").rpartition(".")
+        yield f"schema:{base}/{ver}", p
+
+
+def _concept_nodes(g: Graph, k, kit: Path, rel) -> None:
+    """Interfaces, data schemas, roles, agent profiles, envs, connectors and role skills."""
     for name, d in k.docs["Interface"].items():
         g.node(f"interface:{name}", "interface", name, rel(d.path))
-    for p in sorted((kit / "schemas" / "data").glob("*.schema.json")):
-        n = p.name.removesuffix(".schema.json")
-        base, _, ver = n.rpartition(".")
-        g.node(f"schema:{base}/{ver}", "schema", f"{base}/{ver}", rel(p))
+    for nid, p in _data_schemas(kit):
+        g.node(nid, "schema", nid.removeprefix("schema:"), rel(p))
     for kind, prefix in (("Role", "role"), ("Agent", "agent"), ("Environment", "env"), ("Connector", "connector")):
         for name, d in k.docs[kind].items():
             g.node(f"{prefix}:{name}", prefix, name, rel(d.path))
@@ -150,59 +165,70 @@ def _concepts(g: Graph, kit: Path) -> None:
         for sk in d.spec.get("skills", []):
             g.node(f"skill:{sk}", "skill", sk, rel(d.dir / "skills" / sk / "SKILL.md"))
             g.edge(f"role:{name}", f"skill:{sk}", "uses-skill")
-    for name, d in k.docs["Mode"].items():
-        g.node(f"mode:{name}", "mode", name, rel(d.path))
-        for sk in sorted((d.dir / "skills").glob("*/SKILL.md")):
-            g.node(f"skill:{sk.parent.name}", "skill", sk.parent.name, rel(sk))
-            g.edge(f"mode:{name}", f"skill:{sk.parent.name}", "mode-skill")
-        for t in sorted((d.dir / "types").glob("*.schema.json")):
-            tn = t.name.removesuffix(".schema.json")
-            g.node(f"type:{name}/{tn}", "type", tn, rel(t))
-        cfg = d.spec.get("config")
-        if cfg and (d.dir / cfg).exists():
-            props = (json.loads((d.dir / cfg).read_text()).get("properties") or {})
-            for key in props:
-                g.node(f"config:{name}.{key}", "config-key", key, rel(d.dir / cfg))
-        for rn, env in (d.spec.get("roles") or {}).items():
-            g.edge(f"mode:{name}", f"role:{rn}", "role")
-            if env:
-                g.edge(f"mode:{name}", f"env:{env}", "role-env")
-        g.edge(f"mode:{name}", f"agent:{profile}", "agent")
-        if d.spec.get("coordinator"):
-            g.edge(f"mode:{name}", f"role:{d.spec['coordinator']}", "coordinator")
-        for iface in d.spec.get("needs", []):
-            g.edge(f"mode:{name}", f"interface:{iface}", "needs")
-        for ep, e in d.spec["endpoints"].items():
-            eid = f"endpoint:{name}.{ep}"
-            g.node(eid, "endpoint", f"{name}.{ep}", rel(d.path))
-            g.edge(f"mode:{name}", eid, "endpoint")
-            for t in (e.get("in"), e.get("out")):
-                if t:
-                    g.edge(eid, f"type:{name}/{t}", "type")
-            if (e.get("review") or {}).get("role"):
-                g.edge(eid, f"role:{e['review']['role']}", "review")
-            for env in (e.get("roles") or {}).values():
-                g.edge(eid, f"env:{env}", "role-env")
-            for st in d.spec["workflows"].get(e["workflow"], []):
-                for env in (st.get("roles") or {}).values():
-                    g.edge(eid, f"env:{env}", "role-env")
-                if st.get("role"):
-                    g.edge(eid, f"role:{st['role']}", "step")
-                if st.get("out"):
-                    g.edge(eid, f"type:{name}/{st['out']}", "type")
-                if st.get("run"):
-                    g.edge(eid, f"interface:{st['run'].rsplit('.', 1)[0]}", "run")
-            if cfg:
-                for key in [n.split(".", 1)[1] for n in g.nodes if n.startswith(f"config:{name}.")]:
-                    if f"$config.{key}" in json.dumps(d.spec["workflows"].get(e["workflow"], [])):
-                        g.edge(eid, f"config:{name}.{key}", "reads-config")
+
+
+def _mode(g: Graph, name: str, d, profile: str, rel) -> None:
+    """A mode's nodes (mode, skills, types, config keys, endpoints) and the edges from it."""
+    g.node(f"mode:{name}", "mode", name, rel(d.path))
+    for sk in sorted((d.dir / "skills").glob("*/SKILL.md")):
+        g.node(f"skill:{sk.parent.name}", "skill", sk.parent.name, rel(sk))
+        g.edge(f"mode:{name}", f"skill:{sk.parent.name}", "mode-skill")
+    for t in sorted((d.dir / "types").glob("*.schema.json")):
+        tn = t.name.removesuffix(".schema.json")
+        g.node(f"type:{name}/{tn}", "type", tn, rel(t))
+    cfg = d.spec.get("config")
+    if cfg and (d.dir / cfg).exists():
+        props = (json.loads((d.dir / cfg).read_text()).get("properties") or {})
+        for key in props:
+            g.node(f"config:{name}.{key}", "config-key", key, rel(d.dir / cfg))
+    for rn, env in (d.spec.get("roles") or {}).items():
+        g.edge(f"mode:{name}", f"role:{rn}", "role")
+        if env:
+            g.edge(f"mode:{name}", f"env:{env}", "role-env")
+    g.edge(f"mode:{name}", f"agent:{profile}", "agent")
+    if d.spec.get("coordinator"):
+        g.edge(f"mode:{name}", f"role:{d.spec['coordinator']}", "coordinator")
+    for iface in d.spec.get("needs", []):
+        g.edge(f"mode:{name}", f"interface:{iface}", "needs")
+    for ep, e in d.spec["endpoints"].items():
+        eid = f"endpoint:{name}.{ep}"
+        g.node(eid, "endpoint", f"{name}.{ep}", rel(d.path))
+        g.edge(f"mode:{name}", eid, "endpoint")
+        _endpoint_edges(g, name, eid, e, d.spec["workflows"].get(e["workflow"], []), bool(cfg))
+
+
+def _endpoint_edges(g: Graph, mode: str, eid: str, e: dict, steps: list, has_config: bool) -> None:
+    for t in (e.get("in"), e.get("out")):
+        if t:
+            g.edge(eid, f"type:{mode}/{t}", "type")
+    if (e.get("review") or {}).get("role"):
+        g.edge(eid, f"role:{e['review']['role']}", "review")
+    for env in (e.get("roles") or {}).values():
+        g.edge(eid, f"env:{env}", "role-env")
+    for st in steps:
+        for env in (st.get("roles") or {}).values():
+            g.edge(eid, f"env:{env}", "role-env")
+        if st.get("role"):
+            g.edge(eid, f"role:{st['role']}", "step")
+        if st.get("out"):
+            g.edge(eid, f"type:{mode}/{st['out']}", "type")
+        if st.get("run"):
+            g.edge(eid, f"interface:{st['run'].rsplit('.', 1)[0]}", "run")
+    if has_config:
+        for key in [n.split(".", 1)[1] for n in g.nodes if n.startswith(f"config:{mode}.")]:
+            if f"$config.{key}" in json.dumps(steps):
+                g.edge(eid, f"config:{mode}.{key}", "reads-config")
+
+
+def _binding_edges(g: Graph, k, connectors_of) -> None:
+    """env -> interface/connector (bind), env substitution, connector -> interface (implements, needs)."""
     for name, d in k.docs["Environment"].items():
         if d.spec.get("substitutes"):
             g.edge(f"env:{name}", f"env:{d.spec['substitutes']}", "substitutes")
             g.edge(f"env:{d.spec['substitutes']}", f"env:{name}", "substituted-by")
         for iface, b in d.spec["bind"].items():
             g.edge(f"env:{name}", f"interface:{iface}", "binds")
-            for c in model.connectors_of(b):
+            for c in connectors_of(b):
                 g.edge(f"env:{name}", f"connector:{c}", "binds")
     for name, d in k.docs["Connector"].items():
         impl = d.spec["implements"]
@@ -210,19 +236,22 @@ def _concepts(g: Graph, kit: Path) -> None:
             g.edge(f"connector:{name}", f"interface:{iface}", "implements")
         for iface in d.spec.get("needs", {}).get("capabilities", []):
             g.edge(f"connector:{name}", f"interface:{iface}", "needs")
+
+
+def _schema_ref_edges(g: Graph, k, kit: Path) -> None:
     for name, d in k.docs["Interface"].items():
         for ref in set(re.findall(r"\$ref['\"]?\s*:\s*['\"]?([a-z][a-z0-9.-]*/v[0-9]+)", d.path.read_text())):
             g.edge(f"interface:{name}", f"schema:{ref}", "ref")
-    for p in sorted((kit / "schemas" / "data").glob("*.schema.json")):
-        n = p.name.removesuffix(".schema.json")
-        base, _, ver = n.rpartition(".")
+    for nid, p in _data_schemas(kit):
         for ref in set(re.findall(r"\"\$ref\"\s*:\s*\"([a-z][a-z0-9.-]*/v[0-9]+)\"", p.read_text())):
-            g.edge(f"schema:{base}/{ver}", f"schema:{ref}", "ref")
-    # code, config and playbooks that name a concept also reference it (dispatcher constants, tests, prompts)
+            g.edge(nid, f"schema:{ref}", "ref")
+
+
+def _mention_edges(g: Graph) -> None:
+    """Code, config and playbooks that name a concept also reference it (dispatcher constants, tests, prompts)."""
     for nid, n in list(g.nodes.items()):
         if n["kind"] in ("endpoint", "schema", "connector", "interface", "env", "skill", "role", "agent"):
-            own = {n["path"]} if n["kind"] != "endpoint" else {n["path"]}
-            for _ in range(_mentioned(g, n["name"], own)):
+            for _ in range(_mentioned(g, n["name"], {n["path"]})):
                 g.edges.append((f"text:{n['kind']}", nid, "mention"))
         elif n["kind"] == "config-key":
             py_hits = sum(1 for rel, t in g.texts.items() if rel.endswith(".py") and re.search(

@@ -225,9 +225,6 @@ def slop_messages(a: Artifacts, th: dict) -> list[dict]:
 
 
 # ----------------------------------------------------------------------------- unused
-LEDGER_FIELDS = {"role": ("role",), "agent": ("agent", "agentType"), "env": ("env",), "endpoint": ("target",)}
-
-
 def _ledger_uses(a: Artifacts) -> dict[tuple, int]:
     uses: dict[tuple, int] = defaultdict(int)
     for e in a.ledger:

@@ -105,7 +105,7 @@ def fts5_available() -> bool:
 
 
 def _item_select() -> str:
-    return f"""SELECT
+    return """SELECT
             i.source || ':' || i.ext_id AS id, i.source AS source, i.ext_id AS extId, i.kind AS kind,
             i.author AS author, i.author_name AS authorName, i.title AS title, i.body AS text, i.url AS url,
             i.created_at AS createdAt, i.fetched_at AS fetchedAt, i.container AS container, i.labels AS labels,
@@ -200,7 +200,7 @@ class Sandbox:
     def _only(self) -> str:
         return ", ".join([*self.views, *[t for t in TABLES if t != FTS or self.fts]])
 
-    def _authorize(self, action, a1, a2, db, view) -> int:
+    def _authorize(self, action, a1, a2, db, _trigger) -> int:
         if action == sqlite3.SQLITE_SELECT or action == 33:          # SELECT, WITH RECURSIVE (time-limited)
             return sqlite3.SQLITE_OK
         if action == sqlite3.SQLITE_READ:

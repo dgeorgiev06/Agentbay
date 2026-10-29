@@ -13,8 +13,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 SECTIONS = ["Purpose", "Inputs", "Steps", "Definition of Done", "Outputs", "Failure handling"]
-LEVELS = ("must", "should", "must_not")
-
 H2 = re.compile(r"^##\s+(.+?)\s*#*\s*$")
 DOD = re.compile(r"^\s*[-*]\s+\[(DOD-[0-9]+)\]\s+\((must|should|must_not)\)\s+(\S.*)$")
 LIST_ITEM = re.compile(r"^\s*([-*]|[0-9]+[.)])\s+")

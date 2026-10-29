@@ -1,5 +1,5 @@
 ---
-name: digest
+name: mail-digest
 description: Turn stored email threads into a grounded mail digest (needs reply, deadlines and asks, groups by selector or sender, notable attachments). Use for mail-briefing digest steps.
 ---
 # Mail digest

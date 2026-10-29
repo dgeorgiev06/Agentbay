@@ -11,7 +11,7 @@ Brief me on my email for a period, by thread: what needs my reply, the deadlines
 ## Steps
 1. `refresh`: the dispatcher syncs the store if it is older than 2h, the selectors changed or the source was blocked. When the source is blocked (an expired login) the call goes on with the stored mail and ends `partial`; the coverage note names `bay auth gmail`. With nothing stored yet the call ends `blocked`.
 2. `gather`: the dispatcher reads the threads active in the period (`items.store/v1.threads`), marking those with a sender on the `important` list.
-3. `digest`: the analyst follows the digest skill: reads the threads, opens the messages it relies on with `get`/`thread` (and attachment text through `v_attachments`), and returns the Digest.
+3. `digest`: the analyst follows the mail-digest skill: reads the threads, opens the messages it relies on with `get`/`thread` (and attachment text through `v_attachments`), and returns the Digest.
 4. `review`: the reviewer checks the digest against this Definition of Done and the rules.
 
 ## Definition of Done

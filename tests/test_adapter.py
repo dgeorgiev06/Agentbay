@@ -63,6 +63,12 @@ def test_adapter_round_trip():
     assert "### Mode `cos`" not in coord
     assert "`cos.run`" in coord                                      # but its endpoints are in the table
     assert (proj / ".claude/skills/digest/SKILL.md").exists() and (proj / ".claude/skills/corpus-sql/SKILL.md").exists() and (proj / ".claude/skills/research-brief/SKILL.md").exists()
+    for sk in ("digest", "corpus-sql"):                 # feed-briefing's skills, never mail-briefing's
+        assert (proj / f".claude/skills/{sk}/SKILL.md").read_text() == (KIT / f"modes/briefing/skills/{sk}/SKILL.md").read_text()
+    for sk in ("mail-digest", "mail-sql"):
+        assert (proj / f".claude/skills/{sk}/SKILL.md").read_text() == (KIT / f"modes/mail-briefing/skills/{sk}/SKILL.md").read_text()
+    ma = (proj / ".claude/agents/analyst--mail-briefing.md").read_text()
+    assert "mail-sql" in ma and "mail-digest" in ma and "mail-sql" not in fa
     cat = json.loads((proj / ".agentbay/catalog.json").read_text())
     assert {m["name"] for m in cat["modes"]} == {"cos", "delivery", "feed-briefing", "forge", "improve",
                                                   "mail-briefing"}

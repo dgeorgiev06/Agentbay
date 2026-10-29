@@ -1,3 +1,48 @@
+---
+# Core and existing-extension paths that step 1 edits (Part A: "Proposals declare crossings").
+# `slice` is the step-1 slice (HANDOFF.md); `planned: true` marks slices not built yet.
+touches:
+  # slice 1: quiet checks, component map, bay boundary
+  - { path: framework/components.yaml, reason: the component map (Part A), slice: 1 }
+  - { path: schemas/components.schema.json, reason: schema of the component map, checked by lint, slice: 1 }
+  - { path: bay/boundary.py, reason: "`bay boundary`: B-1, B-2, B-3, B-11 (Part F)", slice: 1 }
+  - { path: bay/proposal.py, reason: "parses a proposal's front-matter touches:", slice: 1 }
+  - { path: bay/cli.py, reason: "`bay boundary`; slice 2 adds `bay auth <connector>` and `bay config example`", slice: 1 }
+  - { path: bay/lint.py, reason: "validates framework/components.yaml; later slices add B-4, B-6, B-7, B-8", slice: 1 }
+  # slice 2: ownership by folder, discovery, self-describing extensions, docs describe contracts only
+  - { path: bay/adapters/, reason: adapters move to adapters/ (B-4), slice: 2, planned: true }
+  - { path: adapters/, reason: the new adapters folder, slice: 2, planned: true }
+  - { path: framework/interfaces/, reason: core interfaces live under framework/interfaces/ (B-4), slice: 2, planned: true }
+  - { path: interfaces/items.*, reason: items.* move to framework/interfaces/, slice: 2, planned: true }
+  - { path: bay/model.py, reason: discovery by folder; config schemas that extend; versioned reads/produces; feature.yaml, slice: 2, planned: true }
+  - { path: bay/registry.py, reason: catalog lists discovered extensions, slice: 2, planned: true }
+  - { path: bay/config.py, reason: "`bay config example` assembles per-extension config.example.yaml", slice: 2, planned: true }
+  - { path: schemas/, reason: config schemas extend (slice 2), versioned contracts (slice 3), feature.yaml (slice 4), slice: 2, planned: true }
+  - { path: agentbay.config.example.yaml, reason: assembled from the extensions' examples, slice: 2, planned: true }
+  - { path: README.md, reason: describes contracts, never instances (B-11), slice: 2, planned: true }
+  - { path: docs/DESIGN.md, reason: describes contracts, never instances (B-11), slice: 2, planned: true }
+  - { path: docs/INTERFACES.md, reason: describes contracts, never instances (B-11), slice: 2, planned: true }
+  - { path: "connectors/*/", reason: "per-extension README.md and config.example.yaml; offline transports for contract tests (slice 6)", slice: 2, planned: true }
+  - { path: "envs/*.yaml", reason: bindings follow the moved interfaces, slice: 2, planned: true }
+  - { path: "modes/*/mode.yaml", reason: "per-mode README/config example (slice 2); versioned reads/produces (slice 3)", slice: 2, planned: true }
+  - { path: framework/connectors/corpus-store/, reason: implements the moved items.* interfaces, slice: 2, planned: true }
+  # slice 3: versioned reads/produces/needs/implements, no extension names another, skill namespaces
+  - { path: framework/rules/conformance.yaml, reason: C-7 vocabulary, C-11, slice: 3, planned: true }
+  - { path: bay/improve/, reason: "conformance checks (slice 3); `boundary-crossing` detector (slice 7)", slice: 3, planned: true }
+  - { path: bay/scaffold.py, reason: "scaffolds write per-mode skill namespaces and touches:", slice: 3, planned: true }
+  - { path: "modes/*/skills/", reason: per-mode skill namespaces, slice: 3, planned: true }
+  # slice 4: feature.yaml and whole-feature override
+  - { path: "modes/*/features/*/", reason: feature.yaml per feature (workflow, skills, uses:), slice: 4, planned: true }
+  - { path: "framework/modes/*/features/*/", reason: feature.yaml per framework-mode feature, slice: 4, planned: true }
+  # slice 5: per-feature uses: in the use shim (security)
+  - { path: bay/use_shim.py, reason: "enforces a feature's uses: (B-9)", slice: 5, planned: true }
+  - { path: bay/dispatch.py, reason: passes the step's feature to the use shim, slice: 5, planned: true }
+  # slice 7: forge.extend rewrite
+  - { path: framework/modes/forge/mode.yaml, reason: "extend's steps: foreach slices, code check step", slice: 7, planned: true }
+  - { path: framework/modes/forge/playbook.md, reason: the shared slice-and-handoff protocol and quiet checks (Part C), slice: 7, planned: true }
+  - { path: framework/modes/improve/features/audit/, reason: the boundary-crossing detector, slice: 7, planned: true }
+  - { path: framework/roles/, reason: builder and reviewer briefs generated from the playbook, slice: 7, planned: true }
+---
 # 0006 - Components that own their contracts, and content types as plug-ins
 
 - Status: approved by the user 2026-10-29 (revision 8: Part E, features as self-contained units, and Part F, a check for every boundary, added at the user's request). Nothing is implemented yet.

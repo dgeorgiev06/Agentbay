@@ -56,3 +56,26 @@ def test_version_mismatch_and_missing_producer_are_refused():
     has(k, "connector fake implements items.source/v1 but declares no spec.produces")
     sub(k, "modes/mail-briefing/mode.yaml", "  reads: [email/v1]", "")
     has(k, "mode mail-briefing needs items.source/v1 but declares no spec.reads")
+
+
+# ------------------------------------------------------------------ B-7: no extension names another
+def test_no_extension_names_another_b7():
+    k = kit_copy()
+    assert not lint.lint_extension_names(model.Kit(KIT))                              # shipped kit: no hit
+    pb = "modes/mail-briefing/features/digest/playbook.md"
+    (k / pb).write_text((k / pb).read_text() + "\nThreads come from gmail-api; see also feed-briefing.\n")
+    sub(k, "connectors/x-api/x_api.py", "\n", "\n# tuned for feed-briefing\nimport fake\n")
+    (k / "modes/mail-briefing/README.md").write_text((k / "modes/mail-briefing/README.md").read_text()
+                                                     + "\nEnv local-mail binds gmail-api.\n")       # README: exempt
+    (k / "connectors/x-api/tests/test_extra.py").write_text("import fake  # tests may pick a stand-in\n")
+    sub(k, "framework/modes/forge/features/create/playbook.md", "stubbed HTTP layer", "fake HTTP layer")
+    ps = lint.run(k)
+    hits = [p for p in ps if "B-7" in p]
+    assert any(pb in p and "mode mail-briefing names connector gmail-api" in p for p in hits), hits
+    assert any(pb in p and "mode mail-briefing names mode feed-briefing" in p for p in hits), hits
+    assert any("x_api.py:2: connector x-api names mode feed-briefing" in p for p in hits), hits
+    assert any("x_api.py:3: connector x-api imports fake of connector fake" in p for p in hits), hits
+    assert any("forge/features/create/playbook.md" in p and "mode forge names connector fake" in p for p in hits)
+    assert not any("README.md" in p or "tests/" in p for p in hits), hits
+    # the extends parent may be named; a framework mode may name a framework connector
+    assert not any("names mode briefing" in p for p in hits) and not any("names connector ledger" in p for p in hits)

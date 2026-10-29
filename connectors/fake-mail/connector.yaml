@@ -4,8 +4,8 @@ metadata:
   name: fake-mail
   description: >-
     Offline items.source/v1 for mail: serves email/v1 items from a JSON fixture (or a built-in sample mailbox)
-    with no network and no secrets. It stands in for gmail-api in env local-mail-offline and declares the same
-    selector capability table, so `bay validate` judges selectors the same way.
+    with no network and no secrets. It stands in for the online mail source in env local-mail-offline and declares
+    a Gmail-like selector capability table, so `bay validate` judges selectors the same way.
   version: 0.1.0
 spec:
   implements: items.source/v1

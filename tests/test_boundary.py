@@ -147,7 +147,7 @@ def test_front_matter_parser():
         raise AssertionError(f"accepted: {bad!r}")
 
 
-SLICES_BUILT = 2   # step-1 slices landed on this branch (HANDOFF.md)
+SLICES_BUILT = 3   # step-1 slices landed on this branch (HANDOFF.md)
 
 
 def test_proposal_0006_declares_its_crossings():

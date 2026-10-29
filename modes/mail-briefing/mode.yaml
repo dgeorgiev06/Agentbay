@@ -3,7 +3,7 @@ kind: Mode
 metadata:
   name: mail-briefing
   version: 0.1.0
-  description: Thread-based briefings and grounded Q&A over your Gmail, read-only, kept to the selectors you set.
+  description: Thread-based briefings and grounded Q&A over your email, read-only, kept to the selectors you set.
 spec:
   # Everything not set here comes from modes/briefing (features sync, digest, ask, prune; their review; the
   # sync and prune playbooks and rules; skills it does not override).

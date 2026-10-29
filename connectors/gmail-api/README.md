@@ -36,6 +36,21 @@ and the status stays `stale` until you sign in again.
 **Settings** (`connectors.gmail-api`, each can only lower its cap): `attachmentMaxBytes`, `attachmentMaxChars`,
 `extractTimeoutS`, `extractMemoryMB`, `maxRetries`; see `config.example.yaml`.
 
+## Selectors in Gmail notation
+
+Modes write selectors in the neutral vocabulary (`selector/v1`, docs/INTERFACES.md); this connector turns the native fields
+into a Gmail search query:
+
+| Selector | Gmail search |
+|---|---|
+| `in: Work` (a user label) | `label:Work` |
+| `in: inbox` (a system label: inbox, sent, starred, important, ...) | `in:inbox` |
+| `from: kiln.fi`, `to: me@example.com` | `from:kiln.fi`, `to:me@example.com` |
+| `since: 7d` | `after:<epoch>` |
+| `has: attachment` | `has:attachment` |
+
+`in:` also accepts Gmail's own `label:<name>` and `in:<name>` spelling, so a selector copied from Gmail works.
+
 ## How it reads
 
 The first sync lists the lookback window with the native Gmail query; later syncs replay `history.list` from

@@ -26,7 +26,7 @@ rules:
     check: rules_testable
   - id: C-4
     level: must
-    statement: Modes, playbooks and feature rules name capabilities, never concrete tools or connectors (no `Bash`, no `x-api`); tools and connectors are bound in envs.
+    statement: Modes, playbooks, feature rules, skills and types name capabilities, never concrete tools or connectors (no `Bash`, no `x-api`), and no other mode except their `extends:` parent; tools and connectors are bound in envs. `bay lint` refuses a mode file that names a connector or another mode (B-7).
     appliesTo: [mode, feature]
     check: names_no_tools
   - id: C-5
@@ -41,7 +41,7 @@ rules:
     check: review_on_side_effects
   - id: C-7
     level: should
-    statement: Content uses the fixed vocabulary (Chief of Staff, Mode, Feature, Role, Agent, Environment, Connector, capability interface, subagent); retired or synonym terms are replaced.
+    statement: Content uses the fixed vocabulary (Chief of Staff, Mode, Feature, Role, Agent, Environment, Connector, capability interface, content type, item, subagent); a content type is the versioned kind of an item (post/v1, email/v1), and an item is the unit a source produces and the store keeps; retired or synonym terms are replaced.
     appliesTo: [mode, feature, role, connector, env]
     check: vocabulary
     terms:
@@ -52,7 +52,7 @@ rules:
       persona: role
   - id: C-8
     level: must
-    statement: Layering holds - mode -> role -> agent -> env -> connector. Roles name capabilities, modes place roles in envs, one agent profile runs them, only envs bind connectors, and agents reach connector data only through read-only use shims.
+    statement: Layering holds - mode -> role -> agent -> env -> connector. Roles name capabilities, modes place roles in envs, one agent profile runs them, only envs bind connectors, and agents reach connector data only through read-only use shims. No extension names or imports another - a connector never names a mode or another connector - so each can be added or removed alone (`bay lint`, B-7); a README may name what its env binds.
     appliesTo: [mode, role, env, connector]
   - id: C-9
     level: should

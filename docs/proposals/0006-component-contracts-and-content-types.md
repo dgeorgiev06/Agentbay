@@ -36,7 +36,8 @@ touches:
   - { path: modes/mail-briefing/, reason: "login hints name `bay auth <connector>`, not a connector; config.schema.json holds only its own keys", slice: 2 }
   - { path: "modes/mail-briefing/features/*/playbook.md", reason: "login hints name `bay auth <connector>`, not a connector", slice: 2 }
   # slice 3: versioned reads/produces/needs/implements, no extension names another, skill namespaces
-  - { path: framework/rules/conformance.yaml, reason: C-7 vocabulary, C-11, slice: 3, planned: true }
+  - { path: framework/rules/conformance.yaml, reason: "C-7 vocabulary (content type, item); C-4 and C-8 name B-7", slice: 3 }
+  - { path: framework/modes/forge/features/create/playbook.md, reason: "B-7: `fake HTTP layer` named the fake connector; now `stubbed`", slice: 3 }
   - { path: bay/improve/, reason: "conformance checks (slice 3); `boundary-crossing` detector (slice 7)", slice: 3, planned: true }
   - { path: "modes/*/skills/", reason: per-mode skill namespaces, slice: 3, planned: true }
   # slice 4: feature.yaml and whole-feature override

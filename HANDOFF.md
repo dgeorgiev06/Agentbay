@@ -10,7 +10,7 @@ commit and a push, and updates this file. This file is removed in the last slice
 |---|---|---|---|---|
 | 1 | Quiet checks + component map + `bay boundary` (+ proposal `touches:` parsing) | A, F | B-1, B-2, B-3, B-11 | done |
 | 2 | Ownership by folder: `adapters/`, `framework/interfaces/`, discovery, `bay auth <connector>`, per-extension README + `config.example.yaml`, `bay config example`, config schemas that extend, docs describe contracts only | A, D | B-4, B-11 | done |
-| 3 | Versioned `reads:`/`produces:`/`needs:`/`implements:`, no extension names another, per-mode skill namespaces, C-7 vocabulary | D | B-6, B-7, B-8 | todo |
+| 3 | Versioned `reads:`/`produces:`/`needs:`/`implements:`, no extension names another, per-mode skill namespaces, C-7 vocabulary | D | B-6, B-7, B-8 | B-6, B-7, C-7 done; B-8 todo |
 | 4 | `feature.yaml` (workflow, skills, `uses:`), whole-feature override, `bay show <mode> --resolved` | E | B-3, B-8 | todo |
 | 5 | Per-feature `uses:` enforced in the use shim (security) | E | B-9 | todo |
 | 6 | Contract tests: connector, source (incl. change-feed), mode; run against every instance | A | B-5 | todo |
@@ -96,6 +96,28 @@ Slice 2, item 6 (rest) and item 7 (9bd9f51, d7e728c):
    (`boundary.stray`), naming the file and the fix. The shipped kit has no stray file. Test:
    `test_ownership_lint_names_stray_tracked_files_b4`.
 
+Slice 3, B-6, B-7 and C-7 (commits on feat/source-kinds after 313120a; see `git log`):
+- B-6: modes declare `reads: [<kind>/v<N>]`, items.source connectors `produces: [<kind>/v<N>]` (schema fields
+  added). `lint.lint_contract_versions` refuses an unversioned `needs:`/`implements:`/`reads:`/`produces:`, an
+  unknown kind, an items.source connector without `produces:`, a non-abstract mode needing items.source/v1
+  without `reads:`, a version mismatch, and a read no bound connector produces (message names forge.connect).
+  Envs checked: every env the mode's `roles:` map (mode-wide and per endpoint) plus every env that
+  `substitutes:` one of them. Known kinds = `schemas/data/*.schema.json` whose `allOf` refs item/v1
+  (`model.item_kinds`; today post/v1, email/v1). Filled in: feed-briefing reads post/v1, mail-briefing
+  email/v1; x-api, fake produce post/v1; gmail-api, fake-mail email/v1. briefing declares none. The connector
+  scaffold writes a `produces:` TODO line.
+- B-7: `lint.lint_extension_names`: mode files (mode.yaml, playbook.md, config.example.yaml,
+  config.schema.json, features/, skills/, types/) never name a connector or another mode (extends ancestors
+  excepted); connector .py/.yaml never name a mode or another connector; connector code imports no other
+  connector's entry module. Word-bounded like B-11. Fixed hits: mail-briefing config example `in: Work`
+  (Gmail notation table now only in connectors/gmail-api/README.md "Selectors in Gmail notation"),
+  mail-briefing description "your email", mail-sql skill id example `<source>:...`, fake-mail description
+  no longer names gmail-api, forge create playbook "stubbed HTTP layer".
+- C-7: "content type" and "item" in the fixed vocabulary; C-4 and C-8 statements name B-7.
+- `SLICES_BUILT = 3`; touches: conformance.yaml `planned` off, forge create playbook added.
+- tests/test_contract_versions.py (4 tests); briefing-child fixtures in test_inheritance/test_roles now
+  declare `reads: [post/v1]` (required by B-6).
+
 ## Decisions
 - Classification order: other (tests/, HANDOFF.md, docs/proposals/, docs/research/, repo meta, the
   proposal) → core docs → core `owns:` (most specific glob wins, so bay/selector.py is briefing) →
@@ -151,19 +173,42 @@ Slice 2, item 6 (rest) and item 7 (9bd9f51, d7e728c):
 - (slice 2) B-11 is word-bounded on dotted names, so `forge.extend`, `cos.run` in the docs do not hit; the docs
   still avoid instance endpoints where a contract sentence does the job.
 
+- (slice 3) `reads:`/`produces:` cover item kinds only; framework modes and connectors read/produce no item
+  kind and declare none. Presence is required only around items.source/v1.
+- (slice 3) B-7 exemptions: README.md (documents the extension's own setup and may name what its env binds) and
+  `tests/` inside an extension folder (fixtures pick concrete stand-ins, e.g. the fake connector). Core
+  instances (under a core `owns:` path: briefing base mode, corpus-store) are not extensions and are not
+  scanned. Framework instances may name each other (they ship and change together, only via forge.extend) but
+  never a user extension. A mode may name every `extends:` ancestor, not only its direct parent.
+- (slice 3) The kernel's selector matcher still accepts `label:`/`in:` spelling (tests use it); only the mode's
+  own files moved to the neutral vocabulary.
+- (slice 3) Claude Code skill names (folder under .claude/skills/ and SKILL.md `name:`) allow lowercase
+  letters, digits and hyphens only (max 64); Claude Code adds `plugin:` itself for plugins. So B-8 must write
+  `<mode>--<skill>` (same separator as role units `<role>--<mode>`), not `<mode>:<skill>`.
+
 ## Next
-Slice 2 is done. Slice 3: versioned `reads:`/`produces:`/`needs:`/`implements:` that agree (B-6), no extension
-names another (B-7: modes never name connectors, connectors never name modes; lint C-4, C-8 + an import scan),
-per-mode skill namespaces `<mode>:<skill>` (B-8; fold in `lint_skill_names`), C-7 vocabulary in
-framework/rules/conformance.yaml. Touches for slice 3 are already in 0006 (`planned: true`); set
-`SLICES_BUILT = 3` in tests/test_boundary.py and flip `planned` as entries land.
-Notes: mail-briefing's config.example.yaml and selectors name Gmail-specific syntax (`label:Work`): B-7 may
-need a judgement there. framework READMEs now name instances (they are the instances' own docs); B-7's
-"no extension names another" must decide whether a framework mode's README naming its connectors counts
-(it describes bindings in its own env, so probably allowed for README, not for code).
+Slice 3, remaining: B-8, per-mode skill namespaces. Then "Slices 1-3 complete: open PR 1 for review".
+- Build writes each mode's skills as `.claude/skills/<mode>--<skill>/` (':' is not valid there, see Decisions),
+  rewriting the copied SKILL.md `name:`; a child's same-named skill overrides its parent's for that child only
+  (`model.mode_skills` already resolves the chain, nearest first). Places: adapters/claude-code/claude_code.py
+  `_skills` (~l.243) and the copy loop (~l.136), `_write_agent` "## Skills" list (~l.223); model.py role skills
+  merge (`skills={**mode_skills(md), **rd.skills}`, ~l.830) and `mode_skills`; cli.py/registry.py list
+  `r.skills`; step plans (grep bay/playbook.py, dispatch.py for skills) must list namespaced names. Role skills
+  (framework/roles/skills, e.g. research-brief) need a namespace too (e.g. `role--<skill>` or keep as is:
+  decide and record).
+- mail-briefing's skills are `mail-sql`, `mail-digest` (rename workaround). Either rename to `sql`/`digest`
+  (playbooks name them) or keep; pick the simpler and record it.
+- Replace `lint.lint_skill_names` (global-name clash) with: lint fails on a skill a feature playbook or role
+  references that does not exist in its mode chain (and on any remaining clash of namespaced names).
+- Tests: two modes with the same skill name build without clobbering; feed-briefing's analyst gets briefing's
+  skills, mail-briefing's analyst gets mail-briefing's. Update tests that expect bare skill folders.
+- Flip `planned` off on `modes/*/skills/` (and add `adapters/`-path touches if needed: `adapters/` is a slice-2
+  entry already). bay/improve/ (slice 3, planned) stays planned unless a conformance check changes.
+- Then update this file: slice 3 done; Next: "Slices 1-3 complete: open PR 1 for review"; reviewer notes:
+  B-7 scope decisions (framework instances, core instances, tests/ exemption) and B-6 env set (substitutes).
 
 ## Test status
-`python3 tests/run.py -q`: 369 passed, 0 failed (the suite takes ~2-3 min; use a long timeout).
+`python3 tests/run.py -q`: 373 passed, 0 failed (the suite takes ~2-3 min; use a long timeout).
 `bay lint` clean, `bay validate` ok, build + clean on a scratch project ok. `bay boundary --base 07aae9e
 --proposal docs/proposals/0006-...md --docs`: 0 failing, 0 B-11 hits.
 

@@ -1,6 +1,6 @@
 # 0006 - Components that own their contracts, and content types as plug-ins
 
-- Status: approved by the user 2026-10-29 (revision 7: four boundary gaps added at the user's request). Nothing is implemented yet.
+- Status: approved by the user 2026-10-29 (revision 8: Part E, features as self-contained units, and Part F, a check for every boundary, added at the user's request). Nothing is implemented yet.
 - Revision 2 follows review by the user:
   - no registration edits;
   - core components own their contracts;
@@ -250,7 +250,7 @@ than hand-written briefs. Three things change.
 | `propose` | builder | Writes `docs/proposals/<id>.md`: problem, change, `touches:` (core paths, a reason each) and `slices:`. Slices are ordered; each is about 40 tool calls or fewer and ends with tests green. |
 | `approve` | gate | Only the user passes it, with `bay approve <callId>` in a terminal. |
 | `implement` | builder, once per slice | A fresh builder per slice. It starts from the proposal section and `HANDOFF.md`, and ends with tests green, a commit, a push and `HANDOFF.md` updated. No slice continues another's conversation. |
-| `check` | code (dispatcher) | `bay boundary` against `touches:`, the contract tests, `tests/run.py -q`, lint, validate, and build + clean in a scratch project. |
+| `check` | code (dispatcher) | The boundary checks B-1 to B-12 (Part F), the contract tests, `tests/run.py -q`, lint, validate, and build + clean in a scratch project. |
 | `review` | reviewer (deep, high) | Gets the diff and the proposal only, never the builder's conversation. Checks the DoD and the rules. |
 | `release` | builder | Version bump; schema apiVersion when a contract changed. |
 
@@ -268,7 +268,7 @@ step's output: `foreach: $steps.propose.slices`. The step completes when every s
 
 ### Definition of Done
 
-- [DOD-1] (must) `bay boundary` passes: every changed core path is listed in `touches:`.
+- [DOD-1] (must) Boundary checks B-1 to B-12 (Part F) pass; the output of each is quoted.
 - [DOD-2] (must) Contract tests pass for every discovered instance of a changed contract.
 - [DOD-3] (must) Tests, lint, validate and build + clean pass; the `check` step's output is quoted.
 - [DOD-4] (must) Adding a source of a new content type is one content-type folder plus its connector folder(s), with `touches: []`, as shown by the contract-test fixtures.
@@ -309,6 +309,57 @@ Two smaller additions:
 - "content type" joins the fixed vocabulary in conformance rule C-7;
 - the boundary check also covers skills and the generated `.claude/` layout.
 
+## E. Inside a mode: features are self-contained
+
+Within a mode, each feature already owns its playbook, rules, types, effects and review. Three things
+still leak across features:
+- **Workflows live in `mode.yaml`,** away from the feature they belong to. With `extends`, understanding one feature means merging two `mode.yaml` files and a feature folder by hand.
+- **Skills belong to the mode,** so every role gets every skill in every feature.
+- **Data access is per role unit** (role × mode), so the analyst in `digest` can run any SQL over the store, though the digest only needs the threads its code step gathered.
+
+**The change:**
+- **A feature is a folder with everything it owns:**
+  ```
+  modes/mail-briefing/
+    mode.yaml              # mode-wide only: purpose, needs, reads, roles -> envs, limits, config, coordinator
+    features/digest/
+      feature.yaml         # in, out, effects, workflow, review, skills, uses
+      playbook.md
+      rules.yaml
+  ```
+- **`uses:` scopes data access.** It lists the read endpoints the feature's role steps may call (e.g. `ask` gets `describe`, `sql`, `get`, `thread`; `digest` gets `get` only). The use shim learns the active call from the dispatcher and allows only that feature's `uses:`. Subagents stay one per role unit; no new agents.
+- **`skills:` scopes skills.** The step plan hands a role only that feature's skills, which are namespaced per mode (Part D).
+- **Whole-feature override.** A child mode replaces a parent's feature by providing the whole folder, never by merging keys. A feature it does not provide is inherited unchanged. `bay show <mode> --resolved` prints the result, file by file, with the origin of each.
+- **Shared on purpose, and staying shared:** types (the mode's API), the store (the mode's data), limits, the roles-to-envs map, config and the coordinator playbook.
+
+## F. Every boundary has a check
+
+A boundary that only a reviewer can see is not a boundary. Each one below is enforced by a
+deterministic check. forge.extend's `check` step runs all of them, and so do `forge.create` and
+`forge.connect`. Lint runs the static ones on every build too.
+
+| # | Boundary | Enforced by | When |
+|---|---|---|---|
+| B-1 | Core vs extension: an extension changes no core path | `bay boundary` against the proposal's `touches:` | `check` step |
+| B-2 | Extension vs extension: a change edits only the extension folders it creates or names | `bay boundary`: each changed folder is new or listed in `touches:` | `check` step |
+| B-3 | Feature vs feature: a change to one feature edits only that feature's folder plus declared mode-wide files | `bay boundary` at feature-folder granularity | `check` step |
+| B-4 | Ownership is visible: core files only under core paths; core interfaces under `framework/interfaces/`; adapters in `adapters/` | lint, from `framework/components.yaml` | every build |
+| B-5 | Contracts are honoured: shape and behaviour | schemas (lint) + contract tests for every discovered instance | every build, `check` step |
+| B-6 | Contracts are versioned: `reads:`/`produces:`/`needs:`/`implements:` agree | lint | every build |
+| B-7 | No extension depends on another: modes never name connectors, connectors never name modes | lint (C-4, C-8) + an import scan of connector and mode code | every build |
+| B-8 | Skills stay in their mode and feature | build writes `<mode>:<skill>`; lint fails on a clash or on an undeclared skill reference | every build |
+| B-9 | Least privilege per feature: a role step reaches only its feature's `uses:` | use shim at runtime; contract test calls an undeclared endpoint and expects a refusal | runtime, `check` step |
+| B-10 | No extension code on the read path: views are SQL only, functions from the fixed allowlist | sandbox view validation (authorizer) | every build |
+| B-11 | No hand-kept lists of extensions in core docs | `bay boundary` + doc-stale detector | `check` step |
+| B-12 | No compatibility code | compat-layer detector | `check` step |
+
+**forge.extend's DoD names them:**
+- DOD-1 becomes: B-1 to B-12 pass, and the `check` step's output for each is quoted.
+- DOD-2 (contract tests) and DOD-4 (a new content type has `touches: []`) stay as they are.
+
+**improve's `boundary-crossing` detector** runs B-1 to B-3 over git history, so a crossing that
+slipped in some other way is still found.
+
 ## Steps (each through forge.extend: proposal → approval → build → independent review)
 
 1. **Contracts, the boundary check and the new forge.extend, on main:**
@@ -316,11 +367,14 @@ Two smaller additions:
    - the `boundary` check (failing), R-10, C-11, the new DOD-4 and the improve detector;
    - contract tests for connector, source and mode, mandatory and run against x-api, fake, gmail-api and fake-mail;
    - the change-feed additions #9 brought (`changeFeed`, `until`, `storedIds`, `cursorExpired`, `exactLabels`, `removed`) declared as optional `items.source/v1` capabilities and covered by the source contract tests;
+   - Part E: `feature.yaml` (workflow, skills, `uses:` per feature), whole-feature override, `bay show --resolved`, per-feature checks in the use shim;
+   - Part F: every boundary check B-1 to B-12, run by forge.extend, forge.create and forge.connect;
    - Part D: per-mode skill namespaces, `adapters/` as its own folder, core interfaces under `framework/interfaces/`, versioned `reads:`/`produces:`, and C-7 vocabulary;
    - Part C: the new forge.extend (steps, `foreach:` slices, `HANDOFF.md`, the `check` step, DoD and rules), the shared forge protocol, and `tests/run.py -q`;
    - builder briefs generated from forge.extend.
    - Acceptance:
-     - the boundary check, run over main's current tree, lists every leak in the Problem table (the to-do list for step 2);
+     - the boundary checks, run over main's current tree, list every leak in the Problem table (the to-do list for step 2);
+     - a contract test shows a role step calling an endpoint outside its feature's `uses:` is refused;
      - a dry run of `bay call forge.extend` on a small sample proposal produces the per-slice step plans and a generated brief.
    - Built by hand, the last time: it is the step that creates the process. Every later step runs through it.
 2. **Content types, on main:**

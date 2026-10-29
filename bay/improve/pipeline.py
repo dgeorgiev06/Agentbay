@@ -106,7 +106,7 @@ class Pipeline:
         ledger_eps = self.session_data(only_ledger=True)[0]["episodes"]
         return detect_artifacts.Artifacts(files=art.files(root=root)["files"], text=text, graph=art.graph(root=root),
                                           ledger=ledger_eps, conformance=conformance.run(self.kit) if is_kit else [],
-                                          is_kit=is_kit, unreadable=unreadable)
+                                          is_kit=is_kit, unreadable=unreadable, root=base)
 
     def _system(self):
         try:
@@ -165,11 +165,11 @@ class Pipeline:
         manual = [{k: r[k] for k in ("id", "level", "statement")} for r in conformance.manual(self.kit)] \
             if a.is_kit else []
         warnings = self.warnings + [f"unreadable: {u}" for u in a.unreadable[:20]] + \
-            [f"not parsed: {u}" for u in a.unparsed[:20]]
+            [f"not parsed: {u}" for u in a.unparsed[:20]] + [f"detector failed: {u}" for u in a.failed]
         return {"candidates": cands, "manual": manual, "warnings": warnings,
                 "stats": {"files": len(a.files), "graphNodes": len(a.graph.get("nodes", [])),
                           "conformanceRules": [c["rule"] for c in a.conformance],
-                          "unreadable": len(a.unreadable), "unparsed": len(a.unparsed)}}
+                          "unreadable": len(a.unreadable), "unparsed": len(a.unparsed), "failed": len(a.failed)}}
 
     def _known_rule_ids(self) -> set[str]:
         """C-n from framework/rules/conformance.yaml, R-n from every rules.yaml, DOD-n from every playbook."""
@@ -280,6 +280,8 @@ class Pipeline:
             found = detect_artifacts.run(a, self.settings, only=name,
                                          roles=self.role_contexts() if a.is_kit else [],
                                          read_endpoints=self.read_endpoints())
+            if a.failed:
+                return {"present": None, "newData": new, "note": f"detector failed: {a.failed[0]}"}
         return {"present": any(fingerprint(c) == f["fingerprint"] for c in found), "newData": new}
 
 

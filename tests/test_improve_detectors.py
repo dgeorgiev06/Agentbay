@@ -148,7 +148,7 @@ def tree(files: dict) -> Path:
 def arts(root: Path, ledger=(), conf=()):
     g = graph.build(root, None).as_dict()
     return da.Artifacts(files=graph.files(root), text=lambda p: (root / p).read_text(), graph=g,
-                        ledger=list(ledger), conformance=list(conf))
+                        ledger=list(ledger), conformance=list(conf), root=root)
 
 
 def test_slop_filler_with_exact_text_and_rewrite():
@@ -275,10 +275,10 @@ def test_complexity_over_branch_and_length_thresholds():
         th = da.thresholds({"thresholds": {"maxComplexity": 10, "maxFunctionLines": 20}})
         c = da.complexity(arts(root), th)
         got = {x["detector"]["key"]: x["measure"] for x in c}
-        # 12 ifs -> 13; a nested function is measured on its own (K.m: 2, flagged only for its length); tests
-        # are not audited
+        # 12 ifs -> 13; a nested function is measured on its own, for both complexity and length (K.m keeps
+        # complexity 2 and 2 own lines, so it is not flagged); tests are not audited
         assert got == {"pkg/a.py:branchy": {"complexity": 13, "lines": 26}, "pkg/a.py:long_one": {"complexity": 1, "lines": 32},
-                       "pkg/a.py:K.m": {"complexity": 2, "lines": 27}, "pkg/a.py:K.m.inner": {"complexity": 13, "lines": 25}}, got
+                       "pkg/a.py:K.m.inner": {"complexity": 13, "lines": 25}}, got
         e = [x for x in c if x["detector"]["key"] == "pkg/a.py:branchy"][0]["evidence"]
         assert e[0]["ref"] == "pkg/a.py:1" and e[1] == {"kind": "measurement", "ref": "complexity",
                                                        "detail": "cyclomatic complexity 13, 26 lines", "value": 13}
@@ -296,7 +296,8 @@ def test_unused_constants_count_reads_from_any_python_file():
         "tests/test_consts.py": "from pkg import consts\n\ndef test_x():\n    assert consts.READ_BY_TEST\n"})
     try:
         c = da.unused_constants(arts(root), da.thresholds({}))
-        # a local of the same name assigned elsewhere is not a read of the module constant
+        # any load of the name anywhere counts as a read (deliberately conservative): DEAD is only a local in
+        # pkg/main.py, yet that load keeps the module constant from being reported
         assert sorted(x["detector"]["key"] for x in c) == ["pkg/consts.py:TABLE"], c
         assert c[0]["evidence"][0]["ref"] == "pkg/consts.py:7"
     finally:
@@ -319,12 +320,58 @@ def test_doc_size_and_stale_references():
         assert [x["scope"]["file"] for x in stale] == ["docs/guide.md"], stale
         details = [e["detail"] for e in stale[0]["evidence"]]
         assert details == ["DESIGN.md: link target does not exist", "pkg/old.py: path does not exist",
-                           "pkg/mod.py gone: pkg/mod.py defines no gone"], details
+                           "pkg/mod.py gone: pkg/mod.py defines no gone", "3 references"], details
+        assert stale[0]["evidence"][-1] == {"kind": "measurement", "ref": "staleRefs", "detail": "3 references",
+                                            "value": 3}
         assert stale[0]["evidence"][0]["ref"] == "docs/guide.md:3"
         # history docs are skipped by default and can be configured
         assert [x["scope"]["file"] for x in da.doc_size(arts(root), da.thresholds(
             {"thresholds": {"docWords": 100}, "historyDocs": []}))] == ["docs/api.md", "docs/proposals/0001-old.md"]
     finally:
+        cleanup(root.parent)
+
+
+def test_doc_stale_checks_links_on_disk_and_skips_code():
+    root = tree({
+        "src/a.py": "X = 1\n",
+        ".claude/settings.json": "{}\n",
+        "build/out.txt": "x\n",
+        "docs/guide.md": "# Doc\n"
+                         "See [settings](../.claude/settings.json), [out](../build/out.txt) and [abs](/src/a.py).\n"
+                         "```md\n[example](path/to/thing.md)\n```\n"
+                         "~~~~\n```\n[still code](nope.md)\n~~~~\n"
+                         "Inline: `[x](inline/missing.md)`. Broken: [gone](../missing.md), [root gone](/no/such.md).\n"
+                         "Escapes: [up](../../outside.md).\n"})
+    try:
+        stale = da.doc_stale(arts(root), da.thresholds({}))
+        refs = [(e["ref"], e["detail"]) for e in stale[0]["evidence"] if e["kind"] == "file"]
+        # SKIP_DIRS targets, a repo-root link and code (fenced or inline) are not reported; a missing target
+        # is, and so is one that resolves outside the root
+        assert refs == [("docs/guide.md:10", "../missing.md: link target does not exist"),
+                        ("docs/guide.md:10", "/no/such.md: link target does not exist"),
+                        ("docs/guide.md:11", "../../outside.md: link target does not exist")], refs
+        # without a root on disk, targets under folders the file list never walks are not reported either
+        a = arts(root)
+        a.root = None
+        refs = [e["detail"] for e in da.doc_stale(a, da.thresholds({}))[0]["evidence"] if e["kind"] == "file"]
+        assert refs == ["../missing.md: link target does not exist", "/no/such.md: link target does not exist",
+                        "../../outside.md: link target does not exist"], refs
+    finally:
+        cleanup(root.parent)
+
+
+def test_run_contains_a_failing_detector():
+    root = tree({"docs/big.md": "word " * 50})
+    saved = da.DETECTORS["doc-stale"]
+    try:
+        def boom(a, th):
+            raise RuntimeError("broken")
+        da.DETECTORS["doc-stale"] = boom
+        a = arts(root)
+        assert kinds(da.run(a, {"thresholds": {"docWords": 10}})) == ["doc-size"]
+        assert a.failed == ["boom: RuntimeError: broken"]
+    finally:
+        da.DETECTORS["doc-stale"] = saved
         cleanup(root.parent)
 
 
@@ -335,13 +382,17 @@ def test_compat_layers_with_their_age_in_releases():
         "pkg/old.py": f'"""Old names, {marker} since 0.4 and kept for one release."""\n\n'
                       "def load(x):\n    # alias for load_v2 until callers move\n    return x\n",
         "pkg/clean.py": "import ast\n\ndef f(n):\n    return isinstance(n, ast.alias)   # an AST node, not a layer\n",
-        "schemas/thing.schema.json": f'{{\n  "properties": {{\n    "old": {{ "{marker}": true }}\n  }}\n}}\n'})
+        "schemas/thing.schema.json": f'{{\n  "properties": {{\n    "old": {{ "{marker}": true }}\n  }}\n}}\n',
+        "modes/m/mode.yaml": "name: m\nold: 1        # legacy key, remove in 0.7\nurl: 'http://x/#legacy'\n"})
     try:
         c = {x["scope"]["file"]: x for x in da.compat_layers(arts(root), da.thresholds({}))}
-        assert sorted(c) == ["pkg/old.py", "schemas/thing.schema.json"]
+        assert sorted(c) == ["modes/m/mode.yaml", "pkg/old.py", "schemas/thing.schema.json"]
         old = c["pkg/old.py"]
         assert old["measure"] == {"markers": 2, "releasesOld": 2} and old["severity"] == "medium"
-        assert [e["ref"] for e in old["evidence"]] == ["pkg/old.py:1", "pkg/old.py:4"]
+        assert [e["ref"] for e in old["evidence"]] == ["pkg/old.py:1", "pkg/old.py:4", "markers"]
+        assert old["evidence"][-1] == {"kind": "measurement", "ref": "markers", "detail": "2 markers", "value": 2}
+        # YAML: only comments count (a '#' inside a value is not one)
+        assert [e["ref"] for e in c["modes/m/mode.yaml"]["evidence"]] == ["modes/m/mode.yaml:2", "markers"]
         assert c["schemas/thing.schema.json"]["evidence"][0]["ref"] == "schemas/thing.schema.json:3"
         assert c["schemas/thing.schema.json"]["severity"] == "low"
     finally:

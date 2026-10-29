@@ -19,6 +19,7 @@ from typing import Callable
 
 import yaml
 from ..secretscan import clip
+from .graph import SKIP_DIRS
 
 DEFAULTS = {"nearDuplicate": 0.7, "contextTokens": 6000, "maxFindingsPerDetector": 50,
             "maxComplexity": 30, "maxFunctionLines": 150, "docWords": 3000}
@@ -53,6 +54,8 @@ class Artifacts:
     is_kit: bool = False
     unreadable: list[str] = field(default_factory=list)   # files the text reader refused or could not read
     unparsed: list[str] = field(default_factory=list)     # Python files with syntax errors (skipped by AST checks)
+    failed: list[str] = field(default_factory=list)       # detectors that raised (their findings are missing)
+    root: Path | None = None    # the scanned tree on disk; doc_stale checks link targets against it when set
 
 
 def candidate(kind: str, key: str, title: str, pattern: str, evidence: list[dict], scope: dict,
@@ -376,6 +379,11 @@ def oversized_context(a: Artifacts, th: dict, roles: list[dict] | None = None) -
 
 
 # ----------------------------------------------------------------------------- complexity
+DECISIONS = tuple(x for x in (ast.If, ast.For, ast.AsyncFor, ast.While, ast.IfExp, ast.ExceptHandler, ast.Assert,
+                              getattr(ast, "match_case", None)) if x is not None)    # match_case: Python 3.10+
+NESTED = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+
 def _branches(fn: ast.AST) -> int:
     """Cyclomatic complexity of one function: 1 + decision points, not counting nested functions or classes
     (they are measured on their own)."""
@@ -385,8 +393,7 @@ def _branches(fn: ast.AST) -> int:
         node = todo.pop()
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
             continue
-        if isinstance(node, (ast.If, ast.For, ast.AsyncFor, ast.While, ast.IfExp, ast.ExceptHandler, ast.Assert,
-                             ast.match_case)):
+        if isinstance(node, DECISIONS):
             n += 1
         elif isinstance(node, ast.comprehension):
             n += 1 + len(node.ifs)
@@ -408,13 +415,28 @@ def _functions(tree: ast.Module):
             todo += [(f"{prefix}{n.name}.", c) for c in n.body]
 
 
+def _own_lines(fn: ast.AST) -> int:
+    """Lines of one function, less the lines of the functions and classes nested in it (measured on their own)."""
+    lines = (fn.end_lineno or fn.lineno) - fn.lineno + 1
+    todo = list(ast.iter_child_nodes(fn))
+    while todo:
+        node = todo.pop()
+        if isinstance(node, NESTED):
+            start = min([node.lineno] + [d.lineno for d in node.decorator_list])
+            lines -= (node.end_lineno or node.lineno) - start + 1
+        else:
+            todo.extend(ast.iter_child_nodes(node))
+    return lines
+
+
 def complexity(a: Artifacts, th: dict) -> list[dict]:
-    """Functions with more decision points than `maxComplexity` or more lines than `maxFunctionLines`."""
+    """Functions with more decision points than `maxComplexity` or more own lines than `maxFunctionLines`
+    (nested functions and classes are measured on their own, for both)."""
     out = []
     for path, _, tree in _py(a):
         for qual, fn in _functions(tree):
             cc = _branches(fn)
-            lines = (fn.end_lineno or fn.lineno) - fn.lineno + 1
+            lines = _own_lines(fn)
             if cc <= th["maxComplexity"] and lines <= th["maxFunctionLines"]:
                 continue
             over = [f"complexity {cc} > {th['maxComplexity']}" if cc > th["maxComplexity"] else "",
@@ -533,27 +555,52 @@ def _defined(a: Artifacts) -> dict[str, set[str]]:
     return out
 
 
+FENCE_RX = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+
+
+def _prose_lines(text: str):
+    """(line number, line) outside fenced code blocks: code examples are not references."""
+    fence = None
+    for i, ln in enumerate(text.splitlines(), 1):
+        m = FENCE_RX.match(ln)
+        if fence:
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not ln[m.end():].strip():
+                fence = None
+        elif m:
+            fence = m.group(1)
+        else:
+            yield i, ln
+
+
 def doc_stale(a: Artifacts, th: dict) -> list[dict]:
-    """Docs that point at files or Python symbols that do not exist: relative markdown links, backticked kit
-    paths (whose first folder exists, so placeholders and generated `.agentbay/` paths are skipped) and
-    `file.py` `symbol` pairs."""
+    """Docs that point at files or Python symbols that do not exist: relative markdown links (a leading `/`
+    is the repo root), backticked kit paths (whose first folder exists, so placeholders and generated
+    `.agentbay/` paths are skipped) and `file.py` `symbol` pairs. Fenced code blocks and links inside inline
+    code are skipped. With `a.root` set, link targets are checked on disk (inside the root only); without it,
+    against the file list, and targets under folders the list never walks (SKIP_DIRS) are not reported."""
     files = {f["path"] for f in a.files}
     dirs = {str(Path(p).parents[i]) for p in files for i in range(len(Path(p).parents) - 1)}
     tops = {p.split("/", 1)[0] for p in files}
     defined = _defined(a)
+    root = Path(a.root).resolve() if a.root else None
 
     def exists(p: str) -> bool:
         p = os.path.normpath(p)
-        return p in files or p in dirs
+        if root is not None:
+            q = (root / p).resolve()
+            return q.is_relative_to(root) and q.exists()
+        return p in files or p in dirs or bool(set(Path(p).parts) & SKIP_DIRS)
 
     out = []
     for doc, t in _docs(a, th):
         here = str(Path(doc).parent)
         bad: list[tuple[int, str, str]] = []
-        for i, ln in enumerate(t.splitlines(), 1):
-            for m in LINK_RX.finditer(ln):
+        for i, ln in _prose_lines(t):
+            for m in LINK_RX.finditer(CODE_RX.sub("", ln)):
                 target = m.group(1).split("#", 1)[0]
-                if target and not re.match(r"^[a-z]+:", target) and not exists(os.path.join(here, target)):
+                if not target or re.match(r"^[a-z]+:", target):
+                    continue
+                if not exists(target.lstrip("/") if target.startswith("/") else os.path.join(here, target)):
                     bad.append((i, target, "link target does not exist"))
             for m in CODE_RX.finditer(ln):
                 tok = m.group(1).strip()
@@ -568,7 +615,9 @@ def doc_stale(a: Artifacts, th: dict) -> list[dict]:
             out.append(candidate("doc-stale", doc, f"{doc} references what no longer exists",
                                  f"{len(bad)} reference(s) in {doc} point at missing files or symbols",
                                  [{"kind": "file", "ref": f"{doc}:{i}", "detail": clip(f"{ref}: {why}", 200)}
-                                  for i, ref, why in bad[:10]],
+                                  for i, ref, why in bad[:10]]
+                                 + [{"kind": "measurement", "ref": "staleRefs", "detail": f"{len(bad)} references",
+                                     "value": len(bad)}],
                                  {"file": doc}, "low", {"staleRefs": len(bad)},
                                  "Update or delete each reference."))
     return out
@@ -610,9 +659,22 @@ def _compat_marks(path: str, text: str, tree: ast.Module) -> list[tuple[int, str
     return sorted(set(marks))
 
 
+YAML_COMMENT_RX = re.compile(r"(?:^|\s)#(.*)$")
+
+
+def _yaml_marks(text: str) -> list[tuple[int, str]]:
+    """(line, comment) of YAML comments that mark a compatibility layer."""
+    marks = []
+    for i, ln in enumerate(text.splitlines(), 1):
+        m = YAML_COMMENT_RX.search(ln)
+        if m and COMPAT_RX.search(m.group(1)):
+            marks.append((i, "#" + m.group(1).rstrip()))
+    return marks
+
+
 def compat_layers(a: Artifacts, th: dict) -> list[dict]:
-    """Code and schemas marked as a compatibility layer, with its age in releases when it names the version it
-    dates from: each one is a removal someone promised."""
+    """Code, YAML comments and schemas marked as a compatibility layer, with its age in releases when it names
+    the version it dates from: each one is a removal someone promised."""
     now = _kit_version(a)
     marked: list[tuple[str, list[tuple[int, str]]]] = []
     for path, text, tree in _py(a):
@@ -625,6 +687,10 @@ def compat_layers(a: Artifacts, th: dict) -> list[dict]:
                      if re.search(r'"deprecated"\s*:\s*true', ln)]
             if lines:
                 marked.append((f["path"], lines))
+        elif f["path"].endswith((".yaml", ".yml")) and f["kind"] != "test":
+            lines = _yaml_marks(a.text(f["path"]) or "")
+            if lines:
+                marked.append((f["path"], lines))
     out = []
     for path, marks in marked:
         ages = [now[1] - int(m.group(2)) for _, s in marks for m in VERSION_RX.finditer(s)
@@ -635,7 +701,9 @@ def compat_layers(a: Artifacts, th: dict) -> list[dict]:
         out.append(candidate("compat-layer", path, f"Compatibility layer in {path}",
                              f"{len(marks)} compatibility marker(s)"
                              + (f", the oldest {age} release(s) old" if age is not None else ""),
-                             [{"kind": "file", "ref": f"{path}:{i}", "detail": clip(s, 200)} for i, s in marks[:10]],
+                             [{"kind": "file", "ref": f"{path}:{i}", "detail": clip(s, 200)} for i, s in marks[:10]]
+                             + [{"kind": "measurement", "ref": "markers", "detail": f"{len(marks)} markers",
+                                 "value": len(marks)}],
                              {"file": path}, "medium" if (age or promised) else "low", measure,
                              "Remove the layer once nothing depends on the old shape; otherwise date it."))
     return out
@@ -679,12 +747,16 @@ def run(a: Artifacts, cfg: dict | None = None, only: str | None = None, roles: l
         if (only and name != only) or fn in seen:
             continue
         seen.add(fn)
-        if fn is oversized_context:
-            res = fn(a, th, roles)
-        elif fn is inefficient:
-            res = fn(a, th, read_endpoints)
-        else:
-            res = fn(a, th)
+        try:
+            if fn is oversized_context:
+                res = fn(a, th, roles)
+            elif fn is inefficient:
+                res = fn(a, th, read_endpoints)
+            else:
+                res = fn(a, th)
+        except Exception as e:      # one broken detector must not sink the audit: named in a.failed
+            a.failed.append(clip(f"{fn.__name__}: {type(e).__name__}: {e}", 300))
+            continue
         res = [c for c in res if not only or c["kind"] == only]
         by_kind: dict[str, int] = defaultdict(int)
         for c in res:

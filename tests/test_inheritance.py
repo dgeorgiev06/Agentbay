@@ -166,3 +166,34 @@ def test_child_sets_config_defaults_instead_of_copying_the_config_schema():
     assert_gap(kc, "mode feed-briefing: configDefaults.colour is not a setting of its config schema",
                "modes/briefing/config.schema.json")
     assert_gap(kc, "mode feed-briefing: configDefaults.lookback:", "does not match")
+
+
+def test_child_config_schema_extends_its_parents():
+    from helpers import project
+    k = model.Kit(KIT)
+    own = json.loads((KIT / "modes/mail-briefing/config.schema.json").read_text())
+    assert list(own["properties"]) == ["important"]                                   # only its own key
+    md = k.get("Mode", "mail-briefing")
+    assert [p.relative_to(KIT).as_posix() for p in md.config_files] == [
+        "modes/briefing/config.schema.json", "modes/mail-briefing/config.schema.json"]
+    gaps = []
+    merged = model.config_schema(k, md, gaps)
+    assert not gaps and {"lookback", "retention", "selectors", "important"} <= set(merged["properties"])
+    assert merged.get("additionalProperties") is False                                 # the parent's rule holds
+    m = model.resolve(k).modes["mail-briefing"]
+    assert m.config["important"] == [] and m.config["lookback"] == "30d" and m.config["retention"] == "30d"
+    p = project({"modes": {"mail-briefing": {"important": ["dana@kiln.fi"], "retention": "60d"}}})
+    c = model.resolve(model.Kit(KIT, p)).modes["mail-briefing"].config
+    assert c["important"] == ["dana@kiln.fi"] and c["retention"] == "60d"
+    p = project({"modes": {"mail-briefing": {"colour": "blue"}}})                    # still closed to unknown keys
+    assert_gap(KIT, "modes.mail-briefing", "colour", project=p)
+
+
+def test_redefining_a_parent_config_key_is_a_lint_error():
+    k = kit_copy()
+    sch = k / "modes/mail-briefing/config.schema.json"
+    doc = json.loads(sch.read_text())
+    doc["properties"]["lookback"] = {"type": "string", "default": "1d"}
+    sch.write_text(json.dumps(doc))
+    assert_gap(k, "mode mail-briefing: config schema modes/mail-briefing/config.schema.json redefines inherited "
+                  "setting 'lookback'", "configDefaults")

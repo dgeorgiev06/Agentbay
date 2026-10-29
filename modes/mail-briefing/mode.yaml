@@ -29,7 +29,7 @@ spec:
   constraints:                 # merged over briefing's (lookbackMax 30d, spendUsd, policies)
     maxItemsPerRun: 500        # messages one sync may read (messages.get calls)
     monthlyItems: 20000
-  config: config.schema.json   # briefing's settings plus `important` (keep the shared ones in step with briefing's)
+  config: config.schema.json   # adds `important` to briefing's settings (a child schema only adds keys)
   configDefaults:              # this mode's defaults
     lookback: 30d
     selectors: [{ id: inbox, in: inbox }, { id: sent, in: sent }]   # sent mail: so needs-reply sees your replies

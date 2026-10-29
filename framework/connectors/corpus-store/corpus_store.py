@@ -662,7 +662,7 @@ class CorpusStore:
         rep = run.sources.setdefault(name, {"fetched": 0, "added": 0, "billed": 0, "requests": 0, "truncated": False,
                                             "checked": 0, "deleted": 0, "queries": []})
         check_pending = self._check_candidates(con, state, src_id, start_src)
-        ctx = _SourceRun(name, src, src_id, rep, list(groups), start_src)
+        sr = _SourceRun(name, src, src_id, rep, list(groups), start_src)
         for nkey, (native, group) in groups.items():
             ck = f"{name}|{nkey}"
             run.active.add(ck)
@@ -690,7 +690,7 @@ class CorpusStore:
                 check_pending = []
                 q = _query_request(cur, native, group, ids, start_src, remaining, check, now, feed)
                 res = self._fetch(con, src, src_id, q)
-            if not self._apply(con, state, run, ctx, cur, q, res, ids, sels, now):
+            if not self._apply(con, state, run, sr, cur, q, res, ids, sels, now):
                 return                                          # blocked: no other query of this source either
             have = parse_time(cur["from"], now)
             if not (feed and q.incremental and have > q.start):
@@ -702,7 +702,7 @@ class CorpusStore:
                 continue
             bq = _Query({"query": q.req["query"], "since": iso(q.start), "until": cur["from"], "maxItems": remaining},
                         q.start, have, False, "older", q.window)
-            if not self._apply(con, state, run, ctx, cur, bq, self._fetch(con, src, src_id, bq), ids, sels, now):
+            if not self._apply(con, state, run, sr, cur, bq, self._fetch(con, src, src_id, bq), ids, sels, now):
                 return
 
     def _fetch(self, con, src, src_id: str, q: "_Query") -> dict:

@@ -592,6 +592,71 @@ def test_login_uses_pkce_a_loopback_redirect_and_only_the_readonly_scope():
         assert "nothing was stored" in str(e)
 
 
+def test_login_ignores_a_redirect_with_another_state_and_keeps_waiting():
+    gm = sys.modules[type(make(FakeGmail(NOW))).__module__]
+
+    def token(method, url, headers, body):
+        form = dict(urllib.parse.parse_qsl(body.decode()))
+        assert form["code"] == "4/GOOD"                                 # the stray request's code is never used
+        return jr({"access_token": "ya29.L", "refresh_token": "1//R2", "scope": SCOPE})
+
+    def browser(url):
+        q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
+
+        def hits():
+            for st, code in (("forged", "4/EVIL"), (q["state"], "4/GOOD")):
+                urllib.request.urlopen(f"{q['redirect_uri']}/?state={st}&code={code}", timeout=5).read()
+        threading.Thread(target=hits, daemon=True).start()
+
+    body = gm.login(connect.Http(["oauth2.googleapis.com"], token, "test"), "c", "s", open_browser=browser,
+                    timeout_s=10, say=lambda *_: None)
+    assert body["refresh_token"] == "1//R2"
+
+
+def test_refresh_requires_exactly_the_readonly_scope_in_the_response():
+    for scope, why in ((None, "states no scope"), ("", "states no scope"),
+                       ("https://www.googleapis.com/auth/gmail.metadata", "does not grant gmail.readonly")):
+        fake = FakeGmail(NOW)
+        real = fake._token
+
+        def token(form, real=real, scope=scope):
+            r = real(form)
+            body = json.loads(r.body)
+            body.pop("scope")
+            if scope is not None:
+                body["scope"] = scope
+            return jr(body)
+        fake._token = token
+        out = make(fake).fetch(since=SINCE, maxItems=5)
+        assert out["items"] == [] and why in out["blocked"] and "bay auth gmail" in out["blocked"], out
+
+
+def test_a_bad_base64_part_is_skipped_with_a_reason_and_listing_stops_on_a_repeated_page():
+    fake = FakeGmail(NOW)
+    real = fake.render
+
+    def render(m):
+        out = real(m)
+        if m["id"] == "18a0004":
+            for part in out["payload"].get("parts") or []:
+                if part.get("filename") == "notes.txt" or (part.get("body") or {}).get("data"):
+                    part["body"] = {**part["body"], "data": "!!not*base64!!", "size": 10}
+                    part["body"].pop("attachmentId", None)
+        return out
+    fake.render = render
+    out = make(fake).fetch(since=SINCE, maxItems=50)
+    item = by_id(out)["18a0004"]
+    reasons = [a.get("reason") or "" for a in item["attachments"]]
+    assert any("not valid base64url" in r for r in reasons)
+    assert any("18a0004" in w and "base64url" in w for w in out.get("warnings", []))
+    assert set(by_id(out)) == {"18a0001", "18a0002", "18a0003", "18a0004"}        # the sync carried on
+    fake = FakeGmail(NOW)
+    fake._list = lambda params: jr({"messages": [{"id": "18a0001", "threadId": "th01"}], "nextPageToken": "same"})
+    out = make(fake).fetch(since=SINCE, maxItems=50)
+    assert [i["extId"] for i in out["items"]] == ["18a0001"]
+    assert len([q for q in fake.log if q["path"].endswith("/messages")]) == 2         # second page added nothing
+
+
 def test_bay_auth_gmail_needs_an_interactive_terminal():
     r = subprocess.run([sys.executable, "-m", "bay.cli", "auth", "gmail"], cwd=KIT, stdin=subprocess.DEVNULL,
                        capture_output=True, text=True, timeout=60)

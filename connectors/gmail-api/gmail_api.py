@@ -96,7 +96,11 @@ class QuotaExhausted(ConnectorError):
 
 # ------------------------------------------------------------------ pure helpers
 def b64url(data: str) -> bytes:
-    return base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))
+    """Gmail's base64url (padding optional). Raises ValueError on anything else."""
+    try:
+        return base64.urlsafe_b64decode(str(data) + "=" * (-len(str(data)) % 4))
+    except (ValueError, TypeError) as e:          # binascii.Error is a ValueError
+        raise ValueError("not base64url") from e
 
 
 def _q(v: str) -> str:
@@ -330,6 +334,7 @@ class GmailApi:
         self._labels: dict | None = None
         self._cache: dict[str, tuple[str, dict | None]] = {}    # one sync calls fetch once per native query
         self.billed = 0
+        self.warnings: list[str] = []          # per-message notes (a body part that did not decode), per fetch
 
     # ------------------------------------------------------------ auth
     def _secret(self, name: str) -> str:
@@ -358,10 +363,12 @@ class GmailApi:
                               f"{CLIENT_SECRET}); store the Desktop-app client again with `bay secret set`, then {FIX}")
         if r.status != 200 or not body.get("access_token"):
             raise ConnectorError(f"gmail-api: token refresh failed (HTTP {r.status}); try again later or {FIX}")
-        granted = set(str(body.get("scope") or SCOPE).split())
-        if granted != {SCOPE}:
-            raise LoginNeeded("gmail-api: the stored login grants more than gmail.readonly; remove agentbay's "
-                              f"access at https://myaccount.google.com/permissions, then {FIX}")
+        granted = set(str(body.get("scope") or "").split())
+        if granted != {SCOPE}:                 # Google states the scope on refresh: refuse anything else, or none
+            what = "states no scope" if not granted else "grants more than gmail.readonly" if SCOPE in granted \
+                else "does not grant gmail.readonly"
+            raise LoginNeeded(f"gmail-api: the stored login {what}; remove agentbay's access at "
+                              f"https://myaccount.google.com/permissions, then {FIX}")
         vault.remember(body["access_token"])
         self._access = body["access_token"]
         if body.get("refresh_token") and body["refresh_token"] != rt:
@@ -433,6 +440,8 @@ class GmailApi:
             run["truncated"] = True
             run["warnings"].append(str(e))
             new_cursor = cursor                       # resume from the old position next time
+        run["warnings"] += self.warnings
+        self.warnings = []
         items = sorted(run["items"].values(), key=lambda x: (x["createdAt"], x["extId"]), reverse=True)
         out = {"items": items, "cursor": new_cursor, "truncated": run["truncated"], "billed": self.billed - billed0,
                "requests": self.ctx.http.requests - req0, "checked": run["checked"], "deleted": sorted(set(run["deleted"])),
@@ -606,7 +615,9 @@ class GmailApi:
         plain: list[str] = []
         html: list[str] = []
         parts: list[dict] = []
-        _walk(payload, plain, html, parts)
+        skipped: list[str] = []
+        _walk(payload, plain, html, parts, skipped)
+        self.warnings += [f"gmail-api: message {m['id']}: {w}" for w in skipped]
         if plain:
             text = plain[0]
         elif html:
@@ -651,15 +662,19 @@ class GmailApi:
             att["reason"] = f"over the {self.max_bytes // (1024 * 1024)} MB attachment cap: metadata only"
             return att
         data = None
-        if body.get("data"):
-            data = b64url(body["data"])
-        elif body.get("attachmentId"):
-            aid = urllib.parse.quote(str(body["attachmentId"]), safe="")
-            r = self._get(f"/messages/{mid}/attachments/{aid}")
-            if r.status != 200:
-                att["reason"] = f"could not download the attachment (HTTP {r.status}): metadata only"
-                return att
-            data = b64url((r.json() or {}).get("data") or "")
+        try:
+            if body.get("data"):
+                data = b64url(body["data"])
+            elif body.get("attachmentId"):
+                aid = urllib.parse.quote(str(body["attachmentId"]), safe="")
+                r = self._get(f"/messages/{mid}/attachments/{aid}")
+                if r.status != 200:
+                    att["reason"] = f"could not download the attachment (HTTP {r.status}): metadata only"
+                    return att
+                data = b64url((r.json() or {}).get("data") or "")
+        except ValueError:
+            att["reason"] = "the attachment content is not valid base64url: metadata only"
+            return att
         if data is None:
             att["reason"] = "no attachment content: metadata only"
             return att
@@ -674,22 +689,26 @@ class GmailApi:
         return att
 
 
-def _walk(part: dict, plain: list[str], html: list[str], atts: list[dict]) -> None:
+def _walk(part: dict, plain: list[str], html: list[str], atts: list[dict], skipped: list[str]) -> None:
     """Depth-first over a message payload: parts with a filename are attachments; the first text/plain and
-    text/html bodies are kept."""
+    text/html bodies are kept. A body part that does not decode is skipped, with the reason in `skipped`."""
     if part.get("filename"):
         atts.append(part)
         return
     mt = str(part.get("mimeType") or "").lower()
     if part.get("parts"):
         for p in part["parts"]:
-            _walk(p, plain, html, atts)
+            _walk(p, plain, html, atts, skipped)
         return
     data = (part.get("body") or {}).get("data")
     if not data or mt not in ("text/plain", "text/html"):
         return
-    txt = _decode(b64url(data), _charset(part))
-    (plain if mt == "text/plain" else html).append(txt)
+    try:
+        raw = b64url(data)
+    except ValueError:
+        skipped.append(f"a {mt} body part is not valid base64url and was skipped")
+        return
+    (plain if mt == "text/plain" else html).append(_decode(raw, _charset(part)))
 
 
 # ------------------------------------------------------------------ login (bay auth gmail)
@@ -708,7 +727,8 @@ def auth_url(client_id: str, redirect: str, challenge: str, state: str) -> str:
 
 
 def wait_for_code(server, state: str, timeout_s: float) -> str:
-    """Serve the loopback redirect until Google sends the code back (or an error), at most timeout_s."""
+    """Serve the loopback redirect until Google sends the code back (or an error), at most timeout_s. A request
+    whose state is not this login's is ignored (its code is never used) and waiting goes on."""
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         server.timeout = max(0.1, deadline - time.monotonic())
@@ -716,8 +736,9 @@ def wait_for_code(server, state: str, timeout_s: float) -> str:
         got = getattr(server, "got", None)
         if got is None:
             continue
-        if got.get("state") != state:
-            raise ConnectorError("the redirect's state does not match this login; run `bay auth gmail` again")
+        if not _rand.compare_digest(str(got.get("state") or ""), state):
+            server.got = None                # not this login's redirect (a stale tab, another site): keep waiting
+            continue
         if got.get("error"):
             raise ConnectorError(f"Google did not grant access ({got['error']})")
         if got.get("code"):

@@ -1,0 +1,33 @@
+# The component map (proposal 0006, Part A). Core components own paths and define contracts;
+# extensions are instances of a contract, each in its own folder (`at:`). `bay boundary` reads this map.
+# Paths are as they are today. `owns:` entries are path globs: a trailing `/` owns everything below it.
+components:
+  kernel:            # loader, resolver, lint, registry, dispatcher, ledger, guard, CLI
+    owns:
+      - bay/
+      - schemas/
+      - framework/agents/
+      - framework/roles/
+      - framework/rules/
+      - framework/interfaces/
+      - framework/components.yaml
+      - coordinator/
+      - bay.sh
+      - requirements.txt
+      - agentbay.config.example.yaml
+    contracts:
+      mode:      { at: ["modes/<name>/", "framework/modes/<name>/"], schema: schemas/mode.schema.json, tests: tests/contracts/mode.py }
+      env:       { at: ["envs/<name>.yaml", "framework/envs/<name>.yaml"], schema: schemas/environment.schema.json }
+      connector: { at: ["connectors/<name>/", "framework/connectors/<name>/"], schema: schemas/connector.schema.json, tests: tests/contracts/connector.py }
+      interface: { at: ["interfaces/<name>.yaml"], schema: schemas/interface.schema.json }
+      adapter:   { at: ["bay/adapters/<name>.py"], protocol: bay/adapters/base.py }   # moves in slice 2
+  briefing:          # corpus store, SQL sandbox, selector matcher, the briefing base mode
+    owns:
+      - framework/connectors/corpus-store/
+      - bay/sqlsandbox.py
+      - bay/selector.py
+      - interfaces/items.*   # moves in slice 2
+      - modes/briefing/
+    contracts:
+      contentType: { at: ["content-types/<name>/"], schema: schemas/content-type.schema.json, tests: tests/contracts/content_type.py }
+      source:      { implements: items.source/v1, tests: tests/contracts/items_source.py }

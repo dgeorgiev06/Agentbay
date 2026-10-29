@@ -433,6 +433,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     out += lint_env_bindings(kit)
     out += lint_connectors(kit)
     out += lint_rulesets(kit)
+    out += lint_components(kit)
     out += lint_skill_names(kit)
     out += wfmod.structure_problems(kit)        # project workflows; targets are checked by `bay validate`
     return list(dict.fromkeys(out))
@@ -454,6 +455,26 @@ def lint_skill_names(kit: model.Kit) -> list[str]:
                 out.append(f"{_where(d / 'SKILL.md', 2)}: skill '{name}' of mode {md.name} has the same name as "
                            f"{_where(prev[1] / 'SKILL.md', 2)} (mode {prev[0]}) but different content; project skills are "
                            f"keyed by name, so one would overwrite the other. Rename one (e.g. {md.name}-{name})")
+    return out
+
+
+def lint_components(kit: model.Kit) -> list[str]:
+    """framework/components.yaml (proposal 0006, Part A): its schema, and every `owns:` glob names a real path."""
+    path = kit.root / "framework" / "components.yaml"
+    if not path.exists():
+        return []
+    try:
+        doc = model.load_yaml(path)
+    except model.SpecError as e:
+        return [f"{_where(path, 1)}: {e}"]
+    out = [f"{_where(path, 1)}: components schema: {e}" for e in model.schema_errors(doc, model.schema("components"))]
+    if out:
+        return out
+    for comp, spec in doc["components"].items():
+        for g in spec["owns"]:
+            if not any(kit.root.glob(g.rstrip("/"))):
+                out.append(f"{_where(path, _line_of(path, re.escape(g)))}: component {comp} owns '{g}', which matches "
+                           f"no path in the kit. Fix the path or remove it")
     return out
 
 

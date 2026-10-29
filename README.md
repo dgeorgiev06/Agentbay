@@ -110,6 +110,8 @@ A source is one connector plus one binding line in an env; a new kind of briefin
 ## Safety, in one paragraph
 
 The guard hook is defense in depth, not isolation: it narrows what subagents can ask to do, but cannot contain
-code once something runs it. Nothing that runs code is auto-approved; the only command that runs without a
-prompt is a role's own read-only data shim. Approval gates, secrets and backlog approvals need your terminal.
+code once something runs it. Nothing that runs code is auto-approved: subagents get no auto-approval except
+their own role's read-only data shim, and the main thread is pre-approved only for the read and notes commands
+`bay show|status|log|note|task|catalog`. `bay call`, `bay submit` and `bay approve` always prompt. Approval
+gates, secrets and backlog approvals need your terminal.
 Details: [docs/DESIGN.md#safety-model](docs/DESIGN.md#safety-model).

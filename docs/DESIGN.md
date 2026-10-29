@@ -91,7 +91,8 @@ cannot contain code once something runs it. Hard isolation needs an OS sandbox.
 - **Nothing that runs code is auto-approved.** The guard allows without a prompt only a role's own read-only
   use shim, run as `python3 -E <kit>/bay/use_shim.py`; when the kit is inside the project, even that prompts.
   Every other subagent command prompts you. The main thread is pre-approved only for
-  `bay show|status|log|note|task|catalog`; `bay call` and `bay submit` run connector code and prompt.
+  `bay show|status|log|note|task|catalog`; `bay call` and `bay submit` run connector code and prompt, and
+  `bay approve` prompts too.
 - **What subagents cannot touch:** the guard hook runs on Bash and every file tool. It denies `.agentbay/`,
   `.claude/`, `.git`, `CLAUDE.md`, `.mcp.json`, `agentbay.config.yaml`, `.env*`, `.envrc`, `Makefile`,
   `bay.sh`, editor folders, `.github/workflows/` and the kit; writes outside the env's `fs.write`; inline

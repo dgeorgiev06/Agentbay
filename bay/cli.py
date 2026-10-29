@@ -20,6 +20,8 @@
   improve decide <id> approve|defer|wontfix   record your decision on a backlog item (approve: terminal only)
   improve weekly [--since 7d]                 scan + audit + triage + backlog; cron it weekly
   secret set <NAME>      store a secret in the keychain (value read from stdin, never echoed)
+  auth gmail             sign in to Gmail (read-only) in your browser; stores GMAIL_REFRESH_TOKEN (first login,
+                         and again whenever a sync says the login expired: weekly for an app in Testing)
 
   task new | status | log | note | reclaim     ledger
   note <ref> "text" --instruction              record a mid-run instruction change (read by improve.scan)
@@ -406,6 +408,49 @@ def cmd_secret(args):
     print(f"stored {args.name} in {args.provider}")
 
 
+def cmd_auth(args):
+    """`bay auth gmail`: the OAuth installed-app login (PKCE, loopback redirect on 127.0.0.1, gmail.readonly).
+    Interactive terminal only, like `secret set`: an agent can neither start a login nor replace the token."""
+    import webbrowser
+    from bay import connect
+    if not sys.stdin.isatty():
+        _die("✗ bay auth gmail needs an interactive terminal (stdin is not a TTY) and your browser; run it yourself "
+             "in a terminal.")
+    s = _system(args)
+    env = s.kit.docs["Environment"].get("local-mail")
+    conn = s.kit.get("Connector", "gmail-api")
+    if env is None or conn is None:
+        _die("✗ env local-mail or connector gmail-api is missing from this kit")
+    mod = connect._load_module(conn)
+    prov = connect.secrets_provider(s, env)
+    try:
+        cid, csec = prov.get(mod.CLIENT_ID), prov.get(mod.CLIENT_SECRET)
+    except vault.SecretError as e:
+        _die(f"✗ {e}")
+    if not cid or not csec:
+        _die(f"✗ store your Google OAuth client first (a 'Desktop app' client in your Google Cloud project): "
+             f"`bay secret set {mod.CLIENT_ID}` and `bay secret set {mod.CLIENT_SECRET}`")
+    vault.remember(cid)
+    vault.remember(csec)
+    allow = [h for h in ("oauth2.googleapis.com", "gmail.googleapis.com")
+             if connect.model.host_allowed(h, env.spec.get("network", {}).get("allow", []))]
+    http = connect.Http(allow, who="bay auth gmail")
+    try:
+        body = mod.login(http, cid, csec, open_browser=webbrowser.open)
+    except connect.ConnectorError as e:
+        _die(f"✗ {e}")
+    try:
+        ok = prov.set(mod.REFRESH_TOKEN, body["refresh_token"])
+    except vault.SecretError as e:
+        _die(f"✗ {e}")
+    if not ok:
+        _die(f"✗ secrets provider '{prov.name}' cannot store {mod.REFRESH_TOKEN}; use provider keychain (macOS)")
+    who = mod.account_of(http, body["access_token"])
+    print(f"stored {mod.REFRESH_TOKEN} in {prov.name}" + (f"; signed in to Gmail as {who} (read-only)" if who else ""))
+    print("Google expires this login after 7 days while the OAuth app is in Testing: when a sync is blocked, run "
+          "`bay auth gmail` again.")
+
+
 # ------------------------------------------------------------------ ledger
 def cmd_task(args):
     print(protocol.new_task_id())
@@ -533,6 +578,8 @@ def main(argv=None):
         n.set_defaults(fn=cmd_new, kind=kind)
     se = sub.add_parser("secret"); se.add_argument("action", choices=["set"]); se.add_argument("name")
     se.add_argument("--provider", default="keychain"); se.set_defaults(fn=cmd_secret)
+    au = sub.add_parser("auth", help="sign in to a source in your browser (interactive terminal only)")
+    au.add_argument("source", choices=["gmail"]); au.set_defaults(fn=cmd_auth)
 
     im = sub.add_parser("improve", help="improve backlog: decide items, run the weekly pass")
     ims = im.add_subparsers(dest="action", required=True)

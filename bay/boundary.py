@@ -9,7 +9,8 @@ framework/components.yaml and the proposal's `touches:`:
   feature (its literal prefix reaches `<mode>/features/`); a whole-mode entry does not cover features.
   Mode-wide files (mode.yaml, playbook.md, ...) must be listed too.
 - docs: README.md, docs/DESIGN.md, docs/INTERFACES.md change only when listed.
-- other: tests/, the proposal, HANDOFF.md, proposal/research records and repo meta pass.
+- other: tests/, the proposal, HANDOFF.md, proposal/research records, repo meta and generated files pass
+  (agentbay.config.example.yaml: `bay config example` assembles it from the extensions, lint fails when stale).
 - anything else is unowned and fails unless listed.
 
 B-11 (`--docs`): the core docs must not name a discovered extension instance (a mode, connector, env or
@@ -30,7 +31,7 @@ import yaml
 
 DOCS = ("README.md", "docs/DESIGN.md", "docs/INTERFACES.md")
 OTHER = ("tests/", "HANDOFF.md", "docs/proposals/", "docs/research/", ".gitignore", ".gitattributes",
-         ".github/", ".editorconfig", "LICENSE", "LICENSE.md")
+         ".github/", ".editorconfig", "LICENSE", "LICENSE.md", "agentbay.config.example.yaml")
 # contracts whose instance names B-11 forbids in the core docs
 NAMED_CONTRACTS = ("mode", "connector", "env", "contentType")
 DOCS_COUNTS = False     # B-11 is report-only until slice 2 of proposal 0006 flips this

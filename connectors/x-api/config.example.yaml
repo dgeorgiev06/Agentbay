@@ -1,0 +1,2 @@
+userId: "1234567890"              # your numeric X user id (else looked up via /2/users/me)
+exclude: [retweets, replies]      # X timeline filter

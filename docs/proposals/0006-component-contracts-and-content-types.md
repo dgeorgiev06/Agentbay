@@ -18,9 +18,9 @@ touches:
   - { path: interfaces/items.*, reason: items.* move to framework/interfaces/, slice: 2 }
   - { path: bay/model.py, reason: discovery by folder; config schemas that extend; versioned reads/produces; feature.yaml, slice: 2 }
   - { path: bay/registry.py, reason: catalog lists discovered extensions, slice: 2, planned: true }
-  - { path: bay/config.py, reason: "`bay config example` assembles per-extension config.example.yaml", slice: 2, planned: true }
+  - { path: bay/config.py, reason: "`bay config example` assembles per-extension config.example.yaml", slice: 2 }
   - { path: schemas/, reason: config schemas extend (slice 2), versioned contracts (slice 3), feature.yaml (slice 4), slice: 2 }
-  - { path: agentbay.config.example.yaml, reason: assembled from the extensions' examples, slice: 2, planned: true }
+  - { path: agentbay.config.example.yaml, reason: assembled from the extensions' examples, slice: 2 }
   - { path: README.md, reason: describes contracts, never instances (B-11), slice: 2, planned: true }
   - { path: docs/DESIGN.md, reason: describes contracts, never instances (B-11), slice: 2, planned: true }
   - { path: docs/INTERFACES.md, reason: describes contracts, never instances (B-11), slice: 2, planned: true }
@@ -30,12 +30,15 @@ touches:
   - { path: framework/connectors/corpus-store/, reason: implements the moved items.* interfaces, slice: 2, planned: true }
   - { path: "modes/*/README.md", reason: per-extension README (Part A self-description), slice: 2 }
   - { path: "modes/*/config.example.yaml", reason: per-extension example config, assembled by `bay config example`, slice: 2 }
+  - { path: framework/modes/improve/, reason: "README.md and config.example.yaml (Part A self-description)", slice: 2 }
+  - { path: framework/connectors/claude-transcripts/, reason: "README.md and config.example.yaml (Part A self-description)", slice: 2 }
+  - { path: framework/modes/forge/templates/, reason: "scaffolded modes and connectors get a README.md (Part A self-description)", slice: 2 }
+  - { path: bay/scaffold.py, reason: "scaffolds write a README.md (slice 2); per-mode skill namespaces and touches: (slice 3)", slice: 2 }
   - { path: modes/mail-briefing/, reason: "login hints name `bay auth <connector>`, not a connector; config.schema.json holds only its own keys", slice: 2 }
   - { path: "modes/mail-briefing/features/*/playbook.md", reason: "login hints name `bay auth <connector>`, not a connector", slice: 2 }
   # slice 3: versioned reads/produces/needs/implements, no extension names another, skill namespaces
   - { path: framework/rules/conformance.yaml, reason: C-7 vocabulary, C-11, slice: 3, planned: true }
   - { path: bay/improve/, reason: "conformance checks (slice 3); `boundary-crossing` detector (slice 7)", slice: 3, planned: true }
-  - { path: bay/scaffold.py, reason: "scaffolds write per-mode skill namespaces and touches:", slice: 3, planned: true }
   - { path: "modes/*/skills/", reason: per-mode skill namespaces, slice: 3, planned: true }
   # slice 4: feature.yaml and whole-feature override
   - { path: "modes/*/features/*/", reason: feature.yaml per feature (workflow, skills, uses:), slice: 4, planned: true }

@@ -3,7 +3,7 @@ complete mode; children override endpoints, workflows, playbooks, rules, review 
 parents are errors; abstract bases are linted but never resolved or installed."""
 import json
 
-from helpers import KIT, assert_gap, edit_yaml, kit_copy, model
+from helpers import KIT, assert_gap, edit_yaml, kit_copy, model, self_describe
 
 from bay import lint
 
@@ -19,6 +19,7 @@ def child(k, name="news-briefing", spec=None):
     doc = {"apiVersion": "agentbay/v2", "kind": "Mode", "metadata": {"name": name, "version": "0.1.0"},
            "spec": {"extends": "briefing", **(spec or {})}}
     (d / "mode.yaml").write_text(json.dumps(doc))
+    self_describe(k, d)
     return d
 
 

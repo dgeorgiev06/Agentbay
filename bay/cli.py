@@ -489,6 +489,17 @@ def cmd_auth(args):
 
 
 # ------------------------------------------------------------------ ledger
+def cmd_config(args):
+    """`bay config example`: assemble agentbay.config.example.yaml from each extension's config.example.yaml."""
+    from bay import config as cfgmod, model
+    text = cfgmod.example(model.Kit(model.KIT, None))
+    if args.stdout:
+        sys.stdout.write(text)
+        return
+    (model.KIT / cfgmod.EXAMPLE).write_text(text, encoding="utf-8")
+    print(f"✓ wrote {cfgmod.EXAMPLE}")
+
+
 def cmd_task(args):
     print(protocol.new_task_id())
 
@@ -646,6 +657,9 @@ def main(argv=None):
     au = sub.add_parser("auth", help="sign in to a source in your browser (interactive terminal only)")
     au.add_argument("connector"); au.add_argument("--env", help="env to log in through (default: the one binding it)")
     au.set_defaults(fn=cmd_auth)
+    cf = sub.add_parser("config", help="example config assembled from the extensions' config.example.yaml")
+    cf.add_argument("action", choices=["example"]); cf.add_argument("--stdout", action="store_true")
+    cf.set_defaults(fn=cmd_config)
 
     im = sub.add_parser("improve", help="improve backlog: decide items, run the weekly pass")
     ims = im.add_subparsers(dest="action", required=True)

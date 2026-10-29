@@ -1,0 +1,9 @@
+# read-only mail (sign in: README.md of the mail connector your env binds); briefing's settings plus `important`
+lookback: 30d                     # first sync reads the last 30 days (= lookbackMax)
+selectors:
+  - { id: partners, from: "*@kiln.fi" }               # `*` is matched locally: Gmail lists every message in
+                                                      # the window; `from: kiln.fi` searches the domain natively
+  - { id: staking,  subject: "staking", in: "label:Work" }
+  - { id: news,     in: "Newsletters", since: 7d }
+  - { id: sent,     in: sent }                        # your replies, so "needs reply" knows what you answered
+important: ["*@kiln.fi", "*@galaxy.com"]              # weighs these senders' threads first in the digest

@@ -272,6 +272,8 @@ def test_lint_warns_when_a_partial_roles_override_splits_a_store_reading_mode():
         "apiVersion: agentbay/v2\nkind: Mode\nmetadata: { name: news-briefing, version: 0.1.0, description: news }\n"
         "spec:\n  extends: briefing\n  purpose: Brief me on news from my sources for testing.\n"
         "  roles: { lead: local-feeds-offline, analyst: local-feeds-offline }\n")
+    from helpers import self_describe
+    self_describe(k, d)
     ws = lint.warnings(model.Kit(k))
     assert any("modes/news-briefing/mode.yaml:7: mode news-briefing puts role reviewer in env local-feeds, whose "
                "items.store/items.source bindings differ from env local-feeds-offline, where its code steps (sync, "

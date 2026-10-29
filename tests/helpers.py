@@ -126,3 +126,12 @@ class MemProvider(vault.EnvProvider):
     def set(self, name, value):
         self.environ[name] = value
         return True
+
+
+def self_describe(kit: Path, folder: Path) -> None:
+    """Give a hand-written test extension its README.md and config.example.yaml, and reassemble the kit's
+    agentbay.config.example.yaml (lint requires all three, 0006 Part A)."""
+    from bay import config, model
+    (folder / "README.md").write_text(f"# {folder.name}\n\nA test extension.\n")
+    (folder / config.FRAGMENT).write_text("# lookback: 3d\n")
+    (kit / config.EXAMPLE).write_text(config.example(model.Kit(kit)))

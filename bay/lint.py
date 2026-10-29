@@ -419,6 +419,44 @@ def lint_config_schemas(kit: model.Kit) -> list[str]:
     return out
 
 
+def lint_self_description(kit: model.Kit) -> list[str]:
+    """Each extension describes itself (0006 Part A): user modes and connectors have a README.md; every
+    extension that takes settings has a config.example.yaml whose settings its config schema accepts; and the
+    kit's agentbay.config.example.yaml is the one `bay config example` assembles from them."""
+    from . import config as cfgmod
+    out: list[str] = []
+    for kind in ("Mode", "Connector"):
+        for d in sorted(kit.docs[kind].values(), key=lambda d: d.name):
+            where = os.path.relpath(d.dir, kit.root)
+            if d.root == "user" and not (d.dir / "README.md").exists():
+                out.append(f"{where}/: {kind.lower()} {d.name} has no README.md; add one (what it is, its "
+                           f"contract, setup, settings)")
+            if not cfgmod.takes_settings(kind, d):
+                continue
+            ex = d.dir / cfgmod.FRAGMENT
+            if not ex.exists():
+                out.append(f"{where}/: {kind.lower()} {d.name} takes settings but has no {cfgmod.FRAGMENT}; add "
+                           f"one (the settings body, as under {kind.lower()}s.{d.name} in agentbay.config.yaml)")
+                continue
+            try:
+                body = yaml.safe_load(ex.read_text(encoding="utf-8"))
+            except yaml.YAMLError as e:
+                out.append(f"{where}/{cfgmod.FRAGMENT}: invalid YAML: {e}")
+                continue
+            if body is None:
+                continue
+            gaps: list[str] = []
+            sch = model.config_schema(kit, d, gaps) if kind == "Mode" else d.spec["config"]
+            if sch is not None and isinstance(body, dict):
+                body = {k: v for k, v in body.items() if not (kind == "Mode" and k == "features")}
+            errs = model.schema_errors(body, model.inline_refs(sch)) if sch is not None else []
+            out += [f"{where}/{cfgmod.FRAGMENT}: {e}" for e in errs]
+    example = kit.root / cfgmod.EXAMPLE
+    if not example.exists() or example.read_text(encoding="utf-8") != cfgmod.example(kit):
+        out.append(f"{cfgmod.EXAMPLE} is stale; run bay config example")
+    return out
+
+
 def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Kit | None = None) -> list[str]:
     kit = kit or model.Kit(kit_root or model.KIT, project)
     out = list(kit.errors) + list(kit.collisions)
@@ -446,6 +484,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     out += lint_rulesets(kit)
     out += lint_components(kit)
     out += lint_config_schemas(kit)
+    out += lint_self_description(kit)
     out += lint_skill_names(kit)
     out += wfmod.structure_problems(kit)        # project workflows; targets are checked by `bay validate`
     return list(dict.fromkeys(out))

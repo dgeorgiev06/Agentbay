@@ -69,13 +69,15 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
     if kind not in KINDS:
         raise ScaffoldError(f"unknown kind '{kind}' (have: {', '.join(KINDS)})")
     _check_name(kit, kind, name)
-    intent = _q(intent or f"TODO one sentence: what {name} is for")
+    raw_intent = intent or f"TODO one sentence: what {name} is for"
+    intent = _q(raw_intent)
     files: list[str] = []
     todo: list[str] = []
     if kind == "mode":
         base = f"modes/{name}"
         _write(kit, f"{base}/mode.yaml", _render("mode/mode.yaml", name=name, intent=intent), files)
         _write(kit, f"{base}/playbook.md", _render("mode/playbook.md", name=name), files)
+        _write(kit, f"{base}/README.md", _render("mode/README.md", name=name, intent=raw_intent), files)
         _write(kit, f"{base}/types/RunReq.schema.json", _render("mode/RunReq.schema.json"), files)
         _write(kit, f"{base}/types/RunOut.schema.json", _render("mode/RunOut.schema.json"), files)
         _write(kit, f"{base}/features/run/playbook.md",
@@ -135,6 +137,8 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
                                                       source_fields=src), files)
         _write(kit, f"{base}/{module}.py", _render("connector/module.py.tmpl", name=name, implements=implements,
                                                    host=host, methods=methods), files)
+        _write(kit, f"{base}/README.md", _render("connector/README.md", name=name, intent=raw_intent,
+                                                 implements=implements), files)
         _write(kit, f"{base}/tests/test_{module}.py", _render("connector/test_module.py.tmpl", name=name,
                                                                module=module, host=host), files)
         todo = [f"set the real API host in {base}/connector.yaml and {base}/{module}.py",

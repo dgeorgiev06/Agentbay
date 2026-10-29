@@ -14,7 +14,6 @@ components:
       - coordinator/
       - bay.sh
       - requirements.txt
-      - agentbay.config.example.yaml
     contracts:
       mode:      { at: ["modes/<name>/", "framework/modes/<name>/"], schema: schemas/mode.schema.json, tests: tests/contracts/mode.py }
       env:       { at: ["envs/<name>.yaml", "framework/envs/<name>.yaml"], schema: schemas/environment.schema.json }

@@ -1,6 +1,6 @@
 # 0006 - Components that own their contracts, and content types as plug-ins
 
-- Status: draft for approval, revision 4 (2026-10-29). Nothing is implemented.
+- Status: draft for approval, revision 5 (2026-10-29). Nothing is implemented.
 - Revision 2 follows review by the user:
   - no registration edits;
   - core components own their contracts;
@@ -8,9 +8,10 @@
   - "kind" renamed and explained.
 - Revision 3: named **content type** (user decision 2026-10-29); views split between the content type
   and the mode; content types are user space, created with `forge.connect`.
+- Revision 5: user decisions 2-4 recorded; steps re-sequenced because #9 merges first.
 - Revision 4: Part C, a new forge.extend (slices, handoff file, check step, observable DoD), added at
   the user's request.
-- Blocks: PR #9 (mail-briefing) is held until steps 1-3 land; it is then rebased onto them.
+- PR #9 (mail-briefing) merges first (user decision 2026-10-29); step 2 then moves email into a content type with the posts.
 - Feature: forge.extend (framework change)
 
 ## Problem
@@ -293,35 +294,33 @@ The slice-and-handoff protocol and quiet checks go into the forge mode's playboo
 
 1. **Contracts, the boundary check and the new forge.extend, on main:**
    - the component map, the discovery changes (adapters, `bay auth <connector>`), config extension, per-extension README and example config, and docs that describe contracts only;
-   - the `boundary` check, R-10, C-11, the new DOD-4 and the improve detector;
-   - contract tests for connector and source (run against x-api and fake), and for mode;
+   - the `boundary` check (failing), R-10, C-11, the new DOD-4 and the improve detector;
+   - contract tests for connector, source and mode, mandatory and run against x-api, fake, gmail-api and fake-mail;
+   - the change-feed additions #9 brought (`changeFeed`, `until`, `storedIds`, `cursorExpired`, `exactLabels`, `removed`) declared as optional `items.source/v1` capabilities and covered by the source contract tests;
    - Part C: the new forge.extend (steps, `foreach:` slices, `HANDOFF.md`, the `check` step, DoD and rules), the shared forge protocol, and `tests/run.py -q`;
    - builder briefs generated from forge.extend.
    - Acceptance:
-     - run against #9 as it stands, the check fails and lists its shared-code edits;
+     - the boundary check, run over main's current tree, lists every leak in the Problem table (the to-do list for step 2);
      - a dry run of `bay call forge.extend` on a small sample proposal produces the per-slice step plans and a generated brief.
    - Built by hand, the last time: it is the step that creates the process. Every later step runs through it.
 2. **Content types, on main:**
-   - the loader, generic child tables, view validation, `produces:`/`reads:` and computed fields;
-   - move posts into `content-types/post/`;
+   - the loader, generic child tables, view validation, `produces:`/`reads:`, computed fields and mode-owned views;
+   - move posts into `content-types/post/` and email into `content-types/email/`;
+   - move "needs reply" and important-sender weighting into mail-briefing's own views; mail-briefing's config holds only `important`;
    - the content-type contract tests.
    - Acceptance:
-     - feed-briefing's sync, describe and status output is identical to today's;
-     - a test asserts that no core file names an content type or connector;
-     - every security test passes unchanged.
-3. **Change-feed sync, a core change in its own PR:** the generic additions Gmail needed (history replay, backfill, expired cursors, exact labels, removed), split out of #9 and tested with a fake change-feed source.
-4. **mail-briefing, rebuilt from #9:**
-   - `content-types/email/`, Gmail specifics in `connectors/gmail-api/`;
-   - "needs reply" and important-sender weighting in mail-briefing's own views; its config holds only `important`.
-   - Acceptance: the contract tests pass for gmail-api and fake-mail, and `bay boundary` passes with `touches: []`: a pure extension.
-5. **forge.connect** (proposal 0003 step 4): scaffolds a content type plus a connector. It is proven by adding RSS with `touches: []`.
+     - feed-briefing's and mail-briefing's offline sync, describe and status output is identical to before the step;
+     - a test asserts that no core file names a content type or connector;
+     - every security test passes unchanged;
+     - the boundary check, run over the whole tree, finds no leaks.
+3. **forge.connect** (proposal 0003 step 4): scaffolds a content type plus a connector. It is proven by adding RSS with `touches: []`.
 
 ## Decided
+- **Strictness:** the boundary check fails the step; an approved `touches:` is the only way through (user, 2026-10-29).
+- **Contract tests are mandatory** for every source connector, so each ships an offline transport with fixtures (user, 2026-10-29).
+- **Order:** merge #9 now; step 2 moves email into a content type (user, 2026-10-29).
 - **Name:** content type (user, 2026-10-29). The stored unit is still called an item in code and interface names (`items.source/v1`); renaming those is not part of this proposal.
 
 ## Decisions needed
 
 1. **Computed fields at store time** (recommended), or allow content types to add SQL functions to the read sandbox.
-2. **Strictness:** the boundary check fails the step, with an approved `touches:` as the only way through (recommended), or it only warns the reviewer.
-3. **Contract tests are mandatory for every source connector**, so each must ship an offline transport with fixtures (recommended), or they are optional.
-4. **Order:** hold #9 until steps 1-4 are done (recommended), or merge #9 now and refactor after.

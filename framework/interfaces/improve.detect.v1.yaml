@@ -32,7 +32,7 @@ spec:
           warnings: { type: array, items: { type: string } }
       effects: [read]
     artifacts:
-      description: Artifact lens - slop, unused, inefficient and conformance detectors over files and the reference graph.
+      description: Artifact lens - slop, unused, inefficient, complexity, doc size and staleness, compatibility-layer and conformance detectors over files and the reference graph.
       in:
         type: object
         additionalProperties: false

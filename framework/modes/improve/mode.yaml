@@ -17,7 +17,7 @@ spec:
       rules: features/scan/rules.yaml
       review: { when: never }
     audit:
-      description: "Artifact lens: slop, unused implementation, inefficiency and conformance violations."
+      description: "Artifact lens: slop, unused code, inefficiency, complexity, doc size and staleness, compatibility layers and conformance violations."
       workflow: audit
       in: AuditReq
       out: RecordOut

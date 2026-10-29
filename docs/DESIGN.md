@@ -147,7 +147,8 @@ use shims.
   (structure and metadata only, never conversation text) and runs session detectors: review rounds, repeated
   rule failures, lintable blockers, out-of-scope work, instruction changes, slow or costly steps, retries,
   permission friction, interrupts, status questions, environment gaps, reverts.
-- **audit** runs deterministic artifact detectors (slop, unused concepts, inefficiency) and the rules in
+- **audit** runs deterministic artifact detectors (slop, unused code and concepts, inefficiency, function
+  complexity, doc size and stale doc references, compatibility layers and their age) and the rules in
   `framework/rules/conformance.yaml`.
 - **triage** ranks findings (`improve.finding/v1`) and has the analyst explain root causes; **backlog** writes
   the weekly report; you decide each item in your terminal; **implement** (on demand, behind a gate) drafts a

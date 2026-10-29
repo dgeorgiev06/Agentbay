@@ -1,4 +1,5 @@
-"""Deterministic artifact detectors (improve.audit): slop, unused, inefficient, conformance.
+"""Deterministic artifact detectors (improve.audit): slop, unused, inefficient, complexity, docs, compatibility
+layers, conformance.
 
 Input (`Artifacts`): file list, text reader and reference graph from artifacts.read/v1, plus ledger episodes
 (for "zero uses in the window") and conformance results. Output: candidate improve.finding/v1 dicts.
@@ -8,16 +9,20 @@ from __future__ import annotations
 
 import ast
 import io
+import os
 import re
 import tokenize
 from collections import defaultdict
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
 import yaml
 from ..secretscan import clip
 
-DEFAULTS = {"nearDuplicate": 0.7, "contextTokens": 6000, "maxFindingsPerDetector": 50}
+DEFAULTS = {"nearDuplicate": 0.7, "contextTokens": 6000, "maxFindingsPerDetector": 50,
+            "maxComplexity": 30, "maxFunctionLines": 150, "docWords": 3000}
+HISTORY_DOCS = ("docs/proposals/",)     # records of past decisions: never sized or checked for staleness
 FILLER = {
     "in order to": "to", "it is important to note that": "", "it's important to note that": "",
     "please note that": "", "it should be noted that": "", "make sure to": "", "be sure to": "",
@@ -370,6 +375,272 @@ def oversized_context(a: Artifacts, th: dict, roles: list[dict] | None = None) -
     return out
 
 
+# ----------------------------------------------------------------------------- complexity
+def _branches(fn: ast.AST) -> int:
+    """Cyclomatic complexity of one function: 1 + decision points, not counting nested functions or classes
+    (they are measured on their own)."""
+    n = 1
+    todo = list(ast.iter_child_nodes(fn))
+    while todo:
+        node = todo.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            continue
+        if isinstance(node, (ast.If, ast.For, ast.AsyncFor, ast.While, ast.IfExp, ast.ExceptHandler, ast.Assert,
+                             ast.match_case)):
+            n += 1
+        elif isinstance(node, ast.comprehension):
+            n += 1 + len(node.ifs)
+        elif isinstance(node, ast.BoolOp):
+            n += len(node.values) - 1
+        todo.extend(ast.iter_child_nodes(node))
+    return n
+
+
+def _functions(tree: ast.Module):
+    """(qualified name, node) of every function and method, nested ones included."""
+    todo = [("", n) for n in tree.body]
+    while todo:
+        prefix, n = todo.pop(0)
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            yield prefix + n.name, n
+            todo += [(f"{prefix}{n.name}.", c) for c in n.body]
+        elif isinstance(n, ast.ClassDef):
+            todo += [(f"{prefix}{n.name}.", c) for c in n.body]
+
+
+def complexity(a: Artifacts, th: dict) -> list[dict]:
+    """Functions with more decision points than `maxComplexity` or more lines than `maxFunctionLines`."""
+    out = []
+    for path, _, tree in _py(a):
+        for qual, fn in _functions(tree):
+            cc = _branches(fn)
+            lines = (fn.end_lineno or fn.lineno) - fn.lineno + 1
+            if cc <= th["maxComplexity"] and lines <= th["maxFunctionLines"]:
+                continue
+            over = [f"complexity {cc} > {th['maxComplexity']}" if cc > th["maxComplexity"] else "",
+                    f"{lines} lines > {th['maxFunctionLines']}" if lines > th["maxFunctionLines"] else ""]
+            severe = cc > 2 * th["maxComplexity"] or lines > 2 * th["maxFunctionLines"]
+            out.append(candidate("complexity", f"{path}:{qual}", f"{qual} in {path} is too complex",
+                                 f"{qual} has {'; '.join(x for x in over if x)}: hard to read, test and change",
+                                 [{"kind": "file", "ref": f"{path}:{fn.lineno}", "detail": f"def {qual}"},
+                                  {"kind": "measurement", "ref": "complexity",
+                                   "detail": f"cyclomatic complexity {cc}, {lines} lines", "value": cc}],
+                                 {"file": path}, "medium" if severe else "low", {"complexity": cc, "lines": lines},
+                                 f"Split {qual} into named helpers, one per decision it makes."))
+    return out
+
+
+# ----------------------------------------------------------------------------- unused constants
+def _referenced(a: Artifacts) -> set[str]:
+    """Every name Python code in the tree loads (names, attributes, imports, getattr-style strings); tests
+    included, since a constant only a test reads is still read."""
+    out: set[str] = set()
+    for f in a.files:
+        if not f["path"].endswith(".py"):
+            continue
+        try:
+            tree = ast.parse(a.text(f["path"]) or "")
+        except (SyntaxError, ValueError, RecursionError):
+            continue
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Store):
+                out.add(n.id)
+            elif isinstance(n, ast.Attribute):
+                out.add(n.attr)
+            elif isinstance(n, ast.alias):
+                out.add((n.asname or n.name).split(".")[-1])
+            elif isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value.isidentifier():
+                out.add(n.value)
+    return out
+
+
+def _exported(tree: ast.Module) -> set[str]:
+    for n in tree.body:
+        if isinstance(n, ast.Assign) and any(isinstance(x, ast.Name) and x.id == "__all__" for x in n.targets):
+            try:
+                return set(ast.literal_eval(n.value))
+            except ValueError:
+                return set()
+    return set()
+
+
+def unused_constants(a: Artifacts, th: dict) -> list[dict]:
+    """Module-level names (constants, tables, patterns) that no Python code anywhere loads. Functions, classes
+    and modules are covered by `unused` through the reference graph."""
+    used = _referenced(a)
+    out = []
+    for path, _, tree in _py(a):
+        if "/templates/" in f"/{path}":
+            continue
+        keep = _exported(tree)
+        for n in tree.body:
+            targets = n.targets if isinstance(n, ast.Assign) else [n.target] if isinstance(n, ast.AnnAssign) else []
+            for t in targets:
+                if not isinstance(t, ast.Name) or t.id in used or t.id in keep or t.id.startswith("__"):
+                    continue
+                out.append(candidate("unused-constant", f"{path}:{t.id}", f"Unused constant {t.id} in {path}",
+                                     f"module-level {t.id} is never read by any Python code",
+                                     [{"kind": "file", "ref": f"{path}:{n.lineno}", "detail": f"{t.id}: 0 reads"},
+                                      {"kind": "measurement", "ref": "references", "detail": "0 loads", "value": 0}],
+                                     {"file": path}, "low", {"references": 0}, f"Delete {t.id}."))
+    return out
+
+
+# ----------------------------------------------------------------------------- docs
+def _docs(a: Artifacts, th: dict):
+    history = tuple(th.get("historyDocs", HISTORY_DOCS))
+    for f in a.files:
+        p = f["path"]
+        if p.endswith(".md") and f["kind"] != "test" and not p.startswith(history) and "/templates/" not in f"/{p}":
+            t = a.text(p)
+            if t is not None:
+                yield p, t
+
+
+def doc_size(a: Artifacts, th: dict) -> list[dict]:
+    """Markdown files longer than `docWords`."""
+    out = []
+    for p, t in _docs(a, th):
+        words = len(t.split())
+        if words > th["docWords"]:
+            out.append(candidate("doc-size", p, f"{p} is {words} words",
+                                 f"{p} has {words} words (budget {th['docWords']}): long docs drift and go unread",
+                                 [{"kind": "file", "ref": f"{p}:1", "detail": clip(t.strip().splitlines()[0], 200)},
+                                  {"kind": "measurement", "ref": "words", "detail": f"{words} words", "value": words}],
+                                 {"file": p}, "medium" if words > 2 * th["docWords"] else "low", {"words": words},
+                                 "Cut history and repetition; keep the current contract and link to details."))
+    return out
+
+
+LINK_RX = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
+CODE_RX = re.compile(r"`([^`\n]+)`")
+PATH_RX = re.compile(r"^[\w][\w.-]*(/[\w.-]+)+/?$")
+SYMBOL_RX = re.compile(r"`([\w./-]+\.py)`(?:\s|:{1,2})*`([A-Za-z_]\w*)(?:\(\))?`|`([\w./-]+\.py):{1,2}([A-Za-z_]\w*)`")
+
+
+def _defined(a: Artifacts) -> dict[str, set[str]]:
+    """Python file -> names it defines (functions, classes, methods, module-level assignments)."""
+    out: dict[str, set[str]] = {}
+    for path, _, tree in _py(a):
+        names = {q.rsplit(".", 1)[-1] for q, _ in _functions(tree)}
+        for n in tree.body:
+            if isinstance(n, ast.ClassDef):
+                names.add(n.name)
+            for t in (n.targets if isinstance(n, ast.Assign) else [n.target] if isinstance(n, ast.AnnAssign) else []):
+                if isinstance(t, ast.Name):
+                    names.add(t.id)
+        out[path] = names
+    return out
+
+
+def doc_stale(a: Artifacts, th: dict) -> list[dict]:
+    """Docs that point at files or Python symbols that do not exist: relative markdown links, backticked kit
+    paths (whose first folder exists, so placeholders and generated `.agentbay/` paths are skipped) and
+    `file.py` `symbol` pairs."""
+    files = {f["path"] for f in a.files}
+    dirs = {str(Path(p).parents[i]) for p in files for i in range(len(Path(p).parents) - 1)}
+    tops = {p.split("/", 1)[0] for p in files}
+    defined = _defined(a)
+
+    def exists(p: str) -> bool:
+        p = os.path.normpath(p)
+        return p in files or p in dirs
+
+    out = []
+    for doc, t in _docs(a, th):
+        here = str(Path(doc).parent)
+        bad: list[tuple[int, str, str]] = []
+        for i, ln in enumerate(t.splitlines(), 1):
+            for m in LINK_RX.finditer(ln):
+                target = m.group(1).split("#", 1)[0]
+                if target and not re.match(r"^[a-z]+:", target) and not exists(os.path.join(here, target)):
+                    bad.append((i, target, "link target does not exist"))
+            for m in CODE_RX.finditer(ln):
+                tok = m.group(1).strip()
+                if PATH_RX.match(tok) and tok.split("/", 1)[0] in tops and not exists(tok.rstrip("/")) \
+                        and not exists(os.path.join(here, tok.rstrip("/"))):
+                    bad.append((i, tok, "path does not exist"))
+            for m in SYMBOL_RX.finditer(ln):
+                path, sym = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
+                if path in defined and sym not in defined[path]:
+                    bad.append((i, f"{path} {sym}", f"{path} defines no {sym}"))
+        if bad:
+            out.append(candidate("doc-stale", doc, f"{doc} references what no longer exists",
+                                 f"{len(bad)} reference(s) in {doc} point at missing files or symbols",
+                                 [{"kind": "file", "ref": f"{doc}:{i}", "detail": clip(f"{ref}: {why}", 200)}
+                                  for i, ref, why in bad[:10]],
+                                 {"file": doc}, "low", {"staleRefs": len(bad)},
+                                 "Update or delete each reference."))
+    return out
+
+
+# ----------------------------------------------------------------------------- compatibility layers
+COMPAT_RX = re.compile(r"\b(deprecat\w*|legacy|backwards?[- ]compat\w*|for (?:one|a) release|kept working"
+                       r"|old names?|alias(?:es|ed)? (?:for|of|to))\b", re.I)
+VERSION_RX = re.compile(r"\bv?(\d+)\.(\d+)(?:\.\d+)?\b")
+
+
+def _kit_version(a: Artifacts) -> tuple[int, int] | None:
+    m = re.search(r"__version__\s*=\s*['\"](\d+)\.(\d+)", a.text("bay/__init__.py") or "") \
+        if any(f["path"] == "bay/__init__.py" for f in a.files) else None
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def _compat_marks(path: str, text: str, tree: ast.Module) -> list[tuple[int, str]]:
+    """(line, text) of comments, docstrings and identifiers that mark a compatibility layer."""
+    marks = []
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+            if tok.type == tokenize.COMMENT and COMPAT_RX.search(tok.string):
+                marks.append((tok.start[0], tok.string.strip()))
+    except (tokenize.TokenError, IndentationError):
+        pass
+    for n in ast.walk(tree):
+        body = getattr(n, "body", None)
+        if isinstance(n, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and body \
+                and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+                and isinstance(body[0].value.value, str):
+            for k, ln in enumerate(body[0].value.value.splitlines()):
+                if COMPAT_RX.search(ln):
+                    marks.append((body[0].lineno + k, ln.strip()))
+        name = n.name if isinstance(n, (ast.FunctionDef, ast.ClassDef)) else n.id if isinstance(n, ast.Name) \
+            else n.attr if isinstance(n, ast.Attribute) else ""
+        if re.search(r"deprecat|legacy", name, re.I):
+            marks.append((n.lineno, name))
+    return sorted(set(marks))
+
+
+def compat_layers(a: Artifacts, th: dict) -> list[dict]:
+    """Code and schemas marked as a compatibility layer, with its age in releases when it names the version it
+    dates from: each one is a removal someone promised."""
+    now = _kit_version(a)
+    marked: list[tuple[str, list[tuple[int, str]]]] = []
+    for path, text, tree in _py(a):
+        marks = _compat_marks(path, text, tree)
+        if marks:
+            marked.append((path, marks))
+    for f in a.files:
+        if f["path"].endswith(".schema.json"):
+            lines = [(i, ln.strip()) for i, ln in enumerate((a.text(f["path"]) or "").splitlines(), 1)
+                     if re.search(r'"deprecated"\s*:\s*true', ln)]
+            if lines:
+                marked.append((f["path"], lines))
+    out = []
+    for path, marks in marked:
+        ages = [now[1] - int(m.group(2)) for _, s in marks for m in VERSION_RX.finditer(s)
+                if now and int(m.group(1)) == now[0] and int(m.group(2)) < now[1]]
+        age = max(ages) if ages else None
+        promised = any(re.search(r"for (one|a) release", s, re.I) for _, s in marks)
+        measure = {"markers": len(marks), **({"releasesOld": age} if age is not None else {})}
+        out.append(candidate("compat-layer", path, f"Compatibility layer in {path}",
+                             f"{len(marks)} compatibility marker(s)"
+                             + (f", the oldest {age} release(s) old" if age is not None else ""),
+                             [{"kind": "file", "ref": f"{path}:{i}", "detail": clip(s, 200)} for i, s in marks[:10]],
+                             {"file": path}, "medium" if (age or promised) else "low", measure,
+                             "Remove the layer once nothing depends on the old shape; otherwise date it."))
+    return out
+
+
 # ----------------------------------------------------------------------------- conformance
 def conformance(a: Artifacts, th: dict) -> list[dict]:
     out = []
@@ -388,12 +659,16 @@ def conformance(a: Artifacts, th: dict) -> list[dict]:
 DETECTORS = {
     "slop-filler": slop_filler, "slop-duplicate-rule": slop_duplicates, "slop-comment": slop_comments,
     "slop-message": slop_messages, "unused": unused, "inefficient-store-read": inefficient,
-    "inefficient-loop-call": inefficient, "oversized-context": oversized_context, "conformance": conformance,
+    "inefficient-loop-call": inefficient, "oversized-context": oversized_context, "complexity": complexity,
+    "unused-constant": unused_constants, "doc-size": doc_size, "doc-stale": doc_stale, "compat-layer": compat_layers,
+    "conformance": conformance,
 }
 
 
 def thresholds(cfg: dict | None) -> dict:
-    return {**DEFAULTS, **((cfg or {}).get("thresholds") or {})}
+    cfg = cfg or {}
+    return {**DEFAULTS, **(cfg.get("thresholds") or {}),
+            **({"historyDocs": cfg["historyDocs"]} if cfg.get("historyDocs") is not None else {})}
 
 
 def run(a: Artifacts, cfg: dict | None = None, only: str | None = None, roles: list[dict] | None = None,

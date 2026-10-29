@@ -265,6 +265,99 @@ def test_inefficient_store_reads_loop_calls_and_oversized_context():
         cleanup(root.parent)
 
 
+def test_complexity_over_branch_and_length_thresholds():
+    branchy = "def branchy(x):\n" + "".join(f"    if x == {i}:\n        return {i}\n" for i in range(12)) + "    return -1\n"
+    long = "def long_one():\n" + "".join(f"    v{i} = {i}\n" for i in range(30)) + "    return 0\n"
+    nested = "class K:\n    def m(self, a, b):\n        def inner(y):\n" + "".join(
+        f"            if y == {i}:\n                return {i}\n" for i in range(12)) + "        return a and b\n"
+    root = tree({"pkg/a.py": branchy + "\n" + long + "\n" + nested, "tests/test_a.py": branchy})
+    try:
+        th = da.thresholds({"thresholds": {"maxComplexity": 10, "maxFunctionLines": 20}})
+        c = da.complexity(arts(root), th)
+        got = {x["detector"]["key"]: x["measure"] for x in c}
+        # 12 ifs -> 13; a nested function is measured on its own (K.m: 2, flagged only for its length); tests
+        # are not audited
+        assert got == {"pkg/a.py:branchy": {"complexity": 13, "lines": 26}, "pkg/a.py:long_one": {"complexity": 1, "lines": 32},
+                       "pkg/a.py:K.m": {"complexity": 2, "lines": 27}, "pkg/a.py:K.m.inner": {"complexity": 13, "lines": 25}}, got
+        e = [x for x in c if x["detector"]["key"] == "pkg/a.py:branchy"][0]["evidence"]
+        assert e[0]["ref"] == "pkg/a.py:1" and e[1] == {"kind": "measurement", "ref": "complexity",
+                                                       "detail": "cyclomatic complexity 13, 26 lines", "value": 13}
+        assert da.complexity(arts(root), da.thresholds({})) == []               # defaults: 30 decisions, 150 lines
+    finally:
+        cleanup(root.parent)
+
+
+def test_unused_constants_count_reads_from_any_python_file():
+    root = tree({
+        "pkg/consts.py": "__all__ = ['EXPORTED']\nUSED = 1\nREAD_BY_TEST = 2\nDEAD = 3\nEXPORTED = 4\n"
+                         "BY_NAME = 5\nTABLE: dict = {}\n__version__ = '1'\n",
+        "pkg/main.py": "from pkg.consts import USED\nimport pkg.consts as c\n\ndef f():\n    DEAD = 0\n"
+                       "    return USED, getattr(c, 'BY_NAME'), DEAD\n",
+        "tests/test_consts.py": "from pkg import consts\n\ndef test_x():\n    assert consts.READ_BY_TEST\n"})
+    try:
+        c = da.unused_constants(arts(root), da.thresholds({}))
+        # a local of the same name assigned elsewhere is not a read of the module constant
+        assert sorted(x["detector"]["key"] for x in c) == ["pkg/consts.py:TABLE"], c
+        assert c[0]["evidence"][0]["ref"] == "pkg/consts.py:7"
+    finally:
+        cleanup(root.parent)
+
+
+def test_doc_size_and_stale_references():
+    root = tree({
+        "pkg/mod.py": "def real():\n    return 1\n\nKNOWN = 2\n",
+        "docs/guide.md": "# Guide\n\nSee [design](DESIGN.md), [api](api.md#top) and [site](https://example.com).\n"
+                         "Code: `pkg/mod.py` `real()`, `pkg/mod.py` `gone`, `pkg/mod.py:KNOWN`, `pkg/old.py`.\n"
+                         "Generated: `.agentbay/roles/<unit>/use`, `modes/<name>/mode.yaml`, `items.store/v1`.\n",
+        "docs/api.md": "# API\n" + "word " * 120,
+        "docs/proposals/0001-old.md": "[gone](../removed.md) " + "history " * 200})
+    try:
+        th = da.thresholds({"thresholds": {"docWords": 100}})
+        size = da.doc_size(arts(root), th)
+        assert [x["scope"]["file"] for x in size] == ["docs/api.md"] and size[0]["measure"] == {"words": 122}
+        stale = da.doc_stale(arts(root), th)
+        assert [x["scope"]["file"] for x in stale] == ["docs/guide.md"], stale
+        details = [e["detail"] for e in stale[0]["evidence"]]
+        assert details == ["DESIGN.md: link target does not exist", "pkg/old.py: path does not exist",
+                           "pkg/mod.py gone: pkg/mod.py defines no gone"], details
+        assert stale[0]["evidence"][0]["ref"] == "docs/guide.md:3"
+        # history docs are skipped by default and can be configured
+        assert [x["scope"]["file"] for x in da.doc_size(arts(root), da.thresholds(
+            {"thresholds": {"docWords": 100}, "historyDocs": []}))] == ["docs/api.md", "docs/proposals/0001-old.md"]
+    finally:
+        cleanup(root.parent)
+
+
+def test_compat_layers_with_their_age_in_releases():
+    marker = "deprec" + "ated"                         # spelled in pieces: this file is part of the audited kit
+    root = tree({
+        "bay/__init__.py": "__version__ = '0.6.1'\n",
+        "pkg/old.py": f'"""Old names, {marker} since 0.4 and kept for one release."""\n\n'
+                      "def load(x):\n    # alias for load_v2 until callers move\n    return x\n",
+        "pkg/clean.py": "import ast\n\ndef f(n):\n    return isinstance(n, ast.alias)   # an AST node, not a layer\n",
+        "schemas/thing.schema.json": f'{{\n  "properties": {{\n    "old": {{ "{marker}": true }}\n  }}\n}}\n'})
+    try:
+        c = {x["scope"]["file"]: x for x in da.compat_layers(arts(root), da.thresholds({}))}
+        assert sorted(c) == ["pkg/old.py", "schemas/thing.schema.json"]
+        old = c["pkg/old.py"]
+        assert old["measure"] == {"markers": 2, "releasesOld": 2} and old["severity"] == "medium"
+        assert [e["ref"] for e in old["evidence"]] == ["pkg/old.py:1", "pkg/old.py:4"]
+        assert c["schemas/thing.schema.json"]["evidence"][0]["ref"] == "schemas/thing.schema.json:3"
+        assert c["schemas/thing.schema.json"]["severity"] == "low"
+    finally:
+        cleanup(root.parent)
+
+
+def test_new_detectors_run_by_name():
+    root = tree({"docs/big.md": "word " * 50})
+    try:
+        cfg = {"thresholds": {"docWords": 10}}
+        assert kinds(da.run(arts(root), cfg)) == ["doc-size"]
+        assert da.run(arts(root), cfg, only="complexity") == []
+    finally:
+        cleanup(root.parent)
+
+
 def test_conformance_checks_on_a_kit_copy():
     k = kit_copy()
     try:

@@ -17,8 +17,11 @@ spec:
         created at or after `since`. `maxItems` is the read budget: the connector never reads (is billed for)
         more items than that. `checkIds` are stored extIds of this source to re-check, at most one read each,
         on top of `maxItems`; ids actually verified come back in `checked`, those the source no longer serves
-        in `deleted`. The store re-applies the full selectors locally, so a source may return more than its
-        native query asked for (never less).
+        in `deleted`; ids that left the source's scope but still exist (moved to trash or spam) come back in
+        `removed` (deleted from the store, not remembered). A source that cannot be read at all (an expired
+        login) returns no items, `billed: 0` and `blocked`: the reason and the one command that fixes it. The
+        store re-applies the full selectors locally, so a source may return more than its native query asked
+        for (never less).
       in:
         type: object
         additionalProperties: false
@@ -40,5 +43,7 @@ spec:
           billed: { type: integer, minimum: 0, description: "Items read from the source in this call (what the provider bills), including deletion checks." }
           checked: { type: array, items: { type: string }, description: "checkIds actually verified in this call." }
           deleted: { type: array, items: { type: string }, description: "extIds the source reports deleted or no longer available." }
+          removed: { type: array, items: { type: string }, description: "extIds that left the source's scope (trash, spam) but may come back; the store drops them without remembering them." }
+          blocked: { type: string, description: "Why nothing could be read (e.g. the login expired), naming the command that fixes it. The store keeps its cursor and reports the gap." }
           warnings: { type: array, items: { type: string } }
       effects: [network, spend]

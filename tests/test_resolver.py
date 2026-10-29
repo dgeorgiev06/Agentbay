@@ -11,7 +11,7 @@ def test_shipped_kit_resolves():
     assert review.role == "reviewer" and review.inference.model == "opus" and review.inference.effort == "high"
     units = s.units()
     assert units["analyst--feed-briefing"].bay_uses == [f"items.store/v1.{e}" for e in (
-        "describe", "sql", "get", "thread", "facets", "search", "query", "status")]
+        "describe", "sql", "get", "thread", "threads", "facets", "search", "query", "status")]
     assert "briefing" not in s.modes and s.modes["feed-briefing"].extends == "briefing"    # abstract base
     assert "Edit" not in units["reviewer--feed-briefing"].tools
     assert s.agent == "claude-code" and set(model.Kit(KIT).docs["Agent"]) == {"claude-code"}   # one profile

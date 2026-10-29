@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/data/email/v1",
+  "title": "email/v1",
+  "description": "item/v1 kind extension for email (Gmail, ...): kind `email`. The envelope carries the subject (`title`), body (`text`, quoted reply chains trimmed), labels and threadId; this adds the addresses, message headers and attachments. Addresses are lower-case bare addresses. `account` is the mailbox the message was read from (how the views know which messages are from or to me). An attachment's `text` (extracted text, secret-scrubbed) is stored in the store's attachments table and read through v_attachments; get/query return attachment metadata only.",
+  "allOf": [{ "$ref": "item/v1" }],
+  "required": ["from", "to", "hasAttachments"],
+  "properties": {
+    "kind": { "const": "email" },
+    "from": { "type": "string", "description": "Sender address (also author.email)." },
+    "to": { "type": "array", "items": { "type": "string" } },
+    "cc": { "type": "array", "items": { "type": "string" } },
+    "subject": { "type": ["string", "null"], "description": "Same as title." },
+    "messageId": { "type": ["string", "null"], "description": "RFC 5322 Message-ID header." },
+    "inReplyTo": { "type": ["string", "null"], "description": "RFC 5322 In-Reply-To header." },
+    "account": { "type": "string", "description": "The mailbox address this message was read from." },
+    "hasAttachments": { "type": "boolean" },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "mime", "size", "textChars"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "mime": { "type": "string" },
+          "size": { "type": "integer", "minimum": 0, "description": "Bytes." },
+          "textChars": { "type": "integer", "minimum": 0, "description": "Characters of extracted text; 0 when only metadata is stored." },
+          "reason": { "type": "string", "description": "Why no text was extracted (type not extracted, over a cap, parser failure)." },
+          "text": { "type": "string", "description": "Extracted text, from the source to the store only; never returned by get/query." }
+        }
+      }
+    }
+  },
+  "unevaluatedProperties": false
+}

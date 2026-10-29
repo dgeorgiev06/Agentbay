@@ -8,7 +8,9 @@ metadata:
     role's use shim. The store holds exactly the mode's scope (items of the sources bound to its env that
     match at least one current selector); internal state lives in a separate state.json. While the
     configured selectors or bound sources differ from the scope last applied, every read endpoint except
-    status refuses with an error saying to run sync (status reports `stale`).
+    status refuses with an error saying to run sync (status reports `stale`). While a source is blocked (its
+    login expired) reads still work on what is stored; status reports `stale` and `blocked`, and coverage
+    states the gap.
 spec:
   version: 1
   binding: connector
@@ -83,8 +85,9 @@ spec:
       effects: [read]
     sql:
       description: >-
-        One read-only SELECT over the views (v_items, v_posts, v_fts) and the store tables (items,
-        item_selectors, items_fts), which hold only the mode's scope. Sandboxed: read-only connection,
+        One read-only SELECT over the views (v_items, v_posts, v_email, v_threads, v_attachments, v_fts,
+        v_attachment_fts) and the store tables (items, item_selectors, attachments, items_fts,
+        attachments_fts), which hold only the mode's scope. Sandboxed: read-only connection,
         authorizer, time limit, row and byte caps; output is redacted and secret-scanned. Errors say what to
         change.
       in:
@@ -137,6 +140,31 @@ spec:
         properties:
           threadId: { type: [string, "null"] }
           items: { type: array, items: { $ref: item/v1 } }
+      effects: [read]
+    threads:
+      description: >-
+        Email threads with activity in a window (last message at or after `since`), newest first, from the
+        v_threads view: subject, participants, first and last date, message count, last sender, whether the
+        last message is from me or addressed to me, `needsReply` (last message from someone else, addressed to
+        me), the selector ids its messages match, its message ids (oldest first), the start of the last
+        message and its attachments' metadata. `important` (sender patterns, the `from` matching rules) marks
+        threads with a message from a matching sender.
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          since: { type: string }
+          until: { type: string }
+          selector: { type: string }
+          important: { type: array, items: { type: string } }
+          limit: { type: integer, minimum: 1, maximum: 500 }
+      out:
+        type: object
+        required: [threads, coverage]
+        additionalProperties: false
+        properties:
+          threads: { type: array, items: { type: object } }
+          coverage: { $ref: items.coverage/v1 }
       effects: [read]
     facets:
       description: Counts per value of one field (source, author, container, kind, selector, day), optionally in a window or for one selector.
@@ -218,4 +246,5 @@ spec:
           selectors: { type: object }
           engine: { enum: [fts5, like] }
           stale: { type: boolean }
+          blocked: { type: object, description: "Sources that could not be read on the last sync, connector -> {reason, since}." }
       effects: [read]

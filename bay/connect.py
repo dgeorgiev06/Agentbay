@@ -98,6 +98,7 @@ class Context:
     window: str | None = None                         # how far back the source API reaches
     source_id: str | None = None
     cost_per_post: float | None = None                # connector-declared price per item read (None: use caps)
+    exact_labels: bool = False                        # items.source: items carry their full label set (replace, not add)
     selectors: dict = field(default_factory=dict)     # items.source: selector capability table (field -> native|local)
     kit: Path | None = None
     project: Path | None = None
@@ -157,6 +158,7 @@ def instantiate(system: model.System, env_name: str, conn_name: str, iface: str,
         secrets=acc, http=Http(net, transport, conn_name), data_dir=data_dir(env, project, system.kit.root, c),
         caps=dict(caps or {}), settings=dict(settings or {}), sources=sources, clock=clock or utcnow,
         window=c.spec.get("window"), source_id=c.spec.get("source"), cost_per_post=c.spec.get("costPerPostUsd"),
+        exact_labels=bool(c.spec.get("exactLabels")),
         selectors=dict(c.spec.get("selectors") or {}),
         kit=system.kit.root, project=project)
     inst = mod.create(ctx)

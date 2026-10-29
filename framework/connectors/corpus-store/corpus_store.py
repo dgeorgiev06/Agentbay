@@ -3,11 +3,15 @@
 Files, in <env write path>/<mode>/ (e.g. .agentbay/data/feeds/feed-briefing/), one pair per mode so two
 briefing modes on one env never share items or tags. Both are created 0600 (SQLite gives -wal and -shm the
 database file's mode).
-  corpus.db    what agents may read, and nothing else. WAL mode; schema version in PRAGMA user_version.
+  corpus.db    what agents may read, and nothing else. WAL mode; schema version in PRAGMA user_version (2; a v1
+               store gains the attachments tables on its next write).
     items           one row per item, unique on (source, ext_id); kind-specific fields in `ext` (JSON)
     item_selectors  (item, selector): the selector ids an item matches (the shared matcher decides)
+    attachments     (item, n): an email attachment's metadata and extracted text (email/v1 attachments[]);
+                    `ext` keeps the metadata only. Rows are deleted with their item (trigger).
     items_fts       FTS5 over title, body and author, kept in step by triggers. Missing when this Python's
                     SQLite has no FTS5: search then falls back to LIKE, and `bay validate` says so.
+    attachments_fts FTS5 over attachment name and text, kept in step by triggers (FTS5 only).
   state.json   cursors (per connector and native query), coverage, budget (per UTC month), deleted
                (<source>:<extId>, never re-stored), checked (last deletion check), selectors and sources (the
                scope last applied). Never opened by the read-only connection agents use.
@@ -21,11 +25,18 @@ Scope invariant: corpus.db holds exactly the mode's scope, meaning items of the 
 env that match at least one current selector (bay/selector.py). sync and prune (dispatcher code steps) enforce
 it on every run (_enforce_scope): rows of sources no longer bound are deleted, and every stored item is
 re-matched without refetching (re-tagged, or deleted when no selector matches); sync stores a fetched item
-only when it matches. items_fts follows `items` through triggers. So read-only SQL has nothing out of scope
-to reach. When the configured selectors or bound sources change, sync first applies the new scope in its own
+only when it matches. A source that declares `exactLabels` sends each item's complete label set, so a
+removed label replaces the stored set (and can take the item out of scope); ids a source reports `removed`
+(trash, spam) are deleted without being remembered, ids it reports `deleted` are deleted and never re-stored.
+items_fts and attachments (with attachments_fts) follow `items` through triggers. So read-only SQL has nothing
+out of scope to reach. When the configured selectors or bound sources change, sync first applies the new scope in its own
 transaction, before and regardless of any fetch, and until a sync or prune has done so every read endpoint
 refuses (status reports `stale`), so a config change never leaves out-of-scope items readable. Every item
 string is secret-scrubbed before it is stored (scrub_item), and every read is scrubbed again.
+
+A source that returns `blocked` (an expired login) leaves its cursors and stored items as they are; state.json
+records it under `blocked` until that source is read again, status reports `stale` and `blocked`, coverage
+names the gap, and sync reports it as `stopped` (the dispatcher makes a sync that read nothing `blocked`).
 
 Budget is enforced before each source fetch exactly as before: a run is capped at the strictest of
 maxItemsPerRun, monthlyItems - used and (spendUsd - spent) / costPerPostUsd. Up to DELETION_CHECK_SHARE of a source's budget re-checks stored items still in its window.
@@ -49,7 +60,7 @@ from bay.config import COST_PER_POST_USD
 from bay.connect import ConnectorError
 from bay.util import duration, iso, parse_time, read_json
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 DB_NAME = "corpus.db"
 STATE_NAME = "state.json"
 LOCK_NAME = "corpus.lock"
@@ -83,6 +94,7 @@ def ddl(fts: bool) -> list[str]:
         "CREATE INDEX item_selectors_selector ON item_selectors (selector)",
         "CREATE TRIGGER items_ad_tags AFTER DELETE ON items BEGIN DELETE FROM item_selectors WHERE item = old.pk; END",
     ]
+    out += attachments_ddl(fts)
     if fts:
         cols = "coalesce(new.title, ''), new.body, coalesce(new.author, '') || ' ' || coalesce(new.author_name, '')"
         out += [
@@ -97,8 +109,38 @@ def ddl(fts: bool) -> list[str]:
     return out
 
 
+def attachments_ddl(fts: bool) -> list[str]:
+    """Schema v2: the attachments table (+ attachments_fts with FTS5). A row dies with its item."""
+    out = [
+        """CREATE TABLE attachments (
+             pk INTEGER PRIMARY KEY, item INTEGER NOT NULL, n INTEGER NOT NULL, name TEXT NOT NULL DEFAULT '',
+             mime TEXT NOT NULL DEFAULT '', size INTEGER NOT NULL DEFAULT 0, text_chars INTEGER NOT NULL DEFAULT 0,
+             reason TEXT, text TEXT NOT NULL DEFAULT '', UNIQUE (item, n))""",
+        "CREATE TRIGGER items_ad_attachments AFTER DELETE ON items BEGIN "
+        "DELETE FROM attachments WHERE item = old.pk; END",
+    ]
+    if fts:
+        out += [
+            "CREATE VIRTUAL TABLE attachments_fts USING fts5(name, text)",
+            "CREATE TRIGGER attachments_ai AFTER INSERT ON attachments BEGIN "
+            "INSERT INTO attachments_fts (rowid, name, text) VALUES (new.pk, new.name, new.text); END",
+            "CREATE TRIGGER attachments_ad AFTER DELETE ON attachments BEGIN "
+            "DELETE FROM attachments_fts WHERE rowid = old.pk; END",
+        ]
+    return out
+
+
+def migrate(con: sqlite3.Connection, ver: int) -> None:
+    """Bring an older store to SCHEMA_VERSION inside the caller's transaction. v1 -> v2 adds the attachments
+    tables (a v1 store has no attachment rows to move)."""
+    if ver < 2:
+        for stmt in attachments_ddl(sbx.has_fts(con)):
+            con.execute(stmt)
+    con.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+
+
 def create_schema(con: sqlite3.Connection) -> bool:
-    """Create the v1 schema in an empty database. Returns whether FTS5 is in use."""
+    """Create the current schema in an empty database. Returns whether FTS5 is in use."""
     fts = sbx.fts5_available()
     for stmt in ddl(fts):
         con.execute(stmt)
@@ -132,6 +174,10 @@ def open_rw(path: Path) -> sqlite3.Connection:
         con.close()           # a pre-release store kept state inside corpus.db, where agents could count it
         raise StoreError(f"{path}: written by a pre-release build (internal state inside corpus.db); move the "
                          f"folder aside and sync again")
+    elif ver < SCHEMA_VERSION:
+        con.execute("BEGIN IMMEDIATE")
+        migrate(con, ver)
+        con.execute("COMMIT")
     return con
 
 
@@ -155,10 +201,14 @@ def scrub_item(it: dict) -> dict:
 
 
 def item_row(it: dict) -> dict:
-    """The one way an item becomes an `items` row (sync uses it); scrubs first."""
+    """The one way an item becomes an `items` row (sync uses it); scrubs first. Attachment text goes to the
+    attachments table (attachment_rows), not into `ext`."""
     it = scrub_item(it)
     au = it.get("author") or {}
     ext = {k: v for k, v in it.items() if k not in ENVELOPE}
+    if isinstance(ext.get("attachments"), list):
+        ext["attachments"] = [{k: v for k, v in a.items() if k != "text"} if isinstance(a, dict) else a
+                              for a in ext["attachments"]]
     if au.get("email") and au.get("handle"):
         ext["author"] = au
     return {"source": it["source"], "ext_id": it["extId"], "kind": it["kind"],
@@ -167,6 +217,18 @@ def item_row(it: dict) -> dict:
             "created_at": it["createdAt"], "fetched_at": it["fetchedAt"], "container": it.get("container"),
             "labels": json.dumps(sorted(set(it.get("labels") or []))), "thread_id": it.get("threadId"),
             "ext": json.dumps(ext, ensure_ascii=False, sort_keys=True)}
+
+
+def attachment_rows(it: dict) -> list[tuple]:
+    """(n, name, mime, size, textChars, reason, text) per attachment of a scrubbed item."""
+    out = []
+    for n, a in enumerate(it.get("attachments") or []):
+        if not isinstance(a, dict):
+            continue
+        text = a.get("text") or ""
+        out.append((n, str(a.get("name") or ""), str(a.get("mime") or ""), int(a.get("size") or 0),
+                    int(a.get("textChars") or len(text)) if text else 0, a.get("reason"), text))
+    return out
 
 
 def row_item(r: sqlite3.Row) -> dict:
@@ -422,6 +484,12 @@ class CorpusStore:
             complete = False
             note = (f"requested from {iso(requested_from)} but the store only covers from {cov['from']}; "
                     f"older items are not available (source API window or budget limited the history)")
+        blocked = state.get("blocked") or {}
+        if blocked:
+            complete = False
+            gap = "; ".join(f"{n} has not been read since {b.get('since')}: {b.get('reason')}"
+                            for n, b in sorted(blocked.items()))
+            note = f"{note}; {gap}" if note else gap
         cov["complete"] = complete
         if note:
             cov["note"] = note
@@ -455,13 +523,14 @@ class CorpusStore:
         if errs:
             raise StoreError(f"connector {src_name}: item {it['id']} does not match {kind}/v1: {'; '.join(errs[:3])}")
 
-    def _upsert(self, con, it: dict, sels: list[dict], now) -> tuple[bool, bool]:
+    def _upsert(self, con, it: dict, sels: list[dict], now, exact: bool = False) -> tuple[bool, bool]:
         """(new, kept) for a scrubbed item (scrub_item), so it matches on exactly what will be stored. Labels
-        union with what is stored; the item is kept only if it matches a selector."""
+        union with what is stored, unless the source sends complete label sets (`exact`); the item is kept only
+        if it matches a selector."""
         old = con.execute("SELECT pk, labels, container FROM items WHERE source = ? AND ext_id = ?",
                           (it["source"], it["extId"])).fetchone()
         labels = set(it.get("labels") or []) | ({it["container"]} if it.get("container") else set())
-        if old is not None:
+        if old is not None and not exact:
             labels |= set(json.loads(old["labels"]))
         merged = {**it, "labels": sorted(labels), "container": (old["container"] if old else None) or it.get("container")}
         tags = selmod.match_ids(merged, sels, now)
@@ -479,6 +548,9 @@ class CorpusStore:
             con.execute(f"UPDATE items SET {', '.join(f'{k} = ?' for k in row)} WHERE pk = ?", [*row.values(), pk])
         con.execute("DELETE FROM item_selectors WHERE item = ?", (pk,))
         con.executemany("INSERT INTO item_selectors (item, selector) VALUES (?, ?)", [(pk, t) for t in tags])
+        con.execute("DELETE FROM attachments WHERE item = ?", (pk,))
+        con.executemany("INSERT INTO attachments (item, n, name, mime, size, text_chars, reason, text) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [(pk, *a) for a in attachment_rows(merged)])
         return old is None, True
 
     def _enforce_scope(self, con, state: dict, sels: list[dict], now) -> dict:
@@ -592,7 +664,12 @@ class CorpusStore:
             q = _query_request(cur, native, group, ids, start_src, remaining, check, now)
             res = src.fetch(**q.req)
             run.warnings += res.get("warnings", [])
-            n_new, n_kept = self._store_fetched(con, run, res, name, src_id, sels, now)
+            if res.get("blocked"):
+                self._blocked(state, run, rep, name, ids, scrub(str(res["blocked"])), now)
+                run.active.update(f"{name}|{k}" for k in groups)    # keep every cursor of this source
+                return                                         # the source cannot be read: no other query either
+            state.setdefault("blocked", {}).pop(name, None)
+            n_new, n_kept = self._store_fetched(con, run, res, name, src_id, sels, now, src.ctx.exact_labels)
             self._bill(state, run, res, src)
             for xid in res.get("checked", []):
                 state["checked"][f"{src_id}:{xid}"] = iso(now)
@@ -610,16 +687,25 @@ class CorpusStore:
             rep["queries"].append({"selectors": ids, "native": q.req["query"], "fetched": len(got), "kept": n_kept,
                                    "mode": q.mode})
 
-    def _store_fetched(self, con, run: "_SyncRun", res: dict, name: str, src_id: str, sels, now) -> tuple[int, int]:
+    def _blocked(self, state, run: "_SyncRun", rep: dict, name: str, ids: list[str], reason: str, now) -> None:
+        """A source that could not be read: keep its cursors and items, record why, report the gap."""
+        prev = (state.get("blocked") or {}).get(name) or {}
+        state.setdefault("blocked", {})[name] = {"reason": reason, "since": prev.get("since") or iso(now)}
+        run.stopped = run.stopped or reason
+        rep["blocked"] = reason
+        rep["queries"].append({"selectors": ids, "skipped": "blocked"})
+
+    def _store_fetched(self, con, run: "_SyncRun", res: dict, name: str, src_id: str, sels, now,
+                       exact: bool = False) -> tuple[int, int]:
         """Validate, scrub and upsert the fetched items (skipping ids deleted at the source), then apply the
-        deletions the source reported. Returns (new, kept)."""
+        deletions and removals the source reported. Returns (new, kept)."""
         n_new = n_kept = 0
         for it in res["items"]:
             self._validate(it, name, src_id)
             it = scrub_item(it)
             if it["id"] in run.deleted:
                 continue
-            is_new, was_kept = self._upsert(con, it, sels, now)
+            is_new, was_kept = self._upsert(con, it, sels, now, exact)
             n_new += is_new
             n_kept += was_kept
         for xid in res.get("deleted", []):
@@ -627,6 +713,9 @@ class CorpusStore:
             run.deleted.add(f"{src_id}:{xid}")
             run.n_deleted += con.execute("DELETE FROM items WHERE source = ? AND ext_id = ?",
                                          (src_id, xid)).rowcount
+        for xid in res.get("removed", []):                   # left the source's scope (trash, spam): may come back
+            run.n_deleted += con.execute("DELETE FROM items WHERE source = ? AND ext_id = ?",
+                                         (src_id, scrub(str(xid)))).rowcount
         run.fetched += len(res["items"])
         run.kept += n_kept
         run.added += n_new
@@ -705,9 +794,14 @@ class CorpusStore:
             engine = "fts5" if sbx.has_fts(con) else "like"
         finally:
             con.close()
-        stale = bool(self._stale(state, sels))   # reads refuse until a sync or prune re-scopes the store
-        return {"lastSync": state["coverage"].get("to"), "coverage": self.coverage(state, lo),
-                "budget": self._budget(state), "count": count, "selectors": per, "engine": engine, "stale": stale}
+        # reads refuse until a sync or prune re-scopes the store; a blocked source makes the store stale too
+        # (its items are older than they look), but reads go on working on what is stored
+        stale = bool(self._stale(state, sels)) or bool(state.get("blocked"))
+        out = {"lastSync": state["coverage"].get("to"), "coverage": self.coverage(state, lo),
+               "budget": self._budget(state), "count": count, "selectors": per, "engine": engine, "stale": stale}
+        if state.get("blocked"):
+            out["blocked"] = state["blocked"]
+        return sbx.clean(out)
 
     def query(self, since=None, until=None, author=None, text=None, selector=None, limit=100, ids=None) -> dict:
         now = self.ctx.now()
@@ -816,9 +910,12 @@ class CorpusStore:
         cols = {v: [{"name": n, "type": t, "description": d} for n, t, d in sbx.COLUMNS[v]] for v in sbx.VIEWS}
         fts = {"view": sbx.FTS_VIEW, "indexes": ["title", "text", "author"],
                "example": "SELECT id, url, snippet FROM v_fts WHERE fts MATCH 'staking AND custody' "
-                          "ORDER BY rank LIMIT 20"}
-        data_views = [v for v in sbx.VIEWS if v != sbx.FTS_VIEW]
+                          "ORDER BY rank LIMIT 20",
+               "attachments": {"view": sbx.ATT_FTS_VIEW, "indexes": ["name", "text"],
+                               "example": "SELECT id, name, snippet FROM v_attachment_fts WHERE fts MATCH 'invoice' "
+                                          "ORDER BY rank LIMIT 20"}}
         if not self.path.exists():
+            data_views = [v for v in sbx.VIEWS if v not in sbx.FTS_VIEWS]
             return {"views": [{"name": v, "columns": cols[v], "rows": 0} for v in data_views],
                     "fts": {**fts, "available": sbx.fts5_available()}, "functions": sorted(sbx.FUNCTIONS),
                     "limits": limits}
@@ -826,26 +923,77 @@ class CorpusStore:
         con = self._ro()
         try:
             fts["available"] = sbx.has_fts(con)
-            views = []
-            for v in data_views:
-                n = con.execute(f"SELECT count(*) FROM {v}").fetchone()[0]
-                samples = {}
-                for c in ("source", "kind", "container", "author"):
-                    samples[c] = [r[0] for r in con.execute(
-                        f"SELECT {c}, count(*) AS n FROM {v} WHERE {c} IS NOT NULL GROUP BY 1 ORDER BY n DESC LIMIT 5")]
-                samples["matched"] = [r[0] for r in con.execute(
-                    f"SELECT DISTINCT j.value FROM {v}, json_each({v}.matched) j ORDER BY 1 LIMIT 20")]
-                span = con.execute(f"SELECT min(createdAt), max(createdAt) FROM {v}").fetchone()
-                views.append({"name": v, "columns": cols[v], "rows": n, "samples": samples,
-                              "createdAt": {"min": span[0], "max": span[1]}})
+            present = sbx.present_views(con)
+            views, rows = [], {}
+            for v in present:
+                if v in sbx.FTS_VIEWS:
+                    continue
+                rows[v] = n = con.execute(f"SELECT count(*) FROM {v}").fetchone()[0]
+                entry = {"name": v, "columns": cols[v], "rows": n}
+                if v in sbx.ITEM_VIEWS:
+                    samples = {}
+                    for c in ("source", "kind", "container", "author"):
+                        samples[c] = [r[0] for r in con.execute(
+                            f"SELECT {c}, count(*) AS n FROM {v} WHERE {c} IS NOT NULL GROUP BY 1 ORDER BY n DESC LIMIT 5")]
+                    samples["matched"] = [r[0] for r in con.execute(
+                        f"SELECT DISTINCT j.value FROM {v}, json_each({v}.matched) j ORDER BY 1 LIMIT 20")]
+                    span = con.execute(f"SELECT min(createdAt), max(createdAt) FROM {v}").fetchone()
+                    entry.update({"samples": samples, "createdAt": {"min": span[0], "max": span[1]}})
+                views.append(entry)
         finally:
             con.close()
-        if fts["available"]:
-            views.append({"name": sbx.FTS_VIEW, "columns": cols[sbx.FTS_VIEW], "rows": views[0]["rows"]})
-        else:
+        base = {sbx.FTS_VIEW: "v_items", sbx.ATT_FTS_VIEW: "v_attachments"}
+        for v in present:
+            if v in sbx.FTS_VIEWS:
+                views.append({"name": v, "columns": cols[v], "rows": rows.get(base[v], 0)})
+        if not fts["available"]:
             fts["note"] = "FTS5 is not available in this Python's SQLite: use search (LIKE) or LIKE in sql"
         return sbx.clean({"views": views, "fts": fts, "functions": sorted(sbx.FUNCTIONS), "limits": limits,
                           "coverage": self.coverage(state)})
+
+    def threads(self, since=None, until=None, selector=None, important=None, limit=100) -> dict:
+        """Email threads active in the window (v_threads), newest first, with their message ids, the start of the
+        last message, attachment metadata and `important` (a sender matches one of the patterns)."""
+        now = self.ctx.now()
+        lo = parse_time(since, now) if since else None
+        if not self.path.exists():
+            return {"threads": [], "coverage": self.coverage(load_state(self.state_path), lo)}
+        where, args = [], []
+        if since:
+            where.append("t.lastDate >= ?")
+            args.append(iso(lo))
+        if until:
+            where.append("t.lastDate <= ?")
+            args.append(iso(parse_time(until, now)))
+        if selector:
+            where.append("EXISTS (SELECT 1 FROM json_each(t.matched) WHERE value = ?)")
+            args.append(selector)
+        state = load_state(self.state_path)
+        con = self._ro()
+        out = []
+        try:
+            atts = "v_attachments" in sbx.present_views(con)
+            rows = con.execute(f"SELECT t.* FROM v_threads t {_where(where)} ORDER BY t.lastDate DESC, t.threadId "
+                               f"LIMIT ?", [*args, int(limit or 100)]).fetchall()
+            for r in rows:
+                t = dict(r)
+                for k in ("participants", "senders", "matched"):
+                    t[k] = json.loads(t[k] or "[]")
+                for k in ("lastFromMe", "lastToMe", "needsReply", "hasAttachments"):
+                    t[k] = bool(t[k])
+                key = (t["source"], t["threadId"])
+                t["ids"] = [x for (x,) in con.execute(
+                    "SELECT id FROM v_email WHERE source = ? AND threadId = ? ORDER BY createdAt, id LIMIT 50", key)]
+                last = con.execute("SELECT substr(text, 1, 500) FROM v_email WHERE id = ?", (t["lastId"],)).fetchone()
+                t["lastText"] = last[0] if last else ""
+                t["attachments"] = [dict(a) for a in con.execute(
+                    "SELECT id, name, mime, size, textChars, reason FROM v_attachments WHERE source = ? AND "
+                    "threadId = ? ORDER BY createdAt, n LIMIT 20", key)] if atts else []
+                t["important"] = any(selmod.addr_matches(important or [], a) for a in t["senders"])
+                out.append(t)
+        finally:
+            con.close()
+        return sbx.clean({"threads": out, "coverage": self.coverage(state, lo)})
 
     def sql(self, sql, limit=None) -> dict:
         try:

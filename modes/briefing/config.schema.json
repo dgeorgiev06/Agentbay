@@ -11,6 +11,10 @@
       "default": [{ "id": "all" }],
       "description": "Which items to keep (bay/selector.py): fields ANDed, selectors ORed, `not` excludes. Changing them re-matches stored items on the next sync; a new selector backfills its lookback; prune drops items no selector matches."
     },
+    "important": {
+      "type": "array", "items": { "type": "string", "minLength": 1 }, "default": [],
+      "description": "Senders whose items weigh more in the digest: handles, addresses or domains, `*` wildcard (the selector `from` rules). The store marks threads with a message from one of them."
+    },
     "maxItemsPerRun": { "type": "integer", "minimum": 1, "description": "Items one sync may read." },
     "monthlyItems": { "type": "integer", "minimum": 0, "description": "Items read per UTC month." },
     "spendUsd": { "type": "number", "minimum": 0 },

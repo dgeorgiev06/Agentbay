@@ -11,14 +11,17 @@ field of its `not` block matches. Matching is case-insensitive (casefold).
               and only here: `*@bank.example`, `news*` (any run of characters). A field with a `*` value is
               matched locally, never sent to the source's search
   subject     substring of the title;  text: substring of title or body (no wildcards)
-  in          a container or label, exactly (home, list:<id>, INBOX)
+  in          a container or label, exactly (home, list:<id>, INBOX); a `label:` or `in:` prefix (Gmail search
+              style, `label:Work`, `in:inbox`) is ignored when matching
   has         link | attachment
   since       relative (7d) or ISO-8601
 
 Each source connector declares which fields its native search handles (connector.yaml spec.selectors:
 `native` or `local`; a field it does not list cannot be expressed). `split()` turns a selector into a
-native query (narrows the fetch) and a local filter. The store always re-applies the FULL selector with
-`matches()`, so behaviour is the same on every source no matter what the native query did.
+native query (narrows the fetch) and a local filter. `not` is native only on a source that declares
+`not: native` and handles every field inside it natively (Gmail's `-` prefix). The store always re-applies
+the FULL selector with `matches()`, so behaviour is the same on every source no matter what the native
+query did.
 """
 from __future__ import annotations
 
@@ -58,6 +61,20 @@ def _addr_match(value: str, addrs: list[str]) -> bool:
     return False
 
 
+def addr_matches(patterns, addr: str) -> bool:
+    """Whether an address or handle matches any of `patterns` (the `from`/`to` rules: handle, address, domain,
+    `*` wildcard). Used for sender lists such as a mode's `important` setting."""
+    return any(_addr_match(p, [addr or ""]) for p in _vals(patterns))
+
+
+def _container(v: str) -> str:
+    v = _norm(v)
+    for prefix in ("label:", "in:"):
+        if v.startswith(prefix):
+            return v[len(prefix):]
+    return v
+
+
 def glob(pattern: str, text: str) -> bool:
     """`*` matches any run of characters; everything else is literal. No regex and no backtracking: the
     literal parts between stars are found left to right (for `*`-only patterns the leftmost occurrence is
@@ -92,7 +109,7 @@ def _field(item: dict, field: str, values: list[str], now: datetime) -> bool:
         return any(v.casefold() in t for v in values)
     if field == "in":
         have = {_norm(x) for x in [item.get("container") or "", *(item.get("labels") or [])] if x}
-        return any(_norm(v) in have for v in values)
+        return any(_norm(v) in have or _container(v) in have for v in values)
     if field == "has":
         return any(_has(item, v) for v in values)
     if field == "since":
@@ -148,20 +165,32 @@ def wildcard(v) -> bool:
     return any("*" in x for x in _vals(v))
 
 
+def _native_not(block, caps: dict) -> bool:
+    """A `not` block goes to the source only when the source declares `not: native` and handles every field in
+    it natively without wildcards (Gmail `-from:x`); otherwise it is matched locally."""
+    return (mode_of(caps, "not") == "native" and isinstance(block, dict) and bool(block)
+            and all(f != "since" and mode_of(caps, f) == "native" and not wildcard(v) for f, v in block.items()))
+
+
 def split(sel: dict, caps: dict) -> tuple[dict, dict]:
-    """(native query, local filter). `not` and wildcard values are always local; the store re-applies the
-    whole selector anyway."""
+    """(native query, local filter). Wildcard values are always local, and `not` is local unless the source
+    can express all of it (`_native_not`); the store re-applies the whole selector anyway."""
     native, local = {}, {}
     for f in FIELDS:
         if f == "id" or f not in sel:
             continue
-        (native if f != "not" and mode_of(caps, f) == "native" and not wildcard(sel[f]) else local)[f] = sel[f]
+        if f == "not":
+            (native if _native_not(sel[f], caps) else local)[f] = sel[f]
+            continue
+        (native if mode_of(caps, f) == "native" and not wildcard(sel[f]) else local)[f] = sel[f]
     return native, local
 
 
 def native_key(native: dict) -> str:
     """Canonical text of a native query: selectors with the same native query share one fetch and cursor."""
-    return json.dumps({k: sorted(_vals(v)) for k, v in sorted(native.items()) if k != "since"},
+    def norm(v):
+        return {k: sorted(_vals(x)) for k, x in sorted(v.items())} if isinstance(v, dict) else sorted(_vals(v))
+    return json.dumps({k: norm(v) for k, v in sorted(native.items()) if k != "since"},
                       sort_keys=True, separators=(",", ":"))
 
 

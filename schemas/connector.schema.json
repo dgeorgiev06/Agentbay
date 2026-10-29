@@ -122,6 +122,10 @@
           "pattern": "^[0-9]+[mhdw]$",
           "description": "How far back the source API can reach (items.source). Older history comes only from the store."
         },
+        "exactLabels": {
+          "type": "boolean",
+          "description": "items.source: every item carries its complete current label set (Gmail labelIds), so the store replaces stored labels instead of adding to them; a removed label then takes the item out of an `in` selector."
+        },
         "costPerPostUsd": {
           "type": "number",
           "minimum": 0,

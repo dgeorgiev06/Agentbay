@@ -1,6 +1,6 @@
 # 0006 - Components that own their contracts, and content types as plug-ins
 
-- Status: draft for approval, revision 5 (2026-10-29). Nothing is implemented.
+- Status: approved by the user 2026-10-29 (revision 6: all decisions taken). Nothing is implemented yet.
 - Revision 2 follows review by the user:
   - no registration edits;
   - core components own their contracts;
@@ -220,6 +220,7 @@ If a mode reads a content type that nothing provides, lint names the fix: "mode 
   - The allowlist is the base views, plus the views of the content types this mode reads, plus the mode's own views.
 - **`describe`** lists only those types. feed-briefing shows no mail views, with no special case.
 - **Computed fields are stored, not computed at read time.** `derive.py` runs in the writer, after secret scrubbing, and may only add fields. This replaces the `addr_key` SQL function, so no extension code ever runs inside the agents' read sandbox.
+- **Recompute:** each row records the `derive.py` version that produced it; on a change the store recomputes the fields locally at the next write, with no fetch.
 - **Store version:** the store records its content types and versions. A mismatch is refused with "move the folder aside and sync again" (no migrations, as now).
 
 ### What stays in the briefing core, and why
@@ -316,11 +317,8 @@ The slice-and-handoff protocol and quiet checks go into the forge mode's playboo
 3. **forge.connect** (proposal 0003 step 4): scaffolds a content type plus a connector. It is proven by adding RSS with `touches: []`.
 
 ## Decided
+- **Computed fields at store time** (user, 2026-10-29). A content type's `derive.py` runs in the writer after scrubbing; no extension code runs in the read sandbox. The store records each row's `derive.py` version and recomputes locally (no network) when it changes.
 - **Strictness:** the boundary check fails the step; an approved `touches:` is the only way through (user, 2026-10-29).
 - **Contract tests are mandatory** for every source connector, so each ships an offline transport with fixtures (user, 2026-10-29).
 - **Order:** merge #9 now; step 2 moves email into a content type (user, 2026-10-29).
 - **Name:** content type (user, 2026-10-29). The stored unit is still called an item in code and interface names (`items.source/v1`); renaming those is not part of this proposal.
-
-## Decisions needed
-
-1. **Computed fields at store time** (recommended), or allow content types to add SQL functions to the read sandbox.

@@ -196,9 +196,17 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
   - Selectors with the same native query share one fetch and one cursor.
   - A field the source does not list cannot be expressed: `bay validate` errors.
   - A `local` field on a paid source (`costPerPostUsd` > 0) gets a validate warning.
-- **`items.source/v1.fetch {query, since | cursor, maxItems, checkIds}`** returns
-  `{items, cursor, truncated, billed, checked?, deleted?, removed?, blocked?, requests?, warnings?}`. It makes
-  one call per distinct native query and is never billed beyond `maxItems`.
+- **`items.source/v1.fetch {query, since [until] | cursor, maxItems, checkIds, storedIds}`** returns
+  `{items, cursor, truncated, billed, checked?, deleted?, removed?, cursorExpired?, blocked?, requests?,
+  warnings?}`. It makes one call per distinct native query and is never billed beyond `maxItems`; `checked`
+  lists only ids actually read.
+  - A connector that declares `changeFeed: true` (gmail-api: history.list) is followed: once a query has a
+    cursor every sync replays the changes since it, with no deletion checks, and gets `storedIds` (changes to
+    them are always read, whatever their age). While the query's coverage starts after the window start, a
+    second fetch `{since: window start, until: start of coverage}` backfills older items and skips
+    `storedIds`, so a first sync cut by `maxItemsPerRun` completes over later syncs and each item is read once.
+    `cursorExpired` (Gmail keeps about a week of history) makes the store drop the cursor and re-list the
+    window with deletion checks. A new item older than the source's window is not stored.
   - `deleted`: gone at the source; the store deletes them and never stores them again.
   - `removed`: left the source's scope but may come back (Gmail trash, spam); deleted, not remembered.
   - `blocked`: nothing could be read (an expired login), with the command that fixes it. The store keeps that

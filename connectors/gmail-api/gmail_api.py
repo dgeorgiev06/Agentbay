@@ -22,14 +22,19 @@ Selector -> Gmail search: from from:, to to:, in label:/in:, since after:, has: 
 fields where Gmail returns at least what the local matcher keeps are native (connector.yaml): subject, text and
 not, and values with `*`, are matched locally by the store (bay/selector.py split) and never reach here.
 
-Sync: without a cursor, messages.list with the native query and after:<since> (newest first, up to maxItems),
-then messages.get for each; the cursor is the mailbox historyId read before listing. With a cursor,
-history.list from it; every changed message is read again (format=full) so its labels are current (the store
-replaces labels: connector.yaml exactLabels), messages in TRASH, SPAM or DRAFT come back as `removed`, and
-deleted ones as `deleted`. history.list 404 (Gmail keeps history about a week) falls back to the full listing
-bounded by the mode's lookback. checkIds not listed by a full sync are re-read: 404 -> deleted.
+Sync (connector.yaml changeFeed: the store follows the cursor and backfills): without a cursor, messages.list
+with the native query and after:<since> (and before:<until> for a backfill, which skips the storedIds), newest
+first, up to maxItems, then messages.get for each; the cursor is the mailbox historyId read before listing.
+checkIds not listed are re-read: 404 -> deleted. With a cursor, history.list from it (_incremental: every
+change to a stored message is read again, any age, so its labels are current and the store, which replaces
+labels (exactLabels), re-matches it; label-only changes to other messages are mostly ignored), bounded by
+maxItems on a history record boundary; messages in TRASH, SPAM or DRAFT come back as `removed`, deleted ones as
+`deleted`. history.list 404 (Gmail keeps history about a week) returns `cursorExpired` without reading
+anything, and the store re-lists its window. The connector reads no mode settings: every bound comes from the
+store's request.
 
-Limits: `maxItems` caps messages.get calls (what `billed` counts; Gmail reads cost nothing). HTTP 429, 5xx and
+Limits: `maxItems` caps messages.get calls (what `billed` counts; Gmail reads cost nothing; a message is read at
+most once per sync). HTTP 429, 5xx and
 rate-limit 403s are retried with exponential backoff (Retry-After when given); when retries run out the call
 returns what it read, truncated, with a warning.
 
@@ -404,23 +409,23 @@ class GmailApi:
         return self._labels
 
     # ------------------------------------------------------------ items.source/v1.fetch
-    def fetch(self, query: dict | None = None, since: str | None = None, cursor: str | None = None,
-              maxItems: int = 100, checkIds: list[str] | None = None) -> dict:
+    def fetch(self, query: dict | None = None, since: str | None = None, until: str | None = None,
+              cursor: str | None = None, maxItems: int = 100, checkIds: list[str] | None = None,
+              storedIds: list[str] | None = None) -> dict:
         run = {"items": {}, "deleted": [], "removed": [], "checked": [], "warnings": [], "truncated": False}
         new_cursor = cursor
+        stored = set(storedIds or [])
         billed0, req0 = self.billed, self.ctx.http.requests      # this call's share (the instance is reused)
         try:
             if cursor:
-                try:
-                    new_cursor = self._incremental(run, cursor, maxItems, checkIds or [])
-                except HistoryGone:
-                    lb = self.ctx.settings.get("lookback") or self.ctx.settings.get("lookbackMax") or "30d"
-                    since = iso(self.ctx.now() - duration(lb))
-                    run["warnings"].append(f"gmail-api: Gmail no longer has the history since the last sync (it "
-                                           f"keeps about a week); re-listed the {lb} lookback window instead")
-                    new_cursor = self._full(run, query or {}, since, maxItems, checkIds or [])
+                new_cursor = self._incremental(run, cursor, query or {}, maxItems, checkIds or [], stored)
             else:
-                new_cursor = self._full(run, query or {}, since, maxItems, checkIds or [])
+                new_cursor = self._full(run, query or {}, since, until, maxItems, checkIds or [], stored)
+        except HistoryGone:
+            return {"items": [], "cursor": None, "truncated": False, "billed": self.billed - billed0,
+                    "requests": self.ctx.http.requests - req0, "cursorExpired": True,
+                    "warnings": ["gmail-api: Gmail no longer has the history since the last sync (it keeps about a "
+                                 "week)"]}
         except LoginNeeded as e:
             return {"items": [], "cursor": cursor, "truncated": True, "billed": self.billed - billed0,
                     "requests": self.ctx.http.requests - req0, "blocked": str(e)}
@@ -436,23 +441,30 @@ class GmailApi:
             out["warnings"] = run["warnings"]
         return out
 
-    def _full(self, run: dict, query: dict, since: str | None, budget: int, check: list[str]) -> str | None:
+    def _full(self, run: dict, query: dict, since: str | None, until: str | None, budget: int, check: list[str],
+              stored: set[str]) -> str | None:
         """messages.list with the native query, newest first, at most `budget` messages read; the cursor is
-        the historyId from before the listing, so changes made while listing are replayed next time."""
+        the historyId from before the listing, so changes made while listing are replayed next time. A backfill
+        (`until`) never reads a message the store already holds: history keeps those current."""
         hid = str(self.profile().get("historyId") or "") or None
-        q = native_query(query, since)
+        q = native_query(query, since, until)
+        skip = stored if until else set()
         ids: list[str] = []
+        seen: set[str] = set()
         token = None
         while True:
-            params = {"q": q or None, "maxResults": max(1, min(LIST_MAX, budget - len(ids))), "pageToken": token}
-            r = self._get("/messages", params)
+            want = LIST_MAX if skip else max(1, min(LIST_MAX, budget - len(ids)))
+            r = self._get("/messages", {"q": q or None, "maxResults": want, "pageToken": token})
             if r.status != 200:
                 raise ConnectorError(f"gmail-api: messages.list failed (HTTP {r.status}); check the selectors' "
                                      f"Gmail query: {q!r}")
             body = r.json() or {}
-            ids += [m["id"] for m in body.get("messages") or []]
+            page = [str(m["id"]) for m in body.get("messages") or [] if m.get("id")]
+            fresh = [m for m in page if m not in seen]
+            seen.update(fresh)
+            ids += [m for m in fresh if m not in skip]
             token = body.get("nextPageToken")
-            if len(ids) >= budget or not token:
+            if len(ids) >= budget or not token or not fresh:      # a page with no new ids: stop (no endless paging)
                 break
         if len(ids) > budget or (len(ids) >= budget and token):
             run["truncated"] = True
@@ -461,16 +473,39 @@ class GmailApi:
             self._take(run, mid)
         listed = set(ids)
         for xid in check:                     # stored, not listed now: deleted, trashed, relabeled or older
-            if xid not in listed:
-                self._take(run, xid)
-            run["checked"].append(xid)
+            if xid in listed or self._take(run, xid) != "skipped":
+                run["checked"].append(xid)
         return hid
 
-    def _incremental(self, run: dict, cursor: str, budget: int, check: list[str]) -> str:
+    def _in_label_ids(self, query: dict) -> set[str]:
+        """Label ids named by the query's `in` (label:/in: prefixes and Gmail's dashes ignored)."""
+        want = set()
+        for v in _vals(query.get("in")):
+            v = v.strip()
+            for pre in ("label:", "in:"):
+                if v.lower().startswith(pre):
+                    v = v[len(pre):]
+            want.add(_label(v).casefold())
+        if not want:
+            return set()
+        return {lid for lid, name in self.labels().items()
+                if _label(name).casefold() in want or lid.casefold() in want}
+
+    def _incremental(self, run: dict, cursor: str, query: dict, budget: int, check: list[str],
+                     stored: set[str]) -> str:
+        """history.list from the cursor. Every change to a stored message is read again (its labels may have
+        taken it out of scope, at any age). For messages the store does not hold: new messages are read unless
+        they arrive in trash, spam or drafts; label changes are read only when an added label is one the query's
+        `in` names, or trash, spam or a user label was removed (restored, or a `not: {in: ...}` may now match);
+        UNREAD, IMPORTANT, STARRED, CATEGORY_* and every other label-only change is ignored. Paging stops at the
+        budget on a history record boundary and returns the last record read as the cursor, so the next sync
+        continues there (a record is never split: the first one is read whole even if it alone is over the
+        budget, so a replay always makes progress). Deletion checks are not needed: history reports deletions."""
         changed: dict[str, None] = {}
         deleted: set[str] = set()
-        latest, token = cursor, None
-        while True:
+        in_ids: set[str] | None = None
+        latest, done, token, stop = cursor, cursor, None, False
+        while not stop:
             r = self._get("/history", {"startHistoryId": cursor, "maxResults": LIST_MAX, "pageToken": token})
             if r.status == 404:
                 raise HistoryGone()
@@ -479,38 +514,58 @@ class GmailApi:
             body = r.json() or {}
             latest = str(body.get("historyId") or latest)
             for h in body.get("history") or []:
-                for key in ("messagesAdded", "labelsAdded", "labelsRemoved"):
+                want: list[str] = []
+                gone: list[str] = []
+                for x in h.get("messagesAdded") or []:
+                    m = x.get("message") or {}
+                    if m.get("id") and (m["id"] in stored or not set(m.get("labelIds") or []) & OUT_OF_SCOPE):
+                        want.append(str(m["id"]))
+                for key in ("labelsAdded", "labelsRemoved"):
                     for x in h.get(key) or []:
-                        mid = (x.get("message") or {}).get("id")
-                        if mid:
-                            changed[mid] = None
-                            deleted.discard(mid)
+                        mid = str((x.get("message") or {}).get("id") or "")
+                        if not mid:
+                            continue
+                        labels = set(x.get("labelIds") or [])
+                        if mid in stored:
+                            want.append(mid)
+                        elif key == "labelsAdded":
+                            if in_ids is None:
+                                in_ids = self._in_label_ids(query) if query.get("in") else set()
+                            if labels & in_ids:
+                                want.append(mid)
+                        elif labels & {"TRASH", "SPAM"} or any(lb.startswith("Label_") for lb in labels):
+                            want.append(mid)
                 for x in h.get("messagesDeleted") or []:
                     mid = (x.get("message") or {}).get("id")
                     if mid:
-                        deleted.add(mid)
-                        changed.pop(mid, None)
+                        gone.append(str(mid))
+                fresh = [m for m in dict.fromkeys(want) if m not in changed]
+                if changed and len(changed) + len(fresh) > budget:
+                    stop = True                    # the next sync starts at this record
+                    break
+                for mid in fresh:
+                    changed[mid] = None
+                    deleted.discard(mid)
+                for mid in gone:
+                    deleted.add(mid)
+                    changed.pop(mid, None)
+                done = str(h.get("id") or done)
             token = body.get("nextPageToken")
             if not token:
                 break
-        ids = list(changed)
-        if len(ids) > budget:                 # keep the old cursor: the store re-lists the window next time
-            ids, latest = ids[:budget], cursor
-            run["truncated"] = True
-        lb = self.ctx.settings.get("lookback") or self.ctx.settings.get("lookbackMax") or "30d"
-        lo = iso(self.ctx.now() - duration(lb))
-        for mid in ids:
-            status, item = self._message(mid)
-            if item is not None and item["createdAt"] < lo:
-                continue                      # an old message relabeled: outside the lookback window
-            self._record(run, mid, status, item)
+        run["truncated"] = stop
+        for mid in changed:
+            self._take(run, mid)
         run["deleted"] += sorted(deleted)
-        run["checked"] += list(check)         # history since the cursor covers every stored message
-        return latest
+        for xid in check:                     # only when asked; history already reports deletions
+            if self._take(run, xid) != "skipped":
+                run["checked"].append(xid)
+        return done if stop else latest
 
-    def _take(self, run: dict, mid: str) -> None:
+    def _take(self, run: dict, mid: str) -> str:
         status, item = self._message(mid)
         self._record(run, mid, status, item)
+        return status
 
     @staticmethod
     def _record(run: dict, mid: str, status: str, item: dict | None) -> None:

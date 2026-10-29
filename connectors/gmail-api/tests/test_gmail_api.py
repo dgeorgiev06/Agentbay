@@ -315,6 +315,123 @@ def test_expired_history_falls_back_to_a_full_listing_bounded_by_lookback():
     assert out["deleted"] == 1
 
 
+def gets(fake) -> dict[str, int]:
+    """messages.get calls per message id in the fake's request log."""
+    out: dict[str, int] = {}
+    for q in fake.log:
+        m = re.search(r"/messages/([^/]+)$", q["path"])
+        if m:
+            out[m.group(1)] = out.get(m.group(1), 0) + 1
+    return out
+
+
+def store_with(fake, p, *, lookback="30d", cap=500, sels=None):
+    st = connect.instantiate(system(p), "local-mail", "corpus-store", "items.store/v1", p, transport=fake,
+                             provider=MemProvider(SECRETS), clock=clock, caps={"maxItemsPerRun": cap},
+                             settings={"mode": "mail-briefing", "lookback": lookback, "lookbackMax": "30d",
+                                       "selectors": sels or [{"id": "inbox", "in": "inbox"}]})
+    st.ctx.sources["gmail-api"].sleep = lambda s: None
+    return st
+
+
+def test_a_stored_message_older_than_the_lookback_is_still_rechecked_when_it_changes():
+    """Review repro lb.py: a 20-day-old stored message archived, then a sync with lookback 7d. The change must
+    be read and the message leave the store; an old message the store does not hold is read but not stored."""
+    fake = FakeGmail(NOW)
+    m = new_msg("19c0001", hours=24 * 20)
+    m["threadId"] = "told"
+    fake.messages[m["id"]] = m
+    old = new_msg("19c0002", labels=("Label_2",), hours=24 * 20)
+    fake.messages[old["id"]] = old
+    p = project()
+    store_with(fake, p).sync()
+    assert "gmail:19c0001" in {i["id"] for i in store_with(fake, p).query()["items"]}
+    fake.relabel("19c0001", remove=["INBOX"])                       # archived
+    fake.relabel("19c0002", add=["INBOX"])                          # an old message moved to the inbox
+    fake.log.clear()
+    out = store_with(fake, p, lookback="7d").sync()
+    assert [q["mode"] for q in out["sources"]["gmail-api"]["queries"]] == ["cursor"]
+    ids = {i["id"] for i in store_with(fake, p, lookback="7d").query()["items"]}
+    assert "gmail:19c0001" not in ids                               # re-read and out of scope at any age
+    assert "gmail:19c0002" not in ids and gets(fake) == {"19c0001": 1, "19c0002": 1}   # older than the window
+    state = json.loads((p / ".agentbay/data/mail/mail-briefing/state.json").read_text())
+    assert not [k for k, v in state["checked"].items() if v == "2026-10-27T12:00:00Z"]  # nothing claimed as checked
+
+
+def test_a_capped_first_sync_backfills_with_history_after_it_and_reads_each_message_once():
+    """Review repro trunc.py: 30 messages in the window, 10 per run. Every later sync replays history and
+    backfills older mail below what is stored, never re-reading a stored message, until coverage is complete."""
+    fake = FakeGmail(NOW)
+    for k in range(30):
+        m = new_msg(f"19b{k:04d}", hours=2 + k * 10)
+        m["threadId"] = f"tx{k}"
+        fake.messages[m["id"]] = m                                  # not via history
+    in_window = {mid for mid, m in fake.messages.items() if m["ageHours"] <= 720
+                 and not {"TRASH", "SPAM"} & set(m["labelIds"]) and "INBOX" in m["labelIds"]}
+    p = project()
+    outs = []
+    for _ in range(6):
+        outs.append(store_with(fake, p, cap=10).sync())
+        if outs[-1]["coverage"]["complete"]:
+            break
+    modes = [[q["mode"] for q in o["sources"]["gmail-api"]["queries"]] for o in outs]
+    assert modes[0] == ["since"] and all(m == ["cursor", "older"] for m in modes[1:]), modes
+    assert len(outs) == 4 and outs[-1]["coverage"]["complete"] and outs[-1]["stopped"] is None
+    assert [o["coverage"]["from"] for o in outs[:-1]] == sorted((o["coverage"]["from"] for o in outs[:-1]),
+                                                                  reverse=True)   # coverage only grows back
+    hist = [q for q in fake.log if q["path"].endswith("/history")]
+    assert len(hist) == 3                                           # every sync after the first
+    reads = gets(fake)
+    assert set(reads) == in_window and set(reads.values()) == {1}   # each message read once
+    assert sum(o["billed"] for o in outs) == len(in_window)        # and billed once
+    ids = {i["extId"] for i in store_with(fake, p, cap=10).query(limit=100)["items"]}
+    assert ids == in_window
+    again = store_with(fake, p, cap=10).sync()                      # complete: history only, nothing read
+    assert [q["mode"] for q in again["sources"]["gmail-api"]["queries"]] == ["cursor"] and again["billed"] == 0
+
+
+def test_history_reads_only_changes_that_can_matter_and_pages_within_the_budget():
+    fake = FakeGmail(NOW)
+    p = project()
+    sels = [{"id": "work", "in": "label:Work"}]
+    store_with(fake, p, sels=sels).sync()                           # 18a0001, 18a0002 (Work) stored
+    other = new_msg("19e0001", labels=("INBOX",), hours=5)
+    fake.messages[other["id"]] = other                              # in the mailbox, not in scope
+    fake.log.clear()
+    fake.relabel("19e0001", add=["UNREAD"])
+    fake.relabel("19e0001", add=["STARRED", "CATEGORY_PROMOTIONS"])
+    fake.relabel("19e0001", remove=["UNREAD", "INBOX"])
+    fake.relabel("18a0002", add=["STARRED"])                        # stored: always re-read
+    out = store_with(fake, p, sels=sels).sync()
+    assert gets(fake) == {"18a0002": 1} and out["billed"] == 1
+    fake.relabel("19e0001", add=["Label_1"])                        # added to Work: now in scope
+    fake.log.clear()
+    store_with(fake, p, sels=sels).sync()
+    assert gets(fake) == {"19e0001": 1}
+    assert "gmail:19e0001" in {i["id"] for i in store_with(fake, p, sels=sels).query()["items"]}
+    for k in range(5):                                              # 5 new Work messages, 2 reads per run
+        fake.add(new_msg(f"19f{k:04d}", labels=("Label_1",), hours=1))
+    fake.log.clear()
+    runs = []
+    while len(runs) < 6:
+        runs.append(store_with(fake, p, sels=sels, cap=2).sync())
+        if not runs[-1]["stopped"]:
+            break
+    assert [o["billed"] for o in runs] == [2, 2, 1] and set(gets(fake).values()) == {1}
+    starts = [q["params"]["startHistoryId"] for q in fake.log if q["path"].endswith("/history")]
+    assert len(set(starts)) == 3                                    # each run continues where the last stopped
+    state = json.loads((p / ".agentbay/data/mail/mail-briefing/state.json").read_text())
+    assert all(c["cursor"] == str(fake.history_id) for c in state["cursors"].values())
+
+
+def test_with_a_cursor_check_ids_are_only_claimed_when_read():
+    fake = FakeGmail(NOW)
+    g = make(fake)
+    first = g.fetch(since=SINCE, maxItems=50)
+    out = make(fake).fetch(cursor=first["cursor"], maxItems=50, checkIds=["18a0001", "bad id!"])
+    assert out["checked"] == ["18a0001"] and out["billed"] == 1
+
+
 # ------------------------------------------------------------------ expired login, backoff
 def test_invalid_grant_blocks_with_the_one_command_and_never_crashes():
     fake = FakeGmail(NOW)

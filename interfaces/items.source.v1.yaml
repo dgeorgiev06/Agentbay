@@ -13,9 +13,12 @@ spec:
     fetch:
       description: >-
         Fetch items for one native query (the native part of one or more selectors, bay/selector.py split),
-        newest first. With `cursor` (what a previous call returned) only items newer than it; otherwise items
-        created at or after `since`. `maxItems` is the read budget: the connector never reads (is billed for)
-        more items than that. `checkIds` are stored extIds of this source to re-check, at most one read each,
+        newest first. With `cursor` (what a previous call returned) only items newer than it (a `changeFeed`
+        source: every item changed since it); otherwise items created at or after `since` and, with `until`, at or
+        before `until` (a backfill of the window before what is stored, which skips `storedIds`). A changeFeed
+        source whose cursor is older than the changes it keeps reads nothing and returns `cursorExpired`; the
+        store then drops the cursor and re-lists the window. `maxItems` is the read budget: the connector never
+        reads (is billed for) more items than that. `checkIds` are stored extIds of this source to re-check, at most one read each,
         on top of `maxItems`; ids actually verified come back in `checked`, those the source no longer serves
         in `deleted`; ids that left the source's scope but still exist (moved to trash or spam) come back in
         `removed` (deleted from the store, not remembered). A source that cannot be read at all (an expired
@@ -28,7 +31,9 @@ spec:
         properties:
           query: { type: object, description: "Native selector fields (from, in, ...); never `since` or `not`." }
           since: { type: string, format: date-time }
+          until: { type: string, format: date-time, description: "With since: only items created at or before this (backfill)." }
           cursor: { type: [string, "null"] }
+          storedIds: { type: array, items: { type: string }, description: "changeFeed sources only: extIds the store holds for this source. Changes to them are always read; a backfill never reads them again." }
           maxItems: { type: integer, minimum: 1 }
           checkIds: { type: array, items: { type: string } }
       out:
@@ -44,6 +49,7 @@ spec:
           checked: { type: array, items: { type: string }, description: "checkIds actually verified in this call." }
           deleted: { type: array, items: { type: string }, description: "extIds the source reports deleted or no longer available." }
           removed: { type: array, items: { type: string }, description: "extIds that left the source's scope (trash, spam) but may come back; the store drops them without remembering them." }
+          cursorExpired: { type: boolean, description: "changeFeed sources: the cursor is older than the changes the source keeps; nothing was read. Fetch again without a cursor." }
           blocked: { type: string, description: "Why nothing could be read (e.g. the login expired), naming the command that fixes it. The store keeps its cursor and reports the gap." }
           warnings: { type: array, items: { type: string } }
       effects: [network, spend]

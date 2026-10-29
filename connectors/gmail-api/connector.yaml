@@ -4,8 +4,9 @@ metadata:
   name: gmail-api
   description: >-
     Your Gmail, read-only, via the official Gmail API v1 with the gmail.readonly scope only: messages.list with
-    a Gmail search query for the first sync, then history.list from the stored historyId (a full re-list of the
-    lookback window when Gmail no longer has that history), messages.get (format=full) and attachments.get.
+    a Gmail search query for the first sync (and to backfill older mail when a run's cap stopped it), then
+    history.list from the stored historyId (a re-list of the window when Gmail no longer has that history),
+    messages.get (format=full) and attachments.get.
     Bodies are text/plain or HTML converted to text, with quoted reply chains trimmed. Attachment text (docx,
     txt, csv, md) is extracted in a separate, resource-limited subprocess; PDFs and everything else are kept as
     metadata only. Nothing can send, label, move or delete mail: the connector calls only GET endpoints on
@@ -18,6 +19,8 @@ spec:
   window: 520w           # the API reaches the whole mailbox; the mode's lookbackMax (30d) is the real bound
   costPerPostUsd: 0      # Gmail API reads are free (quota only): never billed against spendUsd
   exactLabels: true      # messages.get returns a message's complete labelIds
+  changeFeed: true       # history.list replays every change since the historyId: the store follows it, sends no
+                         # deletion checks with it and backfills older mail with `until`
   # A field is native only where Gmail search returns at least what the local matcher keeps (a source may return
   # more, never less). Gmail matches subject: and free terms by whole word (`pil` misses "pilot") and its
   # negation also matches display names (`-from:ruiz` drops dana@kiln.fi sent as "Dana Ruiz"), so subject, text

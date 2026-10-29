@@ -34,6 +34,14 @@ transaction, before and regardless of any fetch, and until a sync or prune has d
 refuses (status reports `stale`), so a config change never leaves out-of-scope items readable. Every item
 string is secret-scrubbed before it is stored (scrub_item), and every read is scrubbed again.
 
+A `changeFeed` source (Gmail history) is followed: once a query has a cursor every sync replays the changes
+since it (no deletion checks; the feed reports deletions and label changes, and every change to a stored item
+is re-read whatever its age), and while that query's coverage starts after the window start a second fetch
+backfills the older part (`since` = window start, `until` = start of coverage, skipping the ids already stored),
+so a first sync stopped by a cap is completed over the next syncs and no message is read twice. A cursor the
+source no longer has (`cursorExpired`) is dropped and the window re-listed with deletion checks. An item the
+store does not hold is stored only when it is inside the source's window.
+
 A source that returns `blocked` (an expired login) leaves its cursors and stored items as they are; state.json
 records it under `blocked` until that source is read again, status reports `stale` and `blocked`, coverage
 names the gap, and sync reports it as `stopped` (the dispatcher makes a sync that read nothing `blocked`).
@@ -298,6 +306,17 @@ class _SyncRun:
 
 
 @dataclass
+class _SourceRun:
+    """One source within a sync: its report entry and every cursor key it owns."""
+    name: str
+    src: object
+    src_id: str
+    rep: dict
+    keys: list
+    start: datetime
+
+
+@dataclass
 class _Query:
     req: dict
     start: datetime
@@ -309,10 +328,11 @@ class _Query:
 
 
 def _query_request(cur: dict, native: dict, group: list[dict], ids: list[str], start_src: datetime, remaining: int,
-                   check: list[str], now) -> _Query:
-    """The fetch arguments for one native query: newer than its cursor when the stored window already reaches
-    back far enough and no selector joined it; otherwise everything since the window start (a backfill when a
-    selector joined an existing query)."""
+                   check: list[str], now, feed: bool = False) -> _Query:
+    """The fetch arguments for one native query: newer than its cursor when no selector joined it and the
+    stored window already reaches back far enough (a `changeFeed` source: always, the older part is backfilled
+    separately); otherwise everything since the window start (a backfill when a selector joined an existing
+    query)."""
     start = start_src
     sinces = [parse_time(s["since"], now) for s in group if s.get("since")]
     if len(sinces) == len(group):
@@ -323,7 +343,7 @@ def _query_request(cur: dict, native: dict, group: list[dict], ids: list[str], s
         req["checkIds"] = check
     have_from = parse_time(cur["from"], now) if cur.get("from") else None
     new_sel = set(ids) - set(cur.get("selectors") or [])
-    incremental = bool(cur.get("cursor")) and have_from is not None and have_from <= start and not new_sel
+    incremental = bool(cur.get("cursor")) and have_from is not None and not new_sel and (feed or have_from <= start)
     mode = "cursor" if incremental else ("backfill" if new_sel and cur.get("selectors") else "since")
     if incremental:
         req["cursor"] = cur["cursor"]
@@ -620,11 +640,14 @@ class CorpusStore:
 
     def _sync_source(self, con, state, sels, now, lookback, run: "_SyncRun", name: str, src) -> None:
         """Fetch each distinct native query of one source (its selectors split by the source's capability
-        table), newest first, within the remaining budget; one deletion pass per source."""
+        table), newest first, within the remaining budget; one deletion pass per source. A `changeFeed` source
+        (Gmail history) always continues from its cursor, gets no deletion checks with it (the feed reports
+        deletions and label changes), and has the window before what is stored backfilled with `until`."""
         src_id = src.ctx.source_id
         if not src_id:
             raise StoreError(f"connector {name} declares no `source`; set spec.source in its connector.yaml "
                              f"so stored items and deletions are keyed correctly")
+        feed = src.ctx.change_feed
         groups: dict[str, tuple[dict, list[dict]]] = {}
         for s in sels:
             native, _ = selmod.split(s, src.ctx.selectors)
@@ -637,6 +660,7 @@ class CorpusStore:
         rep = run.sources.setdefault(name, {"fetched": 0, "added": 0, "billed": 0, "requests": 0, "truncated": False,
                                             "checked": 0, "deleted": 0, "queries": []})
         check_pending = self._check_candidates(con, state, src_id, start_src)
+        ctx = _SourceRun(name, src, src_id, rep, list(groups), start_src)
         for nkey, (native, group) in groups.items():
             ck = f"{name}|{nkey}"
             run.active.add(ck)
@@ -648,33 +672,74 @@ class CorpusStore:
                                               else f"maxItems {run.max_items} reached before {name}")
                 rep["queries"].append({"selectors": ids, "skipped": "budget"})
                 continue
-            check = check_pending[: int(remaining * DELETION_CHECK_SHARE)]
-            check_pending = []                                  # one deletion pass per source per sync
-            q = _query_request(cur, native, group, ids, start_src, remaining, check, now)
-            res = src.fetch(**q.req)
-            run.warnings += res.get("warnings", [])
-            if res.get("blocked"):
-                self._blocked(state, run, rep, name, ids, scrub(str(res["blocked"])), now)
-                run.active.update(f"{name}|{k}" for k in groups)    # keep every cursor of this source
-                return                                         # the source cannot be read: no other query either
-            state.setdefault("blocked", {}).pop(name, None)
-            n_new, n_kept = self._store_fetched(con, run, res, name, src_id, sels, now, src.ctx.exact_labels)
-            self._bill(state, run, res, src)
-            for xid in res.get("checked", []):
-                state["checked"][f"{src_id}:{xid}"] = iso(now)
-            self._advance_cursor(state, run, cur, q, res, name, src, now)
-            cur["selectors"] = ids
-            if res.get("cursor"):
-                cur["cursor"] = _max_id(cur.get("cursor"), res["cursor"])
-            got = res["items"]
-            for k in ("fetched", "added", "billed"):
-                rep[k] += {"fetched": len(got), "added": n_new, "billed": res["billed"]}[k]
-            rep["requests"] += res.get("requests", 0)
-            rep["truncated"] = rep["truncated"] or res["truncated"]
-            rep["checked"] += len(res.get("checked", []))
-            rep["deleted"] += len(res.get("deleted", []))
-            rep["queries"].append({"selectors": ids, "native": q.req["query"], "fetched": len(got), "kept": n_kept,
-                                   "mode": q.mode})
+            follow = feed and bool(cur.get("cursor")) and bool(cur.get("from")) \
+                and not set(ids) - set(cur.get("selectors") or [])
+            check = [] if follow else check_pending[: int(remaining * DELETION_CHECK_SHARE)]
+            if not follow:
+                check_pending = []                              # one deletion pass per source per sync
+            q = _query_request(cur, native, group, ids, start_src, remaining, check, now, feed)
+            res = self._fetch(con, src, src_id, q)
+            if res.get("cursorExpired") and not res.get("blocked"):
+                run.warnings += res.get("warnings", [])
+                run.warnings.append(f"{name}: the source no longer has the changes since the last sync; re-listed "
+                                    f"the window from {iso(q.start)}")
+                cur.pop("cursor", None)
+                check = check_pending[: int(remaining * DELETION_CHECK_SHARE)]
+                check_pending = []
+                q = _query_request(cur, native, group, ids, start_src, remaining, check, now, feed)
+                res = self._fetch(con, src, src_id, q)
+            if not self._apply(con, state, run, ctx, cur, q, res, ids, sels, now):
+                return                                          # blocked: no other query of this source either
+            have = parse_time(cur["from"], now)
+            if not (feed and q.incremental and have > q.start):
+                continue
+            remaining, why = self._remaining(state, run.billed, run.max_items, self._cost(src))
+            if remaining <= 0:
+                run.stopped = run.stopped or (f"{why or 'maxItems'} cap reached before {name} backfilled the window; "
+                                              f"coverage still starts {cur['from']}")
+                continue
+            bq = _Query({"query": q.req["query"], "since": iso(q.start), "until": cur["from"], "maxItems": remaining},
+                        q.start, have, False, "older", q.window)
+            if not self._apply(con, state, run, ctx, cur, bq, self._fetch(con, src, src_id, bq), ids, sels, now):
+                return
+
+    def _fetch(self, con, src, src_id: str, q: "_Query") -> dict:
+        """One source fetch; a changeFeed source also gets the extIds the store holds (storedIds)."""
+        req = dict(q.req)
+        if src.ctx.change_feed:
+            req["storedIds"] = [r[0] for r in con.execute("SELECT ext_id FROM items WHERE source = ? ORDER BY ext_id",
+                                                          (src_id,))]
+        return src.fetch(**req)
+
+    def _apply(self, con, state, run: "_SyncRun", sr: "_SourceRun", cur: dict, q: "_Query", res: dict,
+               ids: list[str], sels, now) -> bool:
+        """Store one fetch's result, bill it, record checks and coverage and report it. False when the source
+        is blocked (its cursors and items are kept)."""
+        run.warnings += res.get("warnings", [])
+        if res.get("blocked"):
+            self._blocked(state, run, sr.rep, sr.name, ids, scrub(str(res["blocked"])), now)
+            run.active.update(f"{sr.name}|{k}" for k in sr.keys)       # keep every cursor of this source
+            return False
+        state.setdefault("blocked", {}).pop(sr.name, None)
+        n_new, n_kept = self._store_fetched(con, run, res, sr.name, sr.src_id, sels, now, sr.src.ctx.exact_labels,
+                                            sr.start)
+        self._bill(state, run, res, sr.src)
+        for xid in res.get("checked", []):
+            state["checked"][f"{sr.src_id}:{xid}"] = iso(now)
+        self._advance_cursor(state, run, cur, q, res, sr.name, sr.src, now)
+        cur["selectors"] = ids
+        if res.get("cursor") and q.mode != "older":         # a backfill never moves the change cursor
+            cur["cursor"] = _max_id(cur.get("cursor"), res["cursor"])
+        got, rep = res["items"], sr.rep
+        for k in ("fetched", "added", "billed"):
+            rep[k] += {"fetched": len(got), "added": n_new, "billed": res["billed"]}[k]
+        rep["requests"] += res.get("requests", 0)
+        rep["truncated"] = rep["truncated"] or res["truncated"]
+        rep["checked"] += len(res.get("checked", []))
+        rep["deleted"] += len(res.get("deleted", []))
+        rep["queries"].append({"selectors": ids, "native": q.req["query"], "fetched": len(got), "kept": n_kept,
+                               "mode": q.mode})
+        return True
 
     def _blocked(self, state, run: "_SyncRun", rep: dict, name: str, ids: list[str], reason: str, now) -> None:
         """A source that could not be read: keep its cursors and items, record why, report the gap."""
@@ -685,14 +750,21 @@ class CorpusStore:
         rep["queries"].append({"selectors": ids, "skipped": "blocked"})
 
     def _store_fetched(self, con, run: "_SyncRun", res: dict, name: str, src_id: str, sels, now,
-                       exact: bool = False) -> tuple[int, int]:
+                       exact: bool = False, start: datetime | None = None) -> tuple[int, int]:
         """Validate, scrub and upsert the fetched items (skipping ids deleted at the source), then apply the
-        deletions and removals the source reported. Returns (new, kept)."""
+        deletions and removals the source reported. An item the store does not hold is stored only when it was
+        created at or after `start` (the source's window start: a change feed also reports old messages that were
+        relabeled); a stored item is always updated, so a relabeled one is re-matched and may leave the scope.
+        Returns (new, kept)."""
         n_new = n_kept = 0
+        lo = iso(start) if start else None
         for it in res["items"]:
             self._validate(it, name, src_id)
             it = scrub_item(it)
             if it["id"] in run.deleted:
+                continue
+            if lo and it["createdAt"] < lo and con.execute(
+                    "SELECT 1 FROM items WHERE source = ? AND ext_id = ?", (it["source"], it["extId"])).fetchone() is None:
                 continue
             is_new, was_kept = self._upsert(con, it, sels, now, exact)
             n_new += is_new
@@ -720,7 +792,26 @@ class CorpusStore:
     def _advance_cursor(self, state: dict, run: "_SyncRun", cur: dict, q: "_Query", res: dict, name: str, src,
                         now) -> None:
         """Record the window this query now covers. A truncated fetch holds only [oldest fetched, now]
-        (sources return newest first), and says which cap stopped it."""
+        (sources return newest first), and says which cap stopped it. A changeFeed source's cursor fetch never
+        moves the start of coverage (a truncated replay continues from its cursor next time); its backfill
+        (`older`) extends it back to the oldest item read, or to the window start when it was not truncated."""
+        if src.ctx.change_feed and q.incremental:
+            cur["to"] = cur["lastSync"] = iso(now)
+            if res["truncated"]:
+                run.stopped = run.stopped or (f"{name}: more changes than the per-run budget; the rest are read "
+                                              f"on the next sync")
+            return
+        if q.mode == "older":
+            covers = min(q.start, q.window) if q.window else q.start
+            src_from = q.start
+            if res["truncated"]:
+                got = [parse_time(x["createdAt"], now) for x in res["items"]]
+                src_from = covers = min([*got, q.have_from])
+                run.stopped = run.stopped or (f"{name}: per-run budget reached while backfilling; coverage now starts "
+                                              f"{iso(src_from)} and the next sync continues from there")
+            cur["from"], cur["covers"] = iso(src_from), iso(covers)
+            cur["to"] = cur["lastSync"] = iso(now)
+            return
         src_from = q.have_from if q.incremental else q.start
         covers = min(src_from, q.window) if q.window and src_from else src_from   # `since` narrowing is no gap
         if res["truncated"]:

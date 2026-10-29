@@ -45,7 +45,8 @@ def test_adapter_round_trip():
     assert any(d.startswith("Edit(//") and d.endswith("/**)") for d in st["permissions"]["deny"])   # kit outside
     agents = {p.stem for p in (proj / ".claude/agents").glob("*.md")}
     assert agents == {"researcher--delivery", "builder--delivery", "reviewer--delivery", "analyst--feed-briefing",
-                      "reviewer--feed-briefing", "builder--forge", "reviewer--forge",
+                      "reviewer--feed-briefing", "analyst--mail-briefing", "reviewer--mail-briefing",
+                      "builder--forge", "reviewer--forge",
                       "analyst--improve", "reviewer--improve"}       # no framework-dev here, so no --<env> suffix
     assert not any(a.startswith("lead--") for a in agents)                      # coordinators run in main thread
     fa = (proj / ".claude/agents/analyst--feed-briefing.md").read_text()
@@ -62,8 +63,15 @@ def test_adapter_round_trip():
     assert "### Mode `cos`" not in coord
     assert "`cos.run`" in coord                                      # but its endpoints are in the table
     assert (proj / ".claude/skills/digest/SKILL.md").exists() and (proj / ".claude/skills/corpus-sql/SKILL.md").exists() and (proj / ".claude/skills/research-brief/SKILL.md").exists()
+    for sk in ("digest", "corpus-sql"):                 # feed-briefing's skills, never mail-briefing's
+        assert (proj / f".claude/skills/{sk}/SKILL.md").read_text() == (KIT / f"modes/briefing/skills/{sk}/SKILL.md").read_text()
+    for sk in ("mail-digest", "mail-sql"):
+        assert (proj / f".claude/skills/{sk}/SKILL.md").read_text() == (KIT / f"modes/mail-briefing/skills/{sk}/SKILL.md").read_text()
+    ma = (proj / ".claude/agents/analyst--mail-briefing.md").read_text()
+    assert "mail-sql" in ma and "mail-digest" in ma and "mail-sql" not in fa
     cat = json.loads((proj / ".agentbay/catalog.json").read_text())
-    assert {m["name"] for m in cat["modes"]} == {"cos", "delivery", "feed-briefing", "forge", "improve"}
+    assert {m["name"] for m in cat["modes"]} == {"cos", "delivery", "feed-briefing", "forge", "improve",
+                                                  "mail-briefing"}
     #  ^ briefing is abstract; cos is the root coordinator's own mode
     assert next(m for m in cat["modes"] if m["name"] == "feed-briefing")["extends"] == "briefing"
     dg = next(e for m in cat["modes"] for e in m["endpoints"] if e["name"] == "feed-briefing.digest")

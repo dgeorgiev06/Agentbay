@@ -24,6 +24,16 @@ modes:
     #   digest:
     #     extraRules: rules/digest-extra.yaml   # your rules stack on the feature's (strictest wins)
 
+  mail-briefing:                      # Gmail, read-only (README "Gmail setup"); same config schema
+    lookback: 30d                     # first sync reads the last 30 days (= lookbackMax)
+    selectors:
+      - { id: partners, from: "*@kiln.fi" }               # `*` is matched locally: Gmail lists every message in
+                                                          # the window; `from: kiln.fi` searches the domain natively
+      - { id: staking,  subject: "staking", in: "label:Work" }
+      - { id: news,     in: "Newsletters", since: 7d }
+      - { id: sent,     in: sent }                        # your replies, so "needs reply" knows what you answered
+    important: ["*@kiln.fi", "*@galaxy.com"]              # weighs these senders' threads first in the digest
+
 # Project workflows: your own sequences of endpoints, run by the Chief of Staff (`cos.run`), one stage at a
 # time. `call` is a <mode>.<endpoint>; `with`/`when`/$in/$steps work as they do inside a mode's workflow.
 # `bay validate` prints each workflow's stages and the effects it may use.
@@ -42,7 +52,12 @@ connectors:
     exclude: [retweets, replies]      # X timeline filter
   # fake:
   #   fixture: fixtures/posts.json    # optional; built-in sample posts otherwise
+  # gmail-api:                        # defaults shown; settings can only lower these caps
+  #   attachmentMaxBytes: 10485760    # larger attachments keep metadata only
+  #   attachmentMaxChars: 200000      # longer extracted text keeps metadata only
+  # fake-mail:
+  #   fixture: fixtures/mail.json     # optional; a built-in sample mailbox otherwise
 
-# Offline switch: run every agent of env local-feeds in the shipped offline env (fake source, no network,
-# $0). Delete this line for the real X timeline. Capabilities stay bound only in envs/<env>.yaml.
-envs: { local-feeds: local-feeds-offline }
+# Offline switch: run every agent of env local-feeds (local-mail) in the shipped offline env (fake sources, no
+# network, $0). Delete an entry for the real X timeline (your Gmail). Capabilities stay bound only in envs/<env>.yaml.
+envs: { local-feeds: local-feeds-offline, local-mail: local-mail-offline }

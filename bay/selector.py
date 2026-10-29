@@ -11,14 +11,18 @@ field of its `not` block matches. Matching is case-insensitive (casefold).
               and only here: `*@bank.example`, `news*` (any run of characters). A field with a `*` value is
               matched locally, never sent to the source's search
   subject     substring of the title;  text: substring of title or body (no wildcards)
-  in          a container or label, exactly (home, list:<id>, INBOX)
+  in          a container or label, exactly (home, list:<id>, INBOX); a `label:` or `in:` prefix (Gmail search
+              style, `label:Work`, `in:inbox`) is ignored when matching
   has         link | attachment
   since       relative (7d) or ISO-8601
 
 Each source connector declares which fields its native search handles (connector.yaml spec.selectors:
 `native` or `local`; a field it does not list cannot be expressed). `split()` turns a selector into a
-native query (narrows the fetch) and a local filter. The store always re-applies the FULL selector with
-`matches()`, so behaviour is the same on every source no matter what the native query did.
+native query (narrows the fetch) and a local filter. A source may return more than its native query asks
+for, never less, so a field is native only where the source's search matches at least what `matches()`
+does: `not` is always local (a source's negation can exclude more, e.g. Gmail's `-from:` also matches display
+names), and so are wildcard values. The store always re-applies the FULL selector with `matches()`, so
+behaviour is the same on every source no matter what the native query did.
 """
 from __future__ import annotations
 
@@ -58,6 +62,39 @@ def _addr_match(value: str, addrs: list[str]) -> bool:
     return False
 
 
+def addr_matches(patterns, addr: str) -> bool:
+    """Whether an address or handle matches any of `patterns` (the `from`/`to` rules: handle, address, domain,
+    `*` wildcard). Used for sender lists such as a mode's `important` setting."""
+    return any(_addr_match(p, [addr or ""]) for p in _vals(patterns))
+
+
+GMAIL_DOMAINS = ("gmail.com", "googlemail.com")
+
+
+def addr_key(addr) -> str | None:
+    """One mailbox's identity: lower case, without a +tag; for Gmail (gmail.com, googlemail.com) the dots of the
+    local part are ignored and googlemail.com is gmail.com. `Dana.Ruiz+work@GoogleMail.com` -> `danaruiz@gmail.com`.
+    Used to tell which messages are mine (the views' fromMe/toMe, SQL function addr_key)."""
+    if addr is None:
+        return None
+    a = str(addr).strip().lower()
+    local, at, domain = a.rpartition("@")
+    if not at or not local:
+        return a
+    local = local.split("+", 1)[0] or local
+    if domain in GMAIL_DOMAINS:
+        local, domain = local.replace(".", ""), "gmail.com"
+    return f"{local}@{domain}"
+
+
+def _container(v: str) -> str:
+    v = _norm(v)
+    for prefix in ("label:", "in:"):
+        if v.startswith(prefix):
+            return v[len(prefix):]
+    return v
+
+
 def glob(pattern: str, text: str) -> bool:
     """`*` matches any run of characters; everything else is literal. No regex and no backtracking: the
     literal parts between stars are found left to right (for `*`-only patterns the leftmost occurrence is
@@ -92,7 +129,7 @@ def _field(item: dict, field: str, values: list[str], now: datetime) -> bool:
         return any(v.casefold() in t for v in values)
     if field == "in":
         have = {_norm(x) for x in [item.get("container") or "", *(item.get("labels") or [])] if x}
-        return any(_norm(v) in have for v in values)
+        return any(_norm(v) in have or _container(v) in have for v in values)
     if field == "has":
         return any(_has(item, v) for v in values)
     if field == "since":

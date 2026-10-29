@@ -1,6 +1,6 @@
 # Proposal 0005: simpler roles/agents/envs, and mail-briefing (Gmail)
 
-Status: Part A implemented (approved by the user 2026-10-28, with the scope change below). Part B is a draft that needs the decisions listed at the end.
+Status: Part A implemented (approved by the user 2026-10-28, with the scope change below). Part B approved by the user 2026-10-28 with the decisions recorded at the end (no PDF text for now).
 Builds on 0003 (merged): item/v1, selectors, corpus-store with read-only SQL, `briefing` base mode.
 
 ## Goal
@@ -103,14 +103,15 @@ The builder made these decisions while implementing Part A; the user approved al
 |---|---|
 | from | `from:` |
 | to | `to:` |
-| subject | `subject:` |
-| text | free terms |
+| subject | local (Gmail's `subject:` matches whole words: `pil` misses "pilot") |
+| text | local (free terms match whole words) |
 | in | `label:` / `in:` |
 | since | `after:` |
 | has: attachment | `has:attachment` |
-| not | `-` prefix |
+| not | local (Gmail's `-from:ruiz` also drops "Dana Ruiz <dana@kiln.fi>") |
 
-  Wildcards are matched locally (from 0003).
+  Wildcards are matched locally (from 0003). A source may return more than the local match, never less, so a
+  field is native only where Gmail search is at least as broad as the matcher (review of PR #9).
 - **Sync:**
   - **First run:** a full sync within lookback, using `messages.list` with the native query, then `messages.get` (format=full) in batches.
   - **After that:** incremental, using `history.list` from the stored `historyId` (messages added, labels added or removed, messages deleted).
@@ -126,7 +127,7 @@ The builder made these decisions while implementing Part A; the user approved al
 
 | Type | How |
 |---|---|
-| PDF | `pypdf`, a pure-Python dependency (needs your approval) |
+| PDF | metadata only for now (user decision 2026-10-28: PDF text not needed yet; `pypdf` would be the dependency if added later) |
 | docx | stdlib zipfile + XML |
 | txt, csv, md | read directly |
 | Images, archives, other binaries | metadata only |
@@ -171,11 +172,8 @@ modes:
 3. Attachment text extraction.
 (forge.connect stays step 4 of proposal 0003.)
 
-## Decisions needed
-1. **Weekly re-login.** For a personal Google account, a private OAuth app in "Testing" status gets refresh tokens that expire after 7 days, so you'd re-run `bay auth gmail` weekly. Options:
-   - Accept weekly re-login. agentbay detects the expiry, marks the mode stale, and tells you to run one command. (Recommended to start.)
-   - Publish the OAuth app to "In production". For a restricted scope like gmail.readonly, that likely means Google's verification process (privacy policy, demo video, possibly a security assessment), which is heavy for personal use. This is to be confirmed before choosing.
-   - IMAP with a Google app password (requires 2-Step Verification). This avoids weekly re-login, but you previously chose Gmail API only.
-2. **Approve `pypdf`** as a dependency for PDF text, or start without PDF text.
-3. **Initial lookback** (proposed 30 days) and your first selectors.
-4. **Sender weighting:** should the `important` list exist from day one?
+## Decisions (user, 2026-10-28)
+1. **Weekly re-login accepted.** The OAuth app stays in "Testing"; refresh tokens expire after 7 days. agentbay detects the expiry, marks the mode stale and names the one command to run (`bay auth gmail`).
+2. **No PDF text for now.** PDFs are stored as metadata only; no new dependency. docx, txt, csv and md text is extracted with the stdlib.
+3. **Initial lookback 30 days**, with the example selectors above as the starting config.
+4. **`important` sender list from day one.**

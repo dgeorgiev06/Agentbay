@@ -539,7 +539,7 @@ def main(argv=None):
     dc = ims.add_parser("decide", help="approve|defer|wontfix a backlog item (approve: interactive terminal only)")
     dc.add_argument("id"); dc.add_argument("decision", choices=["approve", "defer", "wontfix"])
     dc.add_argument("--note"); dc.set_defaults(fn=cmd_improve_decide)
-    wk = ims.add_parser("weekly", help="scan + audit + triage + backlog (cron: see README)")
+    wk = ims.add_parser("weekly", help="scan + audit + triage + backlog (cron: see docs/DESIGN.md)")
     wk.add_argument("--since"); wk.set_defaults(fn=cmd_improve_weekly)
 
     t = sub.add_parser("task"); t.add_argument("action", choices=["new"]); t.set_defaults(fn=cmd_task)

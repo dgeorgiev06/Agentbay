@@ -3,7 +3,7 @@
 - Status: approved 2026-10-28, implemented on branch feat/cos-workflows (all three phases). Decisions
   below taken with the user on 2026-10-28; deviations found during implementation are recorded under
   *Deviations found during implementation*.
-- Design: docs/DESIGN-v0.2.md, proposal 0001 (modes, roles, envs, connectors)
+- Design: docs/DESIGN.md, proposal 0001 (modes, roles, envs, connectors)
 - Feature: forge.extend (framework change)
 
 ## Problem

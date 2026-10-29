@@ -27,7 +27,7 @@ Change the agentbay framework itself (concepts, schemas, CLI, runtime, framework
 - [DOD-10] (should) Simplicity for users: few commands from clone to first result; few files and steps to add a feature, mode, role or connector; scaffolds generate the boilerplate; sensible defaults and minimal config; status and ledger make activity obvious; overengineering is flagged.
 - [DOD-11] (must) Contracts: no breaking contract change without an apiVersion bump.
 - [DOD-12] (must) Framework modes still pass `bay lint` and their tests after the change.
-- [DOD-13] (must) README, docs/INTERFACES.md and docs/DESIGN-v0.2.md are updated in the same change.
+- [DOD-13] (must) README, docs/INTERFACES.md and docs/DESIGN.md are updated in the same change.
 
 ## Outputs
 A `Result`: proposal path, branch, changed files in `artifacts`, release notes in `summary`.

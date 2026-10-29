@@ -337,7 +337,7 @@ def lint_connectors(kit: model.Kit) -> list[str]:
 
 # Scheduled endpoints that a CLI command runs together with the steps they depend on.
 SCHEDULED_BY = {"improve.backlog": "`.agentbay/bay improve weekly` (it runs scan, audit and triage first; cron "
-                                   "recipe in README)"}
+                                   "recipe in docs/DESIGN.md)"}
 
 
 def warnings(kit: model.Kit) -> list[str]:

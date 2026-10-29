@@ -21,7 +21,7 @@ touches:
   - { path: bay/config.py, reason: "`bay config example` assembles per-extension config.example.yaml", slice: 2 }
   - { path: schemas/, reason: config schemas extend (slice 2), versioned contracts (slice 3), feature.yaml (slice 4), slice: 2 }
   - { path: agentbay.config.example.yaml, reason: assembled from the extensions' examples, slice: 2 }
-  - { path: README.md, reason: describes contracts, never instances (B-11), slice: 2, planned: true }
+  - { path: README.md, reason: describes contracts, never instances (B-11), slice: 2 }
   - { path: docs/DESIGN.md, reason: describes contracts, never instances (B-11), slice: 2, planned: true }
   - { path: docs/INTERFACES.md, reason: describes contracts, never instances (B-11), slice: 2, planned: true }
   - { path: "connectors/*/", reason: "per-extension README.md and config.example.yaml; offline transports for contract tests (slice 6)", slice: 2 }

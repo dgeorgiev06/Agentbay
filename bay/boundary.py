@@ -14,7 +14,8 @@ framework/components.yaml and the proposal's `touches:`:
 - anything else is unowned and fails unless listed.
 
 B-11 (`--docs`): the core docs must not name a discovered extension instance (a mode, connector, env or
-content-type folder name) outside a fenced block. It is reported but does not affect the exit code
+content-type folder name) outside a fenced block. Instances inside a core `owns:` path (the briefing base mode,
+corpus-store) are core, not extensions, so naming them is allowed. It is reported but does not affect the exit code
 until DOCS_COUNTS is set (slice 2 of proposal 0006 fixes the docs and flips it).
 
 Glob syntax for `owns:` and `touches:`: `*` and `?` stay within one path segment, `**` crosses
@@ -265,7 +266,7 @@ def instance_names(paths: list[str], cmap: ComponentMap) -> dict[str, str]:
     names = {}
     for p in paths:
         ext = cmap.extension(p)
-        if ext and ext[0].name in NAMED_CONTRACTS:
+        if ext and ext[0].name in NAMED_CONTRACTS and cmap.owner(ext[1]) is None:   # core-owned: not an extension
             names.setdefault(ext[0].instance_name(ext[1]), ext[0].name)
     return names
 

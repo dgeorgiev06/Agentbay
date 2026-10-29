@@ -1,11 +1,13 @@
-# 0006 - Components that own their contracts, and item types as plug-ins
+# 0006 - Components that own their contracts, and content types as plug-ins
 
-- Status: draft for approval, revision 2 (2026-10-29). Nothing is implemented.
+- Status: draft for approval, revision 3 (2026-10-29). Nothing is implemented.
 - Revision 2 follows review by the user:
   - no registration edits;
   - core components own their contracts;
   - contract tests;
   - "kind" renamed and explained.
+- Revision 3: named **content type** (user decision 2026-10-29); views split between the content type
+  and the mode; content types are user space, created with `forge.connect`.
 - Blocks: PR #9 (mail-briefing) is held until steps 1-3 land; it is then rebased onto them.
 - Feature: forge.extend (framework change)
 
@@ -44,9 +46,9 @@ lines) to add one source. On main, X's posts already leak in the same way.
 
 > **An extension is a new folder that satisfies a contract. It edits nothing else.**
 
-There are two kinds of component:
+There are two sorts of component:
 - **Core components** define contracts: the schema an extension must match, the tests it must pass, and where it is discovered. They find and load every instance. Core components change only through an approved framework proposal.
-- **Extensions** (a mode, a connector, an env, an item type) are instances of a contract. Each lives in its own folder and carries its own code, docs, example config and fixtures.
+- **Extensions** (a mode, a connector, an env, an content type) are instances of a contract. Each lives in its own folder and carries its own code, docs, example config and fixtures.
 
 There is no registration step. The core finds extensions by folder, the catalog lists them, and docs
 never keep a hand-written list of them.
@@ -70,7 +72,7 @@ components:
     owns: [framework/connectors/corpus-store/, bay/sqlsandbox.py, bay/selector.py,
            interfaces/items.*, modes/briefing/]
     contracts:
-      itemType:  { at: "item-types/<name>/",      schema: schemas/item-type.schema.json,   tests: tests/contracts/item_type.py }
+      contentType:  { at: "content-types/<name>/",      schema: schemas/content-type.schema.json,   tests: tests/contracts/content_type.py }
       source:    { implements: items.source/v1,                                           tests: tests/contracts/items_source.py }
 ```
 
@@ -108,7 +110,7 @@ in forge.extend before review):
 **Rules:**
 - **forge.extend R-10 (must):** the boundary check and the contract tests pass.
 - **Conformance C-11:** an extension changes no file owned by a core component unless the approved proposal lists it. Docs never keep a hand-written list of extensions.
-- **DOD-4** becomes: adding a source of a new item type is one `item-types/<name>/` folder plus its connector folder(s), with `touches: []`.
+- **DOD-4** becomes: adding a source of a new content type is one `content-types/<name>/` folder plus its connector folder(s), with `touches: []`.
 
 **Improve detector `boundary-crossing`:** scans git history for commits that edited core paths their
 proposal did not list.
@@ -117,27 +119,27 @@ proposal did not list.
 generated from extend's playbook, rules and DoD, with the proposal's `touches:`. It is not written
 by hand.
 
-## B. Item types
+## B. Content types
 
-### What an item type is
+### What a content type is
 
 Every message, post or article agentbay stores is an **item**. All items share one base record: id,
-source, author, text, time, labels, thread. An **item type** says what one type of item looks like
+source, author, text, time, labels, thread. An **content type** says what one type of item looks like
 beyond that base, and how agents can query it:
 
-| Item type | Extra fields | What agents can query |
+| Content type | Extra fields | What agents can query |
 |---|---|---|
 | `post` (X) | language, repost/reply/like counts, quoted post | `v_posts` |
-| `email` | subject, to, cc, message ids, attachments, bulk flag | `v_email`, `v_threads` (one row per conversation, with "needs reply"), `v_attachments` |
+| `email` | subject, to, cc, message ids, attachments, bulk flag, sent-by-me | `v_email`, `v_threads` (one row per conversation), `v_attachments` |
 
-An item type is the **contract between sources and modes**:
+An content type is the **contract between sources and modes**:
 
 ```
 connectors/gmail-api ─┐                                 ┌─ modes/mail-briefing   (reads email)
-connectors/imap      ─┼─ produce ─> item-types/email <─ read ─┤
+connectors/imap      ─┼─ produce ─> content-types/email <─ read ─┤
 connectors/fake-mail ─┘                                 └─ (any other mode that reads email)
 
-connectors/x-api ─┬─ produce ─> item-types/post <─ read ── modes/feed-briefing
+connectors/x-api ─┬─ produce ─> content-types/post <─ read ── modes/feed-briefing
 connectors/fake  ─┘
 ```
 
@@ -146,19 +148,19 @@ the env, and the mode does not notice.
 
 ### Where it lives
 
-`item-types/<name>/` is a top-level folder next to `connectors/` and `modes/`, because several
+`content-types/<name>/` is a top-level folder next to `connectors/` and `modes/`, because several
 connectors share one type. It ships with the kit, like the connectors.
 
 ```
-item-types/email/
-  item-type.yaml     # name, version, docs for each field and view (what `describe` shows agents)
+content-types/email/
+  content-type.yaml     # name, version, docs for each field and view (what `describe` shows agents)
   fields.schema.json # the extra fields (moves from schemas/data/email.v1.schema.json)
   views.sql          # CREATE VIEW v_email, v_threads, v_attachments  (SQL only)
   derive.py          # optional: fields computed when an item is stored (fromMe, toMe, bulk)
   README.md
 ```
 
-`item-type.yaml` may also declare **child tables**: rows per item built from a list in its fields,
+`content-type.yaml` may also declare **child tables**: rows per item built from a list in its fields,
 with optional full-text columns. Email attachments are one:
 
 ```yaml
@@ -172,19 +174,46 @@ tables:
 **How the pieces refer to each other:**
 - **Connectors:** `connector.yaml` declares `produces: [email]`.
 - **Modes:** `mode.yaml` declares `reads: [email]`.
-- **Lint checks** that the item type exists, and that the env binds at least one connector producing every type the mode reads.
+- **Lint checks** that the content type exists, and that the env binds at least one connector producing every type the mode reads.
 
-### What the briefing core does with item types, once and generically
+### What belongs to the content type, and what belongs to the mode
 
-- **The store** creates the tables of the item types the mode's sources produce: each child table with a foreign key to `items`, a delete trigger and full-text triggers. Child rows die with their item, so "the store holds exactly the mode's scope" still holds structurally.
+A content type holds what is true of the data for **every** mode that reads it. A mode's own reading
+of that data lives in the mode:
+
+| | Example | Lives in |
+|---|---|---|
+| What an email is | subject, recipients, message ids, attachments, threads, sent-by-me, bulk | `content-types/email/` |
+| What a mode makes of it | "needs reply" (last message from someone else, to me, not bulk), important-sender weighting, digest sections | `modes/mail-briefing/views.sql`, playbooks, config |
+
+A mode may declare its own `views.sql`. These views are built on the views of the content types it
+`reads:`, and are validated by the same rule: they read nothing else. A deal-tracking mode could then
+define "needs reply" differently without touching email or mail-briefing.
+
+### Who adds content types
+
+Content types are user space, like connectors and modes. `content-types/post/` and
+`content-types/email/` ship with the kit as ready-made examples, next to `connectors/x-api/` and
+`connectors/gmail-api/`.
+
+- **A new source of an existing type** (IMAP for email) is one connector folder.
+- **A new type of content** (Slack messages, RSS articles) is one content-type folder plus its connector. `forge.connect` (proposal 0003 step 4) scaffolds both.
+- **The framework owner** is needed only when the core contracts must grow, as Gmail's change-feed sync did. That goes through `forge.extend`, with a proposal the user approves.
+
+If a mode reads a content type that nothing provides, lint names the fix: "mode mail-briefing reads
+`email`, but no connector bound in env local-mail produces it; add one with `forge.connect`."
+
+### What the briefing core does with content types, once and generically
+
+- **The store** creates the tables of the content types the mode's sources produce: each child table with a foreign key to `items`, a delete trigger and full-text triggers. Child rows die with their item, so "the store holds exactly the mode's scope" still holds structurally.
 - **The sandbox:**
-  - It validates `views.sql` at build and lint.
+  - It validates every content type's and mode's `views.sql` at build and lint.
   - Every statement must be `CREATE VIEW v_<name>`.
   - A view may read only the base tables and its own type's tables and views. This is enforced with the same SQLite authorizer used for reads.
-  - The allowlist is the base views plus the views of the types this mode reads.
+  - The allowlist is the base views, plus the views of the content types this mode reads, plus the mode's own views.
 - **`describe`** lists only those types. feed-briefing shows no mail views, with no special case.
 - **Computed fields are stored, not computed at read time.** `derive.py` runs in the writer, after secret scrubbing, and may only add fields. This replaces the `addr_key` SQL function, so no extension code ever runs inside the agents' read sandbox.
-- **Store version:** the store records its item types and versions. A mismatch is refused with "move the folder aside and sync again" (no migrations, as now).
+- **Store version:** the store records its content types and versions. A mismatch is refused with "move the folder aside and sync again" (no migrations, as now).
 
 ### What stays in the briefing core, and why
 
@@ -202,22 +231,25 @@ The sync additions in #9 (`changeFeed`, `until`, `storedIds`, `cursorExpired`, `
    - contract tests for connector and source (run against x-api and fake), and for mode;
    - envelopes generated from forge.extend.
    - Acceptance: run against #9 as it stands, the check fails and lists its shared-code edits.
-2. **Item types, on main:**
+2. **Content types, on main:**
    - the loader, generic child tables, view validation, `produces:`/`reads:` and computed fields;
-   - move posts into `item-types/post/`;
-   - the item-type contract tests.
+   - move posts into `content-types/post/`;
+   - the content-type contract tests.
    - Acceptance:
      - feed-briefing's sync, describe and status output is identical to today's;
-     - a test asserts that no core file names an item type or connector;
+     - a test asserts that no core file names an content type or connector;
      - every security test passes unchanged.
 3. **Rebase #9:**
-   - `item-types/email/`, Gmail specifics in `connectors/gmail-api/`, mail-briefing's config holding only `important`.
+   - `content-types/email/`, Gmail specifics in `connectors/gmail-api/`;
+   - "needs reply" and important-sender weighting in mail-briefing's own views; its config holds only `important`.
    - Acceptance: the contract tests pass for gmail-api and fake-mail, and `bay boundary` passes with `touches:` listing only the generic sync-protocol additions.
+
+## Decided
+- **Name:** content type (user, 2026-10-29). The stored unit is still called an item in code and interface names (`items.source/v1`); renaming those is not part of this proposal.
 
 ## Decisions needed
 
-1. **Name:** "item type" (recommended: the framework already calls each record an item, so the name explains itself), "content type" (the CMS term), or keep "kind".
-2. **Computed fields at store time** (recommended), or allow item types to add SQL functions to the read sandbox.
-3. **Strictness:** the boundary check fails the step, with an approved `touches:` as the only way through (recommended), or it only warns the reviewer.
-4. **Contract tests are mandatory for every source connector**, so each must ship an offline transport with fixtures (recommended), or they are optional.
-5. **Order:** hold #9 until steps 1-3 are done (recommended), or merge #9 now and refactor after.
+1. **Computed fields at store time** (recommended), or allow content types to add SQL functions to the read sandbox.
+2. **Strictness:** the boundary check fails the step, with an approved `touches:` as the only way through (recommended), or it only warns the reviewer.
+3. **Contract tests are mandatory for every source connector**, so each must ship an offline transport with fixtures (recommended), or they are optional.
+4. **Order:** hold #9 until steps 1-3 are done (recommended), or merge #9 now and refactor after.

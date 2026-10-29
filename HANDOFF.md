@@ -10,7 +10,7 @@ commit and a push, and updates this file. This file is removed in the last slice
 |---|---|---|---|---|
 | 1 | Quiet checks + component map + `bay boundary` (+ proposal `touches:` parsing) | A, F | B-1, B-2, B-3, B-11 | done |
 | 2 | Ownership by folder: `adapters/`, `framework/interfaces/`, discovery, `bay auth <connector>`, per-extension README + `config.example.yaml`, `bay config example`, config schemas that extend, docs describe contracts only | A, D | B-4, B-11 | done |
-| 3 | Versioned `reads:`/`produces:`/`needs:`/`implements:`, no extension names another, per-mode skill namespaces, C-7 vocabulary | D | B-6, B-7, B-8 | B-6, B-7, C-7 done; B-8 todo |
+| 3 | Versioned `reads:`/`produces:`/`needs:`/`implements:`, no extension names another, per-mode skill namespaces, C-7 vocabulary | D | B-6, B-7, B-8 | done |
 | 4 | `feature.yaml` (workflow, skills, `uses:`), whole-feature override, `bay show <mode> --resolved` | E | B-3, B-8 | todo |
 | 5 | Per-feature `uses:` enforced in the use shim (security) | E | B-9 | todo |
 | 6 | Contract tests: connector, source (incl. change-feed), mode; run against every instance | A | B-5 | todo |
@@ -118,6 +118,26 @@ Slice 3, B-6, B-7 and C-7 (commits on feat/source-kinds after 313120a; see `git 
 - tests/test_contract_versions.py (4 tests); briefing-child fixtures in test_inheritance/test_roles now
   declare `reads: [post/v1]` (required by B-6).
 
+Slice 3, B-8 (bc7634a):
+- Build writes a mode's skills (own and inherited) to `.claude/skills/<mode>--<skill>/` and a role's own skills
+  to `<role>--<skill>/`; the copied SKILL.md `name:` is rewritten to the folder name (`_rename_skill`). A child's
+  same-named skill overrides its parent's for that child only (`model.mode_skills`, nearest first).
+- `model.skill_id`, `model.role_skill_names`, `SKILL_NAME_MAX = 64`. `ResolvedMode.skills` and
+  `ResolvedRole.skills` are keyed by the namespaced name; `ResolvedRole.skill_names` maps short -> namespaced
+  (a role's own skill replaces the mode's same-named one for that role).
+- References: subagent "## Skills" lists `` `<mode>--<skill>` (<short>) ``; step plans carry
+  `skills: {short: namespaced}`; COORDINATOR.md gets a "Skills (generated)" table (skill, from, playbooks call
+  it). catalog.json / `bay show` list namespaced names. Playbooks and prompts keep short names.
+- mail-briefing's skills renamed back to `corpus-sql` and `digest` (they override briefing's again).
+- `lint.lint_skill_names` rewritten for B-8: short name must be `[a-z0-9]+(-[a-z0-9]+)*`; namespaced name at most
+  64 (message names the overshoot and the fix); no two sources build the same name; every skill a mode's
+  playbooks (mode playbook + each endpoint's resolved playbook) name ("the X skill", "(X skill)") is in the
+  mode chain or the skills of a role the mode maps; a role prompt's reference is the role's own or in every
+  mode that maps it. `bay clean` removes the folders (manifest), build is idempotent.
+- Tests: test_adapter round trip (no clobbering, override child-only, name: rewritten, idempotent rebuild,
+  clean removes `.claude/skills/`), test_dispatch plan `skills`, test_lint `*_b8` (3), test_inheritance.
+- Touches: `modes/*/skills/` `planned` off; bay/dispatch.py's slice-5 planned entry merged into a slice-3 one.
+
 ## Decisions
 - Classification order: other (tests/, HANDOFF.md, docs/proposals/, docs/research/, repo meta, the
   proposal) → core docs → core `owns:` (most specific glob wins, so bay/selector.py is briefing) →
@@ -186,32 +206,42 @@ Slice 3, B-6, B-7 and C-7 (commits on feat/source-kinds after 313120a; see `git 
   letters, digits and hyphens only (max 64); Claude Code adds `plugin:` itself for plugins. So B-8 must write
   `<mode>--<skill>` (same separator as role units `<role>--<mode>`), not `<mode>:<skill>`.
 
+- (slice 3, B-8) Separator `--`, not `:` (see above). Note the open Agent Skills spec (agentskills.io) also
+  forbids consecutive hyphens; Claude Code's own docs only state the character set and 64. Owner chose `--`.
+- (slice 3, B-8) Role skills get the role's namespace (`researcher--research-brief`), not the mode's: written
+  under the mode's they would clash with a same-named mode skill for the mode's other roles. A mode named like a
+  role could still clash on a name; lint catches it ("also built from").
+- (slice 3, B-8) mail-briefing skills: back to `corpus-sql`/`digest` rather than keep `mail-sql`/`mail-digest`
+  (the task said `sql`/`digest`, but the pre-workaround names were `corpus-sql`/`digest`). Same churn either way
+  (2 renames, 2 playbook words), but keeping the mail- names would leave mail-briefing's analyst with briefing's
+  post-oriented `corpus-sql` and `digest` inherited next to its own; overriding is what B-8 is for.
+- (slice 3, B-8) Abstract modes are not built, so their skills get no folder of their own; their playbooks are
+  still lint-checked against their own chain.
+- (slice 3, B-8) The proposal text (D.1, row B-8) still says `<mode>:<skill>`; left as approved, code follows
+  the Decision above.
+
 ## Next
-Slice 3, remaining: B-8, per-mode skill namespaces. Then "Slices 1-3 complete: open PR 1 for review".
-- Build writes each mode's skills as `.claude/skills/<mode>--<skill>/` (':' is not valid there, see Decisions),
-  rewriting the copied SKILL.md `name:`; a child's same-named skill overrides its parent's for that child only
-  (`model.mode_skills` already resolves the chain, nearest first). Places: adapters/claude-code/claude_code.py
-  `_skills` (~l.243) and the copy loop (~l.136), `_write_agent` "## Skills" list (~l.223); model.py role skills
-  merge (`skills={**mode_skills(md), **rd.skills}`, ~l.830) and `mode_skills`; cli.py/registry.py list
-  `r.skills`; step plans (grep bay/playbook.py, dispatch.py for skills) must list namespaced names. Role skills
-  (framework/roles/skills, e.g. research-brief) need a namespace too (e.g. `role--<skill>` or keep as is:
-  decide and record).
-- mail-briefing's skills are `mail-sql`, `mail-digest` (rename workaround). Either rename to `sql`/`digest`
-  (playbooks name them) or keep; pick the simpler and record it.
-- Replace `lint.lint_skill_names` (global-name clash) with: lint fails on a skill a feature playbook or role
-  references that does not exist in its mode chain (and on any remaining clash of namespaced names).
-- Tests: two modes with the same skill name build without clobbering; feed-briefing's analyst gets briefing's
-  skills, mail-briefing's analyst gets mail-briefing's. Update tests that expect bare skill folders.
-- Flip `planned` off on `modes/*/skills/` (and add `adapters/`-path touches if needed: `adapters/` is a slice-2
-  entry already). bay/improve/ (slice 3, planned) stays planned unless a conformance check changes.
-- Then update this file: slice 3 done; Next: "Slices 1-3 complete: open PR 1 for review"; reviewer notes:
-  B-7 scope decisions (framework instances, core instances, tests/ exemption) and B-6 env set (substitutes).
+Slices 1-3 complete: PR 1 ready for independent review. Look closely at:
+- B-7 framework-instance exemption: framework modes/connectors may name each other (not user extensions);
+  core instances (briefing base mode, corpus-store) are not scanned at all; README.md and an extension's
+  `tests/` are exempt (`lint.lint_extension_names`). Is that scope too wide?
+- B-6 env set: an env counts for a mode when its `roles:` map it or it `substitutes:` one of those
+  (`lint.lint_contract_versions`); reads/produces only around items.source/v1.
+- B-8: skill reference detection is a regex over prose ("the X skill", "(X skill)") in `lint._skill_refs`; it
+  can miss other phrasings. `--` separator vs the agentskills.io no-consecutive-hyphens rule. `_rename_skill`
+  rewrites SKILL.md front matter. Proposal text still says `<mode>:<skill>`.
+- B-4/B-11 classification: core wins over a contract's `at:`; agentbay.config.example.yaml classified as other.
+- `adapters/` back in `model.PROTECTED` and framework-dev's `fs.write` gains `adapters` (security-adjacent).
+- `bay auth` LoginContext limits (secrets/network) in bay/cli.py.
 
 ## Test status
-`python3 tests/run.py -q`: 373 passed, 0 failed (the suite takes ~2-3 min; use a long timeout).
+`python3 tests/run.py -q`: 375 passed, 0 failed (the suite takes ~2-3 min; use a long timeout).
 `bay lint` clean, `bay validate` ok, build + clean on a scratch project ok. `bay boundary --base 07aae9e
 --proposal docs/proposals/0006-...md --docs`: 0 failing, 0 B-11 hits.
 
 ## Open problems
 - DESIGN.md is 1603 words (target ~1.5k); further trimming would cut contract text (safety, store invariants).
 - The `boundary-crossing` improve detector (B-1..B-3 over history) is slice 7.
+- B-8 skill-reference lint matches two prose phrasings only; a feature.yaml `skills:` list (slice 4) should
+  replace the regex as the declared reference.
+- Proposal 0006 D.1 / row B-8 say `<mode>:<skill>`; the owner may want the text amended to `<mode>--<skill>`.

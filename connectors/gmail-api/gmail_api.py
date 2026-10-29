@@ -61,6 +61,7 @@ from email.utils import getaddresses, parseaddr
 from html.parser import HTMLParser
 from pathlib import Path
 
+from bay import selector as selmod
 from bay import vault
 from bay.connect import ConnectorError
 from bay.util import duration, iso
@@ -72,6 +73,7 @@ SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN = "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN"
 LIST_MAX = 500                        # messages.list / history.list maxResults ceiling
 OUT_OF_SCOPE = {"TRASH", "SPAM", "DRAFT"}
+IGNORED_REMOVALS = {"UNREAD", "IMPORTANT"}      # read state and Gmail's own ranking never change the scope
 SYSTEM_IN = {"inbox", "sent", "starred", "important", "snoozed", "chats", "drafts", "spam", "trash", "anywhere",
              "scheduled"}
 EXTRACT = Path(__file__).with_name("extract.py")
@@ -338,6 +340,7 @@ class GmailApi:
         self._profile: dict | None = None
         self._labels: dict | None = None
         self._cache: dict[str, tuple[str, dict | None]] = {}    # one sync calls fetch once per native query
+        self._dates: dict[str, str] = {}          # createdAt of every message read, kept or not (coverage)
         self.billed = 0
         self.warnings: list[str] = []          # per-message notes (a body part that did not decode), per fetch
 
@@ -423,14 +426,15 @@ class GmailApi:
     # ------------------------------------------------------------ items.source/v1.fetch
     def fetch(self, query: dict | None = None, since: str | None = None, until: str | None = None,
               cursor: str | None = None, maxItems: int = 100, checkIds: list[str] | None = None,
-              storedIds: list[str] | None = None) -> dict:
+              storedIds: list[str] | None = None, localIn: list[str] | None = None) -> dict:
         run = {"items": {}, "deleted": [], "removed": [], "checked": [], "warnings": [], "truncated": False}
         new_cursor = cursor
         stored = set(storedIds or [])
         billed0, req0 = self.billed, self.ctx.http.requests      # this call's share (the instance is reused)
         try:
             if cursor:
-                new_cursor = self._incremental(run, cursor, query or {}, maxItems, checkIds or [], stored)
+                new_cursor = self._incremental(run, cursor, query or {}, maxItems, checkIds or [], stored,
+                                               localIn or [])
             else:
                 new_cursor = self._full(run, query or {}, since, until, maxItems, checkIds or [], stored)
         except HistoryGone:
@@ -451,6 +455,8 @@ class GmailApi:
         out = {"items": items, "cursor": new_cursor, "truncated": run["truncated"], "billed": self.billed - billed0,
                "requests": self.ctx.http.requests - req0, "checked": run["checked"], "deleted": sorted(set(run["deleted"])),
                "removed": sorted(set(run["removed"]))}
+        if run.get("oldest"):
+            out["oldest"] = run["oldest"]
         if run["warnings"]:
             out["warnings"] = run["warnings"]
         return out
@@ -461,7 +467,9 @@ class GmailApi:
         the historyId from before the listing, so changes made while listing are replayed next time. A backfill
         (`until`) never reads a message the store already holds: history keeps those current."""
         hid = str(self.profile().get("historyId") or "") or None
-        q = native_query(query, since, until)
+        # drafts never enter the store, so excluding them natively (an exact system-label filter) never narrows
+        # the local match and never spends a read on one
+        q = " ".join(x for x in (native_query(query, since, until), "-in:drafts") if x)
         skip = stored if until else set()
         ids: list[str] = []
         seen: set[str] = set()
@@ -485,6 +493,9 @@ class GmailApi:
         ids = ids[:budget]
         for mid in ids:
             self._take(run, mid)
+        dates = [self._dates[m] for m in ids if m in self._dates]
+        if dates:                             # every message the listing read, kept or not: coverage moves past it
+            run["oldest"] = min(dates)
         listed = set(ids)
         for xid in check:                     # stored, not listed now: deleted, trashed, relabeled or older
             if xid in listed or self._take(run, xid) != "skipped":
@@ -505,13 +516,25 @@ class GmailApi:
         return {lid for lid, name in self.labels().items()
                 if _label(name).casefold() in want or lid.casefold() in want}
 
+    def _added_matches(self, labels: set[str], native_in: set[str], local_in: list[str]) -> bool:
+        """Whether a label added to a message the store does not hold can bring it into scope: one the query's
+        `in` names natively, or one a local (wildcard) `in` value matches with the shared matcher."""
+        if labels & native_in:
+            return True
+        if not local_in:
+            return False
+        names = self.labels()
+        return any(selmod.matches({"labels": [lid, names.get(lid, lid)]}, {"in": local_in}, self.ctx.now())
+                   for lid in labels)
+
     def _incremental(self, run: dict, cursor: str, query: dict, budget: int, check: list[str],
-                     stored: set[str]) -> str:
+                     stored: set[str], local_in: list[str] | None = None) -> str:
         """history.list from the cursor. Every change to a stored message is read again (its labels may have
         taken it out of scope, at any age). For messages the store does not hold: new messages are read unless
-        they arrive in trash, spam or drafts; label changes are read only when an added label is one the query's
-        `in` names, or trash, spam or a user label was removed (restored, or a `not: {in: ...}` may now match);
-        UNREAD, IMPORTANT, STARRED, CATEGORY_* and every other label-only change is ignored. Paging stops at the
+        they arrive in trash, spam or drafts; an added label is read only when the query's `in` names it or a local
+        `in` value (localIn) matches it, and any removed label except UNREAD and IMPORTANT is read (restored from
+        trash or spam, or a `not: {in: ...}` such as unstarring may now match); every other label-only change
+        (UNREAD, IMPORTANT, STARRED or CATEGORY_* added, ...) is ignored. Paging stops at the
         budget on a history record boundary and returns the last record read as the cursor, so the next sync
         continues there (a record is never split: the first one is read whole even if it alone is over the
         budget, so a replay always makes progress). Deletion checks are not needed: history reports deletions."""
@@ -545,9 +568,9 @@ class GmailApi:
                         elif key == "labelsAdded":
                             if in_ids is None:
                                 in_ids = self._in_label_ids(query) if query.get("in") else set()
-                            if labels & in_ids:
+                            if self._added_matches(labels, in_ids, local_in or []):
                                 want.append(mid)
-                        elif labels & {"TRASH", "SPAM"} or any(lb.startswith("Label_") for lb in labels):
+                        elif labels - IGNORED_REMOVALS:    # any other removal may restore it or let a `not` match
                             want.append(mid)
                 for x in h.get("messagesDeleted") or []:
                     mid = (x.get("message") or {}).get("id")
@@ -605,6 +628,9 @@ class GmailApi:
             raise ConnectorError(f"gmail-api: messages.get failed (HTTP {r.status})")
         else:
             m = r.json() or {}
+            ms = int(m.get("internalDate") or 0)
+            if ms:
+                self._dates[mid] = iso(datetime.fromtimestamp(ms / 1000, tz=timezone.utc))
             res = ("removed", None) if set(m.get("labelIds") or []) & OUT_OF_SCOPE else ("item", self._to_item(m))
         self._cache[mid] = res
         return res

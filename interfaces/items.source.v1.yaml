@@ -34,6 +34,7 @@ spec:
           until: { type: string, format: date-time, description: "With since: only items created at or before this (backfill)." }
           cursor: { type: [string, "null"] }
           storedIds: { type: array, items: { type: string }, description: "changeFeed sources only: extIds the store holds for this source. Changes to them are always read; a backfill never reads them again." }
+          localIn: { type: array, items: { type: string }, description: "changeFeed sources only: `in` values of the query's selectors that the native query does not carry (wildcard values). A label added to a message the store does not hold is read when it matches one (bay/selector.py)." }
           maxItems: { type: integer, minimum: 1 }
           checkIds: { type: array, items: { type: string } }
       out:
@@ -49,6 +50,7 @@ spec:
           checked: { type: array, items: { type: string }, description: "checkIds actually verified in this call." }
           deleted: { type: array, items: { type: string }, description: "extIds the source reports deleted or no longer available." }
           removed: { type: array, items: { type: string }, description: "extIds that left the source's scope (trash, spam) but may come back; the store drops them without remembering them." }
+          oldest: { type: string, format: date-time, description: "A listing's oldest message read, whether returned as an item or not (removed, out of scope): a truncated fetch's coverage starts there, so a non-item never stalls it." }
           cursorExpired: { type: boolean, description: "changeFeed sources: the cursor is older than the changes the source keeps; nothing was read. Fetch again without a cursor." }
           blocked: { type: string, description: "Why nothing could be read (e.g. the login expired), naming the command that fixes it. The store keeps its cursor and reports the gap." }
           warnings: { type: array, items: { type: string } }

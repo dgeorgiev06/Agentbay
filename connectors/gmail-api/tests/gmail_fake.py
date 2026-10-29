@@ -212,6 +212,8 @@ class FakeGmail:
         if sep and key in ("label", "in"):
             if key == "in" and val == "anywhere":
                 return True
+            if key == "in" and val == "drafts":
+                return "DRAFT" in m["labelIds"]
             names = {_dash(self._label_name(x)) for x in m["labelIds"]} | {x.lower() for x in m["labelIds"]}
             return _dash(val) in names
         if sep and key == "has":

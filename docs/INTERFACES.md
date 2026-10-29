@@ -196,9 +196,9 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
   - Selectors with the same native query share one fetch and one cursor.
   - A field the source does not list cannot be expressed: `bay validate` errors.
   - A `local` field on a paid source (`costPerPostUsd` > 0) gets a validate warning.
-- **`items.source/v1.fetch {query, since [until] | cursor, maxItems, checkIds, storedIds}`** returns
-  `{items, cursor, truncated, billed, checked?, deleted?, removed?, cursorExpired?, blocked?, requests?,
-  warnings?}`. It makes one call per distinct native query and is never billed beyond `maxItems`; `checked`
+- **`items.source/v1.fetch {query, since [until] | cursor, maxItems, checkIds, storedIds, localIn}`** returns
+  `{items, cursor, truncated, billed, checked?, deleted?, removed?, oldest?, cursorExpired?, blocked?,
+  requests?, warnings?}`. It makes one call per distinct native query and is never billed beyond `maxItems`; `checked`
   lists only ids actually read.
   - A connector that declares `changeFeed: true` (gmail-api: history.list) is followed: once a query has a
     cursor every sync replays the changes since it, with no deletion checks, and gets `storedIds` (changes to
@@ -206,7 +206,13 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
     second fetch `{since: window start, until: start of coverage}` backfills older items and skips
     `storedIds`, so a first sync cut by `maxItemsPerRun` completes over later syncs and each item is read once.
     `cursorExpired` (Gmail keeps about a week of history) makes the store drop the cursor and re-list the
-    window with deletion checks. A new item older than the source's window is not stored.
+    window with deletion checks; stored ids that re-list did not read go into state.json `recheck`, re-read by
+    later syncs within the deletion-check share, and status is `stale` until it is empty (and while a replay
+    is behind). A selector joining a followed query replays the feed first, then re-lists for it without
+    moving the cursor. `localIn` carries the selectors' local (wildcard) `in` values, so a label added to a
+    message not stored is read when one matches. A new item older than the source's window is not stored.
+  - `oldest`: the oldest message a listing read, kept or not; a truncated fetch's coverage moves from it, so
+    a non-item never stalls a backfill.
   - `deleted`: gone at the source; the store deletes them and never stores them again.
   - `removed`: left the source's scope but may come back (Gmail trash, spam); deleted, not remembered.
   - `blocked`: nothing could be read (an expired login), with the command that fixes it. The store keeps that

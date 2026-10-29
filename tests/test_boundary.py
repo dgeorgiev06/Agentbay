@@ -110,12 +110,14 @@ def test_docs_and_unowned_paths():
     assert _failing(rep) == []
 
 
-def test_docs_check_names_instances_outside_fences_and_is_not_counted():
+def test_docs_check_names_instances_outside_fences_and_fails():
     readme = "# kit\nUse the gmail connector.\n```\nmodes/mail/ and local\n```\nSee git.read/v1 and mailbox.\n"
     rep = _check({"README.md": readme}, touches=["README.md"], docs=True)
     assert [(h["file"], h["line"], h["name"]) for h in rep.doc_hits] == [("README.md", 2, "gmail")]
-    assert rep.exit_code == 0 and "README.md:2: names extension connector 'gmail'" in rep.lines()[0]
-    assert "B-11 docs: 1 hits (not counted)" in rep.summary()
+    assert rep.exit_code == 1 and "README.md:2: names extension connector 'gmail'" in rep.lines()[0]
+    assert "B-11 docs: 1 hits" in rep.summary() and not rep.failures
+    clean = _check({"README.md": "# kit\nUse a connector.\n```\ngmail\n```\n"}, touches=["README.md"], docs=True)
+    assert clean.doc_hits == [] and clean.exit_code == 0
     texts = {"docs/DESIGN.md": "a `modes/news/` b\n~~~\nnews\n~~~\n"}
     assert [h["line"] for h in boundary.doc_hits(texts, {"news": "mode"})] == [1]
 
@@ -173,3 +175,21 @@ def test_shipped_component_map_is_valid_and_lint_checks_it():
     (bad / "framework/components.yaml").write_text(yaml.safe_dump({"components": {"kernel": {"owns": ["nowhere/"]}}}))
     errs = lint.lint_components(kit)
     assert len(errs) == 1 and "owns 'nowhere/'" in errs[0]
+
+
+def test_ownership_lint_names_stray_tracked_files_b4():
+    repo = _repo({"notes.txt": "x\n", "framework/stray.yaml": "x\n", "docs/DESIGN.md": "x\n",
+                  "adapters/claude-code/adapter.yaml": "x\n"})
+    (repo / "untracked.txt").write_text("x\n")                 # only tracked files count
+    assert boundary.stray(["bay/cli.py", "modes/mail/mode.yaml", "tests/test_x.py", "README.md", "notes.txt"],
+                          boundary.ComponentMap.load(repo / "framework/components.yaml")) == ["notes.txt"]
+    kit = model.Kit(KIT)
+    kit.root = repo
+    errs = lint.lint_ownership(kit)
+    assert [e.split(":", 1)[0] for e in errs] == ["adapters/claude-code/adapter.yaml", "framework/components.yaml",
+                                                  "framework/stray.yaml", "notes.txt"]   # MAP owns neither
+    assert "(B-4)" in errs[0] and "framework/components.yaml" in errs[0]
+    kit.root = tmpdir()                                            # not a git checkout: nothing to check
+    assert lint.lint_ownership(kit) == []
+    kit.root = KIT
+    assert lint.lint_ownership(kit) == []                          # the shipped kit has no stray file

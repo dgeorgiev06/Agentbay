@@ -3,8 +3,8 @@
 Jobs for Claude Code, defined as data. You describe a **mode** (a job with endpoints): which of the
 framework's **roles** do its steps, the **environment** each role works in, the capabilities it needs, and its
 playbooks, skills and rules. **Connectors** do the deterministic work, and one **agent profile** says how an
-LLM product runs the roles. agentbay checks that it all wires up, compiles it into Claude Code, and runs it
-through one dispatcher that enforces schemas, effects, budgets and secrets, and logs every step.
+LLM product runs the roles. agentbay checks the wiring, compiles it into Claude Code, and runs it through one
+dispatcher that enforces schemas, effects, budgets and secrets, and logs every step.
 
 ```
 Chief of Staff (your main Claude Code session)
@@ -46,9 +46,8 @@ feature:
 .agentbay/bay call feed-briefing.digest '{"since": "3d"}'
 ```
 
-Code steps run in the dispatcher; for an agentic step it returns `needs-agent`, the coordinator runs that
-step's subagent and submits its output, checks run, and the `reviewer` gives one verdict per Definition of
-Done item. `bay status` shows calls, steps and cost.
+Code steps run in the dispatcher; agentic steps run as subagents, and the `reviewer` gives one verdict per
+Definition of Done item. `bay status` shows calls, steps and cost.
 
 **Going live:** sign in as the source connector's `README.md` says, delete that env's entry from the `envs:`
 offline switch in agentbay.config.yaml and rebuild. Budget caps stop a sync before it exceeds one.
@@ -107,16 +106,14 @@ extensions may add commands of their own; their `README.md` lists them.
 
 ## Adding things
 
-A source is one connector plus one binding line in an env; a new kind of briefing is a mode with
-`extends: briefing`; a feature is `bay feature new`. A framework change goes through the framework's extend
-feature, starting from a proposal that lists every core path it touches. Recipes:
+A source is one connector plus one binding line in an env; a feature is `bay feature new`. A framework change
+starts from a proposal that lists every core path it touches. Recipes:
 [docs/INTERFACES.md#extension-recipes](docs/INTERFACES.md#extension-recipes).
 
 ## Safety, in one paragraph
 
 The guard hook is defense in depth, not isolation: it narrows what subagents can ask to do, but cannot contain
-code once something runs it. Nothing that runs code is auto-approved: subagents get no auto-approval except
-their own role's read-only data shim, and the main thread is pre-approved only for the read and notes commands
-`bay show|status|log|note|task|catalog`. `bay call`, `bay submit` and `bay approve` always prompt. Approval
-gates, secrets, browser logins and backlog approvals need your terminal.
+code once something runs it. Nothing that runs code is auto-approved except a role's own read-only data shim;
+the main thread is pre-approved only for `bay show|status|log|note|task|catalog`. Approval gates, secrets,
+browser logins and backlog approvals need your terminal.
 Details: [docs/DESIGN.md#safety-model](docs/DESIGN.md#safety-model).

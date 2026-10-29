@@ -17,23 +17,22 @@ touches:
   - { path: framework/interfaces/, reason: core interfaces live under framework/interfaces/ (B-4), slice: 2 }
   - { path: interfaces/items.*, reason: items.* move to framework/interfaces/, slice: 2 }
   - { path: bay/model.py, reason: discovery by folder; config schemas that extend; versioned reads/produces; feature.yaml, slice: 2 }
-  - { path: bay/registry.py, reason: catalog lists discovered extensions, slice: 2, planned: true }
   - { path: bay/config.py, reason: "`bay config example` assembles per-extension config.example.yaml", slice: 2 }
   - { path: schemas/, reason: config schemas extend (slice 2), versioned contracts (slice 3), feature.yaml (slice 4), slice: 2 }
   - { path: agentbay.config.example.yaml, reason: assembled from the extensions' examples, slice: 2 }
   - { path: README.md, reason: describes contracts, never instances (B-11), slice: 2 }
-  - { path: docs/DESIGN.md, reason: describes contracts, never instances (B-11), slice: 2, planned: true }
-  - { path: docs/INTERFACES.md, reason: describes contracts, never instances (B-11), slice: 2, planned: true }
+  - { path: docs/DESIGN.md, reason: describes contracts, never instances (B-11), slice: 2 }
+  - { path: docs/INTERFACES.md, reason: describes contracts, never instances (B-11), slice: 2 }
   - { path: "connectors/*/", reason: "per-extension README.md and config.example.yaml; offline transports for contract tests (slice 6)", slice: 2 }
-  - { path: "envs/*.yaml", reason: bindings follow the moved interfaces, slice: 2, planned: true }
-  - { path: "modes/*/mode.yaml", reason: "per-mode README/config example (slice 2); versioned reads/produces (slice 3)", slice: 2, planned: true }
-  - { path: framework/connectors/corpus-store/, reason: implements the moved items.* interfaces, slice: 2, planned: true }
+  - { path: "modes/*/mode.yaml", reason: "per-mode README/config example (slice 2); versioned reads/produces (slice 3)", slice: 2 }
   - { path: "modes/*/README.md", reason: per-extension README (Part A self-description), slice: 2 }
   - { path: "modes/*/config.example.yaml", reason: per-extension example config, assembled by `bay config example`, slice: 2 }
   - { path: framework/modes/improve/, reason: "README.md and config.example.yaml (Part A self-description)", slice: 2 }
   - { path: framework/connectors/claude-transcripts/, reason: "README.md and config.example.yaml (Part A self-description)", slice: 2 }
   - { path: framework/modes/forge/templates/, reason: "scaffolded modes and connectors get a README.md (Part A self-description)", slice: 2 }
   - { path: bay/scaffold.py, reason: "scaffolds write a README.md (slice 2); per-mode skill namespaces and touches: (slice 3)", slice: 2 }
+  - { path: "framework/modes/*/README.md", reason: "framework-mode sections move out of DESIGN/INTERFACES into the mode's README (B-11)", slice: 2 }
+  - { path: "framework/connectors/*/README.md", reason: "framework-connector details move out of INTERFACES into the connector's README (B-11)", slice: 2 }
   - { path: modes/mail-briefing/, reason: "login hints name `bay auth <connector>`, not a connector; config.schema.json holds only its own keys", slice: 2 }
   - { path: "modes/mail-briefing/features/*/playbook.md", reason: "login hints name `bay auth <connector>`, not a connector", slice: 2 }
   # slice 3: versioned reads/produces/needs/implements, no extension names another, skill namespaces

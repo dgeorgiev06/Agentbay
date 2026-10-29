@@ -15,8 +15,7 @@ framework/components.yaml and the proposal's `touches:`:
 
 B-11 (`--docs`): the core docs must not name a discovered extension instance (a mode, connector, env or
 content-type folder name) outside a fenced block. Instances inside a core `owns:` path (the briefing base mode,
-corpus-store) are core, not extensions, so naming them is allowed. It is reported but does not affect the exit code
-until DOCS_COUNTS is set (slice 2 of proposal 0006 fixes the docs and flips it).
+corpus-store) are core, not extensions, so naming them is allowed. Each hit fails the check.
 
 Glob syntax for `owns:` and `touches:`: `*` and `?` stay within one path segment, `**` crosses
 segments, and a trailing `/` means the folder and everything under it.
@@ -35,7 +34,6 @@ OTHER = ("tests/", "HANDOFF.md", "docs/proposals/", "docs/research/", ".gitignor
          ".github/", ".editorconfig", "LICENSE", "LICENSE.md", "agentbay.config.example.yaml")
 # contracts whose instance names B-11 forbids in the core docs
 NAMED_CONTRACTS = ("mode", "connector", "env", "contentType")
-DOCS_COUNTS = False     # B-11 is report-only until slice 2 of proposal 0006 flips this
 
 _FENCE = re.compile(r"^\s*(```|~~~)")
 
@@ -132,6 +130,12 @@ class ComponentMap:
         return None
 
 
+def stray(paths: list[str], cmap: ComponentMap) -> list[str]:
+    """B-4: the paths that are neither core docs, other, under a core `owns:` path nor in an extension folder."""
+    return [p for p in paths if p not in DOCS and not any(match(g, p) for g in OTHER)
+            and not cmap.owner(p) and not cmap.extension(p)]
+
+
 # ----------------------------------------------------------------- git
 def _git(repo: Path, *args: str) -> str:
     r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
@@ -176,16 +180,16 @@ class Report:
 
     @property
     def exit_code(self) -> int:
-        return 1 if self.failures or (DOCS_COUNTS and self.doc_hits) else 0
+        return 1 if self.failures or self.doc_hits else 0
 
     def lines(self) -> list[str]:
         where = self.proposal or "the proposal"
         out = [f"{f.path}: {f.owner} - {f.why} - add it to touches: in {where} or move the change"
                for f in self.failures]
         if self.docs_checked:
-            tag = "" if DOCS_COUNTS else " (B-11, reported only: not counted in the exit code until slice 2)"
             out += [f"{h['file']}:{h['line']}: names extension {h['contract']} '{h['name']}' outside a fenced "
-                    f"example block{tag}" for h in self.doc_hits]
+                    f"example block (B-11) - describe the contract, or put the example in a fenced block"
+                    for h in self.doc_hits]
         out.append(self.summary())
         return out
 
@@ -201,13 +205,13 @@ class Report:
         if by_rule:
             s += " (" + ", ".join(f"{r}: {n}" for r, n in sorted(by_rule.items())) + ")"
         if self.docs_checked:
-            s += f"; B-11 docs: {len(self.doc_hits)} hits" + ("" if DOCS_COUNTS else " (not counted)")
+            s += f"; B-11 docs: {len(self.doc_hits)} hits"
         return s
 
     def to_json(self) -> dict:
         return {"base": self.base, "head": self.head, "proposal": self.proposal, "ok": self.exit_code == 0,
                 "paths": [asdict(f) for f in self.findings], "failures": len(self.failures),
-                "docs": {"checked": self.docs_checked, "counted": DOCS_COUNTS, "hits": self.doc_hits}}
+                "docs": {"checked": self.docs_checked, "hits": self.doc_hits}}
 
 
 def classify(path: str, cmap: ComponentMap, touches: list[dict], is_new, proposal: str | None) -> Finding:

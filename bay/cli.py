@@ -618,7 +618,7 @@ def main(argv=None):
     bd.add_argument("--base", required=True, help="the ref the change starts from (git diff <base>...<head>)")
     bd.add_argument("--head", default="HEAD")
     bd.add_argument("--proposal", help="the proposal whose front-matter touches: lists the allowed crossings")
-    bd.add_argument("--docs", action="store_true", help="also run B-11 on the core docs (reported, not yet counted)")
+    bd.add_argument("--docs", action="store_true", help="also run B-11 on the core docs")
     bd.add_argument("--json", action="store_true")
     bd.set_defaults(fn=lambda a: sys.exit(cmd_boundary(a)))
     b = sub.add_parser("build"); b.add_argument("--runtime", default="claude-code"); b.set_defaults(fn=cmd_build)

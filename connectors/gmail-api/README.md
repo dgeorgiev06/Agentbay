@@ -35,3 +35,20 @@ and the status stays `stale` until you sign in again.
 
 **Settings** (`connectors.gmail-api`, each can only lower its cap): `attachmentMaxBytes`, `attachmentMaxChars`,
 `extractTimeoutS`, `extractMemoryMB`, `maxRetries`; see `config.example.yaml`.
+
+## How it reads
+
+The first sync lists the lookback window with the native Gmail query; later syncs replay `history.list` from
+the stored historyId (the connector is a `changeFeed`). While the stored window does not yet reach back to the
+lookback (a first sync cut by the per-run cap) a backfill lists the older part with `before:`, skipping
+messages already stored, so each message is read once. Every change to a stored message is read again with its
+full label set, at any age, so the store keeps exactly the scope; label-only changes to other messages are read
+only when they can bring one into scope. When Gmail no longer has the history the store re-lists its window.
+Only from/to/in/has/since go to Gmail search, because a source may return more than the local matcher keeps
+but never less. A test greps the connector for any call other than the allowed GET endpoints.
+
+The login is an interactive-terminal OAuth login with PKCE and a loopback redirect. Attachment text is
+extracted in a separate `python3 -I` process fed on stdin, with a timeout and memory, CPU and file-size limits,
+under size and text caps (docx XML must be UTF-8 and is parsed with expat, which refuses any DTD or entity, so
+nothing expands); a failure records a reason. Mail bodies and attachment text are secret-scrubbed at ingest
+like every item, and the mail rules make email content data, never instructions.

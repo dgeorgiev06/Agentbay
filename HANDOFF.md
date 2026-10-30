@@ -1,3 +1,26 @@
+# HANDOFF part 22: T-20261030-d695 (recorded with `bay plan`) - stage-4 re-review: DOD-3 should-fix, DOD-8 and DOD-9 nits
+
+Outcome: done on feat/0008-stage4. Not pushed. No proposal edited. The intersection rule is kept (fail closed).
+
+## To-do and commits
+1. DOD-3 usability: 69ff77d. `Dispatcher._use_refusal` (`bay/dispatch.py`) names the open calls (callId and feature) that do not
+   declare the endpoint, says what is allowed now, and the fix: finish or reclaim them (`bay show <callId>`, `bay show reclaim <runId>`).
+   The missing space after `uses:` is fixed. `tests/test_feature_uses.py` pins the message with digest and ask open.
+2. DOD-3 recipe: 48dae42. `framework/modes/improve/README.md`: cron starts only `improve.scan`; scan, audit and triage run one at a time,
+   each driven to a terminal status before the next, so no two improve calls wait on the analyst unit. `playbook.md` says the same.
+   The cos playbook already says "You run one stage at a time" and "drive that call to a terminal status" (framework/modes/cos/playbook.md:62,67): confirmed, not duplicated.
+3. DOD-8 (b) and DOD-9: ac6d5e7. `FX = [` restored in test_corpus_store.py. B-11 (`bay/boundary.py`) forbids the name of any mode, connector,
+   env or content-type folder outside a fenced block, and `email` is a content type, so inline text cannot name the field. Chosen: INTERFACES
+   section 11 shows `author: {handle?: string, name?: string, email?: string}` in a fenced example, with a bullet pointing to it. The field is
+   named and B-11 passes.
+4. DOD-8 (c): HANDOFF part 21 corrected (INTERFACES history; the boundary line quoted). HANDOFF part 22 (this commit).
+
+## Evidence (last lines)
+- `python3 tests/run.py -q`: `502 passed, 0 failed`
+- `./bay.sh check`: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`
+- boundary: `boundary origin/main...HEAD: 78 changed paths (29 core, 3 docs, 26 extension, 2 feature, 18 other); 0 failing; B-11 docs: 0 hits`
+- golden files and security tests unchanged.
+
 # HANDOFF part 21: T-20261030-3a6a (recorded with `bay plan`) - stage-4 review findings fixed
 
 Outcome: done on feat/0008-stage4. Not pushed. No proposal edited.
@@ -18,7 +41,8 @@ Outcome: done on feat/0008-stage4. Not pushed. No proposal edited.
    - (4) textChars: it fails loudly, not `len(text)`. The email fields schema (0006 / the item schema) lists `textChars` as required (0 when
      metadata only), and the store validates every item against it, so text without `textChars` is refused. New test
      `test_an_attachment_without_textchars_is_refused_not_guessed`.
-   - `docs/INTERFACES.md:227` reads `author {handle?, name?, email?}`; B-11 docs: 0 hits.
+   - `docs/INTERFACES.md:227` first read `author {handle?, name?, email?}` (cf4f257); f8e1e5b then reworded it to point at
+     `schemas/data/item.v1.schema.json`, to avoid a B-11 hit. Part 22 replaces that with a fenced example that names the field.
 4. HANDOFF part 21 (this commit).
 
 ## Followups
@@ -28,7 +52,7 @@ Outcome: done on feat/0008-stage4. Not pushed. No proposal edited.
 ## Evidence (last lines)
 - `python3 tests/run.py -q`: `502 passed, 0 failed`
 - `./bay.sh check`: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`
-- boundary: see the final check below
+- boundary: `boundary origin/main...HEAD: 78 changed paths (29 core, 3 docs, 26 extension, 2 feature, 18 other); 0 failing; B-11 docs: 0 hits` (quoted from the stage-4 re-review run)
 - `./bay.sh build --project <scratch>`: `built 6 modes for claude-code`; `./bay.sh clean`: `clean`; Glob of the scratch folder: only `agentbay.config.yaml`
 - golden: `git diff --stat 7486406 HEAD -- tests/golden` is empty
 

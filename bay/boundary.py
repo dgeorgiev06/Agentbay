@@ -14,9 +14,11 @@ framework/components.yaml and the proposal's `touches:`:
   (agentbay.config.example.yaml: `bay config example` assembles it from the extensions, lint fails when stale).
 - anything else is unowned and fails unless listed (CI config under `.github/` included).
 
-Inputs come from commits, never the working tree (F-14): the component map as of `<base>` (a change that edits
-the map is judged by the map it edits; only when `<base>` has no map yet, the change that introduces it is judged
-by its own map at `<head>`, and the report says so), and the proposal's `touches:` as of `<head>`.
+Inputs come from commits, never the working tree (F-14): the component map and the "is this extension new" tree
+as of the merge-base of `<base>` and `<head>` (N-2: the side `<base>...<head>` diffs against; a change that edits
+the map is judged by the map it edits), and the proposal's `touches:` as of `<head>`. Only a change that adds the
+map (status A) is judged by its own map at `<head>`; it then gets no new-extension pass, so every changed path
+outside other must be listed (N-1), and the report says so. Any other base without a map is an error.
 
 B-11 (`--docs`): the core docs must not name a discovered extension instance (a mode, connector, env or
 content-type folder name) outside a fenced block. Instances inside a core `owns:` path (the briefing base mode,
@@ -113,9 +115,20 @@ class ComponentMap:
 
     @classmethod
     def parse(cls, text: str) -> "ComponentMap":
-        doc = yaml.safe_load(text) or {}
+        try:
+            doc = yaml.safe_load(text)
+        except yaml.YAMLError as e:
+            raise RuntimeError(f"{MAP}: not valid YAML ({' '.join(str(e).split())})") from None
+        if doc is None:
+            doc = {}
+        if not isinstance(doc, dict):
+            raise RuntimeError(f"{MAP}: the document must be a mapping with a components: key, not a "
+                               f"{type(doc).__name__}")
         owns, contracts = {}, []
-        for comp, spec in (doc.get("components") or {}).items():
+        comps = doc.get("components") or {}
+        if not isinstance(comps, dict) or not all(isinstance(v, dict) for v in comps.values()):
+            raise RuntimeError(f"{MAP}: components: must map each component name to a mapping")
+        for comp, spec in comps.items():
             owns[comp] = list(spec.get("owns") or [])
             for cname, c in (spec.get("contracts") or {}).items():
                 if c.get("at"):
@@ -165,14 +178,29 @@ def show(repo: Path, rev: str, path: str) -> str | None:
     return _git(repo, "show", f"{rev}:{path}")
 
 
-def map_at(repo: Path, base: str, head: str) -> tuple[ComponentMap, str]:
-    """The component map a change is judged by, and the rev it was read at: `base`'s, or `head`'s when the map
-    does not exist at base yet (the change introducing it)."""
-    for rev in (base, head):
-        text = show(repo, rev, MAP)
-        if text is not None:
-            return ComponentMap.parse(text), rev
-    raise RuntimeError(f"{MAP} exists at neither {base} nor {head}")
+def merge_base(repo: Path, base: str, head: str) -> str:
+    """The commit `base...head` diffs against: the change is judged as of where it forked from base."""
+    out = _git(repo, "merge-base", base, head).strip()
+    if not out:
+        raise RuntimeError(f"{base} and {head} have no common ancestor")
+    return out
+
+
+def map_at(repo: Path, base: str, head: str, mb: str | None = None) -> tuple[ComponentMap, str]:
+    """The component map a change is judged by, and the rev it was read at. Normally the merge-base's (N-2:
+    the side `base...head` diffs against). Only when the change itself adds the map (status A in base...head)
+    is head's map used; the caller then gives no new-extension pass (N-1). Any other base without a map is
+    an error."""
+    mb = mb or merge_base(repo, base, head)
+    text = show(repo, mb, MAP)
+    if text is not None:
+        return ComponentMap.parse(text), base
+    status = _git(repo, "diff", "--name-status", "--no-renames", "--no-relative", "--no-ext-diff",
+                  f"{base}...{head}", "--", MAP).split("\t", 1)[0].strip()
+    if status == "A":
+        return ComponentMap.parse(show(repo, head, MAP)), head
+    raise RuntimeError(f"{MAP} does not exist at {base} (merge-base {mb[:12]}) and this change does not add it; "
+                       f"the boundary check needs the base's component map")
 
 
 def proposal_touches(repo: Path, head: str, path: str) -> list[dict]:
@@ -240,7 +268,8 @@ class Report:
                     f"example block (B-11) - describe the contract, or put the example in a fenced block"
                     for h in self.doc_hits]
         if self.map_rev and self.map_rev != self.base:
-            out.append(f"component map: none at {self.base}; judged by {MAP} at {self.map_rev} (introduced here)")
+            out.append(f"component map: none at {self.base}; judged by {MAP} at {self.map_rev} (introduced here; "
+                       f"every changed path outside other must be in touches:)")
         out.append(self.summary())
         return out
 
@@ -265,8 +294,10 @@ class Report:
                 "docs": {"checked": self.docs_checked, "hits": self.doc_hits}, "mapAt": self.map_rev or self.base}
 
 
-def classify(path: str, cmap: ComponentMap, touches: list[dict], is_new, proposal: str | None) -> Finding:
-    """One changed path -> a Finding. `is_new(root)` says whether an extension root is absent at base."""
+def classify(path: str, cmap: ComponentMap, touches: list[dict], is_new, proposal: str | None,
+             introduced: bool = False) -> Finding:
+    """One changed path -> a Finding. `is_new(root)` says whether an extension root is absent at base.
+    `introduced`: the map is the one this change adds, so a new extension folder gets no pass (N-1)."""
     globs = [t["path"] for t in touches]
     listed = any(match(g, path) for g in globs)
     if path == proposal or any(match(g, path) for g in OTHER):
@@ -282,6 +313,10 @@ def classify(path: str, cmap: ComponentMap, touches: list[dict], is_new, proposa
         c, root = ext
         label = f"{c.name} {c.instance_name(root)}"
         if is_new(root):
+            if introduced:
+                return Finding(path, "extension", label, listed, "B-2",
+                               "" if listed else "new extension folder, judged by the component map this change "
+                               "introduces: no new-extension pass, list it (B-2)")
             return Finding(path, "extension", label, True, "B-2")
         if c.name == "mode":
             m = re.match(re.escape(root) + r"features/([^/]+)/", path)
@@ -333,22 +368,25 @@ def instance_names(paths: list[str], cmap: ComponentMap) -> dict[str, str]:
 def check(repo: Path, base: str, head: str = "HEAD", proposal: str | None = None,
           touches: list[dict] | None = None, cmap: ComponentMap | None = None, docs: bool = False) -> Report:
     repo = Path(repo)
+    mb = merge_base(repo, base, head)                                # N-2: what base...head diffs against
     map_rev = base
     if cmap is None:
-        cmap, map_rev = map_at(repo, base, head)
+        cmap, map_rev = map_at(repo, base, head, mb)
+    introduced = map_rev != base
     touches = [t for t in touches or [] if not t.get("planned")]     # planned entries authorize nothing yet
     at_base: set[str] = set()
-    for f in _git(repo, "-c", "core.quotePath=false", "ls-tree", "-r", "--name-only", "-z", base).split("\0"):
+    for f in _git(repo, "-c", "core.quotePath=false", "ls-tree", "-r", "--name-only", "-z", mb).split("\0"):
         parts = f.split("/")
         at_base.update("/".join(parts[:i]).casefold() for i in range(1, len(parts) + 1) if f)
 
     def is_new(root: str) -> bool:
-        """An extension root is new when no path at base matches it, ignoring case (F-4: `modes/Mail/` next to
-        `modes/mail/` is an edit of mail on a case-insensitive filesystem, not a new mode)."""
+        """An extension root is new when no path at the merge-base matches it, ignoring case (F-4: `modes/Mail/`
+        next to `modes/mail/` is an edit of mail on a case-insensitive filesystem, not a new mode)."""
         return root.rstrip("/").casefold() not in at_base
 
     rep = Report(base, head, proposal, map_rev=map_rev)
-    rep.findings = [classify(p, cmap, touches, is_new, proposal) for p in changed(repo, base, head)]
+    rep.findings = [classify(p, cmap, touches, is_new, proposal, introduced)
+                    for p in changed(repo, base, head)]
     if docs:
         rep.docs_checked = True
         tree = _git(repo, "ls-tree", "-r", "--name-only", head).splitlines()

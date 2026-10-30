@@ -27,6 +27,9 @@ BASE_FILES = {
 }
 
 
+MAP_PATH = "framework/components.yaml"
+
+
 def _git(repo: Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", *args],
                           check=True, capture_output=True, text=True).stdout
@@ -281,7 +284,94 @@ def test_a_map_introduced_by_the_change_judges_that_change_and_says_so_f14():
     _git(repo, "commit", "-q", "-m", "c")
     rep = boundary.check(repo, "HEAD~1", "HEAD", None, [])
     assert rep.map_rev == "HEAD" and "bay/cli.py" in _failing(rep)
-    assert "component map: none at HEAD~1; judged by framework/components.yaml at HEAD (introduced here)" in rep.lines()
+    assert ("component map: none at HEAD~1; judged by framework/components.yaml at HEAD (introduced here; every "
+            "changed path outside other must be in touches:)") in rep.lines()
+
+
+def _commit(repo: Path, files: dict[str, str | None]) -> None:
+    for p, text in files.items():
+        if text is None:
+            _git(repo, "rm", "-q", "-r", p)
+            continue
+        (repo / p).parent.mkdir(parents=True, exist_ok=True)
+        (repo / p).write_text(text)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "c")
+
+
+def test_a_map_introduced_by_the_change_gives_no_new_extension_pass_n1():
+    # the reviewer's backdoor: base has no map; the change adds one that makes bay/<name> an extension folder
+    evil = {"components": {"kernel": {"owns": ["bay/cli.py"],
+                                      "contracts": {"mode": {"at": ["modes/<name>/"]},
+                                                    "adapter": {"at": ["adapters/<name>/", "bay/<name>"]}}}}}
+    repo = tmpdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _commit(repo, {"README.md": "# kit\n", "modes/mail/mode.yaml": "x\n",
+                   "modes/mail/features/digest/playbook.md": "x\n"})
+    _commit(repo, {MAP_PATH: yaml.safe_dump(evil), "bay/backdoor.py": "# evil\n", "modes/new/mode.yaml": "x\n",
+                   "modes/mail/features/digest/playbook.md": "y\n", "tests/test_y.py": "x\n"})
+    rep = boundary.check(repo, "HEAD~1", "HEAD", None, [])
+    assert rep.map_rev == "HEAD" and rep.exit_code == 1
+    assert _failing(rep) == ["bay/backdoor.py", MAP_PATH, "modes/mail/features/digest/playbook.md",
+                             "modes/new/mode.yaml"]                       # no new-extension pass; tests/ is other
+    assert "no new-extension pass" in next(f.why for f in rep.failures if f.path == "bay/backdoor.py")
+    ok = [{"path": t} for t in (MAP_PATH, "bay/backdoor.py", "modes/mail/features/digest/", "modes/new/")]
+    assert not _failing(boundary.check(repo, "HEAD~1", "HEAD", None, ok))
+
+
+def test_a_base_without_a_map_fails_unless_the_change_adds_it_n1():
+    repo = tmpdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _commit(repo, {"README.md": "# kit\n"})
+    _commit(repo, {"bay/backdoor.py": "# evil\n"})
+    try:
+        boundary.check(repo, "HEAD~1", "HEAD", None, [])
+        raise AssertionError("judged without a component map")
+    except RuntimeError as e:
+        assert "does not exist at HEAD~1" in str(e) and "this change does not add it" in str(e)
+    # a map that only exists on base's side after the fork is not the change adding it
+    _git(repo, "checkout", "-q", "-b", "pr", "HEAD")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, {MAP_PATH: yaml.safe_dump(MAP)})
+    _git(repo, "checkout", "-q", "pr")
+    _commit(repo, {"bay/cli.py": "x\n"})
+    try:
+        boundary.check(repo, "main", "pr", None, [])
+        raise AssertionError("judged without the merge-base's component map")
+    except RuntimeError as e:
+        assert "does not exist at main" in str(e)
+
+
+def test_new_and_the_map_are_decided_at_the_merge_base_n2():
+    # the reviewer's stale fork: main deletes a mode (and drops bay/ from kernel owns) after pr forked; pr edits it
+    repo = _repo({})
+    _git(repo, "checkout", "-q", "-b", "pr")
+    _git(repo, "checkout", "-q", "main")
+    loose = {"components": {"kernel": {"owns": ["schemas/"], "contracts": MAP["components"]["kernel"]["contracts"]}}}
+    _commit(repo, {"modes/mail": None, MAP_PATH: yaml.safe_dump(loose)})
+    _git(repo, "checkout", "-q", "pr")
+    _commit(repo, {"modes/mail/mode.yaml": "y\n", "bay/cli.py": "y\n"})
+    rep = boundary.check(repo, "main", "pr", None, [])
+    assert _failing(rep) == ["bay/cli.py", "modes/mail/mode.yaml"]     # existing at the fork, core in its map
+    assert {f.rule for f in rep.failures} == {"B-1", "B-3"} and rep.map_rev == "main"
+
+
+def test_a_malformed_component_map_is_a_one_line_error_n3():
+    for text, want in (("components: [unclosed\n", "not valid YAML"), ("- a\n", "must be a mapping"),
+                       ("components: [a]\n", "components: must map")):
+        try:
+            boundary.ComponentMap.parse(text)
+            raise AssertionError(f"parsed {text!r}")
+        except RuntimeError as e:
+            assert want in str(e) and "\n" not in str(e), str(e)
+        repo = _repo({})
+        _commit(repo, {MAP_PATH: text})
+        _commit(repo, {"bay/cli.py": "z\n"})
+        try:
+            boundary.check(repo, "HEAD~1", "HEAD", None, [])
+            raise AssertionError("checked against a malformed map")
+        except RuntimeError as e:
+            assert want in str(e)
 
 
 def test_only_committed_touches_count_f14():

@@ -96,6 +96,34 @@ def names_config(cmd: str, words: list[str], at_root) -> bool:
         for w in toks if w)
 
 
+_APPROVED_RE = re.compile(r"^status:\s*[\"']?approved\b", re.M | re.I)
+
+
+def marks_approved(text: str) -> bool:
+    """True when a proposal's front matter (the block between the first two `---` lines) says status: approved."""
+    lines = text.replace("\r\n", "\n").split("\n")
+    if not lines or lines[0].strip() != "---":
+        return False
+    end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), len(lines))
+    return bool(_APPROVED_RE.search("\n".join(lines[1:end])))
+
+
+def after_write(tool: str, ti: dict, p: Path) -> str:
+    """The file's text after a Write/Edit/MultiEdit, simulated (an unknown shape counts as the new text alone)."""
+    try:
+        before = p.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        before = ""
+    if tool == "Write":
+        return str(ti.get("content", ""))
+    edits = ti.get("edits") if tool == "MultiEdit" else [ti]
+    text = before
+    for e in edits or []:
+        old, new = str(e.get("old_string", "")), str(e.get("new_string", ""))
+        text = text.replace(old, new) if e.get("replace_all") else text.replace(old, new, 1)
+    return text
+
+
 def unsafe(cmd: str) -> str | None:
     """Return why `cmd` is not a single simple command, or None."""
     single = double = False
@@ -235,6 +263,16 @@ class Guard:
             return "the agentbay kit is not writable by agents"   # outside or nested inside the project
         return None
 
+    def marks_proposal_approved(self, tool: str, ti: dict, p: Path) -> bool:
+        """A write to docs/proposals/*.md that turns its front matter to status: approved (it was not before)."""
+        if not (self.inside(p, self.project / "docs" / "proposals") and p.suffix.casefold() == ".md"):
+            return False
+        try:
+            before = p.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            before = ""
+        return marks_approved(after_write(tool, ti, p)) and not marks_approved(before)
+
     # ---------------------------------------------------------------- decisions
     def decide(self, payload: dict) -> tuple[str, str]:
         """('allow'|'deny'|'pass', reason)"""
@@ -286,6 +324,9 @@ class Guard:
                 why = self.never_write(p)
                 if why:
                     return "deny", f"agentbay: {who} may not write {p}: {why}"
+                if self.marks_proposal_approved(tool, ti, p):
+                    return "deny", (f"agentbay: {who} may not mark {p.name} approved: only the owner approves a "
+                                    f"proposal (status: approved skips forge.extend's gate)")
         if entry is None:
             return "pass", ""
         if tool in WRITE_TOOLS:

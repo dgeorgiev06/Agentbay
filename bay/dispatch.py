@@ -227,8 +227,13 @@ class Dispatcher:
         return self._finish(state, mode, feat)
 
     def _skip(self, step, mode, feat, state) -> bool:
-        if step.when.startswith("$in."):
-            return not state["input"].get(step.when[4:])
+        """`$in.<f>` / `$steps.<id>.<f>`: skip unless truthy; a leading `!` skips when truthy instead (a skipped
+        step's output counts as missing). `stale > <age>`: skip a code step while the store is fresher."""
+        neg = step.when.startswith("!")
+        ref = step.when[1:] if neg else step.when
+        if ref.startswith(("$in.", "$steps.")):
+            v = substitute({"v": ref}, state["input"], state["steps"], {}).get("v")
+            return bool(v) if neg else not v
         age = duration(step.when.split(">")[1].strip())
         iface = step.run.rsplit(".", 1)[0]
         st = self._invoke(step.env, step.connector, iface, "status", {}, settings=self._settings(mode), caps={})

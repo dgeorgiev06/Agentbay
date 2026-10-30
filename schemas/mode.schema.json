@@ -232,8 +232,8 @@
                 },
                 "when": {
                   "type": "string",
-                  "pattern": "^(stale\\s*>\\s*[0-9]+[mhdw]|\\$in\\.[A-Za-z][A-Za-z0-9]*)$",
-                  "description": "`stale > 2h` (skip unless the store is older) or `$in.<field>` (skip unless truthy)."
+                  "pattern": "^(stale\\s*>\\s*[0-9]+[mhdw]|!?\\$in\\.[A-Za-z][A-Za-z0-9]*|!?\\$steps\\.[a-z][a-z0-9-]*\\.[A-Za-z][A-Za-z0-9]*)$",
+                  "description": "`stale > 2h` (code step: skip unless the store is older), `$in.<field>` or `$steps.<id>.<field>` (skip unless truthy); a leading `!` skips when truthy instead."
                 },
                 "task": {
                   "type": "string",

@@ -1,7 +1,7 @@
 """Dispatcher: schemas, grants, effects, budget, step plans, review, ledger, secrets."""
 import json
 
-from helpers import KIT, SECRETS, FakeHttp, MemProvider, clock, jresp, kit_copy, model, project, system
+from helpers import KIT, SECRETS, FakeHttp, MemProvider, cleanup, clock, edit_yaml, jresp, kit_copy, model, project, system
 
 from bay import dispatch, ledger, vault
 
@@ -245,3 +245,48 @@ def test_selector_change_forces_refresh_even_when_fresh():
     assert r["next"]["previous"]["refresh"]["rematched"] == 2            # re-matched, not skipped as fresh
     assert {i["id"] for i in r["next"]["previous"]["gather"]["items"]} == \
         {"fake:1008", "fake:1007", "fake:1006", "fake:1005", "fake:1003"}
+
+
+def _proposal(k, name, fm):
+    (k / "docs/proposals").mkdir(parents=True, exist_ok=True)
+    (k / f"docs/proposals/{name}").write_text(f"---\n{fm}touches: []\n---\n# {name}\n")
+    return f"docs/proposals/{name}"
+
+
+def test_extend_skips_propose_and_the_gate_for_an_approved_proposal():
+    """0006 Part C: a call naming a proposal whose front matter says status: approved (approvedBy, date) goes
+    straight to implement; any other proposal, or none, still goes through propose and the owner's gate."""
+    k = kit_copy()
+    try:
+        d = dispatch.Dispatcher(system(k, k), k, clock=clock)
+        ok_path = _proposal(k, "0099-ok.md", "status: approved\napprovedBy: user\ndate: 2026-10-29\n")
+        r = d.call("forge.extend", {"goal": "build the approved one", "proposal": ok_path})
+        assert r["status"] == "needs-agent" and r["next"]["step"] == "implement", r
+        skipped = [e for e in ledger.read(k) if e.get("callId") == r["callId"] and e["type"] == "step.skipped"]
+        assert sorted(e["step"] for e in skipped) == ["approve", "propose"]
+        for fm in ("status: draft\n", "status: approved\n", "status: approved\napprovedBy: user\n", ""):
+            p = _proposal(k, "0098-not-yet.md", fm)
+            r = d.call("forge.extend", {"goal": "build the unapproved one", "proposal": p})
+            assert r["next"]["step"] == "propose", fm
+        r = d.call("forge.extend", {"goal": "no proposal yet"})
+        assert r["next"]["step"] == "propose"
+        r = d.call("forge.extend", {"goal": "outside proposals", "proposal": "../etc/passwd.md"})
+        assert r["status"] == "failed" and "docs/proposals/" in r["error"]
+    finally:
+        cleanup(k)
+
+
+def test_when_names_only_an_earlier_step():
+    k = kit_copy()
+    try:
+        def edit(doc):
+            doc["spec"]["workflows"]["extend"][1]["when"] = "!$steps.release.approved"
+        edit_yaml(k / "framework/modes/forge/mode.yaml", edit)
+        try:
+            model.resolve(model.Kit(k, k))
+            raise AssertionError("resolved")
+        except model.ResolveError as e:
+            gaps = [str(e)]
+        assert any("when: !$steps.release.approved" in g and "not an earlier step" in g for g in gaps), gaps
+    finally:
+        cleanup(k)

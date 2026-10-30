@@ -758,3 +758,34 @@ def test_no_subagent_writes_agentbay_config_yaml():
                          "agent_type": "some-other-agent", "agent_id": "a1", "cwd": str(p)})[0] == "pass"
     finally:
         cleanup(p)
+
+
+def test_no_subagent_marks_a_proposal_approved():
+    """status: approved in a proposal's front matter skips forge.extend's gate, so only the owner writes it."""
+    p = built()
+    try:
+        (p / "docs/proposals").mkdir(parents=True)
+        draft = "---\nstatus: draft\ntouches: []\n---\n# x\n"
+        (p / "docs/proposals/0001-x.md").write_text(draft)
+        (p / "docs/proposals/0002-y.md").write_text("---\nstatus: approved\napprovedBy: user\ndate: 2026-10-29\n---\n# y\n")
+        g = guard_for(p)
+        approved = "---\nstatus: approved\napprovedBy: user\ndate: 2026-10-29\n---\n# x\n"
+        for agent in ("builder--forge--framework-dev", "some-other-agent"):
+            assert decide(g, agent, "Write", {"file_path": "docs/proposals/0003-new.md", "content": approved}) == "deny"
+            assert decide(g, agent, "Write", {"file_path": f"{p}/docs/proposals/0001-x.md", "content": approved}) == "deny"
+            assert decide(g, agent, "Edit", {"file_path": "docs/proposals/0001-x.md", "old_string": "draft",
+                                             "new_string": "approved"}) == "deny"
+            assert decide(g, agent, "Edit", {"file_path": "docs/proposals/0001-x.md", "old_string": "status: draft",
+                                             "new_string": "Status: 'Approved'"}) == "deny"
+            assert decide(g, agent, "MultiEdit", {"file_path": "docs/proposals/0001-x.md", "edits": [
+                {"old_string": "draft", "new_string": "appr"}, {"old_string": "appr", "new_string": "approved"}]}) == "deny"
+        # body edits, drafts and already-approved proposals are not refused for this reason
+        g2 = "some-other-agent"
+        assert decide(g, g2, "Write", {"file_path": "docs/proposals/0003-new.md", "content": draft}) == "pass"
+        assert decide(g, g2, "Edit", {"file_path": "docs/proposals/0002-y.md", "old_string": "# y",
+                                      "new_string": "# y, revised"}) == "pass"
+        assert decide(g, g2, "Write", {"file_path": "notes/x.md", "content": approved}) == "pass"
+        assert decide(g, g2, "Write", {"file_path": "docs/proposals/0004-z.md",
+                                       "content": "# z\n\nstatus: approved in the body is just text\n"}) == "pass"
+    finally:
+        cleanup(p)

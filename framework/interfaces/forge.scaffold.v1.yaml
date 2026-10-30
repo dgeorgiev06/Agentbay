@@ -2,7 +2,9 @@ apiVersion: agentbay/v2
 kind: Interface
 metadata:
   name: forge.scaffold
-  description: Render a forge template (mode, feature, connector, env) into user space. Shared by `bay <kind> new` and forge.create.
+  description: >-
+    Render a forge template (mode, feature, connector, env) into user space. Shared by `bay <kind> new` and
+    forge.create. Also reads a proposal's approval status for forge.extend.
 spec:
   version: 1
   binding: connector
@@ -29,3 +31,24 @@ spec:
           files: { type: array, items: { type: string } }
           todo: { type: array, items: { type: string } }
       effects: [write]
+    proposal:
+      description: >-
+        The approval status in a proposal's front matter (`status: approved` with `approvedBy` and `date`). Only the
+        owner sets it: the guard refuses a subagent's write that marks a proposal approved.
+      in:
+        type: object
+        required: [path]
+        additionalProperties: false
+        properties:
+          path: { type: string, pattern: "^docs/proposals/[A-Za-z0-9][A-Za-z0-9._-]*\\.md$" }
+      out:
+        type: object
+        required: [path, approved]
+        additionalProperties: false
+        properties:
+          path: { type: string }
+          approved: { type: boolean, description: "status is approved and approvedBy and date are set" }
+          status: { type: string }
+          approvedBy: { type: string }
+          date: { type: string }
+      effects: [read]

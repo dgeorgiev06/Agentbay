@@ -487,6 +487,7 @@ class Dispatcher:
     def _settings(self, mode) -> dict:
         s = dict(mode.config)
         s["mode"] = mode.name                     # connectors that keep per-mode data (corpus-store) key on it
+        s["reads"] = list(mode.reads)             # ... and make it for the content types the mode reads
         if "lookbackMax" in mode.constraints:
             s["lookbackMax"] = mode.constraints["lookbackMax"]
         return s

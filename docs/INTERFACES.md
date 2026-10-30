@@ -217,18 +217,22 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
 ## 11. Briefing: items, selectors and the corpus store
 - **`item/v1`** is the envelope:
   - `id` (`<source>:<extId>`, unique, what agents cite), `extId`, `source`, `kind`;
-  - `author {handle?, name?, email?}`, `title`, `text`, `url`, `createdAt`, `fetchedAt`;
+  - `author {handle?, name?, author.email?}`, `title`, `text`, `url`, `createdAt`, `fetchedAt`;
   - `container`, `labels[]`, `threadId`;
   - `matched[]`, set by the store.
 
   Kind extensions add fields, using `allOf` item/v1 and `unevaluatedProperties: false`. A content type
-  (`content-types/<name>/`: `content-type.yaml`, `fields.schema.json`, `views.sql`) holds the fields of a kind,
-  its version and its views; the store records the types it was made with and refuses another version.
-  `email/v1` adds `from`, `to[]`, `cc[]` (lower-case addresses), `subject`, `messageId`,
-  `inReplyTo`, `account` (the mailbox it was read from: how the views know "me"), `bulk` (List-Unsubscribe, or
-  Precedence: bulk or list; such a thread never needs a reply), `hasAttachments` and
-  `attachments[] {name, mime, size, textChars, reason?, text?}`; `text` travels from the source to the store
-  only and is read through `v_attachments`. The store validates each item against `<kind>/v1` when that schema
+  (`content-types/<name>/`: `content-type.yaml`, `fields.schema.json`, `views.sql`, and `derive.py` when it
+  derives fields) holds the fields of a kind, its version, its views, its child tables and its derived fields:
+  - `tables`: one child table per list field of the item (columns, the element fields moved out of the stored
+    item, an optional FTS5 index `<table>_fts`); rows are written with the item and deleted with it;
+  - `derived` and `deriveVersion`: `derive(item, version)` in `derive.py` (standard library only) computes
+    fields once, when the store writes the item; they are stored in `items.derived`, the views read them, and a
+    changed `deriveVersion` makes the next sync or prune recompute them from the stored items (nothing is
+    fetched).
+
+  The store records the types it was made with (the ones its mode `reads:`) and refuses another version. The
+  type's folder documents its own fields. The store validates each item against `<kind>/v<N>` when that schema
   exists.
 - **`selector/v1`**: `{id, from?, to?, subject?, text?, in?, has?, since?, not?}`.
   - Every field takes one value or a list (any value matches). Matching is case-insensitive (casefold); `has` is
@@ -273,8 +277,8 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
   write, delete. The read endpoints, which agents reach through use shims, are:
   - `describe`: views, columns, row counts, samples, FTS and limits;
   - `sql {sql, limit?}`;
-  - `get {ids}`, `thread {id}`, `threads {since, until, selector, important, limit}` (email threads active in
-    the window from `v_threads`, with message ids, the start of the last message, attachment metadata and
+  - `get {ids}`, `thread {id}`, `threads {since, until, selector, important, limit}` (threads active in the
+    window from `v_threads`, with message ids, the start of the last message, attachment metadata and
     `important` when a sender matches one of the patterns);
   - `facets {field}`, `search {text}`, `query {since, until, author, text, selector, ids}`;
   - `status {since?}`: coverage, budget, per-selector counts, engine, and `stale` when the selectors or the
@@ -290,11 +294,12 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
   (settings.mode from the dispatcher; a use-shim read uses its unit's mode and env). The file, -wal and -shm
   are 0600; WAL mode, `user_version` = 3 (`store_meta` records the content types and their versions). A store of any other version is refused (move the folder aside and sync
   again); stores are never converted:
-  - `items` (unique source + ext_id);
+  - `items` (unique source + ext_id; kind fields in `ext`, derived fields in `derived`);
   - `item_selectors`;
-  - `attachments` (item, n, name, mime, size, text_chars, reason, text), deleted with its item by a trigger;
+  - `store_meta` (the content types, `type:<name>`, and their derive versions, `derive:<name>`);
+  - the child tables of the content types the mode reads, each deleted with its item by a trigger;
   - `items_fts` (FTS5 over title, body and author, own content, kept by triggers);
-  - `attachments_fts` (FTS5 over attachment name and text, kept by triggers).
+  - the `<table>_fts` tables of the child tables that declare `fullText` (kept by triggers).
 
   Internal state is `<mode>/state.json` (0600, never opened by agents): cursors per
   `<connector>|<native query>` (`from` is what was fetched; `covers` is what coverage reports, the window
@@ -302,19 +307,15 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
 
   Without FTS5 the store falls back to LIKE matching, and `bay check` warns.
 - **Agent SQL** (`bay/sqlsandbox.py`):
-  - temp views over the store, which holds only the mode's scope: `v_items`, the views of the store's content types (`views.sql`), `v_email` (one row per
-    message: sender, toList, ccList, messageId, inReplyTo, account, fromMe, toMe, bulk, hasAttachments; "me"
-    compares addresses with the SQL function `addr_key`: lower case, no +tag, Gmail dots ignored, googlemail.com
-    = gmail.com), `v_threads` (one row per thread: subject, messages, firstDate, lastDate, lastId, lastSender,
-    lastFromMe, lastToMe, lastBulk, needsReply (last message from someone else, to me, not bulk), participants,
-    senders, matched), `v_attachments` (one row per attachment, `id` is
-    its message's id) and the full-text views `v_fts` and `v_attachment_fts` (`WHERE fts MATCH '...' ORDER
-    BY rank`, plus a `snippet` column);
+  - temp views over the store, which holds only the mode's scope: `v_items`, the views of the store's content
+    types (`views.sql`; `describe` documents their columns from `content-type.yaml`), `v_fts`, and the types'
+    full-text views (`WHERE fts MATCH '...' ORDER BY rank`, plus a `snippet` column); a store holds the types its
+    mode reads, so a mode sees only those views;
   - `mode=ro` + `query_only`;
   - a strict pre-pass (`EXPLAIN <sql>`) that refuses the FTS shadow tables, then the run, with FTS5's own
     internal reads allowed;
-  - an authorizer: SELECT/READ on those views and on `items`, `item_selectors`, `attachments`, `items_fts`
-    and `attachments_fts`, json_each
+  - an authorizer: SELECT/READ on those views and on `items`, `item_selectors`, `items_fts`, the types' child
+    tables and their FTS5 tables, json_each
     and CTEs, and a function allowlist; everything else is denied, reads of no column (`count(*)`) included;
   - no WITH clause named like a view or store table;
   - a 2 s progress-handler limit, a 1 MB value limit, a 256 MB heap cap (temp_store=FILE), 200/1000 rows, 200 kB per result and 4,000 characters

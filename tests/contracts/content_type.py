@@ -3,9 +3,11 @@ content-types/<name>/ must satisfy, run by tests/test_content_types.py against e
 
     check(root, name) -> list of problems (empty: the contract holds)
 
-A type loads (shape, fields schema, views.sql), has a README, ships fixtures that validate against its fields
-schema, and its views build under the sandbox's read-only rules, document the columns they have and return one
-row per fixture item of the kind when they are item views."""
+A type loads (shape, fields schema, views.sql, derive.py with standard imports only), has a README, ships fixtures
+that validate against its fields schema, and its views build under the sandbox's read-only rules, document the
+columns they have and return one row per fixture item of the kind when they are item views. Over the fixtures its
+derive returns exactly the declared `derived` keys, each child table holds a row per list element without the
+fields it moves out, and the rows go with their item."""
 from __future__ import annotations
 
 import importlib.util
@@ -53,19 +55,44 @@ def check(root: Path, name: str) -> list[str]:
     store = _store_module()
     con = sqlite3.connect(":memory:")
     try:
-        for stmt in sbx.BASE_DDL:
+        fts = sbx.fts5_available()
+        for stmt in (*sbx.BASE_DDL, *ct.table_ddl(fts)):
             con.execute(stmt)
         for it in items:
-            row = store.item_row(it)
-            con.execute(f"INSERT INTO items ({', '.join(row)}) VALUES ({', '.join('?' * len(row))})", list(row.values()))
+            try:
+                row = store.item_row(it, ct)
+            except model.SpecError as e:
+                return [*out, str(e)]
+            if set(json.loads(row["derived"])) != set(ct.derived):
+                out.append(f"{model.rel(ct.dir / contenttypes.DERIVE)}: item {it.get('id')}: derive returned "
+                           f"{sorted(json.loads(row['derived']))}, content-type.yaml derived is {sorted(ct.derived)}")
+            pk = con.execute(f"INSERT INTO items ({', '.join(row)}) VALUES ({', '.join('?' * len(row))})",
+                             list(row.values())).lastrowid
+            for table in ct.tables or {}:
+                con.executemany(ct.table_insert(table), [(pk, *r) for r in ct.table_rows(table, it)])
         con.execute(sbx.ITEMS_VIEW)
-        for _, sql in ct.views:
-            con.execute(sql)
+        for v, sql in ct.views:
+            if fts or v not in ct.fulltext_views():
+                con.execute(sql)
         for v in ct.item_views():
             n = con.execute(f"SELECT count(*) FROM {v}").fetchone()[0]
             if n != len(items):
                 out.append(f"{model.rel(ct.dir / contenttypes.VIEWS)}: item view {v} returns {n} rows for "
                            f"{len(items)} fixture items")
+        for table, spec in (ct.tables or {}).items():
+            n = con.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+            if n != sum(len(it.get(spec["from"]) or []) for it in items):
+                out.append(f"{model.rel(ct.dir / contenttypes.YAML)}: table {table} holds {n} rows for the fixtures' "
+                           f"{spec['from']}")
+            for (ext,) in con.execute("SELECT ext FROM items WHERE kind = ?", (ct.kind,)).fetchall():
+                for el in json.loads(ext).get(spec["from"]) or []:
+                    if set(spec.get("moveOut") or ()) & set(el):
+                        out.append(f"{model.rel(ct.dir / contenttypes.YAML)}: {spec['moveOut']} must not stay in the "
+                                   f"stored item (table {table} keeps them)")
+        con.execute("DELETE FROM items")
+        for table in ct.tables or {}:
+            if con.execute(f"SELECT count(*) FROM {table}").fetchone()[0]:
+                out.append(f"{model.rel(ct.dir / contenttypes.YAML)}: rows of table {table} must go with their item")
     except sqlite3.Error as e:
         out.append(f"{model.rel(ct.dir)}: the views fail over the fixtures: {e}")
     finally:

@@ -505,6 +505,7 @@ class ResolvedMode:
     playbook: str
     skills: dict[str, Path]           # runtime name `<mode>--<skill>` -> folder (own, then inherited via extends)
     config: dict                      # effective agentbay.config.yaml modes.<name> (minus features)
+    reads: list = field(default_factory=list)  # item kinds its features read (`<kind>/v<N>`): the store holds these types
     dirs: list = field(default_factory=list)   # mode folder, then ancestors' (extends): types are looked up here
     extends: str | None = None
     coordinator_unit: ResolvedRole | None = None
@@ -989,7 +990,7 @@ def resolve_mode(kit: Kit, md: Doc, ctx: _Ctx, warnings: list[str] | None = None
         features=features, constraints=constraints, needs=needs,
         playbook=pb_file.read_text() if pb_file.exists() else "",
         skills={skill_id(name, sk): src for sk, src in mode_skills(md).items()}, config=mcfg,
-        dirs=list(md.dirs), extends=md.parent, coordinator_unit=coord_unit)
+        reads=list(s.get("reads") or []), dirs=list(md.dirs), extends=md.parent, coordinator_unit=coord_unit)
 
 
 def _mode_roles(kit: Kit, md: Doc, ctx: _Ctx, roles: dict) -> ResolvedRole | None:

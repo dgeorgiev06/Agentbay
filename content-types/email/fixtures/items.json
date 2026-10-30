@@ -1,0 +1,18 @@
+[
+  {"id": "mail:m1", "extId": "m1", "source": "mail", "kind": "email", "author": {"email": "dana@partner.example"},
+   "title": "Term sheet", "text": "Please confirm the attached terms.", "createdAt": "2026-10-26T10:00:00Z",
+   "fetchedAt": "2026-10-27T10:00:00Z", "labels": ["INBOX"], "threadId": "t1",
+   "from": "dana@partner.example", "to": ["Me.Self+work@googlemail.com"], "cc": [], "account": "meself@gmail.com",
+   "hasAttachments": true, "bulk": false,
+   "attachments": [{"name": "terms.txt", "mime": "text/plain", "size": 20, "textChars": 20, "text": "commitment: 5 percent"}]},
+  {"id": "mail:m2", "extId": "m2", "source": "mail", "kind": "email", "author": {"email": "meself@gmail.com"},
+   "title": "Re: Term sheet", "text": "Confirmed.", "createdAt": "2026-10-26T11:00:00Z",
+   "fetchedAt": "2026-10-27T10:00:00Z", "labels": ["SENT"], "threadId": "t1",
+   "from": "me.self@gmail.com", "to": ["dana@partner.example"], "account": "meself@gmail.com",
+   "hasAttachments": false},
+  {"id": "mail:m3", "extId": "m3", "source": "mail", "kind": "email", "author": {"email": "news@list.example"},
+   "title": "Weekly digest", "text": "News.", "createdAt": "2026-10-26T12:00:00Z",
+   "fetchedAt": "2026-10-27T10:00:00Z", "labels": ["INBOX"], "threadId": "t2",
+   "from": "news@list.example", "to": ["meself@gmail.com"], "account": "meself@gmail.com",
+   "hasAttachments": false, "bulk": true}
+]

@@ -25,6 +25,45 @@
       "properties": {
         "version": { "type": "integer", "minimum": 1, "description": "The `<kind>/v<N>` that connectors `produces:` and modes `reads:`. A store records it; a store of another version is refused." },
         "kind": { "type": "string", "pattern": "^[a-z][a-z0-9]*$", "description": "The item `kind` value of the items this type describes." },
+        "deriveVersion": { "type": "integer", "minimum": 1, "description": "Version of derive.py's output. A store that recorded another one recomputes `derived` from the items it holds (no fetch). Required with `derived`." },
+        "derived": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]*$" },
+          "description": "Fields derive.py computes when the store writes an item; derive(item, version) returns exactly these keys. The store keeps them in items.derived (JSON) and the views read them."
+        },
+        "tables": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Child tables: one row per element of a list field of the item, keyed by table name. The store creates the table (item, n and the columns), deletes its rows with the item and, with fullText, keeps an FTS5 table `<name>_fts` in step.",
+          "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+          "additionalProperties": {
+            "type": "object",
+            "required": ["from", "columns"],
+            "additionalProperties": false,
+            "properties": {
+              "from": { "type": "string", "description": "The item field holding the list (a list of objects)." },
+              "moveOut": { "type": "array", "items": { "type": "string" }, "description": "Element fields kept in the table only: removed from the item's stored `ext`." },
+              "fullText": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "Table columns indexed by the FTS5 table `<name>_fts` (FTS5 only)." },
+              "columns": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["name", "type"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+                    "from": { "type": "string", "description": "The element field the column is read from (default: the column name)." },
+                    "type": { "enum": ["TEXT", "INTEGER"], "description": "TEXT is stored as a string and INTEGER as a whole number; a missing value is '' or 0." },
+                    "nullable": { "type": "boolean", "description": "A missing value stays NULL (the value is stored as it is)." }
+                  }
+                }
+              }
+            }
+          }
+        },
         "views": {
           "type": "object",
           "minProperties": 1,
@@ -40,8 +79,19 @@
                 "type": "object",
                 "required": ["view", "note"],
                 "additionalProperties": false,
-                "description": "The view starts with every column of this base view; `note` is what describe says about those columns.",
-                "properties": { "view": { "const": "v_items" }, "note": { "type": "string" } }
+                "description": "The view starts with every column of this view (v_items or a view of the same type, created earlier in views.sql); `note` is what describe says about those columns.",
+                "properties": { "view": { "type": "string", "pattern": "^v_[A-Za-z0-9_]+$" }, "note": { "type": "string" } }
+              },
+              "fullText": {
+                "type": "object",
+                "required": ["over", "table", "example"],
+                "additionalProperties": false,
+                "description": "The view is the full-text view of a child table's FTS5 index: it exists only with FTS5, and describe lists it after the other views.",
+                "properties": {
+                  "over": { "type": "string", "description": "The view whose rows it searches (describe reports its row count)." },
+                  "table": { "type": "string", "description": "The child table whose `<table>_fts` it reads." },
+                  "example": { "type": "string", "description": "A query describe shows agents." }
+                }
               },
               "columns": {
                 "type": "array",
@@ -51,7 +101,7 @@
                   "additionalProperties": false,
                   "properties": {
                     "name": { "type": "string" },
-                    "type": { "enum": ["TEXT", "INTEGER", "REAL", "JSON"] },
+                    "type": { "enum": ["TEXT", "INTEGER", "REAL", "JSON", "MATCH"] },
                     "description": { "type": "string" }
                   }
                 }

@@ -20,7 +20,7 @@ import yaml  # noqa: E402
 from gmail_fake import SCOPE, FakeGmail, jr  # noqa: E402
 from helpers import KIT, NOW, MemProvider, clock, system, tmpdir  # noqa: E402
 
-from bay import connect, dispatch, model, selector as selmod, vault  # noqa: E402
+from bay import connect, contenttypes, dispatch, model, selector as selmod, vault  # noqa: E402
 
 CONN = HERE.parent / "gmail_api.py"
 SECRETS = {"GMAIL_CLIENT_ID": "cid-1234.apps.googleusercontent.com",
@@ -739,8 +739,9 @@ def test_views_threads_and_needs_reply_from_gmail():
 
 
 def test_me_is_matched_on_normalized_gmail_addresses_and_bulk_mail_never_needs_a_reply():
-    assert selmod.addr_key("Dana.Ruiz+work@GoogleMail.com") == "danaruiz@gmail.com"
-    assert selmod.addr_key("d.r+x@Example.COM") == "d.r@example.com"              # dots matter outside Gmail
+    derive = contenttypes.load()["email"].derive_module()
+    assert derive.addr_key("Dana.Ruiz+work@GoogleMail.com") == "danaruiz@gmail.com"
+    assert derive.addr_key("d.r+x@Example.COM") == "d.r@example.com"              # dots matter outside Gmail
     fake = FakeGmail(NOW)
     fake.account = "meself@gmail.com"
     a = new_msg("19g0001", hours=3, frm="Ana <ana@partner.example>")
@@ -761,7 +762,7 @@ def test_me_is_matched_on_normalized_gmail_addresses_and_bulk_mail_never_needs_a
     t = {x["threadId"]: x for x in st.threads(since="30d")["threads"]}
     assert t["ta"]["needsReply"] and not t["tb"]["needsReply"]
     assert t["tc"]["lastBulk"] and not t["tc"]["needsReply"] and not t["td"]["needsReply"]
-    assert st.sql("SELECT addr_key('A.B+c@gmail.com')")["rows"] == [["ab@gmail.com"]]
+    assert "addr_key" in st.sql("SELECT addr_key('A.B+c@gmail.com')")["error"]       # stored, not a SQL function
 
 
 def test_prompt_injection_in_a_body_stays_data():

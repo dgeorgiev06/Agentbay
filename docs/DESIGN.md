@@ -133,7 +133,7 @@ a change of selectors or sources every read except `status` is refused until a s
 counts every item a source returns, and spend is saved before the items commit.
 
 Agents query with `items.store/v1.sql`: one SELECT over the views (`v_items`, the views of the content
-types the store holds, `v_email`, `v_threads`, `v_attachments`, `v_fts`, `v_attachment_fts`) and the store tables, on a read-only connection,
+types the store holds, `v_fts`) and the store tables, on a read-only connection,
 behind an authorizer with a function allowlist, a pre-pass that refuses FTS shadow tables, and time, heap,
 row, byte and cell limits. Item text and attachment text are secret-scrubbed at ingest and every read is
 redacted and scanned again.

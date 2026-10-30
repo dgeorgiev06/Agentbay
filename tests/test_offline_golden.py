@@ -42,7 +42,7 @@ def collect(mode: str, unit: str, cfg: dict, reads: dict) -> dict:
     return json.loads(json.dumps(out, sort_keys=True).replace(str(p), "<project>"))
 
 
-def compare(mode: str, got: dict) -> None:
+def compare(mode: str, got: dict, deltas=None) -> None:
     f = GOLDEN / f"{mode}.json"
     text = json.dumps(got, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
     if not f.exists():
@@ -51,7 +51,31 @@ def compare(mode: str, got: dict) -> None:
         raise AssertionError(f"{f} did not exist and was written from the current code; review it, commit it, "
                              f"and run again")
     want = json.loads(f.read_text())
-    assert got == want, f"{mode}: output differs from {f.relative_to(KIT)}"
+    if deltas:
+        deltas(want, got)
+    else:
+        assert got == want, f"{mode}: output differs from {f.relative_to(KIT)}"
+
+
+def mail_deltas(want: dict, got: dict) -> None:
+    """The three documented changes of mail-briefing's describe (proposal 0008, item 3, decision (a)); the golden
+    file stays as it was and everything else must match it exactly."""
+    want, got = json.loads(json.dumps(want)), json.loads(json.dumps(got))
+    # 1. no v_posts: the store holds the content types the mode reads, and v_posts had no rows here
+    assert want["sql"]["v_posts"]["rows"] == [[0]]
+    assert "v_posts" in got["sql"]["v_posts"]["error"] and got["sql"]["v_posts"]["rows"] == []
+    del want["sql"]["v_posts"], got["sql"]["v_posts"]
+    by = {v["name"]: v for v in want["describe"]["views"]}
+    del by["v_posts"]
+    # 3. views ordered: base view, the type's views, full-text views (compare the views as a name-keyed map)
+    assert [v["name"] for v in got["describe"]["views"]] == [
+        "v_items", "v_email", "v_attachments", "v_threads", "v_fts", "v_attachment_fts"]
+    assert {v["name"]: v for v in got["describe"]["views"]} == by
+    del want["describe"]["views"], got["describe"]["views"]
+    # 2. no addr_key function: fromMe, toMe and bulk are stored
+    assert "addr_key" in want["describe"]["functions"]
+    want["describe"]["functions"].remove("addr_key")
+    assert got == want
 
 
 def test_feed_briefing_offline_golden():
@@ -74,4 +98,4 @@ def test_mail_briefing_offline_golden():
                                 "ORDER BY rank, id",
             "v_posts": "SELECT count(*) FROM v_posts"},
         "use": {"threads": ("items.store/v1.threads", {"since": "30d", "important": ["*@partner.example"]})}})
-    compare("mail-briefing", got)
+    compare("mail-briefing", got, mail_deltas)

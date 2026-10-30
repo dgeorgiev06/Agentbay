@@ -304,10 +304,12 @@ def test_sandbox_reads_the_mail_views_and_refuses_shadow_tables_and_writes():
         assert err, bad
     d = st.describe()
     names = [v["name"] for v in d["views"]]
-    assert names == ["v_items", "v_posts", "v_email", "v_threads", "v_attachments", "v_fts", "v_attachment_fts"]
+    # this store is made without a mode's `reads`, so it holds every type of the kit (type views by name, then
+    # v_fts, then the types' full-text views)
+    assert names == ["v_items", "v_email", "v_attachments", "v_threads", "v_posts", "v_fts", "v_attachment_fts"]
     assert {v["name"]: v["rows"] for v in d["views"]}["v_threads"] == 4
     assert d["fts"]["attachments"]["view"] == "v_attachment_fts" and set(sbx.COLUMNS) == set(sbx.VIEWS)
-    assert "addr_key" in d["functions"]
+    assert "addr_key" not in d["functions"]
 
 
 def test_attachments_and_their_full_text_rows_go_with_their_message():

@@ -162,10 +162,17 @@ def plans(events: list[dict]) -> dict[str, dict]:
 
 def agent_groups(events: list[dict]) -> list[dict]:
     """Agent runs grouped by role, mode, model and tier, from the ledger alone: runs, outcomes, to-do progress, tokens
-    and cost. Read by `bay status --agents` and by improve's weekly backlog."""
+    and cost. Read by `bay status --agents` and by improve's weekly backlog. A step's submitted usage is one figure
+    for the step, not per agent: when several agents were dispatched to the same call and step, it is split evenly
+    among them, so a total over the groups never exceeds what the steps reported."""
     plan_of = plans(events)
     groups: dict[tuple, dict] = {}
     runs = fold(events)
+    sharing: dict[tuple, int] = {}
+    for e in events:
+        if e.get("type") == "agent.dispatch":
+            k = (e.get("callId"), e.get("step"))
+            sharing[k] = sharing.get(k, 0) + 1
     for e in events:
         if e.get("type") != "agent.dispatch":
             continue
@@ -180,10 +187,11 @@ def agent_groups(events: list[dict]) -> list[dict]:
         pl = plan_of.get(e["taskId"])
         if pl:
             g["todoDone"] += pl["done"]; g["todoTotal"] += len(pl["todo"])
+        n = sharing[(e.get("callId"), e.get("step"))]
         for s in events:
             if s.get("callId") == e.get("callId") and s.get("step") == e.get("step") and s.get("type") == "step.completed":
-                g["tokens"] += (s.get("tokens") or {}).get("total", 0) if isinstance(s.get("tokens"), dict) else 0
-                g["costUsd"] = round(g["costUsd"] + (s.get("costUsd") or 0), 4)
+                g["tokens"] += round(((s.get("tokens") or {}).get("total", 0) if isinstance(s.get("tokens"), dict) else 0) / n)
+                g["costUsd"] = round(g["costUsd"] + (s.get("costUsd") or 0) / n, 4)
     return list(groups.values())
 
 

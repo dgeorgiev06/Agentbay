@@ -219,6 +219,22 @@ def test_bay_plan_records_scrubbed_size_limited_append_only_events():
         cleanup(p)
 
 
+def test_a_steps_usage_is_split_among_the_agents_dispatched_to_it_not_counted_per_agent():
+    p = project()
+    try:
+        for tid, tier in (("T-20261030-0001", "balanced"), ("T-20261030-0002", "deep"), ("T-20261030-0003", "deep")):
+            ledger.append(p, "agent.dispatch", tid, source="coordinator", taskId=tid, callId="C-1", step="s", agent="a",
+                          data={"role": "builder", "mode": "forge", "model": "m", "tier": tier})
+        ledger.append(p, "step.completed", "C-1:s", source="dispatcher", callId="C-1", step="s", tokens={"total": 900},
+                      costUsd=0.3)
+        gs = {g["tier"]: g for g in ledger.agent_groups(ledger.read(p))}
+        assert (gs["balanced"]["tokens"], gs["balanced"]["costUsd"]) == (300, 0.1)
+        assert (gs["deep"]["tokens"], gs["deep"]["costUsd"], gs["deep"]["runs"]) == (600, 0.2, 2)
+        assert sum(g["tokens"] for g in gs.values()) == 900            # the step reported 900, once
+    finally:
+        cleanup(p)
+
+
 def test_a_dispatched_agent_is_listed_by_status_without_the_spawn_hook():
     p = project()
     try:

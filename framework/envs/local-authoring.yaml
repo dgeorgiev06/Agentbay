@@ -8,6 +8,10 @@ metadata:
 spec:
   bind:
     forge.scaffold/v1: scaffold
+    improve.detect/v1: improve-detect       # forge.extend's dead-code check
+    session.events/v1: ledger
+    review.verdicts/v1: ledger
+    artifacts.read/v1: artifact-graph
     workspace.read/v1: { tools: [Read, Glob, Grep] }
     workspace.write/v1:
       tools: [Edit, Write, Bash]

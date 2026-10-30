@@ -6,6 +6,14 @@ touches:
   - { path: bay/lint.py, reason: "B-7 scans imports and module keys only; rules named by plain reason", slice: 1 }
   - { path: framework/components.yaml, reason: "root-file allowance (OTHER set moves here)", slice: 1 }
   - { path: framework/rules/conformance.yaml, reason: "C-4, C-8 wording follows the B-7 change", slice: 1 }
+  # slice 1: dead-code check (owner addition, 2026-10-30)
+  - { path: framework/interfaces/improve.detect.v1.yaml, reason: "dead-code check: new `change` endpoint (base -> new findings, count of existing)", slice: 1 }
+  - { path: framework/connectors/improve-detect/, reason: "dead-code check: implements `change` (connector.yaml, improve_detect.py, README.md)", slice: 1 }
+  - { path: bay/improve/pipeline.py, reason: "dead-code check: `Pipeline.change` audits the tree and the tree at base (moves with slice 6)", slice: 1 }
+  - { path: framework/modes/forge/mode.yaml, reason: "dead-code check: `deadcode` code step in extend between implement and review; `improve.detect/v1` in needs", slice: 1 }
+  - { path: framework/envs/local-authoring.yaml, reason: "dead-code check: binds improve.detect/v1 for forge's code steps (the lead role runs in this env); framework-dev only if the step cannot run there", slice: 1 }
+  - { path: framework/modes/forge/features/extend/playbook.md, reason: "dead-code check: Definition of Done item DOD-14, no new unused code or compatibility layers", slice: 1 }
+  - { path: tests/test_deadcode_check.py, reason: "NEW. dead-code check fixture test", slice: 1 }
   # slice 2: envs, agent profile, config
   - { path: envs/local-feeds-offline.yaml, reason: "deleted: offline switch lives in the env", slice: 2 }
   - { path: envs/local-mail-offline.yaml, reason: "deleted: offline switch lives in the env", slice: 2 }
@@ -42,6 +50,20 @@ touches:
   - { path: bay/workflows.py, reason: "one stage syntax and validator", slice: 7 }
   - { path: framework/connectors/workflow-runner/, reason: "uses the shared implementation", slice: 7 }
   - { path: framework/modes/cos/, reason: "stays a mode, on the shared implementation", slice: 7 }
+  # slice 7: top-level extension folders (owner decision, 2026-10-30). Moves come last, so code moves once. Paths in
+  # earlier entries that start with framework/modes/, framework/envs/ or framework/connectors/ read as modes/, envs/
+  # and connectors/ once this slice has landed.
+  - { path: modes/, reason: "NEW contents: framework-shipped modes (cos, forge, improve, delivery) move here from framework/modes/", slice: 7 }
+  - { path: envs/, reason: "NEW contents: framework-shipped envs (cos-local, framework-dev, improve-local, local-authoring, research, workspace) move here from framework/envs/", slice: 7 }
+  - { path: connectors/, reason: "NEW contents: framework-shipped connectors move here from framework/connectors/", slice: 7 }
+  - { path: framework/modes/, reason: "emptied: moved to modes/", slice: 7 }
+  - { path: framework/envs/, reason: "emptied: moved to envs/", slice: 7 }
+  - { path: framework/connectors/, reason: "emptied: moved to connectors/", slice: 7 }
+  - { path: framework/components.yaml, reason: "declares which components are protected (cos, forge, and the envs and connectors they need); contract `at:` paths lose the framework/ variants; kernel `owns:` drops the moved folders", slice: 7 }
+  - { path: bay/guard.py, reason: "reads protected paths from the component map, not a fixed list", slice: 7 }
+  - { path: bay/model.py, reason: "PROTECTED list removed; `protected_writes` and `_check_protected` read the map; protected names are reserved", slice: 7 }
+  - { path: bay/boundary.py, reason: "classifies the top-level folders by the map; edits to protected components must be listed under `touches:`", slice: 7 }
+  - { path: bay/lint.py, reason: "a user extension may not take a protected name", slice: 7 }
   # slice 8: agent run records (owner addition)
   - { path: bay/ledger.py, reason: "event types `agent.plan`, `agent.plan.done`, `agent.dispatch`; fold into runs (line 14 STEP_TYPES, line 71 fold)", slice: 8 }
   - { path: bay/dispatch.py, reason: "`step.started` (line 331) carries resolved inputs; submit of a role step refused without a recorded outcome", slice: 8 }
@@ -87,7 +109,7 @@ touches:
 
 - Status: draft, for the owner's approval. Nothing is implemented.
 - Decided by the owner: keep every feature and every safety guarantee; `improve` becomes a plain mode; boundaries stay enforced and their misfires are fixed; workflows get one implementation and the Chief of Staff stays a mode.
-- No new features, with two exceptions added at the owner's request: item 6 (every agent run records its outcome, its to-do list and its inputs; 2026-10-29) and the dead-code check in item 1 (2026-10-30). Otherwise, items 1 to 5 each remove a duplicate way of doing one thing.
+- No new features, with three exceptions added at the owner's request: item 6 (every agent run records its outcome, its to-do list and its inputs; 2026-10-29), the dead-code check in item 1 (2026-10-30) and the top-level extension folders in item 7 (2026-10-30). Otherwise, items 1 to 5 each remove a duplicate way of doing one thing.
 
 ## Problem
 
@@ -117,7 +139,12 @@ Every safety guarantee: secrets never reach prompts, logs or the ledger; agents 
   - The B-7 name check (`lint_extension_names`, `bay/lint.py` line 502) matches names in any line of `playbook.md`, `skills/` and feature files, so prose that mentions a mode or connector fails.
 - **Kept:** per-PR proof. A change passes only if every core path it edits is listed under the proposal's `touches:`. Layering rules stay; no extension imports another; versions agree.
 - **Change:** `bay boundary` is the one command (`bay lint` calls it). Findings say what to do in plain words, with the old id in brackets. Repo-root files and `*.md` at the root are allowed. B-7 looks only at imports and the kernel's module keys (`agentbay_connector_*`), not prose. A short list of reasons replaces 36 names; the rules themselves stay.
-- **Dead-code check (the owner asked for it, 2026-10-30):** `forge.extend` runs improve's audit detectors (unused code, compatibility layers, complexity) on every change's diff, through a normal interface call, not a kernel shortcut, and fails the change if it adds any new finding. Findings that already existed don't count. `forge.extend`'s Definition of Done gains an item: no new unused code or compatibility layers.
+- **Dead-code check (the owner asked for it, 2026-10-30):** `forge.extend` runs improve's audit detectors (unused code, compatibility layers, complexity) on every change, through a normal interface call, not a kernel shortcut, and fails the change if it adds any new finding. Findings that already existed don't count. Built as:
+  - **Endpoint.** `improve.detect/v1` gets a `change {base}` endpoint. It audits the working tree and the tree at `base` (exported with `git archive` into a temp dir; its code is never run). It keeps only findings of kind unused, unused-constant, compat-layer and complexity whose fingerprint is absent at `base`. It returns the new findings and the count of existing ones.
+  - **Step.** `forge.extend` gets a code step `deadcode` between `implement` and `review` (`run: improve.detect/v1.change`). Any new finding blocks the call. forge lists `improve.detect/v1` in `needs:`, and `local-authoring` (the env its code steps run in) binds it, as `improve-local` does.
+  - **Definition of Done.** A new item, DOD-14: no new unused code or compatibility layers.
+  - **Test.** A fixture test adds an unused function and a compat alias and expects two new findings; a finding that already existed does not count.
+  - **Order.** The code lives in `bay/improve/` until slice 6 moves it, so slice 1 edits it where it is.
 - **Release metadata:** `CHANGELOG.md` is owned by the kernel and written by `forge.extend`'s release step. Slice 1 adds it to the kernel's `owns:` in `framework/components.yaml`.
 - **Benefit:** a stray `TODO.md` or a sentence in a playbook no longer blocks a change.
 - **Safety impact:** none. A test must show that an import of another connector still fails and that a core edit without `touches:` still fails (`tests/test_boundary.py`, `tests/test_contract_versions.py`).
@@ -196,11 +223,27 @@ CLI target, 15 commands: `check` (validate, lint, boundary), `build`, `clean`, `
 - **Safety impact:** `bay plan` is write-only and append-only: it cannot read state, cannot edit or delete an event, cannot change a call, approval or config, and rejects a taskId that is not the caller's. Tests must show: a secret in plan text is scrubbed; an oversize plan is cut or refused; another agent's taskId is refused; `bay plan` is the only `bay` command a subagent may run (`tests/test_boundaries.py`, `tests/test_ledger.py`, `tests/test_dispatch.py`).
 - **Effort:** medium.
 
+### 7. Top-level extension folders, protection in the map (owner decision, 2026-10-30)
+
+- **Why:** modes, envs and connectors shipped with the kit sit under `framework/`, while a user's own sit at the top level. The same kind of thing lives in two places, and the guard finds protected paths from a fixed list in code.
+- **Removed:** `framework/modes/`, `framework/envs/` and `framework/connectors/`, and the fixed protected list in code (`bay/model.py`, read by `bay/guard.py`).
+- **Kept:** every guarantee in "What stays untouched". Protected parts stay writable only through `forge.extend`.
+- **Change:**
+  - The kit ships one top-level `modes/`, `envs/` and `connectors/` folder. Framework-shipped modes, envs and connectors move there.
+  - `framework/` shrinks to roles, the agent profile, rules, interfaces and the component map.
+  - Protection is declared in the component map (`framework/components.yaml`). `cos` and `forge` are protected, with the control-plane envs and connectors they need. `improve` is an ordinary mode.
+  - The guard and `bay boundary` read protected paths from the map.
+  - Protected names are reserved: a user extension cannot take one.
+  - Changes to a protected component go through `forge.extend`. Their approval may come from chat or the terminal, like every other gate. There is no terminal-only rule.
+- **Benefit:** one place to look for a mode, env or connector, and one place that says what is protected.
+- **Safety impact:** none if the tests agree. Tests must show: a role without `forge.extend` cannot write a protected path read from the map; a user extension named like a protected one is refused; an edit to a protected component without `touches:` fails; approval from chat and from the terminal both pass the gate (`tests/test_boundaries.py`, `tests/test_resolver.py`, `tests/test_guard_7a.py`).
+- **Effort:** medium. It is one slice, and it comes after the improve and workflow changes so each folder moves once.
+
 ## Steps
 
 Each slice is sized for one builder (about 40 tool calls) and ends with `python3 tests/run.py` green and `./bay.sh lint` clean.
 
-1. **Boundary and lint.** Item 1. Acceptance: a `TODO.md` at the root and a prose mention of a connector in a playbook both pass; a cross-connector import and an unlisted core edit both fail; `forge.extend` fails a change that adds unused code, through an interface call, and ignores findings that already existed; its Definition of Done has the new item; `CHANGELOG.md` is in the kernel's `owns:`.
+1. **Boundary and lint.** Item 1. Acceptance: a `TODO.md` at the root and a prose mention of a connector in a playbook both pass; a cross-connector import and an unlisted core edit both fail; `improve.detect/v1` has a `change {base}` endpoint; `forge.extend` has a `deadcode` step between `implement` and `review` that fails a change adding an unused function or a compat alias (two new findings in the fixture test) and ignores findings that already existed; its Definition of Done has DOD-14; `CHANGELOG.md` is in the kernel's `owns:`.
    - Scope also carries these stage-2 items from the stage-1 reviews:
      - (a) a hook 'spawned' record without a callId can stand in for a plan's dispatch: judge a result's taskId by the coordinator's agent.dispatch record;
      - (b) `bay status` shows finished agents as running: a step's submit closes every run dispatched to that call and step;
@@ -212,6 +255,7 @@ Each slice is sized for one builder (about 40 tool calls) and ends with `python3
 5. **Finish 0006.** Item 3. Acceptance: the 0006 step 2 acceptance lines; the dead-code check reports no new findings.
 6. **Improve as a mode.** Item 4. Acceptance: `bay/improve/` is gone; `bay call improve.scan` and `improve.audit` give the same findings on the fixture data; a backlog item cannot be approved without the user; the dead-code check reports no new findings.
 7. **Workflows.** Item 5. Acceptance: one stage-syntax parser in `bay/`; the workflow tests pass; `cos.run` still starts a project workflow; the dead-code check reports no new findings.
+   - Also carries item 7, after the workflow change: framework-shipped modes, envs and connectors move to the top-level `modes/`, `envs/` and `connectors/`. Acceptance: `framework/` holds only roles, the agent profile, rules, interfaces and the component map; protected components are declared in `framework/components.yaml` and the guard and `bay boundary` read them from it; a user extension with a protected name is refused; a write to a protected path without `forge.extend` is denied; approval of a protected change passes from chat or from the terminal; `bay catalog` is unchanged except for paths.
 8. **Agent run records.** Item 6 (the owner's addition). Acceptance: a subagent can run `bay plan` and no other `bay` command; plan events are scrubbed, size-limited and refused for another taskId; `step.started` carries inputs; `bay status` lists a dispatched agent even with the spawn hook off; a role-step submit without an outcome is refused; `bay show` prints outcome, to-do progress and inputs; `bay status --agents` groups runs by role, mode, model and tier from the ledger alone; a reviewer verdict cites outcome and to-do items; improve's weekly backlog reads the same figures. Stage 1 also built, beyond `bay plan`: `bay dispatched` (dispatches are logged even when spawn hooks are off); `bay review-record` (reviews run outside a framework step become visible to improve, but can never pass a gate); commit subjects in git episodes (to tell fix rounds from features); the transcripts fix (improve could read no sessions). Stage 1 carries slice 7a of 0006 (chat approvals, gates bound to recorded approvals), whose review fixes F-1..F-7 are included. The dead-code check reports no new findings.
 9. **Docs and release.** README, `docs/DESIGN.md`, `docs/INTERFACES.md`, changelog, version, schema `apiVersion` bump to `agentbay/v3` with v2 documents refused (feature shape and env changed), a scratch-repo build and clean round trip. Acceptance: all checks green with output quoted; a newcomer can follow the README from clone to first result; the dead-code check reports no new findings.
 

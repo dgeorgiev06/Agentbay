@@ -17,6 +17,12 @@ class ImproveDetect:
         except ValueError as e:
             raise ConnectorError(str(e)) from None
 
+    def change(self, base) -> dict:
+        try:
+            return self.p.change(base)
+        except ValueError as e:
+            raise ConnectorError(str(e)) from None
+
     def resolve(self, findings=None) -> dict:
         return self.p.resolve(findings or [])
 

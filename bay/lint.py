@@ -477,12 +477,11 @@ def lint_contract_versions(kit: model.Kit) -> list[str]:
     return out
 
 
-# B-7: the files of an extension that must not name another. READMEs are exempt (they document the extension's
-# own setup and may name what its env binds); so are tests/ (fixtures pick concrete stand-ins on purpose).
-MODE_FILES = ("mode.yaml", "playbook.md", "config.example.yaml", "config.schema.json", "features/**/*",
-              "skills/**/*", "types/**/*")
+# B-7: a connector's code must not load another connector. Only code is scanned (imports and the kernel's module
+# keys), never prose; tests/ (fixtures pick concrete stand-ins on purpose) and READMEs are exempt.
 CONNECTOR_FILES = ("**/*.py", "**/*.yaml", "**/*.yml")
 _IMPORT = re.compile(r"^\s*(?:from\s+([\w.]+)\s+import|import\s+([\w.]+(?:\s*,\s*[\w.]+)*))")
+_IMPORT_CALL = re.compile(r"""import_module\(\s*['"]([\w.]+)""")
 
 
 def _extension_files(doc: model.Doc, pats) -> list[Path]:
@@ -500,13 +499,13 @@ def _extension_files(doc: model.Doc, pats) -> list[Path]:
 
 
 def lint_extension_names(kit: model.Kit) -> list[str]:
-    """B-7 (proposal 0006, Part F; conformance C-4, C-8): no extension names another. A mode's files never name a
-    connector or another mode (its `extends:` ancestors excepted); a connector's code and yaml never name a mode
-    or another connector, and its code imports no other extension's module. Core instances (under a core
-    `owns:` path) are not extensions and are not scanned; framework instances may name each other (they ship and
-    change together, only through forge.extend), never a user extension. A static scan cannot be complete
-    (a name can be computed at run time); it catches the spelled-out forms: the name in any case, its module
-    form, the kernel's `agentbay_connector_*`/`agentbay_adapter_*` keys and imports."""
+    """B-7 (proposal 0006, Part F; conformance C-4, C-8; simplified by 0008): no connector loads another. A
+    connector's files never import another connector's module nor use its kernel module key
+    (`agentbay_connector_*`/`agentbay_adapter_*`). Prose and names in comments are not scanned. Modes name
+    connectors nowhere in `mode.yaml` (checked with the mode's own lint). Core instances (under a core `owns:`
+    path) are not extensions and are not scanned; framework instances may load each other (they ship and change
+    together, only through forge.extend), never a user extension. A static scan cannot be complete (a name can be
+    computed at run time); it catches the spelled-out forms."""
     cpath = kit.root / "framework" / "components.yaml"
     cmap = boundary.ComponentMap.load(cpath) if cpath.exists() else None
 
@@ -516,52 +515,37 @@ def lint_extension_names(kit: model.Kit) -> list[str]:
         except ValueError:
             return str(f)
 
-    docs = [*kit.docs["Mode"].values(), *kit.docs["Connector"].values()]
-    names = {d.name: d for d in docs}
-    def name_rx(n: str):
-        # the name, its module form (gmail_api) and the sys.modules keys the kernel loads it under
-        mod = re.escape(n.replace("-", "_"))
-        return re.compile(rf"(?<![\w.-]){re.escape(n)}(?![\w-]|\.\w)|(?<![\w.-]){mod}(?![\w-]|\.\w)"
-                          rf"|agentbay_(?:connector|adapter)_{mod}(?!\w)", re.I)
-    rxs = {n: name_rx(n) for n in names}
-    modules = {Path(d.spec["entry"]).stem: d for d in kit.docs["Connector"].values() if d.spec.get("entry")}
+    conns = sorted(kit.docs["Connector"].values(), key=lambda c: c.name)
+    modules = {Path(d.spec["entry"]).stem: d for d in conns if d.spec.get("entry")}
+    keys = {d.name: re.compile(rf"agentbay_(?:connector|adapter)_{re.escape(d.name.replace('-', '_'))}(?!\w)", re.I)
+            for d in conns}
     out = []
-    for d in sorted(docs, key=lambda x: (x.kind, x.name)):
+    for d in conns:
         if cmap and cmap.owner(relk(d.path)):
             continue
-        allowed = {d.name}
-        if d.kind == "Mode":
-            cur = d
-            while cur is not None and cur.parent:
-                allowed.add(cur.parent)
-                cur = kit.docs["Mode"].get(cur.parent)
-        what = "mode" if d.kind == "Mode" else "connector"
-        for f in _extension_files(d, MODE_FILES if d.kind == "Mode" else CONNECTOR_FILES):
+        for f in _extension_files(d, CONNECTOR_FILES):
             if f.parent != d.dir and cmap and not f.is_relative_to(d.dir) and cmap.owner(relk(f)):
-                continue                          # a referenced core file (e.g. briefing's schema): core, not scanned
+                continue                          # a referenced core file: core, not scanned
             try:
                 lines = f.read_text().splitlines()
             except (UnicodeDecodeError, OSError):
                 continue
             for i, line in enumerate(lines, 1):
-                for n, rx in rxs.items():
-                    o = names[n]
-                    if n in allowed or (d.root == "framework" and o.root == "framework") or not rx.search(line):
-                        continue
-                    sort = "mode" if o.kind == "Mode" else "connector"
-                    fix = ("name the capability (`<interface>/v<N>`) or the content type it serves; envs bind "
-                           "connectors" if sort == "connector" else "describe what is needed, not which mode needs it")
-                    out.append(f"{_where(f, i)}: {what} {d.name} names {sort} {n}; no extension names another "
-                               f"(B-7, C-4, C-8): {fix}")
-                if f.suffix != ".py":
-                    continue
-                m = _IMPORT.match(line)
-                for mod in (([m.group(1)] if m and m.group(1) else (m.group(2) or "").split(",")) if m else []):
-                    head = [p for p in mod.strip().split(".") if p]
-                    hit = next((modules[x] for x in head if x in modules and modules[x] is not d), None)
-                    if hit is not None and not (d.root == "framework" and hit.root == "framework"):
-                        out.append(f"{_where(f, i)}: {what} {d.name} imports {mod.strip()} of connector {hit.name}; "
-                                   f"no extension imports another (B-7): move shared code into the kernel or copy it")
+                loaded: list[tuple[str, object]] = []
+                if f.suffix == ".py":
+                    m = _IMPORT.match(line)
+                    mods = ([m.group(1)] if m and m.group(1) else (m.group(2) or "").split(",")) if m else []
+                    mods += _IMPORT_CALL.findall(line)
+                    for mod in mods:
+                        hit = next((modules[x] for x in mod.strip().split(".") if x in modules and modules[x] is not d), None)
+                        if hit is not None:
+                            loaded.append((f"imports {mod.strip()} of connector {hit.name}", hit))
+                loaded += [(f"uses the module key of connector {o.name}", o) for o in conns
+                           if o is not d and keys[o.name].search(line)]
+                for what, hit in loaded:
+                    if not (d.root == "framework" and hit.root == "framework"):
+                        out.append(f"{_where(f, i)}: connector {d.name} {what}; no connector loads another "
+                                   f"(B-7): move shared code into the kernel or copy it")
     return out
 
 

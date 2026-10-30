@@ -65,11 +65,17 @@ def _text(v, what: str, limit: int) -> str:
 
 
 def dispatched_agent(events: list[dict], task_id: str) -> dict | None:
-    """The dispatch record (coordinator) or spawn record (hook) of a taskId, latest first wins; None if unknown."""
+    """The coordinator's latest `agent.dispatch` record of a taskId; only when there is none, the hook's latest
+    `spawned` record. A spawn record never overrides a dispatch: the dispatch names the call and step the run is for."""
+    found = None
     for e in reversed(events):
-        if e.get("taskId") == task_id and e.get("type") in ("agent.dispatch", "spawned"):
+        if e.get("taskId") != task_id:
+            continue
+        if e.get("type") == "agent.dispatch":
             return e
-    return None
+        if found is None and e.get("type") == "spawned":
+            found = e
+    return found
 
 
 def record_plan(project: Path, task_id: str, plan: object) -> dict:

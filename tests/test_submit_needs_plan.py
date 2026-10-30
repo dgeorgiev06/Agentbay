@@ -63,6 +63,35 @@ def test_a_plan_of_another_step_or_call_does_not_count():
         cleanup(k)
 
 
+def test_a_later_spawn_record_does_not_override_the_coordinators_dispatch():
+    k, d, cid = _at_propose()
+    try:
+        tid = "T-20261030-abab"
+        ledger.append(k, "agent.dispatch", tid, source="coordinator", taskId=tid, callId="C-other", step="propose", agent="b")
+        ledger.append(k, "spawned", tid, source="hook", taskId=tid, agent="b")      # no call: would pass if it won
+        ledger.record_plan(k, tid, {"outcome": "o", "todo": [{"text": "t", "serves": "s"}]})
+        assert ledger.dispatched_agent(ledger.read(k), tid)["callId"] == "C-other"
+        with pytest.raises(dispatch.CallError, match="recorded no outcome"):
+            d.submit_strict(cid, "propose", {"status": "done", "summary": "s", "taskId": tid})
+    finally:
+        cleanup(k)
+
+
+def test_a_steps_submit_closes_every_run_dispatched_to_that_call_and_step():
+    k, d, cid = _at_propose()
+    try:
+        a, b, other = "T-20261030-c1c1", "T-20261030-c2c2", "T-20261030-c3c3"
+        for t, call in ((a, cid), (b, cid), (other, "C-other")):
+            ledger.append(k, "agent.dispatch", t, source="coordinator", taskId=t, callId=call, step="propose", agent="b")
+        ledger.record_plan(k, a, {"outcome": "o", "todo": [{"text": "t", "serves": "s"}]})
+        d.submit_strict(cid, "propose", {"status": "done", "summary": "s"})      # only `a` ran; `b` was a sibling
+        state = {r.task_id: r.state for r in ledger.fold(ledger.read(k)).values()}
+        assert state[a] == "done" and state[b] == "done"
+        assert state[other] == "running"                                          # another call's run stays open
+    finally:
+        cleanup(k)
+
+
 def test_a_result_taskid_counts_when_its_dispatch_names_this_call_and_step_or_no_call():
     k, d, cid = _at_propose()
     try:

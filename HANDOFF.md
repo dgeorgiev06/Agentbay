@@ -1,3 +1,52 @@
+# HANDOFF part 8: T-20261030-f82e (recorded with `bay plan`) - fix round for the stage-2 review of 0008 (C-20261030-79f3e5)
+
+Outcome: every should-fix finding of the review (DOD-5, DOD-7, DOD-8, DOD-13, R-4, R-7, R-9) is fixed; the proposal was not edited; no Guard decision changed. Branch feat/0008-stage2, nothing pushed.
+Declared (DOD-7/R-9): cc55bd8 is an out-of-slice refactor of `Guard._bash`, `ClaudeCodeAdapter._settings` and `ledger_verdicts`. It was forced by the stale local `origin/main` (1fc4803, PR #10) that the first deadcode run used as base, and it is behaviour-equivalent per the review. The owner decided to keep it. Add it to the next 0008 amendment's touches (slice 1, reason "complexity refactor surfaced by the first deadcode run"). The owner also accepted the four flagged scope items (test_dispatch stubs, README and INTERFACES edited in slice 1, improve-detect 0.1.0 -> 0.2.0, fixed base `origin/main`); ledger note on C-20261030-79f3e5.
+Fixes:
+1 (5d7959a) DOD-8 base drift: `Pipeline.change` resolves `git merge-base <base> HEAD` and exports that commit; a base that does not resolve is refused with "fetch <remote> (git fetch <remote>)"; the resolved sha is named in `warnings`. The extend playbook says the coordinator runs `git fetch origin` first. Tests `test_the_base_is_the_merge_base_not_the_moved_ref`, `test_a_base_that_does_not_resolve_says_to_fetch`.
+2 (5d7959a) DOD-8 graph asymmetry: when the project is the kit the base graph is built with `graph.build(old, old)`, so it has concept nodes like the current one. Test `test_an_unused_concept_that_existed_at_base_is_not_new_when_the_project_is_the_kit` (project == kit, an unused interface present at base is reported unused now and not new).
+3 (5d7959a, 0843c27, d455025) DOD-8 smaller items: findings are compared uncapped (maxFindingsPerDetector raised for both sides, test `test_a_second_finding_with_the_same_fingerprint_is_new` checks the value passed); fingerprints compared as a multiset (same test: a second identical fingerprint is new); tar errors become `ValueError("cannot extract <base>: ...")` (`test_a_broken_archive_is_a_clear_error`); the base reader refuses .env* and files over 1 MB like artifact-graph and names them under `unreadable at base` (`test_the_base_side_refuses_env_files_and_large_files`); the endpoint description names the temporary export (removed on return) and the fingerprint granularity (compat-layer per file, complexity per function) instead of changing `effects`; the B-7 fixtures `lib/tests/helper.py` and `shared/x_entry.py` now contain `import gmail_api` and the test asserts both hits again (0843c27); `ask = perms` spacing (d455025).
+4 (afe15c6) DOD-13/R-4: docs/DESIGN.md (Safety model) describes the `deadcode` step in contract terms; DESIGN.md is allowed by touches.
+Evidence, last line of each command:
+- `python3 tests/run.py -q`: `460 passed, 0 failed`
+- `./bay.sh lint`: `✓ lint clean` (four `!` advisories as before)
+- `./bay.sh validate`: `✓ 6 modes, 21 endpoints, 5 roles (17 role units), 10 envs, 13 connectors resolve (agent profile claude-code)`
+- `python3 -m bay.cli boundary --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: `boundary origin/main...HEAD: 27 changed paths (10 core, 3 docs, 6 extension, 1 feature, 7 other); 0 failing; B-11 docs: 0 hits`
+- `./bay.sh build --project <scratch>/s2fix` (empty folder): last line `  ! Per-role Bash scope is enforced by the agentbay guard hook; restart Claude Code and accept the workspace trust prompt so hooks run.` (it reported `built 6 modes for claude-code`)
+- `./bay.sh clean --project <scratch>/s2fix`: `clean`
+- Glob `**/*` of <scratch>/s2fix afterwards: `No files found`
+- The scratch folder is an empty non-git folder, so there is no `git status` to quote; the Glob shows nothing left behind.
+- Fake-source demo (offline switch, no network): `tests/test_mail_briefing.py::test_offline_sync_digest_and_ask` (sync, digest and ask over the fake source) passed (`1 passed, 0 failed` with `-k offline_sync_digest`); `tests/test_adapter.py::test_cli_build_and_clean_on_tmp_repo` and its sibling (the round trip on a tmp repo) passed (`2 passed, 0 failed` with `-k cli_build_and_clean`). I did not run `bay call feed-briefing.sync` by hand (not in the allowed commands).
+
+# HANDOFF part 7: T-20261030-b84c (recorded with `bay plan`) - stage 2 of 0008, the dead-code check (item 5 of part 6)
+
+Outcome: `improve.detect/v1.change` and the `deadcode` step in forge.extend exist, are tested, documented and committed on feat/0008-stage2. Done.
+To-do (all done):
+1 (019645d) `change {base}` in framework/interfaces/improve.detect.v1.yaml, framework/connectors/improve-detect (connector.yaml 0.2.0, improve_detect.py, README.md) and `Pipeline.change` (bay/improve/pipeline.py): audits the working tree and the base tree (`git archive` into a temp dir, never run), keeps unused, unused-constant, compat-layer and complexity candidates whose fingerprint is absent at base; returns `{new, existing, warnings}` plus `stopped` when `new` is not empty (the dispatcher ends a code step with `stopped` as blocked).
+2 (9f07820) forge mode.yaml: step `deadcode` (`run: improve.detect/v1.change`, `base: origin/main`) between implement and review; `improve.detect/v1` in needs; local-authoring binds improve-detect, ledger (session.events, review.verdicts) and artifact-graph.
+3 (9f07820) extend playbook: Steps list has `deadcode`; DOD-14.
+4 (9f07820) tests/test_deadcode_check.py: unused function plus compat alias give two new findings (the existing unused function counts as `existing`); a base finding does not count; any revision works and a bad one is refused; a new finding blocks the extend call before review; the step plan has deadcode between implement and review. tests/test_dispatch.py: two extend tests that run past implement stub the step (their kit copy is not a git repo); tests/ is "other" to the boundary, not in touches.
+5 (640d3da, 168a089) README and docs/INTERFACES.md describe the endpoint and the step.
+Note: the base is the literal `origin/main` in mode.yaml; ExtendReq (types, not in touches) has no base field.
+Evidence:
+- `python3 tests/run.py -q`: 453 passed, 0 failed
+- `./bay.sh lint`: ✓ lint clean
+- `./bay.sh validate`: ✓ 6 modes, 21 endpoints, 5 roles (17 role units), 10 envs, 13 connectors resolve (agent profile claude-code)
+- boundary: boundary origin/main...HEAD: 73 changed paths (28 core, 3 docs, 20 extension, 1 feature, 21 other); 0 failing; B-11 docs: 0 hits
+
+# HANDOFF part 6: T-20261030-882f (recorded with `bay plan`) - stage 2 of 0008, step `implement` of C-20261030-0cbe82
+
+Outcome: slice 1 minus the dead-code check, plus carry-overs (a)-(d). PARTIAL: stopped at the tool-call budget. Branch feat/0008-stage2.
+To-do (done: 1, 2, 3, 4, 6, 7; open: 5 = the dead-code check, then the evidence block).
+1 (4d673db) (a) `ledger.dispatched_agent` returns the coordinator's latest `agent.dispatch` of a taskId and uses a `spawned` record only when no dispatch exists, so a later spawn cannot launder another call's taskId. Test `test_a_later_spawn_record_does_not_override_the_coordinators_dispatch`.
+2 (4d673db) (b) `Dispatcher._close_runs`: a role step's submit appends `completed` for every still-running run dispatched to that call and step (and the run the result names). Test `test_a_steps_submit_closes_every_run_dispatched_to_that_call_and_step`.
+3 (bb00394) `CHANGELOG.md` is in the kernel's `owns:` (framework/components.yaml). It was a real B-4 lint failure on this branch before.
+4 (bb00394) Misfires: a repo-root file no component owns passes (`boundary.classify`, `boundary.stray`); owned root files (bay.sh, CHANGELOG.md) still need `touches:`. B-7 (`lint.lint_extension_names`) now scans connector code only, for imports (also `import_module("x")`) and the kernel's `agentbay_connector_*`/`agentbay_adapter_*` keys; prose, comments and mode playbooks are not scanned; `mode.yaml` naming a connector is still refused by the mode lint (lint.py ~306). Tests updated to the new spec (`test_no_extension_names_another_b7`, `test_b7_catches_...`, `test_ownership_lint_...`) and added (`test_repo_root_files_pass_...`); an import of another connector and a core edit without touches still fail. INTERFACES and conformance.yaml wording follow. Not done: renaming rules to plain reasons everywhere (messages keep their ids in brackets).
+5 OPEN the dead-code check. Design, not built: a new `improve.detect/v1` endpoint `change {base}` -> `{new: [candidates], existing: n}` (framework/interfaces/improve.detect.v1.yaml, connector framework/connectors/improve-detect, `Pipeline.change` in bay/improve/pipeline.py): audit the working tree and the tree at `base` (export with `git archive` into a temp dir, never run its code), keep candidates of kinds unused, unused-constant, compat-layer, complexity whose `fingerprint` (bay/improve/store.py) is absent at base. forge `extend` gets a code step `deadcode` between `implement` and `review` (`run: improve.detect/v1.change`, stopped -> blocked on any new finding); forge needs `improve.detect/v1` in `needs:` and an env that binds improve-detect with its sources (see framework/envs/improve-local.yaml: artifact-graph, ledger). Add DOD-14 to features/extend/playbook.md ("no new unused code or compatibility layers"). Fixture test: add an unused function and a compat alias, expect two new findings; an existing finding does not count. Touches the owner must add to 0008 (editing it voids the approval): framework/interfaces/improve.detect.v1.yaml, framework/connectors/improve-detect/, framework/envs/local-authoring.yaml (or framework-dev) and framework/modes/forge/mode.yaml is covered by `framework/modes/*/mode.yaml`.
+6 (this commit) (c) README mentions schedules (cron); suite has no README size test, count is about 900.
+7 (d) the probe gate_repro_sha.py in the review-s1 scratchpad (not in the repo) catches `model.ResolveError` for R5: last line `R5 resolve refuses the edit (fixed): ...`.
+Tests: 448 pass.
+
 # HANDOFF part 5: T-20261030-ba74 (recorded with `bay plan`) - stage 1 fix round for the review of C-20261030-bc7db5
 
 Outcome: DOD-8, DOD-9, R-7 and the usage double count fixed; the proposal was not edited. To-do: 1-5 done.

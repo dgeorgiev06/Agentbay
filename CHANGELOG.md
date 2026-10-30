@@ -2,6 +2,32 @@
 
 Earlier versions: see docs/proposals/
 
+## 0.6.0 - 2026-10-30
+
+Contracts changed only additively (a new `improve.detect/v1` endpoint, a new `forge.extend` step); no schema changed, so the schema apiVersion stays `agentbay/v2`.
+
+### Added
+
+- A dead-code check for framework changes. `improve.detect/v1` has a new endpoint, `change {base}`: it audits the working tree and the tree at the merge-base of `base` and HEAD (exported as plain files, never run) and returns `{new, existing, warnings}` for unused code, unused constants, compatibility layers and complexity. `forge.extend` runs it as a `deadcode` step between implement and review, and any new finding blocks the call. The extend playbook gains DOD-14 (no new unused code or compatibility layers).
+- A base that does not resolve is refused with `fetch origin (git fetch origin)`. The resolved merge-base is named in `warnings`.
+- improve-detect connector 0.2.0.
+
+### Changed
+
+- The coordinator's dispatch decides which call a taskId belongs to; a later `spawned` record cannot stand in for it.
+- A role step's submit closes every run dispatched to that call and step.
+- `CHANGELOG.md` is owned by the kernel.
+- B-7 scans connector code only (imports and the kernel's connector and adapter keys); prose, comments and playbooks are not scanned.
+- Three over-complex functions are refactored with the same behaviour: `Guard._bash`, `ClaudeCodeAdapter._settings` and `ledger_verdicts`.
+
+### Fixed
+
+- `bay boundary` no longer fails a repo-root file that no component owns. Owned root files still need `touches:`.
+
+### Known issues
+
+- If the local `origin/main` is stale, the merge-base is the stale ref and the check can block on findings that are not new. The extend playbook says to run `git fetch origin` first; the forge coordinator playbook does not yet say so.
+
 ## 0.5.0 - 2026-10-30
 
 Contracts changed only additively (optional fields, new event types); the schema apiVersion stays `agentbay/v2`.

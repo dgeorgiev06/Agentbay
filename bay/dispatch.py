@@ -96,16 +96,28 @@ class Dispatcher:
                     raise CallError(f"step {step.id}: output does not match {step.out}: " + "; ".join(errs[:5]))
             state["steps"][step.id] = output
             self._ledger("step.completed", base, summary=f"{step.role} submitted")
-            tid = output.get("taskId") if isinstance(output, dict) else None
-            if tid and ledger.dispatched_agent(ledger.read(self.project), tid):
-                ledger.append(self.project, "completed", tid, source="dispatcher", taskId=tid, callId=call_id,
-                              agent=step.subagent, summary=str(output.get("summary", ""))[:200],
-                              data={"status": output.get("status", "done")})
+            self._close_runs(call_id, step, output)
         state["cursor"] += 1
         if state.get("halt"):
             state["output"] = self._endpoint_output(feat, state)
             return self._finish(state, mode, feat)
         return self._advance(mode, feat, state)
+
+    def _close_runs(self, call_id: str, step, output) -> None:
+        """A step's submit ends every run still open that was dispatched to this call and step (and the run whose
+        taskId the result names, when it was dispatched), so `bay status` stops listing them as running."""
+        evs = ledger.read(self.project)
+        named = output.get("taskId") if isinstance(output, dict) else None
+        tids = [e["taskId"] for e in evs if e.get("type") == "agent.dispatch" and e.get("taskId")
+                and e.get("callId") == call_id and e.get("step") == step.id]
+        if isinstance(named, str) and ledger.dispatched_agent(evs, named):
+            tids.append(named)
+        status = output.get("status", "done") if isinstance(output, dict) else "done"
+        summary = str(output.get("summary", ""))[:200] if isinstance(output, dict) else ""
+        for r in ledger.fold(evs).values():
+            if r.state == "running" and r.task_id in tids:
+                ledger.append(self.project, "completed", r.run_id, source="dispatcher", taskId=r.task_id, callId=call_id,
+                              agent=step.subagent, summary=summary, data={"status": status})
 
     def _require_plan(self, call_id: str, step, output) -> None:
         """A subagent's result is accepted only when its run recorded an outcome (`bay plan`). The run is found by

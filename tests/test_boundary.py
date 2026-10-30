@@ -159,6 +159,19 @@ def test_docs_and_unowned_paths():
     assert _failing(rep) == []
 
 
+def test_repo_root_files_pass_but_a_core_edit_does_not_and_the_kernel_owns_the_changelog():
+    """0008 item 1: a stray TODO.md is not framework code; an owned path still needs touches."""
+    rep = _check({"TODO.md": "x\n", "notes.txt": "x\n", ".env.example": "x\n"})
+    assert _failing(rep) == [] and rep.exit_code == 0
+    rep = _check({"TODO.md": "x\n", "notes.txt": "x\n", "bay/cli.py": "y\n"})
+    assert _failing(rep) == ["bay/cli.py"]
+    shipped = boundary.ComponentMap.load(KIT / "framework/components.yaml")
+    assert shipped.owner("CHANGELOG.md") == "kernel"
+    assert not any(f.ok is False for f in [boundary.classify("TODO.md", shipped, [], lambda r: False, None)])
+    f = boundary.classify("CHANGELOG.md", shipped, [], lambda r: False, None)
+    assert not f.ok and f.rule == "B-1"
+
+
 def test_docs_check_names_instances_outside_fences_and_fails():
     readme = "# kit\nUse the gmail connector.\n```\nmodes/mail/ and local\n```\nSee git.read/v1 and mailbox.\n"
     rep = _check({"README.md": readme}, touches=["README.md"], docs=True)
@@ -239,16 +252,17 @@ def test_shipped_component_map_is_valid_and_lint_checks_it():
 
 
 def test_ownership_lint_names_stray_tracked_files_b4():
-    repo = _repo({"notes.txt": "x\n", "framework/stray.yaml": "x\n", "docs/DESIGN.md": "x\n",
-                  "adapters/claude-code/adapter.yaml": "x\n"})
+    repo = _repo({"TODO.md": "x\n", "notes.txt": "x\n", "tools/x.sh": "x\n", "framework/stray.yaml": "x\n",
+                  "docs/DESIGN.md": "x\n", "adapters/claude-code/adapter.yaml": "x\n"})
     (repo / "untracked.txt").write_text("x\n")                 # only tracked files count
-    assert boundary.stray(["bay/cli.py", "modes/mail/mode.yaml", "tests/test_x.py", "README.md", "notes.txt"],
-                          boundary.ComponentMap.load(repo / "framework/components.yaml")) == ["notes.txt"]
+    assert boundary.stray(["bay/cli.py", "modes/mail/mode.yaml", "tests/test_x.py", "README.md", "notes.txt",
+                           "TODO.md", "tools/x.sh"],
+                          boundary.ComponentMap.load(repo / "framework/components.yaml")) == ["tools/x.sh"]
     kit = model.Kit(KIT)
     kit.root = repo
     errs = lint.lint_ownership(kit)
     assert [e.split(":", 1)[0] for e in errs] == ["adapters/claude-code/adapter.yaml", "framework/components.yaml",
-                                                  "framework/stray.yaml", "notes.txt"]   # MAP owns neither
+                                                  "framework/stray.yaml", "tools/x.sh"]   # MAP owns neither
     assert "(B-4)" in errs[0] and "framework/components.yaml" in errs[0]
     kit.root = tmpdir()                                            # not a git checkout: nothing to check
     assert lint.lint_ownership(kit) == []

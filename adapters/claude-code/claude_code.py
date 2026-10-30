@@ -81,6 +81,83 @@ def _within(p: Path, root: Path) -> bool:
         return False
 
 
+def _remove_each(target: list, items: list) -> None:
+    """Remove the first occurrence of each of `items` that `target` holds."""
+    for p in items:
+        if p in target:
+            target.remove(p)
+
+
+def _owns_hook(h: dict) -> bool:
+    """Whether a hook entry runs one of our commands (the dispatch hook or the guard)."""
+    return any(tag in x.get("command", "") for x in h.get("hooks", []) for tag in (HOOK_TAG, GUARD_TAG))
+
+
+def _strip_owned_hooks(hooks: dict) -> None:
+    """Drop our hook entries from the Pre/PostToolUse lists, and a list that is left empty."""
+    for event in ("PreToolUse", "PostToolUse"):
+        hooks[event] = [h for h in hooks.get(event, []) if not _owns_hook(h)]
+        if not hooks[event]:
+            hooks.pop(event)
+
+
+def _claim(target: list, want: list, previously_owned: list) -> list[str]:
+    """Add each of `want` that `target` lacks; return those we now own (added now, or added by an earlier build)."""
+    owned = []
+    for p in want:
+        if p not in target:
+            target.append(p)
+            owned.append(p)
+        elif p in previously_owned:
+            owned.append(p)
+    return owned
+
+
+def _want_deny(kit: Path, project: Path) -> list[str]:
+    """Session-wide floor (main thread and subagents): no file tool edits the control plane, Claude Code config
+    or the kit; store and call state are not read by file tools.
+    `Edit(...)` covers every editing tool (Write/MultiEdit/NotebookEdit path rules never match)."""
+    want = ["Edit(/.agentbay/**)", "Edit(/.claude/**)", "Read(/.agentbay/data/**)", "Read(/.agentbay/calls/**)"]
+    if not _within(kit, project):
+        want.append(f"Edit(/{kit.resolve()}/**)")
+    elif kit.resolve() != project.resolve():              # kit nested inside the project
+        want.append(f"Edit(/{kit.resolve().relative_to(project.resolve()).as_posix()}/**)")
+    want.append("Edit(/agentbay.config.yaml)")           # the owner's settings (approvals.chat among them)
+    return want
+
+
+def _want_ask() -> list[str]:
+    """`bay approve` in any spelling always asks the user first (the main thread relays chat approvals
+    only through this prompt); a subagent is refused by the guard hook either way."""
+    return [f"Bash({BAY} approve:*)", "Bash(./bay.sh approve:*)", "Bash(bay approve:*)",
+            "Bash(bay.sh approve:*)", "Bash(python3 -m bay.cli approve:*)",
+            "Bash(python3 bay/cli.py approve:*)", "Bash(python3 */bay/cli.py approve:*)"]
+
+
+def _install_hooks(hooks: dict, kit: Path) -> None:
+    """Our guard hook first among the PreToolUse hooks, our dispatch hook last in Pre and PostToolUse."""
+    guard = f'python3 "{kit / "bay" / "guard.py"}"'
+    hooks.setdefault("PreToolUse", []).insert(
+        0, {"matcher": GUARD_MATCHER,
+            # a failing/crashing/timed-out guard blocks the call (Claude Code >= 2.1.295)
+            "hooks": [{"type": "command", "command": guard, "timeout": 10, "onFailure": "block"}]})
+    hook = f'python3 "{kit / "bay" / "hook.py"}"'
+    for event, phase in (("PreToolUse", "pre"), ("PostToolUse", "post")):
+        hooks.setdefault(event, []).append(
+            {"matcher": "Task|Agent", "hooks": [{"type": "command", "command": f"{hook} {phase}", "timeout": 10}]})
+
+
+def _drop_empty(cfg: dict, perms: dict, hooks: dict) -> None:
+    """Remove the permission lists, `permissions` and `hooks` that hold nothing."""
+    for key in ("allow", "deny", "ask"):
+        if not perms[key]:
+            perms.pop(key)
+    if not perms:
+        cfg.pop("permissions")
+    if not hooks:
+        cfg.pop("hooks")
+
+
 def _without(playbook: str, uninstalled: dict) -> str:
     """Drop playbook bullets (and their indented continuation lines) about endpoints not installed here."""
     out, skipping = [], False
@@ -371,81 +448,24 @@ class ClaudeCodeAdapter:
         perms = cfg.setdefault("permissions", {})
         allow = perms.setdefault("allow", [])
         deny = perms.setdefault("deny", [])
-        for p in old.get("permissions", []):
-            if p in allow:
-                allow.remove(p)
+        _remove_each(allow, old.get("permissions", []))
         ask = perms.setdefault("ask", [])
-        for p in old.get("denies", []):
-            if p in deny:
-                deny.remove(p)
-            if p in ask:
-                ask.remove(p)
+        _remove_each(deny, old.get("denies", []))
+        _remove_each(ask, old.get("denies", []))
         hooks = cfg.setdefault("hooks", {})
-        for event in ("PreToolUse", "PostToolUse"):
-            hooks[event] = [h for h in hooks.get(event, [])
-                            if not any(tag in x.get("command", "") for x in h.get("hooks", [])
-                                       for tag in (HOOK_TAG, GUARD_TAG))]
-            if not hooks[event]:
-                hooks.pop(event)
+        _strip_owned_hooks(hooks)
         owned: list[str] = []
         owned_deny: list[str] = []
         if not remove_only:
-            # session-wide floor (main thread and subagents): no file tool edits the control plane,
-            # Claude Code config or the kit; store and call state are not read by file tools.
-            # `Edit(...)` covers every editing tool (Write/MultiEdit/NotebookEdit path rules never match).
-            want_deny = ["Edit(/.agentbay/**)", "Edit(/.claude/**)", "Read(/.agentbay/data/**)",
-                         "Read(/.agentbay/calls/**)"]
-            if not _within(kit, project):
-                want_deny.append(f"Edit(/{kit.resolve()}/**)")
-            elif kit.resolve() != project.resolve():              # kit nested inside the project
-                want_deny.append(f"Edit(/{kit.resolve().relative_to(project.resolve()).as_posix()}/**)")
-            want_deny.append("Edit(/agentbay.config.yaml)")      # the owner's settings (approvals.chat among them)
-            for p in want_deny:
-                if p not in deny:
-                    deny.append(p)
-                    owned_deny.append(p)
-                elif p in old.get("denies", []):
-                    owned_deny.append(p)
-            # `bay approve` in any spelling always asks the user first (the main thread relays chat approvals
-            # only through this prompt); a subagent is refused by the guard hook either way
-            want_ask = [f"Bash({BAY} approve:*)", "Bash(./bay.sh approve:*)", "Bash(bay approve:*)",
-                        "Bash(bay.sh approve:*)", "Bash(python3 -m bay.cli approve:*)",
-                        "Bash(python3 bay/cli.py approve:*)", "Bash(python3 */bay/cli.py approve:*)"]
-            for p in dict.fromkeys(want_ask):
-                if p not in ask:
-                    ask.append(p)
-                    owned_deny.append(p)
-                elif p in old.get("denies", []):
-                    owned_deny.append(p)
+            owned_deny = (_claim(deny, _want_deny(kit, project), old.get("denies", []))
+                          + _claim(ask, list(dict.fromkeys(_want_ask())), old.get("denies", [])))
             # main-thread control plane: explicit subcommands only, never a wildcard over .agentbay/bay.
             # Subagent command prefixes are NOT added here (allow rules are session-wide); the guard
             # hook scopes them per role instead.
             want = [f"Bash({BAY} {c}:*)" for c in COORDINATOR_CMDS]
-            for p in dict.fromkeys(want):
-                if p not in allow:
-                    allow.append(p)
-                    owned.append(p)
-                elif p in old.get("permissions", []):
-                    owned.append(p)
-            guard = f'python3 "{kit / "bay" / "guard.py"}"'
-            hooks.setdefault("PreToolUse", []).insert(
-                0, {"matcher": GUARD_MATCHER,
-                    # a failing/crashing/timed-out guard blocks the call (Claude Code >= 2.1.295)
-                    "hooks": [{"type": "command", "command": guard, "timeout": 10, "onFailure": "block"}]})
-            hook = f'python3 "{kit / "bay" / "hook.py"}"'
-            for event, phase in (("PreToolUse", "pre"), ("PostToolUse", "post")):
-                hooks.setdefault(event, []).append(
-                    {"matcher": "Task|Agent", "hooks": [{"type": "command", "command": f"{hook} {phase}", "timeout": 10}]})
-        if not allow:
-            perms.pop("allow")
-        if not deny:
-            perms.pop("deny")
-        if not ask:
-            perms.pop("ask")
-        if not perms:
-            cfg.pop("permissions")
-        if not hooks:
-            cfg.pop("hooks")
+            owned = _claim(allow, list(dict.fromkeys(want)), old.get("permissions", []))
+            _install_hooks(hooks, kit)
+        _drop_empty(cfg, perms, hooks)
         _write_json(path, cfg)
         rep.written.append(".claude/settings.json")
         return owned, owned_deny

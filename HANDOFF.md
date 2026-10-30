@@ -1,3 +1,9 @@
+# HANDOFF part 4: T-20261030-b07b (recorded with `bay plan`) - stage 1 of 0008 COMPLETE
+
+Outcome: items 7 and 8 done. To-do (done: 1-4): 1 docs (README 895 words, INTERFACES, DESIGN, cos playbook, four role prompts; COORDINATOR.md rebuilt); 2 cleanup (dead `when: approved` branch in `Dispatcher._skip` and its schema text removed, no test existed for it; `approved` output of forge.scaffold `proposal` removed from connector and interface); 3 evidence; 4 this file.
+Tests: 442 pass. lint clean, validate ok, scratch build + clean round trip leaves the folder empty, `bay boundary --docs`: 0 B-11 hits.
+Open for the owner: `bay boundary --base origin/main --proposal 0008 --docs` still fails 17 paths (B-1 5, B-2 9, B-3 3) because stage 1 touched paths that 0008's `touches:` does not list (adapters/claude-code, git/gmail-api/claude-transcripts/scaffold connectors, framework/interfaces forge.scaffold + workflow.run, forge extend playbook + Result type, mail-briefing config.example, schemas event/review.verdict/session.episode). Editing the proposal changes its approved sha256, so it was not touched.
+
 # HANDOFF part 3: T-20261030-5110 (recorded with `bay plan`)
 
 Outcome: stage 1 of 0008 complete (all 8 items below). One commit per green item. Tests: 442 pass. Stopped at the tool-call budget after item 6.

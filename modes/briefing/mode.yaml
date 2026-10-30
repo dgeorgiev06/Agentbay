@@ -3,7 +3,7 @@ kind: Mode
 metadata:
   name: briefing
   version: 0.1.0
-  description: Base mode for source briefings (posts, email, ...) - sync, digest, ask, prune over a local corpus store.
+  description: Base mode for source briefings (items of the content types a child mode reads) - sync, digest, ask, prune over a local corpus store.
 spec:
   # Not installed or called itself: per-source modes `extends: briefing` and override what differs
   # (purpose, constraints, configDefaults, types, steps, playbooks, rules, review, roles and their envs).

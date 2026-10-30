@@ -118,7 +118,8 @@ cannot contain code once something runs it. Hard isolation needs an OS sandbox.
 `modes/briefing` is an abstract base (sync, digest, ask, prune). Each child mode extends it for one kind of
 source, in its own env with its own store, secrets and role units.
 Sources implement `items.source/v1` and return `item/v1` items (`id` is `<source>:<extId>`; a content type, a
-folder `content-types/<name>/` read by `bay/contenttypes.py`, adds fields and the views agents query). A connector declares which selector fields its search handles; the store
+folder `content-types/<name>/` read by `bay/contenttypes.py`, adds fields and the views agents query; a mode may add views of its own over the types it reads, `views.sql`
+and `views.yaml` in its folder). A connector declares which selector fields its search handles; the store
 fetches with that native part and re-applies the whole selector with one shared matcher (`bay/selector.py`),
 so behaviour is the same on every source. A source that declares `changeFeed: true` is followed by cursor
 instead of re-listed. A source whose login is missing or expired returns `blocked` with the one command to

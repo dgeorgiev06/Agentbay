@@ -55,27 +55,6 @@ spec:
         - { name: url, type: TEXT, description: "link to the message" }
         - { name: matched, type: JSON, description: "selector ids the message matches" }
         - { name: rid, type: INTEGER, description: "row id (= attachments_fts.rowid)" }
-    # v_threads: temporary home. Threads and needsReply belong to the mail-briefing mode; this entry and its
-    # statement in views.sql are lifted out together.
-    v_threads:
-      columns:
-        - { name: source, type: TEXT, description: "" }
-        - { name: threadId, type: TEXT, description: "thread id; v_email.threadId" }
-        - { name: subject, type: TEXT, description: "subject of the first message" }
-        - { name: messages, type: INTEGER, description: "stored messages" }
-        - { name: firstDate, type: TEXT, description: "ISO-8601" }
-        - { name: lastDate, type: TEXT, description: "ISO-8601; ORDER BY lastDate DESC" }
-        - { name: lastId, type: TEXT, description: "id of the last message; cite it" }
-        - { name: lastSender, type: TEXT, description: "sender of the last message" }
-        - { name: lastFromMe, type: INTEGER, description: "1 when I sent the last message" }
-        - { name: lastToMe, type: INTEGER, description: "1 when the last message is addressed to me (To/Cc)" }
-        - { name: lastBulk, type: INTEGER, description: "1 when the last message is bulk mail (newsletters, notifications)" }
-        - { name: needsReply, type: INTEGER, description: "1 when the last message is from someone else, addressed to me and not bulk" }
-        - { name: participants, type: JSON, description: "array of every from/to/cc address" }
-        - { name: senders, type: JSON, description: "array of sender addresses" }
-        - { name: matched, type: JSON, description: "selector ids any message matches" }
-        - { name: hasAttachments, type: INTEGER, description: "" }
-        - { name: attachmentCount, type: INTEGER, description: "" }
     v_attachment_fts:
       includes: { view: v_attachments, note: "same scope as v_attachments" }
       fullText:

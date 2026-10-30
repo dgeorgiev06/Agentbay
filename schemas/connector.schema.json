@@ -65,7 +65,7 @@
           "items": {
             "type": "string"
           },
-          "description": "Item kinds (content types) this connector's items carry, versioned (`<kind>/v<N>`, e.g. email/v1). Required for an items.source connector; `bay check` checks it against the `reads:` of every mode whose env binds it (B-6)."
+          "description": "Item kinds (content types) this connector's items carry, versioned (`<kind>/v<N>`, e.g. `<kind>/v1`). Required for an items.source connector; `bay check` checks it against the `reads:` of every mode whose env binds it (B-6)."
         },
         "entry": {
           "type": "string",
@@ -199,7 +199,7 @@
                       ]
                     },
                     "minItems": 1,
-                    "description": "Native fields only: the source matches this field locally when the same selector also sets one of these fields (x-api: `from` together with `in`). Validate warns on a paid source."
+                    "description": "Native fields only: the source matches this field locally when the same selector also sets one of these fields (e.g. `from` together with `in`). Validate warns on a paid source."
                   }
                 }
               }

@@ -125,7 +125,10 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
         base = f"connectors/{name}"
         src = ""
         if implements.startswith("items.source/"):
-            src = (f"  produces: [post/v1]    # TODO the item kind(s) its items carry: <kind>/v<N> (schemas/data/)\n"
+            from . import model
+            kinds = model.item_kinds(kit)
+            kind = next((f"{k}/v{min(v)}" for k, v in sorted(kinds.items())), "<kind>/v1")
+            src = (f"  produces: [{kind}]    # TODO the item kind(s) its items carry: <kind>/v<N> (a content type, content-types/)\n"
                    f"  source: {name}       # value stamped on every item's `source`; item ids are <source>:<extId>\n"
                    f"  window: 7d             # how far back the API serves; older history comes from the store\n"
                    f"  selectors:             # TODO which selector fields the API handles natively; unlisted = unsupported\n"

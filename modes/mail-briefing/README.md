@@ -13,5 +13,9 @@ sample mailbox) and sign in as that connector's README says. Its sync ends `bloc
 expired, naming the `bay auth <connector>` command to run; a digest or question then still runs on stored
 mail and ends `partial`.
 
+**Views:** `views.sql` defines `v_threads` (one row per thread, with `needsReply`) over the email content type's
+`v_email`; `views.yaml` documents its columns and tells `items.store/v1.threads` how to read it (window, selector,
+the sender column `important` is matched against, and the per-row details).
+
 **Settings:** briefing's plus `important` (senders whose threads are weighed first), in
 `config.schema.json`; see `config.example.yaml`.

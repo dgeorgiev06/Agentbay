@@ -488,6 +488,7 @@ class Dispatcher:
         s = dict(mode.config)
         s["mode"] = mode.name                     # connectors that keep per-mode data (corpus-store) key on it
         s["reads"] = list(mode.reads)             # ... and make it for the content types the mode reads
+        s["modeDirs"] = [str(d) for d in mode.dirs]   # ... and with the views the mode defines (views.sql there)
         if "lookbackMax" in mode.constraints:
             s["lookbackMax"] = mode.constraints["lookbackMax"]
         return s

@@ -100,8 +100,9 @@ def test_the_child_table_and_the_derived_fields_come_from_the_type():
     assert d.call("mail-briefing.sync", {})["status"] == "done"
     db = p / ".agentbay/data/mail/mail-briefing/corpus.db"
     con = sqlite3.connect(db)
-    assert con.execute("SELECT key, value FROM store_meta ORDER BY key").fetchall() == [
-        ("derive:email", "1"), ("type:email", "1")]
+    meta = dict(con.execute("SELECT key, value FROM store_meta"))
+    assert sorted(meta) == ["derive:email", "mode-views", "type:email"]            # the mode's own views are recorded too
+    assert meta["derive:email"] == "1" and meta["type:email"] == "1" and "CREATE TEMP VIEW v_threads" in meta["mode-views"]
     names = {r[0] for r in con.execute("SELECT name FROM sqlite_master")}
     assert {"attachments", "attachments_fts"} <= names
     kept = [a for (e,) in con.execute("SELECT ext FROM items") for a in json.loads(e).get("attachments", [])]

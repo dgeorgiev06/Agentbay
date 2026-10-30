@@ -228,7 +228,7 @@
           "items": {
             "type": "string"
           },
-          "description": "Item kinds (content types) the mode reads, versioned (`<kind>/v<N>`, e.g. post/v1). `bay check` refuses an unversioned or unknown kind, and a kind or version that no items.source connector bound in the mode's envs produces (B-6). An abstract mode may declare none; inherited by children unless they set their own."
+          "description": "Item kinds (content types) the mode reads, versioned (`<kind>/v<N>`, e.g. `<kind>/v1`). `bay check` refuses an unversioned or unknown kind, and a kind or version that no items.source connector bound in the mode's envs produces (B-6). An abstract mode may declare none; inherited by children unless they set their own."
         },
         "config": {
           "type": "string",

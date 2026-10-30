@@ -9,7 +9,7 @@ import sqlite3
 import yaml
 from helpers import KIT, NOW, clock, system, tmpdir
 
-from bay import connect, dispatch, model, sqlsandbox as sbx
+from bay import connect, contenttypes, dispatch, model, sqlsandbox as sbx
 
 SELS = [{"id": "inbox", "in": "inbox"}, {"id": "sent", "in": "sent"}]
 
@@ -30,7 +30,9 @@ def store(p, sels=None, **settings):
     return connect.instantiate(system(p), "local-mail", "corpus-store", "items.store/v1", p, clock=clock,
                                caps={"maxItemsPerRun": 500},
                                settings={"mode": "mail-briefing", "lookback": "30d", "lookbackMax": "30d",
-                                         "selectors": sels or SELS, **settings})
+                                         "selectors": sels or SELS,
+                                         "modeDirs": [str(KIT / "modes" / "mail-briefing"), str(KIT / "modes" / "briefing")],
+                                         **settings})
 
 
 def db(p):
@@ -305,11 +307,44 @@ def test_sandbox_reads_the_mail_views_and_refuses_shadow_tables_and_writes():
     d = st.describe()
     names = [v["name"] for v in d["views"]]
     # this store is made without a mode's `reads`, so it holds every type of the kit (type views by name, then
-    # v_fts, then the types' full-text views)
-    assert names == ["v_items", "v_email", "v_attachments", "v_threads", "v_posts", "v_fts", "v_attachment_fts"]
+    # the mode's views, v_fts and the types' full-text views)
+    assert names == ["v_items", "v_email", "v_attachments", "v_posts", "v_threads", "v_fts", "v_attachment_fts"]
     assert {v["name"]: v["rows"] for v in d["views"]}["v_threads"] == 4
     assert d["fts"]["attachments"]["view"] == "v_attachment_fts" and set(sbx.COLUMNS) == set(sbx.VIEWS)
     assert "addr_key" not in d["functions"]
+
+
+def _mode_dir(sql: str, columns: list[str]):
+    d = tmpdir() / "mode"
+    d.mkdir()
+    (d / "views.sql").write_text(sql)
+    (d / "views.yaml").write_text(yaml.safe_dump({"views": {"v_x": {"columns": [
+        {"name": c, "type": "TEXT", "description": ""} for c in columns]}}}))
+    return d
+
+
+def test_threads_needs_a_view_from_the_mode_and_a_mode_view_reads_only_views_of_its_types():
+    p = project()
+    st = store(p, modeDirs=[str(KIT / "modes" / "briefing")])             # a mode with no views of its own
+    st.sync()
+    try:
+        st.threads(since="30d")
+        raise AssertionError("expected a refusal")
+    except connect.ConnectorError as e:
+        assert "defines no rows for `threads`" in str(e) and "views.yaml" in str(e)
+    assert st.sql("SELECT count(*) FROM v_email")["rows"][0][0] > 0
+    assert "v_threads" in st.sql("SELECT count(*) FROM v_threads")["error"]
+    ok = _mode_dir("CREATE VIEW v_x AS SELECT id FROM v_email;", ["id"])
+    assert contenttypes.mode_problems([ok], ["email/v1"]) == []
+    for sql, why in (("CREATE VIEW v_x AS SELECT ext_id AS id FROM main.items;", "it reads items"),
+                     ("CREATE VIEW v_x AS SELECT id FROM v_posts;", "v_posts"),
+                     ("CREATE VIEW v_x AS SELECT id FROM v_attachments JOIN attachments ON 1;", "attachments"),
+                     ("CREATE VIEW v_x AS SELECT randomblob(4) AS id FROM v_email;", "randomblob")):
+        bad = contenttypes.mode_problems([_mode_dir(sql, ["id"])], ["email/v1"])
+        assert bad and why in bad[0] and "v_x" in bad[0], (sql, bad)
+    wrong = contenttypes.mode_problems([_mode_dir("CREATE VIEW v_x AS SELECT id, sender FROM v_email;", ["id"])],
+                                       ["email/v1"])
+    assert wrong and "documents columns" in wrong[0]
 
 
 def test_attachments_and_their_full_text_rows_go_with_their_message():

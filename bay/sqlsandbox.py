@@ -154,13 +154,20 @@ FTS_VIEW_SQL = f"""CREATE TEMP VIEW v_fts AS SELECT v.*, f.{FTS} AS fts, f.rank 
           FROM main.{FTS} f JOIN temp.v_items v ON v.rid = f.rowid"""
 
 
-def view_sql(fts: bool, types: list[contenttypes.ContentType]) -> list[tuple[str, str]]:
+def store_mode_views(con: sqlite3.Connection) -> list[tuple[str, str]]:
+    """(name, CREATE statement) of the views the store's mode defines, as the writer last recorded them."""
+    row = con.execute("SELECT value FROM main.store_meta WHERE key = 'mode-views'").fetchone()
+    return [(n, s) for n, s in json.loads(row[0])] if row else []
+
+
+def view_sql(fts: bool, types: list[contenttypes.ContentType], mode=()) -> list[tuple[str, str]]:
     """(name, CREATE statement) of the views over the store (which holds only the mode's scope), in the order
-    describe lists them: v_items, the content types' views, v_fts (FTS5 only: items_fts joined to v_items, the
-    simplest documented way to search, with rank and snippet as columns), then the types' full-text views."""
+    describe lists them: v_items, the content types' views, the mode's own views (`mode`, pairs as in
+    store_mode_views), v_fts (FTS5 only: items_fts joined to v_items, the simplest documented way to search, with
+    rank and snippet as columns), then the types' full-text views."""
     full = {v for ct in types for v in ct.fulltext_views()}
     own = [(v, sql) for ct in types for v, sql in ct.views if v not in full]
-    return [("v_items", ITEMS_VIEW), *own, *([(FTS_VIEW, FTS_VIEW_SQL)] if fts else []),
+    return [("v_items", ITEMS_VIEW), *own, *mode, *([(FTS_VIEW, FTS_VIEW_SQL)] if fts else []),
             *([(v, sql) for ct in types for v, sql in ct.views if v in full] if fts else [])]
 
 
@@ -184,7 +191,7 @@ def connect_ro(path: Path) -> sqlite3.Connection:
                            f"folder aside and sync again")
         fts = has_fts(con)
         types = store_types(con)
-        for _, stmt in view_sql(fts, types):
+        for _, stmt in view_sql(fts, types, store_mode_views(con)):
             con.execute(stmt)
         for t in fts_tables(fts, types):
             # FTS5 reads its config table when the table first connects, which happens while a statement is
@@ -214,9 +221,9 @@ def has_fts(con: sqlite3.Connection) -> bool:
     return con.execute("SELECT 1 FROM main.sqlite_master WHERE name = ?", (FTS,)).fetchone() is not None
 
 
-def views_of(fts: bool, types: list[contenttypes.ContentType]) -> list[str]:
+def views_of(fts: bool, types: list[contenttypes.ContentType], mode=()) -> list[str]:
     """The views a read-only connection has, in describe order (no full-text views without FTS5)."""
-    return [v for v, _ in view_sql(fts, types)]
+    return [v for v, _ in view_sql(fts, types, mode)]
 
 
 def tables_of(fts: bool, types: list[contenttypes.ContentType]) -> list[str]:
@@ -238,7 +245,7 @@ class Sandbox:
         self.con = connect_ro(path)
         self.fts = has_fts(self.con)
         types = store_types(self.con)
-        self.views = views_of(self.fts, types)
+        self.views = views_of(self.fts, types, store_mode_views(self.con))
         self.tables = tables_of(self.fts, types)
         self.shadow = {f"{t}_{x}" for t in fts_tables(self.fts, types)
                        for x in ("data", "idx", "content", "docsize", "config")}

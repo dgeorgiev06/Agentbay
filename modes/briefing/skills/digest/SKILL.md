@@ -1,6 +1,6 @@
 ---
 name: digest
-description: Turn stored items (posts, email, ...) into a grounded digest of themes. Use for briefing digest `themes` steps.
+description: Turn stored items into a grounded digest of themes. Use for briefing digest `themes` steps.
 ---
 # Digest
 

@@ -11,6 +11,6 @@ declare `produces: [email/v1]`; modes that read it declare `reads: [email/v1]`.
 - `derive.py`: `addr_key` (one mailbox's identity: case, +tags and Gmail dots ignored) and `derive`, which computes
   `fromMe`, `toMe` and `bulk` when the store writes a message. The values are stored, so a view reads them instead of
   computing them per query. When `deriveVersion` changes, the store recomputes them from what it holds.
-- `views.sql`: `v_email` (every `v_items` column, then the message fields), `v_attachments`, `v_attachment_fts` (FTS5
-  only) and, until the mail-briefing mode owns them, `v_threads` with `needsReply`.
+- `views.sql`: `v_email` (every `v_items` column, then the message fields), `v_attachments` and `v_attachment_fts` (FTS5
+  only). Threads are a mode's view over `v_email`, not part of the type.
 - `fixtures/items.json`: sample messages the contract tests validate, derive over and run the views against.

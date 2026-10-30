@@ -117,15 +117,27 @@ def ddl(fts: bool, types: list[contenttypes.ContentType]) -> list[str]:
     return out
 
 
-def create_schema(con: sqlite3.Connection, types: list[contenttypes.ContentType]) -> bool:
-    """Create the current schema in an empty database for `types` and record them (store_meta). Returns whether
-    FTS5 is in use."""
+def record_mode_views(con: sqlite3.Connection, mode: contenttypes.ModeViews | None) -> None:
+    """Record the views the mode defines (store_meta `mode-views`), which readers rebuild; views hold no data, so a
+    changed views.sql simply replaces the record at the next write."""
+    if mode and mode.views:
+        con.execute("INSERT OR REPLACE INTO store_meta (key, value) VALUES ('mode-views', ?)",
+                    (json.dumps(list(mode.views)),))
+    else:
+        con.execute("DELETE FROM store_meta WHERE key = 'mode-views'")
+
+
+def create_schema(con: sqlite3.Connection, types: list[contenttypes.ContentType],
+                  mode: contenttypes.ModeViews | None = None) -> bool:
+    """Create the current schema in an empty database for `types` and record them (store_meta), with the mode's
+    own views. Returns whether FTS5 is in use."""
     fts = sbx.fts5_available()
     for stmt in ddl(fts, types):
         con.execute(stmt)
     con.executemany("INSERT INTO store_meta (key, value) VALUES (?, ?)",
                     [*((f"type:{ct.name}", str(ct.version)) for ct in types),
                      *((f"derive:{ct.name}", str(ct.derive_version)) for ct in types if ct.derived)])
+    record_mode_views(con, mode)
     con.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     return fts
 
@@ -144,11 +156,13 @@ def derive_again(con: sqlite3.Connection, types: list[contenttypes.ContentType])
         con.execute("COMMIT")
 
 
-def open_rw(path: Path, types: list[contenttypes.ContentType]) -> sqlite3.Connection:
-    """Writer connection (dispatcher code steps only): creates the file and schema (for `types`) on first use."""
+def open_rw(path: Path, types: list[contenttypes.ContentType],
+            mode: contenttypes.ModeViews | None = None) -> sqlite3.Connection:
+    """Writer connection (dispatcher code steps only): creates the file and schema (for `types`, with the mode's
+    views) on first use."""
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
-        # the corpus is the user's mail/posts: owner-only. SQLite creates -wal and -shm with the database
+        # the corpus is the user's own content: owner-only. SQLite creates -wal and -shm with the database
         # file's permissions, so creating the file 0600 first covers all three
         os.close(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
     con = sqlite3.connect(path, isolation_level=None)
@@ -161,7 +175,7 @@ def open_rw(path: Path, types: list[contenttypes.ContentType]) -> sqlite3.Connec
             con.close()
             raise StoreError(f"{path}: not a corpus store (user_version 0 with tables); move it aside")
         con.execute("BEGIN IMMEDIATE")
-        create_schema(con, types)
+        create_schema(con, types, mode)
         con.execute("COMMIT")
     elif ver != SCHEMA_VERSION:
         con.close()
@@ -174,6 +188,10 @@ def open_rw(path: Path, types: list[contenttypes.ContentType]) -> sqlite3.Connec
     else:
         try:
             derive_again(con, sbx.store_types(con))
+            if sbx.store_mode_views(con) != (list(mode.views) if mode else []):
+                con.execute("BEGIN IMMEDIATE")
+                record_mode_views(con, mode)
+                con.execute("COMMIT")
         except sbx.SqlError as e:
             con.close()
             raise StoreError(f"{path}: {e}") from None
@@ -447,8 +465,15 @@ class CorpusStore:
             sorted({r.partition("/v")[0] for r in self.ctx.settings["reads"]} & set(have))
         return [have[n] for n in names]
 
+    def _mode(self) -> contenttypes.ModeViews | None:
+        """The views the mode defines (views.sql and views.yaml of its folder or its nearest ancestor's), if any."""
+        try:
+            return contenttypes.mode_views(self.ctx.settings.get("modeDirs") or [])
+        except model.SpecError as e:
+            raise StoreError(str(e)) from None
+
     def _rw(self) -> sqlite3.Connection:
-        con = open_rw(self.path, self._reads())
+        con = open_rw(self.path, self._reads(), self._mode())
         self._cts = {ct.kind: ct for ct in sbx.store_types(con)}
         return con
 
@@ -1076,13 +1101,14 @@ class CorpusStore:
         not made yet is described for those), the base views, and the full-text indexes."""
         limits = {"rows": sbx.DEFAULT_ROWS, "maxRows": sbx.MAX_ROWS, "bytes": sbx.MAX_BYTES, "timeMs": sbx.TIME_MS,
                   "cellChars": sbx.CELL_CHARS}
-        types = self._reads()
+        types, mode = self._reads(), self._mode()
         fts = {"view": sbx.FTS_VIEW, "indexes": ["title", "text", "author"],
                "example": "SELECT id, url, snippet FROM v_fts WHERE fts MATCH 'staking AND custody' "
                           "ORDER BY rank LIMIT 20"}
         if not self.path.exists():
-            cols = _columns(types)
-            return {"views": [{"name": v, "columns": cols[v], "rows": 0} for v in sbx.views_of(False, types)],
+            cols = _columns(types, mode)
+            return {"views": [{"name": v, "columns": cols[v], "rows": 0}
+                              for v in sbx.views_of(False, types, mode.views if mode else ())],
                     "fts": {**fts, "available": sbx.fts5_available()}, "functions": sorted(sbx.FUNCTIONS),
                     "limits": limits}
         state = load_state(self.state_path)
@@ -1090,8 +1116,8 @@ class CorpusStore:
         try:
             fts["available"] = sbx.has_fts(con)
             types = sbx.store_types(con)
-            cols = _columns(types)
-            present = sbx.views_of(fts["available"], types)
+            cols = _columns(types, mode)
+            present = sbx.views_of(fts["available"], types, sbx.store_mode_views(con))
             full = {v: f for ct in types for v, f in ct.fulltext_views().items()}
             item_views = {*sbx.ITEM_VIEWS, *(v for ct in types for v in ct.item_views())}
             views, rows = [], {}
@@ -1126,43 +1152,46 @@ class CorpusStore:
                           "coverage": self.coverage(state)})
 
     def threads(self, since=None, until=None, selector=None, important=None, limit=100) -> dict:
-        """Email threads active in the window (v_threads), newest first, with their message ids, the start of the
-        last message, attachment metadata and `important` (a sender matches one of the patterns)."""
+        """The rows of the view the mode's views.yaml names under `threads`, active in the window, in that order,
+        each with the details the mode asks for and `important` (a value of the mode's sender column matches one
+        of the patterns). A mode without such a view gets an error that names the fix."""
+        mode = self._mode()
+        th = mode.threads if mode else None
+        if th is None:
+            raise StoreError(f"mode {self.ctx.settings.get('mode')} defines no rows for `threads`: give the mode "
+                             f"views.sql and views.yaml (a view, and a `threads:` block naming it and its window, "
+                             f"selector and sender columns)")
         now = self.ctx.now()
         lo = parse_time(since, now) if since else None
         if not self.path.exists():
             return {"threads": [], "coverage": self.coverage(load_state(self.state_path), lo)}
         where, args = [], []
         if since:
-            where.append("t.lastDate >= ?")
+            where.append(f"t.{th['window']} >= ?")
             args.append(iso(lo))
         if until:
-            where.append("t.lastDate <= ?")
+            where.append(f"t.{th['window']} <= ?")
             args.append(iso(parse_time(until, now)))
         if selector:
-            where.append("EXISTS (SELECT 1 FROM json_each(t.matched) WHERE value = ?)")
+            where.append(f"EXISTS (SELECT 1 FROM json_each(t.{th['selector']}) WHERE value = ?)")
             args.append(selector)
         state = load_state(self.state_path)
         con = self._ro()
         out = []
         try:
-            rows = con.execute(f"SELECT t.* FROM v_threads t {_where(where)} ORDER BY t.lastDate DESC, t.threadId "
-                               f"LIMIT ?", [*args, int(limit or 100)]).fetchall()
+            rows = con.execute(f"SELECT t.* FROM {th['view']} t {_where(where)} ORDER BY {th['order']} LIMIT ?",
+                               [*args, int(limit or 100)]).fetchall()
             for r in rows:
                 t = dict(r)
-                for k in ("participants", "senders", "matched"):
+                for k in th.get("json") or ():
                     t[k] = json.loads(t[k] or "[]")
-                for k in ("lastFromMe", "lastToMe", "lastBulk", "needsReply", "hasAttachments"):
+                for k in th.get("flags") or ():
                     t[k] = bool(t[k])
-                key = (t["source"], t["threadId"])
-                t["ids"] = [x for (x,) in con.execute(
-                    "SELECT id FROM v_email WHERE source = ? AND threadId = ? ORDER BY createdAt, id LIMIT 50", key)]
-                last = con.execute("SELECT substr(text, 1, 500) FROM v_email WHERE id = ?", (t["lastId"],)).fetchone()
-                t["lastText"] = last[0] if last else ""
-                t["attachments"] = [dict(a) for a in con.execute(
-                    "SELECT id, name, mime, size, textChars, reason FROM v_attachments WHERE source = ? AND "
-                    "threadId = ? ORDER BY createdAt, n LIMIT 20", key)]
-                t["important"] = any(selmod.addr_matches(important or [], a) for a in t["senders"])
+                for name, det in (th.get("details") or {}).items():
+                    got = con.execute(det["sql"], dict(r)).fetchall()
+                    t[name] = ([x[0] for x in got] if det["as"] == "values" else
+                               [dict(x) for x in got] if det["as"] == "rows" else got[0][0] if got else "")
+                t["important"] = any(selmod.addr_matches(important or [], a) for a in t[th["important"]])
                 out.append(t)
         finally:
             con.close()
@@ -1196,9 +1225,11 @@ class CorpusStore:
         return where, args
 
 
-def _columns(types: list[contenttypes.ContentType]) -> dict[str, list[dict]]:
-    """What describe tells agents about the columns of each view: the base views' and the content types'."""
+def _columns(types: list[contenttypes.ContentType], mode: contenttypes.ModeViews | None) -> dict[str, list[dict]]:
+    """What describe tells agents about the columns of each view: the base views', the content types' and the
+    mode's."""
     docs = {v: ct.column_docs(v) for ct in types for v in ct.view_names()} | sbx.COLUMNS
+    docs |= {v: mode.column_docs(v) for v in (mode.view_names() if mode else ())}
     return {v: [{"name": n, "type": t, "description": d} for n, t, d in docs[v]] for v in docs}
 
 

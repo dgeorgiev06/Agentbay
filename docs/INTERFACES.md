@@ -277,9 +277,9 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
   write, delete. The read endpoints, which agents reach through use shims, are:
   - `describe`: views, columns, row counts, samples, FTS and limits;
   - `sql {sql, limit?}`;
-  - `get {ids}`, `thread {id}`, `threads {since, until, selector, important, limit}` (threads active in the
-    window from `v_threads`, with message ids, the start of the last message, attachment metadata and
-    `important` when a sender matches one of the patterns);
+  - `get {ids}`, `thread {id}`, `threads {since, until, selector, important, limit}` (rows active in the
+    window from the view the mode's `views.yaml` names under `threads`, with the details it asks for per row and
+    `important` when a sender matches one of the patterns; a mode with no such view gets an error);
   - `facets {field}`, `search {text}`, `query {since, until, author, text, selector, ids}`;
   - `status {since?}`: coverage, budget, per-selector counts, engine, and `stale` when the selectors or the
     bound sources changed.

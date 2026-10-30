@@ -86,9 +86,10 @@ spec:
       effects: [read]
     sql:
       description: >-
-        One read-only SELECT over the views (v_items, v_posts, v_email, v_threads, v_attachments, v_fts,
-        v_attachment_fts) and the store tables (items, item_selectors, attachments, items_fts,
-        attachments_fts), which hold only the mode's scope. Sandboxed: read-only connection,
+        One read-only SELECT over the views (v_items and v_fts, the views of the content types the mode reads, the
+        views the mode defines; `describe` lists them) and the store tables (items, item_selectors, items_fts, the
+        child tables of those content types and their full-text indexes), which hold only the mode's scope.
+        Sandboxed: read-only connection,
         authorizer, time limit, row and byte caps; output is redacted and secret-scanned. Errors say what to
         change.
       in:
@@ -144,12 +145,12 @@ spec:
       effects: [read]
     threads:
       description: >-
-        Email threads with activity in a window (last message at or after `since`), newest first, from the
-        v_threads view: subject, participants, first and last date, message count, last sender, whether the
-        last message is from me or addressed to me, `needsReply` (last message from someone else, addressed to
-        me, not bulk mail), the selector ids its messages match, its message ids (oldest first), the start of the last
-        message and its attachments' metadata. `important` (sender patterns, the `from` matching rules) marks
-        threads with a message from a matching sender.
+        Rows of the view the calling mode's views.yaml names under `threads`, with activity in a window (the view's
+        window column at or after `since`), in the order the mode gives (newest first), as the mode defines them:
+        the view's columns (JSON columns as arrays, flag columns as booleans) and the details the mode asks for
+        per row (for example the ids of the items in the row). `selector` keeps rows the selector matches.
+        `important` (sender patterns, the `from` matching rules) marks rows whose sender column has a matching
+        address. A mode that defines no such view gets an error that names the fix.
       in:
         type: object
         additionalProperties: false

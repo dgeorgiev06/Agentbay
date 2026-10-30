@@ -378,7 +378,7 @@ def lint_connectors(kit: model.Kit) -> list[str]:
         impl = [impl] if isinstance(impl, str) else impl
         for iface in impl:
             if iface in SOURCE_INTERFACES:
-                for key, why in (("source", "the value stamped on every post's `source`; the store keys posts "
+                for key, why in (("source", "the value stamped on every item's `source`; the store keys items "
                                             "and deletions on it"),
                                  ("window", "how far back the source API serves (e.g. 7d); older history "
                                             "comes only from the store")):
@@ -429,7 +429,7 @@ def lint_contract_versions(kit: model.Kit) -> list[str]:
                       _as_list(c.spec.get("produces")))
         if model.SOURCE_IFACE in impl and not c.spec.get("produces"):
             out.append(f"{where}: connector {c.name} implements {model.SOURCE_IFACE} but declares no "
-                       f"spec.produces (the item kinds its items carry, e.g. `produces: [post/v1]`; known: {known})")
+                       f"spec.produces (the item kinds its items carry, e.g. `produces: [<kind>/v1]`; known: {known})")
     envs = kit.docs["Environment"]
     for md in sorted(kit.docs["Mode"].values(), key=lambda d: d.name):
         path, line = md.path, _line_of(md.path, r"^\s+needs:")
@@ -446,7 +446,7 @@ def lint_contract_versions(kit: model.Kit) -> list[str]:
             continue
         if not reads:
             out.append(f"{_where(md.path, _line_of(md.path, r'^spec:'))}: mode {md.name} needs {model.SOURCE_IFACE} "
-                       f"but declares no spec.reads (the item kinds its features read, e.g. `reads: [post/v1]`; "
+                       f"but declares no spec.reads (the item kinds its features read, e.g. `reads: [<kind>/v1]`; "
                        f"known: {known})")
             continue
         variants: list[tuple[str, list[str]]] = []          # (env label, its source connectors), real then offline
@@ -704,6 +704,8 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     out += lint_connectors(kit)
     out += lint_contract_versions(kit)
     out += contenttypes.problems(kit.root)
+    for md in kit.docs["Mode"].values():
+        out += contenttypes.mode_problems(md.dirs, _as_list(md.spec.get("reads")), kit.root)
     out += lint_extension_names(kit)
     out += lint_rulesets(kit)
     out += lint_components(kit)

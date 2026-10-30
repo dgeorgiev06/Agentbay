@@ -383,3 +383,200 @@ def problems(root: Path = model.KIT) -> list[str]:
     for ct in types.values():
         out += check_views(ct)
     return out
+
+
+# ----------------------------------------------------------------- views a mode owns
+YAML_MODE = "views.yaml"
+DETAIL_SHAPES = ("values", "value", "rows")
+_PARAM = re.compile(r":([A-Za-z_]\w*)")
+
+
+@dataclass(frozen=True)
+class ModeViews:
+    """The views a mode defines over the content types it reads: views.sql (only `CREATE VIEW v_<name> AS ...`)
+    and views.yaml (`views`: the documented columns of each; `threads`: how items.store/v1.threads reads one)."""
+    dir: Path
+    docs: dict        # view name -> {columns}
+    views: tuple      # (view name, CREATE TEMP VIEW statement) in file order
+    threads: dict | None = None
+
+    def view_names(self) -> list[str]:
+        return [v for v, _ in self.views]
+
+    def column_docs(self, view: str) -> list[tuple[str, str, str]]:
+        return [(c["name"], c["type"], c["description"]) for c in self.docs[view]["columns"]]
+
+
+def _mode_one(d: Path) -> tuple[ModeViews | None, list[str]]:
+    sql, yml = d / VIEWS, d / YAML_MODE
+    out: list[str] = []
+    try:
+        text = sql.read_text(encoding="utf-8")
+        doc = model.load_yaml(yml)
+    except (OSError, model.SpecError) as e:
+        return None, [f"{model.rel(d)}: a mode that defines views needs {VIEWS} and {YAML_MODE} ({e})"]
+    if not isinstance(doc, dict) or not isinstance(doc.get("views"), dict) or set(doc) - {"views", "threads"}:
+        return None, [f"{model.rel(yml)}: must be a mapping with `views` (view -> columns) and optionally `threads`"]
+    views = []
+    for stmt in _statements(text):
+        m = _CREATE.match(stmt)
+        if not m:
+            out.append(f"{model.rel(sql)}: only `CREATE VIEW v_<name> AS SELECT ...` statements are allowed; "
+                       f"found `{stmt[:50]}`")
+            continue
+        views.append((m.group(1), f"CREATE TEMP VIEW {m.group(1)} AS " + stmt[m.end():]))
+    names = [v for v, _ in views]
+    if len(set(names)) != len(names):
+        out.append(f"{model.rel(sql)}: a view is created twice")
+    docs = doc["views"]
+    for v in names:
+        if v not in docs:
+            out.append(f"{model.rel(yml)}: views.{v} is missing: document every view {VIEWS} creates")
+    for v, dd in docs.items():
+        if v not in names:
+            out.append(f"{model.rel(yml)}: views.{v} is documented but {VIEWS} does not create it")
+        cols = dd.get("columns") if isinstance(dd, dict) else None
+        if not cols or not all(isinstance(c, dict) and {"name", "type", "description"} <= set(c) for c in cols):
+            out.append(f"{model.rel(yml)}: views.{v}.columns must list {{name, type, description}} entries")
+    out += _threads_problems(doc.get("threads"), docs, yml)
+    if out:
+        return None, out
+    return ModeViews(d, {v: docs[v] for v in names}, tuple(views), doc.get("threads")), []
+
+
+def _threads_problems(th, docs: dict, yml: Path) -> list[str]:
+    if th is None:
+        return []
+    where = f"{model.rel(yml)}: threads"
+    if not isinstance(th, dict) or th.get("view") not in docs:
+        return [f"{where}.view must name a view documented under `views`"]
+    cols = {c["name"] for c in (docs[th["view"]].get("columns") or []) if isinstance(c, dict) and "name" in c}
+    out = []
+    for key in ("window", "selector", "important"):
+        if th.get(key) not in cols:
+            out.append(f"{where}.{key} must name a column of {th['view']} (the column the {key} rule reads)")
+    for key in ("json", "flags"):
+        for c in th.get(key) or []:
+            if c not in cols:
+                out.append(f"{where}.{key}: {c} is not a column of {th['view']}")
+    if not isinstance(th.get("order"), str):
+        out.append(f"{where}.order must be an ORDER BY expression over the view's columns")
+    for name, det in (th.get("details") or {}).items():
+        if not isinstance(det, dict) or det.get("as") not in DETAIL_SHAPES or not isinstance(det.get("sql"), str):
+            out.append(f"{where}.details.{name} needs `sql` and `as` (one of {', '.join(DETAIL_SHAPES)})")
+            continue
+        for p in _PARAM.findall(det["sql"]):
+            if p not in cols:
+                out.append(f"{where}.details.{name}: parameter :{p} is not a column of {th['view']}")
+    return out
+
+
+def mode_views(dirs) -> ModeViews | None:
+    """The views of the mode whose folders are `dirs` (own folder, then each ancestor's; the nearest folder that has
+    a views.sql wins), or None. Raises SpecError for a folder whose files are wrong."""
+    for d in map(Path, dirs):
+        if (d / VIEWS).exists() or (d / YAML_MODE).exists():
+            mv, errs = _mode_one(d)
+            if errs:
+                raise model.SpecError("mode views:\n    " + "\n    ".join(errs))
+            return mv
+    return None
+
+
+def mode_problems(dirs, reads, root: Path = model.KIT) -> list[str]:
+    """Everything wrong with the views of the mode whose folders are `dirs` and which `reads` the item kinds
+    `reads` (`<kind>/v<N>`): the files, the types the views may read, the documented columns and the threads rules."""
+    for d in map(Path, dirs):
+        if (d / VIEWS).exists() or (d / YAML_MODE).exists():
+            mv, errs = _mode_one(d)
+            return errs or check_mode_views(mv, reads, root)
+    return []
+
+
+def check_mode_views(mv: ModeViews, reads, root: Path = model.KIT) -> list[str]:
+    """Build the mode's views over an empty store of the types it reads under the read-only authorizer. A mode view
+    may read only the base views and the views of those types (and the mode's own earlier views): not a table, not
+    a view of a type the mode does not read."""
+    from . import sqlsandbox as sbx
+    have = scan(root)[0]
+    kinds = {r.partition("/v")[0] for r in reads}
+    types = [ct for ct in have.values() if ct.kind in kinds]
+    fts = sbx.fts5_available()
+    taken = {v for ct in types for v in (*ct.view_names(), *ct.table_names(fts))} | set(sbx.VIEWS)
+    problems = [f"{model.rel(mv.dir / VIEWS)}: view {v} is already taken by the store or a content type the mode "
+                f"reads; rename it" for v in mv.view_names() if v in taken]
+    own = {v.lower() for v in mv.view_names()}
+    readable = {v.lower() for v in (*sbx.VIEWS, *(v for ct in types for v in ct.view_names()), *mv.view_names())}
+    con = sqlite3.connect(":memory:")
+    reads_seen: list[str] = []
+    where = model.rel(mv.dir / VIEWS)
+    try:
+        for stmt in (*sbx.BASE_DDL, *(s for ct in types for s in ct.table_ddl(fts))):
+            con.execute(stmt)
+        for _, stmt in sbx.view_sql(fts, types, mv.views):
+            con.execute(stmt)
+        stored = {n.lower() for (n,) in con.execute(
+            "SELECT name FROM main.sqlite_master UNION SELECT name FROM temp.sqlite_master")}
+        for ct in types:
+            for t in ct.table_names(fts):
+                if t.endswith("_fts"):
+                    con.execute(f"SELECT 1 FROM main.{t} LIMIT 0").fetchall()
+
+        def auth(action, a1, a2, db, via) -> int:
+            if action in (sqlite3.SQLITE_SELECT, 33):
+                return sqlite3.SQLITE_OK
+            if action == sqlite3.SQLITE_READ:
+                t = (a1 or "").lower()
+                if (db is None and t not in stored) or t in sbx.TABLE_FUNCS:
+                    return sqlite3.SQLITE_OK
+                if via is None or via.lower() in own:      # read by a mode view (or by the checked query itself)
+                    if t in readable:
+                        return sqlite3.SQLITE_OK
+                    reads_seen.append(a1)
+                    return sqlite3.SQLITE_DENY
+                return sqlite3.SQLITE_OK                   # inside a view of the store or of a content type
+            if action == sqlite3.SQLITE_FUNCTION:
+                if (a2 or "").lower() in sbx.FUNCTIONS:
+                    return sqlite3.SQLITE_OK
+                reads_seen.append(f"function {a2}")
+                return sqlite3.SQLITE_DENY
+            return sqlite3.SQLITE_DENY
+
+        con.set_authorizer(auth)
+        cols_of: dict[str, list[str]] = {}
+        for v in mv.view_names():
+            reads_seen.clear()
+            try:
+                cols_of[v] = [d[0] for d in con.execute(f"SELECT * FROM {v} LIMIT 0").description]
+            except sqlite3.Error as e:
+                bad = f" (it reads {', '.join(dict.fromkeys(reads_seen))})" if reads_seen else ""
+                problems.append(f"{where}: view {v} cannot be built{bad}: {e}. A mode view may read only the base "
+                                f"views (v_items, v_fts) and the views of the content types the mode reads "
+                                f"({', '.join(sorted(kinds)) or 'none'})")
+                continue
+            want = [c["name"] for c in mv.docs[v]["columns"]]
+            if cols_of[v] != want:
+                problems.append(f"{model.rel(mv.dir / YAML_MODE)}: views.{v} documents columns {want} but the view "
+                                f"has {cols_of[v]}")
+        th = mv.threads
+        if th and th["view"] in cols_of:
+            have_cols = cols_of[th["view"]]
+            for key in ("window", "selector", "important", *th.get("json", []), *th.get("flags", [])):
+                c = th[key] if key in th else key
+                if c not in have_cols:
+                    problems.append(f"{model.rel(mv.dir / YAML_MODE)}: threads names column {c}, which "
+                                    f"{th['view']} does not have")
+            queries = {"order": f"SELECT * FROM {th['view']} ORDER BY {th['order']} LIMIT 0",
+                       **{f"details.{n}": d["sql"] for n, d in (th.get("details") or {}).items()}}
+            for name, q in queries.items():
+                reads_seen.clear()
+                try:
+                    con.execute(q, {p: None for p in _PARAM.findall(q)}).fetchall()
+                except sqlite3.Error as e:
+                    bad = f" (it reads {', '.join(dict.fromkeys(reads_seen))})" if reads_seen else ""
+                    problems.append(f"{model.rel(mv.dir / YAML_MODE)}: threads.{name} cannot run{bad}: {e}")
+    except sqlite3.Error as e:
+        problems.append(f"{where}: {e}")
+    finally:
+        con.close()
+    return problems

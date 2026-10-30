@@ -5,6 +5,7 @@ Every problem is one line, `file:line: message`, naming the concept and the fix.
 """
 from __future__ import annotations
 
+import fnmatch
 import os
 import re
 import subprocess
@@ -315,9 +316,25 @@ def lint_roles(kit: model.Kit) -> list[str]:
 SOURCE_INTERFACES = ("items.source/v1",)
 
 
+def _binds(env, conn_name: str) -> bool:
+    for v in (env.spec.get("bind") or {}).values():
+        if conn_name in (v if isinstance(v, list) else [v] if isinstance(v, str) else []):
+            return True
+    return False
+
+
 def lint_connectors(kit: model.Kit) -> list[str]:
     out = []
     for c in kit.docs["Connector"].values():
+        needs = c.spec.get("needs", {}).get("secrets", [])
+        if c.spec.get("login") and needs:
+            ok = [e.name for e in kit.docs["Environment"].values() if _binds(e, c.name)
+                  and all(any(fnmatch.fnmatchcase(a, p) for a in e.spec.get("secrets", {}).get("allow", []))
+                          for p in needs)]
+            if not ok:
+                out.append(f"{_where(c.path, _line_of(c.path, r'^\s+login:'))}: connector {c.name} declares a "
+                           f"`login` but no env that binds it allows all of its needs.secrets ({', '.join(needs)}); "
+                           f"`bay auth` gives a login only the secrets a sync through that env would get")
         impl = c.spec["implements"]
         impl = [impl] if isinstance(impl, str) else impl
         for iface in impl:

@@ -50,3 +50,55 @@ def test_login_context_gives_only_the_connectors_declared_secrets():
     except vault.SecretError:
         pass
     assert ctx.store_secret("GMAIL_REFRESH_TOKEN", "1//R") and ctx._prov.get("GMAIL_REFRESH_TOKEN") == "1//R"
+
+
+def _evil_kit():
+    """The reviewer's case: a connector declaring another connector's secrets, bound by an env that allows only
+    its own."""
+    from helpers import kit_copy
+    k = kit_copy()
+    d = k / "connectors/evil"
+    d.mkdir(parents=True)
+    (d / "connector.yaml").write_text(
+        "apiVersion: agentbay/v2\nkind: Connector\nmetadata: {name: evil, description: test, version: 0.1.0}\n"
+        "spec:\n  implements: items.source/v1\n  produces: [post/v1]\n  entry: evil.py\n  login: login\n"
+        "  source: evil\n  window: 7d\n  selectors: {}\n"
+        "  needs: { secrets: [EVIL_TOKEN, X_REFRESH_TOKEN, GMAIL_REFRESH_TOKEN], network: [evil.example] }\n")
+    (d / "evil.py").write_text("def create(ctx): pass\ndef login(ctx): pass\n")
+    import yaml
+    env = yaml.safe_load((k / "envs/local-mail.yaml").read_text())
+    env["metadata"]["name"] = "evil-env"
+    env["spec"]["bind"]["items.source/v1"] = ["evil"]
+    env["spec"]["secrets"] = {"provider": "env", "allow": ["EVIL_TOKEN"]}
+    (k / "envs/evil-env.yaml").write_text(yaml.safe_dump(env, sort_keys=False))
+    return k
+
+
+def test_login_secret_access_equals_sync_access():
+    from helpers import MemProvider
+    k = _evil_kit()
+    s = system(None, kit=k)
+    conn = s.kit.get("Connector", "evil")
+    env = cli._login_env(s, conn, None)
+    assert env.name == "evil-env"
+    prov = MemProvider({"X_REFRESH_TOKEN": "xsecret-123", "GMAIL_REFRESH_TOKEN": "gmail-orig"})
+    ctx = cli.LoginContext(conn, env, prov, connect.Http([], who="t"), lambda u: None, say=lambda *_: None)
+    for op in (lambda: ctx.secret("X_REFRESH_TOKEN"), lambda: ctx.store_secret("GMAIL_REFRESH_TOKEN", "attacker")):
+        try:
+            op()
+            raise AssertionError("login reached a secret its env does not allow")
+        except vault.SecretError as e:
+            assert "not allowed" in str(e)
+    assert prov.get("GMAIL_REFRESH_TOKEN") == "gmail-orig"
+    # nor can it log in through an env that does not bind it (local-mail allows GMAIL_REFRESH_TOKEN)
+    r = subprocess.run([sys.executable, "-c", "import sys; sys.argv=['x']; from bay import cli; "
+                        "from helpers import system; from pathlib import Path; "
+                        f"s=system(None, kit=Path({str(k)!r})); "
+                        "cli._login_env(s, s.kit.get('Connector','evil'), 'local-mail')"],
+                       cwd=KIT, capture_output=True, text=True, env={**__import__('os').environ,
+                                                                     "PYTHONPATH": f"{KIT}:{KIT}/tests"})
+    assert r.returncode == 1 and "does not bind connector evil" in r.stderr
+    # and lint refuses the connector: no env that binds it allows all its needs.secrets
+    from bay import lint
+    errs = [e for e in lint.run(k) if "connector evil declares a `login`" in e]
+    assert errs, lint.run(k)

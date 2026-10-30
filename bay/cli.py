@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import sys
 from pathlib import Path
@@ -410,46 +411,54 @@ def cmd_secret(args):
 
 
 class LoginContext:
-    """What a connector's `login` entry gets from `bay auth <connector>`: its own declared secrets (read and
-    store, through the env's provider), an Http limited to its declared hosts that the env allows, the browser
-    and the terminal. Nothing else."""
+    """The API a connector's `login` entry gets from `bay auth <connector>`: the same secret access a sync gets
+    (names both in the env's `secrets.allow` and the connector's `needs.secrets`, read and store, through the
+    env's provider), an Http limited to its declared hosts that the env allows, the browser and the terminal.
+    The entry runs in-process, so this limits the API it is handed, not what the process can do: a connector's
+    code is trusted the same way during a login as during a sync."""
 
     def __init__(self, conn, env, prov, http, open_browser, say=print):
         self.connector, self.env, self.http, self.open_browser, self.say = conn.name, env.name, http, open_browser, say
         self._prov = prov
-        self._declared = set(conn.spec.get("needs", {}).get("secrets", []))
+        self._declared = list(conn.spec.get("needs", {}).get("secrets", []))
+        self._acc = vault.SecretAccessor(prov, env.spec.get("secrets", {}).get("allow", []), self._declared,
+                                         conn.name)
         self.provider = prov.name
 
     def _check(self, name: str) -> None:
-        if name not in self._declared:
+        if not any(fnmatch.fnmatchcase(name, p) for p in self._declared):
             raise vault.SecretError(f"connector {self.connector} does not declare secret {name} (needs.secrets)")
 
     def secret(self, name: str) -> str | None:
         self._check(name)
-        v = self._prov.get(name)
-        if v:
-            vault.remember(v)
-        return v
+        return self._acc.get(name, optional=True)
 
     def store_secret(self, name: str, value: str) -> bool:
         self._check(name)
-        return self._prov.set(name, value)
+        n = len(self._acc.warnings)
+        self._acc.store(name, value)
+        return len(self._acc.warnings) == n
+
+
+def binds_connector(env, conn_name: str) -> bool:
+    """True when the env binds the connector under some interface."""
+    for v in (env.spec.get("bind") or {}).values():
+        vals = v if isinstance(v, list) else [v] if isinstance(v, str) else []
+        if conn_name in vals:
+            return True
+    return False
 
 
 def _login_env(s, conn, name: str | None):
-    """The env to log in through: --env, else the one env that binds the connector."""
-    def binds(env) -> bool:
-        for v in (env.spec.get("bind") or {}).values():
-            vals = v if isinstance(v, list) else [v] if isinstance(v, str) else []
-            if conn.name in vals:
-                return True
-        return False
+    """The env to log in through: --env (which must bind the connector), else the one env that binds it."""
     envs = s.kit.docs["Environment"]
     if name:
         if name not in envs:
             _die(f"✗ unknown env '{name}'")
+        if not binds_connector(envs[name], conn.name):
+            _die(f"✗ env {name} does not bind connector {conn.name}; a login goes through an env that uses it")
         return envs[name]
-    found = [e for e in envs.values() if binds(e)]
+    found = [e for e in envs.values() if binds_connector(e, conn.name)]
     if len(found) != 1:
         which = ", ".join(e.name for e in found) or "none"
         _die(f"✗ {len(found)} envs bind connector {conn.name} ({which}); name one with --env")

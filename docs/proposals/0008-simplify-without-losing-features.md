@@ -83,6 +83,12 @@ touches:
   - { path: modes/mail-briefing/config.schema.json, reason: "wording: rows are marked important, not the store", slice: 5 }
   - { path: "modes/mail-briefing/features/digest/", reason: "feature playbook and rules follow the generic threads endpoint (B-3 needs the mode named)", slice: 5 }
   - { path: "modes/mail-briefing/features/ask/", reason: "feature playbook and rules follow the mode's views (B-3 needs the mode named)", slice: 5 }
+  # slice 5: core-name renames (owner decision (e), 2026-10-30)
+  - { path: bay/connect.py, reason: "rename: posts cost key -> items (reads the `costPerPostUsd` source setting, now `costPerItemUsd`)", slice: 5 }
+  - { path: connectors/fake/connector.yaml, reason: "rename: posts cost key -> items (`costPerPostUsd: 0` becomes `costPerItemUsd: 0`)", slice: 5 }
+  - { path: modes/briefing/config.schema.json, reason: "rename: posts cost key -> items (`costPerItemUsd`; the old key is refused)", slice: 5 }
+  - { path: modes/briefing/README.md, reason: "rename: posts cost key -> items (names `costPerItemUsd`)", slice: 5 }
+  - { path: modes/feed-briefing/config.example.yaml, reason: "rename: posts cost key -> items (example sets `costPerItemUsd`)", slice: 5 }
   # slice 6: improve as a mode
   - { path: bay/improve/, reason: "moved out of core", slice: 6 }
   - { path: framework/modes/improve/, reason: "receives the code; `decide` and `weekly` become features", slice: 6 }
@@ -221,6 +227,7 @@ CLI target, 15 commands: `check` (validate, lint, boundary), `build`, `clean`, `
   - (b) `v_threads` belongs to mail-briefing, and `items.store/v1.threads` stays at v1 as a generic reader of the mode's `v_threads`.
   - (c) With no open call, a use-shim read falls back to the role-level grant, so the security tests stay unchanged.
   - (d) The store creates tables for the content types a mode `reads:`.
+  - (e) Owner decision, 2026-10-30: rename both of the last core names. The base-column descriptions in `bay/sqlsandbox.py` `ITEM_COLUMNS` become generic: no `x, fake, gmail`, `post, email` or `null for posts`; for example source is "the source that produced the item", kind is "the item's content type" and title is "subject or headline, when the content type has one". The cost and budget counter key `posts` becomes `items` everywhere (run state cost, status line, budget caps, corpus-store budget), and the config and env setting `costPerPostUsd` (constant `COST_PER_POST_USD`) becomes `costPerItemUsd` (`COST_PER_ITEM_USD`). There is no alias: the schema refuses the old key, because no installs exist (the v3 store schema comes in slice 9). These are two more documented output changes, listed in the slice 5 acceptance.
 
 ### 4. `improve` becomes a plain mode
 
@@ -298,7 +305,7 @@ Each slice is sized for one builder (about 40 tool calls) and ends with `python3
 2. **Envs, agent profile, config.** Item 2 (offline, agent into adapter, config, limits). Acceptance: both offline env files and the committed example config are gone; the fake-source demo still runs; lint refuses an offline env with a network entry and a config that raises a limit; the dead-code check reports no new findings.
 3. **One feature shape.** Item 2 (feature). Acceptance: every mode builds from `features:`; a code-only feature has no playbook and passes lint; `bay catalog` is unchanged except for ordering; the dead-code check reports no new findings.
 4. **CLI.** Item 2 (commands). Renames reach every file that names an old command, so the touches above list them; the fetch line is the stage-2 review follow-up. Acceptance: `bay --help` lists about 15 commands; an old command name is an unknown command; `.agentbay/COORDINATOR.md` uses the new names; the dead-code check reports no new findings.
-5. **Finish 0006.** Item 3. Built in four parts A-D (HANDOFF part 15). Acceptance: the 0006 step 2 acceptance lines, with offline sync, describe and status output identical except the three describe deltas in item 3, which a golden test asserts exactly; the dead-code check reports no new findings.
+5. **Finish 0006.** Item 3. Built in four parts A-D (HANDOFF part 15). Acceptance: the 0006 step 2 acceptance lines, with offline sync, describe and status output identical except the allowed output changes of item 3: the three describe deltas in (a), the generic base-column descriptions in describe, and the cost key `items` (instead of `posts`) in status and run cost output. A golden test asserts each of these exactly, and everything else stays byte for byte; the dead-code check reports no new findings.
 6. **Improve as a mode.** Item 4. Acceptance: `bay/improve/` is gone; `bay call improve.scan` and `improve.audit` give the same findings on the fixture data; a backlog item cannot be approved without the user; the dead-code check reports no new findings.
 7. **Workflows.** Item 5. Acceptance: one stage-syntax parser in `bay/`; the workflow tests pass; `cos.run` still starts a project workflow; the dead-code check reports no new findings.
    - Also carries item 7, after the workflow change: framework-shipped modes, envs and connectors move to the top-level `modes/`, `envs/` and `connectors/`. Acceptance: `framework/` holds only roles, the agent profile, rules, interfaces and the component map; protected components are declared in `framework/components.yaml` and the guard and `bay boundary` read them from it; a user extension with a protected name is refused; a write to a protected path without `forge.extend` is denied; approval of a protected change passes from chat or from the terminal; `bay catalog` is unchanged except for paths.

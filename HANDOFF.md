@@ -1,3 +1,18 @@
+# HANDOFF part 2: T-20261030-4424 (recorded with `bay plan`)
+
+Outcome: slice 8 finished, slice-7a findings F-1..F-7 fixed with tests, improve blind spots closed.
+To-do, as recorded with `bay plan` (done: 1, 2, 6, 7, 8, 9; open: 3, 4, 5, 10, 11, 12). Tests: 436 pass.
+1 done F-4/F-5/F-6. 2 done submit refused without plan (`Dispatcher._require_plan`; tests/helpers.py wraps `submit` to
+record dispatch+plan, `submit_strict` is the real one; tests/test_submit_needs_plan.py). 3 open: optional outcome/todo citation in
+review.verdict/v1 (VERDICT in bay/dispatch.py, `_accept_review`) and the recorded plan (ledger.plans) in the review brief (`_plan`, kind review).
+4 open: improve backlog reads ledger.plans and `_agent_groups` (bay/cli.py) figures. 5 PARTIAL: forge.extend skip is done and tested
+(mode.yaml `propose` has `when: "!$in.proposal"`; playbook.md updated); docs still open: README, docs/INTERFACES.md, docs/DESIGN.md,
+framework/modes/cos/playbook.md (cos runs `bay dispatched` before every Agent dispatch; chat approvals carry `--sha <prefix>`), role brief
+template (subagents run `bay plan` first). 6 done F-1 (`--sha`). 7 done F-2 (guard `dequote`). 8 done F-3 (`_state_holds`). 9 done F-7 (adapter ask/deny).
+10 open claude-transcripts connector (0 episodes with `root` set; fixture = top-level session .jsonl + subagents/). 11 open git episode subjects (scrubbed).
+12 open `bay review-record <taskId> '<verdict json>'` -> review.verdict/v1 event (event type must be added to schemas/event.schema.json and ledger.TYPES).
+Note: the dead `when: approved <f>` branch in Dispatcher._skip is no longer used by forge; remove it with its test when convenient.
+
 # HANDOFF: 0008 stage 1 (slice 8, agent run records, plus dogfood bug fixes)
 
 Task T-20261030-c91d, call C-20261030-bc7db5, step `implement`. Stands in for `bay plan` until it exists.

@@ -65,6 +65,24 @@ touches:
   - { path: "content-types/", reason: "post and email content types (0006 step 2)", slice: 5 }
   - { path: "modes/*/features/*/", reason: "feature.yaml folds into the feature (0006 slice 4)", slice: 5 }
   - { path: bay/use_shim.py, reason: "per-feature `uses:` (0006 B-9)", slice: 5 }
+  # slice 5: finish 0006 (owner amendment, 2026-10-30)
+  - { path: bay/contenttypes.py, reason: "NEW. content-type loader: views, child tables, derive.py, mode views (0006 Part B)", slice: 5 }
+  - { path: schemas/content-type.schema.json, reason: "NEW. shape of content-type.yaml; declared in framework/components.yaml", slice: 5 }
+  - { path: schemas/data/post.v1.schema.json, reason: "moved to content-types/post/fields.schema.json", slice: 5 }
+  - { path: schemas/data/email.v1.schema.json, reason: "moved to content-types/email/fields.schema.json", slice: 5 }
+  - { path: schemas/data/item.v1.schema.json, reason: "wording: no content type named in the envelope description", slice: 5 }
+  - { path: bay/sqlsandbox.py, reason: "views, tables and functions come from the content-type loader; no type named; store_meta", slice: 5 }
+  - { path: bay/selector.py, reason: "addr_key moves to content-types/email/derive.py", slice: 5 }
+  - { path: "framework/connectors/corpus-store/", reason: "generic child tables, derive and views for the types a mode reads; tests follow", slice: 5 }
+  - { path: framework/interfaces/items.store.v1.yaml, reason: "threads, sql and describe text name no content type; threads reads the mode's v_threads", slice: 5 }
+  - { path: framework/interfaces/items.source.v1.yaml, reason: "wording: no content type named", slice: 5 }
+  - { path: modes/briefing/skills/corpus-sql/SKILL.md, reason: "generic text: views come from the content types a mode reads", slice: 5 }
+  - { path: modes/mail-briefing/views.sql, reason: "NEW. mode-owned v_threads with needsReply (0006 Part B)", slice: 5 }
+  - { path: modes/mail-briefing/views.yaml, reason: "NEW. column docs and row metadata of the mode's views", slice: 5 }
+  - { path: "modes/mail-briefing/skills/", reason: "skills follow the views the mode owns", slice: 5 }
+  - { path: modes/mail-briefing/config.schema.json, reason: "wording: rows are marked important, not the store", slice: 5 }
+  - { path: "modes/mail-briefing/features/digest/", reason: "feature playbook and rules follow the generic threads endpoint (B-3 needs the mode named)", slice: 5 }
+  - { path: "modes/mail-briefing/features/ask/", reason: "feature playbook and rules follow the mode's views (B-3 needs the mode named)", slice: 5 }
   # slice 6: improve as a mode
   - { path: bay/improve/, reason: "moved out of core", slice: 6 }
   - { path: framework/modes/improve/, reason: "receives the code; `decide` and `weekly` become features", slice: 6 }
@@ -198,6 +216,11 @@ CLI target, 15 commands: `check` (validate, lint, boundary), `build`, `clean`, `
 - **Benefit:** a new source is one connector plus one env binding line, and no core file names `post` or `email`.
 - **Safety impact:** none; the per-feature `uses:` check in `bay/use_shim.py` is the guard, with the tests 0006 names.
 - **Effort:** large (this is the biggest slice).
+- **Decided (2026-10-30):**
+  - (a) mail-briefing's describe changes in exactly three ways, all from 0006's design: no `v_posts` (it had 0 rows), no `addr_key` in `functions` (computed fields are stored), and views ordered type views, then the mode's views, then full-text views.
+  - (b) `v_threads` belongs to mail-briefing, and `items.store/v1.threads` stays at v1 as a generic reader of the mode's `v_threads`.
+  - (c) With no open call, a use-shim read falls back to the role-level grant, so the security tests stay unchanged.
+  - (d) The store creates tables for the content types a mode `reads:`.
 
 ### 4. `improve` becomes a plain mode
 
@@ -275,7 +298,7 @@ Each slice is sized for one builder (about 40 tool calls) and ends with `python3
 2. **Envs, agent profile, config.** Item 2 (offline, agent into adapter, config, limits). Acceptance: both offline env files and the committed example config are gone; the fake-source demo still runs; lint refuses an offline env with a network entry and a config that raises a limit; the dead-code check reports no new findings.
 3. **One feature shape.** Item 2 (feature). Acceptance: every mode builds from `features:`; a code-only feature has no playbook and passes lint; `bay catalog` is unchanged except for ordering; the dead-code check reports no new findings.
 4. **CLI.** Item 2 (commands). Renames reach every file that names an old command, so the touches above list them; the fetch line is the stage-2 review follow-up. Acceptance: `bay --help` lists about 15 commands; an old command name is an unknown command; `.agentbay/COORDINATOR.md` uses the new names; the dead-code check reports no new findings.
-5. **Finish 0006.** Item 3. Acceptance: the 0006 step 2 acceptance lines; the dead-code check reports no new findings.
+5. **Finish 0006.** Item 3. Built in four parts A-D (HANDOFF part 15). Acceptance: the 0006 step 2 acceptance lines, with offline sync, describe and status output identical except the three describe deltas in item 3, which a golden test asserts exactly; the dead-code check reports no new findings.
 6. **Improve as a mode.** Item 4. Acceptance: `bay/improve/` is gone; `bay call improve.scan` and `improve.audit` give the same findings on the fixture data; a backlog item cannot be approved without the user; the dead-code check reports no new findings.
 7. **Workflows.** Item 5. Acceptance: one stage-syntax parser in `bay/`; the workflow tests pass; `cos.run` still starts a project workflow; the dead-code check reports no new findings.
    - Also carries item 7, after the workflow change: framework-shipped modes, envs and connectors move to the top-level `modes/`, `envs/` and `connectors/`. Acceptance: `framework/` holds only roles, the agent profile, rules, interfaces and the component map; protected components are declared in `framework/components.yaml` and the guard and `bay boundary` read them from it; a user extension with a protected name is refused; a write to a protected path without `forge.extend` is denied; approval of a protected change passes from chat or from the terminal; `bay catalog` is unchanged except for paths.

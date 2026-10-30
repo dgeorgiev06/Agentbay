@@ -645,7 +645,7 @@ def lint_config_schemas(kit: model.Kit) -> list[str]:
         if md.spec.get("config") and len(md.config_files) > 1:
             gaps: list[str] = []
             model.config_schema(kit, md, gaps)
-            out += [g for g in gaps if "redefines inherited" in g]
+            out += [g for g in gaps if "redefines inherited" in g or "a child's config schema may not use" in g]
     return out
 
 

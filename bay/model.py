@@ -974,6 +974,10 @@ def _mode_roles(kit: Kit, md: Doc, ctx: _Ctx, roles: dict) -> ResolvedRole | Non
     return None
 
 
+CHILD_CONFIG_KEYS = ("type", "properties", "$defs", "title", "description", "$schema", "required",
+                     "additionalProperties")   # F-13: a child's config schema may use these top-level keywords only
+
+
 def config_schema(kit: Kit, md: Doc, gaps: list[str]) -> dict | None:
     """The mode's config schema: its root ancestor's, extended by each descendant's along `extends` (a child's
     `config:` adds properties; redefining an inherited key is an error - change a default through configDefaults).
@@ -987,6 +991,16 @@ def config_schema(kit: Kit, md: Doc, gaps: list[str]) -> dict | None:
         if out is None:
             out = copy.deepcopy(sch)
             continue
+        rel = os.path.relpath(cp, kit.root)
+        for k in sch:
+            if k not in CHILD_CONFIG_KEYS:
+                gaps.append(f"mode {md.name}: config schema {rel} uses top-level keyword '{k}', which a child's config "
+                            f"schema may not use (it only adds settings; allowed: {', '.join(CHILD_CONFIG_KEYS)})")
+        defs = out.get("$defs") or {}
+        for k in sch.get("$defs") or {}:
+            if k in defs:
+                gaps.append(f"mode {md.name}: config schema {rel} redefines inherited $defs '{k}'; "
+                            f"give the child's definition another name")
         props = out.setdefault("properties", {})
         for k, v in (sch.get("properties") or {}).items():
             if k in props:
@@ -998,7 +1012,7 @@ def config_schema(kit: Kit, md: Doc, gaps: list[str]) -> dict | None:
         out["required"] = list(dict.fromkeys([*out.get("required", []), *sch.get("required", [])])) or None
         if out["required"] is None:
             out.pop("required")
-        out.setdefault("$defs", {}).update(sch.get("$defs") or {})
+        out.setdefault("$defs", {}).update({k: v for k, v in (sch.get("$defs") or {}).items() if k not in defs})
         if not out["$defs"]:
             out.pop("$defs")
     return out

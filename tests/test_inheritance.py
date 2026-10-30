@@ -200,3 +200,29 @@ def test_redefining_a_parent_config_key_is_a_lint_error():
             "setting 'lookback'")
     assert_gap(k, want, "configDefaults")
     assert any(want in e for e in problems(k))                                       # `bay lint` reports it too
+
+
+def test_child_config_schema_defs_collision_and_other_keywords_are_errors_f13():
+    k = kit_copy()
+    sch = k / "modes/mail-briefing/config.schema.json"
+    psch = k / "modes/briefing/config.schema.json"
+    parent = json.loads(psch.read_text())
+    parent["$defs"] = {"duration": {"type": "string", "pattern": "^[0-9]+d$"}}
+    psch.write_text(json.dumps(parent))
+    doc = json.loads(sch.read_text())
+    clash = "duration"
+    doc.setdefault("$defs", {})[clash] = {"type": "string"}
+    doc["$defs"]["mailOnly"] = {"type": "string"}
+    doc["allOf"] = [{"required": ["lookback"]}]
+    doc["patternProperties"] = {"^x-": {}}
+    sch.write_text(json.dumps(doc))
+    rel = "modes/mail-briefing/config.schema.json"
+    want_defs = f"mode mail-briefing: config schema {rel} redefines inherited $defs '{clash}'"
+    want_kw = [f"mode mail-briefing: config schema {rel} uses top-level keyword '{kw}'"
+               for kw in ("allOf", "patternProperties")]
+    for w in [want_defs, *want_kw]:
+        assert_gap(k, w)
+        assert any(w in e for e in problems(k))
+    gaps = []
+    merged = model.config_schema(model.Kit(k, None), model.Kit(k, None).get("Mode", "mail-briefing"), gaps)
+    assert merged["$defs"][clash] == parent["$defs"][clash] and "mailOnly" in merged["$defs"]   # parent's kept

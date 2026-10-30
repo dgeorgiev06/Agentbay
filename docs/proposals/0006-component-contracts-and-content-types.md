@@ -18,12 +18,18 @@ touches:
   - { path: interfaces/items.*, reason: items.* move to framework/interfaces/, slice: 2 }
   - { path: bay/model.py, reason: discovery by folder; config schemas that extend; versioned reads/produces; feature.yaml, slice: 2 }
   - { path: bay/config.py, reason: "`bay config example` assembles per-extension config.example.yaml", slice: 2 }
-  - { path: schemas/, reason: config schemas extend (slice 2), versioned contracts (slice 3), feature.yaml (slice 4), slice: 2 }
+  - { path: schemas/mode.schema.json, reason: "config schemas extend (slice 2); versioned reads (slice 3)", slice: 2 }
+  - { path: schemas/connector.schema.json, reason: "`login:` (slice 2); versioned produces (slice 3)", slice: 2 }
+  - { path: schemas/feature.schema.json, reason: feature.yaml, slice: 4, planned: true }
   - { path: agentbay.config.example.yaml, reason: assembled from the extensions' examples, slice: 2 }
   - { path: README.md, reason: describes contracts, never instances (B-11), slice: 2 }
   - { path: docs/DESIGN.md, reason: describes contracts, never instances (B-11), slice: 2 }
   - { path: docs/INTERFACES.md, reason: describes contracts, never instances (B-11), slice: 2 }
-  - { path: "connectors/*/", reason: "per-extension README.md and config.example.yaml; offline transports for contract tests (slice 6)", slice: 2 }
+  - { path: "connectors/*/README.md", reason: per-extension README (Part A self-description), slice: 2 }
+  - { path: "connectors/*/config.example.yaml", reason: per-extension example config, assembled by `bay config example`, slice: 2 }
+  - { path: "connectors/*/connector.yaml", reason: "`login:` declared, not hard-coded in the CLI (slice 2); versioned produces (slice 3)", slice: 2 }
+  - { path: connectors/gmail-api/, reason: "login hints name `bay auth <connector>` with the connector's own name", slice: 2 }
+  - { path: "connectors/*/", reason: offline transports for contract tests, slice: 6, planned: true }
   - { path: "modes/*/mode.yaml", reason: "per-mode README/config example (slice 2); versioned reads/produces (slice 3)", slice: 2 }
   - { path: "modes/*/README.md", reason: per-extension README (Part A self-description), slice: 2 }
   - { path: "modes/*/config.example.yaml", reason: per-extension example config, assembled by `bay config example`, slice: 2 }
@@ -38,7 +44,8 @@ touches:
   # slice 3: versioned reads/produces/needs/implements, no extension names another, skill namespaces
   - { path: framework/rules/conformance.yaml, reason: "C-7 vocabulary (content type, item); C-4 and C-8 name B-7", slice: 3 }
   - { path: framework/modes/forge/features/create/playbook.md, reason: "B-7: `fake HTTP layer` named the fake connector; now `stubbed`", slice: 3 }
-  - { path: bay/improve/, reason: "conformance checks (slice 3); `boundary-crossing` detector (slice 7)", slice: 3, planned: true }
+  - { path: bay/improve/graph.py, reason: "the artifact graph reads a mode's config schema chain (config schemas that extend)", slice: 2 }
+  - { path: bay/improve/, reason: "`boundary-crossing` detector", slice: 7, planned: true }
   - { path: "modes/*/skills/", reason: "per-mode skill namespaces (B-8); mail-briefing skills back to corpus-sql, digest", slice: 3 }
   # slice 4: feature.yaml and whole-feature override
   - { path: "modes/*/features/*/", reason: feature.yaml per feature (workflow, skills, uses:), slice: 4, planned: true }

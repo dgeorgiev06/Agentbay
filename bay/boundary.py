@@ -288,7 +288,7 @@ def check(repo: Path, base: str, head: str = "HEAD", proposal: str | None = None
           touches: list[dict] | None = None, cmap: ComponentMap | None = None, docs: bool = False) -> Report:
     repo = Path(repo)
     cmap = cmap or ComponentMap.load(repo / "framework" / "components.yaml")
-    touches = touches or []
+    touches = [t for t in touches or [] if not t.get("planned")]     # planned entries authorize nothing yet
     at_base: set[str] = set()
     for f in _git(repo, "-c", "core.quotePath=false", "ls-tree", "-r", "--name-only", "-z", base).split("\0"):
         parts = f.split("/")

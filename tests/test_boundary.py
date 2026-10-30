@@ -102,6 +102,13 @@ def test_lint_rejects_case_collisions_and_extension_folders_without_manifest():
     assert not lint.lint_case_and_manifests(SimpleNamespace(root=_repo({})))
 
 
+def test_planned_touches_authorize_nothing_f10():
+    repo = _repo({"bay/cli.py": "y\n"})
+    planned = [{"path": "bay/", "reason": "r", "slice": 9, "planned": True}]
+    assert _failing(boundary.check(repo, "HEAD~1", "HEAD", None, planned)) == ["bay/cli.py"]
+    assert not _failing(boundary.check(repo, "HEAD~1", "HEAD", None, [{**planned[0], "planned": False}]))
+
+
 def test_new_extension_folder_passes():
     rep = _check({"connectors/x-api/connector.yaml": "x\n", "modes/feed/mode.yaml": "x\n",
                   "modes/feed/features/digest/playbook.md": "x\n", "envs/new.yaml": "x\n",

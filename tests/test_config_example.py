@@ -46,3 +46,17 @@ def test_lint_reports_a_stale_example_a_missing_readme_and_a_bad_fragment():
         assert any(e.startswith("connectors/x-api/config.example.yaml: maxPages") for e in errs)
     finally:
         cleanup(k)
+
+
+def test_lint_fails_when_two_envs_substitute_the_same_env():
+    k = kit_copy()
+    try:
+        assert not lint.lint_substitutes(model.Kit(k, None))
+        src = (k / "envs/local-mail-offline.yaml").read_text()
+        (k / "envs/local-mail-offline2.yaml").write_text(src.replace("name: local-mail-offline",
+                                                                     "name: local-mail-offline2"))
+        errs = lint.lint_substitutes(model.Kit(k, None))
+        assert len(errs) == 1 and "local-mail-offline, local-mail-offline2" in errs[0]
+        assert "substitutes: local-mail" in errs[0] and errs[0] in lint.run(k)
+    finally:
+        cleanup(k)

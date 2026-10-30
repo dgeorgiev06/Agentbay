@@ -196,6 +196,24 @@ def lint_env_bindings(kit: model.Kit) -> list[str]:
     return out
 
 
+def lint_substitutes(kit: model.Kit) -> list[str]:
+    """F-11: at most one env may substitute a given env. The offline switch maps each env to one substitute, so a
+    second one would be dropped from agentbay.config.example.yaml without a word."""
+    by: dict[str, list] = {}
+    for env in sorted(kit.docs["Environment"].values(), key=lambda e: e.name):
+        if env.spec.get("substitutes"):
+            by.setdefault(env.spec["substitutes"], []).append(env)
+    out = []
+    for target, envs in sorted(by.items()):
+        if len(envs) > 1:
+            first = envs[0]
+            line = _line_of(first.path, r"^\s*substitutes:")
+            out.append(f"{_where(first.path, line)}: envs "
+                       f"{', '.join(e.name for e in envs)} all declare `substitutes: {target}`; "
+                       f"an env may have one substitute only")
+    return out
+
+
 def lint_rules(path: Path, dod_ids: list[str], ep: dict, md: model.Doc) -> list[str]:
     out: list[str] = []
     try:
@@ -679,6 +697,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
             out.append(p)
     out += lint_roles(kit)
     out += lint_env_bindings(kit)
+    out += lint_substitutes(kit)
     out += lint_connectors(kit)
     out += lint_contract_versions(kit)
     out += lint_extension_names(kit)

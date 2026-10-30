@@ -41,6 +41,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import os
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -63,6 +64,36 @@ EVAL_FLAGS = ("-c", "-e", "--eval", "-E", "-r")
 PROBES = (".agentbay/guard.json", ".agentbay/bay", ".agentbay/roles/role/use", ".agentbay/data/feeds/feed-briefing/corpus.db",
           ".agentbay/data/feeds/feed-briefing/corpus.db-wal", ".agentbay/calls/C-0.json", ".agentbay/ledger/events.jsonl",
           ".claude/settings.json", ".claude/settings.local.json", ".claude/agents/agent.md")
+
+
+# the owner's settings file: it turns approvals from chat on (proposal 0006, Part G), so no subagent may name it in
+# a Bash command (a write by redirect, cp, mv, sed -i, tee, ...); file tools are refused by NEVER_FILES
+CONFIG_FILE = "agentbay.config.yaml"
+# the kit CLI in any spelling: bay, bay.sh, .agentbay/bay, bay/cli.py, `python -m bay.cli`
+_CLI_RE = re.compile(r"(?:^|[\s;&|()`$'\"])(?:\S*/)?(?:bay|bay\.sh|cli\.py|bay\.cli)(?=[\s;&|()`'\"]|$)")
+_APPROVE_RE = re.compile(r"(?:^|[\s;&|()`$'\"])approve(?=[\s;&|()`'\"]|$)")
+
+
+def runs_approve(cmd: str, words: list[str]) -> bool:
+    """True when `cmd` runs the kit CLI's `approve` (a gate is the owner's, never a subagent's). Parsed words are
+    checked when the command parses (so a commit message that mentions `bay approve` is fine); otherwise the raw
+    text."""
+    if words:
+        cli = [i for i, w in enumerate(words)
+               if os.path.basename(w) in ("bay", "bay.sh", "cli.py") or w == "bay.cli"]
+        return bool(cli) and "approve" in words[cli[0] + 1:]
+    return bool(_CLI_RE.search(cmd) and _APPROVE_RE.search(cmd))
+
+
+def names_config(cmd: str, words: list[str], at_root) -> bool:
+    """True when `cmd` names agentbay.config.yaml, directly or by a glob in the project root (`at_root(dir)`)
+    that matches it."""
+    if CONFIG_FILE.casefold() in cmd.casefold():
+        return True
+    toks = words or re.split(r"[\s;&|<>()`'\"]+", cmd)
+    return any(any(c in w for c in "*?[{") and at_root(os.path.dirname(w)) and any(
+        fnmatch.fnmatch(CONFIG_FILE, x.casefold()) for x in _expand_braces(os.path.basename(w).casefold()))
+        for w in toks if w)
 
 
 def unsafe(cmd: str) -> str | None:
@@ -285,6 +316,11 @@ class Guard:
         except ValueError as e:
             why = f"cannot parse command ({e})"
             words = []
+        if runs_approve(command, words):
+            return "deny", (f"agentbay: {who} may not run `bay approve`: approval gates are the owner's (a terminal, "
+                            f"or a chat approval the main thread relays)")
+        if names_config(command, words, lambda d: norm(d or ".", cwd) == self.project):
+            return "deny", f"agentbay: {who} may not name {CONFIG_FILE} in a command (the owner's settings)"
         if entry is None:
             # not an agentbay role: off the control plane by path, glob and interpreter -c (S-B)
             if why:

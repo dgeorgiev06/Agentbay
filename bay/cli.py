@@ -14,6 +14,7 @@
   show <callId>                        current state of a call (result or the step it waits on)
   approve <callId|runId> [--reject]    pass an approval gate of a call, or of a workflow run (W-...)
                                        (you, in a terminal; never an agent)
+          [--via chat --quote "<msg>"] from chat, relayed by the Chief of Staff, when approvals.chat is on
   (agents read data only through .agentbay/roles/<role>--<mode>/use, generated per role unit by build)
 
   mode new <name> | feature new <name> --mode <m>
@@ -251,14 +252,48 @@ def cmd_call(args):
     _run(lambda: d.call(args.target, _json_arg(args.input)))
 
 
+CHAT_BY = "user@chat-via-cos"
+
+
+def _approval_channel(args) -> tuple[str, str]:
+    """(by, quote) for `bay approve`. A terminal approval needs a TTY. A chat approval (`--via chat`) needs the
+    project's `approvals: { chat: true }` and the owner's message quoted verbatim; the ledger labels it
+    user@chat-via-cos, so it is never mistaken for a terminal one (proposal 0006, Part G)."""
+    if args.via != "chat":
+        if args.quote:
+            _die("✗ --quote goes with --via chat (a terminal approval needs no quote)")
+        if not sys.stdin.isatty():
+            _die("✗ bay approve needs an interactive terminal (stdin is not a TTY). Approval gates are for you, not "
+                 "for agents: run it yourself in a terminal. (Approvals from chat need `approvals: { chat: true }` "
+                 "in agentbay.config.yaml and `--via chat`.)")
+        return "user@tty", ""
+    from bay import config as cfgmod
+    try:
+        cfg = cfgmod.load(args.project)
+    except cfgmod.ConfigError as e:
+        _die(f"✗ {e}")
+    if not cfgmod.chat_approvals(cfg):
+        _die("✗ approvals from chat are off: `bay approve --via chat` needs `approvals: { chat: true }` in "
+             f"{cfgmod.NAME} (set it yourself; the default is off). Otherwise run `bay approve` in a terminal.")
+    quote = (args.quote or "").strip()
+    if not quote:
+        _die("✗ --via chat needs --quote \"<the owner's exact message approving this gate>\"")
+    return CHAT_BY, quote
+
+
+def _confirm(by: str) -> None:
+    if by == CHAT_BY:
+        return          # the owner's quoted message is the confirmation; Claude Code asks before this command runs
+    if input("Type yes to confirm: ").strip().lower() != "yes":
+        _die("not confirmed; nothing changed")
+
+
 def cmd_approve(args):
-    """Approval gates are passed only by a human at a terminal."""
-    if not sys.stdin.isatty():
-        _die("✗ bay approve needs an interactive terminal (stdin is not a TTY). Approval gates are for you, not "
-             "for agents: run it yourself in a terminal.")
+    """Approval gates are passed only by the owner: at a terminal, or from chat when they turned that on."""
+    by, quote = _approval_channel(args)
     from bay import dispatch
     if args.call.startswith("W-"):
-        return _approve_workflow(args)
+        return _approve_workflow(args, by, quote)
     d = _dispatcher(args)
     try:
         st = d.show(args.call)
@@ -268,12 +303,11 @@ def cmd_approve(args):
         _die(f"✗ call {args.call} is {st.get('status')}, not awaiting approval")
     verb = "REJECT" if args.reject else "APPROVE"
     print(f"{verb} gate '{st['next']['step']}' of {st['target']}: {st['next']['gate']}")
-    if input("Type yes to confirm: ").strip().lower() != "yes":
-        _die("not confirmed; nothing changed")
-    _run(lambda: d.approve(args.call, not args.reject, args.reason or "", by="user@tty"))
+    _confirm(by)
+    _run(lambda: d.approve(args.call, not args.reject, args.reason or "", by=by, quote=quote))
 
 
-def _approve_workflow(args):
+def _approve_workflow(args, by: str, quote: str):
     """Pass or reject the gate a workflow run waits on (`bay approve W-...`)."""
     from bay import dispatch, workflows as wfmod
     s = _system(args)
@@ -291,11 +325,8 @@ def _approve_workflow(args):
     verb = "REJECT" if args.reject else "APPROVE"
     print(f"{verb} gate '{sid}' of workflow {run['workflow']} (run {args.call}): "
           f"{(stage.gate if stage else '') or '(gate text unavailable)'}")
-    if input("Type yes to confirm: ").strip().lower() != "yes":
-        _die("not confirmed; nothing changed")
-    _run(lambda: d.run_capability("cos", "workflow.run/v1.approve", {
-        "runId": args.call, "approved": not args.reject, "by": "user@tty",
-        **({"reason": args.reason} if args.reason else {})}))
+    _confirm(by)
+    _run(lambda: d.approve_run(args.call, not args.reject, by=by, reason=args.reason or "", quote=quote))
 
 
 def cmd_show(args):
@@ -649,8 +680,12 @@ def main(argv=None):
     su.add_argument("--usage", help='what the runtime reported for the step: \'{"tokens": N, "costUsd": X, "durationMs": N}\'')
     su.set_defaults(fn=cmd_submit)
     sh = sub.add_parser("show"); sh.add_argument("call"); sh.set_defaults(fn=cmd_show)
-    ap_ = sub.add_parser("approve", help="pass (or --reject) an approval gate; interactive terminal only")
+    ap_ = sub.add_parser("approve", help="pass (or --reject) an approval gate; interactive terminal, or chat when "
+                                         "approvals.chat is on")
     ap_.add_argument("call"); ap_.add_argument("--reject", action="store_true"); ap_.add_argument("--reason")
+    ap_.add_argument("--via", choices=["tty", "chat"], default="tty",
+                     help="chat: relayed by the Chief of Staff; needs approvals: { chat: true } in agentbay.config.yaml")
+    ap_.add_argument("--quote", help="--via chat: the owner's exact message approving this gate (recorded in the ledger)")
     ap_.set_defaults(fn=cmd_approve)
 
     for kind in ("mode", "feature", "connector", "env"):

@@ -31,7 +31,7 @@ rules and optional review block. A workflow is ordered steps:
 
 - `run: <capability>/v<N>.<endpoint>`: deterministic code, run by the dispatcher in the coordinator's env;
 - `role: <role>`: an agentic step, run by that role in the env the step, feature or mode `roles:` names;
-- `gate: <text>`: an approval gate only you pass, with `bay approve` in a terminal;
+- `gate: <text>`: an approval gate only you pass, with `bay approve` in a terminal (or from chat, if you opt in);
 - `{review: here}`: where the review step goes (default: last).
 
 `with:` substitutes `$in.x`, `$steps.<id>.x` and `$config.x` (with `a|b` fallbacks); `when:` skips a step
@@ -92,7 +92,9 @@ cannot contain code once something runs it. Hard isolation needs an OS sandbox.
   use shim, run as `python3 -E <kit>/bay/use_shim.py`; when the kit is inside the project, even that prompts.
   Every other subagent command prompts you. The main thread is pre-approved only for
   `bay show|status|log|note|task|catalog`; `bay call` and `bay submit` run connector code and prompt, and
-  `bay approve` prompts too.
+  `bay approve` prompts too. With `approvals: { chat: true }` (off by default), `bay approve --via chat --quote`
+  passes a gate without a terminal; the ledger labels it `user@chat-via-cos`. This trusts the main thread to
+  relay your words, so it is weaker than a terminal. Secrets and logins never leave the terminal.
 - **What subagents cannot touch:** the guard hook runs on Bash and every file tool. It denies `.agentbay/`,
   `.claude/`, `.git`, `CLAUDE.md`, `.mcp.json`, `agentbay.config.yaml`, `.env*`, `.envrc`, `Makefile`,
   `bay.sh`, editor folders, `.github/workflows/` and the kit; writes outside the env's `fs.write`; inline

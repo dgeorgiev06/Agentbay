@@ -93,7 +93,7 @@ tests/           python3 tests/run.py (connector tests live next to each connect
 | `bay ls`, `bay describe <name>`, `bay catalog` | what is installed, resolved |
 | `bay call <mode>.<endpoint> '<json>'` | run a feature (schedules: from your cron) |
 | `bay submit <callId> <step> '<json>'`, `bay show <callId>` | hand back a step's output; current state |
-| `bay approve <callId\|runId> [--reject]` | pass an approval gate (your terminal only) |
+| `bay approve <callId\|runId> [--reject]` | pass an approval gate (your terminal; or `--via chat --quote "<msg>"`, relayed by the Chief of Staff, when `approvals: { chat: true }` is set) |
 | `bay status`, `bay log`, `bay note <ref> "text"` | calls and cost; the run log; a note |
 | `bay mode\|feature\|connector\|env new <name>` | create an extension from a template |
 | `bay secret set <NAME>` | store a secret (read from your terminal, never echoed) |
@@ -115,5 +115,6 @@ starts from a proposal that lists every core path it touches. Recipes:
 The guard hook is defense in depth, not isolation: it narrows what subagents can ask to do, but cannot contain
 code once something runs it. Nothing that runs code is auto-approved except a role's own read-only data shim;
 the main thread is pre-approved only for `bay show|status|log|note|task|catalog`. Approval gates, secrets,
-browser logins and backlog approvals need your terminal.
+browser logins and backlog approvals need your terminal; gates alone can be opened to chat (`approvals: { chat: true }`,
+off by default, labelled `user@chat-via-cos` in the ledger).
 Details: [docs/DESIGN.md#safety-model](docs/DESIGN.md#safety-model).

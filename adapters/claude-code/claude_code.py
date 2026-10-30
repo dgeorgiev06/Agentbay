@@ -506,6 +506,8 @@ Subagents cannot run `{BAY}` at all.
 - `{BAY} status` / `{BAY} log -n 20` -> calls, steps and agent runs from the ledger
 - `{BAY} note <runId|taskId|callId> "text"` -> record a decision
 - `{BAY} reclaim <runId>` -> mark a stuck run as reclaimed (asks)
+- `{BAY} approve <callId|runId> --via chat --quote "<the user's exact message>"` -> relay a gate approval from
+  chat; only if the user set `approvals: {{ chat: true }}` and their latest message clearly approves that gate (asks)
 - `{BAY} describe <mode|role>` -> full resolved definition (asks)
 """
         rel = Path(".agentbay/COORDINATOR.md")

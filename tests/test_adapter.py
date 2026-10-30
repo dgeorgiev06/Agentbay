@@ -234,3 +234,91 @@ def test_adapters_are_discovered_by_folder_with_no_registry():
         raise AssertionError("unknown runtime accepted")
     except KeyError as e:
         assert "adapters/<name>/adapter.yaml" in str(e)
+
+
+def _adapter(root, folder, manifest, code=None):
+    (root / folder).mkdir(parents=True, exist_ok=True)
+    (root / folder / "adapter.yaml").write_text(manifest)
+    if code is not None:
+        (root / folder / "mod.py").write_text(code)
+
+
+ECHO = ("from bay.adapter import BuildReport\n"
+        "class Echo:\n    name = 'echo'\n"
+        "    def build(self, system, project, kit): return BuildReport('echo')\n"
+        "    def clean(self, project): return BuildReport('echo')\n")
+
+
+def test_lint_checks_adapter_manifests_f12():
+    from bay import lint
+    from helpers import cleanup, kit_copy
+    k = kit_copy()
+    try:
+        assert not lint.lint_adapters(model.Kit(k, None))
+        a = k / "adapters"
+        _adapter(a, "extra", "name: extra\nmodule: mod.py\nclass: X\nregistry: true\n", "")
+        _adapter(a, "noclass", "name: noclass\nmodule: mod.py\n", "")
+        _adapter(a, "renamed", "name: other\nmodule: mod.py\nclass: X\n", "")
+        _adapter(a, "escape", "name: escape\nmodule: ../claude-code/claude_code.py\nclass: X\n")
+        _adapter(a, "nomodule", "name: nomodule\nmodule: gone.py\nclass: X\n")
+        _adapter(a, "notyaml", "name: [\n")
+        errs = lint.lint_adapters(model.Kit(k, None))
+        assert any(e.startswith("adapters/extra/adapter.yaml: ") and "registry" in e for e in errs)
+        assert any(e.startswith("adapters/noclass/adapter.yaml: ") and "'class' is a required property" in e
+                   for e in errs)
+        assert "adapters/renamed/adapter.yaml: name 'other' must match its folder 'renamed'" in errs
+        assert ("adapters/escape/adapter.yaml: module '../claude-code/claude_code.py' must be inside the adapter "
+                "folder") in errs
+        assert "adapters/nomodule/adapter.yaml: module 'gone.py' does not exist" in errs
+        assert any(e.startswith("adapters/notyaml/adapter.yaml: unreadable") for e in errs)
+        assert set(errs) <= set(lint.run(k))
+    finally:
+        cleanup(k)
+
+
+def test_a_bad_adapter_entry_is_reported_and_never_imported_f12():
+    from bay import adapter
+    root = tmpdir()
+    marker = root / "imported"
+    boom = f"open({str(marker)!r}, 'w').write('x')\nraise RuntimeError('imported')\n"
+    _adapter(root, "echo", "name: echo\nmodule: mod.py\nclass: Echo\n", ECHO)
+    _adapter(root, "broken", "name: broken\nmodule: mod.py\nclass: Echo\nextra: 1\n", boom)
+    _adapter(root, "other", "name: other\nmodule: mod.py\nclass: Echo\n", boom)   # well-formed, not selected
+    _adapter(root, "garbled", ": : [\n")
+    problems = []
+    assert sorted(adapter.discover(root, problems)) == ["echo", "other"]
+    assert any("broken/adapter.yaml" in p for p in problems) and any("garbled/adapter.yaml" in p for p in problems)
+    ad = adapter.get("echo", root)
+    assert ad.build(None, root, root).runtime == "echo" and ad.clean(root).runtime == "echo"
+    assert not marker.exists()                       # neither the bad entry nor the unselected one was imported
+    try:
+        adapter.get("broken", root)
+        raise AssertionError("bad adapter loaded")
+    except ValueError as e:
+        assert "runtime 'broken' is not loadable" in str(e) and "extra" in str(e)
+    assert not marker.exists()
+
+
+def test_adapter_modules_are_keyed_by_folder_f12():
+    from bay import adapter
+    keys = {adapter.module_key(f) for f in ("claude-code", "claude_code", "claude_2dcode", "claudecode")}
+    assert len(keys) == 4 and all(k.startswith("agentbay_adapter_") and k.isidentifier() for k in keys)
+    m = module("claude-code")
+    assert m.__name__ == adapter.module_key("claude-code") and sys.modules[m.__name__] is m
+    assert "agentbay_adapter_claude_code" not in sys.modules
+
+
+def test_cli_build_and_clean_report_a_broken_other_runtime_f12():
+    import os
+    from helpers import cleanup, kit_copy
+    k, proj = kit_copy(), _proj()
+    try:
+        _adapter(k / "adapters", "zz-broken", "name: wrong\nmodule: mod.py\nclass: X\n", "raise SystemExit(3)\n")
+        env = {**os.environ, "PYTHONPATH": str(k)}
+        for cmd in ("build", "clean"):
+            r = subprocess.run([sys.executable, "-m", "bay.cli", "--project", str(proj), cmd], cwd=k, env=env,
+                               text=True, capture_output=True)
+            assert r.returncode == 0, r.stderr
+            assert "zz-broken/adapter.yaml: name 'wrong' must match its folder 'zz-broken'" in r.stdout
+    finally:
+        cleanup(k)

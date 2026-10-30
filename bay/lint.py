@@ -214,6 +214,19 @@ def lint_substitutes(kit: model.Kit) -> list[str]:
     return out
 
 
+def lint_adapters(kit: model.Kit) -> list[str]:
+    """F-12: every adapters/<name>/adapter.yaml matches schemas/adapter.schema.json, its `name` is its folder and
+    its `module` a file inside the folder. Checked without importing any adapter code."""
+    from . import adapter
+    _, bad = adapter.scan(kit.root / "adapters")
+    return [_rel(e, kit) for errs in bad.values() for e in errs]
+
+
+def _rel(msg: str, kit: model.Kit) -> str:
+    root = str(kit.root.resolve()) + "/"
+    return msg.replace(root, "").replace(str(kit.root) + "/", "")
+
+
 def lint_rules(path: Path, dod_ids: list[str], ep: dict, md: model.Doc) -> list[str]:
     out: list[str] = []
     try:
@@ -698,6 +711,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     out += lint_roles(kit)
     out += lint_env_bindings(kit)
     out += lint_substitutes(kit)
+    out += lint_adapters(kit)
     out += lint_connectors(kit)
     out += lint_contract_versions(kit)
     out += lint_extension_names(kit)

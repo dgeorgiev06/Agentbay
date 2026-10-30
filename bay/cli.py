@@ -117,6 +117,7 @@ def cmd_build(args):
     from bay import adapter
     s = _system(args)
     rep = adapter.get(args.runtime).build(s, args.project, KIT)
+    adapter.discover(problems=rep.warnings)
     print(f"built {len(s.modes)} modes for {rep.runtime} → {args.project}")
     for f in rep.written:
         print(f"  + {f}")
@@ -129,6 +130,9 @@ def cmd_build(args):
 def cmd_clean(args):
     from bay import adapter
     rep = adapter.get(args.runtime).clean(args.project)
+    adapter.discover(problems=rep.warnings)
+    for w in rep.warnings:
+        print(f"  ! {w}")
     for f in rep.removed:
         print(f"  - {f}")
     print("clean")

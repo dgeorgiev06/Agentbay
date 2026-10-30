@@ -134,7 +134,7 @@ writes the registry via `bay.registry.write`. The catalog's content is runtime-n
 supplies only its own `runtime` name - so a second runtime discovers the same modes, endpoints (with resolved
 input/output schemas), roles and project workflows. The claude-code adapter also writes per-unit use
 shims (one per unit `<role>--<mode>[--<env>]`), `.agentbay/guard.json` (one entry per unit) and the PreToolUse guard hook (Bash and every file tool), plus `Edit` deny rules on
-`.agentbay/**`, `.claude/**` and the kit. A runtime is a folder `adapters/<name>/` with `adapter.yaml` (name, module, class), discovered by folder.
+`.agentbay/**`, `.claude/**` and the kit. A runtime is a folder `adapters/<name>/` with `adapter.yaml` (name = folder, module inside the folder, class), discovered by folder; lint checks it, and a malformed entry is reported, never imported.
 
 Skills are namespaced when built: a mode's `skills/<skill>/` becomes `.claude/skills/<mode>--<skill>/` and a
 role's becomes `<role>--<skill>` (the same `--` separator as units; Claude Code skill names allow lowercase

@@ -1,3 +1,34 @@
+# HANDOFF part 18: T-20261030-e57e (recorded with `bay plan`) - slice 5 part C built: mode-owned `v_threads`, generic `threads`, last core names
+
+Outcome: done and green on feat/0008-stage4, with open items for part D listed below. Not pushed. No proposal edited.
+
+## To-do and commits (all in b618440 unless noted)
+1. Mode views loader in `bay/contenttypes.py` (`ModeViews`, `mode_views(dirs)`, `mode_problems`, `check_mode_views`): the nearest mode folder (own, then `extends` chain) with `views.sql`/`views.yaml`; same statement rules as a type; a mode view may read only the base views, the views of the types the mode `reads:` and its own earlier views (authorizer arg 5 = responsible view; functions = sandbox allowlist). Lint runs it for every mode (`bay/lint.py`).
+2. `v_threads` lifted out of `content-types/email/` (statement and `views.v_threads` entry deleted) into `modes/mail-briefing/views.sql` + `views.yaml`. It now reads only `v_email` (no `main.items`); columns and values are unchanged (golden).
+3. `views.yaml` has `views:` (column docs) and `threads:` (view, window, selector, important, order, json, flags, details = per-row SQL with `:column` params). `CorpusStore.threads` reads that block; no view or type name in core. A mode with no `threads:` block gets "mode X defines no rows for `threads`: give the mode views.sql and views.yaml ...". Interface stays v1 (text only).
+4. Store: `store_meta` key `mode-views` (JSON list of name/CREATE TEMP VIEW) is written at creation and re-written by the writer when views.sql changed; absent when the mode has none. `sqlsandbox.view_sql/views_of` take `mode`; order is `v_items`, type views, mode views, `v_fts`, full-text views. `Dispatcher._settings` passes `modeDirs` (mode.dirs).
+5. Wording: `items.store.v1.yaml` (sql, threads), `items.source.v1.yaml`, `modes/briefing/skills/corpus-sql` + `digest` + `mode.yaml` description, mail-briefing skill/playbooks/README/config.schema.json, schemas (mode, connector, event, item.v1), `framework/rules/conformance.yaml`, `bay/lint.py` messages, `bay/config.py` example, `bay/scaffold.py` (scaffolds the first discovered kind, `<kind>/v1` when none), email README, INTERFACES/DESIGN lines.
+6. Tests: new `test_threads_needs_a_view_from_the_mode_and_a_mode_view_reads_only_views_of_its_types`; `modeDirs` added to the store helpers of `tests/test_mail_briefing.py` and `connectors/gmail-api/tests/test_gmail_api.py`; view order and `store_meta` expectations updated. No security test changed. Golden: files untouched, `mail_deltas` unchanged and still exact.
+
+## What part D must know
+- A store built without `modeDirs` (tests that call `connect.instantiate` by hand) has no mode views, so `v_threads` and `threads` are missing there; pass `modeDirs` like the two helpers do.
+- Core hits left in `bay/` that I could not remove without changing describe/status output (golden says byte for byte) or a public key; part D needs an owner decision (a documented golden delta, or an allowlist entry):
+  - `bay/sqlsandbox.py:70-73` `ITEM_COLUMNS` descriptions ("x, fake, gmail", "post, email", "null for posts") are in describe output.
+  - `posts` as the cost/budget counter key (`bay/cli.py:628`, `bay/dispatch.py:70,252,453-454`, corpus-store `budget.posts`) is in status output and state.json; `COST_PER_POST_USD`/`costPerPostUsd` is a public setting name.
+  - `bay/selector.py:102`, `corpus_store.py:226-242` `email` is the item/v1 author field, not a content type. `bay/improve/detect_sessions.py:288` is the verb.
+- Not built: `tests/test_core_names.py`, Part E (`uses:`/`skills:`).
+- `modes/briefing/skills/digest/SKILL.md` and `modes/briefing/mode.yaml` wording changed; boundary passes (0 failing).
+
+## Evidence (last lines)
+- `python3 tests/run.py -q`: `488 passed, 0 failed`
+- golden (inside the run above; earlier `-q -k offline_golden` also passed): `2 passed, 0 failed` in the part-B form
+- `./bay.sh check`: `✓ lint clean` / `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`
+- `./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: `boundary origin/main...HEAD: 56 changed paths (25 core, 2 docs, 17 extension, 2 feature, 10 other); 0 failing; B-11 docs: 0 hits` (at b618440)
+- `./bay.sh build --project .../scratchpad/s5c`: `built 6 modes for claude-code`; `./bay.sh clean --project .../scratchpad/s5c`: `clean`
+- Glob of scratch `s5c` after clean: `agentbay.config.yaml` only
+- `git diff --stat a6c035e HEAD -- tests/golden/`: empty
+- `git grep -nwi "post|posts|email|x-api|gmail-api|fake-mail" -- bay`: the hits listed above only (cli.py:628, config.py:31, dispatch.py:70/252/453/454, improve/detect_sessions.py:288, selector.py:102, sqlsandbox.py:71/73).
+
 # HANDOFF part 17: T-20261030-f10d (recorded with `bay plan`) - slice 5 part B built: `email` moved into `content-types/email/`
 
 Outcome: part B is done and green on feat/0008-stage4. `email` is a content type like `post`: its child table, FTS index, delete trigger,

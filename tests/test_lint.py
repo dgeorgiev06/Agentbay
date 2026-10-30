@@ -313,3 +313,14 @@ def test_skill_name_over_64_characters_fails_lint_b8():
     x = has(k, f"skill name 'mail-briefing--{long}'", "65 characters", "shorten the skill folder name")
     assert "by 1" in x
     assert not [p for p in problems(k) if f"feed-briefing--{long}" in p]     # only mail-briefing has it
+
+
+def test_skill_references_match_any_case_and_the_skill_x_f8():
+    k = kit_copy()
+    sub(k, "modes/mail-briefing/features/ask/playbook.md", "the corpus-sql skill", "The mail-sql Skill")
+    has(k, "modes/mail-briefing/features/ask/playbook.md:14", "names skill 'mail-sql'")
+    k = kit_copy()
+    sub(k, "modes/mail-briefing/features/ask/playbook.md", "the corpus-sql skill", "the skill `mail-sql`")
+    has(k, "modes/mail-briefing/features/ask/playbook.md:14", "names skill 'mail-sql'")
+    from bay import lint
+    assert lint._skill_refs("Use the skill to answer; the skill corpus-sql helps.") == [(1, "corpus-sql")]

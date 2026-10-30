@@ -693,13 +693,25 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     return list(dict.fromkeys(out))
 
 
-SKILL_REF = re.compile(r"(?:\bthe\s+|\()`?([a-z0-9]+(?:-[a-z0-9]+)*)`?\s+skill\b")
+SKILL_REF = re.compile(r"(?:\bthe\s+|\()`?([a-z0-9]+(?:-[a-z0-9]+)*)`?\s+skill\b"
+                       r"|\bthe\s+skill\s+`?([a-z0-9]+(?:-[a-z0-9]+)*)`?", re.I)
+# words that follow "the skill" in prose, not names ("the skill is", "the skill to use")
+_SKILL_PROSE = {"a", "an", "and", "as", "at", "by", "can", "does", "for", "from", "has", "in", "is", "it", "may",
+                "must", "of", "on", "or", "should", "that", "the", "then", "this", "to", "was", "when", "which",
+                "will", "with", "you"}
 SKILL_SHORT = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 def _skill_refs(text: str) -> list[tuple[int, str]]:
     """Skills a playbook or prompt names by short name ("the corpus-sql skill", "(research-brief skill)")."""
-    return [(i, m.group(1)) for i, ln in enumerate(text.splitlines(), 1) for m in SKILL_REF.finditer(ln)]
+    out = []
+    for i, ln in enumerate(text.splitlines(), 1):
+        for m in SKILL_REF.finditer(ln):
+            name = m.group(1) or m.group(2)
+            if m.group(2) and "`" not in m.group(0) and name.lower() in _SKILL_PROSE:
+                continue
+            out.append((i, name))
+    return out
 
 
 def lint_skill_names(kit: model.Kit) -> list[str]:

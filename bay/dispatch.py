@@ -109,12 +109,15 @@ class Dispatcher:
 
     def _require_plan(self, call_id: str, step, output) -> None:
         """A subagent's result is accepted only when its run recorded an outcome (`bay plan`). The run is found by
-        the coordinator's dispatch record for this call and step, or by the taskId in the result block."""
+        the coordinator's dispatch record for this call and step, or by the taskId in the result block when that
+        taskId's dispatch names this call and step (or names no call)."""
         evs = ledger.read(self.project)
         tids = {e.get("taskId") for e in evs if e.get("type") in ("agent.dispatch", "spawned")
                 and e.get("callId") == call_id and e.get("step") == step.id}
-        if isinstance(output, dict) and isinstance(output.get("taskId"), str):
-            tids.add(output["taskId"])
+        named = output.get("taskId") if isinstance(output, dict) else None
+        disp = ledger.dispatched_agent(evs, named) if isinstance(named, str) else None
+        if disp and disp.get("callId") in (None, call_id) and disp.get("step") in (None, step.id):
+            tids.add(named)
         if not tids & set(ledger.plans(evs)):
             raise CallError(f"step {step.id}: the run recorded no outcome and to-do list, so its result is not "
                             f"accepted. The agent runs `.agentbay/bay plan <taskId> '<json>'` first (the coordinator "

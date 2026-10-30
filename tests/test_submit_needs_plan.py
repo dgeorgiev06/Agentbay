@@ -50,7 +50,44 @@ def test_a_plan_of_another_step_or_call_does_not_count():
         ledger.record_plan(k, tid, {"outcome": "o", "todo": [{"text": "t", "serves": "s"}]})
         with pytest.raises(dispatch.CallError, match="recorded no outcome"):
             d.submit_strict(cid, "propose", {"status": "done", "summary": "s"})
-        # the taskId in the result block names the run when no dispatch was logged
+        # naming that taskId in the result block does not borrow its plan: it was dispatched to another call
+        with pytest.raises(dispatch.CallError, match="recorded no outcome"):
+            d.submit_strict(cid, "propose", {"status": "done", "summary": "s", "taskId": tid})
+        # nor one dispatched to another step of this call
+        t2 = "T-20261030-eeee"
+        ledger.append(k, "agent.dispatch", t2, source="coordinator", taskId=t2, callId=cid, step="implement", agent="b")
+        ledger.record_plan(k, t2, {"outcome": "o", "todo": [{"text": "t", "serves": "s"}]})
+        with pytest.raises(dispatch.CallError, match="recorded no outcome"):
+            d.submit_strict(cid, "propose", {"status": "done", "summary": "s", "taskId": t2})
+    finally:
+        cleanup(k)
+
+
+def test_a_result_taskid_counts_when_its_dispatch_names_this_call_and_step_or_no_call():
+    k, d, cid = _at_propose()
+    try:
+        tid = "T-20261030-ffff"
+        ledger.append(k, "agent.dispatch", tid, source="coordinator", taskId=tid, agent="b")      # no callId logged
+        ledger.record_plan(k, tid, {"outcome": "o", "todo": [{"text": "t", "serves": "s"}]})
         assert d.submit_strict(cid, "propose", {"status": "done", "summary": "s", "taskId": tid})["next"]["step"] == "approve"
+    finally:
+        cleanup(k)
+
+
+def test_plan_ownership_is_per_agent_type_not_per_run():
+    """`bay plan` takes any logged dispatch's taskId: the CLI has no caller identity, so there is no per-run check
+    (the guard limits a subagent to `bay plan`; the dispatch record ties the plan to its call and step)."""
+    import inspect
+    assert "agent" not in inspect.signature(ledger.record_plan).parameters
+    assert "agent" not in inspect.signature(ledger.record_done).parameters
+    k, d, cid = _at_propose()
+    try:
+        a, b = "T-20261030-1111", "T-20261030-2222"
+        for t in (a, b):
+            ledger.append(k, "agent.dispatch", t, source="coordinator", taskId=t, callId=cid, step="propose", agent="same-type")
+        ledger.record_plan(k, b, {"outcome": "o", "todo": [{"text": "t", "serves": "s"}]})      # a sibling's plan
+        ledger.record_done(k, b, 1)
+        with pytest.raises(ledger.PlanError, match="not dispatched"):
+            ledger.record_plan(k, "T-20261030-9999", {"outcome": "o", "todo": [{"text": "t", "serves": "s"}]})
     finally:
         cleanup(k)

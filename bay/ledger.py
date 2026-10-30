@@ -72,12 +72,12 @@ def dispatched_agent(events: list[dict], task_id: str) -> dict | None:
     return None
 
 
-def record_plan(project: Path, task_id: str, plan: object, agent: str | None = None) -> dict:
+def record_plan(project: Path, task_id: str, plan: object) -> dict:
     """Append the outcome and to-do list of a dispatched agent: {outcome, todo: [{text, serves}]}. Once per task.
-    Checks size and shape, and that the taskId was dispatched (and that `agent`, when the guard names the caller,
-    is the agent it was dispatched to); text is scrubbed by `append`. This is all `bay plan` can write."""
+    Checks size and shape, and that the taskId was dispatched; text is scrubbed by `append`. This is all `bay plan`
+    can write."""
     evs = read(project)
-    disp = _dispatched_check(evs, task_id, agent)
+    disp = _dispatched_check(evs, task_id)
     if any(e["type"] == "agent.plan" and e.get("taskId") == task_id for e in evs):
         raise PlanError(f"{task_id} already has a plan; tick items with `bay plan {task_id} --done <n>`")
     if not isinstance(plan, dict) or set(plan) - {"outcome", "todo"}:
@@ -96,9 +96,9 @@ def record_plan(project: Path, task_id: str, plan: object, agent: str | None = N
                   summary=outcome, data={"todo": items})
 
 
-def record_done(project: Path, task_id: str, n: object, agent: str | None = None) -> dict:
+def record_done(project: Path, task_id: str, n: object) -> dict:
     evs = read(project)
-    _dispatched_check(evs, task_id, agent)
+    _dispatched_check(evs, task_id)
     plan = plans(evs).get(task_id)
     if not plan:
         raise PlanError(f"{task_id} has no plan yet: run `bay plan {task_id} '<json>'` first")
@@ -132,14 +132,15 @@ def record_review(project: Path, task_id: str, verdict: object) -> dict:
                   summary=_text(summary, "summary", MAX_OUTCOME) if summary else "", data={"items": kept})
 
 
-def _dispatched_check(evs: list[dict], task_id: str, agent: str | None) -> dict:
+def _dispatched_check(evs: list[dict], task_id: str) -> dict:
+    """The taskId must be a logged dispatch. Plan ownership is per agent type, not per run: the guard lets a role
+    subagent run only its own `bay plan` command, and the dispatch record (callId, step) ties the plan to the call
+    that submits it (`Dispatcher._require_plan`). The CLI cannot tell two siblings of one type apart."""
     if not isinstance(task_id, str) or not TASK_ID.match(task_id):
         raise PlanError(f"'{task_id}' is not a taskId (T-YYYYMMDD-xxxx)")
     disp = dispatched_agent(evs, task_id)
     if disp is None:
         raise PlanError(f"{task_id} was not dispatched to any agent; `bay plan` takes only the taskId in your task block")
-    if agent and disp.get("agent") not in (None, agent):
-        raise PlanError(f"{task_id} was dispatched to another agent; `bay plan` takes only your own taskId")
     return disp
 
 

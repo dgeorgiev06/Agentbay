@@ -557,16 +557,16 @@ def cmd_task(args):
 
 def cmd_plan(args):
     """A dispatched agent's outcome and to-do list: the only `bay` command a subagent may run. It appends its own
-    events and changes nothing else. The guard names the caller in AGENTBAY_AGENT so another agent's taskId fails."""
+    events and changes nothing else. It accepts a logged dispatch's taskId; plan ownership is enforced per agent type
+    by the guard (a role subagent may run only `bay plan`) plus the dispatch record, not per run."""
     try:
         if args.done is not None:
             if args.plan_json:
                 _die("✗ pass either the plan JSON or --done <n>, not both")
-            ledger.record_done(args.project, args.task, args.done, agent=os.environ.get("AGENTBAY_AGENT"))
+            ledger.record_done(args.project, args.task, args.done)
             print(f"item {args.done} of {args.task} done")
         else:
-            ledger.record_plan(args.project, args.task, _json_arg(args.plan_json) if args.plan_json else None,
-                               agent=os.environ.get("AGENTBAY_AGENT"))
+            ledger.record_plan(args.project, args.task, _json_arg(args.plan_json) if args.plan_json else None)
             print(f"plan recorded for {args.task}")
     except ledger.PlanError as e:
         _die(f"✗ {e}")

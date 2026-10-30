@@ -2,6 +2,7 @@
 
     apiVersion: agentbay/v2
     secrets: { provider: env }                  # override env provider (e.g. on Linux)
+    approvals: { chat: true }                   # let gates be approved from chat (default off)
     modes:
       feed-briefing:
         lookback: 3d
@@ -43,6 +44,12 @@ def load(project: Path | None) -> dict:
     if errs:
         raise ConfigError(f"{p}:\n    " + "\n    ".join(errs))
     return doc
+
+
+def chat_approvals(cfg: dict) -> bool:
+    """`approvals: { chat: true }`: the owner lets the Chief of Staff relay a gate approval from chat
+    (`bay approve --via chat`). Off unless set to exactly true (proposal 0006, Part G)."""
+    return (cfg.get("approvals") or {}).get("chat") is True
 
 
 def config_path(project: Path | None, rel: str) -> Path:

@@ -90,9 +90,10 @@ class Dispatcher:
             return self._finish(state, mode, feat)
         return self._advance(mode, feat, state)
 
-    def approve(self, call_id: str, approved: bool, reason: str = "", by: str = "user") -> dict:
-        """Pass or reject the approval gate a call is waiting on. Called only from `bay approve`, which
-        requires an interactive terminal (never pre-approved for Claude Code)."""
+    def approve(self, call_id: str, approved: bool, reason: str = "", by: str = "user", quote: str = "") -> dict:
+        """Pass or reject the approval gate a call is waiting on. Called only from `bay approve`, which needs an
+        interactive terminal, or `--via chat` with the project's approvals.chat on; never pre-approved for Claude
+        Code. `quote` is the owner's message a chat approval relays; the ledger keeps it next to `by`."""
         state = self._load(call_id)
         mode, feat = self.sys.feature(state["target"])
         if state["status"] != "awaiting-approval":
@@ -103,12 +104,25 @@ class Dispatcher:
         if not approved:
             state["status"] = "blocked"
             state["result"] = {"reason": reason or "rejected at the approval gate"}
-            self._ledger("step.completed", base, summary=f"gate rejected by {by}", data={"approved": False})
+            self._ledger("step.completed", base, summary=f"gate rejected by {by}",
+                         data={"approved": False, "by": by, **({"quote": quote} if quote else {})})
             return self._finish(state, mode, feat)
-        state["steps"][step.id] = {"approved": True, "by": by}
-        self._ledger("step.completed", base, summary=f"gate approved by {by}", data={"approved": True})
+        state["steps"][step.id] = {"approved": True, "by": by, **({"quote": quote} if quote else {})}
+        self._ledger("step.completed", base, summary=f"gate approved by {by}",
+                     data={"approved": True, "by": by, **({"quote": quote} if quote else {})})
         state["cursor"] += 1
         return self._advance(mode, feat, state)
+
+    def approve_run(self, run_id: str, approved: bool, by: str, reason: str = "", quote: str = "") -> dict:
+        """Pass or reject the gate a project workflow run waits on (`bay approve W-...`), and record who did,
+        with the quoted message of a chat approval, in the ledger."""
+        out = self.run_capability("cos", "workflow.run/v1.approve", {
+            "runId": run_id, "approved": approved, "by": by,
+            **({"reason": reason} if reason else {}), **({"quote": quote} if quote else {})})
+        ledger.append(self.project, "step.completed", run_id, source="dispatcher", step=out.get("stage"),
+                      summary=f"gate {'approved' if approved else 'rejected'} by {by}",
+                      data={"approved": approved, "by": by, **({"quote": quote} if quote else {})})
+        return out
 
     def show(self, call_id: str) -> dict:
         """Current state of a call (result, or the step it waits on). Read-only."""

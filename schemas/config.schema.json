@@ -37,6 +37,16 @@
         }
       }
     },
+    "approvals": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Approval gates. chat: true lets `bay approve --via chat --quote ...` pass a gate without a terminal, relayed by the Chief of Staff and labelled user@chat-via-cos in the ledger. Default off.",
+      "properties": {
+        "chat": {
+          "type": "boolean"
+        }
+      }
+    },
     "envs": {
       "type": "object",
       "additionalProperties": {

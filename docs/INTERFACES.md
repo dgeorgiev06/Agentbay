@@ -157,7 +157,7 @@ of stage effects. Run state is in `.agentbay/data/workflows/`, written only by t
 ## 7. Dispatcher
 `bay call <mode>.<endpoint> '<json>'` -> `{callId, status, output | next, checks, review, cost}`.
 Status: `done | partial | blocked | failed | needs-agent | awaiting-approval`.
-`bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic step (usage goes to the step's event); `bay show <callId>` prints the current state; approval gates pass only with `bay approve <callId>` in an interactive terminal (a project workflow's gate the same way, with its `W-...` run id). A role's generated shim
+`bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic step (usage goes to the step's event); `bay show <callId>` prints the current state; approval gates pass only with `bay approve <callId>` in an interactive terminal (a project workflow's gate the same way, with its `W-...` run id), or with `bay approve <id> --via chat --quote "<the owner's message>"` when agentbay.config.yaml sets `approvals: { chat: true }` (ledger: `by: user@chat-via-cos` and the quote). A role's generated shim
 `.agentbay/roles/<role>--<mode>/use <iface>/v<N>.<ep> '<json>'` (unit fixed inside: role, mode and env; read-only endpoints of the mode's needs)
 is the only way an agent reads connector data; the guard hook stops subagents from running anything else. Secret values are redacted from everything it returns or logs.
 

@@ -34,8 +34,8 @@ spec:
     proposal:
       description: >-
         The approval status in a proposal's front matter (`status: approved` with `approvedBy` and `date`). It is
-        informational: forge.extend skips `propose` for it, never the `approve` gate (only a recorded
-        `bay approve` of the proposal's exact content passes that).
+        informational: it grants nothing: only a recorded `bay approve` of the proposal's exact content skips
+        `propose` and the `approve` gate.
       in:
         type: object
         required: [path]

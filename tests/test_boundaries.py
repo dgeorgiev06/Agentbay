@@ -797,7 +797,10 @@ def test_chat_approval_of_a_proposal_is_recorded_and_skips_the_next_gate_while_u
         f.write_text("---\nstatus: approved\napprovedBy: user\ndate: 2026-10-29\ntouches: []\n---\n# chat\n")
         d = _dispatch.Dispatcher(system(k, k), k)
         inp = {"goal": "build the chat-approved proposal", "proposal": "docs/proposals/0099-chat.md"}
-        cid = d.call("forge.extend", inp)["callId"]
+        first = d.call("forge.extend", inp)            # the marker grants nothing: propose runs, then the gate
+        assert first["next"]["step"] == "propose", first
+        cid = d.submit(first["callId"], "propose", {"status": "done", "summary": "s",
+                                                    "artifacts": [inp["proposal"]]})["callId"]
         r = _cli(k, k, cid, "--via", "chat", "--quote", "approve 0099 as written")
         assert r.returncode == 0, r.stderr
         assert "docs/proposals/0099-chat.md at sha256 " in r.stdout
@@ -807,6 +810,8 @@ def test_chat_approval_of_a_proposal_is_recorded_and_skips_the_next_gate_while_u
         assert "approved by user@chat-via-cos on " in why and "content unchanged" in why, why
         f.write_text(f.read_text() + "\nedited\n")
         again = d.call("forge.extend", inp)
+        assert again["next"]["step"] == "propose", again       # any edit: propose and the gate both run again
+        again = d.submit(again["callId"], "propose", {"status": "done", "summary": "s", "artifacts": [inp["proposal"]]})
         assert again["next"]["step"] == "approve" and "changed since user@chat-via-cos approved it" in again["next"]["why"]
     finally:
         cleanup(k)

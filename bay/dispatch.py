@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import secrets as _rand
 import time
 from pathlib import Path
@@ -32,6 +33,8 @@ VERDICT = "review.verdict/v1"
 # gate for a later call
 APPROVERS = ("user@tty", "user@chat-via-cos")
 FAIL_LEVELS = ("must", "must_not")
+# a proposal a propose step wrote: its output `artifacts` name it (docs/proposals/<id>.md)
+PROPOSAL_PATH = re.compile(r"^docs/proposals/[A-Za-z0-9][A-Za-z0-9._-]*\.md$")
 
 
 class CallError(Exception):
@@ -259,6 +262,9 @@ class Dispatcher:
         step's output counts as missing). `stale > <age>`: skip a code step while the store is fresher."""
         neg = step.when.startswith("!")
         ref = step.when[1:] if neg else step.when
+        if ref.startswith("approved "):         # the gate's rule: the ledger holds an approval of the current content
+            approved = self._gate_check(step, state, self._file_subject(ref.split(None, 1)[1], state))["skipped"]
+            return approved if neg else not approved
         if ref.startswith(("$in.", "$steps.")):
             v = substitute({"v": ref}, state["input"], state["steps"], {}).get("v")
             return bool(v) if neg else not v
@@ -275,7 +281,14 @@ class Dispatcher:
         inside the project). The dispatcher hashes the file itself; no connector output decides a gate."""
         if step.kind != "gate" or not step.approves:
             return None
-        path = substitute({"v": step.approves}, state["input"], state["steps"], {}).get("v")
+        return self._file_subject(step.approves, state)
+
+    def _file_subject(self, expr: str, state) -> dict | None:
+        """{path, sha256} of the project file `expr` names. A list (a step's `artifacts`) names the proposal that
+        step wrote: its first docs/proposals/<id>.md."""
+        path = substitute({"v": expr}, state["input"], state["steps"], {}).get("v")
+        if isinstance(path, list):
+            path = next((x for x in path if isinstance(x, str) and PROPOSAL_PATH.match(x)), None)
         if not isinstance(path, str) or not path:
             return None
         root = self.project.resolve()
@@ -442,6 +455,7 @@ class Dispatcher:
             plan.update({"gate": step.task,
                          "approve": f"the USER runs in their own terminal: .agentbay/bay approve {state['callId']} "
                                     f"(or --reject --reason '...'); then `.agentbay/bay show {state['callId']}`",
+                         **self._chat_path(state["callId"]),
                          **({"why": gate["why"]} if gate.get("why") else {}),
                          **({"approves": gate["approves"]} if gate.get("approves") else {}),
                          "inputs": {k: v for k, v in state["steps"].items() if v is not None}})
@@ -476,6 +490,16 @@ class Dispatcher:
             "tools": [f"{use_shim(role.unit)} {u} '<json>'" for u in role.bay_uses],
         })
         return plan
+
+    def _chat_path(self, call_id: str) -> dict:
+        """With `approvals.chat` on, the gate plan also names the chat path (the owner's own words, quoted)."""
+        try:
+            on = cfgmod.chat_approvals(cfgmod.load(self.project))
+        except cfgmod.ConfigError:
+            return {}
+        return {"approveFromChat": f"approvals.chat is on: when the user's latest message clearly approves this gate, "
+                                   f".agentbay/bay approve {call_id} --via chat --quote \"<their exact message>\" "
+                                   f"(never infer approval)"} if on else {}
 
     def _endpoint_output(self, feat, state):
         for st in reversed(feat.steps):

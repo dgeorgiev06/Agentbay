@@ -232,8 +232,8 @@
                 },
                 "when": {
                   "type": "string",
-                  "pattern": "^(stale\\s*>\\s*[0-9]+[mhdw]|!?\\$in\\.[A-Za-z][A-Za-z0-9]*|!?\\$steps\\.[a-z][a-z0-9-]*\\.[A-Za-z][A-Za-z0-9]*)$",
-                  "description": "`stale > 2h` (code step: skip unless the store is older), `$in.<field>` or `$steps.<id>.<field>` (skip unless truthy); a leading `!` skips when truthy instead."
+                  "pattern": "^(stale\\s*>\\s*[0-9]+[mhdw]|!?approved\\s+\\$in\\.[A-Za-z][A-Za-z0-9]*|!?\\$in\\.[A-Za-z][A-Za-z0-9]*|!?\\$steps\\.[a-z][a-z0-9-]*\\.[A-Za-z][A-Za-z0-9]*)$",
+                  "description": "`stale > 2h` (code step: skip unless the store is older), `$in.<field>` or `$steps.<id>.<field>` (skip unless truthy), `approved $in.<field>` (true when the ledger holds the owner's `bay approve` of that file's current content); a leading `!` skips when true instead."
                 },
                 "task": {
                   "type": "string",
@@ -248,8 +248,8 @@
                 },
                 "approves": {
                   "type": "string",
-                  "pattern": "^\\$in\\.[A-Za-z][A-Za-z0-9]*$",
-                  "description": "Gate only: `$in.<field>` names a project file whose exact content the gate approves. The ledger records its path and sha256 with the approval; a later call naming the same file with the same content skips the gate, any edit makes it run again."
+                  "pattern": "^\\$in\\.[A-Za-z][A-Za-z0-9]*(\\|\\$steps\\.[a-z][a-z0-9-]*\\.[A-Za-z][A-Za-z0-9]*)?$",
+                  "description": "Gate only: `$in.<field>` names a project file whose exact content the gate approves; `|$steps.<id>.<field>` falls back to the docs/proposals file listed in an earlier step's output (its `artifacts`). The ledger records its path and sha256 with the approval; a later call naming the same file with the same content skips the gate, any edit makes it run again."
                 },
                 "review": {
                   "const": "here",

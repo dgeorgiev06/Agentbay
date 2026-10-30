@@ -1,3 +1,50 @@
+# HANDOFF: 0008 stage 1 (slice 8, agent run records, plus dogfood bug fixes)
+
+Task T-20261030-c91d, call C-20261030-bc7db5, step `implement`. Stands in for `bay plan` until it exists.
+
+## Outcome (what done looks like)
+
+Slice 8 acceptance line of docs/proposals/0008-simplify-without-losing-features.md:
+
+- A subagent can run `bay plan` and no other `bay` command.
+- Plan events are scrubbed, size-limited, append-only and refused for another taskId.
+- `step.started` carries the step's inputs.
+- `bay status` lists a dispatched agent even with the spawn hook off (cos logs the dispatch).
+- A role-step submit without a recorded outcome is refused.
+- `bay show` prints outcome, to-do progress and inputs.
+- `bay status --agents` groups runs by role, mode, model and tier from the ledger alone.
+- A reviewer verdict cites outcome and to-do items.
+- improve's weekly backlog reads the same figures.
+
+Dogfood bugs, each with a test:
+
+- (a) result block `protocol:` and the step `Result` type agree.
+- (b) with `approvals.chat` on, gate plan and `bay show` name the chat path.
+- (c) approval binds to proposal path and sha256 even when written by the same call's propose step.
+- (d) one skip rule: ledger approval of the proposal's current content skips propose and approve; front-matter marker grants nothing.
+- (e) ledger approval binding for 0008's current content, if (c) makes it derivable.
+
+Constraints: security only stricter (except `bay plan`, which only appends its own events); guard tests only added to; no new dependencies; no compat code; commit per green item; stop near 50 tool calls with this file updated.
+
+## To-do (status: open / done / dropped(reason) / blocked(reason))
+
+1. done. Bug (a): align `protocol:` in the subagent result block and the `Result` type. Serves bug (a).
+2. done. Bug (b): gate plan and `bay show` name the chat path when `approvals.chat` is on. Serves bug (b).
+3. done. Bug (c): approval binding uses propose-step output artifacts or the call input. Serves bug (c).
+4. done. Bug (d): single skip rule by ledger approval; remove front-matter reliance. Serves bug (d).
+5. open. `ledger`: `agent.plan` / `agent.plan.done` events, scrubbed, size-limited, taskId-checked, fold. Serves "plan events scrubbed, size-limited, refused for another taskId".
+6. open. `bay plan` CLI command, append-only; guard allows it as the only `bay` command for subagents. Serves "subagent can run bay plan and no other".
+7. open. `step.started` carries inputs (value, or sha256 plus preview). Serves "step.started carries inputs".
+8. open. `agent.dispatch` event via cos (`bay dispatched` or equivalent) and `bay status` lists it. Serves "status lists dispatched agent with hook off".
+9. open. Refuse role-step submit with no recorded outcome. Serves "submit refused without outcome".
+10. open. `bay show` prints outcome, to-do progress, inputs. Serves "bay show prints ...".
+11. open. `bay status --agents` grouping by role, mode, model, tier. Serves "status --agents".
+12. open. Reviewer brief and verdict cite outcome and to-do items. Serves "reviewer verdict cites ...".
+13. open. improve weekly backlog reads the same figures. Serves "improve's backlog reads same figures".
+14. open (bug (e) already answered: NOT derivable. The 0008 gate event of this call recorded `approves: none`, because the gate then named no file; recording a binding by hand would forge the owner's approval, so it is left to followups). Docs (README, INTERFACES, DESIGN, COORDINATOR/playbooks) and bug (e) binding. Serves R-4 and bug (e).
+
+---
+
 # HANDOFF - proposal 0006, step 1
 
 Branch `feat/source-kinds` (slices 1-3, PR #10); slice 7a on `feat/extend-v2`, based on PR #10's branch. The spec is `docs/proposals/0006-component-contracts-and-content-types.md`

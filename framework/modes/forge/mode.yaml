@@ -33,11 +33,12 @@ spec:
       - { id: scaffold, run: forge.scaffold/v1.create, with: { kind: "$in.kind", name: "$in.name", target: "$in.target", implements: "$in.implements", intent: "$in.intent" } }
       - { id: fill, role: builder, out: Result, task: "Fill every TODO the scaffold left so the result matches the intent and passes ./bay.sh lint." }
     extend:
-      # a proposal marked approved in its front matter skips propose (nothing to draft); the gate is skipped only
-      # when the ledger holds the owner's `bay approve` of this proposal's exact content (approves:, path + sha256)
+      # one rule: when the ledger holds the owner's `bay approve` of the proposal's current content (path + sha256),
+      # propose and the gate are both skipped. The proposal's front-matter status grants nothing. A proposal the
+      # propose step writes is bound to its approval through that step's artifacts.
       - { id: proposal, run: forge.scaffold/v1.proposal, with: { path: "$in.proposal" }, when: $in.proposal }
-      - { id: propose, role: builder, out: Result, when: "!$steps.proposal.approved", task: "Write the design change proposal to docs/proposals/<id>.md (problem, change to concepts/schemas/CLI, compatibility impact)." }
-      - { id: approve, gate: "The user approves the proposal in docs/proposals/ before anything is implemented.", approves: $in.proposal }
+      - { id: propose, role: builder, out: Result, when: "!approved $in.proposal", task: "Write the design change proposal to docs/proposals/<id>.md (problem, change to concepts/schemas/CLI, compatibility impact)." }
+      - { id: approve, gate: "The user approves the proposal in docs/proposals/ before anything is implemented.", approves: "$in.proposal|$steps.propose.artifacts" }
       - { id: implement, role: builder, out: Result, task: "Implement the approved proposal on a branch: code, schemas, framework modes, docs, tests." }
       - { review: here, id: review }
       - { id: release, role: builder, out: Result, task: "Changelog entry, version bump in bay/__init__.py (and schema apiVersion if contracts changed); all checks green." }

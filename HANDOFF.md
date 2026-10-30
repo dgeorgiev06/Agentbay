@@ -1,3 +1,58 @@
+# HANDOFF part 16: T-20261030-83c8 (recorded with `bay plan`) - slice 5 part A built: golden baseline, content-type loader, `post` moved
+
+Outcome: part A is done and green on feat/0008-stage4. The golden baseline was committed first, from the untouched code; the loader,
+its schema and the contract suite are in; `post` lives in `content-types/post/` and the core reads it only through `bay/contenttypes.py`.
+`email` is untouched (old location, old code path) until part B. Not pushed. No proposal edited.
+
+## To-do and commits
+1. Golden baseline, own commit, passing on the untouched code: a6c035e (`tests/test_offline_golden.py`, `tests/golden/{feed,mail}-briefing.json`).
+2. Loader + schema + contract suite + `post` moved + docs lines reworded: 9bc2597.
+   - `bay/contenttypes.py` (scan/load/check_views/problems, item_kinds, fields_schema), `schemas/content-type.schema.json`,
+     `framework/components.yaml` (`bay/contenttypes.py` under briefing `owns`), `bay/lint.py` (runs `contenttypes.problems`), `bay/model.py`
+     (`data_schema` and `item_kinds` read the types).
+   - `tests/contracts/content_type.py` (the contract: loads, README, fixtures validate, views build under the read-only rules, documented
+     columns equal real columns, item views return one row per fixture) and `tests/test_content_types.py`; `tests/run.py` also globs `content-types/*/tests`.
+   - `content-types/post/` = `content-type.yaml`, `fields.schema.json` (git mv of `schemas/data/post.v1.schema.json`), `views.sql`, `README.md`,
+     `fixtures/items.json`. `v_posts` and its column docs are gone from `bay/sqlsandbox.py`.
+   - Store: `store_meta` table (key `type:<name>` = version), `SCHEMA_VERSION` 3; a store whose type is gone or has another version is refused
+     with "move the folder aside and sync again" (writer and sandbox).
+   - Docs: DESIGN.md:121, :135 and INTERFACES.md:224, :291, :303 reworded (B-11: 0 hits).
+
+## What part B must know
+- Deviations from the part 15 plan, on purpose:
+  - No `ContentType` kind in `model.KINDS`. `bay/contenttypes.py` scans `content-types/*/content-type.yaml` itself (one discovery path, cached by
+    file stat) and lint reports its problems; adding the Kit kind would be a second discovery.
+  - `content-type.yaml` has only `version`, `kind` and `views` (documented columns, `item`, `includes`) for now. `tables`, `derived`, `deriveVersion`
+    are not in `schemas/content-type.schema.json` yet: part B adds them together with the code that reads them (no unused schema keys).
+  - The base DDL (`items`, `item_selectors`) and the `v_items` view moved into `bay/sqlsandbox.py` (`BASE_DDL`, `ITEMS_VIEW`), because the type
+    validation needs them without the connector; `corpus_store.ddl` uses them. `store_types(con)` and `views_of(fts, types)` live there too.
+  - `store_meta` records EVERY type the kit has at store creation (not "the types the mode reads", decision (d)): the golden test needs mail-briefing's
+    describe to keep `v_posts` in part A. Narrowing to `reads:` is the documented describe delta (a); do it in B/C with the golden update.
+  - `tests/test_core_names.py` (part 15 item 4, the ratchet) was not part of this task and is not built.
+- Where email still hard-codes: `VIEWS`, `ITEM_VIEWS`, `MAIL_VIEWS`, `MAIL_FUNCTIONS`, `COLUMNS` (v_email, v_threads, v_attachments, v_fts,
+  v_attachment_fts), `email_view_sql`, `attachments_ddl`, `attachment_rows`, `addr_key` registration, `describe` mail logic in `corpus_store.py`.
+  View order in describe is now `v_items`, the types' views, then `VIEWS[1:]` (`views_of`), which keeps the old order.
+- Type views are written as `CREATE VIEW v_x AS ...` over `temp.v_items` and `main.items`; the loader turns them into `CREATE TEMP VIEW`. `check_views`
+  builds them over an empty store with only the base tables and `v_items`: a type with a child table needs its table in that scaffold (extend `check_views`).
+- Existing tests I had to change (none is a security test; `test_sqlsandbox.py`, `test_boundaries.py`, `test_resolver.py`, `test_dispatch.py`, `test_lint.py` are untouched):
+  `test_corpus_store.py` (user_version 3, "newer than this kit (v3)"), `test_mail_briefing.py` (newer-version case now uses v4, because v3 is current),
+  `test_contract_versions.py` (the F-7 mixed-version case now uses email/v2 from `fake-mail`, because post has one version and lives in a content-type.yaml).
+- `bay/improve/graph.py::_data_schemas` no longer lists `schema:post/v1` (it only scans `schemas/data`); slice 6 touches `bay/improve/`, not changed here.
+- `bay/scaffold.py:128` still says `schemas/data/` in a TODO comment (part C wording).
+- The dead-code step was not run (no command for it in this task); new public names are all used by code or tests.
+- The 17 amendment entries are already in 0008's `touches:`.
+- CLI baseline: `cli_before_check.txt` and a short `cli_before_catalog.txt` are in the scratch folder. `describe feed-briefing` / `describe mail-briefing`
+  were run but not saved (very long JSON, and part A changes no mode file, so they cannot differ); save them with Write at the start of part B if wanted.
+
+## Evidence (last lines)
+- `python3 tests/run.py -q`: `485 passed, 0 failed`
+- `python3 tests/run.py -q -k offline_golden`: `2 passed, 0 failed` (golden files unchanged since a6c035e: `git diff a6c035e --stat -- tests/golden` is empty)
+- `./bay.sh check`: `✓ lint clean` / `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)` (same four `!` warnings as before)
+- `./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`:
+  `boundary origin/main...HEAD: 26 changed paths (9 core, 2 docs, 5 extension, 10 other); 0 failing; B-11 docs: 0 hits` (before this HANDOFF commit)
+- `./bay.sh build --project .../scratchpad/s5a`: `built 6 modes for claude-code`; `./bay.sh clean --project .../scratchpad/s5a`: `clean`
+- Glob of scratch `s5a` after clean: `cli_before_check.txt`, `cli_before_catalog.txt`, `agentbay.config.yaml`
+
 # HANDOFF part 15: T-20261030-db86 (recorded with `bay plan`) - slice 5 of 0008 planned (item 3: finish 0006 step 2 and Part E)
 
 Outcome: slice 5 is split into four sequential builder parts (A to D), each a green commit with its own acceptance, and every path it

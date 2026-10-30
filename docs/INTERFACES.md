@@ -224,7 +224,7 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
 ## 11. Briefing: items, selectors and the corpus store
 - **`item/v1`** is the envelope:
   - `id` (`<source>:<extId>`, unique, what agents cite), `extId`, `source`, `kind`;
-  - `author {handle?, name?, email?}`, `title`, `text`, `url`, `createdAt`, `fetchedAt`;
+  - `author` (optional `handle`, `name` and the address property named in `schemas/data/item.v1.schema.json`), `title`, `text`, `url`, `createdAt`, `fetchedAt`;
   - `container`, `labels[]`, `threadId`;
   - `matched[]`, set by the store.
 

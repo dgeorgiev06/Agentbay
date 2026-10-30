@@ -23,7 +23,7 @@ spec:
                          # deletion checks with it and backfills older mail with `until`
   # A field is native only where Gmail search returns at least what the local matcher keeps (a source may return
   # more, never less). Gmail matches subject: and free terms by whole word (`pil` misses "pilot") and its
-  # negation also matches display names (`-from:ruiz` drops dana@kiln.fi sent as "Dana Ruiz"), so subject, text
+  # negation also matches display names (`-from:ruiz` drops dana@partner.example sent as "Dana Ruiz"), so subject, text
   # and not are matched locally on what from/to/in/has/since fetched.
   selectors:
     from: { mode: native, as: "address or domain (from:, which Gmail also matches on the display name)" }

@@ -86,8 +86,8 @@ def test_selector_fields_map_to_gmail_search():
 
 def test_selector_split_with_the_gmail_capability_table():
     caps = model.Kit(KIT).get("Connector", "gmail-api").spec["selectors"]
-    native, local = selmod.split({"id": "p", "from": "*@kiln.fi", "subject": "staking"}, caps)
-    assert native == {} and local == {"from": "*@kiln.fi", "subject": "staking"}     # wildcards, subject: local
+    native, local = selmod.split({"id": "p", "from": "*@partner.example", "subject": "staking"}, caps)
+    assert native == {} and local == {"from": "*@partner.example", "subject": "staking"}     # wildcards, subject: local
     native, local = selmod.split({"id": "n", "in": "Newsletters", "text": "pil", "not": {"from": "a@b.example"}}, caps)
     assert native == {"in": "Newsletters"} and local == {"text": "pil", "not": {"from": "a@b.example"}}
     native, _ = selmod.split({"id": "a", "from": "a@x.example", "to": "me@x.example", "in": "inbox",
@@ -105,15 +105,15 @@ def test_the_gmail_query_is_never_narrower_than_the_local_match():
     gm = _gm()
     caps = model.Kit(KIT).get("Connector", "gmail-api").spec["selectors"]
     fake = FakeGmail(NOW)
-    msg = new_msg("19d0001", frm="Dana Ruiz <dana@kiln.fi>")
+    msg = new_msg("19d0001", frm="Dana Ruiz <dana@partner.example>")
     msg["headers"]["Subject"] = "Staking pilot timeline"
     msg["parts"] = [{"mimeType": "text/plain", "text": "The pilot starts Monday."}]
     fake.messages[msg["id"]] = msg
     g = make(fake)
     item = g._to_item(fake.render(msg))
     sels = [{"id": "a", "in": "inbox", "not": {"from": "ruiz"}}, {"id": "b", "in": "inbox", "not": {"text": "kiln"}},
-            {"id": "c", "text": "pil"}, {"id": "d", "subject": "pil"}, {"id": "e", "from": "kiln.fi", "text": "pilot"},
-            {"id": "f", "not": {"subject": "ruiz"}}, {"id": "g", "from": "dana@kiln.fi", "in": "label:Newsletters"},
+            {"id": "c", "text": "pil"}, {"id": "d", "subject": "pil"}, {"id": "e", "from": "partner.example", "text": "pilot"},
+            {"id": "f", "not": {"subject": "ruiz"}}, {"id": "g", "from": "dana@partner.example", "in": "label:Newsletters"},
             {"id": "h", "to": "me@example.com", "not": {"from": "*@other.example"}}]
     kept = 0
     for sel in sels:
@@ -703,10 +703,10 @@ def test_me_is_matched_on_normalized_gmail_addresses_and_bulk_mail_never_needs_a
     assert selmod.addr_key("d.r+x@Example.COM") == "d.r@example.com"              # dots matter outside Gmail
     fake = FakeGmail(NOW)
     fake.account = "meself@gmail.com"
-    a = new_msg("19g0001", hours=3, frm="Ana <ana@kiln.fi>")
+    a = new_msg("19g0001", hours=3, frm="Ana <ana@partner.example>")
     a["threadId"], a["headers"]["To"] = "ta", "Me <Me.Self+work@GoogleMail.com>"
     b = new_msg("19g0002", labels=("Label_1",), hours=2, frm="Me <me.self@gmail.com>")   # sent elsewhere, no SENT
-    b["threadId"], b["headers"]["To"] = "tb", "ana@kiln.fi"
+    b["threadId"], b["headers"]["To"] = "tb", "ana@partner.example"
     c = new_msg("19g0003", hours=1, frm="News <news@list.example>")
     c["threadId"], c["headers"]["To"] = "tc", "meself@gmail.com"
     c["headers"]["List-Unsubscribe"] = "<mailto:u@list.example>"

@@ -64,7 +64,7 @@ def test_mail_briefing_extends_briefing_and_places_roles_in_local_mail():
 def test_proposal_example_selectors_validate_against_gmail_and_offline():
     cfg = yaml.safe_load((KIT / "agentbay.config.example.yaml").read_text())
     mail = cfg["modes"]["mail-briefing"]
-    assert mail["lookback"] == "30d" and mail["important"] == ["*@kiln.fi", "*@galaxy.com"]
+    assert mail["lookback"] == "30d" and mail["important"] == ["*@partner.example", "*@example.com"]
     assert {"partners", "staking", "news"} <= {x["id"] for x in mail["selectors"]}
     for envs in ({}, OFFLINE):                                                 # gmail-api, then fake-mail
         p = tmpdir() / "proj"
@@ -72,7 +72,7 @@ def test_proposal_example_selectors_validate_against_gmail_and_offline():
         (p / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "envs": envs,
                                                                 "modes": {"mail-briefing": mail}}))
         s = model.resolve(model.Kit(KIT, p))
-        assert s.modes["mail-briefing"].config["important"] == ["*@kiln.fi", "*@galaxy.com"]
+        assert s.modes["mail-briefing"].config["important"] == ["*@partner.example", "*@example.com"]
 
 
 # ------------------------------------------------------------------ the offline path end to end

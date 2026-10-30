@@ -32,15 +32,19 @@ def _git(repo: Path, *args: str) -> str:
                           check=True, capture_output=True, text=True).stdout
 
 
-def _repo(change: dict[str, str]) -> Path:
+def _repo(change: dict[str, str], moves: tuple = ()) -> Path:
     repo = tmpdir()
     _git(repo, "init", "-q", "-b", "main")
-    for files in (BASE_FILES, change):
+    for i, files in enumerate((BASE_FILES, change)):
         for p, text in files.items():
             (repo / p).parent.mkdir(parents=True, exist_ok=True)
             (repo / p).write_text(text)
+        if i:
+            for old, new in moves:
+                (repo / new).parent.mkdir(parents=True, exist_ok=True)
+                _git(repo, "mv", old, new)
         _git(repo, "add", "-A")
-        _git(repo, "commit", "-q", "-m", "c")
+        _git(repo, "commit", "-q", "--allow-empty", "-m", "c")
     return repo
 
 
@@ -61,6 +65,25 @@ def test_core_edit_fails_without_touches_and_passes_with():
     assert line.startswith("bay/cli.py: kernel - core path owned by kernel (B-1) - add it to touches: in")
     rep = _check({"bay/cli.py": "y\n", "bay/selector.py": "y\n"}, touches=["bay/*.py"])
     assert _failing(rep) == [] and rep.exit_code == 0
+
+
+def test_moves_and_deletions_are_classified_on_both_sides():
+    """F-1: a rename is a deletion plus an addition, whatever the user's git config says about renames."""
+    repo = _repo({}, moves=(("bay/cli.py", "tests/cli.py"),))
+    _git(repo, "config", "diff.renames", "copies")
+    _git(repo, "config", "diff.relative", "true")
+    rep = boundary.check(repo, "HEAD~1", "HEAD", None, [])
+    assert _failing(rep) == ["bay/cli.py"] and rep.failures[0].rule == "B-1"
+    repo = _repo({}, moves=(("modes/mail", "modes/post"),))
+    rep = boundary.check(repo, "HEAD~1", "HEAD", None, [])
+    assert set(_failing(rep)) == {"modes/mail/mode.yaml", "modes/mail/features/digest/playbook.md",
+                                  "modes/mail/features/ask/playbook.md"}
+    assert {f.rule for f in rep.failures} <= {"B-2", "B-3"}
+    _r = _repo({})
+    _git(_r, "rm", "-q", "connectors/gmail/connector.yaml")
+    _git(_r, "commit", "-q", "-m", "d")
+    rep = boundary.check(_r, "HEAD~1", "HEAD", None, [])
+    assert _failing(rep) == ["connectors/gmail/connector.yaml"] and rep.failures[0].rule == "B-2"
 
 
 def test_new_extension_folder_passes():

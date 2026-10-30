@@ -1,6 +1,7 @@
 """`bay boundary`: a deterministic check that a change stays inside its boundaries (proposal 0006, Part F).
 
-It reads `git diff --name-only <base>...<head>` and classifies each changed path with
+It reads `git diff --name-status --no-renames <base>...<head>` and classifies each changed path (deletions
+and both sides of a move included) with
 framework/components.yaml and the proposal's `touches:`:
 
 - core (B-1): under a component's `owns:`; passes only if a `touches:` glob matches.
@@ -145,7 +146,17 @@ def _git(repo: Path, *args: str) -> str:
 
 
 def changed(repo: Path, base: str, head: str = "HEAD") -> list[str]:
-    return [p for p in _git(repo, "diff", "--name-only", f"{base}...{head}").splitlines() if p]
+    """Every path the change adds, modifies or deletes. Renames are split into a deletion and an addition so both
+    sides of a move are classified; the flags pin everything the user's git config could change (rename
+    detection, relative paths, path quoting, external diff drivers)."""
+    out = _git(repo, "-c", "core.quotePath=false", "diff", "--name-status", "--no-renames", "--no-relative",
+               "--no-ext-diff", "-z", f"{base}...{head}")
+    parts = [p for p in out.split("\0")]
+    paths = []
+    for status, path in zip(parts[0::2], parts[1::2]):
+        if status and path:
+            paths.append(path)
+    return list(dict.fromkeys(paths))
 
 
 def _exists_at(repo: Path, ref: str, path: str) -> bool:

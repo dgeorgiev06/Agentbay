@@ -2,7 +2,7 @@
 
 Offline `items.source/v1` for mail: serves `email/v1` items from a JSON fixture (or a built-in sample
 mailbox) with no network and no secrets. The offline env `local-mail-offline` binds it in place of the
-real mail source, with the same selector capability table, so `bay validate` judges selectors the same way.
+real mail source, with the same selector capability table, so `bay check` judges selectors the same way.
 
 **Settings** (`connectors.fake-mail`, all optional): `fixture`, `account`, `deleted`, `removed`, `blocked`.
 See `config.example.yaml` and `connector.yaml` for the fixture shape.

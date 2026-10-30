@@ -16,9 +16,9 @@ def digest_tree(root):
     return h.hexdigest()
 
 
-def test_bay_mode_new_is_lint_clean_and_resolves():
+def test_bay_new_mode_is_lint_clean_and_resolves():
     k = kit_copy()
-    r = subprocess.run([sys.executable, str(k / "bay/cli.py"), "mode", "new", "release-notes",
+    r = subprocess.run([sys.executable, str(k / "bay/cli.py"), "new", "mode", "release-notes",
                         "--intent", "Write release notes from merged PRs"], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert (k / "modes/release-notes/features/run/playbook.md").exists()

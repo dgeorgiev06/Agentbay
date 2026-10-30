@@ -16,7 +16,7 @@ from ..secretscan import clip
 DEFAULTS = {"reviewRounds": 1, "ruleRepeat": 2, "slowStepMs": 600_000, "costlyStepUsd": 1.0,
             "costlySessionUsd": 10.0, "repeatCalls": 3, "permissionEvents": 3, "interrupts": 2,
             "churnCommits": 5, "severeFactor": 3, "statusQuestions": 2}
-CHECK_CITED = re.compile(r"\b(" + "|".join(sorted(checks.REGISTRY)) + r"|bay lint|\blint\b|validate|tests?/|"
+CHECK_CITED = re.compile(r"\b(" + "|".join(sorted(checks.REGISTRY)) + r"|bay check|\blint\b|validate|tests?/|"
                          r"run\.py|pytest|unit tests?|failing tests?|tests? fail\w*)", re.I)
 SCOPE = re.compile(r"\b(out of scope|out-of-scope|outside (the )?(approved )?(scope|proposal|deliverable)|"
                    r"beyond (the )?(approved )?(scope|proposal|deliverable|task)|not in the proposal|unapproved|"

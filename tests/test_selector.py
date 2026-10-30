@@ -76,7 +76,7 @@ def test_validate_reports_unexpressible_fields_and_paid_local_fields():
                 source="x-api")
     s = system(p)
     assert any("`text` is matched locally on paid source x-api" in w for w in s.warnings)
-    r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "validate"],
+    r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "check"],
                        capture_output=True, text=True)
     assert r.returncode == 0 and "matched locally on paid source x-api" in r.stdout
     assert system(project({"modes": {"feed-briefing": {"selectors": [{"id": "s", "text": "staking"}]}}})).warnings == []
@@ -180,7 +180,7 @@ def test_x_from_combined_with_in_on_a_paid_source_warns_in_validate():
                 source="x-api")
     s = system(p)
     assert any("selector 's' combines `from` with `in`" in w and "x-api" in w for w in s.warnings), s.warnings
-    r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "validate"],
+    r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "check"],
                        capture_output=True, text=True)
     assert r.returncode == 0 and "combines `from` with `in`" in r.stdout
     offline = project({"modes": {"feed-briefing": {"selectors": [{"id": "s", "from": "vitalik", "in": "home"}]}}})

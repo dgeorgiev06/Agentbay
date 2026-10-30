@@ -73,7 +73,7 @@ def test_decide_approve_is_human_only_and_backlog_lists_top_items():
         rep = s.backlog(top=5, week="2026-W44")
         assert rep["week"] == "2026-W44" and rep["items"] == [ids[1], ids[0]]       # wontfix excluded; by priority
         text = open(rep["report"]).read()
-        assert text.startswith("# improve backlog 2026-W44") and "bay improve decide" in text
+        assert text.startswith("# improve backlog 2026-W44") and "bay approve" in text
         assert f"`{ids[1]}`" in text and "**Evidence:**" in text and "status **approved**" in text
         assert rep["report"].endswith("reports/2026-W44.md")
     finally:

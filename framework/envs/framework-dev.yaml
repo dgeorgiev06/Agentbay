@@ -12,7 +12,7 @@ spec:
       tools: [Edit, Write, Bash]
       # runs tests on code it writes, i.e. arbitrary code: trusted by design (forge.extend only, user approval
       # gate, mandatory opus review); real containment needs an OS sandbox
-      clis: [./bay.sh lint, ./bay.sh validate, python3 tests/run.py, git status, git diff, git log, git add, git commit]
+      clis: [./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit]
     git.read/v1:
       tools: [Bash]
       clis: [git status, git diff, git log, git show]

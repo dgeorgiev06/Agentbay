@@ -1,5 +1,5 @@
 # The component map (proposal 0006, Part A). Core components own paths and define contracts;
-# extensions are instances of a contract, each in its own folder (`at:`). `bay boundary` reads this map.
+# extensions are instances of a contract, each in its own folder (`at:`). `bay check --base` reads this map.
 # Core files live only under core `owns:` paths (B-4, checked by lint). `owns:` entries are path globs: a trailing `/` owns everything below it.
 components:
   kernel:            # loader, resolver, lint, registry, dispatcher, ledger, guard, CLI

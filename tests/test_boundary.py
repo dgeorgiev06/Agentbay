@@ -1,4 +1,4 @@
-"""`bay boundary` (proposal 0006, Part F: B-1, B-2, B-3, B-11), the component map and proposal front matter."""
+"""`bay check --base` (proposal 0006, Part F: B-1, B-2, B-3, B-11), the component map and proposal front matter."""
 from __future__ import annotations
 
 import subprocess

@@ -1,7 +1,7 @@
 apiVersion: agentbay/v2
 kind: Rules
 rules:
-  - { id: R-1, level: must, statement: "The created content passes bay lint.", appliesTo: both, check: lint_clean, refs: [DOD-1] }
+  - { id: R-1, level: must, statement: "The created content passes bay check.", appliesTo: both, check: lint_clean, refs: [DOD-1] }
   - { id: R-2, level: must_not, statement: "Write framework/, bay/, schemas/, docs/ or tests/ of the kit.", appliesTo: both, refs: [DOD-3] }
   - { id: R-3, level: must_not, statement: "Name concrete tools, connectors or hosts in mode.yaml, playbooks or feature rules.", appliesTo: both, refs: [DOD-4], when: { kind: [mode, feature] } }
   - { id: R-4, level: must, statement: "Every feature declares in/out schemas, effects, playbook and rules in mode.yaml.", appliesTo: both, refs: [DOD-5], when: { kind: [mode, feature] } }

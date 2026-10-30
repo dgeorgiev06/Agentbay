@@ -38,7 +38,7 @@ def load(kit: Path) -> dict:
 
 
 def lint(kit: Path) -> list[str]:
-    """Structure problems of conformance.yaml, as `file:line: message` (used by bay lint)."""
+    """Structure problems of conformance.yaml, as `file:line: message` (used by bay check)."""
     p = path(kit)
     if not p.exists():
         return [f"{PATH}: missing; it is the single source of semantic conformance rules"]

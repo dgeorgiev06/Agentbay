@@ -1,7 +1,7 @@
-"""`bay lint`: structure checks for modes, features, playbooks and rules.
+"""`bay check`, first half: structure checks for modes, features, playbooks and rules.
 
 Every problem is one line, `file:line: message`, naming the concept and the fix.
-`bay validate` runs lint and then full resolution (model.resolve).
+`bay check` runs lint and then full resolution (model.resolve).
 """
 from __future__ import annotations
 
@@ -560,13 +560,8 @@ def lint_extension_names(kit: model.Kit) -> list[str]:
     return out
 
 
-# Scheduled endpoints that a CLI command runs together with the steps they depend on.
-SCHEDULED_BY = {"improve.backlog": "`.agentbay/bay improve weekly` (it runs scan, audit and triage first; cron "
-                                   "recipe in docs/DESIGN.md)"}
-
-
 def warnings(kit: model.Kit) -> list[str]:
-    """Non-fatal findings: printed by `bay lint`, never fail it."""
+    """Non-fatal findings: printed by `bay check`, never fail it."""
     out = []
     for md in kit.docs["Mode"].values():
         if md.spec.get("abstract"):
@@ -574,7 +569,7 @@ def warnings(kit: model.Kit) -> list[str]:
         for ep_name, ep in md.spec["features"].items():
             if ep.get("schedule"):
                 target = f"{md.name}.{ep_name}"
-                run = SCHEDULED_BY.get(target, f"`.agentbay/bay call {target} '{{}}'`")
+                run = f"`.agentbay/bay call {target} '{{}}'`"
                 out.append(f"{_where(*_ep_key_where(md, ep_name, 'schedule'))}: {target} declares "
                            f"schedule '{ep['schedule']}' but no runtime acts on it; run {run} from cron")
     out += split_store_warnings(kit)
@@ -714,7 +709,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     out += lint_config_schemas(kit)
     out += lint_self_description(kit)
     out += lint_skill_names(kit)
-    out += wfmod.structure_problems(kit)        # project workflows; targets are checked by `bay validate`
+    out += wfmod.structure_problems(kit)        # project workflows; targets are checked by `bay check`
     return list(dict.fromkeys(out))
 
 
@@ -840,7 +835,7 @@ MANIFESTS = {"mode": "mode.yaml", "connector": "connector.yaml", "adapter": "ada
 
 def lint_case_and_manifests(kit: model.Kit) -> list[str]:
     """F-4: no two tracked paths differ only in case (one checkout of them would clobber the other on macOS or
-    Windows, and `bay boundary` treats them as one), and every extension folder carries its manifest."""
+    Windows, and `bay check --base` treats them as one), and every extension folder carries its manifest."""
     path = kit.root / "framework" / "components.yaml"
     r = subprocess.run(["git", "-C", str(kit.root), "ls-files", "-z"], capture_output=True)
     if not path.exists() or r.returncode:

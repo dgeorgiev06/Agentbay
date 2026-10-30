@@ -1,8 +1,8 @@
-# Semantic conformance: what "fits the framework" means beyond `bay lint`.
+# Semantic conformance: what "fits the framework" means beyond `bay check`.
 # Single source, read by the reviewers of forge.create and forge.extend (their review plans carry these
 # rules; see `review.rulesets` in framework/modes/forge/mode.yaml) and by improve.audit, which runs every
 # `check` here deterministically and leaves rules without a check to the analyst in improve.audit.
-# `bay lint` validates this file (schemas/conformance.schema.json, unique ids, known checks).
+# `bay check` validates this file (schemas/conformance.schema.json, unique ids, known checks).
 apiVersion: agentbay/v2
 kind: Conformance
 metadata:
@@ -26,7 +26,7 @@ rules:
     check: rules_testable
   - id: C-4
     level: must
-    statement: Modes, playbooks, feature rules, skills and types name capabilities, never concrete tools or connectors (no `Bash`, no `x-api`), and no other mode except their `extends:` parent; tools and connectors are bound in envs. `bay lint` refuses a `mode.yaml` that names a connector; review covers prose.
+    statement: Modes, playbooks, feature rules, skills and types name capabilities, never concrete tools or connectors (no `Bash`, no `x-api`), and no other mode except their `extends:` parent; tools and connectors are bound in envs. `bay check` refuses a `mode.yaml` that names a connector; review covers prose.
     appliesTo: [mode, feature]
     check: names_no_tools
   - id: C-5
@@ -52,7 +52,7 @@ rules:
       persona: role
   - id: C-8
     level: must
-    statement: Layering holds - mode -> role -> agent -> env -> connector. Roles name capabilities, modes place roles in envs, one agent profile runs them, only envs bind connectors, and agents reach connector data only through read-only use shims. No extension imports another - a connector never loads another connector's module - so each can be added or removed alone (`bay lint`, B-7); prose and READMEs may name what an env binds.
+    statement: Layering holds - mode -> role -> agent -> env -> connector. Roles name capabilities, modes place roles in envs, one agent profile runs them, only envs bind connectors, and agents reach connector data only through read-only use shims. No extension imports another - a connector never loads another connector's module - so each can be added or removed alone (`bay check`, B-7); prose and READMEs may name what an env binds.
     appliesTo: [mode, role, env, connector]
   - id: C-9
     level: should

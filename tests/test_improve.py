@@ -147,7 +147,7 @@ def test_scan_triage_backlog_on_fixture_transcripts_and_ledger():
         assert b["status"] == "done" and b["output"]["report"] == ".agentbay/data/improve/reports/2026-W44.md"
         text = (p / b["output"]["report"]).read_text()
         assert text.count("\n## ") == len(b["output"]["items"]) == 10
-        assert "No deterministic check runs before review" in text and "bay improve decide" in text
+        assert "No deterministic check runs before review" in text and "bay approve" in text
         no_secrets_anywhere(p, r, done, t, rv, fin, b)
     finally:
         cleanup(p)
@@ -220,7 +220,7 @@ def test_implement_only_for_approved_items_behind_a_gate_and_edits_nothing():
         cleanup(p)
 
 
-def test_decide_cli_approve_needs_a_terminal():
+def test_approving_a_backlog_item_needs_a_terminal():
     p = proj(transcripts=False)
     try:
         scan(D(p))
@@ -229,46 +229,18 @@ def test_decide_cli_approve_needs_a_terminal():
         def cli(*a):
             return subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), *a],
                                   capture_output=True, text=True, input="yes\n")
-        r = cli("improve", "decide", fid, "approve")
+        r = cli("approve", fid)
         assert r.returncode != 0 and "interactive terminal" in r.stderr
+        r = cli("approve", fid, "--via", "chat", "--quote", "yes approve it", "--sha", "abcdef12")     # never from chat
+        assert r.returncode != 0 and "decided at a terminal" in r.stderr
         assert [f for f in findings(p) if f["id"] == fid][0]["status"] == "open"
-        r = cli("improve", "decide", fid, "defer", "--note", "next quarter")
+        for old in (("improve", "decide", fid, "approve"), ("improve", "weekly")):                      # the old names are gone
+            assert cli(*old).returncode != 0
+        r = cli("approve", fid, "--defer", "--reason", "next quarter")
         assert r.returncode == 0, r.stderr
         f = [f for f in findings(p) if f["id"] == fid][0]
         assert f["status"] == "deferred" and f["history"][-1]["by"] == "cli"
         assert any((e.get("data") or {}).get("kind") == "decision" for e in ledger.read(p))
-    finally:
-        cleanup(p)
-
-
-def test_weekly_writes_the_backlog_only_after_the_analysis_steps():
-    p = proj(transcripts=False)
-    try:
-        def weekly():
-            r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "improve", "weekly"],
-                               capture_output=True, text=True)
-            assert r.returncode == 0, r.stderr
-            return json.loads(r.stdout)
-        out = weekly()
-        assert out["status"] == "pending" and [c["target"] for c in out["calls"]] == \
-            ["improve.scan", "improve.audit", "improve.triage"]
-        assert all(c["status"] == "needs-agent" for c in out["calls"]) and "improve.backlog" in out["next"][-1]
-        assert "--usage" in out["calls"][0]["next"]["submit"]
-        assert not (p / ".agentbay/data/improve/reports").exists()               # no report before the analysis
-        # when nothing is pending, weekly writes the report itself
-        import contextlib
-        import io
-        from bay import cli
-        old, cli.WEEKLY = cli.WEEKLY, ()
-        buf = io.StringIO()
-        try:
-            with contextlib.redirect_stdout(buf):
-                cli.main(["--project", str(p), "improve", "weekly"])
-        finally:
-            cli.WEEKLY = old
-        res = json.loads(buf.getvalue())
-        assert res["status"] == "done" and res["calls"][-1]["target"] == "improve.backlog"
-        assert (p / res["calls"][-1]["output"]["report"]).exists()
     finally:
         cleanup(p)
 

@@ -1,4 +1,4 @@
-"""`bay review-record`: a review that ran outside a framework review step becomes a ledger event improve reads,
+"""`bay note review`: a review that ran outside a framework review step becomes a ledger event improve reads,
 and it can pass no gate."""
 import json
 import subprocess
@@ -28,7 +28,7 @@ def test_review_record_appends_a_scrubbed_event_improve_reads_and_refuses_bad_in
         secret = "sk-ant-api03-" + "a" * 40
         v = json.loads(json.dumps(VERDICT))
         v["items"][1]["evidence"] = f"no migration, key {secret}"
-        r = cli(p, "review-record", TID, json.dumps(v))
+        r = cli(p, "note", "review", TID, json.dumps(v))
         assert r.returncode == 0, r.stderr
         raw = (p / ".agentbay/ledger/events.jsonl").read_text()
         assert secret not in raw and "review.recorded" in raw
@@ -40,8 +40,9 @@ def test_review_record_appends_a_scrubbed_event_improve_reads_and_refuses_bad_in
         for bad in ({"items": []}, {"items": [{"id": "DOD-1", "verdict": "maybe", "evidence": "x"}]},
                     {"items": [{"id": "X-1", "verdict": "pass", "evidence": "x"}]},
                     {"items": [{"id": "DOD-1", "verdict": "pass", "evidence": "x" * 1001}]}, {"nope": 1}):
-            assert cli(p, "review-record", TID, json.dumps(bad)).returncode != 0, bad
-        assert cli(p, "review-record", "T-1", json.dumps(VERDICT)).returncode != 0          # not a taskId
+            assert cli(p, "note", "review", TID, json.dumps(bad)).returncode != 0, bad
+        assert cli(p, "note", "review", "T-1", json.dumps(VERDICT)).returncode != 0          # not a taskId
+        assert cli(p, "review-record", TID, json.dumps(VERDICT)).returncode != 0             # the old name is gone
         assert len([e for e in ledger.read(p) if e["type"] == "review.recorded"]) == 1
     finally:
         cleanup(p)
@@ -74,7 +75,7 @@ def test_a_subagent_may_not_record_a_review():
     p = built()
     try:
         ledger.append(p, "agent.dispatch", TID, source="coordinator", taskId=TID, agent="builder--delivery")
-        c = f".agentbay/bay review-record {TID} '{json.dumps(VERDICT)}'"
+        c = f".agentbay/bay note review {TID} '{json.dumps(VERDICT)}'"
         assert tool(p, "builder--delivery", "Bash", {"command": c})[0] == "deny"
     finally:
         cleanup(p)

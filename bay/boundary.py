@@ -1,4 +1,4 @@
-"""`bay boundary`: a deterministic check that a change stays inside its boundaries (proposal 0006, Part F).
+"""`bay check --base <ref>`: a deterministic check that a change stays inside its boundaries (proposal 0006, Part F).
 
 It reads `git diff --name-status --no-renames <base>...<head>` and classifies each changed path (deletions
 and both sides of a move included) with

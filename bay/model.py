@@ -509,7 +509,7 @@ class System:
     modes: dict[str, ResolvedMode]
     roles: dict[str, RoleDef]
     uninstalled: dict = field(default_factory=dict)   # "<mode>.<endpoint>" -> why it is not installed here
-    warnings: list = field(default_factory=list)      # non-fatal findings (bay validate prints them)
+    warnings: list = field(default_factory=list)      # non-fatal findings (bay check prints them)
     agent: str = DEFAULT_AGENT                        # the agent profile
 
     def env(self, name: str) -> Doc:
@@ -689,7 +689,7 @@ def step_role(st: dict, ep: dict) -> str | None:
 def role_env_problems(md: Doc) -> list[tuple[str | None, str | None, str]]:
     """(feature, step id, message) for every problem with a mode's role -> env maps: a step's role the mode
     does not list, a role with no env, two envs for one step, overrides of roles the mode does not list, and
-    `roles:` on code or gate steps. `bay lint` reports them with file:line, resolve as gaps."""
+    `roles:` on code or gate steps. `bay check` reports them with file:line, resolve as gaps."""
     s, name = md.spec, md.name
     roles = s.get("roles")
     if not roles:

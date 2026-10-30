@@ -54,7 +54,7 @@
     },
     "workflows": {
       "type": "object",
-      "description": "Project workflows: ordered stages composing mode endpoints, run via cos.run. Stage kinds are `call` (<mode>.<endpoint>) and `gate` (approval). `with`, `when`, $in.<field> and $steps.<id>.<field> mean what they mean in a feature's steps. `bay lint` checks every target against the registry and every `with` against that endpoint's input schema.",
+      "description": "Project workflows: ordered stages composing mode endpoints, run via cos.run. Stage kinds are `call` (<mode>.<endpoint>) and `gate` (approval). `with`, `when`, $in.<field> and $steps.<id>.<field> mean what they mean in a feature's steps. `bay check` checks every target against the registry and every `with` against that endpoint's input schema.",
       "propertyNames": {
         "pattern": "^[a-z][a-z0-9-]*$"
       },

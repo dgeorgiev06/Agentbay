@@ -1,4 +1,4 @@
-"""bay lint: one test per failure mode, plus the shipped kit is clean."""
+"""bay check (lint half): one test per failure mode, plus the shipped kit is clean."""
 import shutil
 
 from helpers import KIT, edit_yaml, kit_copy, project
@@ -262,14 +262,14 @@ def test_orphan_feature_folder():
     has(k, "features/stray: feature folder is not referenced by any feature")
 
 
-def test_validate_cli_runs_lint():
+def test_check_cli_runs_lint():
     import subprocess
     import sys
     k = kit_copy()
     sub(k, PB, "## Outputs\n", "## Results\n")
-    r = subprocess.run([sys.executable, str(k / "bay/cli.py"), "validate"], capture_output=True, text=True)
+    r = subprocess.run([sys.executable, str(k / "bay/cli.py"), "check"], capture_output=True, text=True)
     assert r.returncode == 1 and "missing required section '## Outputs'" in r.stdout
-    r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "validate"], capture_output=True, text=True)
+    r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "check"], capture_output=True, text=True)
     assert r.returncode == 0 and "✓ lint clean" in r.stdout and "resolve" in r.stdout
 
 

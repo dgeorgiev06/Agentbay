@@ -15,8 +15,8 @@ comes from a subagent; the main thread sends neither.
     touch .agentbay/ or the kit CLI in any way; everything else falls through
     to normal permissions.
   * main thread (no agent fields): no decision; settings.json applies (explicit
-    `bay show|status|log|note|task` allows, Edit deny rules; `bay call` and
-    `bay submit` always prompt).
+    `bay show|status|note|catalog` allows, with `show reclaim`, `note dispatch`, `note review` and `approve`
+    asking; Edit deny rules; `bay call` and `bay submit` always prompt).
     Claude Code versions that do not send agent fields therefore look like the
     main thread; agentbay requires a version that does (documented).
 

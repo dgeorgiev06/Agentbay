@@ -133,7 +133,7 @@ class Dispatcher:
         if not tids & set(ledger.plans(evs)):
             raise CallError(f"step {step.id}: the run recorded no outcome and to-do list, so its result is not "
                             f"accepted. The agent runs `.agentbay/bay plan <taskId> '<json>'` first (the coordinator "
-                            f"logs the dispatch with `.agentbay/bay dispatched <taskId> --agent <subagent> "
+                            f"logs the dispatch with `.agentbay/bay note dispatch <taskId> --agent <subagent> "
                             f"--call {call_id} --step {step.id}`); then submit again")
 
     def approve(self, call_id: str, approved: bool, reason: str = "", by: str = "user", quote: str = "",
@@ -268,7 +268,7 @@ class Dispatcher:
 
     def run_capability(self, mode_name: str, run: str, args: dict) -> dict:
         """Run one connector endpoint of a mode's capability outside any feature, in the env its code steps use.
-        CLI only (e.g. `bay improve decide`); there is no agent path to it."""
+        CLI only (e.g. `bay approve <F-id>`); there is no agent path to it."""
         if mode_name not in self.sys.modes:
             raise CallError(f"unknown mode '{mode_name}'")
         m = self.sys.modes[mode_name]

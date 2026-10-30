@@ -54,7 +54,10 @@ BAY = ".agentbay/bay"
 # The only control-plane commands the main thread is pre-approved for. Everything else
 # (build, clean, secret, mode new, ...) prompts. Subagents get none of these (guard).
 # Safety rule: nothing that runs code is pre-approved. call/submit run connector code, so they prompt.
-COORDINATOR_CMDS = ("show", "status", "log", "note", "task", "catalog")
+COORDINATOR_CMDS = ("show", "status", "note", "catalog")
+# Writes that sit under a pre-approved command: each is its own prefix (`show reclaim`, `note dispatch`, `note review`)
+# so one `ask` rule keeps the prompt they always had. `ask` is checked before `allow`.
+ASKED_UNDER_COORDINATOR_CMDS = ("show reclaim", "note dispatch", "note review")
 WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 GUARD_MATCHER = "Bash|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep"
 
@@ -128,10 +131,10 @@ def _want_deny(kit: Path, project: Path) -> list[str]:
 
 def _want_ask() -> list[str]:
     """`bay approve` in any spelling always asks the user first (the main thread relays chat approvals
-    only through this prompt); a subagent is refused by the guard hook either way."""
-    return [f"Bash({BAY} approve:*)", "Bash(./bay.sh approve:*)", "Bash(bay approve:*)",
-            "Bash(bay.sh approve:*)", "Bash(python3 -m bay.cli approve:*)",
-            "Bash(python3 bay/cli.py approve:*)", "Bash(python3 */bay/cli.py approve:*)"]
+    only through this prompt); a subagent is refused by the guard hook either way. So do the writes that share a
+    prefix with a pre-approved command (`show reclaim`, `note dispatch`, `note review`)."""
+    spellings = (BAY, "./bay.sh", "bay", "bay.sh", "python3 -m bay.cli", "python3 bay/cli.py", "python3 */bay/cli.py")
+    return [f"Bash({s} {verb}:*)" for verb in ("approve", *ASKED_UNDER_COORDINATOR_CMDS) for s in spellings]
 
 
 def _install_hooks(hooks: dict, kit: Path) -> None:
@@ -195,14 +198,14 @@ def _empty(p: Path) -> bool:
 def _rename_skill(p: Path, name: str) -> None:
     """Set the copied SKILL.md's front-matter `name:` to its namespaced folder name (Claude Code wants them equal).
     The front matter is parsed as YAML (CRLF normalised) and written back with `name` first; a malformed block
-    (`bay lint` reports it) removes the copied skill and stops the build rather than writing a broken file."""
+    (`bay check` reports it) removes the copied skill and stops the build rather than writing a broken file."""
     if not p.exists():
         return
     try:
         meta, body = skill_front_matter(p.read_text(encoding="utf-8"))
     except SpecError as e:
         shutil.rmtree(p.parent, ignore_errors=True)
-        raise SpecError(f"skill {name}: SKILL.md: {e}; run `bay lint`") from e
+        raise SpecError(f"skill {name}: SKILL.md: {e}; run `bay check`") from e
     meta = {"name": name, **{k: v for k, v in meta.items() if k != "name"}}
     head = yaml.safe_dump(meta, sort_keys=False, width=float("inf"), allow_unicode=True, default_flow_style=False)
     p.write_text("---\n" + head + "---\n" + body, encoding="utf-8")
@@ -533,16 +536,19 @@ Machine-readable: `.agentbay/catalog.json`.
 
 ## Control plane (run via Bash)
 
-Pre-approved (read-only): `{BAY} show|status|log|note|task`. `call` and `submit` run connector code, so
-Claude Code asks the user each time; so does everything else (build, clean, secret, scaffolds).
-Subagents cannot run `{BAY}` at all.
+Pre-approved (read-only): `{BAY} show|status|note|catalog`, except `show reclaim`, `note dispatch` and
+`note review`, which ask. `call` and `submit` run connector code, so Claude Code asks the user each time; so
+does everything else (build, clean, secret, scaffolds). Subagents run no `{BAY}` command but their own
+`{BAY} plan`.
 
 - `{BAY} call <mode>.<endpoint> '<json>'` -> run an endpoint; returns a result or the next step plan
 - `{BAY} submit <callId> <stepId> '<json>'` -> hand back a step's output (or a gate approval)
-- `{BAY} task new` -> prints a fresh taskId
-- `{BAY} status` / `{BAY} log -n 20` -> calls, steps and agent runs from the ledger
+- `{BAY} note task` -> prints a fresh taskId
+- `{BAY} status` / `{BAY} status --log -n 20` -> calls, steps and agent runs from the ledger; the raw events
 - `{BAY} note <runId|taskId|callId> "text"` -> record a decision
-- `{BAY} reclaim <runId>` -> mark a stuck run as reclaimed (asks)
+- `{BAY} note dispatch <taskId> --agent <subagent_type> ...` -> log a subagent dispatch (asks)
+- `{BAY} note review <taskId> '<review.verdict/v1 json>'` -> record a review run outside a framework step (asks)
+- `{BAY} show reclaim <runId>` -> mark a stuck run as reclaimed (asks)
 - `{BAY} approve <callId|runId> --via chat --quote "<the user's exact message>"` -> relay a gate approval from
   chat; only if the user set `approvals: {{ chat: true }}` and their latest message clearly approves that gate (asks)
 - `{BAY} describe <mode|role>` -> full resolved definition (asks)

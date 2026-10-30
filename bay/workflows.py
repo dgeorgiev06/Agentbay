@@ -120,7 +120,7 @@ def _optional(schema: dict) -> dict:
 
 
 def structure_problems(kit) -> list[str]:
-    """Checks that need no resolution, so `bay lint` can run them: stage ids, reference order, and
+    """Checks that need no resolution, so `bay check` can run them first: stage ids, reference order, and
     whether a workflow does anything at all."""
     out: list[str] = []
     for name, wf in load(kit).items():
@@ -163,7 +163,7 @@ def _dollars(template, path: str = "") -> list[tuple[str, str]]:
     return []
 
 def target_problems(kit, system) -> list[str]:
-    """Checks that need the resolved system, so `bay validate` runs them: every `call` target resolves
+    """Checks that need the resolved system, so `bay check` runs them: every `call` target resolves
     and every `with` matches that endpoint's input schema."""
     out: list[str] = []
     for name, wf in load(kit).items():

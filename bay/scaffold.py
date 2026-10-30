@@ -84,7 +84,7 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
                _render("feature/playbook.md", mode=name, name="run", intent=intent, role=role or "builder"), files)
         _write(kit, f"{base}/features/run/rules.yaml", _render("feature/rules.yaml"), files)
         todo = [f"fill the TODOs in {base}/features/run/playbook.md and rules.yaml",
-                f"rename or add features with `bay feature new <name> --mode {name}`", "run `./bay.sh lint`"]
+                f"rename or add features with `bay new feature <name> --mode {name}`", "run `./bay.sh check`"]
     elif kind == "feature":
         if not target:
             raise ScaffoldError("kind=feature needs a target mode (--mode <mode>)")
@@ -114,7 +114,7 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
         _write(kit, f"modes/{target}/features/{name}/rules.yaml", _render("feature/rules.yaml"), files)
         mfile.write_text(text)
         files.append(f"modes/{target}/mode.yaml")
-        todo = [f"fill the TODOs in modes/{target}/features/{name}/", "run `./bay.sh lint`"]
+        todo = [f"fill the TODOs in modes/{target}/features/{name}/", "run `./bay.sh check`"]
     elif kind == "connector":
         if not implements:
             raise ScaffoldError("kind=connector needs --implements <interface>/v<N> (e.g. items.source/v1)")

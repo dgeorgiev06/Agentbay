@@ -92,12 +92,17 @@ def test_agentic_step_returns_plan_then_review_then_partial_on_failed_must():
     assert r2["status"] == "needs-agent" and r2["next"]["kind"] == "review"
     rv = r2["next"]
     assert rv["model"] == "opus" and rv["effort"] == "high" and rv["role"] == "reviewer"
+    (rec,) = rv["review"]["recordedPlans"].values()                                  # the brief carries the recorded plan
+    assert rec["step"] == "themes" and rec["outcome"] == "test run of themes" and rec["todo"][0]["n"] == 1
     assert {x["id"] for x in rv["review"]["rules"]} == {"R-1", "R-2", "R-3", "R-4", "R-6"}    # reviewer|both
     chk = {c["rule"]: c for c in rv["review"]["checks"]}
     assert chk["R-1"]["ok"] is False and "not stored items" in chk["R-1"]["detail"]
     verdict = {"items": [{"id": i, "verdict": "pass", "evidence": "ok"}
                          for i in ["DOD-1", "DOD-3", "DOD-4", "DOD-5", "R-2", "R-3", "R-4", "R-6"]]}
+    verdict["items"][0]["cites"] = {"outcome": True, "todo": [1]}                    # optional citation of the recorded plan
     err(lambda: d.submit(r["callId"], "review", verdict), "missing ids: DOD-2", "R-1")
+    bad = {"items": [dict(verdict["items"][0], cites={"todo": [0]})]}
+    err(lambda: d.submit(r["callId"], "review", bad), "does not match review.verdict/v1")
     verdict["items"] += [{"id": "DOD-2", "verdict": "fail", "evidence": "evil.example is not stored", "severity": "blocker"},
                          {"id": "R-1", "verdict": "fail", "evidence": "check R-1 failed", "severity": "blocker"}]
     r3 = d.submit(r["callId"], "review", verdict)

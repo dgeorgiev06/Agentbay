@@ -202,6 +202,15 @@ class Dispatcher:
                         "todo": pl["todo"] if pl else None})
         return {"agents": out} if out else {}
 
+    def _recorded_plans(self, call_id: str) -> dict:
+        """taskId -> {step, outcome, todo} of the agents dispatched for a call: what the reviewer judges the run against;
+        a verdict item may cite them (`cites`)."""
+        evs = ledger.read(self.project)
+        plans = ledger.plans(evs)
+        return {e["taskId"]: {"step": e.get("step"), "outcome": plans[e["taskId"]]["outcome"],
+                              "todo": plans[e["taskId"]]["todo"]}
+                for e in evs if e.get("type") == "agent.dispatch" and e.get("callId") == call_id and e.get("taskId") in plans}
+
     def use(self, unit: str, target: str, inp: dict | None = None) -> dict:
         """Read-only connector access for one compiled unit (a role in one mode and one env). Reached only
         through the unit's own use shim (.agentbay/roles/<unit>/use), which fixes `unit`; there is no CLI flag
@@ -547,6 +556,7 @@ class Dispatcher:
                 "checks": state["checks"],
                 "output": self._endpoint_output(feat, state),
                 "verdictSchema": VERDICT,
+                "recordedPlans": self._recorded_plans(state["callId"]),
             }
             for name in (feat.review or {}).get("rulesets", []):
                 # framework rule sets (e.g. conformance): judged with the DoD; cite their ids in evidence

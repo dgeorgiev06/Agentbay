@@ -226,3 +226,21 @@ def test_child_config_schema_defs_collision_and_other_keywords_are_errors_f13():
     gaps = []
     merged = model.config_schema(model.Kit(k, None), model.Kit(k, None).get("Mode", "mail-briefing"), gaps)
     assert merged["$defs"][clash] == parent["$defs"][clash] and "mailOnly" in merged["$defs"]   # parent's kept
+
+
+def test_child_config_schema_type_and_additional_properties_must_equal_the_parents_n5():
+    k = kit_copy()
+    sch = k / "modes/mail-briefing/config.schema.json"
+    doc = json.loads(sch.read_text())
+    doc["additionalProperties"] = False                    # restates the parent's value: allowed
+    sch.write_text(json.dumps(doc))
+    gaps = []
+    model.config_schema(model.Kit(k, None), model.Kit(k, None).get("Mode", "mail-briefing"), gaps)
+    assert gaps == []
+    rel = "modes/mail-briefing/config.schema.json"
+    for kw, val in (("additionalProperties", True), ("type", "array")):
+        doc2 = dict(doc, **{kw: val})
+        sch.write_text(json.dumps(doc2))
+        want = f"mode mail-briefing: config schema {rel} sets top-level '{kw}' to {json.dumps(val)}"
+        assert_gap(k, want)
+        assert any(want in e for e in problems(k))

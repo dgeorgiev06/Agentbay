@@ -1000,7 +1000,8 @@ def _mode_roles(kit: Kit, md: Doc, ctx: _Ctx, roles: dict) -> ResolvedRole | Non
 
 
 CHILD_CONFIG_KEYS = ("type", "properties", "$defs", "title", "description", "$schema", "required",
-                     "additionalProperties")   # F-13: a child's config schema may use these top-level keywords only
+                     "additionalProperties")   # F-13: a child's config schema may use these top-level keywords only;
+                                               # N-5: `type`/`additionalProperties` only with the parent's value
 
 
 def config_schema(kit: Kit, md: Doc, gaps: list[str]) -> dict | None:
@@ -1021,6 +1022,11 @@ def config_schema(kit: Kit, md: Doc, gaps: list[str]) -> dict | None:
             if k not in CHILD_CONFIG_KEYS:
                 gaps.append(f"mode {md.name}: config schema {rel} uses top-level keyword '{k}', which a child's config "
                             f"schema may not use (it only adds settings; allowed: {', '.join(CHILD_CONFIG_KEYS)})")
+        for k in ("type", "additionalProperties"):     # N-5: may restate the parent's value, never change it
+            if k in sch and (k not in out or sch[k] != out[k]):
+                gaps.append(f"mode {md.name}: config schema {rel} sets top-level '{k}' to {json.dumps(sch[k])}, but "
+                            f"the parent's is {json.dumps(out[k]) if k in out else 'unset'}; a child may only "
+                            f"restate the parent's '{k}' - drop it or make it equal")
         defs = out.get("$defs") or {}
         for k in sch.get("$defs") or {}:
             if k in defs:

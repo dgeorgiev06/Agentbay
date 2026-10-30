@@ -645,7 +645,8 @@ def lint_config_schemas(kit: model.Kit) -> list[str]:
         if md.spec.get("config") and len(md.config_files) > 1:
             gaps: list[str] = []
             model.config_schema(kit, md, gaps)
-            out += [g for g in gaps if "redefines inherited" in g or "a child's config schema may not use" in g]
+            out += [g for g in gaps if "redefines inherited" in g or "a child's config schema may not use" in g
+                    or "a child may only restate" in g]
     return out
 
 
@@ -728,22 +729,19 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
 
 SKILL_REF = re.compile(r"(?:\bthe\s+|\()`?([a-z0-9]+(?:-[a-z0-9]+)*)`?\s+skill\b"
                        r"|\bthe\s+skill\s+`?([a-z0-9]+(?:-[a-z0-9]+)*)`?", re.I)
-# words that follow "the skill" in prose, not names ("the skill is", "the skill to use")
-_SKILL_PROSE = {"a", "an", "and", "as", "at", "by", "can", "does", "for", "from", "has", "in", "is", "it", "may",
-                "must", "of", "on", "or", "should", "that", "the", "then", "this", "to", "was", "when", "which",
-                "will", "with", "you"}
 SKILL_SHORT = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
-def _skill_refs(text: str) -> list[tuple[int, str]]:
-    """Skills a playbook or prompt names by short name ("the corpus-sql skill", "(research-brief skill)")."""
+def _skill_refs(text: str, known: set[str]) -> list[tuple[int, str]]:
+    """Skills a playbook or prompt names by short name ("the `corpus-sql` skill", "(research-brief skill)").
+    A phrase counts only when the name is in backticks or is a skill the kit builds somewhere (`known`), so
+    prose ("the right skill", "the skill is") is not a reference (N-4)."""
     out = []
     for i, ln in enumerate(text.splitlines(), 1):
         for m in SKILL_REF.finditer(ln):
             name = m.group(1) or m.group(2)
-            if m.group(2) and "`" not in m.group(0) and name.lower() in _SKILL_PROSE:
-                continue
-            out.append((i, name))
+            if f"`{name}`" in m.group(0) or name.lower() in known:
+                out.append((i, name))
     return out
 
 
@@ -776,6 +774,8 @@ def lint_skill_names(kit: model.Kit) -> list[str]:
 
     roles = {n: d for n, d in kit.docs["Role"].items()}
     role_skills = {n: list(d.spec.get("skills", [])) for n, d in roles.items()}
+    built = {sk.lower() for md in kit.docs["Mode"].values() for sk in model.mode_skills(md)}
+    built |= {sk.lower() for sks in role_skills.values() for sk in sks}
     for rn, sks in sorted(role_skills.items()):
         for sk in sks:
             add(rn, "role", sk, roles[rn].dir / "skills" / sk)
@@ -791,7 +791,7 @@ def lint_skill_names(kit: model.Kit) -> list[str]:
             if ep.get("playbook"):
                 files.append(next((d / ep["playbook"] for d in md.dirs if (d / ep["playbook"]).exists()), None))
         for f in dict.fromkeys(x for x in files if x is not None):
-            for i, sk in _skill_refs(f.read_text(encoding="utf-8")):
+            for i, sk in _skill_refs(f.read_text(encoding="utf-8"), built):
                 if sk not in known:
                     out.append(f"{_where(f, i)}: names skill '{sk}', which is not in mode {md.name}'s chain "
                                f"({', '.join(sorted(known)) or 'none'}); add skills/{sk}/SKILL.md to the mode or "
@@ -802,7 +802,7 @@ def lint_skill_names(kit: model.Kit) -> list[str]:
             for rn in md.spec.get("roles") or {}:
                 users.setdefault(rn, []).append(md)
     for rn, rd in sorted(roles.items()):
-        for i, sk in _skill_refs(rd.spec.get("prompt", "")):
+        for i, sk in _skill_refs(rd.spec.get("prompt", ""), built):
             missing = [m.name for m in users.get(rn, []) if sk not in model.mode_skills(m)]
             if sk not in role_skills[rn] and (missing or not users.get(rn)):
                 out.append(f"{_where(rd.path, 1)}: role {rn}'s prompt names skill '{sk}', which is neither the "

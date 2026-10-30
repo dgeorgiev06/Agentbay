@@ -296,11 +296,11 @@ def test_same_skill_name_in_two_modes_is_fine_b8():
 
 def test_unknown_skill_reference_fails_lint_b8():
     k = kit_copy()
-    sub(k, "modes/mail-briefing/features/ask/playbook.md", "the corpus-sql skill", "the mail-sql skill")
+    sub(k, "modes/mail-briefing/features/ask/playbook.md", "the corpus-sql skill", "the `mail-sql` skill")
     x = has(k, "modes/mail-briefing/features/ask/playbook.md:14", "names skill 'mail-sql'",
             "not in mode mail-briefing's chain", "corpus-sql")
     assert "skills/mail-sql/SKILL.md" in x
-    sub(k, "framework/roles/researcher.yaml", "Follow the research-brief skill", "Follow the brief-x skill")
+    sub(k, "framework/roles/researcher.yaml", "Follow the research-brief skill", "Follow the `brief-x` skill")
     has(k, "framework/roles/researcher.yaml", "role researcher's prompt names skill 'brief-x'")
 
 
@@ -317,10 +317,25 @@ def test_skill_name_over_64_characters_fails_lint_b8():
 
 def test_skill_references_match_any_case_and_the_skill_x_f8():
     k = kit_copy()
-    sub(k, "modes/mail-briefing/features/ask/playbook.md", "the corpus-sql skill", "The mail-sql Skill")
-    has(k, "modes/mail-briefing/features/ask/playbook.md:14", "names skill 'mail-sql'")
+    sub(k, "modes/mail-briefing/features/ask/playbook.md", "the corpus-sql skill", "The pattern-analysis Skill")
+    has(k, "modes/mail-briefing/features/ask/playbook.md:14", "names skill 'pattern-analysis'")   # built elsewhere
     k = kit_copy()
     sub(k, "modes/mail-briefing/features/ask/playbook.md", "the corpus-sql skill", "the skill `mail-sql`")
     has(k, "modes/mail-briefing/features/ask/playbook.md:14", "names skill 'mail-sql'")
     from bay import lint
-    assert lint._skill_refs("Use the skill to answer; the skill corpus-sql helps.") == [(1, "corpus-sql")]
+    assert lint._skill_refs("Use the skill to answer; the skill corpus-sql helps.", {"corpus-sql"}) == [(1, "corpus-sql")]
+
+
+def test_skill_references_count_only_backticked_or_known_names_n4():
+    from bay import lint
+    known = {"corpus-sql", "digest"}
+    prose = "Pick the right skill. Use the same skill twice; the skill whatever applies (the other skill)."
+    assert lint._skill_refs(prose, known) == []
+    assert lint._skill_refs("the skill `mail-sql`; the `mail-sql` skill; the digest skill; (corpus-sql skill)",
+                            known) == [(1, "mail-sql"), (1, "mail-sql"), (1, "digest"), (1, "corpus-sql")]
+    k = kit_copy()                                         # prose next to a reference is not flagged by lint
+    sub(k, "modes/mail-briefing/features/ask/playbook.md", "the corpus-sql skill",
+        "the corpus-sql skill (the right skill, the same skill; the skill whatever)")
+    assert not [p for p in problems(k) if "names skill" in p]
+    sub(k, "modes/mail-briefing/features/ask/playbook.md", "the right skill", "the `mail-sql` skill")
+    has(k, "modes/mail-briefing/features/ask/playbook.md:14", "names skill 'mail-sql'")

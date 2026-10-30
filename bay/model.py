@@ -83,11 +83,16 @@ def schema(name: str) -> dict:
 
 
 def data_schema(ref: str) -> dict:
-    """'post/v1' -> schemas/data/post.v1.schema.json"""
+    """'item/v1' -> schemas/data/item.v1.schema.json; a content type's `<name>/v<N>` -> its fields.schema.json"""
     name, _, ver = ref.partition("/")
     p = SCHEMAS / "data" / f"{name}.{ver}.schema.json"
     if not p.exists():
-        raise SpecError(f"unknown data schema '{ref}' (expected {p.relative_to(KIT)})")
+        from . import contenttypes
+        found = contenttypes.fields_schema(ref)
+        if found is None:
+            raise SpecError(f"unknown data schema '{ref}' (expected {p.relative_to(KIT)} or a content type "
+                            f"{name} of version {ver})")
+        return found
     return json.loads(p.read_text())
 
 
@@ -95,8 +100,10 @@ VERSIONED = re.compile(r"^[a-z][a-z0-9.-]*/v[0-9]+$")   # `<name>/v<N>`: interfa
 
 
 def item_kinds(kit: Path = KIT) -> dict[str, set[int]]:
-    """Known item kinds (content types): `<kind>/v<N>` data schemas that extend item/v1. kind -> versions."""
-    out: dict[str, set[int]] = {}
+    """Known item kinds: the content types of the kit (content-types/) and `<kind>/v<N>` data schemas that extend
+    item/v1. kind -> versions."""
+    from . import contenttypes
+    out: dict[str, set[int]] = contenttypes.item_kinds(kit)
     for f in sorted((kit / "schemas" / "data").glob("*.v*.schema.json")):
         try:
             doc = json.loads(f.read_text())

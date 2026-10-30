@@ -17,7 +17,7 @@ sys.path.insert(0, str(KIT))
 
 def files() -> list[Path]:
     out = sorted(HERE.glob("test_*.py"))
-    for base in (KIT / "connectors", KIT / "framework" / "connectors"):
+    for base in (KIT / "connectors", KIT / "framework" / "connectors", KIT / "content-types"):
         out += sorted(base.glob("*/tests/test_*.py"))
     return out
 

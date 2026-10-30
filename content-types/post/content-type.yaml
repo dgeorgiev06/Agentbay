@@ -1,0 +1,18 @@
+apiVersion: agentbay/v2
+kind: ContentType
+metadata:
+  name: post
+  description: "A social post (X, Bluesky, ...) with an optional language and engagement counts."
+spec:
+  version: 1
+  kind: post
+  views:
+    v_posts:
+      item: true
+      includes: { view: v_items, note: "kind = 'post' only" }
+      columns:
+        - { name: lang, type: TEXT, description: language code }
+        - { name: metrics, type: JSON, description: engagement counts }
+        - { name: likes, type: INTEGER, description: metrics.like_count }
+        - { name: reposts, type: INTEGER, description: metrics.retweet_count }
+        - { name: replies, type: INTEGER, description: metrics.reply_count }

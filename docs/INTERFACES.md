@@ -221,8 +221,10 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
   - `container`, `labels[]`, `threadId`;
   - `matched[]`, set by the store.
 
-  Kind extensions add fields, using `allOf` item/v1 and `unevaluatedProperties: false`. `post/v1` adds `lang`
-  and `metrics`. `email/v1` adds `from`, `to[]`, `cc[]` (lower-case addresses), `subject`, `messageId`,
+  Kind extensions add fields, using `allOf` item/v1 and `unevaluatedProperties: false`. A content type
+  (`content-types/<name>/`: `content-type.yaml`, `fields.schema.json`, `views.sql`) holds the fields of a kind,
+  its version and its views; the store records the types it was made with and refuses another version.
+  `email/v1` adds `from`, `to[]`, `cc[]` (lower-case addresses), `subject`, `messageId`,
   `inReplyTo`, `account` (the mailbox it was read from: how the views know "me"), `bulk` (List-Unsubscribe, or
   Precedence: bulk or list; such a thread never needs a reply), `hasAttachments` and
   `attachments[] {name, mime, size, textChars, reason?, text?}`; `text` travels from the source to the store
@@ -286,7 +288,7 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
   prune of one mode never run at once (a per-mode lock), and spend is saved before the items commit.
 - **corpus-store** (framework connector) keeps one store per mode, `<env data folder>/<mode>/corpus.db`
   (settings.mode from the dispatcher; a use-shim read uses its unit's mode and env). The file, -wal and -shm
-  are 0600; WAL mode, `user_version` = 2. A store of any other version is refused (move the folder aside and sync
+  are 0600; WAL mode, `user_version` = 3 (`store_meta` records the content types and their versions). A store of any other version is refused (move the folder aside and sync
   again); stores are never converted:
   - `items` (unique source + ext_id);
   - `item_selectors`;
@@ -300,7 +302,7 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
 
   Without FTS5 the store falls back to LIKE matching, and `bay check` warns.
 - **Agent SQL** (`bay/sqlsandbox.py`):
-  - temp views over the store, which holds only the mode's scope: `v_items`, `v_posts`, `v_email` (one row per
+  - temp views over the store, which holds only the mode's scope: `v_items`, the views of the store's content types (`views.sql`), `v_email` (one row per
     message: sender, toList, ccList, messageId, inReplyTo, account, fromMe, toMe, bulk, hasAttachments; "me"
     compares addresses with the SQL function `addr_key`: lower case, no +tag, Gmail dots ignored, googlemail.com
     = gmail.com), `v_threads` (one row per thread: subject, messages, firstDate, lastDate, lastId, lastSender,

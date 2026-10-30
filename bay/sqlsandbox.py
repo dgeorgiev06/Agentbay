@@ -6,8 +6,8 @@ every sync and prune) and no internal state (cursors, budget, coverage, deletion
 separate state.json this connection never opens). So there is nothing out of scope for a query to reach;
 this module only keeps queries read-only and bounded:
   1. the connection is opened `mode=ro` and `PRAGMA query_only` is on;
-  2. sqlite3's authorizer allows SELECT, reads of the views (v_items, v_posts, v_email, v_threads,
-     v_attachments, v_fts, v_attachment_fts) and the store tables (items, item_selectors, attachments,
+  2. sqlite3's authorizer allows SELECT, reads of the views (v_items, the views of the store's content types,
+     v_email, v_threads, v_attachments, v_fts, v_attachment_fts) and the store tables (items, item_selectors, attachments,
      items_fts, attachments_fts), json_each/json_tree, CTEs and an allowlist of functions. It denies writes,
      DDL, ATTACH, PRAGMA, load_extension, sqlite_schema and the FTS shadow tables;
   2b. each query is first prepared as `EXPLAIN <sql>` under that authorizer, and only then runs with FTS5's own
@@ -30,17 +30,18 @@ import sqlite3
 import time
 from pathlib import Path
 
-from . import secretscan, vault
+from . import contenttypes, secretscan, vault
 from .selector import addr_key
 
-SCHEMA_VERSION = 2          # PRAGMA user_version of a corpus store; any other version is refused
-VIEWS = ("v_items", "v_posts", "v_email", "v_threads", "v_attachments", "v_fts", "v_attachment_fts")
+SCHEMA_VERSION = 3          # PRAGMA user_version of a corpus store; any other version is refused
+# the views the store itself creates; a content type adds its own (contenttypes.py) after v_items
+VIEWS = ("v_items", "v_email", "v_threads", "v_attachments", "v_fts", "v_attachment_fts")
 FTS = "items_fts"
 FTS_VIEW = "v_fts"
 ATT_FTS = "attachments_fts"
 ATT_FTS_VIEW = "v_attachment_fts"
 FTS_VIEWS = {FTS_VIEW: FTS, ATT_FTS_VIEW: ATT_FTS}        # full-text view -> the FTS5 table it needs
-ITEM_VIEWS = ("v_items", "v_posts", "v_email")           # one row per item (describe samples these)
+ITEM_VIEWS = ("v_items", "v_email")                      # one row per item (describe samples these)
 MAIL_VIEWS = ("v_email", "v_threads", "v_attachments", ATT_FTS_VIEW)   # describe lists them for stores with email
 MAIL_FUNCTIONS = ("addr_key",)                                         # likewise
 FTS_SHADOW = tuple(f"{t}_{x}" for t in (FTS, ATT_FTS) for x in ("data", "idx", "content", "docsize", "config"))
@@ -84,13 +85,8 @@ ITEM_COLUMNS = [
     ("matched", "JSON", "array of selector ids the item matches; filter with json_each(matched)"),
     ("rid", "INTEGER", "row id (= items_fts.rowid)"),
 ]
-COLUMNS = {   # what describe tells agents; keep in step with view_sql()
+COLUMNS = {   # what describe tells agents, for the views above; a content type documents its own views
     "v_items": ITEM_COLUMNS,
-    "v_posts": [
-        ("(all v_items columns)", "", "kind = 'post' only"), ("lang", "TEXT", "language code"),
-        ("metrics", "JSON", "engagement counts"), ("likes", "INTEGER", "metrics.like_count"),
-        ("reposts", "INTEGER", "metrics.retweet_count"), ("replies", "INTEGER", "metrics.reply_count"),
-    ],
     "v_email": [
         ("(all v_items columns)", "", "kind = 'email' only; title is the subject, author the sender address"),
         ("subject", "TEXT", "= title"), ("sender", "TEXT", "sender address (lower case)"),
@@ -227,18 +223,46 @@ def email_view_sql(fts: bool) -> list[str]:
     return out
 
 
-def view_sql(fts: bool = False) -> list[str]:
-    """Plain views over the store (which holds only the mode's scope). v_fts (FTS5 only) joins items_fts to
-    v_items: the simplest documented way to search, with rank and snippet as columns."""
-    out = [
-        f"CREATE TEMP VIEW v_items AS {_item_select()} FROM main.items i",
-        f"""CREATE TEMP VIEW v_posts AS {_item_select()},
-            json_extract(i.ext, '$.lang') AS lang, json_extract(i.ext, '$.metrics') AS metrics,
-            json_extract(i.ext, '$.metrics.like_count') AS likes,
-            json_extract(i.ext, '$.metrics.retweet_count') AS reposts,
-            json_extract(i.ext, '$.metrics.reply_count') AS replies
-          FROM main.items i WHERE i.kind = 'post'""",
-    ]
+BASE_DDL = (   # the item tables every store has; the store adds its triggers and the full-text tables
+    """CREATE TABLE items (
+         pk INTEGER PRIMARY KEY, source TEXT NOT NULL, ext_id TEXT NOT NULL, kind TEXT NOT NULL,
+         author TEXT, author_name TEXT, title TEXT, body TEXT NOT NULL DEFAULT '', url TEXT,
+         created_at TEXT NOT NULL, fetched_at TEXT NOT NULL, container TEXT,
+         labels TEXT NOT NULL DEFAULT '[]', thread_id TEXT, ext TEXT NOT NULL DEFAULT '{}',
+         UNIQUE (source, ext_id))""",
+    "CREATE INDEX items_created ON items (created_at)",
+    "CREATE INDEX items_author ON items (author)",
+    "CREATE INDEX items_thread ON items (source, thread_id)",
+    """CREATE TABLE item_selectors (item INTEGER NOT NULL, selector TEXT NOT NULL,
+         PRIMARY KEY (item, selector)) WITHOUT ROWID""",
+    "CREATE INDEX item_selectors_selector ON item_selectors (selector)",
+)
+ITEMS_VIEW = f"CREATE TEMP VIEW v_items AS {_item_select()} FROM main.items i"
+
+
+def store_types(con: sqlite3.Connection) -> list[contenttypes.ContentType]:
+    """The content types a store was made with (store_meta), as the kit has them now. A store whose type is gone
+    or has another version is refused: stores are never converted."""
+    held = dict(con.execute("SELECT substr(key, 6), value FROM main.store_meta WHERE key LIKE 'type:%' ORDER BY key"))
+    try:
+        have = contenttypes.load()
+    except Exception as e:
+        raise SqlError(str(e)) from None
+    out = []
+    for name, ver in held.items():
+        if name not in have or str(have[name].version) != ver:
+            now = f"the kit has v{have[name].version}" if name in have else "the kit has no such type"
+            raise SqlError(f"this store holds content type {name} v{ver}, but {now}; stores are never converted: "
+                           f"move the folder aside and sync again")
+        out.append(have[name])
+    return out
+
+
+def view_sql(fts: bool, types: list[contenttypes.ContentType]) -> list[str]:
+    """Plain views over the store (which holds only the mode's scope), then the views of its content types.
+    v_fts (FTS5 only) joins items_fts to v_items: the simplest documented way to search, with rank and snippet
+    as columns."""
+    out = [ITEMS_VIEW, *(sql for ct in types for _, sql in ct.views)]
     if fts:
         out.append(f"""CREATE TEMP VIEW v_fts AS SELECT v.*, f.{FTS} AS fts, f.rank AS rank,
             snippet({FTS}, 1, '[', ']', '…', 16) AS snippet
@@ -266,7 +290,8 @@ def connect_ro(path: Path) -> sqlite3.Connection:
             raise SqlError(f"{path}: written by a pre-release build (internal state inside corpus.db); move the "
                            f"folder aside and sync again")
         fts = has_fts(con)
-        for stmt in view_sql(fts) + email_view_sql(fts):
+        types = store_types(con)
+        for stmt in view_sql(fts, types) + email_view_sql(fts):
             con.execute(stmt)
         for t in (FTS, ATT_FTS) if fts else ():
             # FTS5 reads its config table when the table first connects, which happens while a statement is
@@ -296,9 +321,11 @@ def has_fts(con: sqlite3.Connection) -> bool:
     return con.execute("SELECT 1 FROM main.sqlite_master WHERE name = ?", (FTS,)).fetchone() is not None
 
 
-def views_of(fts: bool) -> list[str]:
-    """The views a read-only connection has, in VIEWS order (no full-text views without FTS5)."""
-    return [v for v in VIEWS if fts or v not in FTS_VIEWS]
+def views_of(fts: bool, types: list[contenttypes.ContentType]) -> list[str]:
+    """The views a read-only connection has: v_items, the content types' views, then the rest in VIEWS order
+    (no full-text views without FTS5)."""
+    own = [v for ct in types for v in ct.view_names()]
+    return [v for v in (VIEWS[0], *own, *VIEWS[1:]) if fts or v not in FTS_VIEWS]
 
 
 def tables_of(fts: bool) -> list[str]:
@@ -311,7 +338,7 @@ class Sandbox:
     def __init__(self, path: Path, *, time_ms: int = TIME_MS, max_bytes: int = MAX_BYTES):
         self.con = connect_ro(path)
         self.fts = has_fts(self.con)
-        self.views = views_of(self.fts)
+        self.views = views_of(self.fts, store_types(self.con))
         self.tables = tables_of(self.fts)
         self.time_ms, self.max_bytes = time_ms, max_bytes
         # every name the file and the temp views define, read before the authorizer is on. A read of no column

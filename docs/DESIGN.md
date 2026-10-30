@@ -117,8 +117,8 @@ cannot contain code once something runs it. Hard isolation needs an OS sandbox.
 
 `modes/briefing` is an abstract base (sync, digest, ask, prune). Each child mode extends it for one kind of
 source, in its own env with its own store, secrets and role units.
-Sources implement `items.source/v1` and return `item/v1` items (`id` is `<source>:<extId>`; a content type
-such as `post/v1` adds fields). A connector declares which selector fields its search handles; the store
+Sources implement `items.source/v1` and return `item/v1` items (`id` is `<source>:<extId>`; a content type, a
+folder `content-types/<name>/` read by `bay/contenttypes.py`, adds fields and the views agents query). A connector declares which selector fields its search handles; the store
 fetches with that native part and re-applies the whole selector with one shared matcher (`bay/selector.py`),
 so behaviour is the same on every source. A source that declares `changeFeed: true` is followed by cursor
 instead of re-listed. A source whose login is missing or expired returns `blocked` with the one command to
@@ -132,8 +132,8 @@ to the mode's env that match a current selector. Every sync and prune enforces i
 a change of selectors or sources every read except `status` is refused until a sync re-scopes. Billing
 counts every item a source returns, and spend is saved before the items commit.
 
-Agents query with `items.store/v1.sql`: one SELECT over the views (`v_items`, `v_posts`, `v_email`,
-`v_threads`, `v_attachments`, `v_fts`, `v_attachment_fts`) and the store tables, on a read-only connection,
+Agents query with `items.store/v1.sql`: one SELECT over the views (`v_items`, the views of the content
+types the store holds, `v_email`, `v_threads`, `v_attachments`, `v_fts`, `v_attachment_fts`) and the store tables, on a read-only connection,
 behind an authorizer with a function allowlist, a pre-pass that refuses FTS shadow tables, and time, heap,
 row, byte and cell limits. Item text and attachment text are secret-scrubbed at ingest and every read is
 redacted and scanned again.

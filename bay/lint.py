@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from . import boundary, checks, config as cfgmod, model, playbook as pbk, rules as rulesmod, workflows as wfmod
+from . import boundary, checks, config as cfgmod, contenttypes, model, playbook as pbk, rules as rulesmod, workflows as wfmod
 
 # Features whose review can never be turned off, with the settings they must use.
 MANDATORY_REVIEW = {"forge.extend": {"when": "always", "tier": "deep", "effort": "high"}}
@@ -413,8 +413,8 @@ def lint_contract_versions(kit: model.Kit) -> list[str]:
                 continue
             k, _, v = n.partition("/v")
             if k not in kinds:
-                out.append(f"{where}: {owner} {key}: unknown item kind '{n}' (known: {known}); add the kind's "
-                           f"schema to schemas/data/ or fix the name")
+                out.append(f"{where}: {owner} {key}: unknown item kind '{n}' (known: {known}); add a "
+                           f"content type for the kind (content-types/<name>/) or fix the name")
             elif int(v) not in kinds[k]:
                 out.append(f"{where}: {owner} {key}: item kind {k} has no version {v} (known: {known})")
 
@@ -703,6 +703,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     out += lint_adapters(kit)
     out += lint_connectors(kit)
     out += lint_contract_versions(kit)
+    out += contenttypes.problems(kit.root)
     out += lint_extension_names(kit)
     out += lint_rulesets(kit)
     out += lint_components(kit)

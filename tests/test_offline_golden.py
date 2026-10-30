@@ -30,7 +30,9 @@ def sql(d, unit, q):
 def collect(mode: str, unit: str, cfg: dict, reads: dict) -> dict:
     p = project(cfg)
     d = dispatch.Dispatcher(system(p), p, clock=clock)
-    out = {"sync": d.call(f"{mode}.sync", {})["output"],
+    r = d.call(f"{mode}.sync", {})
+    assert r["status"] == "done", r
+    out = {"sync": r["output"],
            "describe": d.use(unit, "items.store/v1.describe", {}),
            "status": d.use(unit, "items.store/v1.status", {})}
     out["sql"] = {name: sql(d, unit, q) for name, q in reads["sql"].items()}

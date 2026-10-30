@@ -1,0 +1,7 @@
+[
+  {"id": "x:1", "extId": "1", "source": "x", "kind": "post", "author": {"handle": "alice"}, "text": "Staking update",
+   "url": "https://x.example/alice/1", "createdAt": "2026-10-26T10:00:00Z", "fetchedAt": "2026-10-27T10:00:00Z",
+   "lang": "en", "metrics": {"like_count": 7, "retweet_count": 2, "reply_count": 1}},
+  {"id": "x:2", "extId": "2", "source": "x", "kind": "post", "author": {"handle": "bob"}, "text": "No language, no counts",
+   "createdAt": "2026-10-26T11:00:00Z", "fetchedAt": "2026-10-27T10:00:00Z"}
+]

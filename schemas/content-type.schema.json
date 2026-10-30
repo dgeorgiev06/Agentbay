@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/v2/ContentType",
+  "title": "ContentType",
+  "description": "A content type (proposal 0006, Part B): the contract between the sources that produce one kind of item and the modes that read it. A folder content-types/<name>/ holds content-type.yaml (this file's shape), fields.schema.json (the fields the kind adds to item/v1) and views.sql (only CREATE VIEW v_<name> statements over the base tables). The store builds the views of the types it holds; agents query them.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "agentbay/v2" },
+    "kind": { "const": "ContentType" },
+    "metadata": {
+      "type": "object",
+      "required": ["name", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,40}$" },
+        "description": { "type": "string" }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": ["version", "kind", "views"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "minimum": 1, "description": "The `<kind>/v<N>` that connectors `produces:` and modes `reads:`. A store records it; a store of another version is refused." },
+        "kind": { "type": "string", "pattern": "^[a-z][a-z0-9]*$", "description": "The item `kind` value of the items this type describes." },
+        "views": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "What `describe` tells agents about each view views.sql creates, keyed by view name (v_<name>). The documented columns must equal the real ones.",
+          "propertyNames": { "pattern": "^v_[A-Za-z0-9_]+$" },
+          "additionalProperties": {
+            "type": "object",
+            "required": ["columns"],
+            "additionalProperties": false,
+            "properties": {
+              "item": { "type": "boolean", "description": "One row per item: describe adds samples and a time span." },
+              "includes": {
+                "type": "object",
+                "required": ["view", "note"],
+                "additionalProperties": false,
+                "description": "The view starts with every column of this base view; `note` is what describe says about those columns.",
+                "properties": { "view": { "const": "v_items" }, "note": { "type": "string" } }
+              },
+              "columns": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "type", "description"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": { "type": "string" },
+                    "type": { "enum": ["TEXT", "INTEGER", "REAL", "JSON"] },
+                    "description": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

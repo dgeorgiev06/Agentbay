@@ -23,6 +23,7 @@ components:
   briefing:          # corpus store, SQL sandbox, selector matcher, the briefing base mode
     owns:
       - framework/connectors/corpus-store/
+      - bay/contenttypes.py
       - bay/sqlsandbox.py
       - bay/selector.py
       - framework/interfaces/items.*

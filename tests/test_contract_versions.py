@@ -103,8 +103,9 @@ def test_b7_catches_case_module_forms_nested_tests_and_referenced_files():
 def test_mixed_versions_of_a_read_kind_are_refused_f7():
     """F-7: one bound connector producing the read version does not excuse another producing a different one."""
     k = kit_copy()
-    v2 = (k / "schemas/data/post.v1.schema.json").read_text().replace("post/v1", "post/v2")
-    (k / "schemas/data/post.v2.schema.json").write_text(v2)
-    sub(k, "connectors/fake/connector.yaml", "produces: [post/v1]", "produces: [post/v2]")
-    sub(k, "envs/local-feeds.yaml", "items.source/v1: [x-api]", "items.source/v1: [x-api, fake]")
-    has(k, "mode feed-briefing reads post/v1, but in env local-feeds fake produce post/v2: mixed versions of post")
+    v2 = (k / "schemas/data/email.v1.schema.json").read_text().replace("email/v1", "email/v2")
+    (k / "schemas/data/email.v2.schema.json").write_text(v2)
+    sub(k, "connectors/fake-mail/connector.yaml", "produces: [email/v1]", "produces: [email/v2]")
+    sub(k, "envs/local-mail.yaml", "items.source/v1: [gmail-api]\n    items.store", "items.source/v1: [gmail-api, fake-mail]\n"
+        "    items.store")
+    has(k, "mode mail-briefing reads email/v1, but in env local-mail fake-mail produce email/v2: mixed versions of email")

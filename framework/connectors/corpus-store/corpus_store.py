@@ -67,7 +67,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from bay import model, secretscan, selector as selmod, sqlsandbox as sbx, vault
+from bay import contenttypes, model, secretscan, selector as selmod, sqlsandbox as sbx, vault
 from bay.config import COST_PER_POST_USD
 from bay.connect import ConnectorError
 from bay.util import duration, iso, parse_time, read_json
@@ -92,19 +92,9 @@ class StoreError(ConnectorError):
 
 def ddl(fts: bool) -> list[str]:
     out = [
-        """CREATE TABLE items (
-             pk INTEGER PRIMARY KEY, source TEXT NOT NULL, ext_id TEXT NOT NULL, kind TEXT NOT NULL,
-             author TEXT, author_name TEXT, title TEXT, body TEXT NOT NULL DEFAULT '', url TEXT,
-             created_at TEXT NOT NULL, fetched_at TEXT NOT NULL, container TEXT,
-             labels TEXT NOT NULL DEFAULT '[]', thread_id TEXT, ext TEXT NOT NULL DEFAULT '{}',
-             UNIQUE (source, ext_id))""",
-        "CREATE INDEX items_created ON items (created_at)",
-        "CREATE INDEX items_author ON items (author)",
-        "CREATE INDEX items_thread ON items (source, thread_id)",
-        """CREATE TABLE item_selectors (item INTEGER NOT NULL, selector TEXT NOT NULL,
-             PRIMARY KEY (item, selector)) WITHOUT ROWID""",
-        "CREATE INDEX item_selectors_selector ON item_selectors (selector)",
+        *sbx.BASE_DDL,
         "CREATE TRIGGER items_ad_tags AFTER DELETE ON items BEGIN DELETE FROM item_selectors WHERE item = old.pk; END",
+        "CREATE TABLE store_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID",
     ]
     out += attachments_ddl(fts)
     if fts:
@@ -143,10 +133,13 @@ def attachments_ddl(fts: bool) -> list[str]:
 
 
 def create_schema(con: sqlite3.Connection) -> bool:
-    """Create the current schema in an empty database. Returns whether FTS5 is in use."""
+    """Create the current schema in an empty database and record the content types it is made for (store_meta).
+    Returns whether FTS5 is in use."""
     fts = sbx.fts5_available()
     for stmt in ddl(fts):
         con.execute(stmt)
+    con.executemany("INSERT INTO store_meta (key, value) VALUES (?, ?)",
+                    [(f"type:{ct.name}", str(ct.version)) for ct in contenttypes.load().values()])
     con.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     return fts
 
@@ -177,6 +170,12 @@ def open_rw(path: Path) -> sqlite3.Connection:
         con.close()           # a pre-release store kept state inside corpus.db, where agents could count it
         raise StoreError(f"{path}: written by a pre-release build (internal state inside corpus.db); move the "
                          f"folder aside and sync again")
+    else:
+        try:
+            sbx.store_types(con)
+        except sbx.SqlError as e:
+            con.close()
+            raise StoreError(f"{path}: {e}") from None
     return con
 
 
@@ -1077,12 +1076,15 @@ class CorpusStore:
         v_attachment_fts) and the attachments full-text example are listed only when the store holds email."""
         limits = {"rows": sbx.DEFAULT_ROWS, "maxRows": sbx.MAX_ROWS, "bytes": sbx.MAX_BYTES, "timeMs": sbx.TIME_MS,
                   "cellChars": sbx.CELL_CHARS}
-        cols = {v: [{"name": n, "type": t, "description": d} for n, t, d in sbx.COLUMNS[v]] for v in sbx.VIEWS}
+        types = list(contenttypes.load().values())      # a store not made yet will hold every type the kit has
+        docs = {v: ct.column_docs(v) for ct in types for v in ct.view_names()} | sbx.COLUMNS
+        cols = {v: [{"name": n, "type": t, "description": d} for n, t, d in docs[v]] for v in docs}
+        item_views = {*sbx.ITEM_VIEWS, *(v for ct in types for v in ct.item_views())}
         fts = {"view": sbx.FTS_VIEW, "indexes": ["title", "text", "author"],
                "example": "SELECT id, url, snippet FROM v_fts WHERE fts MATCH 'staking AND custody' "
                           "ORDER BY rank LIMIT 20"}
         if not self.path.exists():
-            data_views = [v for v in sbx.VIEWS if v not in sbx.FTS_VIEWS and v not in sbx.MAIL_VIEWS]
+            data_views = [v for v in sbx.views_of(False, types) if v not in sbx.MAIL_VIEWS]
             return {"views": [{"name": v, "columns": cols[v], "rows": 0} for v in data_views],
                     "fts": {**fts, "available": sbx.fts5_available()}, "functions": _functions(False),
                     "limits": limits}
@@ -1091,14 +1093,15 @@ class CorpusStore:
         try:
             fts["available"] = sbx.has_fts(con)
             mail = con.execute("SELECT 1 FROM v_items WHERE kind = 'email' LIMIT 1").fetchone() is not None
-            present = [v for v in sbx.views_of(fts["available"]) if mail or v not in sbx.MAIL_VIEWS]
+            present = [v for v in sbx.views_of(fts["available"], sbx.store_types(con))
+                       if mail or v not in sbx.MAIL_VIEWS]
             views, rows = [], {}
             for v in present:
                 if v in sbx.FTS_VIEWS:
                     continue
                 rows[v] = n = con.execute(f"SELECT count(*) FROM {v}").fetchone()[0]
                 entry = {"name": v, "columns": cols[v], "rows": n}
-                if v in sbx.ITEM_VIEWS:
+                if v in item_views:
                     samples = {}
                     for c in ("source", "kind", "container", "author"):
                         samples[c] = [r[0] for r in con.execute(

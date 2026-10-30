@@ -269,7 +269,7 @@ def test_a_blocked_source_with_an_empty_store_blocks_digest_and_feed_briefing_be
 def test_a_store_of_another_schema_version_is_refused_not_converted():
     p = project()
     store(p).sync()
-    for ver, fix in ((1, "move the folder aside and sync again"), (3, "update agentbay")):
+    for ver, fix in ((1, "move the folder aside and sync again"), (4, "update agentbay")):
         con = sqlite3.connect(db(p))
         con.execute(f"PRAGMA user_version = {ver}")
         con.commit()

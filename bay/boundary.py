@@ -12,6 +12,7 @@ framework/components.yaml and the proposal's `touches:`:
 - docs: README.md, docs/DESIGN.md, docs/INTERFACES.md change only when listed.
 - other: tests/, the proposal, HANDOFF.md, proposal/research records, repo meta and generated files pass
   (agentbay.config.example.yaml: `bay config example` assembles it from the extensions, lint fails when stale).
+- a file in the repo root that no component owns (TODO.md, CLAUDE.md) passes: it is not framework code.
 - anything else is unowned and fails unless listed (CI config under `.github/` included).
 
 Inputs come from commits, never the working tree (F-14): the component map and the "is this extension new" tree
@@ -153,8 +154,9 @@ class ComponentMap:
 
 
 def stray(paths: list[str], cmap: ComponentMap) -> list[str]:
-    """B-4: the paths that are neither core docs, other, under a core `owns:` path nor in an extension folder."""
-    return [p for p in paths if p not in DOCS and not any(match(g, p) for g in OTHER)
+    """B-4: the paths that are neither core docs, other, a repo-root file, under a core `owns:` path nor in an
+    extension folder."""
+    return [p for p in paths if p not in DOCS and not any(match(g, p) for g in OTHER) and "/" in p
             and not cmap.owner(p) and not cmap.extension(p)]
 
 
@@ -329,6 +331,8 @@ def classify(path: str, cmap: ComponentMap, touches: list[dict], is_new, proposa
                            "" if listed else f"mode-wide file of an existing mode; list it (B-3)")
         return Finding(path, "extension", label, listed, "B-2",
                        "" if listed else f"existing {c.name} folder {root} (B-2)")
+    if "/" not in path:                  # an ordinary repo-root file (TODO.md, .env.example): not framework code
+        return Finding(path, "other", "repo root", True)
     return Finding(path, "unowned", "unowned", listed, "unowned",
                    "" if listed else "not under any component or extension in framework/components.yaml")
 

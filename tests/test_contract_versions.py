@@ -71,14 +71,12 @@ def test_no_extension_names_another_b7():
     sub(k, "framework/modes/forge/features/create/playbook.md", "stubbed HTTP layer", "fake HTTP layer")
     ps = lint.run(k)
     hits = [p for p in ps if "B-7" in p]
-    assert any(pb in p and "mode mail-briefing names connector gmail-api" in p for p in hits), hits
-    assert any(pb in p and "mode mail-briefing names mode feed-briefing" in p for p in hits), hits
-    assert any("x_api.py:2: connector x-api names mode feed-briefing" in p for p in hits), hits
+    # 0008: prose that names a mode or a connector in a playbook or a comment is fine; an import is not
+    assert not any(pb in p or "forge/features/create/playbook.md" in p for p in ps), ps
     assert any("x_api.py:3: connector x-api imports fake of connector fake" in p for p in hits), hits
-    assert any("forge/features/create/playbook.md" in p and "mode forge names connector fake" in p for p in hits)
+    assert not any("x_api.py:2" in p for p in hits), hits
     assert not any("README.md" in p or "tests/" in p for p in hits), hits
-    # the extends parent may be named; a framework mode may name a framework connector
-    assert not any("names mode briefing" in p for p in hits) and not any("names connector ledger" in p for p in hits)
+    assert not any("connector ledger" in p for p in hits)
 
 
 def test_b7_catches_case_module_forms_nested_tests_and_referenced_files():
@@ -94,12 +92,10 @@ def test_b7_catches_case_module_forms_nested_tests_and_referenced_files():
     edit = k / "connectors/fake/connector.yaml"
     edit.write_text(edit.read_text().replace("entry: fake.py", "entry: ../../shared/x_entry.py", 1))
     hits = [p for p in lint.lint_extension_names(model.Kit(k)) if "B-7" in p]
-    assert any("x_api.py:2: connector x-api names connector gmail-api" in p for p in hits), hits
-    assert any("x_api.py:3: connector x-api names connector gmail-api" in p for p in hits), hits
-    assert any("x_api.py:4: connector x-api names connector gmail-api" in p for p in hits), hits
-    assert any("x_api.py:5: connector x-api names connector fake-mail" in p for p in hits), hits
-    assert any("lib/tests/helper.py:1: connector x-api names connector fake-mail" in p for p in hits), hits
-    assert any("shared/x_entry.py:1: connector fake names mode feed-briefing" in p for p in hits), hits
+    assert any("x_api.py:3: connector x-api imports gmail_api of connector gmail-api" in p for p in hits), hits
+    assert any("x_api.py:4: connector x-api uses the module key of connector gmail-api" in p for p in hits), hits
+    assert any("x_api.py:5: connector x-api uses the module key of connector fake-mail" in p for p in hits), hits
+    assert not any("x_api.py:2" in p or "helper.py" in p or "x_entry.py" in p for p in hits), hits      # prose
 
 
 def test_mixed_versions_of_a_read_kind_are_refused_f7():

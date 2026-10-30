@@ -118,11 +118,12 @@ env allows; `open_browser(url)` and `say(text)`. The entry runs in-process, so t
 handed, not what the process can do. `bay lint` refuses a `login:` whose `needs.secrets` no env that binds
 the connector allows.
 
-No extension names another: `bay lint` (B-7) scans a mode's or connector's files, and the files its manifest
-references, for another extension's name in any case, its module form (`_` for `-`), the kernel's
-`agentbay_connector_*`/`agentbay_adapter_*` module keys and imports. README.md and the extension's top-level
-`tests/` are exempt. A static scan cannot be complete (a name can be computed at run time); review covers the
-rest.
+No connector loads another: `bay lint` (B-7) scans a connector's code and the files its manifest references for
+imports of another connector's module and for the kernel's `agentbay_connector_*`/`agentbay_adapter_*` module
+keys. Prose, comments and names in playbooks are not scanned; a mode names a connector nowhere in `mode.yaml`.
+README.md and the extension's top-level `tests/` are exempt. A static scan cannot be complete (a name can be
+computed at run time); review covers the rest. Files in the repository root that no component owns (a TODO.md)
+are not framework code and pass `bay boundary`; `CHANGELOG.md` is owned by the kernel.
 
 ## 5. Adapter and registry
 ```python

@@ -26,7 +26,7 @@ rules:
     check: rules_testable
   - id: C-4
     level: must
-    statement: Modes, playbooks, feature rules, skills and types name capabilities, never concrete tools or connectors (no `Bash`, no `x-api`), and no other mode except their `extends:` parent; tools and connectors are bound in envs. `bay lint` refuses a mode file that names a connector or another mode (B-7).
+    statement: Modes, playbooks, feature rules, skills and types name capabilities, never concrete tools or connectors (no `Bash`, no `x-api`), and no other mode except their `extends:` parent; tools and connectors are bound in envs. `bay lint` refuses a `mode.yaml` that names a connector; review covers prose.
     appliesTo: [mode, feature]
     check: names_no_tools
   - id: C-5
@@ -52,7 +52,7 @@ rules:
       persona: role
   - id: C-8
     level: must
-    statement: Layering holds - mode -> role -> agent -> env -> connector. Roles name capabilities, modes place roles in envs, one agent profile runs them, only envs bind connectors, and agents reach connector data only through read-only use shims. No extension names or imports another - a connector never names a mode or another connector - so each can be added or removed alone (`bay lint`, B-7); a README may name what its env binds.
+    statement: Layering holds - mode -> role -> agent -> env -> connector. Roles name capabilities, modes place roles in envs, one agent profile runs them, only envs bind connectors, and agents reach connector data only through read-only use shims. No extension imports another - a connector never loads another connector's module - so each can be added or removed alone (`bay lint`, B-7); prose and READMEs may name what an env binds.
     appliesTo: [mode, role, env, connector]
   - id: C-9
     level: should

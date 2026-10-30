@@ -1,3 +1,37 @@
+# HANDOFF part 21: T-20261030-3a6a (recorded with `bay plan`) - stage-4 review findings fixed
+
+Outcome: done on feat/0008-stage4. Not pushed. No proposal edited.
+
+## To-do and commits
+1. DOD-3: 49617d3. `Dispatcher._open_uses` (`bay/dispatch.py`) returns the INTERSECTION of the `uses:` of every open call
+   waiting on the unit. The callId was not carried through the shim: the shim line is matched by the guard and the allow patterns
+   (security tests, which must stay unchanged), so the fail-closed fallback was used. `tests/test_feature_uses.py` now expects
+   refusal of the other call's endpoint (status, facets) with digest and ask open; new test with two open calls of different features.
+   Followup: a per-call `--call <callId>` in the tool lines needs the guard patterns changed (a separate proposal).
+2. DOD-13 / R-4: f2b2939. README folder map gains `content-types/`, commands table gains `bay show <mode> --resolved`.
+3. DOD-8 nits: cf4f257.
+   - (1) `_usage` in corpus-store raises StoreError "state.json budget uses the old key `posts`: move the folder aside and sync again"
+     (test added in test_corpus_store.py).
+   - (2) `derive_again` rolls back and raises StoreError on any exception from derive.py; `open_rw` closes the connection for it.
+   - (3) `tests/test_core_names.py`: the allowlist key is now (file, name, place): the identifier, the Python expression holding the
+     string (`au.get('email')`) or the key path in a data file. A new `kind == "email"` in an allowlisted file is a hit.
+   - (4) textChars: it fails loudly, not `len(text)`. The email fields schema (0006 / the item schema) lists `textChars` as required (0 when
+     metadata only), and the store validates every item against it, so text without `textChars` is refused. New test
+     `test_an_attachment_without_textchars_is_refused_not_guessed`.
+   - `docs/INTERFACES.md:227` reads `author {handle?, name?, email?}`; B-11 docs: 0 hits.
+4. HANDOFF part 21 (this commit).
+
+## Followups
+- The proposal's front matter (line 2 "Not approved", line 157 "Status: draft") is stale; editing it voids the approval, so left alone.
+- Per-call `uses:` scope through a callId in the shim line (see 1).
+
+## Evidence (last lines)
+- `python3 tests/run.py -q`: `502 passed, 0 failed`
+- `./bay.sh check`: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`
+- boundary: see the final check below
+- `./bay.sh build --project <scratch>`: `built 6 modes for claude-code`; `./bay.sh clean`: `clean`; Glob of the scratch folder: only `agentbay.config.yaml`
+- golden: `git diff --stat 7486406 HEAD -- tests/golden` is empty
+
 # HANDOFF part 20: T-20261030-68bd (recorded with `bay plan`) - the 3 complexity findings of the deadcode step cleared
 
 Outcome: done on feat/0008-stage4. Not pushed. No proposal edited. No behaviour change; no threshold raised, no exclusion added.

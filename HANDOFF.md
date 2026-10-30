@@ -138,6 +138,29 @@ Slice 3, B-8 (bc7634a):
   clean removes `.claude/skills/`), test_dispatch plan `skills`, test_lint `*_b8` (3), test_inheritance.
 - Touches: `modes/*/skills/` `planned` off; bay/dispatch.py's slice-5 planned entry merged into a slice-3 one.
 
+### Review round 1 (PR #10, independent review)
+Fixed (one commit each, pushed):
+- F-2 `bay auth`: LoginContext reads and stores through vault.SecretAccessor (env `secrets.allow` x connector
+  `needs.secrets`), `--env` must bind the connector, lint refuses a `login:` whose needs.secrets no binding env
+  allows; docstring says it limits the API, not the in-process entry. Test: the reviewer's evil connector.
+- F-3 test_roles creates `interfaces/` in the kit copy; stray empty `interfaces/` removed.
+- F-1 `bay boundary` diffs with `--name-status --no-renames --no-relative -z` (deletions and both sides of a move;
+  independent of git config). 0006 already listed `interfaces/items.*` and `framework/interfaces/`.
+- F-4 new-extension detection is casefolded against `git ls-tree` at base; lint rejects case-colliding tracked
+  paths and mode/connector/adapter folders without their manifest.
+- F-5 B-11 fences follow CommonMark (opening char and length); names match with re.I.
+- F-6 B-7: re.I, module form, `agentbay_connector_*`/`agentbay_adapter_*` keys, only top-level `tests/` exempt,
+  manifest-referenced files (entry, mode config) scanned unless core; INTERFACES states the scan is incomplete.
+- F-7 B-6 flags a bound connector producing a read kind at another version (mixed versions).
+- F-8 skill references: re.I and "the skill X" (prose words after "the skill" skipped unless backticked).
+- F-9 docs: `adapters/` in the protected lists; skill namespaces and SKILL.md `name:` rewrite; connector `login:`
+  and the `bay auth` contract (INTERFACES section 4).
+- F-10 `bay boundary` ignores `planned: true`; bay/improve/graph.py listed (slice 2), schemas/ and connectors/*/
+  narrowed to this PR's files; later-slice globs stay planned.
+Remaining: F-11 (two envs substitute the same env), F-12 (adapter.yaml lint, discover() reports bad entries,
+sys.modules keyed by folder), F-13 (config schema `$defs` collision / other top-level keywords), F-14 (component
+map at --base, proposal at --head, drop `.github/` from OTHER), F-15 (`_rename_skill` yaml front matter, CRLF).
+
 ## Decisions
 - Classification order: other (tests/, HANDOFF.md, docs/proposals/, docs/research/, repo meta, the
   proposal) → core docs → core `owns:` (most specific glob wins, so bay/selector.py is briefing) →
@@ -220,7 +243,12 @@ Slice 3, B-8 (bc7634a):
 - (slice 3, B-8) The proposal text (D.1, row B-8) still says `<mode>:<skill>`; left as approved, code follows
   the Decision above.
 
+- (review 1) B-7 skips a manifest-referenced file that lies under a core `owns:` path (feed-briefing's config is
+  briefing's schema); core is not scanned. Content types get no manifest check yet (manifest name not fixed).
+- (review 1) Login secrets: the old "does not declare" check stays first (security test pins its message), then
+  the SecretAccessor intersection applies.
 ## Next
+- Review round 1: fix F-11 to F-15 (see Done, "Review round 1"), in that order; then re-request review.
 Slices 1-3 complete: PR 1 ready for independent review. Look closely at:
 - B-7 framework-instance exemption: framework modes/connectors may name each other (not user extensions);
   core instances (briefing base mode, corpus-store) are not scanned at all; README.md and an extension's
@@ -235,9 +263,9 @@ Slices 1-3 complete: PR 1 ready for independent review. Look closely at:
 - `bay auth` LoginContext limits (secrets/network) in bay/cli.py.
 
 ## Test status
-`python3 tests/run.py -q`: 375 passed, 0 failed (the suite takes ~2-3 min; use a long timeout).
-`bay lint` clean, `bay validate` ok, build + clean on a scratch project ok. `bay boundary --base 07aae9e
---proposal docs/proposals/0006-...md --docs`: 0 failing, 0 B-11 hits.
+`python3 tests/run.py -q`: 384 passed, 0 failed on a clean checkout of fb8f25f (~3 min; use a long timeout).
+`bay lint` clean, `bay validate` ok, build + clean on a scratch project ok. `bay boundary --base origin/main
+--proposal docs/proposals/0006-...md --docs`: 92 changed paths, 0 failing, 0 B-11 hits.
 
 ## Open problems
 - DESIGN.md is 1603 words (target ~1.5k); further trimming would cut contract text (safety, store invariants).

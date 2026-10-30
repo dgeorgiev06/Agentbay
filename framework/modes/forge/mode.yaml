@@ -33,8 +33,10 @@ spec:
       - { id: scaffold, run: forge.scaffold/v1.create, with: { kind: "$in.kind", name: "$in.name", target: "$in.target", implements: "$in.implements", intent: "$in.intent" } }
       - { id: fill, role: builder, out: Result, task: "Fill every TODO the scaffold left so the result matches the intent and passes ./bay.sh lint." }
     extend:
-      - { id: propose, role: builder, out: Result, task: "Write the design change proposal to docs/proposals/<id>.md (problem, change to concepts/schemas/CLI, compatibility impact)." }
-      - { id: approve, gate: "The user approves the proposal in docs/proposals/ before anything is implemented." }
+      # an approved proposal (front matter status: approved, approvedBy, date) skips propose and the gate
+      - { id: proposal, run: forge.scaffold/v1.proposal, with: { path: "$in.proposal" }, when: $in.proposal }
+      - { id: propose, role: builder, out: Result, when: "!$steps.proposal.approved", task: "Write the design change proposal to docs/proposals/<id>.md (problem, change to concepts/schemas/CLI, compatibility impact)." }
+      - { id: approve, gate: "The user approves the proposal in docs/proposals/ before anything is implemented.", when: "!$steps.proposal.approved" }
       - { id: implement, role: builder, out: Result, task: "Implement the approved proposal on a branch: code, schemas, framework modes, docs, tests." }
       - { review: here, id: review }
       - { id: release, role: builder, out: Result, task: "Changelog entry, version bump in bay/__init__.py (and schema apiVersion if contracts changed); all checks green." }

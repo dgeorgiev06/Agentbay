@@ -76,6 +76,7 @@ touches:
   - { path: schemas/mode.schema.json, reason: "`when:` accepts `!` and `$steps.<id>.<field>` (Part C)", slice: 7 }
   - { path: framework/interfaces/forge.scaffold.v1.yaml, reason: "`proposal` endpoint: a proposal's approval status (Part C)", slice: 7 }
   - { path: framework/connectors/scaffold/, reason: "implements the `proposal` endpoint (Part C)", slice: 7 }
+  - { path: framework/modes/forge/features/extend/playbook.md, reason: "the proposal step and the chat approval path (7a)", slice: 7 }
   - { path: framework/modes/forge/mode.yaml, reason: "extend skips propose and the gate for an approved proposal (7a); foreach slices, code check step (7b)", slice: 7 }
   - { path: framework/modes/forge/playbook.md, reason: the shared slice-and-handoff protocol and quiet checks (Part C), slice: 7, planned: true }
   - { path: framework/modes/improve/features/audit/, reason: the boundary-crossing detector, slice: 7, planned: true }

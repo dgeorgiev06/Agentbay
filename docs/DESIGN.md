@@ -35,7 +35,7 @@ rules and optional review block. A workflow is ordered steps:
 - `{review: here}`: where the review step goes (default: last).
 
 `with:` substitutes `$in.x`, `$steps.<id>.x` and `$config.x` (with `a|b` fallbacks); `when:` skips a step
-(`stale > 2h` or `$in.<field>`). A playbook has the sections Purpose, Inputs, Steps, Definition of Done
+(`stale > 2h`, `$in.<field>` or `$steps.<id>.<field>`; `!` negates). A playbook has the sections Purpose, Inputs, Steps, Definition of Done
 (`- [DOD-n] (must|should|must_not) ...`), Outputs and Failure handling. Rules reference DoD ids, may name a
 deterministic `check` (`citations_resolve`, `no_secrets`, `lint_clean`, ...), and stack with mode
 constraints, role rules and project `extraRules`; the strictest wins. Review is configured only in

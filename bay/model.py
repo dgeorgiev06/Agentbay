@@ -1124,6 +1124,10 @@ def _feature_steps(kit: Kit, md: Doc, ctx: _Ctx, ep: dict, wf: list, where: str)
         steps.append(_role_step(ctx, md, ep, {"id": "review", "role": review["role"]}, f"{where} review",
                                 ep_eff, review=review))
     ids = [x.id for x in steps]
+    for i, x in enumerate(steps):
+        ref = (x.when or "").lstrip("!")
+        if ref.startswith("$steps.") and ref.split(".")[1] not in ids[:i]:
+            ctx.gaps.append(f"{where} step {x.id}: when: {x.when} names '{ref.split('.')[1]}', which is not an earlier step")
     for d in {i for i in ids if ids.count(i) > 1}:
         ctx.gaps.append(f"{where}: duplicate step id '{d}'" + (" (the review step is injected from mode.yaml review; "
                         "do not add a step called review)" if d == "review" else ""))
@@ -1249,7 +1253,7 @@ def _role_step(ctx: _Ctx, md: Doc, ep: dict, st: dict, sw: str, ep_eff, review: 
     kit, gaps = ctx.kit, ctx.gaps
     rn = st["role"]
     kind = "review" if review is not None else "role"
-    step = Step(id=st["id"], kind=kind, role=rn, task=st.get("task", ""), out=st.get("out"))
+    step = Step(id=st["id"], kind=kind, role=rn, task=st.get("task", ""), out=st.get("out"), when=st.get("when"))
     label = "review role" if review is not None else "role"
     if rn not in kit.docs["Role"]:
         gaps.append(f"{sw}: unknown {label} '{rn}' (have: {', '.join(sorted(kit.docs['Role']))})")

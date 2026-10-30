@@ -8,8 +8,9 @@ Change the agentbay framework itself (concepts, schemas, CLI, runtime, framework
 - `proposal` (optional): an existing docs/proposals/<id>.md to implement; `context` (optional).
 
 ## Steps
+First, when `proposal` is given, a code step reads its front matter. When it says `status: approved` with `approvedBy` and `date`, `propose` and `approve` are skipped and the call goes straight to `implement`. Only the user marks a proposal approved.
 1. `propose`: the builder, in env framework-dev, writes docs/proposals/<id>.md: problem, change to concepts/schemas/CLI, compatibility impact.
-2. `approve`: approval gate. The call stops with `awaiting-approval`; only the user passes it, with `bay approve <callId>` in an interactive terminal.
+2. `approve`: approval gate. The call stops with `awaiting-approval`; only the user passes it, with `bay approve <callId>` in an interactive terminal (or from chat, when they turned `approvals.chat` on).
 3. `implement`: the builder implements the approved proposal on a branch: code, schemas, framework modes, docs and tests.
 4. `review`: the reviewer (opus, high effort) checks every DoD item and rule below.
 5. `release`: changelog entry, version bump in bay/__init__.py, schema apiVersion bump when contracts changed; all checks green.

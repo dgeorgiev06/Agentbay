@@ -37,11 +37,13 @@ import shlex
 import shutil
 from pathlib import Path
 
+import yaml
+
 from bay import registry, workflows
 from bay.adapter import BuildReport
 from bay.dispatch import use_shim
 from bay.ledger import now
-from bay.model import PROTECTED, ROOT_COORDINATOR, ResolvedRole, System
+from bay.model import PROTECTED, ROOT_COORDINATOR, ResolvedRole, SpecError, System, skill_front_matter
 from bay.protocol import WORKER_CONTRACT
 
 MARK_BEGIN = "<!-- agentbay:begin (generated; run ./bay build) -->"
@@ -114,16 +116,19 @@ def _empty(p: Path) -> bool:
 
 
 def _rename_skill(p: Path, name: str) -> None:
-    """Set the copied SKILL.md's front-matter `name:` to its namespaced folder name (Claude Code wants them equal)."""
+    """Set the copied SKILL.md's front-matter `name:` to its namespaced folder name (Claude Code wants them equal).
+    The front matter is parsed as YAML (CRLF normalised) and written back with `name` first; a malformed block
+    (`bay lint` reports it) removes the copied skill and stops the build rather than writing a broken file."""
     if not p.exists():
         return
-    text = p.read_text()
-    if text.startswith("---\n"):
-        head, sep, body = text[4:].partition("\n---")
-        lines = [ln for ln in head.split("\n") if not ln.startswith("name:")]
-        p.write_text("---\n" + "\n".join([f"name: {name}", *lines]) + sep + body)
-    else:
-        p.write_text(f"---\nname: {name}\n---\n" + text)
+    try:
+        meta, body = skill_front_matter(p.read_text(encoding="utf-8"))
+    except SpecError as e:
+        shutil.rmtree(p.parent, ignore_errors=True)
+        raise SpecError(f"skill {name}: SKILL.md: {e}; run `bay lint`") from e
+    meta = {"name": name, **{k: v for k, v in meta.items() if k != "name"}}
+    head = yaml.safe_dump(meta, sort_keys=False, width=float("inf"), allow_unicode=True, default_flow_style=False)
+    p.write_text("---\n" + head + "---\n" + body, encoding="utf-8")
 
 
 class ClaudeCodeAdapter:

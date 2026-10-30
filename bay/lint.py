@@ -753,6 +753,7 @@ def lint_skill_names(kit: model.Kit) -> list[str]:
     playbook or role prompt names by short name is in that mode's chain (or the roles it maps)."""
     out: list[str] = []
     ids: dict[str, Path] = {}
+    parsed: set[Path] = set()
 
     def add(owner: str, kind: str, sk: str, src: Path) -> None:
         sid = model.skill_id(owner, sk)
@@ -763,6 +764,12 @@ def lint_skill_names(kit: model.Kit) -> list[str]:
             out.append(f"{where}: skill name '{sid}' ({kind} {owner}) is {len(sid)} characters, over the "
                        f"{model.SKILL_NAME_MAX} a runtime skill name allows; shorten the skill folder name "
                        f"(or the {kind} name) by {len(sid) - model.SKILL_NAME_MAX}")
+        if src not in parsed and (src / "SKILL.md").exists():
+            parsed.add(src)
+            try:
+                model.skill_front_matter((src / "SKILL.md").read_text(encoding="utf-8"))
+            except model.SpecError as e:
+                out.append(f"{where}: {e}")
         prev = ids.setdefault(sid, src)
         if prev != src:
             out.append(f"{where}: skill name '{sid}' is also built from {model.rel(prev)}; rename one")

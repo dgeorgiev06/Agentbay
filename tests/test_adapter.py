@@ -322,3 +322,47 @@ def test_cli_build_and_clean_report_a_broken_other_runtime_f12():
             assert "zz-broken/adapter.yaml: name 'wrong' must match its folder 'zz-broken'" in r.stdout
     finally:
         cleanup(k)
+
+
+def test_rename_skill_parses_front_matter_as_yaml_and_normalises_crlf_f15():
+    import yaml
+    from bay.model import SpecError
+    rename = module("claude-code")._rename_skill
+    d = tmpdir() / "m--s"
+    d.mkdir()
+    p = d / "SKILL.md"
+    p.write_text("---\r\ndescription: \"a: b\"\r\nname:\r\n  s\r\nx: [1, 2]\r\n---\r\n# S\r\nbody --- here\r\n",
+                 newline="")
+    rename(p, "m--s")
+    text = p.read_bytes().decode()
+    assert "\r" not in text and text.startswith("---\nname: m--s\n") and text.endswith("---\n# S\nbody --- here\n")
+    meta = yaml.safe_load(text.split("---\n")[1])
+    assert meta == {"name": "m--s", "description": "a: b", "x": [1, 2]}
+    p.write_text("# plain\n")
+    rename(p, "m--s")
+    assert p.read_text() == "---\nname: m--s\n---\n# plain\n"
+    p.write_text("---\nname: s\ndescription: never closed\n# S\n")
+    try:
+        rename(p, "m--s")
+        raise AssertionError("unclosed front matter accepted")
+    except SpecError as e:
+        assert "skill m--s: SKILL.md: front matter opens with '---' on line 1 but has no closing '---' line" in str(e)
+    assert not d.exists()                                    # no malformed skill left behind
+
+
+def test_lint_reports_a_skill_md_whose_front_matter_never_closes_f15():
+    from bay import lint
+    from helpers import cleanup, kit_copy
+    k = kit_copy()
+    try:
+        f = k / "modes/briefing/skills/digest/SKILL.md"
+        f.write_text(f.read_text().replace("\n---\n", "\n\n", 1))
+        g = k / "modes/briefing/skills/grounded-qa/SKILL.md"
+        g.write_text("---\n- not\n- a mapping\n---\n# x\n")
+        errs = lint.run(k)
+        want = "modes/briefing/skills/digest/SKILL.md:1: front matter opens with '---' on line 1 but has no closing"
+        assert sum(want in e for e in errs) == 1                  # once, though two modes inherit the skill
+        assert any("modes/briefing/skills/grounded-qa/SKILL.md:1: front matter must be a YAML mapping" in e
+                   for e in errs)
+    finally:
+        cleanup(k)

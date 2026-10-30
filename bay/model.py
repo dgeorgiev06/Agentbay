@@ -860,6 +860,31 @@ def name_units(modes: dict, gaps: list[str] | None = None) -> None:
         seen[u.unit] = (u.name, u.mode, u.env)
 
 
+def skill_front_matter(text: str) -> tuple[dict, str]:
+    """(front matter, body) of a SKILL.md, CRLF line ends normalised to LF. A file that does not open with a
+    `---` line has no front matter: ({}, text). Raises SpecError when the block never closes, is not YAML or is
+    not a mapping (F-15)."""
+    text = text.replace("\r\n", "\n")
+    lines = text.split("\n")
+    if lines[0].rstrip() != "---":
+        return {}, text
+    for i in range(1, len(lines)):
+        if lines[i].rstrip() == "---":
+            head, body = "\n".join(lines[1:i]), "\n".join(lines[i + 1:])
+            break
+    else:
+        raise SpecError("front matter opens with '---' on line 1 but has no closing '---' line")
+    try:
+        meta = yaml.safe_load(head)
+    except yaml.YAMLError as e:
+        raise SpecError(f"front matter is not valid YAML: {e}") from e
+    if meta is None:
+        meta = {}
+    if not isinstance(meta, dict):
+        raise SpecError("front matter must be a YAML mapping (name, description)")
+    return meta, body
+
+
 SKILL_NAME_MAX = 64        # Claude Code: a skill name (its folder and SKILL.md `name:`) is [a-z0-9-], at most 64
 
 

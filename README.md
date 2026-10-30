@@ -116,5 +116,5 @@ The guard hook is defense in depth, not isolation: it narrows what subagents can
 code once something runs it. Nothing that runs code is auto-approved except a role's own read-only data shim;
 the main thread is pre-approved only for `bay show|status|log|note|task|catalog`. Approval gates, secrets,
 browser logins and backlog approvals need your terminal; gates alone can be opened to chat (`approvals: { chat: true }`,
-off by default, labelled `user@chat-via-cos` in the ledger).
+off by default, recorded as `user@chat-via-cos`).
 Details: [docs/DESIGN.md#safety-model](docs/DESIGN.md#safety-model).

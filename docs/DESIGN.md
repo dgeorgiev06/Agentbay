@@ -93,7 +93,7 @@ cannot contain code once something runs it. Hard isolation needs an OS sandbox.
   Every other subagent command prompts you. The main thread is pre-approved only for
   `bay show|status|log|note|task|catalog`; `bay call` and `bay submit` run connector code and prompt, and
   `bay approve` prompts too. With `approvals: { chat: true }` (off by default), `bay approve --via chat --quote`
-  passes a gate without a terminal; the ledger labels it `user@chat-via-cos`. This trusts the main thread to
+  passes a gate without a terminal; it is recorded as `user@chat-via-cos`. This trusts the main thread to
   relay your words, so it is weaker than a terminal. Secrets and logins never leave the terminal.
 - **What subagents cannot touch:** the guard hook runs on Bash and every file tool. It denies `.agentbay/`,
   `.claude/`, `.git`, `CLAUDE.md`, `.mcp.json`, `agentbay.config.yaml`, `.env*`, `.envrc`, `Makefile`,

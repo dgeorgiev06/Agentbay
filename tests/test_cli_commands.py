@@ -41,6 +41,19 @@ def test_check_takes_boundary_options_only_with_a_base():
         cleanup(p)
 
 
+def test_check_json_prints_only_the_boundary_json_on_stdout():
+    import json
+    p = project()
+    try:
+        r = cli(p, "check", "--json")
+        assert r.returncode != 0 and "--base" in r.stderr
+        r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "check", "--base", "HEAD", "--json"],
+                           capture_output=True, text=True, cwd=KIT)
+        assert isinstance(json.loads(r.stdout), dict), r.stdout
+    finally:
+        cleanup(p)
+
+
 def test_note_task_mints_an_id_and_dispatch_and_review_take_the_task_first():
     p = project()
     try:

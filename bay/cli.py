@@ -100,9 +100,14 @@ def cmd_lint(args) -> int:
 
 def cmd_check(args):
     """`bay check`: lint, then resolve everything; with --base, also the change's boundary check."""
-    if (args.proposal or args.docs) and not args.base:
-        _die("✗ --proposal and --docs belong to the boundary check: pass --base <ref> too")
-    bad = _validate(args)
+    if (args.proposal or args.docs or args.json) and not args.base:
+        _die("✗ --proposal, --docs and --json belong to the boundary check: pass --base <ref> too")
+    if args.json:                                   # stdout is the JSON report only; the lint lines go to stderr
+        import contextlib
+        with contextlib.redirect_stdout(sys.stderr):
+            bad = _validate(args)
+    else:
+        bad = _validate(args)
     if args.base:
         bad = cmd_boundary(args) or bad
     sys.exit(1 if bad else 0)

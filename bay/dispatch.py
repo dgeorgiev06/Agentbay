@@ -297,8 +297,7 @@ class Dispatcher:
         many = " While several calls wait on this role unit, only what all declare in `uses:` is allowed." if len(calls) > 1 else ""
         return (f"role {r.name} in mode {r.mode} is not granted {target} by the feature of the open call(s) {names}, "
                 f"which do not declare it in `uses:`.{many} Allowed now: {have}. "
-                f"Finish or reclaim those calls first: `bay show <callId>` continues one, "
-                f"`bay show reclaim <runId>` clears a stuck run.")
+                f"Finish those calls first: `bay show <callId>` continues one; run its step and submit.")
 
     def _use_settings(self, unit, iface: str) -> dict:
         """The unit's mode settings when its mode needs `iface` (per-mode stores such as corpus-store key on the

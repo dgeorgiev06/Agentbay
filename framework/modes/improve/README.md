@@ -44,5 +44,5 @@ The analysis steps need an agent, and scan, audit and triage all run on the one 
 `uses:`, and while several calls wait on that unit an analyst may use only what all of them declare, so the
 analyst's reads are refused. Run them one at a time: the Chief of Staff drives the scan to a terminal status
 (`bay show <callId>`, submit), then starts `improve.audit` and drives it to a terminal status, then `improve.triage`,
-and only then runs `improve.backlog` to write the report. If a refusal names an open call, finish it (`bay show
-<callId>`) or reclaim a stuck run (`bay show reclaim <runId>`) first.
+and only then runs `improve.backlog` to write the report. If a refusal names an open call, finish it first (`bay show
+<callId>`, run its step, submit).

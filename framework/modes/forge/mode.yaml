@@ -41,8 +41,9 @@ spec:
       - { id: propose, role: builder, out: Result, when: "!$in.proposal", task: "Write the design change proposal to docs/proposals/<id>.md (problem, change to concepts/schemas/CLI, compatibility impact)." }
       - { id: approve, gate: "The user approves the proposal in docs/proposals/ before anything is implemented.", approves: "$in.proposal|$steps.propose.artifacts" }
       - { id: implement, role: builder, out: Result, task: "Implement the approved proposal on a branch: code, schemas, framework modes, docs, tests." }
+      - { id: deadcode, run: improve.detect/v1.change, with: { base: "origin/main" } }     # any new finding blocks the call
       - { review: here, id: review }
       - { id: release, role: builder, out: Result, task: "Changelog entry, version bump in bay/__init__.py (and schema apiVersion if contracts changed); all checks green." }
   constraints:
     policies: [framework-is-read-only-outside-extend]
-  needs: [forge.scaffold/v1, workspace.read/v1, workspace.write/v1, git.read/v1]
+  needs: [forge.scaffold/v1, workspace.read/v1, workspace.write/v1, git.read/v1, improve.detect/v1]

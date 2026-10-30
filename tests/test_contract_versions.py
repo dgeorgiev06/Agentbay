@@ -86,16 +86,18 @@ def test_b7_catches_case_module_forms_nested_tests_and_referenced_files():
     sub(k, "connectors/x-api/x_api.py", "\n", "\n# see Gmail-API\nimport gmail_api\n"
         "m = importlib.import_module('agentbay_connector_gmail_api')\nsys.modules['agentbay_adapter_fake_mail']\n")
     (k / "connectors/x-api/lib/tests").mkdir(parents=True)
-    (k / "connectors/x-api/lib/tests/helper.py").write_text("FROM = 'fake-mail'\n")
+    (k / "connectors/x-api/lib/tests/helper.py").write_text("FROM = 'fake-mail'\nimport gmail_api\n")
     (k / "shared").mkdir()
-    (k / "shared/x_entry.py").write_text("# tuned for Feed-Briefing\n")
+    (k / "shared/x_entry.py").write_text("# tuned for Feed-Briefing\nimport gmail_api\n")
     edit = k / "connectors/fake/connector.yaml"
     edit.write_text(edit.read_text().replace("entry: fake.py", "entry: ../../shared/x_entry.py", 1))
     hits = [p for p in lint.lint_extension_names(model.Kit(k)) if "B-7" in p]
     assert any("x_api.py:3: connector x-api imports gmail_api of connector gmail-api" in p for p in hits), hits
     assert any("x_api.py:4: connector x-api uses the module key of connector gmail-api" in p for p in hits), hits
     assert any("x_api.py:5: connector x-api uses the module key of connector fake-mail" in p for p in hits), hits
-    assert not any("x_api.py:2" in p or "helper.py" in p or "x_entry.py" in p for p in hits), hits      # prose
+    assert any("helper.py:2: connector x-api imports gmail_api of connector gmail-api" in p for p in hits), hits
+    assert any("x_entry.py:2: connector fake imports gmail_api of connector gmail-api" in p for p in hits), hits
+    assert not any("x_api.py:2" in p or "helper.py:1" in p or "x_entry.py:1" in p for p in hits), hits      # prose
 
 
 def test_mixed_versions_of_a_read_kind_are_refused_f7():

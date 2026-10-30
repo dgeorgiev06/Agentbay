@@ -3,4 +3,4 @@ kind: Rules
 rules:
   - { id: R-1, level: must, statement: "Order items by priority and list at most top items, open and approved only.", appliesTo: both, refs: [DOD-1] }
   - { id: R-2, level: must_not, statement: "Write secrets or transcript text into the report.", appliesTo: both, check: no_secrets, refs: [DOD-3] }
-  - { id: R-3, level: must_not, statement: "Approve, defer or close items; only the user decides, with bay improve decide.", appliesTo: both }
+  - { id: R-3, level: must_not, statement: "Approve, defer or close items; only the user decides, with bay approve.", appliesTo: both }

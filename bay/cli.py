@@ -402,7 +402,7 @@ def _decide_finding(args):
     _run(lambda: d.run_capability("improve", "improve.findings/v1.decide",
                                   {"id": args.call, "decision": decision, "by": by,
                                    **({"note": args.reason} if args.reason else {})}))
-    ledger.append(args.project, "note", args.call, source="cli", summary=f"improve decide {args.call} {decision}",
+    ledger.append(args.project, "note", args.call, source="cli", summary=f"approve {args.call} {decision}",
                   data={"kind": "decision"})
 
 

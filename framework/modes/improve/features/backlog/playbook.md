@@ -12,7 +12,7 @@ Write the weekly backlog report the user reviews: the top open and approved item
 
 ## Definition of Done
 - [DOD-1] (must) The report lists at most `top` items, open and approved only, ordered by priority.
-- [DOD-2] (must) Every listed item shows its id, at least one evidence ref and the `bay improve decide` command.
+- [DOD-2] (must) Every listed item shows its id, at least one evidence ref and the `bay approve` command.
 - [DOD-3] (must_not) The report contains no secret values or transcript text (secret-scanned before writing).
 
 ## Outputs

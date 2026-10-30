@@ -7,7 +7,7 @@ file and names itself in `runtime`, but the content is a fold of the resolved Sy
 
 Endpoint schemas are inlined (`model.type_schema` already resolves `$ref`s), because the only
 reader that matters cannot open mode folders: the coordinator is told to reach data solely through
-`bay call`, and `bay lint` must check a workflow's `with:` against the endpoint it calls without
+`bay call`, and `bay check` must check a workflow's `with:` against the endpoint it calls without
 re-implementing type lookup.
 """
 from __future__ import annotations

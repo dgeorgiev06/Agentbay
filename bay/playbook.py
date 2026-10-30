@@ -59,7 +59,7 @@ def parse(path: Path) -> Playbook:
             pb.problems.append((i, "front matter is not allowed in a playbook (review settings belong in mode.yaml)"))
         if REVIEW_SETTING.match(raw) or REVIEW_HEADING.match(raw):
             pb.problems.append((i, "review settings found in playbook; configure review only in mode.yaml "
-                                   "endpoints.<feature>.review"))
+                                   "features.<feature>.review"))
         m = H2.match(raw)
         if m:
             current = m.group(1).strip()

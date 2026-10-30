@@ -3,7 +3,7 @@ kind: Interface
 metadata:
   name: forge.scaffold
   description: >-
-    Render a forge template (mode, feature, connector, env) into user space. Shared by `bay <kind> new` and
+    Render a forge template (mode, feature, connector, env) into user space. Shared by `bay new <kind>` and
     forge.create. Also reads a proposal's approval status for forge.extend.
 spec:
   version: 1

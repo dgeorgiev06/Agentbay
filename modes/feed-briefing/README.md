@@ -4,7 +4,7 @@ Briefings and grounded Q&A over posts from accounts you follow. `extends: briefi
 `digest`, `ask` and `prune`, with the post content type.
 
 **Setup:** bind an `items.source/v1` connector for posts in the env (the shipped `local-feeds` binds the X
-API; `local-feeds-offline` a fake source). Settings: briefing's (see `config.example.yaml`); `selectors`
+API; with `offline: true` in agentbay.config.yaml it binds a fake source). Settings: briefing's (see `config.example.yaml`); `selectors`
 choose what to keep, by default the home timeline.
 
 Ask *"brief me on the last 3 days"* (`feed-briefing.digest`) or *"what did people say about custody?"*

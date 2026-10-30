@@ -1,5 +1,5 @@
 """Scaffolds for user content. Templates live in framework/modes/forge/templates/
-and are shared by `bay <kind> new` and the forge.create feature (via the
+and are shared by `bay new <kind>` and the forge.create feature (via the
 scaffold connector), so code scaffolding and the agentic flow cannot drift.
 
 Scaffolds only ever write user space (modes/, envs/, connectors/) and never overwrite an existing file.

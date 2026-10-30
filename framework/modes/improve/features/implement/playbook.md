@@ -4,7 +4,7 @@
 On demand, turn one user-approved finding into a reviewed fix request for forge: a forge.extend proposal draft (framework) or a mode-fix task envelope (user mode). improve never edits code.
 
 ## Inputs
-- `id` (required): the finding id. Its status must be `approved` by the user (`bay approve <id>` in a terminal).
+- `id` (required): the finding id. Its status must be `approved` by the user (`bay improve decide <id> approve` in a terminal).
 
 ## Steps
 1. `claim`: the dispatcher runs `improve.findings/v1.claim` (code). An item that is not approved by the user stops the call as `blocked`.

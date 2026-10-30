@@ -24,4 +24,4 @@ coordinator, never executed here.
 
 ## Failure handling
 - Unknown workflow: the step fails and names the workflows the config defines.
-- A `call` target that no longer resolves is caught by `bay check`, not here; the stage's own `bay call` reports it.
+- A `call` target that no longer resolves is caught by `bay lint`, not here; the stage's own `bay call` reports it.

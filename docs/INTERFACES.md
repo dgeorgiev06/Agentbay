@@ -200,7 +200,7 @@ with `mode, endpoint, step, role, agent, env, cost`.
 | `session.events/v1` | `episodes {since, until}` -> `session.episode/v1[]` + stats (read-only); a commit in an episode carries its scrubbed subject (200 characters) |
 | `review.verdicts/v1` | `verdicts {since, until}` -> verdicts with round and subject |
 | `artifacts.read/v1` | `files`, `graph` (nodes with refs, edges), `text` (refuses .agentbay/.claude/.git/.env) |
-| `improve.detect/v1` | `sessions`, `artifacts`, `resolve`, `recheck` (read-only: candidates, never writes) |
+| `improve.detect/v1` | `sessions`, `artifacts`, `resolve`, `recheck`, `change {base}` (read-only: candidates, never writes). `change` audits the working tree and the tree at `base` (git archive; never run) and returns `{new, existing}`: the unused, unused-constant, compat-layer and complexity findings whose fingerprint is absent at `base`, and how many already existed. `forge.extend` runs it as its `deadcode` step between `implement` and `review`; any new finding (`stopped`) ends the call `blocked` (DOD-14) |
 | `improve.findings/v1` | `upsert`, `annotate`, `query`, `get`, `triage`, `decide`, `backlog`, `claim`, `handoff`, `verify` (storage) |
 
 The framework connectors that implement them are bound in the framework env of the mode that uses them; each

@@ -238,6 +238,10 @@ class Dispatcher:
             raise CallError(f"role {role} in mode {r.mode} is not granted {target} (granted: "
                             f"{', '.join(r.bay_uses) or 'none'}); a role may call only the read-only endpoints of the "
                             f"capabilities its mode needs that its env ({r.env}) binds")
+        scoped = self._open_uses(r)
+        if scoped is not None and target not in scoped:       # B-9: while a feature's step waits for this unit
+            raise CallError(f"role {role} in mode {r.mode} is not granted {target} by the feature it is working "
+                            f"on (its `uses:`: {', '.join(sorted(scoped)) or 'none'})")
         iface, ep = target.rsplit(".", 1)
         effects = model.endpoint_effects(self.sys.kit, iface, ep)
         if set(effects) - model.AGENT_SAFE_EFFECTS:      # re-checked at runtime
@@ -254,6 +258,24 @@ class Dispatcher:
                       env=env.name, summary=target,
                       data={"input": inp or {}, **({"items": n} if n is not None else {})})
         return secretscan.scrub_obj(json.loads(vault.redact(json.dumps(out, ensure_ascii=False))))
+
+    def _open_uses(self, unit) -> set[str] | None:
+        """The `uses:` of the features whose open call waits for `unit` (status needs-agent, cursor on a role or
+        review step of this unit); None when no such call is open or none of its features declares `uses:`, so
+        the role-level grant applies (decision (c) of proposal 0008)."""
+        found: set[str] | None = None
+        for f in sorted(self._calls_dir().glob("*.json")):
+            state = read_json(f)
+            if not isinstance(state, dict) or state.get("status") != "needs-agent":
+                continue
+            try:
+                _, feat = self.sys.feature(state["target"])
+                step = feat.steps[state["cursor"]]
+            except (model.ResolveError, KeyError, IndexError):
+                continue
+            if feat.uses is not None and step.resolved is not None and step.resolved.unit == unit.unit:
+                found = (found or set()) | set(feat.uses)
+        return found
 
     def _use_settings(self, unit, iface: str) -> dict:
         """The unit's mode settings when its mode needs `iface` (per-mode stores such as corpus-store key on the
@@ -561,7 +583,9 @@ class Dispatcher:
         plan.update({"role": role.name, "agent": step.agent, "env": step.env, "runAs": run_as,
                      "tier": step.inference.tier, "model": step.inference.model, "effort": step.inference.effort})
         if role.skills:                             # the playbook's short skill names -> the namespaced skills
-            plan["skills"] = {sk: sid for sk, sid in sorted(role.skill_names.items()) if sid in role.skills}
+            mine = model.skill_id(mode.name, "")      # a mode's skills are narrowed to the feature's `skills:`
+            plan["skills"] = {sk: sid for sk, sid in sorted(role.skill_names.items()) if sid in role.skills
+                              and (feat.skills is None or not sid.startswith(mine) or sk in feat.skills)}
         if step.kind == "review":
             plan["review"] = {
                 "task": {"target": state["target"], "input": state["input"]},
@@ -585,7 +609,8 @@ class Dispatcher:
             "input": state["input"],
             "previous": {k: v for k, v in state["steps"].items() if v is not None},
             "out": step.out,
-            "tools": [f"{use_shim(role.unit)} {u} '<json>'" for u in role.bay_uses],
+            "tools": [f"{use_shim(role.unit)} {u} '<json>'" for u in role.bay_uses
+                      if feat.uses is None or u in feat.uses],
         })
         return plan
 

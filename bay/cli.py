@@ -13,6 +13,7 @@
   call <mode>.<endpoint> '<json>'      run an endpoint (the only way to invoke one)
   submit <callId> <stepId> '<json>'    hand back an agentic step's output
   show <callId>                        current state of a call (result or the step it waits on)
+  show <mode> --resolved               the mode's features after `extends`, each with the file it comes from
   show reclaim <runId>                 mark a stuck run as reclaimed
   approve <callId|runId> [--reject]    pass an approval gate of a call, or of a workflow run (W-...)
                                        (you, in a terminal; never an agent)
@@ -695,10 +696,31 @@ def cmd_show(args):
         if len(args.ref) != 2:
             _die("✗ usage: bay show reclaim <runId> [--reason ...]")
         return cmd_reclaim(argparse.Namespace(project=args.project, run=args.ref[1], reason=args.reason or "reclaimed by coordinator"))
+    if args.resolved:
+        if len(args.ref) != 1 or args.reason:
+            _die("✗ usage: bay show <mode> --resolved")
+        return cmd_show_resolved(args)
     if args.reason or len(args.ref) != 1:
         _die("✗ usage: bay show <callId>   (--reason goes with `show reclaim`)")
     d = _dispatcher(args)
     _run(lambda: d.show(args.ref[0]))
+
+
+def cmd_show_resolved(args):
+    """`bay show <mode> --resolved`: the mode's features after `extends`, each with the mode.yaml it comes from. A
+    child's feature replaces its parent's whole, so a feature has exactly one origin (0006 Part E)."""
+    from bay import model
+    kit = _system(args).kit
+    md = kit.get("Mode", args.ref[0])
+    if md is None:
+        _die(f"✗ no mode '{args.ref[0]}' (modes: {', '.join(sorted(kit.docs['Mode']))})")
+    own = {}
+    for d in reversed(md.dirs):                     # the ancestor first; the nearest declaration wins
+        for name in (model.load_yaml(d / "mode.yaml")["spec"].get("features") or {}):
+            own[name] = d / "mode.yaml"
+    feats = {name: {"origin": model.rel(own[name]), **block} for name, block in md.spec["features"].items()}
+    print(json.dumps({"mode": md.name, "extends": md.spec.get("extends"), "abstract": bool(md.spec.get("abstract")),
+                      "features": feats}, indent=2))
 
 
 def cmd_boundary(args) -> int:
@@ -790,6 +812,7 @@ def main(argv=None):
     su.set_defaults(fn=cmd_submit)
     sh = sub.add_parser("show", help="the state of a call; `show reclaim <runId>` marks a stuck run as reclaimed")
     sh.add_argument("ref", nargs="+"); sh.add_argument("--reason", help="show reclaim: why")
+    sh.add_argument("--resolved", action="store_true", help="show <mode>: its features after `extends`, with the file each comes from")
     sh.set_defaults(fn=cmd_show)
     ap_ = sub.add_parser("approve", help="pass (or --reject) an approval gate; interactive terminal, or chat when "
                                          "approvals.chat is on; an F-id decides an improve backlog item")

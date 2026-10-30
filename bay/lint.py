@@ -787,6 +787,12 @@ def lint_skill_names(kit: model.Kit) -> list[str]:
                     out.append(f"{_where(f, i)}: names skill '{sk}', which is not in mode {md.name}'s chain "
                                f"({', '.join(sorted(known)) or 'none'}); add skills/{sk}/SKILL.md to the mode or "
                                f"fix the name")
+        for ep_name, ep in (md.spec.get("features") or {}).items():       # a feature's `skills:` covers its playbook
+            f = next((d / ep["playbook"] for d in md.dirs if ep.get("playbook") and (d / ep["playbook"]).exists()), None)
+            for i, sk in (_skill_refs(f.read_text(encoding="utf-8"), built) if f and ep.get("skills") is not None else []):
+                if sk in chain and sk not in ep["skills"]:
+                    out.append(f"{_where(f, i)}: names skill '{sk}', which {md.name}.{ep_name} does not list in its "
+                               f"`skills:` ({', '.join(ep['skills']) or 'none'}); add it there or fix the name")
     users: dict[str, list] = {}
     for md in kit.docs["Mode"].values():
         if not md.spec.get("abstract"):

@@ -49,8 +49,15 @@ read-only endpoints of those needs are what the mode's roles may read.
 
 **Inheritance.** `extends: <mode>` is resolved when the kit is loaded (`bay/model.py` `merge_mode`), so the
 resolver, lint, conformance, the detectors and adapters always see a complete mode.
-- **Features** merge key by key, so a child can override one feature's review, in/out, playbook or rules; a child's
-  `steps` replace that feature's steps whole; `coordinator` is replaced.
+- **Features** are replaced whole: a child's feature of the same name is the complete block (in/out, effects,
+  playbook, rules, review, `uses:`, `skills:`, steps), never merged key by key with its parent's; a feature the child
+  does not declare is inherited unchanged; `coordinator` is replaced. `bay show <mode> --resolved` prints the result
+  with the mode.yaml each feature comes from.
+- **`uses:` and `skills:`** (per feature) scope what its role steps get. `uses` lists the read endpoints
+  (`items.store/v1.sql`) they may call through the use shim, each granted to a role of the feature; it is required
+  when a role is granted any (`[]` for none). While a call of the feature waits on a role unit, that unit's shim
+  reaches only the `uses` (with no such open call the role-level grant applies). `skills` lists the mode's skills
+  the step plan hands them (absent: all); a playbook may name only those.
 - **`roles`, constraints and configDefaults** merge entry by entry; `needs` are unioned.
 - **Inherited paths** (playbook, rules, config) are rebased to the child's folder. Types, skills and the
   coordinator `playbook.md` are looked up in the child first, then its ancestors.

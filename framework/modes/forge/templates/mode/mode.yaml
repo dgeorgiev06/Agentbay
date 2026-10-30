@@ -14,6 +14,8 @@ spec:
       effects: [read, write]
       playbook: features/run/playbook.md
       rules: features/run/rules.yaml
+      uses: []                            # TODO the read calls its role steps may make, e.g. [items.store/v1.sql]
+      # skills: [<skill>]                   # the mode's skills its role steps are handed (default: all)
       review: { role: reviewer, when: always, tier: balanced, effort: medium }
       steps:
         - { id: work, role: builder, out: RunOut, task: "TODO the job this step does" }

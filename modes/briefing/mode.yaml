@@ -27,6 +27,8 @@ spec:
       playbook: features/digest/playbook.md
       rules: features/digest/rules.yaml
       review: { role: reviewer, when: always, tier: deep, effort: high }
+      uses: [items.store/v1.describe, items.store/v1.sql, items.store/v1.query, items.store/v1.get, items.store/v1.thread]   # B-9
+      skills: [digest, corpus-sql]                                                                     # B-8
       steps:
         - { id: refresh, run: items.store/v1.sync, when: "stale > 2h" }      # code step, no agent
         - { id: gather, run: items.store/v1.query, with: { since: "$in.since|$config.lookback", until: "$in.until", author: "$in.author", selector: "$in.selector", limit: 500 } }
@@ -39,6 +41,8 @@ spec:
       playbook: features/ask/playbook.md
       rules: features/ask/rules.yaml
       review: { role: reviewer, when: never }
+      uses: [items.store/v1.describe, items.store/v1.sql, items.store/v1.query, items.store/v1.search, items.store/v1.facets, items.store/v1.get, items.store/v1.thread, items.store/v1.status]
+      skills: [corpus-sql, grounded-qa]
       steps:
         - { id: refresh, run: items.store/v1.sync, when: "stale > 2h" }
         - { id: context, run: items.store/v1.status, with: { since: "$in.since|$config.lookback" } }
@@ -51,6 +55,8 @@ spec:
       rules: features/prune/rules.yaml
       review: { role: reviewer, when: always, tier: balanced, effort: medium }
       schedule: daily
+      uses: [items.store/v1.status, items.store/v1.sql]      # the reviewer checks what was dropped
+      skills: []
       steps:
         - { id: prune, run: items.store/v1.prune, with: { olderThan: "$in.olderThan|$config.retention" } }
   coordinator: lead

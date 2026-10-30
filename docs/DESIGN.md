@@ -19,8 +19,8 @@ Modes name capabilities, never connectors or tools. Adding a source is one conne
 an env; no mode, role or playbook changes. A user file under `roles/` is an error: a mode
 customizes a role through its playbooks, skills and rules, and a new role is a `forge.extend` proposal.
 
-A mode may `extends:` another. Inheritance is resolved when the kit loads (features merge key by key,
-a child's `steps` replace the feature's whole, `roles`/constraints/configDefaults entry by entry, needs are unioned, inherited paths
+A mode may `extends:` another. Inheritance is resolved when the kit loads (a child's feature replaces its
+parent's feature of that name whole, never key by key; `roles`/constraints/configDefaults entry by entry, needs are unioned, inherited paths
 are rebased), so every later stage sees a complete mode. `abstract: true` marks a base that is linted but
 never installed (`modes/briefing`).
 

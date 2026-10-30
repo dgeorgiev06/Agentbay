@@ -3,7 +3,7 @@ complete mode; children override features, steps, playbooks, rules, review and r
 parents are errors; abstract bases are linted but never resolved or installed."""
 import json
 
-from helpers import KIT, assert_gap, edit_yaml, kit_copy, model, self_describe
+from helpers import KIT, assert_gap, edit_yaml, kit_copy, model, self_describe, whole_feature
 
 from bay import lint
 
@@ -47,8 +47,9 @@ def test_feed_briefing_is_complete_after_extends():
 def test_child_overrides_review_steps_roles_and_inherits_the_rest():
     k = kit_copy()
     edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("features", {}).update(
-        {"ask": {"review": {"role": "reviewer", "when": "always", "tier": "balanced"}},
-         "prune": {"steps": [{"id": "trim", "run": "items.store/v1.prune", "with": {"olderThan": "7d"}}]}}))
+        {"ask": whole_feature(k, "ask", review={"role": "reviewer", "when": "always", "tier": "balanced"}),
+         "prune": whole_feature(k, "prune", steps=[{"id": "trim", "run": "items.store/v1.prune",
+                                                    "with": {"olderThan": "7d"}}])}))
     s = model.resolve(model.Kit(k))
     ask = s.modes["feed-briefing"].features["ask"]
     assert ask.review["tier"] == "balanced" and ask.steps[-1].kind == "review"
@@ -69,6 +70,14 @@ def test_child_overrides_review_steps_roles_and_inherits_the_rest():
                           "researcher": "research"}
     assert s.modes["feed-briefing"].roles["analyst"] == "local-feeds"
     assert problems(k) == []
+
+
+def test_a_child_feature_is_never_merged_key_by_key_with_its_parents():
+    k = kit_copy()
+    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("features", {}).update(
+        {"ask": {"review": {"role": "reviewer", "when": "always", "tier": "balanced"}}}))
+    gs = __import__("helpers").gaps(k)
+    assert any("spec/features/ask: 'steps' is a required property" in g for g in gs), gs     # the rest is not inherited
 
 
 def test_child_can_add_its_own_feature_and_type():
@@ -136,14 +145,15 @@ def test_lint_lines_of_inherited_parts_point_at_the_parent_mode_yaml():
     # a child that sets the schedule itself is reported at its own line
     k = kit_copy()
     edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("features", {}).update(
-        {"prune": {"schedule": "weekly"}}))
+        {"prune": whole_feature(k, "prune", schedule="weekly")}))
     own = line_of(k / "modes/feed-briefing/mode.yaml", "      schedule: weekly")
     ws = lint.warnings(model.Kit(k))
     assert any(f"modes/feed-briefing/mode.yaml:{own}: feed-briefing.prune declares" in w for w in ws), ws
     # steps a child sets itself are reported at the step in the child's own mode.yaml
     k = kit_copy()
     edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("features", {}).update(
-        {"prune": {"steps": [{"id": "trim", "roles": {"lead": "workspace"}, "run": "items.store/v1.prune"}]}}))
+        {"prune": whole_feature(k, "prune", steps=[{"id": "trim", "roles": {"lead": "workspace"},
+                                                    "run": "items.store/v1.prune"}])}))
     step = line_of(k / "modes/feed-briefing/mode.yaml", "      - id: trim")
     ps = problems(k)
     assert any(f"modes/feed-briefing/mode.yaml:{step}: feed-briefing.prune step trim: `roles:` applies to role and "

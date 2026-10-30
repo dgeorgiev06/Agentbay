@@ -15,6 +15,8 @@ spec:
       playbook: features/scan/playbook.md
       rules: features/scan/rules.yaml
       review: { when: never }
+      uses: [session.events/v1.episodes, improve.findings/v1.query, improve.findings/v1.get]
+      skills: [pattern-analysis]
       steps:
         - { id: detect, run: improve.detect/v1.sessions, with: { since: "$in.since|$config.window", until: "$in.until" } }
         - { id: store, run: improve.findings/v1.upsert, with: { candidates: "$steps.detect.candidates", by: improve.scan } }
@@ -29,6 +31,8 @@ spec:
       playbook: features/audit/playbook.md
       rules: features/audit/rules.yaml
       review: { when: never }
+      uses: [artifacts.read/v1.files, artifacts.read/v1.graph, artifacts.read/v1.text]
+      skills: [conformance-audit]
       steps:
         - { id: detect, run: improve.detect/v1.artifacts, with: { root: "$in.root" } }
         - { id: store, run: improve.findings/v1.upsert, with: { candidates: "$steps.detect.candidates", by: improve.audit } }
@@ -43,6 +47,8 @@ spec:
       playbook: features/triage/playbook.md
       rules: features/triage/rules.yaml
       review: { role: reviewer, when: always, tier: balanced, effort: high }
+      uses: [improve.findings/v1.query, improve.findings/v1.get, artifacts.read/v1.files, artifacts.read/v1.text]
+      skills: [pattern-analysis]
       steps:
         - { id: rank, run: improve.findings/v1.triage, with: { top: "$in.top|$config.triageTop" } }
         - { id: analyze, role: analyst, out: Analysis, task: "For each finding in rank.top: confirm its evidence, state the root cause, propose a fix (prefer preventive: a check, lint or conformance rule, a test), a route and an effort 1-5." }
@@ -67,6 +73,8 @@ spec:
       playbook: features/implement/playbook.md
       rules: features/implement/rules.yaml
       review: { role: reviewer, when: always, tier: deep, effort: high }
+      uses: [improve.findings/v1.get, artifacts.read/v1.files, artifacts.read/v1.text]
+      skills: [pattern-analysis]
       steps:
         - { id: claim, run: improve.findings/v1.claim, with: { id: "$in.id" } }
         - { id: draft, role: analyst, out: Draft, task: "Write the fix for the claimed finding as a framework proposal draft for forge (route forge.extend) or a mode-fix task envelope (user mode). Do not write code." }

@@ -27,6 +27,21 @@ def test_submit_is_refused_without_a_recorded_outcome_and_accepted_after_bay_pla
         cleanup(k)
 
 
+def test_bay_show_prints_the_inputs_a_dispatch_recorded():
+    k, d, cid = _at_propose()
+    try:
+        tid = "T-20261030-cccc"
+        ledger.append(k, "agent.dispatch", tid, source="coordinator", taskId=tid, callId=cid, step="propose", agent="b",
+                      data={"inputs": ["docs/proposals/0008.md", "HANDOFF.md"]})
+        ledger.append(k, "agent.dispatch", "T-20261030-dddd", source="coordinator", taskId="T-20261030-dddd", callId=cid,
+                      step="propose", agent="b")
+        agents = {a["taskId"]: a for a in d.show(cid)["agents"]}
+        assert agents[tid]["inputs"] == ["docs/proposals/0008.md", "HANDOFF.md"]
+        assert agents["T-20261030-dddd"]["inputs"] != ["docs/proposals/0008.md", "HANDOFF.md"]
+    finally:
+        cleanup(k)
+
+
 def test_a_plan_of_another_step_or_call_does_not_count():
     k, d, cid = _at_propose()
     try:

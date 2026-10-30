@@ -195,7 +195,8 @@ class Dispatcher:
             pl = plans.get(e["taskId"])
             out.append({"taskId": e["taskId"], "step": e.get("step"), "agent": e.get("agent"),
                         "model": (e.get("data") or {}).get("model"),
-                        "inputs": (started[-1].get("data") or {}).get("inputs") if started else None,
+                        "inputs": (e.get("data") or {}).get("inputs")      # what the coordinator gave the agent
+                        or ((started[-1].get("data") or {}).get("inputs") if started else None),
                         "outcome": pl["outcome"] if pl else None,
                         "progress": f"{pl['done']}/{len(pl['todo'])}" if pl else None,
                         "todo": pl["todo"] if pl else None})

@@ -62,7 +62,9 @@ spec:
       out: *stage
       effects: [read, write]
     approve:
-      description: Pass or reject the gate a run waits on. Reached only from `bay approve` (interactive terminal).
+      description: >-
+        Pass or reject the gate a run waits on. Reached only from `bay approve` (interactive terminal, or `--via chat`
+        when the project's approvals.chat is on).
       in:
         type: object
         required: [runId, approved]
@@ -70,8 +72,9 @@ spec:
         properties:
           runId: { type: string }
           approved: { type: boolean }
-          by: { type: string }
+          by: { type: string, description: "user@tty, or user@chat-via-cos for an approval relayed from chat" }
           reason: { type: string }
+          quote: { type: string, description: "a chat approval: the owner's message, verbatim" }
       out: *stage
       effects: [read, write]
     show:

@@ -8,8 +8,9 @@ Change the agentbay framework itself (concepts, schemas, CLI, runtime, framework
 - `proposal` (optional): an existing docs/proposals/<id>.md to implement; `context` (optional).
 
 ## Steps
+Two rules skip work. When `proposal` names an existing file, `propose` is skipped (there is nothing to draft) and the call stops at `approve`. The gate is skipped only when the ledger holds the user's `bay approve` (terminal or chat) of that proposal path with the sha256 of its current content, recorded by the same gate step and still held in that call's state; a later decision on the path supersedes an earlier one, and any edit since the approval makes the gate run again. The front-matter `status:` grants nothing. A proposal the `propose` step writes is bound to its approval through that step's `artifacts` (list its docs/proposals/<id>.md path). A chat approval carries `--sha <prefix>` of the content shown. The step plan and `bay show <callId>` say why the gate ran or was skipped, and name the chat path when `approvals.chat` is on.
 1. `propose`: the builder, in env framework-dev, writes docs/proposals/<id>.md: problem, change to concepts/schemas/CLI, compatibility impact.
-2. `approve`: approval gate. The call stops with `awaiting-approval`; only the user passes it, with `bay approve <callId>` in an interactive terminal.
+2. `approve`: approval gate. The call stops with `awaiting-approval`; only the user passes it, with `bay approve <callId>` in an interactive terminal (or from chat, when they turned `approvals.chat` on). The approval covers the proposal's exact content (path and sha256, shown with the gate).
 3. `implement`: the builder implements the approved proposal on a branch: code, schemas, framework modes, docs and tests.
 4. `review`: the reviewer (opus, high effort) checks every DoD item and rule below.
 5. `release`: changelog entry, version bump in bay/__init__.py, schema apiVersion bump when contracts changed; all checks green.

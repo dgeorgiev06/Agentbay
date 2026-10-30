@@ -14,6 +14,7 @@
   show <callId>                        current state of a call (result or the step it waits on)
   approve <callId|runId> [--reject]    pass an approval gate of a call, or of a workflow run (W-...)
                                        (you, in a terminal; never an agent)
+          [--via chat --quote "<msg>"] from chat, relayed by the Chief of Staff, when approvals.chat is on
   (agents read data only through .agentbay/roles/<role>--<mode>/use, generated per role unit by build)
 
   mode new <name> | feature new <name> --mode <m>
@@ -32,6 +33,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -251,14 +253,48 @@ def cmd_call(args):
     _run(lambda: d.call(args.target, _json_arg(args.input)))
 
 
+CHAT_BY = "user@chat-via-cos"
+
+
+def _approval_channel(args) -> tuple[str, str]:
+    """(by, quote) for `bay approve`. A terminal approval needs a TTY. A chat approval (`--via chat`) needs the
+    project's `approvals: { chat: true }` and the owner's message quoted verbatim; the ledger labels it
+    user@chat-via-cos, so it is never mistaken for a terminal one (proposal 0006, Part G)."""
+    if args.via != "chat":
+        if args.quote:
+            _die("✗ --quote goes with --via chat (a terminal approval needs no quote)")
+        if not sys.stdin.isatty():
+            _die("✗ bay approve needs an interactive terminal (stdin is not a TTY). Approval gates are for you, not "
+                 "for agents: run it yourself in a terminal. (Approvals from chat need `approvals: { chat: true }` "
+                 "in agentbay.config.yaml and `--via chat`.)")
+        return "user@tty", ""
+    from bay import config as cfgmod
+    try:
+        cfg = cfgmod.load(args.project)
+    except cfgmod.ConfigError as e:
+        _die(f"✗ {e}")
+    if not cfgmod.chat_approvals(cfg):
+        _die("✗ approvals from chat are off: `bay approve --via chat` needs `approvals: { chat: true }` in "
+             f"{cfgmod.NAME} (set it yourself; the default is off). Otherwise run `bay approve` in a terminal.")
+    quote = (args.quote or "").strip()
+    if not quote:
+        _die("✗ --via chat needs --quote \"<the owner's exact message approving this gate>\"")
+    return CHAT_BY, quote
+
+
+def _confirm(by: str) -> None:
+    if by == CHAT_BY:
+        return          # the owner's quoted message is the confirmation; Claude Code asks before this command runs
+    if input("Type yes to confirm: ").strip().lower() != "yes":
+        _die("not confirmed; nothing changed")
+
+
 def cmd_approve(args):
-    """Approval gates are passed only by a human at a terminal."""
-    if not sys.stdin.isatty():
-        _die("✗ bay approve needs an interactive terminal (stdin is not a TTY). Approval gates are for you, not "
-             "for agents: run it yourself in a terminal.")
+    """Approval gates are passed only by the owner: at a terminal, or from chat when they turned that on."""
+    by, quote = _approval_channel(args)
     from bay import dispatch
     if args.call.startswith("W-"):
-        return _approve_workflow(args)
+        return _approve_workflow(args, by, quote)
     d = _dispatcher(args)
     try:
         st = d.show(args.call)
@@ -268,12 +304,17 @@ def cmd_approve(args):
         _die(f"✗ call {args.call} is {st.get('status')}, not awaiting approval")
     verb = "REJECT" if args.reject else "APPROVE"
     print(f"{verb} gate '{st['next']['step']}' of {st['target']}: {st['next']['gate']}")
-    if input("Type yes to confirm: ").strip().lower() != "yes":
-        _die("not confirmed; nothing changed")
-    _run(lambda: d.approve(args.call, not args.reject, args.reason or "", by="user@tty"))
+    ap = st["next"].get("approves")
+    if ap:      # the exact content this approval covers; an edit after it makes the gate run again
+        print(f"  {ap['path']} at sha256 {ap['sha256']}")
+    sha = (args.sha or "").strip() if by == CHAT_BY else (ap["sha256"] if ap else "")
+    if by == CHAT_BY and ap and not sha:
+        _die(f"✗ --via chat needs --sha <prefix> of the content shown: {ap['path']} at sha256 {ap['sha256']}")
+    _confirm(by)
+    _run(lambda: d.approve(args.call, not args.reject, args.reason or "", by=by, quote=quote, sha=sha))
 
 
-def _approve_workflow(args):
+def _approve_workflow(args, by: str, quote: str):
     """Pass or reject the gate a workflow run waits on (`bay approve W-...`)."""
     from bay import dispatch, workflows as wfmod
     s = _system(args)
@@ -291,11 +332,8 @@ def _approve_workflow(args):
     verb = "REJECT" if args.reject else "APPROVE"
     print(f"{verb} gate '{sid}' of workflow {run['workflow']} (run {args.call}): "
           f"{(stage.gate if stage else '') or '(gate text unavailable)'}")
-    if input("Type yes to confirm: ").strip().lower() != "yes":
-        _die("not confirmed; nothing changed")
-    _run(lambda: d.run_capability("cos", "workflow.run/v1.approve", {
-        "runId": args.call, "approved": not args.reject, "by": "user@tty",
-        **({"reason": args.reason} if args.reason else {})}))
+    _confirm(by)
+    _run(lambda: d.approve_run(args.call, not args.reject, by=by, reason=args.reason or "", quote=quote))
 
 
 def cmd_show(args):
@@ -517,6 +555,49 @@ def cmd_task(args):
     print(protocol.new_task_id())
 
 
+def cmd_plan(args):
+    """A dispatched agent's outcome and to-do list: the only `bay` command a subagent may run. It appends its own
+    events and changes nothing else. It accepts a logged dispatch's taskId; plan ownership is enforced per agent type
+    by the guard (a role subagent may run only `bay plan`) plus the dispatch record, not per run."""
+    try:
+        if args.done is not None:
+            if args.plan_json:
+                _die("✗ pass either the plan JSON or --done <n>, not both")
+            ledger.record_done(args.project, args.task, args.done)
+            print(f"item {args.done} of {args.task} done")
+        else:
+            ledger.record_plan(args.project, args.task, _json_arg(args.plan_json) if args.plan_json else None)
+            print(f"plan recorded for {args.task}")
+    except ledger.PlanError as e:
+        _die(f"✗ {e}")
+
+
+def cmd_review_record(args):
+    """The coordinator records a review that ran outside a framework review step (review.verdict/v1) as a
+    `review.recorded` ledger event that improve reads. It touches no call, gate or approval."""
+    from bay import model
+    verdict = _json_arg(args.verdict_json)
+    errs =model.schema_errors(verdict, model.data_schema("review.verdict/v1"))
+    if errs:
+        _die("✗ the review does not match review.verdict/v1: " + "; ".join(errs[:5]))
+    try:
+        ledger.record_review(args.project, args.task, verdict)
+    except ledger.PlanError as e:
+        _die(f"✗ {e}")
+    print(f"review recorded for {args.task}")
+
+
+def cmd_dispatched(args):
+    """The coordinator records a subagent dispatch, so `bay status` lists it even when the spawn hook is off."""
+    if not ledger.TASK_ID.match(args.task):
+        _die(f"✗ '{args.task}' is not a taskId (`bay task new`)")
+    ledger.append(args.project, "agent.dispatch", args.task, source="coordinator", taskId=args.task,
+                  callId=args.call, step=args.step, agent=args.agent, summary=args.summary or "",
+                  data={k: v for k, v in (("model", args.model), ("tier", args.tier), ("role", args.role),
+                                          ("mode", args.mode), ("inputs", args.input)) if v})
+    print("dispatch recorded")
+
+
 def _ago(ts: str) -> str:
     from datetime import datetime, timezone
     if not ts:
@@ -527,6 +608,16 @@ def _ago(ts: str) -> str:
 
 def cmd_status(args):
     evs = ledger.read(args.project)
+    if args.agents:
+        gs = ledger.agent_groups(evs)
+        if args.json:
+            print(json.dumps(gs, indent=2))
+            return
+        print(f"{'ROLE':<14}{'MODE':<14}{'MODEL':<8}{'TIER':<10}{'RUNS':>5}{'DONE':>5}{'NOT-DONE':>9}{'TODO':>8}{'TOKENS':>9}{'USD':>8}")
+        for g in gs:
+            print(f"{g['role']:<14}{g['mode']:<14}{g['model']:<8}{g['tier']:<10}{g['runs']:>5}{g['done']:>5}{g['failed']:>9}"
+                  f"{str(g['todoDone']) + '/' + str(g['todoTotal']):>8}{g['tokens']:>9}{g['costUsd']:>8}")
+        return
     runs = list(ledger.fold(evs).values())
     calls = list(ledger.fold_calls(evs).values())
     notes = ledger.standalone_notes(evs)
@@ -649,8 +740,14 @@ def main(argv=None):
     su.add_argument("--usage", help='what the runtime reported for the step: \'{"tokens": N, "costUsd": X, "durationMs": N}\'')
     su.set_defaults(fn=cmd_submit)
     sh = sub.add_parser("show"); sh.add_argument("call"); sh.set_defaults(fn=cmd_show)
-    ap_ = sub.add_parser("approve", help="pass (or --reject) an approval gate; interactive terminal only")
+    ap_ = sub.add_parser("approve", help="pass (or --reject) an approval gate; interactive terminal, or chat when "
+                                         "approvals.chat is on")
     ap_.add_argument("call"); ap_.add_argument("--reject", action="store_true"); ap_.add_argument("--reason")
+    ap_.add_argument("--via", choices=["tty", "chat"], default="tty",
+                     help="chat: relayed by the Chief of Staff; needs approvals: { chat: true } in agentbay.config.yaml")
+    ap_.add_argument("--quote", help="--via chat: the owner's exact message approving this gate (recorded in the ledger)")
+    ap_.add_argument("--sha", help="--via chat: sha256 prefix (8+ hex) of the content shown to the owner; the approval "
+                                   "is refused if the file changed")
     ap_.set_defaults(fn=cmd_approve)
 
     for kind in ("mode", "feature", "connector", "env"):
@@ -683,6 +780,18 @@ def main(argv=None):
 
     t = sub.add_parser("task"); t.add_argument("action", choices=["new"]); t.set_defaults(fn=cmd_task)
     s = sub.add_parser("status"); s.add_argument("-n", type=int, default=10); s.add_argument("--json", action="store_true")
+    s.add_argument("--agents", action="store_true", help="group agent runs by role, mode, model and tier")
+    pl = sub.add_parser("plan", help="a dispatched agent's outcome and to-do list (append-only; the one command subagents may run)")
+    pl.add_argument("task"); pl.add_argument("plan_json", nargs="?"); pl.add_argument("--done", type=int)
+    pl.set_defaults(fn=cmd_plan)
+    rr = sub.add_parser("review-record", help="record a review that ran outside a framework review step (coordinator)")
+    rr.add_argument("task"); rr.add_argument("verdict_json")
+    rr.set_defaults(fn=cmd_review_record)
+    dp = sub.add_parser("dispatched", help="record a subagent dispatch (coordinator)")
+    dp.add_argument("task"); dp.add_argument("--agent", required=True); dp.add_argument("--call"); dp.add_argument("--step")
+    dp.add_argument("--model"); dp.add_argument("--tier"); dp.add_argument("--role"); dp.add_argument("--mode")
+    dp.add_argument("--summary"); dp.add_argument("--input", action="append")
+    dp.set_defaults(fn=cmd_dispatched)
     s.set_defaults(fn=cmd_status)
     lg = sub.add_parser("log"); lg.add_argument("-n", type=int, default=20); lg.set_defaults(fn=cmd_log)
     no = sub.add_parser("note", help="record a note on a run, task or call (never creates a run)")

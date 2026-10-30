@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from bay import protocol
+from bay import ledger, protocol
 from bay.connect import ConnectorError
-from bay.improve import store as st
+from bay.improve import sources, store as st
 from bay.util import duration
 
 
@@ -57,7 +57,9 @@ class ImproveStore:
         return self._do(self.store.decide, id, decision, by, note or "")
 
     def backlog(self, top=None, week=None) -> dict:
-        res = self._do(self.store.backlog, top or self.settings.get("backlogTop") or 10, week)
+        evs = sources.read_events(Path(self.ctx.project)) if self.ctx.project else []
+        agents = {"groups": ledger.agent_groups(evs), "plans": ledger.plans(evs)}   # run records, as `status --agents`
+        res = self._do(self.store.backlog, top or self.settings.get("backlogTop") or 10, week, agents)
         try:
             res["report"] = Path(res["report"]).relative_to(self.ctx.project).as_posix()
         except (ValueError, TypeError):

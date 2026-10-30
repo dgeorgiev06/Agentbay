@@ -366,3 +366,25 @@ def test_lint_reports_a_skill_md_whose_front_matter_never_closes_f15():
                    for e in errs)
     finally:
         cleanup(k)
+
+
+def test_building_the_kit_into_itself_leaves_git_status_clean():
+    """The kit ignores its own build output (/.claude/, /CLAUDE.md, .agentbay/), so `bay build` and `bay clean`
+    into the kit checkout never show up as changes to commit."""
+    from helpers import cleanup, kit_copy
+    k = kit_copy()
+    try:
+        g = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
+        for c in (["init", "-q"], ["add", "-A"], ["commit", "-qm", "kit"]):
+            assert subprocess.run(g + c, cwd=k, capture_output=True).returncode == 0
+        status = lambda: subprocess.run(["git", "status", "--porcelain"], cwd=k, capture_output=True, text=True).stdout
+        assert status() == ""
+        for cmd in ("build", "clean"):
+            r = subprocess.run([sys.executable, str(k / "bay/cli.py"), cmd, "--project", str(k)],
+                               capture_output=True, text=True)
+            assert r.returncode == 0, r.stderr
+            if cmd == "build":
+                assert (k / "CLAUDE.md").exists() and (k / ".claude/settings.json").exists()
+            assert status() == "", (cmd, status())
+    finally:
+        cleanup(k)

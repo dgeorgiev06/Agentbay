@@ -1,6 +1,106 @@
+# HANDOFF part 5: T-20261030-ba74 (recorded with `bay plan`) - stage 1 fix round for the review of C-20261030-bc7db5
+
+Outcome: DOD-8, DOD-9, R-7 and the usage double count fixed; the proposal was not edited. To-do: 1-5 done.
+1 (92e3019) `Dispatcher._require_plan` takes the result's taskId only when that run's dispatch names this call and step (or no call). Test `test_a_plan_of_another_step_or_call_does_not_count` now expects refusal.
+2 (92e3019) Chose to REMOVE the `agent` parameter of `ledger.record_plan`/`record_done` and the AGENTBAY_AGENT claim: nothing sets that variable and the CLI has no caller identity, so making it real would need new adapter plumbing. Plan ownership is per agent type: the guard lets a role subagent run only its own `bay plan`; the dispatch record ties the plan to its call and step. Documented in `ledger._dispatched_check` and `cli.cmd_plan`; pinned by `test_plan_ownership_is_per_agent_type_not_per_run`. Sibling builders of one type can still tick each other's plans (a known limit, not a regression).
+3 (610f494) README: code fence on its own line, guard caveat and budget-caps sentence restored; three phrases trimmed to stay near 900 words.
+4 (9a2fd62) `ledger.agent_groups` splits a step's submitted usage evenly among the agents dispatched to that call and step (documented in INTERFACES). Test `test_a_steps_usage_is_split_among_the_agents_dispatched_to_it_not_counted_per_agent`.
+5 Evidence, last lines of each command:
+- `python3 tests/run.py -q`: `445 passed, 0 failed`
+- `./bay.sh lint`: `✓ lint clean` (four `!` warnings as before: schedules and the workspace env)
+- `./bay.sh validate`: `✓ 6 modes, 21 endpoints, 5 roles (17 role units), 10 envs, 13 connectors resolve (agent profile claude-code)`
+- `./bay.sh build --project <scratchpad>/s1fix` (empty folder): `! Per-role Bash scope is enforced by the agentbay guard hook; restart Claude Code and accept the workspace trust prompt so hooks run.`; `./bay.sh clean`: last line `clean`; a glob of the folder afterwards: `No files found`
+- `python3 -m bay.cli boundary --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: `boundary origin/main...HEAD: 59 changed paths (21 core, 3 docs, 16 extension, 1 feature, 18 other); 0 failing; B-11 docs: 0 hits`
+- `python3 -I plan_probe.py <kit> <built project>`: every `bay plan` case with a foreign taskId, extra args, `--project`, `dispatched`, `review-record` or `approve` for role subagents is `deny`; non-role subagents: `deny  None  .agentbay/bay plan T-20261030-2908 --done 1`. Last line `pass  None      ./bay.sh  plan T-20261030-2908 '{}'` (no opinion from the guard for `./bay.sh` spellings, as before; Claude Code prompts). The probe needs two arguments (kit, built project).
+- `python3 -I gate_repro_sha.py <kit>`: `R1 forged line -> awaiting-approval approve | the gate runs: no recorded approval ...`, `R3 revert to superseded content -> approve`, `R4 no crash`, `R5 gaps: ["forge.create step fill: `when: stale > 1h` is for code steps ..."]`; then the probe's own R5 step raises `ResolveError` at line 66 because resolve now rejects that edit (the probe expects a runtime crash, so it ends with a traceback; the defect it probes is fixed).
+- Fake-source demo: no command for it is in this task's allowed list; the fake-source flows run inside the test suite (test_dispatch, test_mail_briefing), counted in the 445 above.
+
+# HANDOFF part 4: T-20261030-b07b (recorded with `bay plan`) - stage 1 of 0008 COMPLETE
+
+Outcome: items 7 and 8 done. To-do (done: 1-4): 1 docs (README 895 words, INTERFACES, DESIGN, cos playbook, four role prompts; COORDINATOR.md rebuilt); 2 cleanup (dead `when: approved` branch in `Dispatcher._skip` and its schema text removed, no test existed for it; `approved` output of forge.scaffold `proposal` removed from connector and interface); 3 evidence; 4 this file.
+Tests: 442 pass. lint clean, validate ok, scratch build + clean round trip leaves the folder empty, `bay boundary --docs`: 0 B-11 hits.
+Open for the owner: `bay boundary --base origin/main --proposal 0008 --docs` still fails 17 paths (B-1 5, B-2 9, B-3 3) because stage 1 touched paths that 0008's `touches:` does not list (adapters/claude-code, git/gmail-api/claude-transcripts/scaffold connectors, framework/interfaces forge.scaffold + workflow.run, forge extend playbook + Result type, mail-briefing config.example, schemas event/review.verdict/session.episode). Editing the proposal changes its approved sha256, so it was not touched.
+
+# HANDOFF part 3: T-20261030-5110 (recorded with `bay plan`)
+
+Outcome: stage 1 of 0008 complete (all 8 items below). One commit per green item. Tests: 442 pass. Stopped at the tool-call budget after item 6.
+To-do (done: 1-6; open: 7, 8):
+1 done (1e6a513) `Dispatcher._agents` takes inputs from the dispatch event's data.inputs. 2 done (55e6ba3) `cites` {taskId, outcome, todo[]} in review.verdict/v1 items;
+review brief has `review.recordedPlans` (taskId -> step, outcome, todo). 3 done (652b66a) `ledger.agent_groups` (moved from cli), `plans` passed to Store.backlog, "### Agent runs" section in report.py.
+4 done (213a915) cause: `TranscriptSource.sessions` only scanned <root>/<folder>/*.jsonl; with root = the project folder nothing matched. Now also <root>/*.jsonl. Test in claude-transcripts tests.
+5 done (0916492) commit["subject"] scrubbed, 200 chars, in session.episode/v1; git connector docs and test updated.
+6 done (3bb7364) `bay review-record <taskId> '<review.verdict/v1>'` -> event `review.recorded` (ledger.REVIEW_TYPES, schemas/event.schema.json); improve's `ledger_verdicts` reads it (target "review-record");
+cannot target a callId, nothing in dispatch reads it; tests/test_review_record.py (incl. subagent guard denial).
+7 OPEN docs: README, docs/INTERFACES.md (event type, cites, review brief recordedPlans, commit subject, review-record, dispatched --input), docs/DESIGN.md, framework/modes/cos/playbook.md
+(cos runs `bay dispatched ... --input` before every agent dispatch; chat approvals carry `--sha`; out-of-framework review -> `bay review-record`), role brief template (subagents run `bay plan` first; reviewer may cite with `cites`).
+Also .agentbay/COORDINATOR.md is generated from the cos playbook/role files: edit the sources, then build. Grep `bay plan|bay dispatched|--sha` for where each already appears.
+8 OPEN cleanup: dead `when: approved` branch in Dispatcher._skip and its test; unused `approved` output of the forge.scaffold proposal endpoint.
+
+# HANDOFF part 2: T-20261030-4424 (recorded with `bay plan`)
+
+Outcome: slice 8 finished, slice-7a findings F-1..F-7 fixed with tests, improve blind spots closed.
+To-do, as recorded with `bay plan` (done: 1, 2, 6, 7, 8, 9; open: 3, 4, 5, 10, 11, 12). Tests: 436 pass.
+1 done F-4/F-5/F-6. 2 done submit refused without plan (`Dispatcher._require_plan`; tests/helpers.py wraps `submit` to
+record dispatch+plan, `submit_strict` is the real one; tests/test_submit_needs_plan.py). 3 open: optional outcome/todo citation in
+review.verdict/v1 (VERDICT in bay/dispatch.py, `_accept_review`) and the recorded plan (ledger.plans) in the review brief (`_plan`, kind review).
+4 open: improve backlog reads ledger.plans and `_agent_groups` (bay/cli.py) figures. 5 PARTIAL: forge.extend skip is done and tested
+(mode.yaml `propose` has `when: "!$in.proposal"`; playbook.md updated); docs still open: README, docs/INTERFACES.md, docs/DESIGN.md,
+framework/modes/cos/playbook.md (cos runs `bay dispatched` before every Agent dispatch; chat approvals carry `--sha <prefix>`), role brief
+template (subagents run `bay plan` first). 6 done F-1 (`--sha`). 7 done F-2 (guard `dequote`). 8 done F-3 (`_state_holds`). 9 done F-7 (adapter ask/deny).
+10 open claude-transcripts connector (0 episodes with `root` set; fixture = top-level session .jsonl + subagents/). 11 open git episode subjects (scrubbed).
+12 open `bay review-record <taskId> '<verdict json>'` -> review.verdict/v1 event (event type must be added to schemas/event.schema.json and ledger.TYPES).
+Note: the dead `when: approved <f>` branch in Dispatcher._skip is no longer used by forge; remove it with its test when convenient.
+
+# HANDOFF: 0008 stage 1 (slice 8, agent run records, plus dogfood bug fixes)
+
+Task T-20261030-c91d, call C-20261030-bc7db5, step `implement`. Stands in for `bay plan` until it exists.
+
+## Outcome (what done looks like)
+
+Slice 8 acceptance line of docs/proposals/0008-simplify-without-losing-features.md:
+
+- A subagent can run `bay plan` and no other `bay` command.
+- Plan events are scrubbed, size-limited, append-only and refused for another taskId.
+- `step.started` carries the step's inputs.
+- `bay status` lists a dispatched agent even with the spawn hook off (cos logs the dispatch).
+- A role-step submit without a recorded outcome is refused.
+- `bay show` prints outcome, to-do progress and inputs.
+- `bay status --agents` groups runs by role, mode, model and tier from the ledger alone.
+- A reviewer verdict cites outcome and to-do items.
+- improve's weekly backlog reads the same figures.
+
+Dogfood bugs, each with a test:
+
+- (a) result block `protocol:` and the step `Result` type agree.
+- (b) with `approvals.chat` on, gate plan and `bay show` name the chat path.
+- (c) approval binds to proposal path and sha256 even when written by the same call's propose step.
+- (d) one skip rule: ledger approval of the proposal's current content skips propose and approve; front-matter marker grants nothing.
+- (e) ledger approval binding for 0008's current content, if (c) makes it derivable.
+
+Constraints: security only stricter (except `bay plan`, which only appends its own events); guard tests only added to; no new dependencies; no compat code; commit per green item; stop near 50 tool calls with this file updated.
+
+## To-do (status: open / done / dropped(reason) / blocked(reason))
+
+1. done. Bug (a): align `protocol:` in the subagent result block and the `Result` type. Serves bug (a).
+2. done. Bug (b): gate plan and `bay show` name the chat path when `approvals.chat` is on. Serves bug (b).
+3. done. Bug (c): approval binding uses propose-step output artifacts or the call input. Serves bug (c).
+4. done. Bug (d): single skip rule by ledger approval; remove front-matter reliance. Serves bug (d).
+5. done. `ledger`: `agent.plan` / `agent.plan.done` events, scrubbed, size-limited, taskId-checked, fold. Serves "plan events scrubbed, size-limited, refused for another taskId".
+6. done. `bay plan` CLI command, append-only; guard allows it as the only `bay` command for subagents. Serves "subagent can run bay plan and no other".
+7. done. `step.started` carries inputs (value, or sha256 plus preview). Serves "step.started carries inputs".
+8. done. `agent.dispatch` event via cos (`bay dispatched` or equivalent) and `bay status` lists it. Serves "status lists dispatched agent with hook off".
+9. open (blocked on test churn: 48 existing role-step submits in tests lack a taskId/plan; needs its own pass). Refuse role-step submit with no recorded outcome. Serves "submit refused without outcome".
+10. done. `bay show` prints outcome, to-do progress, inputs. Serves "bay show prints ...".
+11. done. `bay status --agents` grouping by role, mode, model, tier. Serves "status --agents".
+12. open (not started; review.verdict/v1 needs optional outcome/todo citations and the review brief needs the plan). Reviewer brief and verdict cite outcome and to-do items. Serves "reviewer verdict cites ...".
+13. open (not started). improve weekly backlog reads the same figures. Serves "improve's backlog reads same figures".
+14. open (bug (e) already answered: NOT derivable. The 0008 gate event of this call recorded `approves: none`, because the gate then named no file; recording a binding by hand would forge the owner's approval, so it is left to followups). Docs (README, INTERFACES, DESIGN, COORDINATOR/playbooks) and bug (e) binding. Serves R-4 and bug (e).
+
+---
+
 # HANDOFF - proposal 0006, step 1
 
-Branch `feat/source-kinds`. The spec is `docs/proposals/0006-component-contracts-and-content-types.md`
+Branch `feat/source-kinds` (slices 1-3, PR #10); slice 7a on `feat/extend-v2`, based on PR #10's branch. The spec is `docs/proposals/0006-component-contracts-and-content-types.md`
 (approved). Step 1 is built in slices. Each slice is done by a fresh builder, ends with tests green, a
 commit and a push, and updates this file. This file is removed in the last slice.
 
@@ -14,7 +114,9 @@ commit and a push, and updates this file. This file is removed in the last slice
 | 4 | `feature.yaml` (workflow, skills, `uses:`), whole-feature override, `bay show <mode> --resolved` | E | B-3, B-8 | todo |
 | 5 | Per-feature `uses:` enforced in the use shim (security) | E | B-9 | todo |
 | 6 | Contract tests: connector, source (incl. change-feed), mode; run against every instance | A | B-5 | todo |
-| 7 | forge.extend rewrite: `foreach:` slices, code `check` step running B-1..B-12, DoD/rules, generated briefs; forge shared protocol; improve `boundary-crossing` detector | C, F | all | todo |
+| 7a | Approvals from chat (Part G, behind `approvals.chat`); forge.extend skips `propose` for a proposal marked approved, the gate only for a recorded approval of its exact content; the kit ignores its own build output | G, C | - | done |
+| 7b | The new forge.extend: propose, approve, `foreach:` implement, code `check`, review, release; observable DoD/rules; generated briefs; `HANDOFF.md` protocol | C, F | all existing | todo (plan below) |
+| 7c | Shared forge protocol for create/connect; improve `boundary-crossing` detector | C, F | B-1..B-3 | todo (plan below) |
 
 PRs: slices 1-3, 4-5 and 6-7 each make one PR, with an independent review per PR.
 
@@ -137,6 +239,39 @@ Slice 3, B-8 (bc7634a):
 - Tests: test_adapter round trip (no clobbering, override child-only, name: rewritten, idempotent rebuild,
   clean removes `.claude/skills/`), test_dispatch plan `skills`, test_lint `*_b8` (3), test_inheritance.
 - Touches: `modes/*/skills/` `planned` off; bay/dispatch.py's slice-5 planned entry merged into a slice-3 one.
+
+Slice 7a (32b4eab, 838fbb9, 8dcb8ff, 74cdeb9, 515dbfb; correction de3d779):
+- 0006 Part G "Approvals from chat" (owner decision 2026-10-29); 0006 front matter `status: approved`,
+  `approvedBy: user`, `date: 2026-10-29`; Part C notes the approved-proposal skip; slice-7a `touches:`.
+- `bay approve <id> --via chat --quote "<msg>"` (bay/cli.py `_approval_channel`): refused unless
+  `approvals: { chat: true }` (schemas/config.schema.json, `config.chat_approvals`, exactly `true`); the quote is
+  mandatory; `--quote` without `--via chat` is refused; the terminal path is unchanged (TTY + "yes").
+- Ledger: call gates (`Dispatcher.approve(..., quote=)`) and workflow gates (new `Dispatcher.approve_run`, which
+  also writes a `step.completed` event, none existed before) record `data: {approved, by, quote}`;
+  `by` is `user@chat-via-cos` or `user@tty`. workflow.run/v1.approve takes `quote`.
+- Guard (bay/guard.py): every subagent (agentbay role or not) is denied `bay approve` in any spelling
+  (`runs_approve`: bay, bay.sh, .agentbay/bay, bay/cli.py, `-m bay.cli`; parsed words, raw text when the command
+  does not parse) and any Bash command naming `agentbay.config.yaml` or a root-level glob matching it
+  (`names_config`). File-tool writes to it were already denied (NEVER_FILES). (74cdeb9 also denied a subagent
+  write that turned a proposal to `status: approved`; de3d779 removed it, see Decisions.)
+- forge.extend: first step `proposal` (code, `forge.scaffold/v1.proposal`, `when: $in.proposal`) reads the
+  front matter; `propose` carries `when: "!$steps.proposal.approved"` (approved = status approved +
+  approvedBy + date). `approve` carries `approves: $in.proposal` and no `when:` (de3d779): the dispatcher hashes
+  the file itself, `bay approve` records `data.approves: {path, sha256}`, and the gate is skipped only when the
+  ledger's latest dispatcher decision by `user@tty`/`user@chat-via-cos` on that path and hash is an approval
+  (`Dispatcher._gate_check`). An edit while the gate waits makes `bay approve` refuse and re-plan. The plan's
+  `why`/`approves` and `bay show`'s `gates` say why the gate ran or was skipped; `bay approve` prints path + sha256.
+  Lint: a gate takes no `when:`; `approves:` only on a gate. The path must match `docs/proposals/<name>.md` (interface pattern; the connector also
+  resolves it under docs/proposals/).
+- `when:` grammar: `[!]$in.<f>`, `[!]$steps.<id>.<f>`, `stale > <age>`; role steps now take `when:`; resolve
+  fails when `$steps.<id>` is not an earlier step.
+- `.gitignore`: `/.claude/`, `/CLAUDE.md`.
+- Docs: cos playbook "Gates from chat"; extend playbook; README, DESIGN, INTERFACES; generated CLAUDE.md.
+- Tests: test_boundaries `*chat*` (4), `test_guard_denies_bay_approve_*`, `test_no_subagent_writes_agentbay_config_yaml`,
+  `test_no_subagent_writes_the_ledger`, `test_chat_approval_of_a_proposal_*`; test_dispatch
+  `test_extend_marker_skips_propose_but_never_the_gate`, `test_a_recorded_approval_*`, `test_an_edit_after_*`,
+  `test_only_bay_approve_events_*`, `test_a_gate_takes_no_when_*`, `test_when_names_only_an_earlier_step`; test_adapter `test_building_the_kit_into_itself_*`.
+  test_boundary `SLICES_BUILT` is now the set {1, 2, 3, 7}.
 
 ### Review round 1 (PR #10, independent review)
 Fixed (one commit each, pushed):
@@ -280,15 +415,78 @@ All round-2 findings (N-1 to N-5) fixed.
 - (review 2, N-5, replaces F-13's note) A child's `type`/`additionalProperties` must equal the parent's value.
 - (review 1) Login secrets: the old "does not declare" check stays first (security test pins its message), then
   the SecretAccessor intersection applies.
+- (7a) Chat approvals skip the "Type yes" prompt: the quoted message is the confirmation, and Claude Code's
+  permission prompt for the command (never pre-approved) is the second check.
+- (7a, corrected by de3d779; owner policy: a gate passes only by a recorded approval) The front-matter marker
+  skips `propose` only. The `approve` gate is skipped only for a ledger approval by `bay approve` (terminal or
+  chat) of this proposal path at the sha256 of its current content; any edit re-runs the gate. The latest
+  decision on that exact content wins (a rejection after an approval re-runs it). The 74cdeb9 guard rule that
+  denied writing `status: approved` is removed: the marker grants nothing, and no other reason to keep it was
+  found (it never covered the main thread or Bash, which was the hole). The ledger is the trust root: subagents
+  cannot write `.agentbay/` (guard, tested for `.agentbay/ledger/`); a main-thread Bash write to the ledger is the
+  same trust as the main thread typing `bay approve --via chat` (Open problems). Gates take no `when:` at all.
+  The hash is computed by the dispatcher from the project file, never taken from connector output.
+- (7a) The approval lookup is a forge.scaffold/v1 endpoint (code step, dispatcherOnly interface, forge already
+  needs it) plus a generic `when:` negation, rather than a forge-specific dispatcher rule.
+- (7a) `names_config` denies even reads of agentbay.config.yaml by Bash (subagents can use Read); a glob counts
+  only in the project root, so `ls framework/*.yaml` passes.
+- (7a) local-authoring's `fs.write` still lists agentbay.config.yaml; the guard's NEVER_FILES wins for every
+  subagent, so it is dead. Left as is (removing it is 7b/7c cleanup with the forge.create protocol).
+
 ## Next
-- PR #10 ready to merge; then slice 4.
+- PR #10 ready to merge; then slice 4 (or 7b, if the owner keeps 7 ahead of 4-6).
+
+### Plan: slice 7b, the new forge.extend (Part C), not built
+1. Workflow (framework/modes/forge/mode.yaml `extend`):
+   `proposal` (code, as 7a) → `propose` (builder; writes problem, change, `touches:`, `slices:`; skipped when
+   approved) → `approve` (gate, `approves: $in.proposal`; skipped only for a recorded approval of the unchanged proposal) → `implement` (builder, `foreach: $steps.propose.slices`)
+   → `check` (code) → `review` (reviewer, deep, high) → `release` (builder).
+   - Slices come from the proposal: for an approved proposal, `forge.scaffold/v1.proposal` also returns its
+     `slices:` front matter, so `foreach:` reads `$steps.proposal.slices` there; `propose`'s Result carries them
+     otherwise (one `$a|$b` fallback).
+2. Dispatcher `foreach:` (bay/dispatch.py, bay/model.py, schemas/mode.schema.json): a role step runs once per
+   entry of a list from an earlier step; state keeps `{index, outputs[]}`; each run is a fresh plan (new
+   taskId, no shared conversation) whose envelope names the slice and `HANDOFF.md`; the step completes when
+   every entry has; `bay show` reports `slice i/n`; lint: the list ref names an earlier step.
+3. `check` code step (new dispatcherOnly capability, e.g. forge.check/v1.run, bound in framework-dev's code
+   env): runs, quiet, `bay boundary --base <merge-base> --proposal <p> --docs` (B-1, B-2, B-3, B-11),
+   `bay lint` (B-4, B-6, B-7, B-8), `bay validate`, `tests/run.py -q`, build + clean in a scratch project.
+   Output per check `{id, ok, summary}`; B-5, B-9, B-10, B-12 listed as `pending` (slices 5, 6; no compat
+   detector yet) and never reported as pass. A failing check blocks review (`partial`).
+4. DoD and rules (features/extend/playbook.md, rules.yaml): DOD-1..DOD-9 and R-1..R-5 exactly as Part C;
+   remove the quality-word DoD and "compatibility impact" from the propose task; DOD-1/DOD-3 cite the
+   `check` output.
+5. Generated builder briefs: the implement plan's envelope is built from the playbook, the DoD, the
+   proposal's slice section and `HANDOFF.md` (framework/roles/ or bay/playbook.py); a test renders one for a
+   sample proposal (Part "Steps" acceptance: dry run of `bay call forge.extend` gives per-slice plans + brief).
+6. `HANDOFF.md` protocol: implement checks the file exists after each slice (done, decisions, next, test status,
+   open problems) and writes one ledger note per slice; the last slice removes it.
+7. Touches: framework/modes/forge/mode.yaml, features/extend/, bay/dispatch.py, bay/model.py,
+   schemas/mode.schema.json, framework/interfaces/ (check capability), framework/connectors/ (its connector),
+   framework/envs/framework-dev.yaml, framework/roles/; flip their `planned`.
+
+### Plan: slice 7c, not built
+1. Shared forge protocol: the slice-and-handoff protocol and quiet checks move into
+   framework/modes/forge/playbook.md; forge.create (and forge.connect once it exists) run the same `check`
+   step after `fill`; create's DoD names the boundary checks.
+2. improve `boundary-crossing` detector (bay/improve/, framework/modes/improve/features/audit/): runs B-1..B-3
+   over git history (each merge commit against its first parent, with the proposal it names), reports a
+   crossing no `touches:` covered; fixtures with a seeded crossing; never runs code from history.
+3. Touches: bay/improve/, framework/modes/improve/features/audit/, framework/modes/forge/playbook.md,
+   framework/modes/forge/features/create/.
 
 ## Test status
-`python3 tests/run.py -q`: 401 passed, 0 failed on a clean checkout of 18b6b45 (~4 min; use a long timeout).
-`bay lint` clean, `bay validate` ok. `bay boundary --base origin/main --proposal docs/proposals/0006-...md --docs`:
-93 changed paths, 0 failing, 0 B-11 hits (map introduced here, read at HEAD with no new-extension pass).
+`python3 tests/run.py -q`: 416 passed, 0 failed on a clean detached checkout of de3d779 (~4 min; use a long
+timeout). `bay lint` clean, `bay validate` ok. `bay boundary --base origin/main --proposal docs/proposals/0006-...md
+--docs`: 103 changed paths, 0 failing, 0 B-11 hits.
 
 ## Open problems
+- (7a) The chat path trusts the main thread to relay the owner's words (Part G threat note). A main-thread
+  prompt injection could still type `bay approve --via chat`; Claude Code's prompt for the command is the only
+  stop then. That is the documented trade-off, off by default.
+- (7a) The main thread (not a subagent) can append to `.agentbay/ledger/events.jsonl` by Bash, so it could forge
+  a `bay approve` event; that is no more than it can already do by running `bay approve --via chat`. Hashing or
+  signing ledger events is out of scope (the ledger is append-only JSON).
 - DESIGN.md is 1603 words (target ~1.5k); further trimming would cut contract text (safety, store invariants).
 - The `boundary-crossing` improve detector (B-1..B-3 over history) is slice 7.
 - B-8 skill-reference lint matches two prose phrasings only; a feature.yaml `skills:` list (slice 4) should

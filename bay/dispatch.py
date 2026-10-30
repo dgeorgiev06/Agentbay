@@ -5,7 +5,10 @@ A call walks the feature's workflow:
   role step   -> stop and return a step plan; the coordinator runs the role and
                  resumes with `bay submit <callId> <stepId> '<json>'`
   gate step   -> stop with status awaiting-approval; only `bay approve <callId>` (interactive
-                 terminal, never pre-approved) passes or rejects it
+                 terminal, or `--via chat` when approvals.chat is on; never pre-approved) passes or
+                 rejects it. A gate with `approves: $in.<f>` approves that file's exact content: the
+                 ledger records its path and sha256, and a later call naming the same unchanged file
+                 skips the gate (any edit makes it run again). Nothing else skips a gate.
   review step -> injected from mode.yaml `review`; gets DoD, reviewer rules and
                  deterministic check results; verdicts decide done vs partial
 
@@ -15,7 +18,9 @@ are redacted from everything this module returns or logs.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import secrets as _rand
 import time
 from pathlib import Path
@@ -24,7 +29,12 @@ from . import checks, config as cfgmod, connect, ledger, model, secretscan, vaul
 from .util import duration, parse_time, read_json, utcnow, write_json
 
 VERDICT = "review.verdict/v1"
+# who `bay approve` records: a terminal approval, or one relayed from chat (bay/cli.py CHAT_BY); only these pass a
+# gate for a later call
+APPROVERS = ("user@tty", "user@chat-via-cos")
 FAIL_LEVELS = ("must", "must_not")
+# a proposal a propose step wrote: its output `artifacts` name it (docs/proposals/<id>.md)
+PROPOSAL_PATH = re.compile(r"^docs/proposals/[A-Za-z0-9][A-Za-z0-9._-]*\.md$")
 
 
 class CallError(Exception):
@@ -77,6 +87,8 @@ class Dispatcher:
         if step.kind == "review":
             self._accept_review(state, feat, step, output, base)
         else:
+            if step.kind == "role" and step.resolved is not None and step.resolved.runtime != "claude-code-main":
+                self._require_plan(call_id, step, output)
             if step.out:
                 sch = model.type_schema(mode.dirs or mode.path, step.out, f"{feat.mode}.{feat.name}", [])
                 errs = model.schema_errors(output, sch)
@@ -84,15 +96,39 @@ class Dispatcher:
                     raise CallError(f"step {step.id}: output does not match {step.out}: " + "; ".join(errs[:5]))
             state["steps"][step.id] = output
             self._ledger("step.completed", base, summary=f"{step.role} submitted")
+            tid = output.get("taskId") if isinstance(output, dict) else None
+            if tid and ledger.dispatched_agent(ledger.read(self.project), tid):
+                ledger.append(self.project, "completed", tid, source="dispatcher", taskId=tid, callId=call_id,
+                              agent=step.subagent, summary=str(output.get("summary", ""))[:200],
+                              data={"status": output.get("status", "done")})
         state["cursor"] += 1
         if state.get("halt"):
             state["output"] = self._endpoint_output(feat, state)
             return self._finish(state, mode, feat)
         return self._advance(mode, feat, state)
 
-    def approve(self, call_id: str, approved: bool, reason: str = "", by: str = "user") -> dict:
-        """Pass or reject the approval gate a call is waiting on. Called only from `bay approve`, which
-        requires an interactive terminal (never pre-approved for Claude Code)."""
+    def _require_plan(self, call_id: str, step, output) -> None:
+        """A subagent's result is accepted only when its run recorded an outcome (`bay plan`). The run is found by
+        the coordinator's dispatch record for this call and step, or by the taskId in the result block when that
+        taskId's dispatch names this call and step (or names no call)."""
+        evs = ledger.read(self.project)
+        tids = {e.get("taskId") for e in evs if e.get("type") in ("agent.dispatch", "spawned")
+                and e.get("callId") == call_id and e.get("step") == step.id}
+        named = output.get("taskId") if isinstance(output, dict) else None
+        disp = ledger.dispatched_agent(evs, named) if isinstance(named, str) else None
+        if disp and disp.get("callId") in (None, call_id) and disp.get("step") in (None, step.id):
+            tids.add(named)
+        if not tids & set(ledger.plans(evs)):
+            raise CallError(f"step {step.id}: the run recorded no outcome and to-do list, so its result is not "
+                            f"accepted. The agent runs `.agentbay/bay plan <taskId> '<json>'` first (the coordinator "
+                            f"logs the dispatch with `.agentbay/bay dispatched <taskId> --agent <subagent> "
+                            f"--call {call_id} --step {step.id}`); then submit again")
+
+    def approve(self, call_id: str, approved: bool, reason: str = "", by: str = "user", quote: str = "",
+                sha: str = "") -> dict:
+        """Pass or reject the approval gate a call is waiting on. Called only from `bay approve`, which needs an
+        interactive terminal, or `--via chat` with the project's approvals.chat on; never pre-approved for Claude
+        Code. `quote` is the owner's message a chat approval relays; the ledger keeps it next to `by`."""
         state = self._load(call_id)
         mode, feat = self.sys.feature(state["target"])
         if state["status"] != "awaiting-approval":
@@ -100,19 +136,83 @@ class Dispatcher:
         step = feat.steps[state["cursor"]]
         base = self._event_base(mode, feat, step, call_id)
         base.update(_usage_fields(None, state.get("plannedAt")))
+        shown = (state.get("plan") or {}).get("approves")
+        subject = self._gate_subject(step, state)
+        if approved and subject != shown:
+            # the owner approves the content the gate showed; an edit since then needs a fresh look
+            gate = self._gate_check(step, state, subject)
+            state.setdefault("gates", {})[step.id] = gate
+            state["plan"] = self._plan(mode, feat, step, state)
+            self._save(state)
+            raise CallError(f"call {call_id}: {(shown or {}).get('path') or 'the approved file'} changed since the "
+                            f"gate was shown (sha256 {_short(shown)} -> {_short(subject)}); nothing approved. Read "
+                            f"it again (`bay show {call_id}`) and re-run `bay approve {call_id}`")
+        if approved and subject:
+            # the approval names the content it covers: a chat approval must carry the sha256 (prefix) of the
+            # content shown to the owner, the terminal path passes the one it printed
+            if not sha and by == "user@chat-via-cos":
+                raise CallError(f"call {call_id}: a chat approval needs --sha <prefix> of the content shown "
+                                f"({subject['path']} at sha256 {_short(subject)})")
+            if sha and (len(sha) < 8 or not subject["sha256"].startswith(sha.lower())):
+                raise CallError(f"call {call_id}: --sha {sha} does not match the current content of "
+                                f"{subject['path']} (sha256 {_short(subject)}); nothing approved. Read it again "
+                                f"(`bay show {call_id}`)")
+        data = {"approved": approved, "by": by, **({"quote": quote} if quote else {}),
+                **({"approves": subject} if subject else {})}
+        state["steps"][step.id] = {"approved": approved, "by": by, **({"quote": quote} if quote else {}),
+                                   **({"approves": subject} if subject else {})}
         if not approved:
             state["status"] = "blocked"
             state["result"] = {"reason": reason or "rejected at the approval gate"}
-            self._ledger("step.completed", base, summary=f"gate rejected by {by}", data={"approved": False})
+            self._ledger("step.completed", base, summary=f"gate rejected by {by}", data=data)
             return self._finish(state, mode, feat)
-        state["steps"][step.id] = {"approved": True, "by": by}
-        self._ledger("step.completed", base, summary=f"gate approved by {by}", data={"approved": True})
+        self._ledger("step.completed", base, summary=f"gate approved by {by}", data=data)
         state["cursor"] += 1
         return self._advance(mode, feat, state)
 
+    def approve_run(self, run_id: str, approved: bool, by: str, reason: str = "", quote: str = "") -> dict:
+        """Pass or reject the gate a project workflow run waits on (`bay approve W-...`), and record who did,
+        with the quoted message of a chat approval, in the ledger."""
+        out = self.run_capability("cos", "workflow.run/v1.approve", {
+            "runId": run_id, "approved": approved, "by": by,
+            **({"reason": reason} if reason else {}), **({"quote": quote} if quote else {})})
+        ledger.append(self.project, "step.completed", run_id, source="dispatcher", step=out.get("stage"),
+                      summary=f"gate {'approved' if approved else 'rejected'} by {by}",
+                      data={"approved": approved, "by": by, **({"quote": quote} if quote else {})})
+        return out
+
     def show(self, call_id: str) -> dict:
         """Current state of a call (result, or the step it waits on). Read-only."""
-        return self._public(self._load(call_id))
+        return {**self._public(self._load(call_id)), **self._agents(call_id)}
+
+    def _agents(self, call_id: str) -> dict:
+        """The agents dispatched for a call, from the ledger: outcome, to-do progress and inputs (`bay show`)."""
+        evs = ledger.read(self.project)
+        plans = ledger.plans(evs)
+        out = []
+        for e in evs:
+            if e.get("type") != "agent.dispatch" or e.get("callId") != call_id:
+                continue
+            started = [s for s in evs if s.get("type") == "step.started" and s.get("callId") == call_id
+                       and s.get("step") == e.get("step")]
+            pl = plans.get(e["taskId"])
+            out.append({"taskId": e["taskId"], "step": e.get("step"), "agent": e.get("agent"),
+                        "model": (e.get("data") or {}).get("model"),
+                        "inputs": (e.get("data") or {}).get("inputs")      # what the coordinator gave the agent
+                        or ((started[-1].get("data") or {}).get("inputs") if started else None),
+                        "outcome": pl["outcome"] if pl else None,
+                        "progress": f"{pl['done']}/{len(pl['todo'])}" if pl else None,
+                        "todo": pl["todo"] if pl else None})
+        return {"agents": out} if out else {}
+
+    def _recorded_plans(self, call_id: str) -> dict:
+        """taskId -> {step, outcome, todo} of the agents dispatched for a call: what the reviewer judges the run against;
+        a verdict item may cite them (`cites`)."""
+        evs = ledger.read(self.project)
+        plans = ledger.plans(evs)
+        return {e["taskId"]: {"step": e.get("step"), "outcome": plans[e["taskId"]]["outcome"],
+                              "todo": plans[e["taskId"]]["todo"]}
+                for e in evs if e.get("type") == "agent.dispatch" and e.get("callId") == call_id and e.get("taskId") in plans}
 
     def use(self, unit: str, target: str, inp: dict | None = None) -> dict:
         """Read-only connector access for one compiled unit (a role in one mode and one env). Reached only
@@ -182,6 +282,16 @@ class Dispatcher:
                 self._ledger("step.skipped", base, summary=f"when: {step.when}")
                 state["cursor"] += 1
                 continue
+            if step.kind == "gate":
+                gate = self._gate_check(step, state)
+                state.setdefault("gates", {})[step.id] = gate
+                if gate["skipped"]:
+                    prior = gate["prior"]
+                    state["steps"][step.id] = {"approved": True, "by": prior["by"], "priorCall": prior["callId"]}
+                    self._ledger("step.skipped", base, summary=gate["why"],
+                                 data={"approves": gate["approves"], "priorCall": prior["callId"]})
+                    state["cursor"] += 1
+                    continue
             if step.kind == "code":
                 self._run_code(mode, feat, step, state, base)
                 if state["status"] in ("blocked", "failed"):
@@ -194,6 +304,10 @@ class Dispatcher:
             plan = self._plan(mode, feat, step, state)
             state["plan"] = plan
             state["plannedAt"] = time.time()
+            if step.kind in ("role", "review"):
+                self._ledger("step.started", base, summary=f"{step.kind} {step.role}",
+                             data={"inputs": inputs_record(plan.get("input") or plan.get("review", {}).get("task", {}),
+                                                           self.project)})
             self._ledger("step.planned", base, summary=f"{step.kind} {step.role or step.id}")
             self._save(state)
             return self._public(state)
@@ -213,8 +327,13 @@ class Dispatcher:
         return self._finish(state, mode, feat)
 
     def _skip(self, step, mode, feat, state) -> bool:
-        if step.when.startswith("$in."):
-            return not state["input"].get(step.when[4:])
+        """`$in.<f>` / `$steps.<id>.<f>`: skip unless truthy; a leading `!` skips when truthy instead (a skipped
+        step's output counts as missing). `stale > <age>`: skip a code step while the store is fresher."""
+        neg = step.when.startswith("!")
+        ref = step.when[1:] if neg else step.when
+        if ref.startswith(("$in.", "$steps.")):
+            v = substitute({"v": ref}, state["input"], state["steps"], {}).get("v")
+            return bool(v) if neg else not v
         age = duration(step.when.split(">")[1].strip())
         iface = step.run.rsplit(".", 1)[0]
         st = self._invoke(step.env, step.connector, iface, "status", {}, settings=self._settings(mode), caps={})
@@ -222,6 +341,80 @@ class Dispatcher:
         if st.get("stale"):           # selectors or bound sources changed: sync re-scopes the store first
             return False
         return bool(last) and (self.clock() - parse_time(last, self.clock())) <= age
+
+    def _gate_subject(self, step, state) -> dict | None:
+        """{path, sha256} of the project file a gate's `approves: $in.<f>` names, or None (no field, no such file
+        inside the project). The dispatcher hashes the file itself; no connector output decides a gate."""
+        if step.kind != "gate" or not step.approves:
+            return None
+        return self._file_subject(step.approves, state)
+
+    def _file_subject(self, expr: str, state) -> dict | None:
+        """{path, sha256} of the project file `expr` names. A list (a step's `artifacts`) names the proposal that
+        step wrote: its first docs/proposals/<id>.md."""
+        path = substitute({"v": expr}, state["input"], state["steps"], {}).get("v")
+        if isinstance(path, list):
+            path = next((x for x in path if isinstance(x, str) and PROPOSAL_PATH.match(x)), None)
+        if not isinstance(path, str) or not path:
+            return None
+        root = self.project.resolve()
+        p = (root / path).resolve()
+        if not p.is_relative_to(root) or not p.is_file():
+            return None
+        return {"path": path, "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
+
+    def _gate_check(self, step, state, subject: dict | None = ...) -> dict:
+        """Whether a gate runs: skipped only when the ledger's latest owner decision (`bay approve`, terminal or
+        chat) on this exact path and content is an approval. {skipped, why, approves, prior}."""
+        if subject is ...:
+            subject = self._gate_subject(step, state)
+        if subject is None:
+            why = "the gate runs: it approves no file" + (f" ({step.approves} names none in the project)"
+                                                          if step.approves else "")
+            return {"skipped": False, "why": why, "approves": None, "prior": None}
+        last = same_path = None
+        mode_name, _, ep = str(state.get("target", "")).partition(".")
+        for e in ledger.read(self.project):
+            d = e.get("data") or {}
+            if (e.get("type") != "step.completed" or e.get("source") != "dispatcher" or d.get("by") not in APPROVERS
+                    or e.get("mode") != mode_name or e.get("endpoint") != ep or e.get("step") != step.id
+                    or not isinstance(d.get("approves"), dict) or d["approves"].get("path") != subject["path"]):
+                continue
+            # only the latest decision on the path counts: a later approval or rejection of other content
+            # supersedes an earlier one, so reverting a file to old content does not revive its approval
+            same_path = e
+            last = e if d["approves"].get("sha256") == subject["sha256"] and self._state_holds(e, step, subject) else None
+        out = {"approves": subject, "prior": None, "skipped": False}
+        if last is not None and last["data"].get("approved") is True:
+            d = last["data"]
+            out.update(skipped=True, prior={"by": d["by"], "callId": last.get("callId"), "ts": last.get("ts")},
+                       why=f"skipped: {subject['path']} approved by {d['by']} on {str(last.get('ts', ''))[:10]} "
+                           f"(call {last.get('callId')}), content unchanged (sha256 {_short(subject)})")
+        elif last is not None:
+            out["why"] = (f"the gate runs: {subject['path']} at sha256 {_short(subject)} was rejected by "
+                          f"{last['data'].get('by')} on {str(last.get('ts', ''))[:10]}")
+        elif same_path is not None and same_path["data"].get("approved") is True:
+            d = same_path["data"]
+            out["why"] = (f"the gate runs: {subject['path']} changed since {d['by']} approved it on "
+                          f"{str(same_path.get('ts', ''))[:10]} (sha256 {_short(d['approves'])} -> {_short(subject)})")
+        else:
+            out["why"] = (f"the gate runs: no recorded approval of {subject['path']} at sha256 {_short(subject)} "
+                          f"(a front-matter status: approved is informational; only `bay approve` passes a gate)")
+        return out
+
+    def _state_holds(self, e: dict, step, subject: dict) -> bool:
+        """A ledger decision counts only when the call's own state file holds the same decision: the gate approved
+        (or rejected) with the same content hash. A line written into the ledger alone passes nothing."""
+        try:
+            prior = self._load(str(e.get("callId")))
+        except CallError:
+            return False
+        rec = (prior.get("steps") or {}).get(step.id)
+        d = e.get("data") or {}
+        if not isinstance(rec, dict) or rec.get("approved") is not (d.get("approved") is True) \
+                or (rec.get("approves") or {}).get("sha256") != subject["sha256"]:
+            return False
+        return True
 
     def _run_code(self, mode, feat, step, state, base) -> None:
         env = self.sys.env(step.env)
@@ -231,7 +424,7 @@ class Dispatcher:
         args = substitute(step.with_, state["input"], state["steps"], mode.config)
         iface, ep = step.run.rsplit(".", 1)
         caps = cfgmod.caps(mode.constraints, env.spec.get("limits", {}), mode.config)
-        self._ledger("step.started", base, summary=step.run)
+        self._ledger("step.started", base, summary=step.run, data={"inputs": inputs_record(args, self.project)})
         t0 = time.monotonic()
         try:
             out = self._invoke(step.env, step.connector, iface, ep, args, settings=self._settings(mode), caps=caps)
@@ -341,9 +534,13 @@ class Dispatcher:
         if step.kind != "gate":                     # gates are never submitted, only approved by the user
             plan["submit"] = submit
         if step.kind == "gate":
+            gate = (state.get("gates") or {}).get(step.id) or {}
             plan.update({"gate": step.task,
                          "approve": f"the USER runs in their own terminal: .agentbay/bay approve {state['callId']} "
                                     f"(or --reject --reason '...'); then `.agentbay/bay show {state['callId']}`",
+                         **self._chat_path(state["callId"]),
+                         **({"why": gate["why"]} if gate.get("why") else {}),
+                         **({"approves": gate["approves"]} if gate.get("approves") else {}),
                          "inputs": {k: v for k, v in state["steps"].items() if v is not None}})
             return plan
         run_as = "main-thread playbook" if role.runtime == "claude-code-main" else f"subagent_type={step.subagent}"
@@ -359,6 +556,7 @@ class Dispatcher:
                 "checks": state["checks"],
                 "output": self._endpoint_output(feat, state),
                 "verdictSchema": VERDICT,
+                "recordedPlans": self._recorded_plans(state["callId"]),
             }
             for name in (feat.review or {}).get("rulesets", []):
                 # framework rule sets (e.g. conformance): judged with the DoD; cite their ids in evidence
@@ -376,6 +574,16 @@ class Dispatcher:
             "tools": [f"{use_shim(role.unit)} {u} '<json>'" for u in role.bay_uses],
         })
         return plan
+
+    def _chat_path(self, call_id: str) -> dict:
+        """With `approvals.chat` on, the gate plan also names the chat path (the owner's own words, quoted)."""
+        try:
+            on = cfgmod.chat_approvals(cfgmod.load(self.project))
+        except cfgmod.ConfigError:
+            return {}
+        return {"approveFromChat": f"approvals.chat is on: when the user's latest message clearly approves this gate, "
+                                   f".agentbay/bay approve {call_id} --via chat --quote \"<their exact message>\" "
+                                   f"(never infer approval)"} if on else {}
 
     def _endpoint_output(self, feat, state):
         for st in reversed(feat.steps):
@@ -397,6 +605,8 @@ class Dispatcher:
 
     def _public(self, state) -> dict:
         out = {"callId": state["callId"], "target": state["target"], "status": state["status"]}
+        if state.get("gates"):        # why each gate ran or was skipped
+            out["gates"] = {k: g["why"] for k, g in state["gates"].items()}
         if state["status"] in ("needs-agent", "awaiting-approval"):
             out["next"] = state["plan"]
         else:
@@ -435,6 +645,32 @@ class Dispatcher:
         b = dict(base)
         rid = b.pop("run_id")
         ledger.append(self.project, etype, rid, source="dispatcher", **b, **fields)
+
+
+def inputs_record(args, project: Path) -> dict:
+    """What a step was given, for the ledger: a small value as is; for a large value or a file in the project, its
+    sha256 and a short preview (the ledger scrubs secret-shaped text)."""
+    out = {}
+    for k, v in (args if isinstance(args, dict) else {}).items():
+        raw = v if isinstance(v, str) else json.dumps(v, sort_keys=True, ensure_ascii=False)
+        f = None
+        if isinstance(v, str) and 0 < len(v) < 300 and "\n" not in v:
+            try:
+                q = (project / v).resolve()
+                f = q if q.is_file() and q.is_relative_to(project.resolve()) else None
+            except (OSError, ValueError):
+                f = None
+        if f is not None:
+            out[k] = {"file": v, "sha256": hashlib.sha256(f.read_bytes()).hexdigest()}
+        elif len(raw) <= 160:
+            out[k] = v
+        else:
+            out[k] = {"sha256": hashlib.sha256(raw.encode()).hexdigest(), "preview": raw[:120]}
+    return out
+
+
+def _short(subject) -> str:
+    return str((subject or {}).get("sha256") or "none")[:12]
 
 
 def _ms(t0: float) -> int:

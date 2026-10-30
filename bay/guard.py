@@ -41,6 +41,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import os
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -63,6 +64,44 @@ EVAL_FLAGS = ("-c", "-e", "--eval", "-E", "-r")
 PROBES = (".agentbay/guard.json", ".agentbay/bay", ".agentbay/roles/role/use", ".agentbay/data/feeds/feed-briefing/corpus.db",
           ".agentbay/data/feeds/feed-briefing/corpus.db-wal", ".agentbay/calls/C-0.json", ".agentbay/ledger/events.jsonl",
           ".claude/settings.json", ".claude/settings.local.json", ".claude/agents/agent.md")
+
+
+# the owner's settings file: it turns approvals from chat on (proposal 0006, Part G), so no subagent may name it in
+# a Bash command (a write by redirect, cp, mv, sed -i, tee, ...); file tools are refused by NEVER_FILES
+CONFIG_FILE = "agentbay.config.yaml"
+# the kit CLI in any spelling: bay, bay.sh, .agentbay/bay, bay/cli.py, `python -m bay.cli`
+_CLI_RE = re.compile(r"(?:^|[\s;&|()`$'\"])(?:\S*/)?(?:bay|bay\.sh|cli\.py|bay\.cli)(?=[\s;&|()`'\"]|$)")
+_APPROVE_RE = re.compile(r"(?:^|[\s;&|()`$'\"])approve(?=[\s;&|()`'\"]|$)")
+
+
+def runs_approve(cmd: str, words: list[str]) -> bool:
+    """True when `cmd` runs the kit CLI's `approve` (a gate is the owner's, never a subagent's). Parsed words are
+    checked when the command parses (so a commit message that mentions `bay approve` is fine); otherwise the raw
+    text."""
+    if words:
+        cli = [i for i, w in enumerate(words)
+               if os.path.basename(w) in ("bay", "bay.sh", "cli.py") or w == "bay.cli"]
+        return bool(cli) and "approve" in words[cli[0] + 1:]
+    return bool(_CLI_RE.search(cmd) and _APPROVE_RE.search(cmd))
+
+
+def dequote(cmd: str) -> str:
+    """The command text with quotes and backslashes removed: what the shell would join (`.agent''bay`)."""
+    return re.sub(r"['\"\\]", "", cmd)
+
+
+def names_config(cmd: str, words: list[str], at_root) -> bool:
+    """True when `cmd` names agentbay.config.yaml, directly or by a glob in the project root (`at_root(dir)`)
+    that matches it. Quotes and backslashes are removed first (`agentbay.conf''ig.yaml` is the same file), and a
+    command that does not parse is judged on that text alone: anything containing `agentbay.conf` is denied."""
+    if CONFIG_FILE.casefold()[:len("agentbay.conf")] in dequote(cmd).casefold():
+        return True
+    if any(os.path.basename(w).casefold() == CONFIG_FILE.casefold() for w in words):
+        return True
+    toks = words or re.split(r"[\s;&|<>()`'\"]+", cmd)
+    return any(any(c in w for c in "*?[{") and at_root(os.path.dirname(w)) and any(
+        fnmatch.fnmatch(CONFIG_FILE, x.casefold()) for x in _expand_braces(os.path.basename(w).casefold()))
+        for w in toks if w)
 
 
 def unsafe(cmd: str) -> str | None:
@@ -216,7 +255,7 @@ class Guard:
         cwd = Path(payload.get("cwd") or self.project)
         who = f"subagent {agent or payload.get('agent_id')}"
         if tool == "Bash":
-            return self._bash(entry, who, ti.get("command", ""), cwd)
+            return self._bash(entry, who, ti.get("command", ""), cwd, agent)
         if tool in FILE_TOOLS:
             return self._files(entry, who, tool, ti, cwd)
         return "pass", ""
@@ -278,18 +317,23 @@ class Guard:
                 return f"{d}/ of the agentbay checkout is writable only by forge.extend (env must name it)"
         return None
 
-    def _bash(self, entry, who, command, cwd) -> tuple[str, str]:
+    def _bash(self, entry, who, command, cwd, agent=None) -> tuple[str, str]:
         why = unsafe(command)
         try:
             words = shlex.split(command) if not why else []
         except ValueError as e:
             why = f"cannot parse command ({e})"
             words = []
+        if runs_approve(command, words):
+            return "deny", (f"agentbay: {who} may not run `bay approve`: approval gates are the owner's (a terminal, "
+                            f"or a chat approval the main thread relays)")
+        if names_config(command, words, lambda d: norm(d or ".", cwd) == self.project):
+            return "deny", f"agentbay: {who} may not name {CONFIG_FILE} in a command (the owner's settings)"
         if entry is None:
             # not an agentbay role: off the control plane by path, glob and interpreter -c (S-B)
             if why:
                 return ("deny", f"agentbay: {who}: {why} (in a command that mentions .agentbay/.claude)") \
-                    if any(c in command for c in CONTROL) else ("pass", "")
+                    if any(c in dequote(command).casefold() for c in CONTROL) else ("pass", "")
             d = self._words(who, words, cwd)
             return d or ("pass", "")
         if why:
@@ -304,6 +348,8 @@ class Guard:
             if self.policy.get("autoAllowShim", False):    # old or missing policy: prompt (fail closed)
                 return "allow", ""         # the ONLY auto-allow: the role's own read-only data shim
             return "pass", ""              # kit inside the project: roles might edit code the shim runs; prompt
+        if len(words) > 1 and words[1] == "plan" and norm(words[0], cwd) == self.agentbay / "bay":
+            return self._plan_command(who, words, agent)
         for prefix in entry.get("clis", []):
             pw = shlex.split(prefix)
             if words[: len(pw)] != pw:
@@ -324,6 +370,28 @@ class Guard:
         allowed = ([shim] if shim else []) + entry.get("clis", [])
         return "deny", (f"agentbay: role {entry['role']} may only run: {', '.join(allowed) or 'nothing'} via Bash"
                         + (f". Use `{shim} <capability>/v<N>.<endpoint> '<json>'` for data." if shim else "."))
+
+    def _plan_command(self, who, words, agent) -> tuple[str, str]:
+        """`bay plan <taskId> '<json>'` or `bay plan <taskId> --done <n>`: the one `bay` command an agentbay subagent
+        may run. It only appends to the ledger, and only for the taskId the ledger shows was dispatched to this
+        agent; any other shape of the command is denied."""
+        shape = len(words) == 4 or (len(words) == 5 and words[3] == "--done")
+        if not shape or (len(words) == 4 and words[3].startswith("-")) or not re.match(r"^T-[0-9]{8}-[0-9a-z]{4}$", words[2]):
+            return "deny", (f"agentbay: {who}: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`")
+        disp = None                     # stdlib only (this runs as a standalone hook): the ledger's latest record
+        try:
+            for line in (self.agentbay / "ledger" / "events.jsonl").read_text(encoding="utf-8").split("\n"):
+                try:
+                    e = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(e, dict) and e.get("taskId") == words[2] and e.get("type") in ("agent.dispatch", "spawned"):
+                    disp = e
+        except OSError:
+            pass
+        if disp is None or disp.get("agent") != agent:
+            return "deny", f"agentbay: {who}: `bay plan` takes only the taskId this agent was dispatched with"
+        return ("allow", "") if self.policy.get("autoAllowShim", False) else ("pass", "")
 
     def _words(self, who, words, cwd, first: int = 0) -> tuple[str, str] | None:
         """Checks every word for inline interpreter code; words from `first` on (the arguments after an

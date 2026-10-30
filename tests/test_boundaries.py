@@ -608,3 +608,233 @@ def test_policy_without_auto_allow_key_prompts():
         assert decide(g, "analyst--feed-briefing", "Bash", {"command": ".agentbay/roles/analyst--feed-briefing/use items.store/v1.query '{}'"}) == "pass"
     finally:
         cleanup(p)
+
+
+# ---------------------------------------------------------------- 0006 Part G: approvals from chat
+import yaml  # noqa: E402
+
+from bay import dispatch as _dispatch, ledger as _ledger  # noqa: E402
+from helpers import kit_copy  # noqa: E402
+
+CHAT_WF = {"workflows": {"morning": {"steps": [
+    {"id": "sync", "call": "feed-briefing.sync", "with": {"lookback": "$in.lookback"}},
+    {"id": "ship", "gate": "send the digest?"}]}}}
+
+
+def _cli(kit, p, *args):
+    return subprocess.run([sys.executable, str(kit / "bay/cli.py"), "approve", *args, "--project", str(p)],
+                          capture_output=True, text=True, input="")
+
+
+def _gated_run(chat):
+    p = project({**CHAT_WF, **({"approvals": {"chat": chat}} if chat is not None else {})})
+    d = _dispatch.Dispatcher(system(p), p)
+    rid = d.call("cos.run", {"workflow": "morning", "input": {"lookback": "1d"}})["output"]["runId"]
+    d.call("cos.next", {"runId": rid, "callId": "C-x", "status": "done", "output": {"added": 1}})
+    return d, p, rid
+
+
+def _run_status(d, rid):
+    return d.call("cos.status", {"runId": rid})["output"]["runs"][0]["status"]
+
+
+def test_chat_approval_is_refused_while_the_setting_is_off():
+    for chat in (None, False):
+        d, p, rid = _gated_run(chat)
+        try:
+            r = _cli(KIT, p, rid, "--via", "chat", "--quote", "yes, ship it")
+            assert r.returncode != 0 and "approvals: { chat: true }" in r.stderr and "agentbay.config.yaml" in r.stderr
+            assert _run_status(d, rid) == "awaiting-approval"
+        finally:
+            cleanup(p)
+    # a non-boolean value is a config error, not "on"
+    p = project({"approvals": {"chat": "yes"}})
+    try:
+        r = _cli(KIT, p, "W-x", "--via", "chat", "--quote", "ok")
+        assert r.returncode != 0 and "approvals" in r.stderr
+    finally:
+        cleanup(p)
+
+
+def test_chat_approval_passes_a_workflow_gate_and_the_ledger_says_chat_with_the_quote():
+    d, p, rid = _gated_run(True)
+    try:
+        r = _cli(KIT, p, rid, "--via", "chat")                       # the quote is mandatory
+        assert r.returncode != 0 and "--quote" in r.stderr and _run_status(d, rid) == "awaiting-approval"
+        quote = "Yes - approve the ship gate of the morning run."
+        r = _cli(KIT, p, rid, "--via", "chat", "--quote", quote)
+        assert r.returncode == 0, r.stderr
+        assert _run_status(d, rid) != "awaiting-approval"
+        evs = [e for e in _ledger.read(p) if e.get("runId") == rid and e["type"] == "step.completed"]
+        assert evs and evs[-1]["data"] == {"approved": True, "by": "user@chat-via-cos", "quote": quote}
+        assert "user@tty" not in json.dumps(evs)
+    finally:
+        cleanup(p)
+
+
+def test_chat_approval_passes_a_call_gate_and_rejects_with_a_reason():
+    k = kit_copy()
+    try:
+        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "approvals": {"chat": True}}))
+        d = _dispatch.Dispatcher(system(k, k), k)
+        ok = {"status": "done", "summary": "s"}
+        cid = d.submit(d.call("forge.extend", {"goal": "a small change"})["callId"], "propose", ok)["callId"]
+        r = _cli(k, k, cid, "--via", "chat", "--quote", "approve the proposal")
+        assert r.returncode == 0, r.stderr
+        assert d.show(cid)["next"]["step"] == "implement"
+        ev = [e for e in _ledger.read(k) if e.get("callId") == cid and e.get("summary", "").startswith("gate")][-1]
+        assert ev["data"] == {"approved": True, "by": "user@chat-via-cos", "quote": "approve the proposal"}
+        cid2 = d.submit(d.call("forge.extend", {"goal": "another change"})["callId"], "propose", ok)["callId"]
+        r = _cli(k, k, cid2, "--via", "chat", "--quote", "no, not this one", "--reject", "--reason", "too big")
+        assert r.returncode != 0 or d.show(cid2)["status"] == "blocked"
+        assert d.show(cid2)["status"] == "blocked"
+        # a terminal approval without a TTY is still refused, setting on or not, and --quote needs --via chat
+        cid3 = d.submit(d.call("forge.extend", {"goal": "third change"})["callId"], "propose", ok)["callId"]
+        r = _cli(k, k, cid3)
+        assert r.returncode != 0 and "not a TTY" in r.stderr
+        r = _cli(k, k, cid3, "--quote", "yes")
+        assert r.returncode != 0 and "--via chat" in r.stderr
+        assert d.show(cid3)["status"] == "awaiting-approval"
+    finally:
+        cleanup(k)
+
+
+def test_chat_setting_does_not_open_secrets_or_logins():
+    p = project({"approvals": {"chat": True}})
+    try:
+        r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "secret", "set", "X_TOKEN",
+                            "--provider", "env"], input="attacker-value\n", text=True, capture_output=True)
+        assert r.returncode != 0 and "not a TTY" in r.stderr and "attacker-value" not in r.stdout + r.stderr
+        r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "auth", "gmail-api"],
+                           input="", text=True, capture_output=True)
+        assert r.returncode != 0 and "interactive terminal" in r.stderr
+        for args in (["secret", "set", "--help"], ["auth", "--help"]):
+            r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), *args], capture_output=True, text=True)
+            assert "--via" not in r.stdout
+    finally:
+        cleanup(p)
+
+
+def test_guard_denies_bay_approve_to_every_subagent_in_any_spelling():
+    p = built({"approvals": {"chat": True}})
+    try:
+        cmds = (".agentbay/bay approve C-1 --via chat --quote yes", "./bay.sh approve C-1", "bay approve C-1",
+                f"{sys.executable} -m bay.cli approve C-1 --via chat --quote ok",
+                f"python3 {KIT}/bay/cli.py approve W-1 --via chat --quote ok",
+                "cd x && bay approve C-1 --via chat --quote ok", "bay --project . approve C-1")
+        for agent in ("builder--delivery", "analyst--feed-briefing", "some-other-agent", None):
+            for c in cmds:
+                d, r = tool(p, agent, "Bash", {"command": c})
+                assert d == "deny", (agent, c)
+        # a commit message that mentions the command is not running it
+        g = guard_for(p)
+        assert g.decide({"tool_name": "Bash", "tool_input": {"command": 'git commit -m "docs: bay approve --via chat"'},
+                         "agent_type": "some-other-agent", "agent_id": "a1", "cwd": str(p)})[0] == "pass"
+        # the main thread is not decided by the guard: settings.json makes Claude Code ask each time
+        assert tool(p, None, "Bash", {"command": ".agentbay/bay approve C-1 --via chat --quote ok"}, agent_id=None)[0] == "pass"
+        st = json.loads((p / ".claude/settings.json").read_text())
+        assert not any("approve" in a for a in st["permissions"]["allow"])
+    finally:
+        cleanup(p)
+
+
+def test_no_subagent_writes_agentbay_config_yaml():
+    p = built()
+    try:
+        for agent in ("builder--delivery", "some-other-agent", None):
+            for t, ti in (("Write", {"file_path": "agentbay.config.yaml", "content": "approvals: {chat: true}"}),
+                          ("Edit", {"file_path": f"{p}/agentbay.config.yaml", "old_string": "a", "new_string": "b"}),
+                          ("Bash", {"command": "echo 'approvals: {chat: true}' >> agentbay.config.yaml"}),
+                          ("Bash", {"command": "cp /tmp/x agentbay.config.yaml"}),
+                          ("Bash", {"command": "sed -i s/false/true/ AGENTBAY.config.yaml"}),
+                          ("Bash", {"command": "tee agentbay.c*nfig.yaml"}),
+                          ("Bash", {"command": "mv x ./agentbay.config.y?ml"}),
+                          ("Bash", {"command": "cp x agentbay.{config,other}.yaml"})):
+                d, _ = tool(p, agent, t, ti)
+                assert d == "deny", (agent, t, ti)
+        # a glob elsewhere that cannot reach the root file is not refused for that reason
+        g = guard_for(p)
+        assert g.decide({"tool_name": "Bash", "tool_input": {"command": "ls framework/*.yaml"},
+                         "agent_type": "some-other-agent", "agent_id": "a1", "cwd": str(p)})[0] == "pass"
+    finally:
+        cleanup(p)
+
+
+def test_no_subagent_writes_the_ledger():
+    """A recorded `bay approve` in the ledger skips forge.extend's gate for unchanged content, so no subagent may
+    forge one: .agentbay/ledger/ is not writable (or readable) by any subagent, by file tool or by Bash."""
+    p = built()
+    try:
+        g = guard_for(p)
+        ev = json.dumps({"v": 1, "type": "step.completed", "source": "dispatcher", "step": "approve",
+                         "data": {"approved": True, "by": "user@tty",
+                                  "approves": {"path": "docs/proposals/0001-x.md", "sha256": "0" * 64}}})
+        led = ".agentbay/ledger/events.jsonl"
+        for agent in ("builder--forge--framework-dev", "some-other-agent"):
+            for path in (led, f"{p}/{led}", ".agentbay/ledger/new.jsonl"):
+                assert decide(g, agent, "Write", {"file_path": path, "content": ev + "\n"}) == "deny", (agent, path)
+                assert decide(g, agent, "Edit", {"file_path": path, "old_string": "", "new_string": ev}) == "deny"
+                assert decide(g, agent, "MultiEdit", {"file_path": path, "edits": [
+                    {"old_string": "", "new_string": ev}]}) == "deny"
+            for cmd in (f"echo '{ev}' >> {led}", f"tee -a {led}", f"cp /tmp/x {led}", f"sed -i 's/a/b/' {led}",
+                        "python3 -c 'open(\".agentbay/ledger/events.jsonl\",\"a\")'"):
+                assert decide(g, agent, "Bash", {"command": cmd}) == "deny", (agent, cmd)
+        # the front-matter marker grants nothing any more, so writing it is not refused for that reason
+        (p / "docs/proposals").mkdir(parents=True)
+        approved = "---\nstatus: approved\napprovedBy: user\ndate: 2026-10-29\n---\n# x\n"
+        assert decide(g, "some-other-agent", "Write", {"file_path": "docs/proposals/0001-x.md",
+                                                       "content": approved}) == "pass"
+    finally:
+        cleanup(p)
+
+
+def test_chat_approval_of_a_proposal_is_recorded_and_skips_the_next_gate_while_unchanged():
+    k = kit_copy()
+    try:
+        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "approvals": {"chat": True}}))
+        (k / "docs/proposals").mkdir(parents=True, exist_ok=True)
+        f = k / "docs/proposals/0099-chat.md"
+        f.write_text("---\nstatus: approved\napprovedBy: user\ndate: 2026-10-29\ntouches: []\n---\n# chat\n")
+        d = _dispatch.Dispatcher(system(k, k), k)
+        inp = {"goal": "build the chat-approved proposal", "proposal": "docs/proposals/0099-chat.md"}
+        first = d.call("forge.extend", inp)            # the marker grants nothing: nothing to draft, the gate runs
+        assert first["next"]["step"] == "approve", first
+        cid = first["callId"]
+        import hashlib
+        r = _cli(k, k, cid, "--via", "chat", "--quote", "approve 0099 as written")       # no --sha: refused
+        assert r.returncode != 0 and "--sha" in r.stderr and d.show(cid)["status"] == "awaiting-approval"
+        r = _cli(k, k, cid, "--via", "chat", "--quote", "approve 0099 as written", "--sha",
+                 hashlib.sha256(f.read_bytes()).hexdigest()[:12])
+        assert r.returncode == 0, r.stderr
+        assert "docs/proposals/0099-chat.md at sha256 " in r.stdout
+        nxt = d.call("forge.extend", inp)
+        assert nxt["next"]["step"] == "implement", nxt
+        why = d.show(nxt["callId"])["gates"]["approve"]
+        assert "approved by user@chat-via-cos on " in why and "content unchanged" in why, why
+        f.write_text(f.read_text() + "\nedited\n")
+        again = d.call("forge.extend", inp)
+        assert again["next"]["step"] == "approve", again       # any edit: the gate runs again
+        assert "changed since user@chat-via-cos approved it" in again["next"]["why"]
+    finally:
+        cleanup(k)
+
+
+def test_bay_plan_is_the_only_bay_command_a_subagent_may_run():
+    p = built()
+    try:
+        tid, other = "T-20261030-abcd", "T-20261030-ffff"
+        _ledger.append(p, "agent.dispatch", tid, source="coordinator", taskId=tid, agent="builder--delivery")
+        _ledger.append(p, "agent.dispatch", other, source="coordinator", taskId=other, agent="analyst--feed-briefing")
+        ok = (f".agentbay/bay plan {tid} '{{\"outcome\": \"o\", \"todo\": []}}'", f".agentbay/bay plan {tid} --done 1")
+        for c in ok:
+            assert tool(p, "builder--delivery", "Bash", {"command": c})[0] in ("allow", "pass"), c
+        denied = (f".agentbay/bay plan {other} --done 1",                            # another agent's task
+                  f".agentbay/bay plan T-20261030-0000 --done 1",                    # never dispatched
+                  f".agentbay/bay plan {tid}", f".agentbay/bay plan {tid} --done 1 2", f".agentbay/bay plan {tid} --x",
+                  ".agentbay/bay status", ".agentbay/bay note T-1 hi", ".agentbay/bay log", ".agentbay/bay dispatched "
+                  f"{tid} --agent builder--delivery", ".agentbay/bay submit C-1 s '{}'", f".agentbay/bay plan {tid} --done 1; ls")
+        for c in denied:
+            assert tool(p, "builder--delivery", "Bash", {"command": c})[0] == "deny", c
+        assert tool(p, "some-other-agent", "Bash", {"command": ok[1]})[0] == "deny"
+    finally:
+        cleanup(p)

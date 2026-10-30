@@ -4,6 +4,7 @@
   "required": ["status", "summary"],
   "additionalProperties": false,
   "properties": {
+    "protocol": { "const": "Result/v1" },
     "taskId": { "type": "string" },
     "status": { "enum": ["done", "partial", "blocked", "failed"] },
     "summary": { "type": "string", "maxLength": 1200 },

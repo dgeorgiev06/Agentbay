@@ -30,6 +30,10 @@
         "step.completed",
         "step.failed",
         "step.skipped",
+        "agent.plan",
+        "agent.plan.done",
+        "agent.dispatch",
+        "review.recorded",
         "step.planned",
         "call.completed",
         "data.read",
@@ -55,7 +59,8 @@
         "coordinator",
         "cli",
         "dispatcher",
-        "guard"
+        "guard",
+        "plan"
       ]
     },
     "summary": {
@@ -63,7 +68,7 @@
     },
     "data": {
       "type": "object",
-      "description": "Event-specific detail. note: {kind: note|instruction-change|decision}; call.completed: {status}."
+      "description": "Event-specific detail. note: {kind: note|instruction-change|decision}; call.completed: {status}; review.recorded: {items} of a review.verdict/v1 (runId and taskId name the work reviewed)."
     },
     "mode": {
       "type": "string"

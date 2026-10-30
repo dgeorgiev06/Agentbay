@@ -44,6 +44,27 @@
           },
           "suggestion": {
             "type": "string"
+          },
+          "cites": {
+            "type": "object",
+            "description": "Optional: the run's recorded outcome and to-do numbers (bay plan) this verdict rests on.",
+            "additionalProperties": false,
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "pattern": "^T-[0-9]{8}-[0-9a-z]{4}$"
+              },
+              "outcome": {
+                "type": "boolean"
+              },
+              "todo": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
           }
         }
       }

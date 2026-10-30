@@ -38,8 +38,9 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN.md
 `review: {role, when: always|never, tier?, effort?}`, optional `tier`/`effort` for its role steps and optional
 `roles: {role: env}` overrides for its steps.
 Workflows are ordered steps: `run: <capability>/v<N>.<endpoint>` (code), `role: <role>` (agentic; may set
-`tier`, `effort` and `roles: {<its role>: <env>}`), `gate: <text>` (approval), `{review: here}` (position of
-the injected review step).
+`tier`, `effort` and `roles: {<its role>: <env>}`), `gate: <text>` (approval; never `when:`; `approves: $in.<field>`
+records that file's path and sha256 with the approval, and a later call naming the same unchanged file skips
+the gate), `{review: here}` (position of the injected review step).
 `roles: {role: env}` lists the framework roles the mode uses and the env each works in (one env per step:
 step > feature > mode). Modes name capabilities (`needs: [items.store/v1]`), never connectors or tools; the
 read-only endpoints of those needs are what the mode's roles may read.
@@ -62,7 +63,9 @@ Playbook H2 sections in order: Purpose, Inputs, Steps (numbered), Definition of 
 Rules: `{id: R-n, level, statement, appliesTo: executor|reviewer|both, check?, refs?, when?: {kind}}`.
 Endpoint `schedule` is declarative only (lint warns); run it from cron.
 Deterministic checks (`bay/checks.py`): `citations_resolve`, `citations_min:<n>`, `no_secrets`, `lint_clean`.
-The reviewer returns `review.verdict/v1`: per id `pass|fail|n/a`, evidence, severity.
+The reviewer returns `review.verdict/v1`: per id `pass|fail|n/a`, evidence, severity, and optionally `cites`
+`{taskId, outcome, todo[]}` (the recorded outcome and to-do items the verdict rests on). The review brief
+carries `review.recordedPlans` (taskId -> step, outcome, to-do progress) of the agents it judges.
 
 ## 3. Role / Agent profile / Environment
 Ownership: the framework owns roles and the agent profile; the user owns modes, envs and connectors. A user
@@ -157,7 +160,7 @@ of stage effects. Run state is in `.agentbay/data/workflows/`, written only by t
 ## 7. Dispatcher
 `bay call <mode>.<endpoint> '<json>'` -> `{callId, status, output | next, checks, review, cost}`.
 Status: `done | partial | blocked | failed | needs-agent | awaiting-approval`.
-`bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic step (usage goes to the step's event); `bay show <callId>` prints the current state; approval gates pass only with `bay approve <callId>` in an interactive terminal (a project workflow's gate the same way, with its `W-...` run id). A role's generated shim
+`bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic step (usage goes to the step's event); `bay show <callId>` prints the current state; approval gates pass only with `bay approve <callId>` in an interactive terminal (a project workflow's gate the same way, with its `W-...` run id), or with `bay approve <id> --via chat --quote "<the owner's message>" --sha <8+ hex>` (the sha256 prefix of the content the owner saw; refused if the file changed) when agentbay.config.yaml sets `approvals: { chat: true }` (recorded as `by: user@chat-via-cos` with the quote). A role's generated shim
 `.agentbay/roles/<role>--<mode>/use <iface>/v<N>.<ep> '<json>'` (unit fixed inside: role, mode and env; read-only endpoints of the mode's needs)
 is the only way an agent reads connector data; the guard hook stops subagents from running anything else. Secret values are redacted from everything it returns or logs.
 
@@ -173,13 +176,27 @@ Guard: `permission.denied` (tool, agent, reason; never the command).
 Optional on any event: `durationMs`, `tokens {input, output, cacheRead, cacheCreation, total}`, `costUsd`.
 Every value is secret-scanned (`bay/secretscan.py`) and redacted (`vault.redact`) before it is written.
 Data: `data.read` (a role read connector data through its use shim; role, env, endpoint, item count).
+Agent records (append-only; written by the coordinator and the agent, never edited):
+- `agent.dispatch`: `bay dispatched <taskId> --agent <name> [--call --step --model --tier --role --mode --input ...]`,
+  run by the coordinator before every agent dispatch, so `bay status` lists the run even with the spawn hook off.
+  `--input` (repeatable) names the inputs; the dispatcher also copies a step's inputs into `step.started`
+  (`data.inputs`: the value, or its sha256 plus a scrubbed preview).
+- `agent.plan`, `agent.plan.done`: `bay plan <taskId> '{"outcome", "todo": [{"text", "serves"}]}'`, then
+  `bay plan <taskId> --done <n>`. One plan per taskId, only for a dispatched taskId and only by the agent it
+  was dispatched to; text is scrubbed and size-limited. It is the only `bay` command a subagent may run. A
+  role-step `bay submit` is refused when its taskId has no plan.
+- `review.recorded`: `bay review-record <taskId> '<review.verdict/v1>'`, for a review run outside a framework
+  review step. It changes no call, gate or approval; the analysis mode that reads verdicts counts it.
+`bay status --agents` groups runs by role, mode, model and tier from these events alone (a step's submitted usage is
+split evenly among the agents dispatched to that call and step); `bay show` prints
+outcome, to-do progress and inputs.
 Dispatcher: `step.started`, `step.completed`, `step.failed`, `step.skipped`, `step.planned`, `call.completed`
 with `mode, endpoint, step, role, agent, env, cost`.
 
 ## 10. Session, artifact and finding interfaces (framework)
 | interface | endpoints |
 |---|---|
-| `session.events/v1` | `episodes {since, until}` -> `session.episode/v1[]` + stats (read-only) |
+| `session.events/v1` | `episodes {since, until}` -> `session.episode/v1[]` + stats (read-only); a commit in an episode carries its scrubbed subject (200 characters) |
 | `review.verdicts/v1` | `verdicts {since, until}` -> verdicts with round and subject |
 | `artifacts.read/v1` | `files`, `graph` (nodes with refs, edges), `text` (refuses .agentbay/.claude/.git/.env) |
 | `improve.detect/v1` | `sessions`, `artifacts`, `resolve`, `recheck` (read-only: candidates, never writes) |

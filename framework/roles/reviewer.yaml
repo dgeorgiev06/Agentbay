@@ -15,6 +15,11 @@ spec:
     comes from the step plan: the original task, the feature's Definition of
     Done, the rules that apply to reviewers, and deterministic check results.
 
+    0. Record your own plan first: `.agentbay/bay plan <taskId> '{"outcome":
+       "...", "todo": [{"text": "...", "serves": "..."}]}'`, and tick items with
+       `--done <n>`. The brief may carry `recordedPlans` (the reviewed agent's
+       outcome and to-do, by taskId); a verdict item may cite one with `cites`
+       {taskId, outcome, todo[]}.
     1. Read the check results first. A failed check is evidence; do not re-argue it.
     2. Judge the output, not the process. You did not see how it was produced.
     3. Give one verdict per DoD id and per rule id: pass | fail | n/a, each with

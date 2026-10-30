@@ -66,7 +66,7 @@ class WorkflowRunner:
         run["cursor"] += 1
         return self._advance(run, wf)
 
-    def approve(self, runId: str, approved: bool, by: str = "user", reason: str = "") -> dict:
+    def approve(self, runId: str, approved: bool, by: str = "user", reason: str = "", quote: str = "") -> dict:
         run = self._load(runId)
         wf = self._def(run)
         if run["status"] != "awaiting-approval":
@@ -78,7 +78,7 @@ class WorkflowRunner:
             run["reason"] = reason or f"gate '{cur['id']}' rejected by {by}"
             return self._finish(run)
         cur.update({"state": "completed", "status": "approved"})
-        run["results"][cur["id"]] = {"approved": True, "by": by}
+        run["results"][cur["id"]] = {"approved": True, "by": by, **({"quote": quote} if quote else {})}
         run["cursor"] += 1
         return self._advance(run, wf)
 

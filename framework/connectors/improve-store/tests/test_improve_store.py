@@ -80,6 +80,26 @@ def test_decide_approve_is_human_only_and_backlog_lists_top_items():
         cleanup(d)
 
 
+def test_backlog_reports_agent_runs_from_plan_records_and_status_groups():
+    from bay import ledger
+    tid = "T-20261030-aaaa"
+    evs = [{"type": "agent.dispatch", "ts": "2026-10-30T10:00:00+00:00", "runId": tid, "taskId": tid, "callId": "C-1",
+            "step": "implement", "agent": "builder--forge", "data": {"role": "builder", "mode": "forge", "model": "sonnet",
+                                                                      "tier": "balanced"}},
+           {"type": "agent.plan", "ts": "2026-10-30T10:01:00+00:00", "runId": tid, "taskId": tid, "summary": "ship the thing",
+            "data": {"todo": [{"n": 1, "text": "a", "serves": "x"}, {"n": 2, "text": "b", "serves": "y"}]}},
+           {"type": "agent.plan.done", "ts": "2026-10-30T10:02:00+00:00", "runId": tid, "taskId": tid, "data": {"n": 1}}]
+    d = tmpdir()
+    try:
+        agents = {"groups": ledger.agent_groups(evs), "plans": ledger.plans(evs)}
+        text = open(S(d).backlog(week="2026-W44", agents=agents)["report"]).read()
+        assert "## Agent runs" in text and "| builder | forge | sonnet | balanced | 1 |" in text and "| 1/2 |" in text
+        assert f"`{tid}` 1/2: ship the thing" in text
+        assert "## Agent runs" not in open(S(d).backlog(week="2026-W45")["report"]).read()
+    finally:
+        cleanup(d)
+
+
 def test_priority_is_impact_times_frequency_over_effort():
     d = tmpdir()
     try:

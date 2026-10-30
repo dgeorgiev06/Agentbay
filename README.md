@@ -59,7 +59,7 @@ agentbay.config.yaml and rebuild. Budget caps stop a sync before it exceeds one.
 `bay config` prints every setting, with its type, default and description, from the schemas. `bay build`
 writes a minimal `agentbay.config.yaml` when the project has none. Settings can only lower a cap: a value above
 the env's `limits:` is refused by lint and at run time. Capabilities stay bound only in `envs/<env>.yaml`; an
-env's `offline:` block names the fake sources that `offline: true` binds in their place.
+env's `offline:` block names the stand-in sources that `offline: true` binds in their place.
 A mode endpoint with a `schedule:` (daily, weekly) runs from cron: `bay lint` prints the command to schedule.
 
 ## Folder map

@@ -47,7 +47,7 @@ id (`review.verdict/v1`). A failed must item or a blocker makes the call `partia
 `bay validate` lints and then resolves every endpoint, failing with every gap at once, each naming the
 concept and the fix: unknown names, unbound capabilities, effects the endpoint does not declare or the env
 does not allow, tiers the env does not allow, connector needs (hosts, secrets, paths) beyond the env, and
-steps that could write `framework/`, `bay/` or `schemas/` outside `forge.extend`.
+steps that could write `framework/`, `bay/`, `schemas/` or `adapters/` outside `forge.extend`.
 
 Each distinct (role, mode, env) a mode uses compiles to one **unit**, named `<role>--<mode>` (plus `--<env>`
 when the mode runs that role in several envs). A unit is its own subagent, use shim, guard policy entry and

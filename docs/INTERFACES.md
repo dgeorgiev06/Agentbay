@@ -95,7 +95,7 @@ Resolution rules (`bay/model.py`) - every gap is reported at once:
 unknown role/agent profile/env/connector/interface/endpoint; unbound capability; effect not declared by the
 endpoint or not allowed by the env; tier not allowed by the env (naming mode, feature, step, role, env, tier); connector needs (hosts, secrets, fs, capabilities)
 exceed the env; coordinator not on a main-thread runtime; agents granted non-read connector endpoints;
-steps that could write `framework/`, `bay/` or `schemas/` outside `forge.extend`.
+steps that could write `framework/`, `bay/`, `schemas/` or `adapters/` outside `forge.extend`.
 
 ## 4. Interface + Connector
 Interfaces: named endpoints with JSON-schema `in`/`out` and `effects` (`read|write|network|spend|delete`);
@@ -104,6 +104,22 @@ Interfaces: named endpoints with JSON-schema `in`/`out` and `effects` (`read|wri
 `http.request` (env allowlist enforced before every request, HTTPS only), `data_dir`, `caps`, `settings`,
 `sources` (connectors for capabilities it `needs`), `clock`, and for items.source connectors `source_id`,
 `window`, `cost_per_post` and `selectors` (the capability table).
+
+A connector that needs an interactive login (e.g. an OAuth browser flow that stores a refresh token) names a
+function of its `entry` in `login:`. `bay auth <connector> [--env <env>]` runs it, from an interactive terminal
+only (an agent can neither start a login nor replace a token). The env is `--env`, which must bind the
+connector, or else the one env that binds it. The function gets a context with the same secret access a sync
+through that env gets: `secret(name)` and `store_secret(name, value)` for names both in the env's
+`secrets.allow` and the connector's `needs.secrets`; `http` limited to the connector's declared hosts that the
+env allows; `open_browser(url)` and `say(text)`. The entry runs in-process, so this limits the API it is
+handed, not what the process can do. `bay lint` refuses a `login:` whose `needs.secrets` no env that binds
+the connector allows.
+
+No extension names another: `bay lint` (B-7) scans a mode's or connector's files, and the files its manifest
+references, for another extension's name in any case, its module form (`_` for `-`), the kernel's
+`agentbay_connector_*`/`agentbay_adapter_*` module keys and imports. README.md and the extension's top-level
+`tests/` are exempt. A static scan cannot be complete (a name can be computed at run time); review covers the
+rest.
 
 ## 5. Adapter and registry
 ```python
@@ -119,6 +135,12 @@ supplies only its own `runtime` name - so a second runtime discovers the same mo
 input/output schemas), roles and project workflows. The claude-code adapter also writes per-unit use
 shims (one per unit `<role>--<mode>[--<env>]`), `.agentbay/guard.json` (one entry per unit) and the PreToolUse guard hook (Bash and every file tool), plus `Edit` deny rules on
 `.agentbay/**`, `.claude/**` and the kit. A runtime is a folder `adapters/<name>/` with `adapter.yaml` (name, module, class), discovered by folder.
+
+Skills are namespaced when built: a mode's `skills/<skill>/` becomes `.claude/skills/<mode>--<skill>/` and a
+role's becomes `<role>--<skill>` (the same `--` separator as units; Claude Code skill names allow lowercase
+letters, digits and hyphens, at most 64). The build rewrites the `name:` in the copied SKILL.md front matter to
+the namespaced name. Playbooks and role prompts keep naming the short name ("the `<skill>` skill"); lint checks
+each such reference against the skills of the mode's chain (or the role's own).
 
 ## 6. Project workflows and the root coordinator
 The root mode (a framework mode; its README names its endpoints) supplies the preamble of the generated

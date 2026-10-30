@@ -1,3 +1,20 @@
+# HANDOFF part 20: T-20261030-68bd (recorded with `bay plan`) - the 3 complexity findings of the deadcode step cleared
+
+Outcome: done on feat/0008-stage4. Not pushed. No proposal edited. No behaviour change; no threshold raised, no exclusion added.
+
+## To-do and commits
+1. Code: 738ea20. `bay/contenttypes.py`: `_one` now calls `_parse_views`, `_view_doc_problems`, `_table_problems`,
+   `_view_link_problems`, `_derived_problems` (same problems, same order). `check_mode_views` now calls `_build_empty_store`,
+   `_mode_view_authorizer`, `_view_column_problems`, `_threads_query_problems`. `bay/dispatch.py`: `Dispatcher._plan` now calls
+   `_gate_plan`, `_plan_skills`, `_review_brief`, `_executor_brief` (plan keys keep their order).
+2. Test: `tests/test_deadcode_check.py::test_the_functions_the_complexity_check_flagged_stay_under_its_threshold` also measures
+   `_one`, `check_mode_views` and `Dispatcher._plan` with the detector's own `_branches` against `maxComplexity`.
+
+## Evidence
+- `python3 tests/run.py -q`: `499 passed, 0 failed`
+- `./bay.sh check`: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`
+- boundary: `boundary origin/main...HEAD: 76 changed paths (29 core, 2 docs, 26 extension, 2 feature, 17 other); 0 failing; B-11 docs: 0 hits`
+
 # HANDOFF part 19: T-20261030-e403 (recorded with `bay plan`) - slice 5 part D built: decision (e), core-names test, 0006 Part E, whole-tree checks
 
 Outcome: done (not partial: D2 was not needed) on feat/0008-stage4. Not pushed. No proposal edited.

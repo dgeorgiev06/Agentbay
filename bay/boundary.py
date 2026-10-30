@@ -159,12 +159,6 @@ def changed(repo: Path, base: str, head: str = "HEAD") -> list[str]:
     return list(dict.fromkeys(paths))
 
 
-def _exists_at(repo: Path, ref: str, path: str) -> bool:
-    r = subprocess.run(["git", "-C", str(repo), "cat-file", "-e", f"{ref}:{path.rstrip('/')}"],
-                       capture_output=True)
-    return r.returncode == 0
-
-
 # ----------------------------------------------------------------- the check
 @dataclass
 class Finding:
@@ -291,12 +285,15 @@ def check(repo: Path, base: str, head: str = "HEAD", proposal: str | None = None
     repo = Path(repo)
     cmap = cmap or ComponentMap.load(repo / "framework" / "components.yaml")
     touches = touches or []
-    new_cache: dict[str, bool] = {}
+    at_base: set[str] = set()
+    for f in _git(repo, "-c", "core.quotePath=false", "ls-tree", "-r", "--name-only", "-z", base).split("\0"):
+        parts = f.split("/")
+        at_base.update("/".join(parts[:i]).casefold() for i in range(1, len(parts) + 1) if f)
 
     def is_new(root: str) -> bool:
-        if root not in new_cache:
-            new_cache[root] = not _exists_at(repo, base, root)
-        return new_cache[root]
+        """An extension root is new when no path at base matches it, ignoring case (F-4: `modes/Mail/` next to
+        `modes/mail/` is an edit of mail on a case-insensitive filesystem, not a new mode)."""
+        return root.rstrip("/").casefold() not in at_base
 
     rep = Report(base, head, proposal)
     rep.findings = [classify(p, cmap, touches, is_new, proposal) for p in changed(repo, base, head)]

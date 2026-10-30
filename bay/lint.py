@@ -665,6 +665,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     out += lint_rulesets(kit)
     out += lint_components(kit)
     out += lint_ownership(kit)
+    out += lint_case_and_manifests(kit)
     out += lint_config_schemas(kit)
     out += lint_self_description(kit)
     out += lint_skill_names(kit)
@@ -769,6 +770,38 @@ def lint_ownership(kit: model.Kit) -> list[str]:
     return [f"{f}: not under a core owns: path, an extension folder or the boundary's other set (B-4). Move it "
             f"into the folder of the component or extension it belongs to, or add it to that component's owns: "
             f"in framework/components.yaml" for f in boundary.stray(files, boundary.ComponentMap.load(path))]
+
+
+MANIFESTS = {"mode": "mode.yaml", "connector": "connector.yaml", "adapter": "adapter.yaml"}
+
+
+def lint_case_and_manifests(kit: model.Kit) -> list[str]:
+    """F-4: no two tracked paths differ only in case (one checkout of them would clobber the other on macOS or
+    Windows, and `bay boundary` treats them as one), and every extension folder carries its manifest."""
+    path = kit.root / "framework" / "components.yaml"
+    r = subprocess.run(["git", "-C", str(kit.root), "ls-files", "-z"], capture_output=True)
+    if not path.exists() or r.returncode:
+        return []
+    files = [f for f in r.stdout.decode("utf-8", "replace").split("\0") if f]
+    out, seen = [], {}
+    for f in files:
+        parts = f.split("/")
+        for i in range(1, len(parts) + 1):
+            p = "/".join(parts[:i])
+            other = seen.setdefault(p.casefold(), p)
+            if other != p:
+                out.append(f"{p}: differs only in case from {other}; rename one (paths must be unique ignoring case)")
+                seen[p.casefold()] = p
+    cmap, roots = boundary.ComponentMap.load(path), {}
+    for f in files:
+        ext = cmap.extension(f)
+        if ext and ext[0].name in MANIFESTS and ext[1].endswith("/"):
+            roots.setdefault(ext[1], set()).add(f[len(ext[1]):])
+    for root, inside in sorted(roots.items()):
+        if MANIFESTS[cmap.extension(root + "x")[0].name] not in inside:
+            out.append(f"{root}: extension folder without its manifest "
+                       f"{MANIFESTS[cmap.extension(root + 'x')[0].name]}")
+    return list(dict.fromkeys(out))
 
 
 def lint_rulesets(kit: model.Kit) -> list[str]:

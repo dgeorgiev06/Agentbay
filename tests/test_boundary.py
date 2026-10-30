@@ -86,6 +86,22 @@ def test_moves_and_deletions_are_classified_on_both_sides():
     assert _failing(rep) == ["connectors/gmail/connector.yaml"] and rep.failures[0].rule == "B-2"
 
 
+def test_case_only_new_folder_is_not_a_new_extension():
+    """F-4: `modes/Mail/` beside `modes/mail/` is the same folder on a case-insensitive filesystem."""
+    rep = _check({"modes/Mail/features/x/playbook.md": "y\n", "connectors/GMAIL/connector.yaml": "y\n"})
+    assert set(_failing(rep)) == {"modes/Mail/features/x/playbook.md", "connectors/GMAIL/connector.yaml"}
+    assert not _failing(_check({"modes/post/mode.yaml": "y\n"}))
+
+
+def test_lint_rejects_case_collisions_and_extension_folders_without_manifest():
+    from types import SimpleNamespace
+    repo = _repo({"modes/Mail/x.md": "y\n", "connectors/rss/feed.py": "y\n"})
+    errs = lint.lint_case_and_manifests(SimpleNamespace(root=repo))
+    assert any("differs only in case" in e and "modes/Mail" in e and "modes/mail" in e for e in errs), errs
+    assert any(e.startswith("connectors/rss/: extension folder without its manifest connector.yaml") for e in errs)
+    assert not lint.lint_case_and_manifests(SimpleNamespace(root=_repo({})))
+
+
 def test_new_extension_folder_passes():
     rep = _check({"connectors/x-api/connector.yaml": "x\n", "modes/feed/mode.yaml": "x\n",
                   "modes/feed/features/digest/playbook.md": "x\n", "envs/new.yaml": "x\n",

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,7 +16,12 @@ STEP_TYPES = {"step.started", "step.completed", "step.failed", "step.skipped", "
 DATA_TYPES = {"data.read"}             # a role read connector data through its use shim
 # the guard hook denied a subagent tool call (prompts are read from Claude Code transcripts instead)
 PERMISSION_TYPES = {"permission.denied"}
-TYPES = RUN_TYPES | STEP_TYPES | DATA_TYPES | PERMISSION_TYPES
+# an agent run's recorded outcome and to-do list (`bay plan`), and the coordinator's record of a dispatch
+# (`bay dispatched`), which lists a running agent even when the spawn hook is off
+PLAN_TYPES = {"agent.plan", "agent.plan.done", "agent.dispatch"}
+TYPES = RUN_TYPES | STEP_TYPES | DATA_TYPES | PERMISSION_TYPES | PLAN_TYPES
+TASK_ID = re.compile(r"^T-[0-9]{8}-[0-9a-z]{4}$")
+MAX_OUTCOME, MAX_ITEMS, MAX_ITEM_TEXT, MAX_SERVES = 1000, 12, 240, 60
 NOTE_KINDS = ("note", "instruction-change", "decision")
 
 
@@ -41,6 +47,88 @@ def append(project: Path, type: str, run_id: str, **fields) -> dict:
     with open(ledger_path(project), "a", encoding="utf-8") as f:
         f.write(line + "\n")
     return ev
+
+
+class PlanError(ValueError):
+    """A `bay plan` the ledger refuses; the message says what to fix."""
+
+
+def _text(v, what: str, limit: int) -> str:
+    if not isinstance(v, str) or not v.strip():
+        raise PlanError(f"{what} must be a non-empty string")
+    if len(v) > limit:
+        raise PlanError(f"{what} is {len(v)} characters; the limit is {limit}")
+    return v.strip()
+
+
+def dispatched_agent(events: list[dict], task_id: str) -> dict | None:
+    """The dispatch record (coordinator) or spawn record (hook) of a taskId, latest first wins; None if unknown."""
+    for e in reversed(events):
+        if e.get("taskId") == task_id and e.get("type") in ("agent.dispatch", "spawned"):
+            return e
+    return None
+
+
+def record_plan(project: Path, task_id: str, plan: object, agent: str | None = None) -> dict:
+    """Append the outcome and to-do list of a dispatched agent: {outcome, todo: [{text, serves}]}. Once per task.
+    Checks size and shape, and that the taskId was dispatched (and that `agent`, when the guard names the caller,
+    is the agent it was dispatched to); text is scrubbed by `append`. This is all `bay plan` can write."""
+    evs = read(project)
+    disp = _dispatched_check(evs, task_id, agent)
+    if any(e["type"] == "agent.plan" and e.get("taskId") == task_id for e in evs):
+        raise PlanError(f"{task_id} already has a plan; tick items with `bay plan {task_id} --done <n>`")
+    if not isinstance(plan, dict) or set(plan) - {"outcome", "todo"}:
+        raise PlanError('plan must be {"outcome": "...", "todo": [{"text": "...", "serves": "<done criterion>"}]}')
+    outcome = _text(plan.get("outcome"), "outcome", MAX_OUTCOME)
+    todo = plan.get("todo")
+    if not isinstance(todo, list) or not 1 <= len(todo) <= MAX_ITEMS:
+        raise PlanError(f"todo must list 1 to {MAX_ITEMS} items")
+    items = []
+    for i, it in enumerate(todo, 1):
+        if not isinstance(it, dict) or set(it) - {"text", "serves"}:
+            raise PlanError(f"todo item {i} must be {{text, serves}}")
+        items.append({"n": i, "text": _text(it.get("text"), f"todo item {i} text", MAX_ITEM_TEXT),
+                      "serves": _text(it.get("serves"), f"todo item {i} serves", MAX_SERVES)})
+    return append(project, "agent.plan", task_id, source="plan", taskId=task_id, agent=disp.get("agent"),
+                  summary=outcome, data={"todo": items})
+
+
+def record_done(project: Path, task_id: str, n: object, agent: str | None = None) -> dict:
+    evs = read(project)
+    _dispatched_check(evs, task_id, agent)
+    plan = plans(evs).get(task_id)
+    if not plan:
+        raise PlanError(f"{task_id} has no plan yet: run `bay plan {task_id} '<json>'` first")
+    if not isinstance(n, int) or isinstance(n, bool) or not 1 <= n <= len(plan["todo"]):
+        raise PlanError(f"--done takes an item number from 1 to {len(plan['todo'])}")
+    return append(project, "agent.plan.done", task_id, source="plan", taskId=task_id, data={"n": n})
+
+
+def _dispatched_check(evs: list[dict], task_id: str, agent: str | None) -> dict:
+    if not isinstance(task_id, str) or not TASK_ID.match(task_id):
+        raise PlanError(f"'{task_id}' is not a taskId (T-YYYYMMDD-xxxx)")
+    disp = dispatched_agent(evs, task_id)
+    if disp is None:
+        raise PlanError(f"{task_id} was not dispatched to any agent; `bay plan` takes only the taskId in your task block")
+    if agent and disp.get("agent") not in (None, agent):
+        raise PlanError(f"{task_id} was dispatched to another agent; `bay plan` takes only your own taskId")
+    return disp
+
+
+def plans(events: list[dict]) -> dict[str, dict]:
+    """taskId -> {outcome, todo: [{n, text, serves, done}], done: int}, folded from the plan events."""
+    out: dict[str, dict] = {}
+    for e in events:
+        tid = e.get("taskId")
+        if e.get("type") == "agent.plan" and tid and tid not in out:
+            out[tid] = {"outcome": e.get("summary", ""), "todo": [dict(i, done=False) for i in (e.get("data") or {}).get("todo", [])],
+                        "done": 0}
+        elif e.get("type") == "agent.plan.done" and tid in out:
+            for i in out[tid]["todo"]:
+                if i["n"] == (e.get("data") or {}).get("n"):
+                    i["done"] = True
+            out[tid]["done"] = sum(1 for i in out[tid]["todo"] if i["done"])
+    return out
 
 
 def read(project: Path) -> list[dict]:
@@ -95,6 +183,12 @@ def fold(events: list[dict]) -> dict[str, Run]:
             r.summary = e.get("summary", r.summary)
         elif t == "reclaimed":
             r.ended, r.state = e["ts"], "reclaimed"
+    seen = {r.task_id for r in runs.values() if r.task_id}
+    for e in events:
+        if e.get("type") == "agent.dispatch" and e.get("taskId") and e["taskId"] not in seen:
+            runs[e["runId"]] = Run(e["runId"], agent=e.get("agent", "?"), task_id=e["taskId"], state="running",
+                                   started=e["ts"], summary=e.get("summary", ""))
+            seen.add(e["taskId"])
     for n in notes:
         for r in _note_targets(n, runs):
             r.notes.append(n.get("summary", ""))

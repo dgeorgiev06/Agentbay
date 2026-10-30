@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -551,6 +552,60 @@ def cmd_task(args):
     print(protocol.new_task_id())
 
 
+def cmd_plan(args):
+    """A dispatched agent's outcome and to-do list: the only `bay` command a subagent may run. It appends its own
+    events and changes nothing else. The guard names the caller in AGENTBAY_AGENT so another agent's taskId fails."""
+    try:
+        if args.done is not None:
+            if args.plan_json:
+                _die("✗ pass either the plan JSON or --done <n>, not both")
+            ledger.record_done(args.project, args.task, args.done, agent=os.environ.get("AGENTBAY_AGENT"))
+            print(f"item {args.done} of {args.task} done")
+        else:
+            ledger.record_plan(args.project, args.task, _json_arg(args.plan_json) if args.plan_json else None,
+                               agent=os.environ.get("AGENTBAY_AGENT"))
+            print(f"plan recorded for {args.task}")
+    except ledger.PlanError as e:
+        _die(f"✗ {e}")
+
+
+def cmd_dispatched(args):
+    """The coordinator records a subagent dispatch, so `bay status` lists it even when the spawn hook is off."""
+    if not ledger.TASK_ID.match(args.task):
+        _die(f"✗ '{args.task}' is not a taskId (`bay task new`)")
+    ledger.append(args.project, "agent.dispatch", args.task, source="coordinator", taskId=args.task,
+                  callId=args.call, step=args.step, agent=args.agent, summary=args.summary or "",
+                  data={k: v for k, v in (("model", args.model), ("tier", args.tier), ("role", args.role),
+                                          ("mode", args.mode), ("inputs", args.input)) if v})
+    print("dispatch recorded")
+
+
+def _agent_groups(evs: list[dict]) -> list[dict]:
+    """Agent runs grouped by role, mode, model and tier, from the ledger alone: runs, outcomes and to-do progress."""
+    plans = ledger.plans(evs)
+    groups: dict[tuple, dict] = {}
+    runs = ledger.fold(evs)
+    for e in evs:
+        if e.get("type") != "agent.dispatch":
+            continue
+        d = e.get("data") or {}
+        key = tuple(d.get(k) or "-" for k in ("role", "mode", "model", "tier"))
+        g = groups.setdefault(key, {"role": key[0], "mode": key[1], "model": key[2], "tier": key[3], "runs": 0,
+                                    "done": 0, "failed": 0, "todoDone": 0, "todoTotal": 0, "tokens": 0, "costUsd": 0.0})
+        g["runs"] += 1
+        r = next((x for x in runs.values() if x.task_id == e["taskId"]), None)
+        g["done"] += bool(r and r.state == "done")
+        g["failed"] += bool(r and r.state in ("failed", "blocked", "partial"))
+        pl = plans.get(e["taskId"])
+        if pl:
+            g["todoDone"] += pl["done"]; g["todoTotal"] += len(pl["todo"])
+        for s in evs:
+            if s.get("callId") == e.get("callId") and s.get("step") == e.get("step") and s.get("type") == "step.completed":
+                g["tokens"] += (s.get("tokens") or {}).get("total", 0) if isinstance(s.get("tokens"), dict) else 0
+                g["costUsd"] = round(g["costUsd"] + (s.get("costUsd") or 0), 4)
+    return list(groups.values())
+
+
 def _ago(ts: str) -> str:
     from datetime import datetime, timezone
     if not ts:
@@ -561,6 +616,16 @@ def _ago(ts: str) -> str:
 
 def cmd_status(args):
     evs = ledger.read(args.project)
+    if args.agents:
+        gs = _agent_groups(evs)
+        if args.json:
+            print(json.dumps(gs, indent=2))
+            return
+        print(f"{'ROLE':<14}{'MODE':<14}{'MODEL':<8}{'TIER':<10}{'RUNS':>5}{'DONE':>5}{'NOT-DONE':>9}{'TODO':>8}{'TOKENS':>9}{'USD':>8}")
+        for g in gs:
+            print(f"{g['role']:<14}{g['mode']:<14}{g['model']:<8}{g['tier']:<10}{g['runs']:>5}{g['done']:>5}{g['failed']:>9}"
+                  f"{str(g['todoDone']) + '/' + str(g['todoTotal']):>8}{g['tokens']:>9}{g['costUsd']:>8}")
+        return
     runs = list(ledger.fold(evs).values())
     calls = list(ledger.fold_calls(evs).values())
     notes = ledger.standalone_notes(evs)
@@ -721,6 +786,15 @@ def main(argv=None):
 
     t = sub.add_parser("task"); t.add_argument("action", choices=["new"]); t.set_defaults(fn=cmd_task)
     s = sub.add_parser("status"); s.add_argument("-n", type=int, default=10); s.add_argument("--json", action="store_true")
+    s.add_argument("--agents", action="store_true", help="group agent runs by role, mode, model and tier")
+    pl = sub.add_parser("plan", help="a dispatched agent's outcome and to-do list (append-only; the one command subagents may run)")
+    pl.add_argument("task"); pl.add_argument("plan_json", nargs="?"); pl.add_argument("--done", type=int)
+    pl.set_defaults(fn=cmd_plan)
+    dp = sub.add_parser("dispatched", help="record a subagent dispatch (coordinator)")
+    dp.add_argument("task"); dp.add_argument("--agent", required=True); dp.add_argument("--call"); dp.add_argument("--step")
+    dp.add_argument("--model"); dp.add_argument("--tier"); dp.add_argument("--role"); dp.add_argument("--mode")
+    dp.add_argument("--summary"); dp.add_argument("--input", action="append")
+    dp.set_defaults(fn=cmd_dispatched)
     s.set_defaults(fn=cmd_status)
     lg = sub.add_parser("log"); lg.add_argument("-n", type=int, default=20); lg.set_defaults(fn=cmd_log)
     no = sub.add_parser("note", help="record a note on a run, task or call (never creates a run)")

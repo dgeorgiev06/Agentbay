@@ -247,7 +247,7 @@ class Guard:
         cwd = Path(payload.get("cwd") or self.project)
         who = f"subagent {agent or payload.get('agent_id')}"
         if tool == "Bash":
-            return self._bash(entry, who, ti.get("command", ""), cwd)
+            return self._bash(entry, who, ti.get("command", ""), cwd, agent)
         if tool in FILE_TOOLS:
             return self._files(entry, who, tool, ti, cwd)
         return "pass", ""
@@ -309,7 +309,7 @@ class Guard:
                 return f"{d}/ of the agentbay checkout is writable only by forge.extend (env must name it)"
         return None
 
-    def _bash(self, entry, who, command, cwd) -> tuple[str, str]:
+    def _bash(self, entry, who, command, cwd, agent=None) -> tuple[str, str]:
         why = unsafe(command)
         try:
             words = shlex.split(command) if not why else []
@@ -340,6 +340,8 @@ class Guard:
             if self.policy.get("autoAllowShim", False):    # old or missing policy: prompt (fail closed)
                 return "allow", ""         # the ONLY auto-allow: the role's own read-only data shim
             return "pass", ""              # kit inside the project: roles might edit code the shim runs; prompt
+        if len(words) > 1 and words[1] == "plan" and norm(words[0], cwd) == self.agentbay / "bay":
+            return self._plan_command(who, words, agent)
         for prefix in entry.get("clis", []):
             pw = shlex.split(prefix)
             if words[: len(pw)] != pw:
@@ -360,6 +362,28 @@ class Guard:
         allowed = ([shim] if shim else []) + entry.get("clis", [])
         return "deny", (f"agentbay: role {entry['role']} may only run: {', '.join(allowed) or 'nothing'} via Bash"
                         + (f". Use `{shim} <capability>/v<N>.<endpoint> '<json>'` for data." if shim else "."))
+
+    def _plan_command(self, who, words, agent) -> tuple[str, str]:
+        """`bay plan <taskId> '<json>'` or `bay plan <taskId> --done <n>`: the one `bay` command an agentbay subagent
+        may run. It only appends to the ledger, and only for the taskId the ledger shows was dispatched to this
+        agent; any other shape of the command is denied."""
+        shape = len(words) == 4 or (len(words) == 5 and words[3] == "--done")
+        if not shape or (len(words) == 4 and words[3].startswith("-")) or not re.match(r"^T-[0-9]{8}-[0-9a-z]{4}$", words[2]):
+            return "deny", (f"agentbay: {who}: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`")
+        disp = None                     # stdlib only (this runs as a standalone hook): the ledger's latest record
+        try:
+            for line in (self.agentbay / "ledger" / "events.jsonl").read_text(encoding="utf-8").splitlines():
+                try:
+                    e = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if e.get("taskId") == words[2] and e.get("type") in ("agent.dispatch", "spawned"):
+                    disp = e
+        except OSError:
+            pass
+        if disp is None or disp.get("agent") != agent:
+            return "deny", f"agentbay: {who}: `bay plan` takes only the taskId this agent was dispatched with"
+        return ("allow", "") if self.policy.get("autoAllowShim", False) else ("pass", "")
 
     def _words(self, who, words, cwd, first: int = 0) -> tuple[str, str] | None:
         """Checks every word for inline interpreter code; words from `first` on (the arguments after an

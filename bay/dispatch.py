@@ -94,6 +94,11 @@ class Dispatcher:
                     raise CallError(f"step {step.id}: output does not match {step.out}: " + "; ".join(errs[:5]))
             state["steps"][step.id] = output
             self._ledger("step.completed", base, summary=f"{step.role} submitted")
+            tid = output.get("taskId") if isinstance(output, dict) else None
+            if tid and ledger.dispatched_agent(ledger.read(self.project), tid):
+                ledger.append(self.project, "completed", tid, source="dispatcher", taskId=tid, callId=call_id,
+                              agent=step.subagent, summary=str(output.get("summary", ""))[:200],
+                              data={"status": output.get("status", "done")})
         state["cursor"] += 1
         if state.get("halt"):
             state["output"] = self._endpoint_output(feat, state)
@@ -147,7 +152,26 @@ class Dispatcher:
 
     def show(self, call_id: str) -> dict:
         """Current state of a call (result, or the step it waits on). Read-only."""
-        return self._public(self._load(call_id))
+        return {**self._public(self._load(call_id)), **self._agents(call_id)}
+
+    def _agents(self, call_id: str) -> dict:
+        """The agents dispatched for a call, from the ledger: outcome, to-do progress and inputs (`bay show`)."""
+        evs = ledger.read(self.project)
+        plans = ledger.plans(evs)
+        out = []
+        for e in evs:
+            if e.get("type") != "agent.dispatch" or e.get("callId") != call_id:
+                continue
+            started = [s for s in evs if s.get("type") == "step.started" and s.get("callId") == call_id
+                       and s.get("step") == e.get("step")]
+            pl = plans.get(e["taskId"])
+            out.append({"taskId": e["taskId"], "step": e.get("step"), "agent": e.get("agent"),
+                        "model": (e.get("data") or {}).get("model"),
+                        "inputs": (started[-1].get("data") or {}).get("inputs") if started else None,
+                        "outcome": pl["outcome"] if pl else None,
+                        "progress": f"{pl['done']}/{len(pl['todo'])}" if pl else None,
+                        "todo": pl["todo"] if pl else None})
+        return {"agents": out} if out else {}
 
     def use(self, unit: str, target: str, inp: dict | None = None) -> dict:
         """Read-only connector access for one compiled unit (a role in one mode and one env). Reached only
@@ -239,6 +263,10 @@ class Dispatcher:
             plan = self._plan(mode, feat, step, state)
             state["plan"] = plan
             state["plannedAt"] = time.time()
+            if step.kind in ("role", "review"):
+                self._ledger("step.started", base, summary=f"{step.kind} {step.role}",
+                             data={"inputs": inputs_record(plan.get("input") or plan.get("review", {}).get("task", {}),
+                                                           self.project)})
             self._ledger("step.planned", base, summary=f"{step.kind} {step.role or step.id}")
             self._save(state)
             return self._public(state)
@@ -341,7 +369,7 @@ class Dispatcher:
         args = substitute(step.with_, state["input"], state["steps"], mode.config)
         iface, ep = step.run.rsplit(".", 1)
         caps = cfgmod.caps(mode.constraints, env.spec.get("limits", {}), mode.config)
-        self._ledger("step.started", base, summary=step.run)
+        self._ledger("step.started", base, summary=step.run, data={"inputs": inputs_record(args, self.project)})
         t0 = time.monotonic()
         try:
             out = self._invoke(step.env, step.connector, iface, ep, args, settings=self._settings(mode), caps=caps)
@@ -561,6 +589,28 @@ class Dispatcher:
         b = dict(base)
         rid = b.pop("run_id")
         ledger.append(self.project, etype, rid, source="dispatcher", **b, **fields)
+
+
+def inputs_record(args, project: Path) -> dict:
+    """What a step was given, for the ledger: a small value as is; for a large value or a file in the project, its
+    sha256 and a short preview (the ledger scrubs secret-shaped text)."""
+    out = {}
+    for k, v in (args if isinstance(args, dict) else {}).items():
+        raw = v if isinstance(v, str) else json.dumps(v, sort_keys=True, ensure_ascii=False)
+        f = None
+        if isinstance(v, str) and 0 < len(v) < 300 and "\n" not in v:
+            try:
+                q = (project / v).resolve()
+                f = q if q.is_file() and q.is_relative_to(project.resolve()) else None
+            except (OSError, ValueError):
+                f = None
+        if f is not None:
+            out[k] = {"file": v, "sha256": hashlib.sha256(f.read_bytes()).hexdigest()}
+        elif len(raw) <= 160:
+            out[k] = v
+        else:
+            out[k] = {"sha256": hashlib.sha256(raw.encode()).hexdigest(), "preview": raw[:120]}
+    return out
 
 
 def _short(subject) -> str:

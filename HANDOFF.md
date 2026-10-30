@@ -32,15 +32,15 @@ Constraints: security only stricter (except `bay plan`, which only appends its o
 2. done. Bug (b): gate plan and `bay show` name the chat path when `approvals.chat` is on. Serves bug (b).
 3. done. Bug (c): approval binding uses propose-step output artifacts or the call input. Serves bug (c).
 4. done. Bug (d): single skip rule by ledger approval; remove front-matter reliance. Serves bug (d).
-5. open. `ledger`: `agent.plan` / `agent.plan.done` events, scrubbed, size-limited, taskId-checked, fold. Serves "plan events scrubbed, size-limited, refused for another taskId".
-6. open. `bay plan` CLI command, append-only; guard allows it as the only `bay` command for subagents. Serves "subagent can run bay plan and no other".
-7. open. `step.started` carries inputs (value, or sha256 plus preview). Serves "step.started carries inputs".
-8. open. `agent.dispatch` event via cos (`bay dispatched` or equivalent) and `bay status` lists it. Serves "status lists dispatched agent with hook off".
-9. open. Refuse role-step submit with no recorded outcome. Serves "submit refused without outcome".
-10. open. `bay show` prints outcome, to-do progress, inputs. Serves "bay show prints ...".
-11. open. `bay status --agents` grouping by role, mode, model, tier. Serves "status --agents".
-12. open. Reviewer brief and verdict cite outcome and to-do items. Serves "reviewer verdict cites ...".
-13. open. improve weekly backlog reads the same figures. Serves "improve's backlog reads same figures".
+5. done. `ledger`: `agent.plan` / `agent.plan.done` events, scrubbed, size-limited, taskId-checked, fold. Serves "plan events scrubbed, size-limited, refused for another taskId".
+6. done. `bay plan` CLI command, append-only; guard allows it as the only `bay` command for subagents. Serves "subagent can run bay plan and no other".
+7. done. `step.started` carries inputs (value, or sha256 plus preview). Serves "step.started carries inputs".
+8. done. `agent.dispatch` event via cos (`bay dispatched` or equivalent) and `bay status` lists it. Serves "status lists dispatched agent with hook off".
+9. open (blocked on test churn: 48 existing role-step submits in tests lack a taskId/plan; needs its own pass). Refuse role-step submit with no recorded outcome. Serves "submit refused without outcome".
+10. done. `bay show` prints outcome, to-do progress, inputs. Serves "bay show prints ...".
+11. done. `bay status --agents` grouping by role, mode, model, tier. Serves "status --agents".
+12. open (not started; review.verdict/v1 needs optional outcome/todo citations and the review brief needs the plan). Reviewer brief and verdict cite outcome and to-do items. Serves "reviewer verdict cites ...".
+13. open (not started). improve weekly backlog reads the same figures. Serves "improve's backlog reads same figures".
 14. open (bug (e) already answered: NOT derivable. The 0008 gate event of this call recorded `approves: none`, because the gate then named no file; recording a binding by hand would forge the owner's approval, so it is left to followups). Docs (README, INTERFACES, DESIGN, COORDINATOR/playbooks) and bug (e) binding. Serves R-4 and bug (e).
 
 ---

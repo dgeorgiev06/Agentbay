@@ -172,3 +172,63 @@ def test_audit_parses_source_that_contains_secret_shaped_code():
     raw = a.raw_text("connectors/x-api/x_api.py", "kit")
     ast.parse(raw)
     assert "[REDACTED" in a.text("connectors/x-api/x_api.py", "kit")["text"]
+
+
+TID, OTHER = "T-20261030-abcd", "T-20261030-ffff"
+PLAN = {"outcome": "bay plan exists", "todo": [{"text": "write it", "serves": "slice 8 acceptance"},
+                                                {"text": "test it", "serves": "tests"}]}
+
+
+def _dispatch(p, tid=TID, agent="builder--forge--framework-dev", **kw):
+    r = cli(p, "dispatched", tid, "--agent", agent, "--model", "sonnet", "--tier", "balanced", "--role", "builder",
+            "--mode", "forge", "--call", "C-1", "--step", "implement", *kw.get("extra", []))
+    assert r.returncode == 0, r.stderr
+
+
+def test_bay_plan_records_scrubbed_size_limited_append_only_events():
+    p = project()
+    try:
+        r = cli(p, "plan", TID, json.dumps(PLAN))
+        assert r.returncode != 0 and "was not dispatched" in r.stderr           # no dispatch, no plan
+        _dispatch(p)
+        secret = "sk-ant-api03-" + "a" * 40
+        bad = dict(PLAN, outcome=f"done when {secret} works")
+        assert cli(p, "plan", TID, json.dumps(bad)).returncode == 0
+        raw = (p / ".agentbay/ledger/events.jsonl").read_text()
+        assert secret not in raw and "agent.plan" in raw
+        r = cli(p, "plan", TID, json.dumps(PLAN))
+        assert r.returncode != 0 and "already has a plan" in r.stderr           # recorded once
+        q = project()
+        _dispatch(q)
+        for oversize in (dict(PLAN, outcome="x" * 1001), {"outcome": "o", "todo": [{"text": "t", "serves": "s"}] * 13},
+                         {"outcome": "o", "todo": [{"text": "t" * 241, "serves": "s"}]}, {"outcome": "o", "todo": []},
+                         {"outcome": "o", "todo": [{"text": "t", "serves": "s"}], "extra": 1}):
+            r = cli(q, "plan", TID, json.dumps(oversize))
+            assert r.returncode != 0 and ("limit" in r.stderr or "must" in r.stderr), r.stderr
+        assert "agent.plan" not in (q / ".agentbay/ledger/events.jsonl").read_text()
+        # another agent's taskId is refused: it was never dispatched
+        assert cli(q, "plan", OTHER, json.dumps(PLAN)).returncode != 0
+        # --done ticks items, only valid numbers, only after a plan
+        assert cli(q, "plan", TID, "--done", "1").returncode != 0
+        assert cli(q, "plan", TID, json.dumps(PLAN)).returncode == 0
+        assert cli(q, "plan", TID, "--done", "2").returncode == 0 and cli(q, "plan", TID, "--done", "3").returncode != 0
+        pl = ledger.plans(ledger.read(q))[TID]
+        assert pl["done"] == 1 and [i["done"] for i in pl["todo"]] == [False, True]
+        assert {e["type"] for e in ledger.read(q)} == {"agent.dispatch", "agent.plan", "agent.plan.done"}
+    finally:
+        cleanup(p)
+
+
+def test_a_dispatched_agent_is_listed_by_status_without_the_spawn_hook():
+    p = project()
+    try:
+        _dispatch(p)
+        runs = ledger.fold(ledger.read(p))
+        assert [(r.task_id, r.state, r.agent) for r in runs.values()] == [(TID, "running", "builder--forge--framework-dev")]
+        out = cli(p, "status").stdout
+        assert TID in out and "builder--forge--framework-dev" in out
+        g = json.loads(cli(p, "status", "--agents", "--json").stdout)
+        assert g == [dict(g[0], role="builder", mode="forge", model="sonnet", tier="balanced", runs=1)]
+        assert "builder" in cli(p, "status", "--agents").stdout
+    finally:
+        cleanup(p)

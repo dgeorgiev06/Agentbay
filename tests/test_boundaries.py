@@ -815,3 +815,24 @@ def test_chat_approval_of_a_proposal_is_recorded_and_skips_the_next_gate_while_u
         assert again["next"]["step"] == "approve" and "changed since user@chat-via-cos approved it" in again["next"]["why"]
     finally:
         cleanup(k)
+
+
+def test_bay_plan_is_the_only_bay_command_a_subagent_may_run():
+    p = built()
+    try:
+        tid, other = "T-20261030-abcd", "T-20261030-ffff"
+        _ledger.append(p, "agent.dispatch", tid, source="coordinator", taskId=tid, agent="builder--delivery")
+        _ledger.append(p, "agent.dispatch", other, source="coordinator", taskId=other, agent="analyst--feed-briefing")
+        ok = (f".agentbay/bay plan {tid} '{{\"outcome\": \"o\", \"todo\": []}}'", f".agentbay/bay plan {tid} --done 1")
+        for c in ok:
+            assert tool(p, "builder--delivery", "Bash", {"command": c})[0] in ("allow", "pass"), c
+        denied = (f".agentbay/bay plan {other} --done 1",                            # another agent's task
+                  f".agentbay/bay plan T-20261030-0000 --done 1",                    # never dispatched
+                  f".agentbay/bay plan {tid}", f".agentbay/bay plan {tid} --done 1 2", f".agentbay/bay plan {tid} --x",
+                  ".agentbay/bay status", ".agentbay/bay note T-1 hi", ".agentbay/bay log", ".agentbay/bay dispatched "
+                  f"{tid} --agent builder--delivery", ".agentbay/bay submit C-1 s '{}'", f".agentbay/bay plan {tid} --done 1; ls")
+        for c in denied:
+            assert tool(p, "builder--delivery", "Bash", {"command": c})[0] == "deny", c
+        assert tool(p, "some-other-agent", "Bash", {"command": ok[1]})[0] == "deny"
+    finally:
+        cleanup(p)

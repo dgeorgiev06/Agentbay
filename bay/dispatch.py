@@ -240,8 +240,7 @@ class Dispatcher:
                             f"capabilities its mode needs that its env ({r.env}) binds")
         scoped = self._open_uses(r)
         if scoped is not None and target not in scoped:       # B-9: while a feature's step waits for this unit
-            raise CallError(f"role {role} in mode {r.mode} is not granted {target} by the feature it is working "
-                            f"on (when several calls wait, only what all declare in `uses:`:{', '.join(sorted(scoped)) or 'none'})")
+            raise CallError(self._use_refusal(r, target, scoped))
         iface, ep = target.rsplit(".", 1)
         effects = model.endpoint_effects(self.sys.kit, iface, ep)
         if set(effects) - model.AGENT_SAFE_EFFECTS:      # re-checked at runtime
@@ -266,6 +265,13 @@ class Dispatcher:
         fail closed). None when no such call is open or none of its features declares `uses:`, so the role-level
         grant applies (decision (c) of proposal 0008)."""
         found: set[str] | None = None
+        for _, _, uses in self._open_calls(unit):
+            found = set(uses) if found is None else found & set(uses)
+        return found
+
+    def _open_calls(self, unit) -> list[tuple[str, str, list[str]]]:
+        """(callId, feature target, uses) of every open needs-agent call waiting for `unit` whose feature declares `uses:`."""
+        out = []
         for f in sorted(self._calls_dir().glob("*.json")):
             state = read_json(f)
             if not isinstance(state, dict) or state.get("status") != "needs-agent":
@@ -276,8 +282,23 @@ class Dispatcher:
             except (model.ResolveError, KeyError, IndexError):
                 continue
             if feat.uses is not None and step.resolved is not None and step.resolved.unit == unit.unit:
-                found = set(feat.uses) if found is None else found & set(feat.uses)
-        return found
+                out.append((str(state.get("callId") or f.stem), state["target"], list(feat.uses)))
+        return out
+
+    def _use_refusal(self, r, target: str, scoped: set[str]) -> str:
+        """Why `target` is outside the scope of the open calls, naming the calls that removed it and the way out."""
+        calls = self._open_calls(r)
+        blockers = [(cid, tgt) for cid, tgt, uses in calls if target not in uses]
+        have = ", ".join(sorted(scoped)) or "none"
+        if not blockers:
+            return (f"role {r.name} in mode {r.mode} is not granted {target} by the feature it is working on "
+                    f"(its `uses:`: {have})")
+        names = ", ".join(f"{cid} ({tgt})" for cid, tgt in blockers)
+        many = " While several calls wait on this role unit, only what all declare in `uses:` is allowed." if len(calls) > 1 else ""
+        return (f"role {r.name} in mode {r.mode} is not granted {target} by the feature of the open call(s) {names}, "
+                f"which do not declare it in `uses:`.{many} Allowed now: {have}. "
+                f"Finish or reclaim those calls first: `bay show <callId>` continues one, "
+                f"`bay show reclaim <runId>` clears a stuck run.")
 
     def _use_settings(self, unit, iface: str) -> dict:
         """The unit's mode settings when its mode needs `iface` (per-mode stores such as corpus-store key on the

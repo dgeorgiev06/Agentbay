@@ -63,6 +63,10 @@ def test_two_open_calls_of_different_features_share_only_what_both_declare():
     assert d.call("feed-briefing.digest", {"since": "3d"})["status"] == "needs-agent"
     refused(lambda: d.use(ANALYST, "items.store/v1.status", {}), "not granted items.store/v1.status by the feature")
     refused(lambda: d.use(ANALYST, "items.store/v1.search", {}), "by the feature")   # ask only
+    digest = next(c for c in d._open_calls(d.sys.units()[ANALYST]) if c[1] == "feed-briefing.digest")[0]
+    refused(lambda: d.use(ANALYST, "items.store/v1.status", {}), f"{digest} (feed-briefing.digest)",
+            "Finish or reclaim those calls first", "bay show <callId>", "bay show reclaim <runId>",
+            "Allowed now: items.store/v1.")                                                # names the blocking call and the fix
     assert d.use(ANALYST, "items.store/v1.sql", {"sql": "SELECT count(*) FROM v_items"})["rows"] == [[7]]
 
 

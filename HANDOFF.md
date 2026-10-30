@@ -364,9 +364,9 @@ All round-2 findings (N-1 to N-5) fixed.
    framework/modes/forge/features/create/.
 
 ## Test status
-`python3 tests/run.py -q`: 401 passed, 0 failed on a clean checkout of 18b6b45 (~4 min; use a long timeout).
-`bay lint` clean, `bay validate` ok. `bay boundary --base origin/main --proposal docs/proposals/0006-...md --docs`:
-93 changed paths, 0 failing, 0 B-11 hits (map introduced here, read at HEAD with no new-extension pass).
+`python3 tests/run.py -q`: 411 passed, 0 failed on a clean detached checkout of e93a1f6 (~4 min; use a long
+timeout). `bay lint` clean, `bay validate` ok. `bay boundary --base origin/main --proposal docs/proposals/0006-...md
+--docs`: 103 changed paths, 0 failing, 0 B-11 hits.
 
 ## Open problems
 - (7a) The chat path trusts the main thread to relay the owner's words (Part G threat note). A main-thread

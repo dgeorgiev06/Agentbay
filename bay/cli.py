@@ -303,6 +303,9 @@ def cmd_approve(args):
         _die(f"✗ call {args.call} is {st.get('status')}, not awaiting approval")
     verb = "REJECT" if args.reject else "APPROVE"
     print(f"{verb} gate '{st['next']['step']}' of {st['target']}: {st['next']['gate']}")
+    ap = st["next"].get("approves")
+    if ap:      # the exact content this approval covers; an edit after it makes the gate run again
+        print(f"  {ap['path']} at sha256 {ap['sha256']}")
     _confirm(by)
     _run(lambda: d.approve(args.call, not args.reject, args.reason or "", by=by, quote=quote))
 

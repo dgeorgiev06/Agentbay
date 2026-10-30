@@ -32,6 +32,7 @@ rules and optional review block. A workflow is ordered steps:
 - `run: <capability>/v<N>.<endpoint>`: deterministic code, run by the dispatcher in the coordinator's env;
 - `role: <role>`: an agentic step, run by that role in the env the step, feature or mode `roles:` names;
 - `gate: <text>`: an approval gate only you pass, with `bay approve` in a terminal (or from chat, if you opt in);
+  `approves: $in.<f>` ties it to a file's exact content, so a later call on the unchanged file skips it;
 - `{review: here}`: where the review step goes (default: last).
 
 `with:` substitutes `$in.x`, `$steps.<id>.x` and `$config.x` (with `a|b` fallbacks); `when:` skips a step

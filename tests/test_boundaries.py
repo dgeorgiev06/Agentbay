@@ -760,32 +760,53 @@ def test_no_subagent_writes_agentbay_config_yaml():
         cleanup(p)
 
 
-def test_no_subagent_marks_a_proposal_approved():
-    """status: approved in a proposal's front matter skips forge.extend's gate, so only the owner writes it."""
+def test_no_subagent_writes_the_ledger():
+    """A recorded `bay approve` in the ledger skips forge.extend's gate for unchanged content, so no subagent may
+    forge one: .agentbay/ledger/ is not writable (or readable) by any subagent, by file tool or by Bash."""
     p = built()
     try:
-        (p / "docs/proposals").mkdir(parents=True)
-        draft = "---\nstatus: draft\ntouches: []\n---\n# x\n"
-        (p / "docs/proposals/0001-x.md").write_text(draft)
-        (p / "docs/proposals/0002-y.md").write_text("---\nstatus: approved\napprovedBy: user\ndate: 2026-10-29\n---\n# y\n")
         g = guard_for(p)
-        approved = "---\nstatus: approved\napprovedBy: user\ndate: 2026-10-29\n---\n# x\n"
+        ev = json.dumps({"v": 1, "type": "step.completed", "source": "dispatcher", "step": "approve",
+                         "data": {"approved": True, "by": "user@tty",
+                                  "approves": {"path": "docs/proposals/0001-x.md", "sha256": "0" * 64}}})
+        led = ".agentbay/ledger/events.jsonl"
         for agent in ("builder--forge--framework-dev", "some-other-agent"):
-            assert decide(g, agent, "Write", {"file_path": "docs/proposals/0003-new.md", "content": approved}) == "deny"
-            assert decide(g, agent, "Write", {"file_path": f"{p}/docs/proposals/0001-x.md", "content": approved}) == "deny"
-            assert decide(g, agent, "Edit", {"file_path": "docs/proposals/0001-x.md", "old_string": "draft",
-                                             "new_string": "approved"}) == "deny"
-            assert decide(g, agent, "Edit", {"file_path": "docs/proposals/0001-x.md", "old_string": "status: draft",
-                                             "new_string": "Status: 'Approved'"}) == "deny"
-            assert decide(g, agent, "MultiEdit", {"file_path": "docs/proposals/0001-x.md", "edits": [
-                {"old_string": "draft", "new_string": "appr"}, {"old_string": "appr", "new_string": "approved"}]}) == "deny"
-        # body edits, drafts and already-approved proposals are not refused for this reason
-        g2 = "some-other-agent"
-        assert decide(g, g2, "Write", {"file_path": "docs/proposals/0003-new.md", "content": draft}) == "pass"
-        assert decide(g, g2, "Edit", {"file_path": "docs/proposals/0002-y.md", "old_string": "# y",
-                                      "new_string": "# y, revised"}) == "pass"
-        assert decide(g, g2, "Write", {"file_path": "notes/x.md", "content": approved}) == "pass"
-        assert decide(g, g2, "Write", {"file_path": "docs/proposals/0004-z.md",
-                                       "content": "# z\n\nstatus: approved in the body is just text\n"}) == "pass"
+            for path in (led, f"{p}/{led}", ".agentbay/ledger/new.jsonl"):
+                assert decide(g, agent, "Write", {"file_path": path, "content": ev + "\n"}) == "deny", (agent, path)
+                assert decide(g, agent, "Edit", {"file_path": path, "old_string": "", "new_string": ev}) == "deny"
+                assert decide(g, agent, "MultiEdit", {"file_path": path, "edits": [
+                    {"old_string": "", "new_string": ev}]}) == "deny"
+            for cmd in (f"echo '{ev}' >> {led}", f"tee -a {led}", f"cp /tmp/x {led}", f"sed -i 's/a/b/' {led}",
+                        "python3 -c 'open(\".agentbay/ledger/events.jsonl\",\"a\")'"):
+                assert decide(g, agent, "Bash", {"command": cmd}) == "deny", (agent, cmd)
+        # the front-matter marker grants nothing any more, so writing it is not refused for that reason
+        (p / "docs/proposals").mkdir(parents=True)
+        approved = "---\nstatus: approved\napprovedBy: user\ndate: 2026-10-29\n---\n# x\n"
+        assert decide(g, "some-other-agent", "Write", {"file_path": "docs/proposals/0001-x.md",
+                                                       "content": approved}) == "pass"
     finally:
         cleanup(p)
+
+
+def test_chat_approval_of_a_proposal_is_recorded_and_skips_the_next_gate_while_unchanged():
+    k = kit_copy()
+    try:
+        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "approvals": {"chat": True}}))
+        (k / "docs/proposals").mkdir(parents=True, exist_ok=True)
+        f = k / "docs/proposals/0099-chat.md"
+        f.write_text("---\nstatus: approved\napprovedBy: user\ndate: 2026-10-29\ntouches: []\n---\n# chat\n")
+        d = _dispatch.Dispatcher(system(k, k), k)
+        inp = {"goal": "build the chat-approved proposal", "proposal": "docs/proposals/0099-chat.md"}
+        cid = d.call("forge.extend", inp)["callId"]
+        r = _cli(k, k, cid, "--via", "chat", "--quote", "approve 0099 as written")
+        assert r.returncode == 0, r.stderr
+        assert "docs/proposals/0099-chat.md at sha256 " in r.stdout
+        nxt = d.call("forge.extend", inp)
+        assert nxt["next"]["step"] == "implement", nxt
+        why = d.show(nxt["callId"])["gates"]["approve"]
+        assert "approved by user@chat-via-cos on " in why and "content unchanged" in why, why
+        f.write_text(f.read_text() + "\nedited\n")
+        again = d.call("forge.extend", inp)
+        assert again["next"]["step"] == "approve" and "changed since user@chat-via-cos approved it" in again["next"]["why"]
+    finally:
+        cleanup(k)

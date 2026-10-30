@@ -38,8 +38,9 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN.md
 `review: {role, when: always|never, tier?, effort?}`, optional `tier`/`effort` for its role steps and optional
 `roles: {role: env}` overrides for its steps.
 Workflows are ordered steps: `run: <capability>/v<N>.<endpoint>` (code), `role: <role>` (agentic; may set
-`tier`, `effort` and `roles: {<its role>: <env>}`), `gate: <text>` (approval), `{review: here}` (position of
-the injected review step).
+`tier`, `effort` and `roles: {<its role>: <env>}`), `gate: <text>` (approval; never `when:`; `approves: $in.<field>`
+records that file's path and sha256 with the approval, and a later call naming the same unchanged file skips
+the gate), `{review: here}` (position of the injected review step).
 `roles: {role: env}` lists the framework roles the mode uses and the env each works in (one env per step:
 step > feature > mode). Modes name capabilities (`needs: [items.store/v1]`), never connectors or tools; the
 read-only endpoints of those needs are what the mode's roles may read.

@@ -453,6 +453,7 @@ class Step:
     task: str = ""
     out: str | None = None
     connector: str | None = None
+    approves: str | None = None       # gate: "$in.<field>", the file whose exact content the gate approves
     resolved: "ResolvedRole | None" = None    # the compiled unit this step runs (role, mode, env)
 
     @property
@@ -1109,6 +1110,8 @@ def _feature_steps(kit: Kit, md: Doc, ctx: _Ctx, ep: dict, wf: list, where: str)
     marker = False
     for st in wf:
         sw = f"{where} step {st['id']}"
+        if "approves" in st and "gate" not in st:
+            ctx.gaps.append(f"{sw}: approves: goes on a gate step only")
         if "review" in st:
             marker = True
             if review_on:
@@ -1117,7 +1120,11 @@ def _feature_steps(kit: Kit, md: Doc, ctx: _Ctx, ep: dict, wf: list, where: str)
         elif "run" in st:
             steps.append(_code_step(kit, md, ep, st, sw, ep_eff, ctx.gaps, ctx.seen_conn))
         elif "gate" in st:
-            steps.append(Step(id=st["id"], kind="gate", task=st["gate"], when=st.get("when")))
+            # a gate passes only by a recorded approval (`bay approve`), never by a `when:` skip
+            if st.get("when"):
+                ctx.gaps.append(f"{sw}: a gate takes no when: (it passes only by `bay approve`, or by a recorded "
+                                f"approval of the exact content its approves: names)")
+            steps.append(Step(id=st["id"], kind="gate", task=st["gate"], approves=st.get("approves")))
         else:
             steps.append(_role_step(ctx, md, ep, st, sw, ep_eff))
     if review_on and not marker:

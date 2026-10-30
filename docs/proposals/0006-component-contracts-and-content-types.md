@@ -1,5 +1,5 @@
 ---
-# Approval (Part C: forge.extend skips `propose` and the gate for an approved proposal). Only the owner sets it.
+# Approval marker (Part C): informational. It skips forge.extend's `propose`; only a recorded `bay approve` passes the gate.
 status: approved
 approvedBy: user
 date: 2026-10-29
@@ -60,11 +60,11 @@ touches:
   - { path: bay/dispatch.py, reason: "step plans map short skill names to namespaced ones (B-8, slice 3); passes the step's feature to the use shim (slice 5)", slice: 3 }
   # slice 7: forge.extend rewrite
   # slice 7a: approvals from chat (Part G), forge.extend skips propose for an approved proposal, kit ignores its build output
-  - { path: bay/cli.py, reason: "`bay approve --via chat --quote` (Part G)", slice: 7 }
+  - { path: bay/cli.py, reason: "`bay approve --via chat --quote` (Part G); shows the path and sha256 a gate approves (Part C)", slice: 7 }
   - { path: bay/config.py, reason: "`approvals: { chat: true }` read from agentbay.config.yaml (Part G)", slice: 7 }
   - { path: schemas/config.schema.json, reason: "the `approvals.chat` setting (Part G)", slice: 7 }
-  - { path: bay/dispatch.py, reason: "a gate approval records the quoted message (Part G); `when: !$steps.<id>.<field>` (Part C)", slice: 7 }
-  - { path: bay/guard.py, reason: "subagents may not run `bay approve` or write agentbay.config.yaml by Bash (Part G), or mark a proposal approved (Part C)", slice: 7 }
+  - { path: bay/dispatch.py, reason: "a gate approval records the quoted message (Part G); `when: !$steps.<id>.<field>`; a gate's `approves:` records path + sha256 and skips only for a recorded approval of unchanged content (Part C)", slice: 7 }
+  - { path: bay/guard.py, reason: "subagents may not run `bay approve` or write agentbay.config.yaml by Bash (Part G)", slice: 7 }
   - { path: framework/interfaces/workflow.run.v1.yaml, reason: "approve takes the quoted message (Part G)", slice: 7 }
   - { path: framework/connectors/workflow-runner/, reason: "a workflow gate approval records the quoted message (Part G)", slice: 7 }
   - { path: framework/modes/cos/playbook.md, reason: "relaying an approval from chat (Part G)", slice: 7 }
@@ -72,12 +72,12 @@ touches:
   - { path: README.md, reason: "`bay approve --via chat` in the command table (Part G)", slice: 7 }
   - { path: docs/DESIGN.md, reason: "gates: the chat approval path (Part G)", slice: 7 }
   - { path: docs/INTERFACES.md, reason: "`bay approve --via chat` (Part G); `when:` negation (Part C)", slice: 7 }
-  - { path: bay/model.py, reason: "role steps take `when:` (Part C)", slice: 7 }
-  - { path: schemas/mode.schema.json, reason: "`when:` accepts `!` and `$steps.<id>.<field>` (Part C)", slice: 7 }
+  - { path: bay/model.py, reason: "role steps take `when:`; gates take `approves:` and never `when:` (Part C)", slice: 7 }
+  - { path: schemas/mode.schema.json, reason: "`when:` accepts `!` and `$steps.<id>.<field>`; a gate's `approves:` (Part C)", slice: 7 }
   - { path: framework/interfaces/forge.scaffold.v1.yaml, reason: "`proposal` endpoint: a proposal's approval status (Part C)", slice: 7 }
   - { path: framework/connectors/scaffold/, reason: "implements the `proposal` endpoint (Part C)", slice: 7 }
   - { path: framework/modes/forge/features/extend/playbook.md, reason: "the proposal step and the chat approval path (7a)", slice: 7 }
-  - { path: framework/modes/forge/mode.yaml, reason: "extend skips propose and the gate for an approved proposal (7a); foreach slices, code check step (7b)", slice: 7 }
+  - { path: framework/modes/forge/mode.yaml, reason: "extend skips propose for a proposal marked approved, the gate only for a recorded approval of its content (7a); foreach slices, code check step (7b)", slice: 7 }
   - { path: framework/modes/forge/playbook.md, reason: the shared slice-and-handoff protocol and quiet checks (Part C), slice: 7, planned: true }
   - { path: framework/modes/improve/features/audit/, reason: the boundary-crossing detector, slice: 7, planned: true }
   - { path: framework/roles/, reason: builder and reviewer briefs generated from the playbook, slice: 7, planned: true }
@@ -338,9 +338,19 @@ than hand-written briefs. Three things change.
 | `review` | reviewer (deep, high) | Gets the diff and the proposal only, never the builder's conversation. Checks the DoD and the rules. |
 | `release` | builder | Version bump; schema apiVersion when a contract changed. |
 
-**An approved proposal skips `propose` and `approve`.** When the call names a `proposal` whose front matter says
-`status: approved` (with `approvedBy` and `date`), the call goes straight to `implement`. Only the owner marks a
-proposal approved: the guard refuses a subagent's write that makes a proposal approved.
+**An approved proposal skips `propose`; the gate needs a recorded approval.** A gate passes only by a recorded
+approval (owner, 2026-10-29). Two steps, two rules:
+- `propose` is skipped when the named `proposal`'s front matter says `status: approved` (with `approvedBy` and
+  `date`): there is nothing to draft. The marker is documentation only and grants nothing else, so the guard does
+  not police it.
+- `approve` (`approves: $in.proposal`) is skipped only when the ledger's latest `bay approve` decision (terminal
+  or `--via chat`) on this proposal path and the sha256 of its current content is an approval. Otherwise the gate
+  runs. `bay approve` records the path and hash; any edit after it changes the hash, so the next call stops at
+  the gate again. An edit while the gate waits makes `bay approve` refuse until the owner has seen the new text.
+- The step plan and `bay show <callId>` say why the gate ran or was skipped (e.g. "approved by
+  user@chat-via-cos on 2026-10-29 (call C-...), content unchanged"). A gate takes no `when:`.
+- The ledger is append-only and no subagent can write `.agentbay/` (the guard); only dispatcher events with
+  `by: user@tty` or `user@chat-via-cos` count.
 
 **`HANDOFF.md`** lives on the branch and is the only state passed between slices:
 - what is done (commit shas);
@@ -467,6 +477,8 @@ labelled as what it is. Secrets and logins stay terminal-only. (Owner decision, 
   Otherwise an agent could turn the setting on.
 - **Playbook rule for cos:** relay an approval only when the owner's latest message clearly approves
   that specific gate. Quote it verbatim. Never infer approval.
+- **A chat approval of a forge.extend gate counts like a terminal one** for the next call on the same,
+  unchanged proposal (Part C), labelled `user@chat-via-cos` in the plan and in `bay show`.
 - **Threat note:** this path trusts the main thread to relay the owner's words honestly. It is weaker
   than a terminal approval, which is why it is off by default and labelled in the ledger.
 

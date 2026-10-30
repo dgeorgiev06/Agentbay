@@ -310,6 +310,9 @@ def test_schedule_is_a_warning_not_an_error():
     ws = lint.warnings(kit)
     assert any("feed-briefing.prune declares schedule 'daily' but no runtime acts on it" in w and "cron" in w for w in ws)
     assert problems(KIT) == []
+    # improve.backlog runs after the agent steps: the advisory points at the README recipe, not at a bare cron call
+    w = next(w for w in ws if "improve.backlog declares schedule" in w)
+    assert "framework/modes/improve/README.md" in w and "call improve.backlog" not in w
 
 
 def test_run_steps_use_versioned_capability_spelling():

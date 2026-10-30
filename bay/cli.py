@@ -127,7 +127,7 @@ def _validate(args) -> int:
         print(f"{len(wf_problems)} workflow problem(s)")
         return 1
     n_ep = sum(len(m.features) for m in s.modes.values())
-    print(f"✓ {len(s.modes)} modes, {n_ep} endpoints, {len(s.roles)} roles ({len(s.units())} role units), "
+    print(f"✓ {len(s.modes)} modes, {n_ep} features,{len(s.roles)} roles ({len(s.units())} role units), "
           f"{len(s.kit.docs['Environment'])} envs, {len(s.kit.docs['Connector'])} connectors resolve "
           f"(agent profile {s.agent})")
     for name, wf in wfmod.load(s.kit).items():
@@ -772,7 +772,7 @@ def main(argv=None):
     b.set_defaults(fn=cmd_build)
     c = sub.add_parser("clean", help="remove what build wrote"); c.add_argument("--runtime", default="claude-code")
     c.set_defaults(fn=cmd_clean)
-    ct = sub.add_parser("catalog", help="the registry: modes, endpoints, schemas, project workflows (--roles: role units)")
+    ct = sub.add_parser("catalog", help="the registry: modes, features, schemas, project workflows (--roles: role units)")
     ct.add_argument("name", nargs="?", help="<mode>, <mode>.<endpoint> or a workflow name")
     ct.add_argument("--json", action="store_true")
     ct.add_argument("--roles", action="store_true", help="list the role units instead (resolved from the sources)")

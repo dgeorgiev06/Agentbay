@@ -569,9 +569,11 @@ def warnings(kit: model.Kit) -> list[str]:
         for ep_name, ep in md.spec["features"].items():
             if ep.get("schedule"):
                 target = f"{md.name}.{ep_name}"
-                run = f"`.agentbay/bay call {target} '{{}}'`"
+                readme = md.dir / "README.md"
+                how = (f"see the cron recipe in {os.path.relpath(readme, kit.root)}" if readme.exists()
+                       else f"run `.agentbay/bay call {target} '{{}}'` from cron")
                 out.append(f"{_where(*_ep_key_where(md, ep_name, 'schedule'))}: {target} declares "
-                           f"schedule '{ep['schedule']}' but no runtime acts on it; run {run} from cron")
+                           f"schedule '{ep['schedule']}' but no runtime acts on it; {how}")
     out += split_store_warnings(kit)
     stores = [c.name for c in kit.docs["Connector"].values() if "items.store/v1" in (
         [c.spec["implements"]] if isinstance(c.spec["implements"], str) else c.spec["implements"])]

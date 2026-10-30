@@ -57,6 +57,27 @@ touches:
   - { path: docs/DESIGN.md, reason: "concepts", slice: 9 }
   - { path: docs/INTERFACES.md, reason: "feature shape, env, adapter, plan events", slice: 9 }
   - { path: bay/__init__.py, reason: "version bump", slice: 9 }
+  # stage 1 crossings (slice 8, agent run records): schemas
+  - { path: schemas/event.schema.json, reason: "stage 1: new event types agent.plan, agent.dispatch, review.recorded (8bea32b, 1aac204, 3bb7364)", slice: 8 }
+  - { path: schemas/data/review.verdict.v1.schema.json, reason: "stage 1: verdict items may cite the recorded plan (55e6ba3)", slice: 8 }
+  - { path: schemas/data/session.episode.v1.schema.json, reason: "stage 1: git episodes carry the scrubbed commit subject (0916492)", slice: 8 }
+  # stage 1 crossings: connectors
+  - { path: framework/connectors/git/connector.yaml, reason: "stage 1: git episodes carry the scrubbed commit subject (0916492)", slice: 8 }
+  - { path: framework/connectors/git/README.md, reason: "stage 1: git episodes carry the scrubbed commit subject (0916492)", slice: 8 }
+  - { path: framework/connectors/git/tests/test_git_connector.py, reason: "stage 1: git episodes carry the scrubbed commit subject (0916492)", slice: 8 }
+  - { path: framework/connectors/claude-transcripts/tests/test_claude_transcripts.py, reason: "stage 1: sessions read directly under a project-folder root (213a915)", slice: 8 }
+  - { path: framework/connectors/scaffold/scaffold.py, reason: "stage 1: dead 'when: approved' branch and unused proposal 'approved' output removed (56a6b82); also carried from 0006 slice 7a (Part G): approved proposal skips propose (74cdeb9)", slice: 8 }
+  # stage 1 crossings: forge extend playbook, Result type, interface
+  - { path: framework/modes/forge/features/extend/playbook.md, reason: "stage 1: extend playbook follows the one skip rule (54203f7); also carried from 0006 slice 7a (Part G): gate passes only by a recorded approval (74cdeb9, de3d779, 3de59ab)", slice: 8 }
+  - { path: framework/modes/forge/types/Result.schema.json, reason: "stage 1: Result takes protocol (54203f7)", slice: 8 }
+  - { path: framework/interfaces/forge.scaffold.v1.yaml, reason: "stage 1: unused proposal 'approved' output removed (56a6b82); also carried from 0006 slice 7a (Part G): 74cdeb9, de3d779, 54203f7", slice: 8 }
+  # carried from 0006 slice 7a (Part G)
+  - { path: adapters/claude-code/claude_code.py, reason: "carried from 0006 slice 7a (Part G): adapter asks for bay approve and denies Edit of the owner's config, F-7 (008e79d, 838fbb9)", slice: 7 }
+  - { path: connectors/gmail-api/connector.yaml, reason: "carried from 0006 slice 7a (Part G): example domains replace real ones in hints (f06a5b2)", slice: 7 }
+  - { path: connectors/gmail-api/README.md, reason: "carried from 0006 slice 7a (Part G): example domains replace real ones in docs (f06a5b2, b0df5f9)", slice: 7 }
+  - { path: connectors/gmail-api/tests/test_gmail_api.py, reason: "carried from 0006 slice 7a (Part G): example domains and partner name replaced in a test case (f06a5b2, b0df5f9)", slice: 7 }
+  - { path: framework/interfaces/workflow.run.v1.yaml, reason: "carried from 0006 slice 7a (Part G): chat approval wording for workflow gates (838fbb9)", slice: 7 }
+  - { path: modes/mail-briefing/config.example.yaml, reason: "carried from 0006 slice 7a (Part G): example domains replace real ones (f06a5b2)", slice: 7 }
 ---
 # 0008 - Simplify without losing features
 

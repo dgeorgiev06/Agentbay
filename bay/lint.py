@@ -570,7 +570,7 @@ def warnings(kit: model.Kit) -> list[str]:
             if ep.get("schedule"):
                 target = f"{md.name}.{ep_name}"
                 readme = md.dir / "README.md"
-                how = (f"see the cron recipe in {os.path.relpath(readme, kit.root)}" if readme.exists() and "cron" in readme.read_text(encoding="utf-8")
+                how = (f"see the cron recipe in {os.path.relpath(readme, kit.root)}" if readme.exists() and re.search(r"^```cron\b", readme.read_text(encoding="utf-8"), re.M)
                        else f"run `.agentbay/bay call {target} '{{}}'` from cron")
                 out.append(f"{_where(*_ep_key_where(md, ep_name, 'schedule'))}: {target} declares "
                            f"schedule '{ep['schedule']}' but no runtime acts on it; {how}")

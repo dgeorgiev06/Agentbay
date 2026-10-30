@@ -98,6 +98,16 @@ def test_a_write_verb_must_directly_follow_note_or_show_so_the_ask_rules_match()
         cleanup(p)
 
 
+def test_help_after_note_and_show_prints_help_instead_of_being_refused():
+    p = project()
+    try:
+        for argv in (("note", "-h"), ("note", "--help"), ("show", "-h"), ("show", "--help")):
+            r = cli(p, *argv)
+            assert r.returncode == 0 and "usage:" in r.stdout and "no option may come" not in r.stderr, argv
+    finally:
+        cleanup(p)
+
+
 def test_show_reclaim_marks_a_run_and_status_log_prints_events():
     p = project()
     try:

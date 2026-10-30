@@ -746,7 +746,8 @@ def _verb_first(argv: list[str]) -> None:
     i = 0
     while i < len(argv) and argv[i].startswith("-"):      # a global option before the command
         i += 2 if argv[i] == "--project" else 1
-    if i < len(argv) and argv[i] in ("note", "show") and i + 1 < len(argv) and argv[i + 1].startswith("-"):
+    if i < len(argv) and argv[i] in ("note", "show") and i + 1 < len(argv) and argv[i + 1].startswith("-") \
+            and argv[i + 1] not in ("-h", "--help"):
         cmd = argv[i]
         verbs = "`bay note dispatch <taskId> --agent ...`, `bay note review <taskId> '<json>'`" if cmd == "note" \
             else "`bay show reclaim <runId> --reason ...`"
@@ -756,7 +757,7 @@ def _verb_first(argv: list[str]) -> None:
 def main(argv=None):
     raw = sys.argv[1:] if argv is None else list(argv)
     _verb_first(raw)
-    ap =argparse.ArgumentParser(prog="bay", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(prog="bay", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--project", type=Path, default=Path.cwd(), help="target project (default: cwd)")
     sub = ap.add_subparsers(dest="cmd", required=True, metavar="<command>")
 

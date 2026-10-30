@@ -19,6 +19,9 @@ EVIDENCE_CHARS = 300
 REVERT_BODY = re.compile(r"This reverts commit ([0-9a-f]{7,40})")
 
 
+MAX_SUBJECT = 200
+
+
 def in_window(ts: str | None, since: datetime | None, until: datetime | None) -> bool:
     if not ts:
         return since is None
@@ -276,8 +279,8 @@ def ledger_verdicts(project: Path, kit: Path | None = None, since: datetime | No
 
 def git_episodes(project: Path, since: datetime | None = None, until: datetime | None = None,
                  run=subprocess.run) -> tuple[list[dict], dict]:
-    """Commits in the window: sha, date, revert flag/target, files touched and churn. Messages are read only
-    to detect reverts and are never returned."""
+    """Commits in the window: sha, scrubbed subject line, date, revert flag/target, files touched and churn. Bodies are
+    read only to detect reverts and are never returned."""
     args = ["git", "-C", str(project), "log", "--no-color", "--no-merges", "--numstat",
             "--format=%x1e%H%x1f%aI%x1f%s%x1f%b%x1f"]
     if since:
@@ -308,7 +311,8 @@ def git_episodes(project: Path, since: datetime | None = None, until: datetime |
             files.append(path)
             added += int(a) if a.isdigit() else 0
             removed += int(d) if d.isdigit() else 0
-        commit = {"sha": sha[:12], "isRevert": subject.startswith('Revert "') or bool(m), "files": files,
+        commit = {"sha": sha[:12], "subject": secretscan.scrub(subject.strip())[:MAX_SUBJECT],
+                  "isRevert": subject.startswith('Revert "') or bool(m), "files": files,
                   "added": added, "removed": removed}
         if m:
             commit["revertOf"] = m.group(1)[:12]

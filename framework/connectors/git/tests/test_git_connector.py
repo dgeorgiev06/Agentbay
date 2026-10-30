@@ -1,4 +1,4 @@
-"""git connector: commits as episodes with revert detection and churn; messages are never returned."""
+"""git connector: commits as episodes with revert detection and churn; subjects are scrubbed, bodies are never returned."""
 import json
 import shutil
 
@@ -23,7 +23,10 @@ def test_commits_reverts_and_churn_without_messages():
         assert rv["commit"]["revertOf"] == bad[:12] and rv["commit"]["files"] == ["bad.py"]
         assert sum(1 for e in eps if "hot.py" in e["commit"]["files"]) == 5
         blob = json.dumps(out)
-        assert "tweak" not in blob and "add bad" not in blob and all(c not in blob for c in CORES)
+        subjects = sorted(e["commit"]["subject"] for e in eps)
+        assert "tweak 0" in subjects and any(s.startswith("add bad (") for s in subjects)   # subjects are carried ...
+        assert all(c not in blob for c in CORES)                                              # ... scrubbed
+        assert "This reverts commit" not in blob                                              # bodies never are
     finally:
         cleanup(p)
 

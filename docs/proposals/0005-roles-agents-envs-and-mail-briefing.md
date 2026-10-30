@@ -108,7 +108,7 @@ The builder made these decisions while implementing Part A; the user approved al
 | in | `label:` / `in:` |
 | since | `after:` |
 | has: attachment | `has:attachment` |
-| not | local (Gmail's `-from:ruiz` also drops "Dana Ruiz <dana@kiln.fi>") |
+| not | local (Gmail's `-from:ruiz` also drops "Dana Ruiz <dana@partner.example>") |
 
   Wildcards are matched locally (from 0003). A source may return more than the local match, never less, so a
   field is native only where Gmail search is at least as broad as the matcher (review of PR #9).
@@ -140,7 +140,7 @@ The builder made these decisions while implementing Part A; the user approved al
 - **digest:** thread-based, not message-based. Sections:
   1. Needs reply: the last message is from someone else, addressed to me, and I haven't replied.
   2. Deadlines and asks: extracted by the analyst, each citing a message.
-  3. By selector or sender, with configurable sender weighting (`important: ["*@kiln.fi", ...]`).
+  3. By selector or sender, with configurable sender weighting (`important: ["*@partner.example", ...]`).
   4. Notable attachments.
 - **ask:** unchanged contract. The analyst uses `describe` / `sql` on `v_email`, `v_threads` and `v_attachments`, then `get` / `thread`, and must cite message ids.
 - **sync, prune:** inherited. Prune also honours Gmail deletions and label removals.
@@ -155,10 +155,10 @@ modes:
   mail-briefing:
     lookback: 30d
     selectors:
-      - { id: partners, from: "*@kiln.fi" }
+      - { id: partners, from: "*@partner.example" }
       - { id: staking,  subject: "staking", in: "label:Work" }
       - { id: news,     in: "Newsletters", since: 7d }
-    important: ["*@kiln.fi", "*@galaxy.com"]
+    important: ["*@partner.example", "*@example.com"]
 ```
 
 ## Safety summary

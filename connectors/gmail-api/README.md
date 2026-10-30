@@ -45,7 +45,7 @@ into a Gmail search query:
 |---|---|
 | `in: Work` (a user label) | `label:Work` |
 | `in: inbox` (a system label: inbox, sent, starred, important, ...) | `in:inbox` |
-| `from: kiln.fi`, `to: me@example.com` | `from:kiln.fi`, `to:me@example.com` |
+| `from: partner.example`, `to: me@example.com` | `from:partner.example`, `to:me@example.com` |
 | `since: 7d` | `after:<epoch>` |
 | `has: attachment` | `has:attachment` |
 

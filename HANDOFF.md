@@ -1,3 +1,23 @@
+# HANDOFF part 8: T-20261030-f82e (recorded with `bay plan`) - fix round for the stage-2 review of 0008 (C-20261030-79f3e5)
+
+Outcome: every should-fix finding of the review (DOD-5, DOD-7, DOD-8, DOD-13, R-4, R-7, R-9) is fixed; the proposal was not edited; no Guard decision changed. Branch feat/0008-stage2, nothing pushed.
+Declared (DOD-7/R-9): cc55bd8 is an out-of-slice refactor of `Guard._bash`, `ClaudeCodeAdapter._settings` and `ledger_verdicts`. It was forced by the stale local `origin/main` (1fc4803, PR #10) that the first deadcode run used as base, and it is behaviour-equivalent per the review. The owner decided to keep it. Add it to the next 0008 amendment's touches (slice 1, reason "complexity refactor surfaced by the first deadcode run"). The owner also accepted the four flagged scope items (test_dispatch stubs, README and INTERFACES edited in slice 1, improve-detect 0.1.0 -> 0.2.0, fixed base `origin/main`); ledger note on C-20261030-79f3e5.
+Fixes:
+1 (5d7959a) DOD-8 base drift: `Pipeline.change` resolves `git merge-base <base> HEAD` and exports that commit; a base that does not resolve is refused with "fetch <remote> (git fetch <remote>)"; the resolved sha is named in `warnings`. The extend playbook says the coordinator runs `git fetch origin` first. Tests `test_the_base_is_the_merge_base_not_the_moved_ref`, `test_a_base_that_does_not_resolve_says_to_fetch`.
+2 (5d7959a) DOD-8 graph asymmetry: when the project is the kit the base graph is built with `graph.build(old, old)`, so it has concept nodes like the current one. Test `test_an_unused_concept_that_existed_at_base_is_not_new_when_the_project_is_the_kit` (project == kit, an unused interface present at base is reported unused now and not new).
+3 (5d7959a, 0843c27, d455025) DOD-8 smaller items: findings are compared uncapped (maxFindingsPerDetector raised for both sides, test `test_a_second_finding_with_the_same_fingerprint_is_new` checks the value passed); fingerprints compared as a multiset (same test: a second identical fingerprint is new); tar errors become `ValueError("cannot extract <base>: ...")` (`test_a_broken_archive_is_a_clear_error`); the base reader refuses .env* and files over 1 MB like artifact-graph and names them under `unreadable at base` (`test_the_base_side_refuses_env_files_and_large_files`); the endpoint description names the temporary export (removed on return) and the fingerprint granularity (compat-layer per file, complexity per function) instead of changing `effects`; the B-7 fixtures `lib/tests/helper.py` and `shared/x_entry.py` now contain `import gmail_api` and the test asserts both hits again (0843c27); `ask = perms` spacing (d455025).
+4 (afe15c6) DOD-13/R-4: docs/DESIGN.md (Safety model) describes the `deadcode` step in contract terms; DESIGN.md is allowed by touches.
+Evidence, last line of each command:
+- `python3 tests/run.py -q`: `460 passed, 0 failed`
+- `./bay.sh lint`: `✓ lint clean` (four `!` advisories as before)
+- `./bay.sh validate`: `✓ 6 modes, 21 endpoints, 5 roles (17 role units), 10 envs, 13 connectors resolve (agent profile claude-code)`
+- `python3 -m bay.cli boundary --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: `boundary origin/main...HEAD: 27 changed paths (10 core, 3 docs, 6 extension, 1 feature, 7 other); 0 failing; B-11 docs: 0 hits`
+- `./bay.sh build --project <scratch>/s2fix` (empty folder): last line `  ! Per-role Bash scope is enforced by the agentbay guard hook; restart Claude Code and accept the workspace trust prompt so hooks run.` (it reported `built 6 modes for claude-code`)
+- `./bay.sh clean --project <scratch>/s2fix`: `clean`
+- Glob `**/*` of <scratch>/s2fix afterwards: `No files found`
+- The scratch folder is an empty non-git folder, so there is no `git status` to quote; the Glob shows nothing left behind.
+- Fake-source demo (offline switch, no network): `tests/test_mail_briefing.py::test_offline_sync_digest_and_ask` (sync, digest and ask over the fake source) passed (`1 passed, 0 failed` with `-k offline_sync_digest`); `tests/test_adapter.py::test_cli_build_and_clean_on_tmp_repo` and its sibling (the round trip on a tmp repo) passed (`2 passed, 0 failed` with `-k cli_build_and_clean`). I did not run `bay call feed-briefing.sync` by hand (not in the allowed commands).
+
 # HANDOFF part 7: T-20261030-b84c (recorded with `bay plan`) - stage 2 of 0008, the dead-code check (item 5 of part 6)
 
 Outcome: `improve.detect/v1.change` and the `deadcode` step in forge.extend exist, are tested, documented and committed on feat/0008-stage2. Done.

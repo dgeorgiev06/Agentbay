@@ -1,3 +1,26 @@
+# HANDOFF part 12: T-20261030-1ca6 (recorded with `bay plan`) - stage 3 of 0008: rename leftovers
+
+Outcome: every "rename leftover" entry of 0008's touches is fixed, plus the four extra hits; the forge coordinator playbook has the `git fetch origin` line. Wording only; no behaviour change, no alias. Branch feat/0008-stage3, nothing pushed, the proposal not edited.
+To-do (all done; one commit, 77806d3, because the 26 files are one wording sweep and the tests cover them together):
+1 Touches entries "rename leftover" (77806d3): the six offline-env files (connectors/x-api, fake, fake-mail README + connector.yaml, modes/feed-briefing and mail-briefing README) now say `offline: true` in agentbay.config.yaml and the env's `offline:` block instead of `local-*-offline`/`envs:`; bay/playbook.py `features.<feature>.review`; coordinator/commands/bay-status.md `status --log -n 10`; bay/checks.py detail `bay check: lint clean`; bay/registry.py comment; improve.findings.v1.yaml `bay approve <F-id>`; schemas/connector.schema.json (`bay check` twice); scaffold connector.yaml, forge README, create playbook (`bay new <kind>`, `./bay.sh check`), create/extend rules (`bay check`), cos run, improve audit, backlog (playbook DOD-2 and rules R-3 name `bay approve`), implement playbook.
+2 Extra hits (77806d3): bay/cli.py:405 note summary is now `approve <F-id> <decision>`; bay/scaffold.py docstring `bay new <kind>`; framework/interfaces/forge.scaffold.v1.yaml `bay new <kind>`. bay/improve/sources.py:314 `"target": "review-record"` is NOT changed: it is not display text. It is the verdict `target` key that `_number_rounds` groups on and that detectors and findings read; tests/test_review_record.py:39 asserts it. The ledger event type is `review.recorded` (unchanged), but a finding's evidence can carry the target string, so renaming would alter data. It stays as a stored value; that is not a command name.
+3 Playbook line (77806d3): framework/modes/forge/playbook.md, bullet "Before every `forge.extend` call, run `git fetch origin` yourself, so the deadcode base (origin/main) is current." It is a bullet on purpose: the adapter drops bullets naming an uninstalled endpoint, so projects outside the checkout do not see `forge.extend` (a first try as plain prose failed test_b2; fixed before commit).
+4 `git grep -n` of the old spellings (bay lint|validate|boundary|log|dispatched|task new|ls|reclaim, review-record, improve decide|weekly, bay mode|feature|connector|env new, bay <kind> new, local-feeds-offline, local-mail-offline, ./bay.sh lint|validate|boundary), excluding HANDOFF.md, CHANGELOG.md, docs/proposals: remaining hits are exactly
+ - bay/improve/sources.py:314 (stored `target` value, above)
+ - tests/test_cli_commands.py:11 (OLD tuple: the old names must be unknown commands)
+ - tests/test_config.py:15 (asserts the two old env files no longer exist)
+ - tests/test_review_record.py:39 (stored target) and :45 (old command refused)
+ In history files (hit counts): CHANGELOG.md 4, HANDOFF.md 37 (parts 1-11), docs/proposals 0001 3, 0001a 9, 0003 2, 0004 3, 0005 1, 0006 9, 0008 30 (its own text).
+5 Scratch build `s3d`: Grep (case-insensitive) of the whole folder for old command names, `<kind> new`, `local-*-offline`, `endpoints.<feature>`: No matches found. A wider Grep of .agentbay/COORDINATOR.md for lint|validate|boundary|dispatched|reclaim|review-record|improve decide|task new found only the current `show reclaim` and `note dispatch` forms (lines 280, 292); of .claude/ only `status --log -n 10` (bay-status.md) and the English noun "lint" in a skill (improve--pattern-analysis SKILL.md:14). The earlier open item (bay-status.md) is closed.
+Evidence, last line of each command:
+- `python3 tests/run.py -q`: `469 passed, 0 failed`
+- `./bay.sh check`: `✓ 6 modes, 21 endpoints, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`, after `✓ lint clean` (same four `!` advisories)
+- `python3 -m bay.cli check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: `boundary origin/main...HEAD: 81 changed paths (29 core, 3 docs, 24 extension, 1 feature, 24 other); 0 failing; B-11 docs: 0 hits` (run before this HANDOFF commit)
+- `./bay.sh build --project <scratch>/s3d` (folder had only its agentbay.config.yaml): last line `  ! Per-role Bash scope is enforced by the agentbay guard hook; restart Claude Code and accept the workspace trust prompt so hooks run.`
+- `./bay.sh clean --project <scratch>/s3d`: `clean`
+- Glob `**/*` of <scratch>/s3d afterwards: `<scratch>/s3d/agentbay.config.yaml` only.
+Open items: none. Deviations: none from the command list.
+
 # HANDOFF part 11: T-20261030-f8ef (recorded with `bay plan`) - slice 4 of 0008: the CLI
 
 Outcome: `bay --help` lists 16 commands (25 before; the proposal's 15 plus `plan` from item 6). An old name is an unknown command (argparse `invalid choice`, exit 2); no alias, no compatibility branch. Branch feat/0008-stage3, nothing pushed, the proposal not edited. Guard decisions keep their meaning (below). One needed fix is outside 0008's touches (open items).

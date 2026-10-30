@@ -50,10 +50,13 @@ spec:
       effects: [read]
     change:
       description: >-
-        Dead-code check for a change. Audits the working tree and the tree at `base` (a git revision, exported with
-        git archive; its code is never run) and returns the unused, unused-constant, compat-layer and complexity
-        findings whose fingerprint is absent at `base`, with the count of those that already existed. `stopped`
-        names the new findings when there are any, which ends a code step blocked.
+        Dead-code check for a change. Audits the working tree and the tree at the merge-base of `base` and HEAD (a
+        git revision, exported with git archive; its code is never run; an unresolved `base` is refused with the
+        fetch to run) and returns the unused, unused-constant, compat-layer and complexity findings absent there,
+        with the count of those that already existed. Findings are compared uncapped as a multiset of
+        kind + detector key: compat-layer is one finding per file and complexity one per function, so a further
+        marker in an already-flagged file is not new. `stopped` names the new findings when there are any, which
+        ends a code step blocked. Writes nothing but a temporary export of the base tree, removed on return.
       in:
         type: object
         required: [base]

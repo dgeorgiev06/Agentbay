@@ -12,7 +12,7 @@ Two rules skip work. When `proposal` names an existing file, `propose` is skippe
 1. `propose`: the builder, in env framework-dev, writes docs/proposals/<id>.md: problem, change to concepts/schemas/CLI, compatibility impact.
 2. `approve`: approval gate. The call stops with `awaiting-approval`; only the user passes it, with `bay approve <callId>` in an interactive terminal (or from chat, when they turned `approvals.chat` on). The approval covers the proposal's exact content (path and sha256, shown with the gate).
 3. `implement`: the builder implements the approved proposal on a branch: code, schemas, framework modes, docs and tests.
-4. `deadcode`: a code step, `improve.detect/v1.change` against `origin/main`. It audits the working tree and the tree at the base and ends the call `blocked` when the change adds any unused code, unused constant, compatibility layer or complexity finding. Findings that already existed at the base do not count. Remove or wire up what it names, then re-run extend with `proposal` set.
+4. `deadcode`: a code step, `improve.detect/v1.change` against `origin/main`. The coordinator runs `git fetch origin` before extend (an unresolved or stale base is the usual cause of a false block). It audits the working tree and the tree at the merge-base of the base and HEAD and ends the call `blocked` when the change adds any unused code, unused constant, compatibility layer or complexity finding. Findings that already existed at the base do not count. Remove or wire up what it names, then re-run extend with `proposal` set.
 5. `review`: the reviewer (opus, high effort) checks every DoD item and rule below.
 6. `release`: changelog entry, version bump in bay/__init__.py, schema apiVersion bump when contracts changed; all checks green.
 

@@ -10,6 +10,7 @@ import re
 import subprocess
 import tarfile
 import tempfile
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -26,6 +27,7 @@ MAX_SUMMARIES = 300
 VERDICT_KINDS = {"review-rounds", "rule-repeat", "lintable-blocker", "out-of-scope"}
 SCOPE_KEYS = ("mode", "feature", "step", "role", "env", "rule", "file", "files", "framework")
 CHANGE_KINDS = ("unused", "unused-constant", "compat-layer", "complexity")     # the dead-code check
+BASE_MAX_BYTES = 1_000_000      # as artifact-graph's MAX_BYTES for the working tree
 SHA = re.compile(r"^[0-9a-f]{7,40}$")
 
 
@@ -184,33 +186,85 @@ class Pipeline:
             raise ValueError(f"cannot export {base}: {e}") from None
         if r.returncode != 0:
             raise ValueError(f"cannot export {base} with git archive: {(r.stderr or '').strip()[:200]}")
-        with tarfile.open(tar) as t:
-            t.extractall(dest, filter="data")
+        try:
+            with tarfile.open(tar) as t:
+                t.extractall(dest, filter="data")
+        except (tarfile.TarError, OSError) as e:
+            raise ValueError(f"cannot extract {base}: {type(e).__name__}: {str(e)[:200]}") from None
+
+    def _git(self, *args: str) -> subprocess.CompletedProcess | None:
+        try:
+            return self.run(["git", "-C", str(self.project), *args], capture_output=True, text=True, timeout=60)
+        except (OSError, subprocess.SubprocessError):
+            return None
+
+    def _merge_base(self, base: str) -> str:
+        """The commit the working tree branched from: a branch behind a moved `base` is judged against what it
+        started from, not against what others landed since."""
+        r = self._git("rev-parse", "--verify", "--quiet", f"{base}^{{commit}}")
+        if r is None or r.returncode != 0:
+            remote = base.split("/")[0] if "/" in base else "<remote>"
+            raise ValueError(f"base {base} does not resolve in this checkout; fetch {remote} (git fetch {remote}) "
+                             f"and run the check again")
+        r = self._git("merge-base", base, "HEAD")
+        sha = (r.stdout or "").strip() if r is not None and r.returncode == 0 else ""
+        if not SHA.match(sha):
+            raise ValueError(f"base {base} has no common ancestor with HEAD; fetch the remote and rebase the change")
+        return sha
+
+    def _base_text(self, old: Path, unreadable: list[str]):
+        """Reads the base tree the way artifact-graph reads the working tree: no .env* files, no large files."""
+        def text(p):
+            f = old / p
+            if f.name.startswith(".env") or not f.is_file() or f.stat().st_size > BASE_MAX_BYTES:
+                unreadable.append(f"{p}: refused")
+                return None
+            return f.read_text(encoding="utf-8", errors="replace")
+        return text
 
     def change(self, base: str) -> dict:
         """Dead-code check: the unused, unused-constant, compat-layer and complexity findings of the working tree
-        whose fingerprint is absent from the tree at `base`. `stopped` names them when there are any."""
+        that the tree at the merge-base of `base` and HEAD does not have (compared as a multiset of fingerprints).
+        `stopped` names them when there are any."""
         if not isinstance(base, str) or not base or base.startswith("-"):
             raise ValueError(f"base must be a git revision, got {base!r}")
+        sha = self._merge_base(base)
+        # the per-detector cap would truncate each side differently: compare everything, cap nothing
+        cfg = {**self.settings, "thresholds": {**(self.settings.get("thresholds") or {}), "maxFindingsPerDetector": 10 ** 9}}
         ledger_eps = self.session_data(only_ledger=True)[0]["episodes"]
         now_arts = self.artifacts("project")
         with tempfile.TemporaryDirectory(prefix="agentbay-base-") as tmp:
             old = Path(tmp) / "tree"
             old.mkdir()
-            self._export(base, old)
+            self._export(sha, old)
+            unreadable: list[str] = []
+            # same graph as the working tree's: when the project is the kit, the old tree's concepts too
+            is_kit = self.project.resolve() == self.kit.resolve()
+            try:
+                old_graph = graph.build(old, old if is_kit else self.kit).as_dict()
+            except (model.ResolveError, model.SpecError, KeyError, OSError) as e:
+                raise ValueError(f"cannot read the framework at {base} ({sha[:8]}): {str(e)[:200]}") from None
             before = detect_artifacts.Artifacts(
-                files=graph.files(old), text=lambda p: (old / p).read_text(encoding="utf-8", errors="replace"),
-                graph=graph.build(old, self.kit).as_dict(), ledger=ledger_eps, root=old)
-            seen = set()
+                files=graph.files(old), text=self._base_text(old, unreadable), graph=old_graph,
+                ledger=ledger_eps, root=old)
+            seen: Counter = Counter()
             for k in CHANGE_KINDS:
-                seen |= {fingerprint(c) for c in detect_artifacts.run(before, self.settings, only=k)}
+                seen.update(fingerprint(c) for c in detect_artifacts.run(before, cfg, only=k))
             failed = list(before.failed)
         found = []
         for k in CHANGE_KINDS:
-            found += detect_artifacts.run(now_arts, self.settings, only=k)
-        new = [c for c in found if fingerprint(c) not in seen]
+            found += detect_artifacts.run(now_arts, cfg, only=k)
+        new = []
+        for c in found:                          # a second finding with the same fingerprint is new
+            fp = fingerprint(c)
+            if seen[fp] > 0:
+                seen[fp] -= 1
+            else:
+                new.append(c)
         out = {"new": new, "existing": len(found) - len(new),
-               "warnings": self.warnings + [f"detector failed at base: {u}" for u in failed]
+               "warnings": self.warnings + [f"base {base} resolved to merge-base {sha[:12]}"]
+               + [f"detector failed at base: {u}" for u in failed]
+               + [f"unreadable at base: {u}" for u in unreadable[:20]]
                + [f"detector failed: {u}" for u in now_arts.failed]}
         if new:
             out["stopped"] = (f"{len(new)} new dead-code finding(s) against {base}: "

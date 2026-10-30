@@ -18,14 +18,14 @@ GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
 class FakeGraph:
     """artifacts.read/v1 over a directory, as artifact-graph serves it."""
 
-    def __init__(self, root: Path):
-        self.root = root
+    def __init__(self, root: Path, kit: Path = KIT):
+        self.root, self.kit = root, kit
 
     def files(self, root="project"):
         return {"root": root, "files": graph.files(self.root)}
 
     def graph(self, root="project"):
-        return {"root": root, **graph.build(self.root, KIT).as_dict()}
+        return {"root": root, **graph.build(self.root, self.kit).as_dict()}
 
     def raw_text(self, path, root="project"):
         return (self.root / path).read_text()
@@ -108,6 +108,109 @@ def test_the_base_may_be_any_revision_and_a_bad_one_is_refused():
                 assert "base" in str(e) or "git archive" in str(e)
             else:
                 raise AssertionError(bad)
+    finally:
+        cleanup(repo)
+
+
+def test_an_unused_concept_that_existed_at_base_is_not_new_when_the_project_is_the_kit():
+    from bay.improve import detect_artifacts
+    k = kit_copy()
+    try:
+        iface = k / "framework/interfaces/orphan.thing.v1.yaml"
+        iface.write_text((k / "framework/interfaces/improve.detect.v1.yaml").read_text()
+                         .replace("name: improve.detect", "name: orphan.thing", 1))
+        git(k, "init", "-q", "-b", "main")
+        git(k, "add", "-A")
+        git(k, "commit", "-q", "-m", "base")
+        pl = Pipeline({"artifact-graph": FakeGraph(k, k)}, k, k, {}, datetime(2026, 10, 30))
+        now = detect_artifacts.run(pl.artifacts("project"), {}, only="unused")
+        keys = [c["detector"]["key"] for c in now]
+        assert any(x.startswith("interface:orphan.thing") for x in keys), keys    # the concept is reported as unused
+        out = pl.change("HEAD")
+        assert out["new"] == [] and out["existing"] >= 1 and "stopped" not in out, out["new"]
+    finally:
+        cleanup(k)
+
+
+def test_the_base_is_the_merge_base_not_the_moved_ref():
+    repo = repo_at_base()
+    try:
+        git(repo, "branch", "feature")
+        write(repo, {"pkg/core.py": "def used():\n    return 1\n"})          # main removes old_dead
+        git(repo, "commit", "-q", "-am", "main removes dead code")
+        git(repo, "checkout", "-q", "feature")                                 # the feature still has it
+        out = change(repo, "main")
+        assert out["new"] == [] and out["existing"] == 1, out
+        assert any("merge-base" in w for w in out["warnings"]), out["warnings"]
+    finally:
+        cleanup(repo)
+
+
+def test_a_base_that_does_not_resolve_says_to_fetch():
+    repo = repo_at_base()
+    try:
+        try:
+            change(repo, "origin/main")
+        except ValueError as e:
+            assert "fetch origin" in str(e), str(e)
+        else:
+            raise AssertionError("an unresolved base was accepted")
+    finally:
+        cleanup(repo)
+
+
+def test_a_second_finding_with_the_same_fingerprint_is_new():
+    from bay.improve import detect_artifacts, pipeline
+    repo = repo_at_base()
+    real = detect_artifacts.run
+    c = {"kind": "unused", "title": "Unused function dup", "detector": {"name": "unused", "key": "fn:a.py:dup"}}
+    calls = []
+
+    def fake(a, cfg=None, only=None, **kw):
+        if only != "unused":
+            return []
+        calls.append(cfg["thresholds"]["maxFindingsPerDetector"])            # compared before any cap
+        return [c] if a.root != repo else [c, dict(c)]
+    try:
+        pipeline.detect_artifacts.run = fake
+        out = change(repo)
+        assert len(out["new"]) == 1 and out["existing"] == 1 and min(calls) > 1000, (out, calls)
+    finally:
+        pipeline.detect_artifacts.run = real
+        cleanup(repo)
+
+
+def test_a_broken_archive_is_a_clear_error():
+    repo = repo_at_base()
+
+    def run(cmd, **kw):
+        if "archive" in cmd:
+            Path(cmd[cmd.index("-o") + 1]).write_bytes(b"not a tar file" * 100)
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        return subprocess.run(cmd, **kw)
+    try:
+        pl = Pipeline({"artifact-graph": FakeGraph(repo)}, KIT, repo, {}, datetime(2026, 10, 30), run=run)
+        try:
+            pl.change("HEAD")
+        except ValueError as e:
+            assert "cannot extract HEAD" in str(e) or "cannot extract" in str(e), str(e)
+        else:
+            raise AssertionError("a broken archive was accepted")
+    finally:
+        cleanup(repo)
+
+
+def test_the_base_side_refuses_env_files_and_large_files():
+    repo = repo_at_base()
+    try:
+        write(repo, {".env.local": "KEY=1\n"})
+        (repo / "big.py").write_text("x = 1\n" + "# pad\n" * 200_000)
+        git(repo, "add", "-f", "-A")
+        git(repo, "commit", "-q", "-m", "env and big")
+        out = change(repo)
+        refused = [w for w in out["warnings"] if w.startswith("unreadable at base")]
+        assert any(".env.local" in w for w in refused) or any("big.py" in w for w in refused), out["warnings"]
+        assert not any(".env.local" in str(c) for c in out["new"])
     finally:
         cleanup(repo)
 

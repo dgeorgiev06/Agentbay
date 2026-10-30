@@ -85,10 +85,18 @@ def runs_approve(cmd: str, words: list[str]) -> bool:
     return bool(_CLI_RE.search(cmd) and _APPROVE_RE.search(cmd))
 
 
+def dequote(cmd: str) -> str:
+    """The command text with quotes and backslashes removed: what the shell would join (`.agent''bay`)."""
+    return re.sub(r"['\"\\]", "", cmd)
+
+
 def names_config(cmd: str, words: list[str], at_root) -> bool:
     """True when `cmd` names agentbay.config.yaml, directly or by a glob in the project root (`at_root(dir)`)
-    that matches it."""
-    if CONFIG_FILE.casefold() in cmd.casefold():
+    that matches it. Quotes and backslashes are removed first (`agentbay.conf''ig.yaml` is the same file), and a
+    command that does not parse is judged on that text alone: anything containing `agentbay.conf` is denied."""
+    if CONFIG_FILE.casefold()[:len("agentbay.conf")] in dequote(cmd).casefold():
+        return True
+    if any(os.path.basename(w).casefold() == CONFIG_FILE.casefold() for w in words):
         return True
     toks = words or re.split(r"[\s;&|<>()`'\"]+", cmd)
     return any(any(c in w for c in "*?[{") and at_root(os.path.dirname(w)) and any(
@@ -325,7 +333,7 @@ class Guard:
             # not an agentbay role: off the control plane by path, glob and interpreter -c (S-B)
             if why:
                 return ("deny", f"agentbay: {who}: {why} (in a command that mentions .agentbay/.claude)") \
-                    if any(c in command for c in CONTROL) else ("pass", "")
+                    if any(c in dequote(command).casefold() for c in CONTROL) else ("pass", "")
             d = self._words(who, words, cwd)
             return d or ("pass", "")
         if why:
@@ -372,12 +380,12 @@ class Guard:
             return "deny", (f"agentbay: {who}: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`")
         disp = None                     # stdlib only (this runs as a standalone hook): the ledger's latest record
         try:
-            for line in (self.agentbay / "ledger" / "events.jsonl").read_text(encoding="utf-8").splitlines():
+            for line in (self.agentbay / "ledger" / "events.jsonl").read_text(encoding="utf-8").split("\n"):
                 try:
                     e = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                if e.get("taskId") == words[2] and e.get("type") in ("agent.dispatch", "spawned"):
+                if isinstance(e, dict) and e.get("taskId") == words[2] and e.get("type") in ("agent.dispatch", "spawned"):
                     disp = e
         except OSError:
             pass

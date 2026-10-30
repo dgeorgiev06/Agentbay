@@ -374,9 +374,12 @@ class ClaudeCodeAdapter:
         for p in old.get("permissions", []):
             if p in allow:
                 allow.remove(p)
+        ask = perms.setdefault("ask", [])
         for p in old.get("denies", []):
             if p in deny:
                 deny.remove(p)
+            if p in ask:
+                ask.remove(p)
         hooks = cfg.setdefault("hooks", {})
         for event in ("PreToolUse", "PostToolUse"):
             hooks[event] = [h for h in hooks.get(event, [])
@@ -396,9 +399,21 @@ class ClaudeCodeAdapter:
                 want_deny.append(f"Edit(/{kit.resolve()}/**)")
             elif kit.resolve() != project.resolve():              # kit nested inside the project
                 want_deny.append(f"Edit(/{kit.resolve().relative_to(project.resolve()).as_posix()}/**)")
+            want_deny.append("Edit(/agentbay.config.yaml)")      # the owner's settings (approvals.chat among them)
             for p in want_deny:
                 if p not in deny:
                     deny.append(p)
+                    owned_deny.append(p)
+                elif p in old.get("denies", []):
+                    owned_deny.append(p)
+            # `bay approve` in any spelling always asks the user first (the main thread relays chat approvals
+            # only through this prompt); a subagent is refused by the guard hook either way
+            want_ask = [f"Bash({BAY} approve:*)", "Bash(./bay.sh approve:*)", "Bash(bay approve:*)",
+                        "Bash(bay.sh approve:*)", "Bash(python3 -m bay.cli approve:*)",
+                        "Bash(python3 bay/cli.py approve:*)", "Bash(python3 */bay/cli.py approve:*)"]
+            for p in dict.fromkeys(want_ask):
+                if p not in ask:
+                    ask.append(p)
                     owned_deny.append(p)
                 elif p in old.get("denies", []):
                     owned_deny.append(p)
@@ -425,6 +440,8 @@ class ClaudeCodeAdapter:
             perms.pop("allow")
         if not deny:
             perms.pop("deny")
+        if not ask:
+            perms.pop("ask")
         if not perms:
             cfg.pop("permissions")
         if not hooks:

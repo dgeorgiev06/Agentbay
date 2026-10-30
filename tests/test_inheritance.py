@@ -183,9 +183,9 @@ def test_child_config_schema_extends_its_parents():
     assert merged.get("additionalProperties") is False                                 # the parent's rule holds
     m = model.resolve(k).modes["mail-briefing"]
     assert m.config["important"] == [] and m.config["lookback"] == "30d" and m.config["retention"] == "30d"
-    p = project({"modes": {"mail-briefing": {"important": ["dana@kiln.fi"], "retention": "60d"}}})
+    p = project({"modes": {"mail-briefing": {"important": ["dana@partner.example"], "retention": "60d"}}})
     c = model.resolve(model.Kit(KIT, p)).modes["mail-briefing"].config
-    assert c["important"] == ["dana@kiln.fi"] and c["retention"] == "60d"
+    assert c["important"] == ["dana@partner.example"] and c["retention"] == "60d"
     p = project({"modes": {"mail-briefing": {"colour": "blue"}}})                    # still closed to unknown keys
     assert_gap(KIT, "modes.mail-briefing", "colour", project=p)
 

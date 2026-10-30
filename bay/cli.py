@@ -127,7 +127,7 @@ def _validate(args) -> int:
         print(f"{len(wf_problems)} workflow problem(s)")
         return 1
     n_ep = sum(len(m.features) for m in s.modes.values())
-    print(f"✓ {len(s.modes)} modes, {n_ep} features,{len(s.roles)} roles ({len(s.units())} role units), "
+    print(f"✓ {len(s.modes)} modes, {n_ep} features, {len(s.roles)} roles ({len(s.units())} role units), "
           f"{len(s.kit.docs['Environment'])} envs, {len(s.kit.docs['Connector'])} connectors resolve "
           f"(agent profile {s.agent})")
     for name, wf in wfmod.load(s.kit).items():

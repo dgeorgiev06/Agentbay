@@ -1,3 +1,20 @@
+# HANDOFF part 5: T-20261030-ba74 (recorded with `bay plan`) - stage 1 fix round for the review of C-20261030-bc7db5
+
+Outcome: DOD-8, DOD-9, R-7 and the usage double count fixed; the proposal was not edited. To-do: 1-5 done.
+1 (92e3019) `Dispatcher._require_plan` takes the result's taskId only when that run's dispatch names this call and step (or no call). Test `test_a_plan_of_another_step_or_call_does_not_count` now expects refusal.
+2 (92e3019) Chose to REMOVE the `agent` parameter of `ledger.record_plan`/`record_done` and the AGENTBAY_AGENT claim: nothing sets that variable and the CLI has no caller identity, so making it real would need new adapter plumbing. Plan ownership is per agent type: the guard lets a role subagent run only its own `bay plan`; the dispatch record ties the plan to its call and step. Documented in `ledger._dispatched_check` and `cli.cmd_plan`; pinned by `test_plan_ownership_is_per_agent_type_not_per_run`. Sibling builders of one type can still tick each other's plans (a known limit, not a regression).
+3 (610f494) README: code fence on its own line, guard caveat and budget-caps sentence restored; three phrases trimmed to stay near 900 words.
+4 (9a2fd62) `ledger.agent_groups` splits a step's submitted usage evenly among the agents dispatched to that call and step (documented in INTERFACES). Test `test_a_steps_usage_is_split_among_the_agents_dispatched_to_it_not_counted_per_agent`.
+5 Evidence, last lines of each command:
+- `python3 tests/run.py -q`: `445 passed, 0 failed`
+- `./bay.sh lint`: `✓ lint clean` (four `!` warnings as before: schedules and the workspace env)
+- `./bay.sh validate`: `✓ 6 modes, 21 endpoints, 5 roles (17 role units), 10 envs, 13 connectors resolve (agent profile claude-code)`
+- `./bay.sh build --project <scratchpad>/s1fix` (empty folder): `! Per-role Bash scope is enforced by the agentbay guard hook; restart Claude Code and accept the workspace trust prompt so hooks run.`; `./bay.sh clean`: last line `clean`; a glob of the folder afterwards: `No files found`
+- `python3 -m bay.cli boundary --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: `boundary origin/main...HEAD: 59 changed paths (21 core, 3 docs, 16 extension, 1 feature, 18 other); 0 failing; B-11 docs: 0 hits`
+- `python3 -I plan_probe.py <kit> <built project>`: every `bay plan` case with a foreign taskId, extra args, `--project`, `dispatched`, `review-record` or `approve` for role subagents is `deny`; non-role subagents: `deny  None  .agentbay/bay plan T-20261030-2908 --done 1`. Last line `pass  None      ./bay.sh  plan T-20261030-2908 '{}'` (no opinion from the guard for `./bay.sh` spellings, as before; Claude Code prompts). The probe needs two arguments (kit, built project).
+- `python3 -I gate_repro_sha.py <kit>`: `R1 forged line -> awaiting-approval approve | the gate runs: no recorded approval ...`, `R3 revert to superseded content -> approve`, `R4 no crash`, `R5 gaps: ["forge.create step fill: `when: stale > 1h` is for code steps ..."]`; then the probe's own R5 step raises `ResolveError` at line 66 because resolve now rejects that edit (the probe expects a runtime crash, so it ends with a traceback; the defect it probes is fixed).
+- Fake-source demo: no command for it is in this task's allowed list; the fake-source flows run inside the test suite (test_dispatch, test_mail_briefing), counted in the 445 above.
+
 # HANDOFF part 4: T-20261030-b07b (recorded with `bay plan`) - stage 1 of 0008 COMPLETE
 
 Outcome: items 7 and 8 done. To-do (done: 1-4): 1 docs (README 895 words, INTERFACES, DESIGN, cos playbook, four role prompts; COORDINATOR.md rebuilt); 2 cleanup (dead `when: approved` branch in `Dispatcher._skip` and its schema text removed, no test existed for it; `approved` output of forge.scaffold `proposal` removed from connector and interface); 3 evidence; 4 this file.

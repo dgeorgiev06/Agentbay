@@ -177,10 +177,11 @@ def _mode(g: Graph, name: str, d, profile: str, rel) -> None:
         tn = t.name.removesuffix(".schema.json")
         g.node(f"type:{name}/{tn}", "type", tn, rel(t))
     cfg = d.spec.get("config")
-    if cfg and (d.dir / cfg).exists():
-        props = (json.loads((d.dir / cfg).read_text()).get("properties") or {})
-        for key in props:
-            g.node(f"config:{name}.{key}", "config-key", key, rel(d.dir / cfg))
+    if cfg:
+        for cp in d.config_files:                      # the schema chain along extends; a child only adds keys
+            if cp.exists():
+                for key in (json.loads(cp.read_text()).get("properties") or {}):
+                    g.node(f"config:{name}.{key}", "config-key", key, rel(cp))
     for rn, env in (d.spec.get("roles") or {}).items():
         g.edge(f"mode:{name}", f"role:{rn}", "role")
         if env:

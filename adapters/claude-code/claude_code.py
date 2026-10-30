@@ -5,7 +5,8 @@ role in several envs):
   worker role unit         -> .claude/agents/<unit>.md (model from the agent profile's tier map)
   Chief of Staff + mode
   coordinator playbooks    -> .agentbay/COORDINATOR.md, imported from CLAUDE.md (your main session)
-  role skills, mode skills -> .claude/skills/<skill>/  (a mode's skills include those it inherits via extends)
+  mode skills -> .claude/skills/<mode>--<skill>/, role skills -> .claude/skills/<role>--<skill>/ (a mode's
+  skills include those it inherits via extends; SKILL.md `name:` is rewritten to the folder name)
   role data access         -> .agentbay/roles/<unit>/use  (unit fixed inside; read-only endpoints only; its
                               mode's data in its env only)
   coordinator commands     -> .claude/settings.json permissions.allow, explicit prefixes only
@@ -36,12 +37,14 @@ import shlex
 import shutil
 from pathlib import Path
 
-from .. import registry, workflows
-from ..ledger import now
-from ..model import ROOT_COORDINATOR, ResolvedRole, System
-from ..dispatch import use_shim
-from ..protocol import WORKER_CONTRACT
-from .base import BuildReport
+import yaml
+
+from bay import registry, workflows
+from bay.adapter import BuildReport
+from bay.dispatch import use_shim
+from bay.ledger import now
+from bay.model import PROTECTED, ROOT_COORDINATOR, ResolvedRole, SpecError, System, skill_front_matter
+from bay.protocol import WORKER_CONTRACT
 
 MARK_BEGIN = "<!-- agentbay:begin (generated; run ./bay build) -->"
 MARK_END = "<!-- agentbay:end -->"
@@ -54,7 +57,6 @@ BAY = ".agentbay/bay"
 COORDINATOR_CMDS = ("show", "status", "log", "note", "task", "catalog")
 WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 GUARD_MATCHER = "Bash|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep"
-PROTECTED = ("framework", "bay", "schemas")    # kit dirs only forge.extend may write (when project == kit)
 
 
 def _read_json(p: Path, default):
@@ -113,6 +115,22 @@ def _empty(p: Path) -> bool:
     return d in ({}, {"mcpServers": {}})
 
 
+def _rename_skill(p: Path, name: str) -> None:
+    """Set the copied SKILL.md's front-matter `name:` to its namespaced folder name (Claude Code wants them equal).
+    The front matter is parsed as YAML (CRLF normalised) and written back with `name` first; a malformed block
+    (`bay lint` reports it) removes the copied skill and stops the build rather than writing a broken file."""
+    if not p.exists():
+        return
+    try:
+        meta, body = skill_front_matter(p.read_text(encoding="utf-8"))
+    except SpecError as e:
+        shutil.rmtree(p.parent, ignore_errors=True)
+        raise SpecError(f"skill {name}: SKILL.md: {e}; run `bay lint`") from e
+    meta = {"name": name, **{k: v for k, v in meta.items() if k != "name"}}
+    head = yaml.safe_dump(meta, sort_keys=False, width=float("inf"), allow_unicode=True, default_flow_style=False)
+    p.write_text("---\n" + head + "---\n" + body, encoding="utf-8")
+
+
 class ClaudeCodeAdapter:
     name = "claude-code"
 
@@ -139,6 +157,7 @@ class ClaudeCodeAdapter:
             if dst.exists():
                 shutil.rmtree(dst)
             shutil.copytree(src, dst)
+            _rename_skill(dst / "SKILL.md", sk)
             man["files"].append(str(dst.relative_to(project)))
             rep.written.append(str(dst.relative_to(project)) + "/")
         man["files"].append(self._shim(project, kit, rep))
@@ -222,7 +241,9 @@ class ClaudeCodeAdapter:
         if r.rules:
             extras.append("## Rules\n" + "\n".join(f"- {x}" for x in r.rules))
         if r.skills:
-            extras.append("## Skills\nUse these skills when relevant: " + ", ".join(sorted(r.skills)) + ".")
+            extras.append("## Skills\nUse these skills when relevant (the playbooks call each by the name in "
+                          "parentheses): " + ", ".join(f"`{sid}` ({sk})" for sk, sid in sorted(r.skill_names.items())
+                                                    if sid in r.skills) + ".")
         if r.bay_uses:
             extras.append("## Data access\nRead data only through your role's shim, never from files:\n"
                           + "\n".join(f"- `{use_shim(r.unit)} {u} '<json>'`" for u in r.bay_uses))
@@ -247,6 +268,8 @@ class ClaudeCodeAdapter:
             out.update(r.skills)
         for m in system.modes.values():
             out.update(m.skills)
+            if m.coordinator_unit is not None:
+                out.update(m.coordinator_unit.skills)
         return out
 
     def _commands(self, project: Path, kit: Path, rep: BuildReport) -> list[str]:
@@ -433,6 +456,15 @@ class ClaudeCodeAdapter:
                              + _without(m.playbook, system.uninstalled).strip().replace("# ", "#### ", 1))
         for sub, r in sorted(units.items()):
             role_rows.append(f"| `{sub}` | {r.inference.model} | {r.mode} | {r.env} | {r.description} |")
+        skills: dict[str, tuple[str, str]] = {}      # runtime name -> (owner, the playbooks' short name)
+        for m in system.modes.values():
+            for sid in m.skills:
+                skills[sid] = (f"mode {m.name}", sid[len(m.name) + 2:])
+        for r in [*units.values(), *(m.coordinator_unit for m in system.modes.values() if m.coordinator_unit)]:
+            for sk, sid in r.skill_names.items():
+                if sid in r.skills and sid not in skills:
+                    skills[sid] = (f"role {r.name}", sk)
+        skill_rows = [f"| `{sid}` | {own} | {sk} |" for sid, (own, sk) in sorted(skills.items())]
         doc = f"""<!-- generated by agentbay; edit framework/modes/cos/, modes/ and roles/, not this file -->
 {cos}
 
@@ -447,6 +479,14 @@ class ClaudeCodeAdapter:
 | subagent_type | model | mode | env | role |
 |---|---|---|---|---|
 {chr(10).join(role_rows)}
+
+## Skills (generated)
+
+Each mode's skills live in its own namespace; playbooks name a skill by its short name.
+
+| skill | from | playbooks call it |
+|---|---|---|
+{chr(10).join(skill_rows) or '| - | - | - |'}
 
 Machine-readable: `.agentbay/catalog.json`.
 

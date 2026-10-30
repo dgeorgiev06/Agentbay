@@ -77,6 +77,7 @@ def test_agentic_step_returns_plan_then_review_then_partial_on_failed_must():
     assert (nxt["env"], nxt["agent"], nxt["tier"], nxt["model"]) == ("local-feeds-offline", "claude-code", "balanced", "sonnet")
     assert "## Definition of Done" in nxt["playbookText"]
     assert {x["id"] for x in nxt["rules"]} == {"R-1", "R-2", "R-3", "R-4", "R-5", "R-6", "R-7"}  # executor|both
+    assert nxt["skills"]["corpus-sql"] == "feed-briefing--corpus-sql"          # playbook's short name -> namespaced
     posts = nxt["previous"]["gather"]["items"]
     assert len(posts) == 7 and all(p["matched"] == ["home"] for p in posts)
     assert any(t.endswith("items.store/v1.sql '<json>'") for t in nxt["tools"])

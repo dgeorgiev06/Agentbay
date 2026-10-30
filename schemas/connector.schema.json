@@ -60,9 +60,21 @@
             }
           ]
         },
+        "produces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Item kinds (content types) this connector's items carry, versioned (`<kind>/v<N>`, e.g. email/v1). Required for an items.source connector; `bay lint` checks it against the `reads:` of every mode whose env binds it (B-6)."
+        },
         "entry": {
           "type": "string",
           "description": "Python file in the connector folder exposing create(ctx)."
+        },
+        "login": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "Function in `entry` that `bay auth <connector>` calls (interactive terminal only) with a login context: the connector's declared secrets via the env's provider (secret, store_secret), an Http limited to its declared hosts, open_browser and say."
         },
         "source": {
           "type": "string",

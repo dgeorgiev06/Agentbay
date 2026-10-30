@@ -86,8 +86,8 @@ def test_selector_fields_map_to_gmail_search():
 
 def test_selector_split_with_the_gmail_capability_table():
     caps = model.Kit(KIT).get("Connector", "gmail-api").spec["selectors"]
-    native, local = selmod.split({"id": "p", "from": "*@kiln.fi", "subject": "staking"}, caps)
-    assert native == {} and local == {"from": "*@kiln.fi", "subject": "staking"}     # wildcards, subject: local
+    native, local = selmod.split({"id": "p", "from": "*@partner.example", "subject": "staking"}, caps)
+    assert native == {} and local == {"from": "*@partner.example", "subject": "staking"}     # wildcards, subject: local
     native, local = selmod.split({"id": "n", "in": "Newsletters", "text": "pil", "not": {"from": "a@b.example"}}, caps)
     assert native == {"in": "Newsletters"} and local == {"text": "pil", "not": {"from": "a@b.example"}}
     native, _ = selmod.split({"id": "a", "from": "a@x.example", "to": "me@x.example", "in": "inbox",
@@ -105,15 +105,15 @@ def test_the_gmail_query_is_never_narrower_than_the_local_match():
     gm = _gm()
     caps = model.Kit(KIT).get("Connector", "gmail-api").spec["selectors"]
     fake = FakeGmail(NOW)
-    msg = new_msg("19d0001", frm="Dana Ruiz <dana@kiln.fi>")
+    msg = new_msg("19d0001", frm="Dana Ruiz <dana@partner.example>")
     msg["headers"]["Subject"] = "Staking pilot timeline"
     msg["parts"] = [{"mimeType": "text/plain", "text": "The pilot starts Monday."}]
     fake.messages[msg["id"]] = msg
     g = make(fake)
     item = g._to_item(fake.render(msg))
-    sels = [{"id": "a", "in": "inbox", "not": {"from": "ruiz"}}, {"id": "b", "in": "inbox", "not": {"text": "kiln"}},
-            {"id": "c", "text": "pil"}, {"id": "d", "subject": "pil"}, {"id": "e", "from": "kiln.fi", "text": "pilot"},
-            {"id": "f", "not": {"subject": "ruiz"}}, {"id": "g", "from": "dana@kiln.fi", "in": "label:Newsletters"},
+    sels = [{"id": "a", "in": "inbox", "not": {"from": "ruiz"}}, {"id": "b", "in": "inbox", "not": {"text": "partner"}},
+            {"id": "c", "text": "pil"}, {"id": "d", "subject": "pil"}, {"id": "e", "from": "partner.example", "text": "pilot"},
+            {"id": "f", "not": {"subject": "ruiz"}}, {"id": "g", "from": "dana@partner.example", "in": "label:Newsletters"},
             {"id": "h", "to": "me@example.com", "not": {"from": "*@other.example"}}]
     kept = 0
     for sel in sels:
@@ -122,7 +122,7 @@ def test_the_gmail_query_is_never_narrower_than_the_local_match():
         assert not local or fake.matches(q, msg), (sel, q)                     # never less than the local match
         kept += local
     assert kept == 7                                                           # every case but g (not labelled Newsletters)
-    old = {"a": "in:inbox -from:ruiz", "b": "in:inbox -kiln", "c": "pil", "d": "subject:pil"}
+    old = {"a": "in:inbox -from:ruiz", "b": "in:inbox -partner", "c": "pil", "d": "subject:pil"}
     assert not any(fake.matches(q, msg) for q in old.values())                 # what the old table sent: too narrow
 
 
@@ -447,7 +447,7 @@ def test_invalid_grant_blocks_with_the_one_command_and_never_crashes():
     assert len(st2.query()["items"]) == 4                                           # stored mail stays readable
     state = json.loads((p / ".agentbay/data/mail/mail-briefing/state.json").read_text())
     assert all(c.get("cursor") == "5000" for c in state["cursors"].values())         # cursors kept
-    fake.token_error = None                                                          # after `bay auth gmail`
+    fake.token_error = None                                                          # after `bay auth gmail-api`
     st3, _ = store(fake, INBOX, p=p)
     assert st3.sync()["stopped"] is None and "blocked" not in st3.status() and st3.status()["stale"] is False
 
@@ -553,7 +553,7 @@ def test_a_broader_grant_is_refused():
     assert out["items"] == [] and "more than gmail.readonly" in out["blocked"]
 
 
-# ------------------------------------------------------------------ login (bay auth gmail)
+# ------------------------------------------------------------------ login (bay auth gmail-api)
 def test_login_uses_pkce_a_loopback_redirect_and_only_the_readonly_scope():
     gm = sys.modules[type(make(FakeGmail(NOW))).__module__]
     seen = {}
@@ -590,6 +590,46 @@ def test_login_uses_pkce_a_loopback_redirect_and_only_the_readonly_scope():
         raise AssertionError("expected ConnectorError")
     except connect.ConnectorError as e:
         assert "nothing was stored" in str(e)
+
+
+def test_cli_login_is_the_declared_entry_and_stores_the_refresh_token():
+    gm = sys.modules[type(make(FakeGmail(NOW))).__module__]
+    assert yaml.safe_load((KIT / "connectors/gmail-api/connector.yaml").read_text())["spec"]["login"] == "cli_login"
+
+    def api(method, url, headers, body):
+        if url.endswith("/token"):
+            return jr({"access_token": "ya29.CLI", "refresh_token": "1//CLI-REFRESH", "scope": SCOPE})
+        return jr({"emailAddress": "me@example.com"})
+
+    def browser(url):
+        q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
+        redirect = f"{q['redirect_uri']}/?state={q['state']}&code=4/CODE&scope={urllib.parse.quote(SCOPE)}"
+        threading.Thread(target=lambda: urllib.request.urlopen(redirect, timeout=5).read(), daemon=True).start()
+
+    class Ctx:
+        provider, said, stored = "mem", [], {}
+        http = connect.Http(["oauth2.googleapis.com", "gmail.googleapis.com"], api, "test")
+        open_browser = staticmethod(browser)
+
+        def say(self, m):
+            self.said.append(m)
+
+        def secret(self, name):
+            return SECRETS.get(name)
+
+        def store_secret(self, name, value):
+            self.stored[name] = value
+            return True
+
+    ctx = Ctx()
+    gm.cli_login(ctx)
+    assert ctx.stored == {"GMAIL_REFRESH_TOKEN": "1//CLI-REFRESH"} and "me@example.com" in ctx.said[-2]
+    ctx.secret = lambda name: None
+    try:
+        gm.cli_login(ctx)
+        raise AssertionError("expected ConnectorError")
+    except connect.ConnectorError as e:
+        assert "bay secret set GMAIL_CLIENT_ID" in str(e)
 
 
 def test_login_ignores_a_redirect_with_another_state_and_keeps_waiting():
@@ -703,10 +743,10 @@ def test_me_is_matched_on_normalized_gmail_addresses_and_bulk_mail_never_needs_a
     assert selmod.addr_key("d.r+x@Example.COM") == "d.r@example.com"              # dots matter outside Gmail
     fake = FakeGmail(NOW)
     fake.account = "meself@gmail.com"
-    a = new_msg("19g0001", hours=3, frm="Ana <ana@kiln.fi>")
+    a = new_msg("19g0001", hours=3, frm="Ana <ana@partner.example>")
     a["threadId"], a["headers"]["To"] = "ta", "Me <Me.Self+work@GoogleMail.com>"
     b = new_msg("19g0002", labels=("Label_1",), hours=2, frm="Me <me.self@gmail.com>")   # sent elsewhere, no SENT
-    b["threadId"], b["headers"]["To"] = "tb", "ana@kiln.fi"
+    b["threadId"], b["headers"]["To"] = "tb", "ana@partner.example"
     c = new_msg("19g0003", hours=1, frm="News <news@list.example>")
     c["threadId"], c["headers"]["To"] = "tc", "meself@gmail.com"
     c["headers"]["List-Unsubscribe"] = "<mailto:u@list.example>"

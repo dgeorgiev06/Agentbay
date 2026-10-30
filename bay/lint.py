@@ -5,13 +5,15 @@ Every problem is one line, `file:line: message`, naming the concept and the fix.
 """
 from __future__ import annotations
 
+import fnmatch
 import os
 import re
+import subprocess
 from pathlib import Path
 
 import yaml
 
-from . import checks, model, playbook as pbk, rules as rulesmod, workflows as wfmod
+from . import boundary, checks, model, playbook as pbk, rules as rulesmod, workflows as wfmod
 
 # Features whose review can never be turned off, with the settings they must use.
 MANDATORY_REVIEW = {"forge.extend": {"when": "always", "tier": "deep", "effort": "high"}}
@@ -194,6 +196,37 @@ def lint_env_bindings(kit: model.Kit) -> list[str]:
     return out
 
 
+def lint_substitutes(kit: model.Kit) -> list[str]:
+    """F-11: at most one env may substitute a given env. The offline switch maps each env to one substitute, so a
+    second one would be dropped from agentbay.config.example.yaml without a word."""
+    by: dict[str, list] = {}
+    for env in sorted(kit.docs["Environment"].values(), key=lambda e: e.name):
+        if env.spec.get("substitutes"):
+            by.setdefault(env.spec["substitutes"], []).append(env)
+    out = []
+    for target, envs in sorted(by.items()):
+        if len(envs) > 1:
+            first = envs[0]
+            line = _line_of(first.path, r"^\s*substitutes:")
+            out.append(f"{_where(first.path, line)}: envs "
+                       f"{', '.join(e.name for e in envs)} all declare `substitutes: {target}`; "
+                       f"an env may have one substitute only")
+    return out
+
+
+def lint_adapters(kit: model.Kit) -> list[str]:
+    """F-12: every adapters/<name>/adapter.yaml matches schemas/adapter.schema.json, its `name` is its folder and
+    its `module` a file inside the folder. Checked without importing any adapter code."""
+    from . import adapter
+    _, bad = adapter.scan(kit.root / "adapters")
+    return [_rel(e, kit) for errs in bad.values() for e in errs]
+
+
+def _rel(msg: str, kit: model.Kit) -> str:
+    root = str(kit.root.resolve()) + "/"
+    return msg.replace(root, "").replace(str(kit.root) + "/", "")
+
+
 def lint_rules(path: Path, dod_ids: list[str], ep: dict, md: model.Doc) -> list[str]:
     out: list[str] = []
     try:
@@ -314,9 +347,25 @@ def lint_roles(kit: model.Kit) -> list[str]:
 SOURCE_INTERFACES = ("items.source/v1",)
 
 
+def _binds(env, conn_name: str) -> bool:
+    for v in (env.spec.get("bind") or {}).values():
+        if conn_name in (v if isinstance(v, list) else [v] if isinstance(v, str) else []):
+            return True
+    return False
+
+
 def lint_connectors(kit: model.Kit) -> list[str]:
     out = []
     for c in kit.docs["Connector"].values():
+        needs = c.spec.get("needs", {}).get("secrets", [])
+        if c.spec.get("login") and needs:
+            ok = [e.name for e in kit.docs["Environment"].values() if _binds(e, c.name)
+                  and all(any(fnmatch.fnmatchcase(a, p) for a in e.spec.get("secrets", {}).get("allow", []))
+                          for p in needs)]
+            if not ok:
+                out.append(f"{_where(c.path, _line_of(c.path, r'^\s+login:'))}: connector {c.name} declares a "
+                           f"`login` but no env that binds it allows all of its needs.secrets ({', '.join(needs)}); "
+                           f"`bay auth` gives a login only the secrets a sync through that env would get")
         impl = c.spec["implements"]
         impl = [impl] if isinstance(impl, str) else impl
         for iface in impl:
@@ -332,6 +381,187 @@ def lint_connectors(kit: model.Kit) -> list[str]:
                     out.append(f"{_where(c.path, _line_of(c.path, r'^spec:'))}: connector {c.name} implements {iface} "
                                f"but declares no spec.selectors (which selector fields its native search handles: "
                                f"`<field>: native|local`; unlisted fields cannot be expressed)")
+    return out
+
+
+def _as_list(v) -> list:
+    return [v] if isinstance(v, str) else list(v or [])
+
+
+def lint_contract_versions(kit: model.Kit) -> list[str]:
+    """B-6 (proposal 0006, Part F): contracts are versioned and agree. `needs:`, `implements:`, `reads:` and
+    `produces:` name `<name>/v<N>`; `reads:`/`produces:` name a known item kind; an items.source connector says
+    what it produces and a mode that needs items.source says what it reads; and every kind a mode reads is
+    produced, at that version, by the items.source connectors bound in each env its roles use (and in each env
+    that can stand in for one)."""
+    out, kinds = [], model.item_kinds(kit.root)
+    known = ", ".join(f"{k}/v{v}" for k in sorted(kinds) for v in sorted(kinds[k])) or "none"
+
+    def kind_problems(where, owner, key, names):
+        for n in names:
+            if not model.VERSIONED.match(n):
+                out.append(f"{where}: {owner} {key}: '{n}' is unversioned; name the contract version, "
+                           f"`<kind>/v<N>` (known: {known})")
+                continue
+            k, _, v = n.partition("/v")
+            if k not in kinds:
+                out.append(f"{where}: {owner} {key}: unknown item kind '{n}' (known: {known}); add the kind's "
+                           f"schema to schemas/data/ or fix the name")
+            elif int(v) not in kinds[k]:
+                out.append(f"{where}: {owner} {key}: item kind {k} has no version {v} (known: {known})")
+
+    for c in sorted(kit.docs["Connector"].values(), key=lambda d: d.name):
+        where = _where(c.path, _line_of(c.path, r"^\s+implements:"))
+        impl = _as_list(c.spec["implements"])
+        for i in impl:
+            if not model.VERSIONED.match(i):
+                out.append(f"{where}: connector {c.name} implements '{i}', which is unversioned; write "
+                           f"`<interface>/v<N>` (e.g. items.source/v1)")
+        kind_problems(_where(c.path, _line_of(c.path, r"^\s+produces:")), f"connector {c.name}", "produces",
+                      _as_list(c.spec.get("produces")))
+        if model.SOURCE_IFACE in impl and not c.spec.get("produces"):
+            out.append(f"{where}: connector {c.name} implements {model.SOURCE_IFACE} but declares no "
+                       f"spec.produces (the item kinds its items carry, e.g. `produces: [post/v1]`; known: {known})")
+    envs = kit.docs["Environment"]
+    for md in sorted(kit.docs["Mode"].values(), key=lambda d: d.name):
+        path, line = md.path, _line_of(md.path, r"^\s+needs:")
+        for n in md.spec.get("needs", []):
+            if not model.VERSIONED.match(n):
+                out.append(f"{_where(path, line)}: mode {md.name} needs '{n}', which is unversioned; write "
+                           f"`<interface>/v<N>`")
+        reads = _as_list(md.spec.get("reads"))
+        rpath = next((d / "mode.yaml" for d in md.dirs if re.search(r"(?m)^\s+reads:", (d / "mode.yaml").read_text())),
+                     md.path)
+        rwhere = _where(rpath, _line_of(rpath, r"^\s+reads:"))
+        kind_problems(rwhere, f"mode {md.name}", "reads", reads)
+        if model.SOURCE_IFACE not in md.spec.get("needs", []) or md.spec.get("abstract"):
+            continue
+        if not reads:
+            out.append(f"{_where(md.path, _line_of(md.path, r'^spec:'))}: mode {md.name} needs {model.SOURCE_IFACE} "
+                       f"but declares no spec.reads (the item kinds its features read, e.g. `reads: [post/v1]`; "
+                       f"known: {known})")
+            continue
+        names = model.mode_envs(md)
+        names += [e.name for e in envs.values() if e.spec.get("substitutes") in names]
+        for en in dict.fromkeys(names):
+            env = envs.get(en)
+            if env is None:
+                continue                                    # unknown envs are lint_role_envs' problem
+            bound = model.connectors_of(model._bound(env, model.SOURCE_IFACE))
+            if not bound:
+                continue
+            made: dict[str, dict[int, list[str]]] = {}
+            for cn in bound:
+                c = kit.docs["Connector"].get(cn)
+                for p in _as_list(c.spec.get("produces")) if c else []:
+                    k, _, v = p.partition("/v")
+                    if v.isdigit():
+                        made.setdefault(k, {}).setdefault(int(v), []).append(cn)
+            for r in reads:
+                k, _, v = r.partition("/v")
+                if not v.isdigit():
+                    continue
+                if k not in made:
+                    out.append(f"{rwhere}: mode {md.name} reads {r}, but no {model.SOURCE_IFACE} connector env {en} "
+                               f"binds ({', '.join(bound)}) produces {k}. Bind a connector that produces {r} in "
+                               f"env {en}, or make one with forge.connect")
+                elif int(v) not in made[k]:
+                    have = "; ".join(f"{', '.join(cs)} produce {k}/v{n}" for n, cs in sorted(made[k].items()))
+                    out.append(f"{rwhere}: mode {md.name} reads {r}, but in env {en} {have}: version mismatch. "
+                               f"Update the mode's reads: or the connector to the same version")
+                elif len(made[k]) > 1:
+                    odd = "; ".join(f"{', '.join(cs)} produce {k}/v{n}" for n, cs in sorted(made[k].items())
+                                    if n != int(v))
+                    out.append(f"{rwhere}: mode {md.name} reads {r}, but in env {en} {odd}: mixed versions of {k} "
+                               f"reach the mode. Bind only connectors that produce {r}, or update them")
+    return out
+
+
+# B-7: the files of an extension that must not name another. READMEs are exempt (they document the extension's
+# own setup and may name what its env binds); so are tests/ (fixtures pick concrete stand-ins on purpose).
+MODE_FILES = ("mode.yaml", "playbook.md", "config.example.yaml", "config.schema.json", "features/**/*",
+              "skills/**/*", "types/**/*")
+CONNECTOR_FILES = ("**/*.py", "**/*.yaml", "**/*.yml")
+_IMPORT = re.compile(r"^\s*(?:from\s+([\w.]+)\s+import|import\s+([\w.]+(?:\s*,\s*[\w.]+)*))")
+
+
+def _extension_files(doc: model.Doc, pats) -> list[Path]:
+    """The files B-7 scans: the patterns inside the folder (README.md and the folder's top-level tests/ exempt)
+    plus every file the manifest references (entry, config schema), wherever it lives."""
+    out = {doc.path}
+    for pat in pats:
+        out |= {f for f in doc.dir.glob(pat) if f.is_file() and "__pycache__" not in f.parts
+                and f.relative_to(doc.dir).parts[0] != "tests" and f.name != "README.md"}
+    for key in ("entry", "config"):
+        ref = doc.spec.get(key)
+        if isinstance(ref, str) and (doc.dir / ref).is_file():
+            out.add((doc.dir / ref).resolve())
+    return sorted(out)
+
+
+def lint_extension_names(kit: model.Kit) -> list[str]:
+    """B-7 (proposal 0006, Part F; conformance C-4, C-8): no extension names another. A mode's files never name a
+    connector or another mode (its `extends:` ancestors excepted); a connector's code and yaml never name a mode
+    or another connector, and its code imports no other extension's module. Core instances (under a core
+    `owns:` path) are not extensions and are not scanned; framework instances may name each other (they ship and
+    change together, only through forge.extend), never a user extension. A static scan cannot be complete
+    (a name can be computed at run time); it catches the spelled-out forms: the name in any case, its module
+    form, the kernel's `agentbay_connector_*`/`agentbay_adapter_*` keys and imports."""
+    cpath = kit.root / "framework" / "components.yaml"
+    cmap = boundary.ComponentMap.load(cpath) if cpath.exists() else None
+
+    def relk(f: Path) -> str:
+        try:
+            return str(f.relative_to(kit.root))
+        except ValueError:
+            return str(f)
+
+    docs = [*kit.docs["Mode"].values(), *kit.docs["Connector"].values()]
+    names = {d.name: d for d in docs}
+    def name_rx(n: str):
+        # the name, its module form (gmail_api) and the sys.modules keys the kernel loads it under
+        mod = re.escape(n.replace("-", "_"))
+        return re.compile(rf"(?<![\w.-]){re.escape(n)}(?![\w-]|\.\w)|(?<![\w.-]){mod}(?![\w-]|\.\w)"
+                          rf"|agentbay_(?:connector|adapter)_{mod}(?!\w)", re.I)
+    rxs = {n: name_rx(n) for n in names}
+    modules = {Path(d.spec["entry"]).stem: d for d in kit.docs["Connector"].values() if d.spec.get("entry")}
+    out = []
+    for d in sorted(docs, key=lambda x: (x.kind, x.name)):
+        if cmap and cmap.owner(relk(d.path)):
+            continue
+        allowed = {d.name}
+        if d.kind == "Mode":
+            cur = d
+            while cur is not None and cur.parent:
+                allowed.add(cur.parent)
+                cur = kit.docs["Mode"].get(cur.parent)
+        what = "mode" if d.kind == "Mode" else "connector"
+        for f in _extension_files(d, MODE_FILES if d.kind == "Mode" else CONNECTOR_FILES):
+            if f.parent != d.dir and cmap and not f.is_relative_to(d.dir) and cmap.owner(relk(f)):
+                continue                          # a referenced core file (e.g. briefing's schema): core, not scanned
+            try:
+                lines = f.read_text().splitlines()
+            except (UnicodeDecodeError, OSError):
+                continue
+            for i, line in enumerate(lines, 1):
+                for n, rx in rxs.items():
+                    o = names[n]
+                    if n in allowed or (d.root == "framework" and o.root == "framework") or not rx.search(line):
+                        continue
+                    sort = "mode" if o.kind == "Mode" else "connector"
+                    fix = ("name the capability (`<interface>/v<N>`) or the content type it serves; envs bind "
+                           "connectors" if sort == "connector" else "describe what is needed, not which mode needs it")
+                    out.append(f"{_where(f, i)}: {what} {d.name} names {sort} {n}; no extension names another "
+                               f"(B-7, C-4, C-8): {fix}")
+                if f.suffix != ".py":
+                    continue
+                m = _IMPORT.match(line)
+                for mod in (([m.group(1)] if m and m.group(1) else (m.group(2) or "").split(",")) if m else []):
+                    head = [p for p in mod.strip().split(".") if p]
+                    hit = next((modules[x] for x in head if x in modules and modules[x] is not d), None)
+                    if hit is not None and not (d.root == "framework" and hit.root == "framework"):
+                        out.append(f"{_where(f, i)}: {what} {d.name} imports {mod.strip()} of connector {hit.name}; "
+                                   f"no extension imports another (B-7): move shared code into the kernel or copy it")
     return out
 
 
@@ -408,6 +638,56 @@ def split_store_warnings(kit: model.Kit) -> list[str]:
     return list(dict.fromkeys(out))
 
 
+def lint_config_schemas(kit: model.Kit) -> list[str]:
+    """A child mode's config schema only adds settings to its parent's (0006 Part A): redefining one is an error."""
+    out: list[str] = []
+    for md in sorted(kit.docs["Mode"].values(), key=lambda d: d.name):
+        if md.spec.get("config") and len(md.config_files) > 1:
+            gaps: list[str] = []
+            model.config_schema(kit, md, gaps)
+            out += [g for g in gaps if "redefines inherited" in g or "a child's config schema may not use" in g
+                    or "a child may only restate" in g]
+    return out
+
+
+def lint_self_description(kit: model.Kit) -> list[str]:
+    """Each extension describes itself (0006 Part A): user modes and connectors have a README.md; every
+    extension that takes settings has a config.example.yaml whose settings its config schema accepts; and the
+    kit's agentbay.config.example.yaml is the one `bay config example` assembles from them."""
+    from . import config as cfgmod
+    out: list[str] = []
+    for kind in ("Mode", "Connector"):
+        for d in sorted(kit.docs[kind].values(), key=lambda d: d.name):
+            where = os.path.relpath(d.dir, kit.root)
+            if d.root == "user" and not (d.dir / "README.md").exists():
+                out.append(f"{where}/: {kind.lower()} {d.name} has no README.md; add one (what it is, its "
+                           f"contract, setup, settings)")
+            if not cfgmod.takes_settings(kind, d):
+                continue
+            ex = d.dir / cfgmod.FRAGMENT
+            if not ex.exists():
+                out.append(f"{where}/: {kind.lower()} {d.name} takes settings but has no {cfgmod.FRAGMENT}; add "
+                           f"one (the settings body, as under {kind.lower()}s.{d.name} in agentbay.config.yaml)")
+                continue
+            try:
+                body = yaml.safe_load(ex.read_text(encoding="utf-8"))
+            except yaml.YAMLError as e:
+                out.append(f"{where}/{cfgmod.FRAGMENT}: invalid YAML: {e}")
+                continue
+            if body is None:
+                continue
+            gaps: list[str] = []
+            sch = model.config_schema(kit, d, gaps) if kind == "Mode" else d.spec["config"]
+            if sch is not None and isinstance(body, dict):
+                body = {k: v for k, v in body.items() if not (kind == "Mode" and k == "features")}
+            errs = model.schema_errors(body, model.inline_refs(sch)) if sch is not None else []
+            out += [f"{where}/{cfgmod.FRAGMENT}: {e}" for e in errs]
+    example = kit.root / cfgmod.EXAMPLE
+    if not example.exists() or example.read_text(encoding="utf-8") != cfgmod.example(kit):
+        out.append(f"{cfgmod.EXAMPLE} is stale; run bay config example")
+    return out
+
+
 def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Kit | None = None) -> list[str]:
     kit = kit or model.Kit(kit_root or model.KIT, project)
     out = list(kit.errors) + list(kit.collisions)
@@ -431,30 +711,169 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
             out.append(p)
     out += lint_roles(kit)
     out += lint_env_bindings(kit)
+    out += lint_substitutes(kit)
+    out += lint_adapters(kit)
     out += lint_connectors(kit)
+    out += lint_contract_versions(kit)
+    out += lint_extension_names(kit)
     out += lint_rulesets(kit)
+    out += lint_components(kit)
+    out += lint_ownership(kit)
+    out += lint_case_and_manifests(kit)
+    out += lint_config_schemas(kit)
+    out += lint_self_description(kit)
     out += lint_skill_names(kit)
     out += wfmod.structure_problems(kit)        # project workflows; targets are checked by `bay validate`
     return list(dict.fromkeys(out))
 
 
-def _skill_content(d: Path) -> list[tuple[str, bytes]]:
-    return [(str(f.relative_to(d)), f.read_bytes()) for f in sorted(d.rglob("*")) if f.is_file()
-            and "__pycache__" not in f.parts]
+SKILL_REF = re.compile(r"(?:\bthe\s+|\()`?([a-z0-9]+(?:-[a-z0-9]+)*)`?\s+skill\b"
+                       r"|\bthe\s+skill\s+`?([a-z0-9]+(?:-[a-z0-9]+)*)`?", re.I)
+SKILL_SHORT = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+def _skill_refs(text: str, known: set[str]) -> list[tuple[int, str]]:
+    """Skills a playbook or prompt names by short name ("the `corpus-sql` skill", "(research-brief skill)").
+    A phrase counts only when the name is in backticks or is a skill the kit builds somewhere (`known`), so
+    prose ("the right skill", "the skill is") is not a reference (N-4)."""
+    out = []
+    for i, ln in enumerate(text.splitlines(), 1):
+        for m in SKILL_REF.finditer(ln):
+            name = m.group(1) or m.group(2)
+            if f"`{name}`" in m.group(0) or name.lower() in known:
+                out.append((i, name))
+    return out
 
 
 def lint_skill_names(kit: model.Kit) -> list[str]:
-    """Project skills are keyed by name only (.claude/skills/<name>): two modes that would write the same skill
-    name with different content overwrite each other's, so one mode's agents get the other's skill."""
-    out, first = [], {}
-    for md in sorted(kit.docs["Mode"].values(), key=lambda d: (len(d.dirs), d.name)):
-        for name, d in sorted(model.mode_skills(md).items()):
-            prev = first.setdefault(name, (md.name, d))
-            if prev[1] != d and _skill_content(prev[1]) != _skill_content(d):
-                out.append(f"{_where(d / 'SKILL.md', 2)}: skill '{name}' of mode {md.name} has the same name as "
-                           f"{_where(prev[1] / 'SKILL.md', 2)} (mode {prev[0]}) but different content; project skills are "
-                           f"keyed by name, so one would overwrite the other. Rename one (e.g. {md.name}-{name})")
+    """B-8. The build writes a mode's skills as `<mode>--<skill>` and a role's as `<role>--<skill>`, so each name
+    must stay a valid runtime name (a-z, 0-9, '-', at most 64), two sources never share one, and every skill a
+    playbook or role prompt names by short name is in that mode's chain (or the roles it maps)."""
+    out: list[str] = []
+    ids: dict[str, Path] = {}
+    parsed: set[Path] = set()
+
+    def add(owner: str, kind: str, sk: str, src: Path) -> None:
+        sid = model.skill_id(owner, sk)
+        where = _where(src / "SKILL.md", 1)
+        if not SKILL_SHORT.match(sk):
+            out.append(f"{where}: skill folder '{sk}' must be lowercase letters, digits and single hyphens")
+        if len(sid) > model.SKILL_NAME_MAX:
+            out.append(f"{where}: skill name '{sid}' ({kind} {owner}) is {len(sid)} characters, over the "
+                       f"{model.SKILL_NAME_MAX} a runtime skill name allows; shorten the skill folder name "
+                       f"(or the {kind} name) by {len(sid) - model.SKILL_NAME_MAX}")
+        if src not in parsed and (src / "SKILL.md").exists():
+            parsed.add(src)
+            try:
+                model.skill_front_matter((src / "SKILL.md").read_text(encoding="utf-8"))
+            except model.SpecError as e:
+                out.append(f"{where}: {e}")
+        prev = ids.setdefault(sid, src)
+        if prev != src:
+            out.append(f"{where}: skill name '{sid}' is also built from {model.rel(prev)}; rename one")
+
+    roles = {n: d for n, d in kit.docs["Role"].items()}
+    role_skills = {n: list(d.spec.get("skills", [])) for n, d in roles.items()}
+    built = {sk.lower() for md in kit.docs["Mode"].values() for sk in model.mode_skills(md)}
+    built |= {sk.lower() for sks in role_skills.values() for sk in sks}
+    for rn, sks in sorted(role_skills.items()):
+        for sk in sks:
+            add(rn, "role", sk, roles[rn].dir / "skills" / sk)
+    for md in sorted(kit.docs["Mode"].values(), key=lambda d: d.name):
+        chain = model.mode_skills(md)
+        if not md.spec.get("abstract"):
+            for sk, src in sorted(chain.items()):
+                add(md.name, "mode", sk, src)
+        mapped = set((md.spec.get("roles") or {})) | ({md.spec["coordinator"]} if md.spec.get("coordinator") else set())
+        known = set(chain) | {sk for rn in mapped for sk in role_skills.get(rn, [])}
+        files = [next((d / "playbook.md" for d in md.dirs if (d / "playbook.md").exists()), None)]
+        for ep in (md.spec.get("endpoints") or {}).values():
+            if ep.get("playbook"):
+                files.append(next((d / ep["playbook"] for d in md.dirs if (d / ep["playbook"]).exists()), None))
+        for f in dict.fromkeys(x for x in files if x is not None):
+            for i, sk in _skill_refs(f.read_text(encoding="utf-8"), built):
+                if sk not in known:
+                    out.append(f"{_where(f, i)}: names skill '{sk}', which is not in mode {md.name}'s chain "
+                               f"({', '.join(sorted(known)) or 'none'}); add skills/{sk}/SKILL.md to the mode or "
+                               f"fix the name")
+    users: dict[str, list] = {}
+    for md in kit.docs["Mode"].values():
+        if not md.spec.get("abstract"):
+            for rn in md.spec.get("roles") or {}:
+                users.setdefault(rn, []).append(md)
+    for rn, rd in sorted(roles.items()):
+        for i, sk in _skill_refs(rd.spec.get("prompt", ""), built):
+            missing = [m.name for m in users.get(rn, []) if sk not in model.mode_skills(m)]
+            if sk not in role_skills[rn] and (missing or not users.get(rn)):
+                out.append(f"{_where(rd.path, 1)}: role {rn}'s prompt names skill '{sk}', which is neither the "
+                           f"role's own (`skills:`) nor in the chain of mode(s) {', '.join(missing) or '-'} that "
+                           f"map it; add it to the role's skills or name it in the mode's playbook instead")
     return out
+
+
+def lint_components(kit: model.Kit) -> list[str]:
+    """framework/components.yaml (proposal 0006, Part A): its schema, and every `owns:` glob names a real path."""
+    path = kit.root / "framework" / "components.yaml"
+    if not path.exists():
+        return []
+    try:
+        doc = model.load_yaml(path)
+    except model.SpecError as e:
+        return [f"{_where(path, 1)}: {e}"]
+    out = [f"{_where(path, 1)}: components schema: {e}" for e in model.schema_errors(doc, model.schema("components"))]
+    if out:
+        return out
+    for comp, spec in doc["components"].items():
+        for g in spec["owns"]:
+            if not any(kit.root.glob(g.rstrip("/"))):
+                out.append(f"{_where(path, _line_of(path, re.escape(g)))}: component {comp} owns '{g}', which matches "
+                           f"no path in the kit. Fix the path or remove it")
+    return out
+
+
+def lint_ownership(kit: model.Kit) -> list[str]:
+    """B-4 (proposal 0006, Part F): every tracked file of the kit is under a core `owns:` path, an extension
+    folder (`at:`) or the boundary's other set. Runs only when the kit is a git checkout."""
+    path = kit.root / "framework" / "components.yaml"
+    r = subprocess.run(["git", "-C", str(kit.root), "ls-files", "-z"], capture_output=True)
+    if not path.exists() or r.returncode:
+        return []
+    files = [f for f in r.stdout.decode("utf-8", "replace").split("\0") if f]
+    return [f"{f}: not under a core owns: path, an extension folder or the boundary's other set (B-4). Move it "
+            f"into the folder of the component or extension it belongs to, or add it to that component's owns: "
+            f"in framework/components.yaml" for f in boundary.stray(files, boundary.ComponentMap.load(path))]
+
+
+MANIFESTS = {"mode": "mode.yaml", "connector": "connector.yaml", "adapter": "adapter.yaml"}
+
+
+def lint_case_and_manifests(kit: model.Kit) -> list[str]:
+    """F-4: no two tracked paths differ only in case (one checkout of them would clobber the other on macOS or
+    Windows, and `bay boundary` treats them as one), and every extension folder carries its manifest."""
+    path = kit.root / "framework" / "components.yaml"
+    r = subprocess.run(["git", "-C", str(kit.root), "ls-files", "-z"], capture_output=True)
+    if not path.exists() or r.returncode:
+        return []
+    files = [f for f in r.stdout.decode("utf-8", "replace").split("\0") if f]
+    out, seen = [], {}
+    for f in files:
+        parts = f.split("/")
+        for i in range(1, len(parts) + 1):
+            p = "/".join(parts[:i])
+            other = seen.setdefault(p.casefold(), p)
+            if other != p:
+                out.append(f"{p}: differs only in case from {other}; rename one (paths must be unique ignoring case)")
+                seen[p.casefold()] = p
+    cmap, roots = boundary.ComponentMap.load(path), {}
+    for f in files:
+        ext = cmap.extension(f)
+        if ext and ext[0].name in MANIFESTS and ext[1].endswith("/"):
+            roots.setdefault(ext[1], set()).add(f[len(ext[1]):])
+    for root, inside in sorted(roots.items()):
+        if MANIFESTS[cmap.extension(root + "x")[0].name] not in inside:
+            out.append(f"{root}: extension folder without its manifest "
+                       f"{MANIFESTS[cmap.extension(root + 'x')[0].name]}")
+    return list(dict.fromkeys(out))
 
 
 def lint_rulesets(kit: model.Kit) -> list[str]:

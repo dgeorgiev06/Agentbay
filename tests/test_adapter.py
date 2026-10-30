@@ -7,8 +7,9 @@ import sys
 from helpers import KIT, model, system, tmpdir
 
 from bay import ledger
-from bay.adapters import Adapter, get
-from bay.adapters.claude_code import COORDINATOR_CMDS
+from bay.adapter import Adapter, get, module
+
+COORDINATOR_CMDS = module("claude-code").COORDINATOR_CMDS
 
 
 def _proj():
@@ -62,13 +63,28 @@ def test_adapter_round_trip():
     assert coord.count("# You are the Chief of Staff") == 1          # preamble only, not also a mode section
     assert "### Mode `cos`" not in coord
     assert "`cos.run`" in coord                                      # but its endpoints are in the table
-    assert (proj / ".claude/skills/digest/SKILL.md").exists() and (proj / ".claude/skills/corpus-sql/SKILL.md").exists() and (proj / ".claude/skills/research-brief/SKILL.md").exists()
-    for sk in ("digest", "corpus-sql"):                 # feed-briefing's skills, never mail-briefing's
-        assert (proj / f".claude/skills/{sk}/SKILL.md").read_text() == (KIT / f"modes/briefing/skills/{sk}/SKILL.md").read_text()
-    for sk in ("mail-digest", "mail-sql"):
-        assert (proj / f".claude/skills/{sk}/SKILL.md").read_text() == (KIT / f"modes/mail-briefing/skills/{sk}/SKILL.md").read_text()
+    sk_dir = proj / ".claude/skills"
+    built = {d.name for d in sk_dir.iterdir()}
+    assert {"feed-briefing--corpus-sql", "feed-briefing--digest", "feed-briefing--grounded-qa",
+            "mail-briefing--corpus-sql", "mail-briefing--digest", "mail-briefing--grounded-qa",
+            "researcher--research-brief", "improve--pattern-analysis"} <= built
+    assert all("--" in n for n in built)                                    # no bare (global) skill folders
+    def body(p):                                                            # SKILL.md minus its `name:` line
+        return [ln for ln in p.read_text().splitlines() if not ln.startswith("name:")]
+    for n in built:                                                         # name: is the namespaced folder name
+        assert f"\nname: {n}\n" in (sk_dir / n / "SKILL.md").read_text()
+    for sk in ("digest", "corpus-sql", "grounded-qa"):  # same short name in two modes: no clobbering
+        assert body(sk_dir / f"feed-briefing--{sk}/SKILL.md") == body(KIT / f"modes/briefing/skills/{sk}/SKILL.md")
+    for sk in ("digest", "corpus-sql"):                 # mail-briefing overrides these, for itself only
+        assert body(sk_dir / f"mail-briefing--{sk}/SKILL.md") == body(KIT / f"modes/mail-briefing/skills/{sk}/SKILL.md")
+        assert body(KIT / f"modes/mail-briefing/skills/{sk}/SKILL.md") != body(KIT / f"modes/briefing/skills/{sk}/SKILL.md")
+    assert body(sk_dir / "mail-briefing--grounded-qa/SKILL.md") == body(KIT / "modes/briefing/skills/grounded-qa/SKILL.md")
     ma = (proj / ".claude/agents/analyst--mail-briefing.md").read_text()
-    assert "mail-sql" in ma and "mail-digest" in ma and "mail-sql" not in fa
+    assert "`feed-briefing--corpus-sql` (corpus-sql)" in fa and "mail-briefing--" not in fa
+    assert "`mail-briefing--corpus-sql` (corpus-sql)" in ma and "feed-briefing--" not in ma
+    assert "| `mail-briefing--digest` | mode mail-briefing | digest |" in coord
+    assert "| `researcher--research-brief` | role researcher | research-brief |" in coord
+    assert "`researcher--research-brief` (research-brief)" in (proj / ".claude/agents/researcher--delivery.md").read_text()
     cat = json.loads((proj / ".agentbay/catalog.json").read_text())
     assert {m["name"] for m in cat["modes"]} == {"cos", "delivery", "feed-briefing", "forge", "improve",
                                                   "mail-briefing"}
@@ -77,7 +93,11 @@ def test_adapter_round_trip():
     dg = next(e for m in cat["modes"] for e in m["endpoints"] if e["name"] == "feed-briefing.digest")
     assert dg["review"]["role"] == "reviewer" and [s["kind"] for s in dg["steps"]][-1] == "review"
     assert {r["subagent"] for r in cat["roles"]} == agents
+    skills_before = {str(f.relative_to(sk_dir)): f.read_text() for f in sk_dir.rglob("*") if f.is_file()}
+    ad.build(s, proj, KIT)                                                  # idempotent: same skills, nothing extra
+    assert {str(f.relative_to(sk_dir)): f.read_text() for f in sk_dir.rglob("*") if f.is_file()} == skills_before
     ad.clean(proj)
+    assert not (proj / ".claude/skills").exists()                           # namespaced folders removed
     for p, txt in before.items():
         if p.endswith(".json"):
             assert json.loads((proj / p).read_text()) == json.loads(txt), p
@@ -193,3 +213,156 @@ def test_gitignore_is_stable_across_builds_and_kept_while_runtime_data_exists():
     (proj / ".agentbay/ledger/events.jsonl").write_text("{}\n")
     ad.clean(proj)
     assert (proj / ".agentbay/.gitignore").exists()
+
+
+def test_adapters_are_discovered_by_folder_with_no_registry():
+    from bay import adapter
+    assert "claude-code" in adapter.discover()
+    root = tmpdir()
+    (root / "echo").mkdir()
+    (root / "echo/adapter.yaml").write_text("name: echo\nmodule: echo.py\nclass: Echo\n")
+    (root / "echo/echo.py").write_text(
+        "from bay.adapter import BuildReport\n"
+        "class Echo:\n    name = 'echo'\n"
+        "    def build(self, system, project, kit): return BuildReport('echo')\n"
+        "    def clean(self, project): return BuildReport('echo')\n")
+    assert sorted(adapter.discover(root)) == ["echo"]
+    ad = adapter.get("echo", root)
+    assert isinstance(ad, Adapter) and ad.clean(root).runtime == "echo"
+    try:
+        adapter.get("nope", root)
+        raise AssertionError("unknown runtime accepted")
+    except KeyError as e:
+        assert "adapters/<name>/adapter.yaml" in str(e)
+
+
+def _adapter(root, folder, manifest, code=None):
+    (root / folder).mkdir(parents=True, exist_ok=True)
+    (root / folder / "adapter.yaml").write_text(manifest)
+    if code is not None:
+        (root / folder / "mod.py").write_text(code)
+
+
+ECHO = ("from bay.adapter import BuildReport\n"
+        "class Echo:\n    name = 'echo'\n"
+        "    def build(self, system, project, kit): return BuildReport('echo')\n"
+        "    def clean(self, project): return BuildReport('echo')\n")
+
+
+def test_lint_checks_adapter_manifests_f12():
+    from bay import lint
+    from helpers import cleanup, kit_copy
+    k = kit_copy()
+    try:
+        assert not lint.lint_adapters(model.Kit(k, None))
+        a = k / "adapters"
+        _adapter(a, "extra", "name: extra\nmodule: mod.py\nclass: X\nregistry: true\n", "")
+        _adapter(a, "noclass", "name: noclass\nmodule: mod.py\n", "")
+        _adapter(a, "renamed", "name: other\nmodule: mod.py\nclass: X\n", "")
+        _adapter(a, "escape", "name: escape\nmodule: ../claude-code/claude_code.py\nclass: X\n")
+        _adapter(a, "nomodule", "name: nomodule\nmodule: gone.py\nclass: X\n")
+        _adapter(a, "notyaml", "name: [\n")
+        errs = lint.lint_adapters(model.Kit(k, None))
+        assert any(e.startswith("adapters/extra/adapter.yaml: ") and "registry" in e for e in errs)
+        assert any(e.startswith("adapters/noclass/adapter.yaml: ") and "'class' is a required property" in e
+                   for e in errs)
+        assert "adapters/renamed/adapter.yaml: name 'other' must match its folder 'renamed'" in errs
+        assert ("adapters/escape/adapter.yaml: module '../claude-code/claude_code.py' must be inside the adapter "
+                "folder") in errs
+        assert "adapters/nomodule/adapter.yaml: module 'gone.py' does not exist" in errs
+        assert any(e.startswith("adapters/notyaml/adapter.yaml: unreadable") for e in errs)
+        assert set(errs) <= set(lint.run(k))
+    finally:
+        cleanup(k)
+
+
+def test_a_bad_adapter_entry_is_reported_and_never_imported_f12():
+    from bay import adapter
+    root = tmpdir()
+    marker = root / "imported"
+    boom = f"open({str(marker)!r}, 'w').write('x')\nraise RuntimeError('imported')\n"
+    _adapter(root, "echo", "name: echo\nmodule: mod.py\nclass: Echo\n", ECHO)
+    _adapter(root, "broken", "name: broken\nmodule: mod.py\nclass: Echo\nextra: 1\n", boom)
+    _adapter(root, "other", "name: other\nmodule: mod.py\nclass: Echo\n", boom)   # well-formed, not selected
+    _adapter(root, "garbled", ": : [\n")
+    problems = []
+    assert sorted(adapter.discover(root, problems)) == ["echo", "other"]
+    assert any("broken/adapter.yaml" in p for p in problems) and any("garbled/adapter.yaml" in p for p in problems)
+    ad = adapter.get("echo", root)
+    assert ad.build(None, root, root).runtime == "echo" and ad.clean(root).runtime == "echo"
+    assert not marker.exists()                       # neither the bad entry nor the unselected one was imported
+    try:
+        adapter.get("broken", root)
+        raise AssertionError("bad adapter loaded")
+    except ValueError as e:
+        assert "runtime 'broken' is not loadable" in str(e) and "extra" in str(e)
+    assert not marker.exists()
+
+
+def test_adapter_modules_are_keyed_by_folder_f12():
+    from bay import adapter
+    keys = {adapter.module_key(f) for f in ("claude-code", "claude_code", "claude_2dcode", "claudecode")}
+    assert len(keys) == 4 and all(k.startswith("agentbay_adapter_") and k.isidentifier() for k in keys)
+    m = module("claude-code")
+    assert m.__name__ == adapter.module_key("claude-code") and sys.modules[m.__name__] is m
+    assert "agentbay_adapter_claude_code" not in sys.modules
+
+
+def test_cli_build_and_clean_report_a_broken_other_runtime_f12():
+    import os
+    from helpers import cleanup, kit_copy
+    k, proj = kit_copy(), _proj()
+    try:
+        _adapter(k / "adapters", "zz-broken", "name: wrong\nmodule: mod.py\nclass: X\n", "raise SystemExit(3)\n")
+        env = {**os.environ, "PYTHONPATH": str(k)}
+        for cmd in ("build", "clean"):
+            r = subprocess.run([sys.executable, "-m", "bay.cli", "--project", str(proj), cmd], cwd=k, env=env,
+                               text=True, capture_output=True)
+            assert r.returncode == 0, r.stderr
+            assert "zz-broken/adapter.yaml: name 'wrong' must match its folder 'zz-broken'" in r.stdout
+    finally:
+        cleanup(k)
+
+
+def test_rename_skill_parses_front_matter_as_yaml_and_normalises_crlf_f15():
+    import yaml
+    from bay.model import SpecError
+    rename = module("claude-code")._rename_skill
+    d = tmpdir() / "m--s"
+    d.mkdir()
+    p = d / "SKILL.md"
+    p.write_text("---\r\ndescription: \"a: b\"\r\nname:\r\n  s\r\nx: [1, 2]\r\n---\r\n# S\r\nbody --- here\r\n",
+                 newline="")
+    rename(p, "m--s")
+    text = p.read_bytes().decode()
+    assert "\r" not in text and text.startswith("---\nname: m--s\n") and text.endswith("---\n# S\nbody --- here\n")
+    meta = yaml.safe_load(text.split("---\n")[1])
+    assert meta == {"name": "m--s", "description": "a: b", "x": [1, 2]}
+    p.write_text("# plain\n")
+    rename(p, "m--s")
+    assert p.read_text() == "---\nname: m--s\n---\n# plain\n"
+    p.write_text("---\nname: s\ndescription: never closed\n# S\n")
+    try:
+        rename(p, "m--s")
+        raise AssertionError("unclosed front matter accepted")
+    except SpecError as e:
+        assert "skill m--s: SKILL.md: front matter opens with '---' on line 1 but has no closing '---' line" in str(e)
+    assert not d.exists()                                    # no malformed skill left behind
+
+
+def test_lint_reports_a_skill_md_whose_front_matter_never_closes_f15():
+    from bay import lint
+    from helpers import cleanup, kit_copy
+    k = kit_copy()
+    try:
+        f = k / "modes/briefing/skills/digest/SKILL.md"
+        f.write_text(f.read_text().replace("\n---\n", "\n\n", 1))
+        g = k / "modes/briefing/skills/grounded-qa/SKILL.md"
+        g.write_text("---\n- not\n- a mapping\n---\n# x\n")
+        errs = lint.run(k)
+        want = "modes/briefing/skills/digest/SKILL.md:1: front matter opens with '---' on line 1 but has no closing"
+        assert sum(want in e for e in errs) == 1                  # once, though two modes inherit the skill
+        assert any("modes/briefing/skills/grounded-qa/SKILL.md:1: front matter must be a YAML mapping" in e
+                   for e in errs)
+    finally:
+        cleanup(k)

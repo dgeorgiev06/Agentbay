@@ -1,0 +1,14 @@
+# validated against modes/briefing/config.schema.json (feed-briefing extends briefing)
+lookback: 3d                      # default window for sync/digest/ask (<= lookbackMax 30d)
+retention: 30d                    # prune drops posts older than this
+maxItemsPerRun: 200
+monthlyItems: 3000
+spendUsd: 5
+costPerPostUsd: 0.005             # price per post the source reads (timeline + deletion checks); spendUsd cap
+selectors:                        # which posts to keep; default: [{id: home}] = the home timeline
+  - { id: home }
+# - { id: staking, in: list:1585430245762441216 }       # an X List (scope list.read)
+# - { id: vitalik, from: vitalik, not: { text: giveaway } }
+# features:
+#   digest:
+#     extraRules: rules/digest-extra.yaml   # your rules stack on the feature's (strictest wins)

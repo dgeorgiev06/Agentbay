@@ -58,7 +58,7 @@ WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}   # file-writing to
 READ_ONLY_CLIS = ("git status", "git diff", "git log", "git show")   # the only CLIs a read-only capability may bind
 USER_FRAMEWORK_ENVS = ("workspace", "research")   # the framework envs a user mode may put roles in
 LEVEL_RANK = {"should": 1, "must": 2, "must_not": 2}
-PROTECTED = ("framework", "bay", "schemas")       # kit paths only forge.extend may write
+PROTECTED = ("framework", "bay", "schemas", "adapters")   # kit paths only forge.extend may write
 FRAMEWORK_EXTENDER = "forge.extend"
 USER_ROLE = ("roles are framework-level; customize behaviour in your mode's playbooks/skills, or propose a new "
              "role via forge.extend")
@@ -93,6 +93,33 @@ def data_schema(ref: str) -> dict:
     if not p.exists():
         raise SpecError(f"unknown data schema '{ref}' (expected {p.relative_to(KIT)})")
     return json.loads(p.read_text())
+
+
+VERSIONED = re.compile(r"^[a-z][a-z0-9.-]*/v[0-9]+$")   # `<name>/v<N>`: interfaces and item kinds (B-6)
+
+
+def item_kinds(kit: Path = KIT) -> dict[str, set[int]]:
+    """Known item kinds (content types): `<kind>/v<N>` data schemas that extend item/v1. kind -> versions."""
+    out: dict[str, set[int]] = {}
+    for f in sorted((kit / "schemas" / "data").glob("*.v*.schema.json")):
+        try:
+            doc = json.loads(f.read_text())
+        except ValueError:
+            continue
+        if any(isinstance(a, dict) and a.get("$ref") == "item/v1" for a in doc.get("allOf", [])):
+            name, _, ver = doc.get("title", "").partition("/v")
+            if name and ver.isdigit():
+                out.setdefault(name, set()).add(int(ver))
+    return out
+
+
+def mode_envs(md: Doc) -> list[str]:
+    """Every env a mode's `roles:` maps (mode-wide and per endpoint), in order."""
+    s, out = md.spec, []
+    for m in [s.get("roles"), *((ep or {}).get("roles") for ep in (s.get("endpoints") or {}).values())]:
+        if isinstance(m, dict):
+            out += [e for e in m.values() if isinstance(e, str)]
+    return list(dict.fromkeys(out))
 
 
 def ruleset(kit: Path, name: str) -> list[dict]:
@@ -145,6 +172,7 @@ class Doc:
     spec: dict
     lineage: list = field(default_factory=list)   # Mode: own folder, then each ancestor's (extends), nearest first
     parent: str | None = None                      # Mode: the mode it extends
+    config_files: list = field(default_factory=list)   # Mode: config schemas, root ancestor first (each extends the last)
 
     @property
     def dir(self) -> Path:
@@ -201,7 +229,9 @@ class Kit:
                 return
             d = modes[name]
             parent = d.spec.get("extends")
+            own = d.spec.get("config")
             if not parent:
+                d.config_files = [d.dir / own] if own else []
                 done[name] = True
                 return
             if parent == name or parent in trail:
@@ -213,6 +243,8 @@ class Kit:
             resolve(parent, [*trail, name])
             p = modes[parent]
             d.spec = merge_mode(p.spec, d.spec, p.dir, d.dir)
+            own_path = d.dir / own if own else None
+            d.config_files = [*p.config_files, *([own_path] if own_path and own_path not in p.config_files else [])]
             d.lineage, d.parent = [d.dir, *p.dirs], parent
             full = {"apiVersion": "agentbay/v2", "kind": "Mode", "metadata": d.meta,
                     "spec": {k: v for k, v in d.spec.items() if k != "extends"}}
@@ -275,7 +307,7 @@ class Kit:
             name = f"{meta['name']}/v{spec['version']}"
             want = f"{meta['name']}.v{spec['version']}.yaml"
             if f.name != want:
-                raise SpecError(f"{where}: interface {name} must live in interfaces/{want}")
+                raise SpecError(f"{where}: interface {name} must be in a file named {want}")
         else:
             name = meta["name"]
             expect = f.parent.name if f.name in ("mode.yaml", "connector.yaml") else f.stem
@@ -399,10 +431,11 @@ class ResolvedRole:
     tools: list[str]
     clis: list[str]
     bay_uses: list[str]              # "items.store/v1.sql": dispatcher-mediated reads
-    skills: dict[str, Path]
+    skills: dict[str, Path]          # skill name in the runtime (`<mode>--<skill>`, `<role>--<skill>`) -> folder
     isolation: str
     budget: dict
     access: str = "read"             # the role's access: only "write" gets file-writing tools and write paths
+    skill_names: dict[str, str] = field(default_factory=dict)   # short name (playbooks, prompts) -> runtime name
 
 
 @dataclass
@@ -463,7 +496,7 @@ class ResolvedMode:
     constraints: dict
     needs: list[str]
     playbook: str
-    skills: dict[str, Path]
+    skills: dict[str, Path]           # runtime name `<mode>--<skill>` -> folder (own, then inherited via extends)
     config: dict                      # effective agentbay.config.yaml modes.<name> (minus features)
     dirs: list = field(default_factory=list)   # mode folder, then ancestors' (extends): types are looked up here
     extends: str | None = None
@@ -798,12 +831,13 @@ class _Ctx:
             if lim is not None:
                 budget[k] = min(budget.get(k, lim), lim)
         runtime = ((self.profile.spec.get("runtime") or {}).get(kind) if self.profile else None) or "?"
+        names = role_skill_names(md, rd)
         return ResolvedRole(
             name=rd.name, unit=f"{rd.name}--{mode}", mode=mode, env=env.name, kind=kind, runtime=runtime,
             agent=self.agent, description=rd.description, root=rd.root, prompt=rd.prompt, done_when=rd.done_when,
             rules=rd.rules, uses=uses, inference=self.inference(rd.tier, rd.effort), tools=tools, clis=clis,
-            bay_uses=bay_uses, skills={**mode_skills(md), **rd.skills}, isolation=rd.isolation, budget=budget,
-            access=rd.access)
+            bay_uses=bay_uses, skills={names[sk]: src for sk, src in {**mode_skills(md), **rd.skills}.items()},
+            isolation=rd.isolation, budget=budget, access=rd.access, skill_names=names)
 
 
 def name_units(modes: dict, gaps: list[str] | None = None) -> None:
@@ -824,6 +858,45 @@ def name_units(modes: dict, gaps: list[str] | None = None) -> None:
             gaps.append(f"two units are both named {u.unit} ({seen[u.unit]} and {(u.name, u.mode, u.env)}); rename "
                         f"a role or mode so `<role>--<mode>` stays unique")
         seen[u.unit] = (u.name, u.mode, u.env)
+
+
+def skill_front_matter(text: str) -> tuple[dict, str]:
+    """(front matter, body) of a SKILL.md, CRLF line ends normalised to LF. A file that does not open with a
+    `---` line has no front matter: ({}, text). Raises SpecError when the block never closes, is not YAML or is
+    not a mapping (F-15)."""
+    text = text.replace("\r\n", "\n")
+    lines = text.split("\n")
+    if lines[0].rstrip() != "---":
+        return {}, text
+    for i in range(1, len(lines)):
+        if lines[i].rstrip() == "---":
+            head, body = "\n".join(lines[1:i]), "\n".join(lines[i + 1:])
+            break
+    else:
+        raise SpecError("front matter opens with '---' on line 1 but has no closing '---' line")
+    try:
+        meta = yaml.safe_load(head)
+    except yaml.YAMLError as e:
+        raise SpecError(f"front matter is not valid YAML: {e}") from e
+    if meta is None:
+        meta = {}
+    if not isinstance(meta, dict):
+        raise SpecError("front matter must be a YAML mapping (name, description)")
+    return meta, body
+
+
+SKILL_NAME_MAX = 64        # Claude Code: a skill name (its folder and SKILL.md `name:`) is [a-z0-9-], at most 64
+
+
+def skill_id(owner: str, short: str) -> str:
+    """A skill's runtime name: `<mode>--<skill>` for a mode's skills (own and inherited, so each mode has its own
+    namespace and two modes' same-named skills never overwrite each other), `<role>--<skill>` for a role's."""
+    return f"{owner}--{short}"
+
+
+def role_skill_names(md: Doc, rd) -> dict[str, str]:
+    """Short name -> runtime name for a role in a mode: the mode's skills, the role's own replacing same-named ones."""
+    return {**{sk: skill_id(md.name, sk) for sk in mode_skills(md)}, **{sk: skill_id(rd.name, sk) for sk in rd.skills}}
 
 
 def mode_skills(md: Doc) -> dict[str, Path]:
@@ -906,7 +979,8 @@ def resolve_mode(kit: Kit, md: Doc, ctx: _Ctx, warnings: list[str] | None = None
         name=name, version=md.meta["version"], root=md.root, purpose=s["purpose"].strip(), path=md.dir,
         coordinator=s.get("coordinator"), roles={rn: kit.env_name(env) for rn, env in roles.items()},
         features=features, constraints=constraints, needs=needs,
-        playbook=pb_file.read_text() if pb_file.exists() else "", skills=mode_skills(md), config=mcfg,
+        playbook=pb_file.read_text() if pb_file.exists() else "",
+        skills={skill_id(name, sk): src for sk, src in mode_skills(md).items()}, config=mcfg,
         dirs=list(md.dirs), extends=md.parent, coordinator_unit=coord_unit)
 
 
@@ -925,6 +999,56 @@ def _mode_roles(kit: Kit, md: Doc, ctx: _Ctx, roles: dict) -> ResolvedRole | Non
     return None
 
 
+CHILD_CONFIG_KEYS = ("type", "properties", "$defs", "title", "description", "$schema", "required",
+                     "additionalProperties")   # F-13: a child's config schema may use these top-level keywords only;
+                                               # N-5: `type`/`additionalProperties` only with the parent's value
+
+
+def config_schema(kit: Kit, md: Doc, gaps: list[str]) -> dict | None:
+    """The mode's config schema: its root ancestor's, extended by each descendant's along `extends` (a child's
+    `config:` adds properties; redefining an inherited key is an error - change a default through configDefaults).
+    None when the mode takes no settings."""
+    out = None
+    for cp in md.config_files:
+        if not cp.exists():
+            gaps.append(f"mode {md.name}: config schema {os.path.relpath(cp, kit.root)} not found")
+            continue
+        sch = json.loads(cp.read_text())
+        if out is None:
+            out = copy.deepcopy(sch)
+            continue
+        rel = os.path.relpath(cp, kit.root)
+        for k in sch:
+            if k not in CHILD_CONFIG_KEYS:
+                gaps.append(f"mode {md.name}: config schema {rel} uses top-level keyword '{k}', which a child's config "
+                            f"schema may not use (it only adds settings; allowed: {', '.join(CHILD_CONFIG_KEYS)})")
+        for k in ("type", "additionalProperties"):     # N-5: may restate the parent's value, never change it
+            if k in sch and (k not in out or sch[k] != out[k]):
+                gaps.append(f"mode {md.name}: config schema {rel} sets top-level '{k}' to {json.dumps(sch[k])}, but "
+                            f"the parent's is {json.dumps(out[k]) if k in out else 'unset'}; a child may only "
+                            f"restate the parent's '{k}' - drop it or make it equal")
+        defs = out.get("$defs") or {}
+        for k in sch.get("$defs") or {}:
+            if k in defs:
+                gaps.append(f"mode {md.name}: config schema {rel} redefines inherited $defs '{k}'; "
+                            f"give the child's definition another name")
+        props = out.setdefault("properties", {})
+        for k, v in (sch.get("properties") or {}).items():
+            if k in props:
+                gaps.append(f"mode {md.name}: config schema {os.path.relpath(cp, kit.root)} redefines inherited "
+                            f"setting '{k}'; a child's config schema only adds settings - drop '{k}' from it and "
+                            f"set its default with configDefaults")
+                continue
+            props[k] = copy.deepcopy(v)
+        out["required"] = list(dict.fromkeys([*out.get("required", []), *sch.get("required", [])])) or None
+        if out["required"] is None:
+            out.pop("required")
+        out.setdefault("$defs", {}).update({k: v for k, v in (sch.get("$defs") or {}).items() if k not in defs})
+        if not out["$defs"]:
+            out.pop("$defs")
+    return out
+
+
 def _mode_config(kit: Kit, md: Doc, gaps: list[str]) -> tuple[dict, dict]:
     """The mode's effective settings (agentbay.config.yaml over the config schema's defaults and the mode's
     configDefaults) and its per-feature settings."""
@@ -932,11 +1056,9 @@ def _mode_config(kit: Kit, md: Doc, gaps: list[str]) -> tuple[dict, dict]:
     s, name = md.spec, md.name
     mcfg, feat_cfg = cfgmod.mode_settings(kit.config, name)
     if s.get("config"):
-        cp = md.dir / s["config"]
-        if not cp.exists():
-            gaps.append(f"mode {name}: config schema {s['config']} not found")
-        else:
-            mcfg = {**_config_defaults(kit, md, cp, mcfg, gaps), **mcfg}
+        csch = config_schema(kit, md, gaps)
+        if csch is not None:
+            mcfg = {**_config_defaults(kit, md, csch, mcfg, gaps), **mcfg}
     elif mcfg:
         gaps.append(f"agentbay.config.yaml modes.{name}: mode {name} declares no config schema, so it takes no settings")
     if s.get("configDefaults") and not s.get("config"):
@@ -946,11 +1068,11 @@ def _mode_config(kit: Kit, md: Doc, gaps: list[str]) -> tuple[dict, dict]:
     return mcfg, feat_cfg
 
 
-def _config_defaults(kit: Kit, md: Doc, cp: Path, mcfg: dict, gaps: list[str]) -> dict:
+def _config_defaults(kit: Kit, md: Doc, csch: dict, mcfg: dict, gaps: list[str]) -> dict:
     """Check the settings against the config schema; return its `default`s, with the mode's configDefaults
     (a child, usually, replacing some of them instead of copying the schema) applied."""
     name = md.name
-    csch = inline_refs(json.loads(cp.read_text()))
+    csch = inline_refs(csch)
     for e in schema_errors(mcfg, csch):
         gaps.append(f"agentbay.config.yaml modes.{name}: {e}")
     props = csch.get("properties") or {}
@@ -958,7 +1080,7 @@ def _config_defaults(kit: Kit, md: Doc, cp: Path, mcfg: dict, gaps: list[str]) -
     for k, v in (md.spec.get("configDefaults") or {}).items():
         if k not in props:
             gaps.append(f"mode {name}: configDefaults.{k} is not a setting of its config schema "
-                        f"{os.path.relpath(os.path.normpath(cp), kit.root)} (has: {', '.join(props) or 'none'})")
+                        f"{os.path.relpath(os.path.normpath(md.config_files[-1]), kit.root)} (has: {', '.join(props) or 'none'})")
             continue
         errs = schema_errors(v, props[k])
         gaps += [f"mode {name}: configDefaults.{k}: {e.removeprefix('<root>: ')}" for e in errs]
@@ -1168,7 +1290,7 @@ def _role_step(ctx: _Ctx, md: Doc, ep: dict, st: dict, sw: str, ep_eff, review: 
 
 
 def protected_writes(env: Doc) -> list[str]:
-    """Write paths of env that name the kit's framework/, bay/ or schemas/ explicitly."""
+    """Write paths of env that name a protected kit folder (PROTECTED) explicitly."""
     out = []
     for w in env.spec.get("fs", {}).get("write", []):
         parts = Path(w).parts

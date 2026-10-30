@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "adapter.schema.json",
+  "title": "adapters/<name>/adapter.yaml: a runtime adapter, discovered by folder (protocol bay/adapter.py)",
+  "type": "object",
+  "required": ["name", "module", "class"],
+  "additionalProperties": false,
+  "properties": {
+    "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,40}$", "description": "the runtime name; equals the folder name" },
+    "module": { "type": "string", "pattern": "^[^/\\\\].*\\.py$", "description": "the adapter's module, a path inside the adapter folder" },
+    "class": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "the class in `module` implementing the Adapter protocol" },
+    "description": { "type": "string" }
+  }
+}

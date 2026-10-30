@@ -6,8 +6,9 @@ import sys
 from helpers import KIT, cleanup, kit_for, project, system, tmpdir
 
 from bay import guard, vault
-from bay.adapters import get
-from bay.adapters.claude_code import COORDINATOR_CMDS
+from bay.adapter import get, module
+
+COORDINATOR_CMDS = module("claude-code").COORDINATOR_CMDS
 
 
 def built(config=None):
@@ -292,7 +293,7 @@ def test_protected_kit_dirs_when_the_project_is_the_kit():
     try:
         get("claude-code").build(system(k, k), k, k)
         pol = json.loads((k / ".agentbay/guard.json").read_text())
-        assert pol["protected"] == ["framework", "bay", "schemas"]
+        assert pol["protected"] == ["framework", "bay", "schemas", "adapters"]
         assert tool(k, "builder--delivery", "Write", {"file_path": "bay/guard.py", "content": "x"})[0] == "deny"
         assert tool(k, "builder--delivery", "Write", {"file_path": "framework/roles/x.yaml", "content": "x"})[0] == "deny"
         assert tool(k, "builder--forge--local-authoring", "Write", {"file_path": "modes/x.yaml", "content": "x"})[0] == "pass"
@@ -303,6 +304,19 @@ def test_protected_kit_dirs_when_the_project_is_the_kit():
         assert not any(d.startswith("Edit(//") for d in st["permissions"]["deny"])   # kit inside project
         from bay import lint, model
         assert any("reaches framework/" in w for w in lint.warnings(model.Kit(k, k)))
+    finally:
+        cleanup(k)
+
+
+def test_adapter_code_is_protected_when_the_project_is_the_kit():
+    from helpers import kit_copy
+    k = kit_copy()
+    try:
+        get("claude-code").build(system(k, k), k, k)
+        p = {"file_path": "adapters/claude-code/x.py", "content": "x"}
+        assert tool(k, "builder--forge--local-authoring", "Write", p)[0] == "deny"
+        assert tool(k, "builder--delivery", "Write", p)[0] == "deny"
+        assert tool(k, "builder--forge--framework-dev", "Write", p)[0] == "pass"
     finally:
         cleanup(k)
 

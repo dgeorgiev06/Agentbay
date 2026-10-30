@@ -20,7 +20,7 @@ Turn a plain-language intent into a working, lint-clean mode, feature, connector
 - [DOD-4] (must) Mode and feature files name capabilities only, never concrete tools or connectors.
 - [DOD-5] (must) Every feature has a playbook, rules and at least one test or demo call that exercises it.
 - [DOD-6] (must) Features with write, spend, delete or external-write effects have `review: { when: always }`.
-- [DOD-7] (must) A connector implements an existing interface and ships an offline test with a fake HTTP layer.
+- [DOD-7] (must) A connector implements an existing interface and ships an offline test with a stubbed HTTP layer.
 - [DOD-8] (should) The result needs no edits outside the new files, except one binding line in an env for a connector.
 
 ## Outputs

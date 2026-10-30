@@ -64,7 +64,7 @@ def test_mail_briefing_extends_briefing_and_places_roles_in_local_mail():
 def test_proposal_example_selectors_validate_against_gmail_and_offline():
     cfg = yaml.safe_load((KIT / "agentbay.config.example.yaml").read_text())
     mail = cfg["modes"]["mail-briefing"]
-    assert mail["lookback"] == "30d" and mail["important"] == ["*@kiln.fi", "*@galaxy.com"]
+    assert mail["lookback"] == "30d" and mail["important"] == ["*@partner.example", "*@example.com"]
     assert {"partners", "staking", "news"} <= {x["id"] for x in mail["selectors"]}
     for envs in ({}, OFFLINE):                                                 # gmail-api, then fake-mail
         p = tmpdir() / "proj"
@@ -72,7 +72,7 @@ def test_proposal_example_selectors_validate_against_gmail_and_offline():
         (p / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "envs": envs,
                                                                 "modes": {"mail-briefing": mail}}))
         s = model.resolve(model.Kit(KIT, p))
-        assert s.modes["mail-briefing"].config["important"] == ["*@kiln.fi", "*@galaxy.com"]
+        assert s.modes["mail-briefing"].config["important"] == ["*@partner.example", "*@example.com"]
 
 
 # ------------------------------------------------------------------ the offline path end to end
@@ -216,7 +216,7 @@ def test_a_blocked_source_keeps_cursors_and_reads_and_digest_and_ask_go_on_parti
     st = store(p)
     st.sync()
     before = json.loads((p / ".agentbay/data/mail/mail-briefing/state.json").read_text())["cursors"]
-    _block(p, "fake-mail", "gmail-api: the Gmail login has expired; run `bay auth gmail`")
+    _block(p, "fake-mail", "gmail-api: the Gmail login has expired; run `bay auth gmail-api`")
     st = store(p)
     out = st.sync()
     assert "bay auth gmail" in out["stopped"] and out["sources"]["fake-mail"]["blocked"]
@@ -235,7 +235,7 @@ def test_a_blocked_source_keeps_cursors_and_reads_and_digest_and_ask_go_on_parti
     assert gather["coverage"]["complete"] is False
     digest = {"period": {"from": "2026-10-20T12:00:00Z", "to": "2026-10-27T12:00:00Z"}, "needsReply": [], "asks": [],
               "groups": [], "attachments": [], "coverage": gather["coverage"],
-              "notes": "Gmail was not read: the login expired; run `bay auth gmail`. Stored mail only."}
+              "notes": "Gmail was not read: the login expired; run `bay auth gmail-api`. Stored mail only."}
     r = d.submit(r["callId"], "digest", digest)
     ids = [x["id"] for x in r["next"]["review"]["definitionOfDone"]] + [x["id"] for x in r["next"]["review"]["rules"]]
     r = d.submit(r["callId"], "review", {"items": [{"id": i, "verdict": "pass", "evidence": "ok"} for i in ids]})
@@ -244,14 +244,14 @@ def test_a_blocked_source_keeps_cursors_and_reads_and_digest_and_ask_go_on_parti
     assert r["status"] == "needs-agent" and r["next"]["step"] == "answer"
     ctx = r["next"]["previous"]["context"]
     assert ctx["count"] == 6 and ctx["stale"] is True and "bay auth gmail" in ctx["coverage"]["note"]
-    answer = {"answer": "Dana asked for the withdrawal address (stored mail only; run `bay auth gmail`).",
+    answer = {"answer": "Dana asked for the withdrawal address (stored mail only; run `bay auth gmail-api`).",
               "citations": ["fake-mail:m001"], "confidence": "medium", "coverage": ctx["coverage"]}
     assert d.submit(r["callId"], "answer", answer)["status"] == "partial"
 
 
 def test_a_blocked_source_with_an_empty_store_blocks_digest_and_feed_briefing_behaves_the_same():
     p = project()
-    _block(p, "fake-mail", "gmail-api: there is no Gmail login yet; run `bay auth gmail`")
+    _block(p, "fake-mail", "gmail-api: there is no Gmail login yet; run `bay auth gmail-api`")
     d = dispatch.Dispatcher(system(p), p, clock=clock)
     r = d.call("mail-briefing.digest", {})
     assert r["status"] == "blocked" and "bay auth gmail" in r["reason"]       # nothing stored to read

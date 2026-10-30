@@ -16,7 +16,8 @@ with the plan's `submit` command. Repeat until the call is `done`, `partial` or
 ids (look up a message's url with your use shim: `items.store/v1.get '{"ids": [...]}'`),
 and always repeat the coverage note in plain words.
 
-When the Gmail login expired, `sync` ends `blocked` and a digest or ask ends `partial` on the stored mail; both
-name `bay auth gmail` (in the reason, or in the coverage note). Deliver what the partial call produced, say
-plainly that newer mail was not read, and tell the user to run `./bay.sh auth gmail` (or `.agentbay/bay auth
-gmail`) in their own terminal; it needs their browser and cannot be run for them.
+When the source's login expired, `sync` ends `blocked` and a digest or ask ends `partial` on the stored mail; both
+name the `bay auth <connector>` command to run (in the reason, or in the coverage note). Deliver what the partial
+call produced, say plainly that newer mail was not read, and tell the user to run that command (`./bay.sh auth
+<connector>` or `.agentbay/bay auth <connector>`) in their own terminal; it needs their browser and cannot be run
+for them.

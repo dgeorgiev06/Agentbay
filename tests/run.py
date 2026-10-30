@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Stdlib test runner: python3 tests/run.py [-k substring]. Also runs under pytest."""
+"""Stdlib test runner: python3 tests/run.py [-k substring] [-q]. Also runs under pytest.
+
+-q prints only failures (with their traceback) and the summary line."""
 from __future__ import annotations
 
 import importlib.util
@@ -22,6 +24,7 @@ def files() -> list[Path]:
 
 def main(argv: list[str]) -> int:
     k = argv[argv.index("-k") + 1] if "-k" in argv else ""
+    quiet = "-q" in argv
     passed = failed = 0
     for f in files():
         spec = importlib.util.spec_from_file_location(f"t_{f.parent.parent.name}_{f.stem}", f)
@@ -33,12 +36,13 @@ def main(argv: list[str]) -> int:
             try:
                 getattr(mod, name)()
                 passed += 1
-                print(f"✓ {f.stem}::{name}")
+                if not quiet:
+                    print(f"✓ {f.stem}::{name}")
             except Exception:
                 failed += 1
                 print(f"✗ {f.stem}::{name}")
                 traceback.print_exc()
-    print(f"\n{passed} passed, {failed} failed")
+    print(f"{'' if quiet else chr(10)}{passed} passed, {failed} failed")
     return 1 if failed else 0
 
 

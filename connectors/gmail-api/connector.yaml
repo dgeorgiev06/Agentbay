@@ -10,11 +10,13 @@ metadata:
     Bodies are text/plain or HTML converted to text, with quoted reply chains trimmed. Attachment text (docx,
     txt, csv, md) is extracted in a separate, resource-limited subprocess; PDFs and everything else are kept as
     metadata only. Nothing can send, label, move or delete mail: the connector calls only GET endpoints on
-    gmail.googleapis.com, plus the token endpoint. Log in with `bay auth gmail`.
+    gmail.googleapis.com, plus the token endpoint. Log in with `bay auth gmail-api`.
   version: 0.1.0
 spec:
   implements: items.source/v1
+  produces: [email/v1]
   entry: gmail_api.py
+  login: cli_login        # `bay auth gmail-api`: browser OAuth login that stores GMAIL_REFRESH_TOKEN
   source: gmail
   window: 520w           # the API reaches the whole mailbox; the mode's lookbackMax (30d) is the real bound
   costPerPostUsd: 0      # Gmail API reads are free (quota only): never billed against spendUsd
@@ -23,7 +25,7 @@ spec:
                          # deletion checks with it and backfills older mail with `until`
   # A field is native only where Gmail search returns at least what the local matcher keeps (a source may return
   # more, never less). Gmail matches subject: and free terms by whole word (`pil` misses "pilot") and its
-  # negation also matches display names (`-from:ruiz` drops dana@kiln.fi sent as "Dana Ruiz"), so subject, text
+  # negation also matches display names (`-from:ruiz` drops dana@partner.example sent as "Dana Ruiz"), so subject, text
   # and not are matched locally on what from/to/in/has/since fetched.
   selectors:
     from: { mode: native, as: "address or domain (from:, which Gmail also matches on the display name)" }

@@ -8,7 +8,7 @@ from helpers import KIT, clock, cleanup, kit_copy, kit_for, project, system, tmp
 from improve_fixtures import CORES, make_ledger, make_transcripts
 
 from bay import dispatch, ledger
-from bay.adapters import get
+from bay.adapter import get
 
 FIXTURE_EVENTS = 18                                   # lines make_ledger writes
 

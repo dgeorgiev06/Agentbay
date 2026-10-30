@@ -3,6 +3,7 @@
 
   validate               lint + resolve every mode endpoint (fails with every gap)
   lint                   structure checks: playbooks, DoD ids, rules, review, role envs
+  boundary --base <ref>  check a change against framework/components.yaml and a proposal's touches:
   build | clean          compile modes/roles into a runtime (claude-code) / remove it
   ls                     modes, endpoints and roles
   catalog [<name>]       the registry (.agentbay/catalog.json): endpoints with schemas, workflows
@@ -20,8 +21,8 @@
   improve decide <id> approve|defer|wontfix   record your decision on a backlog item (approve: terminal only)
   improve weekly [--since 7d]                 scan + audit + triage + backlog; cron it weekly
   secret set <NAME>      store a secret in the keychain (value read from stdin, never echoed)
-  auth gmail             sign in to Gmail (read-only) in your browser; stores GMAIL_REFRESH_TOKEN (first login,
-                         and again whenever a sync says the login expired: weekly for an app in Testing)
+  auth <connector>       run a connector's declared login (e.g. a browser sign-in that stores its token);
+                         interactive terminal only
 
   task new | status | log | note | reclaim     ledger
   note <ref> "text" --instruction              record a mid-run instruction change (read by improve.scan)
@@ -29,6 +30,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import sys
 from pathlib import Path
@@ -112,9 +114,10 @@ def cmd_validate(args):
 
 
 def cmd_build(args):
-    from bay import adapters
+    from bay import adapter
     s = _system(args)
-    rep = adapters.get(args.runtime).build(s, args.project, KIT)
+    rep = adapter.get(args.runtime).build(s, args.project, KIT)
+    adapter.discover(problems=rep.warnings)
     print(f"built {len(s.modes)} modes for {rep.runtime} → {args.project}")
     for f in rep.written:
         print(f"  + {f}")
@@ -125,8 +128,11 @@ def cmd_build(args):
 
 
 def cmd_clean(args):
-    from bay import adapters
-    rep = adapters.get(args.runtime).clean(args.project)
+    from bay import adapter
+    rep = adapter.get(args.runtime).clean(args.project)
+    adapter.discover(problems=rep.warnings)
+    for w in rep.warnings:
+        print(f"  ! {w}")
     for f in rep.removed:
         print(f"  - {f}")
     print("clean")
@@ -408,50 +414,105 @@ def cmd_secret(args):
     print(f"stored {args.name} in {args.provider}")
 
 
+class LoginContext:
+    """The API a connector's `login` entry gets from `bay auth <connector>`: the same secret access a sync gets
+    (names both in the env's `secrets.allow` and the connector's `needs.secrets`, read and store, through the
+    env's provider), an Http limited to its declared hosts that the env allows, the browser and the terminal.
+    The entry runs in-process, so this limits the API it is handed, not what the process can do: a connector's
+    code is trusted the same way during a login as during a sync."""
+
+    def __init__(self, conn, env, prov, http, open_browser, say=print):
+        self.connector, self.env, self.http, self.open_browser, self.say = conn.name, env.name, http, open_browser, say
+        self._prov = prov
+        self._declared = list(conn.spec.get("needs", {}).get("secrets", []))
+        self._acc = vault.SecretAccessor(prov, env.spec.get("secrets", {}).get("allow", []), self._declared,
+                                         conn.name)
+        self.provider = prov.name
+
+    def _check(self, name: str) -> None:
+        if not any(fnmatch.fnmatchcase(name, p) for p in self._declared):
+            raise vault.SecretError(f"connector {self.connector} does not declare secret {name} (needs.secrets)")
+
+    def secret(self, name: str) -> str | None:
+        self._check(name)
+        return self._acc.get(name, optional=True)
+
+    def store_secret(self, name: str, value: str) -> bool:
+        self._check(name)
+        n = len(self._acc.warnings)
+        self._acc.store(name, value)
+        return len(self._acc.warnings) == n
+
+
+def binds_connector(env, conn_name: str) -> bool:
+    """True when the env binds the connector under some interface."""
+    for v in (env.spec.get("bind") or {}).values():
+        vals = v if isinstance(v, list) else [v] if isinstance(v, str) else []
+        if conn_name in vals:
+            return True
+    return False
+
+
+def _login_env(s, conn, name: str | None):
+    """The env to log in through: --env (which must bind the connector), else the one env that binds it."""
+    envs = s.kit.docs["Environment"]
+    if name:
+        if name not in envs:
+            _die(f"✗ unknown env '{name}'")
+        if not binds_connector(envs[name], conn.name):
+            _die(f"✗ env {name} does not bind connector {conn.name}; a login goes through an env that uses it")
+        return envs[name]
+    found = [e for e in envs.values() if binds_connector(e, conn.name)]
+    if len(found) != 1:
+        which = ", ".join(e.name for e in found) or "none"
+        _die(f"✗ {len(found)} envs bind connector {conn.name} ({which}); name one with --env")
+    return found[0]
+
+
 def cmd_auth(args):
-    """`bay auth gmail`: the OAuth installed-app login (PKCE, loopback redirect on 127.0.0.1, gmail.readonly).
-    Interactive terminal only, like `secret set`: an agent can neither start a login nor replace the token."""
+    """`bay auth <connector>`: runs the connector's declared `login` entry (e.g. an OAuth browser login that stores
+    a refresh token). Interactive terminal only, like `secret set`: an agent can neither start a login nor replace
+    a token."""
     import webbrowser
     from bay import connect
     if not sys.stdin.isatty():
-        _die("✗ bay auth gmail needs an interactive terminal (stdin is not a TTY) and your browser; run it yourself "
-             "in a terminal.")
+        _die(f"✗ bay auth {args.connector} needs an interactive terminal (stdin is not a TTY) and your browser; "
+             f"run it yourself in a terminal.")
     s = _system(args)
-    env = s.kit.docs["Environment"].get("local-mail")
-    conn = s.kit.get("Connector", "gmail-api")
-    if env is None or conn is None:
-        _die("✗ env local-mail or connector gmail-api is missing from this kit")
+    conn = s.kit.get("Connector", args.connector)
+    if conn is None:
+        _die(f"✗ unknown connector '{args.connector}' (`bay ls` lists them)")
+    entry = conn.spec.get("login")
+    if not entry:
+        have = sorted(c.name for c in s.kit.docs["Connector"].values() if c.spec.get("login"))
+        _die(f"✗ connector {conn.name} declares no `login` entry (connectors with one: {', '.join(have) or 'none'})")
+    env = _login_env(s, conn, args.env)
     mod = connect._load_module(conn)
-    prov = connect.secrets_provider(s, env)
-    try:
-        cid, csec = prov.get(mod.CLIENT_ID), prov.get(mod.CLIENT_SECRET)
-    except vault.SecretError as e:
-        _die(f"✗ {e}")
-    if not cid or not csec:
-        _die(f"✗ store your Google OAuth client first (a 'Desktop app' client in your Google Cloud project): "
-             f"`bay secret set {mod.CLIENT_ID}` and `bay secret set {mod.CLIENT_SECRET}`")
-    vault.remember(cid)
-    vault.remember(csec)
-    allow = [h for h in ("oauth2.googleapis.com", "gmail.googleapis.com")
+    fn = getattr(mod, entry, None)
+    if not callable(fn):
+        _die(f"✗ connector {conn.name}: {conn.spec['entry']} has no function {entry} (its declared `login`)")
+    allow = [h for h in conn.spec.get("needs", {}).get("network", [])
              if connect.model.host_allowed(h, env.spec.get("network", {}).get("allow", []))]
-    http = connect.Http(allow, who="bay auth gmail")
+    http = connect.Http(allow, who=f"bay auth {conn.name}")
+    ctx = LoginContext(conn, env, connect.secrets_provider(s, env), http, webbrowser.open)
     try:
-        body = mod.login(http, cid, csec, open_browser=webbrowser.open)
-    except connect.ConnectorError as e:
+        fn(ctx)
+    except (connect.ConnectorError, vault.SecretError) as e:
         _die(f"✗ {e}")
-    try:
-        ok = prov.set(mod.REFRESH_TOKEN, body["refresh_token"])
-    except vault.SecretError as e:
-        _die(f"✗ {e}")
-    if not ok:
-        _die(f"✗ secrets provider '{prov.name}' cannot store {mod.REFRESH_TOKEN}; use provider keychain (macOS)")
-    who = mod.account_of(http, body["access_token"])
-    print(f"stored {mod.REFRESH_TOKEN} in {prov.name}" + (f"; signed in to Gmail as {who} (read-only)" if who else ""))
-    print("Google expires this login after 7 days while the OAuth app is in Testing: when a sync is blocked, run "
-          "`bay auth gmail` again.")
 
 
 # ------------------------------------------------------------------ ledger
+def cmd_config(args):
+    """`bay config example`: assemble agentbay.config.example.yaml from each extension's config.example.yaml."""
+    from bay import config as cfgmod, model
+    text = cfgmod.example(model.Kit(model.KIT, None))
+    if args.stdout:
+        sys.stdout.write(text)
+        return
+    (model.KIT / cfgmod.EXAMPLE).write_text(text, encoding="utf-8")
+    print(f"✓ wrote {cfgmod.EXAMPLE}")
+
+
 def cmd_task(args):
     print(protocol.new_task_id())
 
@@ -520,6 +581,26 @@ def cmd_reclaim(args):
     print(f"reclaimed {rid}")
 
 
+def cmd_boundary(args) -> int:
+    from bay import boundary
+    touches, prop = [], None
+    try:
+        if args.proposal:                    # F-14: the proposal's touches as committed at --head
+            pp = Path(args.proposal).resolve()
+            if not pp.is_relative_to(KIT):
+                _die(f"✗ {args.proposal}: the proposal must be a file in this repository")
+            prop = pp.relative_to(KIT).as_posix()
+            touches = boundary.proposal_touches(KIT, args.head, prop)
+        rep = boundary.check(KIT, args.base, args.head, prop, touches, docs=args.docs)
+    except RuntimeError as e:
+        _die(f"✗ {e}")
+    if args.json:
+        _out(rep.to_json())
+    else:
+        print("\n".join(rep.lines()))
+    return rep.exit_code
+
+
 def _hoist_project(argv: list[str]) -> list[str]:
     """Accept --project anywhere (`bay build --project x` as well as `bay --project x build`)."""
     out, proj = [], []
@@ -545,6 +626,13 @@ def main(argv=None):
 
     sub.add_parser("validate").set_defaults(fn=cmd_validate)
     sub.add_parser("lint").set_defaults(fn=lambda a: sys.exit(cmd_lint(a)))
+    bd = sub.add_parser("boundary", help="check a change's paths against core ownership and the proposal's touches:")
+    bd.add_argument("--base", required=True, help="the ref the change starts from (git diff <base>...<head>)")
+    bd.add_argument("--head", default="HEAD")
+    bd.add_argument("--proposal", help="the proposal whose front-matter touches: lists the allowed crossings")
+    bd.add_argument("--docs", action="store_true", help="also run B-11 on the core docs")
+    bd.add_argument("--json", action="store_true")
+    bd.set_defaults(fn=lambda a: sys.exit(cmd_boundary(a)))
     b = sub.add_parser("build"); b.add_argument("--runtime", default="claude-code"); b.set_defaults(fn=cmd_build)
     c = sub.add_parser("clean"); c.add_argument("--runtime", default="claude-code"); c.set_defaults(fn=cmd_clean)
     sub.add_parser("ls").set_defaults(fn=cmd_ls)
@@ -579,7 +667,11 @@ def main(argv=None):
     se = sub.add_parser("secret"); se.add_argument("action", choices=["set"]); se.add_argument("name")
     se.add_argument("--provider", default="keychain"); se.set_defaults(fn=cmd_secret)
     au = sub.add_parser("auth", help="sign in to a source in your browser (interactive terminal only)")
-    au.add_argument("source", choices=["gmail"]); au.set_defaults(fn=cmd_auth)
+    au.add_argument("connector"); au.add_argument("--env", help="env to log in through (default: the one binding it)")
+    au.set_defaults(fn=cmd_auth)
+    cf = sub.add_parser("config", help="example config assembled from the extensions' config.example.yaml")
+    cf.add_argument("action", choices=["example"]); cf.add_argument("--stdout", action="store_true")
+    cf.set_defaults(fn=cmd_config)
 
     im = sub.add_parser("improve", help="improve backlog: decide items, run the weekly pass")
     ims = im.add_subparsers(dest="action", required=True)

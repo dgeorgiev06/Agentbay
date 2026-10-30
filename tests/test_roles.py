@@ -10,7 +10,7 @@ import yaml
 from helpers import KIT, clock, edit_yaml, kit_copy, model, project, system
 
 from bay import dispatch
-from bay.adapters import get
+from bay.adapter import get
 
 NEWS_ENV = """apiVersion: agentbay/v2
 kind: Environment
@@ -204,6 +204,7 @@ def test_a_read_capability_never_gives_read_roles_write_tools_or_paths():
     """Review case t6: a read-effect tools capability bound to Edit/Write and arbitrary CLIs."""
     from bay import lint
     k = kit_copy()
+    (k / "interfaces").mkdir(exist_ok=True)              # user interfaces/ may not exist in a clean checkout
     (k / "interfaces/notes.edit.v1.yaml").write_text(NOTES_IFACE)
     edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["bind"].update(
         {"notes.edit/v1": {"tools": ["Edit", "Write", "Bash"], "clis": ["rm", "git push"]}}))
@@ -271,7 +272,9 @@ def test_lint_warns_when_a_partial_roles_override_splits_a_store_reading_mode():
     (d / "mode.yaml").write_text(
         "apiVersion: agentbay/v2\nkind: Mode\nmetadata: { name: news-briefing, version: 0.1.0, description: news }\n"
         "spec:\n  extends: briefing\n  purpose: Brief me on news from my sources for testing.\n"
-        "  roles: { lead: local-feeds-offline, analyst: local-feeds-offline }\n")
+        "  roles: { lead: local-feeds-offline, analyst: local-feeds-offline }\n  reads: [post/v1]\n")
+    from helpers import self_describe
+    self_describe(k, d)
     ws = lint.warnings(model.Kit(k))
     assert any("modes/news-briefing/mode.yaml:7: mode news-briefing puts role reviewer in env local-feeds, whose "
                "items.store/items.source bindings differ from env local-feeds-offline, where its code steps (sync, "

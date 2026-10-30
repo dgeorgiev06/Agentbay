@@ -3,7 +3,7 @@ complete mode; children override endpoints, workflows, playbooks, rules, review 
 parents are errors; abstract bases are linted but never resolved or installed."""
 import json
 
-from helpers import KIT, assert_gap, edit_yaml, kit_copy, model
+from helpers import KIT, assert_gap, edit_yaml, kit_copy, model, self_describe
 
 from bay import lint
 
@@ -17,8 +17,9 @@ def child(k, name="news-briefing", spec=None):
     d = k / "modes" / name
     d.mkdir(parents=True)
     doc = {"apiVersion": "agentbay/v2", "kind": "Mode", "metadata": {"name": name, "version": "0.1.0"},
-           "spec": {"extends": "briefing", **(spec or {})}}
+           "spec": {"extends": "briefing", "reads": ["post/v1"], **(spec or {})}}   # a briefing child says what it reads (B-6)
     (d / "mode.yaml").write_text(json.dumps(doc))
+    self_describe(k, d)
     return d
 
 
@@ -38,7 +39,7 @@ def test_feed_briefing_is_complete_after_extends():
     m = sysm.modes["feed-briefing"]
     assert m.features["sync"].in_schema["properties"].keys() == {"lookback", "maxItems"}       # parent type
     assert "question" in m.features["ask"].in_schema["properties"]                             # parent type
-    assert {"digest", "grounded-qa", "corpus-sql"} <= set(m.skills)
+    assert {"feed-briefing--digest", "feed-briefing--grounded-qa", "feed-briefing--corpus-sql"} <= set(m.skills)
     assert m.playbook.startswith("# feed-briefing (coordinator playbook")                      # own playbook.md
     assert m.config["selectors"] == [{"id": "home"}]
 
@@ -166,3 +167,80 @@ def test_child_sets_config_defaults_instead_of_copying_the_config_schema():
     assert_gap(kc, "mode feed-briefing: configDefaults.colour is not a setting of its config schema",
                "modes/briefing/config.schema.json")
     assert_gap(kc, "mode feed-briefing: configDefaults.lookback:", "does not match")
+
+
+def test_child_config_schema_extends_its_parents():
+    from helpers import project
+    k = model.Kit(KIT)
+    own = json.loads((KIT / "modes/mail-briefing/config.schema.json").read_text())
+    assert list(own["properties"]) == ["important"]                                   # only its own key
+    md = k.get("Mode", "mail-briefing")
+    assert [p.relative_to(KIT).as_posix() for p in md.config_files] == [
+        "modes/briefing/config.schema.json", "modes/mail-briefing/config.schema.json"]
+    gaps = []
+    merged = model.config_schema(k, md, gaps)
+    assert not gaps and {"lookback", "retention", "selectors", "important"} <= set(merged["properties"])
+    assert merged.get("additionalProperties") is False                                 # the parent's rule holds
+    m = model.resolve(k).modes["mail-briefing"]
+    assert m.config["important"] == [] and m.config["lookback"] == "30d" and m.config["retention"] == "30d"
+    p = project({"modes": {"mail-briefing": {"important": ["dana@partner.example"], "retention": "60d"}}})
+    c = model.resolve(model.Kit(KIT, p)).modes["mail-briefing"].config
+    assert c["important"] == ["dana@partner.example"] and c["retention"] == "60d"
+    p = project({"modes": {"mail-briefing": {"colour": "blue"}}})                    # still closed to unknown keys
+    assert_gap(KIT, "modes.mail-briefing", "colour", project=p)
+
+
+def test_redefining_a_parent_config_key_is_a_lint_error():
+    k = kit_copy()
+    sch = k / "modes/mail-briefing/config.schema.json"
+    doc = json.loads(sch.read_text())
+    doc["properties"]["lookback"] = {"type": "string", "default": "1d"}
+    sch.write_text(json.dumps(doc))
+    want = ("mode mail-briefing: config schema modes/mail-briefing/config.schema.json redefines inherited "
+            "setting 'lookback'")
+    assert_gap(k, want, "configDefaults")
+    assert any(want in e for e in problems(k))                                       # `bay lint` reports it too
+
+
+def test_child_config_schema_defs_collision_and_other_keywords_are_errors_f13():
+    k = kit_copy()
+    sch = k / "modes/mail-briefing/config.schema.json"
+    psch = k / "modes/briefing/config.schema.json"
+    parent = json.loads(psch.read_text())
+    parent["$defs"] = {"duration": {"type": "string", "pattern": "^[0-9]+d$"}}
+    psch.write_text(json.dumps(parent))
+    doc = json.loads(sch.read_text())
+    clash = "duration"
+    doc.setdefault("$defs", {})[clash] = {"type": "string"}
+    doc["$defs"]["mailOnly"] = {"type": "string"}
+    doc["allOf"] = [{"required": ["lookback"]}]
+    doc["patternProperties"] = {"^x-": {}}
+    sch.write_text(json.dumps(doc))
+    rel = "modes/mail-briefing/config.schema.json"
+    want_defs = f"mode mail-briefing: config schema {rel} redefines inherited $defs '{clash}'"
+    want_kw = [f"mode mail-briefing: config schema {rel} uses top-level keyword '{kw}'"
+               for kw in ("allOf", "patternProperties")]
+    for w in [want_defs, *want_kw]:
+        assert_gap(k, w)
+        assert any(w in e for e in problems(k))
+    gaps = []
+    merged = model.config_schema(model.Kit(k, None), model.Kit(k, None).get("Mode", "mail-briefing"), gaps)
+    assert merged["$defs"][clash] == parent["$defs"][clash] and "mailOnly" in merged["$defs"]   # parent's kept
+
+
+def test_child_config_schema_type_and_additional_properties_must_equal_the_parents_n5():
+    k = kit_copy()
+    sch = k / "modes/mail-briefing/config.schema.json"
+    doc = json.loads(sch.read_text())
+    doc["additionalProperties"] = False                    # restates the parent's value: allowed
+    sch.write_text(json.dumps(doc))
+    gaps = []
+    model.config_schema(model.Kit(k, None), model.Kit(k, None).get("Mode", "mail-briefing"), gaps)
+    assert gaps == []
+    rel = "modes/mail-briefing/config.schema.json"
+    for kw, val in (("additionalProperties", True), ("type", "array")):
+        doc2 = dict(doc, **{kw: val})
+        sch.write_text(json.dumps(doc2))
+        want = f"mode mail-briefing: config schema {rel} sets top-level '{kw}' to {json.dumps(val)}"
+        assert_gap(k, want)
+        assert any(want in e for e in problems(k))

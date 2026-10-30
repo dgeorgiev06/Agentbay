@@ -6,6 +6,7 @@ metadata:
   version: 0.2.0
 spec:
   implements: items.source/v1
+  produces: [post/v1]
   entry: fake.py
   source: fake
   costPerPostUsd: 0      # offline: never billed against spendUsd

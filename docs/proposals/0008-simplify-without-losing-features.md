@@ -73,11 +73,11 @@ touches:
   - { path: framework/interfaces/forge.scaffold.v1.yaml, reason: "stage 1: unused proposal 'approved' output removed (56a6b82); also carried from 0006 slice 7a (Part G): 74cdeb9, de3d779, 54203f7", slice: 8 }
   # carried from 0006 slice 7a (Part G)
   - { path: adapters/claude-code/claude_code.py, reason: "carried from 0006 slice 7a (Part G): adapter asks for bay approve and denies Edit of the owner's config, F-7 (008e79d, 838fbb9)", slice: 7 }
-  - { path: connectors/gmail-api/connector.yaml, reason: "carried from 0006 slice 7a (Part G): example domains replace real ones in hints (f06a5b2)", slice: 7 }
-  - { path: connectors/gmail-api/README.md, reason: "carried from 0006 slice 7a (Part G): example domains replace real ones in docs (f06a5b2, b0df5f9)", slice: 7 }
-  - { path: connectors/gmail-api/tests/test_gmail_api.py, reason: "carried from 0006 slice 7a (Part G): example domains and partner name replaced in a test case (f06a5b2, b0df5f9)", slice: 7 }
+  - { path: connectors/gmail-api/connector.yaml, reason: "privacy hygiene: real company domains replaced with example domains (f06a5b2, b0df5f9); not part of 0008 or 0006", slice: 7 }
+  - { path: connectors/gmail-api/README.md, reason: "privacy hygiene: real company domains replaced with example domains (f06a5b2, b0df5f9); not part of 0008 or 0006", slice: 7 }
+  - { path: connectors/gmail-api/tests/test_gmail_api.py, reason: "privacy hygiene: real company domains replaced with example domains (f06a5b2, b0df5f9); not part of 0008 or 0006", slice: 7 }
   - { path: framework/interfaces/workflow.run.v1.yaml, reason: "carried from 0006 slice 7a (Part G): chat approval wording for workflow gates (838fbb9)", slice: 7 }
-  - { path: modes/mail-briefing/config.example.yaml, reason: "carried from 0006 slice 7a (Part G): example domains replace real ones (f06a5b2)", slice: 7 }
+  - { path: modes/mail-briefing/config.example.yaml, reason: "privacy hygiene: real company domains replaced with example domains (f06a5b2, b0df5f9); not part of 0008 or 0006", slice: 7 }
 ---
 # 0008 - Simplify without losing features
 
@@ -176,6 +176,12 @@ CLI target, 15 commands: `check` (validate, lint, boundary), `build`, `clean`, `
   - **Reviewer verdicts** cite the run's recorded outcome and to-do items, item by item.
   - **Aggregation:** one read-only view (`bay status --agents`, no new command) groups runs by role, mode, model and tier over time. `improve` already reads the ledger, so its weekly backlog reads the same figures; this stays inside improve as a plain mode.
   - **Use:** choose tiers and models per role; spot roles whose playbooks produce rework; calibrate reviewers (findings that held up against bugs that slipped past).
+- **Also built in stage 1, beyond `bay plan`:**
+  - `bay dispatched`: the coordinator's dispatch log, so dispatches are logged even when spawn hooks are off.
+  - `bay review-record` and the `review.recorded` event (3bb7364): reviews run outside a framework step become visible to improve, but can never pass a gate.
+  - Commit subjects in `session.episode/v1` (0916492): to tell fix rounds from features.
+  - The claude-transcripts root fix (213a915): improve could read no sessions.
+  - Stage 1 also carries slice 7a of 0006 (chat approvals, gates bound to recorded approvals), whose review fixes F-1..F-7 are included.
 - **How it is kept simple:**
   - no new store: the plan is ledger events, folded by the existing `fold` (line 71);
   - no second input log: the inputs ride on `step.started`;
@@ -195,7 +201,7 @@ Each slice is sized for one builder (about 40 tool calls) and ends with `python3
 5. **Finish 0006.** Item 3. Acceptance: the 0006 step 2 acceptance lines.
 6. **Improve as a mode.** Item 4. Acceptance: `bay/improve/` is gone; `bay call improve.scan` and `improve.audit` give the same findings on the fixture data; a backlog item cannot be approved without the user.
 7. **Workflows.** Item 5. Acceptance: one stage-syntax parser in `bay/`; the workflow tests pass; `cos.run` still starts a project workflow.
-8. **Agent run records.** Item 6 (the owner's addition). Acceptance: a subagent can run `bay plan` and no other `bay` command; plan events are scrubbed, size-limited and refused for another taskId; `step.started` carries inputs; `bay status` lists a dispatched agent even with the spawn hook off; a role-step submit without an outcome is refused; `bay show` prints outcome, to-do progress and inputs; `bay status --agents` groups runs by role, mode, model and tier from the ledger alone; a reviewer verdict cites outcome and to-do items; improve's weekly backlog reads the same figures.
+8. **Agent run records.** Item 6 (the owner's addition). Acceptance: a subagent can run `bay plan` and no other `bay` command; plan events are scrubbed, size-limited and refused for another taskId; `step.started` carries inputs; `bay status` lists a dispatched agent even with the spawn hook off; a role-step submit without an outcome is refused; `bay show` prints outcome, to-do progress and inputs; `bay status --agents` groups runs by role, mode, model and tier from the ledger alone; a reviewer verdict cites outcome and to-do items; improve's weekly backlog reads the same figures. Stage 1 also built, beyond `bay plan`: `bay dispatched` (dispatches are logged even when spawn hooks are off); `bay review-record` (reviews run outside a framework step become visible to improve, but can never pass a gate); commit subjects in git episodes (to tell fix rounds from features); the transcripts fix (improve could read no sessions). Stage 1 carries slice 7a of 0006 (chat approvals, gates bound to recorded approvals), whose review fixes F-1..F-7 are included.
 9. **Docs and release.** README, `docs/DESIGN.md`, `docs/INTERFACES.md`, changelog, version, schema `apiVersion` bump to `agentbay/v3` with v2 documents refused (feature shape and env changed), a scratch-repo build and clean round trip. Acceptance: all checks green with output quoted; a newcomer can follow the README from clone to first result.
 
 ## Decisions needed

@@ -157,9 +157,20 @@ Fixed (one commit each, pushed):
   and the `bay auth` contract (INTERFACES section 4).
 - F-10 `bay boundary` ignores `planned: true`; bay/improve/graph.py listed (slice 2), schemas/ and connectors/*/
   narrowed to this PR's files; later-slice globs stay planned.
-Remaining: F-11 (two envs substitute the same env), F-12 (adapter.yaml lint, discover() reports bad entries,
-sys.modules keyed by folder), F-13 (config schema `$defs` collision / other top-level keywords), F-14 (component
-map at --base, proposal at --head, drop `.github/` from OTHER), F-15 (`_rename_skill` yaml front matter, CRLF).
+- F-11 lint fails when two envs declare `substitutes:` of the same env, naming both (`lint.lint_substitutes`).
+- F-12 `schemas/adapter.schema.json` (named in the component map; touches entry added to 0006); lint checks the
+  schema, `name` = folder and `module` a file inside the folder (`lint.lint_adapters`, imports nothing).
+  `adapter.discover()` leaves bad entries out and reports them (build/clean print them as warnings), so a broken
+  runtime cannot stop another; only the selected runtime's code is imported. sys.modules key = folder with every
+  non-alphanumeric character escaped (`adapter.module_key`): claude-code and claude_code differ.
+- F-13 a child config schema's `$defs` colliding with the parent's, or any top-level keyword outside
+  `model.CHILD_CONFIG_KEYS`, is a resolve gap and a lint error naming it.
+- F-14 `bay boundary` reads framework/components.yaml at `--base` and the proposal's touches at `--head` (git
+  show); an uncommitted proposal is an error. `.github/` dropped from OTHER (unowned: fails unless listed).
+- F-15 `model.skill_front_matter` (yaml, CRLF normalised); lint reports an unclosed/non-YAML/non-mapping SKILL.md
+  front matter; `_rename_skill` writes `name` first, keeps other keys, and on a bad block removes the copy and
+  stops the build.
+All round-1 findings (F-1 to F-15) fixed.
 
 ## Decisions
 - Classification order: other (tests/, HANDOFF.md, docs/proposals/, docs/research/, repo meta, the
@@ -245,27 +256,22 @@ map at --base, proposal at --head, drop `.github/` from OTHER), F-15 (`_rename_s
 
 - (review 1) B-7 skips a manifest-referenced file that lies under a core `owns:` path (feed-briefing's config is
   briefing's schema); core is not scanned. Content types get no manifest check yet (manifest name not fixed).
+- (review 1, F-14) Bootstrap: origin/main has no framework/components.yaml (this PR introduces it), so the
+  boundary falls back to the map at `--head` when `--base` has none and prints "component map: none at <base>;
+  judged by ... at <head> (introduced here)". Once merged, every later change is judged by the base map.
+- (review 1, F-12) The adapter manifest schema lives in schemas/ like the other contracts' (components.yaml
+  `adapter` now has `schema:`), rather than inline in bay/adapter.py.
+- (review 1, F-13) A child's `additionalProperties` is accepted and, as before, the parent's value stands.
 - (review 1) Login secrets: the old "does not declare" check stays first (security test pins its message), then
   the SecretAccessor intersection applies.
 ## Next
-- Review round 1: fix F-11 to F-15 (see Done, "Review round 1"), in that order; then re-request review.
-Slices 1-3 complete: PR 1 ready for independent review. Look closely at:
-- B-7 framework-instance exemption: framework modes/connectors may name each other (not user extensions);
-  core instances (briefing base mode, corpus-store) are not scanned at all; README.md and an extension's
-  `tests/` are exempt (`lint.lint_extension_names`). Is that scope too wide?
-- B-6 env set: an env counts for a mode when its `roles:` map it or it `substitutes:` one of those
-  (`lint.lint_contract_versions`); reads/produces only around items.source/v1.
-- B-8: skill reference detection is a regex over prose ("the X skill", "(X skill)") in `lint._skill_refs`; it
-  can miss other phrasings. `--` separator vs the agentskills.io no-consecutive-hyphens rule. `_rename_skill`
-  rewrites SKILL.md front matter. Proposal text still says `<mode>:<skill>`.
-- B-4/B-11 classification: core wins over a contract's `at:`; agentbay.config.example.yaml classified as other.
-- `adapters/` back in `model.PROTECTED` and framework-dev's `fs.write` gains `adapters` (security-adjacent).
-- `bay auth` LoginContext limits (secrets/network) in bay/cli.py.
+- Confirmation review of PR #10, then slice 4.
 
 ## Test status
-`python3 tests/run.py -q`: 384 passed, 0 failed on a clean checkout of fb8f25f (~3 min; use a long timeout).
+`python3 tests/run.py -q`: 395 passed, 0 failed on a clean checkout of 6ac7402 (~3 min; use a long timeout).
 `bay lint` clean, `bay validate` ok, build + clean on a scratch project ok. `bay boundary --base origin/main
---proposal docs/proposals/0006-...md --docs`: 92 changed paths, 0 failing, 0 B-11 hits.
+--proposal docs/proposals/0006-...md --docs`: 93 changed paths, 0 failing, 0 B-11 hits (map read at HEAD: none at
+origin/main).
 
 ## Open problems
 - DESIGN.md is 1603 words (target ~1.5k); further trimming would cut contract text (safety, store invariants).

@@ -90,6 +90,8 @@ def runs_approve(cmd: str, words: list[str]) -> bool:
 
 # `approve` is not here: no allow rule covers it, so any spelling of it already gets Claude Code's prompt
 ASK_VERBS = {"note": ("dispatch", "review"), "show": ("reclaim",)}
+# a word with one of these may expand to an asked verb (`{dispatch,}`, `${X:-dispatch}`, a backslash-newline join)
+EXPANSION_CHARS = "{$`\n"
 
 
 def _launcher_end(words: list[str], i: int) -> int | None:
@@ -108,11 +110,23 @@ def asked_bay_write(cmd: str) -> str | None:
     that `cmd` runs, judged on the shell words so quoting, escaping and spacing do not hide it; else None.
     Claude Code's ask rules match the command text, which `note 'dispatch'` or `show re\\claim` does not match."""
     try:
-        words = shlex.split(cmd)
+        raw = shlex.split(cmd)
     except ValueError:
-        words = dequote(cmd).split()
+        raw = dequote(cmd).split()
+    words = raw
     if unsafe(cmd):                          # operators glue to words (`x;.agentbay/bay`): split them off
-        words = [t for w in words for t in re.split(r"[;&|<>(){}`$\n\r]+", w) if t]
+        words = [t for w in raw for t in re.split(r"[;&|<>(){}`$\n\r]+", w) if t]
+    for verb, sub in _launcher_calls(words):
+        if sub in ASK_VERBS.get(verb, ()):
+            return f"{verb} {sub}"
+    for verb, sub in _launcher_calls(raw):   # the shell may expand this word into the asked verb: fail toward ask
+        if verb in ASK_VERBS and any(c in sub for c in EXPANSION_CHARS):
+            return f"{verb} <word with an expansion>"
+    return None
+
+
+def _launcher_calls(words: list[str]):
+    """(verb, word after the verb) for every kit CLI launcher in `words`, after its global options."""
     for i in range(len(words)):
         j = _launcher_end(words, i)
         if j is None:
@@ -120,12 +134,8 @@ def asked_bay_write(cmd: str) -> str | None:
         while j < len(words) and words[j].startswith("-"):      # global options; --project (or an abbreviation) takes a value
             w = words[j]
             j += 2 if len(w) >= 3 and "=" not in w and "--project".startswith(w) else 1
-        verb = words[j] if j < len(words) else ""
-        if verb in ASK_VERBS:
-            sub = words[j + 1] if j + 1 < len(words) else ""
-            if sub in ASK_VERBS[verb]:
-                return f"{verb} {sub}"
-    return None
+        if j < len(words) and words[j] in ASK_VERBS:
+            yield words[j], (words[j + 1] if j + 1 < len(words) else "")
 
 
 def main_thread_decision(payload: dict) -> tuple[str, str]:
@@ -582,8 +592,8 @@ def main() -> int:
             print(reason, file=sys.stderr)
             _emit("deny", reason)
             return 2
-        if decision == "allow":
-            _emit("allow", "")
+        if decision in ("allow", "ask"):      # "ask": a `--agent` session (agent_type, no agent_id) in the main thread
+            _emit(decision, reason if decision == "ask" else "")
         return 0
     except Exception as e:  # fail closed for subagents (the main thread: no decision)
         if subagent:

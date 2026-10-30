@@ -1,3 +1,19 @@
+# HANDOFF part 7: T-20261030-b84c (recorded with `bay plan`) - stage 2 of 0008, the dead-code check (item 5 of part 6)
+
+Outcome: `improve.detect/v1.change` and the `deadcode` step in forge.extend exist, are tested, documented and committed on feat/0008-stage2. Done.
+To-do (all done):
+1 (019645d) `change {base}` in framework/interfaces/improve.detect.v1.yaml, framework/connectors/improve-detect (connector.yaml 0.2.0, improve_detect.py, README.md) and `Pipeline.change` (bay/improve/pipeline.py): audits the working tree and the base tree (`git archive` into a temp dir, never run), keeps unused, unused-constant, compat-layer and complexity candidates whose fingerprint is absent at base; returns `{new, existing, warnings}` plus `stopped` when `new` is not empty (the dispatcher ends a code step with `stopped` as blocked).
+2 (9f07820) forge mode.yaml: step `deadcode` (`run: improve.detect/v1.change`, `base: origin/main`) between implement and review; `improve.detect/v1` in needs; local-authoring binds improve-detect, ledger (session.events, review.verdicts) and artifact-graph.
+3 (9f07820) extend playbook: Steps list has `deadcode`; DOD-14.
+4 (9f07820) tests/test_deadcode_check.py: unused function plus compat alias give two new findings (the existing unused function counts as `existing`); a base finding does not count; any revision works and a bad one is refused; a new finding blocks the extend call before review; the step plan has deadcode between implement and review. tests/test_dispatch.py: two extend tests that run past implement stub the step (their kit copy is not a git repo); tests/ is "other" to the boundary, not in touches.
+5 (640d3da, 168a089) README and docs/INTERFACES.md describe the endpoint and the step.
+Note: the base is the literal `origin/main` in mode.yaml; ExtendReq (types, not in touches) has no base field.
+Evidence:
+- `python3 tests/run.py -q`: 453 passed, 0 failed
+- `./bay.sh lint`: ✓ lint clean
+- `./bay.sh validate`: ✓ 6 modes, 21 endpoints, 5 roles (17 role units), 10 envs, 13 connectors resolve (agent profile claude-code)
+- boundary: boundary origin/main...HEAD: 73 changed paths (28 core, 3 docs, 20 extension, 1 feature, 21 other); 0 failing; B-11 docs: 0 hits
+
 # HANDOFF part 6: T-20261030-882f (recorded with `bay plan`) - stage 2 of 0008, step `implement` of C-20261030-0cbe82
 
 Outcome: slice 1 minus the dead-code check, plus carry-overs (a)-(d). PARTIAL: stopped at the tool-call budget. Branch feat/0008-stage2.

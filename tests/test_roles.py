@@ -204,6 +204,7 @@ def test_a_read_capability_never_gives_read_roles_write_tools_or_paths():
     """Review case t6: a read-effect tools capability bound to Edit/Write and arbitrary CLIs."""
     from bay import lint
     k = kit_copy()
+    (k / "interfaces").mkdir(exist_ok=True)              # user interfaces/ may not exist in a clean checkout
     (k / "interfaces/notes.edit.v1.yaml").write_text(NOTES_IFACE)
     edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["bind"].update(
         {"notes.edit/v1": {"tools": ["Edit", "Write", "Bash"], "clis": ["rm", "git push"]}}))

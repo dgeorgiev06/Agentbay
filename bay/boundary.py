@@ -36,7 +36,7 @@ OTHER = ("tests/", "HANDOFF.md", "docs/proposals/", "docs/research/", ".gitignor
 # contracts whose instance names B-11 forbids in the core docs
 NAMED_CONTRACTS = ("mode", "connector", "env", "contentType")
 
-_FENCE = re.compile(r"^\s*(```|~~~)")
+_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 
 
 # ----------------------------------------------------------------- globs
@@ -255,15 +255,19 @@ def classify(path: str, cmap: ComponentMap, touches: list[dict], is_new, proposa
 def doc_hits(texts: dict[str, str], names: dict[str, str]) -> list[dict]:
     """B-11: each line of the core docs (outside fenced blocks) that names an extension instance.
     `names` maps instance name -> contract name."""
-    rxs = [(n, c, re.compile(rf"(?<![\w.-]){re.escape(n)}(?![\w-]|\.\w)")) for n, c in sorted(names.items())]
+    rxs = [(n, c, re.compile(rf"(?<![\w.-]){re.escape(n)}(?![\w-]|\.\w)", re.I)) for n, c in sorted(names.items())]
     out = []
     for fname, text in texts.items():
-        fenced = False
+        fence = ""            # the open fence (CommonMark: closed by the same character, at least as long)
         for i, line in enumerate(text.splitlines(), 1):
-            if _FENCE.match(line):
-                fenced = not fenced
-                continue
-            if fenced:
+            m = _FENCE.match(line)
+            if not fence:
+                if m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+                    fence = m.group(1)
+                    continue
+            else:
+                if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not m.group(2).strip():
+                    fence = ""
                 continue
             for n, c, rx in rxs:
                 if rx.search(line):

@@ -161,6 +161,18 @@ def test_docs_check_names_instances_outside_fences_and_fails():
     assert [h["line"] for h in boundary.doc_hits(texts, {"news": "mode"})] == [1]
 
 
+def test_docs_check_fences_follow_commonmark_and_names_ignore_case():
+    """F-5: a ``` line inside a ~~~ block does not close it (nor does a shorter fence), so text after the real
+    close is checked; names match in any case."""
+    names = {"news": "mode"}
+    t = "~~~\n```\n~~~\nnews here\n"                       # ``` inside ~~~ must not toggle
+    assert [h["line"] for h in boundary.doc_hits({"d": t}, names)] == [4]
+    t = "````\nnews\n```\nstill fenced news\n````\nnews after\n"   # shorter fence does not close
+    assert [h["line"] for h in boundary.doc_hits({"d": t}, names)] == [6]
+    t = "```\nnews\n``` not a close\n```\nNEWS\n"
+    assert [h["line"] for h in boundary.doc_hits({"d": t}, names)] == [5]
+
+
 def test_glob_matching():
     m = boundary.match
     assert m("bay/", "bay/x/y.py") and not m("bay/", "bayx/y.py")

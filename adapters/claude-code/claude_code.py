@@ -449,7 +449,7 @@ class ClaudeCodeAdapter:
         allow = perms.setdefault("allow", [])
         deny = perms.setdefault("deny", [])
         _remove_each(allow, old.get("permissions", []))
-        ask =perms.setdefault("ask", [])
+        ask = perms.setdefault("ask", [])
         _remove_each(deny, old.get("denies", []))
         _remove_each(ask, old.get("denies", []))
         hooks = cfg.setdefault("hooks", {})

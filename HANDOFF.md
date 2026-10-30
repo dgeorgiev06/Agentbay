@@ -1,3 +1,29 @@
+# HANDOFF part 13: T-20261030-9a71 (recorded with `bay plan`) - stage 3 review fixes (verdict-s3-fixed)
+
+Outcome: all four should-fix/nit findings of the stage-3 review fixed; nothing pushed, the proposal not edited, no path outside 0008's touches.
+To-do (one commit each, tests green before each):
+1 DOD-2 (1ed46df): `bay note` / `bay show` refuse any option directly after the command (`_verb_first` in bay/cli.py, run on the raw argv before `--project` is hoisted), so `note dispatch`, `note review` and `show reclaim` always match their ask prefix. The error names the right spelling. Checked every pre-approved prefix (show, status, note, catalog): the only ledger writers in bay/cli.py are `approve` (asked), `note dispatch`, `note review`, `note <ref> text` (a plain note, read-only in effect, stays allowed) and `show reclaim`; status and catalog write nothing. New tests: tests/test_cli_commands.py `test_a_write_verb_must_directly_follow_note_or_show_so_the_ask_rules_match`, tests/test_guard_7a.py (the canonical write forms each start with an ask prefix; the allow list is exactly show, status, note, catalog).
+ Refused spellings (each exits non-zero with "no option may come before the verb", ledger unchanged):
+ - `note --agent x dispatch T-20261030-abcd`
+ - `note --kind note review T-20261030-abcd {}`
+ - `note --project . dispatch T-20261030-abcd --agent x`
+ - `note --project=. dispatch T-20261030-abcd --agent x`
+ - `note --instruction dispatch T-20261030-abcd`
+ - `show --reason r reclaim R-1`
+ - `show --project . reclaim R-1`
+ `--project` before the command (`bay --project . note dispatch ...`) does not match the allow prefix either, so it prompts.
+2 DOD-8 (852d97e): `check --json` needs `--base` (refused like --proposal/--docs); the lint and resolve lines go to stderr, stdout is the boundary JSON only. Test: `test_check_json_prints_only_the_boundary_json_on_stdout` (json.loads of stdout).
+3 DOD-13/R-4 (d75b5b5): docs/INTERFACES.md lines 7, 24, 339 and docs/DESIGN.md:12 corrected (no framework/agents/, no schemas/agent.schema.json; profile is `profile:` in adapters/<name>/adapter.yaml; a mode lists features, not workflows).
+4 DOD-9 (e179ac4, cc521cf): check summary says `21 features`, the COORDINATOR heading is "Mode features (generated)", the catalog help says features. The JSON keys `endpoints` in catalog.json and the `<mode>.<endpoint>` call targets are data formats and stay. The schedule advisory points at the mode's README cron recipe when that README has one (improve: `see the cron recipe in framework/modes/improve/README.md`), else keeps `run ... from cron`; test in tests/test_lint.py. cc521cf also fixes a missing space in the summary I introduced in e179ac4.
+Evidence, last line of each command:
+- `python3 tests/run.py -q`: `471 passed, 0 failed`
+- `./bay.sh check`: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`, after `✓ lint clean` (same four `!` advisories, the improve one now points at the README)
+- `./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: `boundary origin/main...HEAD: 103 changed paths (36 core, 3 docs, 31 extension, 9 feature, 24 other); 0 failing; B-11 docs: 0 hits` (run before this HANDOFF commit)
+- `./bay.sh build --project <scratch>/s3e` (folder was empty): last line `  ! Per-role Bash scope is enforced by the agentbay guard hook; restart Claude Code and accept the workspace trust prompt so hooks run.`
+- `./bay.sh clean --project <scratch>/s3e`: `clean`
+- Glob `**/*` of <scratch>/s3e afterwards: `<scratch>/s3e/agentbay.config.yaml` only.
+Open items: none. Deviations: none.
+
 # HANDOFF part 12: T-20261030-1ca6 (recorded with `bay plan`) - stage 3 of 0008: rename leftovers
 
 Outcome: every "rename leftover" entry of 0008's touches is fixed, plus the four extra hits; the forge coordinator playbook has the `git fetch origin` line. Wording only; no behaviour change, no alias. Branch feat/0008-stage3, nothing pushed, the proposal not edited.

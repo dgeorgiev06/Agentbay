@@ -450,10 +450,16 @@ _IMPORT = re.compile(r"^\s*(?:from\s+([\w.]+)\s+import|import\s+([\w.]+(?:\s*,\s
 
 
 def _extension_files(doc: model.Doc, pats) -> list[Path]:
-    out = set()
+    """The files B-7 scans: the patterns inside the folder (README.md and the folder's top-level tests/ exempt)
+    plus every file the manifest references (entry, config schema), wherever it lives."""
+    out = {doc.path}
     for pat in pats:
         out |= {f for f in doc.dir.glob(pat) if f.is_file() and "__pycache__" not in f.parts
-                and "tests" not in f.relative_to(doc.dir).parts and f.name != "README.md"}
+                and f.relative_to(doc.dir).parts[0] != "tests" and f.name != "README.md"}
+    for key in ("entry", "config"):
+        ref = doc.spec.get(key)
+        if isinstance(ref, str) and (doc.dir / ref).is_file():
+            out.add((doc.dir / ref).resolve())
     return sorted(out)
 
 
@@ -462,7 +468,9 @@ def lint_extension_names(kit: model.Kit) -> list[str]:
     connector or another mode (its `extends:` ancestors excepted); a connector's code and yaml never name a mode
     or another connector, and its code imports no other extension's module. Core instances (under a core
     `owns:` path) are not extensions and are not scanned; framework instances may name each other (they ship and
-    change together, only through forge.extend), never a user extension."""
+    change together, only through forge.extend), never a user extension. A static scan cannot be complete
+    (a name can be computed at run time); it catches the spelled-out forms: the name in any case, its module
+    form, the kernel's `agentbay_connector_*`/`agentbay_adapter_*` keys and imports."""
     cpath = kit.root / "framework" / "components.yaml"
     cmap = boundary.ComponentMap.load(cpath) if cpath.exists() else None
 
@@ -474,7 +482,12 @@ def lint_extension_names(kit: model.Kit) -> list[str]:
 
     docs = [*kit.docs["Mode"].values(), *kit.docs["Connector"].values()]
     names = {d.name: d for d in docs}
-    rxs = {n: re.compile(rf"(?<![\w.-]){re.escape(n)}(?![\w-]|\.\w)") for n in names}
+    def name_rx(n: str):
+        # the name, its module form (gmail_api) and the sys.modules keys the kernel loads it under
+        mod = re.escape(n.replace("-", "_"))
+        return re.compile(rf"(?<![\w.-]){re.escape(n)}(?![\w-]|\.\w)|(?<![\w.-]){mod}(?![\w-]|\.\w)"
+                          rf"|agentbay_(?:connector|adapter)_{mod}(?!\w)", re.I)
+    rxs = {n: name_rx(n) for n in names}
     modules = {Path(d.spec["entry"]).stem: d for d in kit.docs["Connector"].values() if d.spec.get("entry")}
     out = []
     for d in sorted(docs, key=lambda x: (x.kind, x.name)):
@@ -488,6 +501,8 @@ def lint_extension_names(kit: model.Kit) -> list[str]:
                 cur = kit.docs["Mode"].get(cur.parent)
         what = "mode" if d.kind == "Mode" else "connector"
         for f in _extension_files(d, MODE_FILES if d.kind == "Mode" else CONNECTOR_FILES):
+            if f.parent != d.dir and cmap and not f.is_relative_to(d.dir) and cmap.owner(relk(f)):
+                continue                          # a referenced core file (e.g. briefing's schema): core, not scanned
             try:
                 lines = f.read_text().splitlines()
             except (UnicodeDecodeError, OSError):

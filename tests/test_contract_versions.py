@@ -79,3 +79,24 @@ def test_no_extension_names_another_b7():
     assert not any("README.md" in p or "tests/" in p for p in hits), hits
     # the extends parent may be named; a framework mode may name a framework connector
     assert not any("names mode briefing" in p for p in hits) and not any("names connector ledger" in p for p in hits)
+
+
+def test_b7_catches_case_module_forms_nested_tests_and_referenced_files():
+    """F-6 repros: case, the module form, the kernel's sys.modules keys (also inside import_module strings),
+    a tests/ folder below the extension's top level, and a file the manifest references from outside."""
+    k = kit_copy()
+    sub(k, "connectors/x-api/x_api.py", "\n", "\n# see Gmail-API\nimport gmail_api\n"
+        "m = importlib.import_module('agentbay_connector_gmail_api')\nsys.modules['agentbay_adapter_fake_mail']\n")
+    (k / "connectors/x-api/lib/tests").mkdir(parents=True)
+    (k / "connectors/x-api/lib/tests/helper.py").write_text("FROM = 'fake-mail'\n")
+    (k / "shared").mkdir()
+    (k / "shared/x_entry.py").write_text("# tuned for Feed-Briefing\n")
+    edit = k / "connectors/fake/connector.yaml"
+    edit.write_text(edit.read_text().replace("entry: fake.py", "entry: ../../shared/x_entry.py", 1))
+    hits = [p for p in lint.lint_extension_names(model.Kit(k)) if "B-7" in p]
+    assert any("x_api.py:2: connector x-api names connector gmail-api" in p for p in hits), hits
+    assert any("x_api.py:3: connector x-api names connector gmail-api" in p for p in hits), hits
+    assert any("x_api.py:4: connector x-api names connector gmail-api" in p for p in hits), hits
+    assert any("x_api.py:5: connector x-api names connector fake-mail" in p for p in hits), hits
+    assert any("lib/tests/helper.py:1: connector x-api names connector fake-mail" in p for p in hits), hits
+    assert any("shared/x_entry.py:1: connector fake names mode feed-briefing" in p for p in hits), hits

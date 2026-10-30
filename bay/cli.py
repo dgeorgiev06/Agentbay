@@ -734,8 +734,24 @@ def _hoist_project(argv: list[str]) -> list[str]:
     return proj + out
 
 
+def _verb_first(argv: list[str]) -> None:
+    """`note` and `show` are pre-approved by prefix in the generated permissions, and their writes (`note dispatch`,
+    `note review`, `show reclaim`) are asked by a longer prefix. So nothing may stand between the command and its
+    verb: an option there (or `--project`, which is otherwise accepted anywhere) would run the write unasked."""
+    i = 0
+    while i < len(argv) and argv[i].startswith("-"):      # a global option before the command
+        i += 2 if argv[i] == "--project" else 1
+    if i < len(argv) and argv[i] in ("note", "show") and i + 1 < len(argv) and argv[i + 1].startswith("-"):
+        cmd = argv[i]
+        verbs = "`bay note dispatch <taskId> --agent ...`, `bay note review <taskId> '<json>'`" if cmd == "note" \
+            else "`bay show reclaim <runId> --reason ...`"
+        _die(f"✗ `bay {cmd}`: no option may come before the verb or ref (got {argv[i + 1]!r}); put options after it: {verbs}")
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="bay", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    raw = sys.argv[1:] if argv is None else list(argv)
+    _verb_first(raw)
+    ap =argparse.ArgumentParser(prog="bay", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--project", type=Path, default=Path.cwd(), help="target project (default: cwd)")
     sub = ap.add_subparsers(dest="cmd", required=True, metavar="<command>")
 
@@ -817,7 +833,7 @@ def main(argv=None):
     no.add_argument("--input", action="append", help="note dispatch: an input ref (repeat)")
     no.set_defaults(fn=cmd_note)
 
-    args = ap.parse_args(_hoist_project(sys.argv[1:] if argv is None else list(argv)))
+    args = ap.parse_args(_hoist_project(raw))
     args.project = args.project.resolve()
     args.fn(args)
 

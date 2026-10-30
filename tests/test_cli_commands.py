@@ -55,6 +55,36 @@ def test_note_task_mints_an_id_and_dispatch_and_review_take_the_task_first():
         cleanup(p)
 
 
+BYPASSES = (
+    ("note", "--agent", "x", "dispatch", "T-20261030-abcd"),
+    ("note", "--kind", "note", "review", "T-20261030-abcd", "{}"),
+    ("note", "--project", ".", "dispatch", "T-20261030-abcd", "--agent", "x"),
+    ("note", "--project=.", "dispatch", "T-20261030-abcd", "--agent", "x"),
+    ("note", "--instruction", "dispatch", "T-20261030-abcd"),
+    ("show", "--reason", "r", "reclaim", "R-1"),
+    ("show", "--project", ".", "reclaim", "R-1"),
+)
+
+
+def test_a_write_verb_must_directly_follow_note_or_show_so_the_ask_rules_match():
+    """`note`/`show` are pre-approved by prefix; an option before the verb would skip the `note dispatch` /
+    `note review` / `show reclaim` ask rules."""
+    p = project()
+    try:
+        for argv in BYPASSES:
+            r = cli(p, *argv)
+            assert r.returncode != 0 and "no option may come before the verb" in r.stderr, argv
+        assert not any(e["type"] in ("agent.dispatch", "reclaimed") for e in ledger.read(p))
+        # also with no leading --project (how the coordinator types it)
+        r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), *BYPASSES[0]], capture_output=True, text=True)
+        assert r.returncode != 0 and "no option may come before the verb" in r.stderr
+        # the canonical spellings still work
+        assert cli(p, "note", "dispatch", "T-20261030-abcd", "--agent", "x").returncode == 0
+        assert cli(p, "show", "reclaim", "R-1", "--reason", "r").returncode == 0
+    finally:
+        cleanup(p)
+
+
 def test_show_reclaim_marks_a_run_and_status_log_prints_events():
     p = project()
     try:

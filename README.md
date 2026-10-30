@@ -48,7 +48,7 @@ feature:
 
 Code steps run in the dispatcher, agentic steps as subagents; the `reviewer` gives a verdict per Definition of
 Done item. A change to the framework also passes a code step, `deadcode`, before review: `improve.detect/v1.change`
-audits the tree and the tree at `origin/main`, and any new unused code or compatibility layer blocks the call.
+audits the tree and the tree at its merge-base with `origin/main`, and any new unused code or compatibility layer blocks the call.
 
 **Going live:** sign in as the source connector's `README.md` says, delete that env's entry from the `envs:`
 offline switch in agentbay.config.yaml and rebuild. Budget caps stop a sync before it exceeds one.

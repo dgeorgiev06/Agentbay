@@ -19,7 +19,7 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN.md
 
 | # | Contract | Schema / code | Changes when |
 |---|---|---|---|
-| 1 | **Mode** (features: in/out, effects, workflow, playbook, rules, review) | `schemas/mode.schema.json` | you add or change a job |
+| 1 | **Mode** (features: in/out, effects, steps, optional playbook and rules, review) | `schemas/mode.schema.json` | you add or change a job |
 | 2 | **Feature playbook + rules** | `bay/playbook.py`, `schemas/rules.schema.json` | you change a feature's definition of done |
 | 3 | **Role / Agent profile / Environment** | `schemas/{role,agent,environment}.schema.json` | the framework adds a job or an LLM product; you add wiring |
 | 4 | **Capability interface + Connector** | `schemas/{interface,connector}.schema.json`, `bay/connect.py` | you add a capability or a concrete tool |
@@ -33,11 +33,12 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN.md
 | 12 | **Conformance rules** | `framework/rules/conformance.yaml`, `schemas/conformance.schema.json` | you change what "fits the framework" means |
 
 ## 1. Mode and features
-`mode.yaml` declares, per endpoint (= feature), everything about it in one place:
-`in`/`out` (type names in `types/`), `effects`, `workflow`, `playbook`, `rules`, optional
+`mode.yaml` declares each feature (`spec.features.<name>`, called as `<mode>.<name>`), everything about it in one place:
+`in`/`out` (type names in `types/`), `effects`, `steps`, optional `playbook` and `rules` (a feature that runs no
+role needs neither; one that runs a role needs a playbook), optional
 `review: {role, when: always|never, tier?, effort?}`, optional `tier`/`effort` for its role steps and optional
-`roles: {role: env}` overrides for its steps.
-Workflows are ordered steps: `run: <capability>/v<N>.<endpoint>` (code), `role: <role>` (agentic; may set
+`roles: {role: env}` overrides for its steps. There is no separate endpoint, workflow or feature file.
+`steps` are ordered: `run: <capability>/v<N>.<endpoint>` (code), `role: <role>` (agentic; may set
 `tier`, `effort` and `roles: {<its role>: <env>}`), `gate: <text>` (approval; never `when:`; `approves: $in.<field>`
 records that file's path and sha256 with the approval, and a later call naming the same unchanged file skips
 the gate), `{review: here}` (position of the injected review step).
@@ -48,8 +49,8 @@ read-only endpoints of those needs are what the mode's roles may read.
 
 **Inheritance.** `extends: <mode>` is resolved when the kit is loaded (`bay/model.py` `merge_mode`), so the
 resolver, lint, conformance, the detectors and adapters always see a complete mode.
-- **Endpoints** merge key by key, so a child can override one feature's review, in/out, playbook or rules.
-- **Workflows** are replaced per workflow; `coordinator` is replaced.
+- **Features** merge key by key, so a child can override one feature's review, in/out, playbook or rules; a child's
+  `steps` replace that feature's steps whole; `coordinator` is replaced.
 - **`roles`, constraints and configDefaults** merge entry by entry; `needs` are unioned.
 - **Inherited paths** (playbook, rules, config) are rebased to the child's folder. Types, skills and the
   coordinator `playbook.md` are looked up in the child first, then its ancestors.
@@ -154,7 +155,7 @@ The root mode (a framework mode; its README names its endpoints) supplies the pr
 
 A project workflow is `workflows.<name>` in `agentbay.config.yaml`: `description`, `in` (JSON schema) and
 `steps`, each `{id, call: <mode>.<endpoint>, with?, when?}` or `{id, gate: <text>}`, with the same `$in` /
-`$steps.<id>` substitution as mode workflows. The root mode's endpoints return `nextCall`; the coordinator
+`$steps.<id>` substitution as a feature's steps. The root mode's endpoints return `nextCall`; the coordinator
 makes that call the ordinary way (the dispatcher never recurses). A workflow gate passes only with
 `bay approve <W-runId>`. `bay lint` checks structure (ids, `$steps` order, gate references); `bay validate`
 checks targets against the registry and each `with` against the endpoint's input schema, and prints the union
@@ -322,7 +323,7 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
 
 ## 12. Conformance rules
 `framework/rules/conformance.yaml` (`schemas/conformance.schema.json`, linted by `bay lint`): rules with an id,
-level, statement and optional deterministic `check`. An endpoint's
+level, statement and optional deterministic `check`. A feature's
 `review.rulesets: [conformance]` adds them to the reviewer's plan; the framework's audit feature runs every rule
 that has a check and hands the rest to the analyst.
 

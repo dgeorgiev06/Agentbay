@@ -1,4 +1,6 @@
 """bay lint: one test per failure mode, plus the shipped kit is clean."""
+import shutil
+
 from helpers import KIT, edit_yaml, kit_copy, project
 
 from bay import lint, model
@@ -83,18 +85,30 @@ def test_rules_schema_and_unique_ids_and_refs():
     has(k, RULES, "unknown check 'vibes_ok'")
 
 
-def test_every_feature_has_both_files():
+def test_a_file_a_feature_names_must_exist():
     k = kit_copy()
     (k / RULES).unlink()
-    # an inherited endpoint is reported once, as the parent's, at the parent's mode.yaml line, normalized path
-    has(k, "modes/briefing/mode.yaml:21: feature briefing.digest rules file "
+    # an inherited feature is reported once, as the parent's, at the parent's mode.yaml line, normalized path
+    has(k, "modes/briefing/mode.yaml:22: feature briefing.digest rules file "
            "modes/briefing/features/digest/rules.yaml does not exist")
     assert not [x for x in problems(k) if "feed-briefing.digest rules file" in x]
-    has(k, "features/digest: feature folder is missing rules.yaml")
+
+
+def test_a_feature_that_runs_an_agent_needs_a_playbook_and_a_code_only_one_needs_no_files():
     k = kit_copy()
-    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["endpoints"]["ask"].pop("playbook"))
-    has(k, "feature briefing.ask has no `playbook`")
-    assert len([x for x in problems(k) if "ask has no `playbook`" in x]) == 1
+    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["features"]["ask"].pop("playbook"))
+    has(k, "feature briefing.ask runs an agent but has no `playbook`")
+    assert len([x for x in problems(k) if "ask runs an agent but has no `playbook`" in x]) == 1
+    # sync has code steps only: no playbook, no rules, no folder, and lint stays clean
+    k = kit_copy()
+    shutil.rmtree(k / "modes/briefing/features/sync")
+    edit_yaml(k / "modes/briefing/mode.yaml",
+              lambda d: [d["spec"]["features"]["sync"].pop(key) for key in ("playbook", "rules")])
+    assert problems(k) == [], problems(k)
+    s = model.resolve(model.Kit(k))
+    sync = s.modes["feed-briefing"].features["sync"]
+    assert sync.playbook_path is None and sync.dod == [] and sync.rules == []
+    assert all(st.kind == "code" for st in sync.steps)
 
 
 def test_review_settings_only_in_mode_yaml():
@@ -112,14 +126,14 @@ def test_review_settings_only_in_mode_yaml():
 def test_review_role_must_exist_and_be_in_the_mode():
     k = kit_copy()
     edit_yaml(k / "modes/briefing/mode.yaml",
-              lambda d: d["spec"]["endpoints"]["digest"]["review"].update({"role": "ghost"}))
+              lambda d: d["spec"]["features"]["digest"]["review"].update({"role": "ghost"}))
     has(k, "briefing.digest review role 'ghost' does not exist")
-    # once for the base and its children that inherit the endpoint (mail-briefing declares its own digest)
+    # once for the base and its children that inherit the feature (mail-briefing declares its own digest)
     assert len([x for x in problems(k) if "review role 'ghost' does not exist" in x
                 and "modes/briefing/mode.yaml" in x]) == 1
     k = kit_copy()
     edit_yaml(k / "modes/briefing/mode.yaml",
-              lambda d: d["spec"]["endpoints"]["digest"]["review"].update({"role": "researcher"}))
+              lambda d: d["spec"]["features"]["digest"]["review"].update({"role": "researcher"}))
     has(k, "briefing.digest review: role researcher is not in mode briefing `roles:`", "add `researcher: <env>`")
 
 
@@ -150,7 +164,7 @@ def test_role_env_errors_name_mode_feature_and_step():
     k = kit_copy()
     sub(k, base, "{ id: answer, role: analyst,", "{ id: answer, role: analyst, roles: { reviewer: workspace },")
     sub(k, base, "{ id: prune, run: items.store/v1.prune,", "{ id: prune, roles: { lead: workspace }, run: items.store/v1.prune,")
-    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["endpoints"]["ask"].update({"roles": {"builder": "workspace"}}))
+    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["features"]["ask"].update({"roles": {"builder": "workspace"}}))
     has(k, "briefing.ask step answer: `roles:` names reviewer, but this step runs role analyst")
     has(k, "briefing.prune step prune: `roles:` applies to role and review steps only")
     has(k, "briefing.ask: `roles:` gives role builder an env, but mode briefing does not list builder")
@@ -203,7 +217,7 @@ def test_forge_extend_review_cannot_be_disabled_or_weakened():
         k = kit_copy()
 
         def f(d, change=change):
-            ep = d["spec"]["endpoints"]["extend"]
+            ep = d["spec"]["features"]["extend"]
             if change is None:
                 ep.pop("review")
             else:
@@ -242,14 +256,10 @@ def test_modes_must_not_name_connectors_or_tools():
     has(k, "mode names connector 'x-api'")
 
 
-def test_orphan_workflow_and_feature_folder():
-    k = kit_copy()
-    edit_yaml(k / "modes/feed-briefing/mode.yaml",
-              lambda d: d["spec"].setdefault("workflows", {}).update({"unused": [{"id": "x", "run": "items.store/v1.query"}]}))
-    has(k, "workflow 'unused' is not used by any endpoint")
+def test_orphan_feature_folder():
     k = kit_copy()
     (k / "modes/briefing/features/stray").mkdir()
-    has(k, "features/stray: feature folder is not referenced by any endpoint")
+    has(k, "features/stray: feature folder is not referenced by any feature")
 
 
 def test_validate_cli_runs_lint():

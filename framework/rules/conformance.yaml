@@ -11,7 +11,7 @@ metadata:
 rules:
   - id: C-1
     level: must
-    statement: Every workflow step of a feature (code step, role step, gate, injected review) is described in its playbook's Steps section, by step id, role, capability endpoint or gate.
+    statement: Every step of a feature (code step, role step, gate, injected review) is described in its playbook's Steps section, by step id, role, capability endpoint or gate.
     appliesTo: [mode, feature]
     check: playbook_matches_workflow
   - id: C-2

@@ -195,11 +195,11 @@ def _mode(g: Graph, name: str, d, profile: str, rel) -> None:
         g.edge(f"mode:{name}", f"role:{d.spec['coordinator']}", "coordinator")
     for iface in d.spec.get("needs", []):
         g.edge(f"mode:{name}", f"interface:{iface}", "needs")
-    for ep, e in d.spec["endpoints"].items():
+    for ep, e in d.spec["features"].items():
         eid = f"endpoint:{name}.{ep}"
         g.node(eid, "endpoint", f"{name}.{ep}", rel(d.path))
         g.edge(f"mode:{name}", eid, "endpoint")
-        _endpoint_edges(g, name, eid, e, d.spec["workflows"].get(e["workflow"], []), bool(cfg))
+        _endpoint_edges(g, name, eid, e, e["steps"], bool(cfg))
 
 
 def _endpoint_edges(g: Graph, mode: str, eid: str, e: dict, steps: list, has_config: bool) -> None:

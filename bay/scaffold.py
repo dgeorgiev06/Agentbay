@@ -96,8 +96,8 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
         from . import model
         merged = model.Kit(kit).get("Mode", target)          # a mode that extends another inherits its roles
         spec = merged.spec if merged is not None else doc["spec"]
-        if name in spec["endpoints"] or name in spec["workflows"]:
-            raise ScaffoldError(f"mode {target} already has a feature or workflow named '{name}'")
+        if name in spec["features"]:
+            raise ScaffoldError(f"mode {target} already has a feature named '{name}'")
         if role is None:   # default: the mode's first role that is neither its coordinator nor a reviewer
             role = next((r for r in spec["roles"] if r != spec.get("coordinator") and "review" not in r), None)
             if role is None:
@@ -107,11 +107,8 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
         effects = effects or ["read", "write"]
         reviewer = "reviewer" if "reviewer" in spec["roles"] else None
         rv = review_block(effects, reviewer) if reviewer else "      # review: add a reviewer role to the mode to enable"
-        ep = _render("feature/endpoint.yaml", name=name, intent=intent, effects=", ".join(effects), review=rv)
-        wf = _render("feature/workflow.yaml", name=name, role=role)
-        text = mfile.read_text()
-        text = _insert_under(text, "  endpoints:", ep)
-        text = _insert_under(text, "  workflows:", wf)
+        ft = _render("feature/feature.yaml", name=name, intent=intent, effects=", ".join(effects), review=rv, role=role)
+        text = _insert_under(mfile.read_text(), "  features:", ft)
         _write(kit, f"modes/{target}/features/{name}/playbook.md",
                _render("feature/playbook.md", mode=target, name=name, intent=intent, role=role), files)
         _write(kit, f"modes/{target}/features/{name}/rules.yaml", _render("feature/rules.yaml"), files)

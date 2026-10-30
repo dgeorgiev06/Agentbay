@@ -19,15 +19,16 @@ Modes name capabilities, never connectors or tools. Adding a source is one conne
 an env; no mode, role or playbook changes. A user file under `roles/` is an error: a mode
 customizes a role through its playbooks, skills and rules, and a new role is a `forge.extend` proposal.
 
-A mode may `extends:` another. Inheritance is resolved when the kit loads (endpoints merge key by key,
-workflows per workflow, `roles`/constraints/configDefaults entry by entry, needs are unioned, inherited paths
+A mode may `extends:` another. Inheritance is resolved when the kit loads (features merge key by key,
+a child's `steps` replace the feature's whole, `roles`/constraints/configDefaults entry by entry, needs are unioned, inherited paths
 are rebased), so every later stage sees a complete mode. `abstract: true` marks a base that is linted but
 never installed (`modes/briefing`).
 
-## Features and workflows
+## Features
 
-An endpoint (feature) declares, in `mode.yaml`, its input and output types, effects, workflow, playbook,
-rules and optional review block. A workflow is ordered steps:
+A feature is one block under `features:` in `mode.yaml`: its input and output types, effects, ordered `steps`,
+an optional review block, and a playbook and rules file when it needs them (a feature that runs no role needs
+neither; one that runs a role needs a playbook). It is called as `<mode>.<feature>`. The steps are:
 
 - `run: <capability>/v<N>.<endpoint>`: deterministic code, run by the dispatcher in the coordinator's env;
 - `role: <role>`: an agentic step, run by that role in the env the step, feature or mode `roles:` names;

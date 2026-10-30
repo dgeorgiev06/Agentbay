@@ -133,7 +133,7 @@ def test_a_step_override_runs_one_role_in_two_envs_within_one_mode():
     k = kit_copy()
     (k / "envs/local-news.yaml").write_text(NEWS_ENV)
     edit_yaml(k / "modes/briefing/mode.yaml",
-              lambda d: d["spec"]["workflows"]["digest"][2].update({"roles": {"analyst": "local-news"}}))
+              lambda d: d["spec"]["features"]["digest"]["steps"][2].update({"roles": {"analyst": "local-news"}}))
     p = project()
     s = system(p, k)
     themes = next(st for st in s.modes["feed-briefing"].features["digest"].steps if st.id == "themes")
@@ -243,8 +243,8 @@ def test_user_modes_may_not_put_roles_in_framework_envs_other_than_workspace_and
         "spec": {"purpose": "read improve findings", "coordinator": "lead",
                  "roles": {"lead": "improve-local", "analyst": "improve-local"},
                  "needs": ["improve.findings/v1", "session.events/v1"],
-                 "endpoints": {"look": {"workflow": "look", "effects": ["read"], "review": {"when": "never"}}},
-                 "workflows": {"look": [{"id": "a", "role": "analyst", "task": "x"}]}}}))
+                 "features": {"look": {"effects": ["read"], "review": {"when": "never"},
+                                       "steps": [{"id": "a", "role": "analyst", "task": "x"}]}}}}))
     assert_gap(k, "mode spy: role analyst works in the framework env improve-local (spy.look step a)",
                "user modes may put roles only in their own envs (envs/) or the framework envs workspace and research")
     assert_gap(k, "mode spy: role lead works in the framework env improve-local")
@@ -259,7 +259,7 @@ def test_a_units_default_tier_is_checked_against_the_env_cap():
     from helpers import assert_gap
     k = kit_copy()
     edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"].update({"tiers": ["fast", "balanced"]}))
-    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["endpoints"]["digest"]["review"].update(
+    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["features"]["digest"]["review"].update(
         {"tier": "balanced"}))
     assert_gap(k, "mode feed-briefing: role reviewer in env local-feeds: its default tier 'deep' (the model its "
                   "subagent is compiled with) is not allowed by env local-feeds (allows: fast, balanced)")

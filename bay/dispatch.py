@@ -1,6 +1,6 @@
 """`bay call <mode>.<endpoint> '<json>'`: the only way to invoke an endpoint.
 
-A call walks the feature's workflow:
+A call walks the feature's steps:
   code step   -> run the bound connector here (connectors never reach agents)
   role step   -> stop and return a step plan; the coordinator runs the role and
                  resumes with `bay submit <callId> <stepId> '<json>'`
@@ -267,7 +267,7 @@ class Dispatcher:
         return {**self._settings(m), "sources": sorted({d.spec["source"] for d in docs if d and d.spec.get("source")})}
 
     def run_capability(self, mode_name: str, run: str, args: dict) -> dict:
-        """Run one connector endpoint of a mode's capability outside any workflow, in the env its code steps use.
+        """Run one connector endpoint of a mode's capability outside any feature, in the env its code steps use.
         CLI only (e.g. `bay improve decide`); there is no agent path to it."""
         if mode_name not in self.sys.modes:
             raise CallError(f"unknown mode '{mode_name}'")
@@ -533,7 +533,7 @@ class Dispatcher:
         state["review"] = {"failed": [i["id"] for i in failed], "items": len(got)}
         if failed:
             state["status"] = "partial"
-            state["halt"] = True   # a failed must/blocker stops the workflow (e.g. no release after a failed review)
+            state["halt"] = True   # a failed must/blocker stops the feature (e.g. no release after a failed review)
         self._ledger("step.completed", base, summary=f"review: {len(failed)} failed must/blocker",
                      data={"failed": [i["id"] for i in failed]})
 

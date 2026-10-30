@@ -31,9 +31,9 @@ def test_tier_resolution_step_over_feature_over_role_mapped_by_the_profile():
     assert (rv.inference.tier, rv.inference.model, rv.inference.effort) == ("deep", "opus", "high")    # review block
     # a feature's tier beats the role's; a step's beats the feature's; review steps keep their review block's
     edit_yaml(k / "modes/briefing/mode.yaml", lambda d: (
-        d["spec"]["endpoints"]["ask"].update({"tier": "fast", "effort": "low"}),
-        d["spec"]["endpoints"]["digest"].update({"tier": "fast"}),
-        d["spec"]["workflows"]["digest"][2].update({"tier": "deep", "effort": "high"})))
+        d["spec"]["features"]["ask"].update({"tier": "fast", "effort": "low"}),
+        d["spec"]["features"]["digest"].update({"tier": "fast"}),
+        d["spec"]["features"]["digest"]["steps"][2].update({"tier": "deep", "effort": "high"})))
     s = model.resolve(model.Kit(k))
     ans = step(s, "feed-briefing.ask", "answer")
     assert (ans.inference.tier, ans.inference.model, ans.inference.effort) == ("fast", "haiku", "low")
@@ -57,12 +57,12 @@ def test_env_tier_cap_names_mode_feature_step_role_env_and_tier():
     g = assert_gap(k, "feed-briefing.ask step answer: role analyst in env local-feeds runs at tier "
                       "'balanced' (from role analyst's default)", "allows: fast")
     assert "envs/local-feeds.yaml" in g
-    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["workflows"]["ask"][2].update({"tier": "deep"}))
+    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["features"]["ask"]["steps"][2].update({"tier": "deep"}))
     assert_gap(k, "feed-briefing.ask step answer", "tier 'deep' (from the step)", "env local-feeds")
-    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: (d["spec"]["workflows"]["ask"][2].pop("tier"),
-                                                         d["spec"]["endpoints"]["ask"].update({"tier": "deep"})))
+    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: (d["spec"]["features"]["ask"]["steps"][2].pop("tier"),
+                                                         d["spec"]["features"]["ask"].update({"tier": "deep"})))
     assert_gap(k, "feed-briefing.ask step answer", "tier 'deep' (from the feature)")
-    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["endpoints"]["ask"].update({"tier": "fast"}))
+    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["features"]["ask"].update({"tier": "fast"}))
     assert not any("feed-briefing.ask step answer" in x for x in gaps(k))
 
 
@@ -83,7 +83,7 @@ def test_effect_not_allowed_by_env():
 def test_effect_not_declared_by_endpoint():
     k = kit_copy()
     edit_yaml(k / "modes/feed-briefing/mode.yaml",
-              lambda d: d["spec"].setdefault("endpoints", {}).setdefault("sync", {}).update({"effects": ["network", "write"]}))
+              lambda d: d["spec"].setdefault("features", {}).setdefault("sync", {}).update({"effects": ["network", "write"]}))
     assert_gap(k, "feed-briefing.sync step fetch", "effect 'spend'", "not declared by the endpoint")
 
 
@@ -91,7 +91,7 @@ def test_unknown_role_env_and_agent_profile():
     from helpers import project
     k = kit_copy()
     edit_yaml(k / "modes/briefing/mode.yaml",
-              lambda d: d["spec"]["workflows"]["ask"][2].update({"role": "ghost"}))
+              lambda d: d["spec"]["features"]["ask"]["steps"][2].update({"role": "ghost"}))
     assert_gap(k, "feed-briefing.ask step answer", "unknown role 'ghost'")
     k = kit_copy()
     edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["roles"].update({"analyst": "nowhere"}))
@@ -164,7 +164,7 @@ def test_config_schema_rejects_unknown_settings():
 def test_forge_create_cannot_be_placed_in_framework_writing_env():
     k = kit_copy()
     edit_yaml(k / "framework/modes/forge/mode.yaml",
-              lambda d: d["spec"]["endpoints"]["create"].update({"roles": {"builder": "framework-dev"}}))
+              lambda d: d["spec"]["features"]["create"].update({"roles": {"builder": "framework-dev"}}))
     assert_gap(k, "forge.create step fill", "env framework-dev, which can write framework, bay, schemas",
                "only forge.extend may change the framework")
     s = model.resolve(model.Kit(KIT))  # shipped: create uses the mode's env, extend overrides it
@@ -193,7 +193,7 @@ def test_feature_review_block_resolves_to_existing_placeable_reviewer():
                 assert st.role == f.review["role"] and st.role in s.roles and st.env and st.resolved.mode == m.name
     k = kit_copy()
     edit_yaml(k / "modes/briefing/mode.yaml",
-              lambda d: d["spec"]["endpoints"]["digest"]["review"].update({"role": "nobody"}))
+              lambda d: d["spec"]["features"]["digest"]["review"].update({"role": "nobody"}))
     assert_gap(k, "feed-briefing.digest review", "unknown review role 'nobody'")
 
 

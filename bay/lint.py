@@ -51,7 +51,7 @@ def _entry_line(path: Path, section: str, name: str) -> int | None:
 
 
 def _lineage_where(md: model.Doc, section: str, name: str) -> tuple[Path, int]:
-    """The mode.yaml (own, else the nearest ancestor's) whose `section` (endpoints, workflows) declares `name`,
+    """The mode.yaml (own, else the nearest ancestor's) whose `section` (features) declares `name`,
     and that line: inherited parts are reported where they are written."""
     for d in md.dirs:
         i = _entry_line(d / "mode.yaml", section, name)
@@ -61,23 +61,23 @@ def _lineage_where(md: model.Doc, section: str, name: str) -> tuple[Path, int]:
 
 
 def _ep_where(md: model.Doc, ep_name: str) -> tuple[Path, int]:
-    return _lineage_where(md, "endpoints", ep_name)
+    return _lineage_where(md, "features", ep_name)
 
 
 def _ep_key_where(md: model.Doc, ep_name: str, key: str) -> tuple[Path, int]:
-    """The mode.yaml (own, else the nearest ancestor's) whose endpoint `ep_name` sets `key`, and that line;
-    falls back to where the endpoint is declared."""
-    rx_key = re.compile(rf"\b{re.escape(key)}:")
+    """The mode.yaml (own, else the nearest ancestor's) whose feature `ep_name` sets `key`, and that line;
+    falls back to where the feature is declared."""
+    rx_key = re.compile(rf"^ {{6}}{re.escape(key)}:")        # a key of the feature itself, not of a step
     for d in md.dirs:
-        start = _entry_line(d / "mode.yaml", "endpoints", ep_name)
+        start = _entry_line(d / "mode.yaml", "features", ep_name)
         if start is None:
             continue
         lines = (d / "mode.yaml").read_text(encoding="utf-8").splitlines()
         for i in range(start, len(lines)):
             ln = lines[i]
             if i > start and ln.strip() and len(ln) - len(ln.lstrip()) <= 4:
-                break                                    # the next endpoint (or section) starts
-            if rx_key.search(ln.split("#", 1)[0]):
+                break                                    # the next feature (or section) starts
+            if rx_key.search(ln):
                 return d / "mode.yaml", i + 1
     return _ep_where(md, ep_name)
 
@@ -92,11 +92,13 @@ def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[
     mfile, ep_line = _ep_where(md, ep_name)
     target = f"{md.name}.{ep_name}"
     dod_ids: list[str] = []
+    agentic = any("role" in st or "review" in st for st in ep["steps"]) or \
+        bool(ep.get("review") and ep["review"].get("when") == "always")
+    if agentic and not ep.get("playbook"):
+        out.append(f"{_where(mfile, ep_line)}: feature {target} runs an agent but has no `playbook`; add "
+                   f"`playbook: features/{ep_name}/playbook.md` (a feature with only code steps needs none)")
     for key in ("playbook", "rules"):
-        if not ep.get(key):
-            out.append(f"{_where(mfile, ep_line)}: feature {target} has no `{key}`; add "
-                       f"`{key}: features/{ep_name}/{'playbook.md' if key == 'playbook' else 'rules.yaml'}`")
-        elif not (md.dir / ep[key]).exists():
+        if ep.get(key) and not (md.dir / ep[key]).exists():
             out.append(f"{_where(mfile, ep_line)}: feature {target} {key} file {_file(md, ep[key], kit)} does not exist")
 
     if ep.get("playbook") and (md.dir / ep["playbook"]).exists():
@@ -127,11 +129,10 @@ def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[
 
 
 def _step_where(md: model.Doc, ep_name: str, sid: str | None) -> tuple[Path, int]:
-    """Where a workflow step of a feature is written (own mode.yaml, else the nearest ancestor's)."""
-    wf = (md.spec.get("endpoints") or {}).get(ep_name, {}).get("workflow")
+    """Where a step of a feature is written (own mode.yaml, else the nearest ancestor's)."""
     rx = re.compile(rf"\bid:\s*{re.escape(sid or '')}(?![\w-])")
     for d in md.dirs:
-        start = _entry_line(d / "mode.yaml", "workflows", wf) if wf and sid else None
+        start = _entry_line(d / "mode.yaml", "features", ep_name) if sid else None
         if start is None:
             continue
         lines = (d / "mode.yaml").read_text(encoding="utf-8").splitlines()
@@ -158,9 +159,9 @@ def lint_role_envs(md: model.Doc, kit: model.Kit) -> list[str]:
         return [f"{where}: `roles:` puts role {rn} in unknown env '{env}' (have: {have})"
                 for rn, env in (mapping or {}).items() if env and env not in envs]
     problems += [(None, None, m) for m in unknown(f"mode {md.name}", roles)]
-    for ep_name, ep in (md.spec.get("endpoints") or {}).items():
+    for ep_name, ep in (md.spec.get("features") or {}).items():
         problems += [(ep_name, None, m) for m in unknown(f"{md.name}.{ep_name}", ep.get("roles"))]
-        for st in (md.spec.get("workflows") or {}).get(ep.get("workflow"), []):
+        for st in ep.get("steps") or []:
             problems += [(ep_name, st.get("id"), m)
                          for m in unknown(f"{md.name}.{ep_name} step {st.get('id')}", st.get("roles"))]
     for ep_name, sid, msg in problems + model.role_env_problems(md):
@@ -259,8 +260,8 @@ def lint_rules(path: Path, dod_ids: list[str], ep: dict, md: model.Doc) -> list[
         for k in doc:
             if k.lower().startswith("review"):
                 out.append(f"{_where(path, _line_of(path, rf'^{re.escape(k)}:'))}: review settings found in rules file; "
-                           f"configure review only in mode.yaml endpoints.<feature>.review")
-    errs = model.schema_errors(doc, model.schema("rules"))
+                           f"configure review only in mode.yaml features.<feature>.review")
+    errs =model.schema_errors(doc, model.schema("rules"))
     for e in errs:
         out.append(f"{_where(path, 1)}: rules schema: {e}")
     if errs or not isinstance(doc, dict):
@@ -306,18 +307,9 @@ def _kind_enum(md: model.Doc, ep: dict) -> list[str] | None:
 def lint_mode(md: model.Doc, kit: model.Kit) -> list[str]:
     out: list[str] = []
     s = md.spec
-    used = set()
-    for ep_name, ep in s["endpoints"].items():
-        used.add(ep["workflow"])
-        if ep["workflow"] not in s["workflows"]:
-            out.append(f"{_where(*_ep_where(md, ep_name))}: feature "
-                       f"{md.name}.{ep_name} uses unknown workflow '{ep['workflow']}'")
+    for ep_name, ep in s["features"].items():
         out += lint_feature(md, ep_name, ep, kit)
     out += lint_role_envs(md, kit)
-    for wf in s["workflows"]:
-        if wf not in used:
-            out.append(f"{_where(*_lineage_where(md, 'workflows', wf))}: workflow '{wf}' is not "
-                       f"used by any endpoint; remove it or add an endpoint")
     # modes name capabilities, never concrete tools or connectors
     text = md.path.read_text(encoding="utf-8")
     for i, ln in enumerate(text.splitlines(), 1):
@@ -339,16 +331,10 @@ def lint_mode(md: model.Doc, kit: model.Kit) -> list[str]:
     # features folder must not contain orphans
     fdir = md.dir / "features"
     if fdir.is_dir():
-        declared = {Path(ep.get("playbook", "")).parent.name for ep in s["endpoints"].values()}
+        declared = {Path(ep[k]).parent.name for ep in s["features"].values() for k in ("playbook", "rules") if ep.get(k)}
         for d in sorted(p for p in fdir.iterdir() if p.is_dir()):
             if d.name not in declared:
-                out.append(f"{model.rel(d)}: feature folder is not referenced by any endpoint in mode.yaml")
-            have = [n for n in ("playbook.md", "rules.yaml") if (d / n).exists()]
-            if md.parent and have:
-                continue        # an extending mode's folder holds only what it overrides; the rest is inherited
-            for need in ("playbook.md", "rules.yaml"):
-                if need not in have:
-                    out.append(f"{model.rel(d)}: feature folder is missing {need}")
+                out.append(f"{model.rel(d)}: feature folder is not referenced by any feature in mode.yaml")
     return out
 
 
@@ -359,7 +345,7 @@ def lint_roles(kit: model.Kit) -> list[str]:
             raw = yaml.safe_load(d.path.read_text()) or {}
             if "review" in (raw.get("spec") or {}):
                 out.append(f"{_where(d.path, _line_of(d.path, r'^\s+review:'))}: review settings found in {'an' if kind[0] in 'AEIOU' else 'a'} {kind}; "
-                           f"configure review only in mode.yaml endpoints.<feature>.review")
+                           f"configure review only in mode.yaml features.<feature>.review")
     return out
 
 
@@ -585,7 +571,7 @@ def warnings(kit: model.Kit) -> list[str]:
     for md in kit.docs["Mode"].values():
         if md.spec.get("abstract"):
             continue                    # never installed: its children carry the schedule
-        for ep_name, ep in md.spec["endpoints"].items():
+        for ep_name, ep in md.spec["features"].items():
             if ep.get("schedule"):
                 target = f"{md.name}.{ep_name}"
                 run = SCHEDULED_BY.get(target, f"`.agentbay/bay call {target} '{{}}'`")
@@ -623,11 +609,11 @@ def split_store_warnings(kit: model.Kit) -> list[str]:
         if md.spec.get("abstract") or model.STORE_IFACE not in md.spec.get("needs", []):
             continue
         s = md.spec
-        maps = [(None, None, s.get("roles"))] + [(ep, None, e.get("roles")) for ep, e in (s.get("endpoints") or {}).items()]
-        maps += [(ep, st.get("id"), st.get("roles")) for ep, e in (s.get("endpoints") or {}).items()
-                 for st in (s.get("workflows") or {}).get(e.get("workflow"), [])]
+        maps = [(None, None, s.get("roles"))] + [(ep, None, e.get("roles")) for ep, e in (s.get("features") or {}).items()]
+        maps += [(ep, st.get("id"), st.get("roles")) for ep, e in (s.get("features") or {}).items()
+                 for st in e.get("steps") or []]
         for ep_name, sid, mapping in maps:
-            code, _ = model.code_env(kit, md, model.STORE_IFACE, (s.get("endpoints") or {}).get(ep_name))
+            code, _ = model.code_env(kit, md, model.STORE_IFACE, (s.get("features") or {}).get(ep_name))
             if code is None or not isinstance(mapping, dict):
                 continue
             want = [code.spec["bind"].get(k) for k in keys]
@@ -792,7 +778,7 @@ def lint_skill_names(kit: model.Kit) -> list[str]:
         mapped = set((md.spec.get("roles") or {})) | ({md.spec["coordinator"]} if md.spec.get("coordinator") else set())
         known = set(chain) | {sk for rn in mapped for sk in role_skills.get(rn, [])}
         files = [next((d / "playbook.md" for d in md.dirs if (d / "playbook.md").exists()), None)]
-        for ep in (md.spec.get("endpoints") or {}).values():
+        for ep in (md.spec.get("features") or {}).values():
             if ep.get("playbook"):
                 files.append(next((d / ep["playbook"] for d in md.dirs if (d / ep["playbook"]).exists()), None))
         for f in dict.fromkeys(x for x in files if x is not None):

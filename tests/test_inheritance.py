@@ -1,5 +1,5 @@
 """Mode inheritance: `extends` is resolved at load time, so resolver, lint, conformance and adapters see a
-complete mode; children override endpoints, workflows, playbooks, rules, review and roles; cycles and missing
+complete mode; children override features, steps, playbooks, rules, review and roles; cycles and missing
 parents are errors; abstract bases are linted but never resolved or installed."""
 import json
 
@@ -28,11 +28,11 @@ def test_feed_briefing_is_complete_after_extends():
     md = k.get("Mode", "feed-briefing")
     assert md.parent == "briefing" and md.dirs == [KIT / "modes/feed-briefing", KIT / "modes/briefing"]
     s = md.spec
-    assert set(s["endpoints"]) == {"sync", "digest", "ask", "prune"} and s["coordinator"] == "lead"
-    assert s["endpoints"]["digest"]["playbook"] == "../briefing/features/digest/playbook.md"     # rebased
-    assert s["endpoints"]["sync"]["playbook"] == "../briefing/features/sync/playbook.md"        # inherited
-    assert s["endpoints"]["sync"]["rules"] == "../briefing/features/sync/rules.yaml"            # inherited
-    assert s["endpoints"]["sync"]["effects"] == ["network", "spend", "write"]                   # merged per key
+    assert set(s["features"]) == {"sync", "digest", "ask", "prune"} and s["coordinator"] == "lead"
+    assert s["features"]["digest"]["playbook"] == "../briefing/features/digest/playbook.md"     # rebased
+    assert s["features"]["sync"]["playbook"] == "../briefing/features/sync/playbook.md"        # inherited
+    assert s["features"]["sync"]["rules"] == "../briefing/features/sync/rules.yaml"            # inherited
+    assert s["features"]["sync"]["effects"] == ["network", "spend", "write"]                   # merged per key
     assert s["config"] == "../briefing/config.schema.json" and "abstract" not in s and "extends" in s
     assert s["constraints"]["maxItemsPerRun"] == 500 and s["constraints"]["lookbackMax"] == "30d"
     sysm = model.resolve(k)
@@ -44,12 +44,11 @@ def test_feed_briefing_is_complete_after_extends():
     assert m.config["selectors"] == [{"id": "home"}]
 
 
-def test_child_overrides_review_workflow_roles_and_inherits_the_rest():
+def test_child_overrides_review_steps_roles_and_inherits_the_rest():
     k = kit_copy()
-    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("endpoints", {}).update(
-        {"ask": {"review": {"role": "reviewer", "when": "always", "tier": "balanced"}}}))
-    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("workflows", {}).update(
-        {"prune": [{"id": "trim", "run": "items.store/v1.prune", "with": {"olderThan": "7d"}}]}))
+    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("features", {}).update(
+        {"ask": {"review": {"role": "reviewer", "when": "always", "tier": "balanced"}},
+         "prune": {"steps": [{"id": "trim", "run": "items.store/v1.prune", "with": {"olderThan": "7d"}}]}}))
     s = model.resolve(model.Kit(k))
     ask = s.modes["feed-briefing"].features["ask"]
     assert ask.review["tier"] == "balanced" and ask.steps[-1].kind == "review"
@@ -74,10 +73,9 @@ def test_child_overrides_review_workflow_roles_and_inherits_the_rest():
 
 def test_child_can_add_its_own_feature_and_type():
     k = kit_copy()
-    d = child(k, spec={"purpose": "Mail.", "endpoints": {"triage": {
-        "workflow": "triage", "in": "TriageReq", "effects": ["read"], "playbook": "features/triage/playbook.md",
-        "rules": "features/triage/rules.yaml"}},
-        "workflows": {"triage": [{"id": "look", "run": "items.store/v1.query"}]}})
+    d = child(k, spec={"purpose": "Mail.", "features": {"triage": {
+        "in": "TriageReq", "effects": ["read"], "playbook": "features/triage/playbook.md",
+        "rules": "features/triage/rules.yaml", "steps": [{"id": "look", "run": "items.store/v1.query"}]}}})
     (d / "types").mkdir()
     (d / "types/TriageReq.schema.json").write_text('{"type": "object"}')
     (d / "features/triage").mkdir(parents=True)
@@ -106,15 +104,15 @@ def test_missing_parent_and_cycles_are_errors_naming_the_fix():
 
 def test_raw_child_may_be_partial_but_the_merged_mode_must_be_complete():
     k = kit_copy()
-    child(k, spec={"endpoints": {"extra": {"description": "no workflow anywhere"}}})
+    child(k, spec={"features": {"extra": {"description": "no steps anywhere"}}})
     ps = problems(k)
-    assert any("(after extends briefing)" in p and "'workflow' is a required property" in p for p in ps), ps
+    assert any("(after extends briefing)" in p and "'steps' is a required property" in p for p in ps), ps
     k = kit_copy()
     d = k / "modes/orphan"
     d.mkdir()
     (d / "mode.yaml").write_text(json.dumps({"apiVersion": "agentbay/v2", "kind": "Mode",
                                              "metadata": {"name": "orphan", "version": "1"}, "spec": {"purpose": "x"}}))
-    assert any("modes/orphan/mode.yaml" in p and "'endpoints' is a required property" in p for p in problems(k))
+    assert any("modes/orphan/mode.yaml" in p and "'features' is a required property" in p for p in problems(k))
 
 
 def test_abstract_base_is_linted_not_installed():
@@ -137,20 +135,19 @@ def test_lint_lines_of_inherited_parts_point_at_the_parent_mode_yaml():
     assert not any("modes/feed-briefing/mode.yaml:1:" in w for w in ws)
     # a child that sets the schedule itself is reported at its own line
     k = kit_copy()
-    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("endpoints", {}).update(
+    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("features", {}).update(
         {"prune": {"schedule": "weekly"}}))
     own = line_of(k / "modes/feed-briefing/mode.yaml", "      schedule: weekly")
     ws = lint.warnings(model.Kit(k))
     assert any(f"modes/feed-briefing/mode.yaml:{own}: feed-briefing.prune declares" in w for w in ws), ws
-    # an inherited workflow no endpoint uses any more is reported where the parent defines it
+    # steps a child sets itself are reported at the step in the child's own mode.yaml
     k = kit_copy()
-    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: (
-        d["spec"].setdefault("endpoints", {}).update({"prune": {"workflow": "trim"}}),
-        d["spec"].setdefault("workflows", {}).update({"trim": [{"id": "trim", "run": "items.store/v1.prune"}]})))
-    kbase = k / "modes/briefing/mode.yaml"
-    wf = line_of(kbase, "    prune:", after=line_of(kbase, "  workflows:"))
+    edit_yaml(k / "modes/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("features", {}).update(
+        {"prune": {"steps": [{"id": "trim", "roles": {"lead": "workspace"}, "run": "items.store/v1.prune"}]}}))
+    step = line_of(k / "modes/feed-briefing/mode.yaml", "      - id: trim")
     ps = problems(k)
-    assert any(f"modes/briefing/mode.yaml:{wf}: workflow 'prune' is not used" in p for p in ps), ps
+    assert any(f"modes/feed-briefing/mode.yaml:{step}: feed-briefing.prune step trim: `roles:` applies to role and "
+               f"review steps only" in p for p in ps), ps
 
 
 def test_child_sets_config_defaults_instead_of_copying_the_config_schema():

@@ -1,6 +1,6 @@
 """Project workflows: user-configured stages that compose mode endpoints.
 
-A mode workflow (`mode.yaml spec.workflows`) is a list of steps inside one mode, written by the
+A feature's `steps` (`mode.yaml spec.features.<name>.steps`) are a list of steps inside one mode, written by the
 mode's author. A *project* workflow is a list of stages across modes, written by the user in
 `agentbay.config.yaml`:
 
@@ -19,7 +19,7 @@ mode's author. A *project* workflow is a list of stages across modes, written by
             gate: "send the digest?"
 
 Stage kinds are `call` (one `<mode>.<endpoint>`) and `gate` (approval). `with:`, `when:`,
-`$in.<field>` and `$steps.<id>.<field>` mean what they mean in a mode workflow, so there is one
+`$in.<field>` and `$steps.<id>.<field>` mean what they mean in a feature's steps, so there is one
 substitution language; `bay.dispatch.substitute` does the substituting for both.
 
 Composition stops here on purpose: a stage is not executed inside `bay call`. The dispatcher hands

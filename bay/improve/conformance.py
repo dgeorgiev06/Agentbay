@@ -97,7 +97,7 @@ def _rel(kit: Path, p: Path) -> str:
 
 def _features(k: model.Kit):
     for md in k.docs["Mode"].values():
-        for ep_name, ep in md.spec["endpoints"].items():
+        for ep_name, ep in md.spec["features"].items():
             yield md, ep_name, ep
 
 
@@ -122,7 +122,7 @@ def playbook_matches_workflow(kit: Path, rule: dict) -> list[dict]:
             continue
         hline, body = pb.sections["Steps"]
         text = "\n".join(t for _, t in body).lower()
-        steps = list(md.spec["workflows"].get(ep["workflow"], []))
+        steps = list(ep["steps"])
         if (ep.get("review") or {}).get("when") == "always" and not any("review" in s for s in steps):
             steps.append({"id": "review", "review": "here"})
         for st in steps:
@@ -138,7 +138,7 @@ def playbook_matches_workflow(kit: Path, rule: dict) -> list[dict]:
             if not any(t.lower() in text for t in tokens):
                 what = st.get("run") or st.get("role") or ("gate" if "gate" in st else "review")
                 out.append({"file": _rel(kit, pb_path), "line": hline,
-                            "detail": f"{md.name}.{ep_name}: workflow step '{st['id']}' ({what}) is not described "
+                            "detail": f"{md.name}.{ep_name}: step '{st['id']}' ({what}) is not described "
                                       f"in ## Steps"})
     return out
 
@@ -187,7 +187,7 @@ def names_no_tools(kit: Path, rule: dict) -> list[dict]:
     names = list(TOOLS) + sorted(k.docs["Connector"])
     rx = re.compile(r"`(" + "|".join(re.escape(n) for n in names) + r")`")
     for md in k.docs["Mode"].values():
-        step_ids = {st["id"] for wf in md.spec["workflows"].values() for st in wf}
+        step_ids = {st["id"] for ep in md.spec["features"].values() for st in ep["steps"]}
         files = [md.dir / "playbook.md"] + sorted(md.dir.glob("features/*/playbook.md")) + \
             sorted(md.dir.glob("features/*/rules.yaml"))
         for f in files:

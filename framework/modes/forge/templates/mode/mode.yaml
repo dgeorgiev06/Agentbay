@@ -6,20 +6,18 @@ metadata:
   description: "{{intent}}"
 spec:
   purpose: "{{intent}}"
-  endpoints:
+  features:
     run:
       description: TODO what this feature does, in one line.
-      workflow: run
       in: RunReq
       out: RunOut
       effects: [read, write]
       playbook: features/run/playbook.md
       rules: features/run/rules.yaml
       review: { role: reviewer, when: always, tier: balanced, effort: medium }
+      steps:
+        - { id: work, role: builder, out: RunOut, task: "TODO the job this step does" }
   roles: { builder: workspace, reviewer: workspace }      # role -> the env it works in
-  workflows:
-    run:
-      - { id: work, role: builder, out: RunOut, task: "TODO the job this step does" }
   constraints:
     policies: []
   needs: [workspace.read/v1, workspace.write/v1, git.read/v1]   # what its roles may use, in their envs

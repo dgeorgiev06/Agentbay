@@ -1,6 +1,6 @@
 """Load and resolve the agentbay model.
 
-    Mode -> endpoint (feature) -> workflow step -> Role, in the env the mode's `roles:` map names -> Connector
+    Mode -> feature -> step -> Role, in the env the mode's `roles:` map names -> Connector
     Agent profile: one per LLM product (runtime per kind of role, tier -> model), the `profile:` of a runtime
     adapter (adapters/<name>/adapter.yaml), selected once in agentbay.config.yaml (`agent:`, default claude-code)
 
@@ -15,7 +15,7 @@ and the kit root (user content). Both have the same layout:
 
 Roles (roles/<name>.yaml) exist only under framework/; a user file of that kind is an error.
 
-`resolve(kit)` walks every endpoint and fails with ALL gaps at once, each one a
+`resolve(kit)` walks every feature and fails with ALL gaps at once, each one a
 human-readable sentence naming the concept and what to fix. The `System` it
 returns is the only thing adapters and the dispatcher consume.
 """
@@ -110,9 +110,9 @@ def item_kinds(kit: Path = KIT) -> dict[str, set[int]]:
 
 
 def mode_envs(md: Doc) -> list[str]:
-    """Every env a mode's `roles:` maps (mode-wide and per endpoint), in order."""
+    """Every env a mode's `roles:` maps (mode-wide and per feature), in order."""
     s, out = md.spec, []
-    for m in [s.get("roles"), *((ep or {}).get("roles") for ep in (s.get("endpoints") or {}).values())]:
+    for m in [s.get("roles"), *((ep or {}).get("roles") for ep in (s.get("features") or {}).values())]:
         if isinstance(m, dict):
             out += [e for e in m.values() if isinstance(e, str)]
     return list(dict.fromkeys(out))
@@ -300,7 +300,7 @@ class Kit:
         if kind == "Mode" and isinstance(doc.get("spec"), dict) and doc["spec"].get("extends"):
             # a child declares only what it overrides; the merged spec is checked in full after extends
             sch_doc = copy.deepcopy(sch_doc)
-            sch_doc["properties"]["spec"]["properties"]["endpoints"]["additionalProperties"].pop("required", None)
+            sch_doc["properties"]["spec"]["properties"]["features"]["additionalProperties"].pop("required", None)
         errs = schema_errors(doc, sch_doc)
         if errs:
             raise SpecError(f"{where}:\n    " + "\n    ".join(errs))
@@ -338,9 +338,9 @@ def rel(p: Path) -> str:
 
 
 def merge_mode(parent: dict, child: dict, pdir: Path, cdir: Path) -> dict:
-    """A child mode spec over its parent's. Endpoints merge key by key (a child may override review, in/out,
-    workflow, playbook, rules, ...; an endpoint's `roles` merges entry by entry); workflows are replaced per
-    workflow; `roles` (role -> env), constraints and configDefaults merge entry by entry; needs are unioned;
+    """A child mode spec over its parent's. Features merge key by key (a child may override review, in/out,
+    steps, playbook, rules, ...; a feature's `roles` merges entry by entry, its `steps` are replaced whole);
+    `roles` (role -> env), constraints and configDefaults merge entry by entry; needs are unioned;
     anything else the child sets replaces the parent's. Paths the child inherits
     (playbook, rules, config) are rebased so they still resolve from the child's folder. `abstract` is not
     inherited."""
@@ -350,22 +350,20 @@ def merge_mode(parent: dict, child: dict, pdir: Path, cdir: Path) -> dict:
     out = copy.deepcopy(parent)
     out.pop("abstract", None)
     out.pop("extends", None)
-    for ep in out.get("endpoints", {}).values():
+    for ep in out.get("features", {}).values():
         for k in ("playbook", "rules"):
             if ep.get(k):
                 ep[k] = rebase(ep[k])
     if out.get("config"):
         out["config"] = rebase(out["config"])
     for k, v in child.items():
-        if k == "endpoints":
-            eps = out.setdefault("endpoints", {})
+        if k == "features":
+            eps = out.setdefault("features", {})
             for name, e in v.items():
                 merged = {**eps.get(name, {}), **copy.deepcopy(e)}
                 if isinstance(e.get("roles"), dict) and isinstance(eps.get(name, {}).get("roles"), dict):
                     merged["roles"] = {**eps[name]["roles"], **e["roles"]}
                 eps[name] = merged
-        elif k == "workflows":
-            out.setdefault("workflows", {}).update(copy.deepcopy(v))
         elif k in ("constraints", "configDefaults") or (k == "roles" and isinstance(v, dict)
                                                          and isinstance(out.get(k), dict)):
             out[k] = {**out.get(k, {}), **copy.deepcopy(v)}
@@ -467,10 +465,9 @@ class Step:
 
 @dataclass
 class Feature:
-    """One endpoint of a mode: interface (in/out/effects), workflow, playbook, rules, review."""
+    """One feature of a mode: interface (in/out/effects), steps, optional playbook and rules, review."""
     mode: str
     name: str
-    workflow: str
     steps: list[Step]
     effects: list[str]
     in_type: str | None
@@ -680,7 +677,7 @@ def role_env(spec: dict, ep: dict | None, st: dict | None, role: str) -> str | N
 
 
 def step_role(st: dict, ep: dict) -> str | None:
-    """The role a workflow step runs: its `role`, or the review role at a `{review: here}` marker."""
+    """The role a step runs: its `role`, or the review role at a `{review: here}` marker."""
     if "role" in st:
         return st["role"]
     rv = ep.get("review") or {}
@@ -713,13 +710,13 @@ def role_env_problems(md: Doc) -> list[tuple[str | None, str | None, str]]:
     coord = s.get("coordinator")
     if coord:
         check(coord, f"mode {name} coordinator", None, None, None, None)
-    for ep_name, ep in (s.get("endpoints") or {}).items():
+    for ep_name, ep in (s.get("features") or {}).items():
         for rn in (ep.get("roles") or {}):
             if rn not in roles:
                 out.append((ep_name, None, f"{name}.{ep_name}: `roles:` gives role {rn} an env, but mode {name} "
                                            f"does not list {rn} in its `roles:` ({have})"))
         rv = ep.get("review") or {}
-        steps = (s.get("workflows") or {}).get(ep.get("workflow"), [])
+        steps = ep.get("steps") or []
         for st in steps:
             sid = st.get("id")
             where = f"{name}.{ep_name} step {sid}"
@@ -973,7 +970,7 @@ def resolve_mode(kit: Kit, md: Doc, ctx: _Ctx, warnings: list[str] | None = None
     mcfg, feat_cfg = _mode_config(kit, md, gaps)
     constraints = _mode_constraints(md, mcfg, gaps)
     features: dict[str, Feature] = {}
-    for ep_name, ep in s["endpoints"].items():
+    for ep_name, ep in s["features"].items():
         feat = _feature(kit, md, ctx, ep_name, ep, feat_cfg)
         if feat:
             features[ep_name] = feat
@@ -1105,7 +1102,7 @@ def _mode_constraints(md: Doc, mcfg: dict, gaps: list[str]) -> dict:
 
 
 def _feature_steps(kit: Kit, md: Doc, ctx: _Ctx, ep: dict, wf: list, where: str) -> list[Step]:
-    """The workflow's steps, with the review step injected at its `{review: here}` marker (else at the end)."""
+    """The feature's steps, with the review step injected at its `{review: here}` marker (else at the end)."""
     ep_eff = ep["effects"]
     review = ep.get("review")
     review_on = bool(review and review.get("when") == "always")
@@ -1169,11 +1166,7 @@ def _feature_rules(kit: Kit, md: Doc, ep_name: str, ep: dict, feat_cfg: dict, ga
 def _feature(kit: Kit, md: Doc, ctx: _Ctx, ep_name: str, ep: dict, feat_cfg: dict) -> Feature | None:
     gaps, name = ctx.gaps, md.name
     where = f"{name}.{ep_name}"
-    wf = md.spec["workflows"].get(ep["workflow"])
-    if wf is None:
-        gaps.append(f"{where}: unknown workflow '{ep['workflow']}' (have: {', '.join(md.spec['workflows'])})")
-        return None
-    steps = _feature_steps(kit, md, ctx, ep, wf, where)
+    steps = _feature_steps(kit, md, ctx, ep, ep["steps"], where)
     _check_protected(kit, where, steps, gaps)
     pb_path = Path(os.path.normpath(md.dir / ep["playbook"])) if ep.get("playbook") else None
     pb_text, dod = "", []
@@ -1183,7 +1176,7 @@ def _feature(kit: Kit, md: Doc, ctx: _Ctx, ep_name: str, ep: dict, feat_cfg: dic
     rules = _feature_rules(kit, md, ep_name, ep, feat_cfg, gaps)
     review = ep.get("review")
     feat = Feature(
-        mode=name, name=ep_name, workflow=ep["workflow"], steps=steps, effects=ep["effects"],
+        mode=name, name=ep_name, steps=steps, effects=ep["effects"],
         in_type=ep.get("in"), out_type=ep.get("out"),
         in_schema=type_schema(md.dirs, ep.get("in"), where, gaps),
         out_schema=type_schema(md.dirs, ep.get("out"), where, gaps),

@@ -209,7 +209,7 @@ def _texts(kit: Path | None, target: str, cache: dict, warnings: list) -> dict:
             k = model.Kit(kit)
             mode, _, ep = target.partition(".")
             md = k.get("Mode", mode)
-            e = md.spec["endpoints"].get(ep) if md else None
+            e = md.spec["features"].get(ep) if md else None
             if e and e.get("playbook") and (md.dir / e["playbook"]).exists():
                 from .. import playbook
                 out.update({d.id: d.text for d in playbook.parse(md.dir / e["playbook"]).dod})

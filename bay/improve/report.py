@@ -3,7 +3,24 @@ the store writes what they return (after a secret scan)."""
 from __future__ import annotations
 
 
-def backlog(items: list[dict], counts: dict, week: str, generated: str) -> str:
+def agent_runs(agents: dict) -> list[str]:
+    """The recorded agent runs: figures per role/mode/model/tier, and the runs whose to-do list is not ticked off."""
+    groups, plans = agents.get("groups") or [], agents.get("plans") or {}
+    if not groups:
+        return []
+    lines = ["### Agent runs", "",
+             "| role | mode | model | tier | runs | done | not done | to-do | tokens | USD |", "|---|---|---|---|---|---|---|---|---|---|"]
+    for g in groups:
+        lines.append(f"| {g['role']} | {g['mode']} | {g['model']} | {g['tier']} | {g['runs']} | {g['done']} | {g['failed']} "
+                     f"| {g['todoDone']}/{g['todoTotal']} | {g['tokens']} | {g['costUsd']} |")
+    open_ = [(t, p) for t, p in plans.items() if p["done"] < len(p["todo"])]
+    if open_:
+        lines += ["", "Runs with to-do items not ticked off:", ""]
+        lines += [f"- `{t}` {p['done']}/{len(p['todo'])}: {p['outcome'][:160]}" for t, p in open_[-10:]]
+    return lines + [""]
+
+
+def backlog(items: list[dict], counts: dict, week: str, generated: str, agents: dict | None = None) -> str:
     lines = [f"# improve backlog {week}", "",
              f"Generated {generated}. " + ", ".join(f"{n} {s}" for s, n in counts.items() if n) + ".", "",
              "Decide each item in your own terminal: `.agentbay/bay improve decide <id> approve|defer|wontfix`.",
@@ -30,6 +47,7 @@ def backlog(items: list[dict], counts: dict, week: str, generated: str) -> str:
         if f.get("links"):
             lines.append(f"- **Linked:** {', '.join(f['links'])}")
         lines.append("")
+    lines += agent_runs(agents or {})
     return "\n".join(lines) + "\n"
 
 

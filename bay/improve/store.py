@@ -233,13 +233,14 @@ class Store:
                            for f in ranked]}
 
     # ------------------------------------------------------------------ backlog
-    def backlog(self, top: int = 10, week: str | None = None) -> dict:
+    def backlog(self, top: int = 10, week: str | None = None, agents: dict | None = None) -> dict:
+        """`agents` = {"groups": ledger.agent_groups(...), "plans": ledger.plans(...)}: the run records the report cites."""
         week = week or isoweek(self.now)
         items = self.query(status=["open", "approved"])[:top]
         counts = {st: 0 for st in STATUSES}
         for f in self.load().values():
             counts[f["status"]] += 1
-        text = secretscan.scrub(report.backlog(items, counts, week, iso(self.now)))
+        text = secretscan.scrub(report.backlog(items, counts, week, iso(self.now), agents))
         p = self.dir / "reports" / f"{week}.md"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(text, encoding="utf-8")

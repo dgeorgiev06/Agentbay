@@ -583,32 +583,6 @@ def cmd_dispatched(args):
     print("dispatch recorded")
 
 
-def _agent_groups(evs: list[dict]) -> list[dict]:
-    """Agent runs grouped by role, mode, model and tier, from the ledger alone: runs, outcomes and to-do progress."""
-    plans = ledger.plans(evs)
-    groups: dict[tuple, dict] = {}
-    runs = ledger.fold(evs)
-    for e in evs:
-        if e.get("type") != "agent.dispatch":
-            continue
-        d = e.get("data") or {}
-        key = tuple(d.get(k) or "-" for k in ("role", "mode", "model", "tier"))
-        g = groups.setdefault(key, {"role": key[0], "mode": key[1], "model": key[2], "tier": key[3], "runs": 0,
-                                    "done": 0, "failed": 0, "todoDone": 0, "todoTotal": 0, "tokens": 0, "costUsd": 0.0})
-        g["runs"] += 1
-        r = next((x for x in runs.values() if x.task_id == e["taskId"]), None)
-        g["done"] += bool(r and r.state == "done")
-        g["failed"] += bool(r and r.state in ("failed", "blocked", "partial"))
-        pl = plans.get(e["taskId"])
-        if pl:
-            g["todoDone"] += pl["done"]; g["todoTotal"] += len(pl["todo"])
-        for s in evs:
-            if s.get("callId") == e.get("callId") and s.get("step") == e.get("step") and s.get("type") == "step.completed":
-                g["tokens"] += (s.get("tokens") or {}).get("total", 0) if isinstance(s.get("tokens"), dict) else 0
-                g["costUsd"] = round(g["costUsd"] + (s.get("costUsd") or 0), 4)
-    return list(groups.values())
-
-
 def _ago(ts: str) -> str:
     from datetime import datetime, timezone
     if not ts:
@@ -620,7 +594,7 @@ def _ago(ts: str) -> str:
 def cmd_status(args):
     evs = ledger.read(args.project)
     if args.agents:
-        gs = _agent_groups(evs)
+        gs = ledger.agent_groups(evs)
         if args.json:
             print(json.dumps(gs, indent=2))
             return

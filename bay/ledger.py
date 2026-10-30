@@ -131,6 +131,33 @@ def plans(events: list[dict]) -> dict[str, dict]:
     return out
 
 
+def agent_groups(events: list[dict]) -> list[dict]:
+    """Agent runs grouped by role, mode, model and tier, from the ledger alone: runs, outcomes, to-do progress, tokens
+    and cost. Read by `bay status --agents` and by improve's weekly backlog."""
+    plan_of = plans(events)
+    groups: dict[tuple, dict] = {}
+    runs = fold(events)
+    for e in events:
+        if e.get("type") != "agent.dispatch":
+            continue
+        d = e.get("data") or {}
+        key = tuple(d.get(k) or "-" for k in ("role", "mode", "model", "tier"))
+        g = groups.setdefault(key, {"role": key[0], "mode": key[1], "model": key[2], "tier": key[3], "runs": 0,
+                                    "done": 0, "failed": 0, "todoDone": 0, "todoTotal": 0, "tokens": 0, "costUsd": 0.0})
+        g["runs"] += 1
+        r = next((x for x in runs.values() if x.task_id == e["taskId"]), None)
+        g["done"] += bool(r and r.state == "done")
+        g["failed"] += bool(r and r.state in ("failed", "blocked", "partial"))
+        pl = plan_of.get(e["taskId"])
+        if pl:
+            g["todoDone"] += pl["done"]; g["todoTotal"] += len(pl["todo"])
+        for s in events:
+            if s.get("callId") == e.get("callId") and s.get("step") == e.get("step") and s.get("type") == "step.completed":
+                g["tokens"] += (s.get("tokens") or {}).get("total", 0) if isinstance(s.get("tokens"), dict) else 0
+                g["costUsd"] = round(g["costUsd"] + (s.get("costUsd") or 0), 4)
+    return list(groups.values())
+
+
 def read(project: Path) -> list[dict]:
     p = ledger_path(project)
     if not p.exists():

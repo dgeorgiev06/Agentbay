@@ -494,7 +494,7 @@ class ResolvedMode:
     purpose: str
     path: Path
     coordinator: str | None
-    roles: dict                       # role -> env (after agentbay.config.yaml `envs:` substitution)
+    roles: dict                       # role -> env
     features: dict[str, Feature]
     constraints: dict
     needs: list[str]

@@ -307,8 +307,11 @@ def cmd_approve(args):
     ap = st["next"].get("approves")
     if ap:      # the exact content this approval covers; an edit after it makes the gate run again
         print(f"  {ap['path']} at sha256 {ap['sha256']}")
+    sha = (args.sha or "").strip() if by == CHAT_BY else (ap["sha256"] if ap else "")
+    if by == CHAT_BY and ap and not sha:
+        _die(f"✗ --via chat needs --sha <prefix> of the content shown: {ap['path']} at sha256 {ap['sha256']}")
     _confirm(by)
-    _run(lambda: d.approve(args.call, not args.reject, args.reason or "", by=by, quote=quote))
+    _run(lambda: d.approve(args.call, not args.reject, args.reason or "", by=by, quote=quote, sha=sha))
 
 
 def _approve_workflow(args, by: str, quote: str):
@@ -754,6 +757,8 @@ def main(argv=None):
     ap_.add_argument("--via", choices=["tty", "chat"], default="tty",
                      help="chat: relayed by the Chief of Staff; needs approvals: { chat: true } in agentbay.config.yaml")
     ap_.add_argument("--quote", help="--via chat: the owner's exact message approving this gate (recorded in the ledger)")
+    ap_.add_argument("--sha", help="--via chat: sha256 prefix (8+ hex) of the content shown to the owner; the approval "
+                                   "is refused if the file changed")
     ap_.set_defaults(fn=cmd_approve)
 
     for kind in ("mode", "feature", "connector", "env"):

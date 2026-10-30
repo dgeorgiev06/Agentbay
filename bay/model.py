@@ -1135,6 +1135,9 @@ def _feature_steps(kit: Kit, md: Doc, ctx: _Ctx, ep: dict, wf: list, where: str)
         ref = (x.when or "").lstrip("!")
         if ref.startswith("$steps.") and ref.split(".")[1] not in ids[:i]:
             ctx.gaps.append(f"{where} step {x.id}: when: {x.when} names '{ref.split('.')[1]}', which is not an earlier step")
+        if ref.startswith("stale") and x.kind != "code":
+            ctx.gaps.append(f"{where} step {x.id}: `when: {x.when}` is for code steps (it asks a connector's status); "
+                            f"a {x.kind} step takes `$in.<f>` or `$steps.<id>.<f>`")
     for d in {i for i in ids if ids.count(i) > 1}:
         ctx.gaps.append(f"{where}: duplicate step id '{d}'" + (" (the review step is injected from mode.yaml review; "
                         "do not add a step called review)" if d == "review" else ""))

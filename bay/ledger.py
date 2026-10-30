@@ -42,7 +42,7 @@ def append(project: Path, type: str, run_id: str, **fields) -> dict:
     ev.update({k: v for k, v in fields.items() if v not in (None, "", {}, [])})
     from .secretscan import scrub_obj  # secret-shaped text agentbay never resolved (pasted keys, tokens)
     from .vault import redact  # last line of defence: no secret value ever reaches the ledger
-    line = redact(json.dumps(scrub_obj(ev), ensure_ascii=False))
+    line = redact(json.dumps(scrub_obj(ev), ensure_ascii=True))
     # O_APPEND writes of a single short line are atomic enough for parallel hooks.
     with open(ledger_path(project), "a", encoding="utf-8") as f:
         f.write(line + "\n")
@@ -136,11 +136,14 @@ def read(project: Path) -> list[dict]:
     if not p.exists():
         return []
     out = []
-    for line in p.read_text(encoding="utf-8").splitlines():
+    # one event per "\n" line: str.splitlines would also split on U+2028 and friends inside a summary
+    for line in p.read_text(encoding="utf-8").split("\n"):
         try:
-            out.append(json.loads(line))
+            ev = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if isinstance(ev, dict):
+            out.append(ev)
     return out
 
 

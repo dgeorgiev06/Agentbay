@@ -281,8 +281,9 @@ def test_front_matter_marker_grants_nothing():
         for fm in (APPROVED_FM, "status: draft\n", "status: approved\n", ""):
             p = _proposal(k, "0098-not-yet.md", fm)
             r = d.call("forge.extend", {"goal": "build the proposal", "proposal": p})
-            assert r["next"]["step"] == "propose", fm
-            assert not [e for e in ledger.read(k) if e.get("callId") == r["callId"] and e["type"] == "step.skipped"]
+            # an existing proposal has nothing to draft: propose is skipped, the gate runs (the marker passes nothing)
+            assert r["status"] == "awaiting-approval" and r["next"]["step"] == "approve", fm
+            assert [e["step"] for e in ledger.read(k) if e.get("callId") == r["callId"] and e["type"] == "step.skipped"] == ["propose"]
         r = _to_gate(d, p)
         assert r["status"] == "awaiting-approval" and r["next"]["approves"] == {"path": p, "sha256": _sha(k / p)}
         assert "no recorded approval" in r["next"]["why"] and "informational" in r["next"]["why"]
@@ -314,7 +315,7 @@ def test_a_proposal_written_by_the_propose_step_is_bound_to_its_approval():
         assert [e["step"] for e in ledger.read(k) if e.get("callId") == r2["callId"] and e["type"] == "step.skipped"] \
             == ["propose", "approve"]
         (k / path).write_text((k / path).read_text() + "edit\n")          # any edit: both run again
-        assert d.call("forge.extend", {"goal": "build it again", "proposal": path})["next"]["step"] == "propose"
+        assert d.call("forge.extend", {"goal": "build it again", "proposal": path})["next"]["step"] == "approve"
         # artifacts outside docs/proposals/ bind nothing
         r3 = d.call("forge.extend", {"goal": "design something new"})
         r3 = d.submit(r3["callId"], "propose", {"status": "done", "summary": "s", "artifacts": ["README.md"]})
@@ -366,7 +367,7 @@ def test_a_recorded_approval_of_the_unchanged_proposal_skips_the_gate():
             d = dispatch.Dispatcher(system(k, k), k, clock=clock)
             path = _proposal(k, "0099-ok.md", APPROVED_FM)
             cid = _to_gate(d, path)["callId"]
-            r = d.approve(cid, True, by=by, quote=quote)
+            r = d.approve(cid, True, by=by, quote=quote, sha=_sha(k / path))
             assert r["next"]["step"] == "implement"
             ev = _gate_events(k, cid, "step.completed")[-1]
             assert ev["data"]["approves"] == {"path": path, "sha256": _sha(k / path)} and ev["data"]["by"] == by
@@ -410,9 +411,9 @@ def test_an_edit_after_approval_makes_the_gate_run_again():
         assert d.show(cid2)["next"]["approves"]["sha256"] == _sha(f)            # the plan shows the new content
         assert not [e for e in _gate_events(k, cid2, "step.completed")]
         assert d.approve(cid2, True, by="user@tty")["next"]["step"] == "implement"
-        # the exact content approved earlier is still approved; a rejection of some content is the latest word
+        # only the latest decision on the path counts: the first content was superseded by the later approval
         f.write_text(original)
-        assert d.call("forge.extend", {"goal": "build the proposal", "proposal": path})["next"]["step"] == "implement"
+        assert d.call("forge.extend", {"goal": "build the proposal", "proposal": path})["next"]["step"] == "approve"
         f.write_text(original + "\nA rejected variant.\n")
         cid3 = _to_gate(d, path)["callId"]
         d.approve(cid3, False, by="user@tty", reason="no")

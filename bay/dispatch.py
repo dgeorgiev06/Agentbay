@@ -105,7 +105,8 @@ class Dispatcher:
             return self._finish(state, mode, feat)
         return self._advance(mode, feat, state)
 
-    def approve(self, call_id: str, approved: bool, reason: str = "", by: str = "user", quote: str = "") -> dict:
+    def approve(self, call_id: str, approved: bool, reason: str = "", by: str = "user", quote: str = "",
+                sha: str = "") -> dict:
         """Pass or reject the approval gate a call is waiting on. Called only from `bay approve`, which needs an
         interactive terminal, or `--via chat` with the project's approvals.chat on; never pre-approved for Claude
         Code. `quote` is the owner's message a chat approval relays; the ledger keeps it next to `by`."""
@@ -127,14 +128,25 @@ class Dispatcher:
             raise CallError(f"call {call_id}: {(shown or {}).get('path') or 'the approved file'} changed since the "
                             f"gate was shown (sha256 {_short(shown)} -> {_short(subject)}); nothing approved. Read "
                             f"it again (`bay show {call_id}`) and re-run `bay approve {call_id}`")
+        if approved and subject:
+            # the approval names the content it covers: a chat approval must carry the sha256 (prefix) of the
+            # content shown to the owner, the terminal path passes the one it printed
+            if not sha and by == "user@chat-via-cos":
+                raise CallError(f"call {call_id}: a chat approval needs --sha <prefix> of the content shown "
+                                f"({subject['path']} at sha256 {_short(subject)})")
+            if sha and (len(sha) < 8 or not subject["sha256"].startswith(sha.lower())):
+                raise CallError(f"call {call_id}: --sha {sha} does not match the current content of "
+                                f"{subject['path']} (sha256 {_short(subject)}); nothing approved. Read it again "
+                                f"(`bay show {call_id}`)")
         data = {"approved": approved, "by": by, **({"quote": quote} if quote else {}),
                 **({"approves": subject} if subject else {})}
+        state["steps"][step.id] = {"approved": approved, "by": by, **({"quote": quote} if quote else {}),
+                                   **({"approves": subject} if subject else {})}
         if not approved:
             state["status"] = "blocked"
             state["result"] = {"reason": reason or "rejected at the approval gate"}
             self._ledger("step.completed", base, summary=f"gate rejected by {by}", data=data)
             return self._finish(state, mode, feat)
-        state["steps"][step.id] = {"approved": True, "by": by, **({"quote": quote} if quote else {})}
         self._ledger("step.completed", base, summary=f"gate approved by {by}", data=data)
         state["cursor"] += 1
         return self._advance(mode, feat, state)
@@ -335,14 +347,17 @@ class Dispatcher:
                                                           if step.approves else "")
             return {"skipped": False, "why": why, "approves": None, "prior": None}
         last = same_path = None
+        mode_name, _, ep = str(state.get("target", "")).partition(".")
         for e in ledger.read(self.project):
             d = e.get("data") or {}
             if (e.get("type") != "step.completed" or e.get("source") != "dispatcher" or d.get("by") not in APPROVERS
+                    or e.get("mode") != mode_name or e.get("endpoint") != ep or e.get("step") != step.id
                     or not isinstance(d.get("approves"), dict) or d["approves"].get("path") != subject["path"]):
                 continue
+            # only the latest decision on the path counts: a later approval or rejection of other content
+            # supersedes an earlier one, so reverting a file to old content does not revive its approval
             same_path = e
-            if d["approves"].get("sha256") == subject["sha256"]:
-                last = e
+            last = e if d["approves"].get("sha256") == subject["sha256"] and self._state_holds(e, step, subject) else None
         out = {"approves": subject, "prior": None, "skipped": False}
         if last is not None and last["data"].get("approved") is True:
             d = last["data"]
@@ -360,6 +375,20 @@ class Dispatcher:
             out["why"] = (f"the gate runs: no recorded approval of {subject['path']} at sha256 {_short(subject)} "
                           f"(a front-matter status: approved is informational; only `bay approve` passes a gate)")
         return out
+
+    def _state_holds(self, e: dict, step, subject: dict) -> bool:
+        """A ledger decision counts only when the call's own state file holds the same decision: the gate approved
+        (or rejected) with the same content hash. A line written into the ledger alone passes nothing."""
+        try:
+            prior = self._load(str(e.get("callId")))
+        except CallError:
+            return False
+        rec = (prior.get("steps") or {}).get(step.id)
+        d = e.get("data") or {}
+        if not isinstance(rec, dict) or rec.get("approved") is not (d.get("approved") is True) \
+                or (rec.get("approves") or {}).get("sha256") != subject["sha256"]:
+            return False
+        return True
 
     def _run_code(self, mode, feat, step, state, base) -> None:
         env = self.sys.env(step.env)

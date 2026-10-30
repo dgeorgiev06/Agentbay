@@ -3,9 +3,12 @@
 improve never edits what it inspects: fixes go through forge (framework proposals) or a mode-fix task.
 
 - "what keeps going wrong / what should we fix" -> the weekly run, in this order: `.agentbay/bay call improve.scan
-  '{}'`, `improve.audit`, `improve.triage`. Each may return `needs-agent`: run it to the end
-  (`.agentbay/bay show <callId>`, submit). When all three are done write the report with `.agentbay/bay call
-  improve.backlog '{}'`; show the user its path. If a cron run left calls pending, finish those the same way.
+  '{}'`, `improve.audit`, `improve.triage`. One at a time: each may return `needs-agent`; run it to a terminal
+  status (`.agentbay/bay show <callId>`, submit) before you start the next, because two open improve calls on the
+  analyst unit limit its reads to what both declare. When all three are done write the report with `.agentbay/bay
+  call improve.backlog '{}'`; show the user its path. If a cron run left a scan pending, finish it first, then
+  audit and triage in turn. A refused use names the open calls in the way: finish them (`bay show <callId>`, run
+  the step, submit).
 - "scan my sessions" -> `.agentbay/bay call improve.scan '{"since": "7d"}'`; "audit the code" ->
   `.agentbay/bay call improve.audit '{}'` (`{"root": "kit"}` audits the agentbay kit itself).
 - Decisions are the user's: they run `.agentbay/bay approve <id>` (or `--defer`, `--wontfix`) in their own

@@ -83,11 +83,16 @@ def schema(name: str) -> dict:
 
 
 def data_schema(ref: str) -> dict:
-    """'post/v1' -> schemas/data/post.v1.schema.json"""
+    """'item/v1' -> schemas/data/item.v1.schema.json; a content type's `<name>/v<N>` -> its fields.schema.json"""
     name, _, ver = ref.partition("/")
     p = SCHEMAS / "data" / f"{name}.{ver}.schema.json"
     if not p.exists():
-        raise SpecError(f"unknown data schema '{ref}' (expected {p.relative_to(KIT)})")
+        from . import contenttypes
+        found = contenttypes.fields_schema(ref)
+        if found is None:
+            raise SpecError(f"unknown data schema '{ref}' (expected {p.relative_to(KIT)} or a content type "
+                            f"{name} of version {ver})")
+        return found
     return json.loads(p.read_text())
 
 
@@ -95,8 +100,10 @@ VERSIONED = re.compile(r"^[a-z][a-z0-9.-]*/v[0-9]+$")   # `<name>/v<N>`: interfa
 
 
 def item_kinds(kit: Path = KIT) -> dict[str, set[int]]:
-    """Known item kinds (content types): `<kind>/v<N>` data schemas that extend item/v1. kind -> versions."""
-    out: dict[str, set[int]] = {}
+    """Known item kinds: the content types of the kit (content-types/) and `<kind>/v<N>` data schemas that extend
+    item/v1. kind -> versions."""
+    from . import contenttypes
+    out: dict[str, set[int]] = contenttypes.item_kinds(kit)
     for f in sorted((kit / "schemas" / "data").glob("*.v*.schema.json")):
         try:
             doc = json.loads(f.read_text())
@@ -338,8 +345,8 @@ def rel(p: Path) -> str:
 
 
 def merge_mode(parent: dict, child: dict, pdir: Path, cdir: Path) -> dict:
-    """A child mode spec over its parent's. Features merge key by key (a child may override review, in/out,
-    steps, playbook, rules, ...; a feature's `roles` merges entry by entry, its `steps` are replaced whole);
+    """A child mode spec over its parent's. A child's feature replaces the parent's feature of that name whole
+    (0006 Part E: never a key-by-key merge; a feature it does not declare is inherited unchanged);
     `roles` (role -> env), constraints and configDefaults merge entry by entry; needs are unioned;
     anything else the child sets replaces the parent's. Paths the child inherits
     (playbook, rules, config) are rebased so they still resolve from the child's folder. `abstract` is not
@@ -360,10 +367,7 @@ def merge_mode(parent: dict, child: dict, pdir: Path, cdir: Path) -> dict:
         if k == "features":
             eps = out.setdefault("features", {})
             for name, e in v.items():
-                merged = {**eps.get(name, {}), **copy.deepcopy(e)}
-                if isinstance(e.get("roles"), dict) and isinstance(eps.get(name, {}).get("roles"), dict):
-                    merged["roles"] = {**eps[name]["roles"], **e["roles"]}
-                eps[name] = merged
+                eps[name] = copy.deepcopy(e)
         elif k in ("constraints", "configDefaults") or (k == "roles" and isinstance(v, dict)
                                                          and isinstance(out.get(k), dict)):
             out[k] = {**out.get(k, {}), **copy.deepcopy(v)}
@@ -481,6 +485,8 @@ class Feature:
     review: dict | None               # {role, when, tier?, effort?, rulesets?} or None
     schedule: str | None = None
     description: str = ""
+    uses: list[str] | None = None     # the read endpoints its role steps may call (B-9); None: the role's grants
+    skills: list[str] | None = None   # the mode skills its role steps are handed (B-8); None: every mode skill
 
 
 @dataclass
@@ -498,6 +504,7 @@ class ResolvedMode:
     playbook: str
     skills: dict[str, Path]           # runtime name `<mode>--<skill>` -> folder (own, then inherited via extends)
     config: dict                      # effective agentbay.config.yaml modes.<name> (minus features)
+    reads: list = field(default_factory=list)  # item kinds its features read (`<kind>/v<N>`): the store holds these types
     dirs: list = field(default_factory=list)   # mode folder, then ancestors' (extends): types are looked up here
     extends: str | None = None
     coordinator_unit: ResolvedRole | None = None
@@ -982,7 +989,7 @@ def resolve_mode(kit: Kit, md: Doc, ctx: _Ctx, warnings: list[str] | None = None
         features=features, constraints=constraints, needs=needs,
         playbook=pb_file.read_text() if pb_file.exists() else "",
         skills={skill_id(name, sk): src for sk, src in mode_skills(md).items()}, config=mcfg,
-        dirs=list(md.dirs), extends=md.parent, coordinator_unit=coord_unit)
+        reads=list(s.get("reads") or []), dirs=list(md.dirs), extends=md.parent, coordinator_unit=coord_unit)
 
 
 def _mode_roles(kit: Kit, md: Doc, ctx: _Ctx, roles: dict) -> ResolvedRole | None:
@@ -1183,11 +1190,33 @@ def _feature(kit: Kit, md: Doc, ctx: _Ctx, ep_name: str, ep: dict, feat_cfg: dic
         playbook_path=pb_path, playbook_text=pb_text, dod=dod,
         rules=rules,
         review=review if review and review.get("when") == "always" else None,
-        schedule=ep.get("schedule"), description=ep.get("description", ""))
+        schedule=ep.get("schedule"), description=ep.get("description", ""),
+        uses=ep.get("uses"), skills=ep.get("skills"))
     for st in steps:
         if st.out and st.kind == "role":
             type_schema(md.dirs, st.out, f"{where} step {st.id}", gaps)
+    _check_uses_and_skills(md, feat, where, gaps)
     return feat
+
+
+def _check_uses_and_skills(md: Doc, feat: Feature, where: str, gaps: list[str]) -> None:
+    """B-9 and B-8 for one feature: every `uses:` entry is a read endpoint granted to a role that has a step in
+    it, every `skills:` entry is a skill of the mode, and a feature whose role steps can read the store says
+    which endpoints (`uses: []` for none)."""
+    units = {id(st.resolved): st.resolved for st in feat.steps if st.resolved is not None}.values()
+    granted = {u for r in units for u in r.bay_uses}
+    for u in feat.uses or []:
+        if u not in granted:
+            gaps.append(f"{where}: `uses:` names {u}, which no role in this feature is granted "
+                        f"(granted: {', '.join(sorted(granted)) or 'none'}); a feature can only narrow its roles' grants")
+    if feat.uses is None and granted:
+        gaps.append(f"{where}: its role steps can read the store ({len(granted)} endpoints); declare `uses:` with the "
+                    f"endpoints they need (`uses: []` for none)")
+    have = mode_skills(md)
+    for sk in feat.skills or []:
+        if sk not in have:
+            gaps.append(f"{where}: `skills:` names '{sk}', which is not a skill of mode {md.name} "
+                        f"({', '.join(sorted(have)) or 'none'})")
 
 
 SOURCE_IFACE = "items.source/v1"
@@ -1209,7 +1238,7 @@ def _check_selectors(kit: Kit, md: Doc, mcfg: dict, gaps: list[str], warnings: l
         if c is None:
             continue
         caps = c.spec.get("selectors") or {}
-        price = c.spec.get("costPerPostUsd", mcfg.get("costPerPostUsd", cfgmod.COST_PER_POST_USD))
+        price = c.spec.get("costPerItemUsd", mcfg.get("costPerItemUsd", cfgmod.COST_PER_ITEM_USD))
         errs, warns = selmod.check(sels, caps, connector=cn, paid=float(price) > 0,
                                    where=f"agentbay.config.yaml modes.{md.name}.selectors (env {env.name})")
         gaps += errs

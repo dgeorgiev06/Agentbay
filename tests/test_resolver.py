@@ -1,5 +1,5 @@
 """Resolver: the shipped kit resolves; every failure mode yields an exact, readable gap."""
-from helpers import KIT, assert_gap, edit_yaml, gaps, kit_copy, model
+from helpers import KIT, assert_gap, edit_yaml, gaps, kit_copy, model, whole_feature
 
 
 def test_shipped_kit_resolves():
@@ -83,7 +83,8 @@ def test_effect_not_allowed_by_env():
 def test_effect_not_declared_by_endpoint():
     k = kit_copy()
     edit_yaml(k / "modes/feed-briefing/mode.yaml",
-              lambda d: d["spec"].setdefault("features", {}).setdefault("sync", {}).update({"effects": ["network", "write"]}))
+              lambda d: d["spec"].setdefault("features", {}).update(
+                  {"sync": whole_feature(k, "sync", effects=["network", "write"])}))
     assert_gap(k, "feed-briefing.sync step fetch", "effect 'spend'", "not declared by the endpoint")
 
 

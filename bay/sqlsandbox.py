@@ -6,9 +6,9 @@ every sync and prune) and no internal state (cursors, budget, coverage, deletion
 separate state.json this connection never opens). So there is nothing out of scope for a query to reach;
 this module only keeps queries read-only and bounded:
   1. the connection is opened `mode=ro` and `PRAGMA query_only` is on;
-  2. sqlite3's authorizer allows SELECT, reads of the views (v_items, v_posts, v_email, v_threads,
-     v_attachments, v_fts, v_attachment_fts) and the store tables (items, item_selectors, attachments,
-     items_fts, attachments_fts), json_each/json_tree, CTEs and an allowlist of functions. It denies writes,
+  2. sqlite3's authorizer allows SELECT, reads of the views (v_items, v_fts and the views of the store's content
+     types) and the store tables (items, item_selectors, items_fts and the child tables of the store's content
+     types with their FTS5 tables), json_each/json_tree, CTEs and an allowlist of functions. It denies writes,
      DDL, ATTACH, PRAGMA, load_extension, sqlite_schema and the FTS shadow tables;
   2b. each query is first prepared as `EXPLAIN <sql>` under that authorizer, and only then runs with FTS5's own
      internal reads of its shadow tables allowed (FTS5 prepares those while the query runs, unattributed);
@@ -30,22 +30,16 @@ import sqlite3
 import time
 from pathlib import Path
 
-from . import secretscan, vault
-from .selector import addr_key
+from . import contenttypes, secretscan, vault
 
-SCHEMA_VERSION = 2          # PRAGMA user_version of a corpus store; any other version is refused
-VIEWS = ("v_items", "v_posts", "v_email", "v_threads", "v_attachments", "v_fts", "v_attachment_fts")
+SCHEMA_VERSION = 3          # PRAGMA user_version of a corpus store; any other version is refused
+# the views the store itself creates; a content type adds its own (contenttypes.py)
+VIEWS = ("v_items", "v_fts")
 FTS = "items_fts"
 FTS_VIEW = "v_fts"
-ATT_FTS = "attachments_fts"
-ATT_FTS_VIEW = "v_attachment_fts"
-FTS_VIEWS = {FTS_VIEW: FTS, ATT_FTS_VIEW: ATT_FTS}        # full-text view -> the FTS5 table it needs
-ITEM_VIEWS = ("v_items", "v_posts", "v_email")           # one row per item (describe samples these)
-MAIL_VIEWS = ("v_email", "v_threads", "v_attachments", ATT_FTS_VIEW)   # describe lists them for stores with email
-MAIL_FUNCTIONS = ("addr_key",)                                         # likewise
-FTS_SHADOW = tuple(f"{t}_{x}" for t in (FTS, ATT_FTS) for x in ("data", "idx", "content", "docsize", "config"))
-# the store tables: every row in them is in the mode's scope (attachments rows die with their item)
-TABLES = ("items", "item_selectors", "attachments", FTS, ATT_FTS)
+ITEM_VIEWS = ("v_items",)                                # one row per item (describe samples these)
+# the base store tables: every row in them (and in a content type's child tables) is in the mode's scope
+BASE_TABLES = ("items", "item_selectors")
 TABLE_FUNCS = ("json_each", "json_tree")
 SCHEMA_TABLES = {"sqlite_master", "sqlite_schema", "sqlite_temp_master", "sqlite_temp_schema"}
 FUNCTIONS = frozenset("""
@@ -53,7 +47,7 @@ abs avg bm25 char coalesce count date datetime glob group_concat hex highlight i
 json_array_length json_extract json_group_array json_group_object json_object json_quote json_type json_valid
 julianday length like likelihood lower ltrim match max min nullif round rtrim snippet strftime substr substring
 sum time total trim typeof unicode unixepoch upper replace -> ->> row_number rank dense_rank percent_rank
-cume_dist ntile lag lead first_value last_value nth_value addr_key
+cume_dist ntile lag lead first_value last_value nth_value
 """.split())
 # deliberately absent: load_extension, randomblob/zeroblob (memory), printf/format (width bombs), sqlite_*.
 
@@ -73,10 +67,10 @@ MAX_VALUE = 1_000_000
 HEAP_BYTES = 256 * 1024 * 1024
 
 ITEM_COLUMNS = [
-    ("id", "TEXT", "item id <source>:<extId>; cite this"), ("source", "TEXT", "x, fake, gmail, ..."),
-    ("extId", "TEXT", "the source's own id"), ("kind", "TEXT", "post, email, ..."),
+    ("id", "TEXT", "item id <source>:<extId>; cite this"), ("source", "TEXT", "name of the source that produced it"),
+    ("extId", "TEXT", "the source's own id"), ("kind", "TEXT", "the content type of the item"),
     ("author", "TEXT", "handle or address"), ("authorName", "TEXT", "display name"),
-    ("title", "TEXT", "subject or headline (null for posts)"), ("text", "TEXT", "body"),
+    ("title", "TEXT", "subject or headline (null when the kind has none)"), ("text", "TEXT", "body"),
     ("url", "TEXT", "link to the original (cite it as stored)"), ("createdAt", "TEXT", "ISO-8601 UTC, sortable"),
     ("fetchedAt", "TEXT", "ISO-8601 UTC"), ("container", "TEXT", "where it was fetched from (home, list:<id>)"),
     ("labels", "JSON", "array of containers/labels; filter with json_each(labels)"),
@@ -84,58 +78,13 @@ ITEM_COLUMNS = [
     ("matched", "JSON", "array of selector ids the item matches; filter with json_each(matched)"),
     ("rid", "INTEGER", "row id (= items_fts.rowid)"),
 ]
-COLUMNS = {   # what describe tells agents; keep in step with view_sql()
+COLUMNS = {   # what describe tells agents, for the views above; a content type documents its own views
     "v_items": ITEM_COLUMNS,
-    "v_posts": [
-        ("(all v_items columns)", "", "kind = 'post' only"), ("lang", "TEXT", "language code"),
-        ("metrics", "JSON", "engagement counts"), ("likes", "INTEGER", "metrics.like_count"),
-        ("reposts", "INTEGER", "metrics.retweet_count"), ("replies", "INTEGER", "metrics.reply_count"),
-    ],
-    "v_email": [
-        ("(all v_items columns)", "", "kind = 'email' only; title is the subject, author the sender address"),
-        ("subject", "TEXT", "= title"), ("sender", "TEXT", "sender address (lower case)"),
-        ("toList", "JSON", "array of To addresses; filter with json_each(toList)"),
-        ("ccList", "JSON", "array of Cc addresses"),
-        ("messageId", "TEXT", "RFC Message-ID header"), ("inReplyTo", "TEXT", "RFC In-Reply-To header"),
-        ("account", "TEXT", "the mailbox the message was read from (me)"),
-        ("hasAttachments", "INTEGER", "1 when it has attachments"), ("attachmentCount", "INTEGER", ""),
-        ("fromMe", "INTEGER", "1 when I sent it (label SENT, or sender = account, compared with addr_key)"),
-        ("toMe", "INTEGER", "1 when my address is in To or Cc (addr_key: case, +tags and Gmail dots ignored)"),
-        ("bulk", "INTEGER", "1 for bulk mail (a List-Unsubscribe header, or Precedence: bulk or list)"),
-    ],
-    "v_threads": [
-        ("source", "TEXT", ""), ("threadId", "TEXT", "thread id; v_email.threadId"),
-        ("subject", "TEXT", "subject of the first message"), ("messages", "INTEGER", "stored messages"),
-        ("firstDate", "TEXT", "ISO-8601"), ("lastDate", "TEXT", "ISO-8601; ORDER BY lastDate DESC"),
-        ("lastId", "TEXT", "id of the last message; cite it"), ("lastSender", "TEXT", "sender of the last message"),
-        ("lastFromMe", "INTEGER", "1 when I sent the last message"),
-        ("lastToMe", "INTEGER", "1 when the last message is addressed to me (To/Cc)"),
-        ("lastBulk", "INTEGER", "1 when the last message is bulk mail (newsletters, notifications)"),
-        ("needsReply", "INTEGER", "1 when the last message is from someone else, addressed to me and not bulk"),
-        ("participants", "JSON", "array of every from/to/cc address"), ("senders", "JSON", "array of sender addresses"),
-        ("matched", "JSON", "selector ids any message matches"),
-        ("hasAttachments", "INTEGER", ""), ("attachmentCount", "INTEGER", ""),
-    ],
-    "v_attachments": [
-        ("id", "TEXT", "id of the message the attachment belongs to (<source>:<extId>); cite it"),
-        ("source", "TEXT", ""), ("n", "INTEGER", "position in the message"), ("name", "TEXT", "file name"), ("mime", "TEXT", "MIME type"),
-        ("size", "INTEGER", "bytes"), ("textChars", "INTEGER", "characters of extracted text (0: metadata only)"),
-        ("reason", "TEXT", "why there is no text (type not extracted, over a cap, parser failure)"),
-        ("text", "TEXT", "extracted text (docx, txt, csv, md); use substr()"),
-        ("threadId", "TEXT", ""), ("sender", "TEXT", "sender address of the message"), ("subject", "TEXT", ""),
-        ("createdAt", "TEXT", "the message's date"), ("url", "TEXT", "link to the message"),
-        ("matched", "JSON", "selector ids the message matches"), ("rid", "INTEGER", "row id (= attachments_fts.rowid)"),
-    ],
     "v_fts": [
         ("(all v_items columns)", "", "same scope as v_items"),
         ("fts", "MATCH", "full-text target: WHERE fts MATCH 'staking AND \"proof of stake\"'"),
         ("rank", "REAL", "relevance (bm25); ORDER BY rank puts the best match first"),
         ("snippet", "TEXT", "the matching part of the text, matches in [brackets]"),
-    ],
-    "v_attachment_fts": [
-        ("(all v_attachments columns)", "", "same scope as v_attachments"),
-        ("fts", "MATCH", "full-text target over attachment name and text: WHERE fts MATCH 'invoice'"),
-        ("rank", "REAL", "relevance (bm25)"), ("snippet", "TEXT", "the matching part of the text, matches in [brackets]"),
     ],
 }
 
@@ -165,85 +114,61 @@ def _item_select() -> str:
             i.pk AS rid"""
 
 
-def _thread_rows(alias: str) -> str:
-    """WHERE clause: the email rows of the thread v_threads is grouping (correlated on e.source, e.threadId)."""
-    return f"{alias}.kind = 'email' AND {alias}.source = e.source AND {alias}.thread_id = e.threadId"
+BASE_DDL = (   # the item tables every store has; the store adds its triggers and the full-text tables
+    """CREATE TABLE items (
+         pk INTEGER PRIMARY KEY, source TEXT NOT NULL, ext_id TEXT NOT NULL, kind TEXT NOT NULL,
+         author TEXT, author_name TEXT, title TEXT, body TEXT NOT NULL DEFAULT '', url TEXT,
+         created_at TEXT NOT NULL, fetched_at TEXT NOT NULL, container TEXT,
+         labels TEXT NOT NULL DEFAULT '[]', thread_id TEXT, ext TEXT NOT NULL DEFAULT '{}',
+         derived TEXT NOT NULL DEFAULT '{}', UNIQUE (source, ext_id))""",
+    "CREATE INDEX items_created ON items (created_at)",
+    "CREATE INDEX items_author ON items (author)",
+    "CREATE INDEX items_thread ON items (source, thread_id)",
+    """CREATE TABLE item_selectors (item INTEGER NOT NULL, selector TEXT NOT NULL,
+         PRIMARY KEY (item, selector)) WITHOUT ROWID""",
+    "CREATE INDEX item_selectors_selector ON item_selectors (selector)",
+)
+ITEMS_VIEW = f"CREATE TEMP VIEW v_items AS {_item_select()} FROM main.items i"
 
 
-def _last(col: str) -> str:
-    return (f"(SELECT l.{col} FROM temp.v_email l WHERE l.source = e.source AND l.threadId = e.threadId "
-            f"ORDER BY l.createdAt DESC, l.id DESC LIMIT 1)")
-
-
-def email_view_sql(fts: bool) -> list[str]:
-    """v_email (one row per message), v_threads (one row per thread), v_attachments and, with FTS5,
-    v_attachment_fts. Only allowlisted functions: the authorizer checks the views' own expressions too."""
-    acct = "addr_key(json_extract(i.ext, '$.account'))"
-    out = [
-        f"""CREATE TEMP VIEW v_email AS {_item_select()}, i.title AS subject,
-            json_extract(i.ext, '$.from') AS sender, json_extract(i.ext, '$.to') AS toList,
-            json_extract(i.ext, '$.cc') AS ccList, json_extract(i.ext, '$.messageId') AS messageId,
-            json_extract(i.ext, '$.inReplyTo') AS inReplyTo, json_extract(i.ext, '$.account') AS account,
-            coalesce(json_extract(i.ext, '$.hasAttachments'), 0) AS hasAttachments,
-            coalesce(json_array_length(i.ext, '$.attachments'), 0) AS attachmentCount,
-            (EXISTS (SELECT 1 FROM json_each(i.labels) WHERE value = 'SENT')
-              OR addr_key(coalesce(json_extract(i.ext, '$.from'), '')) = coalesce({acct}, '')) AS fromMe,
-            (EXISTS (SELECT 1 FROM json_each(i.ext, '$.to') WHERE addr_key(value) = {acct})
-              OR EXISTS (SELECT 1 FROM json_each(i.ext, '$.cc') WHERE addr_key(value) = {acct})) AS toMe,
-            coalesce(json_extract(i.ext, '$.bulk'), 0) AS bulk
-          FROM main.items i WHERE i.kind = 'email'""",
-        f"""CREATE TEMP VIEW v_threads AS SELECT t.*,
-              (t.lastFromMe = 0 AND t.lastToMe = 1 AND t.lastBulk = 0) AS needsReply FROM (
-            SELECT e.source AS source, e.threadId AS threadId,
-              (SELECT f.title FROM main.items f WHERE {_thread_rows('f')} ORDER BY f.created_at, f.ext_id LIMIT 1)
-                AS subject,
-              count(*) AS messages, min(e.createdAt) AS firstDate, max(e.createdAt) AS lastDate,
-              {_last('id')} AS lastId, {_last('sender')} AS lastSender,
-              {_last('fromMe')} AS lastFromMe, {_last('toMe')} AS lastToMe, {_last('bulk')} AS lastBulk,
-              (SELECT json_group_array(p) FROM (SELECT DISTINCT p FROM (
-                  SELECT lower(f.author) AS p FROM main.items f WHERE {_thread_rows('f')}
-                  UNION SELECT lower(j.value) FROM main.items f, json_each(f.ext, '$.to') j WHERE {_thread_rows('f')}
-                  UNION SELECT lower(j.value) FROM main.items f, json_each(f.ext, '$.cc') j WHERE {_thread_rows('f')})
-                WHERE p IS NOT NULL ORDER BY p)) AS participants,
-              (SELECT json_group_array(p) FROM (SELECT DISTINCT lower(f.author) AS p FROM main.items f
-                WHERE {_thread_rows('f')} AND f.author IS NOT NULL ORDER BY p)) AS senders,
-              (SELECT json_group_array(sel) FROM (SELECT DISTINCT s.selector AS sel FROM main.items f
-                JOIN main.item_selectors s ON s.item = f.pk WHERE {_thread_rows('f')} ORDER BY sel)) AS matched,
-              max(e.hasAttachments) AS hasAttachments, sum(e.attachmentCount) AS attachmentCount
-            FROM temp.v_email e WHERE e.threadId IS NOT NULL GROUP BY e.source, e.threadId) t""",
-        """CREATE TEMP VIEW v_attachments AS SELECT
-            i.source || ':' || i.ext_id AS id, i.source AS source, a.n AS n, a.name AS name, a.mime AS mime,
-            a.size AS size, a.text_chars AS textChars, a.reason AS reason, a.text AS text, i.thread_id AS threadId,
-            i.author AS sender, i.title AS subject, i.created_at AS createdAt, i.url AS url,
-            (SELECT json_group_array(selector) FROM
-               (SELECT s.selector FROM main.item_selectors s WHERE s.item = i.pk ORDER BY s.selector)) AS matched,
-            a.pk AS rid
-          FROM main.attachments a JOIN main.items i ON i.pk = a.item""",
-    ]
-    if fts:
-        out.append(f"""CREATE TEMP VIEW {ATT_FTS_VIEW} AS SELECT v.*, f.{ATT_FTS} AS fts, f.rank AS rank,
-            snippet({ATT_FTS}, 1, '[', ']', '…', 16) AS snippet
-          FROM main.{ATT_FTS} f JOIN temp.v_attachments v ON v.rid = f.rowid""")
+def store_types(con: sqlite3.Connection) -> list[contenttypes.ContentType]:
+    """The content types a store was made with (store_meta), as the kit has them now. A store whose type is gone
+    or has another version is refused: stores are never converted."""
+    held = dict(con.execute("SELECT substr(key, 6), value FROM main.store_meta WHERE key LIKE 'type:%' ORDER BY key"))
+    try:
+        have = contenttypes.load()
+    except Exception as e:
+        raise SqlError(str(e)) from None
+    out = []
+    for name, ver in held.items():
+        if name not in have or str(have[name].version) != ver:
+            now = f"the kit has v{have[name].version}" if name in have else "the kit has no such type"
+            raise SqlError(f"this store holds content type {name} v{ver}, but {now}; stores are never converted: "
+                           f"move the folder aside and sync again")
+        out.append(have[name])
     return out
 
 
-def view_sql(fts: bool = False) -> list[str]:
-    """Plain views over the store (which holds only the mode's scope). v_fts (FTS5 only) joins items_fts to
-    v_items: the simplest documented way to search, with rank and snippet as columns."""
-    out = [
-        f"CREATE TEMP VIEW v_items AS {_item_select()} FROM main.items i",
-        f"""CREATE TEMP VIEW v_posts AS {_item_select()},
-            json_extract(i.ext, '$.lang') AS lang, json_extract(i.ext, '$.metrics') AS metrics,
-            json_extract(i.ext, '$.metrics.like_count') AS likes,
-            json_extract(i.ext, '$.metrics.retweet_count') AS reposts,
-            json_extract(i.ext, '$.metrics.reply_count') AS replies
-          FROM main.items i WHERE i.kind = 'post'""",
-    ]
-    if fts:
-        out.append(f"""CREATE TEMP VIEW v_fts AS SELECT v.*, f.{FTS} AS fts, f.rank AS rank,
+FTS_VIEW_SQL = f"""CREATE TEMP VIEW v_fts AS SELECT v.*, f.{FTS} AS fts, f.rank AS rank,
             snippet({FTS}, 1, '[', ']', '…', 16) AS snippet
-          FROM main.{FTS} f JOIN temp.v_items v ON v.rid = f.rowid""")
-    return out
+          FROM main.{FTS} f JOIN temp.v_items v ON v.rid = f.rowid"""
+
+
+def store_mode_views(con: sqlite3.Connection) -> list[tuple[str, str]]:
+    """(name, CREATE statement) of the views the store's mode defines, as the writer last recorded them."""
+    row = con.execute("SELECT value FROM main.store_meta WHERE key = 'mode-views'").fetchone()
+    return [(n, s) for n, s in json.loads(row[0])] if row else []
+
+
+def view_sql(fts: bool, types: list[contenttypes.ContentType], mode=()) -> list[tuple[str, str]]:
+    """(name, CREATE statement) of the views over the store (which holds only the mode's scope), in the order
+    describe lists them: v_items, the content types' views, the mode's own views (`mode`, pairs as in
+    store_mode_views), v_fts (FTS5 only: items_fts joined to v_items, the simplest documented way to search, with
+    rank and snippet as columns), then the types' full-text views."""
+    full = {v for ct in types for v in ct.fulltext_views()}
+    own = [(v, sql) for ct in types for v, sql in ct.views if v not in full]
+    return [("v_items", ITEMS_VIEW), *own, *mode, *([(FTS_VIEW, FTS_VIEW_SQL)] if fts else []),
+            *([(v, sql) for ct in types for v, sql in ct.views if v in full] if fts else [])]
 
 
 def connect_ro(path: Path) -> sqlite3.Connection:
@@ -253,7 +178,6 @@ def connect_ro(path: Path) -> sqlite3.Connection:
         raise SqlError("the store is empty: run the mode's sync endpoint first")
     con = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, check_same_thread=False)
     try:
-        con.create_function("addr_key", 1, addr_key, deterministic=True)
         cur = con.execute("PRAGMA hard_heap_limit").fetchone()[0]
         if not cur or cur > HEAP_BYTES:
             con.execute(f"PRAGMA hard_heap_limit = {HEAP_BYTES}")
@@ -266,9 +190,10 @@ def connect_ro(path: Path) -> sqlite3.Connection:
             raise SqlError(f"{path}: written by a pre-release build (internal state inside corpus.db); move the "
                            f"folder aside and sync again")
         fts = has_fts(con)
-        for stmt in view_sql(fts) + email_view_sql(fts):
+        types = store_types(con)
+        for _, stmt in view_sql(fts, types, store_mode_views(con)):
             con.execute(stmt)
-        for t in (FTS, ATT_FTS) if fts else ():
+        for t in fts_tables(fts, types):
             # FTS5 reads its config table when the table first connects, which happens while a statement is
             # prepared: connect it now, so a query naming an FTS table never trips the strict pre-pass
             con.execute(f"SELECT 1 FROM main.{t} LIMIT 0").fetchall()
@@ -291,18 +216,26 @@ def version_error(path, ver: int) -> str:
 
 
 def has_fts(con: sqlite3.Connection) -> bool:
-    """Whether the store was created with FTS5 (items_fts and attachments_fts); without it the full-text views
-    are missing and search falls back to LIKE."""
+    """Whether the store was created with FTS5 (items_fts and the types' FTS5 tables); without it the full-text
+    views are missing and search falls back to LIKE."""
     return con.execute("SELECT 1 FROM main.sqlite_master WHERE name = ?", (FTS,)).fetchone() is not None
 
 
-def views_of(fts: bool) -> list[str]:
-    """The views a read-only connection has, in VIEWS order (no full-text views without FTS5)."""
-    return [v for v in VIEWS if fts or v not in FTS_VIEWS]
+def views_of(fts: bool, types: list[contenttypes.ContentType], mode=()) -> list[str]:
+    """The views a read-only connection has, in describe order (no full-text views without FTS5)."""
+    return [v for v, _ in view_sql(fts, types, mode)]
 
 
-def tables_of(fts: bool) -> list[str]:
-    return [t for t in TABLES if fts or t not in (FTS, ATT_FTS)]
+def tables_of(fts: bool, types: list[contenttypes.ContentType]) -> list[str]:
+    """The tables a read-only connection may read: the base tables, the types' child tables, then the FTS5
+    tables (items_fts and the types')."""
+    plain = [t for ct in types for t in ct.table_names(False)]
+    return [*BASE_TABLES, *plain, *fts_tables(fts, types)]
+
+
+def fts_tables(fts: bool, types: list[contenttypes.ContentType]) -> list[str]:
+    """The FTS5 tables of a store: items_fts and each type's `<table>_fts`."""
+    return [FTS, *(t for ct in types for t in ct.table_names(True) if t.endswith("_fts"))] if fts else []
 
 
 class Sandbox:
@@ -311,8 +244,11 @@ class Sandbox:
     def __init__(self, path: Path, *, time_ms: int = TIME_MS, max_bytes: int = MAX_BYTES):
         self.con = connect_ro(path)
         self.fts = has_fts(self.con)
-        self.views = views_of(self.fts)
-        self.tables = tables_of(self.fts)
+        types = store_types(self.con)
+        self.views = views_of(self.fts, types, store_mode_views(self.con))
+        self.tables = tables_of(self.fts, types)
+        self.shadow = {f"{t}_{x}" for t in fts_tables(self.fts, types)
+                       for x in ("data", "idx", "content", "docsize", "config")}
         self.time_ms, self.max_bytes = time_ms, max_bytes
         # every name the file and the temp views define, read before the authorizer is on. A read of no column
         # reports db None both for a stored table and for a CTE; a CTE may not take a stored name (shadowing),
@@ -350,7 +286,7 @@ class Sandbox:
                 return sqlite3.SQLITE_OK
             if table in TABLE_FUNCS:
                 return sqlite3.SQLITE_OK
-            if table in FTS_SHADOW and db == "main" and not self.strict:
+            if table in self.shadow and db == "main" and not self.strict:
                 return sqlite3.SQLITE_OK      # FTS5's own statements while the (already vetted) query runs
             return self._deny(f"reading `{a1}` is not allowed; query only {self._only()}")
         if action == sqlite3.SQLITE_FUNCTION:

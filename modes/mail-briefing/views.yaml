@@ -1,0 +1,44 @@
+# The views this mode defines (views.sql) over the content types it reads, and how items.store/v1.threads reads them.
+views:
+  v_threads:
+    columns:
+      - { name: source, type: TEXT, description: "" }
+      - { name: threadId, type: TEXT, description: "thread id; v_email.threadId" }
+      - { name: subject, type: TEXT, description: "subject of the first message" }
+      - { name: messages, type: INTEGER, description: "stored messages" }
+      - { name: firstDate, type: TEXT, description: "ISO-8601" }
+      - { name: lastDate, type: TEXT, description: "ISO-8601; ORDER BY lastDate DESC" }
+      - { name: lastId, type: TEXT, description: "id of the last message; cite it" }
+      - { name: lastSender, type: TEXT, description: "sender of the last message" }
+      - { name: lastFromMe, type: INTEGER, description: "1 when I sent the last message" }
+      - { name: lastToMe, type: INTEGER, description: "1 when the last message is addressed to me (To/Cc)" }
+      - { name: lastBulk, type: INTEGER, description: "1 when the last message is bulk mail (newsletters, notifications)" }
+      - { name: needsReply, type: INTEGER, description: "1 when the last message is from someone else, addressed to me and not bulk" }
+      - { name: participants, type: JSON, description: "array of every from/to/cc address" }
+      - { name: senders, type: JSON, description: "array of sender addresses" }
+      - { name: matched, type: JSON, description: "selector ids any message matches" }
+      - { name: hasAttachments, type: INTEGER, description: "" }
+      - { name: attachmentCount, type: INTEGER, description: "" }
+
+# items.store/v1.threads returns the rows of `view` active in the window (`window` column, between since and until),
+# those a selector matches (`selector` column, a JSON array), in `order`; JSON columns come back as arrays and `flags`
+# as booleans; `important` marks rows whose `important` column (a JSON array of addresses) has an address matching
+# the `important` setting. Each detail runs once per row with the row's columns as :name parameters.
+threads:
+  view: v_threads
+  window: lastDate
+  selector: matched
+  important: senders
+  order: "lastDate DESC, threadId"
+  json: [participants, senders, matched]
+  flags: [lastFromMe, lastToMe, lastBulk, needsReply, hasAttachments]
+  details:
+    ids:
+      as: values
+      sql: "SELECT id FROM v_email WHERE source = :source AND threadId = :threadId ORDER BY createdAt, id LIMIT 50"
+    lastText:
+      as: value
+      sql: "SELECT substr(text, 1, 500) FROM v_email WHERE id = :lastId"
+    attachments:
+      as: rows
+      sql: "SELECT id, name, mime, size, textChars, reason FROM v_attachments WHERE source = :source AND threadId = :threadId ORDER BY createdAt, n LIMIT 20"

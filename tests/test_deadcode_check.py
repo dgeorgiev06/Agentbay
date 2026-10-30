@@ -246,9 +246,11 @@ def test_the_functions_the_complexity_check_flagged_stay_under_its_threshold():
     import ast
 
     from bay.improve import detect_artifacts as da
-    flagged = {"adapters/claude-code/claude_code.py": "ClaudeCodeAdapter._settings",
-               "bay/guard.py": "Guard._bash", "bay/improve/sources.py": "ledger_verdicts"}
-    for rel, qual in flagged.items():
+    flagged = [("adapters/claude-code/claude_code.py", "ClaudeCodeAdapter._settings"),
+               ("bay/guard.py", "Guard._bash"), ("bay/improve/sources.py", "ledger_verdicts"),
+               ("bay/contenttypes.py", "_one"), ("bay/contenttypes.py", "check_mode_views"),
+               ("bay/dispatch.py", "Dispatcher._plan")]
+    for rel, qual in flagged:
         funcs = dict(da._functions(ast.parse((KIT / rel).read_text())))
         cc = da._branches(funcs[qual])
         assert cc <= da.DEFAULTS["maxComplexity"], f"{qual} has complexity {cc}"

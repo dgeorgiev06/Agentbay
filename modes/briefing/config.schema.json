@@ -14,6 +14,6 @@
     "maxItemsPerRun": { "type": "integer", "minimum": 1, "description": "Items one sync may read." },
     "monthlyItems": { "type": "integer", "minimum": 0, "description": "Items read per UTC month." },
     "spendUsd": { "type": "number", "minimum": 0 },
-    "costPerPostUsd": { "type": "number", "minimum": 0, "description": "Price per item a source reads, for the spendUsd cap. Unset: bay/config.py COST_PER_POST_USD; a connector may declare its own (fake: 0)." }
+    "costPerItemUsd": { "type": "number", "minimum": 0, "description": "Price per item a source reads, for the spendUsd cap. Unset: bay/config.py COST_PER_ITEM_USD; a connector may declare its own (fake: 0)." }
   }
 }

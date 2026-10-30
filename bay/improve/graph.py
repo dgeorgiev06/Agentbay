@@ -148,10 +148,13 @@ def _concepts(g: Graph, kit: Path) -> None:
 
 
 def _data_schemas(kit: Path):
-    """(node id, path) of each schemas/data/<name>.v<N>.schema.json."""
+    """(node id, path) of each schemas/data/<name>.v<N>.schema.json and each content type's fields schema."""
     for p in sorted((kit / "schemas" / "data").glob("*.schema.json")):
         base, _, ver = p.name.removesuffix(".schema.json").rpartition(".")
         yield f"schema:{base}/{ver}", p
+    from .. import contenttypes
+    for ct in contenttypes.scan(kit)[0].values():
+        yield f"schema:{ct.ref}", ct.dir / contenttypes.FIELDS
 
 
 def _concept_nodes(g: Graph, k, kit: Path, rel) -> None:

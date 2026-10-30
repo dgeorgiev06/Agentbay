@@ -63,7 +63,7 @@ def test_schema_wal_user_version_fts_and_owner_only_file():
     store(p).sync(lookback="3d")
     con = sqlite3.connect(db(p))
     assert con.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 3
     names = {r[0] for r in con.execute("SELECT name FROM sqlite_master")}
     assert {"items", "item_selectors", "items_fts", "items_ai", "items_ad", "items_au"} <= names
     assert {"attachments", "attachments_fts", "attachments_ai", "attachments_ad", "items_ad_attachments"} <= names
@@ -93,7 +93,7 @@ def test_newer_schema_is_refused_with_the_fix():
         store(p).sync(lookback="3d")
         raise AssertionError("expected StoreError")
     except Exception as e:
-        assert "schema v9 is newer than this kit (v2)" in str(e)
+        assert "schema v9 is newer than this kit (v3)" in str(e)
 
 
 def test_sync_dedups_and_is_incremental():
@@ -150,11 +150,11 @@ def test_budget_caps_stop_and_report():
 
     def priced(**kw):                      # the fake source is free; price it like a paid API for this test
         st = store(p, **kw)
-        st.ctx.sources["fake"].ctx.cost_per_post = None
+        st.ctx.sources["fake"].ctx.cost_per_item = None
         return st
-    out = priced(caps={"spendUsd": 0.02, "costPerPostUsd": 0.005}).sync(lookback="3d")
+    out = priced(caps={"spendUsd": 0.02, "costPerItemUsd": 0.005}).sync(lookback="3d")
     assert out["fetched"] == 4 and "spendUsd" in out["stopped"] and out["budget"]["usd"] == 0.02
-    out = priced(caps={"spendUsd": 0.02, "costPerPostUsd": 0.005}).sync(lookback="3d")
+    out = priced(caps={"spendUsd": 0.02, "costPerItemUsd": 0.005}).sync(lookback="3d")
     assert out["fetched"] == 0 and "spendUsd cap reached: nothing fetched" in out["stopped"]
     p = project()
     store(p, caps={"monthlyItems": 5}).sync(lookback="3d")
@@ -162,7 +162,7 @@ def test_budget_caps_stop_and_report():
     assert out["fetched"] == 0 and "monthlyItems" in out["stopped"]
     out = store(p, caps={"monthlyItems": 5}, now=lambda: NOW + timedelta(days=10)).sync(lookback="3d")
     assert out["budget"]["month"] == "2026-11" and out["stopped"] is None
-    assert out["budget"]["posts"] == out["billed"]
+    assert out["budget"]["items"] == out["billed"]
 
 
 def test_gap_after_capped_run_refetches_window():
@@ -206,7 +206,7 @@ def test_budget_counts_reads_not_kept_items():
     p = project()
     store(p).sync(lookback="3d")
     out = store(p, caps={"maxItemsPerRun": 4}).sync(lookback="3d")
-    assert out["fetched"] == 0 and out["billed"] == 2 and out["budget"]["posts"] == 7 + 2
+    assert out["fetched"] == 0 and out["billed"] == 2 and out["budget"]["items"] == 7 + 2
 
 
 def test_deletion_checks_are_reserved_and_only_checked_ids_are_marked():
@@ -280,6 +280,22 @@ def test_status_counts_from_sqlite_and_reports_selectors_and_engine():
     st = store(p).status()
     assert st["count"] == 8 and st["selectors"] == {"home": 8} and st["engine"] == "fts5" and st["stale"] is False
     assert store(p, settings={"selectors": [{"id": "all"}]}).status()["stale"] is True
+
+
+def test_a_state_json_from_before_the_items_rename_gets_an_actionable_error():
+    p = project()
+    store(p).sync(lookback="7d")
+    f = p / ".agentbay/data/feeds/feed-briefing/state.json"
+    st = json.loads(f.read_text())
+    st["budget"] = {month: {"posts": u["items"], "usd": u["usd"]} for month, u in st["budget"].items()}
+    f.write_text(json.dumps(st))
+    try:
+        store(p).status()
+        raise AssertionError("expected StoreError")
+    except AssertionError:
+        raise
+    except Exception as e:
+        assert "old key `posts`" in str(e) and "move the folder aside" in str(e), str(e)
 
 
 # ------------------------------------------------------------------ selectors
@@ -625,7 +641,7 @@ def test_swapping_offline_for_real_refuses_role_reads_until_a_rescope():
 
 
 def test_concurrent_sync_and_prune_keep_every_billed_item():
-    """The reviewer's probe: a slow sync and a prune at the same time used to leave budget.posts at the first
+    """The reviewer's probe: a slow sync and a prune at the same time used to leave budget.items at the first
     run's 7 (each read state.json before any lock and saved it whole)."""
     import threading
     import time as _t
@@ -646,7 +662,7 @@ def test_concurrent_sync_and_prune_keep_every_billed_item():
     got["prune"] = store(p, caps=caps, settings={"retention": "30d"}).prune()
     t.join()
     assert got["sync"]["billed"] > 0 and got["prune"]["remaining"] == 7
-    assert state(p)["budget"]["2026-10"]["posts"] == first + got["sync"]["billed"]
+    assert state(p)["budget"]["2026-10"]["items"] == first + got["sync"]["billed"]
     assert all(c.get("lastSync") for c in state(p)["cursors"].values())
 
 
@@ -659,7 +675,7 @@ def test_a_crash_around_the_commit_never_loses_spend():
     p = project()
     store(p).sync(lookback="3d")
     before = state(p)
-    spent0 = before["budget"]["2026-10"]["posts"]
+    spent0 = before["budget"]["2026-10"]["items"]
     # (a) dies after the items commit, before the final state save: spend kept, cursors not advanced past it
     st = store(p, fixture=FX + [{"id": "2001", "handle": "lido", "text": "new staking post", "ageHours": 1}])
     mod = _sys.modules[type(st).__module__]
@@ -679,13 +695,13 @@ def test_a_crash_around_the_commit_never_loses_spend():
     finally:
         mod.save_state = real_save
     after = state(p)
-    billed = after["budget"]["2026-10"]["posts"] - spent0
+    billed = after["budget"]["2026-10"]["items"] - spent0
     assert billed > 0 and "fake:2001" in ids(p)                           # committed and billed
     assert after["cursors"] == before["cursors"]                          # not advanced: next sync refetches
     out = store(p).sync(lookback="3d")
-    assert state(p)["budget"]["2026-10"]["posts"] == spent0 + billed + out["billed"]   # over-counts, never loses
+    assert state(p)["budget"]["2026-10"]["items"] == spent0 + billed + out["billed"]   # over-counts, never loses
     # (b) dies between the spend save and the commit: nothing committed, spend still kept
-    spent1 = state(p)["budget"]["2026-10"]["posts"]
+    spent1 = state(p)["budget"]["2026-10"]["items"]
     st = store(p, fixture=FX + [{"id": "2002", "handle": "lido", "text": "another post", "ageHours": 1}])
     real_rw = st._rw
 
@@ -705,4 +721,4 @@ def test_a_crash_around_the_commit_never_loses_spend():
         st.sync(lookback="3d")
     except Crash:
         pass
-    assert "fake:2002" not in ids(p) and state(p)["budget"]["2026-10"]["posts"] > spent1
+    assert "fake:2002" not in ids(p) and state(p)["budget"]["2026-10"]["items"] > spent1

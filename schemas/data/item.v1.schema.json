@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agentbay/data/item/v1",
   "title": "item/v1",
-  "description": "Envelope shared by every briefing source (posts, email, ...). `id` is `<source>:<extId>`, unique in the store and what agents cite. Kind extensions (post/v1, ...) add fields; the store validates each item against `<kind>/v1` when that schema exists. `matched` is set by the store (selector ids the item matches), never by a source.",
+  "description": "Envelope shared by every briefing source. `id` is `<source>:<extId>`, unique in the store and what agents cite. A content type adds the fields of its kind (`<kind>/v<N>`); the store validates each item against `<kind>/v1` when that schema exists. `matched` is set by the store (selector ids the item matches), never by a source.",
   "type": "object",
   "required": ["id", "extId", "source", "kind", "author", "text", "createdAt", "fetchedAt"],
   "properties": {
@@ -15,7 +15,7 @@
       "additionalProperties": false,
       "properties": { "handle": { "type": "string" }, "name": { "type": "string" }, "email": { "type": "string" } }
     },
-    "title": { "type": ["string", "null"], "description": "Subject or headline; null for posts." },
+    "title": { "type": ["string", "null"], "description": "Subject or headline; null when the kind has none." },
     "text": { "type": "string" },
     "url": { "type": ["string", "null"], "pattern": "^https://" },
     "createdAt": { "type": "string", "format": "date-time" },

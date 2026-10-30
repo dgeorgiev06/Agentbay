@@ -34,11 +34,15 @@ its roles read through use shims.
   the weekly report; you decide each item in your terminal; **implement** (on demand, behind a gate) drafts a
   forge.extend proposal or a task envelope; **verify** re-runs the detector after the fix.
 
-Weekly, from cron:
+Weekly, from cron, start only the scan:
 
 ```cron
-17 8 * * 1  cd ~/code/my-repo && for f in scan audit triage; do .agentbay/bay call improve.$f '{}'; done >> .agentbay/data/improve/weekly.log 2>&1
+17 8 * * 1  cd ~/code/my-repo && .agentbay/bay call improve.scan '{}' >> .agentbay/data/improve/weekly.log 2>&1
 ```
 
-The analysis steps of scan, audit and triage need an agent: the Chief of Staff finishes the calls the cron run left
-pending, then runs `improve.backlog` to write the report.
+The analysis steps need an agent, and scan, audit and triage all run on the one analyst unit. Each declares its own
+`uses:`, and while several calls wait on that unit an analyst may use only what all of them declare, so the
+analyst's reads are refused. Run them one at a time: the Chief of Staff drives the scan to a terminal status
+(`bay show <callId>`, submit), then starts `improve.audit` and drives it to a terminal status, then `improve.triage`,
+and only then runs `improve.backlog` to write the report. If a refusal names an open call, finish it first (`bay show
+<callId>`, run its step, submit).

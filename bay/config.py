@@ -11,7 +11,7 @@
         features:
           digest: { extraRules: rules/digest-extra.yaml }
     connectors:
-      x-api: { userId: "12345" }
+      my-source: { userId: "12345" }
 
 Capabilities are bound only in envs/<env>.yaml (no override here). `bay build` writes a minimal file when a
 project has none; `bay config` prints every setting from the schemas.
@@ -28,7 +28,7 @@ import yaml
 
 NAME = "agentbay.config.yaml"
 CAPS = ("monthlyItems", "spendUsd", "maxItemsPerRun")
-COST_PER_POST_USD = 0.005      # default price per post read (X API pay-per-use); config costPerPostUsd overrides
+COST_PER_ITEM_USD = 0.005      # default price per item read (pay-per-use APIs); config costPerItemUsd overrides
 FRAGMENT = "config.example.yaml"   # an extension's sample settings, checked against its config schema by lint
 MINIMAL = """\
 # Settings for agentbay in this project. Every setting is optional; `bay config` lists them all.
@@ -110,7 +110,7 @@ def caps(constraints: dict, env_limits: dict, settings: dict) -> dict:
         vals = [v for v in (constraints.get(k), env_limits.get(k)) if v is not None]
         if vals:
             out[k] = min(vals)
-    out["costPerPostUsd"] = settings.get("costPerPostUsd", COST_PER_POST_USD)
+    out["costPerItemUsd"] = settings.get("costPerItemUsd", COST_PER_ITEM_USD)
     return out
 
 

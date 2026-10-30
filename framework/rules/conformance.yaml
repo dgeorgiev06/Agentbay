@@ -26,7 +26,7 @@ rules:
     check: rules_testable
   - id: C-4
     level: must
-    statement: Modes, playbooks, feature rules, skills and types name capabilities, never concrete tools or connectors (no `Bash`, no `x-api`), and no other mode except their `extends:` parent; tools and connectors are bound in envs. `bay check` refuses a `mode.yaml` that names a connector; review covers prose.
+    statement: Modes, playbooks, feature rules, skills and types name capabilities, never concrete tools or connectors (no `Bash`, no connector id), and no other mode except their `extends:` parent; tools and connectors are bound in envs. `bay check` refuses a `mode.yaml` that names a connector; review covers prose.
     appliesTo: [mode, feature]
     check: names_no_tools
   - id: C-5
@@ -41,7 +41,7 @@ rules:
     check: review_on_side_effects
   - id: C-7
     level: should
-    statement: Content uses the fixed vocabulary (Chief of Staff, Mode, Feature, Role, Agent, Environment, Connector, capability interface, content type, item, subagent); a content type is the versioned kind of an item (post/v1, email/v1), and an item is the unit a source produces and the store keeps; retired or synonym terms are replaced.
+    statement: Content uses the fixed vocabulary (Chief of Staff, Mode, Feature, Role, Agent, Environment, Connector, capability interface, content type, item, subagent); a content type is the versioned kind of an item (`<kind>/v<N>`), and an item is the unit a source produces and the store keeps; retired or synonym terms are replaced.
     appliesTo: [mode, feature, role, connector, env]
     check: vocabulary
     terms:

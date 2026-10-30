@@ -52,12 +52,23 @@ def test_caps_take_the_strictest_and_refuse_a_setting_above_the_env_limit():
     merged = config.effective_constraints({"maxItemsPerRun": 300, "spendUsd": 5}, settings)   # the mode's constraints
     got = config.caps(merged, limits, settings)
     assert (got["spendUsd"], got["maxItemsPerRun"], got["monthlyItems"]) == (1, 200, 3000)
-    assert config.caps({}, {}, {"spendUsd": 99})["costPerPostUsd"] == config.COST_PER_POST_USD   # no env limit: no ceiling
+    assert config.caps({}, {}, {"spendUsd": 99})["costPerItemUsd"] == config.COST_PER_ITEM_USD   # no env limit: no ceiling
     try:
         config.caps({}, limits, {"spendUsd": 6})
         raise AssertionError("expected ConfigError")
     except config.ConfigError as e:
         assert "spendUsd 6 raises the env limit 5" in str(e)
+
+
+def test_the_old_price_key_is_refused_by_the_schemas_with_no_alias():
+    from helpers import KIT, gaps
+    assert not any("costPer" in g for g in gaps(KIT, project({"modes": {"feed-briefing": {"costPerItemUsd": 0.01}}})))
+    got = gaps(KIT, project({"modes": {"feed-briefing": {"costPerPostUsd": 0.01}}}))
+    assert any("costPerPostUsd" in g for g in got), got
+    k = kit_copy()
+    f = k / "connectors/fake/connector.yaml"
+    f.write_text(f.read_text().replace("costPerItemUsd", "costPerPostUsd"))
+    assert any("costPerPostUsd" in e for e in lint.run(k)), "a connector declaring the old key must fail lint"
 
 
 def test_a_call_with_a_raised_cap_fails_the_step_and_does_not_run_the_connector():

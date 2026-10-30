@@ -45,7 +45,7 @@
         "extends": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9-]{1,40}$",
-          "description": "Parent mode, resolved at build time: the child inherits features, playbooks, rules, review settings, roles (the role -> env map, overridden entry by entry), coordinator, constraints, configDefaults, needs, config, types, skills and the coordinator playbook, and overrides any of them (features merge key by key; a child's `steps` replace the parent's). Inheritance cycles and missing parents are errors."
+          "description": "Parent mode, resolved at build time: the child inherits features, playbooks, rules, review settings, roles (the role -> env map, overridden entry by entry), coordinator, constraints, configDefaults, needs, config, types, skills and the coordinator playbook, and overrides any of them (a child's feature replaces the parent's feature of that name whole, never key by key). Inheritance cycles and missing parents are errors."
         },
         "abstract": {
           "type": "boolean",
@@ -108,6 +108,24 @@
               "rules": {
                 "type": "string",
                 "description": "features/<feature>/rules.yaml. Optional."
+              },
+              "uses": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9.-]*/v[0-9]+\\.[a-z][A-Za-z0-9]*$"
+                },
+                "description": "The read endpoints (<interface>/v<N>.<endpoint>, e.g. items.store/v1.sql) this feature's role steps may call through the use shim. Each must be granted to a role of the feature; `[]` means none. Required when a role of the feature is granted any."
+              },
+              "skills": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]*$"
+                },
+                "description": "The mode's skills (short names) the step plan hands this feature's role steps. Absent: every skill of the mode."
               },
               "review": {
                 "type": "object",
@@ -228,7 +246,7 @@
           "items": {
             "type": "string"
           },
-          "description": "Item kinds (content types) the mode reads, versioned (`<kind>/v<N>`, e.g. post/v1). `bay check` refuses an unversioned or unknown kind, and a kind or version that no items.source connector bound in the mode's envs produces (B-6). An abstract mode may declare none; inherited by children unless they set their own."
+          "description": "Item kinds (content types) the mode reads, versioned (`<kind>/v<N>`, e.g. `<kind>/v1`). `bay check` refuses an unversioned or unknown kind, and a kind or version that no items.source connector bound in the mode's envs produces (B-6). An abstract mode may declare none; inherited by children unless they set their own."
         },
         "config": {
           "type": "string",

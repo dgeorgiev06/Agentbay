@@ -90,7 +90,7 @@
     },
     "cost": {
       "type": "object",
-      "description": "e.g. {posts, usd}"
+      "description": "e.g. {items, usd}"
     },
     "durationMs": {
       "type": "integer",

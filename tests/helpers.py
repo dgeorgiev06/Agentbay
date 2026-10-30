@@ -78,6 +78,14 @@ def edit_yaml(path: Path, fn) -> None:
     path.write_text(yaml.safe_dump(doc, sort_keys=False))
 
 
+def whole_feature(kit: Path, name: str, **over) -> dict:
+    """briefing's feature `name` as a child mode must write it to change it: the whole block (a child's feature
+    replaces its parent's, never merges key by key), its paths pointing at the parent's folder, with `over` set."""
+    block = yaml.safe_load((kit / "modes/briefing/mode.yaml").read_text())["spec"]["features"][name]
+    block = {**block, **{k: f"../briefing/{block[k]}" for k in ("playbook", "rules") if block.get(k)}}
+    return {**block, **over}
+
+
 def gaps(kit: Path, project: Path | None = None) -> list[str]:
     try:
         model.resolve(model.Kit(kit, project))

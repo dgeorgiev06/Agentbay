@@ -1,0 +1,67 @@
+apiVersion: agentbay/v2
+kind: ContentType
+metadata:
+  name: email
+  description: "An email message (Gmail, ...) with its addresses, headers and attachments; the store keeps attachment text in a child table and derives fromMe, toMe and bulk once, when it writes the message."
+spec:
+  version: 1
+  kind: email
+  deriveVersion: 1
+  derived: [fromMe, toMe, bulk]
+  tables:
+    attachments:
+      from: attachments
+      moveOut: [text]
+      fullText: [name, text]
+      columns:
+        - { name: name, type: TEXT }
+        - { name: mime, type: TEXT }
+        - { name: size, type: INTEGER }
+        - { name: text_chars, from: textChars, type: INTEGER }
+        - { name: reason, type: TEXT, nullable: true }
+        - { name: text, type: TEXT }
+  views:
+    v_email:
+      item: true
+      includes: { view: v_items, note: "kind = 'email' only; title is the subject, author the sender address" }
+      columns:
+        - { name: subject, type: TEXT, description: "= title" }
+        - { name: sender, type: TEXT, description: "sender address (lower case)" }
+        - { name: toList, type: JSON, description: "array of To addresses; filter with json_each(toList)" }
+        - { name: ccList, type: JSON, description: "array of Cc addresses" }
+        - { name: messageId, type: TEXT, description: "RFC Message-ID header" }
+        - { name: inReplyTo, type: TEXT, description: "RFC In-Reply-To header" }
+        - { name: account, type: TEXT, description: "the mailbox the message was read from (me)" }
+        - { name: hasAttachments, type: INTEGER, description: "1 when it has attachments" }
+        - { name: attachmentCount, type: INTEGER, description: "" }
+        - { name: fromMe, type: INTEGER, description: "1 when I sent it (label SENT, or sender = account, compared with addr_key)" }
+        - { name: toMe, type: INTEGER, description: "1 when my address is in To or Cc (addr_key: case, +tags and Gmail dots ignored)" }
+        - { name: bulk, type: INTEGER, description: "1 for bulk mail (a List-Unsubscribe header, or Precedence: bulk or list)" }
+    v_attachments:
+      columns:
+        - { name: id, type: TEXT, description: "id of the message the attachment belongs to (<source>:<extId>); cite it" }
+        - { name: source, type: TEXT, description: "" }
+        - { name: n, type: INTEGER, description: "position in the message" }
+        - { name: name, type: TEXT, description: "file name" }
+        - { name: mime, type: TEXT, description: "MIME type" }
+        - { name: size, type: INTEGER, description: "bytes" }
+        - { name: textChars, type: INTEGER, description: "characters of extracted text (0: metadata only)" }
+        - { name: reason, type: TEXT, description: "why there is no text (type not extracted, over a cap, parser failure)" }
+        - { name: text, type: TEXT, description: "extracted text (docx, txt, csv, md); use substr()" }
+        - { name: threadId, type: TEXT, description: "" }
+        - { name: sender, type: TEXT, description: "sender address of the message" }
+        - { name: subject, type: TEXT, description: "" }
+        - { name: createdAt, type: TEXT, description: "the message's date" }
+        - { name: url, type: TEXT, description: "link to the message" }
+        - { name: matched, type: JSON, description: "selector ids the message matches" }
+        - { name: rid, type: INTEGER, description: "row id (= attachments_fts.rowid)" }
+    v_attachment_fts:
+      includes: { view: v_attachments, note: "same scope as v_attachments" }
+      fullText:
+        over: v_attachments
+        table: attachments
+        example: "SELECT id, name, snippet FROM v_attachment_fts WHERE fts MATCH 'invoice' ORDER BY rank LIMIT 20"
+      columns:
+        - { name: fts, type: MATCH, description: "full-text target over attachment name and text: WHERE fts MATCH 'invoice'" }
+        - { name: rank, type: REAL, description: "relevance (bm25)" }
+        - { name: snippet, type: TEXT, description: "the matching part of the text, matches in [brackets]" }

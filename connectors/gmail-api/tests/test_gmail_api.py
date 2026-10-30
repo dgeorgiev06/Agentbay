@@ -20,7 +20,7 @@ import yaml  # noqa: E402
 from gmail_fake import SCOPE, FakeGmail, jr  # noqa: E402
 from helpers import KIT, NOW, MemProvider, clock, system, tmpdir  # noqa: E402
 
-from bay import connect, dispatch, model, selector as selmod, vault  # noqa: E402
+from bay import connect, contenttypes, dispatch, model, selector as selmod, vault  # noqa: E402
 
 CONN = HERE.parent / "gmail_api.py"
 SECRETS = {"GMAIL_CLIENT_ID": "cid-1234.apps.googleusercontent.com",
@@ -28,6 +28,7 @@ SECRETS = {"GMAIL_CLIENT_ID": "cid-1234.apps.googleusercontent.com",
 SINCE = "2026-09-27T12:00:00Z"        # NOW - 30d
 WORK = [{"id": "work", "in": "label:Work"}]
 INBOX = [{"id": "inbox", "in": "inbox"}, {"id": "sent", "in": "sent"}]
+MODE_DIRS = [str(KIT / "modes" / "mail-briefing"), str(KIT / "modes" / "briefing")]   # where the mode's views.sql is
 
 
 def project(cfg: dict | None = None):
@@ -52,7 +53,7 @@ def store(fake, sels, p=None, provider=None):
     st = connect.instantiate(system(p), "local-mail", "corpus-store", "items.store/v1", p, transport=fake,
                              provider=provider or MemProvider(SECRETS), clock=clock, caps={"maxItemsPerRun": 500},
                              settings={"mode": "mail-briefing", "lookback": "30d", "lookbackMax": "30d",
-                                       "selectors": sels})
+                                       "selectors": sels, "modeDirs": MODE_DIRS})
     st.ctx.sources["gmail-api"].sleep = lambda s: None
     return st, p
 
@@ -329,7 +330,8 @@ def store_with(fake, p, *, lookback="30d", cap=500, sels=None):
     st = connect.instantiate(system(p), "local-mail", "corpus-store", "items.store/v1", p, transport=fake,
                              provider=MemProvider(SECRETS), clock=clock, caps={"maxItemsPerRun": cap},
                              settings={"mode": "mail-briefing", "lookback": lookback, "lookbackMax": "30d",
-                                       "selectors": sels or [{"id": "inbox", "in": "inbox"}]})
+                                       "selectors": sels or [{"id": "inbox", "in": "inbox"}],
+                                       "modeDirs": MODE_DIRS})
     st.ctx.sources["gmail-api"].sleep = lambda s: None
     return st
 
@@ -739,8 +741,9 @@ def test_views_threads_and_needs_reply_from_gmail():
 
 
 def test_me_is_matched_on_normalized_gmail_addresses_and_bulk_mail_never_needs_a_reply():
-    assert selmod.addr_key("Dana.Ruiz+work@GoogleMail.com") == "danaruiz@gmail.com"
-    assert selmod.addr_key("d.r+x@Example.COM") == "d.r@example.com"              # dots matter outside Gmail
+    derive = contenttypes.load()["email"].derive_module()
+    assert derive.addr_key("Dana.Ruiz+work@GoogleMail.com") == "danaruiz@gmail.com"
+    assert derive.addr_key("d.r+x@Example.COM") == "d.r@example.com"              # dots matter outside Gmail
     fake = FakeGmail(NOW)
     fake.account = "meself@gmail.com"
     a = new_msg("19g0001", hours=3, frm="Ana <ana@partner.example>")
@@ -761,7 +764,7 @@ def test_me_is_matched_on_normalized_gmail_addresses_and_bulk_mail_never_needs_a
     t = {x["threadId"]: x for x in st.threads(since="30d")["threads"]}
     assert t["ta"]["needsReply"] and not t["tb"]["needsReply"]
     assert t["tc"]["lastBulk"] and not t["tc"]["needsReply"] and not t["td"]["needsReply"]
-    assert st.sql("SELECT addr_key('A.B+c@gmail.com')")["rows"] == [["ab@gmail.com"]]
+    assert "addr_key" in st.sql("SELECT addr_key('A.B+c@gmail.com')")["error"]       # stored, not a SQL function
 
 
 def test_prompt_injection_in_a_body_stays_data():

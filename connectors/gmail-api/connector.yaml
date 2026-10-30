@@ -19,7 +19,7 @@ spec:
   login: cli_login        # `bay auth gmail-api`: browser OAuth login that stores GMAIL_REFRESH_TOKEN
   source: gmail
   window: 520w           # the API reaches the whole mailbox; the mode's lookbackMax (30d) is the real bound
-  costPerPostUsd: 0      # Gmail API reads are free (quota only): never billed against spendUsd
+  costPerItemUsd: 0      # Gmail API reads are free (quota only): never billed against spendUsd
   exactLabels: true      # messages.get returns a message's complete labelIds
   changeFeed: true       # history.list replays every change since the historyId: the store follows it, sends no
                          # deletion checks with it and backfills older mail with `until`

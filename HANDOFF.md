@@ -1,3 +1,462 @@
+# HANDOFF part 22: T-20261030-d695 (recorded with `bay plan`) - stage-4 re-review: DOD-3 should-fix, DOD-8 and DOD-9 nits
+
+Outcome: done on feat/0008-stage4. Not pushed. No proposal edited. The intersection rule is kept (fail closed).
+
+## To-do and commits
+1. DOD-3 usability: 69ff77d. `Dispatcher._use_refusal` (`bay/dispatch.py`) names the open calls (callId and feature) that do not
+   declare the endpoint, says what is allowed now, and the fix: finish or reclaim them (`bay show <callId>`, `bay show reclaim <runId>`).
+   The missing space after `uses:` is fixed. `tests/test_feature_uses.py` pins the message with digest and ask open.
+2. DOD-3 recipe: 48dae42. `framework/modes/improve/README.md`: cron starts only `improve.scan`; scan, audit and triage run one at a time,
+   each driven to a terminal status before the next, so no two improve calls wait on the analyst unit. `playbook.md` says the same.
+   The cos playbook already says "You run one stage at a time" and "drive that call to a terminal status" (framework/modes/cos/playbook.md:62,67): confirmed, not duplicated.
+3. DOD-8 (b) and DOD-9: ac6d5e7. `FX = [` restored in test_corpus_store.py. B-11 (`bay/boundary.py`) forbids the name of any mode, connector,
+   env or content-type folder outside a fenced block, and `email` is a content type, so inline text cannot name the field. Chosen: INTERFACES
+   section 11 shows `author: {handle?: string, name?: string, email?: string}` in a fenced example, with a bullet pointing to it. The field is
+   named and B-11 passes.
+4. DOD-8 (c): HANDOFF part 21 corrected (INTERFACES history; the boundary line quoted). HANDOFF part 22 (this commit).
+
+## Evidence (last lines)
+- `python3 tests/run.py -q`: `502 passed, 0 failed`
+- `./bay.sh check`: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`
+- boundary: `boundary origin/main...HEAD: 78 changed paths (29 core, 3 docs, 26 extension, 2 feature, 18 other); 0 failing; B-11 docs: 0 hits`
+- golden files and security tests unchanged.
+
+# HANDOFF part 21: T-20261030-3a6a (recorded with `bay plan`) - stage-4 review findings fixed
+
+Outcome: done on feat/0008-stage4. Not pushed. No proposal edited.
+
+## To-do and commits
+1. DOD-3: 49617d3. `Dispatcher._open_uses` (`bay/dispatch.py`) returns the INTERSECTION of the `uses:` of every open call
+   waiting on the unit. The callId was not carried through the shim: the shim line is matched by the guard and the allow patterns
+   (security tests, which must stay unchanged), so the fail-closed fallback was used. `tests/test_feature_uses.py` now expects
+   refusal of the other call's endpoint (status, facets) with digest and ask open; new test with two open calls of different features.
+   Followup: a per-call `--call <callId>` in the tool lines needs the guard patterns changed (a separate proposal).
+2. DOD-13 / R-4: f2b2939. README folder map gains `content-types/`, commands table gains `bay show <mode> --resolved`.
+3. DOD-8 nits: cf4f257.
+   - (1) `_usage` in corpus-store raises StoreError "state.json budget uses the old key `posts`: move the folder aside and sync again"
+     (test added in test_corpus_store.py).
+   - (2) `derive_again` rolls back and raises StoreError on any exception from derive.py; `open_rw` closes the connection for it.
+   - (3) `tests/test_core_names.py`: the allowlist key is now (file, name, place): the identifier, the Python expression holding the
+     string (`au.get('email')`) or the key path in a data file. A new `kind == "email"` in an allowlisted file is a hit.
+   - (4) textChars: it fails loudly, not `len(text)`. The email fields schema (0006 / the item schema) lists `textChars` as required (0 when
+     metadata only), and the store validates every item against it, so text without `textChars` is refused. New test
+     `test_an_attachment_without_textchars_is_refused_not_guessed`.
+   - `docs/INTERFACES.md:227` first read `author {handle?, name?, email?}` (cf4f257); f8e1e5b then reworded it to point at
+     `schemas/data/item.v1.schema.json`, to avoid a B-11 hit. Part 22 replaces that with a fenced example that names the field.
+4. HANDOFF part 21 (this commit).
+
+## Followups
+- The proposal's front matter (line 2 "Not approved", line 157 "Status: draft") is stale; editing it voids the approval, so left alone.
+- Per-call `uses:` scope through a callId in the shim line (see 1).
+
+## Evidence (last lines)
+- `python3 tests/run.py -q`: `502 passed, 0 failed`
+- `./bay.sh check`: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`
+- boundary: `boundary origin/main...HEAD: 78 changed paths (29 core, 3 docs, 26 extension, 2 feature, 18 other); 0 failing; B-11 docs: 0 hits` (quoted from the stage-4 re-review run)
+- `./bay.sh build --project <scratch>`: `built 6 modes for claude-code`; `./bay.sh clean`: `clean`; Glob of the scratch folder: only `agentbay.config.yaml`
+- golden: `git diff --stat 7486406 HEAD -- tests/golden` is empty
+
+# HANDOFF part 20: T-20261030-68bd (recorded with `bay plan`) - the 3 complexity findings of the deadcode step cleared
+
+Outcome: done on feat/0008-stage4. Not pushed. No proposal edited. No behaviour change; no threshold raised, no exclusion added.
+
+## To-do and commits
+1. Code: 738ea20. `bay/contenttypes.py`: `_one` now calls `_parse_views`, `_view_doc_problems`, `_table_problems`,
+   `_view_link_problems`, `_derived_problems` (same problems, same order). `check_mode_views` now calls `_build_empty_store`,
+   `_mode_view_authorizer`, `_view_column_problems`, `_threads_query_problems`. `bay/dispatch.py`: `Dispatcher._plan` now calls
+   `_gate_plan`, `_plan_skills`, `_review_brief`, `_executor_brief` (plan keys keep their order).
+2. Test: `tests/test_deadcode_check.py::test_the_functions_the_complexity_check_flagged_stay_under_its_threshold` also measures
+   `_one`, `check_mode_views` and `Dispatcher._plan` with the detector's own `_branches` against `maxComplexity`.
+
+## Evidence
+- `python3 tests/run.py -q`: `499 passed, 0 failed`
+- `./bay.sh check`: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`
+- boundary: `boundary origin/main...HEAD: 76 changed paths (29 core, 2 docs, 26 extension, 2 feature, 17 other); 0 failing; B-11 docs: 0 hits`
+
+# HANDOFF part 19: T-20261030-e403 (recorded with `bay plan`) - slice 5 part D built: decision (e), core-names test, 0006 Part E, whole-tree checks
+
+Outcome: done (not partial: D2 was not needed) on feat/0008-stage4. Not pushed. No proposal edited.
+
+## To-do and commits
+1. Decision (e): 71ebc63. `ITEM_COLUMNS` descriptions are generic; budget/cost counter `posts` -> `items` (`bay/dispatch.py`, `bay/cli.py`
+   `items=` in status, corpus-store budget); `costPerPostUsd`/`COST_PER_POST_USD`/`cost_per_post` -> `costPerItemUsd`/`COST_PER_ITEM_USD`/
+   `cost_per_item` in `bay/config.py`, `bay/connect.py`, `bay/model.py`, `bay/dispatch.py`, corpus-store, `schemas/connector.schema.json`,
+   `modes/briefing/config.schema.json`, the four connector.yaml, config.example.yaml, READMEs, INTERFACES.md. The old key has no alias:
+   `test_the_old_price_key_is_refused_by_the_schemas_with_no_alias` (mode setting and connector.yaml both refused). `dispatch.use` counted
+   `out["posts"]` for the ledger; it now counts `out["items"]`.
+2. `tests/test_core_names.py`: bcef679. Rule (also in the file's docstring): names are discovered (content-types/ folders and kinds, the
+   view names of types and of `modes/*/views.yaml`, `connectors/` folders). Scanned: .py/.json/.yaml under bay/, framework/, schemas/,
+   adapters/, coordinator/ (folders tests, fixtures skipped; framework modes own no type so are scanned). A hit is an identifier (ast: names,
+   attributes, args, defs, keywords) with a snake/camel segment equal to a type name, or equal to a connector name; a string without
+   whitespace with a type name as a segment or a connector name as a token; in any string a `<type>/v<N>` ref, a view name, or a type or
+   connector name in quotes/backticks. A sentence using the English word (`steps post interim results`) is not a hit. `ALLOWED` has 5
+   entries with reasons, and a stale entry fails: the item/v1 author field `email` in `bay/selector.py`, `corpus_store.py` and
+   `schemas/data/item.v1.schema.json` (a base-record field, not a type, so not renamed: that would change the public item schema), and the
+   Claude Code hook event `PostToolUse` / phase `post` in `adapters/claude-code/claude_code.py`.
+3. Part E: ae33236. `uses:`/`skills:` are keys of `features.<name>` (`schemas/mode.schema.json`, `Feature.uses/skills`). `bay check`
+   (resolve) fails: a `uses` entry no role of the feature is granted (B-9), a feature whose roles are granted any endpoint and has no
+   `uses` (`uses: []` is valid), a `skills` name that is not a skill of the mode (B-8); `bay lint` fails a playbook that names a skill
+   its feature does not list. `Dispatcher.use` (via `_open_uses`) limits a unit to the `uses` of the features whose open call
+   (`needs-agent`, cursor on a role/review step of that unit) waits on it; with no such call the role-level grant applies (decision (c)).
+   `_plan` hands a role only the feature's mode skills (own role skills stay) and only its `uses` as `tools`. `merge_mode`: a child's
+   feature replaces the parent's whole. `bay show <mode> --resolved` prints the features with their origin (options may not come before
+   the verb: the verb-first guard stays, so it is `show mail-briefing --resolved`). Declared in `modes/briefing` (digest, ask, prune),
+   `modes/mail-briefing` (digest, ask: written whole, since they replace briefing's), `framework/modes/improve` (scan, audit, triage,
+   implement); forge templates carry `uses: []` (and a `skills` hint).
+4. Whole tree: see Evidence. `bay/use_shim.py` was not touched (the check is in `Dispatcher.use`, which the shim calls).
+
+## Changes to existing tests (not security assertions)
+- `tests/test_dispatch.py`: the two `cost == {"posts": 7, ...}` assertions now say `items` (decision (e)). Nothing else in the file.
+- `tests/test_resolver.py::test_effect_not_declared_by_endpoint`, `tests/test_inheritance.py` (3 tests): they overrode one key of a parent
+  feature; with whole-feature override they pass the whole block (`helpers.whole_feature`). Assertions are unchanged; new test
+  `test_a_child_feature_is_never_merged_key_by_key_with_its_parents`.
+- corpus-store `test_corpus_store.py` and `tests/test_config.py`: renamed keys. `tests/test_offline_golden.py`: `generic_names` (below).
+- Unchanged and passing in the full run: `tests/test_boundaries.py`, `tests/test_boundary.py`, `tests/test_lint.py`,
+  `tests/test_guard_7a.py`, `tests/test_guard_mainthread.py`, `tests/test_review7a.py`, `tests/test_review_record.py`,
+  `tests/test_submit_needs_plan.py`, `tests/test_auth.py`, `framework/connectors/corpus-store/tests/test_sqlsandbox.py`, the connector
+  tests (gmail-api, x-api, fake, fake-mail).
+
+## Golden
+`git diff a6c035e HEAD -- tests/golden/` (both files) has exactly these hunks and no other: per file, (1) `source` description
+`"x, fake, gmail, ..."` -> `"name of the source that produced it"`, (2) `kind` `"post, email, ..."` -> `"the content type of the item"`,
+(3) `title` `"(null for posts)"` -> `"(null when the kind has none)"`, (4) `costPerPostUsd` -> `costPerItemUsd`, (5) `posts` -> `items`
+(budget in `status` and in `sync`; (4) and (5) each appear twice per file). Every changed line is one of the five allowed changes; the three
+decision (a) deltas stay in `mail_deltas` and the golden file for mail-briefing still has `v_posts` and `addr_key`. `generic_names` in
+`tests/test_offline_golden.py` asserts the three descriptions and the `items`/`costPerItemUsd` keys (and the absence of the old ones) for both modes.
+
+## Evidence (last lines)
+- `python3 tests/run.py -q`: `499 passed, 0 failed`
+- `python3 tests/run.py -k offline_golden`: `2 passed, 0 failed`
+- `./bay.sh check`: `✓ lint clean` / `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`
+- boundary, whole branch (`./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`):
+  `boundary origin/main...HEAD: 76 changed paths (29 core, 2 docs, 26 extension, 2 feature, 17 other); 0 failing; B-11 docs: 0 hits` (at ae33236)
+- `./bay.sh build --project .../scratchpad/s5d`: `built 6 modes for claude-code`; `./bay.sh clean --project .../scratchpad/s5d`: `clean`
+- Glob of scratch `s5d` after clean: `agentbay.config.yaml` only
+- core names: `test_core_names::test_no_core_file_names_a_content_type_or_a_connector` passes with the 5 `ALLOWED` entries, each matched.
+- Dead code: not run by me. Removed with what replaced it: `cost_per_post`, `COST_PER_POST_USD`, `costPerPostUsd`, the per-key feature merge
+  (incl. the `roles` entry merge) in `merge_mode`. Nothing new is unused (`_open_uses`, `_check_uses_and_skills`, `cmd_show_resolved`,
+  `whole_feature` are called).
+
+## Open for the owner
+- 0008's `touches:` already cover every changed path (boundary 0 failing); `bay/use_shim.py` untouched.
+- State of an existing project: a store `state.json` written before this commit has `budget.<month>.posts`; it is not read as `items` (no
+  compat), so the first sync of that month would fail on the missing key until that month's entry is deleted. The branch is unpushed and
+  the offline tests start from empty projects; say if you want a one-time migration instead.
+- `uses:` lists for improve were derived from playbooks/skills (shim reads named there); the first run that needs another read gets a
+  refusal naming the feature's `uses:`.
+
+
+Outcome: done and green on feat/0008-stage4, with open items for part D listed below. Not pushed. No proposal edited.
+
+## To-do and commits (all in b618440 unless noted)
+1. Mode views loader in `bay/contenttypes.py` (`ModeViews`, `mode_views(dirs)`, `mode_problems`, `check_mode_views`): the nearest mode folder (own, then `extends` chain) with `views.sql`/`views.yaml`; same statement rules as a type; a mode view may read only the base views, the views of the types the mode `reads:` and its own earlier views (authorizer arg 5 = responsible view; functions = sandbox allowlist). Lint runs it for every mode (`bay/lint.py`).
+2. `v_threads` lifted out of `content-types/email/` (statement and `views.v_threads` entry deleted) into `modes/mail-briefing/views.sql` + `views.yaml`. It now reads only `v_email` (no `main.items`); columns and values are unchanged (golden).
+3. `views.yaml` has `views:` (column docs) and `threads:` (view, window, selector, important, order, json, flags, details = per-row SQL with `:column` params). `CorpusStore.threads` reads that block; no view or type name in core. A mode with no `threads:` block gets "mode X defines no rows for `threads`: give the mode views.sql and views.yaml ...". Interface stays v1 (text only).
+4. Store: `store_meta` key `mode-views` (JSON list of name/CREATE TEMP VIEW) is written at creation and re-written by the writer when views.sql changed; absent when the mode has none. `sqlsandbox.view_sql/views_of` take `mode`; order is `v_items`, type views, mode views, `v_fts`, full-text views. `Dispatcher._settings` passes `modeDirs` (mode.dirs).
+5. Wording: `items.store.v1.yaml` (sql, threads), `items.source.v1.yaml`, `modes/briefing/skills/corpus-sql` + `digest` + `mode.yaml` description, mail-briefing skill/playbooks/README/config.schema.json, schemas (mode, connector, event, item.v1), `framework/rules/conformance.yaml`, `bay/lint.py` messages, `bay/config.py` example, `bay/scaffold.py` (scaffolds the first discovered kind, `<kind>/v1` when none), email README, INTERFACES/DESIGN lines.
+6. Tests: new `test_threads_needs_a_view_from_the_mode_and_a_mode_view_reads_only_views_of_its_types`; `modeDirs` added to the store helpers of `tests/test_mail_briefing.py` and `connectors/gmail-api/tests/test_gmail_api.py`; view order and `store_meta` expectations updated. No security test changed. Golden: files untouched, `mail_deltas` unchanged and still exact.
+
+## What part D must know
+- A store built without `modeDirs` (tests that call `connect.instantiate` by hand) has no mode views, so `v_threads` and `threads` are missing there; pass `modeDirs` like the two helpers do.
+- Core hits left in `bay/` that I could not remove without changing describe/status output (golden says byte for byte) or a public key; part D needs an owner decision (a documented golden delta, or an allowlist entry):
+  - `bay/sqlsandbox.py:70-73` `ITEM_COLUMNS` descriptions ("x, fake, gmail", "post, email", "null for posts") are in describe output.
+  - `posts` as the cost/budget counter key (`bay/cli.py:628`, `bay/dispatch.py:70,252,453-454`, corpus-store `budget.posts`) is in status output and state.json; `COST_PER_POST_USD`/`costPerPostUsd` is a public setting name.
+  - `bay/selector.py:102`, `corpus_store.py:226-242` `email` is the item/v1 author field, not a content type. `bay/improve/detect_sessions.py:288` is the verb.
+- Not built: `tests/test_core_names.py`, Part E (`uses:`/`skills:`).
+- `modes/briefing/skills/digest/SKILL.md` and `modes/briefing/mode.yaml` wording changed; boundary passes (0 failing).
+
+## Evidence (last lines)
+- `python3 tests/run.py -q`: `488 passed, 0 failed`
+- golden (inside the run above; earlier `-q -k offline_golden` also passed): `2 passed, 0 failed` in the part-B form
+- `./bay.sh check`: `✓ lint clean` / `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`
+- `./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: `boundary origin/main...HEAD: 56 changed paths (25 core, 2 docs, 17 extension, 2 feature, 10 other); 0 failing; B-11 docs: 0 hits` (at b618440)
+- `./bay.sh build --project .../scratchpad/s5c`: `built 6 modes for claude-code`; `./bay.sh clean --project .../scratchpad/s5c`: `clean`
+- Glob of scratch `s5c` after clean: `agentbay.config.yaml` only
+- `git diff --stat a6c035e HEAD -- tests/golden/`: empty
+- `git grep -nwi "post|posts|email|x-api|gmail-api|fake-mail" -- bay`: the hits listed above only (cli.py:628, config.py:31, dispatch.py:70/252/453/454, improve/detect_sessions.py:288, selector.py:102, sqlsandbox.py:71/73).
+
+# HANDOFF part 17: T-20261030-f10d (recorded with `bay plan`) - slice 5 part B built: `email` moved into `content-types/email/`
+
+Outcome: part B is done and green on feat/0008-stage4. `email` is a content type like `post`: its child table, FTS index, delete trigger,
+attachment-text move-out and fromMe/toMe/bulk come from `content-type.yaml` + `derive.py`; the old email code in `bay/sqlsandbox.py`,
+`bay/selector.py` and `corpus-store` is deleted (no second path). Not pushed. No proposal edited.
+
+## To-do and commits
+1. `tables` / `derived` / `deriveVersion` in `schemas/content-type.schema.json` and `bay/contenttypes.py`: d1c1551.
+2. `content-types/email/` (content-type.yaml, fields.schema.json = git mv of `schemas/data/email.v1.schema.json`, views.sql, derive.py, README, fixtures): d1c1551.
+3. Generic child tables, FTS, triggers, derive in `corpus_store.py` / `sqlsandbox.py`; `email_view_sql`, `MAIL_VIEWS`, `MAIL_FUNCTIONS`, `ATT_FTS*`,
+   `attachments_ddl`, `attachment_rows`, the `addr_key` SQL function and `selector.addr_key`/`GMAIL_DOMAINS` removed: d1c1551.
+4. `v_threads` kept working (see part C below): d1c1551.
+5. `deriveVersion` recompute (`derive_again`, test `test_the_child_table_and_the_derived_fields_come_from_the_type`): d1c1551.
+6. Tests: gmail uses `derive.addr_key` (via `ContentType.derive_module()`), `test_contract_versions` bumps `content-types/email` to v2, golden compares with the documented deltas: d1c1551.
+7. Docs: INTERFACES.md :220-232, :276, :293-297, :305-317 and DESIGN.md :135-136 reworded (B-11: 0 hits after the files were committed): d1c1551.
+8-10. Checks, build, clean: see Evidence. 11. This note.
+
+## What part C must know
+- `v_threads` (with `needsReply`) is the LAST statement but one of `content-types/email/views.sql` and the `views.v_threads` entry of
+  `content-type.yaml`, both marked "temporary home". Lift out = cut that statement and that entry together, put them in the mode's
+  `views.sql` / `views.yaml`. It reads only `temp.v_email` and the base tables. Its columns are now in the documented order
+  (`needsReply` after `lastBulk`; the old `SELECT t.*, needsReply` put it last), so `SELECT *` differs from before; named reads and `threads` output are identical.
+  `CorpusStore.threads` still names `v_threads`, `v_email`, `v_attachments` (core names to remove in C).
+- Store content: `settings.reads` (new, from `ResolvedMode.reads` via `Dispatcher._settings`) names the types a store is made for (decision (d)).
+  Absent `reads` = every type of the kit (tests that build a store without a mode). Hence mail-briefing has no `v_posts`, feed-briefing no mail view.
+  `bay/model.py` gained `ResolvedMode.reads`; `bay/dispatch.py` one line in `_settings`.
+- Order of views (`sqlsandbox.view_sql`): `v_items`, the types' non-full-text views (types by name), `v_fts`, the types' full-text views.
+  A view with `fullText: {over, table, example}` in content-type.yaml is a full-text view (FTS5 only); `includes.view` may be a view of the same type.
+- `items.derived` (JSON) is new; `store_meta` has `derive:<name>`. `SCHEMA_VERSION` stays 3 (the branch is unpushed; a v3 store made by part A has no
+  `derived` column and must be moved aside). Readers (the sandbox) do not recompute: after a `deriveVersion` change, `fromMe/toMe/bulk` read stale
+  until the next sync or prune.
+- `textChars` is now stored as given (`int(textChars or 0)`); before it was `len(text)` when text was present and textChars missing. All connectors set both.
+- `bay/improve/graph.py::_data_schemas` now also yields the content types' fields schemas (`schema:post/v1`, `schema:email/v1`), as before the move.
+- Not built (not in this task): `tests/test_core_names.py`; `bay/scaffold.py:128` wording.
+- Golden: `tests/golden/*.json` unchanged since a6c035e; `mail_deltas` in `tests/test_offline_golden.py` asserts the three decided deltas exactly
+  (no `v_posts` view and its sql read is an error, no `addr_key` function, new view order) and all other values equal, including fromMe/toMe/bulk/needsReply.
+
+## Evidence (last lines)
+- `python3 tests/run.py -q`: `487 passed, 0 failed`
+- `python3 tests/run.py -q -k offline_golden`: `2 passed, 0 failed`
+- `./bay.sh check`: `✓ lint clean` / `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)` (same four `!` warnings)
+- `./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`:
+  `boundary origin/main...HEAD: 37 changed paths (13 core, 2 docs, 12 extension, 10 other); 0 failing; B-11 docs: 0 hits` (after d1c1551, before this note)
+- `./bay.sh build --project .../scratchpad/s5b`: `built 6 modes for claude-code`; `./bay.sh clean --project .../scratchpad/s5b`: `clean`
+- Glob of scratch `s5b` after clean: `agentbay.config.yaml` only
+- `git diff --stat a6c035e HEAD -- tests/golden/`: empty
+
+# HANDOFF part 16: T-20261030-83c8 (recorded with `bay plan`) - slice 5 part A built: golden baseline, content-type loader, `post` moved
+
+Outcome: part A is done and green on feat/0008-stage4. The golden baseline was committed first, from the untouched code; the loader,
+its schema and the contract suite are in; `post` lives in `content-types/post/` and the core reads it only through `bay/contenttypes.py`.
+`email` is untouched (old location, old code path) until part B. Not pushed. No proposal edited.
+
+## To-do and commits
+1. Golden baseline, own commit, passing on the untouched code: a6c035e (`tests/test_offline_golden.py`, `tests/golden/{feed,mail}-briefing.json`).
+2. Loader + schema + contract suite + `post` moved + docs lines reworded: 9bc2597.
+   - `bay/contenttypes.py` (scan/load/check_views/problems, item_kinds, fields_schema), `schemas/content-type.schema.json`,
+     `framework/components.yaml` (`bay/contenttypes.py` under briefing `owns`), `bay/lint.py` (runs `contenttypes.problems`), `bay/model.py`
+     (`data_schema` and `item_kinds` read the types).
+   - `tests/contracts/content_type.py` (the contract: loads, README, fixtures validate, views build under the read-only rules, documented
+     columns equal real columns, item views return one row per fixture) and `tests/test_content_types.py`; `tests/run.py` also globs `content-types/*/tests`.
+   - `content-types/post/` = `content-type.yaml`, `fields.schema.json` (git mv of `schemas/data/post.v1.schema.json`), `views.sql`, `README.md`,
+     `fixtures/items.json`. `v_posts` and its column docs are gone from `bay/sqlsandbox.py`.
+   - Store: `store_meta` table (key `type:<name>` = version), `SCHEMA_VERSION` 3; a store whose type is gone or has another version is refused
+     with "move the folder aside and sync again" (writer and sandbox).
+   - Docs: DESIGN.md:121, :135 and INTERFACES.md:224, :291, :303 reworded (B-11: 0 hits).
+
+## What part B must know
+- Deviations from the part 15 plan, on purpose:
+  - No `ContentType` kind in `model.KINDS`. `bay/contenttypes.py` scans `content-types/*/content-type.yaml` itself (one discovery path, cached by
+    file stat) and lint reports its problems; adding the Kit kind would be a second discovery.
+  - `content-type.yaml` has only `version`, `kind` and `views` (documented columns, `item`, `includes`) for now. `tables`, `derived`, `deriveVersion`
+    are not in `schemas/content-type.schema.json` yet: part B adds them together with the code that reads them (no unused schema keys).
+  - The base DDL (`items`, `item_selectors`) and the `v_items` view moved into `bay/sqlsandbox.py` (`BASE_DDL`, `ITEMS_VIEW`), because the type
+    validation needs them without the connector; `corpus_store.ddl` uses them. `store_types(con)` and `views_of(fts, types)` live there too.
+  - `store_meta` records EVERY type the kit has at store creation (not "the types the mode reads", decision (d)): the golden test needs mail-briefing's
+    describe to keep `v_posts` in part A. Narrowing to `reads:` is the documented describe delta (a); do it in B/C with the golden update.
+  - `tests/test_core_names.py` (part 15 item 4, the ratchet) was not part of this task and is not built.
+- Where email still hard-codes: `VIEWS`, `ITEM_VIEWS`, `MAIL_VIEWS`, `MAIL_FUNCTIONS`, `COLUMNS` (v_email, v_threads, v_attachments, v_fts,
+  v_attachment_fts), `email_view_sql`, `attachments_ddl`, `attachment_rows`, `addr_key` registration, `describe` mail logic in `corpus_store.py`.
+  View order in describe is now `v_items`, the types' views, then `VIEWS[1:]` (`views_of`), which keeps the old order.
+- Type views are written as `CREATE VIEW v_x AS ...` over `temp.v_items` and `main.items`; the loader turns them into `CREATE TEMP VIEW`. `check_views`
+  builds them over an empty store with only the base tables and `v_items`: a type with a child table needs its table in that scaffold (extend `check_views`).
+- Existing tests I had to change (none is a security test; `test_sqlsandbox.py`, `test_boundaries.py`, `test_resolver.py`, `test_dispatch.py`, `test_lint.py` are untouched):
+  `test_corpus_store.py` (user_version 3, "newer than this kit (v3)"), `test_mail_briefing.py` (newer-version case now uses v4, because v3 is current),
+  `test_contract_versions.py` (the F-7 mixed-version case now uses email/v2 from `fake-mail`, because post has one version and lives in a content-type.yaml).
+- `bay/improve/graph.py::_data_schemas` no longer lists `schema:post/v1` (it only scans `schemas/data`); slice 6 touches `bay/improve/`, not changed here.
+- `bay/scaffold.py:128` still says `schemas/data/` in a TODO comment (part C wording).
+- The dead-code step was not run (no command for it in this task); new public names are all used by code or tests.
+- The 17 amendment entries are already in 0008's `touches:`.
+- CLI baseline: `cli_before_check.txt` and a short `cli_before_catalog.txt` are in the scratch folder. `describe feed-briefing` / `describe mail-briefing`
+  were run but not saved (very long JSON, and part A changes no mode file, so they cannot differ); save them with Write at the start of part B if wanted.
+
+## Evidence (last lines)
+- `python3 tests/run.py -q`: `485 passed, 0 failed`
+- `python3 tests/run.py -q -k offline_golden`: `2 passed, 0 failed` (golden files unchanged since a6c035e: `git diff a6c035e --stat -- tests/golden` is empty)
+- `./bay.sh check`: `✓ lint clean` / `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)` (same four `!` warnings as before)
+- `./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`:
+  `boundary origin/main...HEAD: 26 changed paths (9 core, 2 docs, 5 extension, 10 other); 0 failing; B-11 docs: 0 hits` (before this HANDOFF commit)
+- `./bay.sh build --project .../scratchpad/s5a`: `built 6 modes for claude-code`; `./bay.sh clean --project .../scratchpad/s5a`: `clean`
+- Glob of scratch `s5a` after clean: `cli_before_check.txt`, `cli_before_catalog.txt`, `agentbay.config.yaml`
+
+# HANDOFF part 15: T-20261030-db86 (recorded with `bay plan`) - slice 5 of 0008 planned (item 3: finish 0006 step 2 and Part E)
+
+Outcome: slice 5 is split into four sequential builder parts (A to D), each a green commit with its own acceptance, and every path it
+needs is listed with its touches status. No code changed; no proposal edited. Branch feat/0008-stage4 (from origin/main 1e5eebe).
+All line numbers are at 1e5eebe.
+
+## 1. Current state
+
+Base item record
+- `schemas/data/item.v1.schema.json:7-18` (envelope: id, extId, source, kind, author, title, text, url, createdAt, fetchedAt, labels, threadId; description names posts and email at :5 and :18).
+- Store tables `framework/connectors/corpus-store/corpus_store.py:93-121` (`ddl`: `items`, `item_selectors`, items_fts + triggers); `item_row` :202-218 (kind fields go to `items.ext` JSON, attachment text is stripped :208-210); `row_item` :233-244; `_stored` :247-255.
+- `SCHEMA_VERSION = 2` at `bay/sqlsandbox.py:36` (and corpus_store.py:75). A store of another version is refused (`version_error` sqlsandbox.py:285).
+
+Post (kind `post`)
+- Fields `schemas/data/post.v1.schema.json:7-12` (lang, metrics). View `v_posts` `bay/sqlsandbox.py:235-240`; column docs :89-93.
+- Producers: `connectors/x-api/connector.yaml:13`, `connectors/fake/connector.yaml:9` (`produces: [post/v1]`). Reader: `modes/feed-briefing/mode.yaml:11` (`reads: [post/v1]`).
+
+Email (kind `email`)
+- Fields `schemas/data/email.v1.schema.json:7-35` (from, to, cc, messageId, inReplyTo, account, hasAttachments, bulk, attachments[]).
+- Producers: `connectors/gmail-api/connector.yaml:17`, `connectors/fake-mail/connector.yaml:12`. Reader: `modes/mail-briefing/mode.yaml:11`.
+- Child table `attachments` (+ `attachments_fts`, triggers): `corpus_store.py:124-142`; rows written by `attachment_rows` :221-230 and `_upsert` :566-568.
+- Views: `email_view_sql` `bay/sqlsandbox.py:178-227` = `v_email` :183-194 (fromMe/toMe use the SQL function `addr_key` :190-192), `v_threads` :195-213 (`needsReply` :196, lastFromMe/lastToMe/lastBulk :202), `v_attachments` :214-221, `v_attachment_fts` :224-226. Column docs :94-128, :135-139.
+- `addr_key` is `bay/selector.py:71-87` (Gmail dot rules); registered as a SQL function `sqlsandbox.py:256`, in the allowlist :56, and `MAIL_FUNCTIONS` :45.
+- Constants that name the types: `VIEWS`, `ITEM_VIEWS`, `MAIL_VIEWS`, `TABLES`, `FTS_VIEWS` `sqlsandbox.py:37-48`; `view_sql` :230-246; `connect_ro` creates all views for every store :269; the authorizer allowlist is `self.views`/`self.tables` :314-315, :347-349 (every store gets `v_posts` and the mail views, whatever the mode reads).
+
+Needs-reply and important-sender logic
+- `needsReply` = `lastFromMe = 0 AND lastToMe = 1 AND lastBulk = 0`, `sqlsandbox.py:196`.
+- `important`: `CorpusStore.threads` `corpus_store.py:1126-1167` (:1163 `addr_matches(important, sender)` from `bay/selector.py:65-68`); also builds `ids` :1156, `lastText` :1158, `attachments` :1160 from the email views.
+- Interface `framework/interfaces/items.store.v1.yaml:145-169` (`threads`, text says "Email threads"); `sql` text :88-93 names the views.
+- Mode: `modes/mail-briefing/mode.yaml:23` (`gather` step `items.store/v1.threads`, `important: $config.important`); setting `modes/mail-briefing/config.schema.json:6-9` (already the only key; example `config.example.yaml:9`).
+- Describe: `corpus_store.py:1075-1124` (mail views listed only when the store holds an `email` row :1093; `fts.attachments` :1117; functions :1197-1199).
+
+How connectors write items
+- A source (`items.source/v1`) returns `item/v1` dicts; `corpus-store.sync` validates each with `_validate` `corpus_store.py:527-539` (`model.data_schema("<kind>/v1")`, falling back to `item/v1`), scrubs (`scrub_item` :183), derives the selector tags, and `_upsert` :541-569 writes `items` + `item_selectors` + `attachments`.
+- Kinds are found by `model.item_kinds` `bay/model.py:97-109` (any `schemas/data/<kind>.v<N>.schema.json` that extends `item/v1`) and `model.data_schema` :85-91; B-6 lint `bay/lint.py:399-480` checks `reads:`/`produces:` against them (messages :432, :449 use `post/v1` as the example); `bay/scaffold.py:128` scaffolds `produces: [post/v1]`.
+
+How modes query
+- Code steps call `items.store/v1.*` (`mode.yaml` `run:`). Agents go through the role unit's use shim: `bay/cli.py:372-386` -> `Dispatcher.use` `bay/dispatch.py:229-256`, allowed when `target in r.bay_uses` (:237), which `bay/model.py:820-824` fills with every read-only endpoint of every needed interface (per role unit, not per feature).
+- Dispatcher settings for the store: `_settings` `dispatch.py:487-492` (`mode`, config), `_use_settings` :258-267 (+ bound `sources`). The store keys on `settings.mode` (`corpus_store.py:364`) and knows nothing else about the mode.
+- Skills that name views: `modes/briefing/skills/corpus-sql/SKILL.md:9,13,22` (v_posts), `modes/mail-briefing/skills/{corpus-sql,digest}/SKILL.md`.
+- Per-feature `uses:`/`skills:` do not exist yet: `Feature` has no such fields (`mode.schema.json:57-180` allows neither); `_plan` hands a role every mode skill (`dispatch.py:561-562`). Slice 3 folded features into `mode.yaml` (no `feature.yaml`), so Part E lands as two more keys of the `features.<name>` block.
+
+Facts the plan depends on
+- Boundary rules: `bay/boundary.py:298-336`. A feature folder of an EXISTING mode passes only if an entry's literal prefix reaches `<mode>/features/` (:326). 0008's slice-5 entry `modes/*/features/*/` has literal prefix `modes/`, so it does NOT cover `modes/mail-briefing/features/*` (it does cover `modes/briefing/features/*`, which is core, B-1). Mode-wide files of an existing mode need an entry that matches the path.
+- `framework/components.yaml:31` already declares the `contentType` contract (`content-types/<name>/`, `schemas/content-type.schema.json`, `tests/contracts/content_type.py`); neither file exists yet.
+- `tests/run.py:18-22` globs `tests/test_*.py` and `*/tests/test_*.py` of `connectors` and `framework/connectors` only.
+- B-11 docs check (`boundary.py:339-359`) will report any line of README/DESIGN/INTERFACES outside a fence that has the bare word `post` or `email` once `content-types/post|email` exist. Today: `docs/DESIGN.md:121`, `docs/INTERFACES.md:220,224,225,274`. Each part rewords the lines it exposes.
+- Tests that read describe/views today: `tests/test_mail_briefing.py:132,144-153,278,292-310`; `framework/connectors/corpus-store/tests/test_sqlsandbox.py` (Sandbox(path) built with no mode at :158,:343,:357,:375, reads `v_posts`); `test_corpus_store.py:426-429,482`; `connectors/gmail-api/tests/test_gmail_api.py:143,715-764`; `tests/test_contract_versions.py:24,47-48,106-107` (write `schemas/data/*.v2.schema.json`).
+
+## 2. Target (0006 Part B and Part E, mapped to files)
+
+Content type = a folder `content-types/<name>/` (top level, user space like connectors; ships `post` and `email`):
+```
+content-types/post/    content-type.yaml  fields.schema.json  views.sql  README.md  fixtures/
+content-types/email/   content-type.yaml  fields.schema.json  views.sql  derive.py  README.md  fixtures/
+```
+- `content-type.yaml` (apiVersion/kind `ContentType`/metadata.name/spec): `version: 1`, `kind: <item kind>`, `deriveVersion` (email), `views: {v_email: {description, item: true, columns: [{name,type,description}]}, ...}` (the column docs that `sbx.COLUMNS` holds today, so `describe` reads them from here), `tables: {attachments: {from: attachments, moveOut: [text], columns: {...}, fullText: [name, text]}}` (0006 Part B syntax; table keeps the name `attachments`, the FTS table `attachments_fts`, so agent SQL does not change), `derived: [fromMe, toMe]`.
+- `fields.schema.json` = the current `schemas/data/<name>.v1.schema.json` moved (same `$id`/`title` `post/v1`, `email/v1`).
+- `views.sql`: only `CREATE VIEW v_<name> ...` statements. Post: `v_posts` (from sqlsandbox.py:235-240). Email: `v_email`, `v_attachments`, `v_attachment_fts` (:183-194, :214-226) with `fromMe`/`toMe` read from stored fields, not from `addr_key`.
+- `derive.py`: `derive(item, version) -> dict` of added fields (`fromMe`, `toMe`), holds `addr_key` (moved from selector.py). Runs in the writer after scrubbing; stdlib imports only (lint scans it). Stored in a new column `items.derived` (JSON) with `items.derived_ver`, NOT in `ext`, so `get`/`query` output stays the same. The store records content types and versions in a `store_meta` table; on a `deriveVersion` change it recomputes `derived` locally (no fetch); another type version is refused ("move the folder aside and sync again"). `SCHEMA_VERSION` goes 2 -> 3.
+- Loader: discovery is a new `ContentType` kind in `model.KINDS` (`bay/model.py:44-50`, folder `content-types`, glob `*/content-type.yaml`, schema `content-type`), so collisions and errors reuse `Kit`; `model.item_kinds` and `model.data_schema` read it (no `schemas/data/post|email`). Views, tables, derive and mode-view handling live in NEW `bay/contenttypes.py` (listed under `briefing` `owns:` in `framework/components.yaml`). `schemas/content-type.schema.json` is new. `tests/contracts/content_type.py` is the contract suite, run by `tests/test_content_types.py` against every discovered type (see Part A).
+- `produces:`/`reads:` already exist and keep their names (`post/v1`, `email/v1`); B-6 lint stays, now fed by the loader. New lint: content-type.yaml shape, documented columns equal the real view columns (built in memory), view SQL passes the read-only authorizer and reads only base tables and the type's own tables/views (B-10), `derive.py` imports, table names unique across the types one mode reads.
+- Generic store (`corpus_store.py`, `sqlsandbox.py`): child tables, their delete and FTS triggers, row writing, derive, and the view set come from the loader for the types the mode reads (`reads` equals what its sources produce, by B-6). `describe` lists a type's views for the types the mode reads, the base views, and the mode's own views; `functions` lists only the fixed allowlist. `Sandbox(path)` keeps its signature: the view set is rebuilt from `store_meta` (types, versions, mode view text), so the sandbox security tests stay unchanged.
+- Mode-owned views: `modes/mail-briefing/views.sql` defines `v_threads` (with `needsReply`, built on the type's `v_email`) and `modes/mail-briefing/views.yaml` its column docs and the row metadata (`window: lastDate`, JSON and boolean columns, `ids`, `lastText`, `attachments` as SQL columns). Same validation as a type's views. `items.store/v1.threads` stays (no interface version bump) but becomes generic: rows of the view `v_threads` of the mode, window on its `lastDate`, selector on `matched`, `important` marks rows whose `senders` match the patterns (`addr_matches` stays in selector.py: it is the `from` rule, not mail-specific). A mode with no `v_threads` gets an error naming the fix. mail-briefing config keeps only `important` (unchanged file apart from its wording).
+- Part E in the slice-3 shape: `features.<name>.uses: [<iface>/v<N>.<endpoint>, ...]` and `features.<name>.skills: [<short name>, ...]` in `mode.yaml`; `mode.schema.json` allows both; lint: every `uses` entry is granted to a role of that feature (B-9), every skill exists in the mode (B-8), a feature with a role step whose unit has `bayUses` must declare `uses`. Enforcement: `Dispatcher.use` allows `target` only if it is in the `uses` of a feature whose open call (`.agentbay/calls/*.json`, status `needs-agent`, cursor on a role step of this unit) waits for that unit; with no such open call the role-level grant applies as today (so existing security tests do not change). `_plan` hands only the feature's `skills`. Whole-feature override: a child's feature of the same name replaces the parent's whole block (`merge_mode`), and `bay show <mode> --resolved` prints the resolved features with their origin. `bay/use_shim.py` itself stays an entry point (listed by 0008, probably untouched).
+
+## 3. Split (sequential; each part ends with `python3 tests/run.py -q` green and `./bay.sh check` clean)
+
+Common to every part: delete replaced code completely (the `deadcode` step fails on new unused code or compat layers); update README/DESIGN/INTERFACES lines for what changed (DOD-13); reword the B-11 doc lines the part exposes; run `python3 -m bay.cli boundary --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs` with the amendment entries below applied by the owner (a builder may not edit a proposal: if the entries are missing the check fails by design; list that in the HANDOFF).
+
+Part A: baseline, loader, `post` moved (about 35 calls)
+1. First commit, before any other change: `tests/test_offline_golden.py` + `tests/golden/*.json` (see section 5), generated from the untouched code.
+2. `schemas/content-type.schema.json`; `ContentType` kind in `model.py`; `item_kinds`/`data_schema` read content types; `bay/contenttypes.py` (load, view/table SQL, validation); `tests/contracts/content_type.py` + `tests/test_content_types.py` (+ `tests/run.py` also globs `content-types/*/tests`); components.yaml `owns` line.
+3. `content-types/post/` (4 files + fixtures); delete `schemas/data/post.v1.schema.json` and the `v_posts` code/docs in sqlsandbox.py; the store builds the `post` views from the loader; `store_meta` + `SCHEMA_VERSION` 3 (the table is generic; email still on the old code path until B).
+4. `tests/test_core_names.py` with a ratchet: scans core files (`bay/**`, `framework/**` except extension folders, `schemas/**`, `adapters/**`, `coordinator/**`) for the discovered names (quoted kind strings, `<name>/v<N>` refs, `v_<view>` names of discovered types, hyphenated connector names `x-api`, `gmail-api`, `fake-mail`); `ALLOWED` lists today's hits per file and shrinks in B and C.
+Acceptance: golden test identical for feed-briefing and mail-briefing; `v_posts` read by the unchanged sandbox security tests; contract suite passes for `post`; a content-type with a view reading another table is refused; kinds still `{post, email}` (email from the old location until B); no `schemas/data/post.*`; docs lines DESIGN.md:121 and INTERFACES.md:224 reworded.
+
+Part B: `email` moved (about 40 calls)
+1. `content-types/email/` (content-type.yaml with `attachments` table and `derived`, fields.schema.json, views.sql with `v_email`/`v_attachments`/`v_attachment_fts`, derive.py with `addr_key`, fixtures); delete `schemas/data/email.v1.schema.json`.
+2. Generic child tables and derive in `corpus_store.py` (`attachments_ddl`, `attachment_rows`, `_upsert` :566-568, `item_row` :208-210, `describe` mail logic :1093-1120, `_functions` :1197) and `sqlsandbox.py` (delete `email_view_sql`, `MAIL_*`, `addr_key` registration and allowlist entry); `bay/selector.py` loses `addr_key`/`GMAIL_DOMAINS`.
+3. `threads()` still reads `v_threads`; until C the view stays in the email type as a documented, temporary home (its SQL moves out in C). Recompute of `derived` on `deriveVersion` change; store version refusal tests.
+Acceptance: golden identical except the documented describe deltas (section 5); fromMe/toMe/bulk/needsReply values identical on the mail fixture; attachment text, FTS and delete-with-item tests unchanged; `derive.py` import scan; test_contract_versions rewritten to write `content-types/*/content-type.yaml` versions; gmail tests use `derive.addr_key` for the unit assertions; INTERFACES lines 220-229, 274, 293-315 reworded.
+
+Part C: mode-owned views, generic `threads`, last core names (about 35 calls)
+1. Move `v_threads` SQL (with `needsReply`, `ids`, `lastText`, `attachments`) to `modes/mail-briefing/views.sql` + `views.yaml`; contenttypes.py loads mode views (lookup through the `extends` chain), validates them with the same authorizer, records them in `store_meta`.
+2. `CorpusStore.threads` becomes the generic reader over `v_threads` (no email names, `important` marking by `addr_matches`); interface text `framework/interfaces/items.store.v1.yaml` (threads, sql, describe) loses every type name.
+3. Skills and playbooks: `modes/briefing/skills/corpus-sql/SKILL.md` (generic text, no `v_posts`), `modes/mail-briefing/skills/*`, `features/digest|ask` wording; `config.schema.json` description ("the store marks threads" -> "rows are marked").
+4. Remove the remaining core names: `bay/lint.py:381,432,449`, `bay/scaffold.py:128`, `bay/model.py:86`, `bay/config.py:14`, `schemas/{mode,connector,event}.schema.json` examples, `schemas/data/item.v1.schema.json:5,18`, `framework/rules/conformance.yaml:29,44`, `framework/interfaces/items.source.v1.yaml:6`; `ALLOWED` in `tests/test_core_names.py` becomes empty and the test asserts it.
+Acceptance: mail-briefing golden (threads output, `v_threads` reads, offline digest plan) identical; feed-briefing describe has no mail view and no mail function, mail-briefing describe has no `v_posts`; a mode without `v_threads` calling `threads` gets the named error; `tests/test_core_names.py` passes with `ALLOWED == {}`; `boundary --docs` reports 0 B-11 hits.
+
+Part D: Part E and the whole-tree checks (about 40 calls; if `uses:` alone has used 30 calls, stop after it, commit, and report the rest as D2)
+1. `uses:`/`skills:` in `schemas/mode.schema.json`, `Feature` in `model.py`, lint (B-8, B-9), `Dispatcher.use` scoping and `_plan` skills in `dispatch.py`, whole-feature override in `merge_mode`, `bay show --resolved` in `cli.py`, `bay/scaffold.py` + `framework/modes/forge/templates/feature/feature.yaml` scaffold the keys.
+2. Declare them in `modes/briefing/mode.yaml`, `modes/mail-briefing/mode.yaml` (digest: derive the list from its playbook and skill, which also read `thread` and `sql` for attachment text, so not only `get` as 0006's example says), and the framework modes whose units have `bayUses` (`./bay.sh describe improve` and the others show `bayUses`).
+3. Tests: a role step calling an endpoint outside its feature's `uses:` is refused with an open call; allowed inside; skills outside `skills:` are not in the plan; a child's feature replaces the parent's whole; `--resolved` shows origins.
+4. Whole tree: `tests/test_core_names.py` still green; the unchanged security files pass (tests/test_boundaries.py, test_resolver.py, test_dispatch.py, test_lint.py, the connector tests, the corpus-store sandbox tests); golden compare final; CLI baseline diff (section 5); boundary `--docs` 0 failing; deadcode step.
+Acceptance (0006 step 2 plus the 0008 line): offline sync, describe and status of feed-briefing and mail-briefing identical to the baseline except the three documented deltas; no core file names a content type or connector (test); every security test unchanged and passing; boundary check over the whole tree finds no leak; the dead-code check reports no new findings.
+
+## 4. Path table
+
+Covered = an existing 0008 `touches:` entry matches the path (cited by slice and path). New = needs the amendment entry in the last column (all are `slice: 5`).
+
+| Part | Path | Change | Status |
+|---|---|---|---|
+| A,B | `content-types/post/*`, `content-types/email/*` | new extensions | Covered: slice 5 `content-types/` |
+| A | `tests/test_offline_golden.py`, `tests/golden/`, `tests/test_content_types.py`, `tests/contracts/content_type.py`, `tests/test_core_names.py`, `tests/run.py` | tests | no entry needed (boundary class `other`, `tests/`) |
+| A,B,C,D | `HANDOFF.md` | notes | no entry needed (`other`) |
+| A | `bay/contenttypes.py` | NEW loader | New: amendment 1 |
+| A | `schemas/content-type.schema.json` | NEW | New: amendment 2 |
+| A | `schemas/data/post.v1.schema.json` | moved out | New: amendment 3 |
+| B | `schemas/data/email.v1.schema.json` | moved out | New: amendment 4 |
+| C | `schemas/data/item.v1.schema.json` | wording | New: amendment 5 |
+| A,B,C | `bay/sqlsandbox.py` | generic views, store_meta | New: amendment 6 |
+| B | `bay/selector.py` | `addr_key` leaves | New: amendment 7 |
+| A,B,C | `framework/connectors/corpus-store/` (`corpus_store.py`, `tests/test_corpus_store.py`, `tests/test_sqlsandbox.py`) | generic store | New: amendment 8 |
+| C | `framework/interfaces/items.store.v1.yaml` | threads/sql/describe text | New: amendment 9 |
+| C | `framework/interfaces/items.source.v1.yaml` | wording at :6 | New: amendment 10 |
+| C | `modes/briefing/skills/corpus-sql/SKILL.md` | generic text | New: amendment 11 |
+| C | `modes/mail-briefing/views.sql` | NEW mode view | New: amendment 12 |
+| C | `modes/mail-briefing/views.yaml` | NEW view docs | New: amendment 13 |
+| C | `modes/mail-briefing/skills/` | wording | New: amendment 14 |
+| C | `modes/mail-briefing/config.schema.json` | wording | New: amendment 15 |
+| C | `modes/mail-briefing/features/digest/` (`playbook.md`, `rules.yaml`) | wording | New: amendment 16 (the slice 5 glob `modes/*/features/*/` has literal prefix `modes/` and fails B-3) |
+| C | `modes/mail-briefing/features/ask/` (`playbook.md`, `rules.yaml`) | wording | New: amendment 17 (same reason) |
+| A,B,C | `bay/model.py` | KINDS, item_kinds, data_schema | Covered: slice 3 `bay/model.py` |
+| A,C | `bay/lint.py` | content-type lint, messages | Covered: slice 1 `bay/lint.py` |
+| A | `framework/components.yaml` | add `bay/contenttypes.py` to briefing `owns` | Covered: slice 1 `framework/components.yaml` |
+| A,B,C | `bay/dispatch.py` (`_settings` :487), `bay/scaffold.py:128`, `bay/config.py:14` | settings, wording | Covered: slice 3 `bay/dispatch.py`, slice 3 `bay/scaffold.py`, slice 2 `bay/config.py` |
+| C | `schemas/mode.schema.json`, `schemas/connector.schema.json`, `schemas/event.schema.json`, `framework/rules/conformance.yaml` | example wording | Covered: slice 3, slice 4, slice 8 (`schemas/event.schema.json`), slice 1 |
+| B | `bay/improve/graph.py` (`_data_schemas` :150) | schema nodes follow the move | Covered: slice 6 `bay/improve/` |
+| B | `connectors/gmail-api/tests/test_gmail_api.py` | addr_key / views assertions | Covered: slice 7 `connectors/gmail-api/tests/test_gmail_api.py` |
+| A,B,C | `README.md`, `docs/DESIGN.md`, `docs/INTERFACES.md` | contracts only, B-11 | Covered: slice 9 (each of the three) |
+| C | `modes/mail-briefing/mode.yaml`, `modes/briefing/mode.yaml`, `modes/briefing/features/*/` | gather step, wording | Covered: slice 3 `modes/*/mode.yaml`; slice 5 `modes/*/features/*/` (core, B-1) |
+| C | `modes/mail-briefing/README.md`, `modes/feed-briefing/README.md` | wording | Covered: slice 2 (each) |
+| C | `modes/mail-briefing/config.example.yaml` | only if wording | Covered: slice 7 |
+| D | `bay/model.py`, `bay/dispatch.py`, `bay/lint.py`, `schemas/mode.schema.json` | Part E | Covered: slices 3, 3, 1, 3 |
+| D | `bay/cli.py` | `show --resolved` | Covered: slice 4 `bay/cli.py` |
+| D | `bay/use_shim.py` | probably untouched | Covered: slice 5 `bay/use_shim.py` |
+| D | `modes/*/mode.yaml`, `framework/modes/*/mode.yaml`, `framework/modes/forge/templates/` | `uses`/`skills` | Covered: slice 3 (each) |
+| D | `bay/scaffold.py` | scaffold the keys | Covered: slice 3 |
+
+Amendment entries (17), to add to 0008's `touches:` by the owner:
+```
+  - { path: bay/contenttypes.py, reason: "NEW. content-type loader: views, child tables, derive.py, mode views (0006 Part B)", slice: 5 }
+  - { path: schemas/content-type.schema.json, reason: "NEW. shape of content-type.yaml; declared in framework/components.yaml", slice: 5 }
+  - { path: schemas/data/post.v1.schema.json, reason: "moved to content-types/post/fields.schema.json", slice: 5 }
+  - { path: schemas/data/email.v1.schema.json, reason: "moved to content-types/email/fields.schema.json", slice: 5 }
+  - { path: schemas/data/item.v1.schema.json, reason: "wording: no content type named in the envelope description", slice: 5 }
+  - { path: bay/sqlsandbox.py, reason: "views, tables and functions come from the content-type loader; no type named; store_meta", slice: 5 }
+  - { path: bay/selector.py, reason: "addr_key moves to content-types/email/derive.py", slice: 5 }
+  - { path: "framework/connectors/corpus-store/", reason: "generic child tables, derive and views for the types a mode reads; tests follow", slice: 5 }
+  - { path: framework/interfaces/items.store.v1.yaml, reason: "threads, sql and describe text name no content type; threads reads the mode's v_threads", slice: 5 }
+  - { path: framework/interfaces/items.source.v1.yaml, reason: "wording: no content type named", slice: 5 }
+  - { path: modes/briefing/skills/corpus-sql/SKILL.md, reason: "generic text: views come from the content types a mode reads", slice: 5 }
+  - { path: modes/mail-briefing/views.sql, reason: "NEW. mode-owned v_threads with needsReply (0006 Part B)", slice: 5 }
+  - { path: modes/mail-briefing/views.yaml, reason: "NEW. column docs and row metadata of the mode's views", slice: 5 }
+  - { path: "modes/mail-briefing/skills/", reason: "skills follow the views the mode owns", slice: 5 }
+  - { path: modes/mail-briefing/config.schema.json, reason: "wording: rows are marked important, not the store", slice: 5 }
+  - { path: "modes/mail-briefing/features/digest/", reason: "feature playbook and rules follow the generic threads endpoint (B-3 needs the mode named)", slice: 5 }
+  - { path: "modes/mail-briefing/features/ask/", reason: "feature playbook and rules follow the mode's views (B-3 needs the mode named)", slice: 5 }
+```
+
+## 5. Baseline for "identical offline sync, describe and status output"
+
+Before part A touches anything (first commit of part A):
+1. `./bay.sh check` (note the summary line), `./bay.sh catalog`, `./bay.sh describe feed-briefing`, `./bay.sh describe mail-briefing`. Save each output to the scratchpad with Write (as slice 3 did): `cli_before_check.txt`, `cli_before_catalog.txt`, `cli_before_describe_feed.txt`, `cli_before_describe_mail.txt`.
+2. Write `tests/test_offline_golden.py` and generate `tests/golden/feed-briefing.json` and `tests/golden/mail-briefing.json` from the UNCHANGED code. The test builds a project with `offline: true` (as `tests/test_mail_briefing.py:17-22`), the fixed `helpers.clock`, and for each mode records: `Dispatcher.call("<mode>.sync", {})["output"]` (no callId), `Dispatcher.use(unit, "items.store/v1.describe", {})`, `...status`, and for mail also `threads {since: "30d", important: ["*@partner.example"]}`, and `sql` reads of `v_email` (id, fromMe, toMe, bulk), `v_threads` (needsReply, lastBulk), `v_attachments` and `fts` examples; for feed `v_posts` (likes, reposts, lang). The test regenerates the structure and compares it with the stored JSON (`GOLDEN_UPDATE` is not offered: a changed file means a changed behavior).
+3. The golden file is the reference; a failing golden test is the compare. No new random or wall-clock values are in it.
+
+After part D, same four CLI commands to `cli_after_*.txt`, then `git diff --no-index --stat` per pair. Expected CLI differences: none in `check` beyond counts of content types if printed, none in `catalog`, `describe` only the new `uses`/`skills` lines if it prints features.
+
+Deliberate describe deltas the golden test must assert exactly (0006's design, not regressions; the acceptance text says "identical", so the owner should confirm these three):
+- mail-briefing no longer lists `v_posts` (the allowlist is the base views, the views of the types the mode reads, and the mode's own views; 0006 Part B "What the briefing core does"). It had 0 rows there.
+- mail-briefing `functions` no longer lists `addr_key` (computed fields are stored, 0006 "Decided"); the `fromMe`/`toMe` column descriptions keep their wording.
+- mail-briefing view order is `v_items, v_email, v_attachments, v_threads, v_fts, v_attachment_fts` (type views, then the mode's views, then full-text views) instead of `v_threads` before `v_attachments`; compare views as a name-keyed map and assert the new order separately.
+Everything else (columns, descriptions, row counts, samples, fts, limits, coverage, sync counts and cost, status) must match byte for byte. feed-briefing has no delta.
+
+Decisions to confirm (assumed above): (1) the three describe deltas; (2) `v_threads` is mode-owned (0006 line 224 lists it under email, line 278 makes needs-reply the mode's), and `items.store/v1.threads` stays at v1 as a generic reader instead of a new `rows` endpoint (a removed endpoint would need an interface version bump, R-2); (3) with no open call, a use-shim read falls back to the role-level grant (keeps the security tests unchanged); (4) the store creates tables for the types a mode `reads:` (equal to what its sources produce by B-6), not for those its sources produce.
+
+Not in this slice: catalog listing of content types, `forge.connect`, DOD-4 wording (0006 Part C), the apiVersion bump (slice 9).
+
 # HANDOFF part 14: T-20261030-c870 (recorded with `bay plan`) - stage 3: last DOD-2 finding of the re-review (verdict-s3b)
 
 Outcome: in the main thread the guard hook asks for `note dispatch`, `note review` and `show reclaim` in any quoting,

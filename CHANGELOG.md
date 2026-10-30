@@ -2,6 +2,45 @@
 
 Earlier versions: see docs/proposals/
 
+## 0.8.0 - 2026-10-30
+
+Content types are plug-ins now: the store knows no post or email shape of its own. Stores written by 0.7.0 are refused and must be moved aside and re-synced (see Known issues). The schema apiVersion stays `agentbay/v2` until slice 9.
+
+### Added
+
+- Content types as plug-ins: `content-types/post` and `content-types/email`, each with a `content-type.yaml`, a fields schema, views and a `derive.py`.
+- The content-type loader.
+- Contract tests for content types, a golden offline test, and a core-names test.
+- Mode-owned views: mail-briefing owns `v_threads` and `needs-reply`.
+- Per-feature `uses:` and `skills:`, and whole-feature override of a mode's feature.
+- `bay show <mode> --resolved` prints the mode as resolved.
+
+### Changed
+
+- The store records its content types and its schema version (now 3). A store that does not match is refused, with the fix in the message.
+- Computed email fields are stored.
+- A generic `threads` reader replaces the email-specific one.
+- The mail-briefing config has only `important`.
+- Cost keys: `posts` is now `items`, and `costPerPostUsd` is now `costPerItemUsd`.
+- Help for base columns is generic.
+- improve runs one call at a time.
+
+### Removed
+
+- The `schemas/data/post` and `schemas/data/email` schemas.
+- Email code in core, and the `addr_key` SQL function.
+- The single-key feature override.
+
+### Security
+
+- A feature's `uses:` is the intersection of the `uses:` of the open calls on its role unit, and it fails closed.
+
+### Known issues
+
+- Per-call `uses:` scope is a follow-up proposal.
+- The apiVersion stays `agentbay/v2` until slice 9.
+- Existing stores must be moved aside and re-synced.
+
 ## 0.7.0 - 2026-10-30
 
 Contracts changed non-additively: the mode, env and config schemas changed shape (a mode lists `features:` instead of `endpoints:` and `workflows:`; an env has an `offline:` block instead of `substitutes:`; the config has `offline: boolean` instead of an `envs:` map), and 9 CLI command names are gone. 0008 schedules the `agentbay/v3` bump for slice 9, so the schema apiVersion stays `agentbay/v2` until then (see Known issues).

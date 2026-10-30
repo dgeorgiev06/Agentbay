@@ -5,8 +5,8 @@ metadata:
   version: 0.1.0
   description: Thread-based briefings and grounded Q&A over your email, read-only, kept to the selectors you set.
 spec:
-  # Everything not set here comes from modes/briefing (features sync, digest, ask, prune; their review; the
-  # sync and prune playbooks and rules; skills it does not override).
+  # Everything not set here comes from modes/briefing (features sync and prune; skills it does not override).
+  # digest and ask below replace briefing's whole (a child's feature never merges key by key).
   extends: briefing
   reads: [email/v1]          # the item kind its features read (B-6)
   purpose: >-
@@ -16,16 +16,32 @@ spec:
   features:
     digest:
       description: Thread-based digest - needs reply, deadlines and asks, by selector or sender (important first), notable attachments.
+      in: DigestReq
+      out: Digest
+      effects: [read, network, spend, write]
       playbook: features/digest/playbook.md
       rules: features/digest/rules.yaml
+      review: { role: reviewer, when: always, tier: deep, effort: high }
+      uses: [items.store/v1.describe, items.store/v1.sql, items.store/v1.get, items.store/v1.thread]   # get/thread: the messages; sql: v_attachments text
+      skills: [digest, corpus-sql]
       steps:
         - { id: refresh, run: items.store/v1.sync, when: "stale > 2h" }      # code step, no agent
         - { id: gather, run: items.store/v1.threads, with: { since: "$in.since|$config.lookback", until: "$in.until", selector: "$in.selector", important: "$config.important", limit: 200 } }
         - { id: digest, role: analyst, out: Digest, task: "Write the mail digest from the gathered threads." }
     ask:
       description: Answer a question from stored email via read-only SQL over v_email, v_threads and v_attachments, citing message ids.
+      in: Question
+      out: Answer
+      effects: [read, network, spend, write]
       playbook: features/ask/playbook.md
       rules: features/ask/rules.yaml
+      review: { role: reviewer, when: never }
+      uses: [items.store/v1.describe, items.store/v1.sql, items.store/v1.search, items.store/v1.facets, items.store/v1.get, items.store/v1.thread, items.store/v1.threads, items.store/v1.status]
+      skills: [corpus-sql, grounded-qa]
+      steps:
+        - { id: refresh, run: items.store/v1.sync, when: "stale > 2h" }
+        - { id: context, run: items.store/v1.status, with: { since: "$in.since|$config.lookback" } }
+        - { id: answer, role: analyst, out: Answer, task: "Answer the question from the stored items only: narrow with SQL, read full items with get, cite item ids." }
   constraints:                 # merged over briefing's (lookbackMax 30d, spendUsd, policies)
     maxItemsPerRun: 500        # messages one sync may read (messages.get calls)
     monthlyItems: 20000

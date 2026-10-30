@@ -67,7 +67,7 @@ class Dispatcher:
             raise CallError(f"{target}: input does not match {feat.in_type or 'schema'}: " + "; ".join(errs))
         call_id = f"C-{self.clock():%Y%m%d}-{_rand.token_hex(3)}"
         state = {"callId": call_id, "target": target, "input": inp, "steps": {}, "cursor": 0,
-                 "status": "running", "checks": [], "cost": {"posts": 0, "usd": 0.0}, "t0": time.time()}
+                 "status": "running", "checks": [], "cost": {"items": 0, "usd": 0.0}, "t0": time.time()}
         return self._advance(mode, feat, state)
 
     def submit(self, call_id: str, step_id: str, output, usage: dict | None = None) -> dict:
@@ -238,6 +238,9 @@ class Dispatcher:
             raise CallError(f"role {role} in mode {r.mode} is not granted {target} (granted: "
                             f"{', '.join(r.bay_uses) or 'none'}); a role may call only the read-only endpoints of the "
                             f"capabilities its mode needs that its env ({r.env}) binds")
+        scoped = self._open_uses(r)
+        if scoped is not None and target not in scoped:       # B-9: while a feature's step waits for this unit
+            raise CallError(self._use_refusal(r, target, scoped))
         iface, ep = target.rsplit(".", 1)
         effects = model.endpoint_effects(self.sys.kit, iface, ep)
         if set(effects) - model.AGENT_SAFE_EFFECTS:      # re-checked at runtime
@@ -249,11 +252,52 @@ class Dispatcher:
         settings = self._use_settings(r, iface)
         outs = {c: self._invoke(env.name, c, iface, ep, inp or {}, settings=settings, caps={}) for c in conns}
         out = outs[conns[0]] if len(conns) == 1 else merge_outputs(outs)
-        n = len(out.get("posts", [])) if isinstance(out, dict) else None
+        n = len(out.get("items", [])) if isinstance(out, dict) else None
         ledger.append(self.project, "data.read", f"use:{unit}", source="dispatcher", role=role, mode=r.mode,
                       env=env.name, summary=target,
                       data={"input": inp or {}, **({"items": n} if n is not None else {})})
         return secretscan.scrub_obj(json.loads(vault.redact(json.dumps(out, ensure_ascii=False))))
+
+    def _open_uses(self, unit) -> set[str] | None:
+        """The endpoints every feature whose open call waits for `unit` (status needs-agent, cursor on a role or
+        review step of this unit) declares in `uses:`: the INTERSECTION, because the use shim does not say which
+        call is asking, so with several open calls a feature never reaches what another did not declare (B-9,
+        fail closed). None when no such call is open or none of its features declares `uses:`, so the role-level
+        grant applies (decision (c) of proposal 0008)."""
+        found: set[str] | None = None
+        for _, _, uses in self._open_calls(unit):
+            found = set(uses) if found is None else found & set(uses)
+        return found
+
+    def _open_calls(self, unit) -> list[tuple[str, str, list[str]]]:
+        """(callId, feature target, uses) of every open needs-agent call waiting for `unit` whose feature declares `uses:`."""
+        out = []
+        for f in sorted(self._calls_dir().glob("*.json")):
+            state = read_json(f)
+            if not isinstance(state, dict) or state.get("status") != "needs-agent":
+                continue
+            try:
+                _, feat = self.sys.feature(state["target"])
+                step = feat.steps[state["cursor"]]
+            except (model.ResolveError, KeyError, IndexError):
+                continue
+            if feat.uses is not None and step.resolved is not None and step.resolved.unit == unit.unit:
+                out.append((str(state.get("callId") or f.stem), state["target"], list(feat.uses)))
+        return out
+
+    def _use_refusal(self, r, target: str, scoped: set[str]) -> str:
+        """Why `target` is outside the scope of the open calls, naming the calls that removed it and the way out."""
+        calls = self._open_calls(r)
+        blockers = [(cid, tgt) for cid, tgt, uses in calls if target not in uses]
+        have = ", ".join(sorted(scoped)) or "none"
+        if not blockers:
+            return (f"role {r.name} in mode {r.mode} is not granted {target} by the feature it is working on "
+                    f"(its `uses:`: {have})")
+        names = ", ".join(f"{cid} ({tgt})" for cid, tgt in blockers)
+        many = " While several calls wait on this role unit, only what all declare in `uses:` is allowed." if len(calls) > 1 else ""
+        return (f"role {r.name} in mode {r.mode} is not granted {target} by the feature of the open call(s) {names}, "
+                f"which do not declare it in `uses:`.{many} Allowed now: {have}. "
+                f"Finish those calls first: `bay show <callId>` continues one; run its step and submit.")
 
     def _use_settings(self, unit, iface: str) -> dict:
         """The unit's mode settings when its mode needs `iface` (per-mode stores such as corpus-store key on the
@@ -448,10 +492,10 @@ class Dispatcher:
             return
         cost = {}
         if isinstance(out, dict) and "billed" in out:
-            cpp = float(caps.get("costPerPostUsd", cfgmod.COST_PER_POST_USD))
-            usd = out["spentUsd"] if "spentUsd" in out else out["billed"] * cpp
-            cost = {"posts": out["billed"], "usd": round(usd, 4)}
-            state["cost"]["posts"] += cost["posts"]
+            price = float(caps.get("costPerItemUsd", cfgmod.COST_PER_ITEM_USD))
+            usd = out["spentUsd"] if "spentUsd" in out else out["billed"] * price
+            cost = {"items": out["billed"], "usd": round(usd, 4)}
+            state["cost"]["items"] += cost["items"]
             state["cost"]["usd"] = round(state["cost"]["usd"] + cost["usd"], 4)
         if isinstance(out, dict) and out.get("stopped"):
             state["stopped"] = out["stopped"]
@@ -487,6 +531,8 @@ class Dispatcher:
     def _settings(self, mode) -> dict:
         s = dict(mode.config)
         s["mode"] = mode.name                     # connectors that keep per-mode data (corpus-store) key on it
+        s["reads"] = list(mode.reads)             # ... and make it for the content types the mode reads
+        s["modeDirs"] = [str(d) for d in mode.dirs]   # ... and with the views the mode defines (views.sql there)
         if "lookbackMax" in mode.constraints:
             s["lookbackMax"] = mode.constraints["lookbackMax"]
         return s
@@ -546,35 +592,57 @@ class Dispatcher:
         if step.kind != "gate":                     # gates are never submitted, only approved by the user
             plan["submit"] = submit
         if step.kind == "gate":
-            gate = (state.get("gates") or {}).get(step.id) or {}
-            plan.update({"gate": step.task,
-                         "approve": f"the USER runs in their own terminal: .agentbay/bay approve {state['callId']} "
-                                    f"(or --reject --reason '...'); then `.agentbay/bay show {state['callId']}`",
-                         **self._chat_path(state["callId"]),
-                         **({"why": gate["why"]} if gate.get("why") else {}),
-                         **({"approves": gate["approves"]} if gate.get("approves") else {}),
-                         "inputs": {k: v for k, v in state["steps"].items() if v is not None}})
+            plan.update(self._gate_plan(step, state))
             return plan
         run_as = "main-thread playbook" if role.runtime == "claude-code-main" else f"subagent_type={step.subagent}"
         plan.update({"role": role.name, "agent": step.agent, "env": step.env, "runAs": run_as,
                      "tier": step.inference.tier, "model": step.inference.model, "effort": step.inference.effort})
         if role.skills:                             # the playbook's short skill names -> the namespaced skills
-            plan["skills"] = {sk: sid for sk, sid in sorted(role.skill_names.items()) if sid in role.skills}
+            plan["skills"] = self._plan_skills(mode, feat, role)
         if step.kind == "review":
-            plan["review"] = {
-                "task": {"target": state["target"], "input": state["input"]},
-                "definitionOfDone": [{"id": d.id, "level": d.level, "text": d.text} for d in feat.dod],
-                "rules": [r.as_dict() for r in feat.rules if r.for_reviewer() and r.applies(state["input"])],
-                "checks": state["checks"],
-                "output": self._endpoint_output(feat, state),
-                "verdictSchema": VERDICT,
-                "recordedPlans": self._recorded_plans(state["callId"]),
-            }
-            for name in (feat.review or {}).get("rulesets", []):
-                # framework rule sets (e.g. conformance): judged with the DoD; cite their ids in evidence
-                plan["review"].setdefault("rulesets", {})[name] = model.ruleset(self.sys.kit.root, name)
+            plan["review"] = self._review_brief(feat, state)
             return plan
-        plan.update({
+        plan.update(self._executor_brief(feat, step, state, role))
+        return plan
+
+    def _gate_plan(self, step, state) -> dict:
+        """What a gate shows the user: the text, how to approve, why it ran, and the outputs so far."""
+        gate = (state.get("gates") or {}).get(step.id) or {}
+        return {"gate": step.task,
+                "approve": f"the USER runs in their own terminal: .agentbay/bay approve {state['callId']} "
+                           f"(or --reject --reason '...'); then `.agentbay/bay show {state['callId']}`",
+                **self._chat_path(state["callId"]),
+                **({"why": gate["why"]} if gate.get("why") else {}),
+                **({"approves": gate["approves"]} if gate.get("approves") else {}),
+                "inputs": {k: v for k, v in state["steps"].items() if v is not None}}
+
+    @staticmethod
+    def _plan_skills(mode, feat, role) -> dict:
+        """The playbook's short skill names -> the namespaced skills; a mode's skills are narrowed to the feature's
+        `skills:`."""
+        mine = model.skill_id(mode.name, "")
+        return {sk: sid for sk, sid in sorted(role.skill_names.items()) if sid in role.skills
+                and (feat.skills is None or not sid.startswith(mine) or sk in feat.skills)}
+
+    def _review_brief(self, feat, state) -> dict:
+        """What the reviewer is given: the task, the DoD, the rules, the checks, the output and the verdict schema."""
+        brief = {
+            "task": {"target": state["target"], "input": state["input"]},
+            "definitionOfDone": [{"id": d.id, "level": d.level, "text": d.text} for d in feat.dod],
+            "rules": [r.as_dict() for r in feat.rules if r.for_reviewer() and r.applies(state["input"])],
+            "checks": state["checks"],
+            "output": self._endpoint_output(feat, state),
+            "verdictSchema": VERDICT,
+            "recordedPlans": self._recorded_plans(state["callId"]),
+        }
+        for name in (feat.review or {}).get("rulesets", []):
+            # framework rule sets (e.g. conformance): judged with the DoD; cite their ids in evidence
+            brief.setdefault("rulesets", {})[name] = model.ruleset(self.sys.kit.root, name)
+        return brief
+
+    def _executor_brief(self, feat, step, state, role) -> dict:
+        """What an executing role is given: the task, playbook, rules, DoD, inputs, previous outputs and tools."""
+        return {
             "task": step.task or f"Do step '{step.id}' of {state['target']}",
             "playbook": str(feat.playbook_path.relative_to(self.sys.kit.root)) if feat.playbook_path else None,
             "playbookText": feat.playbook_text,
@@ -583,9 +651,9 @@ class Dispatcher:
             "input": state["input"],
             "previous": {k: v for k, v in state["steps"].items() if v is not None},
             "out": step.out,
-            "tools": [f"{use_shim(role.unit)} {u} '<json>'" for u in role.bay_uses],
-        })
-        return plan
+            "tools": [f"{use_shim(role.unit)} {u} '<json>'" for u in role.bay_uses
+                      if feat.uses is None or u in feat.uses],
+        }
 
     def _chat_path(self, call_id: str) -> dict:
         """With `approvals.chat` on, the gate plan also names the chat path (the owner's own words, quoted)."""

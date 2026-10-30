@@ -9,7 +9,7 @@ spec:
   produces: [post/v1]
   entry: fake.py
   source: fake
-  costPerPostUsd: 0      # offline: never billed against spendUsd
+  costPerItemUsd: 0      # offline: never billed against spendUsd
   window: 7d
   selectors:
     from: { mode: native, as: handle }

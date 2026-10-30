@@ -32,14 +32,14 @@ def test_sync_runs_code_step_and_logs_events_with_cost():
     p = project()
     r = D(p).call("feed-briefing.sync", {"lookback": "3d"})
     assert r["status"] == "done" and r["output"]["added"] == 7
-    assert r["cost"] == {"posts": 7, "usd": 0.0}   # offline source is free
+    assert r["cost"] == {"items": 7, "usd": 0.0}   # offline source is free
     evs = ledger.read(p)
     types = [e["type"] for e in evs]
     assert types == ["step.started", "step.completed", "call.completed"]
     done = evs[1]
     assert {k: done[k] for k in ("mode", "endpoint", "step", "env")} == \
         {"mode": "feed-briefing", "endpoint": "sync", "step": "fetch", "env": "local-feeds"}
-    assert done["cost"] == {"posts": 7, "usd": 0.0}
+    assert done["cost"] == {"items": 7, "usd": 0.0}
     if model.jsonschema:
         sch = json.loads((KIT / "schemas/event.schema.json").read_text())
         for e in evs:

@@ -3,7 +3,7 @@ kind: Interface
 metadata:
   name: items.source
   description: >-
-    A source of items (posts, email, ...) in the item/v1 envelope. Called only by items.store/v1.sync through the
+    A source of items (of the kinds its content types define) in the item/v1 envelope. Called only by items.store/v1.sync through the
     dispatcher, once per distinct native query. Connectors declare `source`, `window` and their selector
     capability table (connector.yaml spec.selectors).
 spec:

@@ -71,6 +71,7 @@ Each extension is a folder (an env is one file) with its own `README.md` and, if
 modes/           your modes
 envs/            your envs (one file each)
 connectors/      your connectors
+content-types/   content types: fields, views and derived fields of a kind of item (post, email ship as examples)
 interfaces/      your interfaces
 adapters/        agent runtimes bay build compiles for, each with its agent profile
 framework/       shipped with the kit, never edited by users:
@@ -95,6 +96,7 @@ tests/           python3 tests/run.py (connector tests live next to each connect
 | `bay check [--base <ref> --proposal <file>]` | lint and resolve everything; with `--base`, also check a change against core ownership |
 | `bay build` / `bay clean` | compile into a project / remove what was generated |
 | `bay catalog [<name>] [--roles]`, `bay describe <name>` | what is installed, resolved; `--roles` lists the role units |
+| `bay show <mode> --resolved` | a mode's features after `extends`, with the file each comes from |
 | `bay call <mode>.<endpoint> '<json>'` | run a feature |
 | `bay submit <callId> <step> '<json>'`, `bay show <callId>`, `bay show reclaim <runId>` | hand back a step's output; current state; mark a stuck run reclaimed |
 | `bay approve <callId\|runId> [--reject]` | pass an approval gate (your terminal; or `--via chat --quote "<msg>" --sha <hex>`, relayed by the Chief of Staff, when `approvals: { chat: true }` is set) |

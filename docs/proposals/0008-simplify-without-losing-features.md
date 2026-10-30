@@ -71,6 +71,10 @@ touches:
   - { path: framework/modes/forge/features/extend/playbook.md, reason: "stage 1: extend playbook follows the one skip rule (54203f7); also carried from 0006 slice 7a (Part G): gate passes only by a recorded approval (74cdeb9, de3d779, 3de59ab)", slice: 8 }
   - { path: framework/modes/forge/types/Result.schema.json, reason: "stage 1: Result takes protocol (54203f7)", slice: 8 }
   - { path: framework/interfaces/forge.scaffold.v1.yaml, reason: "stage 1: unused proposal 'approved' output removed (56a6b82); also carried from 0006 slice 7a (Part G): 74cdeb9, de3d779, 54203f7", slice: 8 }
+  # release 0.5.0 and the kernel's ownership of the changelog
+  - { path: CHANGELOG.md, reason: "release 0.5.0 (0006 slice 7a, 0008 stage 1)", slice: 8 }
+  - { path: bay/__init__.py, reason: "release 0.5.0 (0006 slice 7a, 0008 stage 1)", slice: 8 }
+  - { path: framework/components.yaml, reason: "slice 1 adds CHANGELOG.md to the kernel", slice: 1 }
   # carried from 0006 slice 7a (Part G)
   - { path: adapters/claude-code/claude_code.py, reason: "carried from 0006 slice 7a (Part G): adapter asks for bay approve and denies Edit of the owner's config, F-7 (008e79d, 838fbb9)", slice: 7 }
   - { path: connectors/gmail-api/connector.yaml, reason: "privacy hygiene: real company domains replaced with example domains (f06a5b2, b0df5f9); not part of 0008 or 0006", slice: 7 }
@@ -113,6 +117,8 @@ Every safety guarantee: secrets never reach prompts, logs or the ledger; agents 
   - The B-7 name check (`lint_extension_names`, `bay/lint.py` line 502) matches names in any line of `playbook.md`, `skills/` and feature files, so prose that mentions a mode or connector fails.
 - **Kept:** per-PR proof. A change passes only if every core path it edits is listed under the proposal's `touches:`. Layering rules stay; no extension imports another; versions agree.
 - **Change:** `bay boundary` is the one command (`bay lint` calls it). Findings say what to do in plain words, with the old id in brackets. Repo-root files and `*.md` at the root are allowed. B-7 looks only at imports and the kernel's module keys (`agentbay_connector_*`), not prose. A short list of reasons replaces 36 names; the rules themselves stay.
+- **Dead-code check (the owner asked for it, 2026-10-30):** `forge.extend` runs improve's audit detectors (unused code, compatibility layers, complexity) on every change's diff, through a normal interface call, not a kernel shortcut, and fails the change if it adds any new finding. Findings that already existed don't count. `forge.extend`'s Definition of Done gains an item: no new unused code or compatibility layers.
+- **Release metadata:** `CHANGELOG.md` is owned by the kernel and written by `forge.extend`'s release step. Slice 1 adds it to the kernel's `owns:` in `framework/components.yaml`.
 - **Benefit:** a stray `TODO.md` or a sentence in a playbook no longer blocks a change.
 - **Safety impact:** none. A test must show that an import of another connector still fails and that a core edit without `touches:` still fails (`tests/test_boundary.py`, `tests/test_contract_versions.py`).
 - **Effort:** small.
@@ -194,15 +200,20 @@ CLI target, 15 commands: `check` (validate, lint, boundary), `build`, `clean`, `
 
 Each slice is sized for one builder (about 40 tool calls) and ends with `python3 tests/run.py` green and `./bay.sh lint` clean.
 
-1. **Boundary and lint.** Item 1. Acceptance: a `TODO.md` at the root and a prose mention of a connector in a playbook both pass; a cross-connector import and an unlisted core edit both fail.
-2. **Envs, agent profile, config.** Item 2 (offline, agent into adapter, config, limits). Acceptance: both offline env files and the committed example config are gone; the fake-source demo still runs; lint refuses an offline env with a network entry and a config that raises a limit.
-3. **One feature shape.** Item 2 (feature). Acceptance: every mode builds from `features:`; a code-only feature has no playbook and passes lint; `bay catalog` is unchanged except for ordering.
-4. **CLI.** Item 2 (commands). Acceptance: `bay --help` lists about 15 commands; an old command name is an unknown command; `.agentbay/COORDINATOR.md` uses the new names.
-5. **Finish 0006.** Item 3. Acceptance: the 0006 step 2 acceptance lines.
-6. **Improve as a mode.** Item 4. Acceptance: `bay/improve/` is gone; `bay call improve.scan` and `improve.audit` give the same findings on the fixture data; a backlog item cannot be approved without the user.
-7. **Workflows.** Item 5. Acceptance: one stage-syntax parser in `bay/`; the workflow tests pass; `cos.run` still starts a project workflow.
-8. **Agent run records.** Item 6 (the owner's addition). Acceptance: a subagent can run `bay plan` and no other `bay` command; plan events are scrubbed, size-limited and refused for another taskId; `step.started` carries inputs; `bay status` lists a dispatched agent even with the spawn hook off; a role-step submit without an outcome is refused; `bay show` prints outcome, to-do progress and inputs; `bay status --agents` groups runs by role, mode, model and tier from the ledger alone; a reviewer verdict cites outcome and to-do items; improve's weekly backlog reads the same figures. Stage 1 also built, beyond `bay plan`: `bay dispatched` (dispatches are logged even when spawn hooks are off); `bay review-record` (reviews run outside a framework step become visible to improve, but can never pass a gate); commit subjects in git episodes (to tell fix rounds from features); the transcripts fix (improve could read no sessions). Stage 1 carries slice 7a of 0006 (chat approvals, gates bound to recorded approvals), whose review fixes F-1..F-7 are included.
-9. **Docs and release.** README, `docs/DESIGN.md`, `docs/INTERFACES.md`, changelog, version, schema `apiVersion` bump to `agentbay/v3` with v2 documents refused (feature shape and env changed), a scratch-repo build and clean round trip. Acceptance: all checks green with output quoted; a newcomer can follow the README from clone to first result.
+1. **Boundary and lint.** Item 1. Acceptance: a `TODO.md` at the root and a prose mention of a connector in a playbook both pass; a cross-connector import and an unlisted core edit both fail; `forge.extend` fails a change that adds unused code, through an interface call, and ignores findings that already existed; its Definition of Done has the new item; `CHANGELOG.md` is in the kernel's `owns:`.
+   - Scope also carries these stage-2 items from the stage-1 reviews:
+     - (a) a hook 'spawned' record without a callId can stand in for a plan's dispatch: judge a result's taskId by the coordinator's agent.dispatch record;
+     - (b) `bay status` shows finished agents as running: a step's submit closes every run dispatched to that call and step;
+     - (c) the README lost its mention of schedules (cron);
+     - (d) the reviewer probe gate_repro_sha.py's R5 step should catch ResolveError (test fixture only).
+2. **Envs, agent profile, config.** Item 2 (offline, agent into adapter, config, limits). Acceptance: both offline env files and the committed example config are gone; the fake-source demo still runs; lint refuses an offline env with a network entry and a config that raises a limit; the dead-code check reports no new findings.
+3. **One feature shape.** Item 2 (feature). Acceptance: every mode builds from `features:`; a code-only feature has no playbook and passes lint; `bay catalog` is unchanged except for ordering; the dead-code check reports no new findings.
+4. **CLI.** Item 2 (commands). Acceptance: `bay --help` lists about 15 commands; an old command name is an unknown command; `.agentbay/COORDINATOR.md` uses the new names; the dead-code check reports no new findings.
+5. **Finish 0006.** Item 3. Acceptance: the 0006 step 2 acceptance lines; the dead-code check reports no new findings.
+6. **Improve as a mode.** Item 4. Acceptance: `bay/improve/` is gone; `bay call improve.scan` and `improve.audit` give the same findings on the fixture data; a backlog item cannot be approved without the user; the dead-code check reports no new findings.
+7. **Workflows.** Item 5. Acceptance: one stage-syntax parser in `bay/`; the workflow tests pass; `cos.run` still starts a project workflow; the dead-code check reports no new findings.
+8. **Agent run records.** Item 6 (the owner's addition). Acceptance: a subagent can run `bay plan` and no other `bay` command; plan events are scrubbed, size-limited and refused for another taskId; `step.started` carries inputs; `bay status` lists a dispatched agent even with the spawn hook off; a role-step submit without an outcome is refused; `bay show` prints outcome, to-do progress and inputs; `bay status --agents` groups runs by role, mode, model and tier from the ledger alone; a reviewer verdict cites outcome and to-do items; improve's weekly backlog reads the same figures. Stage 1 also built, beyond `bay plan`: `bay dispatched` (dispatches are logged even when spawn hooks are off); `bay review-record` (reviews run outside a framework step become visible to improve, but can never pass a gate); commit subjects in git episodes (to tell fix rounds from features); the transcripts fix (improve could read no sessions). Stage 1 carries slice 7a of 0006 (chat approvals, gates bound to recorded approvals), whose review fixes F-1..F-7 are included. The dead-code check reports no new findings.
+9. **Docs and release.** README, `docs/DESIGN.md`, `docs/INTERFACES.md`, changelog, version, schema `apiVersion` bump to `agentbay/v3` with v2 documents refused (feature shape and env changed), a scratch-repo build and clean round trip. Acceptance: all checks green with output quoted; a newcomer can follow the README from clone to first result; the dead-code check reports no new findings.
 
 ## Decisions needed
 

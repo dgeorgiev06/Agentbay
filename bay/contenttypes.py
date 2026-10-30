@@ -177,7 +177,26 @@ def _one(d: Path) -> tuple[ContentType | None, list[str]]:
         text = (d / VIEWS).read_text(encoding="utf-8")
     except OSError as e:
         return None, [*out, f"{model.rel(d / VIEWS)}: not readable ({e})"]
-    views = []
+    views, view_errs = _parse_views(d, text)
+    out += view_errs
+    names = [v for v, _ in views]
+    docs = spec["views"]
+    tables = spec.get("tables") or {}
+    out += _view_doc_problems(d, where, docs, names)
+    out += _table_problems(where, tables)
+    out += _view_link_problems(where, docs, names, tables)
+    derived = tuple(spec.get("derived") or ())
+    out += _derived_problems(d, where, spec, derived)
+    if out:
+        return None, out
+    ct = ContentType(meta["name"], spec["kind"], spec["version"], d, fields,
+                     {v: docs[v] for v in names}, tuple(views), tables, derived, spec.get("deriveVersion"))
+    return ct, []
+
+
+def _parse_views(d: Path, text: str) -> tuple[list[tuple[str, str]], list[str]]:
+    """The (name, CREATE TEMP VIEW statement) of every view views.sql creates, and a problem per other statement."""
+    views, out = [], []
     for stmt in _statements(text):
         m = _CREATE.match(stmt)
         if not m:
@@ -185,17 +204,22 @@ def _one(d: Path) -> tuple[ContentType | None, list[str]]:
                        f"found `{stmt[:50]}`")
             continue
         views.append((m.group(1), f"CREATE TEMP VIEW {m.group(1)} AS " + stmt[m.end():]))
-    names = [v for v, _ in views]
-    docs = spec["views"]
-    for v in names:
-        if v not in docs:
-            out.append(f"{where}: views.{v} is missing: document every view views.sql creates (columns, item)")
-    for v in docs:
-        if v not in names:
-            out.append(f"{where}: views.{v} is documented but {VIEWS} does not create it")
+    return views, out
+
+
+def _view_doc_problems(d: Path, where: str, docs: dict, names: list[str]) -> list[str]:
+    """Every view views.sql creates is documented in content-type.yaml, and the other way round."""
+    out = [f"{where}: views.{v} is missing: document every view views.sql creates (columns, item)"
+           for v in names if v not in docs]
+    out += [f"{where}: views.{v} is documented but {VIEWS} does not create it" for v in docs if v not in names]
     if len(set(names)) != len(names):
         out.append(f"{model.rel(d / VIEWS)}: a view is created twice")
-    tables = spec.get("tables") or {}
+    return out
+
+
+def _table_problems(where: str, tables: dict) -> list[str]:
+    """The declared tables: names the store does not own, unique columns, full-text columns that exist."""
+    out = []
     for t, s in tables.items():
         cols = {c["name"] for c in s["columns"]}
         if t in RESERVED_TABLES or t.endswith("_fts") or t.startswith("sqlite_"):
@@ -205,6 +229,12 @@ def _one(d: Path) -> tuple[ContentType | None, list[str]]:
         for c in s.get("fullText") or ():
             if c not in cols:
                 out.append(f"{where}: tables.{t}.fullText names {c}, which is not a column")
+    return out
+
+
+def _view_link_problems(where: str, docs: dict, names: list[str], tables: dict) -> list[str]:
+    """The views a view includes and the full-text index it declares must exist (and come earlier)."""
+    out = []
     for v, dd in docs.items():
         inc = (dd.get("includes") or {}).get("view")
         if inc and inc != "v_items" and (inc not in names or v not in names or names.index(inc) >= names.index(v)):
@@ -212,8 +242,13 @@ def _one(d: Path) -> tuple[ContentType | None, list[str]]:
         ft = dd.get("fullText")
         if ft and (ft["table"] not in tables or not tables[ft["table"]].get("fullText") or ft["over"] not in docs):
             out.append(f"{where}: views.{v}.fullText needs a table with fullText and an existing `over` view")
-    derived = tuple(spec.get("derived") or ())
+    return out
+
+
+def _derived_problems(d: Path, where: str, spec: dict, derived: tuple) -> list[str]:
+    """`derived`, `deriveVersion` and derive.py go together."""
     has_derive = (d / DERIVE).is_file()
+    out = []
     if derived and "deriveVersion" not in spec:
         out.append(f"{where}: derived needs deriveVersion")
     if spec.get("deriveVersion") and not derived:
@@ -224,11 +259,7 @@ def _one(d: Path) -> tuple[ContentType | None, list[str]]:
         out.append(f"{model.rel(d / DERIVE)}: this type declares no `derived` fields, so derive.py would never run")
     if derived and has_derive:
         out += _derive_problems(d / DERIVE)
-    if out:
-        return None, out
-    ct = ContentType(meta["name"], spec["kind"], spec["version"], d, fields,
-                     {v: docs[v] for v in names}, tuple(views), tables, derived, spec.get("deriveVersion"))
-    return ct, []
+    return out
 
 
 def _derive_problems(f: Path) -> list[str]:
@@ -509,74 +540,100 @@ def check_mode_views(mv: ModeViews, reads, root: Path = model.KIT) -> list[str]:
     readable = {v.lower() for v in (*sbx.VIEWS, *(v for ct in types for v in ct.view_names()), *mv.view_names())}
     con = sqlite3.connect(":memory:")
     reads_seen: list[str] = []
-    where = model.rel(mv.dir / VIEWS)
     try:
-        for stmt in (*sbx.BASE_DDL, *(s for ct in types for s in ct.table_ddl(fts))):
-            con.execute(stmt)
-        for _, stmt in sbx.view_sql(fts, types, mv.views):
-            con.execute(stmt)
-        stored = {n.lower() for (n,) in con.execute(
-            "SELECT name FROM main.sqlite_master UNION SELECT name FROM temp.sqlite_master")}
-        for ct in types:
-            for t in ct.table_names(fts):
-                if t.endswith("_fts"):
-                    con.execute(f"SELECT 1 FROM main.{t} LIMIT 0").fetchall()
-
-        def auth(action, a1, a2, db, via) -> int:
-            if action in (sqlite3.SQLITE_SELECT, 33):
-                return sqlite3.SQLITE_OK
-            if action == sqlite3.SQLITE_READ:
-                t = (a1 or "").lower()
-                if (db is None and t not in stored) or t in sbx.TABLE_FUNCS:
-                    return sqlite3.SQLITE_OK
-                if via is None or via.lower() in own:      # read by a mode view (or by the checked query itself)
-                    if t in readable:
-                        return sqlite3.SQLITE_OK
-                    reads_seen.append(a1)
-                    return sqlite3.SQLITE_DENY
-                return sqlite3.SQLITE_OK                   # inside a view of the store or of a content type
-            if action == sqlite3.SQLITE_FUNCTION:
-                if (a2 or "").lower() in sbx.FUNCTIONS:
-                    return sqlite3.SQLITE_OK
-                reads_seen.append(f"function {a2}")
-                return sqlite3.SQLITE_DENY
-            return sqlite3.SQLITE_DENY
-
-        con.set_authorizer(auth)
-        cols_of: dict[str, list[str]] = {}
-        for v in mv.view_names():
-            reads_seen.clear()
-            try:
-                cols_of[v] = [d[0] for d in con.execute(f"SELECT * FROM {v} LIMIT 0").description]
-            except sqlite3.Error as e:
-                bad = f" (it reads {', '.join(dict.fromkeys(reads_seen))})" if reads_seen else ""
-                problems.append(f"{where}: view {v} cannot be built{bad}: {e}. A mode view may read only the base "
-                                f"views (v_items, v_fts) and the views of the content types the mode reads "
-                                f"({', '.join(sorted(kinds)) or 'none'})")
-                continue
-            want = [c["name"] for c in mv.docs[v]["columns"]]
-            if cols_of[v] != want:
-                problems.append(f"{model.rel(mv.dir / YAML_MODE)}: views.{v} documents columns {want} but the view "
-                                f"has {cols_of[v]}")
-        th = mv.threads
-        if th and th["view"] in cols_of:
-            have_cols = cols_of[th["view"]]
-            for key in ("window", "selector", "important", *th.get("json", []), *th.get("flags", [])):
-                c = th[key] if key in th else key
-                if c not in have_cols:
-                    problems.append(f"{model.rel(mv.dir / YAML_MODE)}: threads names column {c}, which "
-                                    f"{th['view']} does not have")
-            queries = {"order": f"SELECT * FROM {th['view']} ORDER BY {th['order']} LIMIT 0",
-                       **{f"details.{n}": d["sql"] for n, d in (th.get("details") or {}).items()}}
-            for name, q in queries.items():
-                reads_seen.clear()
-                try:
-                    con.execute(q, {p: None for p in _PARAM.findall(q)}).fetchall()
-                except sqlite3.Error as e:
-                    bad = f" (it reads {', '.join(dict.fromkeys(reads_seen))})" if reads_seen else ""
-                    problems.append(f"{model.rel(mv.dir / YAML_MODE)}: threads.{name} cannot run{bad}: {e}")
+        stored = _build_empty_store(con, mv, types, fts)
+        con.set_authorizer(_mode_view_authorizer(stored, own, readable, reads_seen))
+        cols_of = _view_column_problems(con, mv, kinds, reads_seen, problems)
+        _threads_query_problems(con, mv, cols_of, reads_seen, problems)
     except sqlite3.Error as e:
-        problems.append(f"{where}: {e}")
+        problems.append(f"{model.rel(mv.dir / VIEWS)}: {e}")
     finally:
         con.close()
     return problems
+
+
+def _build_empty_store(con, mv: ModeViews, types, fts: bool) -> set[str]:
+    """Create the store's tables and views, the types' tables and the mode's views in `con`; the lower-cased names
+    of everything stored."""
+    from . import sqlsandbox as sbx
+    for stmt in (*sbx.BASE_DDL, *(s for ct in types for s in ct.table_ddl(fts))):
+        con.execute(stmt)
+    for _, stmt in sbx.view_sql(fts, types, mv.views):
+        con.execute(stmt)
+    stored = {n.lower() for (n,) in con.execute(
+        "SELECT name FROM main.sqlite_master UNION SELECT name FROM temp.sqlite_master")}
+    for ct in types:
+        for t in ct.table_names(fts):
+            if t.endswith("_fts"):
+                con.execute(f"SELECT 1 FROM main.{t} LIMIT 0").fetchall()
+    return stored
+
+
+def _mode_view_authorizer(stored: set[str], own: set[str], readable: set[str], reads_seen: list[str]):
+    """The sqlite authorizer of the check: reads outside `readable` and unknown functions are denied and noted."""
+    from . import sqlsandbox as sbx
+
+    def auth(action, a1, a2, db, via) -> int:
+        if action in (sqlite3.SQLITE_SELECT, 33):
+            return sqlite3.SQLITE_OK
+        if action == sqlite3.SQLITE_READ:
+            t = (a1 or "").lower()
+            if (db is None and t not in stored) or t in sbx.TABLE_FUNCS:
+                return sqlite3.SQLITE_OK
+            if via is None or via.lower() in own:      # read by a mode view (or by the checked query itself)
+                if t in readable:
+                    return sqlite3.SQLITE_OK
+                reads_seen.append(a1)
+                return sqlite3.SQLITE_DENY
+            return sqlite3.SQLITE_OK                   # inside a view of the store or of a content type
+        if action == sqlite3.SQLITE_FUNCTION:
+            if (a2 or "").lower() in sbx.FUNCTIONS:
+                return sqlite3.SQLITE_OK
+            reads_seen.append(f"function {a2}")
+            return sqlite3.SQLITE_DENY
+        return sqlite3.SQLITE_DENY
+    return auth
+
+
+def _view_column_problems(con, mv: ModeViews, kinds: set[str], reads_seen: list[str],
+                          problems: list[str]) -> dict[str, list[str]]:
+    """Build each mode view; the columns of those that build, with a problem for each that does not or whose columns
+    differ from the documented ones."""
+    cols_of: dict[str, list[str]] = {}
+    for v in mv.view_names():
+        reads_seen.clear()
+        try:
+            cols_of[v] = [d[0] for d in con.execute(f"SELECT * FROM {v} LIMIT 0").description]
+        except sqlite3.Error as e:
+            bad = f" (it reads {', '.join(dict.fromkeys(reads_seen))})" if reads_seen else ""
+            problems.append(f"{model.rel(mv.dir / VIEWS)}: view {v} cannot be built{bad}: {e}. A mode view may read "
+                            f"only the base views (v_items, v_fts) and the views of the content types the mode reads "
+                            f"({', '.join(sorted(kinds)) or 'none'})")
+            continue
+        want = [c["name"] for c in mv.docs[v]["columns"]]
+        if cols_of[v] != want:
+            problems.append(f"{model.rel(mv.dir / YAML_MODE)}: views.{v} documents columns {want} but the view "
+                            f"has {cols_of[v]}")
+    return cols_of
+
+
+def _threads_query_problems(con, mv: ModeViews, cols_of: dict[str, list[str]], reads_seen: list[str],
+                            problems: list[str]) -> None:
+    """The threads rules: the columns they name exist, and the order and detail queries run."""
+    th = mv.threads
+    if not th or th["view"] not in cols_of:
+        return
+    yml = model.rel(mv.dir / YAML_MODE)
+    for key in ("window", "selector", "important", *th.get("json", []), *th.get("flags", [])):
+        c = th[key] if key in th else key
+        if c not in cols_of[th["view"]]:
+            problems.append(f"{yml}: threads names column {c}, which {th['view']} does not have")
+    queries = {"order": f"SELECT * FROM {th['view']} ORDER BY {th['order']} LIMIT 0",
+               **{f"details.{n}": d["sql"] for n, d in (th.get("details") or {}).items()}}
+    for name, q in queries.items():
+        reads_seen.clear()
+        try:
+            con.execute(q, {p: None for p in _PARAM.findall(q)}).fetchall()
+        except sqlite3.Error as e:
+            bad = f" (it reads {', '.join(dict.fromkeys(reads_seen))})" if reads_seen else ""
+            problems.append(f"{yml}: threads.{name} cannot run{bad}: {e}")

@@ -570,37 +570,57 @@ class Dispatcher:
         if step.kind != "gate":                     # gates are never submitted, only approved by the user
             plan["submit"] = submit
         if step.kind == "gate":
-            gate = (state.get("gates") or {}).get(step.id) or {}
-            plan.update({"gate": step.task,
-                         "approve": f"the USER runs in their own terminal: .agentbay/bay approve {state['callId']} "
-                                    f"(or --reject --reason '...'); then `.agentbay/bay show {state['callId']}`",
-                         **self._chat_path(state["callId"]),
-                         **({"why": gate["why"]} if gate.get("why") else {}),
-                         **({"approves": gate["approves"]} if gate.get("approves") else {}),
-                         "inputs": {k: v for k, v in state["steps"].items() if v is not None}})
+            plan.update(self._gate_plan(step, state))
             return plan
         run_as = "main-thread playbook" if role.runtime == "claude-code-main" else f"subagent_type={step.subagent}"
         plan.update({"role": role.name, "agent": step.agent, "env": step.env, "runAs": run_as,
                      "tier": step.inference.tier, "model": step.inference.model, "effort": step.inference.effort})
         if role.skills:                             # the playbook's short skill names -> the namespaced skills
-            mine = model.skill_id(mode.name, "")      # a mode's skills are narrowed to the feature's `skills:`
-            plan["skills"] = {sk: sid for sk, sid in sorted(role.skill_names.items()) if sid in role.skills
-                              and (feat.skills is None or not sid.startswith(mine) or sk in feat.skills)}
+            plan["skills"] = self._plan_skills(mode, feat, role)
         if step.kind == "review":
-            plan["review"] = {
-                "task": {"target": state["target"], "input": state["input"]},
-                "definitionOfDone": [{"id": d.id, "level": d.level, "text": d.text} for d in feat.dod],
-                "rules": [r.as_dict() for r in feat.rules if r.for_reviewer() and r.applies(state["input"])],
-                "checks": state["checks"],
-                "output": self._endpoint_output(feat, state),
-                "verdictSchema": VERDICT,
-                "recordedPlans": self._recorded_plans(state["callId"]),
-            }
-            for name in (feat.review or {}).get("rulesets", []):
-                # framework rule sets (e.g. conformance): judged with the DoD; cite their ids in evidence
-                plan["review"].setdefault("rulesets", {})[name] = model.ruleset(self.sys.kit.root, name)
+            plan["review"] = self._review_brief(feat, state)
             return plan
-        plan.update({
+        plan.update(self._executor_brief(feat, step, state, role))
+        return plan
+
+    def _gate_plan(self, step, state) -> dict:
+        """What a gate shows the user: the text, how to approve, why it ran, and the outputs so far."""
+        gate = (state.get("gates") or {}).get(step.id) or {}
+        return {"gate": step.task,
+                "approve": f"the USER runs in their own terminal: .agentbay/bay approve {state['callId']} "
+                           f"(or --reject --reason '...'); then `.agentbay/bay show {state['callId']}`",
+                **self._chat_path(state["callId"]),
+                **({"why": gate["why"]} if gate.get("why") else {}),
+                **({"approves": gate["approves"]} if gate.get("approves") else {}),
+                "inputs": {k: v for k, v in state["steps"].items() if v is not None}}
+
+    @staticmethod
+    def _plan_skills(mode, feat, role) -> dict:
+        """The playbook's short skill names -> the namespaced skills; a mode's skills are narrowed to the feature's
+        `skills:`."""
+        mine = model.skill_id(mode.name, "")
+        return {sk: sid for sk, sid in sorted(role.skill_names.items()) if sid in role.skills
+                and (feat.skills is None or not sid.startswith(mine) or sk in feat.skills)}
+
+    def _review_brief(self, feat, state) -> dict:
+        """What the reviewer is given: the task, the DoD, the rules, the checks, the output and the verdict schema."""
+        brief = {
+            "task": {"target": state["target"], "input": state["input"]},
+            "definitionOfDone": [{"id": d.id, "level": d.level, "text": d.text} for d in feat.dod],
+            "rules": [r.as_dict() for r in feat.rules if r.for_reviewer() and r.applies(state["input"])],
+            "checks": state["checks"],
+            "output": self._endpoint_output(feat, state),
+            "verdictSchema": VERDICT,
+            "recordedPlans": self._recorded_plans(state["callId"]),
+        }
+        for name in (feat.review or {}).get("rulesets", []):
+            # framework rule sets (e.g. conformance): judged with the DoD; cite their ids in evidence
+            brief.setdefault("rulesets", {})[name] = model.ruleset(self.sys.kit.root, name)
+        return brief
+
+    def _executor_brief(self, feat, step, state, role) -> dict:
+        """What an executing role is given: the task, playbook, rules, DoD, inputs, previous outputs and tools."""
+        return {
             "task": step.task or f"Do step '{step.id}' of {state['target']}",
             "playbook": str(feat.playbook_path.relative_to(self.sys.kit.root)) if feat.playbook_path else None,
             "playbookText": feat.playbook_text,
@@ -611,8 +631,7 @@ class Dispatcher:
             "out": step.out,
             "tools": [f"{use_shim(role.unit)} {u} '<json>'" for u in role.bay_uses
                       if feat.uses is None or u in feat.uses],
-        })
-        return plan
+        }
 
     def _chat_path(self, call_id: str) -> dict:
         """With `approvals.chat` on, the gate plan also names the chat path (the owner's own words, quoted)."""

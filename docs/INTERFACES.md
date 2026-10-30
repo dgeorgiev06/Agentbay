@@ -109,7 +109,7 @@ Interfaces: named endpoints with JSON-schema `in`/`out` and `effects` (`read|wri
 `create(ctx)`; `ctx` gives `config`, `secrets.get/store` (names allowed by env AND connector only),
 `http.request` (env allowlist enforced before every request, HTTPS only), `data_dir`, `caps`, `settings`,
 `sources` (connectors for capabilities it `needs`), `clock`, and for items.source connectors `source_id`,
-`window`, `cost_per_post` and `selectors` (the capability table).
+`window`, `cost_per_item` and `selectors` (the capability table).
 
 A connector that needs an interactive login (e.g. an OAuth browser flow that stores a refresh token) names a
 function of its `entry` in `login:`. `bay auth <connector> [--env <env>]` runs it, from an interactive terminal
@@ -246,7 +246,7 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
     whole words, and its negation also matches display names).
   - Selectors with the same native query share one fetch and one cursor.
   - A field the source does not list cannot be expressed: `bay check` errors.
-  - A `local` field on a paid source (`costPerPostUsd` > 0) gets a validate warning.
+  - A `local` field on a paid source (`costPerItemUsd` > 0) gets a validate warning.
 - **`items.source/v1.fetch {query, since [until] | cursor, maxItems, checkIds, storedIds, localIn}`** returns
   `{items, cursor, truncated, billed, checked?, deleted?, removed?, oldest?, cursorExpired?, blocked?,
   requests?, warnings?}`. It makes one call per distinct native query and is never billed beyond `maxItems`; `checked`

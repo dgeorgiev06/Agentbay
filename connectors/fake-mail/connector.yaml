@@ -12,7 +12,7 @@ spec:
   produces: [email/v1]
   entry: fake_mail.py
   source: fake-mail
-  costPerPostUsd: 0      # offline: never billed against spendUsd
+  costPerItemUsd: 0      # offline: never billed against spendUsd
   window: 30d
   exactLabels: true      # like Gmail: every item carries its complete label set
   selectors:

@@ -142,10 +142,10 @@
           "type": "boolean",
           "description": "items.source: every item carries its complete current label set (Gmail labelIds), so the store replaces stored labels instead of adding to them; a removed label then takes the item out of an `in` selector."
         },
-        "costPerPostUsd": {
+        "costPerItemUsd": {
           "type": "number",
           "minimum": 0,
-          "description": "Price per item this source reads; overrides the mode's costPerPostUsd (e.g. 0 for offline sources). A source with a price above 0 is paid: validate warns about local-only selector fields on it."
+          "description": "Price per item this source reads; overrides the mode's costPerItemUsd (e.g. 0 for offline sources). A source with a price above 0 is paid: validate warns about local-only selector fields on it."
         },
         "selectors": {
           "type": "object",

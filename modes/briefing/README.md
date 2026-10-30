@@ -14,6 +14,6 @@ rules, review, roles and their envs).
 | `prune` | drop items past retention, deleted at the source or matched by no selector (`schedule: daily`) |
 
 **Settings** (`config.schema.json`, under `modes.<child>` in agentbay.config.yaml): `lookback`, `retention`,
-`maxItemsPerRun`, `monthlyItems`, `spendUsd`, `costPerPostUsd` and `selectors`. A child's own config schema
+`maxItemsPerRun`, `monthlyItems`, `spendUsd`, `costPerItemUsd` and `selectors`. A child's own config schema
 only adds settings; it changes a default through `configDefaults`. Each child ships its own
 `config.example.yaml`.

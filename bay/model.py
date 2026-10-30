@@ -1217,7 +1217,7 @@ def _check_selectors(kit: Kit, md: Doc, mcfg: dict, gaps: list[str], warnings: l
         if c is None:
             continue
         caps = c.spec.get("selectors") or {}
-        price = c.spec.get("costPerPostUsd", mcfg.get("costPerPostUsd", cfgmod.COST_PER_POST_USD))
+        price = c.spec.get("costPerItemUsd", mcfg.get("costPerItemUsd", cfgmod.COST_PER_ITEM_USD))
         errs, warns = selmod.check(sels, caps, connector=cn, paid=float(price) > 0,
                                    where=f"agentbay.config.yaml modes.{md.name}.selectors (env {env.name})")
         gaps += errs

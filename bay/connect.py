@@ -97,7 +97,7 @@ class Context:
     clock: Callable[[], datetime] = utcnow
     window: str | None = None                         # how far back the source API reaches
     source_id: str | None = None
-    cost_per_post: float | None = None                # connector-declared price per item read (None: use caps)
+    cost_per_item: float | None = None               # connector-declared price per item read (None: use caps)
     exact_labels: bool = False                        # items.source: items carry their full label set (replace, not add)
     change_feed: bool = False                         # items.source: the cursor replays every change (Gmail history)
     selectors: dict = field(default_factory=dict)     # items.source: selector capability table (field -> native|local)
@@ -158,7 +158,7 @@ def instantiate(system: model.System, env_name: str, conn_name: str, iface: str,
         config=dict((system.kit.config.get("connectors") or {}).get(conn_name) or {}),
         secrets=acc, http=Http(net, transport, conn_name), data_dir=data_dir(env, project, system.kit.root, c),
         caps=dict(caps or {}), settings=dict(settings or {}), sources=sources, clock=clock or utcnow,
-        window=c.spec.get("window"), source_id=c.spec.get("source"), cost_per_post=c.spec.get("costPerPostUsd"),
+        window=c.spec.get("window"), source_id=c.spec.get("source"), cost_per_item=c.spec.get("costPerItemUsd"),
         exact_labels=bool(c.spec.get("exactLabels")), change_feed=bool(c.spec.get("changeFeed")),
         selectors=dict(c.spec.get("selectors") or {}),
         kit=system.kit.root, project=project)

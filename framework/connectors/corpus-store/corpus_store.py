@@ -56,7 +56,7 @@ records it under `blocked` until that source is read again, status reports `stal
 names the gap, and sync reports it as `stopped` (the dispatcher makes a sync that read nothing `blocked`).
 
 Budget is enforced before each source fetch exactly as before: a run is capped at the strictest of
-maxItemsPerRun, monthlyItems - used and (spendUsd - spent) / costPerPostUsd. Up to DELETION_CHECK_SHARE of a source's budget re-checks stored items still in its window.
+maxItemsPerRun, monthlyItems - used and (spendUsd - spent) / costPerItemUsd. Up to DELETION_CHECK_SHARE of a source's budget re-checks stored items still in its window.
 """
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ from datetime import datetime
 from pathlib import Path
 
 from bay import contenttypes, model, secretscan, selector as selmod, sqlsandbox as sbx, vault
-from bay.config import COST_PER_POST_USD
+from bay.config import COST_PER_ITEM_USD
 from bay.connect import ConnectorError
 from bay.util import duration, iso, parse_time, read_json
 
@@ -488,12 +488,12 @@ class CorpusStore:
         return f"{self.ctx.now():%Y-%m}"
 
     def _usage(self, state: dict) -> dict:
-        return state["budget"].setdefault(self._month(), {"posts": 0, "usd": 0.0})
+        return state["budget"].setdefault(self._month(), {"items": 0, "usd": 0.0})
 
     def _cost(self, src=None) -> float:
-        if src is not None and src.ctx.cost_per_post is not None:
-            return float(src.ctx.cost_per_post)
-        return float(self.ctx.caps.get("costPerPostUsd", COST_PER_POST_USD))
+        if src is not None and src.ctx.cost_per_item is not None:
+            return float(src.ctx.cost_per_item)
+        return float(self.ctx.caps.get("costPerItemUsd", COST_PER_ITEM_USD))
 
     def _remaining(self, state: dict, run_items: int, want: int | None, cost: float) -> tuple[int, str | None]:
         caps = self.ctx.caps
@@ -502,7 +502,7 @@ class CorpusStore:
         if "maxItemsPerRun" in caps:
             limits.append((caps["maxItemsPerRun"] - run_items, "maxItemsPerRun"))
         if "monthlyItems" in caps:
-            limits.append((caps["monthlyItems"] - use["posts"], "monthlyItems"))
+            limits.append((caps["monthlyItems"] - use["items"], "monthlyItems"))
         if "spendUsd" in caps and cost > 0:
             limits.append((math.floor(round((caps["spendUsd"] - use["usd"]) / cost, 6)), "spendUsd"))
         if want is not None:
@@ -543,9 +543,9 @@ class CorpusStore:
 
     def _budget(self, state: dict) -> dict:
         use = self._usage(state)
-        caps = {k: v for k, v in self.ctx.caps.items() if k != "costPerPostUsd"}
-        return {"month": self._month(), "posts": use["posts"], "usd": round(use["usd"], 4),
-                "caps": caps, "costPerPostUsd": self.ctx.caps.get("costPerPostUsd", COST_PER_POST_USD)}
+        caps = {k: v for k, v in self.ctx.caps.items() if k != "costPerItemUsd"}
+        return {"month": self._month(), "items": use["items"], "usd": round(use["usd"], 4),
+                "caps": caps, "costPerItemUsd": self.ctx.caps.get("costPerItemUsd", COST_PER_ITEM_USD)}
 
     def _validate(self, it: dict, src_name: str, src_id: str) -> None:
         if it.get("source") != src_id or it.get("id") != f"{src_id}:{it.get('extId')}":
@@ -885,7 +885,7 @@ class CorpusStore:
     def _bill(self, state: dict, run: "_SyncRun", res: dict, src) -> None:
         run.billed += res["billed"]
         use = self._usage(state)
-        use["posts"] += res["billed"]                       # bill what the source read, not what we kept
+        use["items"] += res["billed"]                       # bill what the source read, not what we kept
         use["usd"] = round(use["usd"] + res["billed"] * self._cost(src), 6)
         run.spent += res["billed"] * self._cost(src)
 

@@ -67,7 +67,7 @@ class Dispatcher:
             raise CallError(f"{target}: input does not match {feat.in_type or 'schema'}: " + "; ".join(errs))
         call_id = f"C-{self.clock():%Y%m%d}-{_rand.token_hex(3)}"
         state = {"callId": call_id, "target": target, "input": inp, "steps": {}, "cursor": 0,
-                 "status": "running", "checks": [], "cost": {"posts": 0, "usd": 0.0}, "t0": time.time()}
+                 "status": "running", "checks": [], "cost": {"items": 0, "usd": 0.0}, "t0": time.time()}
         return self._advance(mode, feat, state)
 
     def submit(self, call_id: str, step_id: str, output, usage: dict | None = None) -> dict:
@@ -249,7 +249,7 @@ class Dispatcher:
         settings = self._use_settings(r, iface)
         outs = {c: self._invoke(env.name, c, iface, ep, inp or {}, settings=settings, caps={}) for c in conns}
         out = outs[conns[0]] if len(conns) == 1 else merge_outputs(outs)
-        n = len(out.get("posts", [])) if isinstance(out, dict) else None
+        n = len(out.get("items", [])) if isinstance(out, dict) else None
         ledger.append(self.project, "data.read", f"use:{unit}", source="dispatcher", role=role, mode=r.mode,
                       env=env.name, summary=target,
                       data={"input": inp or {}, **({"items": n} if n is not None else {})})
@@ -448,10 +448,10 @@ class Dispatcher:
             return
         cost = {}
         if isinstance(out, dict) and "billed" in out:
-            cpp = float(caps.get("costPerPostUsd", cfgmod.COST_PER_POST_USD))
-            usd = out["spentUsd"] if "spentUsd" in out else out["billed"] * cpp
-            cost = {"posts": out["billed"], "usd": round(usd, 4)}
-            state["cost"]["posts"] += cost["posts"]
+            price = float(caps.get("costPerItemUsd", cfgmod.COST_PER_ITEM_USD))
+            usd = out["spentUsd"] if "spentUsd" in out else out["billed"] * price
+            cost = {"items": out["billed"], "usd": round(usd, 4)}
+            state["cost"]["items"] += cost["items"]
             state["cost"]["usd"] = round(state["cost"]["usd"] + cost["usd"], 4)
         if isinstance(out, dict) and out.get("stopped"):
             state["stopped"] = out["stopped"]

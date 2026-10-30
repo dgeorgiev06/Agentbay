@@ -67,10 +67,10 @@ MAX_VALUE = 1_000_000
 HEAP_BYTES = 256 * 1024 * 1024
 
 ITEM_COLUMNS = [
-    ("id", "TEXT", "item id <source>:<extId>; cite this"), ("source", "TEXT", "x, fake, gmail, ..."),
-    ("extId", "TEXT", "the source's own id"), ("kind", "TEXT", "post, email, ..."),
+    ("id", "TEXT", "item id <source>:<extId>; cite this"), ("source", "TEXT", "name of the source that produced it"),
+    ("extId", "TEXT", "the source's own id"), ("kind", "TEXT", "the content type of the item"),
     ("author", "TEXT", "handle or address"), ("authorName", "TEXT", "display name"),
-    ("title", "TEXT", "subject or headline (null for posts)"), ("text", "TEXT", "body"),
+    ("title", "TEXT", "subject or headline (null when the kind has none)"), ("text", "TEXT", "body"),
     ("url", "TEXT", "link to the original (cite it as stored)"), ("createdAt", "TEXT", "ISO-8601 UTC, sortable"),
     ("fetchedAt", "TEXT", "ISO-8601 UTC"), ("container", "TEXT", "where it was fetched from (home, list:<id>)"),
     ("labels", "JSON", "array of containers/labels; filter with json_each(labels)"),

@@ -625,7 +625,7 @@ def cmd_status(args):
     done = [r for r in runs if r.state != "running"][-args.n:]
     print(f"CALLS ({len(calls)})")
     for c in calls[-args.n:]:
-        cost = f"posts={c.cost.get('posts', 0)} usd={c.cost.get('usd', 0)}" if c.cost else ""
+        cost = f"items={c.cost.get('items', 0)} usd={c.cost.get('usd', 0)}" if c.cost else ""
         print(f"  {c.call_id:<18} {c.mode + '.' + c.endpoint:<24} {c.state:<8} step={c.last_step:<10} {_ago(c.ts):>4} {cost}")
     print(f"\nRUNNING AGENTS ({len(live)})")
     for r in live:

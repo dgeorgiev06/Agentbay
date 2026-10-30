@@ -1,6 +1,7 @@
 """Golden baseline of feed-briefing and mail-briefing on the offline sources (proposal 0008, slice 5): the sync
 output, `describe` and `status` of the store, and a fixed set of reads, all under the fixed clock. The reference
-is tests/golden/<mode>.json, generated from the code as it was before content types moved out of the core. A
+is tests/golden/<mode>.json, generated from the code as it was before content types moved out of the core, then changed once for the generic names of decision (e)
+(column descriptions, the `items` cost key). A
 failing compare means a behavior changed: there is no update switch, change the code back or explain the delta.
 A missing file is written once and the test fails, so a new golden is always a visible new file in git."""
 from __future__ import annotations
@@ -51,10 +52,24 @@ def compare(mode: str, got: dict, deltas=None) -> None:
         raise AssertionError(f"{f} did not exist and was written from the current code; review it, commit it, "
                              f"and run again")
     want = json.loads(f.read_text())
+    generic_names(got)
     if deltas:
         deltas(want, got)
     else:
         assert got == want, f"{mode}: output differs from {f.relative_to(KIT)}"
+
+
+def generic_names(got: dict) -> None:
+    """Decision (e) of proposal 0008, item 3: the two changes both modes show. The golden files carry them (they were
+    updated once, for exactly these); the asserts here name them so a reader sees what changed."""
+    cols = {c["name"]: c["description"] for v in got["describe"]["views"] if v["name"] == "v_items"
+            for c in v["columns"]}
+    assert cols["source"] == "name of the source that produced it"
+    assert cols["kind"] == "the content type of the item"
+    assert cols["title"] == "subject or headline (null when the kind has none)"
+    for budget in (got["status"]["budget"], got["sync"]["budget"]):
+        assert budget["items"] == got["sync"]["billed"] and "posts" not in budget
+        assert budget["costPerItemUsd"] == 0.005 and "costPerPostUsd" not in budget
 
 
 def mail_deltas(want: dict, got: dict) -> None:

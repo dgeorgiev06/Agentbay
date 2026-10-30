@@ -97,7 +97,7 @@
       "type": "TEXT"
      },
      {
-      "description": "x, fake, gmail, ...",
+      "description": "name of the source that produced it",
       "name": "source",
       "type": "TEXT"
      },
@@ -107,7 +107,7 @@
       "type": "TEXT"
      },
      {
-      "description": "post, email, ...",
+      "description": "the content type of the item",
       "name": "kind",
       "type": "TEXT"
      },
@@ -122,7 +122,7 @@
       "type": "TEXT"
      },
      {
-      "description": "subject or headline (null for posts)",
+      "description": "subject or headline (null when the kind has none)",
       "name": "title",
       "type": "TEXT"
      },
@@ -446,9 +446,9 @@
  "status": {
   "budget": {
    "caps": {},
-   "costPerPostUsd": 0.005,
+   "costPerItemUsd": 0.005,
+   "items": 7,
    "month": "2026-10",
-   "posts": 7,
    "usd": 0.0
   },
   "count": 7,
@@ -474,9 +474,9 @@
     "monthlyItems": 3000,
     "spendUsd": 5
    },
-   "costPerPostUsd": 0.005,
+   "costPerItemUsd": 0.005,
+   "items": 7,
    "month": "2026-10",
-   "posts": 7,
    "usd": 0.0
   },
   "coverage": {

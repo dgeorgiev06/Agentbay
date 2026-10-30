@@ -33,8 +33,9 @@ spec:
       effects: [write]
     proposal:
       description: >-
-        The approval status in a proposal's front matter (`status: approved` with `approvedBy` and `date`). Only the
-        owner sets it: the guard refuses a subagent's write that marks a proposal approved.
+        The approval status in a proposal's front matter (`status: approved` with `approvedBy` and `date`). It is
+        informational: forge.extend skips `propose` for it, never the `approve` gate (only a recorded
+        `bay approve` of the proposal's exact content passes that).
       in:
         type: object
         required: [path]

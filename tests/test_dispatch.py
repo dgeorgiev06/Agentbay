@@ -253,25 +253,143 @@ def _proposal(k, name, fm):
     return f"docs/proposals/{name}"
 
 
-def test_extend_skips_propose_and_the_gate_for_an_approved_proposal():
-    """0006 Part C: a call naming a proposal whose front matter says status: approved (approvedBy, date) goes
-    straight to implement; any other proposal, or none, still goes through propose and the owner's gate."""
+def _sha(path):
+    import hashlib
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+APPROVED_FM = "status: approved\napprovedBy: user\ndate: 2026-10-29\n"
+
+
+def _gate_events(k, cid, etype):
+    return [e for e in ledger.read(k) if e.get("callId") == cid and e["type"] == etype and e.get("step") == "approve"]
+
+
+def test_extend_marker_skips_propose_but_never_the_gate():
+    """A front-matter status: approved is informational: it skips propose (nothing to draft), never the gate."""
     k = kit_copy()
     try:
         d = dispatch.Dispatcher(system(k, k), k, clock=clock)
-        ok_path = _proposal(k, "0099-ok.md", "status: approved\napprovedBy: user\ndate: 2026-10-29\n")
+        ok_path = _proposal(k, "0099-ok.md", APPROVED_FM)
         r = d.call("forge.extend", {"goal": "build the approved one", "proposal": ok_path})
-        assert r["status"] == "needs-agent" and r["next"]["step"] == "implement", r
+        assert r["status"] == "awaiting-approval" and r["next"]["step"] == "approve", r
+        assert r["next"]["approves"] == {"path": ok_path, "sha256": _sha(k / ok_path)}
+        assert "no recorded approval" in r["next"]["why"] and "informational" in r["next"]["why"]
         skipped = [e for e in ledger.read(k) if e.get("callId") == r["callId"] and e["type"] == "step.skipped"]
-        assert sorted(e["step"] for e in skipped) == ["approve", "propose"]
+        assert [e["step"] for e in skipped] == ["propose"]
         for fm in ("status: draft\n", "status: approved\n", "status: approved\napprovedBy: user\n", ""):
             p = _proposal(k, "0098-not-yet.md", fm)
             r = d.call("forge.extend", {"goal": "build the unapproved one", "proposal": p})
             assert r["next"]["step"] == "propose", fm
         r = d.call("forge.extend", {"goal": "no proposal yet"})
         assert r["next"]["step"] == "propose"
+        r = d.submit(r["callId"], "propose", {"status": "done", "summary": "s"})
+        assert r["next"]["step"] == "approve" and "approves no file" in r["next"]["why"] and "approves" not in r["next"]
         r = d.call("forge.extend", {"goal": "outside proposals", "proposal": "../etc/passwd.md"})
         assert r["status"] == "failed" and "docs/proposals/" in r["error"]
+    finally:
+        cleanup(k)
+
+
+def test_a_recorded_approval_of_the_unchanged_proposal_skips_the_gate():
+    """`bay approve` (terminal or chat) records the proposal's path and sha256; the next call naming the same,
+    unchanged file skips the gate, and the step plan and `bay show` say whose approval it was."""
+    for by, quote in (("user@tty", ""), ("user@chat-via-cos", "yes, approve 0099")):
+        k = kit_copy()
+        try:
+            d = dispatch.Dispatcher(system(k, k), k, clock=clock)
+            path = _proposal(k, "0099-ok.md", APPROVED_FM)
+            cid = d.call("forge.extend", {"goal": "build the proposal", "proposal": path})["callId"]
+            r = d.approve(cid, True, by=by, quote=quote)
+            assert r["next"]["step"] == "implement"
+            ev = _gate_events(k, cid, "step.completed")[-1]
+            assert ev["data"]["approves"] == {"path": path, "sha256": _sha(k / path)} and ev["data"]["by"] == by
+            assert ev["data"].get("quote", "") == quote
+            r = d.call("forge.extend", {"goal": "build the proposal again", "proposal": path})
+            assert r["status"] == "needs-agent" and r["next"]["step"] == "implement", r
+            why = d.show(r["callId"])["gates"]["approve"]
+            assert why.startswith("skipped:") and f"approved by {by} on " in why and "content unchanged" in why, why
+            assert f"(call {cid})" in why
+            sk = _gate_events(k, r["callId"], "step.skipped")
+            assert len(sk) == 1 and sk[0]["data"]["priorCall"] == cid and sk[0]["summary"] == why
+            assert r["next"]["previous"]["approve"] == {"approved": True, "by": by, "priorCall": cid}
+        finally:
+            cleanup(k)
+
+
+def test_an_edit_after_approval_makes_the_gate_run_again():
+    k = kit_copy()
+    try:
+        d = dispatch.Dispatcher(system(k, k), k, clock=clock)
+        path = _proposal(k, "0099-ok.md", APPROVED_FM)
+        f = k / path
+        original = f.read_text()
+        cid = d.call("forge.extend", {"goal": "build the proposal", "proposal": path})["callId"]
+        d.approve(cid, True, by="user@tty")
+        f.write_text(original + "\nOne more slice, added after approval.\n")
+        r = d.call("forge.extend", {"goal": "build the proposal", "proposal": path})
+        assert r["status"] == "awaiting-approval" and r["next"]["step"] == "approve", r
+        assert "changed since user@tty approved it" in r["next"]["why"], r["next"]["why"]
+        assert r["next"]["approves"]["sha256"] == _sha(f)
+        assert "changed since" in d.show(r["callId"])["gates"]["approve"]
+        # editing between the gate being shown and `bay approve` approves nothing: the owner re-reads first
+        cid2 = r["callId"]
+        f.write_text(original + "\nAnd another edit while the gate waits.\n")
+        try:
+            d.approve(cid2, True, by="user@tty")
+            raise AssertionError("approved changed content")
+        except dispatch.CallError as e:
+            assert "changed since the gate was shown" in str(e)
+        assert d.show(cid2)["status"] == "awaiting-approval"
+        assert d.show(cid2)["next"]["approves"]["sha256"] == _sha(f)            # the plan shows the new content
+        assert not [e for e in _gate_events(k, cid2, "step.completed")]
+        assert d.approve(cid2, True, by="user@tty")["next"]["step"] == "implement"
+        # the exact content approved earlier is still approved; a rejection of some content is the latest word
+        f.write_text(original)
+        assert d.call("forge.extend", {"goal": "build the proposal", "proposal": path})["next"]["step"] == "implement"
+        f.write_text(original + "\nA rejected variant.\n")
+        cid3 = d.call("forge.extend", {"goal": "build the proposal", "proposal": path})["callId"]
+        d.approve(cid3, False, by="user@tty", reason="no")
+        r = d.call("forge.extend", {"goal": "build the proposal", "proposal": path})
+        assert r["next"]["step"] == "approve" and "was rejected by user@tty" in r["next"]["why"]
+    finally:
+        cleanup(k)
+
+
+def test_only_bay_approve_events_count_as_a_recorded_approval():
+    """A matching ledger line that `bay approve` did not write (another source, another `by`, a workflow gate)
+    does not pass the gate. Subagents cannot write the ledger at all (test_boundaries)."""
+    k = kit_copy()
+    try:
+        d = dispatch.Dispatcher(system(k, k), k, clock=clock)
+        path = _proposal(k, "0099-ok.md", APPROVED_FM)
+        subj = {"path": path, "sha256": _sha(k / path)}
+        ledger.append(k, "step.completed", "C-x:approve", source="hook", callId="C-x", step="approve",
+                      data={"approved": True, "by": "user@tty", "approves": subj})
+        ledger.append(k, "note", "C-y", source="dispatcher", data={"approved": True, "by": "user@tty", "approves": subj})
+        cid = d.call("forge.extend", {"goal": "build the proposal", "proposal": path})["callId"]
+        d.approve(cid, True)                                  # by="user": not a `bay approve` channel
+        r = d.call("forge.extend", {"goal": "build the proposal", "proposal": path})
+        assert r["next"]["step"] == "approve" and "no recorded approval" in r["next"]["why"]
+    finally:
+        cleanup(k)
+
+
+def test_a_gate_takes_no_when_and_approves_goes_on_a_gate_only():
+    k = kit_copy()
+    try:
+        def edit(doc):
+            wf = doc["spec"]["workflows"]["extend"]
+            next(s for s in wf if s.get("id") == "approve")["when"] = "!$steps.proposal.approved"
+            next(s for s in wf if s.get("id") == "implement")["approves"] = "$in.proposal"
+        edit_yaml(k / "framework/modes/forge/mode.yaml", edit)
+        try:
+            model.resolve(model.Kit(k, k))
+            raise AssertionError("resolved")
+        except model.ResolveError as e:
+            gaps = [str(e)]
+        assert any("step approve: a gate takes no when:" in g for g in gaps), gaps
+        assert any("step implement: approves: goes on a gate step only" in g for g in gaps), gaps
     finally:
         cleanup(k)
 

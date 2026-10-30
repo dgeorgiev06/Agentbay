@@ -1,3 +1,40 @@
+# HANDOFF part 14: T-20261030-c870 (recorded with `bay plan`) - stage 3: last DOD-2 finding of the re-review (verdict-s3b)
+
+Outcome: in the main thread the guard hook asks for `note dispatch`, `note review` and `show reclaim` in any quoting,
+escaping, option or launcher spelling; the three nits are fixed. Stage 3 of 0008 is complete.
+
+To-do (all ticked with `bay plan --done`):
+1. Guard: `main_thread_decision` / `asked_bay_write` in bay/guard.py split the Bash command with the guard's own
+   `shlex.split` (+ `dequote` fallback, operators split off for unsafe text) and find a launcher (`.agentbay/bay`,
+   `./bay.sh`, `bay.sh`, `python3 -m bay.cli`, `python3 bay/cli.py`) anywhere in the words, so env assignments and
+   `x; ...` do not hide it. Commit b900ae3.
+2. Hook config: the PreToolUse guard entry (adapters/claude-code/claude_code.py:141-146) has matcher Bash|Read|... with no
+   subagent filter, so it already ran for the main thread; but `main()` returned 0 before deciding for non-subagents.
+   Now `main()` emits `ask` for the main thread. No adapter change needed. Test:
+   test_generated_hook_runs_the_guard_for_the_main_threads_bash_calls. Commit b900ae3.
+3. Tests: tests/test_guard_mainthread.py (new). Commit b900ae3.
+4. Nits: `ap = argparse` spacing; `note -h/--help` and `show -h/--help` print help (test in tests/test_cli_commands.py).
+   Commit 5f38a76.
+5. Nit: the cron advisory points at the README only when it has a fenced cron recipe (`^```cron`), bay/lint.py. Commit 5f38a76.
+6. Tests, check, boundary run (below).
+
+`approve` is not in the hook on purpose: no allow rule covers it, so any spelling already gets the default prompt, and
+tests/test_boundaries.py asserts the main thread's plain `approve` is "pass" from the guard (unchanged).
+
+Spellings tested (main thread -> ask; a role subagent -> deny for each):
+`note dispatch|'dispatch'|"dispatch"|disp\atch`, `note 'review'|"review"|re\view`, `show re\claim|'reclaim'|"re""claim"`,
+`--project .` / `--project=.` / `--proj .` / `--` before the verb, `FOO=1 ` and `A=1 B='2 3' ` env prefixes, launchers
+`.agentbay/bay`, `./bay.sh`, `bay.sh`, `python3 -m bay.cli`, `PYTHONPATH=. python3 -m bay.cli`, `python3 bay/cli.py`,
+and `echo hi; ...` / `true && ...` prefixes.
+No decision (pass) in the main thread: `note <ref> "text about dispatch"`, `note <ref> dispatch`, `note task`, `status`,
+`status --log -n 20`, `show <callId>`, `show '<callId>'`, `catalog`, `catalog forge.extend`, `approve`, `'approve'`,
+`./bay.sh check`, a git commit message mentioning the words, `ls`.
+
+Evidence:
+- `python3 tests/run.py -q`: `476 passed, 0 failed`
+- `./bay.sh check`: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)` (after `✓ lint clean`)
+- boundary: `boundary origin/main...HEAD: 104 changed paths (36 core, 3 docs, 31 extension, 9 feature, 25 other); 0 failing; B-11 docs: 0 hits`
+
 # HANDOFF part 13: T-20261030-9a71 (recorded with `bay plan`) - stage 3 review fixes (verdict-s3-fixed)
 
 Outcome: all four should-fix/nit findings of the stage-3 review fixed; nothing pushed, the proposal not edited, no path outside 0008's touches.

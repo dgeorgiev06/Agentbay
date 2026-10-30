@@ -438,6 +438,11 @@ def lint_contract_versions(kit: model.Kit) -> list[str]:
                     have = "; ".join(f"{', '.join(cs)} produce {k}/v{n}" for n, cs in sorted(made[k].items()))
                     out.append(f"{rwhere}: mode {md.name} reads {r}, but in env {en} {have}: version mismatch. "
                                f"Update the mode's reads: or the connector to the same version")
+                elif len(made[k]) > 1:
+                    odd = "; ".join(f"{', '.join(cs)} produce {k}/v{n}" for n, cs in sorted(made[k].items())
+                                    if n != int(v))
+                    out.append(f"{rwhere}: mode {md.name} reads {r}, but in env {en} {odd}: mixed versions of {k} "
+                               f"reach the mode. Bind only connectors that produce {r}, or update them")
     return out
 
 

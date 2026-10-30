@@ -100,3 +100,13 @@ def test_b7_catches_case_module_forms_nested_tests_and_referenced_files():
     assert any("x_api.py:5: connector x-api names connector fake-mail" in p for p in hits), hits
     assert any("lib/tests/helper.py:1: connector x-api names connector fake-mail" in p for p in hits), hits
     assert any("shared/x_entry.py:1: connector fake names mode feed-briefing" in p for p in hits), hits
+
+
+def test_mixed_versions_of_a_read_kind_are_refused_f7():
+    """F-7: one bound connector producing the read version does not excuse another producing a different one."""
+    k = kit_copy()
+    v2 = (k / "schemas/data/post.v1.schema.json").read_text().replace("post/v1", "post/v2")
+    (k / "schemas/data/post.v2.schema.json").write_text(v2)
+    sub(k, "connectors/fake/connector.yaml", "produces: [post/v1]", "produces: [post/v2]")
+    sub(k, "envs/local-feeds.yaml", "items.source/v1: [x-api]", "items.source/v1: [x-api, fake]")
+    has(k, "mode feed-briefing reads post/v1, but in env local-feeds fake produce post/v2: mixed versions of post")

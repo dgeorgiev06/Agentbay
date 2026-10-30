@@ -282,8 +282,24 @@ def test_status_counts_from_sqlite_and_reports_selectors_and_engine():
     assert store(p, settings={"selectors": [{"id": "all"}]}).status()["stale"] is True
 
 
+def test_a_state_json_from_before_the_items_rename_gets_an_actionable_error():
+    p = project()
+    store(p).sync(lookback="7d")
+    f = p / ".agentbay/data/feeds/feed-briefing/state.json"
+    st = json.loads(f.read_text())
+    st["budget"] = {month: {"posts": u["items"], "usd": u["usd"]} for month, u in st["budget"].items()}
+    f.write_text(json.dumps(st))
+    try:
+        store(p).status()
+        raise AssertionError("expected StoreError")
+    except AssertionError:
+        raise
+    except Exception as e:
+        assert "old key `posts`" in str(e) and "move the folder aside" in str(e), str(e)
+
+
 # ------------------------------------------------------------------ selectors
-FX = [{"id": "11", "handle": "vitalik", "text": "PeerDAS on mainnet soon", "ageHours": 2},
+FX =[{"id": "11", "handle": "vitalik", "text": "PeerDAS on mainnet soon", "ageHours": 2},
       {"id": "12", "handle": "lido", "text": "Staking module update", "ageHours": 3, "list": "9"},
       {"id": "13", "handle": "spam", "text": "Staking giveaway, click", "ageHours": 4},
       {"id": "14", "handle": "vitalik", "text": "Staking and decentralization", "ageHours": 30}]

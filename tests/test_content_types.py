@@ -37,6 +37,16 @@ def test_the_loader_is_the_only_source_of_the_post_kind():
     assert not contenttypes.problems(KIT)
 
 
+def test_an_attachment_without_textchars_is_refused_not_guessed():
+    """The email schema requires `textChars` (0 when only metadata is stored), so a connector that sends attachment
+    text without it fails loudly at the store's validation instead of storing 0."""
+    items = json.loads((KIT / "content-types/email/fixtures/items.json").read_text())
+    sch = model.inline_refs(model.data_schema("email/v1"))
+    assert model.schema_errors(items[0], sch) == []
+    del items[0]["attachments"][0]["textChars"]
+    assert any("textChars" in e for e in model.schema_errors(items[0], sch))
+
+
 def test_a_view_that_reads_anything_but_the_base_tables_and_its_own_views_is_refused():
     for bad, needle in (("SELECT v.* FROM temp.v_items v, main.attachments a", "attachments"),
                         ("SELECT v.* FROM temp.v_items v WHERE v.id IN (SELECT key FROM main.store_meta)", "store_meta"),

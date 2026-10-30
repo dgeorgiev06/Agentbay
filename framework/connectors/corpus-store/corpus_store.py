@@ -148,12 +148,16 @@ def derive_again(con: sqlite3.Connection, types: list[contenttypes.ContentType])
     held = dict(con.execute("SELECT key, value FROM store_meta WHERE key LIKE 'derive:%'"))
     for ct in (c for c in types if c.derived and held.get(f"derive:{c.name}") != str(c.derive_version)):
         con.execute("BEGIN IMMEDIATE")
-        for (pk,) in con.execute("SELECT pk FROM items WHERE kind = ?", (ct.kind,)).fetchall():
-            con.execute("UPDATE items SET derived = ? WHERE pk = ?",
-                        (json.dumps(ct.derive(_stored(con, pk)), sort_keys=True), pk))
-        con.execute("INSERT OR REPLACE INTO store_meta (key, value) VALUES (?, ?)",
-                    (f"derive:{ct.name}", str(ct.derive_version)))
-        con.execute("COMMIT")
+        try:
+            for (pk,) in con.execute("SELECT pk FROM items WHERE kind = ?", (ct.kind,)).fetchall():
+                con.execute("UPDATE items SET derived = ? WHERE pk = ?",
+                            (json.dumps(ct.derive(_stored(con, pk)), sort_keys=True), pk))
+            con.execute("INSERT OR REPLACE INTO store_meta (key, value) VALUES (?, ?)",
+                        (f"derive:{ct.name}", str(ct.derive_version)))
+            con.execute("COMMIT")
+        except Exception as e:                      # derive.py is content-type code: any failure leaves no half write
+            con.execute("ROLLBACK")
+            raise StoreError(f"content type {ct.name}: deriving its fields again failed: {e}") from None
 
 
 def open_rw(path: Path, types: list[contenttypes.ContentType],
@@ -192,7 +196,7 @@ def open_rw(path: Path, types: list[contenttypes.ContentType],
                 con.execute("BEGIN IMMEDIATE")
                 record_mode_views(con, mode)
                 con.execute("COMMIT")
-        except sbx.SqlError as e:
+        except (sbx.SqlError, StoreError) as e:
             con.close()
             raise StoreError(f"{path}: {e}") from None
     return con
@@ -488,7 +492,11 @@ class CorpusStore:
         return f"{self.ctx.now():%Y-%m}"
 
     def _usage(self, state: dict) -> dict:
-        return state["budget"].setdefault(self._month(), {"items": 0, "usd": 0.0})
+        use = state["budget"].setdefault(self._month(), {"items": 0, "usd": 0.0})
+        if "items" not in use:
+            raise StoreError("state.json budget uses the old key `posts`: move the folder aside and sync again "
+                             "(this is not migrated)")
+        return use
 
     def _cost(self, src=None) -> float:
         if src is not None and src.ctx.cost_per_item is not None:

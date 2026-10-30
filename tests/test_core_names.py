@@ -14,7 +14,9 @@ What counts as naming (identifiers and string literals only, never prose):
     `v_threads`), or a type or connector name in quotes or backticks (`'email'`, "`post`").
 A sentence that merely uses the English word (`steps post interim results`, `the email address`) is not a hit.
 
-Exceptions are ALLOWED below: the exact (file, name, literal) with the reason it is not a content-type reference.
+Exceptions are ALLOWED below: the exact (file, name, place) with the reason it is not a content-type reference.
+The place is the identifier, the Python expression that holds the string (`au.get('email')`) or the key path in a
+data file, so a new `kind == "email"` in an allowlisted file is still a hit.
 An entry that no longer matches fails the test, so the list only shrinks."""
 from __future__ import annotations
 
@@ -32,16 +34,22 @@ SKIP = {"tests", "fixtures", "__pycache__"}
 SUFFIXES = {".py", ".json", ".yaml", ".yml"}
 
 ALLOWED = {
-    ("bay/selector.py", "email", "email"):
+    ("bay/selector.py", "email", "au.get('email')"):
         "the `email` field of an item/v1 author ({handle, name, email}); a field of the base record, not a content type",
-    ("framework/connectors/corpus-store/corpus_store.py", "email", "email"):
-        "the same item/v1 author field, read and written when a row is stored",
-    ("schemas/data/item.v1.schema.json", "email", "email"):
+    ("framework/connectors/corpus-store/corpus_store.py", "email", "au.get('email')"):
+        "the same item/v1 author field, read when a row is stored",
+    ("framework/connectors/corpus-store/corpus_store.py", "email", "'email' not in author"):
+        "the same author field, checked when a handle holds an address",
+    ("framework/connectors/corpus-store/corpus_store.py", "email", "{'email': author.pop('handle'), **author}"):
+        "the same author field, written when a handle holds an address",
+    ("schemas/data/item.v1.schema.json", "email", "/properties/author/properties: email"):
         "the item/v1 author's `email` property, the base record every type extends",
+    ("adapters/claude-code/claude_code.py", "post", "('PostToolUse', 'post')"):
+        "Claude Code's PostToolUse hook event and its `post` phase, not a content type",
     ("adapters/claude-code/claude_code.py", "post", "post"):
-        "the `post` phase of a Claude Code PostToolUse hook, not a content type",
-    ("adapters/claude-code/claude_code.py", "post", "PostToolUse"):
-        "Claude Code's hook event name, not a content type",
+        "a local variable: the text after the generated block's end marker",
+    ("adapters/claude-code/claude_code.py", "post", "('PreToolUse', 'PostToolUse')"):
+        "Claude Code's hook event names, not a content type",
 }
 
 
@@ -82,7 +90,11 @@ def in_identifier(kinds, conns, ident: str) -> list[str]:
 
 
 def python_hits(src: str, kinds, views, conns):
-    for node in ast.walk(ast.parse(src)):
+    """(name, what) pairs; `what` is the identifier, or for a string the expression that holds it (its parent
+    node, e.g. `au.get('email')`), so an ALLOWED entry covers that expression and not the literal everywhere."""
+    tree = ast.parse(src)
+    parent = {c: n for n in ast.walk(tree) for c in ast.iter_child_nodes(n)}
+    for node in ast.walk(tree):
         idents = []
         if isinstance(node, ast.Name):
             idents = [node.id]
@@ -101,20 +113,22 @@ def python_hits(src: str, kinds, views, conns):
                 yield n, i
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             for n in in_literal(kinds, views, conns, node.value):
-                yield n, node.value[:60]
+                yield n, ast.unparse(parent.get(node, node))[:120]
 
 
-def data_hits(doc, kinds, views, conns):
+def data_hits(doc, kinds, views, conns, path=""):
+    """(name, what) pairs; `what` is the key path to the string plus the string, so an ALLOWED entry covers
+    that place in the file and not the word everywhere."""
     if isinstance(doc, dict):
         for k, v in doc.items():
-            yield from data_hits(k, kinds, views, conns)
-            yield from data_hits(v, kinds, views, conns)
+            yield from data_hits(k, kinds, views, conns, path)
+            yield from data_hits(v, kinds, views, conns, f"{path}/{k}")
     elif isinstance(doc, list):
         for v in doc:
-            yield from data_hits(v, kinds, views, conns)
+            yield from data_hits(v, kinds, views, conns, path)
     elif isinstance(doc, str):
         for n in in_literal(kinds, views, conns, doc):
-            yield n, doc[:60]
+            yield n, f"{path}: {doc[:60]}"
 
 
 def core_files(root=KIT):
@@ -169,4 +183,4 @@ def test_the_rule_counts_identifiers_and_literals_but_not_prose():
     assert in_identifier(kinds, conns, "post_rows") == ["post"] and in_identifier(kinds, conns, "emailView") == ["email"]
     assert in_identifier(kinds, conns, "postprocess") == [] and in_identifier(kinds, conns, "fake") == ["fake"]
     assert list(python_hits("def post_rows(item):\n    return item['kind'] == 'post'\n", kinds, views, conns)) == \
-        [("post", "post_rows"), ("post", "post")]
+        [("post", "post_rows"), ("post", "item['kind'] == 'post'")]

@@ -1,4 +1,75 @@
-# HANDOFF part 18: T-20261030-e57e (recorded with `bay plan`) - slice 5 part C built: mode-owned `v_threads`, generic `threads`, last core names
+# HANDOFF part 19: T-20261030-e403 (recorded with `bay plan`) - slice 5 part D built: decision (e), core-names test, 0006 Part E, whole-tree checks
+
+Outcome: done (not partial: D2 was not needed) on feat/0008-stage4. Not pushed. No proposal edited.
+
+## To-do and commits
+1. Decision (e): 71ebc63. `ITEM_COLUMNS` descriptions are generic; budget/cost counter `posts` -> `items` (`bay/dispatch.py`, `bay/cli.py`
+   `items=` in status, corpus-store budget); `costPerPostUsd`/`COST_PER_POST_USD`/`cost_per_post` -> `costPerItemUsd`/`COST_PER_ITEM_USD`/
+   `cost_per_item` in `bay/config.py`, `bay/connect.py`, `bay/model.py`, `bay/dispatch.py`, corpus-store, `schemas/connector.schema.json`,
+   `modes/briefing/config.schema.json`, the four connector.yaml, config.example.yaml, READMEs, INTERFACES.md. The old key has no alias:
+   `test_the_old_price_key_is_refused_by_the_schemas_with_no_alias` (mode setting and connector.yaml both refused). `dispatch.use` counted
+   `out["posts"]` for the ledger; it now counts `out["items"]`.
+2. `tests/test_core_names.py`: bcef679. Rule (also in the file's docstring): names are discovered (content-types/ folders and kinds, the
+   view names of types and of `modes/*/views.yaml`, `connectors/` folders). Scanned: .py/.json/.yaml under bay/, framework/, schemas/,
+   adapters/, coordinator/ (folders tests, fixtures skipped; framework modes own no type so are scanned). A hit is an identifier (ast: names,
+   attributes, args, defs, keywords) with a snake/camel segment equal to a type name, or equal to a connector name; a string without
+   whitespace with a type name as a segment or a connector name as a token; in any string a `<type>/v<N>` ref, a view name, or a type or
+   connector name in quotes/backticks. A sentence using the English word (`steps post interim results`) is not a hit. `ALLOWED` has 5
+   entries with reasons, and a stale entry fails: the item/v1 author field `email` in `bay/selector.py`, `corpus_store.py` and
+   `schemas/data/item.v1.schema.json` (a base-record field, not a type, so not renamed: that would change the public item schema), and the
+   Claude Code hook event `PostToolUse` / phase `post` in `adapters/claude-code/claude_code.py`.
+3. Part E: ae33236. `uses:`/`skills:` are keys of `features.<name>` (`schemas/mode.schema.json`, `Feature.uses/skills`). `bay check`
+   (resolve) fails: a `uses` entry no role of the feature is granted (B-9), a feature whose roles are granted any endpoint and has no
+   `uses` (`uses: []` is valid), a `skills` name that is not a skill of the mode (B-8); `bay lint` fails a playbook that names a skill
+   its feature does not list. `Dispatcher.use` (via `_open_uses`) limits a unit to the `uses` of the features whose open call
+   (`needs-agent`, cursor on a role/review step of that unit) waits on it; with no such call the role-level grant applies (decision (c)).
+   `_plan` hands a role only the feature's mode skills (own role skills stay) and only its `uses` as `tools`. `merge_mode`: a child's
+   feature replaces the parent's whole. `bay show <mode> --resolved` prints the features with their origin (options may not come before
+   the verb: the verb-first guard stays, so it is `show mail-briefing --resolved`). Declared in `modes/briefing` (digest, ask, prune),
+   `modes/mail-briefing` (digest, ask: written whole, since they replace briefing's), `framework/modes/improve` (scan, audit, triage,
+   implement); forge templates carry `uses: []` (and a `skills` hint).
+4. Whole tree: see Evidence. `bay/use_shim.py` was not touched (the check is in `Dispatcher.use`, which the shim calls).
+
+## Changes to existing tests (not security assertions)
+- `tests/test_dispatch.py`: the two `cost == {"posts": 7, ...}` assertions now say `items` (decision (e)). Nothing else in the file.
+- `tests/test_resolver.py::test_effect_not_declared_by_endpoint`, `tests/test_inheritance.py` (3 tests): they overrode one key of a parent
+  feature; with whole-feature override they pass the whole block (`helpers.whole_feature`). Assertions are unchanged; new test
+  `test_a_child_feature_is_never_merged_key_by_key_with_its_parents`.
+- corpus-store `test_corpus_store.py` and `tests/test_config.py`: renamed keys. `tests/test_offline_golden.py`: `generic_names` (below).
+- Unchanged and passing in the full run: `tests/test_boundaries.py`, `tests/test_boundary.py`, `tests/test_lint.py`,
+  `tests/test_guard_7a.py`, `tests/test_guard_mainthread.py`, `tests/test_review7a.py`, `tests/test_review_record.py`,
+  `tests/test_submit_needs_plan.py`, `tests/test_auth.py`, `framework/connectors/corpus-store/tests/test_sqlsandbox.py`, the connector
+  tests (gmail-api, x-api, fake, fake-mail).
+
+## Golden
+`git diff a6c035e HEAD -- tests/golden/` (both files) has exactly these hunks and no other: per file, (1) `source` description
+`"x, fake, gmail, ..."` -> `"name of the source that produced it"`, (2) `kind` `"post, email, ..."` -> `"the content type of the item"`,
+(3) `title` `"(null for posts)"` -> `"(null when the kind has none)"`, (4) `costPerPostUsd` -> `costPerItemUsd`, (5) `posts` -> `items`
+(budget in `status` and in `sync`; (4) and (5) each appear twice per file). Every changed line is one of the five allowed changes; the three
+decision (a) deltas stay in `mail_deltas` and the golden file for mail-briefing still has `v_posts` and `addr_key`. `generic_names` in
+`tests/test_offline_golden.py` asserts the three descriptions and the `items`/`costPerItemUsd` keys (and the absence of the old ones) for both modes.
+
+## Evidence (last lines)
+- `python3 tests/run.py -q`: `499 passed, 0 failed`
+- `python3 tests/run.py -k offline_golden`: `2 passed, 0 failed`
+- `./bay.sh check`: `✓ lint clean` / `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`
+- boundary, whole branch (`./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`):
+  `boundary origin/main...HEAD: 76 changed paths (29 core, 2 docs, 26 extension, 2 feature, 17 other); 0 failing; B-11 docs: 0 hits` (at ae33236)
+- `./bay.sh build --project .../scratchpad/s5d`: `built 6 modes for claude-code`; `./bay.sh clean --project .../scratchpad/s5d`: `clean`
+- Glob of scratch `s5d` after clean: `agentbay.config.yaml` only
+- core names: `test_core_names::test_no_core_file_names_a_content_type_or_a_connector` passes with the 5 `ALLOWED` entries, each matched.
+- Dead code: not run by me. Removed with what replaced it: `cost_per_post`, `COST_PER_POST_USD`, `costPerPostUsd`, the per-key feature merge
+  (incl. the `roles` entry merge) in `merge_mode`. Nothing new is unused (`_open_uses`, `_check_uses_and_skills`, `cmd_show_resolved`,
+  `whole_feature` are called).
+
+## Open for the owner
+- 0008's `touches:` already cover every changed path (boundary 0 failing); `bay/use_shim.py` untouched.
+- State of an existing project: a store `state.json` written before this commit has `budget.<month>.posts`; it is not read as `items` (no
+  compat), so the first sync of that month would fail on the missing key until that month's entry is deleted. The branch is unpushed and
+  the offline tests start from empty projects; say if you want a one-time migration instead.
+- `uses:` lists for improve were derived from playbooks/skills (shim reads named there); the first run that needs another read gets a
+  refusal naming the feature's `uses:`.
+
 
 Outcome: done and green on feat/0008-stage4, with open items for part D listed below. Not pushed. No proposal edited.
 

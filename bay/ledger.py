@@ -19,7 +19,10 @@ PERMISSION_TYPES = {"permission.denied"}
 # an agent run's recorded outcome and to-do list (`bay plan`), and the coordinator's record of a dispatch
 # (`bay dispatched`), which lists a running agent even when the spawn hook is off
 PLAN_TYPES = {"agent.plan", "agent.plan.done", "agent.dispatch"}
-TYPES = RUN_TYPES | STEP_TYPES | DATA_TYPES | PERMISSION_TYPES | PLAN_TYPES
+# a review that ran outside a framework review step, recorded by the coordinator (`bay review-record`). improve reads
+# it; nothing in the dispatcher, the gates or the approval fold does, so it can pass no gate.
+REVIEW_TYPES = {"review.recorded"}
+TYPES = RUN_TYPES | STEP_TYPES | DATA_TYPES | PERMISSION_TYPES | PLAN_TYPES | REVIEW_TYPES
 TASK_ID = re.compile(r"^T-[0-9]{8}-[0-9a-z]{4}$")
 MAX_OUTCOME, MAX_ITEMS, MAX_ITEM_TEXT, MAX_SERVES = 1000, 12, 240, 60
 NOTE_KINDS = ("note", "instruction-change", "decision")
@@ -102,6 +105,31 @@ def record_done(project: Path, task_id: str, n: object, agent: str | None = None
     if not isinstance(n, int) or isinstance(n, bool) or not 1 <= n <= len(plan["todo"]):
         raise PlanError(f"--done takes an item number from 1 to {len(plan['todo'])}")
     return append(project, "agent.plan.done", task_id, source="plan", taskId=task_id, data={"n": n})
+
+
+MAX_REVIEW_ITEMS, MAX_EVIDENCE = 80, 1000
+
+
+def record_review(project: Path, task_id: str, verdict: object) -> dict:
+    """Append a review.verdict/v1 of work reviewed outside a framework review step, as a `review.recorded` event on the
+    taskId of the work. Shape and size are checked here (the CLI also checks the schema); text is scrubbed by `append`.
+    The event is data for improve only: no gate, approval or step reads it."""
+    if not isinstance(task_id, str) or not TASK_ID.match(task_id):
+        raise PlanError(f"'{task_id}' is not a taskId (T-YYYYMMDD-xxxx)")
+    items = verdict.get("items") if isinstance(verdict, dict) else None
+    if not isinstance(items, list) or not 1 <= len(items) <= MAX_REVIEW_ITEMS:
+        raise PlanError(f"a review lists 1 to {MAX_REVIEW_ITEMS} items")
+    kept = []
+    for i, it in enumerate(items, 1):
+        if not isinstance(it, dict) or it.get("verdict") not in ("pass", "fail", "n/a") or not isinstance(it.get("id"), str):
+            raise PlanError(f"review item {i} must carry an id and a verdict of pass, fail or n/a")
+        kept.append({"id": it["id"][:40], "verdict": it["verdict"],
+                     **({"severity": it["severity"]} if it.get("severity") in ("blocker", "should-fix", "nit") else {}),
+                     "evidence": _text(it.get("evidence"), f"review item {i} evidence", MAX_EVIDENCE),
+                     **({"cites": it["cites"]} if isinstance(it.get("cites"), dict) else {})})
+    summary = verdict.get("summary")
+    return append(project, "review.recorded", task_id, source="coordinator", taskId=task_id,
+                  summary=_text(summary, "summary", MAX_OUTCOME) if summary else "", data={"items": kept})
 
 
 def _dispatched_check(evs: list[dict], task_id: str, agent: str | None) -> dict:

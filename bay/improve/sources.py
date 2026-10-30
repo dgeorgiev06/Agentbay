@@ -268,6 +268,15 @@ def ledger_verdicts(project: Path, kit: Path | None = None, since: datetime | No
             out.append({"callId": cid, "episode": f"ab:{cid}", "target": target, "step": step,
                         "subject": _subject(st.get("input") or {}, cid), "ts": ts, "status": st.get("status"),
                         "items": items})
+    for e in read_events(project):          # reviews the coordinator recorded (`bay review-record`)
+        if e["type"] != "review.recorded" or not in_window(e.get("ts"), since, until):
+            continue
+        items = [{k: (secretscan.scrub(v)[:EVIDENCE_CHARS] if k == "evidence" else v)
+                  for k, v in i.items() if k in ("id", "verdict", "severity", "evidence")}
+                 for i in (e.get("data") or {}).get("items", []) if isinstance(i, dict) and i.get("verdict") in ("pass", "fail", "n/a")]
+        tid = str(e.get("taskId") or e["runId"])
+        out.append({"callId": tid, "episode": f"ab:{tid}", "target": "review-record", "step": "review", "subject": tid,
+                    "ts": e["ts"], "status": None, "items": items})
     out.sort(key=lambda v: v["ts"])
     rounds: dict = {}
     for v in out:

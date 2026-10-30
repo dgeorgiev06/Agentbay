@@ -572,6 +572,21 @@ def cmd_plan(args):
         _die(f"✗ {e}")
 
 
+def cmd_review_record(args):
+    """The coordinator records a review that ran outside a framework review step (review.verdict/v1) as a
+    `review.recorded` ledger event that improve reads. It touches no call, gate or approval."""
+    from bay import model
+    verdict = _json_arg(args.verdict_json)
+    errs =model.schema_errors(verdict, model.data_schema("review.verdict/v1"))
+    if errs:
+        _die("✗ the review does not match review.verdict/v1: " + "; ".join(errs[:5]))
+    try:
+        ledger.record_review(args.project, args.task, verdict)
+    except ledger.PlanError as e:
+        _die(f"✗ {e}")
+    print(f"review recorded for {args.task}")
+
+
 def cmd_dispatched(args):
     """The coordinator records a subagent dispatch, so `bay status` lists it even when the spawn hook is off."""
     if not ledger.TASK_ID.match(args.task):
@@ -769,6 +784,9 @@ def main(argv=None):
     pl = sub.add_parser("plan", help="a dispatched agent's outcome and to-do list (append-only; the one command subagents may run)")
     pl.add_argument("task"); pl.add_argument("plan_json", nargs="?"); pl.add_argument("--done", type=int)
     pl.set_defaults(fn=cmd_plan)
+    rr = sub.add_parser("review-record", help="record a review that ran outside a framework review step (coordinator)")
+    rr.add_argument("task"); rr.add_argument("verdict_json")
+    rr.set_defaults(fn=cmd_review_record)
     dp = sub.add_parser("dispatched", help="record a subagent dispatch (coordinator)")
     dp.add_argument("task"); dp.add_argument("--agent", required=True); dp.add_argument("--call"); dp.add_argument("--step")
     dp.add_argument("--model"); dp.add_argument("--tier"); dp.add_argument("--role"); dp.add_argument("--mode")

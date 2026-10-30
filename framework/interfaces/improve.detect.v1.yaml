@@ -48,6 +48,28 @@ spec:
           stats: { type: object }
           warnings: { type: array, items: { type: string } }
       effects: [read]
+    change:
+      description: >-
+        Dead-code check for a change. Audits the working tree and the tree at `base` (a git revision, exported with
+        git archive; its code is never run) and returns the unused, unused-constant, compat-layer and complexity
+        findings whose fingerprint is absent at `base`, with the count of those that already existed. `stopped`
+        names the new findings when there are any, which ends a code step blocked.
+      in:
+        type: object
+        required: [base]
+        additionalProperties: false
+        properties:
+          base: { type: string, minLength: 1, description: "git revision, e.g. origin/main" }
+      out:
+        type: object
+        required: [new, existing]
+        additionalProperties: false
+        properties:
+          new: { type: array, items: { type: object } }
+          existing: { type: integer, minimum: 0 }
+          stopped: { type: string }
+          warnings: { type: array, items: { type: string } }
+      effects: [read]
     resolve:
       description: >-
         Check analyst findings: every evidence ref must resolve (episode in the sources, file and line that

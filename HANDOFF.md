@@ -14,7 +14,7 @@ commit and a push, and updates this file. This file is removed in the last slice
 | 4 | `feature.yaml` (workflow, skills, `uses:`), whole-feature override, `bay show <mode> --resolved` | E | B-3, B-8 | todo |
 | 5 | Per-feature `uses:` enforced in the use shim (security) | E | B-9 | todo |
 | 6 | Contract tests: connector, source (incl. change-feed), mode; run against every instance | A | B-5 | todo |
-| 7a | Approvals from chat (Part G, behind `approvals.chat`); forge.extend skips `propose` and the gate for an approved proposal; the kit ignores its own build output | G, C | - | done |
+| 7a | Approvals from chat (Part G, behind `approvals.chat`); forge.extend skips `propose` for a proposal marked approved, the gate only for a recorded approval of its exact content; the kit ignores its own build output | G, C | - | done |
 | 7b | The new forge.extend: propose, approve, `foreach:` implement, code `check`, review, release; observable DoD/rules; generated briefs; `HANDOFF.md` protocol | C, F | all existing | todo (plan below) |
 | 7c | Shared forge protocol for create/connect; improve `boundary-crossing` detector | C, F | B-1..B-3 | todo (plan below) |
 
@@ -140,7 +140,7 @@ Slice 3, B-8 (bc7634a):
   clean removes `.claude/skills/`), test_dispatch plan `skills`, test_lint `*_b8` (3), test_inheritance.
 - Touches: `modes/*/skills/` `planned` off; bay/dispatch.py's slice-5 planned entry merged into a slice-3 one.
 
-Slice 7a (32b4eab, 838fbb9, 8dcb8ff, 74cdeb9, 515dbfb):
+Slice 7a (32b4eab, 838fbb9, 8dcb8ff, 74cdeb9, 515dbfb; correction de3d779):
 - 0006 Part G "Approvals from chat" (owner decision 2026-10-29); 0006 front matter `status: approved`,
   `approvedBy: user`, `date: 2026-10-29`; Part C notes the approved-proposal skip; slice-7a `touches:`.
 - `bay approve <id> --via chat --quote "<msg>"` (bay/cli.py `_approval_channel`): refused unless
@@ -152,19 +152,25 @@ Slice 7a (32b4eab, 838fbb9, 8dcb8ff, 74cdeb9, 515dbfb):
 - Guard (bay/guard.py): every subagent (agentbay role or not) is denied `bay approve` in any spelling
   (`runs_approve`: bay, bay.sh, .agentbay/bay, bay/cli.py, `-m bay.cli`; parsed words, raw text when the command
   does not parse) and any Bash command naming `agentbay.config.yaml` or a root-level glob matching it
-  (`names_config`). File-tool writes to it were already denied (NEVER_FILES). New: a subagent write (Write, Edit,
-  MultiEdit, simulated) that turns a `docs/proposals/*.md` front matter to `status: approved` is denied.
+  (`names_config`). File-tool writes to it were already denied (NEVER_FILES). (74cdeb9 also denied a subagent
+  write that turned a proposal to `status: approved`; de3d779 removed it, see Decisions.)
 - forge.extend: first step `proposal` (code, `forge.scaffold/v1.proposal`, `when: $in.proposal`) reads the
-  front matter; `propose` and `approve` carry `when: "!$steps.proposal.approved"`. Approved = status approved +
-  approvedBy + date. The path must match `docs/proposals/<name>.md` (interface pattern; the connector also
+  front matter; `propose` carries `when: "!$steps.proposal.approved"` (approved = status approved +
+  approvedBy + date). `approve` carries `approves: $in.proposal` and no `when:` (de3d779): the dispatcher hashes
+  the file itself, `bay approve` records `data.approves: {path, sha256}`, and the gate is skipped only when the
+  ledger's latest dispatcher decision by `user@tty`/`user@chat-via-cos` on that path and hash is an approval
+  (`Dispatcher._gate_check`). An edit while the gate waits makes `bay approve` refuse and re-plan. The plan's
+  `why`/`approves` and `bay show`'s `gates` say why the gate ran or was skipped; `bay approve` prints path + sha256.
+  Lint: a gate takes no `when:`; `approves:` only on a gate. The path must match `docs/proposals/<name>.md` (interface pattern; the connector also
   resolves it under docs/proposals/).
 - `when:` grammar: `[!]$in.<f>`, `[!]$steps.<id>.<f>`, `stale > <age>`; role steps now take `when:`; resolve
   fails when `$steps.<id>` is not an earlier step.
 - `.gitignore`: `/.claude/`, `/CLAUDE.md`.
 - Docs: cos playbook "Gates from chat"; extend playbook; README, DESIGN, INTERFACES; generated CLAUDE.md.
 - Tests: test_boundaries `*chat*` (4), `test_guard_denies_bay_approve_*`, `test_no_subagent_writes_agentbay_config_yaml`,
-  `test_no_subagent_marks_a_proposal_approved`; test_dispatch `test_extend_skips_propose_*`,
-  `test_when_names_only_an_earlier_step`; test_adapter `test_building_the_kit_into_itself_*`.
+  `test_no_subagent_writes_the_ledger`, `test_chat_approval_of_a_proposal_*`; test_dispatch
+  `test_extend_marker_skips_propose_but_never_the_gate`, `test_a_recorded_approval_*`, `test_an_edit_after_*`,
+  `test_only_bay_approve_events_*`, `test_a_gate_takes_no_when_*`, `test_when_names_only_an_earlier_step`; test_adapter `test_building_the_kit_into_itself_*`.
   test_boundary `SLICES_BUILT` is now the set {1, 2, 3, 7}.
 
 ### Review round 1 (PR #10, independent review)
@@ -311,9 +317,15 @@ All round-2 findings (N-1 to N-5) fixed.
   the SecretAccessor intersection applies.
 - (7a) Chat approvals skip the "Type yes" prompt: the quoted message is the confirmation, and Claude Code's
   permission prompt for the command (never pre-approved) is the second check.
-- (7a) The approved-proposal skip also skips the `approve` gate ("straight to implement"). To keep R-2 honest,
-  the guard stops subagents from marking a proposal approved; edits to an already-approved proposal (e.g. added
-  `touches:`) stay allowed, as slices 1-3 did.
+- (7a, corrected by de3d779; owner policy: a gate passes only by a recorded approval) The front-matter marker
+  skips `propose` only. The `approve` gate is skipped only for a ledger approval by `bay approve` (terminal or
+  chat) of this proposal path at the sha256 of its current content; any edit re-runs the gate. The latest
+  decision on that exact content wins (a rejection after an approval re-runs it). The 74cdeb9 guard rule that
+  denied writing `status: approved` is removed: the marker grants nothing, and no other reason to keep it was
+  found (it never covered the main thread or Bash, which was the hole). The ledger is the trust root: subagents
+  cannot write `.agentbay/` (guard, tested for `.agentbay/ledger/`); a main-thread Bash write to the ledger is the
+  same trust as the main thread typing `bay approve --via chat` (Open problems). Gates take no `when:` at all.
+  The hash is computed by the dispatcher from the project file, never taken from connector output.
 - (7a) The approval lookup is a forge.scaffold/v1 endpoint (code step, dispatcherOnly interface, forge already
   needs it) plus a generic `when:` negation, rather than a forge-specific dispatcher rule.
 - (7a) `names_config` denies even reads of agentbay.config.yaml by Bash (subagents can use Read); a glob counts
@@ -327,7 +339,7 @@ All round-2 findings (N-1 to N-5) fixed.
 ### Plan: slice 7b, the new forge.extend (Part C), not built
 1. Workflow (framework/modes/forge/mode.yaml `extend`):
    `proposal` (code, as 7a) → `propose` (builder; writes problem, change, `touches:`, `slices:`; skipped when
-   approved) → `approve` (gate; skipped when approved) → `implement` (builder, `foreach: $steps.propose.slices`)
+   approved) → `approve` (gate, `approves: $in.proposal`; skipped only for a recorded approval of the unchanged proposal) → `implement` (builder, `foreach: $steps.propose.slices`)
    → `check` (code) → `review` (reviewer, deep, high) → `release` (builder).
    - Slices come from the proposal: for an approved proposal, `forge.scaffold/v1.proposal` also returns its
      `slices:` front matter, so `foreach:` reads `$steps.proposal.slices` there; `propose`'s Result carries them
@@ -364,7 +376,7 @@ All round-2 findings (N-1 to N-5) fixed.
    framework/modes/forge/features/create/.
 
 ## Test status
-`python3 tests/run.py -q`: 411 passed, 0 failed on a clean detached checkout of e93a1f6 (~4 min; use a long
+`python3 tests/run.py -q`: 416 passed, 0 failed on a clean detached checkout of de3d779 (~4 min; use a long
 timeout). `bay lint` clean, `bay validate` ok. `bay boundary --base origin/main --proposal docs/proposals/0006-...md
 --docs`: 103 changed paths, 0 failing, 0 B-11 hits.
 
@@ -372,8 +384,9 @@ timeout). `bay lint` clean, `bay validate` ok. `bay boundary --base origin/main 
 - (7a) The chat path trusts the main thread to relay the owner's words (Part G threat note). A main-thread
   prompt injection could still type `bay approve --via chat`; Claude Code's prompt for the command is the only
   stop then. That is the documented trade-off, off by default.
-- (7a) An unknown (non-agentbay) subagent can still write a proposal by Bash (`sed -i`, redirects); the guard
-  checks file tools only for the approval flip. agentbay roles have no file-writing CLI.
+- (7a) The main thread (not a subagent) can append to `.agentbay/ledger/events.jsonl` by Bash, so it could forge
+  a `bay approve` event; that is no more than it can already do by running `bay approve --via chat`. Hashing or
+  signing ledger events is out of scope (the ledger is append-only JSON).
 - DESIGN.md is 1603 words (target ~1.5k); further trimming would cut contract text (safety, store invariants).
 - The `boundary-crossing` improve detector (B-1..B-3 over history) is slice 7.
 - B-8 skill-reference lint matches two prose phrasings only; a feature.yaml `skills:` list (slice 4) should

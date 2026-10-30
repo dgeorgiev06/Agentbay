@@ -111,7 +111,7 @@ def test_the_gmail_query_is_never_narrower_than_the_local_match():
     fake.messages[msg["id"]] = msg
     g = make(fake)
     item = g._to_item(fake.render(msg))
-    sels = [{"id": "a", "in": "inbox", "not": {"from": "ruiz"}}, {"id": "b", "in": "inbox", "not": {"text": "kiln"}},
+    sels = [{"id": "a", "in": "inbox", "not": {"from": "ruiz"}}, {"id": "b", "in": "inbox", "not": {"text": "partner"}},
             {"id": "c", "text": "pil"}, {"id": "d", "subject": "pil"}, {"id": "e", "from": "partner.example", "text": "pilot"},
             {"id": "f", "not": {"subject": "ruiz"}}, {"id": "g", "from": "dana@partner.example", "in": "label:Newsletters"},
             {"id": "h", "to": "me@example.com", "not": {"from": "*@other.example"}}]
@@ -122,7 +122,7 @@ def test_the_gmail_query_is_never_narrower_than_the_local_match():
         assert not local or fake.matches(q, msg), (sel, q)                     # never less than the local match
         kept += local
     assert kept == 7                                                           # every case but g (not labelled Newsletters)
-    old = {"a": "in:inbox -from:ruiz", "b": "in:inbox -kiln", "c": "pil", "d": "subject:pil"}
+    old = {"a": "in:inbox -from:ruiz", "b": "in:inbox -partner", "c": "pil", "d": "subject:pil"}
     assert not any(fake.matches(q, msg) for q in old.values())                 # what the old table sent: too narrow
 
 

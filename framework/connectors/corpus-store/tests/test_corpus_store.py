@@ -299,7 +299,7 @@ def test_a_state_json_from_before_the_items_rename_gets_an_actionable_error():
 
 
 # ------------------------------------------------------------------ selectors
-FX =[{"id": "11", "handle": "vitalik", "text": "PeerDAS on mainnet soon", "ageHours": 2},
+FX = [{"id": "11", "handle": "vitalik", "text": "PeerDAS on mainnet soon", "ageHours": 2},
       {"id": "12", "handle": "lido", "text": "Staking module update", "ageHours": 3, "list": "9"},
       {"id": "13", "handle": "spam", "text": "Staking giveaway, click", "ageHours": 4},
       {"id": "14", "handle": "vitalik", "text": "Staking and decentralization", "ageHours": 30}]

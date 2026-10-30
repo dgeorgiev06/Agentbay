@@ -224,9 +224,13 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
 ## 11. Briefing: items, selectors and the corpus store
 - **`item/v1`** is the envelope:
   - `id` (`<source>:<extId>`, unique, what agents cite), `extId`, `source`, `kind`;
-  - `author` (optional `handle`, `name` and the address property named in `schemas/data/item.v1.schema.json`), `title`, `text`, `url`, `createdAt`, `fetchedAt`;
+  - `author` (an object with three optional fields, shown in the example below), `title`, `text`, `url`, `createdAt`, `fetchedAt`;
   - `container`, `labels[]`, `threadId`;
   - `matched[]`, set by the store.
+
+```yaml
+author: {handle?: string, name?: string, email?: string}   # email is the author's address, e.g. a sender
+```
 
   Kind extensions add fields, using `allOf` item/v1 and `unevaluatedProperties: false`. A content type
   (`content-types/<name>/`: `content-type.yaml`, `fields.schema.json`, `views.sql`, and `derive.py` when it

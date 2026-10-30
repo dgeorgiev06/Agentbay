@@ -328,9 +328,6 @@ class Dispatcher:
         step's output counts as missing). `stale > <age>`: skip a code step while the store is fresher."""
         neg = step.when.startswith("!")
         ref = step.when[1:] if neg else step.when
-        if ref.startswith("approved "):         # the gate's rule: the ledger holds an approval of the current content
-            approved = self._gate_check(step, state, self._file_subject(ref.split(None, 1)[1], state))["skipped"]
-            return approved if neg else not approved
         if ref.startswith(("$in.", "$steps.")):
             v = substitute({"v": ref}, state["input"], state["steps"], {}).get("v")
             return bool(v) if neg else not v

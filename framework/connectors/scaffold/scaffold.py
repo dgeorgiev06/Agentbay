@@ -21,7 +21,7 @@ class Scaffold:
 
 
     def proposal(self, path) -> dict:
-        """A proposal's approval status, from its front matter. Approved only with status, approvedBy and date."""
+        """A proposal's front matter status, approvedBy and date (informational; only `bay approve` passes the gate)."""
         root = kit_project(self.ctx)
         p = (root / path).resolve()
         if not p.is_relative_to((root / "docs" / "proposals").resolve()) or not p.is_file():
@@ -30,9 +30,7 @@ class Scaffold:
             fm = front_matter(p.read_text(encoding="utf-8"))
         except ProposalError as e:
             raise ConnectorError(f"{path}: {e}") from e
-        out = {"path": path, **{k: str(fm[k]) for k in ("status", "approvedBy", "date") if fm.get(k)}}
-        out["approved"] = out.get("status") == "approved" and bool(out.get("approvedBy")) and bool(out.get("date"))
-        return out
+        return {"path": path, **{k: str(fm[k]) for k in ("status", "approvedBy", "date") if fm.get(k)}}
 
 
 def create(ctx):

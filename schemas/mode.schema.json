@@ -233,7 +233,7 @@
                 "when": {
                   "type": "string",
                   "pattern": "^(stale\\s*>\\s*[0-9]+[mhdw]|!?approved\\s+\\$in\\.[A-Za-z][A-Za-z0-9]*|!?\\$in\\.[A-Za-z][A-Za-z0-9]*|!?\\$steps\\.[a-z][a-z0-9-]*\\.[A-Za-z][A-Za-z0-9]*)$",
-                  "description": "`stale > 2h` (code step: skip unless the store is older), `$in.<field>` or `$steps.<id>.<field>` (skip unless truthy), `approved $in.<field>` (true when the ledger holds the owner's `bay approve` of that file's current content); a leading `!` skips when true instead."
+                  "description": "`stale > 2h` (code step: skip unless the store is older), `$in.<field>` or `$steps.<id>.<field>` (skip unless truthy); a leading `!` skips when true instead."
                 },
                 "task": {
                   "type": "string",

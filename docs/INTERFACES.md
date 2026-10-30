@@ -186,7 +186,7 @@ Agent records (append-only; written by the coordinator and the agent, never edit
   was dispatched to; text is scrubbed and size-limited. It is the only `bay` command a subagent may run. A
   role-step `bay submit` is refused when its taskId has no plan.
 - `review.recorded`: `bay review-record <taskId> '<review.verdict/v1>'`, for a review run outside a framework
-  review step. It changes no call, gate or approval; improve reads it as a verdict.
+  review step. It changes no call, gate or approval; the analysis mode that reads verdicts counts it.
 `bay status --agents` groups runs by role, mode, model and tier from these events alone; `bay show` prints
 outcome, to-do progress and inputs.
 Dispatcher: `step.started`, `step.completed`, `step.failed`, `step.skipped`, `step.planned`, `call.completed`

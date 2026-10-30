@@ -44,11 +44,10 @@ spec:
           path: { type: string, pattern: "^docs/proposals/[A-Za-z0-9][A-Za-z0-9._-]*\\.md$" }
       out:
         type: object
-        required: [path, approved]
+        required: [path]
         additionalProperties: false
         properties:
           path: { type: string }
-          approved: { type: boolean, description: "status is approved and approvedBy and date are set" }
           status: { type: string }
           approvedBy: { type: string }
           date: { type: string }

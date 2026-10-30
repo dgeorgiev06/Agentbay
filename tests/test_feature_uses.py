@@ -48,9 +48,22 @@ def test_a_role_step_reaches_only_its_features_uses_while_its_call_is_open():
     refused(lambda: d.use(ANALYST, "items.store/v1.facets", {}), "by the feature")
     d.use(REVIEWER, "items.store/v1.status", {})                     # another unit, no step of its own waiting
     ask = d.call("feed-briefing.ask", {"question": "what is new?"})
-    assert ask["status"] == "needs-agent"                            # two open calls for one unit: their uses add up
-    d.use(ANALYST, "items.store/v1.status", {})
-    d.use(ANALYST, "items.store/v1.sql", {"sql": "SELECT 1"})
+    assert ask["status"] == "needs-agent"                            # two open calls for one unit: only what both declare
+    d.use(ANALYST, "items.store/v1.sql", {"sql": "SELECT 1"})                        # in both
+    refused(lambda: d.use(ANALYST, "items.store/v1.status", {}), "by the feature")   # ask declares it, digest does not
+    refused(lambda: d.use(ANALYST, "items.store/v1.facets", {}), "by the feature")   # ask declares it, digest does not
+
+
+def test_two_open_calls_of_different_features_share_only_what_both_declare():
+    p = project()
+    d = D(p)
+    assert d.call("feed-briefing.sync", {})["status"] == "done"
+    assert d.call("feed-briefing.ask", {"question": "what is new?"})["status"] == "needs-agent"
+    d.use(ANALYST, "items.store/v1.status", {})                      # ask alone declares status
+    assert d.call("feed-briefing.digest", {"since": "3d"})["status"] == "needs-agent"
+    refused(lambda: d.use(ANALYST, "items.store/v1.status", {}), "not granted items.store/v1.status by the feature")
+    refused(lambda: d.use(ANALYST, "items.store/v1.search", {}), "by the feature")   # ask only
+    assert d.use(ANALYST, "items.store/v1.sql", {"sql": "SELECT count(*) FROM v_items"})["rows"] == [[7]]
 
 
 def test_the_step_plan_hands_a_role_only_its_features_skills_and_endpoints():

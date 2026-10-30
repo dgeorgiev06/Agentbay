@@ -241,7 +241,7 @@ class Dispatcher:
         scoped = self._open_uses(r)
         if scoped is not None and target not in scoped:       # B-9: while a feature's step waits for this unit
             raise CallError(f"role {role} in mode {r.mode} is not granted {target} by the feature it is working "
-                            f"on (its `uses:`: {', '.join(sorted(scoped)) or 'none'})")
+                            f"on (when several calls wait, only what all declare in `uses:`:{', '.join(sorted(scoped)) or 'none'})")
         iface, ep = target.rsplit(".", 1)
         effects = model.endpoint_effects(self.sys.kit, iface, ep)
         if set(effects) - model.AGENT_SAFE_EFFECTS:      # re-checked at runtime
@@ -260,9 +260,11 @@ class Dispatcher:
         return secretscan.scrub_obj(json.loads(vault.redact(json.dumps(out, ensure_ascii=False))))
 
     def _open_uses(self, unit) -> set[str] | None:
-        """The `uses:` of the features whose open call waits for `unit` (status needs-agent, cursor on a role or
-        review step of this unit); None when no such call is open or none of its features declares `uses:`, so
-        the role-level grant applies (decision (c) of proposal 0008)."""
+        """The endpoints every feature whose open call waits for `unit` (status needs-agent, cursor on a role or
+        review step of this unit) declares in `uses:`: the INTERSECTION, because the use shim does not say which
+        call is asking, so with several open calls a feature never reaches what another did not declare (B-9,
+        fail closed). None when no such call is open or none of its features declares `uses:`, so the role-level
+        grant applies (decision (c) of proposal 0008)."""
         found: set[str] | None = None
         for f in sorted(self._calls_dir().glob("*.json")):
             state = read_json(f)
@@ -274,7 +276,7 @@ class Dispatcher:
             except (model.ResolveError, KeyError, IndexError):
                 continue
             if feat.uses is not None and step.resolved is not None and step.resolved.unit == unit.unit:
-                found = (found or set()) | set(feat.uses)
+                found = set(feat.uses) if found is None else found & set(feat.uses)
         return found
 
     def _use_settings(self, unit, iface: str) -> dict:

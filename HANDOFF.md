@@ -172,6 +172,21 @@ Fixed (one commit each, pushed):
   stops the build.
 All round-1 findings (F-1 to F-15) fixed.
 
+### Review round 2 (PR #10, confirmation review)
+- N-1 `bay boundary` uses head's component map only when the diff adds it (status A in base...head); then no
+  new-extension pass: every changed path outside other must be in touches:. A base without a map that the change
+  does not add is an error. The reviewer's backdoor (a map making `bay/<name>` an adapter folder) fails. This PR
+  still passes: all 93 paths are listed.
+- N-2 the map and the "is this extension new" tree are read at `git merge-base base head` (what base...head diffs
+  against); the stale-fork scenario (main deletes a mode after the fork, the PR edits it) fails B-3.
+- N-3 `ComponentMap.parse` raises RuntimeError on bad YAML, a non-mapping document or a non-mapping
+  `components:`; the CLI prints one line.
+- N-4 a skill reference ("the X skill", "the skill X", "(X skill)") counts only when X is backticked or is a skill
+  the kit builds (any mode chain or role); "the right skill", "the same skill" are prose.
+- N-5 a child config schema may set top-level `type`/`additionalProperties` only to the parent's value; anything
+  else is a resolve gap and a lint error naming the keyword.
+All round-2 findings (N-1 to N-5) fixed.
+
 ## Decisions
 - Classification order: other (tests/, HANDOFF.md, docs/proposals/, docs/research/, repo meta, the
   proposal) → core docs → core `owns:` (most specific glob wins, so bay/selector.py is briefing) →
@@ -256,22 +271,22 @@ All round-1 findings (F-1 to F-15) fixed.
 
 - (review 1) B-7 skips a manifest-referenced file that lies under a core `owns:` path (feed-briefing's config is
   briefing's schema); core is not scanned. Content types get no manifest check yet (manifest name not fixed).
-- (review 1, F-14) Bootstrap: origin/main has no framework/components.yaml (this PR introduces it), so the
-  boundary falls back to the map at `--head` when `--base` has none and prints "component map: none at <base>;
-  judged by ... at <head> (introduced here)". Once merged, every later change is judged by the base map.
+- (review 1, F-14; narrowed in review 2, N-1/N-2) Bootstrap: origin/main has no framework/components.yaml (this
+  PR introduces it). The boundary reads the map at the merge-base; only when the diff adds the map (status A) it
+  uses the map at `--head`, gives no new-extension pass (every path outside other must be listed) and says so.
+  Any other base without a map is an error. Once merged, every later change is judged by the merge-base map.
 - (review 1, F-12) The adapter manifest schema lives in schemas/ like the other contracts' (components.yaml
   `adapter` now has `schema:`), rather than inline in bay/adapter.py.
-- (review 1, F-13) A child's `additionalProperties` is accepted and, as before, the parent's value stands.
+- (review 2, N-5, replaces F-13's note) A child's `type`/`additionalProperties` must equal the parent's value.
 - (review 1) Login secrets: the old "does not declare" check stays first (security test pins its message), then
   the SecretAccessor intersection applies.
 ## Next
-- Confirmation review of PR #10, then slice 4.
+- PR #10 ready to merge; then slice 4.
 
 ## Test status
-`python3 tests/run.py -q`: 395 passed, 0 failed on a clean checkout of 6ac7402 (~3 min; use a long timeout).
-`bay lint` clean, `bay validate` ok, build + clean on a scratch project ok. `bay boundary --base origin/main
---proposal docs/proposals/0006-...md --docs`: 93 changed paths, 0 failing, 0 B-11 hits (map read at HEAD: none at
-origin/main).
+`python3 tests/run.py -q`: 401 passed, 0 failed on a clean checkout of 18b6b45 (~4 min; use a long timeout).
+`bay lint` clean, `bay validate` ok. `bay boundary --base origin/main --proposal docs/proposals/0006-...md --docs`:
+93 changed paths, 0 failing, 0 B-11 hits (map introduced here, read at HEAD with no new-extension pass).
 
 ## Open problems
 - DESIGN.md is 1603 words (target ~1.5k); further trimming would cut contract text (safety, store invariants).

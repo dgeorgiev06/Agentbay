@@ -4,7 +4,7 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN.md
 
 ```
  modes/  envs/  connectors/  interfaces/       you (user space)
- framework/{roles,agents,modes,envs,connectors,interfaces}/   the framework (roles and agent profiles only here)
+ framework/{roles,modes,envs,connectors,interfaces}/   the framework (roles only here; an agent profile is in adapters/<name>/adapter.yaml)
     │
     ├─> bay check ─> model.resolve() ─> System ──> Adapter.build ──> .claude/agents/<role>--<mode>.md, COORDINATOR.md, catalog
     │                  (exact gaps)                                  (claude-code now; headless / cloud next)
@@ -21,7 +21,7 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN.md
 |---|---|---|---|
 | 1 | **Mode** (features: in/out, effects, steps, optional playbook and rules, review) | `schemas/mode.schema.json` | you add or change a job |
 | 2 | **Feature playbook + rules** | `bay/playbook.py`, `schemas/rules.schema.json` | you change a feature's definition of done |
-| 3 | **Role / Agent profile / Environment** | `schemas/{role,agent,environment}.schema.json` | the framework adds a job or an LLM product; you add wiring |
+| 3 | **Role / Agent profile / Environment** | `schemas/{role,environment}.schema.json`; the profile is `profile:` in `schemas/adapter.schema.json` | the framework adds a job or an LLM product; you add wiring |
 | 4 | **Capability interface + Connector** | `schemas/{interface,connector}.schema.json`, `bay/connect.py` | you add a capability or a concrete tool |
 | 5 | **Adapter + registry** (`.agentbay/catalog.json`) | `bay/adapter.py`, `bay/registry.py` | you add a runtime, or something a coordinator must discover |
 | 6 | **Project workflow** (stages composing `<mode>.<endpoint>`) | `schemas/config.schema.json` `workflows`, `bay/workflows.py` | you compose modes differently |
@@ -336,7 +336,7 @@ that has a check and hands the rest to the analyst.
 - **New feature** -> `bay new feature weekly --mode <mode> --effects read`, fill the playbook and rules, `bay check`.
 - **New mode / env** -> `bay new mode <name>` / `bay new env <name>`, or `bay call forge.create`. Behaviour for a role
   in your mode goes in its playbooks, skills and rules; a new framework role is a `forge.extend` proposal.
-- **New LLM product** -> a framework agent profile (forge.extend); select it with `agent:`. Modes, roles and envs
+- **New LLM product** -> a new adapter with its `profile:` (forge.extend); select it with `agent:`. Modes, roles and envs
   do not change.
 - **New runtime** -> implement `Adapter`, register it, `./bay.sh build --runtime <name>`. Modes do not change.
 - **Change the framework** -> `bay call forge.extend '{"goal": "..."}'` (proposal, approval, review mandatory).

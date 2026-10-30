@@ -436,10 +436,16 @@ class TranscriptSource:
         self.root, self.project = Path(root), project
 
     def sessions(self) -> tuple[list[Path], int]:
-        """Session files directly under <root>/<project-folder>/; symlinks are skipped and counted."""
+        """Session files under <root>/<project-folder>/, or directly under <root> when root is itself one project's
+        folder (~/.claude/projects/-home-claude); symlinks are skipped and counted."""
         if not self.root.is_dir() or self.root.is_symlink():
             return [], 0
         out, skipped = [], 0
+        for f in sorted(self.root.glob("*.jsonl")):
+            if safe_file(f, self.root):
+                out.append(f)
+            else:
+                skipped += 1
         for d in sorted(self.root.iterdir()):
             if d.is_symlink():
                 skipped += 1

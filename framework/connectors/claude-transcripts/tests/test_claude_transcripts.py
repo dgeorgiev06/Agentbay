@@ -174,6 +174,41 @@ def test_connector_window_and_config_root():
         cleanup(base)
 
 
+def test_real_layout_root_is_the_project_folder_as_the_dogfood_project_configures_it():
+    """Real layout: ~/.claude/projects/-home-claude/<session>.jsonl + <session>/subagents/agent-*.jsonl, with `root`
+    set to that folder: it produced 0 episodes, because only <root>/<folder>/*.jsonl was looked at."""
+    from helpers import clock, project, system
+    from bay import connect
+    base = tmpdir()
+    old_home = os.environ.get("HOME")
+    try:
+        os.environ["HOME"] = str(base)
+        folder = base / ".claude" / "projects" / "-home-claude"
+        p = project({"connectors": {"claude-transcripts": {"root": "~/.claude/projects/-home-claude"}}})
+        sid = "5c5c5c5c-0000-4000-8000-000000000001"
+        folder.mkdir(parents=True)
+        recs = session_records(sid, str(p))
+        (folder / f"{sid}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
+        sub = folder / sid / "subagents"
+        sub.mkdir(parents=True)
+        (sub / "agent-a0.jsonl").write_text("".join(json.dumps(dict(r, isSidechain=True)) + "\n" for r in recs[:4]))
+        s = system(p)
+        inst = connect.instantiate(s, "improve-local", "claude-transcripts", "session.events/v1", p, clock=clock)
+        out = inst.episodes(since="7d")
+        kinds = sorted(e["kind"] for e in out["episodes"])
+        assert kinds == ["session", "subagent"], (kinds, out["stats"])
+        assert out["stats"]["sessions"] == 1 and not out["stats"]["errors"]
+        if model.jsonschema:
+            for e in out["episodes"]:
+                model.jsonschema.validate(e, SCHEMA)
+    finally:
+        if old_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = old_home
+        cleanup(base)
+
+
 def test_infinite_and_non_finite_numbers_never_fail_a_scan():
     """JSON allows 1e999 / Infinity / NaN; they are ignored, not converted (OverflowError)."""
     lines = ['{"type": "assistant", "message": {"id": "m1", "content": [], '

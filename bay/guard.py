@@ -318,55 +318,98 @@ class Guard:
         return None
 
     def _bash(self, entry, who, command, cwd, agent=None) -> tuple[str, str]:
+        why, words = self._parse_command(command)
+        d = self._owner_only(who, command, words, cwd)
+        if d:
+            return d
+        if entry is None:
+            return self._bash_outside_role(who, command, why, words, cwd)
+        return self._bash_in_role(entry, who, why, words, cwd, agent)
+
+    @staticmethod
+    def _parse_command(command) -> tuple[str, list]:
+        """(why the command is unsafe or unparsable, or a falsy value; its words, empty when there is a `why`)."""
         why = unsafe(command)
+        if why:
+            return why, []
         try:
-            words = shlex.split(command) if not why else []
+            return why, shlex.split(command)
         except ValueError as e:
-            why = f"cannot parse command ({e})"
-            words = []
+            return f"cannot parse command ({e})", []
+
+    def _owner_only(self, who, command, words, cwd) -> tuple[str, str] | None:
+        """Denies for anyone, role or not: `bay approve` and the owner's config file are the owner's."""
         if runs_approve(command, words):
             return "deny", (f"agentbay: {who} may not run `bay approve`: approval gates are the owner's (a terminal, "
                             f"or a chat approval the main thread relays)")
         if names_config(command, words, lambda d: norm(d or ".", cwd) == self.project):
             return "deny", f"agentbay: {who} may not name {CONFIG_FILE} in a command (the owner's settings)"
-        if entry is None:
-            # not an agentbay role: off the control plane by path, glob and interpreter -c (S-B)
-            if why:
-                return ("deny", f"agentbay: {who}: {why} (in a command that mentions .agentbay/.claude)") \
-                    if any(c in dequote(command).casefold() for c in CONTROL) else ("pass", "")
-            d = self._words(who, words, cwd)
-            return d or ("pass", "")
+        return None
+
+    def _bash_outside_role(self, who, command, why, words, cwd) -> tuple[str, str]:
+        """Not an agentbay role: off the control plane by path, glob and interpreter -c (S-B)."""
+        if why:
+            return ("deny", f"agentbay: {who}: {why} (in a command that mentions .agentbay/.claude)") \
+                if any(c in dequote(command).casefold() for c in CONTROL) else ("pass", "")
+        d = self._words(who, words, cwd)
+        return d or ("pass", "")
+
+    def _bash_in_role(self, entry, who, why, words, cwd, agent) -> tuple[str, str]:
+        """An agentbay role may run only its shim, `bay plan` and its approved CLI prefixes."""
         if why:
             return "deny", f"agentbay: {who}: {why}"
         if not words:
             return "deny", f"agentbay: {who}: empty command"
-        shim = entry.get("shim")
-        if shim and norm(words[0], cwd) == norm(shim, self.project):
-            for w in words[1:]:
-                if w.startswith("-"):
-                    return "deny", f"agentbay: the use shim takes no flags (got {w})"
-            if self.policy.get("autoAllowShim", False):    # old or missing policy: prompt (fail closed)
-                return "allow", ""         # the ONLY auto-allow: the role's own read-only data shim
-            return "pass", ""              # kit inside the project: roles might edit code the shim runs; prompt
+        d = self._shim_command(entry, who, words, cwd)
+        if d:
+            return d
         if len(words) > 1 and words[1] == "plan" and norm(words[0], cwd) == self.agentbay / "bay":
             return self._plan_command(who, words, agent)
+        d = self._cli_command(entry, who, words, cwd)
+        return d or self._deny_unlisted(entry)
+
+    def _shim_command(self, entry, who, words, cwd) -> tuple[str, str] | None:
+        """The decision for a call of the role's use shim; None when the command is not the shim."""
+        shim = entry.get("shim")
+        if not (shim and norm(words[0], cwd) == norm(shim, self.project)):
+            return None
+        flag = next((w for w in words[1:] if w.startswith("-")), None)
+        if flag is not None:
+            return "deny", f"agentbay: the use shim takes no flags (got {flag})"
+        if self.policy.get("autoAllowShim", False):    # old or missing policy: prompt (fail closed)
+            return "allow", ""         # the ONLY auto-allow: the role's own read-only data shim
+        return "pass", ""              # kit inside the project: roles might edit code the shim runs; prompt
+
+    def _cli_command(self, entry, who, words, cwd) -> tuple[str, str] | None:
+        """The decision for a command under one of the role's approved CLI prefixes; None when under none."""
         for prefix in entry.get("clis", []):
             pw = shlex.split(prefix)
-            if words[: len(pw)] != pw:
-                continue
-            rest = words[len(pw):]
-            d = self._words(who, words, cwd, first=len(pw))
+            if words[: len(pw)] == pw:
+                return self._prefixed_command(entry, who, words, cwd, pw)
+        return None
+
+    def _prefixed_command(self, entry, who, words, cwd, pw) -> tuple[str, str]:
+        d = self._words(who, words, cwd, first=len(pw))
+        if d:
+            return d
+        if pw[0] == "git":
+            d = self._git_command(entry, words, cwd, len(pw))
             if d:
                 return d
-            if pw[0] == "git":
-                bad = [w for w in rest if w.startswith(GIT_BAD_FLAGS)]
-                if bad:
-                    return "deny", f"agentbay: git flag {bad[0]} is not allowed (it writes or reads files or runs programs)"
-                if words[1:3] == ["worktree", "add"]:
-                    d = self._worktree_add(entry, words[3:], cwd)
-                    if d:
-                        return d
-            return "pass", ""              # never auto-allowed: Claude Code's normal permission prompt applies
+        return "pass", ""              # never auto-allowed: Claude Code's normal permission prompt applies
+
+    def _git_command(self, entry, words, cwd, first) -> tuple[str, str] | None:
+        """Denies for git flags that write or read files or run programs, and for an unsafe `worktree add`."""
+        bad = [w for w in words[first:] if w.startswith(GIT_BAD_FLAGS)]
+        if bad:
+            return "deny", f"agentbay: git flag {bad[0]} is not allowed (it writes or reads files or runs programs)"
+        if words[1:3] == ["worktree", "add"]:
+            return self._worktree_add(entry, words[3:], cwd)
+        return None
+
+    @staticmethod
+    def _deny_unlisted(entry) -> tuple[str, str]:
+        shim = entry.get("shim")
         allowed = ([shim] if shim else []) + entry.get("clis", [])
         return "deny", (f"agentbay: role {entry['role']} may only run: {', '.join(allowed) or 'nothing'} via Bash"
                         + (f". Use `{shim} <capability>/v<N>.<endpoint> '<json>'` for data." if shim else "."))

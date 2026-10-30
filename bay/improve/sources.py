@@ -225,13 +225,40 @@ def _texts(kit: Path | None, target: str, cache: dict, warnings: list) -> dict:
 def ledger_verdicts(project: Path, kit: Path | None = None, since: datetime | None = None,
                     until: datetime | None = None) -> tuple[list[dict], dict]:
     """Every review.verdict/v1 submitted to a review step, with round numbers per (target, subject)."""
-    cdir = project / ".agentbay" / "calls"
     warnings: list[str] = []
+    last_ts = _last_event_ts(project)
+    out, texts = [], {}
+    for f, st in _call_states(project / ".agentbay" / "calls", warnings):
+        cid = st.get("callId") or f.stem
+        ts = last_ts.get(cid) or datetime.fromtimestamp(f.stat().st_mtime).astimezone().isoformat(timespec="seconds")
+        if not in_window(ts, since, until):
+            continue
+        target = st.get("target", "?")
+        for step, val in (st.get("steps") or {}).items():
+            if not _is_review_step(val):
+                continue
+            tx = _texts(kit, target, texts, warnings)
+            items = _review_items(f, step, val["items"], tx, warnings)
+            out.append({"callId": cid, "episode": f"ab:{cid}", "target": target, "step": step,
+                        "subject": _subject(st.get("input") or {}, cid), "ts": ts, "status": st.get("status"),
+                        "items": items})
+    out.extend(_recorded_reviews(project, since, until))
+    out.sort(key=lambda v: v["ts"])
+    _number_rounds(out)
+    return out, {"verdicts": len(out), **({"warnings": warnings} if warnings else {})}
+
+
+def _last_event_ts(project: Path) -> dict[str, str]:
+    """The timestamp of the latest ledger event of each call."""
     last_ts: dict[str, str] = {}
     for e in read_events(project):
         if e.get("callId"):
             last_ts[e["callId"]] = max(last_ts.get(e["callId"], ""), e.get("ts", ""))
-    out, texts = [], {}
+    return last_ts
+
+
+def _call_states(cdir: Path, warnings: list[str]):
+    """(file, state) of every readable call state under `cdir`, in name order; the others are warned about."""
     for f in sorted(cdir.glob("C-*.json")) if cdir.is_dir() else []:
         try:
             st = json.loads(f.read_text(encoding="utf-8"))
@@ -241,34 +268,43 @@ def ledger_verdicts(project: Path, kit: Path | None = None, since: datetime | No
         if not isinstance(st, dict):
             warn(warnings, f".agentbay/calls/{f.name}: not a call state object, skipped")
             continue
-        cid = st.get("callId") or f.stem
-        ts = last_ts.get(cid) or datetime.fromtimestamp(f.stat().st_mtime).astimezone().isoformat(timespec="seconds")
-        if not in_window(ts, since, until):
+        yield f, st
+
+
+def _is_review_step(val) -> bool:
+    """Whether a call-state step holds review items (each with a verdict)."""
+    return (isinstance(val, dict) and isinstance(val.get("items"), list)
+            and all(isinstance(i, dict) and "verdict" in i for i in val["items"]))
+
+
+def _review_item(i: dict, tx: dict) -> dict:
+    """One verdict item as the detectors see it: bounded and scrubbed."""
+    it = {"id": str(i.get("id", "?"))[:40], "verdict": i["verdict"]}
+    if i.get("severity") in ("blocker", "should-fix", "nit"):
+        it["severity"] = i["severity"]
+    if isinstance(i.get("evidence"), str):         # scrub first, then cut: no secret prefix survives
+        it["evidence"] = secretscan.scrub(i["evidence"])[:EVIDENCE_CHARS]
+    if it["id"] in tx:
+        it["text"] = secretscan.scrub(tx[it["id"]])[:EVIDENCE_CHARS]
+    return it
+
+
+def _review_items(f: Path, step: str, raw: list, tx: dict, warnings: list[str]) -> list[dict]:
+    """The items of one review step; one whose verdict is not pass|fail|n/a is warned about and skipped."""
+    items = []
+    for n, i in enumerate(raw):
+        if i.get("verdict") not in ("pass", "fail", "n/a"):
+            warn(warnings, f".agentbay/calls/{f.name}: steps.{step}.items[{n}]: verdict "
+                           f"{str(i.get('verdict'))[:20]!r} is not pass|fail|n/a, skipped")
             continue
-        target = st.get("target", "?")
-        for step, val in (st.get("steps") or {}).items():
-            if not (isinstance(val, dict) and isinstance(val.get("items"), list)
-                    and all(isinstance(i, dict) and "verdict" in i for i in val["items"])):
-                continue
-            tx = _texts(kit, target, texts, warnings)
-            items = []
-            for n, i in enumerate(val["items"]):
-                if i.get("verdict") not in ("pass", "fail", "n/a"):
-                    warn(warnings, f".agentbay/calls/{f.name}: steps.{step}.items[{n}]: verdict "
-                                   f"{str(i.get('verdict'))[:20]!r} is not pass|fail|n/a, skipped")
-                    continue
-                it = {"id": str(i.get("id", "?"))[:40], "verdict": i["verdict"]}
-                if i.get("severity") in ("blocker", "should-fix", "nit"):
-                    it["severity"] = i["severity"]
-                if isinstance(i.get("evidence"), str):         # scrub first, then cut: no secret prefix survives
-                    it["evidence"] = secretscan.scrub(i["evidence"])[:EVIDENCE_CHARS]
-                if it["id"] in tx:
-                    it["text"] = secretscan.scrub(tx[it["id"]])[:EVIDENCE_CHARS]
-                items.append(it)
-            out.append({"callId": cid, "episode": f"ab:{cid}", "target": target, "step": step,
-                        "subject": _subject(st.get("input") or {}, cid), "ts": ts, "status": st.get("status"),
-                        "items": items})
-    for e in read_events(project):          # reviews the coordinator recorded (`bay review-record`)
+        items.append(_review_item(i, tx))
+    return items
+
+
+def _recorded_reviews(project: Path, since: datetime | None, until: datetime | None) -> list[dict]:
+    """Reviews the coordinator recorded (`bay review-record`)."""
+    out = []
+    for e in read_events(project):
         if e["type"] != "review.recorded" or not in_window(e.get("ts"), since, until):
             continue
         items = [{k: (secretscan.scrub(v)[:EVIDENCE_CHARS] if k == "evidence" else v)
@@ -277,13 +313,16 @@ def ledger_verdicts(project: Path, kit: Path | None = None, since: datetime | No
         tid = str(e.get("taskId") or e["runId"])
         out.append({"callId": tid, "episode": f"ab:{tid}", "target": "review-record", "step": "review", "subject": tid,
                     "ts": e["ts"], "status": None, "items": items})
-    out.sort(key=lambda v: v["ts"])
+    return out
+
+
+def _number_rounds(verdicts: list[dict]) -> None:
+    """Number the verdicts of each (target, subject) 1, 2, ... in list order."""
     rounds: dict = {}
-    for v in out:
+    for v in verdicts:
         k = (v["target"], v["subject"])
         rounds[k] = rounds.get(k, 0) + 1
         v["round"] = rounds[k]
-    return out, {"verdicts": len(out), **({"warnings": warnings} if warnings else {})}
 
 
 def git_episodes(project: Path, since: datetime | None = None, until: datetime | None = None,

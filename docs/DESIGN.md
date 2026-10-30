@@ -46,7 +46,7 @@ id (`review.verdict/v1`). A failed must item or a blocker makes the call `partia
 
 ## Compile: units
 
-`bay validate` lints and then resolves every endpoint, failing with every gap at once, each naming the
+`bay check` lints and then resolves every endpoint, failing with every gap at once, each naming the
 concept and the fix: unknown names, unbound capabilities, effects the endpoint does not declare or the env
 does not allow, tiers the env does not allow, connector needs (hosts, secrets, paths) beyond the env, and
 steps that could write `framework/`, `bay/`, `schemas/` or `adapters/` outside `forge.extend`.
@@ -82,8 +82,8 @@ The run log (`events.jsonl` under `.agentbay/`) is append-only; state is a fold 
 `call.completed` (mode, endpoint, step, role, agent, env, cost, optional `durationMs`/`tokens`/`costUsd`),
 hooks write agent runs (`spawned`, `completed`, `failed`), the guard writes `permission.denied` (never the
 command), shims write `data.read`, and `bay note` writes notes (an instruction change, a decision). Agent
-runs are recorded by the parties that know them: the Chief of Staff logs each dispatch (`bay dispatched`, with
-inputs) and any review it ran outside a review step (`bay review-record`); a subagent records its outcome and
+runs are recorded by the parties that know them: the Chief of Staff logs each dispatch (`bay note dispatch`, with
+inputs) and any review it ran outside a review step (`bay note review`); a subagent records its outcome and
 to-do list first (`bay plan`, items ticked with `--done`), the only `bay` command it may run. A reviewer's
 verdict can cite them (`cites`), and `bay status --agents` groups runs by role, mode, model and tier. Notes
 attach to a run, task or call and never create a run. Every value is pattern-scanned for secrets and redacted
@@ -143,7 +143,7 @@ redacted and scanned again.
 A project workflow is stages in `agentbay.config.yaml`, each a `call: <mode>.<endpoint>` or a `gate:`. The
 root mode's endpoints, over `workflow.run/v1`, return the call to make; the coordinator makes it the ordinary
 way, so every stage keeps its own grants, effects, budget, review and gates, and nothing recurses.
-`bay validate` checks each stage's target and input and prints the union of stage effects.
+`bay check` checks each stage's target and input and prints the union of stage effects.
 
 ## Framework modes and connectors
 

@@ -27,7 +27,7 @@ Python 3 and Claude Code. From a clone:
 
 ```bash
 pip install -r requirements.txt        # pyyaml, jsonschema
-./bay.sh validate                      # lint + resolve everything
+./bay.sh check                         # lint + resolve everything
 python3 tests/run.py                   # the test suite
 ```
 
@@ -60,7 +60,7 @@ agentbay.config.yaml and rebuild. Budget caps stop a sync before it exceeds one.
 writes a minimal `agentbay.config.yaml` when the project has none. Settings can only lower a cap: a value above
 the env's `limits:` is refused by lint and at run time. Capabilities stay bound only in `envs/<env>.yaml`; an
 env's `offline:` block names the stand-in sources that `offline: true` binds in their place.
-A mode endpoint with a `schedule:` (daily, weekly) runs from cron: `bay lint` prints the command to schedule.
+A mode endpoint with a `schedule:` (daily, weekly) runs from cron: `bay check` prints the command to schedule.
 
 ## Folder map
 
@@ -92,26 +92,26 @@ tests/           python3 tests/run.py (connector tests live next to each connect
 
 | command | does |
 |---|---|
-| `bay validate` / `bay lint` | check everything / just structure |
+| `bay check [--base <ref> --proposal <file>]` | lint and resolve everything; with `--base`, also check a change against core ownership |
 | `bay build` / `bay clean` | compile into a project / remove what was generated |
-| `bay ls`, `bay describe <name>`, `bay catalog` | what is installed, resolved |
+| `bay catalog [<name>] [--roles]`, `bay describe <name>` | what is installed, resolved; `--roles` lists the role units |
 | `bay call <mode>.<endpoint> '<json>'` | run a feature |
-| `bay submit <callId> <step> '<json>'`, `bay show <callId>` | hand back a step's output; current state |
+| `bay submit <callId> <step> '<json>'`, `bay show <callId>`, `bay show reclaim <runId>` | hand back a step's output; current state; mark a stuck run reclaimed |
 | `bay approve <callId\|runId> [--reject]` | pass an approval gate (your terminal; or `--via chat --quote "<msg>" --sha <hex>`, relayed by the Chief of Staff, when `approvals: { chat: true }` is set) |
-| `bay status [--agents]`, `bay log`, `bay note <ref> "text"` | calls, steps, cost, agent runs (grouped by role, mode, model, tier); the run log; a note |
-| `bay dispatched <taskId> --input <x>`, `bay plan <taskId> [--done <n>]`, `bay review-record <taskId>` | agent run records: the Chief of Staff logs each dispatch and outside review; a subagent first records its outcome and to-do (its only `bay` command) |
-| `bay mode\|feature\|connector\|env new <name>` | create an extension from a template |
+| `bay approve <F-id> [--defer\|--wontfix]` | decide an improve backlog item (your terminal only, never from chat) |
+| `bay status [--agents\|--log]`, `bay note <ref> "text"` | calls, steps, cost, agent runs (grouped by role, mode, model, tier); the raw run log; a note |
+| `bay note task`, `bay note dispatch <taskId> --agent <name> --input <x>`, `bay note review <taskId> '<json>'`, `bay plan <taskId> [--done <n>]` | agent run records: a fresh taskId; the Chief of Staff logs each dispatch and outside review; a subagent first records its outcome and to-do (`bay plan` is its only `bay` command) |
+| `bay new mode\|feature\|connector\|env <name>` | create an extension from a template |
 | `bay secret set <NAME>` | store a secret (read from your terminal, never echoed) |
 | `bay auth <connector>` | a connector's browser login |
 | `bay config` | print every agentbay.config.yaml setting, from the schemas |
-| `bay boundary --base <ref> --proposal <file>` | check a change against core ownership |
 
 Run as `./bay.sh <command>` in the kit, or `.agentbay/bay <command>` in a built project; extensions may add
 commands (see their `README.md`).
 
 ## Adding things
 
-A source is one connector plus one binding line in an env; a feature is `bay feature new`. A framework change
+A source is one connector plus one binding line in an env; a feature is `bay new feature`. A framework change
 starts from a proposal that lists every core path it touches. Recipes:
 [docs/INTERFACES.md#extension-recipes](docs/INTERFACES.md#extension-recipes).
 

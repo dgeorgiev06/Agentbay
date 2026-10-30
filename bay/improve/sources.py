@@ -302,7 +302,7 @@ def _review_items(f: Path, step: str, raw: list, tx: dict, warnings: list[str]) 
 
 
 def _recorded_reviews(project: Path, since: datetime | None, until: datetime | None) -> list[dict]:
-    """Reviews the coordinator recorded (`bay review-record`)."""
+    """Reviews the coordinator recorded (`bay note review`)."""
     out = []
     for e in read_events(project):
         if e["type"] != "review.recorded" or not in_window(e.get("ts"), since, until):

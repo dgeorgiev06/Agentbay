@@ -200,7 +200,7 @@ def test_redefining_a_parent_config_key_is_a_lint_error():
     want = ("mode mail-briefing: config schema modes/mail-briefing/config.schema.json redefines inherited "
             "setting 'lookback'")
     assert_gap(k, want, "configDefaults")
-    assert any(want in e for e in problems(k))                                       # `bay lint` reports it too
+    assert any(want in e for e in problems(k))                                       # `bay check` reports it too
 
 
 def test_child_config_schema_defs_collision_and_other_keywords_are_errors_f13():

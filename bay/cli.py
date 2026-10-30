@@ -582,16 +582,15 @@ def cmd_reclaim(args):
 
 
 def cmd_boundary(args) -> int:
-    from bay import boundary, proposal
+    from bay import boundary
     touches, prop = [], None
-    if args.proposal:
-        pp = Path(args.proposal).resolve()
-        try:
-            touches = proposal.load_touches(pp)
-        except (OSError, proposal.ProposalError) as e:
-            _die(f"✗ {e}")
-        prop = str(pp.relative_to(KIT)) if pp.is_relative_to(KIT) else str(pp)
     try:
+        if args.proposal:                    # F-14: the proposal's touches as committed at --head
+            pp = Path(args.proposal).resolve()
+            if not pp.is_relative_to(KIT):
+                _die(f"✗ {args.proposal}: the proposal must be a file in this repository")
+            prop = pp.relative_to(KIT).as_posix()
+            touches = boundary.proposal_touches(KIT, args.head, prop)
         rep = boundary.check(KIT, args.base, args.head, prop, touches, docs=args.docs)
     except RuntimeError as e:
         _die(f"✗ {e}")

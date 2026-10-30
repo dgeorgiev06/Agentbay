@@ -251,3 +251,50 @@ def test_ownership_lint_names_stray_tracked_files_b4():
     assert lint.lint_ownership(kit) == []
     kit.root = KIT
     assert lint.lint_ownership(kit) == []                          # the shipped kit has no stray file
+
+
+def test_a_change_to_the_component_map_is_judged_by_the_base_map_f14():
+    new_map = {"components": {**MAP["components"],
+                              "plugins": {"owns": ["plugins/core.py"],
+                                          "contracts": {"plugin": {"at": ["plugins/<name>/"]}}}}}
+    change = {"framework/components.yaml": yaml.safe_dump(new_map), "plugins/p/x.py": "x\n",
+              ".github/workflows/ci.yml": "on: push\n"}
+    rep = _check(change, touches=["framework/components.yaml"])
+    assert _failing(rep) == [".github/workflows/ci.yml", "plugins/p/x.py"]      # head's map would pass plugins/p/
+    assert {f.cls for f in rep.failures} == {"unowned"} and rep.map_rev == "HEAD~1"
+    assert not any(ln.startswith("component map:") for ln in rep.lines())
+    rep = _check(change, touches=["framework/components.yaml", "plugins/p/", ".github/"])
+    assert not _failing(rep)
+
+
+def test_a_map_introduced_by_the_change_judges_that_change_and_says_so_f14():
+    repo = tmpdir()
+    _git(repo, "init", "-q", "-b", "main")
+    (repo / "README.md").write_text("# kit\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "c")
+    (repo / "framework").mkdir()
+    (repo / "framework/components.yaml").write_text(yaml.safe_dump(MAP))
+    (repo / "bay").mkdir()
+    (repo / "bay/cli.py").write_text("x\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "c")
+    rep = boundary.check(repo, "HEAD~1", "HEAD", None, [])
+    assert rep.map_rev == "HEAD" and "bay/cli.py" in _failing(rep)
+    assert "component map: none at HEAD~1; judged by framework/components.yaml at HEAD (introduced here)" in rep.lines()
+
+
+def test_only_committed_touches_count_f14():
+    prop = "docs/proposals/0099-x.md"
+    repo = _repo({"bay/cli.py": "y\n", prop: "---\ntouches: []\n---\n# x\n"})
+    (repo / prop).write_text("---\ntouches:\n  - { path: bay/cli.py, reason: r }\n---\n# x\n")   # not committed
+    t = boundary.proposal_touches(repo, "HEAD", prop)
+    assert t == [] and _failing(boundary.check(repo, "HEAD~1", "HEAD", prop, t)) == ["bay/cli.py"]
+    _git(repo, "commit", "-q", "-am", "c")
+    t = boundary.proposal_touches(repo, "HEAD", prop)
+    assert not _failing(boundary.check(repo, "HEAD~2", "HEAD", prop, t))
+    try:
+        boundary.proposal_touches(repo, "HEAD", "docs/proposals/0100-uncommitted.md")
+        raise AssertionError("an uncommitted proposal was read")
+    except RuntimeError as e:
+        assert "is not committed at HEAD" in str(e)

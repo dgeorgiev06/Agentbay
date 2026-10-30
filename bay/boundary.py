@@ -12,7 +12,11 @@ framework/components.yaml and the proposal's `touches:`:
 - docs: README.md, docs/DESIGN.md, docs/INTERFACES.md change only when listed.
 - other: tests/, the proposal, HANDOFF.md, proposal/research records, repo meta and generated files pass
   (agentbay.config.example.yaml: `bay config example` assembles it from the extensions, lint fails when stale).
-- anything else is unowned and fails unless listed.
+- anything else is unowned and fails unless listed (CI config under `.github/` included).
+
+Inputs come from commits, never the working tree (F-14): the component map as of `<base>` (a change that edits
+the map is judged by the map it edits; only when `<base>` has no map yet, the change that introduces it is judged
+by its own map at `<head>`, and the report says so), and the proposal's `touches:` as of `<head>`.
 
 B-11 (`--docs`): the core docs must not name a discovered extension instance (a mode, connector, env or
 content-type folder name) outside a fenced block. Instances inside a core `owns:` path (the briefing base mode,
@@ -32,7 +36,7 @@ import yaml
 
 DOCS = ("README.md", "docs/DESIGN.md", "docs/INTERFACES.md")
 OTHER = ("tests/", "HANDOFF.md", "docs/proposals/", "docs/research/", ".gitignore", ".gitattributes",
-         ".github/", ".editorconfig", "LICENSE", "LICENSE.md", "agentbay.config.example.yaml")
+         ".editorconfig", "LICENSE", "LICENSE.md", "agentbay.config.example.yaml")
 # contracts whose instance names B-11 forbids in the core docs
 NAMED_CONTRACTS = ("mode", "connector", "env", "contentType")
 
@@ -105,7 +109,11 @@ class ComponentMap:
 
     @classmethod
     def load(cls, path: Path) -> "ComponentMap":
-        doc = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+        return cls.parse(Path(path).read_text(encoding="utf-8"))
+
+    @classmethod
+    def parse(cls, text: str) -> "ComponentMap":
+        doc = yaml.safe_load(text) or {}
         owns, contracts = {}, []
         for comp, spec in (doc.get("components") or {}).items():
             owns[comp] = list(spec.get("owns") or [])
@@ -145,6 +153,41 @@ def _git(repo: Path, *args: str) -> str:
     return r.stdout
 
 
+MAP = "framework/components.yaml"
+
+
+def show(repo: Path, rev: str, path: str) -> str | None:
+    """The text of `path` as committed at `rev`, or None when `rev` has no such file."""
+    r = subprocess.run(["git", "-C", str(repo), "cat-file", "-e", f"{rev}:{path}"], capture_output=True)
+    if r.returncode:
+        _git(repo, "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}")      # a bad rev is an error, not "absent"
+        return None
+    return _git(repo, "show", f"{rev}:{path}")
+
+
+def map_at(repo: Path, base: str, head: str) -> tuple[ComponentMap, str]:
+    """The component map a change is judged by, and the rev it was read at: `base`'s, or `head`'s when the map
+    does not exist at base yet (the change introducing it)."""
+    for rev in (base, head):
+        text = show(repo, rev, MAP)
+        if text is not None:
+            return ComponentMap.parse(text), rev
+    raise RuntimeError(f"{MAP} exists at neither {base} nor {head}")
+
+
+def proposal_touches(repo: Path, head: str, path: str) -> list[dict]:
+    """The `touches:` of the proposal at `path` (repo-relative) as committed at `head`; an edit not yet
+    committed does not count."""
+    from . import proposal
+    text = show(repo, head, path)
+    if text is None:
+        raise RuntimeError(f"{path} is not committed at {head}; commit the proposal before running the check")
+    try:
+        return proposal.touches(text)
+    except proposal.ProposalError as e:
+        raise RuntimeError(f"{path} at {head}: {e}") from e
+
+
 def changed(repo: Path, base: str, head: str = "HEAD") -> list[str]:
     """Every path the change adds, modifies or deletes. Renames are split into a deletion and an addition so both
     sides of a move are classified; the flags pin everything the user's git config could change (rename
@@ -178,6 +221,7 @@ class Report:
     findings: list[Finding] = field(default_factory=list)
     doc_hits: list[dict] = field(default_factory=list)
     docs_checked: bool = False
+    map_rev: str = ""        # the rev the component map was read at (base, or head when base has none)
 
     @property
     def failures(self) -> list[Finding]:
@@ -195,6 +239,8 @@ class Report:
             out += [f"{h['file']}:{h['line']}: names extension {h['contract']} '{h['name']}' outside a fenced "
                     f"example block (B-11) - describe the contract, or put the example in a fenced block"
                     for h in self.doc_hits]
+        if self.map_rev and self.map_rev != self.base:
+            out.append(f"component map: none at {self.base}; judged by {MAP} at {self.map_rev} (introduced here)")
         out.append(self.summary())
         return out
 
@@ -216,7 +262,7 @@ class Report:
     def to_json(self) -> dict:
         return {"base": self.base, "head": self.head, "proposal": self.proposal, "ok": self.exit_code == 0,
                 "paths": [asdict(f) for f in self.findings], "failures": len(self.failures),
-                "docs": {"checked": self.docs_checked, "hits": self.doc_hits}}
+                "docs": {"checked": self.docs_checked, "hits": self.doc_hits}, "mapAt": self.map_rev or self.base}
 
 
 def classify(path: str, cmap: ComponentMap, touches: list[dict], is_new, proposal: str | None) -> Finding:
@@ -287,7 +333,9 @@ def instance_names(paths: list[str], cmap: ComponentMap) -> dict[str, str]:
 def check(repo: Path, base: str, head: str = "HEAD", proposal: str | None = None,
           touches: list[dict] | None = None, cmap: ComponentMap | None = None, docs: bool = False) -> Report:
     repo = Path(repo)
-    cmap = cmap or ComponentMap.load(repo / "framework" / "components.yaml")
+    map_rev = base
+    if cmap is None:
+        cmap, map_rev = map_at(repo, base, head)
     touches = [t for t in touches or [] if not t.get("planned")]     # planned entries authorize nothing yet
     at_base: set[str] = set()
     for f in _git(repo, "-c", "core.quotePath=false", "ls-tree", "-r", "--name-only", "-z", base).split("\0"):
@@ -299,7 +347,7 @@ def check(repo: Path, base: str, head: str = "HEAD", proposal: str | None = None
         `modes/mail/` is an edit of mail on a case-insensitive filesystem, not a new mode)."""
         return root.rstrip("/").casefold() not in at_base
 
-    rep = Report(base, head, proposal)
+    rep = Report(base, head, proposal, map_rev=map_rev)
     rep.findings = [classify(p, cmap, touches, is_new, proposal) for p in changed(repo, base, head)]
     if docs:
         rep.docs_checked = True

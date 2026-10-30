@@ -6,7 +6,6 @@ components:
     owns:
       - bay/
       - schemas/
-      - framework/agents/
       - framework/roles/
       - framework/rules/
       - framework/interfaces/

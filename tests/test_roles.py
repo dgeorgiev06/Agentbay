@@ -88,7 +88,7 @@ def test_one_reader_role_in_two_modes_and_envs_compiles_separately_with_separate
     p = project()
     s = system(p, k)
     u = s.units()
-    assert (u["analyst--feed-briefing"].env, u["analyst--news-briefing"].env) == ("local-feeds-offline", "local-news")
+    assert (u["analyst--feed-briefing"].env, u["analyst--news-briefing"].env) == ("local-feeds", "local-news")
     get("claude-code").build(s, p, k)
     for unit in ("analyst--feed-briefing", "analyst--news-briefing"):
         assert (p / f".claude/agents/{unit}.md").exists()
@@ -121,7 +121,7 @@ def test_one_reader_role_in_two_modes_and_envs_compiles_separately_with_separate
                            capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
     reads = [json.loads(x) for x in (p / ".agentbay/ledger/events.jsonl").read_text().splitlines() if '"data.read"' in x]
-    assert {(e["role"], e["mode"], e["env"]) for e in reads} >= {("analyst", "feed-briefing", "local-feeds-offline"),
+    assert {(e["role"], e["mode"], e["env"]) for e in reads} >= {("analyst", "feed-briefing", "local-feeds"),
                                                                  ("analyst", "news-briefing", "local-news")}
     # a digest step plan runs the unit of its own mode
     plan = call(d, "news-briefing.digest")["next"]
@@ -139,17 +139,17 @@ def test_a_step_override_runs_one_role_in_two_envs_within_one_mode():
     themes = next(st for st in s.modes["feed-briefing"].features["digest"].steps if st.id == "themes")
     answer = next(st for st in s.modes["feed-briefing"].features["ask"].steps if st.id == "answer")
     assert (themes.env, themes.subagent) == ("local-news", "analyst--feed-briefing--local-news")
-    assert (answer.env, answer.subagent) == ("local-feeds-offline", "analyst--feed-briefing--local-feeds-offline")
+    assert (answer.env, answer.subagent) == ("local-feeds", "analyst--feed-briefing--local-feeds")
     get("claude-code").build(s, p, k)
     pol = json.loads((p / ".agentbay/guard.json").read_text())["subagents"]
     assert pol["analyst--feed-briefing--local-news"]["env"] == "local-news"
-    assert pol["analyst--feed-briefing--local-feeds-offline"]["env"] == "local-feeds-offline"
+    assert pol["analyst--feed-briefing--local-feeds"]["env"] == "local-feeds"
     assert (p / ".agentbay/roles/analyst--feed-briefing--local-news/use").exists()
     d = dispatch.Dispatcher(s, p, clock=clock)
     call(d, "feed-briefing.sync")
     # each unit reads the store of its own env: nothing was synced in local-news, so that unit finds an empty
     # store (and is told to sync), never the other env's items
-    feed = d.use("analyst--feed-briefing--local-feeds-offline", "items.store/v1.query", {})["items"]
+    feed = d.use("analyst--feed-briefing--local-feeds", "items.store/v1.query", {})["items"]
     assert feed
     news = d.use("analyst--feed-briefing--local-news", "items.store/v1.query", {})
     assert news["items"] == [] and "run the mode's sync" in news["coverage"]["note"]
@@ -158,9 +158,11 @@ def test_a_step_override_runs_one_role_in_two_envs_within_one_mode():
 
 def test_swapping_the_agent_profile_changes_only_the_model_names():
     k = kit_copy()
-    other = (k / "framework/agents/claude-code.yaml").read_text().replace("name: claude-code", "name: other-llm") \
-        .replace("{ fast: haiku, balanced: sonnet, deep: opus }", "{ fast: tiny-1, balanced: mid-2, deep: big-3 }")
-    (k / "framework/agents/other-llm.yaml").write_text(other)
+    other = yaml.safe_load((k / "adapters/claude-code/adapter.yaml").read_text())
+    other["name"] = "other-llm"
+    other["profile"]["tiers"] = {"fast": "tiny-1", "balanced": "mid-2", "deep": "big-3"}
+    (k / "adapters/other-llm").mkdir()
+    (k / "adapters/other-llm/adapter.yaml").write_text(yaml.safe_dump(other))
     outs = {}
     for agent in ("claude-code", "other-llm"):
         p = project({"agent": agent} if agent != "claude-code" else {})
@@ -272,12 +274,13 @@ def test_lint_warns_when_a_partial_roles_override_splits_a_store_reading_mode():
     (d / "mode.yaml").write_text(
         "apiVersion: agentbay/v2\nkind: Mode\nmetadata: { name: news-briefing, version: 0.1.0, description: news }\n"
         "spec:\n  extends: briefing\n  purpose: Brief me on news from my sources for testing.\n"
-        "  roles: { lead: local-feeds-offline, analyst: local-feeds-offline }\n  reads: [post/v1]\n")
+        "  roles: { lead: local-news, analyst: local-news }\n  reads: [post/v1]\n")
+    (k / "envs/local-news.yaml").write_text(NEWS_ENV)
     from helpers import self_describe
-    self_describe(k, d)
+    self_describe(d)
     ws = lint.warnings(model.Kit(k))
     assert any("modes/news-briefing/mode.yaml:7: mode news-briefing puts role reviewer in env local-feeds, whose "
-               "items.store/items.source bindings differ from env local-feeds-offline, where its code steps (sync, "
+               "items.store/items.source bindings differ from env local-news, where its code steps (sync, "
                "prune) run" in w for w in ws), ws
     assert not any("mode feed-briefing puts role" in w for w in lint.warnings(model.Kit(KIT)))   # shipped: no split
     assert lint.run(k) == []                                                                       # a warning only
@@ -292,4 +295,4 @@ def test_lint_reports_an_unknown_env_in_a_roles_map_with_file_and_line():
     ps = lint.run(k)
     assert any(p.endswith(f"modes/briefing/mode.yaml:{line}: mode briefing: `roles:` puts role reviewer in unknown "
                           f"env 'nowhere' (have: cos-local, framework-dev, improve-local, local-authoring, local-feeds, "
-                          f"local-feeds-offline, local-mail, local-mail-offline, research, workspace)") for p in ps), ps
+                          f"local-mail, research, workspace)") for p in ps), ps

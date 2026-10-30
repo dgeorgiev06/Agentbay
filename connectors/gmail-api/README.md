@@ -24,7 +24,7 @@ refresh token it receives.
 3. Sign in: `./bay.sh auth gmail-api` (or `.agentbay/bay auth gmail-api` in a built project), in your own
    terminal. It opens your browser, receives Google's answer on `127.0.0.1` and stores `GMAIL_REFRESH_TOKEN`
    in the keychain.
-4. Remove `local-mail: local-mail-offline` from the `envs:` line of agentbay.config.yaml, set your selectors
+4. Remove `offline: true` from agentbay.config.yaml, set your selectors
    under `modes.mail-briefing` (the first sync reads the last 30 days, up to 500 messages a run; later syncs
    read new changes and fill in older mail until the 30 days are covered) and rebuild.
 

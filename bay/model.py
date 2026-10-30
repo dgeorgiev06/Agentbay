@@ -1,8 +1,8 @@
 """Load and resolve the agentbay model.
 
     Mode -> endpoint (feature) -> workflow step -> Role, in the env the mode's `roles:` map names -> Connector
-    Agent: one profile per LLM product (runtime per kind of role, tier -> model), selected once in
-    agentbay.config.yaml (`agent:`, default claude-code)
+    Agent profile: one per LLM product (runtime per kind of role, tier -> model), the `profile:` of a runtime
+    adapter (adapters/<name>/adapter.yaml), selected once in agentbay.config.yaml (`agent:`, default claude-code)
 
 Each distinct (role, mode, env) a mode uses compiles to its own unit (`<role>--<mode>`, plus `--<env>` when
 the mode runs that role in several envs): its own subagent, use shim, guard policy and store access.
@@ -13,8 +13,7 @@ and the kit root (user content). Both have the same layout:
     interfaces/<name>.v<N>.yaml   modes/<name>/mode.yaml   envs/<name>.yaml
     connectors/<name>/connector.yaml
 
-Roles (roles/<name>.yaml) and agent profiles (agents/<name>.yaml) exist only under framework/; a user file of
-either kind is an error.
+Roles (roles/<name>.yaml) exist only under framework/; a user file of that kind is an error.
 
 `resolve(kit)` walks every endpoint and fails with ALL gaps at once, each one a
 human-readable sentence naming the concept and what to fix. The `System` it
@@ -46,7 +45,6 @@ KINDS = {  # kind -> (folder, glob, schema)
     "Interface": ("interfaces", "*.yaml", "interface"),
     "Mode": ("modes", "*/mode.yaml", "mode"),
     "Role": ("roles", "*.yaml", "role"),
-    "Agent": ("agents", "*.yaml", "agent"),
     "Environment": ("envs", "*.yaml", "environment"),
     "Connector": ("connectors", "*/connector.yaml", "connector"),
 }
@@ -63,9 +61,7 @@ FRAMEWORK_EXTENDER = "forge.extend"
 USER_ROLE = ("roles are framework-level; customize behaviour in your mode's playbooks/skills, or propose a new "
              "role via forge.extend")
 # Kinds loaded from framework/ only; user space is modes/, envs/, connectors/ (and interfaces/).
-FRAMEWORK_ONLY = {"Role": USER_ROLE,
-                  "Agent": "agent profiles are framework-level (framework/agents/); select one with `agent:` in "
-                           "agentbay.config.yaml, or propose a new profile via forge.extend"}
+FRAMEWORK_ONLY = {"Role": USER_ROLE}
 ROOT_COORDINATOR = "cos"      # the mode whose coordinator owns the main thread; its playbook is the preamble
 
 
@@ -213,8 +209,8 @@ class Kit:
         self._apply_extends()
         from . import config as cfgmod
         self.config = copy.deepcopy(cfgmod.load(project) if config is None else config)
-        self.env_swap: dict[str, str] = {}
-        self._select_envs()
+        if self.config.get("offline") is True:
+            self._go_offline()
 
     def _apply_extends(self) -> None:
         """Resolve `extends:` at load time, so the resolver, lint, conformance and improve always see a complete
@@ -263,29 +259,35 @@ class Kit:
             if not ok:
                 modes.pop(name, None)
 
-    def _select_envs(self) -> None:
-        """agentbay.config.yaml `envs: {A: B}` runs every role a mode puts in env A in env B instead, if B
-        declares `substitutes: A`. Capabilities stay bound only in envs/; this only chooses between tracked envs."""
-        for frm, to in (self.config.get("envs") or {}).items():
-            a, b = self.docs["Environment"].get(frm), self.docs["Environment"].get(to)
-            if a is None or b is None:
-                self.errors.append(f"agentbay.config.yaml envs: unknown env '{frm if a is None else to}' "
-                                   f"(have: {', '.join(sorted(self.docs['Environment']))})")
+    def _go_offline(self) -> None:
+        """agentbay.config.yaml `offline: true`: every env with an `offline:` block binds what the block lists
+        over its own bindings, and has no network and no secrets, whatever the block says (lint refuses a block
+        that lists any). Envs without the block are unchanged."""
+        for env in self.docs["Environment"].values():
+            off = env.spec.get("offline")
+            if not off:
                 continue
-            if b.spec.get("substitutes") != frm:
-                self.errors.append(f"agentbay.config.yaml envs: env {to} does not declare `substitutes: {frm}`, "
-                                   f"so it cannot stand in for {frm}")
-                continue
-            self.env_swap[frm] = to
+            env.spec["bind"] = {**env.spec["bind"], **off["bind"]}
+            env.spec["network"] = {"allow": []}
+            if "secrets" in env.spec:
+                env.spec["secrets"] = {**env.spec["secrets"], "allow": []}
 
-    def env_name(self, name: str | None) -> str | None:
-        """The env a `roles:` entry names, after agentbay.config.yaml `envs:` substitution."""
-        return self.env_swap.get(name, name) if name else None
+    def profiles(self) -> dict[str, dict]:
+        """Every agent profile: the `profile:` of each adapters/<name>/adapter.yaml that has one, by adapter name."""
+        out: dict[str, dict] = {}
+        for y in sorted((self.root / "adapters").glob("*/adapter.yaml")):
+            try:
+                meta = yaml.safe_load(y.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, yaml.YAMLError):
+                continue                   # lint_adapters reports an unreadable adapter.yaml
+            if isinstance(meta, dict) and isinstance(meta.get("profile"), dict):
+                out[y.parent.name] = meta["profile"]
+        return out
 
-    def profile(self) -> tuple[Doc | None, str]:
+    def profile(self) -> tuple[dict | None, str]:
         """(the agent profile that runs every role, its name): agentbay.config.yaml `agent:`, else claude-code."""
         name = self.config.get("agent") or DEFAULT_AGENT
-        return self.docs["Agent"].get(name), name
+        return self.profiles().get(name), name
 
     def _load(self, kind: str, root_name: str, f: Path, sch: str) -> None:
         doc = load_yaml(f)
@@ -750,8 +752,9 @@ class _Ctx:
         self.kit, self.gaps, self.seen_conn = kit, gaps, set()
         self.profile, self.agent = kit.profile()
         if self.profile is None:
-            gaps.append(f"agent profile '{self.agent}' not found (have: {', '.join(sorted(kit.docs['Agent'])) or 'none'}); "
-                        f"add agents/{self.agent}.yaml or set `agent:` in agentbay.config.yaml to one of them")
+            gaps.append(f"agent profile '{self.agent}' not found (have: {', '.join(sorted(kit.profiles())) or 'none'}); "
+                        f"add a `profile:` to adapters/{self.agent}/adapter.yaml or set `agent:` in "
+                        f"agentbay.config.yaml to one of them")
         self.roles: dict[str, RoleDef] = {}
         for name in sorted(kit.docs["Role"]):
             rd = resolve_role_def(kit, name, gaps)
@@ -760,7 +763,7 @@ class _Ctx:
         self.units: dict[tuple[str, str, str], ResolvedRole | None] = {}
 
     def inference(self, tier: str, effort: str) -> Inference:
-        p = self.profile.spec if self.profile else {}
+        p = self.profile or {}
         return Inference((p.get("tiers") or {}).get(tier, tier), (p.get("effort") or {}).get(effort, effort), tier)
 
     def unit(self, rn: str, md: Doc, env_name: str, kind: str, where: str) -> ResolvedRole | None:
@@ -831,7 +834,7 @@ class _Ctx:
             lim = env.spec.get("limits", {}).get(k)
             if lim is not None:
                 budget[k] = min(budget.get(k, lim), lim)
-        runtime = ((self.profile.spec.get("runtime") or {}).get(kind) if self.profile else None) or "?"
+        runtime = ((self.profile.get("runtime") or {}).get(kind) if self.profile else None) or "?"
         names = role_skill_names(md, rd)
         return ResolvedRole(
             name=rd.name, unit=f"{rd.name}--{mode}", mode=mode, env=env.name, kind=kind, runtime=runtime,
@@ -927,9 +930,9 @@ def code_env(kit: Kit, mode: Doc, iface: str, ep: dict | None = None) -> tuple[D
     roles = s.get("roles") or {}
     coord = s.get("coordinator")
     if coord:
-        name = kit.env_name(role_env(s, ep, None, coord))
+        name = role_env(s, ep, None, coord)
         return (kit.get("Environment", name) if name else None), f"the env of coordinator {coord}"
-    envs = [kit.get("Environment", kit.env_name(role_env(s, ep, None, rn)) or "") for rn in roles]
+    envs = [kit.get("Environment", role_env(s, ep, None, rn) or "") for rn in roles]
     for rn, env in zip(roles, envs):
         if env and _bound(env, iface) is not None:
             return env, f"the env of role {rn}"
@@ -949,7 +952,7 @@ def resolve(kit: Kit) -> System:
         if m:
             modes[mname] = m
     name_units(modes, gaps)
-    coord_rt = ((ctx.profile.spec.get("runtime") or {}).get("coordinator") if ctx.profile else None)
+    coord_rt = ((ctx.profile.get("runtime") or {}).get("coordinator") if ctx.profile else None)
     if coord_rt and coord_rt != "claude-code-main" and any(m.coordinator for m in modes.values()):
         gaps.append(f"agent profile {ctx.agent}: coordinators run on runtime {coord_rt}, but mode coordinators need "
                     f"claude-code-main (subagents cannot spawn subagents)")
@@ -978,7 +981,7 @@ def resolve_mode(kit: Kit, md: Doc, ctx: _Ctx, warnings: list[str] | None = None
     pb_file = next((d / "playbook.md" for d in md.dirs if (d / "playbook.md").exists()), md.dir / "playbook.md")
     return ResolvedMode(
         name=name, version=md.meta["version"], root=md.root, purpose=s["purpose"].strip(), path=md.dir,
-        coordinator=s.get("coordinator"), roles={rn: kit.env_name(env) for rn, env in roles.items()},
+        coordinator=s.get("coordinator"), roles=dict(roles),
         features=features, constraints=constraints, needs=needs,
         playbook=pb_file.read_text() if pb_file.exists() else "",
         skills={skill_id(name, sk): src for sk, src in mode_skills(md).items()}, config=mcfg,
@@ -996,7 +999,7 @@ def _mode_roles(kit: Kit, md: Doc, ctx: _Ctx, roles: dict) -> ResolvedRole | Non
     ctx.gaps += [msg for _, _, msg in role_env_problems(md)]
     coord = md.spec.get("coordinator")
     if coord and coord in ctx.roles and roles.get(coord):
-        return ctx.unit(coord, md, kit.env_name(roles[coord]), "coordinator", f"mode {name} coordinator")
+        return ctx.unit(coord, md, roles[coord], "coordinator", f"mode {name} coordinator")
     return None
 
 
@@ -1272,7 +1275,7 @@ def _role_step(ctx: _Ctx, md: Doc, ep: dict, st: dict, sw: str, ep_eff, review: 
     if rd is None:
         gaps.append(f"{sw}: {label} {rn} does not resolve (see role {rn} errors)")
         return step
-    env_name = kit.env_name(role_env(md.spec, ep, st, rn))
+    env_name = role_env(md.spec, ep, st, rn)
     if env_name is None:
         return step                       # no env: reported by role_env_problems (mode, feature, step)
     u = ctx.unit(rn, md, env_name, "coordinator" if rn == md.spec.get("coordinator") else "worker", sw)

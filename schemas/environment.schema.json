@@ -162,6 +162,7 @@
         },
         "limits": {
           "type": "object",
+          "description": "The ceiling for every cap. agentbay.config.yaml and modes may lower a cap, never raise it above the value here.",
           "additionalProperties": false,
           "properties": {
             "maxTurns": {
@@ -188,9 +189,57 @@
             }
           }
         },
-        "substitutes": {
-          "type": "string",
-          "description": "This env may stand in for the named env when agentbay.config.yaml selects it with `envs: {<named>: <this>}` (e.g. an offline variant). Bindings still live only in envs/."
+        "offline": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "bind"
+          ],
+          "description": "What this env binds when agentbay.config.yaml sets `offline: true`: the listed capabilities are bound to the connectors given here (fake sources) instead of the ones above. While offline the env has no network and no secrets, whatever it lists. `network` and `secrets` may be written only to say so: an entry in either is a lint error.",
+          "properties": {
+            "bind": {
+              "type": "object",
+              "description": "<interface>/v<N> -> connector name | [connector names]; replaces that capability's binding while offline.",
+              "additionalProperties": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1
+                  }
+                ]
+              }
+            },
+            "network": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "allow": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "secrets": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "allow": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }

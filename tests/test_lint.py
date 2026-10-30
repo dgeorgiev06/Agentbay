@@ -1,7 +1,7 @@
 """bay lint: one test per failure mode, plus the shipped kit is clean."""
 from helpers import KIT, edit_yaml, kit_copy, project
 
-from bay import lint
+from bay import lint, model
 
 
 def problems(k, p=None):
@@ -166,16 +166,36 @@ def test_role_env_errors_name_mode_feature_and_step():
     assert_gap(k, "feed-briefing.digest step themes: role analyst has no env")
 
 
-def test_a_user_space_role_or_agent_profile_is_an_error():
+def test_a_user_space_role_is_an_error():
     k = kit_copy()
     (k / "roles").mkdir()
     (k / "roles/summarizer.yaml").write_text((k / "framework/roles/analyst.yaml").read_text().replace("analyst", "summarizer"))
     has(k, "roles/summarizer.yaml: roles are framework-level; customize behaviour in your mode's playbooks/skills, or "
            "propose a new role via forge.extend")
+
+
+def test_an_offline_env_with_a_network_host_or_a_secret_is_refused():
     k = kit_copy()
-    (k / "agents").mkdir()
-    (k / "agents/other.yaml").write_text((k / "framework/agents/claude-code.yaml").read_text().replace("name: claude-code", "name: other"))
-    has(k, "agents/other.yaml: agent profiles are framework-level")
+    assert not [p for p in lint.lint_offline(model.Kit(k))]
+    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["offline"].update({"network": {"allow": ["api.x.com"]}}))
+    errs = lint.lint_offline(model.Kit(k))
+    assert len(errs) == 1 and "envs/local-feeds.yaml:" in errs[0] and "offline with network host api.x.com" in errs[0]
+    assert errs[0] in lint.run(k)
+    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["offline"].pop("network"))
+    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["offline"].update({"secrets": {"allow": ["X_CLIENT_ID"]}}))
+    assert any("offline with secret X_CLIENT_ID" in p for p in lint.lint_offline(model.Kit(k)))
+    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["offline"].pop("secrets"))
+    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["offline"]["bind"].update({"git.read/v1": "fake"}))
+    assert any("offline binds git.read/v1, which the env does not bind" in p for p in lint.lint_offline(model.Kit(k)))
+
+
+def test_a_config_that_raises_an_env_limit_is_refused_and_one_that_lowers_it_passes():
+    for cap, over, under in (("spendUsd", 6, 1), ("monthlyItems", 3001, 10), ("maxItemsPerRun", 501, 10)):
+        errs = lint.lint_config_limits(model.Kit(KIT, project({"modes": {"feed-briefing": {cap: over}}})))
+        assert len(errs) == 1 and f"modes.feed-briefing.{cap}: {over} is above the {cap} limit" in errs[0], errs
+        assert "env local-feeds" in errs[0] and errs[0] in lint.run(KIT, project({"modes": {"feed-briefing": {cap: over}}}))
+        assert not lint.lint_config_limits(model.Kit(KIT, project({"modes": {"feed-briefing": {cap: under}}})))
+    assert not lint.lint_config_limits(model.Kit(KIT, project()))
 
 
 def test_forge_extend_review_cannot_be_disabled_or_weakened():

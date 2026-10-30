@@ -4,7 +4,9 @@
   validate               lint + resolve every mode endpoint (fails with every gap)
   lint                   structure checks: playbooks, DoD ids, rules, review, role envs
   boundary --base <ref>  check a change against framework/components.yaml and a proposal's touches:
-  build | clean          compile modes/roles into a runtime (claude-code) / remove it
+  build | clean          compile modes/roles into a runtime (claude-code) / remove it; build writes a minimal
+                         agentbay.config.yaml when the project has none
+  config                 every agentbay.config.yaml setting, with type, default and description (from the schemas)
   ls                     modes, endpoints and roles
   catalog [<name>]       the registry (.agentbay/catalog.json): endpoints with schemas, workflows
   describe <mode|role>   resolved definition as JSON
@@ -116,11 +118,13 @@ def cmd_validate(args):
 
 
 def cmd_build(args):
-    from bay import adapter
+    from bay import adapter, config
     s = _system(args)
     rep = adapter.get(args.runtime).build(s, args.project, KIT)
     adapter.discover(problems=rep.warnings)
     print(f"built {len(s.modes)} modes for {rep.runtime} → {args.project}")
+    if config.write_minimal(args.project):
+        print(f"  + {config.NAME}")
     for f in rep.written:
         print(f"  + {f}")
     for f in rep.removed:
@@ -541,14 +545,9 @@ def cmd_auth(args):
 
 # ------------------------------------------------------------------ ledger
 def cmd_config(args):
-    """`bay config example`: assemble agentbay.config.example.yaml from each extension's config.example.yaml."""
+    """`bay config`: every setting of agentbay.config.yaml, read from the schemas."""
     from bay import config as cfgmod, model
-    text = cfgmod.example(model.Kit(model.KIT, None))
-    if args.stdout:
-        sys.stdout.write(text)
-        return
-    (model.KIT / cfgmod.EXAMPLE).write_text(text, encoding="utf-8")
-    print(f"✓ wrote {cfgmod.EXAMPLE}")
+    sys.stdout.write(cfgmod.describe(model.Kit(model.KIT, None)))
 
 
 def cmd_task(args):
@@ -766,9 +765,7 @@ def main(argv=None):
     au = sub.add_parser("auth", help="sign in to a source in your browser (interactive terminal only)")
     au.add_argument("connector"); au.add_argument("--env", help="env to log in through (default: the one binding it)")
     au.set_defaults(fn=cmd_auth)
-    cf = sub.add_parser("config", help="example config assembled from the extensions' config.example.yaml")
-    cf.add_argument("action", choices=["example"]); cf.add_argument("--stdout", action="store_true")
-    cf.set_defaults(fn=cmd_config)
+    sub.add_parser("config", help="print every agentbay.config.yaml setting, from the schemas").set_defaults(fn=cmd_config)
 
     im = sub.add_parser("improve", help="improve backlog: decide items, run the weekly pass")
     ims = im.add_subparsers(dest="action", required=True)

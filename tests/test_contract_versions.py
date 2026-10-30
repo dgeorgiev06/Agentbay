@@ -48,7 +48,7 @@ def test_version_mismatch_and_missing_producer_are_refused():
     (k / "schemas/data/email.v2.schema.json").write_text(v2)
     sub(k, "connectors/fake-mail/connector.yaml", "produces: [email/v1]", "produces: [email/v2]")
     sub(k, "connectors/x-api/connector.yaml", "produces: [post/v1]", "produces: [email/v1]")
-    has(k, "mode mail-briefing reads email/v1, but in env local-mail-offline fake-mail produce email/v2: "
+    has(k, "mode mail-briefing reads email/v1, but in env local-mail (offline) fake-mail produce email/v2: "
            "version mismatch")
     has(k, "mode feed-briefing reads post/v1, but no items.source/v1 connector env local-feeds binds (x-api) "
            "produces post", "forge.connect")

@@ -435,10 +435,10 @@ class Dispatcher:
             raise CallError(f"{feat.mode}.{feat.name} step {step.id}: effects {bad} not allowed")
         args = substitute(step.with_, state["input"], state["steps"], mode.config)
         iface, ep = step.run.rsplit(".", 1)
-        caps = cfgmod.caps(mode.constraints, env.spec.get("limits", {}), mode.config)
         self._ledger("step.started", base, summary=step.run, data={"inputs": inputs_record(args, self.project)})
         t0 = time.monotonic()
         try:
+            caps = cfgmod.caps(mode.constraints, env.spec.get("limits", {}), mode.config)
             out = self._invoke(step.env, step.connector, iface, ep, args, settings=self._settings(mode), caps=caps)
         except Exception as e:  # report, never leak
             msg = vault.redact(str(e))

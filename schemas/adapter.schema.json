@@ -9,6 +9,53 @@
     "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,40}$", "description": "the runtime name; equals the folder name" },
     "module": { "type": "string", "pattern": "^[^/\\\\].*\\.py$", "description": "the adapter's module, a path inside the adapter folder" },
     "class": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "the class in `module` implementing the Adapter protocol" },
-    "description": { "type": "string" }
+    "description": { "type": "string" },
+    "profile": {
+      "type": "object",
+      "required": ["runtime", "tiers"],
+      "additionalProperties": false,
+      "description": "The agent profile: how this LLM product runs roles. The only place that knows the product: the runtime per kind of role, the model for each tier, effort values and tool names. Selected once in agentbay.config.yaml (`agent:`, default claude-code).",
+      "properties": {
+        "runtime": {
+          "type": "object",
+          "required": ["coordinator", "worker"],
+          "additionalProperties": false,
+          "description": "Runtime per kind of role. coordinator: a mode's coordinator role (claude-code-main runs it as a playbook in the Chief of Staff's main thread); worker: every other role (claude-code-subagent: a generated .claude/agents/<role>--<mode>.md).",
+          "properties": {
+            "coordinator": { "$ref": "#/$defs/runtime" },
+            "worker": { "$ref": "#/$defs/runtime" }
+          }
+        },
+        "tiers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fast", "balanced", "deep"],
+          "description": "The product's model for each tier.",
+          "properties": {
+            "fast": { "type": "string", "minLength": 1 },
+            "balanced": { "type": "string", "minLength": 1 },
+            "deep": { "type": "string", "minLength": 1 }
+          }
+        },
+        "effort": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The product's value for each effort (default: the same word).",
+          "properties": {
+            "low": { "type": "string", "minLength": 1 },
+            "medium": { "type": "string", "minLength": 1 },
+            "high": { "type": "string", "minLength": 1 }
+          }
+        },
+        "tools": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1 },
+          "description": "Optional: agentbay tool name (as bound in envs) -> the product's tool name (default: the same name)."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "runtime": { "enum": ["claude-code-main", "claude-code-subagent", "headless", "cloud"] }
   }
 }

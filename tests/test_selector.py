@@ -135,7 +135,7 @@ def test_wildcard_values_are_matched_locally_never_sent_to_the_source():
     # fake: `from: vit*` used to fetch nothing (the source got the pattern as a handle)
     from bay import connect
     p = project()
-    st = connect.instantiate(system(p), "local-feeds-offline", "corpus-store", "items.store/v1", p,
+    st = connect.instantiate(system(p), "local-feeds", "corpus-store", "items.store/v1", p,
                              settings={"lookbackMax": "30d", "selectors": [{"id": "v", "from": "vit*"}],
                                        "mode": "feed-briefing"}, clock=lambda: NOW)
     out = st.sync(lookback="3d")

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from . import boundary, checks, model, playbook as pbk, rules as rulesmod, workflows as wfmod
+from . import boundary, checks, config as cfgmod, model, playbook as pbk, rules as rulesmod, workflows as wfmod
 
 # Features whose review can never be turned off, with the settings they must use.
 MANDATORY_REVIEW = {"forge.extend": {"when": "always", "tier": "deep", "effort": "high"}}
@@ -196,21 +196,43 @@ def lint_env_bindings(kit: model.Kit) -> list[str]:
     return out
 
 
-def lint_substitutes(kit: model.Kit) -> list[str]:
-    """F-11: at most one env may substitute a given env. The offline switch maps each env to one substitute, so a
-    second one would be dropped from agentbay.config.example.yaml without a word."""
-    by: dict[str, list] = {}
-    for env in sorted(kit.docs["Environment"].values(), key=lambda e: e.name):
-        if env.spec.get("substitutes"):
-            by.setdefault(env.spec["substitutes"], []).append(env)
+def lint_offline(kit: model.Kit) -> list[str]:
+    """An env's `offline:` block rebinds capabilities the env already binds, to connectors, and nothing else: while
+    offline the env has no network and no secrets, so a block that lists a host or a secret is refused."""
     out = []
-    for target, envs in sorted(by.items()):
-        if len(envs) > 1:
-            first = envs[0]
-            line = _line_of(first.path, r"^\s*substitutes:")
-            out.append(f"{_where(first.path, line)}: envs "
-                       f"{', '.join(e.name for e in envs)} all declare `substitutes: {target}`; "
-                       f"an env may have one substitute only")
+    for env in sorted(kit.docs["Environment"].values(), key=lambda e: e.name):
+        off = env.spec.get("offline")
+        if not off:
+            continue
+        where = _where(env.path, _line_of(env.path, r"^\s+offline:"))
+        for key, what in (("network", "network host"), ("secrets", "secret")):
+            allow = (off.get(key) or {}).get("allow") or []
+            if allow:
+                out.append(f"{where}: env {env.name} is offline with {what} {', '.join(allow)}; an offline env has no "
+                           f"network and no secrets, so remove `{key}` from its `offline:` block")
+        own = (env.spec.get("bind") or {})
+        for iface in off["bind"]:
+            if iface not in own:
+                out.append(f"{where}: env {env.name} offline binds {iface}, which the env does not bind; capabilities "
+                           f"are bound in `bind:`, and `offline.bind` only replaces a connector")
+    return out
+
+
+def lint_config_limits(kit: model.Kit) -> list[str]:
+    """Limits live in the env; agentbay.config.yaml may only lower a cap. A mode setting above the limit of the env
+    where the mode's code steps run is refused."""
+    out = []
+    for name in sorted((kit.config.get("modes") or {})):
+        md = kit.docs["Mode"].get(name)
+        if md is None or model.STORE_IFACE not in md.spec.get("needs", []):
+            continue
+        env, _ = model.code_env(kit, md, model.STORE_IFACE, None)
+        if env is None:
+            continue
+        settings, _ = cfgmod.mode_settings(kit.config, name)
+        out += [f"{cfgmod.NAME} modes.{name}.{k}: {v} is above the {k} limit {lim} of env {env.name}; settings can "
+                f"only lower a cap (raise `limits:` in {model.rel(env.path)} to allow more)"
+                for k, v, lim in cfgmod.raised((env.spec.get("limits") or {}), settings)]
     return out
 
 
@@ -332,7 +354,7 @@ def lint_mode(md: model.Doc, kit: model.Kit) -> list[str]:
 
 def lint_roles(kit: model.Kit) -> list[str]:
     out = []
-    for kind in ("Role", "Agent", "Environment", "Connector"):
+    for kind in ("Role", "Environment", "Connector"):
         for d in kit.docs[kind].values():
             raw = yaml.safe_load(d.path.read_text()) or {}
             if "review" in (raw.get("spec") or {}):
@@ -441,13 +463,16 @@ def lint_contract_versions(kit: model.Kit) -> list[str]:
                        f"but declares no spec.reads (the item kinds its features read, e.g. `reads: [post/v1]`; "
                        f"known: {known})")
             continue
-        names = model.mode_envs(md)
-        names += [e.name for e in envs.values() if e.spec.get("substitutes") in names]
-        for en in dict.fromkeys(names):
+        variants: list[tuple[str, list[str]]] = []          # (env label, its source connectors), real then offline
+        for en in dict.fromkeys(model.mode_envs(md)):
             env = envs.get(en)
             if env is None:
                 continue                                    # unknown envs are lint_role_envs' problem
-            bound = model.connectors_of(model._bound(env, model.SOURCE_IFACE))
+            variants.append((en, model.connectors_of(model._bound(env, model.SOURCE_IFACE))))
+            off = (env.spec.get("offline") or {}).get("bind", {}).get(model.SOURCE_IFACE)
+            if off is not None:
+                variants.append((f"{en} (offline)", model.connectors_of(off)))
+        for en, bound in variants:
             if not bound:
                 continue
             made: dict[str, dict[int, list[str]]] = {}
@@ -607,7 +632,7 @@ def split_store_warnings(kit: model.Kit) -> list[str]:
                 continue
             want = [code.spec["bind"].get(k) for k in keys]
             for rn, env_name in mapping.items():
-                env = kit.get("Environment", kit.env_name(env_name) or "")
+                env = kit.get("Environment", env_name or "")
                 if env is None or env.name == code.name or model.STORE_IFACE not in env.spec.get("bind", {}):
                     continue
                 if [env.spec["bind"].get(k) for k in keys] != want:
@@ -636,9 +661,7 @@ def lint_config_schemas(kit: model.Kit) -> list[str]:
 
 def lint_self_description(kit: model.Kit) -> list[str]:
     """Each extension describes itself (0006 Part A): user modes and connectors have a README.md; every
-    extension that takes settings has a config.example.yaml whose settings its config schema accepts; and the
-    kit's agentbay.config.example.yaml is the one `bay config example` assembles from them."""
-    from . import config as cfgmod
+    extension that takes settings has a config.example.yaml whose settings its config schema accepts."""
     out: list[str] = []
     for kind in ("Mode", "Connector"):
         for d in sorted(kit.docs[kind].values(), key=lambda d: d.name):
@@ -666,9 +689,6 @@ def lint_self_description(kit: model.Kit) -> list[str]:
                 body = {k: v for k, v in body.items() if not (kind == "Mode" and k == "features")}
             errs = model.schema_errors(body, model.inline_refs(sch)) if sch is not None else []
             out += [f"{where}/{cfgmod.FRAGMENT}: {e}" for e in errs]
-    example = kit.root / cfgmod.EXAMPLE
-    if not example.exists() or example.read_text(encoding="utf-8") != cfgmod.example(kit):
-        out.append(f"{cfgmod.EXAMPLE} is stale; run bay config example")
     return out
 
 
@@ -695,7 +715,8 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
             out.append(p)
     out += lint_roles(kit)
     out += lint_env_bindings(kit)
-    out += lint_substitutes(kit)
+    out += lint_offline(kit)
+    out += lint_config_limits(kit)
     out += lint_adapters(kit)
     out += lint_connectors(kit)
     out += lint_contract_versions(kit)

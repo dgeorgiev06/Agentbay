@@ -15,7 +15,9 @@ from bay import connect  # noqa: E402
 HOME = [{"id": "home", "in": "home"}]
 
 
-def store(p, caps=None, settings=None, now=clock, fixture=None, env="local-feeds-offline"):
+def store(p, caps=None, settings=None, now=clock, fixture=None, online=False):
+    """The store of project p, offline (the fake source) unless online: the same project with `offline` unset,
+    so the env binds x-api."""
     if fixture is not None:
         (p / "fx.json").write_text(json.dumps(fixture))
         cfgp = p / "agentbay.config.yaml"
@@ -24,7 +26,13 @@ def store(p, caps=None, settings=None, now=clock, fixture=None, env="local-feeds
         cfg.setdefault("connectors", {})["fake"] = {"fixture": "fx.json"}
         cfgp.write_text(yaml.safe_dump(cfg))
     s = system(p)
-    return connect.instantiate(s, env, "corpus-store", "items.store/v1", p, caps=caps or {},
+    if online:
+        from helpers import KIT
+        from bay import config, model
+        cfg = config.load(p)
+        cfg.pop("offline")
+        s = model.resolve(model.Kit(KIT, p, config=cfg))
+    return connect.instantiate(s, "local-feeds", "corpus-store", "items.store/v1", p, caps=caps or {},
                                settings={"lookbackMax": "30d", "selectors": HOME, "mode": "feed-briefing", **(settings or {})},
                                clock=now)
 
@@ -389,7 +397,7 @@ def test_unbinding_a_source_removes_its_items_and_cursors():
     p = project()
     store(p).sync(lookback="3d")
     assert len(ids(p)) == 7 and any(k.startswith("fake|") for k in state(p)["cursors"])
-    online = store(p, env="local-feeds")                      # x-api bound instead of the fake source
+    online = store(p, online=True)                            # x-api bound instead of the fake source
     assert online.status()["stale"] is True                   # the next sync changes the scope
     out = online.prune(olderThan="30d")
     assert out["unbound"] == 7 and ids(p) == set() and not any(k.startswith("fake|") for k in state(p)["cursors"])
@@ -555,7 +563,7 @@ def test_reads_refuse_a_stale_scope_until_sync_rescopes():
     st.sync(lookback="3d")
     assert refused_reads(st) == [] and [i["id"] for i in st.query()["items"]] == ["fake:11"]
     # unbinding the source (the env now binds x-api instead): refused until a prune re-scopes it
-    online = store(p, env="local-feeds", settings={"selectors": sels[:1]})
+    online = store(p, online=True, settings={"selectors": sels[:1]})
     errs = refused_reads(online)
     assert len(errs) == 8 and all("bound sources are now x (was fake)" in e for e in errs), errs
     online.prune(olderThan="30d")
@@ -593,7 +601,7 @@ def test_swapping_offline_for_real_refuses_role_reads_until_a_rescope():
     assert len(D.use("analyst--feed-briefing", "items.store/v1.query", {})["items"]) == 7
     cfgp = p / "agentbay.config.yaml"                    # swap to the real env (x-api)
     cfg = yaml.safe_load(cfgp.read_text())
-    cfg.pop("envs")
+    cfg.pop("offline")
     cfg.update({"connectors": {"x-api": {"userId": "42"}}, "secrets": {"provider": "env"}})
     cfgp.write_text(yaml.safe_dump(cfg))
     D = dispatch.Dispatcher(system(p), p, clock=clock)

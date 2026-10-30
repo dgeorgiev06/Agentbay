@@ -308,7 +308,7 @@ class ClaudeCodeAdapter:
         if not r.tools:
             rep.warnings.append(f"{sub}: no tools resolved; defaulting to Read only (empty would inherit ALL tools)")
         prof, _ = system.kit.profile()
-        names = (prof.spec.get("tools") or {}) if prof else {}          # the profile's tool-name mapping
+        names = (prof.get("tools") or {}) if prof else {}          # the profile's tool-name mapping
         fm = ["---", f"name: {sub}", f"description: {json.dumps(r.description)}",
               f"tools: {', '.join(names.get(x, x) for x in tools)}", f"model: {r.inference.model}", "---"]
         extras = [f"## Where you work\nRole `{r.name}` in mode `{r.mode}`, env `{r.env}`. "

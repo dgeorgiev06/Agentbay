@@ -15,3 +15,5 @@ spec:
   fs: { read: ["."], write: [".agentbay/data/mail"] }
   effects: [read, write, network, spend, delete]
   limits: { maxTurns: 40, maxMinutes: 20, spendUsd: 0, monthlyItems: 20000, maxItemsPerRun: 500 }
+  offline:                          # `offline: true` in agentbay.config.yaml: the fake mailbox, no network, no secrets
+    bind: { items.source/v1: [fake-mail] }

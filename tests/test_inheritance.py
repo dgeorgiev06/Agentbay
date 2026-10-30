@@ -19,7 +19,7 @@ def child(k, name="news-briefing", spec=None):
     doc = {"apiVersion": "agentbay/v2", "kind": "Mode", "metadata": {"name": name, "version": "0.1.0"},
            "spec": {"extends": "briefing", "reads": ["post/v1"], **(spec or {})}}   # a briefing child says what it reads (B-6)
     (d / "mode.yaml").write_text(json.dumps(doc))
-    self_describe(k, d)
+    self_describe(d)
     return d
 
 
@@ -57,12 +57,16 @@ def test_child_overrides_review_workflow_roles_and_inherits_the_rest():
     assert ask.playbook_path.resolve() == (k / "modes/briefing/features/ask/playbook.md").resolve()
     assert [st.id for st in s.modes["feed-briefing"].features["prune"].steps] == ["trim", "review"]
     # a second child of the same base keeps the base behaviour
-    child(k, spec={"purpose": "Mail.", "roles": {"analyst": "local-feeds-offline", "researcher": "research"}})
+    (k / "envs/local-news.yaml").write_text(
+        "apiVersion: agentbay/v2\nkind: Environment\nmetadata: { name: local-news, description: Another briefing env. }\n"
+        "spec:\n  bind:\n    items.source/v1: [fake]\n    items.store/v1: corpus-store\n  network: { allow: [] }\n"
+        "  fs: { read: [\".\"], write: [\".agentbay/data/news\"] }\n  effects: [read, write, network, spend, delete]\n")
+    child(k, spec={"purpose": "Mail.", "roles": {"analyst": "local-news", "researcher": "research"}})
     s = model.resolve(model.Kit(k))
     mail = s.modes["news-briefing"]
     assert mail.features["ask"].review is None and mail.extends == "briefing"
     # the roles map is inherited and overridden entry by entry
-    assert mail.roles == {"lead": "local-feeds", "analyst": "local-feeds-offline", "reviewer": "local-feeds",
+    assert mail.roles == {"lead": "local-feeds", "analyst": "local-news", "reviewer": "local-feeds",
                           "researcher": "research"}
     assert s.modes["feed-briefing"].roles["analyst"] == "local-feeds"
     assert problems(k) == []

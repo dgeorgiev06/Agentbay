@@ -225,7 +225,7 @@ def test_path_normalization_and_symlinks():
 def test_writes_limited_to_env_fs_write_and_kit_is_off_limits():
     p = built()
     try:
-        # analyst's env (local-feeds-offline) writes only .agentbay/data/feeds, which is itself control plane
+        # analyst's env (local-feeds) writes only .agentbay/data/feeds, which is itself control plane
         assert tool(p, "analyst--feed-briefing", "Write", {"file_path": "notes.md", "content": "x"})[0] == "deny"
         assert tool(p, "builder--delivery", "Write", {"file_path": str(KIT / "bay/guard.py"), "content": "x"})[0] == "deny"
         assert tool(p, "builder--delivery", "Write", {"file_path": "/etc/x", "content": "x"})[0] == "deny"
@@ -541,7 +541,7 @@ def test_n5_fake_fixture_must_stay_inside_the_project():
     try:
         (p.parent / "outside.json").write_text("[]")
         try:
-            connect.instantiate(system(p), "local-feeds-offline", "fake", "items.source/v1", p)
+            connect.instantiate(system(p), "local-feeds", "fake", "items.source/v1", p)
             raise AssertionError("expected ConnectorError")
         except connect.ConnectorError as e:
             assert "must be a path inside the project" in str(e)

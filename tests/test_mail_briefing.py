@@ -1,4 +1,4 @@
-"""mail-briefing on the offline fake-mail source (env local-mail-offline): resolution, the offline end-to-end
+"""mail-briefing on the offline fake-mail source (env local-mail): resolution, the offline end-to-end
 path, separate stores and units next to feed-briefing, the mail views and threads endpoint, exact labels,
 removed ids, a blocked source, refusing other schema versions and the sandbox over the new tables."""
 from __future__ import annotations
@@ -11,14 +11,13 @@ from helpers import KIT, NOW, clock, system, tmpdir
 
 from bay import connect, dispatch, model, sqlsandbox as sbx
 
-OFFLINE = {"local-mail": "local-mail-offline", "local-feeds": "local-feeds-offline"}
 SELS = [{"id": "inbox", "in": "inbox"}, {"id": "sent", "in": "sent"}]
 
 
 def project(cfg: dict | None = None):
     p = tmpdir() / "proj"
     p.mkdir()
-    (p / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "envs": dict(OFFLINE),
+    (p / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "offline": True,
                                                             **(cfg or {})}))
     return p
 
@@ -28,7 +27,7 @@ def fake_cfg(**kw) -> dict:
 
 
 def store(p, sels=None, **settings):
-    return connect.instantiate(system(p), "local-mail-offline", "corpus-store", "items.store/v1", p, clock=clock,
+    return connect.instantiate(system(p), "local-mail", "corpus-store", "items.store/v1", p, clock=clock,
                                caps={"maxItemsPerRun": 500},
                                settings={"mode": "mail-briefing", "lookback": "30d", "lookbackMax": "30d",
                                          "selectors": sels or SELS, **settings})
@@ -45,7 +44,7 @@ def test_mail_briefing_extends_briefing_and_places_roles_in_local_mail():
     assert m.extends == "briefing" and set(m.features) == {"sync", "digest", "ask", "prune"}
     assert model.Kit(KIT).get("Mode", "mail-briefing").spec["roles"] == {"lead": "local-mail", "analyst": "local-mail",
                                                                       "reviewer": "local-mail"}
-    assert m.roles == {"lead": "local-mail-offline", "analyst": "local-mail-offline", "reviewer": "local-mail-offline"}
+    assert m.roles == {"lead": "local-mail", "analyst": "local-mail", "reviewer": "local-mail"}
     assert m.config["lookback"] == "30d" and m.config["selectors"] == SELS and m.config["important"] == []
     assert "important" not in s.modes["feed-briefing"].config                  # mail-only setting, not shared
     dig = m.features["digest"]
@@ -53,7 +52,7 @@ def test_mail_briefing_extends_briefing_and_places_roles_in_local_mail():
     assert dig.steps[1].run == "items.store/v1.threads" and dig.out_type == "Digest"
     assert "needsReply" in dig.out_schema["properties"]                         # the mail Digest type
     u = s.units()["analyst--mail-briefing"]
-    assert u.env == "local-mail-offline" and "items.store/v1.threads" in u.bay_uses
+    assert u.env == "local-mail" and "items.store/v1.threads" in u.bay_uses
     assert not [x for x in u.bay_uses if x.endswith((".sync", ".prune"))]       # read endpoints only
     assert {t for t in u.tools} & {"Write", "Edit"} == set()
     rules = {r.statement for r in dig.rules}
@@ -62,14 +61,13 @@ def test_mail_briefing_extends_briefing_and_places_roles_in_local_mail():
 
 
 def test_proposal_example_selectors_validate_against_gmail_and_offline():
-    cfg = yaml.safe_load((KIT / "agentbay.config.example.yaml").read_text())
-    mail = cfg["modes"]["mail-briefing"]
+    mail = yaml.safe_load((KIT / "modes/mail-briefing/config.example.yaml").read_text())
     assert mail["lookback"] == "30d" and mail["important"] == ["*@partner.example", "*@example.com"]
     assert {"partners", "staking", "news"} <= {x["id"] for x in mail["selectors"]}
-    for envs in ({}, OFFLINE):                                                 # gmail-api, then fake-mail
+    for offline in (False, True):                                              # gmail-api, then fake-mail
         p = tmpdir() / "proj"
         p.mkdir()
-        (p / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "envs": envs,
+        (p / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "offline": offline,
                                                                 "modes": {"mail-briefing": mail}}))
         s = model.resolve(model.Kit(KIT, p))
         assert s.modes["mail-briefing"].config["important"] == ["*@partner.example", "*@example.com"]
@@ -84,7 +82,7 @@ def test_offline_sync_digest_and_ask():
     r = d.call("mail-briefing.digest", {"since": "7d"})
     assert r["status"] == "needs-agent" and r["next"]["step"] == "digest"
     plan = r["next"]
-    assert plan["role"] == "analyst" and plan["env"] == "local-mail-offline" and "analyst--mail-briefing" in plan["runAs"]
+    assert plan["role"] == "analyst" and plan["env"] == "local-mail" and "analyst--mail-briefing" in plan["runAs"]
     th = {t["threadId"]: t for t in plan["previous"]["gather"]["threads"]}
     assert th["t-pilot"]["needsReply"] and th["t-pilot"]["important"] and th["t-pilot"]["lastId"] == "fake-mail:m003"
     assert th["t-pilot"]["ids"] == ["fake-mail:m001", "fake-mail:m002", "fake-mail:m003"]
@@ -120,7 +118,7 @@ def test_two_modes_on_separate_envs_keep_separate_stores_and_units():
     p = project()
     s = system(p)
     u = s.units()
-    assert u["analyst--feed-briefing"].env == "local-feeds-offline" and u["analyst--mail-briefing"].env == "local-mail-offline"
+    assert u["analyst--feed-briefing"].env == "local-feeds" and u["analyst--mail-briefing"].env == "local-mail"
     d = dispatch.Dispatcher(s, p, clock=clock)
     assert d.call("feed-briefing.sync", {})["status"] == "done"
     assert d.call("mail-briefing.sync", {})["status"] == "done"

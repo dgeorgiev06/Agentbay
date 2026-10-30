@@ -94,16 +94,13 @@ def assert_gap(kit: Path, *needles: str, project: Path | None = None) -> str:
     raise AssertionError(f"no gap containing {needles}; got:\n  " + "\n  ".join(gs))
 
 
-OFFLINE = {"local-feeds": "local-feeds-offline"}   # the shipped offline env (fake source, no network)
-
-
 def project(config: dict | None = None, source: str = "fake") -> Path:
-    """A project dir. source="fake" selects the shipped offline env via `envs:`; "x-api" uses local-feeds."""
+    """A project dir. source="fake" sets `offline: true` (fake sources, no network); "x-api" uses the real source."""
     p = tmpdir() / "proj"
     p.mkdir()
     cfg = {"apiVersion": "agentbay/v2"}
     if source == "fake":
-        cfg["envs"] = dict(OFFLINE)
+        cfg["offline"] = True
     elif source != "x-api":
         raise ValueError(source)
     cfg.update(config or {})
@@ -158,10 +155,8 @@ class MemProvider(vault.EnvProvider):
         return True
 
 
-def self_describe(kit: Path, folder: Path) -> None:
-    """Give a hand-written test extension its README.md and config.example.yaml, and reassemble the kit's
-    agentbay.config.example.yaml (lint requires all three, 0006 Part A)."""
-    from bay import config, model
+def self_describe(folder: Path) -> None:
+    """Give a hand-written test extension its README.md and config.example.yaml (lint requires both, 0006 Part A)."""
+    from bay import config
     (folder / "README.md").write_text(f"# {folder.name}\n\nA test extension.\n")
     (folder / config.FRAGMENT).write_text("# lookback: 3d\n")
-    (kit / config.EXAMPLE).write_text(config.example(model.Kit(kit)))

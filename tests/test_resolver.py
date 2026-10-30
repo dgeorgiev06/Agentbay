@@ -14,7 +14,7 @@ def test_shipped_kit_resolves():
         "describe", "sql", "get", "thread", "threads", "facets", "search", "query", "status")]
     assert "briefing" not in s.modes and s.modes["feed-briefing"].extends == "briefing"    # abstract base
     assert "Edit" not in units["reviewer--feed-briefing"].tools
-    assert s.agent == "claude-code" and set(model.Kit(KIT).docs["Agent"]) == {"claude-code"}   # one profile
+    assert s.agent == "claude-code" and set(model.Kit(KIT).profiles()) == {"claude-code"}   # one profile
 
 
 def step(s, target, sid):
@@ -46,7 +46,7 @@ def test_tier_resolution_step_over_feature_over_role_mapped_by_the_profile():
     assert step(s, "feed-briefing.prune", "review").inference.model == "sonnet"            # review block: balanced
     assert s.units()["analyst--feed-briefing"].inference.model == "opus"          # role default
     # the profile maps tiers: another model name for `deep` changes only the model
-    edit_yaml(k / "framework/agents/claude-code.yaml", lambda d: d["spec"]["tiers"].update({"deep": "opus-next"}))
+    edit_yaml(k / "adapters/claude-code/adapter.yaml", lambda d: d["profile"]["tiers"].update({"deep": "opus-next"}))
     s = model.resolve(model.Kit(k))
     assert step(s, "feed-briefing.digest", "themes").inference.model == "opus-next"
 
@@ -125,8 +125,8 @@ def test_unknown_connector_and_wrong_interface():
 
 def test_coordinator_must_run_in_main_thread():
     k = kit_copy()
-    edit_yaml(k / "framework/agents/claude-code.yaml",
-              lambda d: d["spec"]["runtime"].update({"coordinator": "claude-code-subagent"}))
+    edit_yaml(k / "adapters/claude-code/adapter.yaml",
+              lambda d: d["profile"]["runtime"].update({"coordinator": "claude-code-subagent"}))
     assert_gap(k, "agent profile claude-code: coordinators run on runtime claude-code-subagent",
                "need claude-code-main")
 
@@ -197,14 +197,24 @@ def test_feature_review_block_resolves_to_existing_placeable_reviewer():
     assert_gap(k, "feed-briefing.digest review", "unknown review role 'nobody'")
 
 
-def test_offline_env_switch_selects_a_declared_substitute_only():
-    from helpers import OFFLINE, project
-    s = model.resolve(model.Kit(KIT, project()))
-    assert s.modes["feed-briefing"].roles["analyst"] == "local-feeds-offline"
-    assert s.units()["analyst--feed-briefing"].env == "local-feeds-offline"
+def test_offline_switch_rebinds_the_source_and_closes_network_and_secrets():
+    from helpers import project
+    real = model.Kit(KIT, project(source="x-api")).get("Environment", "local-feeds").spec
+    assert real["bind"]["items.source/v1"] == ["x-api"] and real["network"]["allow"] == ["api.x.com"]
+    k = model.Kit(KIT, project())
+    off = k.get("Environment", "local-feeds").spec
+    assert off["bind"]["items.source/v1"] == ["fake"] and off["bind"]["items.store/v1"] == "corpus-store"
+    assert off["network"] == {"allow": []} and off["secrets"]["allow"] == []
+    assert k.get("Environment", "local-mail").spec["bind"]["items.source/v1"] == ["fake-mail"]
+    assert k.get("Environment", "workspace").spec == model.Kit(KIT, project(source="x-api")).get(
+        "Environment", "workspace").spec                      # an env without an `offline:` block is unchanged
+    s = model.resolve(k)
+    assert s.units()["analyst--feed-briefing"].env == "local-feeds"      # the env keeps its name
     assert s.modes["feed-briefing"].features["sync"].steps[0].connector == "corpus-store"
-    gs = gaps(KIT, project({"envs": {"local-feeds": "workspace"}}, source="x-api"))
-    assert any("env workspace does not declare `substitutes: local-feeds`" in g for g in gs), gs
-    gs = gaps(KIT, project({"envs": {"local-feeds": "nope"}}, source="x-api"))
-    assert any("unknown env 'nope'" in g for g in gs)
-    assert OFFLINE == {"local-feeds": "local-feeds-offline"}
+    from bay import config
+    for bad, word in (({"offline": "yes"}, "offline"), ({"envs": {"local-feeds": "workspace"}}, "envs")):
+        try:                                                  # not a boolean; the `envs:` map is gone
+            model.Kit(KIT, project(bad))
+            raise AssertionError("expected ConfigError")
+        except config.ConfigError as e:
+            assert word in str(e)

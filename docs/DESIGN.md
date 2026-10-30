@@ -10,13 +10,13 @@ and the history of each decision is in [proposals/](proposals/).
 |---|---|---|
 | **Role** | a generic job: prompt, `doneWhen`, rules, skills, default tier (fast, balanced, deep), access (read or write). Five ship: `lead`, `analyst`, `researcher`, `builder`, `reviewer` | framework (`framework/roles/`) |
 | **Mode** | one logical job: purpose, endpoints (features), workflows, the roles it uses and the env each works in (`roles:`), the capabilities it needs, constraints, playbooks, skills, rules | you (`modes/`), or the framework |
-| **Agent profile** | how one LLM product runs roles: runtime per kind of role (coordinator, worker), tier -> model, effort values. Selected once with `agent:` (default `claude-code`) | framework (`framework/agents/`) |
+| **Agent profile** | how one LLM product runs roles: runtime per kind of role (coordinator, worker), tier -> model, effort values. Selected once with `agent:` (default `claude-code`) | the runtime adapter (`adapters/<name>/adapter.yaml`, `profile:`) |
 | **Environment** | what a role can touch: capability bindings, secrets (names and provider), network allowlist, filesystem paths, allowed tiers, effects, limits | you (`envs/`), or the framework |
 | **Connector** | code implementing a capability interface; holds the secrets and network use | you (`connectors/`), or the framework |
 | **Capability interface** | a versioned contract: named endpoints with JSON-schema in/out and declared effects (`read`, `write`, `network`, `spend`, `delete`) | `interfaces/`, `framework/interfaces/` |
 
 Modes name capabilities, never connectors or tools. Adding a source is one connector plus one binding line in
-an env; no mode, role or playbook changes. A user file under `roles/` or `agents/` is an error: a mode
+an env; no mode, role or playbook changes. A user file under `roles/` is an error: a mode
 customizes a role through its playbooks, skills and rules, and a new role is a `forge.extend` proposal.
 
 A mode may `extends:` another. Inheritance is resolved when the kit loads (endpoints merge key by key,

@@ -68,17 +68,19 @@ The reviewer returns `review.verdict/v1`: per id `pass|fail|n/a`, evidence, seve
 carries `review.recordedPlans` (taskId -> step, outcome, to-do progress) of the agents it judges.
 
 ## 3. Role / Agent profile / Environment
-Ownership: the framework owns roles and the agent profile; the user owns modes, envs and connectors. A user
-role file or agent profile is an error.
+Ownership: the framework owns roles; the agent profile is part of a runtime adapter; the user owns modes, envs
+and connectors. A user role file is an error.
 - Role (`framework/roles/`: lead, analyst, researcher, builder, reviewer): `prompt`, `doneWhen`, `rules`,
   `skills`, default `tier` (fast | balanced | deep), optional `effort`, `access` (read | write). No agent, env or
   data access of its own.
-- Agent profile (`framework/agents/claude-code.yaml`, `agent:` in agentbay.config.yaml): `runtime`
+- Agent profile (`profile:` in `adapters/<name>/adapter.yaml`, `agent:` in agentbay.config.yaml): `runtime`
   `{coordinator: claude-code-main, worker: claude-code-subagent}`, `tiers {fast, balanced, deep} -> model`,
   `effort` mapping, optional `tools` name mapping. The only place a model name appears.
 - Environment: `bind` (interface -> connector(s) or `{tools, clis, mcpServers}`), `secrets {provider, allow}`,
   `network.allow`, `fs {read, write}` (paths relative to the project root), optional `tiers` cap, `effects`,
-  `limits`.
+  `limits` (the ceiling for every cap), optional `offline {bind, network, secrets}`: with `offline: true` in
+  agentbay.config.yaml the env binds `offline.bind` over its own bindings and has no network and no secrets
+  (`bay lint` refuses an `offline` block that lists a host or a secret).
 - Grants of a unit (role, mode, env): the read-only connector endpoints of the mode's `needs` that the env binds
   (never an interface marked `dispatcherOnly`), plus the tools of the mode's tools capabilities whose effects
   are read or network (any, with `access: write`). Only `access: write` roles get file-writing tools (Edit,
@@ -87,8 +89,8 @@ role file or agent profile is an error.
   the `write` effect.
 - Tier: step (a review: its review block) > feature > role default; the profile maps it to a model; the env's
   `tiers` cap it. The env also caps the role's default tier, which is the model its unit is compiled with.
-  Envs are the only place capabilities are bound; `agentbay.config.yaml` cannot rebind them. It can select an
-  env that declares `substitutes: <env>` (`envs: { <env>: <offline env> }`).
+  Envs are the only place capabilities are bound; `agentbay.config.yaml` cannot rebind them. It can switch every
+  env's `offline:` block on (`offline: true`), and can lower a cap but never raise the env's `limits`.
 - User modes may put roles only in their own envs (`envs/`) and the framework envs named in
   `bay/model.py` `USER_FRAMEWORK_ENVS`.
 - Code steps (`run:`) run in the coordinator's env for that feature; `bay lint` warns when a store-reading

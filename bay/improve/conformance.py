@@ -293,7 +293,7 @@ def vocabulary(kit: Path, rule: dict) -> list[dict]:
     k = _kit(kit)
     terms = rule.get("terms") or {}
     files: list[Path] = []
-    for kind in ("Mode", "Role", "Agent", "Environment", "Connector"):
+    for kind in ("Mode", "Role", "Environment", "Connector"):
         for d in k.docs[kind].values():
             files.append(d.path)
             if kind == "Mode":

@@ -208,14 +208,14 @@ def test_front_matter_parser():
         raise AssertionError(f"accepted: {bad!r}")
 
 
-SLICES_BUILT = 3   # step-1 slices landed on this branch (HANDOFF.md)
+SLICES_BUILT = {1, 2, 3, 7}   # step-1 slices (some or all of them) landed on this branch (HANDOFF.md)
 
 
 def test_proposal_0006_declares_its_crossings():
     t = proposal.load_touches(KIT / "docs/proposals/0006-component-contracts-and-content-types.md")
     paths = {e["path"] for e in t}
     assert {"bay/boundary.py", "bay/proposal.py", "framework/components.yaml"} <= paths
-    assert all(e.get("planned") for e in t if e.get("slice", 1) > SLICES_BUILT)   # later slices are not built yet
+    assert all(e.get("planned") for e in t if e.get("slice", 1) not in SLICES_BUILT)   # other slices are not built yet
 
 
 def test_shipped_component_map_is_valid_and_lint_checks_it():

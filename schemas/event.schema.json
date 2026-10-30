@@ -58,7 +58,8 @@
         "coordinator",
         "cli",
         "dispatcher",
-        "guard"
+        "guard",
+        "plan"
       ]
     },
     "summary": {

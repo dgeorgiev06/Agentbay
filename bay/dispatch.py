@@ -87,6 +87,8 @@ class Dispatcher:
         if step.kind == "review":
             self._accept_review(state, feat, step, output, base)
         else:
+            if step.kind == "role" and step.resolved is not None and step.resolved.runtime != "claude-code-main":
+                self._require_plan(call_id, step, output)
             if step.out:
                 sch = model.type_schema(mode.dirs or mode.path, step.out, f"{feat.mode}.{feat.name}", [])
                 errs = model.schema_errors(output, sch)
@@ -104,6 +106,20 @@ class Dispatcher:
             state["output"] = self._endpoint_output(feat, state)
             return self._finish(state, mode, feat)
         return self._advance(mode, feat, state)
+
+    def _require_plan(self, call_id: str, step, output) -> None:
+        """A subagent's result is accepted only when its run recorded an outcome (`bay plan`). The run is found by
+        the coordinator's dispatch record for this call and step, or by the taskId in the result block."""
+        evs = ledger.read(self.project)
+        tids = {e.get("taskId") for e in evs if e.get("type") in ("agent.dispatch", "spawned")
+                and e.get("callId") == call_id and e.get("step") == step.id}
+        if isinstance(output, dict) and isinstance(output.get("taskId"), str):
+            tids.add(output["taskId"])
+        if not tids & set(ledger.plans(evs)):
+            raise CallError(f"step {step.id}: the run recorded no outcome and to-do list, so its result is not "
+                            f"accepted. The agent runs `.agentbay/bay plan <taskId> '<json>'` first (the coordinator "
+                            f"logs the dispatch with `.agentbay/bay dispatched <taskId> --agent <subagent> "
+                            f"--call {call_id} --step {step.id}`); then submit again")
 
     def approve(self, call_id: str, approved: bool, reason: str = "", by: str = "user", quote: str = "",
                 sha: str = "") -> dict:

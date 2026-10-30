@@ -19,6 +19,36 @@ from bay.connect import Response  # noqa: E402
 NOW = datetime(2026, 10, 27, 12, 0, 0, tzinfo=timezone.utc)
 
 
+def _install_plan_recorder() -> None:
+    """A role step's result is accepted only when its run recorded an outcome (`bay plan`). Tests that play the
+    agent get that for free: when a submit is refused for the missing outcome, the coordinator's dispatch and the
+    agent's plan are recorded and the submit is retried. `dispatch.Dispatcher.submit_strict` is the real one
+    (tests of the refusal use it)."""
+    from bay import dispatch, ledger, protocol
+    if hasattr(dispatch.Dispatcher, "submit_strict"):
+        return
+    strict = dispatch.Dispatcher.submit
+
+    def submit(self, call_id, step_id, output, usage=None):
+        try:
+            return strict(self, call_id, step_id, output, usage)
+        except dispatch.CallError as e:
+            if "recorded no outcome" not in str(e):
+                raise
+        tid = protocol.new_task_id()
+        ledger.append(self.project, "agent.dispatch", tid, source="coordinator", taskId=tid, callId=call_id,
+                      step=step_id, agent="test-agent")
+        ledger.record_plan(self.project, tid, {"outcome": f"test run of {step_id}",
+                                               "todo": [{"text": "do the step", "serves": "the step's output"}]})
+        return strict(self, call_id, step_id, output, usage)
+
+    dispatch.Dispatcher.submit_strict = strict
+    dispatch.Dispatcher.submit = submit
+
+
+_install_plan_recorder()
+
+
 def clock():
     return NOW
 

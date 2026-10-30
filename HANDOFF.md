@@ -1,3 +1,18 @@
+# HANDOFF part 3: T-20261030-5110 (recorded with `bay plan`)
+
+Outcome: stage 1 of 0008 complete (all 8 items below). One commit per green item. Tests: 442 pass. Stopped at the tool-call budget after item 6.
+To-do (done: 1-6; open: 7, 8):
+1 done (1e6a513) `Dispatcher._agents` takes inputs from the dispatch event's data.inputs. 2 done (55e6ba3) `cites` {taskId, outcome, todo[]} in review.verdict/v1 items;
+review brief has `review.recordedPlans` (taskId -> step, outcome, todo). 3 done (652b66a) `ledger.agent_groups` (moved from cli), `plans` passed to Store.backlog, "### Agent runs" section in report.py.
+4 done (213a915) cause: `TranscriptSource.sessions` only scanned <root>/<folder>/*.jsonl; with root = the project folder nothing matched. Now also <root>/*.jsonl. Test in claude-transcripts tests.
+5 done (0916492) commit["subject"] scrubbed, 200 chars, in session.episode/v1; git connector docs and test updated.
+6 done (3bb7364) `bay review-record <taskId> '<review.verdict/v1>'` -> event `review.recorded` (ledger.REVIEW_TYPES, schemas/event.schema.json); improve's `ledger_verdicts` reads it (target "review-record");
+cannot target a callId, nothing in dispatch reads it; tests/test_review_record.py (incl. subagent guard denial).
+7 OPEN docs: README, docs/INTERFACES.md (event type, cites, review brief recordedPlans, commit subject, review-record, dispatched --input), docs/DESIGN.md, framework/modes/cos/playbook.md
+(cos runs `bay dispatched ... --input` before every agent dispatch; chat approvals carry `--sha`; out-of-framework review -> `bay review-record`), role brief template (subagents run `bay plan` first; reviewer may cite with `cites`).
+Also .agentbay/COORDINATOR.md is generated from the cos playbook/role files: edit the sources, then build. Grep `bay plan|bay dispatched|--sha` for where each already appears.
+8 OPEN cleanup: dead `when: approved` branch in Dispatcher._skip and its test; unused `approved` output of the forge.scaffold proposal endpoint.
+
 # HANDOFF part 2: T-20261030-4424 (recorded with `bay plan`)
 
 Outcome: slice 8 finished, slice-7a findings F-1..F-7 fixed with tests, improve blind spots closed.

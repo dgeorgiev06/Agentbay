@@ -80,7 +80,11 @@ logged.
 The run log (`events.jsonl` under `.agentbay/`) is append-only; state is a fold over it. The dispatcher writes `step.*` and
 `call.completed` (mode, endpoint, step, role, agent, env, cost, optional `durationMs`/`tokens`/`costUsd`),
 hooks write agent runs (`spawned`, `completed`, `failed`), the guard writes `permission.denied` (never the
-command), shims write `data.read`, and `bay note` writes notes (an instruction change, a decision). Notes
+command), shims write `data.read`, and `bay note` writes notes (an instruction change, a decision). Agent
+runs are recorded by the parties that know them: the Chief of Staff logs each dispatch (`bay dispatched`, with
+inputs) and any review it ran outside a review step (`bay review-record`); a subagent records its outcome and
+to-do list first (`bay plan`, items ticked with `--done`), the only `bay` command it may run. A reviewer's
+verdict can cite them (`cites`), and `bay status --agents` groups runs by role, mode, model and tier. Notes
 attach to a run, task or call and never create a run. Every value is pattern-scanned for secrets and redacted
 before it is written. `bay status` folds the run log into calls, steps, runs and cost.
 
@@ -93,8 +97,8 @@ cannot contain code once something runs it. Hard isolation needs an OS sandbox.
   use shim, run as `python3 -E <kit>/bay/use_shim.py`; when the kit is inside the project, even that prompts.
   Every other subagent command prompts you. The main thread is pre-approved only for
   `bay show|status|log|note|task|catalog`; `bay call` and `bay submit` run connector code and prompt, and
-  `bay approve` prompts too. With `approvals: { chat: true }` (off by default), `bay approve --via chat --quote`
-  passes a gate without a terminal; it is recorded as `user@chat-via-cos`. This trusts the main thread to
+  `bay approve` prompts too. With `approvals: { chat: true }` (off by default), `bay approve --via chat --quote --sha`
+  (the sha256 prefix of what you saw) passes a gate without a terminal; it is recorded as `user@chat-via-cos`. This trusts the main thread to
   relay your words, so it is weaker than a terminal. Secrets and logins never leave the terminal.
 - **What subagents cannot touch:** the guard hook runs on Bash and every file tool. It denies `.agentbay/`,
   `.claude/`, `.git`, `CLAUDE.md`, `.mcp.json`, `agentbay.config.yaml`, `.env*`, `.envrc`, `Makefile`,

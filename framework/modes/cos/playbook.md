@@ -23,6 +23,11 @@ write, spend and delete belongs to the endpoint you call.
      (mint the id with `.agentbay/bay task new`) and includes the plan's task,
      playbook, rules, definition of done and inputs. `runAs: main-thread playbook`
      -> do it yourself following that mode's coordinator playbook.
+     Before every Agent dispatch, log it: `.agentbay/bay dispatched <taskId> --agent <subagent_type>
+     --call <callId> --step <stepId> --model <m> --tier <t> --role <r> --mode <mode> --input <path or id>`
+     (repeat `--input` per input). `bay status` lists the run from this even with the spawn hook off, and a
+     subagent can record a plan only for a taskId logged here. The subagent's first action is `bay plan`
+     (outcome and to-do), then it ticks items with `--done <n>`; a role-step submit is refused without a plan.
      Then submit the JSON output with what the run cost, from the Agent tool result (total tokens,
      duration) when it reports them: `.agentbay/bay submit <callId> <stepId> '<json>' --usage
      '{"tokens": <n>, "costUsd": <usd>, "durationMs": <ms>}'` (omit fields you do not know). improve reads
@@ -32,8 +37,10 @@ write, spend and delete belongs to the endpoint you call.
      turned on approvals from chat, they may answer in chat instead; see "Gates from
      chat". Afterwards `.agentbay/bay show <callId>` gives you the next step.
    - `done` / `partial` / `blocked` / `failed`: report.
-4. **Record.** Steps and subagent spawns are logged automatically. Log your
-   decisions with `.agentbay/bay note <taskId|callId> "..."`.
+4. **Record.** Steps are logged automatically; log each dispatch with `bay dispatched` (step 3) and your
+   decisions with `.agentbay/bay note <taskId|callId> "..."`. A review you ran outside a framework review step
+   (an independent reviewer agent you started yourself) is recorded with
+   `.agentbay/bay review-record <taskId> '<review.verdict/v1 json>'`; improve reads it. It changes no call or gate.
 5. **Report.** Lead with the outcome, then open items (coverage gaps, budget
    stops, failed review items). No step-by-step recaps.
 
@@ -80,7 +87,8 @@ set it, and you never ask a subagent to.
   gate (this call or run, this gate text). A reply to another question, a general "go
   ahead", or anything you would have to interpret is not an approval: ask again.
 - Quote the message verbatim, whole, with nothing added or trimmed:
-  `.agentbay/bay approve <callId|runId> --via chat --quote "<their exact message>"`.
+  `.agentbay/bay approve <callId|runId> --via chat --quote "<their exact message>" --sha <8+ hex of the
+  sha256 of the content you showed them>`. The approval is refused if the file changed since.
   A rejection is the same with `--reject` (and `--reason` when they gave one).
 - Claude Code asks the user before the command runs; that prompt is part of the check.
 - The ledger records it as `user@chat-via-cos` with the quote, never as a terminal
@@ -89,7 +97,7 @@ set it, and you never ask a subagent to.
 
 ## Status questions
 For "what's going on", "what's running", "what did X do": run
-`.agentbay/bay status` (and `log` if needed) and answer from it. The ledger is
+`.agentbay/bay status` (`--agents` groups runs by role, mode, model and tier; `log` if needed) and answer from it. The ledger is
 the source of truth, not your memory of the conversation.
 
 ## Rules

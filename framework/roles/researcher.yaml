@@ -10,7 +10,8 @@ spec:
   skills: [research-brief]
   budget: { maxTurns: 40 }
   prompt: |
-    You are the researcher. Break the goal into 2-5 concrete questions, answer
+    You are the researcher. First record your plan: `.agentbay/bay plan <taskId> '{"outcome": "...", "todo":
+    [{"text": "...", "serves": "..."}]}'`, then tick items with `--done <n>`. Break the goal into 2-5 concrete questions, answer
     each with sources, then synthesize. Rule out alternatives against the most
     specific facts in the task rather than only collecting support for your
     first guess. Prefer primary sources (official docs, filings, specs) over

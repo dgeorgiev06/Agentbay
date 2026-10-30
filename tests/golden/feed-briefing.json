@@ -1,0 +1,518 @@
+{
+ "describe": {
+  "coverage": {
+   "complete": true,
+   "from": "2026-10-24T12:00:00Z",
+   "requestedFrom": null,
+   "to": "2026-10-27T12:00:00Z"
+  },
+  "fts": {
+   "available": true,
+   "example": "SELECT id, url, snippet FROM v_fts WHERE fts MATCH 'staking AND custody' ORDER BY rank LIMIT 20",
+   "indexes": [
+    "title",
+    "text",
+    "author"
+   ],
+   "view": "v_fts"
+  },
+  "functions": [
+   "->",
+   "->>",
+   "abs",
+   "avg",
+   "bm25",
+   "char",
+   "coalesce",
+   "count",
+   "cume_dist",
+   "date",
+   "datetime",
+   "dense_rank",
+   "first_value",
+   "glob",
+   "group_concat",
+   "hex",
+   "highlight",
+   "ifnull",
+   "iif",
+   "instr",
+   "json",
+   "json_array",
+   "json_array_length",
+   "json_extract",
+   "json_group_array",
+   "json_group_object",
+   "json_object",
+   "json_quote",
+   "json_type",
+   "json_valid",
+   "julianday",
+   "lag",
+   "last_value",
+   "lead",
+   "length",
+   "like",
+   "likelihood",
+   "lower",
+   "ltrim",
+   "match",
+   "max",
+   "min",
+   "nth_value",
+   "ntile",
+   "nullif",
+   "percent_rank",
+   "rank",
+   "replace",
+   "round",
+   "row_number",
+   "rtrim",
+   "snippet",
+   "strftime",
+   "substr",
+   "substring",
+   "sum",
+   "time",
+   "total",
+   "trim",
+   "typeof",
+   "unicode",
+   "unixepoch",
+   "upper"
+  ],
+  "limits": {
+   "bytes": 200000,
+   "cellChars": 4000,
+   "maxRows": 1000,
+   "rows": 200,
+   "timeMs": 2000
+  },
+  "views": [
+   {
+    "columns": [
+     {
+      "description": "item id <source>:<extId>; cite this",
+      "name": "id",
+      "type": "TEXT"
+     },
+     {
+      "description": "x, fake, gmail, ...",
+      "name": "source",
+      "type": "TEXT"
+     },
+     {
+      "description": "the source's own id",
+      "name": "extId",
+      "type": "TEXT"
+     },
+     {
+      "description": "post, email, ...",
+      "name": "kind",
+      "type": "TEXT"
+     },
+     {
+      "description": "handle or address",
+      "name": "author",
+      "type": "TEXT"
+     },
+     {
+      "description": "display name",
+      "name": "authorName",
+      "type": "TEXT"
+     },
+     {
+      "description": "subject or headline (null for posts)",
+      "name": "title",
+      "type": "TEXT"
+     },
+     {
+      "description": "body",
+      "name": "text",
+      "type": "TEXT"
+     },
+     {
+      "description": "link to the original (cite it as stored)",
+      "name": "url",
+      "type": "TEXT"
+     },
+     {
+      "description": "ISO-8601 UTC, sortable",
+      "name": "createdAt",
+      "type": "TEXT"
+     },
+     {
+      "description": "ISO-8601 UTC",
+      "name": "fetchedAt",
+      "type": "TEXT"
+     },
+     {
+      "description": "where it was fetched from (home, list:<id>)",
+      "name": "container",
+      "type": "TEXT"
+     },
+     {
+      "description": "array of containers/labels; filter with json_each(labels)",
+      "name": "labels",
+      "type": "JSON"
+     },
+     {
+      "description": "thread or conversation id",
+      "name": "threadId",
+      "type": "TEXT"
+     },
+     {
+      "description": "array of selector ids the item matches; filter with json_each(matched)",
+      "name": "matched",
+      "type": "JSON"
+     },
+     {
+      "description": "row id (= items_fts.rowid)",
+      "name": "rid",
+      "type": "INTEGER"
+     }
+    ],
+    "createdAt": {
+     "max": "2026-10-27T10:00:00Z",
+     "min": "2026-10-24T14:00:00Z"
+    },
+    "name": "v_items",
+    "rows": 7,
+    "samples": {
+     "author": [
+      "custody_news",
+      "solana_dev",
+      "vitalik",
+      "lido"
+     ],
+     "container": [
+      "home"
+     ],
+     "kind": [
+      "post"
+     ],
+     "matched": [
+      "home"
+     ],
+     "source": [
+      "fake"
+     ]
+    }
+   },
+   {
+    "columns": [
+     {
+      "description": "kind = 'post' only",
+      "name": "(all v_items columns)",
+      "type": ""
+     },
+     {
+      "description": "language code",
+      "name": "lang",
+      "type": "TEXT"
+     },
+     {
+      "description": "engagement counts",
+      "name": "metrics",
+      "type": "JSON"
+     },
+     {
+      "description": "metrics.like_count",
+      "name": "likes",
+      "type": "INTEGER"
+     },
+     {
+      "description": "metrics.retweet_count",
+      "name": "reposts",
+      "type": "INTEGER"
+     },
+     {
+      "description": "metrics.reply_count",
+      "name": "replies",
+      "type": "INTEGER"
+     }
+    ],
+    "createdAt": {
+     "max": "2026-10-27T10:00:00Z",
+     "min": "2026-10-24T14:00:00Z"
+    },
+    "name": "v_posts",
+    "rows": 7,
+    "samples": {
+     "author": [
+      "custody_news",
+      "solana_dev",
+      "vitalik",
+      "lido"
+     ],
+     "container": [
+      "home"
+     ],
+     "kind": [
+      "post"
+     ],
+     "matched": [
+      "home"
+     ],
+     "source": [
+      "fake"
+     ]
+    }
+   },
+   {
+    "columns": [
+     {
+      "description": "same scope as v_items",
+      "name": "(all v_items columns)",
+      "type": ""
+     },
+     {
+      "description": "full-text target: WHERE fts MATCH 'staking AND \"proof of stake\"'",
+      "name": "fts",
+      "type": "MATCH"
+     },
+     {
+      "description": "relevance (bm25); ORDER BY rank puts the best match first",
+      "name": "rank",
+      "type": "REAL"
+     },
+     {
+      "description": "the matching part of the text, matches in [brackets]",
+      "name": "snippet",
+      "type": "TEXT"
+     }
+    ],
+    "name": "v_fts",
+    "rows": 7
+   }
+  ]
+ },
+ "sql": {
+  "v_fts": {
+   "columns": [
+    "id",
+    "snippet"
+   ],
+   "rowCount": 5,
+   "rows": [
+    [
+     "fake:1005",
+     "Community [staking] module opens to new node operators; bond requirements reduced."
+    ],
+    [
+     "fake:1006",
+     "Thoughts on [staking] decentralization: operator diversity matters more than client count."
+    ],
+    [
+     "fake:1003",
+     "US custodian adds Solana [staking] for institutional clients with daily reward reporting."
+    ],
+    [
+     "fake:1008",
+     "Firedancer validator client now on 8% of mainnet stake. [Staking] yields unchanged."
+    ],
+    [
+     "fake:1007",
+     "Two more EU banks announce institutional [staking] pilots for ETH via regulated custodians."
+    ]
+   ],
+   "truncated": null
+  },
+  "v_items": {
+   "columns": [
+    "id",
+    "kind",
+    "author",
+    "createdAt",
+    "matched"
+   ],
+   "rowCount": 7,
+   "rows": [
+    [
+     "fake:1003",
+     "post",
+     "custody_news",
+     "2026-10-24T14:00:00Z",
+     "[\"home\"]"
+    ],
+    [
+     "fake:1004",
+     "post",
+     "solana_dev",
+     "2026-10-25T10:00:00Z",
+     "[\"home\"]"
+    ],
+    [
+     "fake:1005",
+     "post",
+     "lido",
+     "2026-10-26T06:00:00Z",
+     "[\"home\"]"
+    ],
+    [
+     "fake:1006",
+     "post",
+     "vitalik",
+     "2026-10-26T16:00:00Z",
+     "[\"home\"]"
+    ],
+    [
+     "fake:1007",
+     "post",
+     "custody_news",
+     "2026-10-27T03:00:00Z",
+     "[\"home\"]"
+    ],
+    [
+     "fake:1008",
+     "post",
+     "solana_dev",
+     "2026-10-27T07:00:00Z",
+     "[\"home\"]"
+    ],
+    [
+     "fake:1009",
+     "post",
+     "vitalik",
+     "2026-10-27T10:00:00Z",
+     "[\"home\"]"
+    ]
+   ],
+   "truncated": null
+  },
+  "v_posts": {
+   "columns": [
+    "id",
+    "likes",
+    "reposts",
+    "replies",
+    "lang"
+   ],
+   "rowCount": 7,
+   "rows": [
+    [
+     "fake:1003",
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     "fake:1004",
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     "fake:1005",
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     "fake:1006",
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     "fake:1007",
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     "fake:1008",
+     null,
+     null,
+     null,
+     null
+    ],
+    [
+     "fake:1009",
+     null,
+     null,
+     null,
+     null
+    ]
+   ],
+   "truncated": null
+  }
+ },
+ "status": {
+  "budget": {
+   "caps": {},
+   "costPerPostUsd": 0.005,
+   "month": "2026-10",
+   "posts": 7,
+   "usd": 0.0
+  },
+  "count": 7,
+  "coverage": {
+   "complete": true,
+   "from": "2026-10-24T12:00:00Z",
+   "requestedFrom": null,
+   "to": "2026-10-27T12:00:00Z"
+  },
+  "engine": "fts5",
+  "lastSync": "2026-10-27T12:00:00Z",
+  "selectors": {
+   "home": 7
+  },
+  "stale": false
+ },
+ "sync": {
+  "added": 7,
+  "billed": 7,
+  "budget": {
+   "caps": {
+    "maxItemsPerRun": 500,
+    "monthlyItems": 3000,
+    "spendUsd": 5
+   },
+   "costPerPostUsd": 0.005,
+   "month": "2026-10",
+   "posts": 7,
+   "usd": 0.0
+  },
+  "coverage": {
+   "complete": true,
+   "from": "2026-10-24T12:00:00Z",
+   "requestedFrom": "2026-10-24T12:00:00Z",
+   "to": "2026-10-27T12:00:00Z"
+  },
+  "deleted": 0,
+  "fetched": 7,
+  "kept": 7,
+  "outOfScope": 0,
+  "rematched": 0,
+  "sources": {
+   "fake": {
+    "added": 7,
+    "billed": 7,
+    "checked": 0,
+    "deleted": 0,
+    "fetched": 7,
+    "queries": [
+     {
+      "fetched": 7,
+      "kept": 7,
+      "mode": "since",
+      "native": {},
+      "selectors": [
+       "home"
+      ]
+     }
+    ],
+    "requests": 0,
+    "truncated": false
+   }
+  },
+  "spentUsd": 0.0,
+  "stopped": null
+ }
+}

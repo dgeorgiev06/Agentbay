@@ -87,7 +87,7 @@ touches:
 
 - Status: draft, for the owner's approval. Nothing is implemented.
 - Decided by the owner: keep every feature and every safety guarantee; `improve` becomes a plain mode; boundaries stay enforced and their misfires are fixed; workflows get one implementation and the Chief of Staff stays a mode.
-- No new features, with one exception: item 6 (every agent run records its outcome, its to-do list and its inputs) was added at the owner's request on 2026-10-29. It is the only addition. Items 1 to 5 each remove a duplicate way of doing one thing.
+- No new features, with two exceptions added at the owner's request: item 6 (every agent run records its outcome, its to-do list and its inputs; 2026-10-29) and the dead-code check in item 1 (2026-10-30). Otherwise, items 1 to 5 each remove a duplicate way of doing one thing.
 
 ## Problem
 

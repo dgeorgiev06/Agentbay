@@ -1,3 +1,50 @@
+# HANDOFF part 17: T-20261030-f10d (recorded with `bay plan`) - slice 5 part B built: `email` moved into `content-types/email/`
+
+Outcome: part B is done and green on feat/0008-stage4. `email` is a content type like `post`: its child table, FTS index, delete trigger,
+attachment-text move-out and fromMe/toMe/bulk come from `content-type.yaml` + `derive.py`; the old email code in `bay/sqlsandbox.py`,
+`bay/selector.py` and `corpus-store` is deleted (no second path). Not pushed. No proposal edited.
+
+## To-do and commits
+1. `tables` / `derived` / `deriveVersion` in `schemas/content-type.schema.json` and `bay/contenttypes.py`: d1c1551.
+2. `content-types/email/` (content-type.yaml, fields.schema.json = git mv of `schemas/data/email.v1.schema.json`, views.sql, derive.py, README, fixtures): d1c1551.
+3. Generic child tables, FTS, triggers, derive in `corpus_store.py` / `sqlsandbox.py`; `email_view_sql`, `MAIL_VIEWS`, `MAIL_FUNCTIONS`, `ATT_FTS*`,
+   `attachments_ddl`, `attachment_rows`, the `addr_key` SQL function and `selector.addr_key`/`GMAIL_DOMAINS` removed: d1c1551.
+4. `v_threads` kept working (see part C below): d1c1551.
+5. `deriveVersion` recompute (`derive_again`, test `test_the_child_table_and_the_derived_fields_come_from_the_type`): d1c1551.
+6. Tests: gmail uses `derive.addr_key` (via `ContentType.derive_module()`), `test_contract_versions` bumps `content-types/email` to v2, golden compares with the documented deltas: d1c1551.
+7. Docs: INTERFACES.md :220-232, :276, :293-297, :305-317 and DESIGN.md :135-136 reworded (B-11: 0 hits after the files were committed): d1c1551.
+8-10. Checks, build, clean: see Evidence. 11. This note.
+
+## What part C must know
+- `v_threads` (with `needsReply`) is the LAST statement but one of `content-types/email/views.sql` and the `views.v_threads` entry of
+  `content-type.yaml`, both marked "temporary home". Lift out = cut that statement and that entry together, put them in the mode's
+  `views.sql` / `views.yaml`. It reads only `temp.v_email` and the base tables. Its columns are now in the documented order
+  (`needsReply` after `lastBulk`; the old `SELECT t.*, needsReply` put it last), so `SELECT *` differs from before; named reads and `threads` output are identical.
+  `CorpusStore.threads` still names `v_threads`, `v_email`, `v_attachments` (core names to remove in C).
+- Store content: `settings.reads` (new, from `ResolvedMode.reads` via `Dispatcher._settings`) names the types a store is made for (decision (d)).
+  Absent `reads` = every type of the kit (tests that build a store without a mode). Hence mail-briefing has no `v_posts`, feed-briefing no mail view.
+  `bay/model.py` gained `ResolvedMode.reads`; `bay/dispatch.py` one line in `_settings`.
+- Order of views (`sqlsandbox.view_sql`): `v_items`, the types' non-full-text views (types by name), `v_fts`, the types' full-text views.
+  A view with `fullText: {over, table, example}` in content-type.yaml is a full-text view (FTS5 only); `includes.view` may be a view of the same type.
+- `items.derived` (JSON) is new; `store_meta` has `derive:<name>`. `SCHEMA_VERSION` stays 3 (the branch is unpushed; a v3 store made by part A has no
+  `derived` column and must be moved aside). Readers (the sandbox) do not recompute: after a `deriveVersion` change, `fromMe/toMe/bulk` read stale
+  until the next sync or prune.
+- `textChars` is now stored as given (`int(textChars or 0)`); before it was `len(text)` when text was present and textChars missing. All connectors set both.
+- `bay/improve/graph.py::_data_schemas` now also yields the content types' fields schemas (`schema:post/v1`, `schema:email/v1`), as before the move.
+- Not built (not in this task): `tests/test_core_names.py`; `bay/scaffold.py:128` wording.
+- Golden: `tests/golden/*.json` unchanged since a6c035e; `mail_deltas` in `tests/test_offline_golden.py` asserts the three decided deltas exactly
+  (no `v_posts` view and its sql read is an error, no `addr_key` function, new view order) and all other values equal, including fromMe/toMe/bulk/needsReply.
+
+## Evidence (last lines)
+- `python3 tests/run.py -q`: `487 passed, 0 failed`
+- `python3 tests/run.py -q -k offline_golden`: `2 passed, 0 failed`
+- `./bay.sh check`: `✓ lint clean` / `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)` (same four `!` warnings)
+- `./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`:
+  `boundary origin/main...HEAD: 37 changed paths (13 core, 2 docs, 12 extension, 10 other); 0 failing; B-11 docs: 0 hits` (after d1c1551, before this note)
+- `./bay.sh build --project .../scratchpad/s5b`: `built 6 modes for claude-code`; `./bay.sh clean --project .../scratchpad/s5b`: `clean`
+- Glob of scratch `s5b` after clean: `agentbay.config.yaml` only
+- `git diff --stat a6c035e HEAD -- tests/golden/`: empty
+
 # HANDOFF part 16: T-20261030-83c8 (recorded with `bay plan`) - slice 5 part A built: golden baseline, content-type loader, `post` moved
 
 Outcome: part A is done and green on feat/0008-stage4. The golden baseline was committed first, from the untouched code; the loader,

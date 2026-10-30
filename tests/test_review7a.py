@@ -139,7 +139,7 @@ def test_f5_lint_refuses_when_stale_on_a_non_code_step():
     k = kit_copy()
     try:
         edit_yaml(k / "framework/modes/forge/mode.yaml",
-                  lambda doc: next(s for s in doc["spec"]["workflows"]["create"] if s["id"] == "fill").update(when="stale > 1h"))
+                  lambda doc: next(s for s in doc["spec"]["features"]["create"]["steps"] if s["id"] == "fill").update(when="stale > 1h"))
         assert any("fill" in g and "stale" in g for g in gaps(k, k)), gaps(k, k)
     finally:
         cleanup(k)

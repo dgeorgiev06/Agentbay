@@ -151,7 +151,7 @@ def test_cli_build_and_clean_on_tmp_repo():
     r = subprocess.run(["sh", str(KIT / "bay.sh"), "--project", str(proj), "build"], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert (proj / ".agentbay/bay").exists()
-    r = subprocess.run([str(proj / ".agentbay/bay"), "ls"], capture_output=True, text=True)
+    r = subprocess.run([str(proj / ".agentbay/bay"), "catalog"], capture_output=True, text=True)
     assert r.returncode == 0 and "feed-briefing.digest" in r.stdout
     r = subprocess.run(["sh", str(KIT / "bay.sh"), "--project", str(proj), "clean"], capture_output=True, text=True)
     assert r.returncode == 0 and (proj / "CLAUDE.md").read_text() == "# mine\n"

@@ -1,6 +1,6 @@
 """Project workflows: user-configured stages that compose mode endpoints.
 
-A mode workflow (`mode.yaml spec.workflows`) is a list of steps inside one mode, written by the
+A feature's `steps` (`mode.yaml spec.features.<name>.steps`) are a list of steps inside one mode, written by the
 mode's author. A *project* workflow is a list of stages across modes, written by the user in
 `agentbay.config.yaml`:
 
@@ -19,7 +19,7 @@ mode's author. A *project* workflow is a list of stages across modes, written by
             gate: "send the digest?"
 
 Stage kinds are `call` (one `<mode>.<endpoint>`) and `gate` (approval). `with:`, `when:`,
-`$in.<field>` and `$steps.<id>.<field>` mean what they mean in a mode workflow, so there is one
+`$in.<field>` and `$steps.<id>.<field>` mean what they mean in a feature's steps, so there is one
 substitution language; `bay.dispatch.substitute` does the substituting for both.
 
 Composition stops here on purpose: a stage is not executed inside `bay call`. The dispatcher hands
@@ -120,7 +120,7 @@ def _optional(schema: dict) -> dict:
 
 
 def structure_problems(kit) -> list[str]:
-    """Checks that need no resolution, so `bay lint` can run them: stage ids, reference order, and
+    """Checks that need no resolution, so `bay check` can run them first: stage ids, reference order, and
     whether a workflow does anything at all."""
     out: list[str] = []
     for name, wf in load(kit).items():
@@ -163,7 +163,7 @@ def _dollars(template, path: str = "") -> list[tuple[str, str]]:
     return []
 
 def target_problems(kit, system) -> list[str]:
-    """Checks that need the resolved system, so `bay validate` runs them: every `call` target resolves
+    """Checks that need the resolved system, so `bay check` runs them: every `call` target resolves
     and every `with` matches that endpoint's input schema."""
     out: list[str] = []
     for name, wf in load(kit).items():

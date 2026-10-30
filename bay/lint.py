@@ -1,7 +1,7 @@
-"""`bay lint`: structure checks for modes, features, playbooks and rules.
+"""`bay check`, first half: structure checks for modes, features, playbooks and rules.
 
 Every problem is one line, `file:line: message`, naming the concept and the fix.
-`bay validate` runs lint and then full resolution (model.resolve).
+`bay check` runs lint and then full resolution (model.resolve).
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from . import boundary, checks, model, playbook as pbk, rules as rulesmod, workflows as wfmod
+from . import boundary, checks, config as cfgmod, model, playbook as pbk, rules as rulesmod, workflows as wfmod
 
 # Features whose review can never be turned off, with the settings they must use.
 MANDATORY_REVIEW = {"forge.extend": {"when": "always", "tier": "deep", "effort": "high"}}
@@ -51,7 +51,7 @@ def _entry_line(path: Path, section: str, name: str) -> int | None:
 
 
 def _lineage_where(md: model.Doc, section: str, name: str) -> tuple[Path, int]:
-    """The mode.yaml (own, else the nearest ancestor's) whose `section` (endpoints, workflows) declares `name`,
+    """The mode.yaml (own, else the nearest ancestor's) whose `section` (features) declares `name`,
     and that line: inherited parts are reported where they are written."""
     for d in md.dirs:
         i = _entry_line(d / "mode.yaml", section, name)
@@ -61,23 +61,23 @@ def _lineage_where(md: model.Doc, section: str, name: str) -> tuple[Path, int]:
 
 
 def _ep_where(md: model.Doc, ep_name: str) -> tuple[Path, int]:
-    return _lineage_where(md, "endpoints", ep_name)
+    return _lineage_where(md, "features", ep_name)
 
 
 def _ep_key_where(md: model.Doc, ep_name: str, key: str) -> tuple[Path, int]:
-    """The mode.yaml (own, else the nearest ancestor's) whose endpoint `ep_name` sets `key`, and that line;
-    falls back to where the endpoint is declared."""
-    rx_key = re.compile(rf"\b{re.escape(key)}:")
+    """The mode.yaml (own, else the nearest ancestor's) whose feature `ep_name` sets `key`, and that line;
+    falls back to where the feature is declared."""
+    rx_key = re.compile(rf"^ {{6}}{re.escape(key)}:")        # a key of the feature itself, not of a step
     for d in md.dirs:
-        start = _entry_line(d / "mode.yaml", "endpoints", ep_name)
+        start = _entry_line(d / "mode.yaml", "features", ep_name)
         if start is None:
             continue
         lines = (d / "mode.yaml").read_text(encoding="utf-8").splitlines()
         for i in range(start, len(lines)):
             ln = lines[i]
             if i > start and ln.strip() and len(ln) - len(ln.lstrip()) <= 4:
-                break                                    # the next endpoint (or section) starts
-            if rx_key.search(ln.split("#", 1)[0]):
+                break                                    # the next feature (or section) starts
+            if rx_key.search(ln):
                 return d / "mode.yaml", i + 1
     return _ep_where(md, ep_name)
 
@@ -92,11 +92,13 @@ def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[
     mfile, ep_line = _ep_where(md, ep_name)
     target = f"{md.name}.{ep_name}"
     dod_ids: list[str] = []
+    agentic = any("role" in st or "review" in st for st in ep["steps"]) or \
+        bool(ep.get("review") and ep["review"].get("when") == "always")
+    if agentic and not ep.get("playbook"):
+        out.append(f"{_where(mfile, ep_line)}: feature {target} runs an agent but has no `playbook`; add "
+                   f"`playbook: features/{ep_name}/playbook.md` (a feature with only code steps needs none)")
     for key in ("playbook", "rules"):
-        if not ep.get(key):
-            out.append(f"{_where(mfile, ep_line)}: feature {target} has no `{key}`; add "
-                       f"`{key}: features/{ep_name}/{'playbook.md' if key == 'playbook' else 'rules.yaml'}`")
-        elif not (md.dir / ep[key]).exists():
+        if ep.get(key) and not (md.dir / ep[key]).exists():
             out.append(f"{_where(mfile, ep_line)}: feature {target} {key} file {_file(md, ep[key], kit)} does not exist")
 
     if ep.get("playbook") and (md.dir / ep["playbook"]).exists():
@@ -127,11 +129,10 @@ def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[
 
 
 def _step_where(md: model.Doc, ep_name: str, sid: str | None) -> tuple[Path, int]:
-    """Where a workflow step of a feature is written (own mode.yaml, else the nearest ancestor's)."""
-    wf = (md.spec.get("endpoints") or {}).get(ep_name, {}).get("workflow")
+    """Where a step of a feature is written (own mode.yaml, else the nearest ancestor's)."""
     rx = re.compile(rf"\bid:\s*{re.escape(sid or '')}(?![\w-])")
     for d in md.dirs:
-        start = _entry_line(d / "mode.yaml", "workflows", wf) if wf and sid else None
+        start = _entry_line(d / "mode.yaml", "features", ep_name) if sid else None
         if start is None:
             continue
         lines = (d / "mode.yaml").read_text(encoding="utf-8").splitlines()
@@ -158,9 +159,9 @@ def lint_role_envs(md: model.Doc, kit: model.Kit) -> list[str]:
         return [f"{where}: `roles:` puts role {rn} in unknown env '{env}' (have: {have})"
                 for rn, env in (mapping or {}).items() if env and env not in envs]
     problems += [(None, None, m) for m in unknown(f"mode {md.name}", roles)]
-    for ep_name, ep in (md.spec.get("endpoints") or {}).items():
+    for ep_name, ep in (md.spec.get("features") or {}).items():
         problems += [(ep_name, None, m) for m in unknown(f"{md.name}.{ep_name}", ep.get("roles"))]
-        for st in (md.spec.get("workflows") or {}).get(ep.get("workflow"), []):
+        for st in ep.get("steps") or []:
             problems += [(ep_name, st.get("id"), m)
                          for m in unknown(f"{md.name}.{ep_name} step {st.get('id')}", st.get("roles"))]
     for ep_name, sid, msg in problems + model.role_env_problems(md):
@@ -196,21 +197,43 @@ def lint_env_bindings(kit: model.Kit) -> list[str]:
     return out
 
 
-def lint_substitutes(kit: model.Kit) -> list[str]:
-    """F-11: at most one env may substitute a given env. The offline switch maps each env to one substitute, so a
-    second one would be dropped from agentbay.config.example.yaml without a word."""
-    by: dict[str, list] = {}
-    for env in sorted(kit.docs["Environment"].values(), key=lambda e: e.name):
-        if env.spec.get("substitutes"):
-            by.setdefault(env.spec["substitutes"], []).append(env)
+def lint_offline(kit: model.Kit) -> list[str]:
+    """An env's `offline:` block rebinds capabilities the env already binds, to connectors, and nothing else: while
+    offline the env has no network and no secrets, so a block that lists a host or a secret is refused."""
     out = []
-    for target, envs in sorted(by.items()):
-        if len(envs) > 1:
-            first = envs[0]
-            line = _line_of(first.path, r"^\s*substitutes:")
-            out.append(f"{_where(first.path, line)}: envs "
-                       f"{', '.join(e.name for e in envs)} all declare `substitutes: {target}`; "
-                       f"an env may have one substitute only")
+    for env in sorted(kit.docs["Environment"].values(), key=lambda e: e.name):
+        off = env.spec.get("offline")
+        if not off:
+            continue
+        where = _where(env.path, _line_of(env.path, r"^\s+offline:"))
+        for key, what in (("network", "network host"), ("secrets", "secret")):
+            allow = (off.get(key) or {}).get("allow") or []
+            if allow:
+                out.append(f"{where}: env {env.name} is offline with {what} {', '.join(allow)}; an offline env has no "
+                           f"network and no secrets, so remove `{key}` from its `offline:` block")
+        own = (env.spec.get("bind") or {})
+        for iface in off["bind"]:
+            if iface not in own:
+                out.append(f"{where}: env {env.name} offline binds {iface}, which the env does not bind; capabilities "
+                           f"are bound in `bind:`, and `offline.bind` only replaces a connector")
+    return out
+
+
+def lint_config_limits(kit: model.Kit) -> list[str]:
+    """Limits live in the env; agentbay.config.yaml may only lower a cap. A mode setting above the limit of the env
+    where the mode's code steps run is refused."""
+    out = []
+    for name in sorted((kit.config.get("modes") or {})):
+        md = kit.docs["Mode"].get(name)
+        if md is None or model.STORE_IFACE not in md.spec.get("needs", []):
+            continue
+        env, _ = model.code_env(kit, md, model.STORE_IFACE, None)
+        if env is None:
+            continue
+        settings, _ = cfgmod.mode_settings(kit.config, name)
+        out += [f"{cfgmod.NAME} modes.{name}.{k}: {v} is above the {k} limit {lim} of env {env.name}; settings can "
+                f"only lower a cap (raise `limits:` in {model.rel(env.path)} to allow more)"
+                for k, v, lim in cfgmod.raised((env.spec.get("limits") or {}), settings)]
     return out
 
 
@@ -237,8 +260,8 @@ def lint_rules(path: Path, dod_ids: list[str], ep: dict, md: model.Doc) -> list[
         for k in doc:
             if k.lower().startswith("review"):
                 out.append(f"{_where(path, _line_of(path, rf'^{re.escape(k)}:'))}: review settings found in rules file; "
-                           f"configure review only in mode.yaml endpoints.<feature>.review")
-    errs = model.schema_errors(doc, model.schema("rules"))
+                           f"configure review only in mode.yaml features.<feature>.review")
+    errs =model.schema_errors(doc, model.schema("rules"))
     for e in errs:
         out.append(f"{_where(path, 1)}: rules schema: {e}")
     if errs or not isinstance(doc, dict):
@@ -284,18 +307,9 @@ def _kind_enum(md: model.Doc, ep: dict) -> list[str] | None:
 def lint_mode(md: model.Doc, kit: model.Kit) -> list[str]:
     out: list[str] = []
     s = md.spec
-    used = set()
-    for ep_name, ep in s["endpoints"].items():
-        used.add(ep["workflow"])
-        if ep["workflow"] not in s["workflows"]:
-            out.append(f"{_where(*_ep_where(md, ep_name))}: feature "
-                       f"{md.name}.{ep_name} uses unknown workflow '{ep['workflow']}'")
+    for ep_name, ep in s["features"].items():
         out += lint_feature(md, ep_name, ep, kit)
     out += lint_role_envs(md, kit)
-    for wf in s["workflows"]:
-        if wf not in used:
-            out.append(f"{_where(*_lineage_where(md, 'workflows', wf))}: workflow '{wf}' is not "
-                       f"used by any endpoint; remove it or add an endpoint")
     # modes name capabilities, never concrete tools or connectors
     text = md.path.read_text(encoding="utf-8")
     for i, ln in enumerate(text.splitlines(), 1):
@@ -317,27 +331,21 @@ def lint_mode(md: model.Doc, kit: model.Kit) -> list[str]:
     # features folder must not contain orphans
     fdir = md.dir / "features"
     if fdir.is_dir():
-        declared = {Path(ep.get("playbook", "")).parent.name for ep in s["endpoints"].values()}
+        declared = {Path(ep[k]).parent.name for ep in s["features"].values() for k in ("playbook", "rules") if ep.get(k)}
         for d in sorted(p for p in fdir.iterdir() if p.is_dir()):
             if d.name not in declared:
-                out.append(f"{model.rel(d)}: feature folder is not referenced by any endpoint in mode.yaml")
-            have = [n for n in ("playbook.md", "rules.yaml") if (d / n).exists()]
-            if md.parent and have:
-                continue        # an extending mode's folder holds only what it overrides; the rest is inherited
-            for need in ("playbook.md", "rules.yaml"):
-                if need not in have:
-                    out.append(f"{model.rel(d)}: feature folder is missing {need}")
+                out.append(f"{model.rel(d)}: feature folder is not referenced by any feature in mode.yaml")
     return out
 
 
 def lint_roles(kit: model.Kit) -> list[str]:
     out = []
-    for kind in ("Role", "Agent", "Environment", "Connector"):
+    for kind in ("Role", "Environment", "Connector"):
         for d in kit.docs[kind].values():
             raw = yaml.safe_load(d.path.read_text()) or {}
             if "review" in (raw.get("spec") or {}):
                 out.append(f"{_where(d.path, _line_of(d.path, r'^\s+review:'))}: review settings found in {'an' if kind[0] in 'AEIOU' else 'a'} {kind}; "
-                           f"configure review only in mode.yaml endpoints.<feature>.review")
+                           f"configure review only in mode.yaml features.<feature>.review")
     return out
 
 
@@ -441,13 +449,16 @@ def lint_contract_versions(kit: model.Kit) -> list[str]:
                        f"but declares no spec.reads (the item kinds its features read, e.g. `reads: [post/v1]`; "
                        f"known: {known})")
             continue
-        names = model.mode_envs(md)
-        names += [e.name for e in envs.values() if e.spec.get("substitutes") in names]
-        for en in dict.fromkeys(names):
+        variants: list[tuple[str, list[str]]] = []          # (env label, its source connectors), real then offline
+        for en in dict.fromkeys(model.mode_envs(md)):
             env = envs.get(en)
             if env is None:
                 continue                                    # unknown envs are lint_role_envs' problem
-            bound = model.connectors_of(model._bound(env, model.SOURCE_IFACE))
+            variants.append((en, model.connectors_of(model._bound(env, model.SOURCE_IFACE))))
+            off = (env.spec.get("offline") or {}).get("bind", {}).get(model.SOURCE_IFACE)
+            if off is not None:
+                variants.append((f"{en} (offline)", model.connectors_of(off)))
+        for en, bound in variants:
             if not bound:
                 continue
             made: dict[str, dict[int, list[str]]] = {}
@@ -549,23 +560,20 @@ def lint_extension_names(kit: model.Kit) -> list[str]:
     return out
 
 
-# Scheduled endpoints that a CLI command runs together with the steps they depend on.
-SCHEDULED_BY = {"improve.backlog": "`.agentbay/bay improve weekly` (it runs scan, audit and triage first; cron "
-                                   "recipe in docs/DESIGN.md)"}
-
-
 def warnings(kit: model.Kit) -> list[str]:
-    """Non-fatal findings: printed by `bay lint`, never fail it."""
+    """Non-fatal findings: printed by `bay check`, never fail it."""
     out = []
     for md in kit.docs["Mode"].values():
         if md.spec.get("abstract"):
             continue                    # never installed: its children carry the schedule
-        for ep_name, ep in md.spec["endpoints"].items():
+        for ep_name, ep in md.spec["features"].items():
             if ep.get("schedule"):
                 target = f"{md.name}.{ep_name}"
-                run = SCHEDULED_BY.get(target, f"`.agentbay/bay call {target} '{{}}'`")
+                readme = md.dir / "README.md"
+                how = (f"see the cron recipe in {os.path.relpath(readme, kit.root)}" if readme.exists() and re.search(r"^```cron\b", readme.read_text(encoding="utf-8"), re.M)
+                       else f"run `.agentbay/bay call {target} '{{}}'` from cron")
                 out.append(f"{_where(*_ep_key_where(md, ep_name, 'schedule'))}: {target} declares "
-                           f"schedule '{ep['schedule']}' but no runtime acts on it; run {run} from cron")
+                           f"schedule '{ep['schedule']}' but no runtime acts on it; {how}")
     out += split_store_warnings(kit)
     stores = [c.name for c in kit.docs["Connector"].values() if "items.store/v1" in (
         [c.spec["implements"]] if isinstance(c.spec["implements"], str) else c.spec["implements"])]
@@ -598,16 +606,16 @@ def split_store_warnings(kit: model.Kit) -> list[str]:
         if md.spec.get("abstract") or model.STORE_IFACE not in md.spec.get("needs", []):
             continue
         s = md.spec
-        maps = [(None, None, s.get("roles"))] + [(ep, None, e.get("roles")) for ep, e in (s.get("endpoints") or {}).items()]
-        maps += [(ep, st.get("id"), st.get("roles")) for ep, e in (s.get("endpoints") or {}).items()
-                 for st in (s.get("workflows") or {}).get(e.get("workflow"), [])]
+        maps = [(None, None, s.get("roles"))] + [(ep, None, e.get("roles")) for ep, e in (s.get("features") or {}).items()]
+        maps += [(ep, st.get("id"), st.get("roles")) for ep, e in (s.get("features") or {}).items()
+                 for st in e.get("steps") or []]
         for ep_name, sid, mapping in maps:
-            code, _ = model.code_env(kit, md, model.STORE_IFACE, (s.get("endpoints") or {}).get(ep_name))
+            code, _ = model.code_env(kit, md, model.STORE_IFACE, (s.get("features") or {}).get(ep_name))
             if code is None or not isinstance(mapping, dict):
                 continue
             want = [code.spec["bind"].get(k) for k in keys]
             for rn, env_name in mapping.items():
-                env = kit.get("Environment", kit.env_name(env_name) or "")
+                env = kit.get("Environment", env_name or "")
                 if env is None or env.name == code.name or model.STORE_IFACE not in env.spec.get("bind", {}):
                     continue
                 if [env.spec["bind"].get(k) for k in keys] != want:
@@ -636,9 +644,7 @@ def lint_config_schemas(kit: model.Kit) -> list[str]:
 
 def lint_self_description(kit: model.Kit) -> list[str]:
     """Each extension describes itself (0006 Part A): user modes and connectors have a README.md; every
-    extension that takes settings has a config.example.yaml whose settings its config schema accepts; and the
-    kit's agentbay.config.example.yaml is the one `bay config example` assembles from them."""
-    from . import config as cfgmod
+    extension that takes settings has a config.example.yaml whose settings its config schema accepts."""
     out: list[str] = []
     for kind in ("Mode", "Connector"):
         for d in sorted(kit.docs[kind].values(), key=lambda d: d.name):
@@ -666,9 +672,6 @@ def lint_self_description(kit: model.Kit) -> list[str]:
                 body = {k: v for k, v in body.items() if not (kind == "Mode" and k == "features")}
             errs = model.schema_errors(body, model.inline_refs(sch)) if sch is not None else []
             out += [f"{where}/{cfgmod.FRAGMENT}: {e}" for e in errs]
-    example = kit.root / cfgmod.EXAMPLE
-    if not example.exists() or example.read_text(encoding="utf-8") != cfgmod.example(kit):
-        out.append(f"{cfgmod.EXAMPLE} is stale; run bay config example")
     return out
 
 
@@ -695,7 +698,8 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
             out.append(p)
     out += lint_roles(kit)
     out += lint_env_bindings(kit)
-    out += lint_substitutes(kit)
+    out += lint_offline(kit)
+    out += lint_config_limits(kit)
     out += lint_adapters(kit)
     out += lint_connectors(kit)
     out += lint_contract_versions(kit)
@@ -707,7 +711,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     out += lint_config_schemas(kit)
     out += lint_self_description(kit)
     out += lint_skill_names(kit)
-    out += wfmod.structure_problems(kit)        # project workflows; targets are checked by `bay validate`
+    out += wfmod.structure_problems(kit)        # project workflows; targets are checked by `bay check`
     return list(dict.fromkeys(out))
 
 
@@ -771,7 +775,7 @@ def lint_skill_names(kit: model.Kit) -> list[str]:
         mapped = set((md.spec.get("roles") or {})) | ({md.spec["coordinator"]} if md.spec.get("coordinator") else set())
         known = set(chain) | {sk for rn in mapped for sk in role_skills.get(rn, [])}
         files = [next((d / "playbook.md" for d in md.dirs if (d / "playbook.md").exists()), None)]
-        for ep in (md.spec.get("endpoints") or {}).values():
+        for ep in (md.spec.get("features") or {}).values():
             if ep.get("playbook"):
                 files.append(next((d / ep["playbook"] for d in md.dirs if (d / ep["playbook"]).exists()), None))
         for f in dict.fromkeys(x for x in files if x is not None):
@@ -833,7 +837,7 @@ MANIFESTS = {"mode": "mode.yaml", "connector": "connector.yaml", "adapter": "ada
 
 def lint_case_and_manifests(kit: model.Kit) -> list[str]:
     """F-4: no two tracked paths differ only in case (one checkout of them would clobber the other on macOS or
-    Windows, and `bay boundary` treats them as one), and every extension folder carries its manifest."""
+    Windows, and `bay check --base` treats them as one), and every extension folder carries its manifest."""
     path = kit.root / "framework" / "components.yaml"
     r = subprocess.run(["git", "-C", str(kit.root), "ls-files", "-z"], capture_output=True)
     if not path.exists() or r.returncode:

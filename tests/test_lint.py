@@ -1,7 +1,9 @@
-"""bay lint: one test per failure mode, plus the shipped kit is clean."""
+"""bay check (lint half): one test per failure mode, plus the shipped kit is clean."""
+import shutil
+
 from helpers import KIT, edit_yaml, kit_copy, project
 
-from bay import lint
+from bay import lint, model
 
 
 def problems(k, p=None):
@@ -83,18 +85,30 @@ def test_rules_schema_and_unique_ids_and_refs():
     has(k, RULES, "unknown check 'vibes_ok'")
 
 
-def test_every_feature_has_both_files():
+def test_a_file_a_feature_names_must_exist():
     k = kit_copy()
     (k / RULES).unlink()
-    # an inherited endpoint is reported once, as the parent's, at the parent's mode.yaml line, normalized path
-    has(k, "modes/briefing/mode.yaml:21: feature briefing.digest rules file "
+    # an inherited feature is reported once, as the parent's, at the parent's mode.yaml line, normalized path
+    has(k, "modes/briefing/mode.yaml:22: feature briefing.digest rules file "
            "modes/briefing/features/digest/rules.yaml does not exist")
     assert not [x for x in problems(k) if "feed-briefing.digest rules file" in x]
-    has(k, "features/digest: feature folder is missing rules.yaml")
+
+
+def test_a_feature_that_runs_an_agent_needs_a_playbook_and_a_code_only_one_needs_no_files():
     k = kit_copy()
-    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["endpoints"]["ask"].pop("playbook"))
-    has(k, "feature briefing.ask has no `playbook`")
-    assert len([x for x in problems(k) if "ask has no `playbook`" in x]) == 1
+    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["features"]["ask"].pop("playbook"))
+    has(k, "feature briefing.ask runs an agent but has no `playbook`")
+    assert len([x for x in problems(k) if "ask runs an agent but has no `playbook`" in x]) == 1
+    # sync has code steps only: no playbook, no rules, no folder, and lint stays clean
+    k = kit_copy()
+    shutil.rmtree(k / "modes/briefing/features/sync")
+    edit_yaml(k / "modes/briefing/mode.yaml",
+              lambda d: [d["spec"]["features"]["sync"].pop(key) for key in ("playbook", "rules")])
+    assert problems(k) == [], problems(k)
+    s = model.resolve(model.Kit(k))
+    sync = s.modes["feed-briefing"].features["sync"]
+    assert sync.playbook_path is None and sync.dod == [] and sync.rules == []
+    assert all(st.kind == "code" for st in sync.steps)
 
 
 def test_review_settings_only_in_mode_yaml():
@@ -112,14 +126,14 @@ def test_review_settings_only_in_mode_yaml():
 def test_review_role_must_exist_and_be_in_the_mode():
     k = kit_copy()
     edit_yaml(k / "modes/briefing/mode.yaml",
-              lambda d: d["spec"]["endpoints"]["digest"]["review"].update({"role": "ghost"}))
+              lambda d: d["spec"]["features"]["digest"]["review"].update({"role": "ghost"}))
     has(k, "briefing.digest review role 'ghost' does not exist")
-    # once for the base and its children that inherit the endpoint (mail-briefing declares its own digest)
+    # once for the base and its children that inherit the feature (mail-briefing declares its own digest)
     assert len([x for x in problems(k) if "review role 'ghost' does not exist" in x
                 and "modes/briefing/mode.yaml" in x]) == 1
     k = kit_copy()
     edit_yaml(k / "modes/briefing/mode.yaml",
-              lambda d: d["spec"]["endpoints"]["digest"]["review"].update({"role": "researcher"}))
+              lambda d: d["spec"]["features"]["digest"]["review"].update({"role": "researcher"}))
     has(k, "briefing.digest review: role researcher is not in mode briefing `roles:`", "add `researcher: <env>`")
 
 
@@ -150,7 +164,7 @@ def test_role_env_errors_name_mode_feature_and_step():
     k = kit_copy()
     sub(k, base, "{ id: answer, role: analyst,", "{ id: answer, role: analyst, roles: { reviewer: workspace },")
     sub(k, base, "{ id: prune, run: items.store/v1.prune,", "{ id: prune, roles: { lead: workspace }, run: items.store/v1.prune,")
-    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["endpoints"]["ask"].update({"roles": {"builder": "workspace"}}))
+    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["features"]["ask"].update({"roles": {"builder": "workspace"}}))
     has(k, "briefing.ask step answer: `roles:` names reviewer, but this step runs role analyst")
     has(k, "briefing.prune step prune: `roles:` applies to role and review steps only")
     has(k, "briefing.ask: `roles:` gives role builder an env, but mode briefing does not list builder")
@@ -166,16 +180,36 @@ def test_role_env_errors_name_mode_feature_and_step():
     assert_gap(k, "feed-briefing.digest step themes: role analyst has no env")
 
 
-def test_a_user_space_role_or_agent_profile_is_an_error():
+def test_a_user_space_role_is_an_error():
     k = kit_copy()
     (k / "roles").mkdir()
     (k / "roles/summarizer.yaml").write_text((k / "framework/roles/analyst.yaml").read_text().replace("analyst", "summarizer"))
     has(k, "roles/summarizer.yaml: roles are framework-level; customize behaviour in your mode's playbooks/skills, or "
            "propose a new role via forge.extend")
+
+
+def test_an_offline_env_with_a_network_host_or_a_secret_is_refused():
     k = kit_copy()
-    (k / "agents").mkdir()
-    (k / "agents/other.yaml").write_text((k / "framework/agents/claude-code.yaml").read_text().replace("name: claude-code", "name: other"))
-    has(k, "agents/other.yaml: agent profiles are framework-level")
+    assert not [p for p in lint.lint_offline(model.Kit(k))]
+    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["offline"].update({"network": {"allow": ["api.x.com"]}}))
+    errs = lint.lint_offline(model.Kit(k))
+    assert len(errs) == 1 and "envs/local-feeds.yaml:" in errs[0] and "offline with network host api.x.com" in errs[0]
+    assert errs[0] in lint.run(k)
+    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["offline"].pop("network"))
+    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["offline"].update({"secrets": {"allow": ["X_CLIENT_ID"]}}))
+    assert any("offline with secret X_CLIENT_ID" in p for p in lint.lint_offline(model.Kit(k)))
+    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["offline"].pop("secrets"))
+    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["offline"]["bind"].update({"git.read/v1": "fake"}))
+    assert any("offline binds git.read/v1, which the env does not bind" in p for p in lint.lint_offline(model.Kit(k)))
+
+
+def test_a_config_that_raises_an_env_limit_is_refused_and_one_that_lowers_it_passes():
+    for cap, over, under in (("spendUsd", 6, 1), ("monthlyItems", 3001, 10), ("maxItemsPerRun", 501, 10)):
+        errs = lint.lint_config_limits(model.Kit(KIT, project({"modes": {"feed-briefing": {cap: over}}})))
+        assert len(errs) == 1 and f"modes.feed-briefing.{cap}: {over} is above the {cap} limit" in errs[0], errs
+        assert "env local-feeds" in errs[0] and errs[0] in lint.run(KIT, project({"modes": {"feed-briefing": {cap: over}}}))
+        assert not lint.lint_config_limits(model.Kit(KIT, project({"modes": {"feed-briefing": {cap: under}}})))
+    assert not lint.lint_config_limits(model.Kit(KIT, project()))
 
 
 def test_forge_extend_review_cannot_be_disabled_or_weakened():
@@ -183,7 +217,7 @@ def test_forge_extend_review_cannot_be_disabled_or_weakened():
         k = kit_copy()
 
         def f(d, change=change):
-            ep = d["spec"]["endpoints"]["extend"]
+            ep = d["spec"]["features"]["extend"]
             if change is None:
                 ep.pop("review")
             else:
@@ -222,24 +256,20 @@ def test_modes_must_not_name_connectors_or_tools():
     has(k, "mode names connector 'x-api'")
 
 
-def test_orphan_workflow_and_feature_folder():
-    k = kit_copy()
-    edit_yaml(k / "modes/feed-briefing/mode.yaml",
-              lambda d: d["spec"].setdefault("workflows", {}).update({"unused": [{"id": "x", "run": "items.store/v1.query"}]}))
-    has(k, "workflow 'unused' is not used by any endpoint")
+def test_orphan_feature_folder():
     k = kit_copy()
     (k / "modes/briefing/features/stray").mkdir()
-    has(k, "features/stray: feature folder is not referenced by any endpoint")
+    has(k, "features/stray: feature folder is not referenced by any feature")
 
 
-def test_validate_cli_runs_lint():
+def test_check_cli_runs_lint():
     import subprocess
     import sys
     k = kit_copy()
     sub(k, PB, "## Outputs\n", "## Results\n")
-    r = subprocess.run([sys.executable, str(k / "bay/cli.py"), "validate"], capture_output=True, text=True)
+    r = subprocess.run([sys.executable, str(k / "bay/cli.py"), "check"], capture_output=True, text=True)
     assert r.returncode == 1 and "missing required section '## Outputs'" in r.stdout
-    r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "validate"], capture_output=True, text=True)
+    r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "check"], capture_output=True, text=True)
     assert r.returncode == 0 and "✓ lint clean" in r.stdout and "resolve" in r.stdout
 
 
@@ -280,6 +310,9 @@ def test_schedule_is_a_warning_not_an_error():
     ws = lint.warnings(kit)
     assert any("feed-briefing.prune declares schedule 'daily' but no runtime acts on it" in w and "cron" in w for w in ws)
     assert problems(KIT) == []
+    # improve.backlog runs after the agent steps: the advisory points at the README recipe, not at a bare cron call
+    w = next(w for w in ws if "improve.backlog declares schedule" in w)
+    assert "framework/modes/improve/README.md" in w and "call improve.backlog" not in w
 
 
 def test_run_steps_use_versioned_capability_spelling():

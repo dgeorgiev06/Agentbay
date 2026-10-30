@@ -16,7 +16,7 @@ spec:
     workspace.write/v1:
       tools: [Edit, Write, Bash]
       # no test runner: an agent that can write code and run it escapes any hook; the user/coordinator runs tests
-      clis: [./bay.sh lint, ./bay.sh validate]
+      clis: [./bay.sh check]
     git.read/v1:
       tools: [Bash]
       clis: [git status, git diff, git log, git show]

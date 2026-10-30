@@ -14,7 +14,7 @@ def test_shipped_kit_resolves():
         "describe", "sql", "get", "thread", "threads", "facets", "search", "query", "status")]
     assert "briefing" not in s.modes and s.modes["feed-briefing"].extends == "briefing"    # abstract base
     assert "Edit" not in units["reviewer--feed-briefing"].tools
-    assert s.agent == "claude-code" and set(model.Kit(KIT).docs["Agent"]) == {"claude-code"}   # one profile
+    assert s.agent == "claude-code" and set(model.Kit(KIT).profiles()) == {"claude-code"}   # one profile
 
 
 def step(s, target, sid):
@@ -31,9 +31,9 @@ def test_tier_resolution_step_over_feature_over_role_mapped_by_the_profile():
     assert (rv.inference.tier, rv.inference.model, rv.inference.effort) == ("deep", "opus", "high")    # review block
     # a feature's tier beats the role's; a step's beats the feature's; review steps keep their review block's
     edit_yaml(k / "modes/briefing/mode.yaml", lambda d: (
-        d["spec"]["endpoints"]["ask"].update({"tier": "fast", "effort": "low"}),
-        d["spec"]["endpoints"]["digest"].update({"tier": "fast"}),
-        d["spec"]["workflows"]["digest"][2].update({"tier": "deep", "effort": "high"})))
+        d["spec"]["features"]["ask"].update({"tier": "fast", "effort": "low"}),
+        d["spec"]["features"]["digest"].update({"tier": "fast"}),
+        d["spec"]["features"]["digest"]["steps"][2].update({"tier": "deep", "effort": "high"})))
     s = model.resolve(model.Kit(k))
     ans = step(s, "feed-briefing.ask", "answer")
     assert (ans.inference.tier, ans.inference.model, ans.inference.effort) == ("fast", "haiku", "low")
@@ -46,7 +46,7 @@ def test_tier_resolution_step_over_feature_over_role_mapped_by_the_profile():
     assert step(s, "feed-briefing.prune", "review").inference.model == "sonnet"            # review block: balanced
     assert s.units()["analyst--feed-briefing"].inference.model == "opus"          # role default
     # the profile maps tiers: another model name for `deep` changes only the model
-    edit_yaml(k / "framework/agents/claude-code.yaml", lambda d: d["spec"]["tiers"].update({"deep": "opus-next"}))
+    edit_yaml(k / "adapters/claude-code/adapter.yaml", lambda d: d["profile"]["tiers"].update({"deep": "opus-next"}))
     s = model.resolve(model.Kit(k))
     assert step(s, "feed-briefing.digest", "themes").inference.model == "opus-next"
 
@@ -57,12 +57,12 @@ def test_env_tier_cap_names_mode_feature_step_role_env_and_tier():
     g = assert_gap(k, "feed-briefing.ask step answer: role analyst in env local-feeds runs at tier "
                       "'balanced' (from role analyst's default)", "allows: fast")
     assert "envs/local-feeds.yaml" in g
-    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["workflows"]["ask"][2].update({"tier": "deep"}))
+    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["features"]["ask"]["steps"][2].update({"tier": "deep"}))
     assert_gap(k, "feed-briefing.ask step answer", "tier 'deep' (from the step)", "env local-feeds")
-    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: (d["spec"]["workflows"]["ask"][2].pop("tier"),
-                                                         d["spec"]["endpoints"]["ask"].update({"tier": "deep"})))
+    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: (d["spec"]["features"]["ask"]["steps"][2].pop("tier"),
+                                                         d["spec"]["features"]["ask"].update({"tier": "deep"})))
     assert_gap(k, "feed-briefing.ask step answer", "tier 'deep' (from the feature)")
-    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["endpoints"]["ask"].update({"tier": "fast"}))
+    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["features"]["ask"].update({"tier": "fast"}))
     assert not any("feed-briefing.ask step answer" in x for x in gaps(k))
 
 
@@ -83,7 +83,7 @@ def test_effect_not_allowed_by_env():
 def test_effect_not_declared_by_endpoint():
     k = kit_copy()
     edit_yaml(k / "modes/feed-briefing/mode.yaml",
-              lambda d: d["spec"].setdefault("endpoints", {}).setdefault("sync", {}).update({"effects": ["network", "write"]}))
+              lambda d: d["spec"].setdefault("features", {}).setdefault("sync", {}).update({"effects": ["network", "write"]}))
     assert_gap(k, "feed-briefing.sync step fetch", "effect 'spend'", "not declared by the endpoint")
 
 
@@ -91,7 +91,7 @@ def test_unknown_role_env_and_agent_profile():
     from helpers import project
     k = kit_copy()
     edit_yaml(k / "modes/briefing/mode.yaml",
-              lambda d: d["spec"]["workflows"]["ask"][2].update({"role": "ghost"}))
+              lambda d: d["spec"]["features"]["ask"]["steps"][2].update({"role": "ghost"}))
     assert_gap(k, "feed-briefing.ask step answer", "unknown role 'ghost'")
     k = kit_copy()
     edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["roles"].update({"analyst": "nowhere"}))
@@ -125,8 +125,8 @@ def test_unknown_connector_and_wrong_interface():
 
 def test_coordinator_must_run_in_main_thread():
     k = kit_copy()
-    edit_yaml(k / "framework/agents/claude-code.yaml",
-              lambda d: d["spec"]["runtime"].update({"coordinator": "claude-code-subagent"}))
+    edit_yaml(k / "adapters/claude-code/adapter.yaml",
+              lambda d: d["profile"]["runtime"].update({"coordinator": "claude-code-subagent"}))
     assert_gap(k, "agent profile claude-code: coordinators run on runtime claude-code-subagent",
                "need claude-code-main")
 
@@ -164,7 +164,7 @@ def test_config_schema_rejects_unknown_settings():
 def test_forge_create_cannot_be_placed_in_framework_writing_env():
     k = kit_copy()
     edit_yaml(k / "framework/modes/forge/mode.yaml",
-              lambda d: d["spec"]["endpoints"]["create"].update({"roles": {"builder": "framework-dev"}}))
+              lambda d: d["spec"]["features"]["create"].update({"roles": {"builder": "framework-dev"}}))
     assert_gap(k, "forge.create step fill", "env framework-dev, which can write framework, bay, schemas",
                "only forge.extend may change the framework")
     s = model.resolve(model.Kit(KIT))  # shipped: create uses the mode's env, extend overrides it
@@ -193,18 +193,28 @@ def test_feature_review_block_resolves_to_existing_placeable_reviewer():
                 assert st.role == f.review["role"] and st.role in s.roles and st.env and st.resolved.mode == m.name
     k = kit_copy()
     edit_yaml(k / "modes/briefing/mode.yaml",
-              lambda d: d["spec"]["endpoints"]["digest"]["review"].update({"role": "nobody"}))
+              lambda d: d["spec"]["features"]["digest"]["review"].update({"role": "nobody"}))
     assert_gap(k, "feed-briefing.digest review", "unknown review role 'nobody'")
 
 
-def test_offline_env_switch_selects_a_declared_substitute_only():
-    from helpers import OFFLINE, project
-    s = model.resolve(model.Kit(KIT, project()))
-    assert s.modes["feed-briefing"].roles["analyst"] == "local-feeds-offline"
-    assert s.units()["analyst--feed-briefing"].env == "local-feeds-offline"
+def test_offline_switch_rebinds_the_source_and_closes_network_and_secrets():
+    from helpers import project
+    real = model.Kit(KIT, project(source="x-api")).get("Environment", "local-feeds").spec
+    assert real["bind"]["items.source/v1"] == ["x-api"] and real["network"]["allow"] == ["api.x.com"]
+    k = model.Kit(KIT, project())
+    off = k.get("Environment", "local-feeds").spec
+    assert off["bind"]["items.source/v1"] == ["fake"] and off["bind"]["items.store/v1"] == "corpus-store"
+    assert off["network"] == {"allow": []} and off["secrets"]["allow"] == []
+    assert k.get("Environment", "local-mail").spec["bind"]["items.source/v1"] == ["fake-mail"]
+    assert k.get("Environment", "workspace").spec == model.Kit(KIT, project(source="x-api")).get(
+        "Environment", "workspace").spec                      # an env without an `offline:` block is unchanged
+    s = model.resolve(k)
+    assert s.units()["analyst--feed-briefing"].env == "local-feeds"      # the env keeps its name
     assert s.modes["feed-briefing"].features["sync"].steps[0].connector == "corpus-store"
-    gs = gaps(KIT, project({"envs": {"local-feeds": "workspace"}}, source="x-api"))
-    assert any("env workspace does not declare `substitutes: local-feeds`" in g for g in gs), gs
-    gs = gaps(KIT, project({"envs": {"local-feeds": "nope"}}, source="x-api"))
-    assert any("unknown env 'nope'" in g for g in gs)
-    assert OFFLINE == {"local-feeds": "local-feeds-offline"}
+    from bay import config
+    for bad, word in (({"offline": "yes"}, "offline"), ({"envs": {"local-feeds": "workspace"}}, "envs")):
+        try:                                                  # not a boolean; the `envs:` map is gone
+            model.Kit(KIT, project(bad))
+            raise AssertionError("expected ConfigError")
+        except config.ConfigError as e:
+            assert word in str(e)

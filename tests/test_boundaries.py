@@ -125,7 +125,7 @@ def test_settings_have_no_wildcards():
             assert perm.startswith("Bash(.agentbay/bay ") and perm.split()[1].rstrip(":*)") in \
                 COORDINATOR_CMDS, perm
         # the invariant behind the list: every pre-approved command is read-only
-        assert not ({"call", "submit", "approve", "build", "clean", "secret", "improve", "reclaim"}
+        assert not ({"call", "submit", "approve", "build", "clean", "secret", "auth", "new", "check", "plan"}
                     & set(COORDINATOR_CMDS))
         assert not any("secret" in x or "build" in x or "roles/" in x for x in st["permissions"]["allow"])
     finally:
@@ -225,7 +225,7 @@ def test_path_normalization_and_symlinks():
 def test_writes_limited_to_env_fs_write_and_kit_is_off_limits():
     p = built()
     try:
-        # analyst's env (local-feeds-offline) writes only .agentbay/data/feeds, which is itself control plane
+        # analyst's env (local-feeds) writes only .agentbay/data/feeds, which is itself control plane
         assert tool(p, "analyst--feed-briefing", "Write", {"file_path": "notes.md", "content": "x"})[0] == "deny"
         assert tool(p, "builder--delivery", "Write", {"file_path": str(KIT / "bay/guard.py"), "content": "x"})[0] == "deny"
         assert tool(p, "builder--delivery", "Write", {"file_path": "/etc/x", "content": "x"})[0] == "deny"
@@ -413,7 +413,7 @@ def test_safety_rule_only_the_own_shim_is_auto_allowed():
         get("claude-code").build(system(k, k), k, k)
         gk = guard_for(k)
         for agent, cmd in (("builder--forge--framework-dev", "python3 tests/run.py"),
-                           ("builder--forge--framework-dev", "./bay.sh validate"), ("builder--forge--local-authoring", "./bay.sh lint")):
+                           ("builder--forge--framework-dev", "./bay.sh check"), ("builder--forge--local-authoring", "./bay.sh check")):
             assert decide(gk, agent, "Bash", {"command": cmd}) == "pass", cmd     # code never auto-allowed
         st = json.loads((p / ".claude/settings.json").read_text())
         assert not any(c in a for a in st["permissions"]["allow"] for c in ("bay call", "bay submit"))
@@ -541,7 +541,7 @@ def test_n5_fake_fixture_must_stay_inside_the_project():
     try:
         (p.parent / "outside.json").write_text("[]")
         try:
-            connect.instantiate(system(p), "local-feeds-offline", "fake", "items.source/v1", p)
+            connect.instantiate(system(p), "local-feeds", "fake", "items.source/v1", p)
             raise AssertionError("expected ConnectorError")
         except connect.ConnectorError as e:
             assert "must be a path inside the project" in str(e)
@@ -831,8 +831,11 @@ def test_bay_plan_is_the_only_bay_command_a_subagent_may_run():
         denied = (f".agentbay/bay plan {other} --done 1",                            # another agent's task
                   f".agentbay/bay plan T-20261030-0000 --done 1",                    # never dispatched
                   f".agentbay/bay plan {tid}", f".agentbay/bay plan {tid} --done 1 2", f".agentbay/bay plan {tid} --x",
-                  ".agentbay/bay status", ".agentbay/bay note T-1 hi", ".agentbay/bay log", ".agentbay/bay dispatched "
-                  f"{tid} --agent builder--delivery", ".agentbay/bay submit C-1 s '{}'", f".agentbay/bay plan {tid} --done 1; ls")
+                  ".agentbay/bay status", ".agentbay/bay note T-1 hi", ".agentbay/bay status --log", ".agentbay/bay note dispatch "
+                  f"{tid} --agent builder--delivery", ".agentbay/bay submit C-1 s '{}'", f".agentbay/bay plan {tid} --done 1; ls",
+                  f".agentbay/bay note review {tid} '{{}}'", ".agentbay/bay note task", ".agentbay/bay show reclaim R-1",
+                  ".agentbay/bay approve C-1", ".agentbay/bay approve F-12345678 --defer", ".agentbay/bay secret set X",
+                  ".agentbay/bay auth gmail-api", ".agentbay/bay check", ".agentbay/bay catalog --roles")
         for c in denied:
             assert tool(p, "builder--delivery", "Bash", {"command": c})[0] == "deny", c
         assert tool(p, "some-other-agent", "Bash", {"command": ok[1]})[0] == "deny"

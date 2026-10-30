@@ -20,10 +20,10 @@ write, spend and delete belongs to the endpoint you call.
 3. **Run steps.** The call returns a status:
    - `needs-agent`: run `next` as it says. `runAs: subagent_type=<name>` -> Agent
      tool with that `subagent_type` and `model`; the prompt STARTS with a task block
-     (mint the id with `.agentbay/bay task new`) and includes the plan's task,
+     (mint the id with `.agentbay/bay note task`) and includes the plan's task,
      playbook, rules, definition of done and inputs. `runAs: main-thread playbook`
      -> do it yourself following that mode's coordinator playbook.
-     Before every Agent dispatch, log it: `.agentbay/bay dispatched <taskId> --agent <subagent_type>
+     Before every Agent dispatch, log it: `.agentbay/bay note dispatch <taskId> --agent <subagent_type>
      --call <callId> --step <stepId> --model <m> --tier <t> --role <r> --mode <mode> --input <path or id>`
      (repeat `--input` per input). `bay status` lists the run from this even with the spawn hook off, and a
      subagent can record a plan only for a taskId logged here. The subagent's first action is `bay plan`
@@ -37,10 +37,10 @@ write, spend and delete belongs to the endpoint you call.
      turned on approvals from chat, they may answer in chat instead; see "Gates from
      chat". Afterwards `.agentbay/bay show <callId>` gives you the next step.
    - `done` / `partial` / `blocked` / `failed`: report.
-4. **Record.** Steps are logged automatically; log each dispatch with `bay dispatched` (step 3) and your
+4. **Record.** Steps are logged automatically; log each dispatch with `bay note dispatch` (step 3) and your
    decisions with `.agentbay/bay note <taskId|callId> "..."`. A review you ran outside a framework review step
    (an independent reviewer agent you started yourself) is recorded with
-   `.agentbay/bay review-record <taskId> '<review.verdict/v1 json>'`; improve reads it. It changes no call or gate.
+   `.agentbay/bay note review <taskId> '<review.verdict/v1 json>'`; improve reads it. It changes no call or gate.
 5. **Report.** Lead with the outcome, then open items (coverage gaps, budget
    stops, failed review items). No step-by-step recaps.
 
@@ -92,12 +92,12 @@ set it, and you never ask a subagent to.
   A rejection is the same with `--reject` (and `--reason` when they gave one).
 - Claude Code asks the user before the command runs; that prompt is part of the check.
 - The ledger records it as `user@chat-via-cos` with the quote, never as a terminal
-  approval. Never infer approval, and never relay one for a secret or a login:
-  `bay secret set` and `bay auth` stay in the user's terminal.
+  approval. Never infer approval, and never relay one for a secret, a login or an improve backlog item
+  (`bay approve <F-id>`): `bay secret set`, `bay auth` and backlog decisions stay in the user's terminal.
 
 ## Status questions
 For "what's going on", "what's running", "what did X do": run
-`.agentbay/bay status` (`--agents` groups runs by role, mode, model and tier; `log` if needed) and answer from it. The ledger is
+`.agentbay/bay status` (`--agents` groups runs by role, mode, model and tier; `--log` for the raw events) and answer from it. The ledger is
 the source of truth, not your memory of the conversation.
 
 ## Rules

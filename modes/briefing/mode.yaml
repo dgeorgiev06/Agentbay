@@ -6,60 +6,55 @@ metadata:
   description: Base mode for source briefings (posts, email, ...) - sync, digest, ask, prune over a local corpus store.
 spec:
   # Not installed or called itself: per-source modes `extends: briefing` and override what differs
-  # (purpose, constraints, configDefaults, types, workflows, playbooks, rules, review, roles and their envs).
+  # (purpose, constraints, configDefaults, types, steps, playbooks, rules, review, roles and their envs).
   abstract: true
   purpose: Keep me briefed on items from my sources; answer questions about them from the stored items only.
-  endpoints:
+  features:
     sync:
       description: Pull new items from every bound source into the corpus store (selectors, budget caps).
-      workflow: sync
       in: SyncReq
       effects: [network, spend, write]
       playbook: features/sync/playbook.md
       rules: features/sync/rules.yaml
       review: { role: reviewer, when: never }
+      steps:
+        - { id: fetch, run: items.store/v1.sync, with: { lookback: "$in.lookback|$config.lookback", maxItems: "$in.maxItems" } }
     digest:
       description: Themes across recent items, each grounded in stored items.
-      workflow: digest
       in: DigestReq
       out: Digest
       effects: [read, network, spend, write]
       playbook: features/digest/playbook.md
       rules: features/digest/rules.yaml
       review: { role: reviewer, when: always, tier: deep, effort: high }
+      steps:
+        - { id: refresh, run: items.store/v1.sync, when: "stale > 2h" }      # code step, no agent
+        - { id: gather, run: items.store/v1.query, with: { since: "$in.since|$config.lookback", until: "$in.until", author: "$in.author", selector: "$in.selector", limit: 500 } }
+        - { id: themes, role: analyst, out: Digest, task: "Write the digest from the gathered items." }
     ask:
       description: Answer a question from stored items via read-only SQL, with citations.
-      workflow: ask
       in: Question
       out: Answer
       effects: [read, network, spend, write]
       playbook: features/ask/playbook.md
       rules: features/ask/rules.yaml
       review: { role: reviewer, when: never }
+      steps:
+        - { id: refresh, run: items.store/v1.sync, when: "stale > 2h" }
+        - { id: context, run: items.store/v1.status, with: { since: "$in.since|$config.lookback" } }
+        - { id: answer, role: analyst, out: Answer, task: "Answer the question from the stored items only: narrow with SQL, read full items with get, cite item ids." }
     prune:
       description: Drop items past retention, items deleted at the source and items no selector matches.
-      workflow: prune
       in: PruneReq
       effects: [read, write, delete]
       playbook: features/prune/playbook.md
       rules: features/prune/rules.yaml
       review: { role: reviewer, when: always, tier: balanced, effort: medium }
       schedule: daily
+      steps:
+        - { id: prune, run: items.store/v1.prune, with: { olderThan: "$in.olderThan|$config.retention" } }
   coordinator: lead
   roles: { lead: local-feeds, analyst: local-feeds, reviewer: local-feeds }   # role -> env
-  workflows:
-    sync:
-      - { id: fetch, run: items.store/v1.sync, with: { lookback: "$in.lookback|$config.lookback", maxItems: "$in.maxItems" } }
-    digest:
-      - { id: refresh, run: items.store/v1.sync, when: "stale > 2h" }      # code step, no agent
-      - { id: gather, run: items.store/v1.query, with: { since: "$in.since|$config.lookback", until: "$in.until", author: "$in.author", selector: "$in.selector", limit: 500 } }
-      - { id: themes, role: analyst, out: Digest, task: "Write the digest from the gathered items." }
-    ask:
-      - { id: refresh, run: items.store/v1.sync, when: "stale > 2h" }
-      - { id: context, run: items.store/v1.status, with: { since: "$in.since|$config.lookback" } }
-      - { id: answer, role: analyst, out: Answer, task: "Answer the question from the stored items only: narrow with SQL, read full items with get, cite item ids." }
-    prune:
-      - { id: prune, run: items.store/v1.prune, with: { olderThan: "$in.olderThan|$config.retention" } }
   constraints:
     lookbackMax: 30d
     spendUsd: 5          # dollar cap enforced by the dispatcher (C-6 spend exemption for sync)

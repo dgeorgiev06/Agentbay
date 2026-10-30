@@ -25,4 +25,4 @@ Find slop, unused implementation, inefficiency, complexity, oversized or stale d
 
 ## Failure handling
 - A file cannot be parsed (syntax error, binary): it is skipped by the detectors that need to parse it.
-- conformance.yaml is invalid: `bay lint` reports it; fix it before auditing.
+- conformance.yaml is invalid: `bay check` reports it; fix it before auditing.

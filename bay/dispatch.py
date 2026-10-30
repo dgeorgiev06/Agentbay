@@ -1,6 +1,6 @@
 """`bay call <mode>.<endpoint> '<json>'`: the only way to invoke an endpoint.
 
-A call walks the feature's workflow:
+A call walks the feature's steps:
   code step   -> run the bound connector here (connectors never reach agents)
   role step   -> stop and return a step plan; the coordinator runs the role and
                  resumes with `bay submit <callId> <stepId> '<json>'`
@@ -133,7 +133,7 @@ class Dispatcher:
         if not tids & set(ledger.plans(evs)):
             raise CallError(f"step {step.id}: the run recorded no outcome and to-do list, so its result is not "
                             f"accepted. The agent runs `.agentbay/bay plan <taskId> '<json>'` first (the coordinator "
-                            f"logs the dispatch with `.agentbay/bay dispatched <taskId> --agent <subagent> "
+                            f"logs the dispatch with `.agentbay/bay note dispatch <taskId> --agent <subagent> "
                             f"--call {call_id} --step {step.id}`); then submit again")
 
     def approve(self, call_id: str, approved: bool, reason: str = "", by: str = "user", quote: str = "",
@@ -267,8 +267,8 @@ class Dispatcher:
         return {**self._settings(m), "sources": sorted({d.spec["source"] for d in docs if d and d.spec.get("source")})}
 
     def run_capability(self, mode_name: str, run: str, args: dict) -> dict:
-        """Run one connector endpoint of a mode's capability outside any workflow, in the env its code steps use.
-        CLI only (e.g. `bay improve decide`); there is no agent path to it."""
+        """Run one connector endpoint of a mode's capability outside any feature, in the env its code steps use.
+        CLI only (e.g. `bay approve <F-id>`); there is no agent path to it."""
         if mode_name not in self.sys.modes:
             raise CallError(f"unknown mode '{mode_name}'")
         m = self.sys.modes[mode_name]
@@ -435,10 +435,10 @@ class Dispatcher:
             raise CallError(f"{feat.mode}.{feat.name} step {step.id}: effects {bad} not allowed")
         args = substitute(step.with_, state["input"], state["steps"], mode.config)
         iface, ep = step.run.rsplit(".", 1)
-        caps = cfgmod.caps(mode.constraints, env.spec.get("limits", {}), mode.config)
         self._ledger("step.started", base, summary=step.run, data={"inputs": inputs_record(args, self.project)})
         t0 = time.monotonic()
         try:
+            caps = cfgmod.caps(mode.constraints, env.spec.get("limits", {}), mode.config)
             out = self._invoke(step.env, step.connector, iface, ep, args, settings=self._settings(mode), caps=caps)
         except Exception as e:  # report, never leak
             msg = vault.redact(str(e))
@@ -533,7 +533,7 @@ class Dispatcher:
         state["review"] = {"failed": [i["id"] for i in failed], "items": len(got)}
         if failed:
             state["status"] = "partial"
-            state["halt"] = True   # a failed must/blocker stops the workflow (e.g. no release after a failed review)
+            state["halt"] = True   # a failed must/blocker stops the feature (e.g. no release after a failed review)
         self._ledger("step.completed", base, summary=f"review: {len(failed)} failed must/blocker",
                      data={"failed": [i["id"] for i in failed]})
 

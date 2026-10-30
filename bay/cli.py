@@ -1,32 +1,37 @@
 #!/usr/bin/env python3
 """agentbay control plane.
 
-  validate               lint + resolve every mode endpoint (fails with every gap)
-  lint                   structure checks: playbooks, DoD ids, rules, review, role envs
-  boundary --base <ref>  check a change against framework/components.yaml and a proposal's touches:
-  build | clean          compile modes/roles into a runtime (claude-code) / remove it
-  ls                     modes, endpoints and roles
-  catalog [<name>]       the registry (.agentbay/catalog.json): endpoints with schemas, workflows
+  check [--base <ref>]   lint + resolve every mode endpoint (fails with every gap); with --base, also check the
+                         change against framework/components.yaml and a proposal's touches: (--proposal, --docs)
+  build | clean          compile modes/roles into a runtime (claude-code) / remove it; build writes a minimal
+                         agentbay.config.yaml when the project has none
+  config                 every agentbay.config.yaml setting, with type, default and description (from the schemas)
+  catalog [<name>]       the registry (.agentbay/catalog.json): endpoints with schemas, workflows;
+                         --roles lists the role units instead (no build needed)
   describe <mode|role>   resolved definition as JSON
 
   call <mode>.<endpoint> '<json>'      run an endpoint (the only way to invoke one)
   submit <callId> <stepId> '<json>'    hand back an agentic step's output
   show <callId>                        current state of a call (result or the step it waits on)
+  show reclaim <runId>                 mark a stuck run as reclaimed
   approve <callId|runId> [--reject]    pass an approval gate of a call, or of a workflow run (W-...)
                                        (you, in a terminal; never an agent)
           [--via chat --quote "<msg>"] from chat, relayed by the Chief of Staff, when approvals.chat is on
+  approve <F-id> [--defer|--wontfix]   decide an improve backlog item (a terminal only; never from chat)
   (agents read data only through .agentbay/roles/<role>--<mode>/use, generated per role unit by build)
 
-  mode new <name> | feature new <name> --mode <m>
-  connector new <name> --implements <iface> | env new <name>     scaffolds (forge templates)
-  improve decide <id> approve|defer|wontfix   record your decision on a backlog item (approve: terminal only)
-  improve weekly [--since 7d]                 scan + audit + triage + backlog; cron it weekly
+  new mode <name> | new feature <name> --mode <m>
+  new connector <name> --implements <iface> | new env <name>     scaffolds (forge templates)
   secret set <NAME>      store a secret in the keychain (value read from stdin, never echoed)
   auth <connector>       run a connector's declared login (e.g. a browser sign-in that stores its token);
                          interactive terminal only
 
-  task new | status | log | note | reclaim     ledger
-  note <ref> "text" --instruction              record a mid-run instruction change (read by improve.scan)
+  status [--agents|--log]                      calls, steps and agent runs; the raw ledger
+  note <ref> "text" [--instruction]            record a note (--instruction: a mid-run instruction change)
+  note task                                    print a fresh taskId
+  note dispatch <taskId> --agent <name> ...    the coordinator's dispatch log
+  note review <taskId> '<review.verdict/v1>'   a review that ran outside a framework step
+  plan <taskId> '<json>' | --done <n>          a dispatched agent's outcome and to-do (the only command subagents run)
 """
 from __future__ import annotations
 
@@ -93,9 +98,24 @@ def cmd_lint(args) -> int:
     return 0
 
 
-def cmd_validate(args):
+def cmd_check(args):
+    """`bay check`: lint, then resolve everything; with --base, also the change's boundary check."""
+    if (args.proposal or args.docs or args.json) and not args.base:
+        _die("✗ --proposal, --docs and --json belong to the boundary check: pass --base <ref> too")
+    if args.json:                                   # stdout is the JSON report only; the lint lines go to stderr
+        import contextlib
+        with contextlib.redirect_stdout(sys.stderr):
+            bad = _validate(args)
+    else:
+        bad = _validate(args)
+    if args.base:
+        bad = cmd_boundary(args) or bad
+    sys.exit(1 if bad else 0)
+
+
+def _validate(args) -> int:
     if cmd_lint(args):
-        sys.exit(1)
+        return 1
     s = _system(args)
     from bay import workflows as wfmod
     wf_problems = wfmod.target_problems(s.kit, s)
@@ -105,22 +125,25 @@ def cmd_validate(args):
         print(f"! {w}")
     if wf_problems:
         print(f"{len(wf_problems)} workflow problem(s)")
-        sys.exit(1)
+        return 1
     n_ep = sum(len(m.features) for m in s.modes.values())
-    print(f"✓ {len(s.modes)} modes, {n_ep} endpoints, {len(s.roles)} roles ({len(s.units())} role units), "
+    print(f"✓ {len(s.modes)} modes, {n_ep} features, {len(s.roles)} roles ({len(s.units())} role units), "
           f"{len(s.kit.docs['Environment'])} envs, {len(s.kit.docs['Connector'])} connectors resolve "
           f"(agent profile {s.agent})")
     for name, wf in wfmod.load(s.kit).items():
         eff = ", ".join(wfmod.effects(s, wf)) or "none"
         print(f"✓ workflow {name}: {len(wf.stages)} stages, effects {eff}")
+    return 0
 
 
 def cmd_build(args):
-    from bay import adapter
+    from bay import adapter, config
     s = _system(args)
     rep = adapter.get(args.runtime).build(s, args.project, KIT)
     adapter.discover(problems=rep.warnings)
     print(f"built {len(s.modes)} modes for {rep.runtime} → {args.project}")
+    if config.write_minimal(args.project):
+        print(f"  + {config.NAME}")
     for f in rep.written:
         print(f"  + {f}")
     for f in rep.removed:
@@ -140,13 +163,7 @@ def cmd_clean(args):
     print("clean")
 
 
-def cmd_ls(args):
-    s = _system(args)
-    for m in s.modes.values():
-        print(f"{m.name} ({m.root}) - {m.purpose}")
-        for f in m.features.values():
-            rv = f" review={f.review['role']}" if f.review else ""
-            print(f"  {m.name}.{f.name:<10} effects={','.join(f.effects)}{rv}")
+def _print_units(s) -> None:
     print(f"\nrole units (<role>--<mode>[--<env>], agent profile {s.agent}):")
     for name, u in sorted(s.units().items()):
         run = "main thread" if u.runtime == "claude-code-main" else f"tier={u.inference.tier} model={u.inference.model}"
@@ -154,8 +171,14 @@ def cmd_ls(args):
 
 
 def cmd_catalog(args):
-    """The registry, as the coordinator reads it: a pure read of .agentbay/catalog.json (pre-approved)."""
+    """The registry, as the coordinator reads it: a pure read of .agentbay/catalog.json (pre-approved).
+    `--roles` also resolves the kit and lists the role units."""
     from bay import registry
+    if args.roles:
+        if args.name or args.json:
+            _die("✗ --roles lists the role units: pass no name and no --json")
+        _print_units(_system(args))
+        return
     try:
         cat = registry.load(args.project)
     except FileNotFoundError as e:
@@ -291,6 +314,10 @@ def _confirm(by: str) -> None:
 
 def cmd_approve(args):
     """Approval gates are passed only by the owner: at a terminal, or from chat when they turned that on."""
+    if args.call.startswith("F-"):
+        return _decide_finding(args)
+    if args.defer or args.wontfix:
+        _die("✗ --defer and --wontfix decide an improve backlog item (F-...), not a gate")
     by, quote = _approval_channel(args)
     from bay import dispatch
     if args.call.startswith("W-"):
@@ -336,11 +363,6 @@ def _approve_workflow(args, by: str, quote: str):
     _run(lambda: d.approve_run(args.call, not args.reject, by=by, reason=args.reason or "", quote=quote))
 
 
-def cmd_show(args):
-    d = _dispatcher(args)
-    _run(lambda: d.show(args.call))
-
-
 def cmd_submit(args):
     d = _dispatcher(args)
     usage = _json_arg(args.usage) if args.usage else None
@@ -364,62 +386,38 @@ def role_use_main(unit: str, project: Path, argv: list[str]) -> None:
     _run(lambda: d.use(unit, target, _json_arg(inp)))
 
 
-# ------------------------------------------------------------------ improve
-WEEKLY = ("improve.scan", "improve.audit", "improve.triage")      # then improve.backlog, once nothing is pending
-
-
-def cmd_improve_decide(args):
-    """Human decisions on backlog items. approve needs an interactive terminal (never an agent)."""
+def _decide_finding(args):
+    """`bay approve <F-id>`: the owner's decision on an improve backlog item. Approving needs an interactive terminal
+    (never an agent, never chat); `--defer` and `--wontfix` record the other two decisions."""
+    if args.reject or args.via == "chat" or args.quote or args.sha:
+        _die("✗ a backlog item is decided at a terminal: `bay approve <F-id>` approves it, `--defer` or `--wontfix` "
+             "decide otherwise (--reject, --via, --quote and --sha are for gates)")
+    if args.defer and args.wontfix:
+        _die("✗ pass --defer or --wontfix, not both")
+    decision = "defer" if args.defer else "wontfix" if args.wontfix else "approve"
     tty = sys.stdin.isatty()
-    if args.decision == "approve":
+    if decision == "approve":
         if not tty:
-            _die("✗ bay improve decide ... approve needs an interactive terminal (stdin is not a TTY). Approving a "
+            _die(f"✗ bay approve {args.call} needs an interactive terminal (stdin is not a TTY). Approving a "
                  "fix is your decision, not an agent's: run it yourself in a terminal.")
-        if input(f"APPROVE {args.id} for implementation on demand? Type yes to confirm: ").strip().lower() != "yes":
+        if input(f"APPROVE {args.call} for implementation on demand? Type yes to confirm: ").strip().lower() != "yes":
             _die("not confirmed; nothing changed")
     d = _dispatcher(args)
     by = "user@tty" if tty else "cli"
     _run(lambda: d.run_capability("improve", "improve.findings/v1.decide",
-                                  {"id": args.id, "decision": args.decision, "by": by,
-                                   **({"note": args.note} if args.note else {})}))
-    ledger.append(args.project, "note", args.id, source="cli", summary=f"improve decide {args.id} {args.decision}",
+                                  {"id": args.call, "decision": decision, "by": by,
+                                   **({"note": args.reason} if args.reason else {})}))
+    ledger.append(args.project, "note", args.call, source="cli", summary=f"approve {args.call} {decision}",
                   data={"kind": "decision"})
-
-
-def cmd_improve_weekly(args):
-    """scan + audit + triage, then backlog. The report is written only when no analysis step is pending; otherwise
-    this stops and lists the agent steps to finish first (the coordinator runs them, then improve.backlog)."""
-    from bay import connect, dispatch
-    d = _dispatcher(args)
-    calls, pending = [], []
-    for target in WEEKLY:
-        inp = {"since": args.since} if target == "improve.scan" and args.since else {}
-        try:
-            r = d.call(target, inp)
-        except (dispatch.CallError, connect.ConnectorError) as e:
-            r = {"target": target, "status": "failed", "error": str(e)}
-        item = {k: r[k] for k in ("callId", "target", "status", "error") if k in r}
-        if r.get("status") in ("needs-agent", "awaiting-approval"):
-            item["next"] = {k: r["next"][k] for k in ("step", "role", "runAs", "submit") if k in r["next"]}
-            pending.append(item)
-        calls.append(item)
-    if pending:
-        _out({"status": "pending", "calls": calls,
-              "next": ["Run each pending step plan (`.agentbay/bay show <callId>` prints it) and submit its output; "
-                       "each call continues until it is done.",
-                       "Then write the report: .agentbay/bay call improve.backlog '{}'"]})
-        return
-    try:
-        r = d.call("improve.backlog", {})
-    except (dispatch.CallError, connect.ConnectorError) as e:
-        _die(f"✗ improve.backlog: {e}")
-    calls.append({k: r[k] for k in ("callId", "target", "status", "output") if k in r})
-    _out({"status": r["status"], "calls": calls})
 
 
 # ------------------------------------------------------------------ scaffolds & secrets
 def cmd_new(args):
     from bay import scaffold
+    if args.kind == "feature" and not args.mode:
+        _die("✗ new feature needs --mode <mode>")
+    if args.kind == "connector" and not args.implements:
+        _die("✗ new connector needs --implements <interface>")
     try:
         res = scaffold.create(KIT, args.kind, args.name, target=getattr(args, "mode", None),
                               implements=getattr(args, "implements", None), intent=args.intent,
@@ -519,7 +517,7 @@ def cmd_auth(args):
     s = _system(args)
     conn = s.kit.get("Connector", args.connector)
     if conn is None:
-        _die(f"✗ unknown connector '{args.connector}' (`bay ls` lists them)")
+        _die(f"✗ unknown connector '{args.connector}'")
     entry = conn.spec.get("login")
     if not entry:
         have = sorted(c.name for c in s.kit.docs["Connector"].values() if c.spec.get("login"))
@@ -541,18 +539,9 @@ def cmd_auth(args):
 
 # ------------------------------------------------------------------ ledger
 def cmd_config(args):
-    """`bay config example`: assemble agentbay.config.example.yaml from each extension's config.example.yaml."""
+    """`bay config`: every setting of agentbay.config.yaml, read from the schemas."""
     from bay import config as cfgmod, model
-    text = cfgmod.example(model.Kit(model.KIT, None))
-    if args.stdout:
-        sys.stdout.write(text)
-        return
-    (model.KIT / cfgmod.EXAMPLE).write_text(text, encoding="utf-8")
-    print(f"✓ wrote {cfgmod.EXAMPLE}")
-
-
-def cmd_task(args):
-    print(protocol.new_task_id())
+    sys.stdout.write(cfgmod.describe(model.Kit(model.KIT, None)))
 
 
 def cmd_plan(args):
@@ -572,26 +561,29 @@ def cmd_plan(args):
         _die(f"✗ {e}")
 
 
-def cmd_review_record(args):
-    """The coordinator records a review that ran outside a framework review step (review.verdict/v1) as a
-    `review.recorded` ledger event that improve reads. It touches no call, gate or approval."""
+def _note_review(args, task: str, verdict_json: str):
+    """`bay note review <taskId> '<review.verdict/v1>'`: the coordinator records a review that ran outside a framework
+    review step as a `review.recorded` ledger event that improve reads. It touches no call, gate or approval."""
     from bay import model
-    verdict = _json_arg(args.verdict_json)
-    errs =model.schema_errors(verdict, model.data_schema("review.verdict/v1"))
+    verdict = _json_arg(verdict_json)
+    errs = model.schema_errors(verdict, model.data_schema("review.verdict/v1"))
     if errs:
         _die("✗ the review does not match review.verdict/v1: " + "; ".join(errs[:5]))
     try:
-        ledger.record_review(args.project, args.task, verdict)
+        ledger.record_review(args.project, task, verdict)
     except ledger.PlanError as e:
         _die(f"✗ {e}")
-    print(f"review recorded for {args.task}")
+    print(f"review recorded for {task}")
 
 
-def cmd_dispatched(args):
-    """The coordinator records a subagent dispatch, so `bay status` lists it even when the spawn hook is off."""
-    if not ledger.TASK_ID.match(args.task):
-        _die(f"✗ '{args.task}' is not a taskId (`bay task new`)")
-    ledger.append(args.project, "agent.dispatch", args.task, source="coordinator", taskId=args.task,
+def _note_dispatch(args, task: str):
+    """`bay note dispatch <taskId> --agent ...`: the coordinator records a subagent dispatch, so `bay status` lists
+    it even when the spawn hook is off."""
+    if not args.agent:
+        _die("✗ note dispatch needs --agent <subagent_type>")
+    if not ledger.TASK_ID.match(task):
+        _die(f"✗ '{task}' is not a taskId (`bay note task` mints one)")
+    ledger.append(args.project, "agent.dispatch", task, source="coordinator", taskId=task,
                   callId=args.call, step=args.step, agent=args.agent, summary=args.summary or "",
                   data={k: v for k, v in (("model", args.model), ("tier", args.tier), ("role", args.role),
                                           ("mode", args.mode), ("inputs", args.input)) if v})
@@ -608,6 +600,10 @@ def _ago(ts: str) -> str:
 
 def cmd_status(args):
     evs = ledger.read(args.project)
+    if args.log:
+        for e in evs[-args.n:]:
+            print(json.dumps(e, ensure_ascii=False))
+        return
     if args.agents:
         gs = ledger.agent_groups(evs)
         if args.json:
@@ -644,11 +640,6 @@ def cmd_status(args):
             print(f"  {n['runId'][:18]:<18} {kind:<18} {n.get('summary', '')[:70]}")
 
 
-def cmd_log(args):
-    for e in ledger.read(args.project)[-args.n:]:
-        print(json.dumps(e, ensure_ascii=False))
-
-
 def _find_run(project, key) -> str:
     for r in ledger.fold(ledger.read(project)).values():
         if r.run_id.startswith(key) or r.task_id == key:
@@ -656,20 +647,58 @@ def _find_run(project, key) -> str:
     return key  # a task, call or anything else: the note stays standalone (it never creates a run)
 
 
+DISPATCH_FLAGS = ("agent", "call", "step", "model", "tier", "role", "mode", "summary", "input")
+
+
 def cmd_note(args):
-    rid = _find_run(args.project, args.ref)
-    kind = "instruction-change" if args.instruction else args.kind
-    ledger.append(args.project, "note", rid, source="coordinator", summary=args.text,
-                  taskId=args.ref if args.ref.startswith("T-") else None,
-                  callId=args.ref if args.ref.startswith("C-") else None,
-                  data={"kind": kind} if kind != "note" else None)
-    print("noted")
+    """`bay note`: a note on a run, task or call; `note task` mints a taskId; `note dispatch` and `note review` are the
+    coordinator's records (taskId first, so a permission rule can match them by prefix)."""
+    words = args.words
+    verb = words[0]
+    if verb not in ("task", "dispatch", "review") and any(getattr(args, f) for f in DISPATCH_FLAGS):
+        _die("✗ --agent, --call, --step, --model, --tier, --role, --mode, --summary and --input go with `note dispatch`")
+    if verb == "task":
+        if len(words) != 1:
+            _die("✗ `bay note task` takes no arguments")
+        print(protocol.new_task_id())
+    elif verb == "dispatch":
+        if len(words) != 2:
+            _die("✗ usage: bay note dispatch <taskId> --agent <subagent_type> [--call --step --model --tier --role --mode --input]")
+        _note_dispatch(args, words[1])
+    elif verb == "review":
+        if len(words) != 3:
+            _die("✗ usage: bay note review <taskId> '<review.verdict/v1 json>'")
+        _note_review(args, words[1], words[2])
+    else:
+        if len(words) != 2:
+            _die("✗ usage: bay note <runId|taskId|callId> \"text\"")
+        ref, text = words
+        rid = _find_run(args.project, ref)
+        kind = "instruction-change" if args.instruction else args.kind
+        ledger.append(args.project, "note", rid, source="coordinator", summary=text,
+                      taskId=ref if ref.startswith("T-") else None,
+                      callId=ref if ref.startswith("C-") else None,
+                      data={"kind": kind} if kind != "note" else None)
+        print("noted")
 
 
 def cmd_reclaim(args):
     rid = _find_run(args.project, args.run)
     ledger.append(args.project, "reclaimed", rid, source="cli", summary=args.reason)
     print(f"reclaimed {rid}")
+
+
+def cmd_show(args):
+    """`bay show <callId>`; `bay show reclaim <runId>` marks a stuck run as reclaimed (a write, so it is its own
+    prefix for a permission rule)."""
+    if args.ref[0] == "reclaim":
+        if len(args.ref) != 2:
+            _die("✗ usage: bay show reclaim <runId> [--reason ...]")
+        return cmd_reclaim(argparse.Namespace(project=args.project, run=args.ref[1], reason=args.reason or "reclaimed by coordinator"))
+    if args.reason or len(args.ref) != 1:
+        _die("✗ usage: bay show <callId>   (--reason goes with `show reclaim`)")
+    d = _dispatcher(args)
+    _run(lambda: d.show(args.ref[0]))
 
 
 def cmd_boundary(args) -> int:
@@ -710,100 +739,107 @@ def _hoist_project(argv: list[str]) -> list[str]:
     return proj + out
 
 
+def _verb_first(argv: list[str]) -> None:
+    """`note` and `show` are pre-approved by prefix in the generated permissions, and their writes (`note dispatch`,
+    `note review`, `show reclaim`) are asked by a longer prefix. So nothing may stand between the command and its
+    verb: an option there (or `--project`, which is otherwise accepted anywhere) would run the write unasked."""
+    i = 0
+    while i < len(argv) and argv[i].startswith("-"):      # a global option before the command
+        i += 2 if argv[i] == "--project" else 1
+    if i < len(argv) and argv[i] in ("note", "show") and i + 1 < len(argv) and argv[i + 1].startswith("-") \
+            and argv[i + 1] not in ("-h", "--help"):
+        cmd = argv[i]
+        verbs = "`bay note dispatch <taskId> --agent ...`, `bay note review <taskId> '<json>'`" if cmd == "note" \
+            else "`bay show reclaim <runId> --reason ...`"
+        _die(f"✗ `bay {cmd}`: no option may come before the verb or ref (got {argv[i + 1]!r}); put options after it: {verbs}")
+
+
 def main(argv=None):
+    raw = sys.argv[1:] if argv is None else list(argv)
+    _verb_first(raw)
     ap = argparse.ArgumentParser(prog="bay", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--project", type=Path, default=Path.cwd(), help="target project (default: cwd)")
-    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub = ap.add_subparsers(dest="cmd", required=True, metavar="<command>")
 
-    sub.add_parser("validate").set_defaults(fn=cmd_validate)
-    sub.add_parser("lint").set_defaults(fn=lambda a: sys.exit(cmd_lint(a)))
-    bd = sub.add_parser("boundary", help="check a change's paths against core ownership and the proposal's touches:")
-    bd.add_argument("--base", required=True, help="the ref the change starts from (git diff <base>...<head>)")
-    bd.add_argument("--head", default="HEAD")
-    bd.add_argument("--proposal", help="the proposal whose front-matter touches: lists the allowed crossings")
-    bd.add_argument("--docs", action="store_true", help="also run B-11 on the core docs")
-    bd.add_argument("--json", action="store_true")
-    bd.set_defaults(fn=lambda a: sys.exit(cmd_boundary(a)))
-    b = sub.add_parser("build"); b.add_argument("--runtime", default="claude-code"); b.set_defaults(fn=cmd_build)
-    c = sub.add_parser("clean"); c.add_argument("--runtime", default="claude-code"); c.set_defaults(fn=cmd_clean)
-    sub.add_parser("ls").set_defaults(fn=cmd_ls)
-    ct = sub.add_parser("catalog", help="the registry: modes, endpoints, schemas, project workflows")
+    ck = sub.add_parser("check", help="lint and resolve everything; with --base, also check a change's boundary")
+    ck.add_argument("--base", help="check the change from this ref: its paths against core ownership and the proposal's "
+                                   "touches: (git diff <base>...<head>)")
+    ck.add_argument("--head", default="HEAD")
+    ck.add_argument("--proposal", help="the proposal whose front-matter touches: lists the allowed crossings")
+    ck.add_argument("--docs", action="store_true", help="also run B-11 on the core docs")
+    ck.add_argument("--json", action="store_true", help="the boundary report as JSON")
+    ck.set_defaults(fn=cmd_check)
+    b = sub.add_parser("build", help="compile modes and roles into a runtime"); b.add_argument("--runtime", default="claude-code")
+    b.set_defaults(fn=cmd_build)
+    c = sub.add_parser("clean", help="remove what build wrote"); c.add_argument("--runtime", default="claude-code")
+    c.set_defaults(fn=cmd_clean)
+    ct = sub.add_parser("catalog", help="the registry: modes, features, schemas, project workflows (--roles: role units)")
     ct.add_argument("name", nargs="?", help="<mode>, <mode>.<endpoint> or a workflow name")
     ct.add_argument("--json", action="store_true")
+    ct.add_argument("--roles", action="store_true", help="list the role units instead (resolved from the sources)")
     ct.set_defaults(fn=cmd_catalog)
-    d = sub.add_parser("describe"); d.add_argument("name"); d.add_argument("--prompt", action="store_true")
+    d = sub.add_parser("describe", help="a mode's or role's resolved definition"); d.add_argument("name")
+    d.add_argument("--prompt", action="store_true")
     d.set_defaults(fn=cmd_describe)
 
     ca = sub.add_parser("call", help="run <mode>.<endpoint> with a JSON input ('-' reads stdin)")
     ca.add_argument("target"); ca.add_argument("input", nargs="?"); ca.set_defaults(fn=cmd_call)
-    su = sub.add_parser("submit"); su.add_argument("call"); su.add_argument("step"); su.add_argument("output")
+    su = sub.add_parser("submit", help="hand back an agentic step's output")
+    su.add_argument("call"); su.add_argument("step"); su.add_argument("output")
     su.add_argument("--usage", help='what the runtime reported for the step: \'{"tokens": N, "costUsd": X, "durationMs": N}\'')
     su.set_defaults(fn=cmd_submit)
-    sh = sub.add_parser("show"); sh.add_argument("call"); sh.set_defaults(fn=cmd_show)
+    sh = sub.add_parser("show", help="the state of a call; `show reclaim <runId>` marks a stuck run as reclaimed")
+    sh.add_argument("ref", nargs="+"); sh.add_argument("--reason", help="show reclaim: why")
+    sh.set_defaults(fn=cmd_show)
     ap_ = sub.add_parser("approve", help="pass (or --reject) an approval gate; interactive terminal, or chat when "
-                                         "approvals.chat is on")
+                                         "approvals.chat is on; an F-id decides an improve backlog item")
     ap_.add_argument("call"); ap_.add_argument("--reject", action="store_true"); ap_.add_argument("--reason")
     ap_.add_argument("--via", choices=["tty", "chat"], default="tty",
                      help="chat: relayed by the Chief of Staff; needs approvals: { chat: true } in agentbay.config.yaml")
     ap_.add_argument("--quote", help="--via chat: the owner's exact message approving this gate (recorded in the ledger)")
     ap_.add_argument("--sha", help="--via chat: sha256 prefix (8+ hex) of the content shown to the owner; the approval "
                                    "is refused if the file changed")
+    ap_.add_argument("--defer", action="store_true", help="F-id: defer the backlog item")
+    ap_.add_argument("--wontfix", action="store_true", help="F-id: close the backlog item as wontfix")
     ap_.set_defaults(fn=cmd_approve)
 
-    for kind in ("mode", "feature", "connector", "env"):
-        k = sub.add_parser(kind, help=f"scaffold {'an' if kind[0] in 'aeiou' else 'a'} {kind}")
-        ks = k.add_subparsers(dest="action", required=True)
-        n = ks.add_parser("new"); n.add_argument("name"); n.add_argument("--intent")
-        if kind == "feature":
-            n.add_argument("--mode", required=True)
-            n.add_argument("--role", help="default: the mode's first non-coordinator, non-reviewer role")
-            n.add_argument("--effects", help="comma-separated, default read,write")
-        if kind == "connector":
-            n.add_argument("--implements", required=True)
-        n.set_defaults(fn=cmd_new, kind=kind)
-    se = sub.add_parser("secret"); se.add_argument("action", choices=["set"]); se.add_argument("name")
+    nw = sub.add_parser("new", help="scaffold a mode, feature, connector or env")
+    nw.add_argument("kind", choices=["mode", "feature", "connector", "env"]); nw.add_argument("name")
+    nw.add_argument("--intent")
+    nw.add_argument("--mode", help="feature: the mode it joins")
+    nw.add_argument("--role", help="feature: default is the mode's first non-coordinator, non-reviewer role")
+    nw.add_argument("--effects", help="feature: comma-separated, default read,write")
+    nw.add_argument("--implements", help="connector: the interface it implements")
+    nw.set_defaults(fn=cmd_new)
+    se = sub.add_parser("secret", help="store a secret in the keychain (interactive terminal only)")
+    se.add_argument("action", choices=["set"]); se.add_argument("name")
     se.add_argument("--provider", default="keychain"); se.set_defaults(fn=cmd_secret)
     au = sub.add_parser("auth", help="sign in to a source in your browser (interactive terminal only)")
     au.add_argument("connector"); au.add_argument("--env", help="env to log in through (default: the one binding it)")
     au.set_defaults(fn=cmd_auth)
-    cf = sub.add_parser("config", help="example config assembled from the extensions' config.example.yaml")
-    cf.add_argument("action", choices=["example"]); cf.add_argument("--stdout", action="store_true")
-    cf.set_defaults(fn=cmd_config)
+    sub.add_parser("config", help="print every agentbay.config.yaml setting, from the schemas").set_defaults(fn=cmd_config)
 
-    im = sub.add_parser("improve", help="improve backlog: decide items, run the weekly pass")
-    ims = im.add_subparsers(dest="action", required=True)
-    dc = ims.add_parser("decide", help="approve|defer|wontfix a backlog item (approve: interactive terminal only)")
-    dc.add_argument("id"); dc.add_argument("decision", choices=["approve", "defer", "wontfix"])
-    dc.add_argument("--note"); dc.set_defaults(fn=cmd_improve_decide)
-    wk = ims.add_parser("weekly", help="scan + audit + triage + backlog (cron: see docs/DESIGN.md)")
-    wk.add_argument("--since"); wk.set_defaults(fn=cmd_improve_weekly)
-
-    t = sub.add_parser("task"); t.add_argument("action", choices=["new"]); t.set_defaults(fn=cmd_task)
-    s = sub.add_parser("status"); s.add_argument("-n", type=int, default=10); s.add_argument("--json", action="store_true")
+    s = sub.add_parser("status", help="calls, steps and agent runs from the ledger (--agents, --log)")
+    s.add_argument("-n", type=int, default=10); s.add_argument("--json", action="store_true")
     s.add_argument("--agents", action="store_true", help="group agent runs by role, mode, model and tier")
+    s.add_argument("--log", action="store_true", help="print the last -n raw ledger events")
+    s.set_defaults(fn=cmd_status)
     pl = sub.add_parser("plan", help="a dispatched agent's outcome and to-do list (append-only; the one command subagents may run)")
     pl.add_argument("task"); pl.add_argument("plan_json", nargs="?"); pl.add_argument("--done", type=int)
     pl.set_defaults(fn=cmd_plan)
-    rr = sub.add_parser("review-record", help="record a review that ran outside a framework review step (coordinator)")
-    rr.add_argument("task"); rr.add_argument("verdict_json")
-    rr.set_defaults(fn=cmd_review_record)
-    dp = sub.add_parser("dispatched", help="record a subagent dispatch (coordinator)")
-    dp.add_argument("task"); dp.add_argument("--agent", required=True); dp.add_argument("--call"); dp.add_argument("--step")
-    dp.add_argument("--model"); dp.add_argument("--tier"); dp.add_argument("--role"); dp.add_argument("--mode")
-    dp.add_argument("--summary"); dp.add_argument("--input", action="append")
-    dp.set_defaults(fn=cmd_dispatched)
-    s.set_defaults(fn=cmd_status)
-    lg = sub.add_parser("log"); lg.add_argument("-n", type=int, default=20); lg.set_defaults(fn=cmd_log)
-    no = sub.add_parser("note", help="record a note on a run, task or call (never creates a run)")
-    no.add_argument("ref"); no.add_argument("text")
+    no = sub.add_parser("note", help="record a note on a run, task or call; `note task` mints a taskId; "
+                                     "`note dispatch` and `note review` are the coordinator's records")
+    no.add_argument("words", nargs="+", metavar="word",
+                    help="<ref> \"text\" | task | dispatch <taskId> | review <taskId> '<json>'")
     no.add_argument("--kind", choices=ledger.NOTE_KINDS, default="note")
     no.add_argument("--instruction", action="store_true", help="the user changed the instructions mid-run "
                     "(same as --kind instruction-change)")
+    for f in ("agent", "call", "step", "model", "tier", "role", "mode", "summary"):
+        no.add_argument(f"--{f}", help="note dispatch" + (" (required)" if f == "agent" else ""))
+    no.add_argument("--input", action="append", help="note dispatch: an input ref (repeat)")
     no.set_defaults(fn=cmd_note)
-    r = sub.add_parser("reclaim"); r.add_argument("run"); r.add_argument("--reason", default="reclaimed by coordinator")
-    r.set_defaults(fn=cmd_reclaim)
 
-    args = ap.parse_args(_hoist_project(sys.argv[1:] if argv is None else list(argv)))
+    args = ap.parse_args(_hoist_project(raw))
     args.project = args.project.resolve()
     args.fn(args)
 

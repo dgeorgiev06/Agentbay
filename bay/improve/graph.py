@@ -40,7 +40,9 @@ def kind_of(rel: str) -> str:
         return "connector"
     if name.endswith(".schema.json"):
         return "type" if "types" in parts else "schema"
-    for folder, k in (("roles", "role"), ("agents", "agent"), ("envs", "env"), ("interfaces", "interface")):
+    if name == "adapter.yaml":
+        return "agent"                       # the adapter file holds the agent profile
+    for folder, k in (("roles", "role"), ("envs", "env"), ("interfaces", "interface")):
         if folder in parts and name.endswith(".yaml") and parts[-2] == folder:
             return k
     if name.endswith(".py") or name.endswith(".tmpl"):
@@ -153,14 +155,16 @@ def _data_schemas(kit: Path):
 
 
 def _concept_nodes(g: Graph, k, kit: Path, rel) -> None:
-    """Interfaces, data schemas, roles, agent profiles, envs, connectors and role skills."""
+    """Interfaces, data schemas, roles, agent profiles (from the adapters), envs, connectors and role skills."""
     for name, d in k.docs["Interface"].items():
         g.node(f"interface:{name}", "interface", name, rel(d.path))
     for nid, p in _data_schemas(kit):
         g.node(nid, "schema", nid.removeprefix("schema:"), rel(p))
-    for kind, prefix in (("Role", "role"), ("Agent", "agent"), ("Environment", "env"), ("Connector", "connector")):
+    for kind, prefix in (("Role", "role"), ("Environment", "env"), ("Connector", "connector")):
         for name, d in k.docs[kind].items():
             g.node(f"{prefix}:{name}", prefix, name, rel(d.path))
+    for name in k.profiles():
+        g.node(f"agent:{name}", "agent", name, f"adapters/{name}/adapter.yaml")
     for name, d in k.docs["Role"].items():
         for sk in d.spec.get("skills", []):
             g.node(f"skill:{sk}", "skill", sk, rel(d.dir / "skills" / sk / "SKILL.md"))
@@ -191,11 +195,11 @@ def _mode(g: Graph, name: str, d, profile: str, rel) -> None:
         g.edge(f"mode:{name}", f"role:{d.spec['coordinator']}", "coordinator")
     for iface in d.spec.get("needs", []):
         g.edge(f"mode:{name}", f"interface:{iface}", "needs")
-    for ep, e in d.spec["endpoints"].items():
+    for ep, e in d.spec["features"].items():
         eid = f"endpoint:{name}.{ep}"
         g.node(eid, "endpoint", f"{name}.{ep}", rel(d.path))
         g.edge(f"mode:{name}", eid, "endpoint")
-        _endpoint_edges(g, name, eid, e, d.spec["workflows"].get(e["workflow"], []), bool(cfg))
+        _endpoint_edges(g, name, eid, e, e["steps"], bool(cfg))
 
 
 def _endpoint_edges(g: Graph, mode: str, eid: str, e: dict, steps: list, has_config: bool) -> None:
@@ -222,12 +226,9 @@ def _endpoint_edges(g: Graph, mode: str, eid: str, e: dict, steps: list, has_con
 
 
 def _binding_edges(g: Graph, k, connectors_of) -> None:
-    """env -> interface/connector (bind), env substitution, connector -> interface (implements, needs)."""
+    """env -> interface/connector (bind, offline bind), connector -> interface (implements, needs)."""
     for name, d in k.docs["Environment"].items():
-        if d.spec.get("substitutes"):
-            g.edge(f"env:{name}", f"env:{d.spec['substitutes']}", "substitutes")
-            g.edge(f"env:{d.spec['substitutes']}", f"env:{name}", "substituted-by")
-        for iface, b in d.spec["bind"].items():
+        for iface, b in {**d.spec["bind"], **(d.spec.get("offline") or {}).get("bind", {})}.items():
             g.edge(f"env:{name}", f"interface:{iface}", "binds")
             for c in connectors_of(b):
                 g.edge(f"env:{name}", f"connector:{c}", "binds")

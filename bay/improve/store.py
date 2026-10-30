@@ -6,7 +6,7 @@ by bay/improve/report.py.
             reopen a fixed/verified finding whose pattern comes back
   annotate  root cause, proposed fix, route, effort from the analyst (after review); open findings only
   triage    "same file" links across lenses and priority = impact x frequency / effort
-  decide    human decisions (approve | defer | wontfix); approve only via `bay improve decide` in a terminal
+  decide    human decisions (approve | defer | wontfix); approve only via `bay approve <id>` in a terminal
   backlog   write reports/<isoweek>.md
   claim / handoff   implement: only approved items; writes a draft proposal or a task envelope, never code
   verify    close as verified, or reopen
@@ -174,7 +174,7 @@ class Store:
         if decision not in DECISIONS:
             raise StoreError(f"decision must be one of {', '.join(DECISIONS)}")
         if decision == "approve" and by != HUMAN:
-            raise StoreError("approve is a human decision: run `bay improve decide <id> approve` in your terminal")
+            raise StoreError("approve is a human decision: run `bay approve <id>` in your terminal")
         fs = self.load()
         f = fs.get(fid)
         if f is None:
@@ -255,7 +255,7 @@ class Store:
         approved = [h for h in f.get("history", []) if h["status"] == "approved" and h["by"] == HUMAN]
         if f["status"] != "approved" or not approved:
             return {"stopped": f"{fid} is {f['status']}; implement runs only for items you approved with "
-                               f"`bay improve decide {fid} approve` in your terminal", "finding": f}
+                               f"`bay approve {fid}` in your terminal", "finding": f}
         return {"finding": f}
 
     def handoff(self, fid: str, draft: dict, task_id: str) -> dict:

@@ -4,9 +4,9 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN.md
 
 ```
  modes/  envs/  connectors/  interfaces/       you (user space)
- framework/{roles,agents,modes,envs,connectors,interfaces}/   the framework (roles and agent profiles only here)
+ framework/{roles,modes,envs,connectors,interfaces}/   the framework (roles only here; an agent profile is in adapters/<name>/adapter.yaml)
     │
-    ├─> bay lint ─> model.resolve() ─> System ──> Adapter.build ──> .claude/agents/<role>--<mode>.md, COORDINATOR.md, catalog
+    ├─> bay check ─> model.resolve() ─> System ──> Adapter.build ──> .claude/agents/<role>--<mode>.md, COORDINATOR.md, catalog
     │                  (exact gaps)                                  (claude-code now; headless / cloud next)
     │
  Chief of Staff ── bay call <mode>.<endpoint> ──> Dispatcher ──> code steps ──> Connector (secrets, allowlisted HTTP)
@@ -19,9 +19,9 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN.md
 
 | # | Contract | Schema / code | Changes when |
 |---|---|---|---|
-| 1 | **Mode** (features: in/out, effects, workflow, playbook, rules, review) | `schemas/mode.schema.json` | you add or change a job |
+| 1 | **Mode** (features: in/out, effects, steps, optional playbook and rules, review) | `schemas/mode.schema.json` | you add or change a job |
 | 2 | **Feature playbook + rules** | `bay/playbook.py`, `schemas/rules.schema.json` | you change a feature's definition of done |
-| 3 | **Role / Agent profile / Environment** | `schemas/{role,agent,environment}.schema.json` | the framework adds a job or an LLM product; you add wiring |
+| 3 | **Role / Agent profile / Environment** | `schemas/{role,environment}.schema.json`; the profile is `profile:` in `schemas/adapter.schema.json` | the framework adds a job or an LLM product; you add wiring |
 | 4 | **Capability interface + Connector** | `schemas/{interface,connector}.schema.json`, `bay/connect.py` | you add a capability or a concrete tool |
 | 5 | **Adapter + registry** (`.agentbay/catalog.json`) | `bay/adapter.py`, `bay/registry.py` | you add a runtime, or something a coordinator must discover |
 | 6 | **Project workflow** (stages composing `<mode>.<endpoint>`) | `schemas/config.schema.json` `workflows`, `bay/workflows.py` | you compose modes differently |
@@ -33,11 +33,12 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN.md
 | 12 | **Conformance rules** | `framework/rules/conformance.yaml`, `schemas/conformance.schema.json` | you change what "fits the framework" means |
 
 ## 1. Mode and features
-`mode.yaml` declares, per endpoint (= feature), everything about it in one place:
-`in`/`out` (type names in `types/`), `effects`, `workflow`, `playbook`, `rules`, optional
+`mode.yaml` declares each feature (`spec.features.<name>`, called as `<mode>.<name>`), everything about it in one place:
+`in`/`out` (type names in `types/`), `effects`, `steps`, optional `playbook` and `rules` (a feature that runs no
+role needs neither; one that runs a role needs a playbook), optional
 `review: {role, when: always|never, tier?, effort?}`, optional `tier`/`effort` for its role steps and optional
-`roles: {role: env}` overrides for its steps.
-Workflows are ordered steps: `run: <capability>/v<N>.<endpoint>` (code), `role: <role>` (agentic; may set
+`roles: {role: env}` overrides for its steps. There is no separate endpoint, workflow or feature file.
+`steps` are ordered: `run: <capability>/v<N>.<endpoint>` (code), `role: <role>` (agentic; may set
 `tier`, `effort` and `roles: {<its role>: <env>}`), `gate: <text>` (approval; never `when:`; `approves: $in.<field>`
 records that file's path and sha256 with the approval, and a later call naming the same unchanged file skips
 the gate), `{review: here}` (position of the injected review step).
@@ -48,8 +49,8 @@ read-only endpoints of those needs are what the mode's roles may read.
 
 **Inheritance.** `extends: <mode>` is resolved when the kit is loaded (`bay/model.py` `merge_mode`), so the
 resolver, lint, conformance, the detectors and adapters always see a complete mode.
-- **Endpoints** merge key by key, so a child can override one feature's review, in/out, playbook or rules.
-- **Workflows** are replaced per workflow; `coordinator` is replaced.
+- **Features** merge key by key, so a child can override one feature's review, in/out, playbook or rules; a child's
+  `steps` replace that feature's steps whole; `coordinator` is replaced.
 - **`roles`, constraints and configDefaults** merge entry by entry; `needs` are unioned.
 - **Inherited paths** (playbook, rules, config) are rebased to the child's folder. Types, skills and the
   coordinator `playbook.md` are looked up in the child first, then its ancestors.
@@ -68,30 +69,32 @@ The reviewer returns `review.verdict/v1`: per id `pass|fail|n/a`, evidence, seve
 carries `review.recordedPlans` (taskId -> step, outcome, to-do progress) of the agents it judges.
 
 ## 3. Role / Agent profile / Environment
-Ownership: the framework owns roles and the agent profile; the user owns modes, envs and connectors. A user
-role file or agent profile is an error.
+Ownership: the framework owns roles; the agent profile is part of a runtime adapter; the user owns modes, envs
+and connectors. A user role file is an error.
 - Role (`framework/roles/`: lead, analyst, researcher, builder, reviewer): `prompt`, `doneWhen`, `rules`,
   `skills`, default `tier` (fast | balanced | deep), optional `effort`, `access` (read | write). No agent, env or
   data access of its own.
-- Agent profile (`framework/agents/claude-code.yaml`, `agent:` in agentbay.config.yaml): `runtime`
+- Agent profile (`profile:` in `adapters/<name>/adapter.yaml`, `agent:` in agentbay.config.yaml): `runtime`
   `{coordinator: claude-code-main, worker: claude-code-subagent}`, `tiers {fast, balanced, deep} -> model`,
   `effort` mapping, optional `tools` name mapping. The only place a model name appears.
 - Environment: `bind` (interface -> connector(s) or `{tools, clis, mcpServers}`), `secrets {provider, allow}`,
   `network.allow`, `fs {read, write}` (paths relative to the project root), optional `tiers` cap, `effects`,
-  `limits`.
+  `limits` (the ceiling for every cap), optional `offline {bind, network, secrets}`: with `offline: true` in
+  agentbay.config.yaml the env binds `offline.bind` over its own bindings and has no network and no secrets
+  (`bay check` refuses an `offline` block that lists a host or a secret).
 - Grants of a unit (role, mode, env): the read-only connector endpoints of the mode's `needs` that the env binds
   (never an interface marked `dispatcherOnly`), plus the tools of the mode's tools capabilities whose effects
   are read or network (any, with `access: write`). Only `access: write` roles get file-writing tools (Edit,
   Write, MultiEdit, NotebookEdit), CLIs beyond read-only version control, and the env's `fs.write` paths in their guard
-  entry. `bay lint` rejects a tools binding that lists file-writing tools or such CLIs under a capability without
+  entry. `bay check` rejects a tools binding that lists file-writing tools or such CLIs under a capability without
   the `write` effect.
 - Tier: step (a review: its review block) > feature > role default; the profile maps it to a model; the env's
   `tiers` cap it. The env also caps the role's default tier, which is the model its unit is compiled with.
-  Envs are the only place capabilities are bound; `agentbay.config.yaml` cannot rebind them. It can select an
-  env that declares `substitutes: <env>` (`envs: { <env>: <offline env> }`).
+  Envs are the only place capabilities are bound; `agentbay.config.yaml` cannot rebind them. It can switch every
+  env's `offline:` block on (`offline: true`), and can lower a cap but never raise the env's `limits`.
 - User modes may put roles only in their own envs (`envs/`) and the framework envs named in
   `bay/model.py` `USER_FRAMEWORK_ENVS`.
-- Code steps (`run:`) run in the coordinator's env for that feature; `bay lint` warns when a store-reading
+- Code steps (`run:`) run in the coordinator's env for that feature; `bay check` warns when a store-reading
   mode puts a role in an env whose `items.store`/`items.source` bindings differ from it.
 
 Resolution rules (`bay/model.py`) - every gap is reported at once:
@@ -115,15 +118,15 @@ connector, or else the one env that binds it. The function gets a context with t
 through that env gets: `secret(name)` and `store_secret(name, value)` for names both in the env's
 `secrets.allow` and the connector's `needs.secrets`; `http` limited to the connector's declared hosts that the
 env allows; `open_browser(url)` and `say(text)`. The entry runs in-process, so this limits the API it is
-handed, not what the process can do. `bay lint` refuses a `login:` whose `needs.secrets` no env that binds
+handed, not what the process can do. `bay check` refuses a `login:` whose `needs.secrets` no env that binds
 the connector allows.
 
-No connector loads another: `bay lint` (B-7) scans a connector's code and the files its manifest references for
+No connector loads another: `bay check` (B-7) scans a connector's code and the files its manifest references for
 imports of another connector's module and for the kernel's `agentbay_connector_*`/`agentbay_adapter_*` module
 keys. Prose, comments and names in playbooks are not scanned; a mode names a connector nowhere in `mode.yaml`.
 README.md and the extension's top-level `tests/` are exempt. A static scan cannot be complete (a name can be
 computed at run time); review covers the rest. Files in the repository root that no component owns (a TODO.md)
-are not framework code and pass `bay boundary`; `CHANGELOG.md` is owned by the kernel.
+are not framework code and pass `bay check --base`; `CHANGELOG.md` is owned by the kernel.
 
 ## 5. Adapter and registry
 ```python
@@ -152,16 +155,16 @@ The root mode (a framework mode; its README names its endpoints) supplies the pr
 
 A project workflow is `workflows.<name>` in `agentbay.config.yaml`: `description`, `in` (JSON schema) and
 `steps`, each `{id, call: <mode>.<endpoint>, with?, when?}` or `{id, gate: <text>}`, with the same `$in` /
-`$steps.<id>` substitution as mode workflows. The root mode's endpoints return `nextCall`; the coordinator
+`$steps.<id>` substitution as a feature's steps. The root mode's endpoints return `nextCall`; the coordinator
 makes that call the ordinary way (the dispatcher never recurses). A workflow gate passes only with
-`bay approve <W-runId>`. `bay lint` checks structure (ids, `$steps` order, gate references); `bay validate`
-checks targets against the registry and each `with` against the endpoint's input schema, and prints the union
+`bay approve <W-runId>`. `bay check` checks structure (ids, `$steps` order, gate references), then
+targets against the registry and each `with` against the endpoint's input schema, and prints the union
 of stage effects. Run state is in `.agentbay/data/workflows/`, written only by the connector bound to `workflow.run/v1`.
 
 ## 7. Dispatcher
 `bay call <mode>.<endpoint> '<json>'` -> `{callId, status, output | next, checks, review, cost}`.
 Status: `done | partial | blocked | failed | needs-agent | awaiting-approval`.
-`bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic step (usage goes to the step's event); `bay show <callId>` prints the current state; approval gates pass only with `bay approve <callId>` in an interactive terminal (a project workflow's gate the same way, with its `W-...` run id), or with `bay approve <id> --via chat --quote "<the owner's message>" --sha <8+ hex>` (the sha256 prefix of the content the owner saw; refused if the file changed) when agentbay.config.yaml sets `approvals: { chat: true }` (recorded as `by: user@chat-via-cos` with the quote). A role's generated shim
+`bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic step (usage goes to the step's event); `bay show <callId>` prints the current state (`bay show reclaim <runId>` marks a stuck run reclaimed); approval gates pass only with `bay approve <callId>` in an interactive terminal (a project workflow's gate the same way, with its `W-...` run id), or with `bay approve <id> --via chat --quote "<the owner's message>" --sha <8+ hex>` (the sha256 prefix of the content the owner saw; refused if the file changed) when agentbay.config.yaml sets `approvals: { chat: true }` (recorded as `by: user@chat-via-cos` with the quote). A role's generated shim
 `.agentbay/roles/<role>--<mode>/use <iface>/v<N>.<ep> '<json>'` (unit fixed inside: role, mode and env; read-only endpoints of the mode's needs)
 is the only way an agent reads connector data; the guard hook stops subagents from running anything else. Secret values are redacted from everything it returns or logs.
 
@@ -178,7 +181,7 @@ Optional on any event: `durationMs`, `tokens {input, output, cacheRead, cacheCre
 Every value is secret-scanned (`bay/secretscan.py`) and redacted (`vault.redact`) before it is written.
 Data: `data.read` (a role read connector data through its use shim; role, env, endpoint, item count).
 Agent records (append-only; written by the coordinator and the agent, never edited):
-- `agent.dispatch`: `bay dispatched <taskId> --agent <name> [--call --step --model --tier --role --mode --input ...]`,
+- `agent.dispatch`: `bay note dispatch <taskId> --agent <name> [--call --step --model --tier --role --mode --input ...]`,
   run by the coordinator before every agent dispatch, so `bay status` lists the run even with the spawn hook off.
   `--input` (repeatable) names the inputs; the dispatcher also copies a step's inputs into `step.started`
   (`data.inputs`: the value, or its sha256 plus a scrubbed preview).
@@ -186,7 +189,7 @@ Agent records (append-only; written by the coordinator and the agent, never edit
   `bay plan <taskId> --done <n>`. One plan per taskId, only for a dispatched taskId and only by the agent it
   was dispatched to; text is scrubbed and size-limited. It is the only `bay` command a subagent may run. A
   role-step `bay submit` is refused when its taskId has no plan.
-- `review.recorded`: `bay review-record <taskId> '<review.verdict/v1>'`, for a review run outside a framework
+- `review.recorded`: `bay note review <taskId> '<review.verdict/v1>'`, for a review run outside a framework
   review step. It changes no call, gate or approval; the analysis mode that reads verdicts counts it.
 `bay status --agents` groups runs by role, mode, model and tier from these events alone (a step's submitted usage is
 split evenly among the agents dispatched to that call and step); `bay show` prints
@@ -236,7 +239,7 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
     `not` and `*` values are always local, and Gmail keeps `subject` and `text` local too (its search matches
     whole words, and its negation also matches display names).
   - Selectors with the same native query share one fetch and one cursor.
-  - A field the source does not list cannot be expressed: `bay validate` errors.
+  - A field the source does not list cannot be expressed: `bay check` errors.
   - A `local` field on a paid source (`costPerPostUsd` > 0) gets a validate warning.
 - **`items.source/v1.fetch {query, since [until] | cursor, maxItems, checkIds, storedIds, localIn}`** returns
   `{items, cursor, truncated, billed, checked?, deleted?, removed?, oldest?, cursorExpired?, blocked?,
@@ -295,7 +298,7 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
   `<connector>|<native query>` (`from` is what was fetched; `covers` is what coverage reports, the window
   start when every selector of the query has its own `since`), coverage, budget, deleted, checked, and the selectors and sources last applied.
 
-  Without FTS5 the store falls back to LIKE matching, and `bay validate` warns.
+  Without FTS5 the store falls back to LIKE matching, and `bay check` warns.
 - **Agent SQL** (`bay/sqlsandbox.py`):
   - temp views over the store, which holds only the mode's scope: `v_items`, `v_posts`, `v_email` (one row per
     message: sender, toList, ccList, messageId, inReplyTo, account, fromMe, toMe, bulk, hasAttachments; "me"
@@ -319,21 +322,21 @@ verified), history[], detector, links[]`. Dedup key: fingerprint = hash(kind, de
   read is redacted and scanned.
 
 ## 12. Conformance rules
-`framework/rules/conformance.yaml` (`schemas/conformance.schema.json`, linted by `bay lint`): rules with an id,
-level, statement and optional deterministic `check`. An endpoint's
+`framework/rules/conformance.yaml` (`schemas/conformance.schema.json`, linted by `bay check`): rules with an id,
+level, statement and optional deterministic `check`. A feature's
 `review.rulesets: [conformance]` adds them to the reviewer's plan; the framework's audit feature runs every rule
 that has a check and hands the rest to the analyst.
 
 ## Extension recipes
-- **New source** -> `bay connector new bsky --implements items.source/v1` (template sets `source`, `window` and a
+- **New source** -> `bay new connector bsky --implements items.source/v1` (template sets `source`, `window` and a
   `selectors` table, which lint requires), implement `fetch`, then in the env add `bsky` to the `items.source/v1`
   binding and its host/secret names to `network.allow`/`secrets.allow`. Modes, roles and playbooks are untouched.
 - **New kind of briefing** -> a mode with `extends: briefing` (purpose, constraints, `configDefaults`, its own
   env in `roles:`, overrides). Its analyst compiles to its own unit (`analyst--<mode>`) with its own store.
-- **New feature** -> `bay feature new weekly --mode <mode> --effects read`, fill the playbook and rules, `bay lint`.
-- **New mode / env** -> `bay mode new <name>` / `bay env new <name>`, or `bay call forge.create`. Behaviour for a role
+- **New feature** -> `bay new feature weekly --mode <mode> --effects read`, fill the playbook and rules, `bay check`.
+- **New mode / env** -> `bay new mode <name>` / `bay new env <name>`, or `bay call forge.create`. Behaviour for a role
   in your mode goes in its playbooks, skills and rules; a new framework role is a `forge.extend` proposal.
-- **New LLM product** -> a framework agent profile (forge.extend); select it with `agent:`. Modes, roles and envs
+- **New LLM product** -> a new adapter with its `profile:` (forge.extend); select it with `agent:`. Modes, roles and envs
   do not change.
 - **New runtime** -> implement `Adapter`, register it, `./bay.sh build --runtime <name>`. Modes do not change.
 - **Change the framework** -> `bay call forge.extend '{"goal": "..."}'` (proposal, approval, review mandatory).

@@ -6,31 +6,28 @@ metadata:
   description: General delegation - research a question, or build a change and have it independently reviewed.
 spec:
   purpose: Turn a request into a sourced brief or a reviewed change, delegated to the right worker.
-  endpoints:
+  features:
     research:
       description: Research a question and return a sourced brief.
-      workflow: research
       in: Task
       out: Result
       effects: [read, network]
       playbook: features/research/playbook.md
       rules: features/research/rules.yaml
       review: { role: reviewer, when: never }
+      steps:
+        - { id: brief, role: researcher, out: Result, task: "Research the goal and return a Result with the brief." }
     build:
       description: Implement a change in the repo, then review it independently.
-      workflow: build
       in: Task
       out: Result
       effects: [read, write]
       playbook: features/build/playbook.md
       rules: features/build/rules.yaml
       review: { role: reviewer, when: always, tier: balanced, effort: medium }
+      steps:
+        - { id: implement, role: builder, out: Result, task: "Implement the deliverable and return a Result." }
   roles: { researcher: research, builder: workspace, reviewer: workspace }   # role -> env
-  workflows:
-    research:
-      - { id: brief, role: researcher, out: Result, task: "Research the goal and return a Result with the brief." }
-    build:
-      - { id: implement, role: builder, out: Result, task: "Implement the deliverable and return a Result." }
   constraints:
     policies: [one-deliverable-per-task, independent-review]
   needs: [workspace.read/v1, workspace.write/v1, git.read/v1, web.research/v1]   # what its roles may use

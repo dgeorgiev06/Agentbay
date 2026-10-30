@@ -17,9 +17,9 @@ DATA_TYPES = {"data.read"}             # a role read connector data through its 
 # the guard hook denied a subagent tool call (prompts are read from Claude Code transcripts instead)
 PERMISSION_TYPES = {"permission.denied"}
 # an agent run's recorded outcome and to-do list (`bay plan`), and the coordinator's record of a dispatch
-# (`bay dispatched`), which lists a running agent even when the spawn hook is off
+# (`bay note dispatch`), which lists a running agent even when the spawn hook is off
 PLAN_TYPES = {"agent.plan", "agent.plan.done", "agent.dispatch"}
-# a review that ran outside a framework review step, recorded by the coordinator (`bay review-record`). improve reads
+# a review that ran outside a framework review step, recorded by the coordinator (`bay note review`). improve reads
 # it; nothing in the dispatcher, the gates or the approval fold does, so it can pass no gate.
 REVIEW_TYPES = {"review.recorded"}
 TYPES = RUN_TYPES | STEP_TYPES | DATA_TYPES | PERMISSION_TYPES | PLAN_TYPES | REVIEW_TYPES

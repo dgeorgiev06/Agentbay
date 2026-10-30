@@ -16,7 +16,7 @@ Chief of Staff (your main Claude Code session)
 ```
 
 The framework owns the five roles (`lead`, `analyst`, `researcher`, `builder`, `reviewer`) and the agent
-profile (`framework/agents/claude-code.yaml`, the only file that names models). You own modes, envs and
+profile (the `profile:` in `adapters/claude-code/adapter.yaml`, the only file that names models). You own modes, envs and
 connectors. Modes name capabilities (`items.source/v1`), never tools; agents never see secrets or connectors.
 
 Design: [docs/DESIGN.md](docs/DESIGN.md). Contracts: [docs/INTERFACES.md](docs/INTERFACES.md).
@@ -27,14 +27,15 @@ Python 3 and Claude Code. From a clone:
 
 ```bash
 pip install -r requirements.txt        # pyyaml, jsonschema
-./bay.sh validate                      # lint + resolve everything
+./bay.sh check                         # lint + resolve everything
 python3 tests/run.py                   # the test suite
 ```
 
 ## Quickstart (offline, 5 minutes)
 
 ```bash
-cp agentbay.config.example.yaml ~/code/my-repo/agentbay.config.yaml   # selects the offline envs (fake sources)
+./bay.sh build --project ~/code/my-repo   # writes a minimal agentbay.config.yaml when the project has none
+# add `offline: true` to ~/code/my-repo/agentbay.config.yaml (fake sources, no network, no secrets), then:
 ./bay.sh build --project ~/code/my-repo
 cd ~/code/my-repo && claude            # restart Claude Code after every build; accept the workspace trust prompt
 ```
@@ -50,14 +51,16 @@ Code steps run in the dispatcher, agentic steps as subagents; the `reviewer` giv
 Done item. A change to the framework also passes a code step, `deadcode`, before review: `improve.detect/v1.change`
 audits the tree and the tree at its merge-base with `origin/main`, and any new unused code or compatibility layer blocks the call.
 
-**Going live:** sign in as the source connector's `README.md` says, delete that env's entry from the `envs:`
-offline switch in agentbay.config.yaml and rebuild. Budget caps stop a sync before it exceeds one.
+**Going live:** sign in as the source connector's `README.md` says, remove `offline: true` from
+agentbay.config.yaml and rebuild. Budget caps stop a sync before it exceeds one.
 
 ## Settings
 
-`agentbay.config.example.yaml` lists every installed extension's settings (`bay config example`
-regenerates it). Settings can only tighten limits; capabilities stay bound only in `envs/<env>.yaml`.
-A mode endpoint with a `schedule:` (daily, weekly) runs from cron: `bay lint` prints the command to schedule.
+`bay config` prints every setting, with its type, default and description, from the schemas. `bay build`
+writes a minimal `agentbay.config.yaml` when the project has none. Settings can only lower a cap: a value above
+the env's `limits:` is refused by lint and at run time. Capabilities stay bound only in `envs/<env>.yaml`; an
+env's `offline:` block names the stand-in sources that `offline: true` binds in their place.
+A mode endpoint with a `schedule:` (daily, weekly) runs from cron: `bay check` prints the command to schedule.
 
 ## Folder map
 
@@ -69,9 +72,9 @@ modes/           your modes
 envs/            your envs (one file each)
 connectors/      your connectors
 interfaces/      your interfaces
-adapters/        agent runtimes bay build compiles for
+adapters/        agent runtimes bay build compiles for, each with its agent profile
 framework/       shipped with the kit, never edited by users:
-  roles/ agents/   the five roles and the agent profile
+  roles/           the five roles
   modes/ envs/ connectors/   framework extensions (cos, forge, improve, ...)
   interfaces/      core interfaces
   rules/           conformance rules
@@ -89,26 +92,26 @@ tests/           python3 tests/run.py (connector tests live next to each connect
 
 | command | does |
 |---|---|
-| `bay validate` / `bay lint` | check everything / just structure |
+| `bay check [--base <ref> --proposal <file>]` | lint and resolve everything; with `--base`, also check a change against core ownership |
 | `bay build` / `bay clean` | compile into a project / remove what was generated |
-| `bay ls`, `bay describe <name>`, `bay catalog` | what is installed, resolved |
+| `bay catalog [<name>] [--roles]`, `bay describe <name>` | what is installed, resolved; `--roles` lists the role units |
 | `bay call <mode>.<endpoint> '<json>'` | run a feature |
-| `bay submit <callId> <step> '<json>'`, `bay show <callId>` | hand back a step's output; current state |
+| `bay submit <callId> <step> '<json>'`, `bay show <callId>`, `bay show reclaim <runId>` | hand back a step's output; current state; mark a stuck run reclaimed |
 | `bay approve <callId\|runId> [--reject]` | pass an approval gate (your terminal; or `--via chat --quote "<msg>" --sha <hex>`, relayed by the Chief of Staff, when `approvals: { chat: true }` is set) |
-| `bay status [--agents]`, `bay log`, `bay note <ref> "text"` | calls, steps, cost, agent runs (grouped by role, mode, model, tier); the run log; a note |
-| `bay dispatched <taskId> --input <x>`, `bay plan <taskId> [--done <n>]`, `bay review-record <taskId>` | agent run records: the Chief of Staff logs each dispatch and outside review; a subagent first records its outcome and to-do (its only `bay` command) |
-| `bay mode\|feature\|connector\|env new <name>` | create an extension from a template |
+| `bay approve <F-id> [--defer\|--wontfix]` | decide a backlog item from the analysis mode (your terminal only, never from chat) |
+| `bay status [--agents\|--log]`, `bay note <ref> "text"` | calls, steps, cost, agent runs (grouped by role, mode, model, tier); the raw run log; a note |
+| `bay note task`, `bay note dispatch <taskId> --agent <name> --input <x>`, `bay note review <taskId> '<json>'`, `bay plan <taskId> [--done <n>]` | agent run records: a fresh taskId; the Chief of Staff logs each dispatch and outside review; a subagent first records its outcome and to-do (`bay plan` is its only `bay` command) |
+| `bay new mode\|feature\|connector\|env <name>` | create an extension from a template |
 | `bay secret set <NAME>` | store a secret (read from your terminal, never echoed) |
 | `bay auth <connector>` | a connector's browser login |
-| `bay config example` | regenerate agentbay.config.example.yaml |
-| `bay boundary --base <ref> --proposal <file>` | check a change against core ownership |
+| `bay config` | print every agentbay.config.yaml setting, from the schemas |
 
 Run as `./bay.sh <command>` in the kit, or `.agentbay/bay <command>` in a built project; extensions may add
 commands (see their `README.md`).
 
 ## Adding things
 
-A source is one connector plus one binding line in an env; a feature is `bay feature new`. A framework change
+A source is one connector plus one binding line in an env; a feature is `bay new feature`. A framework change
 starts from a proposal that lists every core path it touches. Recipes:
 [docs/INTERFACES.md#extension-recipes](docs/INTERFACES.md#extension-recipes).
 

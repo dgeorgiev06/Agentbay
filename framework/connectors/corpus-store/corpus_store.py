@@ -10,7 +10,7 @@ database file's mode).
     attachments     (item, n): an email attachment's metadata and extracted text (email/v1 attachments[]);
                     `ext` keeps the metadata only. Rows are deleted with their item (trigger).
     items_fts       FTS5 over title, body and author, kept in step by triggers. Missing when this Python's
-                    SQLite has no FTS5: search then falls back to LIKE, and `bay validate` says so.
+                    SQLite has no FTS5: search then falls back to LIKE, and `bay check` says so.
     attachments_fts FTS5 over attachment name and text, kept in step by triggers (FTS5 only).
   state.json   cursors (per connector and native query), coverage, budget (per UTC month), deleted
                (<source>:<extId>, never re-stored), checked (last deletion check), selectors and sources (the

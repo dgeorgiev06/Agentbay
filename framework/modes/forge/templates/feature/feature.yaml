@@ -1,7 +1,8 @@
     {{name}}:
       description: "{{intent}}"
-      workflow: {{name}}
       effects: [{{effects}}]
       playbook: features/{{name}}/playbook.md
       rules: features/{{name}}/rules.yaml
 {{review}}
+      steps:
+        - { id: work, role: {{role}}, task: "TODO the job this step does" }

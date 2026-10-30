@@ -32,7 +32,7 @@ def setup(extra_fixture=None, selectors=None):
     cfg = yaml.safe_load((p / "agentbay.config.yaml").read_text())
     cfg["connectors"] = {"fake": {"fixture": "fx.json"}}
     (p / "agentbay.config.yaml").write_text(yaml.safe_dump(cfg))
-    st = connect.instantiate(system(p), "local-feeds-offline", "corpus-store", "items.store/v1", p,
+    st = connect.instantiate(system(p), "local-feeds", "corpus-store", "items.store/v1", p,
                              settings={"lookbackMax": "30d", "selectors": selectors or HOME,
                                        "mode": "feed-briefing"}, clock=clock)
     st.sync(lookback="3d")
@@ -241,7 +241,7 @@ def test_fts_match_syntax_errors_say_how_to_quote():
 
 def test_missing_store_is_explained():
     p = project()
-    st = connect.instantiate(system(p), "local-feeds-offline", "corpus-store", "items.store/v1", p,
+    st = connect.instantiate(system(p), "local-feeds", "corpus-store", "items.store/v1", p,
                              settings={"selectors": [{"id": "home"}], "mode": "feed-briefing"}, clock=clock)
     assert "run the mode's sync endpoint first" in st.sql("SELECT 1")["error"]
     assert not dbfile(p).exists()                                     # reads never create the store
@@ -292,7 +292,7 @@ def test_out_of_scope_rows_are_gone_so_no_oracle_form_finds_them():
     assert st.sql("SELECT count(*) FROM v_fts WHERE fts MATCH 'zebra'")["rows"] == [[1]]    # in scope via `zebra`
     plant_out_of_scope(p)
     # the `zebra` selector is removed; sync deletes its item and the planted rows from items and items_fts
-    st = connect.instantiate(system(p), "local-feeds-offline", "corpus-store", "items.store/v1", p,
+    st = connect.instantiate(system(p), "local-feeds", "corpus-store", "items.store/v1", p,
                              settings={"lookbackMax": "30d", "selectors": ZEBRA[:1], "mode": "feed-briefing"},
                              clock=clock)
     out = st.sync(lookback="3d")

@@ -14,9 +14,12 @@ comes from a subagent; the main thread sends neither.
   * other subagent (agent_type unknown, or agent_id without agent_type): may not
     touch .agentbay/ or the kit CLI in any way; everything else falls through
     to normal permissions.
-  * main thread (no agent fields): no decision; settings.json applies (explicit
-    `bay show|status|log|note|task` allows, Edit deny rules; `bay call` and
-    `bay submit` always prompt).
+  * main thread (no agent fields): no decision, except "ask" for `note dispatch`, `note review`, `show reclaim`
+    in any quoting or launcher spelling (the ask rules below match only the plain text; `approve` needs no
+    hook: no allow rule covers it);
+    settings.json applies (explicit
+    `bay show|status|note|catalog` allows, with `show reclaim`, `note dispatch`, `note review` and `approve`
+    asking; Edit deny rules; `bay call` and `bay submit` always prompt).
     Claude Code versions that do not send agent fields therefore look like the
     main thread; agentbay requires a version that does (documented).
 
@@ -83,6 +86,65 @@ def runs_approve(cmd: str, words: list[str]) -> bool:
                if os.path.basename(w) in ("bay", "bay.sh", "cli.py") or w == "bay.cli"]
         return bool(cli) and "approve" in words[cli[0] + 1:]
     return bool(_CLI_RE.search(cmd) and _APPROVE_RE.search(cmd))
+
+
+# `approve` is not here: no allow rule covers it, so any spelling of it already gets Claude Code's prompt
+ASK_VERBS = {"note": ("dispatch", "review"), "show": ("reclaim",)}
+# a word with one of these may expand to an asked verb (`{dispatch,}`, `${X:-dispatch}`, a backslash-newline join)
+EXPANSION_CHARS = "{$`\n"
+
+
+def _launcher_end(words: list[str], i: int) -> int | None:
+    """If a kit CLI launcher starts at words[i] (`.agentbay/bay`, `./bay.sh`, `bay.sh`, `python3 -m bay.cli`,
+    `python3 bay/cli.py`), the index just after it; else None."""
+    base = os.path.basename(words[i])
+    if base in ("bay", "bay.sh", "cli.py"):
+        return i + 1
+    if base.startswith("python") and words[i + 1:i + 3] == ["-m", "bay.cli"]:
+        return i + 3
+    return None
+
+
+def asked_bay_write(cmd: str) -> str | None:
+    """For the main thread: the name of the kit command (`note dispatch`, `note review`, `show reclaim`)
+    that `cmd` runs, judged on the shell words so quoting, escaping and spacing do not hide it; else None.
+    Claude Code's ask rules match the command text, which `note 'dispatch'` or `show re\\claim` does not match."""
+    try:
+        raw = shlex.split(cmd)
+    except ValueError:
+        raw = dequote(cmd).split()
+    words = raw
+    if unsafe(cmd):                          # operators glue to words (`x;.agentbay/bay`): split them off
+        words = [t for w in raw for t in re.split(r"[;&|<>(){}`$\n\r]+", w) if t]
+    for verb, sub in _launcher_calls(words):
+        if sub in ASK_VERBS.get(verb, ()):
+            return f"{verb} {sub}"
+    for verb, sub in _launcher_calls(raw):   # the shell may expand this word into the asked verb: fail toward ask
+        if verb in ASK_VERBS and any(c in sub for c in EXPANSION_CHARS):
+            return f"{verb} <word with an expansion>"
+    return None
+
+
+def _launcher_calls(words: list[str]):
+    """(verb, word after the verb) for every kit CLI launcher in `words`, after its global options."""
+    for i in range(len(words)):
+        j = _launcher_end(words, i)
+        if j is None:
+            continue
+        while j < len(words) and words[j].startswith("-"):      # global options; --project (or an abbreviation) takes a value
+            w = words[j]
+            j += 2 if len(w) >= 3 and "=" not in w and "--project".startswith(w) else 1
+        if j < len(words) and words[j] in ASK_VERBS:
+            yield words[j], (words[j + 1] if j + 1 < len(words) else "")
+
+
+def main_thread_decision(payload: dict) -> tuple[str, str]:
+    """('ask'|'pass', reason) for a call from the main thread: only the kit's logging writes are asked."""
+    if payload.get("tool_name") == "Bash":
+        hit = asked_bay_write((payload.get("tool_input") or {}).get("command", "") or "")
+        if hit:
+            return "ask", f"agentbay: `bay {hit}` records a decision in the ledger; confirm it"
+    return "pass", ""
 
 
 def dequote(cmd: str) -> str:
@@ -249,7 +311,7 @@ class Guard:
         agent = payload.get("agent_type")
         entry = self.policy.get("subagents", {}).get(agent) if agent else None
         if entry is None and not payload.get("agent_id"):
-            return "pass", ""            # main thread (also `--agent` sessions: agent_type without agent_id)
+            return main_thread_decision(payload)   # main thread (also `--agent` sessions: agent_type without agent_id)
         tool = payload.get("tool_name")
         ti = payload.get("tool_input") or {}
         cwd = Path(payload.get("cwd") or self.project)
@@ -518,6 +580,9 @@ def main() -> int:
         payload = json.load(sys.stdin)
         subagent = bool(payload.get("agent_id") or payload.get("agent_type"))
         if not subagent:
+            decision, reason = main_thread_decision(payload)
+            if decision == "ask":
+                _emit("ask", reason)
             return 0
         project = Path(os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd())
         policy = json.loads((project / POLICY).read_text())
@@ -527,10 +592,10 @@ def main() -> int:
             print(reason, file=sys.stderr)
             _emit("deny", reason)
             return 2
-        if decision == "allow":
-            _emit("allow", "")
+        if decision in ("allow", "ask"):      # "ask": a `--agent` session (agent_type, no agent_id) in the main thread
+            _emit(decision, reason if decision == "ask" else "")
         return 0
-    except Exception as e:  # fail closed for subagents
+    except Exception as e:  # fail closed for subagents (the main thread: no decision)
         if subagent:
             msg = f"agentbay guard error ({type(e).__name__}); denied for subagent. Rebuild with ./bay.sh build"
             print(msg, file=sys.stderr)

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agentbay/v2/Mode",
   "title": "Mode",
-  "description": "A job playbook: one logical job. Endpoints run workflows of code steps (run: <capability>/v<N>.<endpoint>) and agentic steps (role: <role>). Modes name capabilities, never concrete tools.",
+  "description": "A job playbook: one logical job. Its features each run steps: code steps (run: <capability>/v<N>.<endpoint>), agentic steps (role: <role>) and gates. Modes name capabilities, never concrete tools.",
   "type": "object",
   "required": [
     "apiVersion",
@@ -45,7 +45,7 @@
         "extends": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9-]{1,40}$",
-          "description": "Parent mode, resolved at build time: the child inherits endpoints, workflows, playbooks, rules, review settings, roles (the role -> env map, overridden entry by entry), coordinator, constraints, configDefaults, needs, config, types, skills and the coordinator playbook, and overrides any of them (endpoints merge key by key, workflows are replaced per workflow). Inheritance cycles and missing parents are errors."
+          "description": "Parent mode, resolved at build time: the child inherits features, playbooks, rules, review settings, roles (the role -> env map, overridden entry by entry), coordinator, constraints, configDefaults, needs, config, types, skills and the coordinator playbook, and overrides any of them (features merge key by key; a child's `steps` replace the parent's). Inheritance cycles and missing parents are errors."
         },
         "abstract": {
           "type": "boolean",
@@ -54,16 +54,17 @@
         "purpose": {
           "type": "string"
         },
-        "endpoints": {
+        "features": {
           "type": "object",
           "minProperties": 1,
           "propertyNames": {
             "pattern": "^[a-z][a-z0-9-]*$"
           },
+          "description": "What the mode can do, one entry per feature, called as <mode>.<feature>: its interface (in, out, effects), its steps, and optionally a playbook and rules. A feature with no role step (code only) needs neither file.",
           "additionalProperties": {
             "type": "object",
             "required": [
-              "workflow",
+              "steps",
               "effects"
             ],
             "additionalProperties": false,
@@ -71,8 +72,13 @@
               "description": {
                 "type": "string"
               },
-              "workflow": {
-                "type": "string"
+              "steps": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "$ref": "#/$defs/step"
+                },
+                "description": "The feature's steps, in order. A review step is injected from `review` (at a `{review: here}` marker, else after the last step)."
               },
               "in": {
                 "type": "string",
@@ -93,15 +99,15 @@
                   ]
                 },
                 "uniqueItems": true,
-                "description": "Everything this endpoint may do. Every step's effects must be declared here and allowed by the env."
+                "description": "Everything this feature may do. Every step's effects must be declared here and allowed by the env."
               },
               "playbook": {
                 "type": "string",
-                "description": "features/<feature>/playbook.md (relative to the mode folder)"
+                "description": "features/<feature>/playbook.md (relative to the mode folder). Required when a step runs a role; a code-only feature has none."
               },
               "rules": {
                 "type": "string",
-                "description": "features/<feature>/rules.yaml"
+                "description": "features/<feature>/rules.yaml. Optional."
               },
               "review": {
                 "type": "object",
@@ -178,101 +184,7 @@
         },
         "roles": {
           "$ref": "#/$defs/roleEnvs",
-          "description": "The roles this mode uses and the env each one works in: {role: env}. Features and workflow steps may override entries (`roles:` of the same shape); one env per step. Children inherit the map and override it entry by entry."
-        },
-        "workflows": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-              "type": "object",
-              "required": [
-                "id"
-              ],
-              "additionalProperties": false,
-              "oneOf": [
-                {
-                  "required": [
-                    "run"
-                  ]
-                },
-                {
-                  "required": [
-                    "role"
-                  ]
-                },
-                {
-                  "required": [
-                    "gate"
-                  ]
-                },
-                {
-                  "required": [
-                    "review"
-                  ]
-                }
-              ],
-              "properties": {
-                "id": {
-                  "type": "string",
-                  "pattern": "^[a-z][a-z0-9-]*$"
-                },
-                "run": {
-                  "type": "string",
-                  "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)*/v[0-9]+\\.[a-z][a-z0-9-]*$",
-                  "description": "Code step: <capability>/v<N>.<endpoint>, e.g. items.store/v1.sync (same spelling as role `uses`)."
-                },
-                "role": {
-                  "type": "string"
-                },
-                "with": {
-                  "type": "object",
-                  "description": "Input for a code step. \"$in.<field>\" and \"$steps.<id>.<field>\" are substituted; missing values are dropped."
-                },
-                "when": {
-                  "type": "string",
-                  "pattern": "^(stale\\s*>\\s*[0-9]+[mhdw]|!?approved\\s+\\$in\\.[A-Za-z][A-Za-z0-9]*|!?\\$in\\.[A-Za-z][A-Za-z0-9]*|!?\\$steps\\.[a-z][a-z0-9-]*\\.[A-Za-z][A-Za-z0-9]*)$",
-                  "description": "`stale > 2h` (code step: skip unless the store is older), `$in.<field>` or `$steps.<id>.<field>` (skip unless truthy); a leading `!` skips when true instead."
-                },
-                "task": {
-                  "type": "string",
-                  "description": "What the role should do in this step (goal of its TaskEnvelope)."
-                },
-                "out": {
-                  "type": "string"
-                },
-                "gate": {
-                  "type": "string",
-                  "description": "Approval gate: the dispatcher stops with status awaiting-approval and shows this text; only the owner passes it, with `bay approve <callId>` (a terminal, or `--via chat` when approvals.chat is on). A gate takes no `when:`."
-                },
-                "approves": {
-                  "type": "string",
-                  "pattern": "^\\$in\\.[A-Za-z][A-Za-z0-9]*(\\|\\$steps\\.[a-z][a-z0-9-]*\\.[A-Za-z][A-Za-z0-9]*)?$",
-                  "description": "Gate only: `$in.<field>` names a project file whose exact content the gate approves; `|$steps.<id>.<field>` falls back to the docs/proposals file listed in an earlier step's output (its `artifacts`). The ledger records its path and sha256 with the approval; a later call naming the same file with the same content skips the gate, any edit makes it run again."
-                },
-                "review": {
-                  "const": "here",
-                  "description": "Position marker for the review step configured on the endpoint (mode.yaml endpoints.<f>.review). Without a marker, review runs after the last step."
-                },
-                "roles": {
-                  "$ref": "#/$defs/roleEnvs",
-                  "description": "This step's env for its role ({<role>: <env>}, one entry), over the feature's and the mode's."
-                },
-                "tier": {
-                  "$ref": "#/$defs/tier",
-                  "description": "Tier of this role step (over the feature's and the role's)."
-                },
-                "effort": {
-                  "$ref": "#/$defs/effort",
-                  "description": "Effort of this role step (over the feature's and the role's)."
-                }
-              }
-            }
-          },
-          "propertyNames": {
-            "pattern": "^[a-z][a-z0-9-]*$"
-          }
+          "description": "The roles this mode uses and the env each one works in: {role: env}. Features and steps may override entries (`roles:` of the same shape); one env per step. Children inherit the map and override it entry by entry."
         },
         "constraints": {
           "type": "object",
@@ -309,14 +221,14 @@
           "items": {
             "type": "string"
           },
-          "description": "Interfaces the mode's steps and roles use, versioned (`<interface>/v<N>`); `bay lint` refuses an unversioned name (B-6)."
+          "description": "Interfaces the mode's steps and roles use, versioned (`<interface>/v<N>`); `bay check` refuses an unversioned name (B-6)."
         },
         "reads": {
           "type": "array",
           "items": {
             "type": "string"
           },
-          "description": "Item kinds (content types) the mode reads, versioned (`<kind>/v<N>`, e.g. post/v1). `bay lint` refuses an unversioned or unknown kind, and a kind or version that no items.source connector bound in the mode's envs produces (B-6). An abstract mode may declare none; inherited by children unless they set their own."
+          "description": "Item kinds (content types) the mode reads, versioned (`<kind>/v<N>`, e.g. post/v1). `bay check` refuses an unversioned or unknown kind, and a kind or version that no items.source connector bound in the mode's envs produces (B-6). An abstract mode may declare none; inherited by children unless they set their own."
         },
         "config": {
           "type": "string",
@@ -337,14 +249,97 @@
       "then": {
         "required": [
           "purpose",
-          "endpoints",
-          "roles",
-          "workflows"
+          "features",
+          "roles"
         ]
       }
     }
   },
   "$defs": {
+    "step": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "run"
+          ]
+        },
+        {
+          "required": [
+            "role"
+          ]
+        },
+        {
+          "required": [
+            "gate"
+          ]
+        },
+        {
+          "required": [
+            "review"
+          ]
+        }
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "run": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)*/v[0-9]+\\.[a-z][a-z0-9-]*$",
+          "description": "Code step: <capability>/v<N>.<endpoint>, e.g. items.store/v1.sync (same spelling as role `uses`)."
+        },
+        "role": {
+          "type": "string"
+        },
+        "with": {
+          "type": "object",
+          "description": "Input for a code step. \"$in.<field>\" and \"$steps.<id>.<field>\" are substituted; missing values are dropped."
+        },
+        "when": {
+          "type": "string",
+          "pattern": "^(stale\\s*>\\s*[0-9]+[mhdw]|!?approved\\s+\\$in\\.[A-Za-z][A-Za-z0-9]*|!?\\$in\\.[A-Za-z][A-Za-z0-9]*|!?\\$steps\\.[a-z][a-z0-9-]*\\.[A-Za-z][A-Za-z0-9]*)$",
+          "description": "`stale > 2h` (code step: skip unless the store is older), `$in.<field>` or `$steps.<id>.<field>` (skip unless truthy); a leading `!` skips when true instead."
+        },
+        "task": {
+          "type": "string",
+          "description": "What the role should do in this step (goal of its TaskEnvelope)."
+        },
+        "out": {
+          "type": "string"
+        },
+        "gate": {
+          "type": "string",
+          "description": "Approval gate: the dispatcher stops with status awaiting-approval and shows this text; only the owner passes it, with `bay approve <callId>` (a terminal, or `--via chat` when approvals.chat is on). A gate takes no `when:`."
+        },
+        "approves": {
+          "type": "string",
+          "pattern": "^\\$in\\.[A-Za-z][A-Za-z0-9]*(\\|\\$steps\\.[a-z][a-z0-9-]*\\.[A-Za-z][A-Za-z0-9]*)?$",
+          "description": "Gate only: `$in.<field>` names a project file whose exact content the gate approves; `|$steps.<id>.<field>` falls back to the docs/proposals file listed in an earlier step's output (its `artifacts`). The ledger records its path and sha256 with the approval; a later call naming the same file with the same content skips the gate, any edit makes it run again."
+        },
+        "review": {
+          "const": "here",
+          "description": "Position marker for the review step configured on the feature (mode.yaml features.<f>.review). Without a marker, review runs after the last step."
+        },
+        "roles": {
+          "$ref": "#/$defs/roleEnvs",
+          "description": "This step's env for its role ({<role>: <env>}, one entry), over the feature's and the mode's."
+        },
+        "tier": {
+          "$ref": "#/$defs/tier",
+          "description": "Tier of this role step (over the feature's and the role's)."
+        },
+        "effort": {
+          "$ref": "#/$defs/effort",
+          "description": "Effort of this role step (over the feature's and the role's)."
+        }
+      }
+    },
     "roleEnvs": {
       "type": "object",
       "minProperties": 1,

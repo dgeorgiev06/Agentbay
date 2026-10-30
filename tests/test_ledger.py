@@ -180,7 +180,7 @@ PLAN = {"outcome": "bay plan exists", "todo": [{"text": "write it", "serves": "s
 
 
 def _dispatch(p, tid=TID, agent="builder--forge--framework-dev", **kw):
-    r = cli(p, "dispatched", tid, "--agent", agent, "--model", "sonnet", "--tier", "balanced", "--role", "builder",
+    r = cli(p, "note", "dispatch", tid, "--agent", agent, "--model", "sonnet", "--tier", "balanced", "--role", "builder",
             "--mode", "forge", "--call", "C-1", "--step", "implement", *kw.get("extra", []))
     assert r.returncode == 0, r.stderr
 

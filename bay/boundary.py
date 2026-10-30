@@ -1,4 +1,4 @@
-"""`bay boundary`: a deterministic check that a change stays inside its boundaries (proposal 0006, Part F).
+"""`bay check --base <ref>`: a deterministic check that a change stays inside its boundaries (proposal 0006, Part F).
 
 It reads `git diff --name-status --no-renames <base>...<head>` and classifies each changed path (deletions
 and both sides of a move included) with
@@ -10,8 +10,7 @@ framework/components.yaml and the proposal's `touches:`:
   feature (its literal prefix reaches `<mode>/features/`); a whole-mode entry does not cover features.
   Mode-wide files (mode.yaml, playbook.md, ...) must be listed too.
 - docs: README.md, docs/DESIGN.md, docs/INTERFACES.md change only when listed.
-- other: tests/, the proposal, HANDOFF.md, proposal/research records, repo meta and generated files pass
-  (agentbay.config.example.yaml: `bay config example` assembles it from the extensions, lint fails when stale).
+- other: tests/, the proposal, HANDOFF.md, proposal/research records and repo meta pass.
 - a file in the repo root that no component owns (TODO.md, CLAUDE.md) passes: it is not framework code.
 - anything else is unowned and fails unless listed (CI config under `.github/` included).
 
@@ -39,7 +38,7 @@ import yaml
 
 DOCS = ("README.md", "docs/DESIGN.md", "docs/INTERFACES.md")
 OTHER = ("tests/", "HANDOFF.md", "docs/proposals/", "docs/research/", ".gitignore", ".gitattributes",
-         ".editorconfig", "LICENSE", "LICENSE.md", "agentbay.config.example.yaml")
+         ".editorconfig", "LICENSE", "LICENSE.md")
 # contracts whose instance names B-11 forbids in the core docs
 NAMED_CONTRACTS = ("mode", "connector", "env", "contentType")
 

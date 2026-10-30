@@ -26,6 +26,12 @@ touches:
   - { path: schemas/agent.schema.json, reason: "removed with the agent file", slice: 2 }
   - { path: schemas/adapter.schema.json, reason: "adds the profile", slice: 2 }
   - { path: schemas/config.schema.json, reason: "no `envs:`; `offline:`", slice: 2 }
+  - { path: connectors/x-api/README.md, reason: "rename leftover: names `local-feeds-offline` and the `envs:` line of the config", slice: 2 }
+  - { path: connectors/fake/README.md, reason: "rename leftover: names the env `local-feeds-offline`", slice: 2 }
+  - { path: connectors/fake-mail/README.md, reason: "rename leftover: names the env `local-mail-offline`", slice: 2 }
+  - { path: connectors/fake-mail/connector.yaml, reason: "rename leftover: description names the env `local-mail-offline`", slice: 2 }
+  - { path: modes/feed-briefing/README.md, reason: "rename leftover: names `local-feeds-offline`", slice: 2 }
+  - { path: modes/mail-briefing/README.md, reason: "rename leftover: names `local-mail-offline`", slice: 2 }
   # slice 3: one feature shape
   - { path: bay/model.py, reason: "feature = interface + inline steps + optional playbook and rules; substitution code removed", slice: 3 }
   - { path: bay/dispatch.py, reason: "runs inline steps", slice: 3 }
@@ -34,10 +40,27 @@ touches:
   - { path: "framework/modes/forge/templates/", reason: "one feature template", slice: 3 }
   - { path: "modes/*/mode.yaml", reason: "migrated to features", slice: 3 }
   - { path: "framework/modes/*/mode.yaml", reason: "migrated to features", slice: 3 }
+  - { path: bay/playbook.py, reason: "rename leftover: says `endpoints.<feature>.review`; becomes `features.<feature>.review`", slice: 3 }
   # slice 4: CLI
   - { path: bay/cli.py, reason: "25 commands to about 15; `bay improve` removed", slice: 4 }
   - { path: bay/guard.py, reason: "command names", slice: 4 }
   - { path: bay.sh, reason: "command names", slice: 4 }
+  - { path: coordinator/commands/bay-status.md, reason: "rename leftover: calls the removed `bay log`; becomes `status --log -n 10`", slice: 4 }
+  - { path: bay/checks.py, reason: "rename leftover: detail text `bay lint clean`", slice: 4 }
+  - { path: bay/registry.py, reason: "rename leftover: comment names `bay lint`", slice: 4 }
+  - { path: framework/interfaces/improve.findings.v1.yaml, reason: "rename leftover: description names `bay improve decide`", slice: 4 }
+  - { path: schemas/connector.schema.json, reason: "rename leftover: two descriptions name `bay lint` and `bay validate`", slice: 4 }
+  - { path: framework/connectors/scaffold/connector.yaml, reason: "rename leftover: description names `bay <kind> new`", slice: 4 }
+  - { path: framework/modes/forge/README.md, reason: "rename leftover: names `bay <kind> new`", slice: 4 }
+  - { path: framework/modes/forge/playbook.md, reason: "stage-2 review follow-up: the coordinator runs `git fetch origin` before forge.extend", slice: 4 }
+  - { path: framework/modes/forge/features/create/playbook.md, reason: "rename leftover: `bay <kind> new`, `./bay.sh lint` and `./bay.sh validate` (the builder's cli list now has `check`)", slice: 4 }
+  - { path: framework/modes/forge/features/create/rules.yaml, reason: "rename leftover: R-1 names `bay lint`", slice: 4 }
+  - { path: framework/modes/forge/features/extend/rules.yaml, reason: "rename leftover: R-3 names `bay lint`", slice: 4 }
+  - { path: framework/modes/cos/features/run/playbook.md, reason: "rename leftover: names `bay lint`", slice: 4 }
+  - { path: framework/modes/improve/features/audit/playbook.md, reason: "rename leftover: names `bay lint`", slice: 4 }
+  - { path: framework/modes/improve/features/backlog/playbook.md, reason: "rename leftover: DOD-2 names `bay improve decide`; the report prints `bay approve`", slice: 4 }
+  - { path: framework/modes/improve/features/backlog/rules.yaml, reason: "rename leftover: R-3 names `bay improve decide`", slice: 4 }
+  - { path: framework/modes/improve/features/implement/playbook.md, reason: "rename leftover: names `bay improve decide`", slice: 4 }
   # slice 5: 0006 step 2 and slice 4
   - { path: "content-types/", reason: "post and email content types (0006 step 2)", slice: 5 }
   - { path: "modes/*/features/*/", reason: "feature.yaml folds into the feature (0006 slice 4)", slice: 5 }
@@ -251,7 +274,7 @@ Each slice is sized for one builder (about 40 tool calls) and ends with `python3
      - (d) the reviewer probe gate_repro_sha.py's R5 step should catch ResolveError (test fixture only).
 2. **Envs, agent profile, config.** Item 2 (offline, agent into adapter, config, limits). Acceptance: both offline env files and the committed example config are gone; the fake-source demo still runs; lint refuses an offline env with a network entry and a config that raises a limit; the dead-code check reports no new findings.
 3. **One feature shape.** Item 2 (feature). Acceptance: every mode builds from `features:`; a code-only feature has no playbook and passes lint; `bay catalog` is unchanged except for ordering; the dead-code check reports no new findings.
-4. **CLI.** Item 2 (commands). Acceptance: `bay --help` lists about 15 commands; an old command name is an unknown command; `.agentbay/COORDINATOR.md` uses the new names; the dead-code check reports no new findings.
+4. **CLI.** Item 2 (commands). Renames reach every file that names an old command, so the touches above list them; the fetch line is the stage-2 review follow-up. Acceptance: `bay --help` lists about 15 commands; an old command name is an unknown command; `.agentbay/COORDINATOR.md` uses the new names; the dead-code check reports no new findings.
 5. **Finish 0006.** Item 3. Acceptance: the 0006 step 2 acceptance lines; the dead-code check reports no new findings.
 6. **Improve as a mode.** Item 4. Acceptance: `bay/improve/` is gone; `bay call improve.scan` and `improve.audit` give the same findings on the fixture data; a backlog item cannot be approved without the user; the dead-code check reports no new findings.
 7. **Workflows.** Item 5. Acceptance: one stage-syntax parser in `bay/`; the workflow tests pass; `cos.run` still starts a project workflow; the dead-code check reports no new findings.

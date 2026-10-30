@@ -84,7 +84,7 @@ def lint_clean(output, ctx: CheckContext, arg=None) -> dict:
     problems = lint.run(ctx.kit) if ctx.kit else []
     if problems:
         return {"ok": False, "detail": f"{len(problems)} lint problem(s); first: {problems[0]}"}
-    return {"ok": True, "detail": "bay lint clean"}
+    return {"ok": True, "detail": "bay check: lint clean"}
 
 
 REGISTRY: dict[str, Callable] = {

@@ -9,25 +9,26 @@ and the history of each decision is in [proposals/](proposals/).
 | Concept | Is | Who writes it |
 |---|---|---|
 | **Role** | a generic job: prompt, `doneWhen`, rules, skills, default tier (fast, balanced, deep), access (read or write). Five ship: `lead`, `analyst`, `researcher`, `builder`, `reviewer` | framework (`framework/roles/`) |
-| **Mode** | one logical job: purpose, endpoints (features), workflows, the roles it uses and the env each works in (`roles:`), the capabilities it needs, constraints, playbooks, skills, rules | you (`modes/`), or the framework |
-| **Agent profile** | how one LLM product runs roles: runtime per kind of role (coordinator, worker), tier -> model, effort values. Selected once with `agent:` (default `claude-code`) | framework (`framework/agents/`) |
+| **Mode** | one logical job: purpose, features (in/out, effects, steps), the roles it uses and the env each works in (`roles:`), the capabilities it needs, constraints, playbooks, skills, rules | you (`modes/`), or the framework |
+| **Agent profile** | how one LLM product runs roles: runtime per kind of role (coordinator, worker), tier -> model, effort values. Selected once with `agent:` (default `claude-code`) | the runtime adapter (`adapters/<name>/adapter.yaml`, `profile:`) |
 | **Environment** | what a role can touch: capability bindings, secrets (names and provider), network allowlist, filesystem paths, allowed tiers, effects, limits | you (`envs/`), or the framework |
 | **Connector** | code implementing a capability interface; holds the secrets and network use | you (`connectors/`), or the framework |
 | **Capability interface** | a versioned contract: named endpoints with JSON-schema in/out and declared effects (`read`, `write`, `network`, `spend`, `delete`) | `interfaces/`, `framework/interfaces/` |
 
 Modes name capabilities, never connectors or tools. Adding a source is one connector plus one binding line in
-an env; no mode, role or playbook changes. A user file under `roles/` or `agents/` is an error: a mode
+an env; no mode, role or playbook changes. A user file under `roles/` is an error: a mode
 customizes a role through its playbooks, skills and rules, and a new role is a `forge.extend` proposal.
 
-A mode may `extends:` another. Inheritance is resolved when the kit loads (endpoints merge key by key,
-workflows per workflow, `roles`/constraints/configDefaults entry by entry, needs are unioned, inherited paths
+A mode may `extends:` another. Inheritance is resolved when the kit loads (features merge key by key,
+a child's `steps` replace the feature's whole, `roles`/constraints/configDefaults entry by entry, needs are unioned, inherited paths
 are rebased), so every later stage sees a complete mode. `abstract: true` marks a base that is linted but
 never installed (`modes/briefing`).
 
-## Features and workflows
+## Features
 
-An endpoint (feature) declares, in `mode.yaml`, its input and output types, effects, workflow, playbook,
-rules and optional review block. A workflow is ordered steps:
+A feature is one block under `features:` in `mode.yaml`: its input and output types, effects, ordered `steps`,
+an optional review block, and a playbook and rules file when it needs them (a feature that runs no role needs
+neither; one that runs a role needs a playbook). It is called as `<mode>.<feature>`. The steps are:
 
 - `run: <capability>/v<N>.<endpoint>`: deterministic code, run by the dispatcher in the coordinator's env;
 - `role: <role>`: an agentic step, run by that role in the env the step, feature or mode `roles:` names;
@@ -45,7 +46,7 @@ id (`review.verdict/v1`). A failed must item or a blocker makes the call `partia
 
 ## Compile: units
 
-`bay validate` lints and then resolves every endpoint, failing with every gap at once, each naming the
+`bay check` lints and then resolves every endpoint, failing with every gap at once, each naming the
 concept and the fix: unknown names, unbound capabilities, effects the endpoint does not declare or the env
 does not allow, tiers the env does not allow, connector needs (hosts, secrets, paths) beyond the env, and
 steps that could write `framework/`, `bay/`, `schemas/` or `adapters/` outside `forge.extend`.
@@ -81,8 +82,8 @@ The run log (`events.jsonl` under `.agentbay/`) is append-only; state is a fold 
 `call.completed` (mode, endpoint, step, role, agent, env, cost, optional `durationMs`/`tokens`/`costUsd`),
 hooks write agent runs (`spawned`, `completed`, `failed`), the guard writes `permission.denied` (never the
 command), shims write `data.read`, and `bay note` writes notes (an instruction change, a decision). Agent
-runs are recorded by the parties that know them: the Chief of Staff logs each dispatch (`bay dispatched`, with
-inputs) and any review it ran outside a review step (`bay review-record`); a subagent records its outcome and
+runs are recorded by the parties that know them: the Chief of Staff logs each dispatch (`bay note dispatch`, with
+inputs) and any review it ran outside a review step (`bay note review`); a subagent records its outcome and
 to-do list first (`bay plan`, items ticked with `--done`), the only `bay` command it may run. A reviewer's
 verdict can cite them (`cites`), and `bay status --agents` groups runs by role, mode, model and tier. Notes
 attach to a run, task or call and never create a run. Every value is pattern-scanned for secrets and redacted
@@ -142,7 +143,7 @@ redacted and scanned again.
 A project workflow is stages in `agentbay.config.yaml`, each a `call: <mode>.<endpoint>` or a `gate:`. The
 root mode's endpoints, over `workflow.run/v1`, return the call to make; the coordinator makes it the ordinary
 way, so every stage keeps its own grants, effects, budget, review and gates, and nothing recurses.
-`bay validate` checks each stage's target and input and prints the union of stage effects.
+`bay check` checks each stage's target and input and prints the union of stage effects.
 
 ## Framework modes and connectors
 

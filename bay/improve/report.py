@@ -23,7 +23,7 @@ def agent_runs(agents: dict) -> list[str]:
 def backlog(items: list[dict], counts: dict, week: str, generated: str, agents: dict | None = None) -> str:
     lines = [f"# improve backlog {week}", "",
              f"Generated {generated}. " + ", ".join(f"{n} {s}" for s, n in counts.items() if n) + ".", "",
-             "Decide each item in your own terminal: `.agentbay/bay improve decide <id> approve|defer|wontfix`.",
+             "Decide each item in your own terminal: `.agentbay/bay approve <id>` (or `--defer`, `--wontfix`).",
              "Approved items are implemented only on demand: `.agentbay/bay call improve.implement "
              "'{\"id\": \"<id>\"}'`.", ""]
     if not items:
@@ -72,7 +72,7 @@ def handoff(f: dict, draft: dict, task_id: str) -> tuple[str, str, dict]:
         "```task", "protocol: TaskEnvelope/v1", f"taskId: {task_id}",
         f"goal: {env.get('goal') or draft['title']}", "context: |", *[f"  {ln}" for ln in ctx.splitlines()],
         "constraints:", *[f"  - {c}" for c in env.get("constraints") or
-                          ["change only the mode named in the finding", "bay lint and validate stay clean"]],
+                          ["change only the mode named in the finding", "bay check stays clean"]],
         f"deliverable: {env.get('deliverable') or draft['change'][:300]}", "```", ""])
     return f"{f['id']}.task.md", body, {"envelope": body,
                                          "how": "the Chief of Staff hands this to forge.create or the builder role"}

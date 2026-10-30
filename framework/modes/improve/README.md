@@ -4,8 +4,8 @@ Finds recurring failures and waste in sessions and in the code and content, with
 weekly backlog and hands the items you approve to forge. It never edits what it inspects.
 
 Features: `scan` (session lens), `audit` (artifact lens), `triage`, `backlog` (`schedule: weekly`),
-`implement` (one approved item) and `verify`. `bay improve weekly` runs scan, audit, triage and backlog;
-`bay improve decide <id> approve|defer|wontfix` records your decision.
+`implement` (one approved item) and `verify`. The weekly run is scan, audit, triage, then backlog (the Chief of
+Staff's playbook, or a cron line per call); `bay approve <id>` (or `--defer`, `--wontfix`) records your decision.
 
 **Settings** (`config.schema.json`, `modes.improve`): `window`, `retention`, `backlogTop`, `triageTop`,
 `thresholds`, `historyDocs`; see `config.example.yaml`.
@@ -37,8 +37,8 @@ its roles read through use shims.
 Weekly, from cron:
 
 ```cron
-17 8 * * 1  cd ~/code/my-repo && .agentbay/bay improve weekly >> .agentbay/data/improve/weekly.log 2>&1
+17 8 * * 1  cd ~/code/my-repo && for f in scan audit triage; do .agentbay/bay call improve.$f '{}'; done >> .agentbay/data/improve/weekly.log 2>&1
 ```
 
-`bay improve weekly` runs scan, audit and triage, and writes the report only when no agent step is pending;
-otherwise it lists the pending calls for the coordinator to finish, then `improve.backlog`.
+The analysis steps of scan, audit and triage need an agent: the Chief of Staff finishes the calls the cron run left
+pending, then runs `improve.backlog` to write the report.

@@ -1,8 +1,8 @@
 """Load and resolve the agentbay model.
 
-    Mode -> endpoint (feature) -> workflow step -> Role, in the env the mode's `roles:` map names -> Connector
-    Agent: one profile per LLM product (runtime per kind of role, tier -> model), selected once in
-    agentbay.config.yaml (`agent:`, default claude-code)
+    Mode -> feature -> step -> Role, in the env the mode's `roles:` map names -> Connector
+    Agent profile: one per LLM product (runtime per kind of role, tier -> model), the `profile:` of a runtime
+    adapter (adapters/<name>/adapter.yaml), selected once in agentbay.config.yaml (`agent:`, default claude-code)
 
 Each distinct (role, mode, env) a mode uses compiles to its own unit (`<role>--<mode>`, plus `--<env>` when
 the mode runs that role in several envs): its own subagent, use shim, guard policy and store access.
@@ -13,10 +13,9 @@ and the kit root (user content). Both have the same layout:
     interfaces/<name>.v<N>.yaml   modes/<name>/mode.yaml   envs/<name>.yaml
     connectors/<name>/connector.yaml
 
-Roles (roles/<name>.yaml) and agent profiles (agents/<name>.yaml) exist only under framework/; a user file of
-either kind is an error.
+Roles (roles/<name>.yaml) exist only under framework/; a user file of that kind is an error.
 
-`resolve(kit)` walks every endpoint and fails with ALL gaps at once, each one a
+`resolve(kit)` walks every feature and fails with ALL gaps at once, each one a
 human-readable sentence naming the concept and what to fix. The `System` it
 returns is the only thing adapters and the dispatcher consume.
 """
@@ -46,7 +45,6 @@ KINDS = {  # kind -> (folder, glob, schema)
     "Interface": ("interfaces", "*.yaml", "interface"),
     "Mode": ("modes", "*/mode.yaml", "mode"),
     "Role": ("roles", "*.yaml", "role"),
-    "Agent": ("agents", "*.yaml", "agent"),
     "Environment": ("envs", "*.yaml", "environment"),
     "Connector": ("connectors", "*/connector.yaml", "connector"),
 }
@@ -63,9 +61,7 @@ FRAMEWORK_EXTENDER = "forge.extend"
 USER_ROLE = ("roles are framework-level; customize behaviour in your mode's playbooks/skills, or propose a new "
              "role via forge.extend")
 # Kinds loaded from framework/ only; user space is modes/, envs/, connectors/ (and interfaces/).
-FRAMEWORK_ONLY = {"Role": USER_ROLE,
-                  "Agent": "agent profiles are framework-level (framework/agents/); select one with `agent:` in "
-                           "agentbay.config.yaml, or propose a new profile via forge.extend"}
+FRAMEWORK_ONLY = {"Role": USER_ROLE}
 ROOT_COORDINATOR = "cos"      # the mode whose coordinator owns the main thread; its playbook is the preamble
 
 
@@ -114,9 +110,9 @@ def item_kinds(kit: Path = KIT) -> dict[str, set[int]]:
 
 
 def mode_envs(md: Doc) -> list[str]:
-    """Every env a mode's `roles:` maps (mode-wide and per endpoint), in order."""
+    """Every env a mode's `roles:` maps (mode-wide and per feature), in order."""
     s, out = md.spec, []
-    for m in [s.get("roles"), *((ep or {}).get("roles") for ep in (s.get("endpoints") or {}).values())]:
+    for m in [s.get("roles"), *((ep or {}).get("roles") for ep in (s.get("features") or {}).values())]:
         if isinstance(m, dict):
             out += [e for e in m.values() if isinstance(e, str)]
     return list(dict.fromkeys(out))
@@ -213,8 +209,8 @@ class Kit:
         self._apply_extends()
         from . import config as cfgmod
         self.config = copy.deepcopy(cfgmod.load(project) if config is None else config)
-        self.env_swap: dict[str, str] = {}
-        self._select_envs()
+        if self.config.get("offline") is True:
+            self._go_offline()
 
     def _apply_extends(self) -> None:
         """Resolve `extends:` at load time, so the resolver, lint, conformance and improve always see a complete
@@ -263,29 +259,35 @@ class Kit:
             if not ok:
                 modes.pop(name, None)
 
-    def _select_envs(self) -> None:
-        """agentbay.config.yaml `envs: {A: B}` runs every role a mode puts in env A in env B instead, if B
-        declares `substitutes: A`. Capabilities stay bound only in envs/; this only chooses between tracked envs."""
-        for frm, to in (self.config.get("envs") or {}).items():
-            a, b = self.docs["Environment"].get(frm), self.docs["Environment"].get(to)
-            if a is None or b is None:
-                self.errors.append(f"agentbay.config.yaml envs: unknown env '{frm if a is None else to}' "
-                                   f"(have: {', '.join(sorted(self.docs['Environment']))})")
+    def _go_offline(self) -> None:
+        """agentbay.config.yaml `offline: true`: every env with an `offline:` block binds what the block lists
+        over its own bindings, and has no network and no secrets, whatever the block says (lint refuses a block
+        that lists any). Envs without the block are unchanged."""
+        for env in self.docs["Environment"].values():
+            off = env.spec.get("offline")
+            if not off:
                 continue
-            if b.spec.get("substitutes") != frm:
-                self.errors.append(f"agentbay.config.yaml envs: env {to} does not declare `substitutes: {frm}`, "
-                                   f"so it cannot stand in for {frm}")
-                continue
-            self.env_swap[frm] = to
+            env.spec["bind"] = {**env.spec["bind"], **off["bind"]}
+            env.spec["network"] = {"allow": []}
+            if "secrets" in env.spec:
+                env.spec["secrets"] = {**env.spec["secrets"], "allow": []}
 
-    def env_name(self, name: str | None) -> str | None:
-        """The env a `roles:` entry names, after agentbay.config.yaml `envs:` substitution."""
-        return self.env_swap.get(name, name) if name else None
+    def profiles(self) -> dict[str, dict]:
+        """Every agent profile: the `profile:` of each adapters/<name>/adapter.yaml that has one, by adapter name."""
+        out: dict[str, dict] = {}
+        for y in sorted((self.root / "adapters").glob("*/adapter.yaml")):
+            try:
+                meta = yaml.safe_load(y.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, yaml.YAMLError):
+                continue                   # lint_adapters reports an unreadable adapter.yaml
+            if isinstance(meta, dict) and isinstance(meta.get("profile"), dict):
+                out[y.parent.name] = meta["profile"]
+        return out
 
-    def profile(self) -> tuple[Doc | None, str]:
+    def profile(self) -> tuple[dict | None, str]:
         """(the agent profile that runs every role, its name): agentbay.config.yaml `agent:`, else claude-code."""
         name = self.config.get("agent") or DEFAULT_AGENT
-        return self.docs["Agent"].get(name), name
+        return self.profiles().get(name), name
 
     def _load(self, kind: str, root_name: str, f: Path, sch: str) -> None:
         doc = load_yaml(f)
@@ -298,7 +300,7 @@ class Kit:
         if kind == "Mode" and isinstance(doc.get("spec"), dict) and doc["spec"].get("extends"):
             # a child declares only what it overrides; the merged spec is checked in full after extends
             sch_doc = copy.deepcopy(sch_doc)
-            sch_doc["properties"]["spec"]["properties"]["endpoints"]["additionalProperties"].pop("required", None)
+            sch_doc["properties"]["spec"]["properties"]["features"]["additionalProperties"].pop("required", None)
         errs = schema_errors(doc, sch_doc)
         if errs:
             raise SpecError(f"{where}:\n    " + "\n    ".join(errs))
@@ -336,9 +338,9 @@ def rel(p: Path) -> str:
 
 
 def merge_mode(parent: dict, child: dict, pdir: Path, cdir: Path) -> dict:
-    """A child mode spec over its parent's. Endpoints merge key by key (a child may override review, in/out,
-    workflow, playbook, rules, ...; an endpoint's `roles` merges entry by entry); workflows are replaced per
-    workflow; `roles` (role -> env), constraints and configDefaults merge entry by entry; needs are unioned;
+    """A child mode spec over its parent's. Features merge key by key (a child may override review, in/out,
+    steps, playbook, rules, ...; a feature's `roles` merges entry by entry, its `steps` are replaced whole);
+    `roles` (role -> env), constraints and configDefaults merge entry by entry; needs are unioned;
     anything else the child sets replaces the parent's. Paths the child inherits
     (playbook, rules, config) are rebased so they still resolve from the child's folder. `abstract` is not
     inherited."""
@@ -348,22 +350,20 @@ def merge_mode(parent: dict, child: dict, pdir: Path, cdir: Path) -> dict:
     out = copy.deepcopy(parent)
     out.pop("abstract", None)
     out.pop("extends", None)
-    for ep in out.get("endpoints", {}).values():
+    for ep in out.get("features", {}).values():
         for k in ("playbook", "rules"):
             if ep.get(k):
                 ep[k] = rebase(ep[k])
     if out.get("config"):
         out["config"] = rebase(out["config"])
     for k, v in child.items():
-        if k == "endpoints":
-            eps = out.setdefault("endpoints", {})
+        if k == "features":
+            eps = out.setdefault("features", {})
             for name, e in v.items():
                 merged = {**eps.get(name, {}), **copy.deepcopy(e)}
                 if isinstance(e.get("roles"), dict) and isinstance(eps.get(name, {}).get("roles"), dict):
                     merged["roles"] = {**eps[name]["roles"], **e["roles"]}
                 eps[name] = merged
-        elif k == "workflows":
-            out.setdefault("workflows", {}).update(copy.deepcopy(v))
         elif k in ("constraints", "configDefaults") or (k == "roles" and isinstance(v, dict)
                                                          and isinstance(out.get(k), dict)):
             out[k] = {**out.get(k, {}), **copy.deepcopy(v)}
@@ -465,10 +465,9 @@ class Step:
 
 @dataclass
 class Feature:
-    """One endpoint of a mode: interface (in/out/effects), workflow, playbook, rules, review."""
+    """One feature of a mode: interface (in/out/effects), steps, optional playbook and rules, review."""
     mode: str
     name: str
-    workflow: str
     steps: list[Step]
     effects: list[str]
     in_type: str | None
@@ -492,7 +491,7 @@ class ResolvedMode:
     purpose: str
     path: Path
     coordinator: str | None
-    roles: dict                       # role -> env (after agentbay.config.yaml `envs:` substitution)
+    roles: dict                       # role -> env
     features: dict[str, Feature]
     constraints: dict
     needs: list[str]
@@ -510,7 +509,7 @@ class System:
     modes: dict[str, ResolvedMode]
     roles: dict[str, RoleDef]
     uninstalled: dict = field(default_factory=dict)   # "<mode>.<endpoint>" -> why it is not installed here
-    warnings: list = field(default_factory=list)      # non-fatal findings (bay validate prints them)
+    warnings: list = field(default_factory=list)      # non-fatal findings (bay check prints them)
     agent: str = DEFAULT_AGENT                        # the agent profile
 
     def env(self, name: str) -> Doc:
@@ -678,7 +677,7 @@ def role_env(spec: dict, ep: dict | None, st: dict | None, role: str) -> str | N
 
 
 def step_role(st: dict, ep: dict) -> str | None:
-    """The role a workflow step runs: its `role`, or the review role at a `{review: here}` marker."""
+    """The role a step runs: its `role`, or the review role at a `{review: here}` marker."""
     if "role" in st:
         return st["role"]
     rv = ep.get("review") or {}
@@ -690,7 +689,7 @@ def step_role(st: dict, ep: dict) -> str | None:
 def role_env_problems(md: Doc) -> list[tuple[str | None, str | None, str]]:
     """(feature, step id, message) for every problem with a mode's role -> env maps: a step's role the mode
     does not list, a role with no env, two envs for one step, overrides of roles the mode does not list, and
-    `roles:` on code or gate steps. `bay lint` reports them with file:line, resolve as gaps."""
+    `roles:` on code or gate steps. `bay check` reports them with file:line, resolve as gaps."""
     s, name = md.spec, md.name
     roles = s.get("roles")
     if not roles:
@@ -711,13 +710,13 @@ def role_env_problems(md: Doc) -> list[tuple[str | None, str | None, str]]:
     coord = s.get("coordinator")
     if coord:
         check(coord, f"mode {name} coordinator", None, None, None, None)
-    for ep_name, ep in (s.get("endpoints") or {}).items():
+    for ep_name, ep in (s.get("features") or {}).items():
         for rn in (ep.get("roles") or {}):
             if rn not in roles:
                 out.append((ep_name, None, f"{name}.{ep_name}: `roles:` gives role {rn} an env, but mode {name} "
                                            f"does not list {rn} in its `roles:` ({have})"))
         rv = ep.get("review") or {}
-        steps = (s.get("workflows") or {}).get(ep.get("workflow"), [])
+        steps = ep.get("steps") or []
         for st in steps:
             sid = st.get("id")
             where = f"{name}.{ep_name} step {sid}"
@@ -750,8 +749,9 @@ class _Ctx:
         self.kit, self.gaps, self.seen_conn = kit, gaps, set()
         self.profile, self.agent = kit.profile()
         if self.profile is None:
-            gaps.append(f"agent profile '{self.agent}' not found (have: {', '.join(sorted(kit.docs['Agent'])) or 'none'}); "
-                        f"add agents/{self.agent}.yaml or set `agent:` in agentbay.config.yaml to one of them")
+            gaps.append(f"agent profile '{self.agent}' not found (have: {', '.join(sorted(kit.profiles())) or 'none'}); "
+                        f"add a `profile:` to adapters/{self.agent}/adapter.yaml or set `agent:` in "
+                        f"agentbay.config.yaml to one of them")
         self.roles: dict[str, RoleDef] = {}
         for name in sorted(kit.docs["Role"]):
             rd = resolve_role_def(kit, name, gaps)
@@ -760,7 +760,7 @@ class _Ctx:
         self.units: dict[tuple[str, str, str], ResolvedRole | None] = {}
 
     def inference(self, tier: str, effort: str) -> Inference:
-        p = self.profile.spec if self.profile else {}
+        p = self.profile or {}
         return Inference((p.get("tiers") or {}).get(tier, tier), (p.get("effort") or {}).get(effort, effort), tier)
 
     def unit(self, rn: str, md: Doc, env_name: str, kind: str, where: str) -> ResolvedRole | None:
@@ -831,7 +831,7 @@ class _Ctx:
             lim = env.spec.get("limits", {}).get(k)
             if lim is not None:
                 budget[k] = min(budget.get(k, lim), lim)
-        runtime = ((self.profile.spec.get("runtime") or {}).get(kind) if self.profile else None) or "?"
+        runtime = ((self.profile.get("runtime") or {}).get(kind) if self.profile else None) or "?"
         names = role_skill_names(md, rd)
         return ResolvedRole(
             name=rd.name, unit=f"{rd.name}--{mode}", mode=mode, env=env.name, kind=kind, runtime=runtime,
@@ -927,9 +927,9 @@ def code_env(kit: Kit, mode: Doc, iface: str, ep: dict | None = None) -> tuple[D
     roles = s.get("roles") or {}
     coord = s.get("coordinator")
     if coord:
-        name = kit.env_name(role_env(s, ep, None, coord))
+        name = role_env(s, ep, None, coord)
         return (kit.get("Environment", name) if name else None), f"the env of coordinator {coord}"
-    envs = [kit.get("Environment", kit.env_name(role_env(s, ep, None, rn)) or "") for rn in roles]
+    envs = [kit.get("Environment", role_env(s, ep, None, rn) or "") for rn in roles]
     for rn, env in zip(roles, envs):
         if env and _bound(env, iface) is not None:
             return env, f"the env of role {rn}"
@@ -949,7 +949,7 @@ def resolve(kit: Kit) -> System:
         if m:
             modes[mname] = m
     name_units(modes, gaps)
-    coord_rt = ((ctx.profile.spec.get("runtime") or {}).get("coordinator") if ctx.profile else None)
+    coord_rt = ((ctx.profile.get("runtime") or {}).get("coordinator") if ctx.profile else None)
     if coord_rt and coord_rt != "claude-code-main" and any(m.coordinator for m in modes.values()):
         gaps.append(f"agent profile {ctx.agent}: coordinators run on runtime {coord_rt}, but mode coordinators need "
                     f"claude-code-main (subagents cannot spawn subagents)")
@@ -970,7 +970,7 @@ def resolve_mode(kit: Kit, md: Doc, ctx: _Ctx, warnings: list[str] | None = None
     mcfg, feat_cfg = _mode_config(kit, md, gaps)
     constraints = _mode_constraints(md, mcfg, gaps)
     features: dict[str, Feature] = {}
-    for ep_name, ep in s["endpoints"].items():
+    for ep_name, ep in s["features"].items():
         feat = _feature(kit, md, ctx, ep_name, ep, feat_cfg)
         if feat:
             features[ep_name] = feat
@@ -978,7 +978,7 @@ def resolve_mode(kit: Kit, md: Doc, ctx: _Ctx, warnings: list[str] | None = None
     pb_file = next((d / "playbook.md" for d in md.dirs if (d / "playbook.md").exists()), md.dir / "playbook.md")
     return ResolvedMode(
         name=name, version=md.meta["version"], root=md.root, purpose=s["purpose"].strip(), path=md.dir,
-        coordinator=s.get("coordinator"), roles={rn: kit.env_name(env) for rn, env in roles.items()},
+        coordinator=s.get("coordinator"), roles=dict(roles),
         features=features, constraints=constraints, needs=needs,
         playbook=pb_file.read_text() if pb_file.exists() else "",
         skills={skill_id(name, sk): src for sk, src in mode_skills(md).items()}, config=mcfg,
@@ -996,7 +996,7 @@ def _mode_roles(kit: Kit, md: Doc, ctx: _Ctx, roles: dict) -> ResolvedRole | Non
     ctx.gaps += [msg for _, _, msg in role_env_problems(md)]
     coord = md.spec.get("coordinator")
     if coord and coord in ctx.roles and roles.get(coord):
-        return ctx.unit(coord, md, kit.env_name(roles[coord]), "coordinator", f"mode {name} coordinator")
+        return ctx.unit(coord, md, roles[coord], "coordinator", f"mode {name} coordinator")
     return None
 
 
@@ -1102,7 +1102,7 @@ def _mode_constraints(md: Doc, mcfg: dict, gaps: list[str]) -> dict:
 
 
 def _feature_steps(kit: Kit, md: Doc, ctx: _Ctx, ep: dict, wf: list, where: str) -> list[Step]:
-    """The workflow's steps, with the review step injected at its `{review: here}` marker (else at the end)."""
+    """The feature's steps, with the review step injected at its `{review: here}` marker (else at the end)."""
     ep_eff = ep["effects"]
     review = ep.get("review")
     review_on = bool(review and review.get("when") == "always")
@@ -1166,11 +1166,7 @@ def _feature_rules(kit: Kit, md: Doc, ep_name: str, ep: dict, feat_cfg: dict, ga
 def _feature(kit: Kit, md: Doc, ctx: _Ctx, ep_name: str, ep: dict, feat_cfg: dict) -> Feature | None:
     gaps, name = ctx.gaps, md.name
     where = f"{name}.{ep_name}"
-    wf = md.spec["workflows"].get(ep["workflow"])
-    if wf is None:
-        gaps.append(f"{where}: unknown workflow '{ep['workflow']}' (have: {', '.join(md.spec['workflows'])})")
-        return None
-    steps = _feature_steps(kit, md, ctx, ep, wf, where)
+    steps = _feature_steps(kit, md, ctx, ep, ep["steps"], where)
     _check_protected(kit, where, steps, gaps)
     pb_path = Path(os.path.normpath(md.dir / ep["playbook"])) if ep.get("playbook") else None
     pb_text, dod = "", []
@@ -1180,7 +1176,7 @@ def _feature(kit: Kit, md: Doc, ctx: _Ctx, ep_name: str, ep: dict, feat_cfg: dic
     rules = _feature_rules(kit, md, ep_name, ep, feat_cfg, gaps)
     review = ep.get("review")
     feat = Feature(
-        mode=name, name=ep_name, workflow=ep["workflow"], steps=steps, effects=ep["effects"],
+        mode=name, name=ep_name, steps=steps, effects=ep["effects"],
         in_type=ep.get("in"), out_type=ep.get("out"),
         in_schema=type_schema(md.dirs, ep.get("in"), where, gaps),
         out_schema=type_schema(md.dirs, ep.get("out"), where, gaps),
@@ -1272,7 +1268,7 @@ def _role_step(ctx: _Ctx, md: Doc, ep: dict, st: dict, sw: str, ep_eff, review: 
     if rd is None:
         gaps.append(f"{sw}: {label} {rn} does not resolve (see role {rn} errors)")
         return step
-    env_name = kit.env_name(role_env(md.spec, ep, st, rn))
+    env_name = role_env(md.spec, ep, st, rn)
     if env_name is None:
         return step                       # no env: reported by role_env_problems (mode, feature, step)
     u = ctx.unit(rn, md, env_name, "coordinator" if rn == md.spec.get("coordinator") else "worker", sw)

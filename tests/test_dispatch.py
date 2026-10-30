@@ -38,7 +38,7 @@ def test_sync_runs_code_step_and_logs_events_with_cost():
     assert types == ["step.started", "step.completed", "call.completed"]
     done = evs[1]
     assert {k: done[k] for k in ("mode", "endpoint", "step", "env")} == \
-        {"mode": "feed-briefing", "endpoint": "sync", "step": "fetch", "env": "local-feeds-offline"}
+        {"mode": "feed-briefing", "endpoint": "sync", "step": "fetch", "env": "local-feeds"}
     assert done["cost"] == {"posts": 7, "usd": 0.0}
     if model.jsonschema:
         sch = json.loads((KIT / "schemas/event.schema.json").read_text())
@@ -74,7 +74,7 @@ def test_agentic_step_returns_plan_then_review_then_partial_on_failed_must():
     assert r["status"] == "needs-agent"
     nxt = r["next"]
     assert nxt["role"] == "analyst" and nxt["runAs"] == "subagent_type=analyst--feed-briefing"
-    assert (nxt["env"], nxt["agent"], nxt["tier"], nxt["model"]) == ("local-feeds-offline", "claude-code", "balanced", "sonnet")
+    assert (nxt["env"], nxt["agent"], nxt["tier"], nxt["model"]) == ("local-feeds", "claude-code", "balanced", "sonnet")
     assert "## Definition of Done" in nxt["playbookText"]
     assert {x["id"] for x in nxt["rules"]} == {"R-1", "R-2", "R-3", "R-4", "R-5", "R-6", "R-7"}  # executor|both
     assert nxt["skills"]["corpus-sql"] == "feed-briefing--corpus-sql"          # playbook's short name -> namespaced
@@ -146,7 +146,7 @@ def test_use_enforces_role_grants():
 def test_effects_rechecked_at_runtime():
     p = project()
     s = system(p)
-    s.kit.docs["Environment"]["local-feeds-offline"].spec["effects"] = ["read"]   # changed after resolution
+    s.kit.docs["Environment"]["local-feeds"].spec["effects"] = ["read"]   # changed after resolution
     d = dispatch.Dispatcher(s, p, clock=clock)
     err(lambda: d.call("feed-briefing.prune", {}), "effects", "not allowed")
 
@@ -461,7 +461,7 @@ def test_a_gate_takes_no_when_and_approves_goes_on_a_gate_only():
     k = kit_copy()
     try:
         def edit(doc):
-            wf = doc["spec"]["workflows"]["extend"]
+            wf = doc["spec"]["features"]["extend"]["steps"]
             next(s for s in wf if s.get("id") == "approve")["when"] = "!$steps.proposal.approved"
             next(s for s in wf if s.get("id") == "implement")["approves"] = "$in.proposal"
         edit_yaml(k / "framework/modes/forge/mode.yaml", edit)
@@ -480,7 +480,7 @@ def test_when_names_only_an_earlier_step():
     k = kit_copy()
     try:
         def edit(doc):
-            doc["spec"]["workflows"]["extend"][1]["when"] = "!$steps.release.approved"
+            doc["spec"]["features"]["extend"]["steps"][1]["when"] = "!$steps.release.approved"
         edit_yaml(k / "framework/modes/forge/mode.yaml", edit)
         try:
             model.resolve(model.Kit(k, k))

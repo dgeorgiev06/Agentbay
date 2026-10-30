@@ -1,3 +1,196 @@
+# HANDOFF part 14: T-20261030-c870 (recorded with `bay plan`) - stage 3: last DOD-2 finding of the re-review (verdict-s3b)
+
+Outcome: in the main thread the guard hook asks for `note dispatch`, `note review` and `show reclaim` in any quoting,
+escaping, option or launcher spelling; the three nits are fixed. Stage 3 of 0008 is complete.
+
+To-do (all ticked with `bay plan --done`):
+1. Guard: `main_thread_decision` / `asked_bay_write` in bay/guard.py split the Bash command with the guard's own
+   `shlex.split` (+ `dequote` fallback, operators split off for unsafe text) and find a launcher (`.agentbay/bay`,
+   `./bay.sh`, `bay.sh`, `python3 -m bay.cli`, `python3 bay/cli.py`) anywhere in the words, so env assignments and
+   `x; ...` do not hide it. Commit b900ae3.
+2. Hook config: the PreToolUse guard entry (adapters/claude-code/claude_code.py:141-146) has matcher Bash|Read|... with no
+   subagent filter, so it already ran for the main thread; but `main()` returned 0 before deciding for non-subagents.
+   Now `main()` emits `ask` for the main thread. No adapter change needed. Test:
+   test_generated_hook_runs_the_guard_for_the_main_threads_bash_calls. Commit b900ae3.
+3. Tests: tests/test_guard_mainthread.py (new). Commit b900ae3.
+4. Nits: `ap = argparse` spacing; `note -h/--help` and `show -h/--help` print help (test in tests/test_cli_commands.py).
+   Commit 5f38a76.
+5. Nit: the cron advisory points at the README only when it has a fenced cron recipe (`^```cron`), bay/lint.py. Commit 5f38a76.
+6. Tests, check, boundary run (below).
+
+`approve` is not in the hook on purpose: no allow rule covers it, so any spelling already gets the default prompt, and
+tests/test_boundaries.py asserts the main thread's plain `approve` is "pass" from the guard (unchanged).
+
+Spellings tested (main thread -> ask; a role subagent -> deny for each):
+`note dispatch|'dispatch'|"dispatch"|disp\atch`, `note 'review'|"review"|re\view`, `show re\claim|'reclaim'|"re""claim"`,
+`--project .` / `--project=.` / `--proj .` / `--` before the verb, `FOO=1 ` and `A=1 B='2 3' ` env prefixes, launchers
+`.agentbay/bay`, `./bay.sh`, `bay.sh`, `python3 -m bay.cli`, `PYTHONPATH=. python3 -m bay.cli`, `python3 bay/cli.py`,
+and `echo hi; ...` / `true && ...` prefixes.
+No decision (pass) in the main thread: `note <ref> "text about dispatch"`, `note <ref> dispatch`, `note task`, `status`,
+`status --log -n 20`, `show <callId>`, `show '<callId>'`, `catalog`, `catalog forge.extend`, `approve`, `'approve'`,
+`./bay.sh check`, a git commit message mentioning the words, `ls`.
+
+Evidence:
+- `python3 tests/run.py -q`: `476 passed, 0 failed`
+- `./bay.sh check`: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)` (after `✓ lint clean`)
+- boundary: `boundary origin/main...HEAD: 104 changed paths (36 core, 3 docs, 31 extension, 9 feature, 25 other); 0 failing; B-11 docs: 0 hits`
+
+# HANDOFF part 13: T-20261030-9a71 (recorded with `bay plan`) - stage 3 review fixes (verdict-s3-fixed)
+
+Outcome: all four should-fix/nit findings of the stage-3 review fixed; nothing pushed, the proposal not edited, no path outside 0008's touches.
+To-do (one commit each, tests green before each):
+1 DOD-2 (1ed46df): `bay note` / `bay show` refuse any option directly after the command (`_verb_first` in bay/cli.py, run on the raw argv before `--project` is hoisted), so `note dispatch`, `note review` and `show reclaim` always match their ask prefix. The error names the right spelling. Checked every pre-approved prefix (show, status, note, catalog): the only ledger writers in bay/cli.py are `approve` (asked), `note dispatch`, `note review`, `note <ref> text` (a plain note, read-only in effect, stays allowed) and `show reclaim`; status and catalog write nothing. New tests: tests/test_cli_commands.py `test_a_write_verb_must_directly_follow_note_or_show_so_the_ask_rules_match`, tests/test_guard_7a.py (the canonical write forms each start with an ask prefix; the allow list is exactly show, status, note, catalog).
+ Refused spellings (each exits non-zero with "no option may come before the verb", ledger unchanged):
+ - `note --agent x dispatch T-20261030-abcd`
+ - `note --kind note review T-20261030-abcd {}`
+ - `note --project . dispatch T-20261030-abcd --agent x`
+ - `note --project=. dispatch T-20261030-abcd --agent x`
+ - `note --instruction dispatch T-20261030-abcd`
+ - `show --reason r reclaim R-1`
+ - `show --project . reclaim R-1`
+ `--project` before the command (`bay --project . note dispatch ...`) does not match the allow prefix either, so it prompts.
+2 DOD-8 (852d97e): `check --json` needs `--base` (refused like --proposal/--docs); the lint and resolve lines go to stderr, stdout is the boundary JSON only. Test: `test_check_json_prints_only_the_boundary_json_on_stdout` (json.loads of stdout).
+3 DOD-13/R-4 (d75b5b5): docs/INTERFACES.md lines 7, 24, 339 and docs/DESIGN.md:12 corrected (no framework/agents/, no schemas/agent.schema.json; profile is `profile:` in adapters/<name>/adapter.yaml; a mode lists features, not workflows).
+4 DOD-9 (e179ac4, cc521cf): check summary says `21 features`, the COORDINATOR heading is "Mode features (generated)", the catalog help says features. The JSON keys `endpoints` in catalog.json and the `<mode>.<endpoint>` call targets are data formats and stay. The schedule advisory points at the mode's README cron recipe when that README has one (improve: `see the cron recipe in framework/modes/improve/README.md`), else keeps `run ... from cron`; test in tests/test_lint.py. cc521cf also fixes a missing space in the summary I introduced in e179ac4.
+Evidence, last line of each command:
+- `python3 tests/run.py -q`: `471 passed, 0 failed`
+- `./bay.sh check`: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`, after `✓ lint clean` (same four `!` advisories, the improve one now points at the README)
+- `./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: `boundary origin/main...HEAD: 103 changed paths (36 core, 3 docs, 31 extension, 9 feature, 24 other); 0 failing; B-11 docs: 0 hits` (run before this HANDOFF commit)
+- `./bay.sh build --project <scratch>/s3e` (folder was empty): last line `  ! Per-role Bash scope is enforced by the agentbay guard hook; restart Claude Code and accept the workspace trust prompt so hooks run.`
+- `./bay.sh clean --project <scratch>/s3e`: `clean`
+- Glob `**/*` of <scratch>/s3e afterwards: `<scratch>/s3e/agentbay.config.yaml` only.
+Open items: none. Deviations: none.
+
+# HANDOFF part 12: T-20261030-1ca6 (recorded with `bay plan`) - stage 3 of 0008: rename leftovers
+
+Outcome: every "rename leftover" entry of 0008's touches is fixed, plus the four extra hits; the forge coordinator playbook has the `git fetch origin` line. Wording only; no behaviour change, no alias. Branch feat/0008-stage3, nothing pushed, the proposal not edited.
+To-do (all done; one commit, 77806d3, because the 26 files are one wording sweep and the tests cover them together):
+1 Touches entries "rename leftover" (77806d3): the six offline-env files (connectors/x-api, fake, fake-mail README + connector.yaml, modes/feed-briefing and mail-briefing README) now say `offline: true` in agentbay.config.yaml and the env's `offline:` block instead of `local-*-offline`/`envs:`; bay/playbook.py `features.<feature>.review`; coordinator/commands/bay-status.md `status --log -n 10`; bay/checks.py detail `bay check: lint clean`; bay/registry.py comment; improve.findings.v1.yaml `bay approve <F-id>`; schemas/connector.schema.json (`bay check` twice); scaffold connector.yaml, forge README, create playbook (`bay new <kind>`, `./bay.sh check`), create/extend rules (`bay check`), cos run, improve audit, backlog (playbook DOD-2 and rules R-3 name `bay approve`), implement playbook.
+2 Extra hits (77806d3): bay/cli.py:405 note summary is now `approve <F-id> <decision>`; bay/scaffold.py docstring `bay new <kind>`; framework/interfaces/forge.scaffold.v1.yaml `bay new <kind>`. bay/improve/sources.py:314 `"target": "review-record"` is NOT changed: it is not display text. It is the verdict `target` key that `_number_rounds` groups on and that detectors and findings read; tests/test_review_record.py:39 asserts it. The ledger event type is `review.recorded` (unchanged), but a finding's evidence can carry the target string, so renaming would alter data. It stays as a stored value; that is not a command name.
+3 Playbook line (77806d3): framework/modes/forge/playbook.md, bullet "Before every `forge.extend` call, run `git fetch origin` yourself, so the deadcode base (origin/main) is current." It is a bullet on purpose: the adapter drops bullets naming an uninstalled endpoint, so projects outside the checkout do not see `forge.extend` (a first try as plain prose failed test_b2; fixed before commit).
+4 `git grep -n` of the old spellings (bay lint|validate|boundary|log|dispatched|task new|ls|reclaim, review-record, improve decide|weekly, bay mode|feature|connector|env new, bay <kind> new, local-feeds-offline, local-mail-offline, ./bay.sh lint|validate|boundary), excluding HANDOFF.md, CHANGELOG.md, docs/proposals: remaining hits are exactly
+ - bay/improve/sources.py:314 (stored `target` value, above)
+ - tests/test_cli_commands.py:11 (OLD tuple: the old names must be unknown commands)
+ - tests/test_config.py:15 (asserts the two old env files no longer exist)
+ - tests/test_review_record.py:39 (stored target) and :45 (old command refused)
+ In history files (hit counts): CHANGELOG.md 4, HANDOFF.md 37 (parts 1-11), docs/proposals 0001 3, 0001a 9, 0003 2, 0004 3, 0005 1, 0006 9, 0008 30 (its own text).
+5 Scratch build `s3d`: Grep (case-insensitive) of the whole folder for old command names, `<kind> new`, `local-*-offline`, `endpoints.<feature>`: No matches found. A wider Grep of .agentbay/COORDINATOR.md for lint|validate|boundary|dispatched|reclaim|review-record|improve decide|task new found only the current `show reclaim` and `note dispatch` forms (lines 280, 292); of .claude/ only `status --log -n 10` (bay-status.md) and the English noun "lint" in a skill (improve--pattern-analysis SKILL.md:14). The earlier open item (bay-status.md) is closed.
+Evidence, last line of each command:
+- `python3 tests/run.py -q`: `469 passed, 0 failed`
+- `./bay.sh check`: `✓ 6 modes, 21 endpoints, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`, after `✓ lint clean` (same four `!` advisories)
+- `python3 -m bay.cli check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: `boundary origin/main...HEAD: 81 changed paths (29 core, 3 docs, 24 extension, 1 feature, 24 other); 0 failing; B-11 docs: 0 hits` (run before this HANDOFF commit)
+- `./bay.sh build --project <scratch>/s3d` (folder had only its agentbay.config.yaml): last line `  ! Per-role Bash scope is enforced by the agentbay guard hook; restart Claude Code and accept the workspace trust prompt so hooks run.`
+- `./bay.sh clean --project <scratch>/s3d`: `clean`
+- Glob `**/*` of <scratch>/s3d afterwards: `<scratch>/s3d/agentbay.config.yaml` only.
+Open items: none. Deviations: none from the command list.
+
+# HANDOFF part 11: T-20261030-f8ef (recorded with `bay plan`) - slice 4 of 0008: the CLI
+
+Outcome: `bay --help` lists 16 commands (25 before; the proposal's 15 plus `plan` from item 6). An old name is an unknown command (argparse `invalid choice`, exit 2); no alias, no compatibility branch. Branch feat/0008-stage3, nothing pushed, the proposal not edited. Guard decisions keep their meaning (below). One needed fix is outside 0008's touches (open items).
+Old -> new:
+| old | new |
+|---|---|
+| `validate`, `lint` | `check` (lint, then resolve, then workflows) |
+| `boundary --base ...` | `check --base <ref> [--head --proposal --docs --json]` (options without `--base` are refused) |
+| `ls` | `catalog --roles` (role units, resolved from sources, no build needed; the mode/endpoint half of `ls` was `catalog`) |
+| `reclaim <run>` | `show reclaim <runId> [--reason]` |
+| `log -n` | `status --log -n` |
+| `task new` | `note task` |
+| `dispatched <taskId> --agent ...` | `note dispatch <taskId> --agent ...` |
+| `review-record <taskId> <json>` | `note review <taskId> <json>` |
+| `mode\|feature\|connector\|env new <name>` | `new <kind> <name>` (`--mode` for a feature, `--implements` for a connector, checked) |
+| `improve decide <id> approve\|defer\|wontfix` | `approve <F-id> [--defer\|--wontfix] [--reason]` (the F- prefix selects it; terminal only, `--via chat`, `--reject`, `--quote`, `--sha` are refused for it) |
+| `improve weekly` | removed (proposal: "removed"; item 4 makes the weekly run a cron line or workflow). The improve playbook and README now list the four calls in order, with a cron line. |
+Kept as they were: `build clean catalog describe call submit show approve secret auth config status note plan`.
+Where the proposal was silent I chose: `note` takes the verb first (`note task|dispatch|review`) and `show` takes `reclaim` first, so a permission rule can match them by prefix; `review-record` goes into `note` (like dispatch) rather than staying a 17th command; `ls` goes into `catalog --roles`.
+Guard and permissions (same decisions):
+- bay/guard.py needed no rule change: a role subagent may run only `.agentbay/bay plan <own taskId> ...`; every other spelling (including all new ones) is denied by the same checks; `approve` is denied to anyone by `runs_approve`, so `approve <F-id>` is covered. Only the docstring names changed. `secret`, `auth`, config writes: unchanged paths (non-TTY refusal, `names_config`).
+- The main thread pre-approves `show|status|note|catalog` (was `show|status|log|note|task|catalog`). Three writes now share a prefix with a pre-approved command, so adapters/claude-code/claude_code.py adds `ask` rules (checked before `allow`) for `show reclaim`, `note dispatch`, `note review` in every spelling that `approve` already had; before, `reclaim`, `dispatched` and `review-record` were not pre-approved and so asked. `approve` keeps its ask rules.
+- `bay secret set` and `bay auth` unchanged (interactive terminal only). The Chief of Staff playbook now also says never to relay a backlog decision (`bay approve <F-id>`) from chat.
+- The env `clis` for the forge builders (framework/envs/framework-dev.yaml, local-authoring.yaml) list `./bay.sh check` instead of `lint` and `validate`.
+Generated text: the cos playbook (so `.agentbay/COORDINATOR.md`), the adapter's control-plane section, improve and forge playbooks, scaffold hints, error messages, README, DESIGN, INTERFACES, conformance.yaml, two schema descriptions. A scratch build's COORDINATOR.md has no old command name (grep of the scratch folder found only `.claude/commands/bay-status.md`, see open items). The checkout's own `.agentbay/COORDINATOR.md` is untracked and generated: it still shows the old names until the coordinator runs `./bay.sh build`.
+To-do (all done; the work is in three commits, 4b8da69 the CLI, guard texts, adapter, playbooks and tests together because the names and their tests change together, 46750c0 README/DESIGN/INTERFACES, dd0faaa reverts of edits that the boundary check refused plus a README wording fix):
+1 Read proposal, guard, model, adapter, CLI (no commit).
+2 Merge commands and remove the old code: `cmd_ls`, `cmd_log`, `cmd_task`, `cmd_reclaim` as a command, `cmd_review_record`, `cmd_dispatched`, `cmd_improve_decide`, `cmd_improve_weekly`, `WEEKLY`, `SCHEDULED_BY` (lint) are gone (4b8da69).
+3 Names in guard, adapter, generated text, playbooks, env clis, tests (4b8da69, 46750c0, dd0faaa). Tests: only command names changed in existing tests (test_boundaries, test_review_record, test_ledger, test_selector, test_lint, test_forge, test_adapter, test_improve) plus extra denials in `test_bay_plan_is_the_only_bay_command_a_subagent_may_run` (note review/dispatch/task, show reclaim, approve, approve F-id, secret, auth, check, catalog) and ask-rule asserts in test_guard_7a. `test_weekly_writes_the_backlog_only_after_the_analysis_steps` is deleted with the command it tested. New tests/test_cli_commands.py (16 commands, old names unknown, note/show/new/catalog forms).
+4 Checks and this note.
+Open items (outside 0008's touches, so editing them fails the boundary check; add to the next amendment):
+- BLOCKER-ish: `coordinator/commands/bay-status.md` (kernel-owned, not in touches) still runs `bay log -n 10`; the generated slash command `/bay-status` now calls an unknown command. Change it to `{{BAY}} status --log -n 10` (or drop the log call).
+- Feature folders of existing framework modes (B-3, not in touches): `framework/modes/cos/features/run/playbook.md:27` (`bay lint`), `framework/modes/forge/features/create/playbook.md` (lines 11, 13, 17: `bay <kind> new`, `./bay.sh lint` and `./bay.sh validate`; the builder's cli list no longer has them, so create's builder is told to run unknown commands), `framework/modes/forge/features/create/rules.yaml` and `.../extend/rules.yaml` (`bay lint` in a statement), `framework/modes/improve/features/{audit,backlog,implement}/...` (`bay lint`, `bay improve decide` in playbook/rules text, and DOD-2 of backlog, which the report no longer matches: it prints `bay approve`). I made these edits and reverted them when the boundary check refused them.
+- Core files not in touches: `bay/checks.py:87` (detail text `bay lint clean`), `bay/registry.py:10` (comment `bay lint`), `framework/interfaces/improve.findings.v1.yaml:117` (`bay improve decide`), `schemas/connector.schema.json:68,152` (`bay lint`, `bay validate` in two descriptions). `docs/proposals/*` and this file's older parts keep the old names as history.
+- `lint` still warns that `improve.backlog` (schedule weekly) should be run by `bay call improve.backlog` from cron; that alone writes the report without the scan, audit and triage calls. Slice 6 turns the weekly run into a feature or workflow; until then the improve README has the four-call cron recipe.
+Deviations from the task's command list, to be honest about: the checks were run as `./bay.sh check` and `python3 -m bay.cli check --base ...` (the renamed lint, validate and boundary); `./bay.sh lint` and `validate` no longer exist. Two helper edits were done with `python3` (a heredoc for the parser block in bay/cli.py, and a `python3 -c` to delete one test function from tests/test_improve.py); the results are in the commits and the tests pass.
+Dead-code check: not run here (it runs when cos re-runs forge.extend). Replaced code was removed completely; grep for `cmd_ls`, `cmd_log`, `cmd_task`, `cmd_improve`, `WEEKLY`, `SCHEDULED_BY`, `cmd_review_record`, `cmd_dispatched` in bay/, tests/, framework/, docs/ finds nothing.
+Evidence, last line of each command:
+- `python3 tests/run.py -q`: `469 passed, 0 failed` (run on dd0faaa)
+- `./bay.sh check` (was lint, then validate): `✓ 6 modes, 21 endpoints, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`, after `✓ lint clean` (four `!` advisories as before)
+- `python3 -m bay.cli check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs` (was boundary): `boundary origin/main...HEAD: 80 changed paths (29 core, 3 docs, 24 extension, 1 feature, 23 other); 0 failing; B-11 docs: 0 hits` (run on dd0faaa, before this HANDOFF commit)
+- `./bay.sh build --project <scratch>/s3c` (folder did not exist): last line `  ! Per-role Bash scope is enforced by the agentbay guard hook; restart Claude Code and accept the workspace trust prompt so hooks run.`
+- `./bay.sh clean --project <scratch>/s3c`: `clean`
+- Glob `**/*` of <scratch>/s3c afterwards: `<scratch>/s3c/agentbay.config.yaml` only (the user's file, left by clean).
+- `./bay.sh lint` now: `bay: error: argument <command>: invalid choice: 'lint' (choose from 'check', 'build', 'clean', 'catalog', 'describe', 'call', 'submit', 'show', 'approve', 'new', 'secret', 'auth', 'config', 'status', 'plan', 'note')`
+- `./bay.sh --help` command list (the positional section):
+```
+check            lint and resolve everything; with --base, also check a change's boundary
+build            compile modes and roles into a runtime
+clean            remove what build wrote
+catalog          the registry: modes, endpoints, schemas, project workflows (--roles: role units)
+describe         a mode's or role's resolved definition
+call             run <mode>.<endpoint> with a JSON input ('-' reads stdin)
+submit           hand back an agentic step's output
+show             the state of a call; `show reclaim <runId>` marks a stuck run as reclaimed
+approve          pass (or --reject) an approval gate; interactive terminal, or chat when approvals.chat is on; an F-id decides an improve backlog item
+new              scaffold a mode, feature, connector or env
+secret           store a secret in the keychain (interactive terminal only)
+auth             sign in to a source in your browser (interactive terminal only)
+config           print every agentbay.config.yaml setting, from the schemas
+status           calls, steps and agent runs from the ledger (--agents, --log)
+plan             a dispatched agent's outcome and to-do list (append-only; the one command subagents may run)
+note             record a note on a run, task or call; `note task` mints a taskId; `note dispatch` and `note review` are the coordinator's records
+```
+
+# HANDOFF part 10: T-20261030-72ef (recorded with `bay plan`) - slice 3 of 0008: one feature shape
+
+Outcome: slice 3 is implemented on feat/0008-stage3, nothing pushed, the proposal not edited. Every mode builds from `features:`; a code-only feature has no playbook, no rules and no folder and passes lint; `bay catalog` is unchanged except for ordering. No old-shape reader, alias or compatibility branch was added; no `feature.yaml` (0006 slice 4 lands inside the feature block).
+To-do (all done, one commit because schema, loader, lint, modes and tests change together; c9e6dcc):
+1 Catalog baseline saved before any change: <scratch>/catalog_before.txt (scratchpad root).
+2 Shape: `spec.features.<name>` = `{description, in, out, effects, steps, playbook?, rules?, review?, schedule?, roles?, tier?, effort?}`. schemas/mode.schema.json: `endpoints` and `workflows` are replaced by `features` with `steps`; the step definition moved to `$defs/step`. bay/model.py: `Feature.workflow` field, the workflow lookup and the unknown-workflow gap are gone; `merge_mode` merges features key by key and a child's `steps` replace the parent feature's whole (the `workflows` branch is removed); `role_env_problems`, `mode_envs`, `resolve_mode`, `_feature` read `features`. bay/dispatch.py needed no code change (it runs `Feature.steps`); docstrings follow.
+3 Lint (bay/lint.py): a feature with a role or review step and no `playbook` is refused ("runs an agent but has no `playbook`"); rules and playbook are otherwise optional; the "workflow is not used", "unknown workflow" and "feature folder is missing playbook.md/rules.yaml" checks are removed (no workflow, and the files are optional); an orphan feature folder is still refused. Line lookup (`_ep_key_where`, `_step_where`) reads `features:` and matches a feature's own keys (6-space indent), so a step's `roles:` is not mistaken for the feature's.
+4 Migrated: modes/{briefing,delivery,mail-briefing}/mode.yaml, framework/modes/{cos,forge,improve}/mode.yaml (steps inline, text of every step unchanged). bay/improve/{conformance,graph,sources}.py read `features`/`steps`. bay/scaffold.py scaffolds the single block: framework/modes/forge/templates/feature/feature.yaml replaces endpoint.yaml and workflow.yaml (deleted); the mode template is one `features:` block. Docs: docs/INTERFACES.md, docs/DESIGN.md, bay/workflows.py docstring, schemas/config.schema.json and framework/rules/conformance.yaml wording.
+5 Tests (tests/ is "other" to the boundary): the 22 tests that wrote `endpoints`/`workflows` now write `features`/`steps` (test_dispatch, test_review7a, test_roles, test_resolver, test_inheritance, test_lint); new `test_a_feature_that_runs_an_agent_needs_a_playbook_and_a_code_only_one_needs_no_files` (briefing.sync without playbook, rules or folder: lint empty, resolves with no DoD and code steps only); `test_lint_lines_of_inherited_parts...` now checks a child's own steps are reported at the child's step line; test_forge asserts a scaffolded feature is one `features:` block with no `endpoints`/`workflows`.
+Open, outside this slice's touches: bay/playbook.py:62 still says "configure review only in mode.yaml endpoints.<feature>.review" (bay/playbook.py is not in 0008's touches, so editing it would fail the boundary check); add it to the next amendment and change the wording to `features.<feature>.review`. Existing extension READMEs were grepped for `endpoints:`/`workflows:`/`workflow:`: none name the old shape. The apiVersion bump stays in slice 9 (mode documents are still `agentbay/v2`).
+Dead-code check: not run here (it runs when cos re-runs forge.extend). Replaced code was removed completely. Grep (`\.workflow\b`, `["workflow"]`, `spec["workflows"]`, `spec["endpoints"]` on modes, `endpoint.yaml`, `workflow.yaml`, `_lineage_where(... 'workflows'`) finds nothing in bay/, framework/, modes/, schemas/ or docs/ outside the proposals and this file. `spec["endpoints"]` that remains is the interface (connector capability) endpoints, which are a different concept.
+Evidence, last line of each command:
+- `python3 tests/run.py -q`: `464 passed, 0 failed`
+- `./bay.sh lint`: `✓ lint clean` (four `!` advisories as before)
+- `./bay.sh validate`: `✓ 6 modes, 21 endpoints, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`
+- `python3 -m bay.cli boundary --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: `boundary origin/main...HEAD: 57 changed paths (22 core, 3 docs, 16 extension, 16 other); 0 failing; B-11 docs: 0 hits` (run on c9e6dcc, before this HANDOFF commit)
+- `./bay.sh build --project <scratch>/s3b`: last line `  ! Per-role Bash scope is enforced by the agentbay guard hook; restart Claude Code and accept the workspace trust prompt so hooks run.` (it reported `built 6 modes for claude-code`)
+- `./bay.sh clean --project <scratch>/s3b`: `clean`
+- Glob `**/*` of <scratch>/s3b afterwards: `<scratch>/s3b/agentbay.config.yaml` (written by build, left by clean because it is the user's file) and `<scratch>/s3b/proj/.git/**` (a git-init folder that was already in the scratch folder before this task; not created by the build or by me). No generated adapter file is left.
+- Catalog before/after: before = `./bay.sh catalog` in the checkout before any change (registry built 14:34:42, includes forge.extend, 21 endpoints); after = `./bay.sh catalog --project <scratch>/s3b` after `build` (registry built 15:15:36). The checkout's own `.agentbay/catalog.json` is only rewritten by a build of the checkout, which was not in the allowed commands, so the after-catalog comes from a scratch project; a scratch project does not install forge.extend (`System.for_project`), which is the only line that differs: all 20 other endpoint lines (names, in -> out types, effects, review roles), all mode headers and the `project workflows: none` line are identical, in the same order. forge.extend is covered by `validate`: still 21 endpoints, and by tests (`test_dispatch` extend flows, `test_deadcode_check` step order, `test_lint` mandatory review).
+
+# HANDOFF part 9: T-20261030-79af (recorded with `bay plan`) - slice 2 of 0008: envs, agent profile, config
+
+Outcome: slice 2 is implemented on feat/0008-stage3 (cut from origin/main 1da7f88), nothing pushed, the proposal not edited. Both offline env files and the committed example config are gone; the fake-source demo runs (`offline: true`); lint refuses an offline block with a network host or a secret, and a config that raises an env limit. No v2 readers, aliases or compat branches were added.
+To-do (all done, one commit because the items share schemas and tests; 8742b4e, then 8cf495d for a README wording fix that the B-11 docs check needed):
+1 Offline switch in the env: `envs/local-feeds.yaml` and `envs/local-mail.yaml` carry `offline: { bind: { items.source/v1: [fake | fake-mail] } }`; `envs/local-*-offline.yaml` deleted; `substitutes:` removed from schemas/environment.schema.json (now `offline {bind, network, secrets}`), the `envs:` map removed from schemas/config.schema.json (now `offline: boolean`). `Kit._go_offline` (bay/model.py) rebinds the listed capabilities and forces `network: {allow: []}` and `secrets.allow: []`; `Kit.env_name`, `_select_envs`, `env_swap` and `lint_substitutes` are removed, and a role's env name is now the env itself (units are `analyst--feed-briefing`, env `local-feeds`). New `lint.lint_offline`: refuses an `offline:` block that lists a network host or a secret, or rebinds a capability the env does not bind; `lint_contract_versions` checks the offline connectors too (label `env local-mail (offline)`).
+2 Agent profile in the adapter: `framework/agents/claude-code.yaml` and schemas/agent.schema.json deleted; the profile is `profile:` in `adapters/claude-code/adapter.yaml` (schemas/adapter.schema.json, optional, same fields). `Kit.profiles()` and `Kit.profile()` return the profile dict; the `Agent` kind, `FRAMEWORK_ONLY["Agent"]` and the `agents/` ownership line in framework/components.yaml are removed; claude_code.py, improve/graph.py and improve/conformance.py follow.
+3 Config: `agentbay.config.example.yaml` deleted; `bay build` writes a minimal `agentbay.config.yaml` when the project has none (`config.write_minimal`); `bay config` (no argument) prints every setting from the schemas (`config.describe`); `config.example()`, `fragment()`, the kernel text blocks and the stale-example lint are removed (each extension's `config.example.yaml` stays and lint still checks it against its schema). Limits in one place: `config.caps` refuses a setting above the env `limits` (ConfigError; the step fails with the message), `config.raised` + `lint.lint_config_limits` refuse it in lint; settings no longer enter the `min` in `caps` (they already reach it through `effective_constraints`).
+4 Tests: tests/test_config_example.py -> tests/test_config.py (no example, `bay config`, minimal config on build, caps, raised cap fails a call); tests/test_lint.py (offline refusals, raised limits); test_resolver (offline switch, adapter profile); helpers (`project()` sets `offline: true`); test_mail_briefing, test_roles, test_inheritance, test_dispatch, test_selector, test_boundaries, test_contract_versions and the corpus-store tests follow the env rename (`local-feeds-offline` -> `local-feeds`; the corpus-store tests get an `online=True` store built from the same project without `offline`).
+5 Docs: README, docs/DESIGN.md, docs/INTERFACES.md (all in touches) and connectors/gmail-api/README.md (in touches) follow.
+Open, outside this slice's touches (stale wording, not code): connectors/x-api/README.md:11, connectors/fake/README.md:4, connectors/fake-mail/README.md:4 and connector.yaml:7, modes/feed-briefing/README.md:7 and modes/mail-briefing/README.md:11 still name `local-feeds-offline` / `local-mail-offline` or the `envs:` line. They are existing extensions not listed in 0008's touches, so the boundary check would fail an edit; add them to the next amendment (slice 2 or 9) and fix the wording. The apiVersion bump stays in slice 9 (configs and envs are still `agentbay/v2`).
+Dead-code check: not run here (it runs when cos re-runs forge.extend). Replaced code was removed completely; grep for `env_name`, `env_swap`, `substitutes`, `docs["Agent"]`, `config.EXAMPLE`, `framework/agents`, `agentbay.config.example` finds only the stale extension READMEs above and the new tests that assert absence.
+Evidence, last line of each command:
+- `python3 tests/run.py -q`: `463 passed, 0 failed`
+- `./bay.sh lint`: `✓ lint clean` (four `!` advisories as before)
+- `./bay.sh validate`: `✓ 6 modes, 21 endpoints, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`
+- `python3 -m bay.cli boundary --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: `boundary origin/main...HEAD: 39 changed paths (16 core, 3 docs, 7 extension, 13 other); 0 failing; B-11 docs: 0 hits` (run on 8cf495d, before this HANDOFF commit)
+- `./bay.sh build --project <scratch>/s3a` (folder did not exist): last line `  ! Per-role Bash scope is enforced by the agentbay guard hook; restart Claude Code and accept the workspace trust prompt so hooks run.`; the output starts `+ agentbay.config.yaml` (the minimal config)
+- `./bay.sh clean --project <scratch>/s3a`: `clean`
+- Glob `**/*` of <scratch>/s3a afterwards: `<scratch>/s3a/agentbay.config.yaml` only. `clean` leaves the config because it is the user's file, not generated by an adapter.
+- Fake-source demo: `tests/test_mail_briefing.py::test_offline_sync_digest_and_ask` and the feed flows in test_dispatch run on `offline: true` and pass in the 463 above; I did not run `bay call` by hand (not in the allowed commands).
+
 # HANDOFF part 8: T-20261030-f82e (recorded with `bay plan`) - fix round for the stage-2 review of 0008 (C-20261030-79f3e5)
 
 Outcome: every should-fix finding of the review (DOD-5, DOD-7, DOD-8, DOD-13, R-4, R-7, R-9) is fixed; the proposal was not edited; no Guard decision changed. Branch feat/0008-stage2, nothing pushed.

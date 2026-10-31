@@ -28,8 +28,11 @@ MAX_OUTCOME, MAX_ITEMS, MAX_ITEM_TEXT, MAX_SERVES = 1000, 12, 240, 60
 NOTE_KINDS = ("note", "instruction-change", "decision")
 
 
+LEDGER_FILE = ".agentbay/ledger/events.jsonl"      # project-relative
+
+
 def ledger_path(project: Path) -> Path:
-    p = project / ".agentbay" / "ledger" / "events.jsonl"
+    p = project / LEDGER_FILE
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 

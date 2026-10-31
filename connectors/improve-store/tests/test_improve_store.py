@@ -6,6 +6,8 @@ from datetime import timedelta
 from helpers import NOW, cleanup, connector_pkg, model, tmpdir
 from improve_fixtures import CORES, SECRETS
 
+from bay.boundary import Protection
+
 st = connector_pkg("improve-store", "store")
 
 # The finding contract: `fingerprint` lives in bay/util.py; improve-detect's test asserts this same vector.
@@ -26,7 +28,7 @@ def cand(kind="slow-step", key="forge.extend.implement", lens="sessions", refs=(
 
 
 def S(d, now=NOW):
-    return st.Store(d, now, {"cos", "forge"})
+    return st.Store(d, now, Protection(names={"mode": ("cos", "forge")}))
 
 
 def test_a_file_of_a_protected_instance_routes_to_forge_extend_like_the_protected_folders():
@@ -34,18 +36,22 @@ def test_a_file_of_a_protected_instance_routes_to_forge_extend_like_the_protecte
     the route follows the component map's names, not the folder."""
     d = tmpdir()
     try:
-        paths = st.instance_paths({"mode": ("cos",), "env": ("workspace",), "connector": ("ledger",)})
-        assert paths == ("modes/cos", "envs/workspace.yaml", "connectors/ledger")
-        s = st.Store(d, NOW, {"cos"}, paths)
+        names = {"mode": ("cos",), "env": ("workspace",), "connector": ("ledger",)}
+        assert st.instance_paths(names) == ("modes/cos", "envs/workspace.yaml", "connectors/ledger")
+        s = st.Store(d, NOW, Protection(names=names))
         route = lambda *files: s.route_for({"scope": {"files": list(files)}})      # noqa: E731
         assert route("framework/roles/builder.yaml") == "forge.extend"
         assert route("connectors/ledger/ledger.py", "modes/cos/mode.yaml", "envs/workspace.yaml") == "forge.extend"
         assert route("connectors/gmail-api/gmail_api.py") == "mode-fix"                       # an ordinary connector
         assert route("modes/cosmos/mode.yaml", "connectors/ledger2/x.py", "envs/workspace.yaml.bak") == "mode-fix"
         assert route("connectors/ledger/ledger.py", "connectors/gmail-api/gmail_api.py") == "mode-fix"   # all must be
-        assert st.Store(d, NOW).route_for({"scope": {"file": "connectors/ledger/ledger.py"}}) == "mode-fix"
+        assert S(d).route_for({"scope": {"file": "connectors/ledger/ledger.py"}}) == "mode-fix"    # no protected names
+        # a map that could not be read routes everything to forge.extend
+        closed = st.Store(d, NOW, Protection.closed_set())
+        assert closed.route_for({"scope": {"file": "app/x.py"}}) == "forge.extend"
+        assert closed.route_for({"scope": {"mode": "anything"}}) == "forge.extend"
         # improve is an ordinary mode (stage 5 part H): a finding about it, or its files, is a mode-fix task
-        s = st.Store(d, NOW, {"cos", "forge"}, paths)
+        s = st.Store(d, NOW, Protection(names={**names, "mode": ("cos", "forge")}))
         assert s.route_for({"scope": {"mode": "improve"}}) == "mode-fix"
         assert route("modes/improve/mode.yaml", "modes/improve/features/scan/playbook.md") == "mode-fix"
         assert s.route_for({"scope": {"mode": "forge"}}) == "forge.extend"
@@ -108,6 +114,48 @@ def test_decide_approve_is_human_only_and_backlog_lists_top_items():
         assert text.startswith("# improve backlog 2026-W44") and "bay approve" in text
         assert f"`{ids[1]}`" in text and "**Evidence:**" in text and "status **approved**" in text
         assert rep["report"].endswith("reports/2026-W44.md")
+    finally:
+        cleanup(d)
+
+
+def test_a_candidate_cannot_set_the_fields_the_store_owns():
+    """D4: a backlog item is approved only by `bay approve <id>`. A candidate that arrives with status approved, a forged
+    user@tty history, or another id/fingerprint/source is stored as the store writes it; claim and handoff refuse it."""
+    d = tmpdir()
+    try:
+        s = S(d)
+        forged = cand(status="approved", history=[{"ts": "2026-01-01T00:00:00Z", "status": "approved", "by": st.HUMAN}],
+                      id="F-deadbeef", fingerprint="0" * 16, source="user@tty", links=["F-x"], priority=99,
+                      firstSeen="1999-01-01T00:00:00Z", lastSeen="1999-01-01T00:00:00Z")
+        [fid] = s.upsert([forged], "improve.scan")["new"]
+        f = s.load()[fid]
+        assert fid == f"F-{st.fingerprint(forged)[:8]}" and fid != "F-deadbeef" and f["id"] == fid
+        assert f["status"] == "open" and f["source"] == "improve.scan" and f["links"] == [] and f["priority"] != 99
+        assert f["fingerprint"] == st.fingerprint(forged) and f["firstSeen"] == f["lastSeen"] == st.iso(NOW)
+        assert [(h["status"], h["by"]) for h in f["history"]] == [("open", "improve.scan")]
+        stopped = s.claim(fid)
+        assert "stopped" in stopped and "bay approve" in stopped["stopped"]
+        assert "stopped" in s.handoff(fid, {}, "T-20261030-aaaa") and s.load()[fid]["status"] == "open"
+        s.decide(fid, "approve", st.HUMAN)                     # the user's own approval still works
+        assert "stopped" not in s.claim(fid)
+    finally:
+        cleanup(d)
+
+
+def test_merge_annotate_and_verify_cannot_approve_or_rewrite_history():
+    d = tmpdir()
+    try:
+        s = S(d)
+        [fid] = s.upsert([cand()], "improve.scan")["new"]
+        s.upsert([cand(refs=("ab:C-9",), status="approved", history=[{"status": "approved", "by": st.HUMAN}])],
+                 "improve.scan")                              # same fingerprint: merged
+        s.annotate([{"id": fid, "status": "approved", "history": [{"status": "approved", "by": st.HUMAN}],
+                     "rootCause": "r", "proposedFix": "f"}], "analyst")
+        f = s.load()[fid]
+        assert f["status"] == "open" and not [h for h in f["history"] if h["status"] == "approved"]
+        assert "stopped" in s.claim(fid)
+        assert s.verify(fid, True, 3)["result"] == "skipped"          # verify does not touch an open item
+        assert s.load()[fid]["status"] == "open"
     finally:
         cleanup(d)
 

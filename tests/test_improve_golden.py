@@ -18,6 +18,7 @@ from improve_fixtures import make_ledger, make_transcripts
 from layout import PROTECTED_INSTANCES
 
 from bay import dispatch
+from bay.boundary import Protection
 
 HUMAN = "user@tty"
 
@@ -156,8 +157,8 @@ ROUTE_SCOPES = {
 def golden_routes() -> dict:
     store = mods()[4]
     out = {}
-    for label, framework_modes in (("default", None), ("shipped modes", {"cos", "forge"})):
-        s = store.Store(tmpdir(), NOW, framework_modes)
+    for label, framework_modes in (("default", ("cos", "forge")), ("shipped modes", ("cos", "forge"))):
+        s = store.Store(tmpdir(), NOW, Protection(names={"mode": framework_modes}))
         out[label] = {name: s.route_for({"scope": sc}) for name, sc in ROUTE_SCOPES.items()}
     return out
 
@@ -179,7 +180,7 @@ def fixed_candidates() -> list:
 def golden_reports() -> dict:
     store = mods()[4]
     tmp = tmpdir()
-    s = store.Store(tmp, NOW, {"cos", "forge"})
+    s = store.Store(tmp, NOW, Protection(names={"mode": ("cos", "forge")}))
     res = s.upsert(fixed_candidates(), "improve.scan")
     s.triage()
     ids = res["new"]

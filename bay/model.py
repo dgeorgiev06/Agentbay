@@ -196,6 +196,21 @@ class Doc:
             return str(self.path)
 
 
+def load_protection(root: Path) -> tuple[boundary.Protection, str | None]:
+    """The one loader of the `protected:` block of <root>/framework/components.yaml (used by the kit, scaffold and the
+    improve store). Anything but a readable, well-formed block fails closed: (the closed set, the error) - the set
+    reserves every name, covers every path and lets no mode place a role."""
+    try:
+        prot = boundary.ComponentMap.load(Path(root) / "framework" / "components.yaml").protected
+        if prot is None:
+            raise RuntimeError("framework/components.yaml: no protected: block")
+        return prot, None
+    except Exception as e:                      # noqa: BLE001 - whatever is wrong with the map, the answer is closed
+        return boundary.Protection.closed_set(), (
+            f"{e}; without a readable protected: block nothing is trusted (every name is reserved, "
+            f"no role may write or be placed) - restore the block")
+
+
 class Kit:
     """Everything on disk, plus the project's agentbay.config.yaml. No wiring checks."""
 
@@ -225,18 +240,10 @@ class Kit:
             self._go_offline()
 
     def _load_protection(self) -> boundary.Protection:
-        """The `protected:` block of framework/components.yaml. Anything but a readable, well-formed block fails
-        closed: the error is reported (so nothing resolves or builds) and the set reserves every name, covers every
-        path and lets no mode place a role."""
-        try:
-            prot = boundary.ComponentMap.load(self.root / "framework" / "components.yaml").protected
-            if prot is None:
-                raise RuntimeError("framework/components.yaml: no protected: block")
-            return prot
-        except Exception as e:                      # noqa: BLE001 - whatever is wrong with the map, the answer is closed
-            self.errors.append(f"{e}; without a readable protected: block nothing is trusted (every name is reserved, "
-                               f"no role may write or be placed) - restore the block")
-            return boundary.Protection.closed_set()
+        prot, err = load_protection(self.root)
+        if err:
+            self.errors.append(err)
+        return prot
 
     def protected_paths(self) -> list[str]:
         """The kit folders only forge.extend may write, as the policy lists them: the map's `paths`, then the folder (or

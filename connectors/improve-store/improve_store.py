@@ -1,47 +1,22 @@
 """improve-store: improve.findings/v1 -> the store module of this folder (storage only; writes only ctx.data_dir)."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from bay import boundary, ledger, protocol
+from bay import ledger, model, protocol
 from bay.connect import ConnectorError
-from bay.util import duration, fingerprint
+from bay.util import duration, fingerprint, read_events
 
 from . import store as st
-
-
-def _protection(kit):
-    """The component map's `protected:` set (what only forge.extend changes), or None when there is no kit or map."""
-    if not kit:
-        return None
-    try:
-        return boundary.ComponentMap.load(Path(kit) / "framework" / "components.yaml").protected
-    except (OSError, RuntimeError):
-        return None
-
-
-def _read_events(project: Path) -> list[dict]:
-    """Ledger events for the run records of the backlog; a line that is not a ledger event is skipped."""
-    p = ledger.ledger_path(project)
-    out = []
-    if p.exists():
-        for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
-            try:
-                e = json.loads(line) if line.strip() else None
-            except (ValueError, RecursionError):
-                e = None
-            if isinstance(e, dict) and all(isinstance(e.get(k), str) for k in ("type", "ts", "runId")):
-                out.append(e)
-    return out
 
 
 class ImproveStore:
     def __init__(self, ctx):
         self.ctx = ctx
-        prot = _protection(ctx.kit)
-        self.store = st.Store(ctx.data_dir, ctx.now(), set(prot.names["mode"]) if prot else None,
-                              st.instance_paths(prot.names) if prot else ())
+        if not ctx.kit:
+            raise ConnectorError("improve-store needs the kit (framework/components.yaml `protected:`) to route findings")
+        prot, _ = model.load_protection(Path(ctx.kit))      # a map that cannot be read protects everything
+        self.store = st.Store(ctx.data_dir, ctx.now(), prot)
         self.settings = ctx.settings or {}
 
     def _summary(self, ids: list[str]) -> list[dict]:
@@ -85,7 +60,7 @@ class ImproveStore:
         return self._do(self.store.decide, id, decision, by, note or "")
 
     def backlog(self, top=None, week=None) -> dict:
-        evs = _read_events(Path(self.ctx.project)) if self.ctx.project else []
+        evs = read_events(Path(self.ctx.project)) if self.ctx.project else []
         agents = {"groups": ledger.agent_groups(evs), "plans": ledger.plans(evs)}   # run records, as `status --agents`
         res = self._do(self.store.backlog, top or self.settings.get("backlogTop") or 10, week, agents)
         try:

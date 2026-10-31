@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from bay import secretscan
+from bay.boundary import Protection
 from bay.util import fingerprint
 
 from . import report
@@ -37,6 +38,7 @@ def instance_paths(names: dict) -> tuple[str, ...]:
     forge.extend like the folders in FRAMEWORK_DIRS."""
     return (*(f"modes/{n}" for n in names.get("mode", ())), *(f"envs/{n}.yaml" for n in names.get("env", ())),
             *(f"connectors/{n}" for n in names.get("connector", ())))
+STORE_OWNED = ("id", "fingerprint", "status", "firstSeen", "lastSeen", "source", "links", "history", "priority")
 HUMAN = "user@tty"
 MAX_EVIDENCE = 30
 
@@ -55,13 +57,14 @@ def isoweek(dt: datetime) -> str:
 
 
 class Store:
-    def __init__(self, data_dir: Path, now: datetime, framework_modes: set[str] | None = None,
-                 protected_paths: tuple[str, ...] = ()):
+    def __init__(self, data_dir: Path, now: datetime, protection: Protection):
+        """`protection`: the component map's `protected:` set (model.load_protection); a closed one routes everything
+        to forge.extend."""
         self.dir = Path(data_dir)
         self.path = self.dir / "findings.jsonl"
         self.now = now
-        self.framework_modes = framework_modes or {"cos", "forge"}     # the map's protected modes
-        self.protected_paths = tuple(protected_paths)
+        self.protection = protection
+        self.protected_paths = instance_paths(protection.names)
 
     # ------------------------------------------------------------------ io
     def load(self) -> dict[str, dict]:
@@ -86,12 +89,12 @@ class Store:
 
     # ------------------------------------------------------------------ helpers
     def _framework_file(self, x: str) -> bool:
-        return x.startswith(FRAMEWORK_DIRS) or any(x == p or x.startswith(p + "/") for p in self.protected_paths)
+        return self.protection.closed or x.startswith(FRAMEWORK_DIRS) or any(x == p or x.startswith(p + "/") for p in self.protected_paths)
 
     def route_for(self, f: dict) -> str:
         sc = f.get("scope") or {}
         files = [sc["file"]] if sc.get("file") else list(sc.get("files") or [])
-        if sc.get("framework") or sc.get("mode") in self.framework_modes:
+        if self.protection.closed or sc.get("framework") or sc.get("mode") in self.protection.names.get("mode", ()):
             return "forge.extend"
         if files and all(self._framework_file(x) for x in files):
             return "forge.extend"
@@ -116,8 +119,11 @@ class Store:
             fid = f"F-{fp[:8]}"
             cur = fs.get(fid)
             if cur is None:
-                f = {"id": fid, "fingerprint": fp, "status": "open", "firstSeen": iso(self.now), "source": by,
-                     "links": [], **c}
+                # the store owns these fields: whatever a candidate carries under them is dropped, so a candidate
+                # cannot arrive approved, with a forged history, or under another id
+                f = {**{k: v for k, v in c.items() if k not in STORE_OWNED},
+                     "id": fid, "fingerprint": fp, "status": "open", "firstSeen": iso(self.now), "source": by,
+                     "links": [], "history": []}
                 f["evidence"] = c["evidence"][:MAX_EVIDENCE]
                 f.setdefault("route", self.route_for(f))
                 self._hist(f, "open", by, "detected")

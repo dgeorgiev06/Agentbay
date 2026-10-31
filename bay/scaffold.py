@@ -55,12 +55,8 @@ def _check_name(kit: Path, kind: str, name: str) -> None:
 
 def _protected(kit: Path, kind: str, name: str) -> bool:
     """Does the component map reserve this name? A map that cannot be read reserves every name (fail closed)."""
-    from . import boundary
-    try:
-        prot = boundary.ComponentMap.load(kit / "framework" / "components.yaml").protected
-    except (OSError, RuntimeError):
-        return True
-    return prot is None or prot.reserved(kind, name)
+    from .model import load_protection
+    return load_protection(kit)[0].reserved(kind, name)
 
 
 def review_block(effects: list[str], role: str = "reviewer") -> str:

@@ -10,30 +10,9 @@ from datetime import datetime
 from pathlib import Path
 
 from bay import secretscan
-from bay.util import in_window, short_hash, warn
+from bay.util import in_window, read_events, short_hash, warn
 
 EVIDENCE_CHARS = 300
-LEDGER = ".agentbay/ledger/events.jsonl"
-
-
-def read_events(project: Path, warnings: list | None = None) -> list[dict]:
-    """Ledger events; a line that is not a JSON event is skipped and named (file:line) in `warnings`."""
-    p = project / LEDGER
-    out = []
-    if p.exists():
-        for n, line in enumerate(p.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
-            if not line.strip():
-                continue
-            try:
-                e = json.loads(line)
-            except (ValueError, RecursionError):
-                e = None
-            if isinstance(e, dict) and isinstance(e.get("type"), str) and isinstance(e.get("ts"), str) \
-                    and isinstance(e.get("runId"), str):
-                out.append(e)
-            else:
-                warn(warnings, f"{LEDGER}:{n}: not a ledger event, skipped")
-    return out
 
 
 def _tokens_add(acc: dict, tok) -> None:

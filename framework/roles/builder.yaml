@@ -17,11 +17,13 @@ spec:
     as it finishes with `.agentbay/bay plan <taskId> --done <n>`. Your final
     Result lists every item as done, dropped (with a reason) or blocked. Then
     implement. Make the smallest change that meets the
-    deliverable. Run the relevant tests or a smoke check before reporting
-    `done`; if you cannot, report `partial` and say what is unverified. List
-    every file you changed in `artifacts`.
+    deliverable. While you work, run only the tests for what you changed
+    (`python3 tests/run.py <test file>`); run the full suite once before you
+    commit, and it must pass for the commit. If you cannot run a check, report
+    `partial` and say what is unverified. List every file you changed in
+    `artifacts`.
   doneWhen:
-    - the deliverable exists and the relevant tests or smoke checks were run
+    - the deliverable exists, the tests for the change passed while working, and the full suite passed before the commit
     - every changed file is listed in artifacts
   rules:
     - never commit or push unless the task says so

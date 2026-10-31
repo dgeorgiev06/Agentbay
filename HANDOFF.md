@@ -1,3 +1,33 @@
+# HANDOFF part 26: T-20261031-653a (recorded with `bay plan`) - stage 5 part D built (sources and transcripts moved; bay/improve/ removed)
+
+Outcome: done. One code commit, cd8ba96, on feat/0008-stage5 (D1 to D5 are one commit: the moves, the imports and the tests cannot be green separately). No proposal edited; every path is in 0008's touches (boundary below).
+
+## To-do
+| Item | Commit | What |
+|---|---|---|
+| D1 | cd8ba96 | `git mv bay/improve/transcripts.py framework/connectors/claude-transcripts/parser.py` (entry `transcripts.py` imports `from .parser import TranscriptSource`); test imports `connector_pkg("claude-transcripts", "parser")` |
+| D2 | cd8ba96 | `sources.py` -> `ledger/ledger_sources.py` (ledger part, `git mv`) and `git/git_episodes.py` (git part: `REVERT_BODY`, `MAX_SUBJECT`, `git_episodes`); `ledger.py`, `git_history.py` import them; tests follow (`test_git_connector.py`, `test_review_record.py`) |
+| D3 | cd8ba96 | `fingerprint` defined once, in `bay/util.py`; `store.py` and `pipeline.py` import it; the shared-vector test is kept in both connector tests (each asserts `62f5b3fa536c7238`) |
+| D4 | cd8ba96 | `bay/improve/__init__.py` removed last; wording fixed in `framework/modes/improve/{config.example.yaml,config.schema.json,features/scan/playbook.md}`, connector docstrings, `test_improve_golden.py` (`MOVING` loses `bay/improve/`), `test_deadcode_check.py` (path of `ledger_verdicts`) |
+| D5 | - | no golden change, so no new `EXPECTED_DELTAS` entry (the only one is still part C's `inefficient-store-read` 3 -> 5) |
+| HANDOFF | this commit | |
+
+## What part E (and later parts) must know
+- improve-store's `read_events` use: `bay.ledger.read` is not equal (it accepts any dict and does not require `type`, `ts`, `runId` strings; it splits on `\n` and decodes strictly), so `improve_store.py` has a 12-line `_read_events` (the `read_events` behaviour without the warnings list, which the backlog never passed). `ledger_sources.read_events` stays in `ledger/` for the ledger connector. If part E wants one reader, make it a deliberate change to `bay/ledger.py` (not in touches).
+- Left on purpose: `tests/test_guard_matrix.py:31` still lists the sample path `bay/improve/pipeline.py` and `tests/golden/guard-matrix.json` has its rows (a non-existent file in the protected `bay/` dir, used as a "new file under bay/" probe). Renaming it changes the baseline's row keys; part F/G may swap it for another `bay/` sample in the test and golden together. Not in touches (tests are `other`).
+- `bay/improve/__pycache__/` is left on disk, untracked and ignored (the allowed commands cannot delete it); `git ls-files bay/improve` is empty. Delete it by hand.
+- The kit-audit counts did not change (no new `EXPECTED_DELTAS`): `ledger_sources.py` and `git_episodes.py` add no unused function, long function or store re-read.
+- `tests/helpers.connector_pkg("ledger", "ledger_sources")`, `("git", "git_episodes")`, `("claude-transcripts", "parser")` load the new siblings.
+
+## Evidence (run at cd8ba96)
+- `python3 tests/run.py -q` (run before the commit, same tree): `515 passed, 0 failed`. Includes `test_improve_golden`, the guard matrix pair, `test_stage_syntax_table`, `test_improve.py` (terminal-only approval, :225-245 unchanged), the improve-store tests (import lines only) and both `test_fingerprint_matches_the_shared_vector`.
+- `./bay.sh check` last line: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)` (line before: `✓ lint clean`; the same four warnings as before).
+- Boundary: `boundary origin/main...HEAD: 59 changed paths (17 core, 23 extension, 1 feature, 18 other); 0 failing; B-11 docs: 0 hits`.
+- `./bay.sh build --project <scratch>/s6d`: `built 6 modes for claude-code`; `./bay.sh clean --project <scratch>/s6d`: last line `clean`; Glob `**/*` of s6d afterwards: only `agentbay.config.yaml` (the input I wrote).
+- Baselines: `test_improve_golden` passes with the golden file untouched (`git diff` of `tests/golden/` is empty in cd8ba96); `test_guard_decision_matrix`, `test_guard_matrix_for_a_project_with_the_kit_outside` and `test_stage_syntax_table` pass; no golden file is in the commit.
+- `git grep -n -E "bay[./]improve"` outside HANDOFF, proposals and goldens: one hit, the guard-matrix sample path above. Nothing outside 0008's touches needed an edit (no blocker).
+- CLI comparison: `catalog` equals `s5-cli-baseline/catalog.txt` line for line except the `registry built` timestamp. `describe improve` has 16 `"connector": improve-detect|improve-store` steps, as in `describe_improve.txt` (16). `check` output is the same four warnings as `check.txt`. cos, forge, `catalog.json`, `--roles` were not re-run (nothing in part D touches them).
+
 # HANDOFF part 25: T-20261031-4d3f (recorded with `bay plan`) - stage 5 part C built (improve-detect and improve-store receive their code)
 
 Outcome: done. One commit, a4bec9b, on feat/0008-stage5 (C1, C2, C3 are one commit: the moves, the fingerprint copy and the test imports cannot be green separately). `bay/improve/` keeps `__init__`, `sources`, `transcripts` for part D (it deletes the folder). No proposal edited; every path is in 0008's touches.

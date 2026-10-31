@@ -1,5 +1,5 @@
 ---
-# Not approved. The owner approves at the forge.extend gate (`bay approve`). Direction agreed 2026-10-29: keep every feature and safety guarantee.
+# Approval is recorded in the ledger by `bay approve` (at the forge.extend gate), not in this file; this front matter grants nothing. Direction agreed 2026-10-29: keep every feature and safety guarantee.
 touches:
   # slice 1: boundary and lint
   - { path: bay/boundary.py, reason: "root files allowed; fewer named rules; one command", slice: 1 }
@@ -151,10 +151,20 @@ touches:
   - { path: connectors/gmail-api/tests/test_gmail_api.py, reason: "privacy hygiene: real company domains replaced with example domains (f06a5b2, b0df5f9); not part of 0008 or 0006", slice: 7 }
   - { path: framework/interfaces/workflow.run.v1.yaml, reason: "carried from 0006 slice 7a (Part G): chat approval wording for workflow gates (838fbb9)", slice: 7 }
   - { path: modes/mail-briefing/config.example.yaml, reason: "privacy hygiene: real company domains replaced with example domains (f06a5b2, b0df5f9); not part of 0008 or 0006", slice: 7 }
+  # stage 5: slices 6-7 (owner amendment, 2026-10-30)
+  # bay/connect.py (connector packages, D2) is already covered by path by the slice 5 entry above.
+  - { path: bay/conformance.py, reason: "NEW. moved from bay/improve/conformance.py: the conformance rules loader and checks, used by lint and by improve-detect", slice: 6 }
+  - { path: bay/graph.py, reason: "NEW. moved from bay/improve/graph.py: the file and reference graph, used by artifact-graph and improve-detect", slice: 6 }
+  - { path: bay/util.py, reason: "short_hash, in_window and warn move here from bay/improve/ (several connectors use them)", slice: 6 }
+  - { path: schemas/conformance.schema.json, reason: "description names bay/improve/conformance.py; follows the move to bay/conformance.py", slice: 6 }
+  - { path: "framework/modes/improve/features/", reason: "wording follows the moved code (slice 6); moved to modes/improve/features/ (slice 7); B-3 needs this prefix", slice: 6 }
+  - { path: "framework/modes/cos/features/", reason: "moved to modes/cos/features/; B-3 needs this prefix", slice: 7 }
+  - { path: schemas/components.schema.json, reason: "`protected:` block of the component map", slice: 7 }
+  - { path: schemas/interface.schema.json, reason: "`ownerOnly` endpoints: only the owner's command may call them (improve decide)", slice: 7 }
 ---
 # 0008 - Simplify without losing features
 
-- Status: draft, for the owner's approval. Nothing is implemented.
+- Status: approval is recorded in the ledger by `bay approve`, not in this file; this line grants nothing. Progress is in HANDOFF.md and the slice list below.
 - Decided by the owner: keep every feature and every safety guarantee; `improve` becomes a plain mode; boundaries stay enforced and their misfires are fixed; workflows get one implementation and the Chief of Staff stays a mode.
 - No new features, with three exceptions added at the owner's request: item 6 (every agent run records its outcome, its to-do list and its inputs; 2026-10-29), the dead-code check in item 1 (2026-10-30) and the top-level extension folders in item 7 (2026-10-30). Otherwise, items 1 to 5 each remove a duplicate way of doing one thing.
 
@@ -237,8 +247,11 @@ CLI target, 15 commands: `check` (validate, lint, boundary), `build`, `clean`, `
 - **Benefit:** core shrinks by about a third, and improve is an example of how to write a mode.
 - **Safety impact:** none if user-only approval stays a gate (`tests/test_improve.py`, `tests/test_improve_detectors.py`, `tests/test_boundaries.py`).
 - **Effort:** large.
-
-### 5. One workflow implementation
+- **Decided (2026-10-30), by the owner; where these differ from the text above, they win:**
+  - D1. The shared `graph` and `conformance` code stays in core as `bay/graph.py` and `bay/conformance.py`, because each has two users and one connector may not import another. `bay/improve/` is still gone, and 2,758 lines leave core.
+  - D2. A connector folder may hold several modules: `bay/connect.py` lets a connector import its own siblings. This is what lets improve-detect and improve-store take their code without one 1,500-line file.
+  - D4. Security decision. `improve.findings/v1.decide` becomes `ownerOnly`: only the owner's `bay approve <F-id>` in a terminal reaches it, and no workflow step may call it. This prevents an ordinary `modes/improve/mode.yaml` (or any user mode) from approving its own findings with a `run:` step, which location-based protection used to prevent. The resolver and lint refuse such a step; `schemas/interface.schema.json` gains the `ownerOnly` key. Findings about improve itself now route to a mode fix, not `forge.extend`, and `origin` for improve in `bay catalog` reads `user`.
+  - D5. `decide` is not turned into a gated feature. `bay approve <F-id>` stays terminal-only, because a gate can be approved from chat and a backlog item must never be decided from chat. The missing generic "owner decision" hook is a follow-up, not a back door.
 
 - **Removed:** the second implementation. Today the mode workflow is checked in `bay/model.py` (around lines 1105-1180) and run in `bay/dispatch.py`, while project workflows have their own validator (`bay/workflows.py`, 235 lines) and runner (`framework/connectors/workflow-runner/`, 159 lines), each re-reading `$in`, `$steps` and `when:`.
 - **Kept:** project workflows in `agentbay.config.yaml`, gates, `when:` and `$steps` references. The Chief of Staff stays a mode (`cos.run`, `cos.next`, `cos.status`).
@@ -246,8 +259,10 @@ CLI target, 15 commands: `check` (validate, lint, boundary), `build`, `clean`, `
 - **Benefit:** a fix to `when:` or `$steps` works everywhere.
 - **Safety impact:** none; `tests/test_workflows.py` and `tests/test_dispatch.py` must pass with only name changes.
 - **Effort:** medium.
-
-### 6. Every agent run records its outcome, its to-do list and its inputs (added by the owner)
+- **Decided (2026-10-30), by the owner; where these differ from the text above, they win:**
+  - D6. "One step runner" means one parser, one validator and one `skip`, `substitute` and `advance` rule. Two executors stay: the dispatcher runs steps inside a call, and the cursor hands back `nextCall`. Nested calls would break the guarantee that each stage keeps its own grants, effects, budget, review and gates.
+  - D7. Security decision. A gate with `when:` is refused in project workflows too, as it already is in mode features. The `when` value comes from the output the coordinator passes to `cos.next`, so an agent could fabricate it and skip an approval gate; refusing it prevents that. The cost is that project workflows lose conditional gates; no shipped workflow uses one. The error names the fix.
+  - D8. The reference grammar is the union of both (`!` negation, hyphens, nested paths), spelled once in code. Nothing accepted today is rejected. records its outcome, its to-do list and its inputs (added by the owner)
 
 - **Why:** reviewers grade against a moving target, and the ledger cannot say what an agent was asked to do. During this very dispatch `bay status` showed 0 running agents, because the spawn hooks (`bay/hook.py`) are not always active.
 - **Removed:** nothing. This is the one deliberate addition.
@@ -291,6 +306,10 @@ CLI target, 15 commands: `check` (validate, lint, boundary), `build`, `clean`, `
 - **Benefit:** one place to look for a mode, env or connector, and one place that says what is protected.
 - **Safety impact:** none if the tests agree. Tests must show: a role without `forge.extend` cannot write a protected path read from the map; a user extension named like a protected one is refused; an edit to a protected component without `touches:` fails; approval from chat and from the terminal both pass the gate (`tests/test_boundaries.py`, `tests/test_resolver.py`, `tests/test_guard_7a.py`).
 - **Effort:** medium. It is one slice, and it comes after the improve and workflow changes so each folder moves once.
+- **Decided (2026-10-30), by the owner; where these differ from the text above, they win:**
+  - D3. Protection covers all six framework envs and all nine framework connectors, not only the strict closure of cos and forge. The other connectors scrub secrets, redact transcripts or hold approval state, and all were protected by location, so leaving them writable would loosen a guard decision nobody asked to loosen. `improve-local` is protected but lets the improve mode use it. Improve cannot ship its own connector fixes without `forge.extend`.
+  - D9. `framework-dev` names each protected instance path in `fs.write`, kept in sync by a lint. The guard rule is unchanged: a protected path is writable only if an env path is at or under it. No new env syntax.
+  - Note: `delivery` is already `modes/delivery/`, and the agent profile already lives in `adapters/`, so `framework/` keeps roles, rules, interfaces and the component map.
 
 ## Steps
 
@@ -306,8 +325,8 @@ Each slice is sized for one builder (about 40 tool calls) and ends with `python3
 3. **One feature shape.** Item 2 (feature). Acceptance: every mode builds from `features:`; a code-only feature has no playbook and passes lint; `bay catalog` is unchanged except for ordering; the dead-code check reports no new findings.
 4. **CLI.** Item 2 (commands). Renames reach every file that names an old command, so the touches above list them; the fetch line is the stage-2 review follow-up. Acceptance: `bay --help` lists about 15 commands; an old command name is an unknown command; `.agentbay/COORDINATOR.md` uses the new names; the dead-code check reports no new findings.
 5. **Finish 0006.** Item 3. Built in four parts A-D (HANDOFF part 15). Acceptance: the 0006 step 2 acceptance lines, with offline sync, describe and status output identical except the allowed output changes of item 3: the three describe deltas in (a), the generic base-column descriptions in describe, and the cost key `items` (instead of `posts`) in status and run cost output. A golden test asserts each of these exactly, and everything else stays byte for byte; the dead-code check reports no new findings.
-6. **Improve as a mode.** Item 4. Acceptance: `bay/improve/` is gone; `bay call improve.scan` and `improve.audit` give the same findings on the fixture data; a backlog item cannot be approved without the user; the dead-code check reports no new findings.
-7. **Workflows.** Item 5. Acceptance: one stage-syntax parser in `bay/`; the workflow tests pass; `cos.run` still starts a project workflow; the dead-code check reports no new findings.
+6. **Improve as a mode.** Item 4. Acceptance: `bay/improve/` is gone; `bay call improve.scan` and `improve.audit` give the same findings on the fixture data; a backlog item cannot be approved without the user; the dead-code check reports no new findings. Built in parts A-H together with slice 7 (HANDOFF part 23). Also: the improve golden baseline taken in part A is unchanged; the guard-decision matrix from part A is unchanged except where D3, D4 and D7 change it on purpose (see slice 7); the folder move (part G) is a pure `git mv`.
+7. **Workflows.** Item 5. Acceptance: one stage-syntax parser in `bay/`; the workflow tests pass; `cos.run` still starts a project workflow; the dead-code check reports no new findings. Built in parts A-H together with slice 6 (HANDOFF part 23). Also: the improve golden baseline taken in part A is unchanged; the guard-decision matrix from part A is unchanged except where D3, D4 and D7 change it on purpose (D3: the protected set grows from the four folders to those plus each protected instance path; D4: `decide` becomes `ownerOnly` and improve's mode rows go from deny to pass for authoring writers; D7: a project-workflow gate with `when:` is refused); the folder move (part G) is a pure `git mv`.
    - Also carries item 7, after the workflow change: framework-shipped modes, envs and connectors move to the top-level `modes/`, `envs/` and `connectors/`. Acceptance: `framework/` holds only roles, the agent profile, rules, interfaces and the component map; protected components are declared in `framework/components.yaml` and the guard and `bay boundary` read them from it; a user extension with a protected name is refused; a write to a protected path without `forge.extend` is denied; approval of a protected change passes from chat or from the terminal; `bay catalog` is unchanged except for paths.
 8. **Agent run records.** Item 6 (the owner's addition). Acceptance: a subagent can run `bay plan` and no other `bay` command; plan events are scrubbed, size-limited and refused for another taskId; `step.started` carries inputs; `bay status` lists a dispatched agent even with the spawn hook off; a role-step submit without an outcome is refused; `bay show` prints outcome, to-do progress and inputs; `bay status --agents` groups runs by role, mode, model and tier from the ledger alone; a reviewer verdict cites outcome and to-do items; improve's weekly backlog reads the same figures. Stage 1 also built, beyond `bay plan`: `bay dispatched` (dispatches are logged even when spawn hooks are off); `bay review-record` (reviews run outside a framework step become visible to improve, but can never pass a gate); commit subjects in git episodes (to tell fix rounds from features); the transcripts fix (improve could read no sessions). Stage 1 carries slice 7a of 0006 (chat approvals, gates bound to recorded approvals), whose review fixes F-1..F-7 are included. The dead-code check reports no new findings.
 9. **Docs and release.** README, `docs/DESIGN.md`, `docs/INTERFACES.md`, changelog, version, schema `apiVersion` bump to `agentbay/v3` with v2 documents refused (feature shape and env changed), a scratch-repo build and clean round trip. Acceptance: all checks green with output quoted; a newcomer can follow the README from clone to first result; the dead-code check reports no new findings.

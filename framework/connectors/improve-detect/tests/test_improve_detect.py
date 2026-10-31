@@ -3,10 +3,18 @@ measurement-only refused); re-checks; secrets cut at an evidence boundary never 
 import json
 import shutil
 
-from helpers import clock, cleanup, project, system, tmpdir
+from helpers import clock, cleanup, connector_pkg, project, system, tmpdir
 from improve_fixtures import CORES, SECRETS, git, make_git_repo, make_ledger, make_transcripts
 
 from bay import connect
+
+# The finding contract: improve-store keeps its own copy of `fingerprint`; both tests assert this same vector.
+FINGERPRINT_VECTOR = ({"kind": "unused", "detector": {"key": "fn:app/core.py:never_called"}}, "62f5b3fa536c7238")   # tests/golden/improve.json
+
+
+def test_fingerprint_matches_the_shared_vector():
+    c, want = FINGERPRINT_VECTOR
+    assert connector_pkg("improve-detect", "pipeline").fingerprint(c) == want
 
 
 def inst(p):

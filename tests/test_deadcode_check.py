@@ -6,10 +6,13 @@ import textwrap
 from datetime import datetime
 from pathlib import Path
 
-from helpers import KIT, cleanup, clock, kit_copy, project, system, tmpdir
+from helpers import KIT, cleanup, clock, connector_pkg, kit_copy, project, system, tmpdir
 
 from bay import dispatch, graph
-from bay.improve.pipeline import Pipeline
+
+pipeline = connector_pkg("improve-detect", "pipeline")
+detect_artifacts = pipeline.detect_artifacts
+Pipeline = pipeline.Pipeline
 
 GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
 
@@ -112,7 +115,6 @@ def test_the_base_may_be_any_revision_and_a_bad_one_is_refused():
 
 
 def test_an_unused_concept_that_existed_at_base_is_not_new_when_the_project_is_the_kit():
-    from bay.improve import detect_artifacts
     k = kit_copy()
     try:
         iface = k / "framework/interfaces/orphan.thing.v1.yaml"
@@ -159,7 +161,6 @@ def test_a_base_that_does_not_resolve_says_to_fetch():
 
 
 def test_a_second_finding_with_the_same_fingerprint_is_new():
-    from bay.improve import detect_artifacts, pipeline
     repo = repo_at_base()
     real = detect_artifacts.run
     c = {"kind": "unused", "title": "Unused function dup", "detector": {"name": "unused", "key": "fn:a.py:dup"}}
@@ -244,7 +245,7 @@ def test_forge_extend_runs_deadcode_between_implement_and_review():
 def test_the_functions_the_complexity_check_flagged_stay_under_its_threshold():
     import ast
 
-    from bay.improve import detect_artifacts as da
+    da = detect_artifacts
     flagged = [("adapters/claude-code/claude_code.py", "ClaudeCodeAdapter._settings"),
                ("bay/guard.py", "Guard._bash"), ("bay/improve/sources.py", "ledger_verdicts"),
                ("bay/contenttypes.py", "_one"), ("bay/contenttypes.py", "check_mode_views"),

@@ -16,10 +16,14 @@ from pathlib import Path
 
 import yaml
 
-from .. import conformance, graph, model
-from ..util import short_hash
+from bay import conformance, graph, model
+from bay.util import short_hash
 from . import detect_artifacts, detect_sessions
-from .store import fingerprint
+
+
+def fingerprint(c: dict) -> str:
+    """The finding contract: improve-store keeps an identical copy (tests share one vector)."""
+    return short_hash(f"{c['kind']}|{c['detector']['key']}", 16)
 
 EPISODE_SUMMARY_FIELDS = ("id", "source", "kind", "target", "status", "agent", "agentType", "parent", "start",
                           "durationMs", "costUsd", "errors", "permissionPrompts", "interrupts", "instructionChanges",
@@ -67,7 +71,7 @@ class Pipeline:
         return [s for _, s in sorted(self.sources.items()) if callable(getattr(s, method, None))]
 
     def window(self, since=None, until=None) -> tuple[str, str | None]:
-        from ..util import parse_time
+        from bay.util import parse_time
         s = parse_time(since or self.settings.get("window") or "7d", self.now)
         return iso(s), (iso(parse_time(until, self.now)) if until else None)
 

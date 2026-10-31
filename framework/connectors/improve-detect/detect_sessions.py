@@ -10,8 +10,8 @@ from __future__ import annotations
 import re
 from collections import Counter, defaultdict
 
-from .. import checks
-from ..secretscan import clip
+from bay import checks
+from bay.secretscan import clip
 
 DEFAULTS = {"reviewRounds": 1, "ruleRepeat": 2, "slowStepMs": 600_000, "costlyStepUsd": 1.0,
             "costlySessionUsd": 10.0, "repeatCalls": 3, "permissionEvents": 3, "interrupts": 2,

@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 from golden_util import compare, normal
-from helpers import KIT, NOW, cleanup, clock, project, system, tmpdir
+from helpers import KIT, NOW, cleanup, clock, connector_pkg, project, system, tmpdir
 from improve_fixtures import make_ledger, make_transcripts
 
 from bay import dispatch
@@ -23,8 +23,8 @@ HUMAN = "user@tty"
 
 def mods():
     from bay import graph
-    from bay.improve import detect_artifacts, pipeline, report, store
-    return detect_artifacts, graph, pipeline, report, store
+    pipeline = connector_pkg("improve-detect", "pipeline")
+    return pipeline.detect_artifacts, graph, pipeline, connector_pkg("improve-store", "report"), connector_pkg("improve-store", "store")
 
 
 def findings_rows(p: Path) -> list:
@@ -267,7 +267,22 @@ def test_moving_files_have_no_deadcode_findings():
     assert not found, found
 
 
+# Named, reasoned changes to the golden since it was taken from untouched code (the rest of the file must not move).
+EXPECTED_DELTAS = {
+    ("kitAudit", "countsPerKind", "inefficient-store-read"): {
+        "was": 3, "now": 5,
+        "why": "stage 5 part C moved improve's store.py into connectors/improve-store/; the detector scans only files "
+               "under /connectors/, so Store.query and Store.claim (each re-reads the findings file per call) now count. "
+               "Fixture-data results (scan, audit, routes, reports, change) are unchanged."},
+}
+
+
 def test_improve_golden():
     got = {"scan": golden_scan(), "audit": golden_audit(), "kitAudit": golden_kit_audit(), "routes": golden_routes(),
            "reports": golden_reports(), "change": golden_change()}
+    for path, delta in EXPECTED_DELTAS.items():
+        node = got
+        for key in path:
+            node = node[key]
+        assert node == delta["now"] != delta["was"], f"{'/'.join(path)}: expected {delta['was']} -> {delta['now']} ({delta['why']}), got {node}"
     compare("improve", got)

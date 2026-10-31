@@ -18,8 +18,8 @@ from pathlib import Path
 from typing import Callable
 
 import yaml
-from ..graph import SKIP_DIRS
-from ..secretscan import clip
+from bay.graph import SKIP_DIRS
+from bay.secretscan import clip
 
 DEFAULTS = {"nearDuplicate": 0.7, "contextTokens": 6000, "maxFindingsPerDetector": 50,
             "maxComplexity": 30, "maxFunctionLines": 150, "docWords": 3000}

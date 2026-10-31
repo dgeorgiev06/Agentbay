@@ -116,6 +116,18 @@ def project(config: dict | None = None, source: str = "fake") -> Path:
     return p
 
 
+def connector_pkg(name: str, module: str | None = None):
+    """A shipped connector's package (its folder, loaded as the runtime loads it); `module` names a sibling of the
+    entry, for instance connector_pkg("improve-detect", "pipeline")."""
+    import importlib
+    from bay import connect
+    c = model.Kit(KIT).get("Connector", name)
+    pkg = sys.modules.get(f"agentbay_connector_{name.replace('-', '_')}")
+    if pkg is None or list(getattr(pkg, "__path__", [])) != [str(c.dir)]:     # one load per folder: siblings stay one set
+        pkg = connect._load_module(c)
+    return importlib.import_module(f"{pkg.__name__}.{module}") if module else pkg
+
+
 def kit_for(project_dir: Path | None) -> Path:
     return KIT
 

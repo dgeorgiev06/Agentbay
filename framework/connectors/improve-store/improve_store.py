@@ -1,12 +1,14 @@
-"""improve-store: improve.findings/v1 -> bay.improve.store (storage only; writes only ctx.data_dir)."""
+"""improve-store: improve.findings/v1 -> the store module of this folder (storage only; writes only ctx.data_dir)."""
 from __future__ import annotations
 
 from pathlib import Path
 
 from bay import ledger, protocol
 from bay.connect import ConnectorError
-from bay.improve import sources, store as st
+from bay.improve import sources
 from bay.util import duration
+
+from . import store as st
 
 
 class ImproveStore:

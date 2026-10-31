@@ -3,10 +3,18 @@ report, claim/handoff, verify, retention; and the secret scan on every write."""
 import json
 from datetime import timedelta
 
-from helpers import NOW, cleanup, model, tmpdir
+from helpers import NOW, cleanup, connector_pkg, model, tmpdir
 from improve_fixtures import CORES, SECRETS
 
-from bay.improve import store as st
+st = connector_pkg("improve-store", "store")
+
+# The finding contract: improve-detect keeps its own copy of `fingerprint`; both tests assert this same vector.
+FINGERPRINT_VECTOR = ({"kind": "unused", "detector": {"key": "fn:app/core.py:never_called"}}, "62f5b3fa536c7238")   # tests/golden/improve.json
+
+
+def test_fingerprint_matches_the_shared_vector():
+    c, want = FINGERPRINT_VECTOR
+    assert st.fingerprint(c) == want
 
 
 def cand(kind="slow-step", key="forge.extend.implement", lens="sessions", refs=("ab:C-1", "ab:C-2"), **kw):

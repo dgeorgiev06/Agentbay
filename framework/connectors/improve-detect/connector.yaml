@@ -4,7 +4,7 @@ metadata:
   name: improve-detect
   description: >-
     improve.detect/v1: reads the bound session, verdict and artifact sources and runs improve's deterministic
-    detectors (bay/improve/pipeline.py). Read-only; findings are stored by improve-store.
+    detectors (pipeline.py in this folder). Read-only; findings are stored by improve-store.
   version: 0.2.0
 spec:
   implements: improve.detect/v1

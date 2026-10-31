@@ -1,6 +1,6 @@
 """The improve store: .agentbay/data/improve/findings.jsonl (one improve.finding/v1 per line). Storage only:
-detectors live in bay/improve/detect_*.py and run behind improve.detect/v1; report and handoff text is rendered
-by bay/improve/report.py.
+detectors live in the improve-detect connector and run behind improve.detect/v1; report and handoff text is
+rendered by report.py in this folder.
 
   upsert    candidates (detectors or resolved analyst findings); dedup by fingerprint, merge evidence,
             reopen a fixed/verified finding whose pattern comes back
@@ -19,8 +19,9 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .. import secretscan
-from ..util import short_hash
+from bay import secretscan
+from bay.util import short_hash
+
 from . import report
 
 STATUSES = ("open", "approved", "deferred", "wontfix", "in-progress", "fixed", "verified")
@@ -38,6 +39,7 @@ class StoreError(Exception):
 
 
 def fingerprint(c: dict) -> str:
+    """The finding contract: improve-detect keeps an identical copy (tests share one vector)."""
     return short_hash(f"{c['kind']}|{c['detector']['key']}", 16)
 
 

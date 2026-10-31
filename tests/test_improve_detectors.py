@@ -4,10 +4,12 @@ import shutil
 import textwrap
 from pathlib import Path
 
-from helpers import cleanup, kit_copy, tmpdir
+from helpers import cleanup, connector_pkg, kit_copy, tmpdir
 
 from bay import conformance, graph
-from bay.improve import detect_artifacts as da, detect_sessions as ds
+
+da = connector_pkg("improve-detect", "detect_artifacts")
+ds = connector_pkg("improve-detect", "detect_sessions")
 
 TH = ds.thresholds({"thresholds": {"slowStepMs": 1000, "costlyStepUsd": 1.0}})
 

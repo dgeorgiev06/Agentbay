@@ -1,6 +1,7 @@
-"""improve-detect: improve.detect/v1 -> bay.improve.pipeline (read-only)."""
+"""improve-detect: improve.detect/v1 -> the pipeline module of this folder (read-only)."""
 from bay.connect import ConnectorError
-from bay.improve.pipeline import Pipeline
+
+from .pipeline import Pipeline
 
 
 class ImproveDetect:

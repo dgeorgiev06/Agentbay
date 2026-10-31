@@ -129,9 +129,8 @@ def dispatcher_skip() -> list:
         d = dispatch.Dispatcher(system(p), p, clock=clock)
         out = []
         for when, inp, steps in SKIP_ROWS:
-            step = model.Step(id="b", kind="role", when=when)
             try:
-                got = d._skip(step, None, None, {"input": inp, "steps": steps})
+                got = workflows.skip(when, inp, steps)
             except Exception as e:                                  # recorded: what an unparsed form does
                 got = f"{type(e).__name__}: {e}"
             out.append({"when": when, "input": inp, "steps": steps, "skipped": got})
@@ -140,7 +139,7 @@ def dispatcher_skip() -> list:
             d._invoke = lambda *a, _s=status, **kw: _s
             d._settings = lambda mode: {}
             try:
-                got = d._skip(step, None, None, {"input": {}, "steps": {}})
+                got = workflows.skip(when, {}, {}, lambda age: d._fresh(step, None, age))
             except Exception as e:
                 got = f"{type(e).__name__}: {e}"
             out.append({"when": when, "status": status, "skipped": got})
@@ -268,7 +267,8 @@ def test_the_reference_grammar_is_spelled_once_and_the_schemas_equal_it():
 def test_the_dispatcher_and_the_cursor_share_one_skip_rule_and_one_substitution():
     runner = (KIT / "connectors" / "workflow-runner" / "workflow_runner.py").read_text()
     assert not hasattr(dispatch, "substitute") and "substitute" not in runner
-    assert "wfmod.advance(" in runner and "wfmod.skip(" in (KIT / "bay" / "dispatch.py").read_text()
+    assert "wfmod.advance(" in runner and "wfmod.advance(" in (KIT / "bay" / "dispatch.py").read_text()
+    assert not hasattr(dispatch.Dispatcher, "_skip")
     for when, inp, steps in SKIP_ROWS:
         if when.startswith(("$in.", "!$in.", "$steps.", "!$steps.")):
             stages = [workflows.Stage(id="a", call="x.y"), workflows.Stage(id="b", call="x.y", when=when)]
@@ -315,7 +315,6 @@ def test_no_output_passed_to_cos_next_skips_a_gate():
         cleanup(p)
     stages = [workflows.Stage(id="g", gate="ok?", when="!$in.nope")]
     assert workflows.advance(stages, 0, {}, {}).kind == "refused"
-    assert workflows.skip("!$in.nope", {}, {}, gate=True) is False
 
 
 def test_a_gate_without_when_still_waits_for_the_owner():

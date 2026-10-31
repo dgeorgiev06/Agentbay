@@ -327,14 +327,22 @@ class Dispatcher:
 
     # ------------------------------------------------------------ engine
     def _advance(self, mode, feat, state) -> dict:
-        while state["cursor"] < len(feat.steps):
-            step = feat.steps[state["cursor"]]
+        stages = [wfmod.Stage.of_step(s) for s in feat.steps]
+        by_id = {s.id: s for s in feat.steps}
+        while True:
+            mv = wfmod.advance(stages, state["cursor"], state["input"], state["steps"],
+                               lambda st, age: self._fresh(by_id[st.id], mode, age))
+            for sid in mv.skipped:
+                state["steps"][sid] = None
+                self._ledger("step.skipped", self._event_base(mode, feat, by_id[sid], state["callId"]),
+                             summary=f"when: {by_id[sid].when}")
+            if mv.kind in ("refused", "missing"):          # fail closed; resolve already refuses both
+                raise CallError(mv.reason or f"{feat.name}: no step at position {mv.cursor}")
+            state["cursor"] = mv.cursor
+            if mv.kind == "done":
+                break
+            step = feat.steps[mv.cursor]
             base = self._event_base(mode, feat, step, state["callId"])
-            if step.when and self._skip(step, mode, feat, state):
-                state["steps"][step.id] = None
-                self._ledger("step.skipped", base, summary=f"when: {step.when}")
-                state["cursor"] += 1
-                continue
             if step.kind == "gate":
                 gate = self._gate_check(step, state)
                 state.setdefault("gates", {})[step.id] = gate
@@ -379,16 +387,14 @@ class Dispatcher:
             state["status"] = "partial" if (failed_checks or state.get("stopped")) else "done"
         return self._finish(state, mode, feat)
 
-    def _skip(self, step, mode, feat, state) -> bool:
-        """The shared skip rule (`workflows.skip`); `stale > <age>` asks the step's connector for the store's status."""
-        def fresh(age) -> bool:
-            iface = step.run.rsplit(".", 1)[0]
-            st = self._invoke(step.env, step.connector, iface, "status", {}, settings=self._settings(mode), caps={})
-            last = st.get("lastSync")
-            if st.get("stale"):           # selectors or bound sources changed: sync re-scopes the store first
-                return False
-            return bool(last) and (self.clock() - parse_time(last, self.clock())) <= age
-        return wfmod.skip(step.when, state["input"], state["steps"], fresh, gate=step.kind == "gate")
+    def _fresh(self, step, mode, age) -> bool:
+        """`stale > <age>` (via `workflows.advance`): the step's connector says whether the store is fresher than that."""
+        iface = step.run.rsplit(".", 1)[0]
+        st = self._invoke(step.env, step.connector, iface, "status", {}, settings=self._settings(mode), caps={})
+        last = st.get("lastSync")
+        if st.get("stale"):           # selectors or bound sources changed: sync re-scopes the store first
+            return False
+        return bool(last) and (self.clock() - parse_time(last, self.clock())) <= age
 
     def _gate_subject(self, step, state) -> dict | None:
         """{path, sha256} of the project file a gate's `approves: $in.<f>` names, or None (no field, no such file

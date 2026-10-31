@@ -333,12 +333,10 @@ def substitute(template, inp: dict, steps: dict, settings: dict):
     return val(template or {})
 
 
-def skip(when: str, inp: dict, steps: dict, fresh=None, gate: bool = False) -> bool:
+def skip(when: str, inp: dict, steps: dict, fresh=None) -> bool:
     """The one skip rule. `$in.<f>` / `$steps.<id>.<f>`: skip unless truthy; a leading `!` skips when truthy instead
     (a skipped step's output counts as missing). `stale > <age>`: skip while `fresh(age)` says the store is fresher
-    (a code step of a feature; no `fresh` never skips). A gate is never skipped by a value."""
-    if gate:
-        return False
+    (a code step of a feature; no `fresh` never skips). A gate is never skipped by a value: advance refuses it."""
     neg = when.startswith("!")
     ref = when[1:] if neg else when
     if ref.startswith(("$in.", "$steps.")):
@@ -360,9 +358,10 @@ class Move:
     reason: str = ""
 
 
-def advance(stages: list[Stage | None], cursor: int, inp: dict, results: dict) -> Move:
+def advance(stages: list[Stage | None], cursor: int, inp: dict, results: dict, fresh=None) -> Move:
     """The one advance rule of the cursor: from `cursor`, skip stages whose `when` says so, then stop at the first
-    call or gate. A gate with `when:` is refused, never evaluated, so no output passed to cos.next can skip it."""
+    call or gate. A gate with `when:` is refused, never evaluated, so no output passed to cos.next can skip it.
+    `fresh(stage, age)` answers `stale > <age>` (a feature's code step)."""
     skipped: list[str] = []
     while cursor < len(stages):
         st = stages[cursor]
@@ -370,7 +369,7 @@ def advance(stages: list[Stage | None], cursor: int, inp: dict, results: dict) -
             return Move("missing", cursor, skipped)
         if st.kind == "gate" and st.when:
             return Move("refused", cursor, skipped, st, reason=f"stage '{st.id}': a gate takes no when: {PROJECT_GATE_FIX}")
-        if st.when and skip(st.when, inp, results):
+        if st.when and skip(st.when, inp, results, fresh and (lambda age, st=st: fresh(st, age))):
             skipped.append(st.id)
             cursor += 1
             continue

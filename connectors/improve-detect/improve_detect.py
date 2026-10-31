@@ -1,7 +1,6 @@
 """improve-detect: improve.detect/v1 -> the pipeline module of this folder (read-only)."""
-from bay import limits
+from bay import limits, util
 from bay.connect import ConnectorError
-from bay.util import PROPOSAL_PATH
 
 from .pipeline import Pipeline
 
@@ -29,7 +28,7 @@ class ImproveDetect:
     def limits(self, base, proposal=None) -> dict:
         """bay/limits.py on the project; read-only (the builder's `check --limits` writes the ratchet)."""
         root = self.p.project.resolve()
-        path = next(((root / x).resolve() for x in ([proposal] if isinstance(proposal, str) else proposal or []) if x and (isinstance(proposal, str) or PROPOSAL_PATH.match(x))), None)  # a list: the propose step's artifacts
+        path = next(((root / x).resolve() for x in ([proposal] if isinstance(proposal, str) else proposal or []) if x and (isinstance(proposal, str) or util.PROPOSAL_PATH.match(x))), None)  # a list: the propose step's artifacts
         try:
             if base.startswith("-") or path and not path.is_relative_to(root):
                 raise ValueError("base must be a git revision and proposal a path inside the project")

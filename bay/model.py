@@ -38,6 +38,7 @@ except ImportError:  # pragma: no cover
 
 from . import playbook as pbk
 from . import rules as rulesmod
+from . import workflows as wfmod
 
 KIT = Path(__file__).resolve().parent.parent
 SCHEMAS = KIT / "schemas"
@@ -1127,25 +1128,15 @@ def _feature_steps(kit: Kit, md: Doc, ctx: _Ctx, ep: dict, wf: list, where: str)
         elif "run" in st:
             steps.append(_code_step(kit, md, ep, st, sw, ep_eff, ctx.gaps, ctx.seen_conn))
         elif "gate" in st:
-            # a gate passes only by a recorded approval (`bay approve`), never by a `when:` skip
-            if st.get("when"):
-                ctx.gaps.append(f"{sw}: a gate takes no when: (it passes only by `bay approve`, or by a recorded "
-                                f"approval of the exact content its approves: names)")
-            steps.append(Step(id=st["id"], kind="gate", task=st["gate"], approves=st.get("approves")))
+            # a gate passes only by a recorded approval (`bay approve`), never by a `when:` skip (check_stages says so)
+            steps.append(Step(id=st["id"], kind="gate", task=st["gate"], approves=st.get("approves"), when=st.get("when")))
         else:
             steps.append(_role_step(ctx, md, ep, st, sw, ep_eff))
     if review_on and not marker:
         steps.append(_role_step(ctx, md, ep, {"id": "review", "role": review["role"]}, f"{where} review",
                                 ep_eff, review=review))
-    ids = [x.id for x in steps]
-    for i, x in enumerate(steps):
-        ref = (x.when or "").lstrip("!")
-        if ref.startswith("$steps.") and ref.split(".")[1] not in ids[:i]:
-            ctx.gaps.append(f"{where} step {x.id}: when: {x.when} names '{ref.split('.')[1]}', which is not an earlier step")
-        if ref.startswith("stale") and x.kind != "code":
-            ctx.gaps.append(f"{where} step {x.id}: `when: {x.when}` is for code steps (it asks a connector's status); "
-                            f"a {x.kind} step takes `$in.<f>` or `$steps.<id>.<f>`")
-    for d in {i for i in ids if ids.count(i) > 1}:
+    ctx.gaps += wfmod.check_stages([wfmod.Stage.of_step(x) for x in steps], where, wfmod.FEATURE_GATE_FIX)
+    for d in wfmod.duplicates([x.id for x in steps]):
         ctx.gaps.append(f"{where}: duplicate step id '{d}'" + (" (the review step is injected from mode.yaml review; "
                         "do not add a step called review)" if d == "review" else ""))
     return steps

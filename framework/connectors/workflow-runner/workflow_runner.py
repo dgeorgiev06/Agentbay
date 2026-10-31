@@ -16,7 +16,6 @@ from pathlib import Path
 
 from bay import workflows as wfmod
 from bay.connect import ConnectorError
-from bay.dispatch import substitute
 
 OPEN = ("stage-ready", "awaiting-approval")
 ENDED = ("done", "blocked", "failed")
@@ -93,32 +92,27 @@ class WorkflowRunner:
     # ------------------------------------------------------------ engine
     def _advance(self, run: dict, wf) -> dict:
         """Walk stages until one needs the coordinator (a call), needs the user (a gate), or the run ends."""
-        skipped: list[str] = []
-        while run["cursor"] < len(run["stages"]):
-            rec = run["stages"][run["cursor"]]
-            stage = wf.stage(rec["id"])
-            if stage is None:                   # the workflow was edited under a live run
-                run["status"] = "failed"
-                run["reason"] = (f"stage '{rec['id']}' is no longer in workflows.{run['workflow']}; "
-                                 f"the workflow changed after this run started. Start a new run.")
-                return self._finish(run)
-            if stage.when and not substitute({"v": stage.when}, run["input"], run["results"], {}).get("v"):
+        mv = wfmod.advance([wf.stage(r["id"]) for r in run["stages"]], run["cursor"], run["input"], run["results"])
+        for rec in run["stages"][run["cursor"]:mv.cursor]:
+            if rec["id"] in mv.skipped:
                 rec["state"] = "skipped"
-                skipped.append(rec["id"])
-                run["cursor"] += 1
-                continue
-            if stage.kind == "gate":
-                rec["state"] = "running"
-                run["status"] = "awaiting-approval"
-                return self._save(run, {"gate": stage.gate, "stage": rec["id"],
-                                        **({"skipped": skipped} if skipped else {})})
-            rec["state"] = "running"
-            run["status"] = "stage-ready"
-            args = substitute(stage.with_, run["input"], run["results"], {})
-            return self._save(run, {"stage": rec["id"], "nextCall": {"target": stage.call, "input": args},
-                                    **({"skipped": skipped} if skipped else {})})
-        run["status"] = "done"
-        return self._finish(run, {"skipped": skipped} if skipped else {})
+        run["cursor"] = mv.cursor
+        extra = {"skipped": mv.skipped} if mv.skipped else {}
+        if mv.kind in ("missing", "refused"):   # the workflow was edited under a live run, or holds a gate with `when:`
+            rec = run["stages"][mv.cursor]
+            run["status"] = "failed"
+            run["reason"] = mv.reason or (f"stage '{rec['id']}' is no longer in workflows.{run['workflow']}; "
+                                          f"the workflow changed after this run started. Start a new run.")
+            return self._finish(run)
+        if mv.kind == "done":
+            run["status"] = "done"
+            return self._finish(run, extra)
+        run["stages"][mv.cursor]["state"] = "running"
+        if mv.kind == "gate":
+            run["status"] = "awaiting-approval"
+            return self._save(run, {"gate": mv.stage.gate, "stage": mv.stage.id, **extra})
+        run["status"] = "stage-ready"
+        return self._save(run, {"stage": mv.stage.id, "nextCall": {"target": mv.stage.call, "input": mv.args}, **extra})
 
     def _finish(self, run: dict, extra: dict | None = None) -> dict:
         run["endedAt"] = self.ctx.now().isoformat(timespec="seconds")

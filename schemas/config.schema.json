@@ -109,12 +109,12 @@
                 },
                 "when": {
                   "type": "string",
-                  "pattern": "^\\$(in|steps)\\.[A-Za-z][A-Za-z0-9-]*(\\.[A-Za-z][A-Za-z0-9-]*)*$",
-                  "description": "Skip the stage unless this value is truthy."
+                  "pattern": "^!?\\$(?:in|steps)\\.[A-Za-z][A-Za-z0-9-]*(?:\\.[A-Za-z][A-Za-z0-9-]*)*$",
+                  "description": "Skip the stage unless this value is truthy; a leading `!` skips when it is truthy instead. A gate takes no `when` (`bay check` refuses it)."
                 },
                 "gate": {
                   "type": "string",
-                  "description": "Approval gate: the run stops and only `bay approve` passes it."
+                  "description": "Approval gate: the run stops and only `bay approve` passes it. It takes no `when`."
                 }
               }
             }

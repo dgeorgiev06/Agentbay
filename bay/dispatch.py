@@ -368,7 +368,7 @@ class Dispatcher:
             if step.kind == "review" and "checks_done" not in state:
                 self._run_checks(feat, state)
                 with suppress(RuntimeError, OSError):          # outside git a later re-check names no commit range
-                    state["head"] = boundary._git(self.project, "rev-parse", "HEAD").strip()
+                    state["head"] = boundary.git(self.project, "rev-parse", "HEAD").strip()
             state["status"] = "awaiting-approval" if step.kind == "gate" else "needs-agent"
             plan = self._plan(mode, feat, step, state)
             state["plan"] = plan

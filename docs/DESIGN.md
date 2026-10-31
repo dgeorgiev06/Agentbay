@@ -42,10 +42,8 @@ neither; one that runs a role needs a playbook). It is called as `<mode>.<featur
 deterministic `check` (`citations_resolve`, `no_secrets`, `lint_clean`, ...), and stack with mode
 constraints, role rules and project `extraRules`; the strictest wins. Review is configured only in
 `mode.yaml`: the reviewer gets the task, the DoD, the rules and the check results, and returns one verdict per
-id (`review.verdict/v1`). A failed must item or a blocker makes the call `partial`; the call halts before
-release only when a failed item is rated blocker (a security finding is) or is a must item with no rating. A failed
-must item rated should-fix or nit goes to the Result's list and the call goes on to release, ending `partial`.
-After a halt, the re-run gets one more round (R-1) that is a scoped re-check when the approved proposal is
+id (`review.verdict/v1`). Any failed must or must_not item, and any item rated blocker, makes the call `partial` and halts it before release;
+the should-fix and nit ratings only set how the findings are listed. After a halt, the re-run gets one more round (R-1) that is a scoped re-check when the approved proposal is
 unchanged: the brief carries `recheck` (the failed ids, the fix commits, the items that passed), the reviewer judges
 the failed ids again, and a carried item can still fail on new evidence. A changed proposal, or a re-run after a
 re-check, gets a full review.

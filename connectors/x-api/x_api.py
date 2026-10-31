@@ -31,6 +31,7 @@ import base64
 from datetime import datetime
 
 from bay.connect import ConnectorError
+from bay.selector import vals
 from bay.util import iso
 
 API = "https://api.x.com/2"
@@ -158,7 +159,7 @@ class XApi:
 
     def _streams(self, query: dict) -> list[tuple[str, str, bool]]:
         """(url, container, accepts since_id/start_time) per native value."""
-        ins, froms = _list(query.get("in")), _list(query.get("from"))
+        ins, froms = vals(query.get("in")), vals(query.get("from"))
         out = []
         for v in ins:
             if v.lower() == "home":
@@ -247,10 +248,6 @@ class XApi:
             gone += [x for x in batch if x not in found]
             checked += batch
         return checked, gone
-
-
-def _list(v) -> list[str]:
-    return [] if v is None else [str(x) for x in (v if isinstance(v, list) else [v])]
 
 
 def _rate_limited(r, what: str) -> str:

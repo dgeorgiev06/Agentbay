@@ -78,12 +78,11 @@ Deterministic checks (`bay/checks.py`): `citations_resolve`, `citations_min:<n>`
 The reviewer returns `review.verdict/v1`: per id `pass|fail|n/a`, evidence, severity, and optionally `cites`
 `{taskId, outcome, todo[]}` (the recorded outcome and to-do items the verdict rests on). The review brief
 carries `review.recordedPlans` (taskId -> step, outcome, to-do progress) of the agents it judges.
-Halting is by the reviewer's rating: a failed item rated `blocker`, or a failed must/must_not item with no rating,
-ends the call `partial` before release; a failed must item rated `should-fix` or `nit` is listed in the Result and the
-call goes on to release, ending `partial`. When the same feature already had a failed review of the same approved
+Any failed must/must_not item, or any item rated `blocker`, makes the call `partial` and halts it before release;
+`should-fix` and `nit` ratings only set how findings are listed. When the same feature already had a failed review of the same approved
 proposal (same path and sha256 at the gate), the next review brief carries `recheck`
-`{priorCall, failed[], commits[], carried[]}`: the verdict must cover every id of the DoD and reviewer rules, the
-reviewer judges `failed` against `commits`, and `carried` items stand unless new evidence fails them (a submitted item
+`{priorCall, failed[], commits, carried[]}` (`commits` is a `<sha>..HEAD` range, or null outside git): the verdict must
+cover every id of the DoD and reviewer rules, the reviewer judges `failed` against `commits`, and `carried` items stand unless new evidence fails them (a submitted item
 wins over a carried one). A review after a passed review, after a re-check, or after any edit to the proposal is full.
 
 ## 3. Role / Agent profile / Environment

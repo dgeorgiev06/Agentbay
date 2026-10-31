@@ -18,7 +18,6 @@ Proposal 0008, slice 9: the framework is simpler and the contracts are versioned
 - `apiVersion: agentbay/v3` in every schema, mode, env, connector, interface, role, content type, config and rule file. A v2 file is refused with "this kit reads agentbay/v3, not '<found>'; change the line to apiVersion: agentbay/v3"; there is no reader and no migration.
 - Schemas: one rules schema serves feature rules and conformance rules (the conformance schema is gone), and the finding, episode and selector schemas moved from `schemas/data/` to the data folders of the modes that own them. Schemas 19 -> 15.
 - The limits ratchet: a count is checked against the higher of its ceiling and the base branch's, so a ceiling lowered earlier on a branch may climb back to the base value, never above it. `bay check --limits` writes nothing; `--write`, at release, records lower counts.
-- Review halts by the reviewer's rating: only a blocker, or a failed must item with no rating, stops the call before release. A failed must item rated should-fix or nit is listed and the call ends `partial` after release.
 - One ledger reader (`bay.ledger.read`); the dispatcher steps through `workflows.advance`; the proposal path pattern is shared.
 - A base component map without a `protected:` block is an error in `bay check --base`.
 - improve-store validates route, effort and impact on upsert as it does on annotate.

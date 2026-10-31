@@ -247,7 +247,7 @@ def test_failed_review_halts_before_release():
     assert r["status"] == "partial" and "next" not in r
     # a re-run on the same approved proposal: a scoped re-check of the failed items (once), else a full review
     path = _proposal(k, "0096-recheck.md", "status: draft\n")
-    real_git, dispatch.boundary._git = dispatch.boundary._git, lambda *a: "abc123\n"      # the kit copy is no git checkout
+    real_git, dispatch.boundary.git = dispatch.boundary.git, lambda *a: "abc123\n"      # the kit copy is no git checkout
 
     def to_review():
         r = d.call("forge.extend", {"goal": "recheck", "proposal": path})
@@ -255,15 +255,15 @@ def test_failed_review_halts_before_release():
             r = d.approve(r["callId"], True, by="user@tty")
         return d.submit(r["callId"], "implement", ok)
 
-    def verdict(ids, fail=()):
+    def verdict(ids, fail=(), severity="blocker"):
         return {"items": [{"id": i, "verdict": "fail" if i in fail else "pass", "evidence": "e",
-                           **({"severity": "blocker"} if i in fail else {})} for i in ids]}
+                           **({"severity": severity} if i in fail else {})} for i in ids]}
     try:
         r1 = to_review()
         ids = [x["id"] for x in r1["next"]["review"]["definitionOfDone"] + r1["next"]["review"]["rules"]]
         a, b = ids[:2]
         assert "recheck" not in r1["next"]["review"]
-        assert d.submit(r1["callId"], "review", verdict(ids, [a]))["review"]["failed"] == [a]    # still halts
+        assert d.submit(r1["callId"], "review", verdict(ids, [a], "should-fix"))["review"]["failed"] == [a]    # a failed must halts at any rating
         r2 = to_review()
         skipped = [e["step"] for e in ledger.read(k) if e.get("callId") == r2["callId"] and e["type"] == "step.skipped"]
         rc = r2["next"]["review"]["recheck"]
@@ -283,7 +283,7 @@ def test_failed_review_halts_before_release():
         (k / path).write_text((k / path).read_text() + "edit\n")
         assert "recheck" not in to_review()["next"]["review"]  # a changed proposal: the owner approved again, full review
     finally:
-        dispatch.boundary._git = real_git
+        dispatch.boundary.git = real_git
         cleanup(k)
 
 

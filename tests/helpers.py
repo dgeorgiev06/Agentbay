@@ -70,7 +70,7 @@ def cleanup(p: Path) -> None:
 
 def _link_or_copy(src, dst) -> None:
     """Files in the kit's folders are hard links (a build or a test writes the top-level and dot files, so those are
-    copies); a write through Path.write_text/write_bytes first breaks the link (below), so the kit is never changed."""
+    copies); KitPath and the edit helpers break the link before a write (below), so the kit is never changed."""
     if os.sep in os.path.relpath(src, KIT) and not os.path.relpath(src, KIT).startswith("."):
         try:
             return os.link(src, dst)
@@ -79,16 +79,30 @@ def _link_or_copy(src, dst) -> None:
     shutil.copy2(src, dst)
 
 
-def _write_unshared(write):
-    def wrapped(self, *args, **kwargs):
-        if os.path.lexists(self) and os.stat(self).st_nlink > 1:
-            os.unlink(self)
-        return write(self, *args, **kwargs)
-    return wrapped
+def unshare(path) -> None:
+    """Make `path` a private copy when it is a hard link into the real kit, before anything writes to it."""
+    if os.path.lexists(path) and os.stat(path).st_nlink > 1:
+        tmp = f"{path}.unshared"
+        shutil.copy2(path, tmp)
+        os.replace(tmp, path)
 
 
-Path.write_text = _write_unshared(Path.write_text)
-Path.write_bytes = _write_unshared(Path.write_bytes)
+class KitPath(type(Path())):
+    """A path inside a kit copy: a write (write_text, write_bytes, open for writing) first breaks the hard link, so the
+    real kit is never changed. Only paths made from kit_copy() are KitPaths; nothing global is patched."""
+
+    def write_text(self, *a, **kw):
+        unshare(self)
+        return super().write_text(*a, **kw)
+
+    def write_bytes(self, *a, **kw):
+        unshare(self)
+        return super().write_bytes(*a, **kw)
+
+    def open(self, mode="r", *a, **kw):
+        if set(mode) & set("wa+x"):
+            unshare(self)
+        return super().open(mode, *a, **kw)
 
 
 def kit_copy() -> Path:
@@ -96,12 +110,13 @@ def kit_copy() -> Path:
     d = tmpdir() / "kit"
     shutil.copytree(KIT, d, copy_function=_link_or_copy,
                     ignore=shutil.ignore_patterns(".git", "__pycache__", ".agentbay"))
-    return d
+    return KitPath(d)
 
 
 def edit_yaml(path: Path, fn) -> None:
     doc = yaml.safe_load(path.read_text())
     fn(doc)
+    unshare(path)
     path.write_text(yaml.safe_dump(doc, sort_keys=False))
 
 

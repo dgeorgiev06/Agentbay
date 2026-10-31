@@ -239,6 +239,7 @@ def test_forge_extend_runs_deadcode_between_implement_and_review():
         assert ids.index("limits") + 1 == ids.index("review")
         assert feat.steps[ids.index("deadcode")].run == "improve.detect/v1.change"
         assert feat.steps[ids.index("limits")].run == "improve.detect/v1.limits"
+        assert feat.steps[ids.index("limits")].with_["proposal"] == "$in.proposal|$steps.propose.artifacts"
     finally:
         cleanup(p)
 

@@ -85,7 +85,7 @@ spec:
         additionalProperties: false
         properties:
           base: { type: string, minLength: 1, description: "git revision, e.g. origin/main" }
-          proposal: { type: string, description: "project path of the proposal whose exceptions: apply" }
+          proposal: { type: [string, array], items: { type: string }, description: "project path of the proposal whose exceptions: apply; a list (the propose step's artifacts) names its first docs/proposals/*.md" }
       out:
         type: object
         required: [problems, notes]

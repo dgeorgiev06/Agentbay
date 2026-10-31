@@ -10,6 +10,7 @@ import contextlib
 import importlib.util
 import io
 import os
+import subprocess
 import sys
 import time
 import traceback
@@ -20,6 +21,16 @@ HERE = Path(__file__).resolve().parent
 KIT = HERE.parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(KIT))
+
+
+def kit_state() -> str | None:
+    """The checkout's git status and diff, to see that the run left the real kit as it found it (None: no git)."""
+    try:
+        r = [subprocess.run(["git", "-C", str(KIT), *a], capture_output=True, text=True, check=True).stdout
+             for a in (["status", "--porcelain"], ["diff", "HEAD"])]
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return "".join(r)
 
 
 def files() -> list[Path]:
@@ -65,6 +76,7 @@ def main(argv: list[str]) -> int:
         return 2
     asked = [a for i, a in enumerate(argv) if not a.startswith("-") and (i == 0 or argv[i - 1] not in ("-k", "-j"))]
     todo = [f for f in files() if not asked or any(f.stem == Path(a).stem for a in asked)]
+    before = kit_state()
     start = time.perf_counter()
     if jobs > 1 and len(todo) > 1:
         with ProcessPoolExecutor(max_workers=min(jobs, len(todo))) as pool:
@@ -79,6 +91,9 @@ def main(argv: list[str]) -> int:
     slow = ", ".join(f"{n} {t:.1f}s" for t, n in sorted(times, reverse=True)[:15])
     print(f"{'' if quiet else chr(10)}slowest 15: {slow}")
     print(f"{passed} passed, {failed} failed in {wall:.1f}s ({'1 worker' if jobs <= 1 else f'{jobs} workers'})")
+    if kit_state() != before:
+        print("✗ the run changed the real kit (git status or diff differs from before it): a test wrote through a hard link")
+        failed += 1
     return 1 if failed else 0
 
 

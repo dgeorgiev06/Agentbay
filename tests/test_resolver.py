@@ -2,7 +2,7 @@
 import os
 import time
 
-from helpers import KIT, assert_gap, edit_yaml, gaps, kit_copy, model, whole_feature
+from helpers import KIT, assert_gap, edit_yaml, gaps, kit_copy, model, unshare, whole_feature
 
 
 def test_shipped_kit_resolves():
@@ -54,6 +54,7 @@ def test_tier_resolution_step_over_feature_over_role_mapped_by_the_profile():
     assert step(s, "feed-briefing.digest", "themes").inference.model == "opus-next"
     # the YAML cache never serves a changed file: rewrite it in place (same inode, same size) after it was kept
     f, t = k / "adapters/claude-code/adapter.yaml", time.time() - 100
+    unshare(f)                                                               # the r+ write below must not reach the real kit
     for a, b in (("opus-next", "opus-nxet"), ("opus-nxet", "opus-next")):
         os.utime(f, (t, t))
         assert model.load_yaml(f)["profile"]["tiers"]["deep"] == a          # old file: parsed and kept

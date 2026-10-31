@@ -1,26 +1,37 @@
 ---
 # Approval is recorded in the ledger by `bay approve`; this file grants nothing. Design only: nothing is moved before the gate. The file-by-file audit of all tracked files has run; its verdicts on the A-n decisions are in "Audit verdicts" and the decisions below already carry them. Standards components are split out to 0011 and the audit's cuts to 0012; both depend on this proposal.
+id: "0010"
 touches:
   - { path: components/, reason: "NEW top-level folder. Every mode, source connector, content type and the shared tools component move here; the move table lists each" }
   - { path: modes/, reason: "REMOVED. Its seven folders move to components/<name>/ (a rename of every file inside)" }
   - { path: connectors/, reason: "REMOVED. 3 source connectors become components; 10 become `connectors/` inside their owner" }
   - { path: content-types/, reason: "REMOVED. email and post become components/email/ and components/post/" }
   - { path: envs/, reason: "REMOVED. Each env moves into the component of the mode it binds (components/tools/ for the two shared ones)" }
+  - { path: envs/framework-dev.yaml, reason: "its fs.write gains the paths the move needs (slice 1) and the paths its protected part is synced from (slice 2)" }
+  - { path: connectors/improve-detect/, reason: "the deadcode change detector becomes rename-aware (slice 0), then the folder moves" }
   - { path: coordinator/, reason: "REMOVED. Its only reader is the claude-code adapter, so its commands move to adapters/claude-code/commands/" }
   - { path: framework/interfaces/, reason: "REMOVED. Each interface moves into the component that owns it" }
   - { path: framework/components.yaml, reason: "renamed framework/kernel.yaml; keeps only what the kernel owns; the protected: lists, the briefing entry and the unread keys go" }
   - { path: framework/limits.yaml, reason: "top_level_folders 11 to 7, framework_folders 3 to 2, schemas 15 to 16, new measure component_spread" }
   - { path: framework/roles/, reason: "the golden rule reads `golden/` folders" }
   - { path: framework/rules/conformance.yaml, reason: "C-7 vocabulary (component, internal connector); component-folder rule" }
-  - { path: schemas/, reason: "apiVersion v4 in every kind; NEW component.schema.json; `protected` field on mode, connector, environment, component" }
-  - { path: bay/model.py, reason: "discovery by one glob per kind; protection from manifests" }
+  - { path: schemas/, reason: "apiVersion v4 (slice 1 names the two that stay); NEW component.schema.json; `protected` field on mode, connector, environment, component" }
+  - { path: bay/model.py, reason: "discovery by one glob per kind; protection from manifests; lint's mode_envs folds in (slice 0)" }
   - { path: bay/lint.py, reason: "reference-resolves check and the T2 rules (slice 0); component-folder checks, the old-folder refusal, framework-dev fs.write sync, internal-connector placement" }
+  - { path: bay/connect.py, reason: "connector login moves in from bay/cli.py, dropping the copy of connect's limits (slice 0)" }
+  - { path: bay/templates/, reason: "NEW; the forge templates move here (decision 2)" }
+  - { path: bay/contenttypes.py, reason: "FOLDER goes; the loader finds content types" }
+  - { path: bay/conformance.py, reason: "reads the commands at adapters/claude-code/commands" }
+  - { path: bay/config.py, reason: "path strings follow the move" }
+  - { path: bay/rules.py, reason: "docstring paths follow the move" }
+  - { path: bay/__init__.py, reason: "release step: version" }
+  - { path: CHANGELOG.md, reason: "release step: entry" }
   - { path: bay/boundary.py, reason: "B-1 to B-3 at component-folder granularity; reads kernel.yaml" }
   - { path: bay/guard.py, reason: "protected paths from manifests" }
   - { path: bay/scaffold.py, reason: "stays in bay/ because `bay new` imports it; scaffold targets under components/; templates move to bay/templates/; the sensitive-path list comes from manifests" }
   - { path: bay/limits.py, reason: "count components/**; component_spread; a base ceilings file with fewer measures" }
   - { path: bay/graph.py, reason: "data schemas and skills under components/" }
-  - { path: bay/cli.py, reason: "`bay build` writes skills as <component>--<skill>; no new command" }
+  - { path: bay/cli.py, reason: "`bay build` writes skills as <component>--<skill>; connector login leaves for bay/connect.py; no new command" }
   - { path: adapters/claude-code/, reason: "generated paths, the skill namespace, commands from coordinator/, test_adapter.py" }
   - { path: tests/, reason: "9 test files and 3 golden files move out; layout.py goes; run.py discovers components/**/tests/ and adapters/*/tests/" }
   - { path: README.md, reason: "layout, vocabulary, how to add a component" }
@@ -28,7 +39,7 @@ touches:
   - { path: docs/DESIGN.md, reason: "one folder per component; what connector means; the B-1..B-12 table joins the safety model" }
 exceptions:
   - { measure: schemas, to: 16, reason: "component.schema.json is added; task.schema.json goes in 0012 slice 1, which returns the ceiling to 15" }
-  - { measure: tests, to: 540, reason: "new tests for the slice 0 lint rules (the reference check and the T2 rules), minus the tests that slices 0 and 1 remove; 0011 and 0012 move the count further, and the release lowers the ceiling to the real count" }
+  - { measure: tests, to: 540, reason: "new tests for the slice 0 lint rules (the reference check and the T2 rules), and the rename-aware deadcode test, minus the tests that slices 0 and 1 remove; 0011 and 0012 move the count further, and the release lowers the ceiling to the real count" }
 ---
 
 # 0010: One folder per component
@@ -109,7 +120,7 @@ The loader (`bay/model.py`) has one table: kind to manifest filename, found with
 
 `framework/components.yaml` is no longer a map of components; they are derived from the folders. It is renamed `framework/kernel.yaml` and keeps the kernel's `owns:` (the paths the boundary check treats as core) and nothing else. The `briefing` entry goes (its folder is its ownership), and so does the `contracts:` block, which repeats the loader table and names three contract test files that do not exist. Contract tests move to the loader: each discovered instance of a kind runs the kind's contract test. The schema, tests, protocol, implements and source keys that no code reads go too.
 
-`protected:` moves into manifests. A manifest says `protected: true` (modes, connectors, components), and an env says `protected: {}` or `protected: { modes: [improve] }` for the modes allowed to put roles there (`*` for `workspace`, `research`). The guard and `bay boundary` read it from the loader. Protected names stay reserved because component names are unique. Fail closed: a file whose manifest cannot be read is protected. A change to a `protected` field is a write to a protected path, so only `forge.extend` can lower a protection. `framework-dev`'s `fs.write` still names each protected path (D9 of 0008 is unchanged, no new syntax); lint computes that list from the manifests and fails when they differ. Scaffold's sensitive-path list is computed from the same manifests, so the extend playbook no longer copies it.
+`protected:` moves into manifests. A manifest says `protected: true` (modes, connectors, components), and an env says `protected: {}` or `protected: { modes: [improve] }` for the modes allowed to put roles there (`*` for `workspace`, `research`). The guard and `bay boundary` read it from the loader. Every component's `interfaces/` folder is protected by convention, with no field to set, so the interfaces keep the protection they have under `framework/` today. That includes `improve.findings/v1`, which makes backlog approval owner-only. Protected names stay reserved because component names are unique. Fail closed: a file whose manifest cannot be read is protected. A change to a `protected` field is a write to a protected path, so only `forge.extend` can lower a protection. `framework-dev`'s `fs.write` still names each protected path (D9 of 0008 is unchanged, no new syntax); lint computes that list from the manifests and fails when they differ. Scaffold's sensitive-path list is computed from the same manifests, so the extend playbook no longer copies it.
 
 ### 5. The move
 
@@ -189,7 +200,7 @@ Interfaces live with the component whose mode needs them (as 0006 D3 did for `it
 - `top_level_folders` 11 to 7 and `framework_folders` 3 to 2: lower, no exception. `schemas` rises from 15 to 16 for this proposal: `component.schema.json` is added. 0012 slice 1 removes `task.schema.json` and the ceiling returns to 15 (exception below).
 - NEW `component_spread`: the largest number of top-level folders a mode reaches by the rule of the measurement above (its folder, parent, env files, bound connectors, interface owners, content types). Target and ceiling 1 once slice 3 lands. It can only tighten: it goes 5 to 1, and a mode that reaches a second top-level folder fails. It needs `bay/limits.py` to read a base `limits.yaml` that lacks the measure (a missing base value means the new measure sets its own).
 - `kit_python_lines` counts `components/` (replacing `connectors` and `content-types`) and excludes `tests/` folders as now. `tests` counts `components/**/tests/test_*.py` by the same pattern. The move adds no kit Python, so this proposal needs no `kit_python_lines` exception. 0011 raises that ceiling for the new checkers and adds the `comment_lines` measure; 0012 lowers `tests` and `comment_lines` further.
-- Exceptions are in the front matter: `schemas` to 16 and `tests` to 540, each with its reason. `bay_lines` is not raised: derived protection deletes the protected-list code and its sync lints. Across the three proposals the audit's cuts remove about 145 lines (mostly in 0012) against 50 to 80 added. If the plan step shows otherwise, a builder trims and the proposal is not amended for it.
+- Exceptions are in the front matter: `schemas` to 16 and `tests` to 540, each with its reason. `bay_lines` has no exception: 0010 adds about 50 lines net and pays for them in slice 0 with same-behaviour cuts pulled forward from 0012.
 
 ### 7. What "connector" means
 
@@ -215,8 +226,10 @@ Standards components follow in 0011.
 
 Each ends with the tests green and `bay check` clean. No old path keeps working: slice 1 moves and switches the loader in one commit, because a half-moved tree cannot load without a compatibility layer. "Rows" are the cut-list rows of the appendix.
 
-0. **Every reference resolves, and the T2 lint rules.** Lint already reports a declared feature playbook or rules file that does not exist (`bay/lint.py:101-103`). The gap is files found by convention or named from code: the adapter-run scripts (`bay/hook.py`, `bay/guard.py`, `bay/use_shim.py`, `bay/graph.py`), a mode's coordinator playbook (`bay/model.py:1023` reads a missing one as empty), data schemas found by name, and feature types. The check refuses each missing one, so the move and the cuts after it (0012) cannot leave check green over a broken system. Lint also refuses agent-facing text (playbook, rules) on a code-only feature, a rule that has no check and only restates a DoD ref, and a manifest key no code reads. The offenders go in the same slice: the unreachable playbooks and rules (briefing sync and prune, cos, improve backlog and verify, feed-briefing), the unread `policies:` keys, the extend playbook's repeated facts (about 400 words), and the six READMEs. Rows a10, a12-a16, a19, a20, a24, a25, b17.
-1. **Move.** The table of decision 5, the loader table, scaffold and adapter paths, test discovery, `apiVersion: agentbay/v4` in every manifest and schema (the layout is a breaking change to where extensions live), the 9 test files and 3 golden files, docs paths. `lint` refuses a leftover `modes/`, `envs/`, `connectors/`, `content-types/` or `coordinator/` folder with "move it to components/<name>/"; it is a refusal, not support. Protection still read from `kernel.yaml` with its old lists, paths rewritten.
+0. **Every reference resolves, and the T2 lint rules.** Lint already reports a declared feature playbook or rules file that does not exist (`bay/lint.py:101-103`). The gap is files found by convention or named from code: the adapter-run scripts (`bay/hook.py`, `bay/guard.py`, `bay/use_shim.py`, `bay/graph.py`), a mode's coordinator playbook (`bay/model.py:1023` reads a missing one as empty), data schemas found by name, and feature types. The check refuses each missing one, so the move and the cuts after it (0012) cannot leave check green over a broken system. Lint also refuses agent-facing text (playbook, rules) on a code-only feature, a rule that has no check and only restates a DoD ref, and a manifest key no code reads. The offenders go in the same slice: the unreachable playbooks and rules (briefing sync and prune, cos, improve backlog and verify, feed-briefing), the unread `policies:` keys, the extend playbook's repeated facts (about 400 words), and the six READMEs. The doc-stale detector also skips `docs/plans/`, as it skips `docs/proposals/` (`connectors/improve-detect/detect_artifacts.py:26`): a plan names paths that exist only after it is implemented, and this plan made the improve golden fail. Rows a10, a12-a16, a19, a20, a24, a25, b17.
+
+   Two more items belong here. The deadcode change detector (`improve-detect`'s `change`) becomes rename-aware: it matches findings across git renames (base path to head path), so a finding that existed at the base in a moved file is not new. Its test is `tests/test_deadcode_check.py::test_a_finding_in_a_renamed_file_is_not_new`. And the `bay_lines` payers (decision 6): connector login moves from `bay/cli.py` into `bay/connect.py`, removing the copy of connect's limits, and lint's `mode_envs` folds into `bay/model.py`. Both moved here from 0012 slice 3.
+1. **Move.** The table of decision 5, the loader table, scaffold and adapter paths, test discovery, `apiVersion: agentbay/v4` in every manifest and every extension schema (the layout is a breaking change to where extensions live; `config.schema.json` and `event.schema.json` stay at v3, because config files and the ledger do not change), the 9 test files and 3 golden files, docs paths. `lint` refuses a leftover `modes/`, `envs/`, `connectors/`, `content-types/` or `coordinator/` folder with "move it to components/<name>/"; it is a refusal, not support. Protection still read from `kernel.yaml` with its old lists, paths rewritten. Builders work with the guard on: `framework-dev`'s `fs.write` gains the paths the move needs, namely the unprotected component folders, `README.md` and the mode files slice 0 edits. Slice 2 derives the protected part of that list from the manifests; the owner answers each prompted `git mv` or `git rm`.
 2. **Derived protection.** `protected` in manifests, the lists deleted, `framework-dev` `fs.write` synced by lint, scaffold's sensitive-path list derived, `tests/layout.py` removed.
 3. **Boundary, limits, docs.** Component-granularity B-1 to B-3, `component_spread`, the internal-connector placement lint, README, DESIGN, INTERFACES, C-7 vocabulary. The B-1..B-12 table of 0006 Part F moves into DESIGN's safety model, because code cites those ids; DESIGN keeps its link to `proposals/`. Row b18.
 
@@ -236,7 +249,7 @@ Each rule in `framework/rules/conformance.yaml` (moving to the kernel) names its
 
 ## Compatibility impact
 
-Breaking, and no code keeps the old layout working. Every manifest and schema goes to `agentbay/v4`. A user's own `modes/`, `envs/`, `connectors/` and `content-types/` must move to `components/` (an env goes to `components/<mode>/envs/`; a mode's internal connector to its `connectors/`). `bay build` regenerates `.claude/`; skills become `<component>--<skill>`. `forge.create` scaffolds under `components/`. Config files and the ledger do not change. There is no new CLI command; `cli_commands` stays 16. Secrets, approvals and the network allowlist are unchanged. The guard's protected set (same 17 instances, now read from manifests) is unchanged, and the guard decisions that `tests/golden/guard-matrix.json` pins are re-pinned only by 0012 slice 8, after review.
+Breaking, and no code keeps the old layout working. Every manifest and extension schema goes to `agentbay/v4`. A user's own `modes/`, `envs/`, `connectors/` and `content-types/` must move to `components/` (an env goes to `components/<mode>/envs/`; a mode's internal connector to its `connectors/`). `bay build` regenerates `.claude/`; skills become `<component>--<skill>`. `forge.create` scaffolds under `components/`. Config files and the ledger do not change. There is no new CLI command; `cli_commands` stays 16. Secrets, approvals and the network allowlist are unchanged. The guard's protected set is the 17 instances, now read from manifests, plus every component's `interfaces/` folder; those of cos and forge nest inside protected folders, so three paths (briefing, improve, tools) are new, and every interface keeps the protection it has today. The guard decisions that `tests/golden/guard-matrix.json` pins are re-pinned only by 0012 slice 8, after review.
 
 ## Safety impact
 

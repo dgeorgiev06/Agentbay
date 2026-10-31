@@ -27,7 +27,7 @@ Each ends with the tests green and `bay check` clean. "Rows" are the cut-list ro
 
 1. **Types derive from code.** A feature's in and out default to its code step's endpoint schema, and a `$ref` may point into a schema. Type lookup falls back past the mode lineage to one shared Result in `components/tools/types/`, which replaces the four copies. Rows a21, a22, a23, a26, a29.
 2. **Playbook and rules fall back to the parent.** The resolver reads the lineage as lint already does (`bay/model.py:1181,1201` read only the child). Then mail-briefing's ask playbook and rules, its `mode.yaml` override and its coordinator playbook go, with three generic pieces moved into briefing's ask; feed-briefing's ask gains briefing's no-secrets and author-and-date rules, which the owner confirms at approval. Four fixture tests are rewritten. Rows a27, a28.
-3. **Shared helpers and dead branches.** One helper each for the ISO time, the time window, the path guard, the write-tool set, the front-matter parser, the SQL authorizer, the ledger folds, the git file listing and config defaults, plus the dead branches (corpus-store pre-release code, the `fixed` status with no writer). The parser stops emitting the spill-file, compaction and hook-timing outputs, and their fields leave the session schema. Rows a17, b8, b10, b11, b12, b13 (without folding `show --resolved` into `describe`, which stays out of this proposal).
+3. **Shared helpers and dead branches.** One helper each for the ISO time, the time window, the path guard, the write-tool set, the front-matter parser, the SQL authorizer, the ledger folds, the git file listing and config defaults, plus the dead branches (corpus-store pre-release code, the `fixed` status with no writer). The parser stops emitting the spill-file, compaction and hook-timing outputs, and their fields leave the session schema. Rows a17, b8, b10, b11 (without folding `show --resolved` into `describe`, which stays out of this proposal). Rows b12 and b13 are moved to 0010: connector login into `bay/connect.py`, and lint's `mode_envs` into `bay/model.py`.
 4. **Tests named by subject.** `test_boundaries.py` becomes `test_guard.py` and takes the F-2 and F-7 cases of `test_guard_7a.py`; `test_boundary.py` becomes `test_check_base.py`; `test_review7a.py` (at `components/forge/tests/` after 0010 slice 1) is merged into the dispatch, ledger and resolver tests, dropping only the f6-revert duplicate; one helpers module; one home per rule; the duplicates go. Lint then refuses a test file or test name with a slice or round label. Rows a30, a31, a32, b15, b16.
 5. **Compact schema formatting.** One formatter writes the data schemas compactly, with `$defs` for repeated tokens, and the environment schema drops its offline block. No content changes. `bay check` then fails on a JSON file the formatter would change. Rows b1, b2, b3, b14.
 6. **Comment cleanup.** One commit removes the comments and docstring lines that break the comments rule (0011's `comments` component) and lowers `comment_lines` to the real count. It changes no code: the code with comments stripped is identical before and after. Row b9.
@@ -83,8 +83,8 @@ Rows cite cross.md section 4 as 0010's appendix describes. Estimated line counts
 | b8 | corpus-store pre-release branches and tests | 3 |
 | b10 | claude-transcripts parser outputs and schema fields | 3 |
 | b11 | bay/contenttypes.py authorizer | 3 |
-| b12 | bay/lint.py helpers | 3 |
-| b13 | bay/cli.py helpers | 3 |
+| b12 | bay/lint.py helpers | moved to 0010 |
+| b13 | bay/cli.py helpers | moved to 0010 |
 | a30 | tests/conftest.py | 4 |
 | a31 | tests/test_guard_7a.py | 4 |
 | a32 | tests/test_review7a.py | 4 |

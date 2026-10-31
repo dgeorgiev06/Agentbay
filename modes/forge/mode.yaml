@@ -35,9 +35,9 @@ spec:
         - { id: proposal, run: forge.scaffold/v1.proposal, with: { path: "$in.proposal" }, when: $in.proposal }
         - { id: propose, role: builder, out: Result, when: "!$in.proposal", task: "Write the design change proposal to docs/proposals/<id>.md (problem, change to concepts/schemas/CLI, compatibility impact)." }
         - { id: approve, gate: "The user approves the proposal in docs/proposals/ before anything is implemented.", approves: "$in.proposal|$steps.propose.artifacts" }
-        - { id: implement, role: builder, out: Result, task: "Implement the approved proposal on a branch: code, schemas, framework modes, docs, tests." }
+        - { id: implement, role: builder, out: Result, task: "Implement the approved proposal on a branch: code, schemas, framework modes, docs, tests; `./bay.sh check --limits` passes. A fix round after review is this step again, and its result is the implement result." }
         - { id: deadcode, run: improve.detect/v1.change, with: { base: "origin/main" } }     # any new finding blocks the call
-        - { review: here, id: review }
+        - { review: here, id: review }                                                   # one round; a second only for a blocker or security finding
         - { id: release, role: builder, out: Result, task: "Changelog entry, version bump in bay/__init__.py (and schema apiVersion if contracts changed); all checks green." }
   coordinator: lead
   roles: { lead: local-authoring, builder: local-authoring, reviewer: workspace }   # user space only

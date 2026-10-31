@@ -1,3 +1,59 @@
+# HANDOFF part 24: T-20261031-68cb (recorded with `bay plan`) - stage 5 parts A and B built (baselines, then core prep)
+
+Outcome: status done for A1 to A4 and B1 to B3 (A5, the CLI baselines, was not taken: see open items). Branch feat/0008-stage5, 7 commits on top of
+the part 23 plan commits (b17040c, 7778467). No proposal edited; every path is in 0008's touches (boundary below).
+
+## To-do and shas
+| Item | Commit | What |
+|---|---|---|
+| A1 | 4055b85 | `tests/test_improve_golden.py` + `tests/golden/improve.json` (+ `tests/golden_util.py`, the shared compare: missing file is written and the test fails once, as `test_offline_golden.py`) |
+| A2 | 67dc3c7 | `tests/test_guard_matrix.py` + `tests/golden/guard-matrix.json`, `guard-matrix-project.json`, `tests/layout.py` (`physical(logical)`) |
+| A3 | 440e014 | `tests/test_stage_syntax.py` + `tests/golden/stages.json` |
+| A4 | c2423dc | `test_moving_files_have_no_deadcode_findings` (in `test_improve_golden.py`); it found `CorpusStore._sync_source` (complexity), fixed by extracting `_plan_source` and `_backfill` |
+| B1 | bf9f255 | `bay/connect.py:_load_module`: `submodule_search_locations=[folder]`, stale `agentbay_connector_<name>*` modules dropped first; `tests/test_connector_packages.py` (3 tests) |
+| B2 | 1f6442d | `bay/util.py`: `short_hash`, `in_window`, `warn` (+ `MAX_WARNINGS`); `tests/test_util.py` (3 tests); importers updated; `bay/improve/__init__.py` is a docstring only |
+| B3 | 546ad51 | `git mv` of `graph.py` and `conformance.py` to `bay/`; importers, `lint.py:877,880`, artifact-graph code and yaml text, `schemas/conformance.schema.json:5`, three tests. `bay/improve/` now holds 8 modules |
+
+## What part C (and later parts) must know
+- Baseline files and where they take their imports. `tests/test_improve_golden.py` imports improve's modules only in `mods()` (returns detect_artifacts, graph, pipeline, report, store):
+  part C/D change that one function (and `FakeGraph` uses `mods()[1]`). The golden has six sections (scan, audit, kitAudit, routes, reports, change); `git diff` of `tests/golden/improve.json` must stay empty.
+- One edit to a baseline, made in A4 on purpose: `kitAudit.countsPerKind.complexity` 9 -> 8 (the corpus-store fix). The kit audit counts every kind (complexity 8, doc-size 2, doc-stale 2,
+  inefficient-store-read 3, slop-duplicate-rule 15, unused 5): a part that adds or removes an unused function, a long function, a doc over 3,000 words or a stale doc reference changes it and must say so.
+- The A4 test scans the paths in `MOVING` (`bay/improve/`, `bay/graph.py`, `bay/conformance.py`, `bay/util.py`, `framework/connectors|modes|envs/`). Part G must change that tuple to the moved paths
+  (`connectors/`, `modes/`, `envs/` hold user extensions with findings of their own, for instance `connectors/gmail-api`: complexity x2 and unused x3, which never move, so restrict to the protected instances).
+  Parts C and D: the moved files must still pass it (`improve-detect/`, `improve-store/` files are under `framework/connectors/`).
+- Guard matrix: rows are keyed `<tool> <logical path or command>` per caller (`main thread`, `Explore` = unknown subagent, 5 units). `tests/layout.py:physical` maps `mode:cos/mode.yaml`, `env:cos-local`,
+  `connector:ledger/ledger.py` to `framework/...` when that folder exists in the kit and to the top-level folder otherwise, so part G needs no edit to the test for those rows. The golden holds reasons too
+  (they name physical paths, e.g. `framework/modes/improve/mode.yaml`): after G, reasons of moved rows change in path text only; compare decisions first (index 0 of each row), then reasons with paths mapped.
+  Also in the golden: `policy` (protected list = the four dirs), `protectedWrites` per env (via `model.protected_writes`, which part F re-signatures: update `protected_view`), `resolverGaps` (the three
+  test_resolver gaps, run on a kit copy), `lintWarnings` (the "reaches" text). `guard-matrix-project.json` is a normal project with the kit outside (autoAllowShim true, empty protected list).
+- Stage-syntax table: `stages.json` holds, for 36 `when` forms, the project-workflow and feature-step verdicts (schema errors appear in the feature table as layer `resolve`, because `model.resolve` wraps SpecError; the message
+  quotes the pattern, so part E changes those lines when it unifies the pattern), 6 gate-with-`when` forms, 21 `with` values, `Dispatcher._skip` rows and `workflow_runner._advance` rows (via `cos.run`/`cos.next`).
+  Known today (for D6 to D8): feature `when` accepts `!`, `approved $in.f`, `stale > 2h`, no hyphens, no nested `$in.x.y`; project `when` accepts hyphens and nested paths, no `!`;
+  a feature gate with `when` is refused by `_feature_steps`; a project gate with `when` is accepted and skipped by `_advance`.
+- B1: a connector folder is now a package named `agentbay_connector_<name>`; siblings load as `agentbay_connector_<name>.<sibling>`. B-7 (`lint_extension_names`) scans every `.py` in the folder, and a
+  sibling or import named like another connector's entry stem is flagged unless both are framework instances; `from . import x` (no dotted module) is not flagged. In part C, improve-detect's siblings
+  (`pipeline`, `detect_artifacts`, `detect_sessions`) and improve-store's (`store`, `report`) do not collide with any entry stem today (entries: artifact_graph, transcripts, corpus_store, git_history, improve_detect, improve_store, ledger, scaffold, workflow_runner, ...);
+  note `claude-transcripts` has an entry called `transcripts.py`, so part D must name the parser `parser.py` (as planned) and not `transcripts.py`.
+- B2: `bay.util.warn` keeps the cap (20) the old `sources.warn` had. `sources.py` still has `read_events`, `ledger_*`, `git_episodes`, `REVERT_BODY`, `MAX_SUBJECT`, `LEDGER` for part D.
+- `fingerprint` is still in `bay/improve/store.py` (part C copies it); A1's golden records every fingerprint, which is the shared test vector.
+- Not run: the real dead-code step (`improve.detect/v1.change` through forge.extend needs a call); A4 is its precondition and passes, and nothing in B adds a function that is unused.
+
+## Open items
+- A5 (CLI baselines of `check`, `catalog`, `catalog --roles`, `describe cos|forge|improve|improve-local` saved in the scratchpad) was not taken: the one-command-at-a-time rule gives no way to save output without a redirect,
+  and the outputs are long. Part G needs them: take them at the start of part C (before any yaml moves) with `Write`, or compare against `origin/main` by checking it out in a second worktree.
+- Amendments listed in section 4 of part 23 still wait for the owner. The boundary check above reports 0 failing on the `touches:` as they are in 0008 now (the plan commit 7778467 added the stage-5 entries), so nothing was blocked in A or B.
+- The "Known today" line in the stage-syntax note above is read from the schemas and validators; the exact accept/reject of each form is in `tests/golden/stages.json`, which is the reference.
+
+## Evidence (run at 546ad51, before this file was committed)
+- `python3 tests/run.py -q`: `513 passed, 0 failed` (part 23 baseline 502; +11 = improve golden, moving-files deadcode, guard matrix x2, stage syntax, connector packages x3, util x3).
+- `./bay.sh check` last line: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)` (line before: `✓ lint clean`; the same four warnings as at f635890).
+- `./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs` last line: `boundary origin/main...HEAD: 33 changed paths (15 core, 3 extension, 15 other); 0 failing; B-11 docs: 0 hits`.
+- `./bay.sh build --project <scratch>/s6a` then `./bay.sh clean --project <scratch>/s6a`: built 6 modes (34 files listed), clean removed them (last line `clean`). Glob `**/*` of the scratch folder afterwards: only `agentbay.config.yaml` (the input I wrote).
+- Baselines on the untouched code (A1 to A3, each commit run with `python3 tests/run.py -k ...`): `test_improve_golden` passed (also twice in a row); `test_guard_decision_matrix` and `test_guard_matrix_for_a_project_with_the_kit_outside` passed;
+  `test_stage_syntax_table` passed (twice). After B1, B2, B3: the same tests passed unchanged (goldens identical, `git diff 440e014 -- tests/golden/guard-matrix.json tests/golden/stages.json` empty; `improve.json` differs from A1 only by the A4 complexity line).
+- `git status` clean at the end except this file.
+
 # HANDOFF part 23: T-20261030-67d2 (recorded with `bay plan`) - stage 5 of 0008 planned (slices 6 and 7: improve as a plain mode, one workflow syntax, top-level extension folders)
 
 Outcome: stage 5 is split into eight sequential builder parts (A to H), each a green commit with its own acceptance, and every path

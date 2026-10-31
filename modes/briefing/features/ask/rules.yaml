@@ -1,4 +1,4 @@
-apiVersion: agentbay/v2
+apiVersion: agentbay/v3
 kind: Rules
 rules:
   - { id: R-1, level: must, statement: "Cite only ids or urls of stored items, exactly as stored.", appliesTo: both, check: citations_resolve, refs: [DOD-2] }

@@ -33,7 +33,7 @@ MODE_DIRS = [str(KIT / "modes" / "mail-briefing"), str(KIT / "modes" / "briefing
 def project(cfg: dict | None = None):
     p = tmpdir() / "proj"
     p.mkdir()
-    (p / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2",
+    (p / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v3",
                                                             "secrets": {"provider": "env"}, **(cfg or {})}))
     return p
 

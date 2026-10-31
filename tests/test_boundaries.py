@@ -688,7 +688,7 @@ def test_chat_approval_passes_a_workflow_gate_and_the_ledger_says_chat_with_the_
 def test_chat_approval_passes_a_call_gate_and_rejects_with_a_reason():
     k = kit_copy()
     try:
-        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "approvals": {"chat": True}}))
+        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v3", "approvals": {"chat": True}}))
         d = _dispatch.Dispatcher(system(k, k), k)
         ok = {"status": "done", "summary": "s"}
         cid = d.submit(d.call("forge.extend", {"goal": "a small change"})["callId"], "propose", ok)["callId"]
@@ -802,7 +802,7 @@ def test_no_subagent_writes_the_ledger():
 def test_chat_approval_of_a_proposal_is_recorded_and_skips_the_next_gate_while_unchanged():
     k = kit_copy()
     try:
-        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "approvals": {"chat": True}}))
+        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v3", "approvals": {"chat": True}}))
         (k / "docs/proposals").mkdir(parents=True, exist_ok=True)
         f = k / "docs/proposals/0099-chat.md"
         f.write_text("---\nstatus: approved\napprovedBy: user\ndate: 2026-10-29\ntouches: []\n---\n# chat\n")

@@ -25,10 +25,10 @@ def test_build_writes_a_minimal_config_and_keeps_an_existing_one():
     p = tmpdir() / "proj"
     p.mkdir()
     assert config.write_minimal(p) is True
-    assert yaml.safe_load((p / config.NAME).read_text()) == {"apiVersion": "agentbay/v2"}
+    assert yaml.safe_load((p / config.NAME).read_text()) == {"apiVersion": "agentbay/v3"}
     assert not config.load(p).get("offline")
-    (p / config.NAME).write_text("apiVersion: agentbay/v2\noffline: true\n")
-    assert config.write_minimal(p) is False and config.load(p) == {"apiVersion": "agentbay/v2", "offline": True}
+    (p / config.NAME).write_text("apiVersion: agentbay/v3\noffline: true\n")
+    assert config.write_minimal(p) is False and config.load(p) == {"apiVersion": "agentbay/v3", "offline": True}
     q = tmpdir() / "proj"
     q.mkdir()
     r = subprocess.run([sys.executable, "-m", "bay.cli", "--project", str(q), "build"], cwd=KIT, text=True,

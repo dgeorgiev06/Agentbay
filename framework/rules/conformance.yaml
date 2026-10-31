@@ -3,7 +3,7 @@
 # rules; see `review.rulesets` in modes/forge/mode.yaml) and by improve.audit, which runs every
 # `check` here deterministically and leaves rules without a check to the analyst in improve.audit.
 # `bay check` validates this file (schemas/rules.schema.json, unique ids, known checks).
-apiVersion: agentbay/v2
+apiVersion: agentbay/v3
 kind: Conformance
 metadata:
   name: conformance

@@ -1,4 +1,4 @@
-apiVersion: agentbay/v2
+apiVersion: agentbay/v3
 kind: Rules
 rules:
   - { id: R-1, level: must, statement: "Order items by priority and list at most top items, open and approved only.", appliesTo: both, refs: [DOD-1] }

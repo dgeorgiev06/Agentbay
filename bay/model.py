@@ -144,7 +144,9 @@ def schema_errors(instance, sch: dict) -> list[str]:
     if jsonschema is None:
         return []
     v = jsonschema.Draft202012Validator(sch, format_checker=jsonschema.FormatChecker())
-    return [f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {e.message}"
+    why = lambda e: (f"this kit reads agentbay/v3, not {e.instance!r}; change the line to apiVersion: agentbay/v3 (the v2 shapes changed too, see CHANGELOG 1.0.0)"
+                     if e.validator == "const" and list(e.absolute_path) == ["apiVersion"] else e.message)
+    return [f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {why(e)}"
             for e in sorted(v.iter_errors(instance), key=lambda e: list(map(str, e.absolute_path)))]
 
 
@@ -282,7 +284,7 @@ class Kit:
             own_path = d.dir / own if own else None
             d.config_files = [*p.config_files, *([own_path] if own_path and own_path not in p.config_files else [])]
             d.lineage, d.parent = [d.dir, *p.dirs], parent
-            full = {"apiVersion": "agentbay/v2", "kind": "Mode", "metadata": d.meta,
+            full = {"apiVersion": "agentbay/v3", "kind": "Mode", "metadata": d.meta,
                     "spec": {k: v for k, v in d.spec.items() if k != "extends"}}
             errs = schema_errors(full, schema("mode"))
             if errs:

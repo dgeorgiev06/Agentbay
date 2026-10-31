@@ -207,9 +207,9 @@ def test_unused_needs_no_references_and_no_ledger_uses():
                        "if __name__ == '__main__':\n    main()\n",
         "pkg/settings.yaml": "hook: only_in_comments\nalso: orphan_mod\n",
         "pkg/orphan_mod.py": "X = 1\n",
-        "interfaces/thing.v1.yaml": "apiVersion: agentbay/v2\nkind: Interface\nmetadata: {name: thing}\n"
+        "interfaces/thing.v1.yaml": "apiVersion: agentbay/v3\nkind: Interface\nmetadata: {name: thing}\n"
                                     "spec: {version: 1, endpoints: {fetch: {effects: [read]}}}\n",
-        "connectors/c/connector.yaml": "apiVersion: agentbay/v2\nkind: Connector\nmetadata: {name: c}\n"
+        "connectors/c/connector.yaml": "apiVersion: agentbay/v3\nkind: Connector\nmetadata: {name: c}\n"
                                        "spec: {implements: thing/v1, entry: c.py}\n",
         "connectors/c/c.py": "class C:\n    def fetch(self):\n        return []\n\n    def stale(self):\n"
                              "        return 0\n\ndef create(ctx):\n    return C()\n"})
@@ -230,7 +230,7 @@ def test_unused_role_is_kept_when_the_ledger_used_it():
     try:
         import yaml
         (k / f"framework/roles/{name}.yaml").write_text(yaml.safe_dump({
-            "apiVersion": "agentbay/v2", "kind": "Role", "metadata": {"name": name, "description": "never placed"},
+            "apiVersion": "agentbay/v3", "kind": "Role", "metadata": {"name": name, "description": "never placed"},
             "spec": {"tier": "fast", "prompt": "Never placed in any mode; exists to test the unused detector.", "doneWhen": ["x"]}}))
         g = graph.build(k, k).as_dict()
         a = da.Artifacts(files=graph.files(k), text=lambda p: (k / p).read_text(), graph=g)
@@ -461,7 +461,7 @@ def test_conformance_yaml_is_linted():
         probs = lint.run(k)
         assert any("duplicate conformance rule id C-1" in x for x in probs)
         assert any("unknown check 'no_such_check'" in x for x in probs)
-        p.write_text("apiVersion: agentbay/v2\nkind: Conformance\nrules: [{id: X-1, level: must}]\n")
+        p.write_text("apiVersion: agentbay/v3\nkind: Conformance\nrules: [{id: X-1, level: must}]\n")
         assert any("conformance schema" in x for x in lint.run(k))
         shutil.copy(k / "modes/forge/mode.yaml", k / "fm.bak")
         p.unlink()

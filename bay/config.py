@@ -1,6 +1,6 @@
 """agentbay.config.yaml: per-project user settings.
 
-    apiVersion: agentbay/v2
+    apiVersion: agentbay/v3
     offline: true                               # the fake sources, no network, no secrets, $0
     secrets: { provider: env }                  # override env provider (e.g. on Linux)
     approvals: { chat: true }                   # let gates be approved from chat (default off)
@@ -33,7 +33,7 @@ FRAGMENT = "config.example.yaml"   # an extension's sample settings, checked aga
 MINIMAL = """\
 # Settings for agentbay in this project. Every setting is optional; `bay config` lists them all.
 # `offline: true` runs the shipped envs on fake sources (no network, no secrets, $0).
-apiVersion: agentbay/v2
+apiVersion: agentbay/v3
 """
 
 

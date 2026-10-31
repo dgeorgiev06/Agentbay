@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v2/Interface",
+  "$id": "agentbay/v3/Interface",
   "title": "Capability interface",
   "description": "Versioned contract: named endpoints with in/out JSON schemas and declared effects. File: interfaces/<name>.v<N>.yaml. binding=connector: implemented by connector code called by the dispatcher. binding=tools: satisfied by runtime tools (Read, Bash, ...) bound in an environment.",
   "type": "object",
   "required": ["apiVersion", "kind", "metadata", "spec"],
   "additionalProperties": false,
   "properties": {
-    "apiVersion": { "const": "agentbay/v2" },
+    "apiVersion": { "const": "agentbay/v3" },
     "kind": { "const": "Interface" },
     "metadata": {
       "type": "object",

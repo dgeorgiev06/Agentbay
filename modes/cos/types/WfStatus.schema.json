@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v2/cos/WfStatus",
+  "$id": "agentbay/v3/cos/WfStatus",
   "title": "WfStatus",
   "description": "Workflow runs and the state of each stage. Per-stage endpoint output is not included; `bay show <callId>` has it.",
   "type": "object",

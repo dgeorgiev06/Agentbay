@@ -132,3 +132,15 @@ Commit 1255cb3 on feat/0008-slice9 (this note is the next commit). Items 1-4 as 
 Net lines against the base ceilings: bay 9618 (base 9621; limits +1, cli +1, model +1, payers -5; 3b adds 3 and has no headroom left), kit Python 6588 (base 6589), tests 536 (base 546), schemas 15, cli_commands 16. Tests extended, none added.
 
 Last lines: `python3 tests/run.py -q`: "536 passed, 0 failed in 150.7s (2 workers)"; `./bay.sh check --limits --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: "✓ limits: 7 measures within their ceilings" (boundary: "66 changed paths (25 core, 1 docs, 16 extension, 2 feature, 22 other); 0 failing; B-11 docs: 0 hits"; lint clean; "✓ 6 modes, 21 features, 5 roles (18 role units), 8 envs, 13 connectors resolve (agent profile claude-code)").
+
+## Part 3b done
+
+One commit on feat/0008-slice9 (sha: `git log -1`, the commit that adds this note; it cannot name itself). apiVersion `agentbay/v3` in 95 tracked files plus this note (96 in the commit): 9 schemas (`$id` and `const`), bay/config.py (MINIMAL, docstring), bay/model.py (merged-mode doc), 13 interfaces, 5 roles, conformance.yaml, 8 envs, 2 content types, 13 connector.yaml and the gmail-api test, 35 mode files (5 cos types carry it in `$id`), README line 86, 11 test files. No golden carries the string, so no golden delta was needed. This part ran with the guard off, as parts 1 to 3a did (owner decision 2).
+
+Refusal: `schema_errors` (bay/model.py) rewrites a `const` error on `apiVersion` to "this kit reads agentbay/v3, not '<found>'; change the line to apiVersion: agentbay/v3 (the v2 shapes changed too, see CHANGELOG 1.0.0)" (found value repr-quoted). +2 bay lines, no reader, no migration. Test: the config loop of `test_offline_switch_rebinds_the_source_and_closes_network_and_secrets` (tests/test_resolver.py) gets a v2 config; a short loop after it refuses a v2 mode and a v2 env with the same message. No test added.
+
+Net bay lines: 9618 after 3a, 9620 now (base ceiling 9621). Kit Python 6588, tests 536, schemas 15. framework/limits.yaml untouched (3c writes it).
+
+Remaining hits of the old string (checked with Grep; `git grep` is not on the builder's list): CHANGELOG.md (7, history), docs/proposals/0001-v0.2-modes.md (1, history), docs/plans/0008 (1, this plan), tests/test_resolver.py (3, the refusal test), this file (the plan text in item 13). All intended.
+
+Last lines: `python3 tests/run.py -q`: "536 passed, 0 failed in 164.1s (2 workers)"; `./bay.sh check`: "✓ 6 modes, 21 features, 5 roles (18 role units), 8 envs, 13 connectors resolve (agent profile claude-code)" (lint clean); `./bay.sh check --limits --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: "✓ limits: 7 measures within their ceilings" (boundary: "72 changed paths (28 core, 2 docs, 17 extension, 2 feature, 23 other); 0 failing; B-11 docs: 0 hits").

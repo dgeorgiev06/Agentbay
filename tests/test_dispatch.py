@@ -399,11 +399,11 @@ def test_the_step_result_accepts_what_the_worker_contract_returns():
 def test_gate_plan_and_show_name_the_chat_path_when_approvals_chat_is_on():
     k = kit_copy()
     try:
-        (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v2\napprovals: { chat: false }\n")
+        (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v3\napprovals: { chat: false }\n")
         d = dispatch.Dispatcher(system(k, k), k, clock=clock)
         r = _to_gate(d, _proposal(k, "0096-chat.md", ""))
         assert "approveFromChat" not in r["next"] and "approveFromChat" not in d.show(r["callId"])["next"]
-        (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v2\napprovals: { chat: true }\n")
+        (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v3\napprovals: { chat: true }\n")
         r = _to_gate(d, _proposal(k, "0096-chat.md", ""))
         for plan in (r["next"], d.show(r["callId"])["next"]):
             assert f"--via chat --quote" in plan["approveFromChat"] and r["callId"] in plan["approveFromChat"]
@@ -505,7 +505,7 @@ def test_an_edit_after_approval_makes_the_gate_run_again():
         assert "plan" not in _to_gate(d, p2)["next"]["approves"]
         # the plan step: large (10+ touches, exceptions, no touches, a sensitive touch), approvals.plan always | never
         def nxt(fm, setting=None):
-            (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v2\n" + (f"approvals: {{ plan: {setting} }}\n" if setting else ""))
+            (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v3\n" + (f"approvals: {{ plan: {setting} }}\n" if setting else ""))
             (k / "docs/proposals/0090-x.md").write_text(f"---\n{fm}---\n# x\n")
             return d.call("forge.extend", {"goal": "build it", "proposal": "docs/proposals/0090-x.md"})["next"]
         one = "  - { path: README.md, reason: r }\n"

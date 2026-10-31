@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v2/cos/StatusReq",
+  "$id": "agentbay/v3/cos/StatusReq",
   "title": "StatusReq",
   "description": "State of one workflow run, or of every run.",
   "type": "object",

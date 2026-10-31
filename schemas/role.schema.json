@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v2/Role",
+  "$id": "agentbay/v3/Role",
   "title": "Role",
   "description": "A generic job, shipped with the framework (framework/roles/ only): prompt, definition of done, rules, skills, a default tier and its access. It names neither an agent (the LLM product), nor an env, nor data: each mode says which env a role works in (`roles:`), its role units read the read-only endpoints of the mode's `needs`, and the mode's playbooks, skills and rules say what to do.",
   "type": "object",
   "required": ["apiVersion", "kind", "metadata", "spec"],
   "additionalProperties": false,
   "properties": {
-    "apiVersion": { "const": "agentbay/v2" },
+    "apiVersion": { "const": "agentbay/v3" },
     "kind": { "const": "Role" },
     "metadata": {
       "type": "object",

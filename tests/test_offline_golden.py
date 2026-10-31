@@ -19,7 +19,7 @@ GOLDEN = KIT / "tests" / "golden"
 def project(cfg: dict | None = None):
     p = tmpdir() / "proj"
     p.mkdir()
-    (p / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "offline": True,
+    (p / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v3", "offline": True,
                                                             **(cfg or {})}))
     return p
 

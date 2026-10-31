@@ -1,4 +1,4 @@
-apiVersion: agentbay/v2
+apiVersion: agentbay/v3
 kind: Rules
 rules:
   - { id: R-1, level: must, statement: "Cite evidence by the exact episode ids, file:line refs or rule ids given in the plan or the store.", appliesTo: both, refs: [DOD-1] }

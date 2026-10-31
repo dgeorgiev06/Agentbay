@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v2/cos/NextReq",
+  "$id": "agentbay/v3/cos/NextReq",
   "title": "NextReq",
   "description": "Record the stage call that just finished and get the next stage.",
   "type": "object",

@@ -384,7 +384,7 @@ def _cli_approve(k, cid, *args):
 def test_approval_from_chat_and_from_the_terminal_both_pass_the_gate():
     k = kit_copy()
     try:
-        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "approvals": {"chat": True}}))
+        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v3", "approvals": {"chat": True}}))
         get("claude-code").build(system(k, k), k, k)
         pol, decide = _guard(k)
         assert pol["protected"] == ["framework", "bay", "schemas", "adapters", *PROTECTED_INSTANCES]

@@ -1,4 +1,4 @@
-apiVersion: agentbay/v2
+apiVersion: agentbay/v3
 kind: Rules
 rules:
   - { id: R-1, level: must_not, statement: "An approval gate must not be passed by this endpoint or any agent; only `bay approve` passes one.", appliesTo: both, refs: [DOD-4] }

@@ -17,7 +17,7 @@ SELS = [{"id": "inbox", "in": "inbox"}, {"id": "sent", "in": "sent"}]
 def project(cfg: dict | None = None):
     p = tmpdir() / "proj"
     p.mkdir()
-    (p / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "offline": True,
+    (p / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v3", "offline": True,
                                                             **(cfg or {})}))
     return p
 
@@ -69,7 +69,7 @@ def test_proposal_example_selectors_validate_against_gmail_and_offline():
     for offline in (False, True):                                              # gmail-api, then fake-mail
         p = tmpdir() / "proj"
         p.mkdir()
-        (p / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "offline": offline,
+        (p / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v3", "offline": offline,
                                                                 "modes": {"mail-briefing": mail}}))
         s = model.resolve(model.Kit(KIT, p))
         assert s.modes["mail-briefing"].config["important"] == ["*@partner.example", "*@example.com"]

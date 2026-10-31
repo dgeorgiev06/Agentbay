@@ -83,7 +83,7 @@ framework/       shipped with the kit, never edited by users:
   components.yaml  the component map: core paths, the contracts extensions implement, and a `protected:` block
                    naming what only forge.extend may change (folders, and the shipped modes, envs and connectors
                    that sit in modes/, envs/ and connectors/ among yours)
-schemas/         the contracts (apiVersion agentbay/v2) and data schemas
+schemas/         the contracts (apiVersion agentbay/v3) and data schemas
 bay/             resolver, lint, dispatcher, guard hook, run log, CLI
 coordinator/     Chief of Staff slash commands
 tests/           python3 tests/run.py (connector tests live next to each connector)

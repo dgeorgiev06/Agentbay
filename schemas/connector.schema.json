@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v2/Connector",
+  "$id": "agentbay/v3/Connector",
   "title": "Connector",
   "description": "Concrete code implementing one or more capability interfaces. Only the dispatcher instantiates connectors; agents never see them or their secrets.",
   "type": "object",
@@ -13,7 +13,7 @@
   "additionalProperties": false,
   "properties": {
     "apiVersion": {
-      "const": "agentbay/v2"
+      "const": "agentbay/v3"
     },
     "kind": {
       "const": "Connector"

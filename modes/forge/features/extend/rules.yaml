@@ -1,4 +1,4 @@
-apiVersion: agentbay/v2
+apiVersion: agentbay/v3
 kind: Rules
 rules:
   - { id: R-1, level: must, statement: "Review is mandatory on every forge.extend run (when: always, opus, high) and never disabled. It is one independent round; a second round is only for a blocker or a security finding, and it is a scoped re-check of the failed ids when the approved proposal is unchanged (a full review otherwise, and after a re-check).", appliesTo: both }

@@ -1,4 +1,4 @@
-apiVersion: agentbay/v2
+apiVersion: agentbay/v3
 kind: Rules
 rules:
   - { id: R-1, level: must_not, statement: "Implement an item that the user did not approve, or pass the approval gate for the user.", appliesTo: both, refs: [DOD-1] }

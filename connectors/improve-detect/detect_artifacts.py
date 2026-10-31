@@ -263,9 +263,7 @@ def unused(a: Artifacts, th: dict) -> list[dict]:
         if "/templates/" in f"/{path}" or path.startswith("docs/"):
             continue
         refs = n["refs"] if k != "endpoint" else mentions[n["id"]]
-        if refs or k in ("mode",):
-            continue
-        if uses.get((k, n["name"]), 0):
+        if refs or k in ("mode",) or uses.get((k, n["name"]), 0):
             continue
         what = {"function": "function", "module": "module", "config-key": "config key"}.get(k, k)
         loc = f"{path}:{n['line']}" if n.get("line") else path

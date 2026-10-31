@@ -100,11 +100,8 @@ class Store:
     def route_for(self, f: dict) -> str:
         sc = f.get("scope") or {}
         files = [sc["file"]] if sc.get("file") else list(sc.get("files") or [])
-        if self.protection.closed or sc.get("framework") or sc.get("mode") in self.protection.names.get("mode", ()):
-            return "forge.extend"
-        if files and all(self._framework_file(x) for x in files):
-            return "forge.extend"
-        return "mode-fix"
+        owned = self.protection.closed or sc.get("framework") or sc.get("mode") in self.protection.names.get("mode", ())
+        return "forge.extend" if owned or files and all(self._framework_file(x) for x in files) else "mode-fix"
 
     def score(self, f: dict) -> None:
         impact = f.get("impact") or SEVERITY.get(f.get("severity", "medium"), 2)

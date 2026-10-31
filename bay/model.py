@@ -795,14 +795,14 @@ class _Ctx:
             rd = resolve_role_def(kit, name, gaps)
             if rd:
                 self.roles[name] = rd
-        self.units: dict[tuple[str, str, str], ResolvedRole | None] = {}
+        self.units: dict[tuple[str, str, str, str], ResolvedRole | None] = {}
 
     def inference(self, tier: str, effort: str) -> Inference:
         p = self.profile or {}
         return Inference((p.get("tiers") or {}).get(tier, tier), (p.get("effort") or {}).get(effort, effort), tier)
 
     def unit(self, rn: str, md: Doc, env_name: str, kind: str, where: str) -> ResolvedRole | None:
-        key = (rn, md.name, env_name)
+        key = (rn, md.name, env_name, kind)
         if key not in self.units:
             self.units[key] = self._unit(self.roles[rn], md, env_name, kind, where)
         return self.units[key]
@@ -892,7 +892,8 @@ def name_units(modes: dict, gaps: list[str] | None = None) -> None:
         envs.setdefault((u.name, u.mode), set()).add(u.env)
     seen: dict[str, tuple] = {}
     for u in units.values():
-        u.unit = f"{u.name}--{u.mode}" + (f"--{u.env}" if len(envs[(u.name, u.mode)]) > 1 else "")
+        step = u.kind == "worker" and u.name == modes[u.mode].coordinator       # told apart from the coordinator's unit
+        u.unit = f"{u.name}--{u.mode}" + (f"--{u.env}" if len(envs[(u.name, u.mode)]) > 1 else "") + "--step" * step
         if gaps is not None and u.unit in seen and seen[u.unit] != (u.name, u.mode, u.env):
             gaps.append(f"two units are both named {u.unit} ({seen[u.unit]} and {(u.name, u.mode, u.env)}); rename "
                         f"a role or mode so `<role>--<mode>` stays unique")
@@ -1333,7 +1334,7 @@ def _role_step(ctx: _Ctx, md: Doc, ep: dict, st: dict, sw: str, ep_eff, review: 
     env_name = role_env(md.spec, ep, st, rn)
     if env_name is None:
         return step                       # no env: reported by role_env_problems (mode, feature, step)
-    u = ctx.unit(rn, md, env_name, "coordinator" if rn == md.spec.get("coordinator") else "worker", sw)
+    u = ctx.unit(rn, md, env_name, "worker", sw)       # the coordinator's role as a step runs as a subagent, not the main thread
     if u is None:
         return step
     env = kit.get("Environment", env_name)

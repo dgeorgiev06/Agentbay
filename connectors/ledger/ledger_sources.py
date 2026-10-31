@@ -278,4 +278,3 @@ def _number_rounds(verdicts: list[dict]) -> None:
         rounds[k] = rounds.get(k, 0) + 1
         v["round"] = rounds[k]
 
-

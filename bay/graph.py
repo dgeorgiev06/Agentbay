@@ -356,4 +356,3 @@ def _python(g: Graph) -> None:
             g.edges.append(("ref:entry", f"py:{rel}", "entry"))
         elif any(p.stem in names for other, names in names_by_file.items() if other != rel):
             g.edges.append(("ref:import", f"py:{rel}", "import"))
-

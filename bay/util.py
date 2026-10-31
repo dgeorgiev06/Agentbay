@@ -24,9 +24,7 @@ def utcnow() -> datetime:
 
 
 def iso(dt: datetime | None) -> str | None:
-    if dt is None:
-        return None
-    return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return None if dt is None else dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def parse_time(text: str, now: datetime) -> datetime:

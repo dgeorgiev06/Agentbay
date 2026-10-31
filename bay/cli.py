@@ -336,11 +336,12 @@ def cmd_approve(args):
     verb = "REJECT" if args.reject else "APPROVE"
     print(f"{verb} gate '{st['next']['step']}' of {st['target']}: {st['next']['gate']}")
     ap = st["next"].get("approves")
-    if ap:      # the exact content this approval covers; an edit after it makes the gate run again
-        print(f"  {ap['path']} at sha256 {ap['sha256']}")
-    sha = (args.sha or "").strip() if by == CHAT_BY else (ap["sha256"] if ap else "")
+    shown = [x for x in (ap, (ap or {}).get("plan")) if x]      # the exact content this approval covers (proposal, plan)
+    for x in shown:                                             # an edit after it makes the gate run again
+        print(f"  {x['path']} at sha256 {x['sha256']}")
+    sha = (args.sha or "").strip() if by == CHAT_BY else "+".join(str(x["sha256"]) for x in shown)
     if by == CHAT_BY and ap and not sha:
-        _die(f"✗ --via chat needs --sha <prefix> of the content shown: {ap['path']} at sha256 {ap['sha256']}")
+        _die("✗ --via chat needs --sha <8+ hex prefix of each sha256 shown above, joined by +>")
     _confirm(by)
     _run(lambda: d.approve(args.call, not args.reject, args.reason or "", by=by, quote=quote, sha=sha))
 

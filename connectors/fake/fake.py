@@ -66,14 +66,10 @@ class Fake:
         rows = []
         for it in sorted(self.items, key=lambda x: int(x["id"]), reverse=True):
             created = now - timedelta(hours=float(it["ageHours"]))
-            if created < lo or created > now:
-                continue
-            if cursor and int(it["id"]) <= int(cursor):
+            if created < lo or created > now or (cursor and int(it["id"]) <= int(cursor)):
                 continue
             boxes = ["home"] + ([f"list:{it['list']}"] if it.get("list") else [])
-            if handles and it["handle"].lower() not in handles:
-                continue
-            if where and not where & set(boxes):
+            if handles and it["handle"].lower() not in handles or where and not where & set(boxes):
                 continue
             container = next((b for b in boxes if b in where), "home")
             rows.append({

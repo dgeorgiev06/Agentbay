@@ -44,6 +44,14 @@
       "properties": {
         "chat": {
           "type": "boolean"
+        },
+        "plan": {
+          "enum": [
+            "large",
+            "always",
+            "never"
+          ],
+          "description": "When forge.extend runs a planning step before the approval gate: for a large or security-sensitive proposal (the default), always, or never. The gate itself always runs and binds the plan with the proposal."
         }
       }
     },

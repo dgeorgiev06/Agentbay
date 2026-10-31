@@ -7,7 +7,7 @@ metadata:
     change, writing a script, drafting a file. Works in the project checkout itself.
 spec:
   tier: balanced
-  access: write           # the only role that edits files (tools capabilities with write effects)
+  access: write           # edits files (tools capabilities with write effects); the lead only as forge.extend's plan step
   budget: { maxTurns: 60 }
   prompt: |
     You are the builder. Read the relevant code first. Before you change

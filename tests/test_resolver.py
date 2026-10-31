@@ -215,7 +215,8 @@ def test_offline_switch_rebinds_the_source_and_closes_network_and_secrets():
     assert s.modes["feed-briefing"].features["sync"].steps[0].connector == "corpus-store"
     from bay import config
     for bad, word in (({"offline": "yes"}, "offline"), ({"envs": {"local-feeds": "workspace"}}, "envs"),
-                      ({"bindings": {"local-feeds": {"items.source/v1": ["fake"]}}}, "bindings")):
+                      ({"bindings": {"local-feeds": {"items.source/v1": ["fake"]}}}, "bindings"),
+                      ({"approvals": {"plan": "bogus"}}, "approvals")):             # approvals.plan: large | always | never
         try:                                                  # not a boolean; the `envs:` and `bindings:` maps are gone
             model.Kit(KIT, project(bad))
             raise AssertionError("expected ConfigError")

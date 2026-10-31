@@ -259,9 +259,7 @@ def _rate_limited(r, what: str) -> str:
 
 
 def _norm(ts: str | None) -> str | None:
-    if not ts:
-        return None
-    return iso(datetime.fromisoformat(ts.replace("Z", "+00:00")))
+    return iso(datetime.fromisoformat(ts.replace("Z", "+00:00"))) if ts else None
 
 
 def create(ctx) -> XApi:

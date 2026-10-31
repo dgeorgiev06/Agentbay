@@ -48,7 +48,7 @@ def test_shipped_roles_are_five_generic_framework_roles_without_data_access():
     assert set(kit.docs["Role"]) == {"lead", "analyst", "researcher", "builder", "reviewer"}
     assert all(d.root == "framework" and "uses" not in d.spec for d in kit.docs["Role"].values())
     assert model.resolve(kit).roles["builder"].isolation == "none"                      # works in the checkout itself
-    assert [d.name for d in kit.docs["Role"].values() if d.spec.get("access") == "write"] == ["builder"]
+    assert [d.name for d in kit.docs["Role"].values() if d.spec.get("access") == "write"] == ["builder", "lead"]   # lead: forge.extend's plan step
 
 
 def test_access_comes_from_the_mode_needs_through_the_env():

@@ -219,7 +219,8 @@ def test_a_new_finding_blocks_the_extend_call_before_review():
     k = kit_copy()
     try:
         d = dispatch.Dispatcher(system(k, k), k, clock=clock)
-        d._invoke = lambda env, conn, iface, ep, args, **kw: \
+        real = d._invoke
+        d._invoke = lambda env, conn, iface, ep, args, **kw: real(env, conn, iface, ep, args, **kw) if iface.startswith("forge.") else \
             {"new": [{"kind": "unused"}], "existing": 0, "stopped": "1 new dead-code finding(s) against origin/main"}
         ok = {"status": "done", "summary": "s"}
         r = d.call("forge.extend", {"goal": "x change"})

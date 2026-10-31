@@ -45,10 +45,7 @@ def _fields(body: str) -> dict:
 
 def parse_blocks(text: str) -> dict[str, dict]:
     """Return the LAST task and result block found in text."""
-    out: dict[str, dict] = {}
-    for kind, body in _BLOCK.findall(text or ""):
-        out[kind] = _fields(body)
-    return out
+    return {kind: _fields(body) for kind, body in _BLOCK.findall(text or "")}
 
 
 def task_id_from(text: str) -> str | None:

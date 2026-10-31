@@ -21,7 +21,7 @@ from pathlib import Path
 
 from bay import secretscan
 from bay.boundary import Protection
-from bay.util import fingerprint
+from bay.util import fingerprint, iso
 
 from . import report
 
@@ -45,10 +45,6 @@ MAX_EVIDENCE = 30
 
 class StoreError(Exception):
     pass
-
-
-def iso(dt: datetime) -> str:
-    return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _classify(f: dict, src: dict) -> None:

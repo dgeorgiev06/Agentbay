@@ -293,11 +293,11 @@ def test_use_output_is_secret_scanned():
 
 
 def test_evidence_rule_ids_must_exist():
-    from datetime import datetime
+    from datetime import datetime, timezone
     Pipeline = connector_pkg("improve-detect", "pipeline").Pipeline
     p = proj(transcripts=False)
     try:
-        pl = Pipeline({}, KIT, p, {}, datetime.now())
+        pl = Pipeline({}, KIT, p, {}, datetime.now(timezone.utc))
         assert pl._resolves({"kind": "rule", "ref": "C-1"}, set()) is None
         assert pl._resolves({"kind": "rule", "ref": "C-99999"}, set())
         assert pl._resolves({"kind": "rule", "ref": "R-424242"}, set())

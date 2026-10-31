@@ -3,7 +3,7 @@ revision and returns only the unused / unused-constant / compat-layer / complexi
 runs it as the `deadcode` step between implement and review."""
 import subprocess
 import textwrap
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from helpers import KIT, cleanup, clock, connector_pkg, kit_copy, project, system, tmpdir
@@ -61,7 +61,7 @@ def repo_at_base() -> Path:
 
 
 def change(repo: Path, base="HEAD") -> dict:
-    pl = Pipeline({"artifact-graph": FakeGraph(repo)}, KIT, repo, {}, datetime(2026, 10, 30))
+    pl = Pipeline({"artifact-graph": FakeGraph(repo)}, KIT, repo, {}, datetime(2026, 10, 30, tzinfo=timezone.utc))
     return pl.change(base)
 
 
@@ -95,6 +95,19 @@ def test_a_finding_that_existed_at_base_does_not_count():
         cleanup(repo)
 
 
+def test_a_finding_in_a_renamed_file_is_not_new():
+    repo = repo_at_base()
+    try:
+        git(repo, "mv", "pkg/core.py", "pkg/base.py")
+        write(repo, {"pkg/main.py": BASE["pkg/main.py"].replace("pkg.core", "pkg.base")})
+        out = change(repo)
+        assert out["new"] == [] and out["existing"] == 1 and "stopped" not in out, out["new"]
+        write(repo, {"pkg/base.py": BASE["pkg/core.py"] + "\ndef fresh():\n    return 3\n"})
+        assert [c["detector"]["key"] for c in change(repo)["new"]] == ["fn:pkg/base.py:fresh"]
+    finally:
+        cleanup(repo)
+
+
 def test_the_base_may_be_any_revision_and_a_bad_one_is_refused():
     repo = repo_at_base()
     try:
@@ -123,7 +136,7 @@ def test_an_unused_concept_that_existed_at_base_is_not_new_when_the_project_is_t
         git(k, "init", "-q", "-b", "main")
         git(k, "add", "-A")
         git(k, "commit", "-q", "-m", "base")
-        pl = Pipeline({"artifact-graph": FakeGraph(k, k)}, k, k, {}, datetime(2026, 10, 30))
+        pl = Pipeline({"artifact-graph": FakeGraph(k, k)}, k, k, {}, datetime(2026, 10, 30, tzinfo=timezone.utc))
         now = detect_artifacts.run(pl.artifacts("project"), {}, only="unused")
         keys = [c["detector"]["key"] for c in now]
         assert any(x.startswith("interface:orphan.thing") for x in keys), keys    # the concept is reported as unused
@@ -189,7 +202,7 @@ def test_a_broken_archive_is_a_clear_error():
             return subprocess.CompletedProcess(cmd, 0, "", "")
         return subprocess.run(cmd, **kw)
     try:
-        pl = Pipeline({"artifact-graph": FakeGraph(repo)}, KIT, repo, {}, datetime(2026, 10, 30), run=run)
+        pl = Pipeline({"artifact-graph": FakeGraph(repo)}, KIT, repo, {}, datetime(2026, 10, 30, tzinfo=timezone.utc), run=run)
         try:
             pl.change("HEAD")
         except ValueError as e:

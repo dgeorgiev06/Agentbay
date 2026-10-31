@@ -17,7 +17,7 @@ from pathlib import Path
 import yaml
 
 from bay import conformance, graph, model
-from bay.util import fingerprint, short_hash
+from bay.util import fingerprint, iso, short_hash
 from . import detect_artifacts, detect_sessions
 
 EPISODE_SUMMARY_FIELDS = ("id", "source", "kind", "target", "status", "agent", "agentType", "parent", "start",
@@ -29,10 +29,6 @@ SCOPE_KEYS = ("mode", "feature", "step", "role", "env", "rule", "file", "files",
 CHANGE_KINDS = ("unused", "unused-constant", "compat-layer", "complexity")     # the dead-code check
 BASE_MAX_BYTES = 1_000_000      # as artifact-graph's MAX_BYTES for the working tree
 SHA = re.compile(r"^[0-9a-f]{7,40}$")
-
-
-def iso(dt: datetime | None) -> str | None:
-    return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z") if dt else None
 
 
 def summary(e: dict) -> dict:
@@ -222,6 +218,11 @@ class Pipeline:
             return f.read_text(encoding="utf-8", errors="replace")
         return text
 
+    def _renames(self, sha: str) -> dict:
+        r = self._git("diff", "-M", "--diff-filter=R", "--name-status", "-z", sha)
+        t = (r.stdout or "").split("\0") if r is not None and r.returncode == 0 else []
+        return dict(zip(t[1::3], t[2::3]))
+
     def change(self, base: str) -> dict:
         """Dead-code check: the unused, unused-constant, compat-layer and complexity findings of the working tree
         that the tree at the merge-base of `base` and HEAD does not have (compared as a multiset of fingerprints).
@@ -233,6 +234,7 @@ class Pipeline:
         cfg = {**self.settings, "thresholds": {**(self.settings.get("thresholds") or {}), "maxFindingsPerDetector": 10 ** 9}}
         ledger_eps = self.session_data(only_ledger=True)[0]["episodes"]
         now_arts = self.artifacts("project")
+        ren = self._renames(sha)
         with tempfile.TemporaryDirectory(prefix="agentbay-base-") as tmp:
             old = Path(tmp) / "tree"
             old.mkdir()
@@ -249,7 +251,9 @@ class Pipeline:
                 ledger=ledger_eps, root=old)
             seen: Counter = Counter()
             for k in CHANGE_KINDS:
-                seen.update(fingerprint(c) for c in detect_artifacts.run(before, cfg, only=k))
+                for c in detect_artifacts.run(before, cfg, only=k):
+                    c["detector"]["key"] = ":".join(ren.get(p, p) for p in c["detector"]["key"].split(":"))
+                    seen[fingerprint(c)] += 1
             failed = list(before.failed)
         found = []
         for k in CHANGE_KINDS:

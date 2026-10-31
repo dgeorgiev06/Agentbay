@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import subprocess
 import textwrap
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from golden_util import compare, normal
@@ -243,7 +243,7 @@ def golden_change() -> dict:
         write(repo, {"pkg/core.py": BASE["pkg/core.py"] + "\ndef brand_new_helper():\n    return 3\n",
                      "pkg/main.py": BASE["pkg/main.py"].replace("return used()", "return old_used()")
                      + "\ndef old_used():\n    # alias for used until callers move\n    return used()\n"})
-        pl = pipeline.Pipeline({"artifact-graph": FakeGraph(repo)}, KIT, repo, {}, datetime(2026, 10, 30))
+        pl = pipeline.Pipeline({"artifact-graph": FakeGraph(repo)}, KIT, repo, {}, datetime(2026, 10, 30, tzinfo=timezone.utc))
         return normal(pl.change("HEAD"), {str(repo): "<repo>"})
     finally:
         cleanup(repo)
@@ -261,7 +261,7 @@ def test_moving_files_have_no_deadcode_findings():
     is new at its new path and would block the step. So the files stage 5 moves (improve's code, the shipped connectors
     and modes) must have none now; a finding found here is fixed before the move, not after."""
     detect_artifacts, graph, pipeline, _, _ = mods()
-    pl = pipeline.Pipeline({"artifact-graph": FakeGraph(KIT)}, KIT, KIT, {}, datetime(2026, 10, 30))
+    pl = pipeline.Pipeline({"artifact-graph": FakeGraph(KIT)}, KIT, KIT, {}, datetime(2026, 10, 30, tzinfo=timezone.utc))
     arts = pl.artifacts("project")
     found = []
     for kind in DEADCODE_KINDS:

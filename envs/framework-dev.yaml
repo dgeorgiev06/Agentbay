@@ -27,7 +27,8 @@ spec:
             connectors/artifact-graph, connectors/claude-transcripts, connectors/corpus-store, connectors/git,
             connectors/improve-detect, connectors/improve-store, connectors/ledger, connectors/scaffold,
             connectors/workflow-runner,
-            docs, tests]
+            modes, connectors, envs, content-types, coordinator, components,
+            docs, tests, README.md]
   tiers: [balanced, deep]          # no fast tier for framework changes
   effects: [read, write]
   limits: { maxTurns: 120, maxMinutes: 60 }

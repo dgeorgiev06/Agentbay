@@ -207,12 +207,13 @@ def undo_move(got: dict) -> dict:
     pol, moved = got["policy"], PROTECTED_INSTANCES
     assert pol["protected"] == FOUR + moved, pol["protected"]
     pol["protected"] = FOUR
-    assert pol["units"][DEV]["write"] == [*FOUR, *moved, "docs", "tests"], pol["units"][DEV]["write"]
+    window = [*MOVE_WINDOW_DIRS, "docs", "tests", "README.md"]       # the temporary 0010 part 0b entries (see MOVE_WINDOW_DELTAS)
+    assert pol["units"][DEV]["write"] == [*FOUR, *moved, *window], pol["units"][DEV]["write"]
     pol["units"][DEV]["write"] = [*FOUR, "docs", "tests"]
     assert got["protectedWrites"]["framework-dev"] == FOUR + moved
     got["protectedWrites"]["framework-dev"] = FOUR
     local_writes = str(pol["units"][LOCAL]["write"])
-    dev_now, dev_was = str([*FOUR, *moved, "docs", "tests"]), str([*FOUR, "docs", "tests"])    # a reason quotes the list
+    dev_now, dev_was = str([*FOUR, *moved, *window]),str([*FOUR, "docs", "tests"])    # a reason quotes the list
     # (4) framework-dev may also run `git mv` and `git rm` (Part 3a): in its clis and in its "may only run" reasons
     assert pol["units"][DEV]["clis"] == [*DEV_CLIS, *MV_RM, "git show"], pol["units"][DEV]["clis"]
     pol["units"][DEV]["clis"] = [*DEV_CLIS, "git show"]
@@ -249,11 +250,31 @@ USER_MODE_GAP = ("mode improve: role analyst works in the framework env framewor
 IMPROVE_ROWS = ["Edit mode:improve/mode.yaml", "MultiEdit mode:improve/mode.yaml", "NotebookEdit mode:improve/n.ipynb",
                 "Write mode:improve/README.md", "Write mode:improve/features/scan/playbook.md",
                 "Write mode:improve/mode.yaml"]
-EXPECTED_DELTAS: dict = {
+IMPROVE_DELTAS: dict = {
     **{("builder--delivery", r): ("deny", "pass") for r in IMPROVE_ROWS},
     **{(LOCAL, r): ("deny", "pass") for r in IMPROVE_ROWS},
     **{(DEV, r): ("pass", "deny") for r in IMPROVE_ROWS},
 }
+# TEMPORARY, for 0010 slice 1 (plan 0010 part 0b): framework-dev's fs.write names the whole folders modes, connectors,
+# envs, content-types, coordinator, components and README.md, so the move can be built through it. That suspends D9
+# (forge.extend's builder writes protected paths only) for the unprotected paths below: deny -> pass. The protected
+# paths (cos, forge, the protected envs and connectors) are not rows here and still deny every non-framework role.
+# Part 2a removes the broad entries (lint syncs fs.write from the manifests), this group goes, and D9 holds again.
+# The IMPROVE_DELTAS rows of DEV (pass -> deny) net to pass -> pass while the window is open: modes/ covers improve.
+MOVE_WINDOW_DIRS = ["modes", "connectors", "envs", "content-types", "coordinator", "components"]
+MOVE_WINDOW_ROWS = ["Edit connector:fake/connector.yaml", "Edit mode:briefing/mode.yaml",
+                    "MultiEdit connector:fake/connector.yaml", "MultiEdit mode:briefing/mode.yaml", "Write README.md",
+                    "Write connector:brand-new/x.py", "Write connector:fake/connector.yaml",
+                    "Write connector:gmail-api/connector.yaml", "Write content-types/x/y.py", "Write env:brand-new",
+                    "Write env:local-feeds", "Write mode:brand-new/mode.yaml", "Write mode:briefing/mode.yaml",
+                    "Write mode:delivery/mode.yaml", "Write mode:feed-briefing/mode.yaml",
+                    "Write mode:mail-briefing/mode.yaml", "Write modes/x.yaml"]
+MOVE_WINDOW_DELTAS: dict = {
+    **{(DEV, r): ("deny", "pass") for r in MOVE_WINDOW_ROWS},
+    **{(DEV, r): ("pass", "pass") for r in IMPROVE_ROWS},      # IMPROVE_DELTAS' pass -> deny, undone by modes/
+}
+EXPECTED_DELTAS: dict = {**IMPROVE_DELTAS, **MOVE_WINDOW_DELTAS}
+NET_DELTAS = {k: v for k, v in EXPECTED_DELTAS.items() if v[0] != v[1]}
 
 
 def put_back(got: dict, want: dict) -> dict:
@@ -293,7 +314,7 @@ def test_guard_decision_matrix():
                       "matrix": matrix(k)}, real)
         want = json.loads((GOLDEN / "guard-matrix.json").read_text())
         diff = changed(got, want)
-        assert diff == EXPECTED_DELTAS, "a guard decision changed:\n" + "\n".join(f"{key}: {v}" for key, v in diff.items())
+        assert diff == NET_DELTAS, "a guard decision changed:\n" + "\n".join(f"{key}: {v}" for key, v in diff.items())
         compare("guard-matrix", undo_move(put_back(got, want)))
     finally:
         cleanup(k)

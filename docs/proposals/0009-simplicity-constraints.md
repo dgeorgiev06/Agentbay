@@ -1,5 +1,5 @@
 ---
-# Not approved. The owner approves at the forge.extend gate (`bay approve`). Owner request 2026-10-30: "We need constraints against complicating this framework."
+# Approval is recorded in the ledger by `bay approve`; this file grants nothing. Owner request 2026-10-30: "We need constraints against complicating this framework."
 touches:
   - { path: bay/limits.py, reason: "NEW. counts the size budget, compares with the ceilings, reads exceptions from the proposal (about 80 lines)" }
   - { path: bay/cli.py, reason: "`bay check --limits` (a flag, not a new command)" }
@@ -41,9 +41,10 @@ One rule: a change may not make the framework bigger than its ceiling. A determi
 
 | Measure | Today |
 |---|---|
-| lines in `bay/` (including `bay/improve/`) | 11821 |
+| lines in `bay/` | 9508 |
+| lines of Python in kit connectors, adapters and content types (tests excluded) | 6576 |
 | CLI commands | 16 |
-| folders directly under `framework/` | 6 |
+| folders directly under `framework/` | 3 |
 | schemas in `schemas/` (with `schemas/data/`) | 19 |
 | top-level folders in the repo | 11 |
 

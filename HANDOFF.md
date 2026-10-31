@@ -1,3 +1,35 @@
+# HANDOFF part 25: T-20261031-4d3f (recorded with `bay plan`) - stage 5 part C built (improve-detect and improve-store receive their code)
+
+Outcome: done. One commit, a4bec9b, on feat/0008-stage5 (C1, C2, C3 are one commit: the moves, the fingerprint copy and the test imports cannot be green separately). `bay/improve/` keeps `__init__`, `sources`, `transcripts` for part D (it deletes the folder). No proposal edited; every path is in 0008's touches.
+
+## To-do
+| Item | Commit | What |
+|---|---|---|
+| C0 | - | CLI baselines read from s5-cli-baseline (comparison below) |
+| C1, C2, C3 | a4bec9b | moves, fingerprint copy with shared vector, tests follow, yaml text |
+| golden delta | a4bec9b | coordinator decision on C-20261031-953c87: `kitAudit` `inefficient-store-read` 3 -> 5, named in `EXPECTED_DELTAS` in `test_improve_golden.py` (asserts was/now/reason, then the whole file compares) |
+| HANDOFF | this commit | |
+
+## What part D must know
+- The 3 -> 5 delta: the detector scans only `/connectors/` files, so `Store.query` and `Store.claim` count since store.py moved. Moving `sources.py` pieces into `ledger/` and `git/` (already under connectors/) may add more: check `kitAudit.countsPerKind` and name each change in `EXPECTED_DELTAS`.
+- `tests/helpers.connector_pkg(name, module=None)` loads a connector as the runtime does and reuses the load while the folder is the same; use it for new sibling modules (`parser.py`, `ledger_sources.py`, `git_episodes.py`).
+- `improve_store.py` still imports `from bay.improve import sources` (read_events); part D changes that.
+- `MOVING` in test_improve_golden still lists `bay/improve/`; the moved files are under `framework/connectors/` there, so A4 still covers them.
+
+## Done
+- `git mv` of pipeline, detect_artifacts, detect_sessions to `framework/connectors/improve-detect/`; store, report to `framework/connectors/improve-store/`. Imports are `from bay import ...` and sibling `from . import ...`;
+  `improve_detect.py` uses `from .pipeline import Pipeline`; `improve_store.py` uses `from . import store as st` (still `from bay.improve import sources` until part D). `bay/improve/` now holds `__init__`, `sources`, `transcripts`.
+- `fingerprint` is in `store.py` and copied into `pipeline.py`; both connector tests assert one vector (`unused` + `fn:app/core.py:never_called` -> `62f5b3fa536c7238`, from `tests/golden/improve.json`).
+- `tests/helpers.connector_pkg(name, module=None)` (one load per folder, so siblings stay one set); `test_deadcode_check.py`, `test_improve.py`, `test_improve_detectors.py`, `test_improve_golden.py:mods()`, `test_improve_store.py` use it. Connector yaml text updated.
+
+## Evidence (run at a4bec9b)
+- `python3 tests/run.py -q`: `515 passed, 0 failed` (513 + the two fingerprint-vector tests, one per connector). A first run before the delta decision gave `514 passed, 1 failed` (`test_improve_golden`, the one number).
+- `./bay.sh check` last line: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)` (line before: `✓ lint clean`; the same four warnings as `s5-cli-baseline/check.txt`, which it equals line for line).
+- Boundary: `boundary origin/main...HEAD: 48 changed paths (17 core, 14 extension, 17 other); 0 failing; B-11 docs: 0 hits`.
+- `./bay.sh build --project <scratch>/s6c`: `built 6 modes for claude-code`; `./bay.sh clean --project <scratch>/s6c`: last line `clean`; Glob `**/*` of s6c afterwards: only `agentbay.config.yaml`.
+- Baselines: `test_improve_golden` passes (only the named delta; `git diff` of `improve.json` in a4bec9b is that one line); `test_guard_decision_matrix` and `test_guard_matrix_for_a_project_with_the_kit_outside` pass; `test_stage_syntax_table` passes; `guard-matrix*.json` and `stages.json` not in the commit.
+- CLI baseline comparison: `catalog` equals `catalog.txt` line for line except the `registry built` timestamp. `describe improve` has 16 `"connector": improve-detect|improve-store` steps, as in `describe_improve.txt` (connector names, not paths, so nothing moves). `check` equals `check.txt`. cos, forge, `catalog.json`, `--roles` were not re-run (nothing in part C touches them).
+
 # HANDOFF part 24: T-20261031-68cb (recorded with `bay plan`) - stage 5 parts A and B built (baselines, then core prep)
 
 Outcome: status done for A1 to A4 and B1 to B3 (A5, the CLI baselines, was not taken: see open items). Branch feat/0008-stage5, 7 commits on top of

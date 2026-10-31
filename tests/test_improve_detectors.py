@@ -4,9 +4,12 @@ import shutil
 import textwrap
 from pathlib import Path
 
-from helpers import cleanup, kit_copy, tmpdir
+from helpers import cleanup, connector_pkg, kit_copy, tmpdir
 
-from bay.improve import conformance, detect_artifacts as da, detect_sessions as ds, graph
+from bay import conformance, graph
+
+da = connector_pkg("improve-detect", "detect_artifacts")
+ds = connector_pkg("improve-detect", "detect_sessions")
 
 TH = ds.thresholds({"thresholds": {"slowStepMs": 1000, "costlyStepUsd": 1.0}})
 
@@ -422,7 +425,7 @@ def test_conformance_checks_on_a_kit_copy():
         pb2 = k / "modes/briefing/features/ask/playbook.md"
         pb2.write_text(pb2.read_text().replace("## Outputs", "Use `Bash` and a sub-agent.\n\n## Outputs"))
         # C-5: a read-only endpoint that writes
-        st = k / "framework/connectors/corpus-store/corpus_store.py"
+        st = k / "connectors/corpus-store/corpus_store.py"
         st.write_text(st.read_text().replace("    def status(self", "    def status(self, *a, **kw):\n"
                                              "        self.path.write_text('')\n        return self._status()\n\n"
                                              "    def _status(self", 1))
@@ -460,7 +463,7 @@ def test_conformance_yaml_is_linted():
         assert any("unknown check 'no_such_check'" in x for x in probs)
         p.write_text("apiVersion: agentbay/v2\nkind: Conformance\nrules: [{id: X-1, level: must}]\n")
         assert any("conformance schema" in x for x in lint.run(k))
-        shutil.copy(k / "framework/modes/forge/mode.yaml", k / "fm.bak")
+        shutil.copy(k / "modes/forge/mode.yaml", k / "fm.bak")
         p.unlink()
         assert any("conformance.yaml: missing" in x for x in lint.run(k))
     finally:

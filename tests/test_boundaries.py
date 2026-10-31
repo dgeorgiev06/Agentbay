@@ -4,6 +4,7 @@ import subprocess
 import sys
 
 from helpers import KIT, cleanup, kit_for, project, system, tmpdir
+from layout import PROTECTED_INSTANCES
 
 from bay import guard, vault
 from bay.adapter import get, module
@@ -293,7 +294,14 @@ def test_protected_kit_dirs_when_the_project_is_the_kit():
     try:
         get("claude-code").build(system(k, k), k, k)
         pol = json.loads((k / ".agentbay/guard.json").read_text())
-        assert pol["protected"] == ["framework", "bay", "schemas", "adapters"]
+        # the four folders of the old policy, in their old order, then exactly the protected instances (stage 5 part G)
+        assert pol["protected"] == ["framework", "bay", "schemas", "adapters", *PROTECTED_INSTANCES]
+        assert tool(k, "builder--forge--local-authoring", "Write",
+                    {"file_path": "modes/cos/mode.yaml", "content": "x"})[0] == "deny"
+        assert tool(k, "builder--forge--local-authoring", "Write",
+                    {"file_path": "connectors/ledger/ledger.py", "content": "x"})[0] == "deny"
+        assert tool(k, "builder--forge--framework-dev", "Write",
+                    {"file_path": "modes/cos/mode.yaml", "content": "x"})[0] == "pass"
         assert tool(k, "builder--delivery", "Write", {"file_path": "bay/guard.py", "content": "x"})[0] == "deny"
         assert tool(k, "builder--delivery", "Write", {"file_path": "framework/roles/x.yaml", "content": "x"})[0] == "deny"
         assert tool(k, "builder--forge--local-authoring", "Write", {"file_path": "modes/x.yaml", "content": "x"})[0] == "pass"

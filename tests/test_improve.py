@@ -4,7 +4,7 @@ import json
 import subprocess
 import sys
 
-from helpers import KIT, clock, cleanup, kit_copy, kit_for, project, system, tmpdir
+from helpers import KIT, clock, cleanup, connector_pkg, kit_copy, kit_for, project, system, tmpdir
 from improve_fixtures import CORES, make_ledger, make_transcripts
 
 from bay import dispatch, ledger
@@ -311,7 +311,7 @@ def test_use_output_is_secret_scanned():
 
 def test_evidence_rule_ids_must_exist():
     from datetime import datetime
-    from bay.improve.pipeline import Pipeline
+    Pipeline = connector_pkg("improve-detect", "pipeline").Pipeline
     p = proj(transcripts=False)
     try:
         pl = Pipeline({}, KIT, p, {}, datetime.now())

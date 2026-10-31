@@ -1,4 +1,4 @@
-"""pytest support: `pytest tests connectors framework/connectors` (python3 tests/run.py needs no pytest)."""
+"""pytest support: `pytest tests connectors` (python3 tests/run.py needs no pytest)."""
 import sys
 from pathlib import Path
 

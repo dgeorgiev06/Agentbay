@@ -29,6 +29,7 @@ segments, and a trailing `/` means the folder and everything under it.
 """
 from __future__ import annotations
 
+import posixpath
 import re
 import subprocess
 from dataclasses import dataclass, field, asdict
@@ -78,6 +79,97 @@ def literal_prefix(glob: str) -> str:
     return glob[:m.start()] if m else glob
 
 
+# ----------------------------------------------------------------- protection
+PROTECTED_KINDS = ("mode", "env", "connector")      # the contracts whose instances can be protected
+_NAME = re.compile(r"^[a-z][a-z0-9-]*$")
+
+
+class ProtectedError(ValueError):
+    """The `protected:` block of the component map is not what the loader accepts."""
+
+
+def under(path: str, folder: str) -> bool:
+    """True when `path` is `folder` or inside it (both kit-relative, `/`-separated)."""
+    return path == folder or path.startswith(folder.rstrip("/") + "/")
+
+
+def _names(value, what: str, pattern=_NAME) -> tuple[str, ...]:
+    if not isinstance(value, list) or not all(isinstance(n, str) and pattern.match(n) for n in value):
+        raise ProtectedError(f"{what} must be a list of names (lowercase letters, digits and hyphens)")
+    if len(set(value)) != len(value):
+        raise ProtectedError(f"{what} lists a name twice")
+    return tuple(value)
+
+
+def _folder(p) -> str:
+    bad = not isinstance(p, str) or not p or p.startswith(("/", "~")) or "\\" in p
+    if bad or posixpath.normpath(p) != p or p == "." or p.startswith("../") or p == "..":
+        raise ProtectedError(f"paths: {p!r} must be a kit-relative folder in normal form (no '..', no leading '/', "
+                             f"no trailing '/')")
+    return p
+
+
+@dataclass(frozen=True)
+class Protection:
+    """What only `forge.extend` may change, as the component map declares it (`protected:`): folders (`paths`), and
+    by name the modes, envs and connectors that are protected wherever they sit. `place` says, for each protected
+    env, which unprotected modes may put roles there (`*` = every one). A set that could not be read is `closed`:
+    every name is reserved, every path covered, nothing may be placed - never open."""
+    paths: tuple[str, ...] = ()
+    names: dict = field(default_factory=dict)       # kind -> protected instance names (env: the keys of `place`)
+    place: dict = field(default_factory=dict)       # env -> the unprotected modes that may use it
+    closed: bool = False
+
+    @classmethod
+    def closed_set(cls) -> "Protection":
+        return cls(closed=True)
+
+    @classmethod
+    def parse(cls, block) -> "Protection":
+        """The `protected:` block; every key is required (an omitted list is not 'nothing protected')."""
+        if not isinstance(block, dict) or set(block) != {"paths", "mode", "env", "connector"}:
+            raise ProtectedError("must be a mapping with exactly the keys paths, mode, env and connector")
+        raw = block["paths"]
+        if not isinstance(raw, list) or not raw:
+            raise ProtectedError("paths must be a non-empty list of folders")
+        paths = tuple(_folder(p) for p in raw)
+        if len(set(paths)) != len(paths):
+            raise ProtectedError("paths lists a folder twice")
+        env = block["env"]
+        if not isinstance(env, dict):
+            raise ProtectedError("env must map each protected env to {} or {modes: [...]}")
+        place = {}
+        for name, body in env.items():
+            if not isinstance(name, str) or not _NAME.match(name) or not (body is None or isinstance(body, dict)):
+                raise ProtectedError(f"env {name!r} must be a name mapped to {{}} or {{modes: [...]}}")
+            if set(body or {}) - {"modes"}:
+                raise ProtectedError(f"env {name}: the only key is modes")
+            place[name] = _names((body or {}).get("modes", []), f"env {name}: modes", re.compile(r"^(\*|[a-z][a-z0-9-]*)$"))
+        return cls(paths, {"mode": _names(block["mode"], "mode"), "env": tuple(place),
+                           "connector": _names(block["connector"], "connector")}, place)
+
+    def reserved(self, kind: str, name: str) -> bool:
+        return self.closed or name in self.names.get(kind, ())
+
+    def covers(self, path: str) -> bool:
+        """`path` (kit-relative) is inside one of the protected folders (instances: see `Kit.covers`)."""
+        path = posixpath.normpath(path)
+        return self.closed or any(under(path, p) for p in self.paths)
+
+    def may_place(self, mode: str, env: str) -> bool:
+        """May `mode` put a role in `env`? Anything may use an unprotected env; a protected env belongs to the
+        protected modes and to the unprotected modes its entry names."""
+        if self.closed:
+            return False
+        if env not in self.place or mode in self.names.get("mode", ()):
+            return True
+        return "*" in self.place[env] or mode in self.place[env]
+
+    def open_envs(self) -> list[str]:
+        """The protected envs every unprotected mode may use, in the map's order."""
+        return [e for e, modes in self.place.items() if "*" in modes]
+
+
 # ----------------------------------------------------------------- the map
 @dataclass
 class Contract:
@@ -108,6 +200,7 @@ class Contract:
 class ComponentMap:
     owns: dict[str, list[str]]
     contracts: list[Contract]
+    protected: Protection | None = None        # None: the map has no `protected:` block (see protected_by)
 
     @classmethod
     def load(cls, path: Path) -> "ComponentMap":
@@ -133,7 +226,11 @@ class ComponentMap:
             for cname, c in (spec.get("contracts") or {}).items():
                 if c.get("at"):
                     contracts.append(Contract(comp, cname, list(c["at"])))
-        return cls(owns, contracts)
+        try:
+            prot = Protection.parse(doc["protected"]) if "protected" in doc else None
+        except ProtectedError as e:
+            raise RuntimeError(f"{MAP}: protected: {e}") from None
+        return cls(owns, contracts, prot)
 
     def owner(self, path: str) -> str | None:
         """The core component owning `path`; the most specific `owns:` glob wins."""
@@ -149,6 +246,22 @@ class ComponentMap:
             root = c.instance(path)
             if root:
                 return c, root
+        return None
+
+    def protected_by(self, path: str) -> str | None:
+        """Why `path` is protected (a folder of `protected.paths`, or a file of a protected mode, env or connector
+        wherever its folder sits), else None. A map without a `protected:` block protects nothing here: the check
+        judges a change by the base's map, and a base that predates the block cannot say; the kit itself fails closed
+        on such a map (model.Kit)."""
+        p = self.protected
+        if p is None:
+            return None
+        for d in p.paths:
+            if under(path, d):
+                return f"protected folder {d}/"
+        ext = self.extension(path)
+        if ext and ext[0].name in PROTECTED_KINDS and p.reserved(ext[0].name, ext[0].instance_name(ext[1])):
+            return f"protected {ext[0].name} {ext[0].instance_name(ext[1])}"
         return None
 
 
@@ -298,7 +411,19 @@ class Report:
 def classify(path: str, cmap: ComponentMap, touches: list[dict], is_new, proposal: str | None,
              introduced: bool = False) -> Finding:
     """One changed path -> a Finding. `is_new(root)` says whether an extension root is absent at base.
-    `introduced`: the map is the one this change adds, so a new extension folder gets no pass (N-1)."""
+    `introduced`: the map is the one this change adds, so a new extension folder gets no pass (N-1).
+    A path the map protects (`protected:`) passes only when `touches:` lists it: the new-extension pass does
+    not reach a protected name, and a protected folder is never new."""
+    f = _classify(path, cmap, touches, is_new, proposal, introduced)
+    why = cmap.protected_by(path)
+    if why and f.ok and f.cls != "other" and not any(match(t["path"], path) for t in touches):
+        return Finding(path, f.cls, f.owner, False, "protected",
+                       f"{why}: only forge.extend changes it, so it must be listed even when the folder is new")
+    return f
+
+
+def _classify(path: str, cmap: ComponentMap, touches: list[dict], is_new, proposal: str | None,
+              introduced: bool = False) -> Finding:
     globs = [t["path"] for t in touches]
     listed = any(match(g, path) for g in globs)
     if path == proposal or any(match(g, path) for g in OTHER):

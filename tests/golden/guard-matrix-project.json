@@ -1,0 +1,100 @@
+{
+ "analyst--feed-briefing approve": [
+  "deny",
+  "agentbay: subagent analyst--feed-briefing may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+ ],
+ "analyst--feed-briefing bay dir of project": [
+  "deny",
+  "agentbay: role analyst may not write <project>/bay/x.py: outside the role's writable paths []"
+ ],
+ "analyst--feed-briefing config": [
+  "deny",
+  "agentbay: subagent analyst--feed-briefing may not write <project>/agentbay.config.yaml: agentbay.config.yaml is never writable by agents (agent/tool configuration)"
+ ],
+ "analyst--feed-briefing kit bay.sh": [
+  "deny",
+  "agentbay: role analyst may only run: .agentbay/roles/analyst--feed-briefing/use via Bash. Use `.agentbay/roles/analyst--feed-briefing/use <capability>/v<N>.<endpoint> '<json>'` for data."
+ ],
+ "analyst--feed-briefing kit cli": [
+  "deny",
+  "agentbay: role analyst may only run: .agentbay/roles/analyst--feed-briefing/use via Bash. Use `.agentbay/roles/analyst--feed-briefing/use <capability>/v<N>.<endpoint> '<json>'` for data."
+ ],
+ "analyst--feed-briefing kit file": [
+  "deny",
+  "agentbay: subagent analyst--feed-briefing may not write <kit>/bay/guard.py: the agentbay kit is not writable by agents"
+ ],
+ "analyst--feed-briefing kit mode": [
+  "deny",
+  "agentbay: subagent analyst--feed-briefing may not write <kit>/modes/briefing/mode.yaml: the agentbay kit is not writable by agents"
+ ],
+ "analyst--feed-briefing kit read": [
+  "deny",
+  "agentbay: role analyst may only read inside . (env fs.read)"
+ ],
+ "analyst--feed-briefing ledger": [
+  "deny",
+  "agentbay: subagent analyst--feed-briefing may not access <project>/.agentbay/ledger/events.jsonl (.agentbay/ is the control plane)"
+ ],
+ "analyst--feed-briefing shim": [
+  "allow",
+  ""
+ ],
+ "analyst--feed-briefing shim flag": [
+  "deny",
+  "agentbay: the use shim takes no flags (got --role)"
+ ],
+ "analyst--feed-briefing src": [
+  "deny",
+  "agentbay: role analyst may not write <project>/src/app.py: outside the role's writable paths []"
+ ],
+ "autoAllowShim": true,
+ "builder--delivery approve": [
+  "deny",
+  "agentbay: subagent builder--delivery may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+ ],
+ "builder--delivery bay dir of project": [
+  "pass",
+  ""
+ ],
+ "builder--delivery config": [
+  "deny",
+  "agentbay: subagent builder--delivery may not write <project>/agentbay.config.yaml: agentbay.config.yaml is never writable by agents (agent/tool configuration)"
+ ],
+ "builder--delivery kit bay.sh": [
+  "deny",
+  "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+ ],
+ "builder--delivery kit cli": [
+  "deny",
+  "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+ ],
+ "builder--delivery kit file": [
+  "deny",
+  "agentbay: subagent builder--delivery may not write <kit>/bay/guard.py: the agentbay kit is not writable by agents"
+ ],
+ "builder--delivery kit mode": [
+  "deny",
+  "agentbay: subagent builder--delivery may not write <kit>/modes/briefing/mode.yaml: the agentbay kit is not writable by agents"
+ ],
+ "builder--delivery kit read": [
+  "deny",
+  "agentbay: role builder may only read inside . (env fs.read)"
+ ],
+ "builder--delivery ledger": [
+  "deny",
+  "agentbay: subagent builder--delivery may not access <project>/.agentbay/ledger/events.jsonl (.agentbay/ is the control plane)"
+ ],
+ "builder--delivery shim": [
+  "deny",
+  "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+ ],
+ "builder--delivery shim flag": [
+  "deny",
+  "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+ ],
+ "builder--delivery src": [
+  "pass",
+  ""
+ ],
+ "protected": []
+}

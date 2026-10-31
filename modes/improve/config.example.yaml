@@ -1,0 +1,7 @@
+# defaults shown (config.schema.json); detector thresholds default in connectors/improve-detect/
+# window: 7d                      # default scan window (sessions started inside it)
+# retention: 90d                  # verified and wontfix findings not seen for this long are dropped
+# backlogTop: 10                  # items in the weekly backlog report
+# triageTop: 5                    # top open findings the analyst examines per triage
+# historyDocs: [docs/proposals/]  # markdown kept as history: doc-size and doc-stale skip it
+# thresholds: { reviewRounds: 1, docWords: 3000 }

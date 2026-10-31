@@ -1,0 +1,5038 @@
+{
+ "lintWarnings": [
+  "<project>/framework/envs/workspace.yaml: env workspace write path '.' reaches framework/, bay/, schemas/, adapters/ because the project is the agentbay checkout; the guard hook denies those writes at runtime unless the env names them explicitly (only forge.extend's framework-dev does)"
+ ],
+ "matrix": {
+  "Explore": {
+   "Bash ": [
+    "pass",
+    ""
+   ],
+   "Bash ./.agentbay/bay approve C-1": [
+    "deny",
+    "agentbay: subagent Explore may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a000 '{}'": [
+    "deny",
+    "agentbay: subagent Explore: argument ./.agentbay/bay reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a999": [
+    "deny",
+    "agentbay: subagent Explore: argument ./.agentbay/bay reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a999 '{}'": [
+    "deny",
+    "agentbay: subagent Explore: argument ./.agentbay/bay reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a999 --done 1": [
+    "deny",
+    "agentbay: subagent Explore: argument ./.agentbay/bay reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a999 --force": [
+    "deny",
+    "agentbay: subagent Explore: argument ./.agentbay/bay reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-b000 '{}'": [
+    "deny",
+    "agentbay: subagent Explore: argument ./.agentbay/bay reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-zzzz '{}'": [
+    "deny",
+    "agentbay: subagent Explore: argument ./.agentbay/bay reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash ./.agentbay/bay plan T-bad '{}'": [
+    "deny",
+    "agentbay: subagent Explore: argument ./.agentbay/bay reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash ./bay.sh call x.y '{}'": [
+    "deny",
+    "agentbay: subagent Explore: argument ./bay.sh reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash ./bay.sh check": [
+    "deny",
+    "agentbay: subagent Explore: argument ./bay.sh reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash .agentbay/bay approve C-1": [
+    "deny",
+    "agentbay: subagent Explore may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash .agentbay/bay call forge.extend '{}'": [
+    "deny",
+    "agentbay: subagent Explore: argument .agentbay/bay reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash .agentbay/bay plan T-20261031-a999 '{}'": [
+    "deny",
+    "agentbay: subagent Explore: argument .agentbay/bay reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash .agentbay/bay show C-1": [
+    "deny",
+    "agentbay: subagent Explore: argument .agentbay/bay reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash .agentbay/roles/Explore/use": [
+    "deny",
+    "agentbay: subagent Explore: argument .agentbay/roles/Explore/use reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash .agentbay/roles/Explore/use --role x items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: subagent Explore: argument .agentbay/roles/Explore/use reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash .agentbay/roles/Explore/use improve.findings/v1.query '{}'; ls": [
+    "deny",
+    "agentbay: subagent Explore: shell operator ';' is not allowed; run one command at a time (in a command that mentions .agentbay/.claude)"
+   ],
+   "Bash .agentbay/roles/Explore/use items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: subagent Explore: argument .agentbay/roles/Explore/use reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash .agentbay/roles/analyst--other/use items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: subagent Explore: argument .agentbay/roles/analyst--other/use reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash <project>/.agentbay/roles/Explore/use items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: subagent Explore: argument <project>/.agentbay/roles/Explore/use reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash bash -c ls": [
+    "deny",
+    "agentbay: subagent Explore: inline interpreter code (bash -c/-e) is not allowed"
+   ],
+   "Bash bay approve C-1": [
+    "deny",
+    "agentbay: subagent Explore may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash bay.sh approve C-1": [
+    "deny",
+    "agentbay: subagent Explore may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash cat '.agent''bay/guard.json'": [
+    "deny",
+    "agentbay: subagent Explore: argument .agentbay/guard.json reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash cat ./bay.sh": [
+    "deny",
+    "agentbay: subagent Explore: argument ./bay.sh reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash cat .agentbay/guard.json": [
+    "deny",
+    "agentbay: subagent Explore: argument .agentbay/guard.json reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash cat .claude/settings.json": [
+    "deny",
+    "agentbay: subagent Explore: argument .claude/settings.json reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash cat .env": [
+    "pass",
+    ""
+   ],
+   "Bash cat agentbay.conf''ig.yaml": [
+    "deny",
+    "agentbay: subagent Explore may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash cat agentbay.config.*": [
+    "deny",
+    "agentbay: subagent Explore may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash cat agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent Explore may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash echo $(id)": [
+    "pass",
+    ""
+   ],
+   "Bash echo `id`": [
+    "pass",
+    ""
+   ],
+   "Bash echo x > agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent Explore may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash git -C . status": [
+    "pass",
+    ""
+   ],
+   "Bash git commit -m 'about bay approve'": [
+    "pass",
+    ""
+   ],
+   "Bash git diff --ext-diff": [
+    "pass",
+    ""
+   ],
+   "Bash git diff --no-index a b": [
+    "pass",
+    ""
+   ],
+   "Bash git log --output=x": [
+    "pass",
+    ""
+   ],
+   "Bash git show --textconv HEAD:x": [
+    "pass",
+    ""
+   ],
+   "Bash git status": [
+    "pass",
+    ""
+   ],
+   "Bash git worktree add -b nb wt/y": [
+    "pass",
+    ""
+   ],
+   "Bash git worktree add ../x": [
+    "pass",
+    ""
+   ],
+   "Bash git worktree add bay/wt": [
+    "pass",
+    ""
+   ],
+   "Bash git worktree add wt/x": [
+    "pass",
+    ""
+   ],
+   "Bash head -3 README.md": [
+    "pass",
+    ""
+   ],
+   "Bash ls": [
+    "pass",
+    ""
+   ],
+   "Bash ls 'unbalanced": [
+    "pass",
+    ""
+   ],
+   "Bash ls -la": [
+    "pass",
+    ""
+   ],
+   "Bash ls .a?entbay": [
+    "deny",
+    "agentbay: subagent Explore: glob .a?entbay matches .agentbay/ or .claude/"
+   ],
+   "Bash ls .agent*": [
+    "deny",
+    "agentbay: subagent Explore: glob .agent* matches .agentbay/ or .claude/"
+   ],
+   "Bash ls .agentbay": [
+    "deny",
+    "agentbay: subagent Explore: argument .agentbay reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash ls .claude": [
+    "deny",
+    "agentbay: subagent Explore: argument .claude reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash ls > out.txt": [
+    "pass",
+    ""
+   ],
+   "Bash ls | wc": [
+    "pass",
+    ""
+   ],
+   "Bash ls; cat x": [
+    "pass",
+    ""
+   ],
+   "Bash mkdir x": [
+    "pass",
+    ""
+   ],
+   "Bash node -e 1": [
+    "deny",
+    "agentbay: subagent Explore: inline interpreter code (node -c/-e) is not allowed"
+   ],
+   "Bash perl -e 1": [
+    "deny",
+    "agentbay: subagent Explore: inline interpreter code (perl -c/-e) is not allowed"
+   ],
+   "Bash python3 -c 'print(1)'": [
+    "deny",
+    "agentbay: subagent Explore: inline interpreter code (python3 -c/-e) is not allowed"
+   ],
+   "Bash python3 -m bay.cli approve C-1": [
+    "deny",
+    "agentbay: subagent Explore may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash python3 -m http.server": [
+    "pass",
+    ""
+   ],
+   "Bash python3 bay/cli.py approve C-1": [
+    "deny",
+    "agentbay: subagent Explore may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash python3 bay/cli.py check": [
+    "deny",
+    "agentbay: subagent Explore: argument bay/cli.py reaches .agentbay/, .claude/ or the kit CLI"
+   ],
+   "Bash python3 tests/run.py -q": [
+    "pass",
+    ""
+   ],
+   "Bash python3 tests/run.py tests/test_improve.py": [
+    "pass",
+    ""
+   ],
+   "Bash rm -rf x": [
+    "pass",
+    ""
+   ],
+   "Bash ruby -e 1": [
+    "deny",
+    "agentbay: subagent Explore: inline interpreter code (ruby -c/-e) is not allowed"
+   ],
+   "Bash sed -i s/a/b/ agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent Explore may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash sh -c ls": [
+    "deny",
+    "agentbay: subagent Explore: inline interpreter code (sh -c/-e) is not allowed"
+   ],
+   "Edit bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Edit connector:fake/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Edit docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "Edit env:workspace": [
+    "pass",
+    ""
+   ],
+   "Edit mode:briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Edit mode:improve/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Edit src/app.py": [
+    "pass",
+    ""
+   ],
+   "Glob {\"path\": \"..\", \"pattern\": \"*\"}": [
+    "deny",
+    "agentbay: subagent Explore may not search .agentbay/ (pattern *)"
+   ],
+   "Glob {\"pattern\": \"**/*.json\"}": [
+    "pass",
+    ""
+   ],
+   "Glob {\"pattern\": \".*\"}": [
+    "deny",
+    "agentbay: subagent Explore may not search .agentbay/ (pattern .*)"
+   ],
+   "Glob {\"pattern\": \"../*\"}": [
+    "pass",
+    ""
+   ],
+   "Glob {\"pattern\": \".agentbay/**\"}": [
+    "deny",
+    "agentbay: subagent Explore may not search .agentbay/ (pattern .agentbay/**)"
+   ],
+   "Glob {\"pattern\": \"bay/*.py\"}": [
+    "pass",
+    ""
+   ],
+   "Grep {\"glob\": \".claude/*\", \"pattern\": \"x\"}": [
+    "deny",
+    "agentbay: subagent Explore may not search .claude/ (pattern .claude/*)"
+   ],
+   "Grep {\"path\": \".agentbay\", \"pattern\": \"x\"}": [
+    "deny",
+    "agentbay: subagent Explore may not access <project>/.agentbay (.agentbay/ is the control plane)"
+   ],
+   "Grep {\"path\": \"docs\", \"pattern\": \"x\"}": [
+    "pass",
+    ""
+   ],
+   "Grep {\"pattern\": \"x\"}": [
+    "pass",
+    ""
+   ],
+   "MultiEdit bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "MultiEdit connector:fake/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "MultiEdit docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "MultiEdit env:workspace": [
+    "pass",
+    ""
+   ],
+   "MultiEdit mode:briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "MultiEdit mode:improve/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "MultiEdit src/app.py": [
+    "pass",
+    ""
+   ],
+   "NotebookEdit mode:improve/n.ipynb": [
+    "pass",
+    ""
+   ],
+   "NotebookEdit src/n.ipynb": [
+    "pass",
+    ""
+   ],
+   "Read ../outside.txt": [
+    "pass",
+    ""
+   ],
+   "Read .agentbay/guard.json": [
+    "deny",
+    "agentbay: subagent Explore may not access <project>/.agentbay/guard.json (.agentbay/ is the control plane)"
+   ],
+   "Read .claude/settings.json": [
+    "pass",
+    ""
+   ],
+   "Read .env": [
+    "pass",
+    ""
+   ],
+   "Read /etc/passwd": [
+    "pass",
+    ""
+   ],
+   "Read README.md": [
+    "pass",
+    ""
+   ],
+   "Read bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Read connector:ledger/ledger.py": [
+    "pass",
+    ""
+   ],
+   "Read docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "Read framework/roles/builder.yaml": [
+    "pass",
+    ""
+   ],
+   "Read mode:improve/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Read src/app.py": [
+    "pass",
+    ""
+   ],
+   "Read tests/helpers.py": [
+    "pass",
+    ""
+   ],
+   "WebFetch https://example.com": [
+    "pass",
+    ""
+   ],
+   "Write ../escape.py": [
+    "pass",
+    ""
+   ],
+   "Write .agentbay/guard.json": [
+    "deny",
+    "agentbay: subagent Explore may not access <project>/.agentbay/guard.json (.agentbay/ is the control plane)"
+   ],
+   "Write .claude/settings.json": [
+    "deny",
+    "agentbay: subagent Explore may not write <project>/.claude/settings.json: .claude/ is never writable by agents"
+   ],
+   "Write .env": [
+    "deny",
+    "agentbay: subagent Explore may not write <project>/.env: .env is never writable by agents (agent/tool configuration)"
+   ],
+   "Write .env.local": [
+    "deny",
+    "agentbay: subagent Explore may not write <project>/.env.local: .env.local is never writable by agents (agent/tool configuration)"
+   ],
+   "Write .git/config": [
+    "deny",
+    "agentbay: subagent Explore may not write <project>/.git/config: .git/ is never writable by agents"
+   ],
+   "Write .github/workflows/ci.yml": [
+    "deny",
+    "agentbay: subagent Explore may not write <project>/.github/workflows/ci.yml: .github/workflows/ is never writable by agents"
+   ],
+   "Write .vscode/x.json": [
+    "deny",
+    "agentbay: subagent Explore may not write <project>/.vscode/x.json: .vscode/ is never writable by agents"
+   ],
+   "Write /etc/passwd": [
+    "pass",
+    ""
+   ],
+   "Write <project>/bay/abs.py": [
+    "pass",
+    ""
+   ],
+   "Write <project>/src/abs.py": [
+    "pass",
+    ""
+   ],
+   "Write BAY.SH": [
+    "pass",
+    ""
+   ],
+   "Write Bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Write CLAUDE.md": [
+    "deny",
+    "agentbay: subagent Explore may not write <project>/CLAUDE.md: CLAUDE.md is never writable by agents (agent/tool configuration)"
+   ],
+   "Write HANDOFF.md": [
+    "pass",
+    ""
+   ],
+   "Write Makefile": [
+    "deny",
+    "agentbay: subagent Explore may not write <project>/Makefile: Makefile is never writable by agents (agent/tool configuration)"
+   ],
+   "Write README.md": [
+    "pass",
+    ""
+   ],
+   "Write adapters/claude-code/x.py": [
+    "pass",
+    ""
+   ],
+   "Write adapters/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent Explore may not write <project>/agentbay.config.yaml: agentbay.config.yaml is never writable by agents (agent/tool configuration)"
+   ],
+   "Write bay.sh": [
+    "deny",
+    "agentbay: subagent Explore may not write <project>/bay.sh: bay.sh is never writable by agents (agent/tool configuration)"
+   ],
+   "Write bay/../bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Write bay/brand_new.py": [
+    "pass",
+    ""
+   ],
+   "Write bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Write bay/improve/pipeline.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:artifact-graph/artifact_graph.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:brand-new/x.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:claude-transcripts/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:corpus-store/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:fake/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:git/git_history.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:gmail-api/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:improve-detect/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:improve-store/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:improve-store/improve_store.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:ledger/ledger.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:scaffold/scaffold.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:workflow-runner/workflow_runner.py": [
+    "pass",
+    ""
+   ],
+   "Write content-types/x/y.py": [
+    "pass",
+    ""
+   ],
+   "Write docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "Write env:brand-new": [
+    "pass",
+    ""
+   ],
+   "Write env:cos-local": [
+    "pass",
+    ""
+   ],
+   "Write env:framework-dev": [
+    "pass",
+    ""
+   ],
+   "Write env:improve-local": [
+    "pass",
+    ""
+   ],
+   "Write env:local-authoring": [
+    "pass",
+    ""
+   ],
+   "Write env:local-feeds": [
+    "pass",
+    ""
+   ],
+   "Write env:research": [
+    "pass",
+    ""
+   ],
+   "Write env:workspace": [
+    "pass",
+    ""
+   ],
+   "Write framework/components.yaml": [
+    "pass",
+    ""
+   ],
+   "Write framework/interfaces/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write framework/roles/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write framework/rules/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:brand-new/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:cos/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:delivery/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:feed-briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:forge/features/create/playbook.md": [
+    "pass",
+    ""
+   ],
+   "Write mode:forge/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:improve/README.md": [
+    "pass",
+    ""
+   ],
+   "Write mode:improve/features/scan/playbook.md": [
+    "pass",
+    ""
+   ],
+   "Write mode:improve/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:mail-briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write modes/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write roles/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write schemas/x.json": [
+    "pass",
+    ""
+   ],
+   "Write src/../bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Write src/app.py": [
+    "pass",
+    ""
+   ],
+   "Write tests/test_x.py": [
+    "pass",
+    ""
+   ]
+  },
+  "analyst--improve": {
+   "Bash ": [
+    "deny",
+    "agentbay: subagent analyst--improve: empty command"
+   ],
+   "Bash ./.agentbay/bay approve C-1": [
+    "deny",
+    "agentbay: subagent analyst--improve may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a000 '{}'": [
+    "deny",
+    "agentbay: subagent analyst--improve: `bay plan` takes only the taskId this agent was dispatched with"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a004": [
+    "deny",
+    "agentbay: subagent analyst--improve: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a004 '{}'": [
+    "pass",
+    ""
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a004 --done 1": [
+    "pass",
+    ""
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a004 --force": [
+    "deny",
+    "agentbay: subagent analyst--improve: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-b000 '{}'": [
+    "deny",
+    "agentbay: subagent analyst--improve: `bay plan` takes only the taskId this agent was dispatched with"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-zzzz '{}'": [
+    "deny",
+    "agentbay: subagent analyst--improve: `bay plan` takes only the taskId this agent was dispatched with"
+   ],
+   "Bash ./.agentbay/bay plan T-bad '{}'": [
+    "deny",
+    "agentbay: subagent analyst--improve: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`"
+   ],
+   "Bash ./bay.sh call x.y '{}'": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash ./bay.sh check": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash .agentbay/bay approve C-1": [
+    "deny",
+    "agentbay: subagent analyst--improve may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash .agentbay/bay call forge.extend '{}'": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash .agentbay/bay plan T-20261031-a004 '{}'": [
+    "pass",
+    ""
+   ],
+   "Bash .agentbay/bay show C-1": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash .agentbay/roles/analyst--improve/use": [
+    "pass",
+    ""
+   ],
+   "Bash .agentbay/roles/analyst--improve/use --role x items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: the use shim takes no flags (got --role)"
+   ],
+   "Bash .agentbay/roles/analyst--improve/use improve.findings/v1.query '{}'; ls": [
+    "deny",
+    "agentbay: subagent analyst--improve: shell operator ';' is not allowed; run one command at a time"
+   ],
+   "Bash .agentbay/roles/analyst--improve/use items.store/v1.query '{}'": [
+    "pass",
+    ""
+   ],
+   "Bash .agentbay/roles/analyst--other/use items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash <project>/.agentbay/roles/analyst--improve/use items.store/v1.query '{}'": [
+    "pass",
+    ""
+   ],
+   "Bash bash -c ls": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash bay approve C-1": [
+    "deny",
+    "agentbay: subagent analyst--improve may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash bay.sh approve C-1": [
+    "deny",
+    "agentbay: subagent analyst--improve may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash cat '.agent''bay/guard.json'": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash cat ./bay.sh": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash cat .agentbay/guard.json": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash cat .claude/settings.json": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash cat .env": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash cat agentbay.conf''ig.yaml": [
+    "deny",
+    "agentbay: subagent analyst--improve may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash cat agentbay.config.*": [
+    "deny",
+    "agentbay: subagent analyst--improve may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash cat agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent analyst--improve may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash echo $(id)": [
+    "deny",
+    "agentbay: subagent analyst--improve: shell expansion ($ or `) is not allowed"
+   ],
+   "Bash echo `id`": [
+    "deny",
+    "agentbay: subagent analyst--improve: shell expansion ($ or `) is not allowed"
+   ],
+   "Bash echo x > agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent analyst--improve may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash git -C . status": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash git commit -m 'about bay approve'": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash git diff --ext-diff": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash git diff --no-index a b": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash git log --output=x": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash git show --textconv HEAD:x": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash git status": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash git worktree add -b nb wt/y": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash git worktree add ../x": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash git worktree add bay/wt": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash git worktree add wt/x": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash head -3 README.md": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash ls": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash ls 'unbalanced": [
+    "deny",
+    "agentbay: subagent analyst--improve: unbalanced quotes"
+   ],
+   "Bash ls -la": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash ls .a?entbay": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash ls .agent*": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash ls .agentbay": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash ls .claude": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash ls > out.txt": [
+    "deny",
+    "agentbay: subagent analyst--improve: shell operator '>' is not allowed; run one command at a time"
+   ],
+   "Bash ls | wc": [
+    "deny",
+    "agentbay: subagent analyst--improve: shell operator '|' is not allowed; run one command at a time"
+   ],
+   "Bash ls; cat x": [
+    "deny",
+    "agentbay: subagent analyst--improve: shell operator ';' is not allowed; run one command at a time"
+   ],
+   "Bash mkdir x": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash node -e 1": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash perl -e 1": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash python3 -c 'print(1)'": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash python3 -m bay.cli approve C-1": [
+    "deny",
+    "agentbay: subagent analyst--improve may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash python3 -m http.server": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash python3 bay/cli.py approve C-1": [
+    "deny",
+    "agentbay: subagent analyst--improve may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash python3 bay/cli.py check": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash python3 tests/run.py -q": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash python3 tests/run.py tests/test_improve.py": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash rm -rf x": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash ruby -e 1": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Bash sed -i s/a/b/ agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent analyst--improve may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash sh -c ls": [
+    "deny",
+    "agentbay: role analyst may only run: .agentbay/roles/analyst--improve/use via Bash. Use `.agentbay/roles/analyst--improve/use <capability>/v<N>.<endpoint> '<json>'` for data."
+   ],
+   "Edit bay/guard.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/bay/guard.py: outside the role's writable paths []"
+   ],
+   "Edit connector:fake/connector.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/connectors/fake/connector.yaml: outside the role's writable paths []"
+   ],
+   "Edit docs/DESIGN.md": [
+    "deny",
+    "agentbay: role analyst may not write <project>/docs/DESIGN.md: outside the role's writable paths []"
+   ],
+   "Edit env:workspace": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/envs/workspace.yaml: outside the role's writable paths []"
+   ],
+   "Edit mode:briefing/mode.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/modes/briefing/mode.yaml: outside the role's writable paths []"
+   ],
+   "Edit mode:improve/mode.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/modes/improve/mode.yaml: outside the role's writable paths []"
+   ],
+   "Edit src/app.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/src/app.py: outside the role's writable paths []"
+   ],
+   "Glob {\"path\": \"..\", \"pattern\": \"*\"}": [
+    "deny",
+    "agentbay: subagent analyst--improve may not search .agentbay/ (pattern *)"
+   ],
+   "Glob {\"pattern\": \"**/*.json\"}": [
+    "pass",
+    ""
+   ],
+   "Glob {\"pattern\": \".*\"}": [
+    "deny",
+    "agentbay: subagent analyst--improve may not search .agentbay/ (pattern .*)"
+   ],
+   "Glob {\"pattern\": \"../*\"}": [
+    "deny",
+    "agentbay: subagent analyst--improve may not glob dot-paths (../*) at the project root"
+   ],
+   "Glob {\"pattern\": \".agentbay/**\"}": [
+    "deny",
+    "agentbay: subagent analyst--improve may not search .agentbay/ (pattern .agentbay/**)"
+   ],
+   "Glob {\"pattern\": \"bay/*.py\"}": [
+    "pass",
+    ""
+   ],
+   "Grep {\"glob\": \".claude/*\", \"pattern\": \"x\"}": [
+    "deny",
+    "agentbay: subagent analyst--improve may not search .claude/ (pattern .claude/*)"
+   ],
+   "Grep {\"path\": \".agentbay\", \"pattern\": \"x\"}": [
+    "deny",
+    "agentbay: subagent analyst--improve may not access <project>/.agentbay (.agentbay/ is the control plane)"
+   ],
+   "Grep {\"path\": \"docs\", \"pattern\": \"x\"}": [
+    "pass",
+    ""
+   ],
+   "Grep {\"pattern\": \"x\"}": [
+    "pass",
+    ""
+   ],
+   "MultiEdit bay/guard.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/bay/guard.py: outside the role's writable paths []"
+   ],
+   "MultiEdit connector:fake/connector.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/connectors/fake/connector.yaml: outside the role's writable paths []"
+   ],
+   "MultiEdit docs/DESIGN.md": [
+    "deny",
+    "agentbay: role analyst may not write <project>/docs/DESIGN.md: outside the role's writable paths []"
+   ],
+   "MultiEdit env:workspace": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/envs/workspace.yaml: outside the role's writable paths []"
+   ],
+   "MultiEdit mode:briefing/mode.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/modes/briefing/mode.yaml: outside the role's writable paths []"
+   ],
+   "MultiEdit mode:improve/mode.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/modes/improve/mode.yaml: outside the role's writable paths []"
+   ],
+   "MultiEdit src/app.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/src/app.py: outside the role's writable paths []"
+   ],
+   "NotebookEdit mode:improve/n.ipynb": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/modes/improve/n.ipynb: outside the role's writable paths []"
+   ],
+   "NotebookEdit src/n.ipynb": [
+    "deny",
+    "agentbay: role analyst may not write <project>/src/n.ipynb: outside the role's writable paths []"
+   ],
+   "Read ../outside.txt": [
+    "deny",
+    "agentbay: role analyst may only read inside . (env fs.read)"
+   ],
+   "Read .agentbay/guard.json": [
+    "deny",
+    "agentbay: subagent analyst--improve may not access <project>/.agentbay/guard.json (.agentbay/ is the control plane)"
+   ],
+   "Read .claude/settings.json": [
+    "pass",
+    ""
+   ],
+   "Read .env": [
+    "pass",
+    ""
+   ],
+   "Read /etc/passwd": [
+    "deny",
+    "agentbay: role analyst may only read inside . (env fs.read)"
+   ],
+   "Read README.md": [
+    "pass",
+    ""
+   ],
+   "Read bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Read connector:ledger/ledger.py": [
+    "pass",
+    ""
+   ],
+   "Read docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "Read framework/roles/builder.yaml": [
+    "pass",
+    ""
+   ],
+   "Read mode:improve/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Read src/app.py": [
+    "pass",
+    ""
+   ],
+   "Read tests/helpers.py": [
+    "pass",
+    ""
+   ],
+   "WebFetch https://example.com": [
+    "pass",
+    ""
+   ],
+   "Write ../escape.py": [
+    "deny",
+    "agentbay: role analyst may not write <tmp>/escape.py: outside the role's writable paths []"
+   ],
+   "Write .agentbay/guard.json": [
+    "deny",
+    "agentbay: subagent analyst--improve may not access <project>/.agentbay/guard.json (.agentbay/ is the control plane)"
+   ],
+   "Write .claude/settings.json": [
+    "deny",
+    "agentbay: subagent analyst--improve may not write <project>/.claude/settings.json: .claude/ is never writable by agents"
+   ],
+   "Write .env": [
+    "deny",
+    "agentbay: subagent analyst--improve may not write <project>/.env: .env is never writable by agents (agent/tool configuration)"
+   ],
+   "Write .env.local": [
+    "deny",
+    "agentbay: subagent analyst--improve may not write <project>/.env.local: .env.local is never writable by agents (agent/tool configuration)"
+   ],
+   "Write .git/config": [
+    "deny",
+    "agentbay: subagent analyst--improve may not write <project>/.git/config: .git/ is never writable by agents"
+   ],
+   "Write .github/workflows/ci.yml": [
+    "deny",
+    "agentbay: subagent analyst--improve may not write <project>/.github/workflows/ci.yml: .github/workflows/ is never writable by agents"
+   ],
+   "Write .vscode/x.json": [
+    "deny",
+    "agentbay: subagent analyst--improve may not write <project>/.vscode/x.json: .vscode/ is never writable by agents"
+   ],
+   "Write /etc/passwd": [
+    "deny",
+    "agentbay: role analyst may not write /etc/passwd: outside the role's writable paths []"
+   ],
+   "Write <project>/bay/abs.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/bay/abs.py: outside the role's writable paths []"
+   ],
+   "Write <project>/src/abs.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/src/abs.py: outside the role's writable paths []"
+   ],
+   "Write BAY.SH": [
+    "deny",
+    "agentbay: role analyst may not write <project>/BAY.SH: outside the role's writable paths []"
+   ],
+   "Write Bay/guard.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/Bay/guard.py: outside the role's writable paths []"
+   ],
+   "Write CLAUDE.md": [
+    "deny",
+    "agentbay: subagent analyst--improve may not write <project>/CLAUDE.md: CLAUDE.md is never writable by agents (agent/tool configuration)"
+   ],
+   "Write HANDOFF.md": [
+    "deny",
+    "agentbay: role analyst may not write <project>/HANDOFF.md: outside the role's writable paths []"
+   ],
+   "Write Makefile": [
+    "deny",
+    "agentbay: subagent analyst--improve may not write <project>/Makefile: Makefile is never writable by agents (agent/tool configuration)"
+   ],
+   "Write README.md": [
+    "deny",
+    "agentbay: role analyst may not write <project>/README.md: outside the role's writable paths []"
+   ],
+   "Write adapters/claude-code/x.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/adapters/claude-code/x.py: outside the role's writable paths []"
+   ],
+   "Write adapters/x.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/adapters/x.yaml: outside the role's writable paths []"
+   ],
+   "Write agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent analyst--improve may not write <project>/agentbay.config.yaml: agentbay.config.yaml is never writable by agents (agent/tool configuration)"
+   ],
+   "Write bay.sh": [
+    "deny",
+    "agentbay: subagent analyst--improve may not write <project>/bay.sh: bay.sh is never writable by agents (agent/tool configuration)"
+   ],
+   "Write bay/../bay/guard.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/bay/guard.py: outside the role's writable paths []"
+   ],
+   "Write bay/brand_new.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/bay/brand_new.py: outside the role's writable paths []"
+   ],
+   "Write bay/guard.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/bay/guard.py: outside the role's writable paths []"
+   ],
+   "Write bay/improve/pipeline.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/bay/improve/pipeline.py: outside the role's writable paths []"
+   ],
+   "Write connector:artifact-graph/artifact_graph.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/connectors/artifact-graph/artifact_graph.py: outside the role's writable paths []"
+   ],
+   "Write connector:brand-new/x.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/connectors/brand-new/x.py: outside the role's writable paths []"
+   ],
+   "Write connector:claude-transcripts/connector.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/connectors/claude-transcripts/connector.yaml: outside the role's writable paths []"
+   ],
+   "Write connector:corpus-store/connector.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/connectors/corpus-store/connector.yaml: outside the role's writable paths []"
+   ],
+   "Write connector:fake/connector.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/connectors/fake/connector.yaml: outside the role's writable paths []"
+   ],
+   "Write connector:git/git_history.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/connectors/git/git_history.py: outside the role's writable paths []"
+   ],
+   "Write connector:gmail-api/connector.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/connectors/gmail-api/connector.yaml: outside the role's writable paths []"
+   ],
+   "Write connector:improve-detect/connector.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/connectors/improve-detect/connector.yaml: outside the role's writable paths []"
+   ],
+   "Write connector:improve-store/connector.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/connectors/improve-store/connector.yaml: outside the role's writable paths []"
+   ],
+   "Write connector:improve-store/improve_store.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/connectors/improve-store/improve_store.py: outside the role's writable paths []"
+   ],
+   "Write connector:ledger/ledger.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/connectors/ledger/ledger.py: outside the role's writable paths []"
+   ],
+   "Write connector:scaffold/scaffold.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/connectors/scaffold/scaffold.py: outside the role's writable paths []"
+   ],
+   "Write connector:workflow-runner/workflow_runner.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/connectors/workflow-runner/workflow_runner.py: outside the role's writable paths []"
+   ],
+   "Write content-types/x/y.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/content-types/x/y.py: outside the role's writable paths []"
+   ],
+   "Write docs/DESIGN.md": [
+    "deny",
+    "agentbay: role analyst may not write <project>/docs/DESIGN.md: outside the role's writable paths []"
+   ],
+   "Write env:brand-new": [
+    "deny",
+    "agentbay: role analyst may not write <project>/envs/brand-new.yaml: outside the role's writable paths []"
+   ],
+   "Write env:cos-local": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/envs/cos-local.yaml: outside the role's writable paths []"
+   ],
+   "Write env:framework-dev": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/envs/framework-dev.yaml: outside the role's writable paths []"
+   ],
+   "Write env:improve-local": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/envs/improve-local.yaml: outside the role's writable paths []"
+   ],
+   "Write env:local-authoring": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/envs/local-authoring.yaml: outside the role's writable paths []"
+   ],
+   "Write env:local-feeds": [
+    "deny",
+    "agentbay: role analyst may not write <project>/envs/local-feeds.yaml: outside the role's writable paths []"
+   ],
+   "Write env:research": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/envs/research.yaml: outside the role's writable paths []"
+   ],
+   "Write env:workspace": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/envs/workspace.yaml: outside the role's writable paths []"
+   ],
+   "Write framework/components.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/components.yaml: outside the role's writable paths []"
+   ],
+   "Write framework/interfaces/x.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/interfaces/x.yaml: outside the role's writable paths []"
+   ],
+   "Write framework/roles/x.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/roles/x.yaml: outside the role's writable paths []"
+   ],
+   "Write framework/rules/x.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/rules/x.yaml: outside the role's writable paths []"
+   ],
+   "Write mode:brand-new/mode.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/modes/brand-new/mode.yaml: outside the role's writable paths []"
+   ],
+   "Write mode:briefing/mode.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/modes/briefing/mode.yaml: outside the role's writable paths []"
+   ],
+   "Write mode:cos/mode.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/modes/cos/mode.yaml: outside the role's writable paths []"
+   ],
+   "Write mode:delivery/mode.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/modes/delivery/mode.yaml: outside the role's writable paths []"
+   ],
+   "Write mode:feed-briefing/mode.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/modes/feed-briefing/mode.yaml: outside the role's writable paths []"
+   ],
+   "Write mode:forge/features/create/playbook.md": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/modes/forge/features/create/playbook.md: outside the role's writable paths []"
+   ],
+   "Write mode:forge/mode.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/modes/forge/mode.yaml: outside the role's writable paths []"
+   ],
+   "Write mode:improve/README.md": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/modes/improve/README.md: outside the role's writable paths []"
+   ],
+   "Write mode:improve/features/scan/playbook.md": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/modes/improve/features/scan/playbook.md: outside the role's writable paths []"
+   ],
+   "Write mode:improve/mode.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/framework/modes/improve/mode.yaml: outside the role's writable paths []"
+   ],
+   "Write mode:mail-briefing/mode.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/modes/mail-briefing/mode.yaml: outside the role's writable paths []"
+   ],
+   "Write modes/x.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/modes/x.yaml: outside the role's writable paths []"
+   ],
+   "Write roles/x.yaml": [
+    "deny",
+    "agentbay: role analyst may not write <project>/roles/x.yaml: outside the role's writable paths []"
+   ],
+   "Write schemas/x.json": [
+    "deny",
+    "agentbay: role analyst may not write <project>/schemas/x.json: outside the role's writable paths []"
+   ],
+   "Write src/../bay/guard.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/bay/guard.py: outside the role's writable paths []"
+   ],
+   "Write src/app.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/src/app.py: outside the role's writable paths []"
+   ],
+   "Write tests/test_x.py": [
+    "deny",
+    "agentbay: role analyst may not write <project>/tests/test_x.py: outside the role's writable paths []"
+   ]
+  },
+  "builder--delivery": {
+   "Bash ": [
+    "deny",
+    "agentbay: subagent builder--delivery: empty command"
+   ],
+   "Bash ./.agentbay/bay approve C-1": [
+    "deny",
+    "agentbay: subagent builder--delivery may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a000": [
+    "deny",
+    "agentbay: subagent builder--delivery: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a000 '{}'": [
+    "pass",
+    ""
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a000 --done 1": [
+    "pass",
+    ""
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a000 --force": [
+    "deny",
+    "agentbay: subagent builder--delivery: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-b000 '{}'": [
+    "deny",
+    "agentbay: subagent builder--delivery: `bay plan` takes only the taskId this agent was dispatched with"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-zzzz '{}'": [
+    "deny",
+    "agentbay: subagent builder--delivery: `bay plan` takes only the taskId this agent was dispatched with"
+   ],
+   "Bash ./.agentbay/bay plan T-bad '{}'": [
+    "deny",
+    "agentbay: subagent builder--delivery: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`"
+   ],
+   "Bash ./bay.sh call x.y '{}'": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash ./bay.sh check": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash .agentbay/bay approve C-1": [
+    "deny",
+    "agentbay: subagent builder--delivery may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash .agentbay/bay call forge.extend '{}'": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash .agentbay/bay plan T-20261031-a000 '{}'": [
+    "pass",
+    ""
+   ],
+   "Bash .agentbay/bay show C-1": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash .agentbay/roles/analyst--other/use items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash .agentbay/roles/builder--delivery/use": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash .agentbay/roles/builder--delivery/use --role x items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash .agentbay/roles/builder--delivery/use improve.findings/v1.query '{}'; ls": [
+    "deny",
+    "agentbay: subagent builder--delivery: shell operator ';' is not allowed; run one command at a time"
+   ],
+   "Bash .agentbay/roles/builder--delivery/use items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash <project>/.agentbay/roles/builder--delivery/use items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash bash -c ls": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash bay approve C-1": [
+    "deny",
+    "agentbay: subagent builder--delivery may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash bay.sh approve C-1": [
+    "deny",
+    "agentbay: subagent builder--delivery may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash cat '.agent''bay/guard.json'": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash cat ./bay.sh": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash cat .agentbay/guard.json": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash cat .claude/settings.json": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash cat .env": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash cat agentbay.conf''ig.yaml": [
+    "deny",
+    "agentbay: subagent builder--delivery may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash cat agentbay.config.*": [
+    "deny",
+    "agentbay: subagent builder--delivery may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash cat agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent builder--delivery may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash echo $(id)": [
+    "deny",
+    "agentbay: subagent builder--delivery: shell expansion ($ or `) is not allowed"
+   ],
+   "Bash echo `id`": [
+    "deny",
+    "agentbay: subagent builder--delivery: shell expansion ($ or `) is not allowed"
+   ],
+   "Bash echo x > agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent builder--delivery may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash git -C . status": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash git commit -m 'about bay approve'": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash git diff --ext-diff": [
+    "deny",
+    "agentbay: git flag --ext-diff is not allowed (it writes or reads files or runs programs)"
+   ],
+   "Bash git diff --no-index a b": [
+    "deny",
+    "agentbay: git flag --no-index is not allowed (it writes or reads files or runs programs)"
+   ],
+   "Bash git log --output=x": [
+    "deny",
+    "agentbay: git flag --output=x is not allowed (it writes or reads files or runs programs)"
+   ],
+   "Bash git show --textconv HEAD:x": [
+    "deny",
+    "agentbay: git flag --textconv is not allowed (it writes or reads files or runs programs)"
+   ],
+   "Bash git status": [
+    "pass",
+    ""
+   ],
+   "Bash git worktree add -b nb wt/y": [
+    "pass",
+    ""
+   ],
+   "Bash git worktree add ../x": [
+    "deny",
+    "agentbay: git worktree add needs a relative path inside the project"
+   ],
+   "Bash git worktree add bay/wt": [
+    "deny",
+    "agentbay: git worktree add bay/wt: bay/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Bash git worktree add wt/x": [
+    "pass",
+    ""
+   ],
+   "Bash head -3 README.md": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash ls": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash ls 'unbalanced": [
+    "deny",
+    "agentbay: subagent builder--delivery: unbalanced quotes"
+   ],
+   "Bash ls -la": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash ls .a?entbay": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash ls .agent*": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash ls .agentbay": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash ls .claude": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash ls > out.txt": [
+    "deny",
+    "agentbay: subagent builder--delivery: shell operator '>' is not allowed; run one command at a time"
+   ],
+   "Bash ls | wc": [
+    "deny",
+    "agentbay: subagent builder--delivery: shell operator '|' is not allowed; run one command at a time"
+   ],
+   "Bash ls; cat x": [
+    "deny",
+    "agentbay: subagent builder--delivery: shell operator ';' is not allowed; run one command at a time"
+   ],
+   "Bash mkdir x": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash node -e 1": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash perl -e 1": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash python3 -c 'print(1)'": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash python3 -m bay.cli approve C-1": [
+    "deny",
+    "agentbay: subagent builder--delivery may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash python3 -m http.server": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash python3 bay/cli.py approve C-1": [
+    "deny",
+    "agentbay: subagent builder--delivery may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash python3 bay/cli.py check": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash python3 tests/run.py -q": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash python3 tests/run.py tests/test_improve.py": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash rm -rf x": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash ruby -e 1": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Bash sed -i s/a/b/ agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent builder--delivery may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash sh -c ls": [
+    "deny",
+    "agentbay: role builder may only run: git status, git diff, git log, git add, git worktree, git show via Bash."
+   ],
+   "Edit bay/guard.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/bay/guard.py: bay/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Edit connector:fake/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Edit docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "Edit env:workspace": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/envs/workspace.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Edit mode:briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Edit mode:improve/mode.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/improve/mode.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Edit src/app.py": [
+    "pass",
+    ""
+   ],
+   "Glob {\"path\": \"..\", \"pattern\": \"*\"}": [
+    "deny",
+    "agentbay: subagent builder--delivery may not search .agentbay/ (pattern *)"
+   ],
+   "Glob {\"pattern\": \"**/*.json\"}": [
+    "pass",
+    ""
+   ],
+   "Glob {\"pattern\": \".*\"}": [
+    "deny",
+    "agentbay: subagent builder--delivery may not search .agentbay/ (pattern .*)"
+   ],
+   "Glob {\"pattern\": \"../*\"}": [
+    "deny",
+    "agentbay: subagent builder--delivery may not glob dot-paths (../*) at the project root"
+   ],
+   "Glob {\"pattern\": \".agentbay/**\"}": [
+    "deny",
+    "agentbay: subagent builder--delivery may not search .agentbay/ (pattern .agentbay/**)"
+   ],
+   "Glob {\"pattern\": \"bay/*.py\"}": [
+    "pass",
+    ""
+   ],
+   "Grep {\"glob\": \".claude/*\", \"pattern\": \"x\"}": [
+    "deny",
+    "agentbay: subagent builder--delivery may not search .claude/ (pattern .claude/*)"
+   ],
+   "Grep {\"path\": \".agentbay\", \"pattern\": \"x\"}": [
+    "deny",
+    "agentbay: subagent builder--delivery may not access <project>/.agentbay (.agentbay/ is the control plane)"
+   ],
+   "Grep {\"path\": \"docs\", \"pattern\": \"x\"}": [
+    "pass",
+    ""
+   ],
+   "Grep {\"pattern\": \"x\"}": [
+    "pass",
+    ""
+   ],
+   "MultiEdit bay/guard.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/bay/guard.py: bay/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "MultiEdit connector:fake/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "MultiEdit docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "MultiEdit env:workspace": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/envs/workspace.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "MultiEdit mode:briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "MultiEdit mode:improve/mode.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/improve/mode.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "MultiEdit src/app.py": [
+    "pass",
+    ""
+   ],
+   "NotebookEdit mode:improve/n.ipynb": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/improve/n.ipynb: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "NotebookEdit src/n.ipynb": [
+    "pass",
+    ""
+   ],
+   "Read ../outside.txt": [
+    "deny",
+    "agentbay: role builder may only read inside . (env fs.read)"
+   ],
+   "Read .agentbay/guard.json": [
+    "deny",
+    "agentbay: subagent builder--delivery may not access <project>/.agentbay/guard.json (.agentbay/ is the control plane)"
+   ],
+   "Read .claude/settings.json": [
+    "pass",
+    ""
+   ],
+   "Read .env": [
+    "pass",
+    ""
+   ],
+   "Read /etc/passwd": [
+    "deny",
+    "agentbay: role builder may only read inside . (env fs.read)"
+   ],
+   "Read README.md": [
+    "pass",
+    ""
+   ],
+   "Read bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Read connector:ledger/ledger.py": [
+    "pass",
+    ""
+   ],
+   "Read docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "Read framework/roles/builder.yaml": [
+    "pass",
+    ""
+   ],
+   "Read mode:improve/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Read src/app.py": [
+    "pass",
+    ""
+   ],
+   "Read tests/helpers.py": [
+    "pass",
+    ""
+   ],
+   "WebFetch https://example.com": [
+    "pass",
+    ""
+   ],
+   "Write ../escape.py": [
+    "deny",
+    "agentbay: role builder may not write <tmp>/escape.py: outside the role's writable paths ['.']"
+   ],
+   "Write .agentbay/guard.json": [
+    "deny",
+    "agentbay: subagent builder--delivery may not access <project>/.agentbay/guard.json (.agentbay/ is the control plane)"
+   ],
+   "Write .claude/settings.json": [
+    "deny",
+    "agentbay: subagent builder--delivery may not write <project>/.claude/settings.json: .claude/ is never writable by agents"
+   ],
+   "Write .env": [
+    "deny",
+    "agentbay: subagent builder--delivery may not write <project>/.env: .env is never writable by agents (agent/tool configuration)"
+   ],
+   "Write .env.local": [
+    "deny",
+    "agentbay: subagent builder--delivery may not write <project>/.env.local: .env.local is never writable by agents (agent/tool configuration)"
+   ],
+   "Write .git/config": [
+    "deny",
+    "agentbay: subagent builder--delivery may not write <project>/.git/config: .git/ is never writable by agents"
+   ],
+   "Write .github/workflows/ci.yml": [
+    "deny",
+    "agentbay: subagent builder--delivery may not write <project>/.github/workflows/ci.yml: .github/workflows/ is never writable by agents"
+   ],
+   "Write .vscode/x.json": [
+    "deny",
+    "agentbay: subagent builder--delivery may not write <project>/.vscode/x.json: .vscode/ is never writable by agents"
+   ],
+   "Write /etc/passwd": [
+    "deny",
+    "agentbay: role builder may not write /etc/passwd: outside the role's writable paths ['.']"
+   ],
+   "Write <project>/bay/abs.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/bay/abs.py: bay/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write <project>/src/abs.py": [
+    "pass",
+    ""
+   ],
+   "Write BAY.SH": [
+    "pass",
+    ""
+   ],
+   "Write Bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Write CLAUDE.md": [
+    "deny",
+    "agentbay: subagent builder--delivery may not write <project>/CLAUDE.md: CLAUDE.md is never writable by agents (agent/tool configuration)"
+   ],
+   "Write HANDOFF.md": [
+    "pass",
+    ""
+   ],
+   "Write Makefile": [
+    "deny",
+    "agentbay: subagent builder--delivery may not write <project>/Makefile: Makefile is never writable by agents (agent/tool configuration)"
+   ],
+   "Write README.md": [
+    "pass",
+    ""
+   ],
+   "Write adapters/claude-code/x.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/adapters/claude-code/x.py: adapters/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write adapters/x.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/adapters/x.yaml: adapters/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent builder--delivery may not write <project>/agentbay.config.yaml: agentbay.config.yaml is never writable by agents (agent/tool configuration)"
+   ],
+   "Write bay.sh": [
+    "deny",
+    "agentbay: subagent builder--delivery may not write <project>/bay.sh: bay.sh is never writable by agents (agent/tool configuration)"
+   ],
+   "Write bay/../bay/guard.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/bay/guard.py: bay/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write bay/brand_new.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/bay/brand_new.py: bay/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write bay/guard.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/bay/guard.py: bay/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write bay/improve/pipeline.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/bay/improve/pipeline.py: bay/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write connector:artifact-graph/artifact_graph.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/artifact-graph/artifact_graph.py: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write connector:brand-new/x.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:claude-transcripts/connector.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/claude-transcripts/connector.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write connector:corpus-store/connector.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/corpus-store/connector.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write connector:fake/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:git/git_history.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/git/git_history.py: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write connector:gmail-api/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:improve-detect/connector.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/improve-detect/connector.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write connector:improve-store/connector.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/improve-store/connector.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write connector:improve-store/improve_store.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/improve-store/improve_store.py: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write connector:ledger/ledger.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/ledger/ledger.py: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write connector:scaffold/scaffold.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/scaffold/scaffold.py: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write connector:workflow-runner/workflow_runner.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/workflow-runner/workflow_runner.py: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write content-types/x/y.py": [
+    "pass",
+    ""
+   ],
+   "Write docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "Write env:brand-new": [
+    "pass",
+    ""
+   ],
+   "Write env:cos-local": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/envs/cos-local.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write env:framework-dev": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/envs/framework-dev.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write env:improve-local": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/envs/improve-local.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write env:local-authoring": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/envs/local-authoring.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write env:local-feeds": [
+    "pass",
+    ""
+   ],
+   "Write env:research": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/envs/research.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write env:workspace": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/envs/workspace.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write framework/components.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/components.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write framework/interfaces/x.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/interfaces/x.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write framework/roles/x.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/roles/x.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write framework/rules/x.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/rules/x.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write mode:brand-new/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:cos/mode.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/cos/mode.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write mode:delivery/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:feed-briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:forge/features/create/playbook.md": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/forge/features/create/playbook.md: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write mode:forge/mode.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/forge/mode.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write mode:improve/README.md": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/improve/README.md: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write mode:improve/features/scan/playbook.md": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/improve/features/scan/playbook.md: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write mode:improve/mode.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/improve/mode.yaml: framework/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write mode:mail-briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write modes/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write roles/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write schemas/x.json": [
+    "deny",
+    "agentbay: role builder may not write <project>/schemas/x.json: schemas/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write src/../bay/guard.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/bay/guard.py: bay/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+   ],
+   "Write src/app.py": [
+    "pass",
+    ""
+   ],
+   "Write tests/test_x.py": [
+    "pass",
+    ""
+   ]
+  },
+  "builder--forge--framework-dev": {
+   "Bash ": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev: empty command"
+   ],
+   "Bash ./.agentbay/bay approve C-1": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a000 '{}'": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev: `bay plan` takes only the taskId this agent was dispatched with"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a002": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a002 '{}'": [
+    "pass",
+    ""
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a002 --done 1": [
+    "pass",
+    ""
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a002 --force": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-b000 '{}'": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev: `bay plan` takes only the taskId this agent was dispatched with"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-zzzz '{}'": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev: `bay plan` takes only the taskId this agent was dispatched with"
+   ],
+   "Bash ./.agentbay/bay plan T-bad '{}'": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`"
+   ],
+   "Bash ./bay.sh call x.y '{}'": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash ./bay.sh check": [
+    "pass",
+    ""
+   ],
+   "Bash .agentbay/bay approve C-1": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash .agentbay/bay call forge.extend '{}'": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash .agentbay/bay plan T-20261031-a002 '{}'": [
+    "pass",
+    ""
+   ],
+   "Bash .agentbay/bay show C-1": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash .agentbay/roles/analyst--other/use items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash .agentbay/roles/builder--forge--framework-dev/use": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash .agentbay/roles/builder--forge--framework-dev/use --role x items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash .agentbay/roles/builder--forge--framework-dev/use improve.findings/v1.query '{}'; ls": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev: shell operator ';' is not allowed; run one command at a time"
+   ],
+   "Bash .agentbay/roles/builder--forge--framework-dev/use items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash <project>/.agentbay/roles/builder--forge--framework-dev/use items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash bash -c ls": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash bay approve C-1": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash bay.sh approve C-1": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash cat '.agent''bay/guard.json'": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash cat ./bay.sh": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash cat .agentbay/guard.json": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash cat .claude/settings.json": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash cat .env": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash cat agentbay.conf''ig.yaml": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash cat agentbay.config.*": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash cat agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash echo $(id)": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev: shell expansion ($ or `) is not allowed"
+   ],
+   "Bash echo `id`": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev: shell expansion ($ or `) is not allowed"
+   ],
+   "Bash echo x > agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash git -C . status": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash git commit -m 'about bay approve'": [
+    "pass",
+    ""
+   ],
+   "Bash git diff --ext-diff": [
+    "deny",
+    "agentbay: git flag --ext-diff is not allowed (it writes or reads files or runs programs)"
+   ],
+   "Bash git diff --no-index a b": [
+    "deny",
+    "agentbay: git flag --no-index is not allowed (it writes or reads files or runs programs)"
+   ],
+   "Bash git log --output=x": [
+    "deny",
+    "agentbay: git flag --output=x is not allowed (it writes or reads files or runs programs)"
+   ],
+   "Bash git show --textconv HEAD:x": [
+    "deny",
+    "agentbay: git flag --textconv is not allowed (it writes or reads files or runs programs)"
+   ],
+   "Bash git status": [
+    "pass",
+    ""
+   ],
+   "Bash git worktree add -b nb wt/y": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash git worktree add ../x": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash git worktree add bay/wt": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash git worktree add wt/x": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash head -3 README.md": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash ls": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash ls 'unbalanced": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev: unbalanced quotes"
+   ],
+   "Bash ls -la": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash ls .a?entbay": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash ls .agent*": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash ls .agentbay": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash ls .claude": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash ls > out.txt": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev: shell operator '>' is not allowed; run one command at a time"
+   ],
+   "Bash ls | wc": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev: shell operator '|' is not allowed; run one command at a time"
+   ],
+   "Bash ls; cat x": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev: shell operator ';' is not allowed; run one command at a time"
+   ],
+   "Bash mkdir x": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash node -e 1": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash perl -e 1": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash python3 -c 'print(1)'": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash python3 -m bay.cli approve C-1": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash python3 -m http.server": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash python3 bay/cli.py approve C-1": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash python3 bay/cli.py check": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash python3 tests/run.py -q": [
+    "pass",
+    ""
+   ],
+   "Bash python3 tests/run.py tests/test_improve.py": [
+    "pass",
+    ""
+   ],
+   "Bash rm -rf x": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash ruby -e 1": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Bash sed -i s/a/b/ agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash sh -c ls": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit, git show via Bash."
+   ],
+   "Edit bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Edit connector:fake/connector.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/connectors/fake/connector.yaml: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Edit docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "Edit env:workspace": [
+    "pass",
+    ""
+   ],
+   "Edit mode:briefing/mode.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/modes/briefing/mode.yaml: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Edit mode:improve/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Edit src/app.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/src/app.py: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Glob {\"path\": \"..\", \"pattern\": \"*\"}": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not search .agentbay/ (pattern *)"
+   ],
+   "Glob {\"pattern\": \"**/*.json\"}": [
+    "pass",
+    ""
+   ],
+   "Glob {\"pattern\": \".*\"}": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not search .agentbay/ (pattern .*)"
+   ],
+   "Glob {\"pattern\": \"../*\"}": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not glob dot-paths (../*) at the project root"
+   ],
+   "Glob {\"pattern\": \".agentbay/**\"}": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not search .agentbay/ (pattern .agentbay/**)"
+   ],
+   "Glob {\"pattern\": \"bay/*.py\"}": [
+    "pass",
+    ""
+   ],
+   "Grep {\"glob\": \".claude/*\", \"pattern\": \"x\"}": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not search .claude/ (pattern .claude/*)"
+   ],
+   "Grep {\"path\": \".agentbay\", \"pattern\": \"x\"}": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not access <project>/.agentbay (.agentbay/ is the control plane)"
+   ],
+   "Grep {\"path\": \"docs\", \"pattern\": \"x\"}": [
+    "pass",
+    ""
+   ],
+   "Grep {\"pattern\": \"x\"}": [
+    "pass",
+    ""
+   ],
+   "MultiEdit bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "MultiEdit connector:fake/connector.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/connectors/fake/connector.yaml: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "MultiEdit docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "MultiEdit env:workspace": [
+    "pass",
+    ""
+   ],
+   "MultiEdit mode:briefing/mode.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/modes/briefing/mode.yaml: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "MultiEdit mode:improve/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "MultiEdit src/app.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/src/app.py: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "NotebookEdit mode:improve/n.ipynb": [
+    "pass",
+    ""
+   ],
+   "NotebookEdit src/n.ipynb": [
+    "deny",
+    "agentbay: role builder may not write <project>/src/n.ipynb: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Read ../outside.txt": [
+    "deny",
+    "agentbay: role builder may only read inside . (env fs.read)"
+   ],
+   "Read .agentbay/guard.json": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not access <project>/.agentbay/guard.json (.agentbay/ is the control plane)"
+   ],
+   "Read .claude/settings.json": [
+    "pass",
+    ""
+   ],
+   "Read .env": [
+    "pass",
+    ""
+   ],
+   "Read /etc/passwd": [
+    "deny",
+    "agentbay: role builder may only read inside . (env fs.read)"
+   ],
+   "Read README.md": [
+    "pass",
+    ""
+   ],
+   "Read bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Read connector:ledger/ledger.py": [
+    "pass",
+    ""
+   ],
+   "Read docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "Read framework/roles/builder.yaml": [
+    "pass",
+    ""
+   ],
+   "Read mode:improve/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Read src/app.py": [
+    "pass",
+    ""
+   ],
+   "Read tests/helpers.py": [
+    "pass",
+    ""
+   ],
+   "WebFetch https://example.com": [
+    "pass",
+    ""
+   ],
+   "Write ../escape.py": [
+    "deny",
+    "agentbay: role builder may not write <tmp>/escape.py: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write .agentbay/guard.json": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not access <project>/.agentbay/guard.json (.agentbay/ is the control plane)"
+   ],
+   "Write .claude/settings.json": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not write <project>/.claude/settings.json: .claude/ is never writable by agents"
+   ],
+   "Write .env": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not write <project>/.env: .env is never writable by agents (agent/tool configuration)"
+   ],
+   "Write .env.local": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not write <project>/.env.local: .env.local is never writable by agents (agent/tool configuration)"
+   ],
+   "Write .git/config": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not write <project>/.git/config: .git/ is never writable by agents"
+   ],
+   "Write .github/workflows/ci.yml": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not write <project>/.github/workflows/ci.yml: .github/workflows/ is never writable by agents"
+   ],
+   "Write .vscode/x.json": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not write <project>/.vscode/x.json: .vscode/ is never writable by agents"
+   ],
+   "Write /etc/passwd": [
+    "deny",
+    "agentbay: role builder may not write /etc/passwd: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write <project>/bay/abs.py": [
+    "pass",
+    ""
+   ],
+   "Write <project>/src/abs.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/src/abs.py: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write BAY.SH": [
+    "deny",
+    "agentbay: role builder may not write <project>/BAY.SH: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write Bay/guard.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/Bay/guard.py: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write CLAUDE.md": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not write <project>/CLAUDE.md: CLAUDE.md is never writable by agents (agent/tool configuration)"
+   ],
+   "Write HANDOFF.md": [
+    "deny",
+    "agentbay: role builder may not write <project>/HANDOFF.md: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write Makefile": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not write <project>/Makefile: Makefile is never writable by agents (agent/tool configuration)"
+   ],
+   "Write README.md": [
+    "deny",
+    "agentbay: role builder may not write <project>/README.md: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write adapters/claude-code/x.py": [
+    "pass",
+    ""
+   ],
+   "Write adapters/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not write <project>/agentbay.config.yaml: agentbay.config.yaml is never writable by agents (agent/tool configuration)"
+   ],
+   "Write bay.sh": [
+    "deny",
+    "agentbay: subagent builder--forge--framework-dev may not write <project>/bay.sh: bay.sh is never writable by agents (agent/tool configuration)"
+   ],
+   "Write bay/../bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Write bay/brand_new.py": [
+    "pass",
+    ""
+   ],
+   "Write bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Write bay/improve/pipeline.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:artifact-graph/artifact_graph.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:brand-new/x.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/connectors/brand-new/x.py: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write connector:claude-transcripts/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:corpus-store/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:fake/connector.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/connectors/fake/connector.yaml: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write connector:git/git_history.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:gmail-api/connector.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/connectors/gmail-api/connector.yaml: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write connector:improve-detect/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:improve-store/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:improve-store/improve_store.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:ledger/ledger.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:scaffold/scaffold.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:workflow-runner/workflow_runner.py": [
+    "pass",
+    ""
+   ],
+   "Write content-types/x/y.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/content-types/x/y.py: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "Write env:brand-new": [
+    "deny",
+    "agentbay: role builder may not write <project>/envs/brand-new.yaml: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write env:cos-local": [
+    "pass",
+    ""
+   ],
+   "Write env:framework-dev": [
+    "pass",
+    ""
+   ],
+   "Write env:improve-local": [
+    "pass",
+    ""
+   ],
+   "Write env:local-authoring": [
+    "pass",
+    ""
+   ],
+   "Write env:local-feeds": [
+    "deny",
+    "agentbay: role builder may not write <project>/envs/local-feeds.yaml: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write env:research": [
+    "pass",
+    ""
+   ],
+   "Write env:workspace": [
+    "pass",
+    ""
+   ],
+   "Write framework/components.yaml": [
+    "pass",
+    ""
+   ],
+   "Write framework/interfaces/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write framework/roles/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write framework/rules/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:brand-new/mode.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/modes/brand-new/mode.yaml: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write mode:briefing/mode.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/modes/briefing/mode.yaml: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write mode:cos/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:delivery/mode.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/modes/delivery/mode.yaml: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write mode:feed-briefing/mode.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/modes/feed-briefing/mode.yaml: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write mode:forge/features/create/playbook.md": [
+    "pass",
+    ""
+   ],
+   "Write mode:forge/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:improve/README.md": [
+    "pass",
+    ""
+   ],
+   "Write mode:improve/features/scan/playbook.md": [
+    "pass",
+    ""
+   ],
+   "Write mode:improve/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:mail-briefing/mode.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/modes/mail-briefing/mode.yaml: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write modes/x.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/modes/x.yaml: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write roles/x.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/roles/x.yaml: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write schemas/x.json": [
+    "pass",
+    ""
+   ],
+   "Write src/../bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Write src/app.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/src/app.py: outside the role's writable paths ['framework', 'bay', 'schemas', 'adapters', 'docs', 'tests']"
+   ],
+   "Write tests/test_x.py": [
+    "pass",
+    ""
+   ]
+  },
+  "builder--forge--local-authoring": {
+   "Bash ": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring: empty command"
+   ],
+   "Bash ./.agentbay/bay approve C-1": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a000 '{}'": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring: `bay plan` takes only the taskId this agent was dispatched with"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a001": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a001 '{}'": [
+    "pass",
+    ""
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a001 --done 1": [
+    "pass",
+    ""
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a001 --force": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-b000 '{}'": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring: `bay plan` takes only the taskId this agent was dispatched with"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-zzzz '{}'": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring: `bay plan` takes only the taskId this agent was dispatched with"
+   ],
+   "Bash ./.agentbay/bay plan T-bad '{}'": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`"
+   ],
+   "Bash ./bay.sh call x.y '{}'": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ./bay.sh check": [
+    "pass",
+    ""
+   ],
+   "Bash .agentbay/bay approve C-1": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash .agentbay/bay call forge.extend '{}'": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash .agentbay/bay plan T-20261031-a001 '{}'": [
+    "pass",
+    ""
+   ],
+   "Bash .agentbay/bay show C-1": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash .agentbay/roles/analyst--other/use items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash .agentbay/roles/builder--forge--local-authoring/use": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash .agentbay/roles/builder--forge--local-authoring/use --role x items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash .agentbay/roles/builder--forge--local-authoring/use improve.findings/v1.query '{}'; ls": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring: shell operator ';' is not allowed; run one command at a time"
+   ],
+   "Bash .agentbay/roles/builder--forge--local-authoring/use items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash <project>/.agentbay/roles/builder--forge--local-authoring/use items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash bash -c ls": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash bay approve C-1": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash bay.sh approve C-1": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash cat '.agent''bay/guard.json'": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash cat ./bay.sh": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash cat .agentbay/guard.json": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash cat .claude/settings.json": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash cat .env": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash cat agentbay.conf''ig.yaml": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash cat agentbay.config.*": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash cat agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash echo $(id)": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring: shell expansion ($ or `) is not allowed"
+   ],
+   "Bash echo `id`": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring: shell expansion ($ or `) is not allowed"
+   ],
+   "Bash echo x > agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash git -C . status": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash git commit -m 'about bay approve'": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash git diff --ext-diff": [
+    "deny",
+    "agentbay: git flag --ext-diff is not allowed (it writes or reads files or runs programs)"
+   ],
+   "Bash git diff --no-index a b": [
+    "deny",
+    "agentbay: git flag --no-index is not allowed (it writes or reads files or runs programs)"
+   ],
+   "Bash git log --output=x": [
+    "deny",
+    "agentbay: git flag --output=x is not allowed (it writes or reads files or runs programs)"
+   ],
+   "Bash git show --textconv HEAD:x": [
+    "deny",
+    "agentbay: git flag --textconv is not allowed (it writes or reads files or runs programs)"
+   ],
+   "Bash git status": [
+    "pass",
+    ""
+   ],
+   "Bash git worktree add -b nb wt/y": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash git worktree add ../x": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash git worktree add bay/wt": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash git worktree add wt/x": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash head -3 README.md": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ls": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ls 'unbalanced": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring: unbalanced quotes"
+   ],
+   "Bash ls -la": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ls .a?entbay": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ls .agent*": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ls .agentbay": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ls .claude": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ls > out.txt": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring: shell operator '>' is not allowed; run one command at a time"
+   ],
+   "Bash ls | wc": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring: shell operator '|' is not allowed; run one command at a time"
+   ],
+   "Bash ls; cat x": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring: shell operator ';' is not allowed; run one command at a time"
+   ],
+   "Bash mkdir x": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash node -e 1": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash perl -e 1": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash python3 -c 'print(1)'": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash python3 -m bay.cli approve C-1": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash python3 -m http.server": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash python3 bay/cli.py approve C-1": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash python3 bay/cli.py check": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash python3 tests/run.py -q": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash python3 tests/run.py tests/test_improve.py": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash rm -rf x": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ruby -e 1": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Bash sed -i s/a/b/ agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash sh -c ls": [
+    "deny",
+    "agentbay: role builder may only run: ./bay.sh check, git status, git diff, git log, git show via Bash."
+   ],
+   "Edit bay/guard.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/bay/guard.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Edit connector:fake/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Edit docs/DESIGN.md": [
+    "deny",
+    "agentbay: role builder may not write <project>/docs/DESIGN.md: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Edit env:workspace": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/envs/workspace.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Edit mode:briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Edit mode:improve/mode.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/improve/mode.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Edit src/app.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/src/app.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Glob {\"path\": \"..\", \"pattern\": \"*\"}": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not search .agentbay/ (pattern *)"
+   ],
+   "Glob {\"pattern\": \"**/*.json\"}": [
+    "pass",
+    ""
+   ],
+   "Glob {\"pattern\": \".*\"}": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not search .agentbay/ (pattern .*)"
+   ],
+   "Glob {\"pattern\": \"../*\"}": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not glob dot-paths (../*) at the project root"
+   ],
+   "Glob {\"pattern\": \".agentbay/**\"}": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not search .agentbay/ (pattern .agentbay/**)"
+   ],
+   "Glob {\"pattern\": \"bay/*.py\"}": [
+    "pass",
+    ""
+   ],
+   "Grep {\"glob\": \".claude/*\", \"pattern\": \"x\"}": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not search .claude/ (pattern .claude/*)"
+   ],
+   "Grep {\"path\": \".agentbay\", \"pattern\": \"x\"}": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not access <project>/.agentbay (.agentbay/ is the control plane)"
+   ],
+   "Grep {\"path\": \"docs\", \"pattern\": \"x\"}": [
+    "pass",
+    ""
+   ],
+   "Grep {\"pattern\": \"x\"}": [
+    "pass",
+    ""
+   ],
+   "MultiEdit bay/guard.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/bay/guard.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "MultiEdit connector:fake/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "MultiEdit docs/DESIGN.md": [
+    "deny",
+    "agentbay: role builder may not write <project>/docs/DESIGN.md: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "MultiEdit env:workspace": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/envs/workspace.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "MultiEdit mode:briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "MultiEdit mode:improve/mode.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/improve/mode.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "MultiEdit src/app.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/src/app.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "NotebookEdit mode:improve/n.ipynb": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/improve/n.ipynb: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "NotebookEdit src/n.ipynb": [
+    "deny",
+    "agentbay: role builder may not write <project>/src/n.ipynb: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Read ../outside.txt": [
+    "deny",
+    "agentbay: role builder may only read inside . (env fs.read)"
+   ],
+   "Read .agentbay/guard.json": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not access <project>/.agentbay/guard.json (.agentbay/ is the control plane)"
+   ],
+   "Read .claude/settings.json": [
+    "pass",
+    ""
+   ],
+   "Read .env": [
+    "pass",
+    ""
+   ],
+   "Read /etc/passwd": [
+    "deny",
+    "agentbay: role builder may only read inside . (env fs.read)"
+   ],
+   "Read README.md": [
+    "pass",
+    ""
+   ],
+   "Read bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Read connector:ledger/ledger.py": [
+    "pass",
+    ""
+   ],
+   "Read docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "Read framework/roles/builder.yaml": [
+    "pass",
+    ""
+   ],
+   "Read mode:improve/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Read src/app.py": [
+    "pass",
+    ""
+   ],
+   "Read tests/helpers.py": [
+    "pass",
+    ""
+   ],
+   "WebFetch https://example.com": [
+    "pass",
+    ""
+   ],
+   "Write ../escape.py": [
+    "deny",
+    "agentbay: role builder may not write <tmp>/escape.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write .agentbay/guard.json": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not access <project>/.agentbay/guard.json (.agentbay/ is the control plane)"
+   ],
+   "Write .claude/settings.json": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not write <project>/.claude/settings.json: .claude/ is never writable by agents"
+   ],
+   "Write .env": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not write <project>/.env: .env is never writable by agents (agent/tool configuration)"
+   ],
+   "Write .env.local": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not write <project>/.env.local: .env.local is never writable by agents (agent/tool configuration)"
+   ],
+   "Write .git/config": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not write <project>/.git/config: .git/ is never writable by agents"
+   ],
+   "Write .github/workflows/ci.yml": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not write <project>/.github/workflows/ci.yml: .github/workflows/ is never writable by agents"
+   ],
+   "Write .vscode/x.json": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not write <project>/.vscode/x.json: .vscode/ is never writable by agents"
+   ],
+   "Write /etc/passwd": [
+    "deny",
+    "agentbay: role builder may not write /etc/passwd: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write <project>/bay/abs.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/bay/abs.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write <project>/src/abs.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/src/abs.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write BAY.SH": [
+    "deny",
+    "agentbay: role builder may not write <project>/BAY.SH: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write Bay/guard.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/Bay/guard.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write CLAUDE.md": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not write <project>/CLAUDE.md: CLAUDE.md is never writable by agents (agent/tool configuration)"
+   ],
+   "Write HANDOFF.md": [
+    "deny",
+    "agentbay: role builder may not write <project>/HANDOFF.md: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write Makefile": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not write <project>/Makefile: Makefile is never writable by agents (agent/tool configuration)"
+   ],
+   "Write README.md": [
+    "deny",
+    "agentbay: role builder may not write <project>/README.md: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write adapters/claude-code/x.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/adapters/claude-code/x.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write adapters/x.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/adapters/x.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not write <project>/agentbay.config.yaml: agentbay.config.yaml is never writable by agents (agent/tool configuration)"
+   ],
+   "Write bay.sh": [
+    "deny",
+    "agentbay: subagent builder--forge--local-authoring may not write <project>/bay.sh: bay.sh is never writable by agents (agent/tool configuration)"
+   ],
+   "Write bay/../bay/guard.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/bay/guard.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write bay/brand_new.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/bay/brand_new.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write bay/guard.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/bay/guard.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write bay/improve/pipeline.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/bay/improve/pipeline.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write connector:artifact-graph/artifact_graph.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/artifact-graph/artifact_graph.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write connector:brand-new/x.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:claude-transcripts/connector.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/claude-transcripts/connector.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write connector:corpus-store/connector.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/corpus-store/connector.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write connector:fake/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:git/git_history.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/git/git_history.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write connector:gmail-api/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:improve-detect/connector.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/improve-detect/connector.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write connector:improve-store/connector.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/improve-store/connector.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write connector:improve-store/improve_store.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/improve-store/improve_store.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write connector:ledger/ledger.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/ledger/ledger.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write connector:scaffold/scaffold.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/scaffold/scaffold.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write connector:workflow-runner/workflow_runner.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/connectors/workflow-runner/workflow_runner.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write content-types/x/y.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/content-types/x/y.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write docs/DESIGN.md": [
+    "deny",
+    "agentbay: role builder may not write <project>/docs/DESIGN.md: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write env:brand-new": [
+    "pass",
+    ""
+   ],
+   "Write env:cos-local": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/envs/cos-local.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write env:framework-dev": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/envs/framework-dev.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write env:improve-local": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/envs/improve-local.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write env:local-authoring": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/envs/local-authoring.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write env:local-feeds": [
+    "pass",
+    ""
+   ],
+   "Write env:research": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/envs/research.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write env:workspace": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/envs/workspace.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write framework/components.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/components.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write framework/interfaces/x.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/interfaces/x.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write framework/roles/x.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/roles/x.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write framework/rules/x.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/rules/x.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write mode:brand-new/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:cos/mode.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/cos/mode.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write mode:delivery/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:feed-briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:forge/features/create/playbook.md": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/forge/features/create/playbook.md: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write mode:forge/mode.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/forge/mode.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write mode:improve/README.md": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/improve/README.md: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write mode:improve/features/scan/playbook.md": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/improve/features/scan/playbook.md: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write mode:improve/mode.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/framework/modes/improve/mode.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write mode:mail-briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write modes/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write roles/x.yaml": [
+    "deny",
+    "agentbay: role builder may not write <project>/roles/x.yaml: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write schemas/x.json": [
+    "deny",
+    "agentbay: role builder may not write <project>/schemas/x.json: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write src/../bay/guard.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/bay/guard.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write src/app.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/src/app.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ],
+   "Write tests/test_x.py": [
+    "deny",
+    "agentbay: role builder may not write <project>/tests/test_x.py: outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']"
+   ]
+  },
+  "main thread": {
+   "Bash ./.agentbay/bay note review T-1 '{}'": [
+    "ask",
+    "agentbay: `bay note review` records a decision in the ledger; confirm it"
+   ],
+   "Bash ./bay.sh approve C-1": [
+    "pass",
+    ""
+   ],
+   "Bash ./bay.sh show reclaim R-1": [
+    "ask",
+    "agentbay: `bay show reclaim` records a decision in the ledger; confirm it"
+   ],
+   "Bash .agentbay/bay --project /x show reclaim R": [
+    "ask",
+    "agentbay: `bay show reclaim` records a decision in the ledger; confirm it"
+   ],
+   "Bash .agentbay/bay approve C-1": [
+    "pass",
+    ""
+   ],
+   "Bash .agentbay/bay call forge.extend '{}'": [
+    "pass",
+    ""
+   ],
+   "Bash .agentbay/bay note $X T-1": [
+    "ask",
+    "agentbay: `bay note <word with an expansion>` records a decision in the ledger; confirm it"
+   ],
+   "Bash .agentbay/bay note 'dispatch' T-1": [
+    "ask",
+    "agentbay: `bay note dispatch` records a decision in the ledger; confirm it"
+   ],
+   "Bash .agentbay/bay note dispatch T-1 --agent x": [
+    "ask",
+    "agentbay: `bay note dispatch` records a decision in the ledger; confirm it"
+   ],
+   "Bash .agentbay/bay note task": [
+    "pass",
+    ""
+   ],
+   "Bash .agentbay/bay note {dispatch,} T-1": [
+    "ask",
+    "agentbay: `bay note <word with an expansion>` records a decision in the ledger; confirm it"
+   ],
+   "Bash .agentbay/bay show re\\claim R-1": [
+    "ask",
+    "agentbay: `bay show reclaim` records a decision in the ledger; confirm it"
+   ],
+   "Bash .agentbay/bay status": [
+    "pass",
+    ""
+   ],
+   "Bash /x/.agentbay/bay show reclaim R-1": [
+    "ask",
+    "agentbay: `bay show reclaim` records a decision in the ledger; confirm it"
+   ],
+   "Bash bay.sh --proj . show reclaim R-1": [
+    "ask",
+    "agentbay: `bay show reclaim` records a decision in the ledger; confirm it"
+   ],
+   "Bash bay.sh --project . show reclaim R-1": [
+    "ask",
+    "agentbay: `bay show reclaim` records a decision in the ledger; confirm it"
+   ],
+   "Bash git commit -m 'bay note dispatch'": [
+    "pass",
+    ""
+   ],
+   "Bash ls": [
+    "pass",
+    ""
+   ],
+   "Bash ls 'unbalanced": [
+    "pass",
+    ""
+   ],
+   "Bash python3 -m bay.cli note dispatch T-1": [
+    "ask",
+    "agentbay: `bay note dispatch` records a decision in the ledger; confirm it"
+   ],
+   "Bash python3 /k/bay/cli.py note review T": [
+    "ask",
+    "agentbay: `bay note review` records a decision in the ledger; confirm it"
+   ],
+   "Bash python3 bay/cli.py show reclaim R-1": [
+    "ask",
+    "agentbay: `bay show reclaim` records a decision in the ledger; confirm it"
+   ],
+   "Bash x;.agentbay/bay note review T": [
+    "ask",
+    "agentbay: `bay note review` records a decision in the ledger; confirm it"
+   ],
+   "Edit bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Edit connector:fake/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Edit docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "Edit env:workspace": [
+    "pass",
+    ""
+   ],
+   "Edit mode:briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Edit mode:improve/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Edit src/app.py": [
+    "pass",
+    ""
+   ],
+   "Glob {\"path\": \"..\", \"pattern\": \"*\"}": [
+    "pass",
+    ""
+   ],
+   "Glob {\"pattern\": \"**/*.json\"}": [
+    "pass",
+    ""
+   ],
+   "Glob {\"pattern\": \".*\"}": [
+    "pass",
+    ""
+   ],
+   "Glob {\"pattern\": \"../*\"}": [
+    "pass",
+    ""
+   ],
+   "Glob {\"pattern\": \".agentbay/**\"}": [
+    "pass",
+    ""
+   ],
+   "Glob {\"pattern\": \"bay/*.py\"}": [
+    "pass",
+    ""
+   ],
+   "Grep {\"glob\": \".claude/*\", \"pattern\": \"x\"}": [
+    "pass",
+    ""
+   ],
+   "Grep {\"path\": \".agentbay\", \"pattern\": \"x\"}": [
+    "pass",
+    ""
+   ],
+   "Grep {\"path\": \"docs\", \"pattern\": \"x\"}": [
+    "pass",
+    ""
+   ],
+   "Grep {\"pattern\": \"x\"}": [
+    "pass",
+    ""
+   ],
+   "MultiEdit bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "MultiEdit connector:fake/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "MultiEdit docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "MultiEdit env:workspace": [
+    "pass",
+    ""
+   ],
+   "MultiEdit mode:briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "MultiEdit mode:improve/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "MultiEdit src/app.py": [
+    "pass",
+    ""
+   ],
+   "NotebookEdit mode:improve/n.ipynb": [
+    "pass",
+    ""
+   ],
+   "NotebookEdit src/n.ipynb": [
+    "pass",
+    ""
+   ],
+   "Read ../outside.txt": [
+    "pass",
+    ""
+   ],
+   "Read .agentbay/guard.json": [
+    "pass",
+    ""
+   ],
+   "Read .claude/settings.json": [
+    "pass",
+    ""
+   ],
+   "Read .env": [
+    "pass",
+    ""
+   ],
+   "Read /etc/passwd": [
+    "pass",
+    ""
+   ],
+   "Read README.md": [
+    "pass",
+    ""
+   ],
+   "Read bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Read connector:ledger/ledger.py": [
+    "pass",
+    ""
+   ],
+   "Read docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "Read framework/roles/builder.yaml": [
+    "pass",
+    ""
+   ],
+   "Read mode:improve/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Read src/app.py": [
+    "pass",
+    ""
+   ],
+   "Read tests/helpers.py": [
+    "pass",
+    ""
+   ],
+   "WebFetch https://example.com": [
+    "pass",
+    ""
+   ],
+   "Write ../escape.py": [
+    "pass",
+    ""
+   ],
+   "Write .agentbay/guard.json": [
+    "pass",
+    ""
+   ],
+   "Write .claude/settings.json": [
+    "pass",
+    ""
+   ],
+   "Write .env": [
+    "pass",
+    ""
+   ],
+   "Write .env.local": [
+    "pass",
+    ""
+   ],
+   "Write .git/config": [
+    "pass",
+    ""
+   ],
+   "Write .github/workflows/ci.yml": [
+    "pass",
+    ""
+   ],
+   "Write .vscode/x.json": [
+    "pass",
+    ""
+   ],
+   "Write /etc/passwd": [
+    "pass",
+    ""
+   ],
+   "Write <project>/bay/abs.py": [
+    "pass",
+    ""
+   ],
+   "Write <project>/src/abs.py": [
+    "pass",
+    ""
+   ],
+   "Write BAY.SH": [
+    "pass",
+    ""
+   ],
+   "Write Bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Write CLAUDE.md": [
+    "pass",
+    ""
+   ],
+   "Write HANDOFF.md": [
+    "pass",
+    ""
+   ],
+   "Write Makefile": [
+    "pass",
+    ""
+   ],
+   "Write README.md": [
+    "pass",
+    ""
+   ],
+   "Write adapters/claude-code/x.py": [
+    "pass",
+    ""
+   ],
+   "Write adapters/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write agentbay.config.yaml": [
+    "pass",
+    ""
+   ],
+   "Write bay.sh": [
+    "pass",
+    ""
+   ],
+   "Write bay/../bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Write bay/brand_new.py": [
+    "pass",
+    ""
+   ],
+   "Write bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Write bay/improve/pipeline.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:artifact-graph/artifact_graph.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:brand-new/x.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:claude-transcripts/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:corpus-store/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:fake/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:git/git_history.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:gmail-api/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:improve-detect/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:improve-store/connector.yaml": [
+    "pass",
+    ""
+   ],
+   "Write connector:improve-store/improve_store.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:ledger/ledger.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:scaffold/scaffold.py": [
+    "pass",
+    ""
+   ],
+   "Write connector:workflow-runner/workflow_runner.py": [
+    "pass",
+    ""
+   ],
+   "Write content-types/x/y.py": [
+    "pass",
+    ""
+   ],
+   "Write docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "Write env:brand-new": [
+    "pass",
+    ""
+   ],
+   "Write env:cos-local": [
+    "pass",
+    ""
+   ],
+   "Write env:framework-dev": [
+    "pass",
+    ""
+   ],
+   "Write env:improve-local": [
+    "pass",
+    ""
+   ],
+   "Write env:local-authoring": [
+    "pass",
+    ""
+   ],
+   "Write env:local-feeds": [
+    "pass",
+    ""
+   ],
+   "Write env:research": [
+    "pass",
+    ""
+   ],
+   "Write env:workspace": [
+    "pass",
+    ""
+   ],
+   "Write framework/components.yaml": [
+    "pass",
+    ""
+   ],
+   "Write framework/interfaces/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write framework/roles/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write framework/rules/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:brand-new/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:cos/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:delivery/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:feed-briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:forge/features/create/playbook.md": [
+    "pass",
+    ""
+   ],
+   "Write mode:forge/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:improve/README.md": [
+    "pass",
+    ""
+   ],
+   "Write mode:improve/features/scan/playbook.md": [
+    "pass",
+    ""
+   ],
+   "Write mode:improve/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write mode:mail-briefing/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Write modes/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write roles/x.yaml": [
+    "pass",
+    ""
+   ],
+   "Write schemas/x.json": [
+    "pass",
+    ""
+   ],
+   "Write src/../bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Write src/app.py": [
+    "pass",
+    ""
+   ],
+   "Write tests/test_x.py": [
+    "pass",
+    ""
+   ]
+  },
+  "reviewer--forge": {
+   "Bash ": [
+    "deny",
+    "agentbay: subagent reviewer--forge: empty command"
+   ],
+   "Bash ./.agentbay/bay approve C-1": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a000 '{}'": [
+    "deny",
+    "agentbay: subagent reviewer--forge: `bay plan` takes only the taskId this agent was dispatched with"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a003": [
+    "deny",
+    "agentbay: subagent reviewer--forge: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a003 '{}'": [
+    "pass",
+    ""
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a003 --done 1": [
+    "pass",
+    ""
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-a003 --force": [
+    "deny",
+    "agentbay: subagent reviewer--forge: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-b000 '{}'": [
+    "deny",
+    "agentbay: subagent reviewer--forge: `bay plan` takes only the taskId this agent was dispatched with"
+   ],
+   "Bash ./.agentbay/bay plan T-20261031-zzzz '{}'": [
+    "deny",
+    "agentbay: subagent reviewer--forge: `bay plan` takes only the taskId this agent was dispatched with"
+   ],
+   "Bash ./.agentbay/bay plan T-bad '{}'": [
+    "deny",
+    "agentbay: subagent reviewer--forge: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`"
+   ],
+   "Bash ./bay.sh call x.y '{}'": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ./bay.sh check": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash .agentbay/bay approve C-1": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash .agentbay/bay call forge.extend '{}'": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash .agentbay/bay plan T-20261031-a003 '{}'": [
+    "pass",
+    ""
+   ],
+   "Bash .agentbay/bay show C-1": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash .agentbay/roles/analyst--other/use items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash .agentbay/roles/reviewer--forge/use": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash .agentbay/roles/reviewer--forge/use --role x items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash .agentbay/roles/reviewer--forge/use improve.findings/v1.query '{}'; ls": [
+    "deny",
+    "agentbay: subagent reviewer--forge: shell operator ';' is not allowed; run one command at a time"
+   ],
+   "Bash .agentbay/roles/reviewer--forge/use items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash <project>/.agentbay/roles/reviewer--forge/use items.store/v1.query '{}'": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash bash -c ls": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash bay approve C-1": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash bay.sh approve C-1": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash cat '.agent''bay/guard.json'": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash cat ./bay.sh": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash cat .agentbay/guard.json": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash cat .claude/settings.json": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash cat .env": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash cat agentbay.conf''ig.yaml": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash cat agentbay.config.*": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash cat agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash echo $(id)": [
+    "deny",
+    "agentbay: subagent reviewer--forge: shell expansion ($ or `) is not allowed"
+   ],
+   "Bash echo `id`": [
+    "deny",
+    "agentbay: subagent reviewer--forge: shell expansion ($ or `) is not allowed"
+   ],
+   "Bash echo x > agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash git -C . status": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash git commit -m 'about bay approve'": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash git diff --ext-diff": [
+    "deny",
+    "agentbay: git flag --ext-diff is not allowed (it writes or reads files or runs programs)"
+   ],
+   "Bash git diff --no-index a b": [
+    "deny",
+    "agentbay: git flag --no-index is not allowed (it writes or reads files or runs programs)"
+   ],
+   "Bash git log --output=x": [
+    "deny",
+    "agentbay: git flag --output=x is not allowed (it writes or reads files or runs programs)"
+   ],
+   "Bash git show --textconv HEAD:x": [
+    "deny",
+    "agentbay: git flag --textconv is not allowed (it writes or reads files or runs programs)"
+   ],
+   "Bash git status": [
+    "pass",
+    ""
+   ],
+   "Bash git worktree add -b nb wt/y": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash git worktree add ../x": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash git worktree add bay/wt": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash git worktree add wt/x": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash head -3 README.md": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ls": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ls 'unbalanced": [
+    "deny",
+    "agentbay: subagent reviewer--forge: unbalanced quotes"
+   ],
+   "Bash ls -la": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ls .a?entbay": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ls .agent*": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ls .agentbay": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ls .claude": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ls > out.txt": [
+    "deny",
+    "agentbay: subagent reviewer--forge: shell operator '>' is not allowed; run one command at a time"
+   ],
+   "Bash ls | wc": [
+    "deny",
+    "agentbay: subagent reviewer--forge: shell operator '|' is not allowed; run one command at a time"
+   ],
+   "Bash ls; cat x": [
+    "deny",
+    "agentbay: subagent reviewer--forge: shell operator ';' is not allowed; run one command at a time"
+   ],
+   "Bash mkdir x": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash node -e 1": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash perl -e 1": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash python3 -c 'print(1)'": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash python3 -m bay.cli approve C-1": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash python3 -m http.server": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash python3 bay/cli.py approve C-1": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not run `bay approve`: approval gates are the owner's (a terminal, or a chat approval the main thread relays)"
+   ],
+   "Bash python3 bay/cli.py check": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash python3 tests/run.py -q": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash python3 tests/run.py tests/test_improve.py": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash rm -rf x": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash ruby -e 1": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Bash sed -i s/a/b/ agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not name agentbay.config.yaml in a command (the owner's settings)"
+   ],
+   "Bash sh -c ls": [
+    "deny",
+    "agentbay: role reviewer may only run: git status, git diff, git log, git show via Bash."
+   ],
+   "Edit bay/guard.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/bay/guard.py: outside the role's writable paths []"
+   ],
+   "Edit connector:fake/connector.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/connectors/fake/connector.yaml: outside the role's writable paths []"
+   ],
+   "Edit docs/DESIGN.md": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/docs/DESIGN.md: outside the role's writable paths []"
+   ],
+   "Edit env:workspace": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/envs/workspace.yaml: outside the role's writable paths []"
+   ],
+   "Edit mode:briefing/mode.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/modes/briefing/mode.yaml: outside the role's writable paths []"
+   ],
+   "Edit mode:improve/mode.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/modes/improve/mode.yaml: outside the role's writable paths []"
+   ],
+   "Edit src/app.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/src/app.py: outside the role's writable paths []"
+   ],
+   "Glob {\"path\": \"..\", \"pattern\": \"*\"}": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not search .agentbay/ (pattern *)"
+   ],
+   "Glob {\"pattern\": \"**/*.json\"}": [
+    "pass",
+    ""
+   ],
+   "Glob {\"pattern\": \".*\"}": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not search .agentbay/ (pattern .*)"
+   ],
+   "Glob {\"pattern\": \"../*\"}": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not glob dot-paths (../*) at the project root"
+   ],
+   "Glob {\"pattern\": \".agentbay/**\"}": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not search .agentbay/ (pattern .agentbay/**)"
+   ],
+   "Glob {\"pattern\": \"bay/*.py\"}": [
+    "pass",
+    ""
+   ],
+   "Grep {\"glob\": \".claude/*\", \"pattern\": \"x\"}": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not search .claude/ (pattern .claude/*)"
+   ],
+   "Grep {\"path\": \".agentbay\", \"pattern\": \"x\"}": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not access <project>/.agentbay (.agentbay/ is the control plane)"
+   ],
+   "Grep {\"path\": \"docs\", \"pattern\": \"x\"}": [
+    "pass",
+    ""
+   ],
+   "Grep {\"pattern\": \"x\"}": [
+    "pass",
+    ""
+   ],
+   "MultiEdit bay/guard.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/bay/guard.py: outside the role's writable paths []"
+   ],
+   "MultiEdit connector:fake/connector.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/connectors/fake/connector.yaml: outside the role's writable paths []"
+   ],
+   "MultiEdit docs/DESIGN.md": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/docs/DESIGN.md: outside the role's writable paths []"
+   ],
+   "MultiEdit env:workspace": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/envs/workspace.yaml: outside the role's writable paths []"
+   ],
+   "MultiEdit mode:briefing/mode.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/modes/briefing/mode.yaml: outside the role's writable paths []"
+   ],
+   "MultiEdit mode:improve/mode.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/modes/improve/mode.yaml: outside the role's writable paths []"
+   ],
+   "MultiEdit src/app.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/src/app.py: outside the role's writable paths []"
+   ],
+   "NotebookEdit mode:improve/n.ipynb": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/modes/improve/n.ipynb: outside the role's writable paths []"
+   ],
+   "NotebookEdit src/n.ipynb": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/src/n.ipynb: outside the role's writable paths []"
+   ],
+   "Read ../outside.txt": [
+    "deny",
+    "agentbay: role reviewer may only read inside . (env fs.read)"
+   ],
+   "Read .agentbay/guard.json": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not access <project>/.agentbay/guard.json (.agentbay/ is the control plane)"
+   ],
+   "Read .claude/settings.json": [
+    "pass",
+    ""
+   ],
+   "Read .env": [
+    "pass",
+    ""
+   ],
+   "Read /etc/passwd": [
+    "deny",
+    "agentbay: role reviewer may only read inside . (env fs.read)"
+   ],
+   "Read README.md": [
+    "pass",
+    ""
+   ],
+   "Read bay/guard.py": [
+    "pass",
+    ""
+   ],
+   "Read connector:ledger/ledger.py": [
+    "pass",
+    ""
+   ],
+   "Read docs/DESIGN.md": [
+    "pass",
+    ""
+   ],
+   "Read framework/roles/builder.yaml": [
+    "pass",
+    ""
+   ],
+   "Read mode:improve/mode.yaml": [
+    "pass",
+    ""
+   ],
+   "Read src/app.py": [
+    "pass",
+    ""
+   ],
+   "Read tests/helpers.py": [
+    "pass",
+    ""
+   ],
+   "WebFetch https://example.com": [
+    "pass",
+    ""
+   ],
+   "Write ../escape.py": [
+    "deny",
+    "agentbay: role reviewer may not write <tmp>/escape.py: outside the role's writable paths []"
+   ],
+   "Write .agentbay/guard.json": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not access <project>/.agentbay/guard.json (.agentbay/ is the control plane)"
+   ],
+   "Write .claude/settings.json": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not write <project>/.claude/settings.json: .claude/ is never writable by agents"
+   ],
+   "Write .env": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not write <project>/.env: .env is never writable by agents (agent/tool configuration)"
+   ],
+   "Write .env.local": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not write <project>/.env.local: .env.local is never writable by agents (agent/tool configuration)"
+   ],
+   "Write .git/config": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not write <project>/.git/config: .git/ is never writable by agents"
+   ],
+   "Write .github/workflows/ci.yml": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not write <project>/.github/workflows/ci.yml: .github/workflows/ is never writable by agents"
+   ],
+   "Write .vscode/x.json": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not write <project>/.vscode/x.json: .vscode/ is never writable by agents"
+   ],
+   "Write /etc/passwd": [
+    "deny",
+    "agentbay: role reviewer may not write /etc/passwd: outside the role's writable paths []"
+   ],
+   "Write <project>/bay/abs.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/bay/abs.py: outside the role's writable paths []"
+   ],
+   "Write <project>/src/abs.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/src/abs.py: outside the role's writable paths []"
+   ],
+   "Write BAY.SH": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/BAY.SH: outside the role's writable paths []"
+   ],
+   "Write Bay/guard.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/Bay/guard.py: outside the role's writable paths []"
+   ],
+   "Write CLAUDE.md": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not write <project>/CLAUDE.md: CLAUDE.md is never writable by agents (agent/tool configuration)"
+   ],
+   "Write HANDOFF.md": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/HANDOFF.md: outside the role's writable paths []"
+   ],
+   "Write Makefile": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not write <project>/Makefile: Makefile is never writable by agents (agent/tool configuration)"
+   ],
+   "Write README.md": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/README.md: outside the role's writable paths []"
+   ],
+   "Write adapters/claude-code/x.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/adapters/claude-code/x.py: outside the role's writable paths []"
+   ],
+   "Write adapters/x.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/adapters/x.yaml: outside the role's writable paths []"
+   ],
+   "Write agentbay.config.yaml": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not write <project>/agentbay.config.yaml: agentbay.config.yaml is never writable by agents (agent/tool configuration)"
+   ],
+   "Write bay.sh": [
+    "deny",
+    "agentbay: subagent reviewer--forge may not write <project>/bay.sh: bay.sh is never writable by agents (agent/tool configuration)"
+   ],
+   "Write bay/../bay/guard.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/bay/guard.py: outside the role's writable paths []"
+   ],
+   "Write bay/brand_new.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/bay/brand_new.py: outside the role's writable paths []"
+   ],
+   "Write bay/guard.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/bay/guard.py: outside the role's writable paths []"
+   ],
+   "Write bay/improve/pipeline.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/bay/improve/pipeline.py: outside the role's writable paths []"
+   ],
+   "Write connector:artifact-graph/artifact_graph.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/connectors/artifact-graph/artifact_graph.py: outside the role's writable paths []"
+   ],
+   "Write connector:brand-new/x.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/connectors/brand-new/x.py: outside the role's writable paths []"
+   ],
+   "Write connector:claude-transcripts/connector.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/connectors/claude-transcripts/connector.yaml: outside the role's writable paths []"
+   ],
+   "Write connector:corpus-store/connector.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/connectors/corpus-store/connector.yaml: outside the role's writable paths []"
+   ],
+   "Write connector:fake/connector.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/connectors/fake/connector.yaml: outside the role's writable paths []"
+   ],
+   "Write connector:git/git_history.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/connectors/git/git_history.py: outside the role's writable paths []"
+   ],
+   "Write connector:gmail-api/connector.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/connectors/gmail-api/connector.yaml: outside the role's writable paths []"
+   ],
+   "Write connector:improve-detect/connector.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/connectors/improve-detect/connector.yaml: outside the role's writable paths []"
+   ],
+   "Write connector:improve-store/connector.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/connectors/improve-store/connector.yaml: outside the role's writable paths []"
+   ],
+   "Write connector:improve-store/improve_store.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/connectors/improve-store/improve_store.py: outside the role's writable paths []"
+   ],
+   "Write connector:ledger/ledger.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/connectors/ledger/ledger.py: outside the role's writable paths []"
+   ],
+   "Write connector:scaffold/scaffold.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/connectors/scaffold/scaffold.py: outside the role's writable paths []"
+   ],
+   "Write connector:workflow-runner/workflow_runner.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/connectors/workflow-runner/workflow_runner.py: outside the role's writable paths []"
+   ],
+   "Write content-types/x/y.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/content-types/x/y.py: outside the role's writable paths []"
+   ],
+   "Write docs/DESIGN.md": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/docs/DESIGN.md: outside the role's writable paths []"
+   ],
+   "Write env:brand-new": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/envs/brand-new.yaml: outside the role's writable paths []"
+   ],
+   "Write env:cos-local": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/envs/cos-local.yaml: outside the role's writable paths []"
+   ],
+   "Write env:framework-dev": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/envs/framework-dev.yaml: outside the role's writable paths []"
+   ],
+   "Write env:improve-local": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/envs/improve-local.yaml: outside the role's writable paths []"
+   ],
+   "Write env:local-authoring": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/envs/local-authoring.yaml: outside the role's writable paths []"
+   ],
+   "Write env:local-feeds": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/envs/local-feeds.yaml: outside the role's writable paths []"
+   ],
+   "Write env:research": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/envs/research.yaml: outside the role's writable paths []"
+   ],
+   "Write env:workspace": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/envs/workspace.yaml: outside the role's writable paths []"
+   ],
+   "Write framework/components.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/components.yaml: outside the role's writable paths []"
+   ],
+   "Write framework/interfaces/x.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/interfaces/x.yaml: outside the role's writable paths []"
+   ],
+   "Write framework/roles/x.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/roles/x.yaml: outside the role's writable paths []"
+   ],
+   "Write framework/rules/x.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/rules/x.yaml: outside the role's writable paths []"
+   ],
+   "Write mode:brand-new/mode.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/modes/brand-new/mode.yaml: outside the role's writable paths []"
+   ],
+   "Write mode:briefing/mode.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/modes/briefing/mode.yaml: outside the role's writable paths []"
+   ],
+   "Write mode:cos/mode.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/modes/cos/mode.yaml: outside the role's writable paths []"
+   ],
+   "Write mode:delivery/mode.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/modes/delivery/mode.yaml: outside the role's writable paths []"
+   ],
+   "Write mode:feed-briefing/mode.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/modes/feed-briefing/mode.yaml: outside the role's writable paths []"
+   ],
+   "Write mode:forge/features/create/playbook.md": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/modes/forge/features/create/playbook.md: outside the role's writable paths []"
+   ],
+   "Write mode:forge/mode.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/modes/forge/mode.yaml: outside the role's writable paths []"
+   ],
+   "Write mode:improve/README.md": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/modes/improve/README.md: outside the role's writable paths []"
+   ],
+   "Write mode:improve/features/scan/playbook.md": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/modes/improve/features/scan/playbook.md: outside the role's writable paths []"
+   ],
+   "Write mode:improve/mode.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/framework/modes/improve/mode.yaml: outside the role's writable paths []"
+   ],
+   "Write mode:mail-briefing/mode.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/modes/mail-briefing/mode.yaml: outside the role's writable paths []"
+   ],
+   "Write modes/x.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/modes/x.yaml: outside the role's writable paths []"
+   ],
+   "Write roles/x.yaml": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/roles/x.yaml: outside the role's writable paths []"
+   ],
+   "Write schemas/x.json": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/schemas/x.json: outside the role's writable paths []"
+   ],
+   "Write src/../bay/guard.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/bay/guard.py: outside the role's writable paths []"
+   ],
+   "Write src/app.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/src/app.py: outside the role's writable paths []"
+   ],
+   "Write tests/test_x.py": [
+    "deny",
+    "agentbay: role reviewer may not write <project>/tests/test_x.py: outside the role's writable paths []"
+   ]
+  }
+ },
+ "policy": {
+  "autoAllowShim": false,
+  "protected": [
+   "framework",
+   "bay",
+   "schemas",
+   "adapters"
+  ],
+  "units": {
+   "analyst--improve": {
+    "clis": [],
+    "env": "improve-local",
+    "mode": "improve",
+    "read": [
+     "."
+    ],
+    "role": "analyst",
+    "shim": ".agentbay/roles/analyst--improve/use",
+    "write": []
+   },
+   "builder--delivery": {
+    "clis": [
+     "git status",
+     "git diff",
+     "git log",
+     "git add",
+     "git worktree",
+     "git show"
+    ],
+    "env": "workspace",
+    "mode": "delivery",
+    "read": [
+     "."
+    ],
+    "role": "builder",
+    "shim": null,
+    "write": [
+     "."
+    ]
+   },
+   "builder--forge--framework-dev": {
+    "clis": [
+     "./bay.sh check",
+     "python3 tests/run.py",
+     "git status",
+     "git diff",
+     "git log",
+     "git add",
+     "git commit",
+     "git show"
+    ],
+    "env": "framework-dev",
+    "mode": "forge",
+    "read": [
+     "."
+    ],
+    "role": "builder",
+    "shim": null,
+    "write": [
+     "framework",
+     "bay",
+     "schemas",
+     "adapters",
+     "docs",
+     "tests"
+    ]
+   },
+   "builder--forge--local-authoring": {
+    "clis": [
+     "./bay.sh check",
+     "git status",
+     "git diff",
+     "git log",
+     "git show"
+    ],
+    "env": "local-authoring",
+    "mode": "forge",
+    "read": [
+     "."
+    ],
+    "role": "builder",
+    "shim": null,
+    "write": [
+     "modes",
+     "envs",
+     "connectors",
+     "agentbay.config.yaml"
+    ]
+   },
+   "reviewer--forge": {
+    "clis": [
+     "git status",
+     "git diff",
+     "git log",
+     "git show"
+    ],
+    "env": "workspace",
+    "mode": "forge",
+    "read": [
+     "."
+    ],
+    "role": "reviewer",
+    "shim": null,
+    "write": []
+   }
+  }
+ },
+ "protectedWrites": {
+  "cos-local": [],
+  "framework-dev": [
+   "framework",
+   "bay",
+   "schemas",
+   "adapters"
+  ],
+  "improve-local": [],
+  "local-authoring": [],
+  "local-feeds": [],
+  "local-mail": [],
+  "research": [],
+  "workspace": []
+ },
+ "resolverGaps": {
+  "forge.create in a framework-writing env": [
+   "forge.create step fill: role builder runs in env framework-dev, which can write framework, bay, schemas, adapters; only forge.extend may change the framework - give it an env that writes user space only (e.g. local-authoring) in the mode's `roles:`"
+  ],
+  "improve in a framework-writing env": [
+   "improve.scan step patterns: role analyst runs in env framework-dev, which can write framework, bay, schemas, adapters; only forge.extend may change the framework - give it an env that writes user space only (e.g. local-authoring) in the mode's `roles:`",
+   "improve.scan: `uses:` names session.events/v1.episodes, which no role in this feature is granted (granted: none); a feature can only narrow its roles' grants",
+   "improve.scan: `uses:` names improve.findings/v1.query, which no role in this feature is granted (granted: none); a feature can only narrow its roles' grants",
+   "improve.scan: `uses:` names improve.findings/v1.get, which no role in this feature is granted (granted: none); a feature can only narrow its roles' grants",
+   "improve.audit step judge: role analyst runs in env framework-dev, which can write framework, bay, schemas, adapters; only forge.extend may change the framework - give it an env that writes user space only (e.g. local-authoring) in the mode's `roles:`",
+   "improve.audit: `uses:` names artifacts.read/v1.files, which no role in this feature is granted (granted: none); a feature can only narrow its roles' grants",
+   "improve.audit: `uses:` names artifacts.read/v1.graph, which no role in this feature is granted (granted: none); a feature can only narrow its roles' grants",
+   "improve.audit: `uses:` names artifacts.read/v1.text, which no role in this feature is granted (granted: none); a feature can only narrow its roles' grants",
+   "improve.triage step analyze: role analyst runs in env framework-dev, which can write framework, bay, schemas, adapters; only forge.extend may change the framework - give it an env that writes user space only (e.g. local-authoring) in the mode's `roles:`",
+   "improve.triage: `uses:` names improve.findings/v1.query, which no role in this feature is granted (granted: none); a feature can only narrow its roles' grants",
+   "improve.triage: `uses:` names improve.findings/v1.get, which no role in this feature is granted (granted: none); a feature can only narrow its roles' grants",
+   "improve.triage: `uses:` names artifacts.read/v1.files, which no role in this feature is granted (granted: none); a feature can only narrow its roles' grants",
+   "improve.triage: `uses:` names artifacts.read/v1.text, which no role in this feature is granted (granted: none); a feature can only narrow its roles' grants",
+   "improve.implement step draft: role analyst runs in env framework-dev, which can write framework, bay, schemas, adapters; only forge.extend may change the framework - give it an env that writes user space only (e.g. local-authoring) in the mode's `roles:`",
+   "improve.implement: `uses:` names improve.findings/v1.get, which no role in this feature is granted (granted: none); a feature can only narrow its roles' grants",
+   "improve.implement: `uses:` names artifacts.read/v1.files, which no role in this feature is granted (granted: none); a feature can only narrow its roles' grants",
+   "improve.implement: `uses:` names artifacts.read/v1.text, which no role in this feature is granted (granted: none); a feature can only narrow its roles' grants"
+  ],
+  "user mode in a framework-writing env": [
+   "mode delivery: role builder works in the framework env framework-dev (delivery.build step implement); user modes may put roles only in their own envs (envs/) or the framework envs workspace and research"
+  ]
+ }
+}

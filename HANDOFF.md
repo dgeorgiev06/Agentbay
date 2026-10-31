@@ -1,3 +1,557 @@
+# HANDOFF part 31: T-20261031-a2db (recorded with `bay plan`) - the four should-fix findings of the stage-5 review fixed
+
+Outcome: done. cf0c463 (DOD-2, DOD-8) and f86ef1f (DOD-13, R-4) on feat/0008-stage5, not pushed. Nits (DOD-10) left for slice 9.
+- DOD-2: `Store.upsert` drops `STORE_OWNED` (id, fingerprint, status, firstSeen, lastSeen, source, links, history, priority) from a candidate. annotate, verify, decide and handoff already whitelist keys or set status themselves; tests added for upsert (new and merge), annotate, verify, claim and handoff.
+- DOD-8: one ledger reader `bay.util.read_events` (ledger and improve-store); one protection loader `model.load_protection` (kit, scaffold, improve-store), fail closed; `Store(data_dir, now, protection)` has no hard-coded default, a closed set routes to forge.extend.
+- DOD-13/R-4: README layout and docs/INTERFACES.md (`ownerOnly`, `protected:`).
+- Evidence: `python3 tests/run.py -q`: "546 passed, 0 failed"; `./bay.sh check`: "✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)"; check --base: "290 changed paths (33 core, 3 docs, 199 extension, 22 feature, 33 other); 0 failing; B-11 docs: 0 hits". Goldens untouched.
+
+# HANDOFF part 30: T-20261031-3894 (recorded with `bay plan`) - stage 5 part H built (improve is an ordinary mode); slices 6 and 7 acceptance
+
+Outcome: done. Commit 2dd116e on feat/0008-stage5 (not pushed) holds the previous builder's edits, finished: improve left `protected.mode` (now `[cos, forge]`), `PROTECTED_INSTANCES` and framework-dev `fs.write` together. `improve-local` and the nine connectors stay protected (D3). No proposal edited.
+
+## Evidence (at 2dd116e plus this handoff)
+- `python3 tests/run.py -q`: `544 passed, 0 failed`.
+- `./bay.sh check`: `✓ lint clean` / `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`. One warning is the stale `.agentbay/guard.json` (22 paths vs the map's 21); the checkout was not rebuilt.
+- `./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: `boundary origin/main...HEAD: 288 changed paths (32 core, 2 docs, 199 extension, 22 feature, 33 other); 0 failing; B-11 docs: 0 hits`.
+- build/clean on s6h: `built 6 modes for claude-code`, clean printed `clean`, Glob afterwards: only `agentbay.config.yaml`.
+
+## Deltas (the goldens are untouched: `git status --short -- tests/golden` empty)
+- Guard matrix, `EXPECTED_DELTAS` in `tests/test_guard_matrix.py`, six improve rows (`Edit/MultiEdit/NotebookEdit/Write` of `mode:improve/...`): `builder--delivery` and `builder--forge--local-authoring` deny -> pass (improve's folder is a user extension, D3); `builder--forge--framework-dev` pass -> deny (it named `modes/improve` only because improve was protected, D9). One resolver gap: improve with a role in `framework-dev` now gets the user-mode message.
+- Improve golden, `ROUTE_DELTAS` in `tests/test_improve_golden.py`, three route rows: `default`/`mode improve` forge.extend -> mode-fix; `shipped modes`/`mode improve` forge.extend -> mode-fix; `default`/`mode cos` mode-fix -> forge.extend (the store's default set is now `{cos, forge}`, the map's).
+- Stage-syntax baseline unchanged.
+
+## Tests added (D4 and part H)
+- `test_protection.py`: improve is an ordinary mode (origin `user`, env and connectors still protected); improve files writable by authoring writers, env and connectors denied; `bay new` no longer calls improve protected; `check --base` treats a new improve folder as an extension. Already there from part F: `test_no_step_in_any_mode_may_call_improve_findings_decide` (resolver and lint refuse a step running `improve.findings/v1.decide` in a user mode and in `modes/improve/mode.yaml`) and `test_bay_approve_of_a_backlog_item_from_a_terminal_still_works...` (terminal ok, `--via chat` refused with "decided at a terminal").
+- Case variants (`Cos`, `FORGE`, `LEDGER`, `Workspace`): `test_a_user_mode_named_cos_or_forge_in_another_case_is_stopped_everywhere` (bay new refuses, `check --base` fails the path, case-collision lint reports it).
+
+## Acceptance
+Slice 6:
+- `bay/improve/` gone: `git ls-files bay/improve` empty. PASS
+- scan and audit give the same findings: `test_improve_golden` passes with only the named route deltas. PASS
+- backlog item not approvable without the user: `test_approving_a_backlog_item_needs_a_terminal`, the terminal-only test above. PASS
+- deferred or open item cannot reach implement: `test_implement_only_for_approved_items_behind_a_gate_and_edits_nothing`. PASS
+- improve golden unchanged, matrix changed only on named rows, part G a pure `git mv` (R100 proof in part 29). PASS
+- dead-code: no new findings. Not run as a step (it runs inside forge.extend `deadcode`); `test_moving_files_have_no_deadcode_findings` passes.
+
+Slice 7:
+- one stage-syntax parser in `bay/`; workflow tests pass; `cos.run` starts a project workflow (part 27, in the 544). PASS
+- D3, D4, D7 deltas as named above and in parts 27 and 28. PASS
+- `framework/` holds only roles, interfaces, rules and the map: `git ls-files framework` lists `components.yaml`, 13 interfaces, 5 roles plus a skill, `rules/conformance.yaml`. PASS
+- protected components declared in the map and read by guard and `bay boundary`; user extension with a protected name refused; protected write without forge.extend denied; chat and terminal approval both pass the gate: `test_protection.py` (544 green). PASS
+- `bay catalog` unchanged except paths: compared in part 29. NOT re-diffed in this part; the one expected change is that improve's origin reads `user` (`test_improve_is_an_ordinary_mode...` asserts the root).
+
+Leftover: empty folders `framework/{modes,envs,connectors}/` may remain on disk; the checkout's `.agentbay/guard.json` is stale until `./bay.sh build`.
+
+# HANDOFF part 29: T-20261031-891e (recorded with `bay plan`) - stage 5 part G built (shipped modes, envs and connectors moved to the top-level folders)
+
+Outcome: done. Seven commits on feat/0008-stage5 (not pushed): one pure `git mv`, then six that follow it. No proposal edited; every path is in 0008's touches (boundary below). The tree is NOT green between b002722 and f8af1b4 (the loader still reads the old folders there); from f8af1b4 on, only the tests and docs lagged, and 683a4e3 is green.
+
+## To-do
+| Item | Commit | What |
+|---|---|---|
+| name collisions | - | none: framework modes cos, forge, improve; envs cos-local, framework-dev, improve-local, local-authoring, research, workspace; connectors artifact-graph, claude-transcripts, corpus-store, git, improve-detect, improve-store, ledger, scaffold, workflow-runner. None is at the top level (user: briefing, delivery, feed-briefing, mail-briefing; local-feeds, local-mail; fake, fake-mail, gmail-api, x-api) |
+| G1 the move | b002722 | `git mv framework/modes/{cos,forge,improve} modes/`, the six `framework/envs/*.yaml` to `envs/`, the nine `framework/connectors/*` to `connectors/`. 116 files, all R100 (proof below) |
+| G3 loader and code | f8af1b4 | `model.Kit` reads modes/envs/connectors from the kit root only (`SOURCES`: roles and interfaces keep both roots); `Kit.roots`, `Kit.collisions` and the "defined by both" path are gone (a name defined twice is a `SpecError`; the "protected name" check in `_load` is gone: one folder per kind, the map protects by name); `Doc.root` is "framework" for a name in `protected:` and "user" otherwise (origin in `catalog`/`describe` unchanged); `scaffold.py` (`TEMPLATES` at `modes/forge/templates`, `_check_name` and `feature` refuse a protected name/mode, an unreadable map reserves every name); `claude_code.py` text; `lint.py` (collisions reader; the `reaches` warning lists the map's folders only, not instance paths: otherwise local-authoring's `modes` would warn forever); `improve_store.py` reads the protected mode names from the map, and `store.py` routes a file of a protected instance (`instance_paths`) to forge.extend like the `framework/` dirs |
+| G2 map | 9c70c2a | `framework/components.yaml`: the `at:` lists drop `framework/...`; briefing owns `connectors/corpus-store/`; `protected:` unchanged (names resolve to the new folders; improve is still in `mode:`) |
+| G2 fs.write | 7645bbd | `envs/framework-dev.yaml` fs.write: `framework, bay, schemas, adapters`, then 3 modes, 6 envs, 9 connectors in policy order, then `docs, tests` |
+| G4 tests | 9cd430c | see below |
+| docs | a4f7576 | DESIGN (where instances sit; the store connector described by its interface), INTERFACES line 304, conformance.yaml, improve config example |
+| order | 683a4e3 | `Kit` lists protected docs first, then the rest (the order every listing had when framework/ loaded first): `bay check` warnings come out in the baseline's order |
+
+## What part H (and later parts) must know
+- `git ls-files framework` = components.yaml, interfaces/ (13), roles/ (5 + skills/research-brief), rules/conformance.yaml. Empty folders `framework/{modes,envs,connectors}/` are left on disk (the allowed commands cannot remove them): delete by hand.
+- The guard policy now lists 22 paths (the four folders, then each protected instance where it sits). The checkout's own `.agentbay/guard.json` is the old 4-path one, so `./bay.sh check` prints ONE new warning (the part F stale-policy warning); `./bay.sh build` in the checkout clears it. I did not build the checkout (only scratch projects).
+- `tests/layout.py` has `PROTECTED_INSTANCES` (the 18 paths, written out) and a plain `physical`. Tests that name the protected set import it; H removes `modes/improve` from it when improve leaves `protected.mode` (and from framework-dev's fs.write, which lint demands).
+- improve-store: framework modes already come from the map (H item 2 first half is done); `store.py` `FRAMEWORK_DIRS` keeps `framework/ bay/ schemas/ docs/ tests/` and the map's instance paths are added by `instance_paths`.
+- B-11: `corpus-store` is core-owned only in the NEW map; `check --base` judges by the base's map, where `connectors/corpus-store/` is an extension, so two doc lines (DESIGN 129, INTERFACES 304) that named it were reworded to "the store connector". After the merge the name may come back.
+- `test_guard_matrix.py` keeps `guard-matrix.json` untouched and maps the new layout back with `undo_move` (below). H adds its own delta list for improve rows (deny -> pass) there; remove `modes/improve` from `PROTECTED_INSTANCES` and from `undo_move`'s expectation at the same time.
+- `test_core_names`: core files = `bay framework schemas adapters coordinator` plus `PROTECTED_INSTANCES` (the files that were under framework/); connector names = connectors implementing `items.source/v1` (the same four: x-api, gmail-api, fake-mail, fake).
+- Not done: a case-variant test (`modes/Cos`) of `lint_case_and_manifests` needs a git checkout of the kit copy (`test_boundary.py:99` covers the rule in general); the real dead-code step (`improve.detect/v1.change` through forge.extend) was not called; `test_moving_files_have_no_deadcode_findings` passes on the protected instances at their new paths.
+- Tests changed beyond path text: `test_lint.py` (the collision test became `test_a_protected_name_is_reserved_and_defined_once`: bay new refuses cos, improve, scaffold, workspace and a feature in cos; a mode folder named cos2 holding cos's file is a name mismatch; a ghost protected mode fails lint), `test_protection.py` (the reserved-name test became `test_a_name_is_protected_wherever_it_sits_and_is_defined_once`: naming `fake` in the map protects it and the policy lists it; D9 lint then asks framework-dev to name it; a stale-instance and a missing-instance case), `test_forge.py` (message: "protected name"), `test_improve_store.py` (+1 routing test), `test_boundaries.py:296` (policy = the four, then exactly `PROTECTED_INSTANCES`: a superset of the old list), `test_boundary.py:239`. Security tests otherwise unchanged except path text.
+
+## Evidence (run at 683a4e3)
+- `python3 tests/run.py -q` last line: `539 passed, 0 failed` (538 + 1 routing test).
+- `./bay.sh check` last two lines: `✓ lint clean` / `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`.
+- `./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs` last line: `boundary origin/main...HEAD: 288 changed paths (32 core, 2 docs, 199 extension, 22 feature, 33 other); 0 failing; B-11 docs: 0 hits`.
+- `./bay.sh build --project <scratch>/s6g`: `built 6 modes for claude-code`; `./bay.sh clean --project <scratch>/s6g`: last line `clean`; Glob `**/*` of s6g afterwards: only `agentbay.config.yaml` (the input I wrote).
+- Rename proof. `git show --stat --summary -M100% b002722`: `116 files changed, 0 insertions(+), 0 deletions(-)`, then 116 lines of the form `rename {framework/modes => modes}/cos/mode.yaml (100%)` (also `{framework/envs => envs}/framework-dev.yaml (100%)`, `{framework/connectors => connectors}/ledger/ledger.py (100%)`); no line is anything but `rename ... (100%)`. `git log --follow --oneline -- modes/cos/mode.yaml`: `b002722 Move framework modes, envs and connectors to the top-level folders (pure git mv, stage 5 part G)`, `c9e6dcc 0008 slice 3: one feature shape ...`, `7626c2d feat(cos): the Chief of Staff is a mode, ...` (history continues past the move).
+
+## Baselines
+- `tests/golden/` is UNCHANGED (`git status --short -- tests/golden` empty; no commit of this part touches it): `improve.json` (the kitAudit counts did not move: the detectors scan the moved files the same way), `stages.json`, `guard-matrix.json`, `guard-matrix-project.json`. `test_improve_golden`, `test_stage_syntax_table`, `test_guard_decision_matrix` and `test_guard_matrix_for_a_project_with_the_kit_outside` pass in the full run. No `EXPECTED_DELTAS` row added.
+- Guard matrix, proof: `test_guard_decision_matrix` first asserts every decision (index 0 of every row of every caller) equals the golden's, with nothing mapped, then compares the whole result to the untouched golden after `undo_move` puts back these named, path-only differences (each asserted present first): (1) `policy.protected` = the four + `PROTECTED_INSTANCES` -> the four; framework-dev's `write` and `protectedWrites.framework-dev` and the quoted list in its reasons and in the resolver gaps likewise (D9); (2) `<project>/<instance path>` -> `<project>/framework/<instance path>` in reasons, the `lintWarnings` text and the resolver gaps; (3) the deny reason `modes/cos/ of the agentbay checkout is writable only by forge.extend (env must name it)` -> `framework/ of the agentbay checkout ...` (the entry that denied); (4) for `builder--forge--local-authoring` only, that same clause -> `outside the role's writable paths ['modes', 'envs', 'connectors', 'agentbay.config.yaml']`: local-authoring writes modes/, envs/ and connectors/, so a protected instance in them is now denied by the protected entry instead of being outside its writable paths (a deny in both). Row keys are logical (`Write mode:cos/mode.yaml`), so no key changed.
+- `test_boundaries.py:290-321` (changed only at the policy-list assertion, plus four new deny/pass rows) and `test_resolver.py:165-185` (only the path in `edit_yaml`) pass.
+
+## CLI comparison with `s5-cli-baseline/` (read side by side; the tool could not diff, so this is a read, not a byte diff)
+- `catalog`: equals `catalog.txt` line for line except the `registry built` timestamp (31 lines).
+- `catalog --roles`: equals `catalog_--roles.txt` (17 units, same env/tier/model columns).
+- `describe cos`: equals `describe_cos.txt` line for line; no path appears in it.
+- `describe forge` and `describe improve`: same fields, endpoints, DoD ids and line numbers, rules and steps (checked at the anchors the baselines have: origin, roles, the 16 improve-detect/improve-store connector steps, the forge steps with env framework-dev, task texts at the lines the baseline greps give); none of the three outputs holds a file path, so there is no path delta to list.
+- `check` vs `check.txt`: the warning lines are the same and in the same order, with the paths changed: `framework/modes/improve/mode.yaml:65` -> `modes/improve/mode.yaml:65`, `framework/modes/improve/README.md` -> `modes/improve/README.md`, `framework/envs/workspace.yaml` -> `envs/workspace.yaml`. One line is new: the stale `.agentbay/guard.json` warning (the checkout's policy was built before the move; see above).
+
+# HANDOFF part 28: T-20261031-9243 (recorded with `bay plan`) - stage 5 part F built (protection declared in the component map)
+
+Outcome: done. One code commit, 2d56a52, on feat/0008-stage5 (the pieces cannot be green apart: the loader, guard policy, lint and tests share one block). No proposal edited; every path is in 0008's touches (boundary below). Still the OLD folder layout.
+
+## To-do
+| Item | Commit | What |
+|---|---|---|
+| F1 map + schema | 2d56a52 | `framework/components.yaml` `protected:` (paths = the four dirs in the old order; mode cos, forge, improve; env cos-local, framework-dev, improve-local {modes: [improve]}, local-authoring, workspace {modes: ["*"]}, research {modes: ["*"]}; the nine connectors); `schemas/components.schema.json` `protected` (optional in the schema, required by the kit load) |
+| F2 loader | 2d56a52 | `boundary.Protection` (parse, `reserved`, `covers`, `may_place`, `open_envs`, `closed_set`); `model.Kit.protected`, `Kit.protected_paths()`, `Kit.covers()`; `PROTECTED` and `USER_FRAMEWORK_ENVS` removed (no fallback); `protected_writes(kit, env)`; `_check_protected`; `_unit` env rule reads `may_place` |
+| F3 fail closed | 2d56a52 | a missing/unreadable/malformed block puts an error in `kit.errors` (nothing resolves, `bay check` fails), makes `Kit.protected` closed (every name reserved, every path covered, nobody placed), and the claude-code adapter refuses to write a policy from a closed set |
+| F4 guard policy | 2d56a52 | adapter writes `guard.json` `protected` = `kit.protected_paths()` (map paths, then each protected instance folder not already inside one; today = the four dirs). `bay/guard.py` untouched (its loop is unchanged). lint warns when `.agentbay/guard.json` differs from the map (stale policy) |
+| F5 boundary | 2d56a52 | `boundary.classify` wraps the old rule: a path the base map protects (`protected.paths` folder, or a mode/env/connector of a protected name) that would pass only as a new extension fails with rule `protected` unless `touches:` lists it; existing-instance and B-3 rules are unchanged |
+| F6 lint | 2d56a52 | `lint_protection` (names exist, closure: envs a protected mode maps and connectors a protected env binds are protected, D9 sync both ways), `lint_owner_only`, the `reaches` warning reads the map; `_component_map` makes the other lint readers survive a bad map |
+| F7 D4 | 2d56a52 | `improve.findings/v1.decide` has `ownerOnly: true` (`schemas/interface.schema.json` key); `model._code_step` (resolver) and `lint_owner_only` refuse any step running an ownerOnly endpoint; `Dispatcher.run_capability` (`bay approve <F-id>`) untouched |
+| F8 tests | 2d56a52 | `tests/test_protection.py` (17 tests); `tests/test_guard_matrix.py` call `model.protected_writes(kit, env)` (signature only); `docs/DESIGN.md`, `docs/INTERFACES.md` lose the two lines naming `USER_FRAMEWORK_ENVS` |
+| HANDOFF | this commit | |
+
+## What part G (and later parts) must know
+- Instance paths: `Kit.protected_paths()` lists an instance folder only if it is not inside another protected path. Today every protected instance sits in `framework/`, so the policy is still the four dirs, and the matrix is identical. When G moves `framework/modes/cos` to `modes/cos` the policy gains that path; `lint_protection` then FAILS until `framework-dev` `fs.write` names it (D9: the guard lets an env write a protected path only if the env names it). So G must add each moved protected instance path to `framework/envs/framework-dev.yaml` (after `adapters`, before `docs`; keep the first four in order, `test_resolver.py:169` text). Only existing instances are listed, by where they sit, not by `at:` variant.
+- `improve` is in `protected.mode` until H; H removes it (and `improve-local`'s `modes: [improve]` is then what lets it use that env). `Doc.root` and `Kit.collisions` still exist (G replaces them); the collision message for a user doc named like a framework one is unchanged. The new map rule (`... is a protected name`) fires for a protected name with no framework doc.
+- `bay check --base`: a base map WITHOUT a `protected:` block protects nothing in the boundary check (origin/main's map has none, and this branch must pass against it); a base map with a malformed block makes the check error. Not "fail closed" for a missing block: owner decision needed. After this branch merges, the base always has the block; the exemption can then become an error (one line in `ComponentMap.protected_by`/`parse`).
+- Message of `_unit`'s env gap now names `open_envs()` in the map's order; the map lists `workspace` before `research` so the golden text (`workspace and research`) is unchanged.
+- `lint_extension_names` keeps its original conditional shape on purpose: the improve golden's `kitAudit.complexity` count (8) changed to 7 when I simplified it.
+- ownerOnly: `uses:` of a role cannot reach `decide` (write effect, shim is read-only), so only code steps needed the refusal.
+- Open: `bay new` still refuses reserved names through the collision/`is a framework name` path (G, `scaffold.py`).
+
+## Evidence (run at 2d56a52)
+- `python3 tests/run.py -q` last line: `538 passed, 0 failed` (521 + 17 new).
+- `./bay.sh check` last line: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)` (line before: `✓ lint clean`; the same four warnings as before).
+- `./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs` last line: `boundary origin/main...HEAD: 74 changed paths (27 core, 2 docs, 25 extension, 1 feature, 19 other); 0 failing; B-11 docs: 0 hits`.
+- `./bay.sh build --project <scratch>/s6f`: `built 6 modes for claude-code`; `./bay.sh clean --project <scratch>/s6f`: last line `clean`; Glob `**/*` of s6f afterwards: only `agentbay.config.yaml` (the input I wrote).
+- Baselines: `test_guard_decision_matrix` and `test_guard_matrix_for_a_project_with_the_kit_outside` pass with `tests/golden/guard-matrix*.json` UNCHANGED. EXPECTED_DELTAS rows: none (D3 adds no path to the policy in the old layout: every protected instance is inside `framework/`; D4 changes no guard decision; the D9 sync needs no new `fs.write` entry yet). `test_improve_golden` passes with `improve.json` unchanged; `test_stage_syntax_table` passes with `stages.json` unchanged. Security tests unchanged (`test_boundaries.py:296` still asserts the four dirs and passes); new cases are in `tests/test_protection.py`: role without forge.extend cannot write a map-listed path, user extension named like a protected one refused, edit and new folder of a protected component fail `check --base` without `touches:`, chat and terminal approvals both pass the gate, D4 (resolver and lint refuse, `bay approve <F-id>` works, chat refused), D9 lint both ways, closure, stale policy, 14 malformed/missing block variants fail closed.
+
+# HANDOFF part 27: T-20261031-edd9 (recorded with `bay plan`) - stage 5 part E built (one workflow syntax, validator, skip and advance rule)
+
+Outcome: done. One code commit, dffef42, on feat/0008-stage5. No proposal edited; every path is in 0008's touches (boundary below).
+
+## To-do
+| Item | Commit | What |
+|---|---|---|
+| E1 parser | dffef42 | `bay/workflows.py` is the one stage-syntax module: the reference grammar once (`FIELD`, `PATH`, `REFERENCE`, `WHEN_PATTERN`, `FEATURE_WHEN_PATTERN`, `APPROVES_PATTERN`), `Stage` (also `Stage.of_step` for a mode step), `check_stages` (the validator for both), `skip`, `substitute` (moved from `bay/dispatch.py`, gone there), `advance` + `Move` (the cursor rule) |
+| E2 callers | dffef42 | `model._feature_steps` builds `Stage`s and calls `check_stages` (gate steps now carry `when` so the check sees it); `Dispatcher._skip` is `workflows.skip` plus a `fresh` callback for `stale > age`; `workflow_runner._advance` is `workflows.advance` plus the run file bookkeeping. Two executors kept (D6) |
+| E3 D7 | dffef42 | a gate with `when` in a project workflow: `structure_problems` (so `bay check` / lint) says `... step g: a gate takes no when: it passes only by `bay approve <runId>` ... Remove `when:` from this gate (put `when:` on the call stages around it ...)`; `advance` returns `refused` for it and the run fails with that text; `skip(gate=True)` is always False. The config schema still allows the key, so the message is the structure one, not a schema pattern error |
+| E4 D8 | dffef42 | one union grammar: a project `when` takes `!`; a feature `when` takes hyphens, nested paths, a step id in capitals and `$steps.<name>` without a field; `approves` takes the same paths. Schema patterns in `config.schema.json` / `mode.schema.json` equal the constants (test) |
+| HANDOFF | this commit | |
+
+## What part F (and later parts) must know
+- `workflows.py` no longer imports `model` at module level (lazy imports in `effects`, `_check_call`); `model.py` imports `workflows as wfmod`.
+- `stages.json` is UNCHANGED. `test_stage_syntax_table` undoes `EXPECTED_DELTAS` (rows checked against their new value, then put back to the golden's value; `OLD_PATTERNS` undoes the pattern text that schema messages quote; `EXPECTED_RUNNER_DELTAS` for the two `cos.next` rows) and then compares to the untouched golden. Deltas: project `when` `!$in.x`, `!$steps.a.x` accepted (D8); feature `when` `$in.x-y`, `$in.x.y`, `$steps.a.x-y`, `$steps.a.x.y`, `$steps.a`, `$steps.A.x` accepted (D8); project gate with `when` `$in.x`, `$steps.a.x`, `!$in.x`, `!$steps.a.x`, `$steps.nope.x` refused (D7). A gate with `when: stale > 2h` was and is a schema refusal. Nothing accepted before is refused except the D7 rows.
+- New tests (`tests/test_stage_syntax.py`): grammar spelled once in code and schema patterns equal it; dispatcher and cursor share skip/substitute; D7 refused at `structure_problems` and `lint.run`; no output passed to `cos.next` skips a gate (cursor refuses and the run fails; `skip(gate=True)`), a gate without `when` still waits.
+- Kept lenient on purpose so nothing accepted before is refused: a project `$steps.<name>` with no field or a capital id is not order-checked (as before); the `approved $in.f` feature form still crashes `Dispatcher._skip` with IndexError (recorded in the golden, not mine to fix here).
+- The `_grammar_problems` check repeats the schema patterns in code so the validator is right for a stage built in code; it also keeps the three pattern constants read in code (the kit audit's unused-constant count stayed 0 new; the improve golden is untouched).
+- Docs not touched (not in part E's touches): `docs/INTERFACES.md:164` still describes project stages; slice 9 can add that a project gate takes no `when`.
+- `-k` is the test filter (`python3 tests/run.py -k name`); a bare file name runs everything.
+
+## Evidence (run at dffef42)
+- `python3 tests/run.py -q` last line: `521 passed, 0 failed` (515 + 6 new).
+- `./bay.sh check` last line: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)` (line before: `✓ lint clean`; the same four warnings as before).
+- `./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs` last line: `boundary origin/main...HEAD: 65 changed paths (22 core, 24 extension, 1 feature, 18 other); 0 failing; B-11 docs: 0 hits`.
+- `./bay.sh build --project <scratch>/s6e`: `built 6 modes for claude-code`; `./bay.sh clean --project <scratch>/s6e`: last line `clean`; Glob `**/*` of s6e afterwards: only `agentbay.config.yaml` (the input I wrote).
+- Baselines: `tests/golden/` has no change in dffef42 (`git show --stat dffef42` lists no golden); `test_improve_golden`, `test_guard_decision_matrix`, `test_guard_matrix_for_a_project_with_the_kit_outside` and `test_stage_syntax_table` pass in the full run. Security tests unchanged; `test_workflows.py` and `test_dispatch.py` not edited.
+
+# HANDOFF part 26: T-20261031-653a (recorded with `bay plan`) - stage 5 part D built (sources and transcripts moved; bay/improve/ removed)
+
+Outcome: done. One code commit, cd8ba96, on feat/0008-stage5 (D1 to D5 are one commit: the moves, the imports and the tests cannot be green separately). No proposal edited; every path is in 0008's touches (boundary below).
+
+## To-do
+| Item | Commit | What |
+|---|---|---|
+| D1 | cd8ba96 | `git mv bay/improve/transcripts.py framework/connectors/claude-transcripts/parser.py` (entry `transcripts.py` imports `from .parser import TranscriptSource`); test imports `connector_pkg("claude-transcripts", "parser")` |
+| D2 | cd8ba96 | `sources.py` -> `ledger/ledger_sources.py` (ledger part, `git mv`) and `git/git_episodes.py` (git part: `REVERT_BODY`, `MAX_SUBJECT`, `git_episodes`); `ledger.py`, `git_history.py` import them; tests follow (`test_git_connector.py`, `test_review_record.py`) |
+| D3 | cd8ba96 | `fingerprint` defined once, in `bay/util.py`; `store.py` and `pipeline.py` import it; the shared-vector test is kept in both connector tests (each asserts `62f5b3fa536c7238`) |
+| D4 | cd8ba96 | `bay/improve/__init__.py` removed last; wording fixed in `framework/modes/improve/{config.example.yaml,config.schema.json,features/scan/playbook.md}`, connector docstrings, `test_improve_golden.py` (`MOVING` loses `bay/improve/`), `test_deadcode_check.py` (path of `ledger_verdicts`) |
+| D5 | - | no golden change, so no new `EXPECTED_DELTAS` entry (the only one is still part C's `inefficient-store-read` 3 -> 5) |
+| HANDOFF | this commit | |
+
+## What part E (and later parts) must know
+- improve-store's `read_events` use: `bay.ledger.read` is not equal (it accepts any dict and does not require `type`, `ts`, `runId` strings; it splits on `\n` and decodes strictly), so `improve_store.py` has a 12-line `_read_events` (the `read_events` behaviour without the warnings list, which the backlog never passed). `ledger_sources.read_events` stays in `ledger/` for the ledger connector. If part E wants one reader, make it a deliberate change to `bay/ledger.py` (not in touches).
+- Left on purpose: `tests/test_guard_matrix.py:31` still lists the sample path `bay/improve/pipeline.py` and `tests/golden/guard-matrix.json` has its rows (a non-existent file in the protected `bay/` dir, used as a "new file under bay/" probe). Renaming it changes the baseline's row keys; part F/G may swap it for another `bay/` sample in the test and golden together. Not in touches (tests are `other`).
+- `bay/improve/__pycache__/` is left on disk, untracked and ignored (the allowed commands cannot delete it); `git ls-files bay/improve` is empty. Delete it by hand.
+- The kit-audit counts did not change (no new `EXPECTED_DELTAS`): `ledger_sources.py` and `git_episodes.py` add no unused function, long function or store re-read.
+- `tests/helpers.connector_pkg("ledger", "ledger_sources")`, `("git", "git_episodes")`, `("claude-transcripts", "parser")` load the new siblings.
+
+## Evidence (run at cd8ba96)
+- `python3 tests/run.py -q` (run before the commit, same tree): `515 passed, 0 failed`. Includes `test_improve_golden`, the guard matrix pair, `test_stage_syntax_table`, `test_improve.py` (terminal-only approval, :225-245 unchanged), the improve-store tests (import lines only) and both `test_fingerprint_matches_the_shared_vector`.
+- `./bay.sh check` last line: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)` (line before: `✓ lint clean`; the same four warnings as before).
+- Boundary: `boundary origin/main...HEAD: 59 changed paths (17 core, 23 extension, 1 feature, 18 other); 0 failing; B-11 docs: 0 hits`.
+- `./bay.sh build --project <scratch>/s6d`: `built 6 modes for claude-code`; `./bay.sh clean --project <scratch>/s6d`: last line `clean`; Glob `**/*` of s6d afterwards: only `agentbay.config.yaml` (the input I wrote).
+- Baselines: `test_improve_golden` passes with the golden file untouched (`git diff` of `tests/golden/` is empty in cd8ba96); `test_guard_decision_matrix`, `test_guard_matrix_for_a_project_with_the_kit_outside` and `test_stage_syntax_table` pass; no golden file is in the commit.
+- `git grep -n -E "bay[./]improve"` outside HANDOFF, proposals and goldens: one hit, the guard-matrix sample path above. Nothing outside 0008's touches needed an edit (no blocker).
+- CLI comparison: `catalog` equals `s5-cli-baseline/catalog.txt` line for line except the `registry built` timestamp. `describe improve` has 16 `"connector": improve-detect|improve-store` steps, as in `describe_improve.txt` (16). `check` output is the same four warnings as `check.txt`. cos, forge, `catalog.json`, `--roles` were not re-run (nothing in part D touches them).
+
+# HANDOFF part 25: T-20261031-4d3f (recorded with `bay plan`) - stage 5 part C built (improve-detect and improve-store receive their code)
+
+Outcome: done. One commit, a4bec9b, on feat/0008-stage5 (C1, C2, C3 are one commit: the moves, the fingerprint copy and the test imports cannot be green separately). `bay/improve/` keeps `__init__`, `sources`, `transcripts` for part D (it deletes the folder). No proposal edited; every path is in 0008's touches.
+
+## To-do
+| Item | Commit | What |
+|---|---|---|
+| C0 | - | CLI baselines read from s5-cli-baseline (comparison below) |
+| C1, C2, C3 | a4bec9b | moves, fingerprint copy with shared vector, tests follow, yaml text |
+| golden delta | a4bec9b | coordinator decision on C-20261031-953c87: `kitAudit` `inefficient-store-read` 3 -> 5, named in `EXPECTED_DELTAS` in `test_improve_golden.py` (asserts was/now/reason, then the whole file compares) |
+| HANDOFF | this commit | |
+
+## What part D must know
+- The 3 -> 5 delta: the detector scans only `/connectors/` files, so `Store.query` and `Store.claim` count since store.py moved. Moving `sources.py` pieces into `ledger/` and `git/` (already under connectors/) may add more: check `kitAudit.countsPerKind` and name each change in `EXPECTED_DELTAS`.
+- `tests/helpers.connector_pkg(name, module=None)` loads a connector as the runtime does and reuses the load while the folder is the same; use it for new sibling modules (`parser.py`, `ledger_sources.py`, `git_episodes.py`).
+- `improve_store.py` still imports `from bay.improve import sources` (read_events); part D changes that.
+- `MOVING` in test_improve_golden still lists `bay/improve/`; the moved files are under `framework/connectors/` there, so A4 still covers them.
+
+## Done
+- `git mv` of pipeline, detect_artifacts, detect_sessions to `framework/connectors/improve-detect/`; store, report to `framework/connectors/improve-store/`. Imports are `from bay import ...` and sibling `from . import ...`;
+  `improve_detect.py` uses `from .pipeline import Pipeline`; `improve_store.py` uses `from . import store as st` (still `from bay.improve import sources` until part D). `bay/improve/` now holds `__init__`, `sources`, `transcripts`.
+- `fingerprint` is in `store.py` and copied into `pipeline.py`; both connector tests assert one vector (`unused` + `fn:app/core.py:never_called` -> `62f5b3fa536c7238`, from `tests/golden/improve.json`).
+- `tests/helpers.connector_pkg(name, module=None)` (one load per folder, so siblings stay one set); `test_deadcode_check.py`, `test_improve.py`, `test_improve_detectors.py`, `test_improve_golden.py:mods()`, `test_improve_store.py` use it. Connector yaml text updated.
+
+## Evidence (run at a4bec9b)
+- `python3 tests/run.py -q`: `515 passed, 0 failed` (513 + the two fingerprint-vector tests, one per connector). A first run before the delta decision gave `514 passed, 1 failed` (`test_improve_golden`, the one number).
+- `./bay.sh check` last line: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)` (line before: `✓ lint clean`; the same four warnings as `s5-cli-baseline/check.txt`, which it equals line for line).
+- Boundary: `boundary origin/main...HEAD: 48 changed paths (17 core, 14 extension, 17 other); 0 failing; B-11 docs: 0 hits`.
+- `./bay.sh build --project <scratch>/s6c`: `built 6 modes for claude-code`; `./bay.sh clean --project <scratch>/s6c`: last line `clean`; Glob `**/*` of s6c afterwards: only `agentbay.config.yaml`.
+- Baselines: `test_improve_golden` passes (only the named delta; `git diff` of `improve.json` in a4bec9b is that one line); `test_guard_decision_matrix` and `test_guard_matrix_for_a_project_with_the_kit_outside` pass; `test_stage_syntax_table` passes; `guard-matrix*.json` and `stages.json` not in the commit.
+- CLI baseline comparison: `catalog` equals `catalog.txt` line for line except the `registry built` timestamp. `describe improve` has 16 `"connector": improve-detect|improve-store` steps, as in `describe_improve.txt` (connector names, not paths, so nothing moves). `check` equals `check.txt`. cos, forge, `catalog.json`, `--roles` were not re-run (nothing in part C touches them).
+
+# HANDOFF part 24: T-20261031-68cb (recorded with `bay plan`) - stage 5 parts A and B built (baselines, then core prep)
+
+Outcome: status done for A1 to A4 and B1 to B3 (A5, the CLI baselines, was not taken: see open items). Branch feat/0008-stage5, 7 commits on top of
+the part 23 plan commits (b17040c, 7778467). No proposal edited; every path is in 0008's touches (boundary below).
+
+## To-do and shas
+| Item | Commit | What |
+|---|---|---|
+| A1 | 4055b85 | `tests/test_improve_golden.py` + `tests/golden/improve.json` (+ `tests/golden_util.py`, the shared compare: missing file is written and the test fails once, as `test_offline_golden.py`) |
+| A2 | 67dc3c7 | `tests/test_guard_matrix.py` + `tests/golden/guard-matrix.json`, `guard-matrix-project.json`, `tests/layout.py` (`physical(logical)`) |
+| A3 | 440e014 | `tests/test_stage_syntax.py` + `tests/golden/stages.json` |
+| A4 | c2423dc | `test_moving_files_have_no_deadcode_findings` (in `test_improve_golden.py`); it found `CorpusStore._sync_source` (complexity), fixed by extracting `_plan_source` and `_backfill` |
+| B1 | bf9f255 | `bay/connect.py:_load_module`: `submodule_search_locations=[folder]`, stale `agentbay_connector_<name>*` modules dropped first; `tests/test_connector_packages.py` (3 tests) |
+| B2 | 1f6442d | `bay/util.py`: `short_hash`, `in_window`, `warn` (+ `MAX_WARNINGS`); `tests/test_util.py` (3 tests); importers updated; `bay/improve/__init__.py` is a docstring only |
+| B3 | 546ad51 | `git mv` of `graph.py` and `conformance.py` to `bay/`; importers, `lint.py:877,880`, artifact-graph code and yaml text, `schemas/conformance.schema.json:5`, three tests. `bay/improve/` now holds 8 modules |
+
+## What part C (and later parts) must know
+- Baseline files and where they take their imports. `tests/test_improve_golden.py` imports improve's modules only in `mods()` (returns detect_artifacts, graph, pipeline, report, store):
+  part C/D change that one function (and `FakeGraph` uses `mods()[1]`). The golden has six sections (scan, audit, kitAudit, routes, reports, change); `git diff` of `tests/golden/improve.json` must stay empty.
+- One edit to a baseline, made in A4 on purpose: `kitAudit.countsPerKind.complexity` 9 -> 8 (the corpus-store fix). The kit audit counts every kind (complexity 8, doc-size 2, doc-stale 2,
+  inefficient-store-read 3, slop-duplicate-rule 15, unused 5): a part that adds or removes an unused function, a long function, a doc over 3,000 words or a stale doc reference changes it and must say so.
+- The A4 test scans the paths in `MOVING` (`bay/improve/`, `bay/graph.py`, `bay/conformance.py`, `bay/util.py`, `framework/connectors|modes|envs/`). Part G must change that tuple to the moved paths
+  (`connectors/`, `modes/`, `envs/` hold user extensions with findings of their own, for instance `connectors/gmail-api`: complexity x2 and unused x3, which never move, so restrict to the protected instances).
+  Parts C and D: the moved files must still pass it (`improve-detect/`, `improve-store/` files are under `framework/connectors/`).
+- Guard matrix: rows are keyed `<tool> <logical path or command>` per caller (`main thread`, `Explore` = unknown subagent, 5 units). `tests/layout.py:physical` maps `mode:cos/mode.yaml`, `env:cos-local`,
+  `connector:ledger/ledger.py` to `framework/...` when that folder exists in the kit and to the top-level folder otherwise, so part G needs no edit to the test for those rows. The golden holds reasons too
+  (they name physical paths, e.g. `framework/modes/improve/mode.yaml`): after G, reasons of moved rows change in path text only; compare decisions first (index 0 of each row), then reasons with paths mapped.
+  Also in the golden: `policy` (protected list = the four dirs), `protectedWrites` per env (via `model.protected_writes`, which part F re-signatures: update `protected_view`), `resolverGaps` (the three
+  test_resolver gaps, run on a kit copy), `lintWarnings` (the "reaches" text). `guard-matrix-project.json` is a normal project with the kit outside (autoAllowShim true, empty protected list).
+- Stage-syntax table: `stages.json` holds, for 36 `when` forms, the project-workflow and feature-step verdicts (schema errors appear in the feature table as layer `resolve`, because `model.resolve` wraps SpecError; the message
+  quotes the pattern, so part E changes those lines when it unifies the pattern), 6 gate-with-`when` forms, 21 `with` values, `Dispatcher._skip` rows and `workflow_runner._advance` rows (via `cos.run`/`cos.next`).
+  Known today (for D6 to D8): feature `when` accepts `!`, `approved $in.f`, `stale > 2h`, no hyphens, no nested `$in.x.y`; project `when` accepts hyphens and nested paths, no `!`;
+  a feature gate with `when` is refused by `_feature_steps`; a project gate with `when` is accepted and skipped by `_advance`.
+- B1: a connector folder is now a package named `agentbay_connector_<name>`; siblings load as `agentbay_connector_<name>.<sibling>`. B-7 (`lint_extension_names`) scans every `.py` in the folder, and a
+  sibling or import named like another connector's entry stem is flagged unless both are framework instances; `from . import x` (no dotted module) is not flagged. In part C, improve-detect's siblings
+  (`pipeline`, `detect_artifacts`, `detect_sessions`) and improve-store's (`store`, `report`) do not collide with any entry stem today (entries: artifact_graph, transcripts, corpus_store, git_history, improve_detect, improve_store, ledger, scaffold, workflow_runner, ...);
+  note `claude-transcripts` has an entry called `transcripts.py`, so part D must name the parser `parser.py` (as planned) and not `transcripts.py`.
+- B2: `bay.util.warn` keeps the cap (20) the old `sources.warn` had. `sources.py` still has `read_events`, `ledger_*`, `git_episodes`, `REVERT_BODY`, `MAX_SUBJECT`, `LEDGER` for part D.
+- `fingerprint` is still in `bay/improve/store.py` (part C copies it); A1's golden records every fingerprint, which is the shared test vector.
+- Not run: the real dead-code step (`improve.detect/v1.change` through forge.extend needs a call); A4 is its precondition and passes, and nothing in B adds a function that is unused.
+
+## Open items
+- A5 (CLI baselines of `check`, `catalog`, `catalog --roles`, `describe cos|forge|improve|improve-local` saved in the scratchpad) was not taken: the one-command-at-a-time rule gives no way to save output without a redirect,
+  and the outputs are long. Part G needs them: take them at the start of part C (before any yaml moves) with `Write`, or compare against `origin/main` by checking it out in a second worktree.
+- Amendments listed in section 4 of part 23 still wait for the owner. The boundary check above reports 0 failing on the `touches:` as they are in 0008 now (the plan commit 7778467 added the stage-5 entries), so nothing was blocked in A or B.
+- The "Known today" line in the stage-syntax note above is read from the schemas and validators; the exact accept/reject of each form is in `tests/golden/stages.json`, which is the reference.
+
+## Evidence (run at 546ad51, before this file was committed)
+- `python3 tests/run.py -q`: `513 passed, 0 failed` (part 23 baseline 502; +11 = improve golden, moving-files deadcode, guard matrix x2, stage syntax, connector packages x3, util x3).
+- `./bay.sh check` last line: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)` (line before: `✓ lint clean`; the same four warnings as at f635890).
+- `./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs` last line: `boundary origin/main...HEAD: 33 changed paths (15 core, 3 extension, 15 other); 0 failing; B-11 docs: 0 hits`.
+- `./bay.sh build --project <scratch>/s6a` then `./bay.sh clean --project <scratch>/s6a`: built 6 modes (34 files listed), clean removed them (last line `clean`). Glob `**/*` of the scratch folder afterwards: only `agentbay.config.yaml` (the input I wrote).
+- Baselines on the untouched code (A1 to A3, each commit run with `python3 tests/run.py -k ...`): `test_improve_golden` passed (also twice in a row); `test_guard_decision_matrix` and `test_guard_matrix_for_a_project_with_the_kit_outside` passed;
+  `test_stage_syntax_table` passed (twice). After B1, B2, B3: the same tests passed unchanged (goldens identical, `git diff 440e014 -- tests/golden/guard-matrix.json tests/golden/stages.json` empty; `improve.json` differs from A1 only by the A4 complexity line).
+- `git status` clean at the end except this file.
+
+# HANDOFF part 23: T-20261030-67d2 (recorded with `bay plan`) - stage 5 of 0008 planned (slices 6 and 7: improve as a plain mode, one workflow syntax, top-level extension folders)
+
+Outcome: stage 5 is split into eight sequential builder parts (A to H), each a green commit with its own acceptance, and every path
+is listed with its `touches:` status. No code changed; no proposal edited. Branch feat/0008-stage5 (from origin/main f635890, 0.8.0).
+All line numbers are at f635890. Baseline: `python3 tests/run.py -q` = 502 passed; `./bay.sh check` = `6 modes, 21 features, 5 roles
+(17 role units), 8 envs, 13 connectors resolve`. Three places where 0008 and the code disagree need the owner (section 5, D3 to D7).
+
+## 1. Current state
+
+bay/improve/ (3,281 lines, 10 files) and who imports it
+- `__init__.py` 22 (`short_hash`); `detect_artifacts.py` 766; `detect_sessions.py` 367; `pipeline.py` 396; `store.py` 291; `report.py` 78;
+  `sources.py` 370; `transcripts.py` 490; `graph.py` 358; `conformance.py` 324.
+- Core imports it once: `bay/lint.py:880` (`conformance.lint`, via `lint_rulesets`). `bay/cli.py:408` does not import it but names the mode
+  and capability (`run_capability("improve", "improve.findings/v1.decide", ...)`, `_decide_finding` :390); `bay improve` itself went in stage 4.
+- Connectors import it (all under `framework/connectors/`): `artifact-graph/artifact_graph.py:6` (graph), `claude-transcripts/transcripts.py:7-8`
+  (sources.in_window, TranscriptSource), `git/git_history.py:2` (sources.git_episodes), `ledger/ledger.py:2` (sources.ledger_*),
+  `improve-detect/improve_detect.py:3` (Pipeline), `improve-store/improve_store.py:8` (sources.read_events, store). Their tests too:
+  `claude-transcripts/tests/test_claude_transcripts.py:11`, `git/tests/test_git_connector.py:9`, `improve-store/tests/test_improve_store.py:9`.
+- Tests: `tests/test_deadcode_check.py:12,13,116,163,248,250`, `test_improve.py:314`, `test_improve_detectors.py:9`, `test_review_record.py:12`.
+- Inside: `pipeline.py:20-21` uses conformance, detect_*, graph (`graph.build/files` for the base tree, :244,:248), `short_hash`, `store.fingerprint`;
+  `detect_artifacts.py:22` uses `graph.SKIP_DIRS`; `store.py:23` uses `report`, `short_hash`; `transcripts.py` and `sources.py` use `short_hash`.
+- Two couplings to the old layout: `improve_store.py:15` lists `framework/modes/` to build the set of "framework modes"; `store.py:30`
+  `FRAMEWORK_DIRS = ("framework/", "bay/", "schemas/", "docs/", "tests/")` and :84-88 `route_for` send those findings to `forge.extend`.
+- Connectors are loaded by `bay/connect.py:112-121` with `spec_from_file_location` and no sibling search path, so a connector today is one
+  file (gmail-api runs its second file as a subprocess). That is why `sqlsandbox.py` lives in core. improve's 10 modules cannot move as they are.
+- Findings are fingerprinted by `kind|detector key`, and the key holds the file path (`detect_artifacts.py:445,503,701`, node ids `fn:<path>:<name>`).
+  A moved file's existing dead-code finding is therefore NEW at the new path and would block the dead-code step.
+
+Workflows: two stage-syntax implementations, one shared substitution
+- Mode features: `schemas/mode.schema.json:318-341` (with, when pattern, gate, approves); `bay/model.py:1111-1151` `_feature_steps` (ids,
+  earlier-step refs :1142-1147, gate takes no `when` :1131); `Step` :446-460; run by `Dispatcher._skip` (`dispatch.py:385-399`) and the gate code (:401-430).
+- Project workflows: `schemas/config.schema.json:55-124`; `bay/workflows.py` (`Stage`/`Workflow` :43-64, `load` :67, `structure_problems` :122,
+  `_check_dollars` :143, `target_problems` :165, `_check_ref` :202); run by `framework/connectors/workflow-runner/workflow_runner.py` `_advance` :94-121.
+- Shared already: `dispatch.substitute` :797-821 (imported by `workflow_runner.py:19`). The `$` reference grammar is spelled five times:
+  `workflows.py:38-40`, `mode.schema.json:324`, `config.schema.json:112`, `model.py:1143`, `dispatch.py:390`.
+- They disagree. Mode `when` allows `!` and `stale > 2h`, field names without hyphens; workflow `when` has no `!`, allows hyphens and nested paths.
+  A mode gate may not have `when` (`model.py:1131`, 0006 slice 7a); a project gate may: `_advance` evaluates `when` before the gate (:105-114), so a
+  falsy `when` skips the gate. The `when` value comes from the output the coordinator passes to `cos.next`.
+- cos: `framework/modes/cos/mode.yaml` (features run, next, status; role lead in env cos-local; needs workflow.run/v1). It has no code of its own.
+
+Protection is hard-coded in six places
+- `bay/model.py:59` `PROTECTED = ("framework", "bay", "schemas", "adapters")`; :1331 `protected_writes` (first path part in PROTECTED); :1341 `_check_protected`
+  (called :1177; skipped for `forge.extend`); `adapters/claude-code/claude_code.py:46,440` writes it to `.agentbay/guard.json` as `protected` when
+  the project is the kit; `bay/guard.py:373-380` `_write_denied` denies a protected folder unless a path in the role's env `fs.write` is at or under it;
+  `bay/lint.py:586-595` warns for env write paths that reach it. `bay/boundary.py` has no protection concept (B-1..B-4 by `owns:`/`at:`).
+- Whole top-level folders are protected, so everything under `framework/` (incl. improve) is protected by location. Guard tests:
+  `tests/test_boundaries.py:290-321` (asserts `pol["protected"] == ["framework", "bay", "schemas", "adapters"]`, :296).
+- Two roots, "framework" and "user" (`model.py:172,201`; KINDS :44-50). Effects of the root: `Kit.collisions` (:204,:325-330; lint.py:680; model.py:947;
+  tests `test_lint.py:239-246`), `USER_FRAMEWORK_ENVS = ("workspace","research")` and :791, `lint.py:557` (B-7: framework connectors may load each other),
+  `lint.py:652` (README only for user modes/connectors), `registry.py:56` and `cli.py:232` (`origin`), `scaffold.py:50-56` ("is a framework name").
+
+What the folders hold
+- `framework/modes/`: cos, forge, improve (3; `delivery` is already `modes/delivery/`, not here). `framework/envs/`: cos-local, framework-dev, improve-local,
+  local-authoring, research, workspace. `framework/connectors/`: artifact-graph, claude-transcripts, corpus-store (owned by briefing, `components.yaml:25`), git,
+  improve-detect, improve-store, ledger, scaffold, workflow-runner. `framework/` also: roles/, rules/, interfaces/, components.yaml. The agent profile is already
+  in `adapters/claude-code/adapter.yaml` (slice 2), so 0008's "framework/ keeps ... the agent profile" is already true.
+- Top level today: `modes/` briefing, delivery, feed-briefing, mail-briefing; `envs/` local-feeds, local-mail; `connectors/` fake, fake-mail, gmail-api, x-api.
+- forge needs envs local-authoring, framework-dev, workspace, which bind connectors scaffold, improve-detect (the dead-code step), ledger, artifact-graph.
+  cos needs cos-local, which binds workflow-runner.
+
+## 2. Target (0008 items 4, 5, 7)
+
+Where improve's code lands (`bay/improve/` gone)
+| Module | Lands in | Why |
+|---|---|---|
+| detect_artifacts, detect_sessions, pipeline | `improve-detect/` (entry improve_detect.py + 3 siblings, 1,529 lines) | only improve-detect uses them |
+| store, report | `improve-store/` (357 lines) | only improve-store uses them |
+| transcripts | `claude-transcripts/` as `parser.py` (490) | only that connector |
+| sources, ledger part (read_events, ledger_episodes, ledger_verdicts, review items) | `ledger/` | ledger connector (improve-store's `read_events` use: `bay.ledger.read` if equal, else a 18-line copy) |
+| sources, git part (git_episodes, REVERT_BODY, MAX_SUBJECT) | `git/` | git connector |
+| graph (358) | `bay/graph.py` | used by artifact-graph AND improve-detect; B-7 forbids one connector loading the other |
+| conformance (324) | `bay/conformance.py` | used by core lint AND improve-detect; core must not import an extension |
+| short_hash, in_window, warn | `bay/util.py` | used by 4+ connectors |
+| fingerprint (3 lines) | copied into improve-store and improve-detect, one shared test vector in both tests | the algorithm is the finding contract |
+Net: 2,758 lines leave core; about 700 stay in core as ordinary modules (D1).
+
+To make that possible, `bay/connect.py:_load_module` passes `submodule_search_locations=[c.dir]`, so a connector's siblings import as `from . import x` (D2).
+
+Workflows: `bay/workflows.py` becomes the one stage-syntax module (no new file): the reference grammar (one regex), `Stage` parsed from either a mode step or a
+project stage, `check_stages` (ids, earlier-step refs, `$in` declared, `$`-values, gate takes no `when`), `skip(when, inp, steps)`, `substitute`, and
+`advance(stages, cursor, inp, results)` (skip, gate, or next call). `model._feature_steps`, `Dispatcher._skip`, `workflow_runner._advance` and the two
+schema `when` patterns use it. `workflows.py` must not import `model` at module level (model imports it); its two model uses become lazy imports.
+cos stays a mode on `workflow.run/v1`; the cursor keeps handing back `nextCall` (D6).
+
+Top-level layout and the map
+- After G: `modes/` (briefing, cos, delivery, feed-briefing, forge, improve, mail-briefing), `envs/` (8), `connectors/` (13), `content-types/`, `adapters/`, `bay/`, `schemas/`.
+  `framework/` = `roles/`, `rules/`, `interfaces/`, `components.yaml`.
+- `framework/components.yaml` gains a `protected:` block and loses the `framework/<kind>/` variants of the three `at:` lists and `framework/connectors/corpus-store/`
+  (briefing now owns `connectors/corpus-store/`). Proposed shape (schema in `schemas/components.schema.json`):
+```
+protected:                                  # writable only through forge.extend; these names are reserved
+  paths: [framework, bay, schemas, adapters]   # was PROTECTED, same spelling and order
+  mode: [cos, forge]                           # improve is listed too until part H, so G is a pure move
+  env:  { cos-local: {}, framework-dev: {}, improve-local: { modes: [improve] }, local-authoring: {},
+          research: { modes: ["*"] }, workspace: { modes: ["*"] } }     # `modes:` = unprotected modes that may place roles here (was USER_FRAMEWORK_ENVS)
+  connector: [artifact-graph, claude-transcripts, corpus-store, git, improve-detect, improve-store, ledger, scaffold, workflow-runner]
+```
+- Readers: the adapter builds `guard.json` `protected` from the map (the guard keeps reading its policy; the policy now has the four dirs first, then one path per
+  protected instance); `model.Kit` loads the map once (`Kit.protected`), replacing `PROTECTED`, `USER_FRAMEWORK_ENVS`, `Doc.root` and `collisions`;
+  `boundary.classify` makes a path of a protected instance pass only when listed, even if the folder is new; `lint` checks the map (every name exists, closure:
+  each env a protected mode maps and each connector those envs bind is protected, `framework-dev` names every protected path in `fs.write`).
+- Reserved names with one folder per kind: a name cannot be defined twice, so "taking" one means replacing it. It is stopped by the guard (role writes), by the boundary
+  (edit needs `touches:`, no new-extension pass), by `bay new` (refuses a protected name) and by lint (a protected name must exist as that kind; a mode.yaml cannot mark itself protected).
+- improve: mode folder ordinary (no map entry after H). Its env and all nine connectors stay protected (D3). `decide` becomes `ownerOnly` (D4).
+
+## 3. Split (sequential; each part ends with `python3 tests/run.py -q` green, `./bay.sh check` clean, dead-code step with no new findings, one commit)
+
+Common rules (lessons of parts 15-22): the baseline is its own first commit, taken from untouched code; `git mv` for every move (the boundary check splits renames, so both
+sides are classified: see section 4 for the B-3 trap); delete replaced code completely; functions stay under complexity 30 and 150 lines (`_load_module`, `Kit.__init__`,
+`Guard._write_denied`, `lint.run` and `_feature_steps` are close: extract before adding); reword the README/DESIGN/INTERFACES lines a part exposes (B-11); the builder lists any
+missing amendment in its HANDOFF instead of editing the proposal.
+
+Part A: baselines (about 30 calls). No behaviour change.
+1. First commit: `tests/test_improve_golden.py` + `tests/golden/improve.json`, from untouched code. It records, on test-built fixture data (so the kit move cannot change it):
+   (a) `improve.scan`: `previous.detect` candidates (kind, lens, title, severity, scope, evidence refs, detector key, fingerprint), `stats`, and the rows of `findings.jsonl` after the
+   `store` step (ts dropped), from `improve_fixtures.make_transcripts/make_ledger`; (b) `improve.audit` on a fixture project tree written by the test (unused function and constant, compat
+   alias, over-complex function, oversize and stale doc, broken link): candidates, `stats`, `manual`; (c) `improve.audit {root: "kit"}`: counts per kind only, and zero
+   conformance findings; (d) `Store.route_for` for a table of scopes (framework file, bay file, mode cos, mode forge, mode improve, a user mode, docs, tests); (e) `report.backlog` and `report.handoff`
+   text for a fixed findings file; (f) `change` on a two-commit temp repo (exists in `test_deadcode_check.py`; keep). The golden is the compare: a changed file means changed behaviour.
+2. `tests/test_guard_matrix.py` + `tests/golden/guard-matrix.json`: build the kit as its own project (as `test_boundaries.py:290-296`), then for each unit
+   (`builder--delivery`, `builder--forge--local-authoring`, `builder--forge--framework-dev`, `reviewer--forge`, `analyst--improve`) and tool `Write` the decision for about 45 LOGICAL paths:
+   each protected dir file, one file per shipped mode/env/connector (`mode:cos/mode.yaml`, `env:improve-local`, `connector:improve-store/connector.yaml`, ...), user space, `bay.sh`, `docs/`, `.agentbay/`.
+   A small `layout.physical(logical)` helper returns today's path (`framework/modes/cos/mode.yaml`) and, after G, the new one. Also record `protected_writes(env)` for the 8 envs, the gap text of
+   `test_resolver.py:165-175`, the policy `protected` list, and `lint.warnings` text about protected reach.
+3. `tests/golden/stages.json` + `tests/test_stage_syntax.py`: a table of broken and valid `when`/`with`/`gate` forms, each run through the project-workflow validator and the feature-step validator (current
+   messages, current accept/reject, including the gate-with-`when` difference), and a table (when, input, steps) -> skipped, through `Dispatcher._skip` and `workflow_runner._advance`.
+4. Dead-code precondition: add `test_moving_files_have_no_deadcode_findings` (detect_artifacts over the kit, kinds unused, unused-constant, compat-layer, complexity, restricted to improve's code, the shipped
+   connectors and the shipped modes, by logical id). If it fails, fix those findings now: after a move they would be new.
+5. Save CLI baselines in the scratchpad with Write: `check`, `catalog`, `catalog --roles`, `describe cos|forge|improve|improve-local`.
+Acceptance: all new tests pass on the untouched code; goldens committed before any other change; nothing else touched.
+
+Part B: core prep for the move (about 35 calls)
+1. `bay/connect.py`: connector packages (D2) + test (a two-file connector loads; relative import works; a sibling named like another connector's entry is still caught by B-7).
+2. `bay/util.py`: `short_hash`, `in_window`, `warn` (moved from `bay/improve/`); callers updated.
+3. `git mv bay/improve/graph.py bay/graph.py`, `git mv bay/improve/conformance.py bay/conformance.py`; update `artifact_graph.py:6`, `pipeline.py`, `detect_artifacts.py:22`, `lint.py:880`, tests, docstrings, `schemas/conformance.schema.json:5`.
+Acceptance: A's goldens unchanged; `bay/improve/` has 8 modules; B-7 test still fails a cross-connector import; deadcode: no new findings.
+
+Part C: improve-detect and improve-store receive their code (about 40 calls)
+1. `git mv bay/improve/{pipeline,detect_artifacts,detect_sessions}.py framework/connectors/improve-detect/`; relative imports; `bay.model` stays an import (core).
+2. `git mv bay/improve/{store,report}.py framework/connectors/improve-store/`; `fingerprint` copied into improve-detect with the shared vector in both tests; `improve_store.py` unchanged logic (framework_modes still from `framework/modes`).
+3. Tests follow: `test_improve_detectors.py` and `test_deadcode_check.py` load the connector package through a `tests/helpers.connector_pkg(name)` (uses `connect._load_module`, then `importlib.import_module(f"{mod.__name__}.detect_artifacts")`); connector yaml and README text (`bay/improve/` references).
+Acceptance: A's improve golden identical (a) to (f); connector tests unchanged apart from import lines; `improve.detect/v1.change` result identical on the temp repo.
+
+Part D: sessions and sources; `bay/improve/` removed; slice 6 acceptance (about 40 calls)
+1. `transcripts.py` -> `claude-transcripts/parser.py`; sources split: ledger part -> `ledger/`, git part -> `git/` (names `ledger_sources.py`, `git_episodes.py`); `in_window` from util; improve-store's `read_events` use per section 2.
+2. Delete `bay/improve/` (the `__init__.py` last); `git grep bay.improve` must be empty outside HANDOFF and proposals; fix wording in `framework/modes/improve/{README.md,config.example.yaml,config.schema.json,features/scan/playbook.md:29}`, connector yamls, `bay/lint.py:877`.
+3. `decide` stays reached by `bay approve <F-id>` (`cli.py:390-412` unchanged; D5). `weekly` needs nothing (stage 4: cron recipe in `framework/modes/improve/README.md`).
+Acceptance (0008 slice 6): `bay/improve/` gone; A's improve golden identical; `test_improve.py` (incl. :225-245: terminal-only approval, never from chat) and the improve-store tests pass with only import changes; a deferred or open item cannot reach `implement`; dead-code: no new findings.
+
+Part E: one workflow syntax, validator and advance rule (about 40 calls)
+1. `bay/workflows.py` per section 2; `model._feature_steps`, `Dispatcher._skip`, `dispatch.substitute` (moved), `workflow_runner._advance`, the `when` patterns in both schemas, `bay/cli.py` callers (`wfmod` uses :121-135, :347-358).
+2. Behaviour set by D6 to D8 (recommended: union grammar; gate takes no `when` in both; a project workflow with one gets a lint error naming the fix).
+3. Tests: `test_stage_syntax.py` now asserts ONE parser (`git grep` for the reference regex finds one definition) and the table from A3 with the documented changes only; `test_workflows.py` and `test_dispatch.py` pass with name changes only; `cos.run` starts a workflow (existing test).
+Acceptance (0008 slice 7a): one stage-syntax parser in `bay/`; workflow tests pass; the reference grammar is spelled once in code (schemas keep a pattern generated from or equal to it, with a test comparing them); dead-code: no new findings.
+
+Part F: protection read from the map, old layout (about 35 calls)
+1. `schemas/components.schema.json` `protected:` (paths only, plus empty instance lists); `Kit.protected` in `model.py`; `PROTECTED` and `USER_FRAMEWORK_ENVS` removed; `protected_writes`, `_check_protected`, `lint.warnings` read it.
+2. Adapter writes `guard.json` `protected` from the map; `bay check` warns when `guard.json` differs from the map (stale policy). `bay/guard.py` keeps its loop; only docstring/message text changes.
+3. `boundary.py`: `protected` finding class (listed or fail).
+4. `framework/components.yaml`: `protected.paths` = the four dirs in the old order and spelling; `mode:` lists improve until H (so G is a pure move).
+Acceptance: A's guard matrix identical for every row; `test_boundaries.py:290-321` and `test_resolver.py:165-185` pass unchanged; new tests: a role without `forge.extend` cannot write a path the map lists (a test map with an extra path), an edit to a protected path without `touches:` fails and with it passes, stale policy is reported.
+
+Part G: the move (about 40 calls; mechanical, behaviour identical)
+1. `git mv framework/modes/* modes/`, `framework/envs/* envs/`, `framework/connectors/* connectors/` (one `git mv` per top folder; commit message says so); `framework/` keeps roles, rules, interfaces, components.yaml.
+2. Map: `at:` lists drop `framework/...`; briefing owns `connectors/corpus-store/`; `protected:` lists the moved instances (improve still in `mode:`, so every row of the guard matrix is unchanged); `framework-dev` `fs.write` names each protected instance path after the four dirs (order keeps `test_resolver.py:169` text); `lint_components` globs.
+3. Loader: modes, envs, connectors read from the kit root only; `Doc.root` becomes `protected`-derived label; `Kit.collisions` and its two readers and `test_lint.py:239-246` replaced by the reserved-name tests (section 6); `scaffold.py:14,50-56` point at `modes/forge/templates` and the protected-name message; `improve_store.py:15` and `FRAMEWORK_DIRS` read the map; `claude_code.py:483,508` text; `lint.py:557,652` use `protected`.
+4. Path literals in tests (18 files, list in section 4) and `tests/run.py:20`, `tests/contracts/content_type.py:21`, `tests/test_core_names.py` (same files scanned as before, mapped through the move; discovered connector names = connectors implementing `items.source/v1`, the same four as today).
+Acceptance: guard matrix identical for every logical row; `bay catalog` and `bay describe` identical to A's baselines except file paths; the golden improve file identical; `git ls-files framework` = roles, rules, interfaces, components.yaml only; boundary check over the whole branch: 0 failing with section 4's amendments.
+
+Part H: improve becomes ordinary (about 30 calls)
+1. `interface improve.findings/v1` `decide` gets `ownerOnly: true`; resolver and lint refuse a `run:` step of an ownerOnly endpoint; `run_capability` (CLI path) allows it (D4).
+2. Remove improve from `protected.mode`; `improve_store` framework modes = protected modes from the map; origin rule; README rule; docs lines (README folder map :77, DESIGN :52,:153-154, INTERFACES :7).
+3. Matrix deltas asserted exactly: `modes/improve/**` rows go deny -> pass for `local-authoring` and `workspace` writers; nothing else changes.
+Acceptance (0008 slice 7): the slice 7 acceptance line, all of it, with output quoted; the changelog stays for slice 9.
+
+## 4. Path table
+
+Covered = an existing `touches:` entry matches the path (the check matches paths only, never the slice). New = amendment in the last column.
+
+| Part | Path | Change | Status |
+|---|---|---|---|
+| B,C,D | `bay/improve/` (deleted over B-D) | moved out | Covered: slice 6 `bay/improve/` |
+| B | `bay/graph.py` | NEW (moved) | New: amendment 2 |
+| B | `bay/conformance.py` | NEW (moved) | New: amendment 1 |
+| B | `bay/util.py` | helpers | New: amendment 3 |
+| B | `bay/connect.py` | connector packages | Covered by path: slice 5 `bay/connect.py` (its reason is a rename; amendment 8, a record) |
+| B | `schemas/conformance.schema.json` | description names `bay/improve/conformance.py` | New: amendment 4 |
+| B,D | `bay/lint.py` | import, docstring | Covered: slice 1 / slice 7 `bay/lint.py` |
+| C,D | `framework/connectors/{improve-detect,improve-store}/` | receive code | Covered: slice 6 `framework/connectors/improve-*/` |
+| B,D | `framework/connectors/{artifact-graph,claude-transcripts,git,ledger}/` | import lines, receive code | Covered by path: slice 7 `framework/connectors/` (slice 6 entry names only `improve-*`; fine) |
+| D | `framework/modes/improve/{README.md,config.*,mode.yaml}` | wording | Covered: slice 6 `framework/modes/improve/` |
+| C,D | `framework/modes/improve/features/*` (scan/playbook.md:29, and G's move of all 12 files) | wording; moved | New: amendment 5 (the slice 6 entry's prefix stops at `improve/`, so B-3 fails; only 4 of 12 files are listed, slice 4) |
+| A-H | `tests/**`, `tests/golden/`, `connectors/*/tests`, `framework/connectors/*/tests` | tests | no entry needed (`other`) / extension tests follow their connector |
+| E | `bay/workflows.py`, `bay/model.py`, `bay/dispatch.py`, `bay/cli.py` | one syntax | Covered: slice 7, 3, 3, 4 |
+| E | `schemas/mode.schema.json`, `schemas/config.schema.json` | `when` pattern | Covered: slice 3, slice 2 |
+| E | `framework/connectors/workflow-runner/` | uses shared code | Covered: slice 7 |
+| E,G | `framework/modes/cos/` mode-wide files | moved | Covered: slice 7 `framework/modes/cos/` |
+| E,G | `framework/modes/cos/features/{run,next,status}/` (moved; 5 of 6 files unlisted) | moved | New: amendment 6 |
+| F,G | `framework/components.yaml` | protected block, at:, owns | Covered: slice 7 |
+| F | `schemas/components.schema.json` | `protected:` block | New: amendment 7 |
+| F,G | `bay/guard.py`, `bay/boundary.py`, `bay/model.py`, `bay/lint.py` | read the map | Covered: slice 7 (each) |
+| F | `adapters/claude-code/claude_code.py` | policy from the map; text :483,:508 | Covered: slice 7 |
+| G | `bay/scaffold.py`, `bay/registry.py` | paths, reserved message; origin | Covered: slice 3, slice 4 |
+| G | `framework/modes/forge/` (4 feature files + rest), `framework/modes/improve/` | moved | Covered: slice 4 and 8 list all four forge feature files; `framework/modes/` slice 7 |
+| G | `framework/envs/*` -> `envs/*` | moved; `framework-dev` fs.write | Covered: slice 7 `framework/envs/`, `envs/` |
+| G | `framework/connectors/*` -> `connectors/*` (incl. corpus-store, core for briefing) | moved | Covered: slice 7; slice 5 `framework/connectors/corpus-store/` |
+| H | `framework/interfaces/improve.findings.v1.yaml` | `ownerOnly` | Covered: slice 4 |
+| H | `schemas/interface.schema.json` | `ownerOnly` key | New: amendment 9 (only if D4 recommended option) |
+| H | `README.md`, `docs/DESIGN.md`, `docs/INTERFACES.md` | folder map, protection | Covered: slice 9 (each) |
+| D,H | `.agentbay/COORDINATOR.md` (generated), `HANDOFF.md` | | generated / other |
+
+Files in G with literal `framework/(modes|envs|connectors)` outside the moved folders (all other or covered): `adapters/claude-code/claude_code.py`, `bay/scaffold.py`, `docs/DESIGN.md:153-154`,
+`framework/components.yaml`, `framework/rules/conformance.yaml:3` (covered, slice 1), `CHANGELOG.md:76` (history, leave), tests: `conftest.py`, `test_boundary.py:239`, `test_contract_versions.py:76`,
+`test_core_names.py:39-43`, `test_dispatch.py:467,484`, `test_improve_detectors.py:425,463`, `test_ledger.py:168`, `test_lint.py:225-245,315`, `test_mail_briefing.py:290`, `test_resolver.py:167,184`,
+`test_review7a.py:141`, `improve-store/tests/test_improve_store.py:124-126`.
+
+Amendment entries (9), to add to 0008's `touches:` by the owner (8 is a record; 9 only with D4):
+```
+  - { path: bay/conformance.py, reason: "NEW. moved from bay/improve/conformance.py: the conformance rules loader and checks, used by lint and by improve-detect", slice: 6 }
+  - { path: bay/graph.py, reason: "NEW. moved from bay/improve/graph.py: the file and reference graph, used by artifact-graph and improve-detect", slice: 6 }
+  - { path: bay/util.py, reason: "short_hash, in_window and warn move here from bay/improve/ (several connectors use them)", slice: 6 }
+  - { path: schemas/conformance.schema.json, reason: "description names bay/improve/conformance.py; follows the move to bay/conformance.py", slice: 6 }
+  - { path: "framework/modes/improve/features/", reason: "wording follows the moved code (slice 6); moved to modes/improve/features/ (slice 7); B-3 needs this prefix", slice: 6 }
+  - { path: "framework/modes/cos/features/", reason: "moved to modes/cos/features/; B-3 needs this prefix", slice: 7 }
+  - { path: schemas/components.schema.json, reason: "`protected:` block of the component map", slice: 7 }
+  - { path: bay/connect.py, reason: "a connector may be several modules: sibling imports resolve inside its folder (improve-detect, improve-store)", slice: 6 }
+  - { path: schemas/interface.schema.json, reason: "`ownerOnly` endpoints: only the owner's command may call them (improve decide)", slice: 7 }
+```
+The B-3 trap again (part 15): `bay check --base` splits renames, so each deleted `framework/modes/<m>/features/...` file is a feature path of an existing mode and needs an entry whose literal prefix reaches
+`framework/modes/<m>/features/`. forge is already covered (all 4 files listed); cos and improve are not. The added side (`modes/<m>/`) is new at the merge-base, so it passes as a new extension.
+Run the whole-branch check after F and after G, not only at the end.
+
+## 5. Decisions for the owner (recommended option first)
+
+D1. Shared improve code stays in core. `bay/graph.py` and `bay/conformance.py` (682 lines) cannot move into one connector (two users each, B-7). Recommended: core, as ordinary modules; "bay/improve/ gone" holds
+    and 2,758 lines leave (a quarter of core, not a third). Alternatives: copy graph into two connectors (358 duplicated lines), or version `artifacts.read/v1` so improve-detect asks artifact-graph for a base-tree graph (interface bump, R-2).
+D2. Multi-module connectors. Recommended: `_load_module` passes `submodule_search_locations` (about 3 lines, covered by path, amendment 8 as a record). Trade-off: a new, small contract (a connector folder is a package); the
+    alternative is one 1,500-line `improve_detect.py` or leaving the code in core, which fails the proposal.
+D3. What is protected. 0008: cos and forge, "with the control-plane envs and connectors they need". The strict closure is envs cos-local, local-authoring, framework-dev, workspace and connectors workflow-runner, scaffold,
+    improve-detect, ledger, artifact-graph. Recommended wider list (section 2): all 6 envs and all 9 connectors, because the other four (claude-transcripts, git, improve-store, corpus-store) scrub secrets, redact transcripts or
+    hold the approval state, and all of them were protected by location; leaving them writable would loosen a guard decision nobody asked to loosen. Trade-off: improve cannot ship its own connector fixes without `forge.extend`.
+    `improve-local` is protected but names `modes: [improve]`, so the ordinary improve mode may use it.
+D4. improve as an ordinary mode weakens user-only approval unless `decide` is closed. Today nothing stops a `modes/improve/mode.yaml` step `run: improve.findings/v1.decide` with `by: user@tty`; the file is safe only because
+    `framework/` is protected (`improve.findings.v1.yaml:117` says "no workflow step calls it", enforced by location). Recommended: `ownerOnly: true` on that endpoint, refused by the resolver in any step, allowed only through
+    `run_capability` from `bay approve <F-id>` (+ amendment 9). Alternatives: keep `modes/improve/mode.yaml` protected (improve not fully ordinary), or accept the risk. Also changes (documented, tested): findings about improve itself
+    route to `mode-fix`, not `forge.extend`; `origin` in `bay catalog` for improve reads `user`, not `framework` (the one catalog change beyond paths).
+D5. `decide` as a feature with a gate (0008 item 4, literal) vs keeping `bay approve <F-id>`. A gate can be approved from chat (`approvals.chat`), but COORDINATOR.md and `test_improve.py:234` say a backlog item is never decided from chat.
+    Recommended: keep `bay approve <F-id>` terminal-only (`cli.py:390`), still calling improve's capability. Trade-off: core `cli.py` still names the improve mode and `F-` ids; 0008 says a missing contract is a follow-up, not a back door, so this is the follow-up
+    (a generic "owner decision" hook declared by a mode).
+D6. "One step runner" and "a project workflow is a feature whose steps are calls". Recommended: one parser, one validator, one `skip`/`substitute`/`advance` rule, with two executors kept (the dispatcher runs steps inside a call; the cursor hands back `nextCall`).
+    Reason: nested calls would break the stated guarantee that each stage keeps its own grants, effects, budget, review and gates and that nothing recurses (`workflows.py:25-28`), and bring cycles and effect unions. Acceptance reads "one stage-syntax parser in bay/".
+D7. A gate with `when:` in a project workflow is skipped today. The value comes from the output the coordinator passes to `cos.next`, so an agent can fabricate it. Recommended: refuse it in both (same rule as 0006 slice 7a), message naming the fix; no shipped workflow uses it (`test_workflows.py` has `when` only on a call stage).
+    Trade-off: removes conditional gates from project workflows (a lost capability, though an unsafe one); alternative keep it and say so in the docs.
+D8. Reference grammar. Recommended: the union (`!` negation, hyphens, nested paths) in both. It loosens the mode `when` pattern slightly; nothing that was accepted is rejected.
+D9. Protected paths for `forge.extend`'s builder. Recommended: `framework-dev` names each protected instance path in `fs.write` (the guard rule is unchanged: a protected path is writable only if an env path is at or under it), kept in sync by a lint.
+    Alternative: a `@protected` token in `fs.write` (a new env syntax and schema change).
+Not decisions, notes: `delivery` is already `modes/delivery/` (0008's list is wrong on that name); the slice 7 acceptance should say "roles, rules, interfaces and the component map" since the agent profile already lives in `adapters/`.
+
+## 6. Risks and how each part proves no guard decision changed
+
+Security-relevant changes: (1) the guard policy now comes from the map and the protected set grows from 4 dirs to dirs plus instance paths; (2) `modes/`, `envs/`, `connectors/` become writable by `local-authoring` (it writes those three folders,
+`framework/envs/local-authoring.yaml:25`) while holding protected instances, so protection must be per instance; (3) the root distinction that stopped user modes using framework envs and kept framework names reserved is replaced by the map;
+(4) improve leaves protection (D4); (5) the project-workflow gate rule changes (D7); (6) connector loading gains a search path (D2); (7) moved findings change fingerprints.
+
+Proof per part
+- A: the baselines themselves. The guard matrix is generated by the real `Guard` over a built kit project, so it records decisions, not intentions.
+- B, C, D: no guard code touched; improve golden identical; B-7 test shows a cross-connector import still fails, and a sibling module may not shadow another connector's entry name; `git grep bay.improve` empty at D.
+  Fingerprints: the A4 test and the dead-code step show no moved file carries a finding.
+- E: `test_stage_syntax.py` lists every accept/reject change; the gate rule has a test for each side; `test_dispatch.py` and `test_workflows.py` unchanged apart from names.
+- F: the matrix is identical row by row; the only new decision source is the map, and tests show a role cannot write a map-listed path, an unlisted edit fails the boundary, and a stale `guard.json` is reported (the guard still fails open when the key is missing, as today; the warning is the new part).
+- G: matrix identical for all logical rows (the compare maps old to new paths and fails on any difference); protected set == old four dirs plus exactly the moved instances (test asserts the list, replacing the `:296` equality, which must change because the list grows: the reviewer checks it is a superset of the old list);
+  reserved names: `bay new mode cos`, `bay new connector scaffold`, `bay new env workspace` refused with the protected-name message; a lint run on a kit whose map names a missing instance fails; deleting and re-adding `modes/cos/` without `touches:` fails the boundary; case variants fail `lint_case_and_manifests`.
+- H: matrix deltas asserted as an exact list (improve mode rows only); a mode step calling `decide` is a resolve gap; `bay approve <F-id>` still terminal-only; a user mode cannot place a role in `improve-local` (not listed) while improve can.
+- Whole-branch boundary check (with the nine amendments applied) and `python3 tests/run.py -q` after every part; quote last lines in each part's HANDOFF as before.
+
+Other risks
+- `tests/test_boundaries.py:306` asserts a "reaches framework/" lint warning; after F the warning logic must stay limited to dirs and `.` (a write path of `modes` reaching `modes/cos` is by design, the guard denies it) or `bay check` gains permanent noise.
+- `test_core_names.py` must not start scanning connector names such as `git` and `ledger` (they would hit everywhere in `bay/`): keep the discovered set to `items.source/v1` implementers.
+- B-11: README/DESIGN/INTERFACES may not name any mode, connector or env outside a fence; the framework instances were already counted (they sit under the `framework/...` `at:`), so nothing new, but H adds the words "improve-local" and "cos" to docs only in fences or dotted forms.
+- The dead-code base is `origin/main`; a moved file's pre-existing findings are new (section 1). A4 is the guard against it.
+- Size: C and D are the largest; if C passes 35 calls without the goldens green, commit what is green (detect first, store second) and report the rest as C2.
+- `improve.implement` hands a draft to forge; with improve unprotected, a mode-fix task path now applies to improve's own files: check `test_improve.py` routes after H.
+
 # HANDOFF part 22: T-20261030-d695 (recorded with `bay plan`) - stage-4 re-review: DOD-3 should-fix, DOD-8 and DOD-9 nits
 
 Outcome: done on feat/0008-stage4. Not pushed. No proposal edited. The intersection rule is kept (fail closed).

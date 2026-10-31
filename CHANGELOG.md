@@ -2,6 +2,30 @@
 
 Earlier versions: see docs/proposals/
 
+## 0.9.0 - 2026-10-31
+
+improve is a plain mode, workflows have one implementation, and the kit's modes, envs and connectors live in the top-level folders. Protection is declared in the component map. The schema apiVersion stays `agentbay/v2` until slice 9.
+
+### Changed
+
+- Kit-shipped modes, envs and connectors moved from `framework/modes|envs|connectors` to `modes/`, `envs/`, `connectors/` (a pure `git mv`). `framework/` holds roles, rules, interfaces and the component map.
+- improve's code moved out of the core into its connectors (improve-detect, improve-store, claude-transcripts, git, ledger); `bay/improve/` is gone. The file graph and conformance checks are core modules (`bay/graph.py`, `bay/conformance.py`), shared helpers are in `bay/util.py`.
+- A connector folder may hold several modules.
+- One workflow syntax in `bay/workflows.py`: one grammar, validator and skip/substitute/advance rule shared by the step runner and the cos stage runner. Both accept the same references.
+- Protection is declared in `framework/components.yaml` (`protected:`): modes cos and forge and the envs and connectors they need. The guard, `bay check --base` and lint read it; a missing or malformed block protects everything. Protected names are reserved. framework-dev names each protected path it may write, and lint keeps it in sync.
+- improve is an ordinary mode.
+
+### Security
+
+- `improve.findings/v1.decide` is owner-only: no step in any mode may call it; only `bay approve <F-id>` in a terminal reaches it.
+- improve's store sets the fields it owns (status, history, ids, timestamps) itself; a finding cannot arrive approved or with a forged history.
+- A gate with `when:` is refused in project workflows, so no output passed to `cos.next` can skip an approval.
+
+### Known issues
+
+- `bay check --base` treats a base map without a `protected:` block as protecting nothing (main had none before this release); slice 9 makes it an error.
+- Per-feature `uses:` is the intersection of open calls' `uses:`; per-call scope is a follow-up.
+
 ## 0.8.0 - 2026-10-30
 
 Content types are plug-ins now: the store knows no post or email shape of its own. Stores written by 0.7.0 are refused and must be moved aside and re-synced (see Known issues). The schema apiVersion stays `agentbay/v2` until slice 9.

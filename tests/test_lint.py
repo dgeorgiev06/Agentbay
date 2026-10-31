@@ -1,7 +1,7 @@
 """bay check (lint half): one test per failure mode, plus the shipped kit is clean."""
 import shutil
 
-from helpers import KIT, edit_yaml, kit_copy, project
+from helpers import KIT, cleanup, edit_yaml, kit_copy, project
 
 from bay import lint, model
 
@@ -222,13 +222,13 @@ def test_forge_extend_review_cannot_be_disabled_or_weakened():
                 ep.pop("review")
             else:
                 ep["review"].update(change)
-        edit_yaml(k / "framework/modes/forge/mode.yaml", f)
-        has(k, "framework/modes/forge/mode.yaml", "forge.extend must declare review", "cannot be disabled")
+        edit_yaml(k / "modes/forge/mode.yaml", f)
+        has(k, "modes/forge/mode.yaml", "forge.extend must declare review", "cannot be disabled")
 
 
 def test_kind_scoped_rules_are_linted():
     k = kit_copy()
-    sub(k, "framework/modes/forge/features/create/rules.yaml", "when: { kind: env }", "when: { kind: plugin }")
+    sub(k, "modes/forge/features/create/rules.yaml", "when: { kind: env }", "when: { kind: plugin }")
     has(k, "rule R-8 when.kind 'plugin' is not one of")
     k = kit_copy()
     (k / RULES).write_text((k / RULES).read_text().rstrip() + "\n  - { id: R-9, level: must, statement: \"x y z\", "
@@ -236,14 +236,38 @@ def test_kind_scoped_rules_are_linted():
     has(k, "rule R-9 uses when.kind but the feature's input type has no `kind` enum")
 
 
-def test_name_collision_between_user_and_framework():
+def test_a_protected_name_is_reserved_and_defined_once():
+    """With one folder per kind a name is defined once; what keeps a protected name from being taken is the map
+    (stage 5 part G): `bay new` refuses it, a feature cannot be added to a protected mode, and the map may not name
+    an instance that is missing."""
+    from bay import model, scaffold
     k = kit_copy()
-    (k / "modes/forge").mkdir()
-    (k / "modes/forge/mode.yaml").write_text((k / "modes/delivery/mode.yaml").read_text().replace("name: delivery", "name: forge"))
-    has(k, "Mode 'forge' is defined by both the framework", "modes/forge/mode.yaml", "rename yours")
+    try:
+        for kind, name in (("mode", "cos"), ("mode", "forge"), ("connector", "scaffold"), ("env", "workspace")):
+            try:
+                scaffold.create(k, kind, name, implements="items.source/v1")
+                raise AssertionError(f"bay new {kind} {name} was allowed")
+            except scaffold.ScaffoldError as e:
+                assert "protected name" in str(e) and "forge.extend" in str(e), str(e)
+        try:
+            scaffold.create(k, "feature", "extra", target="cos")
+            raise AssertionError("a feature was added to a protected mode")
+        except scaffold.ScaffoldError as e:
+            assert "mode 'cos' is protected" in str(e), str(e)
+        assert not (k / "modes/cos/features/extra").exists()
+        # a second definition under another folder name is a name mismatch, never a second mode 'cos'
+        (k / "modes/cos2").mkdir()
+        (k / "modes/cos2/mode.yaml").write_text((k / "modes/cos/mode.yaml").read_text())
+        errs = model.Kit(k).errors
+        assert any("modes/cos2/mode.yaml" in e and "must match 'cos2'" in e for e in errs), errs
+    finally:
+        cleanup(k)
     k = kit_copy()
-    (k / "envs/workspace.yaml").write_text((k / "framework/envs/workspace.yaml").read_text())
-    has(k, "Environment 'workspace' is defined by both the framework")
+    try:
+        edit_yaml(k / "framework/components.yaml", lambda d: d["protected"]["mode"].append("ghost"))
+        has(k, "protected mode 'ghost' does not exist")
+    finally:
+        cleanup(k)
 
 
 def test_modes_must_not_name_connectors_or_tools():
@@ -312,7 +336,7 @@ def test_schedule_is_a_warning_not_an_error():
     assert problems(KIT) == []
     # improve.backlog runs after the agent steps: the advisory points at the README recipe, not at a bare cron call
     w = next(w for w in ws if "improve.backlog declares schedule" in w)
-    assert "framework/modes/improve/README.md" in w and "call improve.backlog" not in w
+    assert "modes/improve/README.md" in w and "call improve.backlog" not in w
 
 
 def test_run_steps_use_versioned_capability_spelling():

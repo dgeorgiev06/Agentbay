@@ -1,0 +1,1706 @@
+{
+ "audit": {
+  "candidates": [
+   {
+    "evidence": [
+     "app/core.py:9",
+     "ledger"
+    ],
+    "fingerprint": "62f5b3fa536c7238",
+    "key": "fn:app/core.py:never_called",
+    "kind": "unused",
+    "lens": "artifacts",
+    "scope": {
+     "file": "app/core.py"
+    },
+    "severity": "low",
+    "title": "Unused function never_called"
+   },
+   {
+    "evidence": [
+     "app/core.py:13",
+     "ledger"
+    ],
+    "fingerprint": "d7ae3ed430708843",
+    "key": "fn:app/core.py:old_one",
+    "kind": "unused",
+    "lens": "artifacts",
+    "scope": {
+     "file": "app/core.py"
+    },
+    "severity": "low",
+    "title": "Unused function old_one"
+   },
+   {
+    "evidence": [
+     "app/core.py:18",
+     "ledger"
+    ],
+    "fingerprint": "6f7e920baab0b0fa",
+    "key": "fn:app/core.py:giant",
+    "kind": "unused",
+    "lens": "artifacts",
+    "scope": {
+     "file": "app/core.py"
+    },
+    "severity": "low",
+    "title": "Unused function giant"
+   },
+   {
+    "evidence": [
+     "app/core.py:18",
+     "complexity"
+    ],
+    "fingerprint": "9e303cdc6d8c216e",
+    "key": "app/core.py:giant",
+    "kind": "complexity",
+    "lens": "artifacts",
+    "scope": {
+     "file": "app/core.py"
+    },
+    "severity": "low",
+    "title": "giant in app/core.py is too complex"
+   },
+   {
+    "evidence": [
+     "app/core.py:2",
+     "references"
+    ],
+    "fingerprint": "f6ded5a04bdb269d",
+    "key": "app/core.py:UNUSED_LIMIT",
+    "kind": "unused-constant",
+    "lens": "artifacts",
+    "scope": {
+     "file": "app/core.py"
+    },
+    "severity": "low",
+    "title": "Unused constant UNUSED_LIMIT in app/core.py"
+   },
+   {
+    "evidence": [
+     "docs/big.md:1",
+     "words"
+    ],
+    "fingerprint": "6f5beda973d1010d",
+    "key": "docs/big.md",
+    "kind": "doc-size",
+    "lens": "artifacts",
+    "scope": {
+     "file": "docs/big.md"
+    },
+    "severity": "low",
+    "title": "docs/big.md is 3102 words"
+   },
+   {
+    "evidence": [
+     "docs/stale.md:3",
+     "docs/stale.md:3",
+     "docs/stale.md:3",
+     "staleRefs"
+    ],
+    "fingerprint": "ac8bf693c74a6bbd",
+    "key": "docs/stale.md",
+    "kind": "doc-stale",
+    "lens": "artifacts",
+    "scope": {
+     "file": "docs/stale.md"
+    },
+    "severity": "low",
+    "title": "docs/stale.md references what no longer exists"
+   },
+   {
+    "evidence": [
+     "app/core.py:14",
+     "markers"
+    ],
+    "fingerprint": "9dd79b1e10bf2175",
+    "key": "app/core.py",
+    "kind": "compat-layer",
+    "lens": "artifacts",
+    "scope": {
+     "file": "app/core.py"
+    },
+    "severity": "medium",
+    "title": "Compatibility layer in app/core.py"
+   }
+  ],
+  "manual": [],
+  "stats": {
+   "conformanceRules": [],
+   "failed": 0,
+   "files": 5,
+   "graphNodes": 7,
+   "unparsed": 0,
+   "unreadable": 0
+  },
+  "warnings": []
+ },
+ "change": {
+  "existing": 1,
+  "new": [
+   {
+    "detector": {
+     "key": "fn:pkg/core.py:brand_new_helper",
+     "name": "unused"
+    },
+    "evidence": [
+     {
+      "detail": "fn:pkg/core.py:brand_new_helper: 0 references",
+      "kind": "file",
+      "ref": "pkg/core.py:7"
+     },
+     {
+      "detail": "0 uses",
+      "kind": "measurement",
+      "ref": "ledger",
+      "value": 0
+     }
+    ],
+    "kind": "unused",
+    "lens": "artifacts",
+    "measure": {
+     "ledgerUses": 0,
+     "references": 0
+    },
+    "occurrences": 2,
+    "pattern": "function brand_new_helper has no references in the code/reference graph and no ledger uses in the window",
+    "proposedFix": "Delete brand_new_helper (or wire it in if it should be used).",
+    "scope": {
+     "file": "pkg/core.py"
+    },
+    "severity": "low",
+    "title": "Unused function brand_new_helper"
+   },
+   {
+    "detector": {
+     "key": "pkg/main.py",
+     "name": "compat-layer"
+    },
+    "evidence": [
+     {
+      "detail": "# alias for used until callers move",
+      "kind": "file",
+      "ref": "pkg/main.py:10"
+     },
+     {
+      "detail": "1 markers",
+      "kind": "measurement",
+      "ref": "markers",
+      "value": 1
+     }
+    ],
+    "kind": "compat-layer",
+    "lens": "artifacts",
+    "measure": {
+     "markers": 1
+    },
+    "occurrences": 2,
+    "pattern": "1 compatibility marker(s)",
+    "proposedFix": "Remove the layer once nothing depends on the old shape; otherwise date it.",
+    "scope": {
+     "file": "pkg/main.py"
+    },
+    "severity": "low",
+    "title": "Compatibility layer in pkg/main.py"
+   }
+  ],
+  "stopped": "2 new dead-code finding(s) against HEAD: unused Unused function brand_new_helper; compat-layer Compatibility layer in pkg/main.py",
+  "warnings": [
+   "base HEAD resolved to merge-base <sha12>"
+  ]
+ },
+ "kitAudit": {
+  "conformanceFindings": 0,
+  "conformanceRules": [
+   "C-1",
+   "C-2",
+   "C-3",
+   "C-4",
+   "C-5",
+   "C-6",
+   "C-7"
+  ],
+  "countsPerKind": {
+   "complexity": 8,
+   "doc-size": 2,
+   "doc-stale": 2,
+   "inefficient-store-read": 5,
+   "slop-duplicate-rule": 15,
+   "unused": 5
+  },
+  "manual": [
+   "C-8",
+   "C-9",
+   "C-10"
+  ]
+ },
+ "reports": {
+  "backlog": {
+   "counts": {
+    "approved": 1,
+    "deferred": 1,
+    "open": 2
+   },
+   "items": [
+    "F-ff5d7fba",
+    "F-8af6c688",
+    "F-aeba35ea"
+   ],
+   "week": "2026-W44"
+  },
+  "handoffs": {
+   "forge.extend": {
+    "draft": "F-8af6c688.proposal.md",
+    "file": "# Proposal draft: Cut the churn\n\nStatus: draft from improve finding F-8af6c688. File it with forge.extend (its propose step writes docs/proposals/<id>.md); nothing is implemented before that call's approval gate.\n\n## Problem\nIt churns.\n\n## Evidence\n- file modes/m/y.py:3\n- measurement n\n\n## Change\nFix it.\n\n## Compatibility\nNo contract change expected.\n\n## Tests\n- a test\n",
+    "id": "F-8af6c688",
+    "next": {
+     "call": "forge.extend",
+     "input": {
+      "context": "# Proposal draft: Cut the churn\n\nStatus: draft from improve finding F-8af6c688. File it with forge.extend (its propose step writes docs/proposals/<id>.md); nothing is implemented before that call's approval gate.\n\n## Problem\nIt churns.\n\n## Evidence\n- file modes/m/y.py:3\n- measurement n\n\n## Change\nFix it.\n\n## Compatibility\nNo contract change expected.\n\n## Tests\n- a test\n",
+      "goal": "Cut the churn"
+     }
+    },
+    "route": "forge.extend"
+   },
+   "mode-fix": {
+    "draft": "F-aeba35ea.task.md",
+    "file": "```task\nprotocol: TaskEnvelope/v1\ntaskId: T-20261031-0001\ngoal: Fix the mode\ncontext: |\n  It breaks.\n  \n  Evidence:\n  - file modes/m/y.py:3\n  \n  Change:\n  Patch it.\nconstraints:\n  - change only the mode named in the finding\n  - bay check stays clean\ndeliverable: Patch it.\n```\n",
+    "id": "F-aeba35ea",
+    "next": {
+     "envelope": "```task\nprotocol: TaskEnvelope/v1\ntaskId: T-20261031-0001\ngoal: Fix the mode\ncontext: |\n  It breaks.\n  \n  Evidence:\n  - file modes/m/y.py:3\n  \n  Change:\n  Patch it.\nconstraints:\n  - change only the mode named in the finding\n  - bay check stays clean\ndeliverable: Patch it.\n```\n",
+     "how": "the Chief of Staff hands this to forge.create or the builder role"
+    },
+    "route": "mode-fix"
+   }
+  },
+  "reportText": "# improve backlog 2026-W44\n\nGenerated 2026-10-27T12:00:00Z. 2 open, 1 approved, 1 deferred.\n\nDecide each item in your own terminal: `.agentbay/bay approve <id>` (or `--defer`, `--wontfix`).\nApproved items are implemented only on demand: `.agentbay/bay call improve.implement '{\"id\": \"<id>\"}'`.\n\n## 1. slow-step in bay/a.py\n\n`F-ff5d7fba` | sessions/slow-step | severity severe | priority 6.67 | status **open** | route forge.extend\n\n- **Pattern:** slow-step pattern for forge.extend:implement\n- **Measurement:** n=2\n- **Evidence:**\n  - file `bay/a.py:3` - the line -> `do better`\n  - measurement `n` - 2\n- **Root cause:** not analysed yet (improve.triage)\n- **Proposed fix:** -\n- **Linked:** F-aeba35ea\n\n## 2. complexity in modes/m/y.py\n\n`F-8af6c688` | artifacts/complexity | severity high | priority 4.5 | status **approved** | route mode-fix\n\n- **Pattern:** complexity pattern for fn:modes/m/y.py:y\n- **Measurement:** n=2\n- **Evidence:**\n  - file `modes/m/y.py:3` - the line -> `do better`\n  - measurement `n` - 2\n- **Root cause:** not analysed yet (improve.triage)\n- **Proposed fix:** -\n\n## 3. unused in bay/a.py\n\n`F-aeba35ea` | artifacts/unused | severity low | priority 0.33 | status **open** | route forge.extend\n\n- **Pattern:** unused pattern for fn:bay/a.py:x\n- **Measurement:** n=2\n- **Evidence:**\n  - file `bay/a.py:3` - the line -> `do better`\n  - measurement `n` - 2\n- **Root cause:** not analysed yet (improve.triage)\n- **Proposed fix:** -\n- **Linked:** F-ff5d7fba\n\n### Agent runs\n\n| role | mode | model | tier | runs | done | not done | to-do | tokens | USD |\n|---|---|---|---|---|---|---|---|---|---|\n| builder | forge | sonnet | balanced | 2 | 1 | 1 | 3/4 | 1200 | 0.5 |\n\nRuns with to-do items not ticked off:\n\n- `T-20261025-aaaa` 1/2: did a thing\n\n",
+  "rows": [
+   {
+    "detector": {
+     "key": "fn:bay/a.py:x",
+     "name": "unused"
+    },
+    "evidence": [
+     {
+      "detail": "the line",
+      "kind": "file",
+      "ref": "bay/a.py:3",
+      "rewrite": "do better"
+     },
+     {
+      "detail": "2",
+      "kind": "measurement",
+      "ref": "n",
+      "value": 2
+     }
+    ],
+    "fingerprint": "aeba35eaf9114e46",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     },
+     {
+      "by": "user@tty",
+      "status": "approved",
+      "ts": "2026-10-27T12:00:00Z"
+     },
+     {
+      "by": "improve.implement",
+      "note": "handoff F-aeba35ea.task.md",
+      "status": "in-progress",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-aeba35ea",
+    "kind": "unused",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "artifacts",
+    "links": [
+     "F-ff5d7fba"
+    ],
+    "measure": {
+     "n": 2
+    },
+    "occurrences": 1,
+    "pattern": "unused pattern for fn:bay/a.py:x",
+    "priority": 0.33,
+    "route": "forge.extend",
+    "scope": {
+     "file": "bay/a.py"
+    },
+    "severity": "low",
+    "source": "improve.scan",
+    "status": "in-progress",
+    "title": "unused in bay/a.py"
+   },
+   {
+    "detector": {
+     "key": "fn:modes/m/y.py:y",
+     "name": "complexity"
+    },
+    "evidence": [
+     {
+      "detail": "the line",
+      "kind": "file",
+      "ref": "modes/m/y.py:3",
+      "rewrite": "do better"
+     },
+     {
+      "detail": "2",
+      "kind": "measurement",
+      "ref": "n",
+      "value": 2
+     }
+    ],
+    "fingerprint": "8af6c688c50f44d9",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     },
+     {
+      "by": "user@tty",
+      "note": "fix it",
+      "status": "approved",
+      "ts": "2026-10-27T12:00:00Z"
+     },
+     {
+      "by": "improve.implement",
+      "note": "handoff F-8af6c688.proposal.md",
+      "status": "in-progress",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-8af6c688",
+    "kind": "complexity",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "artifacts",
+    "links": [],
+    "measure": {
+     "n": 2
+    },
+    "occurrences": 3,
+    "pattern": "complexity pattern for fn:modes/m/y.py:y",
+    "priority": 4.5,
+    "route": "mode-fix",
+    "scope": {
+     "file": "modes/m/y.py"
+    },
+    "severity": "high",
+    "source": "improve.scan",
+    "status": "in-progress",
+    "title": "complexity in modes/m/y.py"
+   },
+   {
+    "detector": {
+     "key": "docs/b.md",
+     "name": "doc-size"
+    },
+    "evidence": [
+     {
+      "detail": "the line",
+      "kind": "file",
+      "ref": "docs/b.md:3",
+      "rewrite": "do better"
+     },
+     {
+      "detail": "2",
+      "kind": "measurement",
+      "ref": "n",
+      "value": 2
+     }
+    ],
+    "fingerprint": "f9855a26d28b068d",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     },
+     {
+      "by": "user@tty",
+      "status": "deferred",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-f9855a26",
+    "kind": "doc-size",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "artifacts",
+    "links": [],
+    "measure": {
+     "n": 2
+    },
+    "occurrences": 1,
+    "pattern": "doc-size pattern for docs/b.md",
+    "priority": 0.67,
+    "route": "forge.extend",
+    "scope": {
+     "file": "docs/b.md"
+    },
+    "severity": "medium",
+    "source": "improve.scan",
+    "status": "deferred",
+    "title": "doc-size in docs/b.md"
+   },
+   {
+    "detector": {
+     "key": "forge.extend:implement",
+     "name": "slow-step"
+    },
+    "evidence": [
+     {
+      "detail": "the line",
+      "kind": "file",
+      "ref": "bay/a.py:3",
+      "rewrite": "do better"
+     },
+     {
+      "detail": "2",
+      "kind": "measurement",
+      "ref": "n",
+      "value": 2
+     }
+    ],
+    "fingerprint": "ff5d7fba65ed8f21",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-ff5d7fba",
+    "kind": "slow-step",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "sessions",
+    "links": [
+     "F-aeba35ea"
+    ],
+    "measure": {
+     "n": 2
+    },
+    "occurrences": 4,
+    "pattern": "slow-step pattern for forge.extend:implement",
+    "priority": 6.67,
+    "route": "forge.extend",
+    "scope": {
+     "file": "bay/a.py"
+    },
+    "severity": "severe",
+    "source": "improve.scan",
+    "status": "open",
+    "title": "slow-step in bay/a.py"
+   }
+  ],
+  "upsert": {
+   "merged": [],
+   "new": [
+    "F-aeba35ea",
+    "F-8af6c688",
+    "F-f9855a26",
+    "F-ff5d7fba"
+   ],
+   "reopened": []
+  }
+ },
+ "routes": {
+  "default": {
+   "bay and mode file": "mode-fix",
+   "bay file": "forge.extend",
+   "docs file": "forge.extend",
+   "empty": "mode-fix",
+   "framework file": "forge.extend",
+   "framework flag": "forge.extend",
+   "mode cos": "mode-fix",
+   "mode forge": "forge.extend",
+   "mode improve": "forge.extend",
+   "schemas file": "forge.extend",
+   "tests file": "forge.extend",
+   "user file": "mode-fix",
+   "user mode": "mode-fix"
+  },
+  "shipped modes": {
+   "bay and mode file": "mode-fix",
+   "bay file": "forge.extend",
+   "docs file": "forge.extend",
+   "empty": "mode-fix",
+   "framework file": "forge.extend",
+   "framework flag": "forge.extend",
+   "mode cos": "forge.extend",
+   "mode forge": "forge.extend",
+   "mode improve": "forge.extend",
+   "schemas file": "forge.extend",
+   "tests file": "forge.extend",
+   "user file": "mode-fix",
+   "user mode": "mode-fix"
+  }
+ },
+ "scan": {
+  "candidates": [
+   {
+    "evidence": [
+     "ab:C-20261025-000000",
+     "ab:C-20261025-000001",
+     "ab:C-20261025-000002"
+    ],
+    "fingerprint": "a526421306c5808e",
+    "key": "forge.extend",
+    "kind": "review-rounds",
+    "lens": "sessions",
+    "scope": {
+     "feature": "extend",
+     "mode": "forge"
+    },
+    "severity": "medium",
+    "title": "forge.extend needs 3 review rounds"
+   },
+   {
+    "evidence": [
+     "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+     "cc:0a1b2c3d-0000-4000-8000-<sha12>"
+    ],
+    "fingerprint": "0fd10a9b8c17f591",
+    "key": "claude-code-sessions",
+    "kind": "review-rounds",
+    "lens": "sessions",
+    "scope": {
+     "framework": "claude-code sessions"
+    },
+    "severity": "medium",
+    "title": "Sessions run several review rounds"
+   },
+   {
+    "evidence": [
+     "ab:C-20261025-000000",
+     "ab:C-20261025-000001",
+     "ab:C-20261025-000002"
+    ],
+    "fingerprint": "5628d6fb1012d689",
+    "key": "forge.extend:DOD-5",
+    "kind": "rule-repeat",
+    "lens": "sessions",
+    "scope": {
+     "feature": "extend",
+     "mode": "forge",
+     "rule": "DOD-5"
+    },
+    "severity": "high",
+    "title": "forge.extend DOD-5 keeps failing review"
+   },
+   {
+    "evidence": [
+     "ab:C-20261025-000000",
+     "ab:C-20261025-000001",
+     "ab:C-20261025-000002"
+    ],
+    "fingerprint": "dc27aad6560ffda8",
+    "key": "forge.extend:DOD-7",
+    "kind": "rule-repeat",
+    "lens": "sessions",
+    "scope": {
+     "feature": "extend",
+     "mode": "forge",
+     "rule": "DOD-7"
+    },
+    "severity": "high",
+    "title": "forge.extend DOD-7 keeps failing review"
+   },
+   {
+    "evidence": [
+     "ab:C-20261025-000000",
+     "ab:C-20261025-000001",
+     "ab:C-20261025-000002"
+    ],
+    "fingerprint": "8885ad2dea2d2335",
+    "key": "forge.extend:DOD-5",
+    "kind": "lintable-blocker",
+    "lens": "sessions",
+    "scope": {
+     "feature": "extend",
+     "mode": "forge",
+     "rule": "DOD-5"
+    },
+    "severity": "severe",
+    "title": "forge.extend: blocker DOD-5 was a check's job"
+   },
+   {
+    "evidence": [
+     "ab:C-20261025-000000",
+     "ab:C-20261025-000001",
+     "ab:C-20261025-000002"
+    ],
+    "fingerprint": "9973d1252ee866ab",
+    "key": "forge.extend",
+    "kind": "out-of-scope",
+    "lens": "sessions",
+    "scope": {
+     "feature": "extend",
+     "mode": "forge"
+    },
+    "severity": "medium",
+    "title": "forge.extend adds unapproved scope"
+   },
+   {
+    "evidence": [
+     "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+     "cc:0a1b2c3d-0000-4000-8000-<sha12>"
+    ],
+    "fingerprint": "8f6fb8704051be65",
+    "key": "claude-code-sessions",
+    "kind": "instruction-change",
+    "lens": "sessions",
+    "scope": {
+     "framework": "claude-code-sessions"
+    },
+    "severity": "medium",
+    "title": "Instructions change mid-run (claude-code-sessions)"
+   },
+   {
+    "evidence": [
+     "ab:C-20261025-000000",
+     "ab:C-20261025-000001"
+    ],
+    "fingerprint": "d740debb6046a6cb",
+    "key": "forge.extend",
+    "kind": "instruction-change",
+    "lens": "sessions",
+    "scope": {
+     "feature": "extend",
+     "mode": "forge"
+    },
+    "severity": "medium",
+    "title": "Instructions change mid-run (forge.extend)"
+   },
+   {
+    "evidence": [
+     "ab:C-20261025-000000",
+     "ab:C-20261025-000001",
+     "ab:C-20261025-000002"
+    ],
+    "fingerprint": "291fa0aa7734c6a0",
+    "key": "forge.extend.implement",
+    "kind": "slow-step",
+    "lens": "sessions",
+    "scope": {
+     "feature": "extend",
+     "mode": "forge",
+     "step": "implement"
+    },
+    "severity": "severe",
+    "title": "forge.extend.implement is slow"
+   },
+   {
+    "evidence": [
+     "ab:C-20261025-000000",
+     "ab:C-20261025-000001",
+     "ab:C-20261025-000002"
+    ],
+    "fingerprint": "3058cf8ed40b6398",
+    "key": "forge.extend.implement",
+    "kind": "costly-step",
+    "lens": "sessions",
+    "scope": {
+     "feature": "extend",
+     "mode": "forge",
+     "step": "implement"
+    },
+    "severity": "medium",
+    "title": "forge.extend.implement is costly"
+   },
+   {
+    "evidence": [
+     "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+     "cc:0a1b2c3d-0000-4000-8000-<sha12>"
+    ],
+    "fingerprint": "b804485795f786e6",
+    "key": "Bash",
+    "kind": "retry-loop",
+    "lens": "sessions",
+    "scope": {
+     "framework": "tool Bash"
+    },
+    "severity": "medium",
+    "title": "Repeated identical Bash calls"
+   },
+   {
+    "evidence": [
+     "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+     "cc:0a1b2c3d-0000-4000-8000-<sha12>"
+    ],
+    "fingerprint": "ec30222e01523fa6",
+    "key": "prompted:claude-code sessions",
+    "kind": "permission-friction",
+    "lens": "sessions",
+    "scope": {
+     "framework": "prompted claude-code sessions"
+    },
+    "severity": "medium",
+    "title": "Prompted claude-code sessions calls keep interrupting work"
+   },
+   {
+    "evidence": [
+     "ab:run:agent-1",
+     "ab:run:agent-2"
+    ],
+    "fingerprint": "42fd9d3532e779cf",
+    "key": "denied:Bash",
+    "kind": "permission-friction",
+    "lens": "sessions",
+    "scope": {
+     "framework": "denied Bash"
+    },
+    "severity": "medium",
+    "title": "Denied Bash calls keep interrupting work"
+   },
+   {
+    "evidence": [
+     "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+     "cc:0a1b2c3d-0000-4000-8000-<sha12>"
+    ],
+    "fingerprint": "28a01f60ce03fc41",
+    "key": "user",
+    "kind": "interrupts",
+    "lens": "sessions",
+    "scope": {
+     "framework": "claude-code sessions"
+    },
+    "severity": "medium",
+    "title": "The user interrupts runs"
+   },
+   {
+    "evidence": [
+     "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+     "cc:0a1b2c3d-0000-4000-8000-<sha12>"
+    ],
+    "fingerprint": "4efe194eb3cd14f1",
+    "key": "user",
+    "kind": "status-questions",
+    "lens": "sessions",
+    "scope": {
+     "framework": "claude-code sessions"
+    },
+    "severity": "medium",
+    "title": "The user keeps asking for status"
+   },
+   {
+    "evidence": [
+     "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+     "cc:0a1b2c3d-0000-4000-8000-<sha12>"
+    ],
+    "fingerprint": "cbba6b2eb6f0f0fc",
+    "key": "command-not-found",
+    "kind": "env-gap",
+    "lens": "sessions",
+    "scope": {
+     "framework": "environment command-not-found"
+    },
+    "severity": "medium",
+    "title": "Environment gap: command-not-found"
+   }
+  ],
+  "episodesTotal": 10,
+  "stats": {
+   "claude-transcripts": {
+    "badLines": 2,
+    "errors": [],
+    "files": 3,
+    "otherProjects": 1,
+    "sessions": 2,
+    "skippedOld": 0,
+    "skippedSymlinks": 0,
+    "spillBytes": 6920,
+    "spillFiles": 2,
+    "unknownRecordTypes": {
+     "weird-new-type": 2
+    }
+   },
+   "episodes": 10,
+   "git": {
+    "commits": 0,
+    "note": "not a git repository"
+   },
+   "ledger": {
+    "calls": 4,
+    "events": 19,
+    "instructionNotes": 2,
+    "runs": 2
+   },
+   "verdicts": {
+    "verdicts": 3
+   }
+  },
+  "store": [
+   {
+    "detector": {
+     "key": "forge.extend",
+     "name": "review-rounds"
+    },
+    "evidence": [
+     {
+      "detail": "round 1 of docs/proposals/0002.md",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000000"
+     },
+     {
+      "detail": "round 2 of docs/proposals/0002.md",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000001"
+     },
+     {
+      "detail": "round 3 of docs/proposals/0002.md",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000002"
+     }
+    ],
+    "fingerprint": "a526421306c5808e",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-a5264213",
+    "kind": "review-rounds",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "sessions",
+    "links": [],
+    "measure": {
+     "maxRounds": 3,
+     "subjects": 1
+    },
+    "occurrences": 3,
+    "pattern": "1 subject(s) of forge.extend went through more than 1 review round(s)",
+    "priority": 2.0,
+    "proposedFix": "Find the DoD/rule ids that fail in round 1 and turn them into checks or clearer playbook steps.",
+    "route": "forge.extend",
+    "scope": {
+     "feature": "extend",
+     "mode": "forge"
+    },
+    "severity": "medium",
+    "source": "improve.scan",
+    "status": "open",
+    "title": "forge.extend needs 3 review rounds"
+   },
+   {
+    "detector": {
+     "key": "claude-code-sessions",
+     "name": "review-rounds"
+    },
+    "evidence": [
+     {
+      "detail": "2 reviewer subagents",
+      "kind": "episode",
+      "ref": "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+      "value": 2
+     },
+     {
+      "detail": "2 reviewer subagents",
+      "kind": "episode",
+      "ref": "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+      "value": 2
+     }
+    ],
+    "fingerprint": "0fd10a9b8c17f591",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-0fd10a9b",
+    "kind": "review-rounds",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "sessions",
+    "links": [],
+    "measure": {
+     "maxRounds": 2,
+     "sessions": 2
+    },
+    "occurrences": 2,
+    "pattern": "2 sessions spawned a reviewer subagent more than 1 time(s)",
+    "priority": 1.33,
+    "route": "forge.extend",
+    "scope": {
+     "framework": "claude-code sessions"
+    },
+    "severity": "medium",
+    "source": "improve.scan",
+    "status": "open",
+    "title": "Sessions run several review rounds"
+   },
+   {
+    "detector": {
+     "key": "forge.extend:DOD-5",
+     "name": "rule-repeat"
+    },
+    "evidence": [
+     {
+      "detail": "DOD-5 failed (blocker)",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000000"
+     },
+     {
+      "detail": "DOD-5 failed (blocker)",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000001"
+     },
+     {
+      "detail": "DOD-5 failed (blocker)",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000002"
+     }
+    ],
+    "fingerprint": "5628d6fb1012d689",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-5628d6fb",
+    "kind": "rule-repeat",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "sessions",
+    "links": [],
+    "measure": {
+     "failures": 3
+    },
+    "occurrences": 3,
+    "pattern": "DOD-5 failed in 3 reviews: Evidence: the tests, `bay check` (with `--base` for the boundary), a scratch-repo `build` + `clean` round trip and the f",
+    "priority": 3.0,
+    "proposedFix": "Make the rule a deterministic check (rules.yaml `check:`) or add the missing step to the playbook so the executor meets it before review.",
+    "route": "forge.extend",
+    "scope": {
+     "feature": "extend",
+     "mode": "forge",
+     "rule": "DOD-5"
+    },
+    "severity": "high",
+    "source": "improve.scan",
+    "status": "open",
+    "title": "forge.extend DOD-5 keeps failing review"
+   },
+   {
+    "detector": {
+     "key": "forge.extend:DOD-7",
+     "name": "rule-repeat"
+    },
+    "evidence": [
+     {
+      "detail": "DOD-7 failed (should-fix)",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000000"
+     },
+     {
+      "detail": "DOD-7 failed (should-fix)",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000001"
+     },
+     {
+      "detail": "DOD-7 failed (should-fix)",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000002"
+     }
+    ],
+    "fingerprint": "dc27aad6560ffda8",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-dc27aad6",
+    "kind": "rule-repeat",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "sessions",
+    "links": [],
+    "measure": {
+     "failures": 3
+    },
+    "occurrences": 3,
+    "pattern": "DOD-7 failed in 3 reviews: Scope: nothing beyond the approved proposal changed.",
+    "priority": 3.0,
+    "proposedFix": "Make the rule a deterministic check (rules.yaml `check:`) or add the missing step to the playbook so the executor meets it before review.",
+    "route": "forge.extend",
+    "scope": {
+     "feature": "extend",
+     "mode": "forge",
+     "rule": "DOD-7"
+    },
+    "severity": "high",
+    "source": "improve.scan",
+    "status": "open",
+    "title": "forge.extend DOD-7 keeps failing review"
+   },
+   {
+    "detector": {
+     "key": "forge.extend:DOD-5",
+     "name": "lintable-blocker"
+    },
+    "evidence": [
+     {
+      "detail": "blocker DOD-5 cites run.py, tests/",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000000"
+     },
+     {
+      "detail": "blocker DOD-5 cites run.py, tests/",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000001"
+     },
+     {
+      "detail": "blocker DOD-5 cites run.py, tests/",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000002"
+     }
+    ],
+    "fingerprint": "8885ad2dea2d2335",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-8885ad2d",
+    "kind": "lintable-blocker",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "sessions",
+    "links": [],
+    "measure": {
+     "blockers": 3
+    },
+    "occurrences": 3,
+    "pattern": "review blocker DOD-5 cites run.py, tests/; a check before review would have caught it",
+    "priority": 5.0,
+    "proposedFix": "Add a deterministic check (or a lint rule) for this and reference it from the rule's `check:` so it fails before review.",
+    "route": "forge.extend",
+    "scope": {
+     "feature": "extend",
+     "mode": "forge",
+     "rule": "DOD-5"
+    },
+    "severity": "severe",
+    "source": "improve.scan",
+    "status": "open",
+    "title": "forge.extend: blocker DOD-5 was a check's job"
+   },
+   {
+    "detector": {
+     "key": "forge.extend",
+     "name": "out-of-scope"
+    },
+    "evidence": [
+     {
+      "detail": "DOD-7 failed on scope",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000000"
+     },
+     {
+      "detail": "DOD-7 failed on scope",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000001"
+     },
+     {
+      "detail": "DOD-7 failed on scope",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000002"
+     }
+    ],
+    "fingerprint": "9973d1252ee866ab",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-9973d125",
+    "kind": "out-of-scope",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "sessions",
+    "links": [],
+    "measure": {
+     "runs": 3
+    },
+    "occurrences": 3,
+    "pattern": "reviewers flagged out-of-scope additions in 3 runs",
+    "priority": 2.0,
+    "proposedFix": "State the deliverable list in the task envelope and add a rule that lists files outside it as a fail.",
+    "route": "forge.extend",
+    "scope": {
+     "feature": "extend",
+     "mode": "forge"
+    },
+    "severity": "medium",
+    "source": "improve.scan",
+    "status": "open",
+    "title": "forge.extend adds unapproved scope"
+   },
+   {
+    "detector": {
+     "key": "claude-code-sessions",
+     "name": "instruction-change"
+    },
+    "evidence": [
+     {
+      "detail": "1 change(s)",
+      "kind": "episode",
+      "ref": "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+      "value": 1
+     },
+     {
+      "detail": "1 change(s)",
+      "kind": "episode",
+      "ref": "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+      "value": 1
+     }
+    ],
+    "fingerprint": "8f6fb8704051be65",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-8f6fb870",
+    "kind": "instruction-change",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "sessions",
+    "links": [],
+    "measure": {
+     "changes": 2,
+     "episodes": 2
+    },
+    "occurrences": 2,
+    "pattern": "2 episodes had mid-run instruction changes (2 in total)",
+    "priority": 1.33,
+    "proposedFix": "Capture the missing requirement up front: add it to the input type or the playbook's Inputs, or ask for it before the first agentic step.",
+    "route": "forge.extend",
+    "scope": {
+     "framework": "claude-code-sessions"
+    },
+    "severity": "medium",
+    "source": "improve.scan",
+    "status": "open",
+    "title": "Instructions change mid-run (claude-code-sessions)"
+   },
+   {
+    "detector": {
+     "key": "forge.extend",
+     "name": "instruction-change"
+    },
+    "evidence": [
+     {
+      "detail": "1 change(s)",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000000",
+      "value": 1
+     },
+     {
+      "detail": "1 change(s)",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000001",
+      "value": 1
+     }
+    ],
+    "fingerprint": "d740debb6046a6cb",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-d740debb",
+    "kind": "instruction-change",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "sessions",
+    "links": [],
+    "measure": {
+     "changes": 2,
+     "episodes": 2
+    },
+    "occurrences": 2,
+    "pattern": "2 episodes had mid-run instruction changes (2 in total)",
+    "priority": 1.33,
+    "proposedFix": "Capture the missing requirement up front: add it to the input type or the playbook's Inputs, or ask for it before the first agentic step.",
+    "route": "forge.extend",
+    "scope": {
+     "feature": "extend",
+     "mode": "forge"
+    },
+    "severity": "medium",
+    "source": "improve.scan",
+    "status": "open",
+    "title": "Instructions change mid-run (forge.extend)"
+   },
+   {
+    "detector": {
+     "key": "forge.extend.implement",
+     "name": "slow-step"
+    },
+    "evidence": [
+     {
+      "detail": "2400000 ms",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000000",
+      "value": 2400000
+     },
+     {
+      "detail": "2400001 ms",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000001",
+      "value": 2400001
+     },
+     {
+      "detail": "2400002 ms",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000002",
+      "value": 2400002
+     }
+    ],
+    "fingerprint": "291fa0aa7734c6a0",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-291fa0aa",
+    "kind": "slow-step",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "sessions",
+    "links": [],
+    "measure": {
+     "count": 3,
+     "max": 2400002,
+     "median": 2400001,
+     "threshold": 600000,
+     "unit": "ms"
+    },
+    "occurrences": 3,
+    "pattern": "3 run(s) of forge.extend.implement exceeded 600000 ms (median 2400001, max 2400002)",
+    "priority": 5.0,
+    "route": "forge.extend",
+    "scope": {
+     "feature": "extend",
+     "mode": "forge",
+     "step": "implement"
+    },
+    "severity": "severe",
+    "source": "improve.scan",
+    "status": "open",
+    "title": "forge.extend.implement is slow"
+   },
+   {
+    "detector": {
+     "key": "forge.extend.implement",
+     "name": "costly-step"
+    },
+    "evidence": [
+     {
+      "detail": "$1.50",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000000",
+      "value": 1.5
+     },
+     {
+      "detail": "$1.50",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000001",
+      "value": 1.5
+     },
+     {
+      "detail": "$1.50",
+      "kind": "episode",
+      "ref": "ab:C-20261025-000002",
+      "value": 1.5
+     }
+    ],
+    "fingerprint": "3058cf8ed40b6398",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-3058cf8e",
+    "kind": "costly-step",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "sessions",
+    "links": [],
+    "measure": {
+     "count": 3,
+     "max": 1.5,
+     "median": 1.5,
+     "threshold": 1.0,
+     "unit": "usd"
+    },
+    "occurrences": 3,
+    "pattern": "3 run(s) of forge.extend.implement cost more than $1.0 (max $1.50)",
+    "priority": 2.0,
+    "route": "forge.extend",
+    "scope": {
+     "feature": "extend",
+     "mode": "forge",
+     "step": "implement"
+    },
+    "severity": "medium",
+    "source": "improve.scan",
+    "status": "open",
+    "title": "forge.extend.implement is costly"
+   },
+   {
+    "detector": {
+     "key": "Bash",
+     "name": "retry-loop"
+    },
+    "evidence": [
+     {
+      "detail": "3 identical Bash calls",
+      "kind": "episode",
+      "ref": "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+      "value": 3
+     },
+     {
+      "detail": "3 identical Bash calls",
+      "kind": "episode",
+      "ref": "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+      "value": 3
+     }
+    ],
+    "fingerprint": "b804485795f786e6",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-b8044857",
+    "kind": "retry-loop",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "sessions",
+    "links": [],
+    "measure": {
+     "episodes": 2,
+     "maxRepeats": 3
+    },
+    "occurrences": 2,
+    "pattern": "2 episodes repeated an identical Bash call >= 3 times (max 3)",
+    "priority": 1.33,
+    "proposedFix": "Find what the retried call was waiting for (state, a missing input, a flaky check) and make the playbook say when to stop or what to read instead.",
+    "route": "forge.extend",
+    "scope": {
+     "framework": "tool Bash"
+    },
+    "severity": "medium",
+    "source": "improve.scan",
+    "status": "open",
+    "title": "Repeated identical Bash calls"
+   },
+   {
+    "detector": {
+     "key": "prompted:claude-code sessions",
+     "name": "permission-friction"
+    },
+    "evidence": [
+     {
+      "detail": "3 prompted",
+      "kind": "episode",
+      "ref": "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+      "value": 3
+     },
+     {
+      "detail": "3 prompted",
+      "kind": "episode",
+      "ref": "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+      "value": 3
+     }
+    ],
+    "fingerprint": "ec30222e01523fa6",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-ec30222e",
+    "kind": "permission-friction",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "sessions",
+    "links": [],
+    "measure": {
+     "episodes": 2,
+     "events": 6
+    },
+    "occurrences": 2,
+    "pattern": "6 prompted permission events for claude-code sessions across 2 episodes",
+    "priority": 1.33,
+    "proposedFix": "If the call is legitimate, give the role a narrow env command prefix or a read-only capability; if not, say so in the role prompt so the agent stops trying.",
+    "route": "forge.extend",
+    "scope": {
+     "framework": "prompted claude-code sessions"
+    },
+    "severity": "medium",
+    "source": "improve.scan",
+    "status": "open",
+    "title": "Prompted claude-code sessions calls keep interrupting work"
+   },
+   {
+    "detector": {
+     "key": "denied:Bash",
+     "name": "permission-friction"
+    },
+    "evidence": [
+     {
+      "detail": "2 denied",
+      "kind": "episode",
+      "ref": "ab:run:agent-1",
+      "value": 2
+     },
+     {
+      "detail": "1 denied",
+      "kind": "episode",
+      "ref": "ab:run:agent-2",
+      "value": 1
+     }
+    ],
+    "fingerprint": "42fd9d3532e779cf",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-42fd9d35",
+    "kind": "permission-friction",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "sessions",
+    "links": [],
+    "measure": {
+     "episodes": 2,
+     "events": 3
+    },
+    "occurrences": 2,
+    "pattern": "3 denied permission events for Bash across 2 episodes",
+    "priority": 1.33,
+    "proposedFix": "If the call is legitimate, give the role a narrow env command prefix or a read-only capability; if not, say so in the role prompt so the agent stops trying.",
+    "route": "forge.extend",
+    "scope": {
+     "framework": "denied Bash"
+    },
+    "severity": "medium",
+    "source": "improve.scan",
+    "status": "open",
+    "title": "Denied Bash calls keep interrupting work"
+   },
+   {
+    "detector": {
+     "key": "user",
+     "name": "interrupts"
+    },
+    "evidence": [
+     {
+      "detail": "1 interrupt(s)",
+      "kind": "episode",
+      "ref": "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+      "value": 1
+     },
+     {
+      "detail": "1 interrupt(s)",
+      "kind": "episode",
+      "ref": "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+      "value": 1
+     }
+    ],
+    "fingerprint": "28a01f60ce03fc41",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-28a01f60",
+    "kind": "interrupts",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "sessions",
+    "links": [],
+    "measure": {
+     "episodes": 2,
+     "interrupts": 2
+    },
+    "occurrences": 2,
+    "pattern": "2 episodes were interrupted by the user (2 times)",
+    "priority": 1.33,
+    "proposedFix": "Compare what ran before each interrupt (tool calls, subagents) and add the missing stop condition or confirmation step.",
+    "route": "forge.extend",
+    "scope": {
+     "framework": "claude-code sessions"
+    },
+    "severity": "medium",
+    "source": "improve.scan",
+    "status": "open",
+    "title": "The user interrupts runs"
+   },
+   {
+    "detector": {
+     "key": "user",
+     "name": "status-questions"
+    },
+    "evidence": [
+     {
+      "detail": "2 status question(s)",
+      "kind": "episode",
+      "ref": "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+      "value": 2
+     },
+     {
+      "detail": "2 status question(s)",
+      "kind": "episode",
+      "ref": "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+      "value": 2
+     }
+    ],
+    "fingerprint": "4efe194eb3cd14f1",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-4efe194e",
+    "kind": "status-questions",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "sessions",
+    "links": [],
+    "measure": {
+     "episodes": 2,
+     "questions": 4
+    },
+    "occurrences": 2,
+    "pattern": "4 short status questions across 2 sessions",
+    "priority": 1.33,
+    "proposedFix": "Make progress visible without asking: report step completions (bay status) or have long steps post interim results.",
+    "route": "forge.extend",
+    "scope": {
+     "framework": "claude-code sessions"
+    },
+    "severity": "medium",
+    "source": "improve.scan",
+    "status": "open",
+    "title": "The user keeps asking for status"
+   },
+   {
+    "detector": {
+     "key": "command-not-found",
+     "name": "env-gap"
+    },
+    "evidence": [
+     {
+      "detail": "1 command-not-found error(s)",
+      "kind": "episode",
+      "ref": "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+      "value": 1
+     },
+     {
+      "detail": "1 command-not-found error(s)",
+      "kind": "episode",
+      "ref": "cc:0a1b2c3d-0000-4000-8000-<sha12>",
+      "value": 1
+     }
+    ],
+    "fingerprint": "cbba6b2eb6f0f0fc",
+    "firstSeen": "2026-10-27T12:00:00Z",
+    "history": [
+     {
+      "by": "improve.scan",
+      "note": "detected",
+      "status": "open",
+      "ts": "2026-10-27T12:00:00Z"
+     }
+    ],
+    "id": "F-cbba6b2e",
+    "kind": "env-gap",
+    "lastSeen": "2026-10-27T12:00:00Z",
+    "lens": "sessions",
+    "links": [],
+    "measure": {
+     "episodes": 2,
+     "errors": 2
+    },
+    "occurrences": 2,
+    "pattern": "2 tool errors of kind command-not-found across 2 sessions",
+    "priority": 1.33,
+    "proposedFix": "Install or bind what is missing in the env (a CLI prefix, a dependency, a network allow entry) or tell the role it is unavailable.",
+    "route": "forge.extend",
+    "scope": {
+     "framework": "environment command-not-found"
+    },
+    "severity": "medium",
+    "source": "improve.scan",
+    "status": "open",
+    "title": "Environment gap: command-not-found"
+   }
+  ],
+  "window": {
+   "since": "2026-10-20T12:00:00Z",
+   "until": null
+  }
+ }
+}

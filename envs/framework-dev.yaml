@@ -1,0 +1,33 @@
+apiVersion: agentbay/v2
+kind: Environment
+metadata:
+  name: framework-dev
+  description: >-
+    Change the agentbay framework itself; paths are relative to the agentbay checkout (the project for
+    forge). Only forge.extend may place roles here.
+spec:
+  bind:
+    workspace.read/v1: { tools: [Read, Glob, Grep] }
+    workspace.write/v1:
+      tools: [Edit, Write, Bash]
+      # runs tests on code it writes, i.e. arbitrary code: trusted by design (forge.extend only, user approval
+      # gate, mandatory opus review); real containment needs an OS sandbox
+      clis: [./bay.sh check, python3 tests/run.py, git status, git diff, git log, git add, git commit]
+    git.read/v1:
+      tools: [Bash]
+      clis: [git status, git diff, git log, git show]
+  fs:
+    read: ["."]
+    # the four protected folders, then each protected mode, env and connector (lint keeps this in step with the
+    # protected: block of framework/components.yaml), then docs and tests
+    write: [framework, bay, schemas, adapters,
+            modes/cos, modes/forge,
+            envs/cos-local.yaml, envs/framework-dev.yaml, envs/improve-local.yaml, envs/local-authoring.yaml,
+            envs/workspace.yaml, envs/research.yaml,
+            connectors/artifact-graph, connectors/claude-transcripts, connectors/corpus-store, connectors/git,
+            connectors/improve-detect, connectors/improve-store, connectors/ledger, connectors/scaffold,
+            connectors/workflow-runner,
+            docs, tests]
+  tiers: [balanced, deep]          # no fast tier for framework changes
+  effects: [read, write]
+  limits: { maxTurns: 120, maxMinutes: 60 }

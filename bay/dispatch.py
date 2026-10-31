@@ -25,8 +25,8 @@ import secrets as _rand
 import time
 from pathlib import Path
 
-from . import checks, config as cfgmod, connect, ledger, model, secretscan, vault
-from .util import duration, parse_time, read_json, utcnow, write_json
+from . import checks, config as cfgmod, connect, ledger, model, secretscan, vault, workflows as wfmod
+from .util import parse_time, read_json, utcnow, write_json
 
 VERDICT = "review.verdict/v1"
 # who `bay approve` records: a terminal approval, or one relayed from chat (bay/cli.py CHAT_BY); only these pass a
@@ -383,20 +383,15 @@ class Dispatcher:
         return self._finish(state, mode, feat)
 
     def _skip(self, step, mode, feat, state) -> bool:
-        """`$in.<f>` / `$steps.<id>.<f>`: skip unless truthy; a leading `!` skips when truthy instead (a skipped
-        step's output counts as missing). `stale > <age>`: skip a code step while the store is fresher."""
-        neg = step.when.startswith("!")
-        ref = step.when[1:] if neg else step.when
-        if ref.startswith(("$in.", "$steps.")):
-            v = substitute({"v": ref}, state["input"], state["steps"], {}).get("v")
-            return bool(v) if neg else not v
-        age = duration(step.when.split(">")[1].strip())
-        iface = step.run.rsplit(".", 1)[0]
-        st = self._invoke(step.env, step.connector, iface, "status", {}, settings=self._settings(mode), caps={})
-        last = st.get("lastSync")
-        if st.get("stale"):           # selectors or bound sources changed: sync re-scopes the store first
-            return False
-        return bool(last) and (self.clock() - parse_time(last, self.clock())) <= age
+        """The shared skip rule (`workflows.skip`); `stale > <age>` asks the step's connector for the store's status."""
+        def fresh(age) -> bool:
+            iface = step.run.rsplit(".", 1)[0]
+            st = self._invoke(step.env, step.connector, iface, "status", {}, settings=self._settings(mode), caps={})
+            last = st.get("lastSync")
+            if st.get("stale"):           # selectors or bound sources changed: sync re-scopes the store first
+                return False
+            return bool(last) and (self.clock() - parse_time(last, self.clock())) <= age
+        return wfmod.skip(step.when, state["input"], state["steps"], fresh, gate=step.kind == "gate")
 
     def _gate_subject(self, step, state) -> dict | None:
         """{path, sha256} of the project file a gate's `approves: $in.<f>` names, or None (no field, no such file
@@ -408,7 +403,7 @@ class Dispatcher:
     def _file_subject(self, expr: str, state) -> dict | None:
         """{path, sha256} of the project file `expr` names. A list (a step's `artifacts`) names the proposal that
         step wrote: its first docs/proposals/<id>.md."""
-        path = substitute({"v": expr}, state["input"], state["steps"], {}).get("v")
+        path = wfmod.substitute({"v": expr}, state["input"], state["steps"], {}).get("v")
         if isinstance(path, list):
             path = next((x for x in path if isinstance(x, str) and PROPOSAL_PATH.match(x)), None)
         if not isinstance(path, str) or not path:
@@ -477,7 +472,7 @@ class Dispatcher:
         bad = [e for e in step.effects if e not in env.spec["effects"] or e not in feat.effects]
         if bad:  # resolver guarantees this; re-checked at runtime in case files changed underneath
             raise CallError(f"{feat.mode}.{feat.name} step {step.id}: effects {bad} not allowed")
-        args = substitute(step.with_, state["input"], state["steps"], mode.config)
+        args = wfmod.substitute(step.with_, state["input"], state["steps"], mode.config)
         iface, ep = step.run.rsplit(".", 1)
         self._ledger("step.started", base, summary=step.run, data={"inputs": inputs_record(args, self.project)})
         t0 = time.monotonic()
@@ -794,31 +789,3 @@ def use_shim(unit: str) -> str:
     return f".agentbay/roles/{unit}/use"
 
 
-def substitute(template, inp: dict, steps: dict, settings: dict):
-    """"$in.x", "$steps.id.x", "$config.x", "$in.x|$config.y" (first present) -> values.
-    Keys whose value is missing are dropped."""
-    def val(v):
-        if isinstance(v, str) and v.startswith("$") and "|" in v:
-            for alt in v.split("|"):
-                x = val(alt.strip())
-                if x is not _MISSING:
-                    return x
-            return _MISSING
-        if isinstance(v, str) and v.startswith("$"):
-            head, _, rest = v[1:].partition(".")
-            src = {"in": inp, "steps": steps, "config": settings}.get(head)
-            if src is None:
-                return _MISSING
-            cur = src
-            for part in rest.split("."):
-                if not isinstance(cur, dict) or part not in cur or cur[part] is None:
-                    return _MISSING
-                cur = cur[part]
-            return cur
-        if isinstance(v, dict):
-            return {k: x for k, x in ((k, val(x)) for k, x in v.items()) if x is not _MISSING}
-        return v
-    return val(template or {})
-
-
-_MISSING = object()

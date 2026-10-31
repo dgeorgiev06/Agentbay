@@ -1,8 +1,9 @@
-"""Scaffolds for user content. Templates live in framework/modes/forge/templates/
+"""Scaffolds for user content. Templates live in modes/forge/templates/
 and are shared by `bay new <kind>` and the forge.create feature (via the
 scaffold connector), so code scaffolding and the agentic flow cannot drift.
 
-Scaffolds only ever write user space (modes/, envs/, connectors/) and never overwrite an existing file.
+Scaffolds write new instances into modes/, envs/ and connectors/, never overwrite an existing file and refuse a
+protected name (the map's `protected:` block reserves them).
 """
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from pathlib import Path
 
 import yaml
 
-TEMPLATES = Path(__file__).resolve().parent.parent / "framework" / "modes" / "forge" / "templates"
+TEMPLATES = Path(__file__).resolve().parent.parent / "modes" / "forge" / "templates"
 KINDS = ("mode", "feature", "connector", "env")
 NAME = re.compile(r"^[a-z][a-z0-9-]{1,40}$")
 REVIEW_EFFECTS = {"write", "spend", "delete"}   # features with these get review on by default
@@ -47,13 +48,15 @@ def _q(s: str) -> str:
 def _check_name(kit: Path, kind: str, name: str) -> None:
     if not NAME.match(name):
         raise ScaffoldError(f"{kind} name '{name}' must be lowercase letters, digits and dashes (2-41 chars)")
-    reserved = {
-        "mode": kit / "framework" / "modes" / name,
-        "env": kit / "framework" / "envs" / f"{name}.yaml",
-        "connector": kit / "framework" / "connectors" / name,
-    }.get(kind)
-    if reserved is not None and reserved.exists():
-        raise ScaffoldError(f"{kind} '{name}' is a framework name; pick another")
+    if kind in ("mode", "env", "connector") and _protected(kit, kind, name):
+        raise ScaffoldError(f"{kind} '{name}' is a protected name (framework/components.yaml `protected:`): only "
+                            f"forge.extend defines it; pick another")
+
+
+def _protected(kit: Path, kind: str, name: str) -> bool:
+    """Does the component map reserve this name? A map that cannot be read reserves every name (fail closed)."""
+    from .model import load_protection
+    return load_protection(kit)[0].reserved(kind, name)
 
 
 def review_block(effects: list[str], role: str = "reviewer") -> str:
@@ -90,8 +93,11 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
             raise ScaffoldError("kind=feature needs a target mode (--mode <mode>)")
         mdir = kit / "modes" / target
         mfile = mdir / "mode.yaml"
+        if _protected(kit, "mode", target):
+            raise ScaffoldError(f"mode '{target}' is protected (framework/components.yaml `protected:`): it is changed "
+                                f"via forge.extend")
         if not mfile.exists():
-            raise ScaffoldError(f"mode '{target}' not found under modes/ (framework modes are changed via forge.extend)")
+            raise ScaffoldError(f"mode '{target}' not found under modes/")
         doc = yaml.safe_load(mfile.read_text())
         from . import model
         merged = model.Kit(kit).get("Mode", target)          # a mode that extends another inherits its roles

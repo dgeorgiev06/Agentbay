@@ -287,7 +287,7 @@ def test_a_store_of_another_schema_version_is_refused_not_converted():
         con = sqlite3.connect(db(p))
         assert con.execute("PRAGMA user_version").fetchone()[0] == ver           # left as it was
         con.close()
-    src = (KIT / "framework/connectors/corpus-store/corpus_store.py").read_text()
+    src = (KIT / "connectors/corpus-store/corpus_store.py").read_text()
     assert "def migrate" not in src and "v1 store" not in src
 
 

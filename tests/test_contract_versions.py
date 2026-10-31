@@ -73,7 +73,7 @@ def test_no_extension_names_another_b7():
     (k / "modes/mail-briefing/README.md").write_text((k / "modes/mail-briefing/README.md").read_text()
                                                      + "\nEnv local-mail binds gmail-api.\n")       # README: exempt
     (k / "connectors/x-api/tests/test_extra.py").write_text("import fake  # tests may pick a stand-in\n")
-    sub(k, "framework/modes/forge/features/create/playbook.md", "stubbed HTTP layer", "fake HTTP layer")
+    sub(k, "modes/forge/features/create/playbook.md", "stubbed HTTP layer", "fake HTTP layer")
     ps = lint.run(k)
     hits = [p for p in ps if "B-7" in p]
     # 0008: prose that names a mode or a connector in a playbook or a comment is fine; an import is not

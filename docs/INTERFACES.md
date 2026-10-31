@@ -99,8 +99,8 @@ and connectors. A user role file is an error.
   `tiers` cap it. The env also caps the role's default tier, which is the model its unit is compiled with.
   Envs are the only place capabilities are bound; `agentbay.config.yaml` cannot rebind them. It can switch every
   env's `offline:` block on (`offline: true`), and can lower a cap but never raise the env's `limits`.
-- User modes may put roles only in their own envs (`envs/`) and the framework envs named in
-  `bay/model.py` `USER_FRAMEWORK_ENVS`.
+- User modes may put roles only in their own envs (`envs/`) and the protected envs the component map opens to
+  them (`framework/components.yaml` `protected:`, each env's `modes:`).
 - Code steps (`run:`) run in the coordinator's env for that feature; `bay check` warns when a store-reading
   mode puts a role in an env whose `items.store`/`items.source` bindings differ from it.
 
@@ -112,7 +112,12 @@ steps that could write `framework/`, `bay/`, `schemas/` or `adapters/` outside `
 
 ## 4. Interface + Connector
 Interfaces: named endpoints with JSON-schema `in`/`out` and `effects` (`read|write|network|spend|delete`);
-`binding: connector` (code) or `tools` (runtime tools). A connector is `connector.yaml` + `entry` exposing
+`binding: connector` (code) or `tools` (runtime tools). `ownerOnly: true` on an endpoint: no step of any mode may
+run it (resolver and lint refuse it); only the owner's own command reaches it (`improve.findings/v1.decide`, via
+`bay approve <F-id>`). The component map's `protected:` block (`framework/components.yaml`) has the keys `paths`
+(folders), `mode`, `env` (each a name, optionally `{modes: [...]}`: the unprotected modes that may place roles there)
+and `connector`; all four are required, and a missing or malformed block fails closed (every name reserved, nothing
+writable or placeable). A connector is `connector.yaml` + `entry` exposing
 `create(ctx)`; `ctx` gives `config`, `secrets.get/store` (names allowed by env AND connector only),
 `http.request` (env allowlist enforced before every request, HTTPS only), `data_dir`, `caps`, `settings`,
 `sources` (connectors for capabilities it `needs`), `clock`, and for items.source connectors `source_id`,
@@ -301,7 +306,7 @@ author: {handle?: string, name?: string, email?: string}   # email is the author
   selectors or bound sources, sync re-scopes in its own transaction before fetching, and until a sync or
   prune has run every read endpoint except `status` refuses with an error saying to run sync. sync and
   prune of one mode never run at once (a per-mode lock), and spend is saved before the items commit.
-- **corpus-store** (framework connector) keeps one store per mode, `<env data folder>/<mode>/corpus.db`
+- **The store connector** (the framework connector that implements this interface) keeps one store per mode, `<env data folder>/<mode>/corpus.db`
   (settings.mode from the dispatcher; a use-shim read uses its unit's mode and env). The file, -wal and -shm
   are 0600; WAL mode, `user_version` = 3 (`store_meta` records the content types and their versions). A store of any other version is refused (move the folder aside and sync
   again); stores are never converted:

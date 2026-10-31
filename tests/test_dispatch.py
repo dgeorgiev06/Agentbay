@@ -464,7 +464,7 @@ def test_a_gate_takes_no_when_and_approves_goes_on_a_gate_only():
             wf = doc["spec"]["features"]["extend"]["steps"]
             next(s for s in wf if s.get("id") == "approve")["when"] = "!$steps.proposal.approved"
             next(s for s in wf if s.get("id") == "implement")["approves"] = "$in.proposal"
-        edit_yaml(k / "framework/modes/forge/mode.yaml", edit)
+        edit_yaml(k / "modes/forge/mode.yaml", edit)
         try:
             model.resolve(model.Kit(k, k))
             raise AssertionError("resolved")
@@ -481,7 +481,7 @@ def test_when_names_only_an_earlier_step():
     try:
         def edit(doc):
             doc["spec"]["features"]["extend"]["steps"][1]["when"] = "!$steps.release.approved"
-        edit_yaml(k / "framework/modes/forge/mode.yaml", edit)
+        edit_yaml(k / "modes/forge/mode.yaml", edit)
         try:
             model.resolve(model.Kit(k, k))
             raise AssertionError("resolved")

@@ -156,7 +156,7 @@ def policy_view(k) -> dict:
 
 def protected_view(k) -> dict:
     kit = model.Kit(k, k)
-    return {e: model.protected_writes(kit.get("Environment", e)) for e in ENVS}
+    return {e: model.protected_writes(kit, kit.get("Environment", e)) for e in ENVS}
 
 
 def resolver_gaps() -> dict:

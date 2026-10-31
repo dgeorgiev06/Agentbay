@@ -6,6 +6,7 @@ Every problem is one line, `file:line: message`, naming the concept and the fix.
 from __future__ import annotations
 
 import fnmatch
+import json
 import os
 import re
 import subprocess
@@ -509,6 +510,14 @@ def _extension_files(doc: model.Doc, pats) -> list[Path]:
     return sorted(out)
 
 
+def _component_map(path: Path) -> boundary.ComponentMap | None:
+    """The component map, or None when it is absent or unreadable (the kit load reports that, fail closed)."""
+    try:
+        return boundary.ComponentMap.load(path)
+    except (OSError, RuntimeError):
+        return None
+
+
 def lint_extension_names(kit: model.Kit) -> list[str]:
     """B-7 (proposal 0006, Part F; conformance C-4, C-8; simplified by 0008): no connector loads another. A
     connector's files never import another connector's module nor use its kernel module key
@@ -518,7 +527,7 @@ def lint_extension_names(kit: model.Kit) -> list[str]:
     together, only through forge.extend), never a user extension. A static scan cannot be complete (a name can be
     computed at run time); it catches the spelled-out forms."""
     cpath = kit.root / "framework" / "components.yaml"
-    cmap = boundary.ComponentMap.load(cpath) if cpath.exists() else None
+    cmap = _component_map(cpath) if cpath.exists() else None
 
     def relk(f: Path) -> str:
         try:
@@ -584,9 +593,11 @@ def warnings(kit: model.Kit) -> list[str]:
                        f"(search is slower and unranked; items_fts is absent from sql). Use a Python built with "
                        f"FTS5 (python.org and Homebrew builds have it) for ranked full-text search")
     if kit.project is not None and kit.project.resolve() == kit.root.resolve():
+        roots = kit.protected_paths()
+        out += stale_policy(kit, roots)
         for env in kit.docs["Environment"].values():
             for w in env.spec.get("fs", {}).get("write", []):
-                hits = [d for d in model.PROTECTED if w in (".", "", "./") or Path(d).is_relative_to(Path(w))]
+                hits = [d for d in roots if w in (".", "", "./") or Path(d).is_relative_to(Path(w))]
                 hits = [d for d in hits if Path(w) != Path(d) and not Path(w).is_relative_to(Path(d))]
                 if hits:
                     out.append(f"{env.rel}: env {env.name} write path '{w}' reaches "
@@ -709,6 +720,8 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     out += lint_extension_names(kit)
     out += lint_rulesets(kit)
     out += lint_components(kit)
+    out += lint_protection(kit)
+    out += lint_owner_only(kit)
     out += lint_ownership(kit)
     out += lint_case_and_manifests(kit)
     out += lint_config_schemas(kit)
@@ -828,6 +841,94 @@ def lint_components(kit: model.Kit) -> list[str]:
     return out
 
 
+def stale_policy(kit: model.Kit, every: list[str]) -> list[str]:
+    """The guard enforces `.agentbay/guard.json`, which the build writes from the map's `protected:` block. A policy
+    built before the block changed protects a different set; say so (the guard itself keeps reading its policy)."""
+    path = kit.project / ".agentbay" / "guard.json"
+    if not path.is_file():
+        return []
+    try:
+        have = json.loads(path.read_text(encoding="utf-8")).get("protected")
+    except (OSError, ValueError, AttributeError):
+        have = None
+    if have == every:
+        return []
+    return [f".agentbay/guard.json: its protected list ({len(have) if isinstance(have, list) else 'none'} paths) is not "
+            f"the one framework/components.yaml `protected:` gives ({len(every)} paths: the guard enforces the policy, "
+            f"not the map); rebuild it with ./bay.sh build"]
+
+
+def _mode_envs(spec: dict) -> set[str]:
+    """Every env a mode's `roles:` maps, at the mode, a feature or a step."""
+    maps = [spec.get("roles")]
+    for ep in (spec.get("features") or {}).values():
+        maps.append(ep.get("roles"))
+        maps += [st.get("roles") for st in ep.get("steps") or [] if isinstance(st, dict)]
+    return {e for m in maps if isinstance(m, dict) for e in m.values() if isinstance(e, str)}
+
+
+def lint_protection(kit: model.Kit) -> list[str]:
+    """The map's `protected:` block (proposal 0008, stage 5): every protected name exists as that kind, the set is
+    closed (the envs a protected mode maps and the connectors a protected env binds are protected too), and every env
+    that names a protected path names all of them (D9: the guard lets an env write a protected path only if the env
+    names that path, so framework-dev lists each one) and none that the map no longer protects. A block that cannot
+    be read is already an error of the kit load."""
+    prot = kit.protected
+    if prot.closed:
+        return []
+    path = kit.root / "framework" / "components.yaml"
+    where = _where(path, _line_of(path, r"^protected:"))
+    out = []
+    for kind, label in model.PROTECTION_KIND.items():
+        out += [f"{where}: protected {label} '{n}' does not exist; remove it from protected: or restore it"
+                for n in prot.names.get(label, ()) if kit.get(kind, n) is None]
+    for name in prot.names.get("mode", ()):
+        md = kit.get("Mode", name)
+        out += [f"{where}: protected mode {name} puts roles in env {e}, which is not protected; protect {e} too "
+                f"(the wiring of a protected mode is protected)"
+                for e in sorted(_mode_envs(md.spec) if md else ()) if e in kit.docs["Environment"] and e not in prot.place]
+    for e in prot.place:
+        env = kit.get("Environment", e)
+        for iface, b in (env.spec.get("bind", {}).items() if env else ()):
+            out += [f"{where}: protected env {e} binds connector {c} ({iface}), which is not protected; protect {c} too"
+                    for c in model.connectors_of(b) if kit.get("Connector", c) and c not in prot.names["connector"]]
+    return out + _protected_paths_in_sync(kit)
+
+
+def _protected_paths_in_sync(kit: model.Kit) -> list[str]:
+    cmap = _component_map(kit.root / "framework" / "components.yaml")
+    if cmap is None:
+        return []
+    every, out = kit.protected_paths(), []
+    for env in sorted(kit.docs["Environment"].values(), key=lambda d: d.name):
+        writes = [os.path.normpath(w).replace(os.sep, "/") for w in env.spec.get("fs", {}).get("write", [])]
+        if any(kit.covers(w) for w in writes):
+            missing = [p for p in every if not any(boundary.under(w, p) for w in writes)]
+            if missing:
+                out.append(f"{env.rel}: env {env.name} writes protected paths but not {', '.join(missing)}; the guard "
+                           f"lets an env write a protected path only if the env names it - add them to fs.write")
+        for w in writes:
+            ext = cmap.extension(w) or cmap.extension(w + "/")
+            if ext and ext[0].name in boundary.PROTECTED_KINDS and ext[1].rstrip("/") == w \
+                    and not kit.protected.reserved(ext[0].name, ext[0].instance_name(ext[1])):
+                out.append(f"{env.rel}: env {env.name} fs.write names {w}, which the protected: block of "
+                           f"framework/components.yaml does not list; remove it or protect the {ext[0].name}")
+    return out
+
+
+def lint_owner_only(kit: model.Kit) -> list[str]:
+    """D4: an endpoint its interface marks `ownerOnly` is run by the owner's command, never by a step of any mode."""
+    out = []
+    for md in sorted(kit.docs["Mode"].values(), key=lambda d: d.name):
+        for ep_name, ep in (md.spec.get("features") or {}).items():
+            for st in ep.get("steps") or []:
+                if isinstance(st, dict) and isinstance(st.get("run"), str) and model.owner_only(kit, st["run"]):
+                    out.append(f"{_where(md.path, _line_of(md.path, re.escape(st['run'])))}: step {st.get('id')} of "
+                               f"{md.name}.{ep_name} runs {st['run']}, which is ownerOnly: only the owner's command "
+                               f"reaches it (`bay approve <F-id>` in a terminal); no step may")
+    return out
+
+
 def lint_ownership(kit: model.Kit) -> list[str]:
     """B-4 (proposal 0006, Part F): every tracked file of the kit is under a core `owns:` path, an extension
     folder (`at:`) or the boundary's other set. Runs only when the kit is a git checkout."""
@@ -836,9 +937,12 @@ def lint_ownership(kit: model.Kit) -> list[str]:
     if not path.exists() or r.returncode:
         return []
     files = [f for f in r.stdout.decode("utf-8", "replace").split("\0") if f]
+    cmap = _component_map(path)
+    if cmap is None:
+        return []
     return [f"{f}: not under a core owns: path, an extension folder or the boundary's other set (B-4). Move it "
             f"into the folder of the component or extension it belongs to, or add it to that component's owns: "
-            f"in framework/components.yaml" for f in boundary.stray(files, boundary.ComponentMap.load(path))]
+            f"in framework/components.yaml" for f in boundary.stray(files, cmap)]
 
 
 MANIFESTS = {"mode": "mode.yaml", "connector": "connector.yaml", "adapter": "adapter.yaml"}
@@ -861,7 +965,9 @@ def lint_case_and_manifests(kit: model.Kit) -> list[str]:
             if other != p:
                 out.append(f"{p}: differs only in case from {other}; rename one (paths must be unique ignoring case)")
                 seen[p.casefold()] = p
-    cmap, roots = boundary.ComponentMap.load(path), {}
+    cmap, roots = _component_map(path), {}
+    if cmap is None:
+        return list(dict.fromkeys(out))
     for f in files:
         ext = cmap.extension(f)
         if ext and ext[0].name in MANIFESTS and ext[1].endswith("/"):

@@ -1,8 +1,28 @@
 # The component map (proposal 0006, Part A). Core components own paths and define contracts;
 # extensions are instances of a contract, each in its own folder (`at:`). `bay check --base` reads this map.
 # Core files live only under core `owns:` paths (B-4, checked by lint). `owns:` entries are path globs: a trailing `/` owns everything below it.
+#
+# `protected:` is what only forge.extend may change (proposal 0008, stage 5): the guard, `bay check --base`, the
+# resolver and lint read it, and a protected name is reserved (nobody else can define a mode, env or connector of that
+# name). The kit refuses a map where the block is missing or malformed (nothing is writable, no name is free).
+#   paths:     kit folders; the guard denies a write there to any env that does not name the path (framework-dev does)
+#   mode:      protected modes (improve stays listed until the move of the extension folders is done)
+#   env:       protected envs; `modes:` = the unprotected modes that may put roles there (`*` = every one)
+#   connector: protected connectors (they scrub secrets, redact transcripts, hold the approval state)
+# Lint keeps framework-dev's fs.write in step with this block: it names every protected path it may write.
+protected:
+  paths: [framework, bay, schemas, adapters]
+  mode: [cos, forge, improve]
+  env:
+    cos-local: {}
+    framework-dev: {}
+    improve-local: { modes: [improve] }
+    local-authoring: {}
+    workspace: { modes: ["*"] }
+    research: { modes: ["*"] }
+  connector: [artifact-graph, claude-transcripts, corpus-store, git, improve-detect, improve-store, ledger, scaffold, workflow-runner]
 components:
-  kernel:            # loader, resolver, lint, registry, dispatcher, ledger, guard, CLI
+  kernel:           # loader, resolver, lint, registry, dispatcher, ledger, guard, CLI
     owns:
       - bay/
       - schemas/

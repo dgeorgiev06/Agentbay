@@ -56,8 +56,8 @@ when the mode runs that role in several envs). A unit is its own subagent, use s
 store access. Its grants come from the mode, not the role: the read-only connector endpoints of the mode's
 `needs` that the env binds, plus the tools of tools-capabilities whose effects are read or network. Only
 `access: write` roles get file-writing tools, CLIs beyond read-only version control, and the env's write paths. User
-modes may put roles only in their own envs and the framework envs named in `bay/model.py`
-`USER_FRAMEWORK_ENVS`; an env's `tiers` caps both step tiers and a role's default tier.
+modes may put roles only in their own envs and the protected envs the component map opens to them
+(`framework/components.yaml` `protected:`); an env's `tiers` caps both step tiers and a role's default tier.
 
 The claude-code adapter writes `.claude/agents/<unit>.md` for worker units, runs mode coordinators as
 playbooks in the main thread (subagents cannot spawn subagents), and writes `.agentbay/COORDINATOR.md`, the

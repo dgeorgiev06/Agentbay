@@ -36,6 +36,7 @@ try:
 except ImportError:  # pragma: no cover
     jsonschema = None
 
+from . import boundary
 from . import playbook as pbk
 from . import rules as rulesmod
 from . import workflows as wfmod
@@ -55,9 +56,8 @@ AGENT_SAFE_EFFECTS = {"read"}          # connector endpoints a role may call via
 READ_TOOL_EFFECTS = {"read", "network"}  # tools capabilities every role may get; others need `access: write`
 WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}   # file-writing tools: `access: write` roles only
 READ_ONLY_CLIS = ("git status", "git diff", "git log", "git show")   # the only CLIs a read-only capability may bind
-USER_FRAMEWORK_ENVS = ("workspace", "research")   # the framework envs a user mode may put roles in
 LEVEL_RANK = {"should": 1, "must": 2, "must_not": 2}
-PROTECTED = ("framework", "bay", "schemas", "adapters")   # kit paths only forge.extend may write
+PROTECTION_KIND = {"Mode": "mode", "Environment": "env", "Connector": "connector"}   # kinds a name of which can be protected
 FRAMEWORK_EXTENDER = "forge.extend"
 USER_ROLE = ("roles are framework-level; customize behaviour in your mode's playbooks/skills, or propose a new "
              "role via forge.extend")
@@ -204,6 +204,7 @@ class Kit:
         self.docs: dict[str, dict[str, Doc]] = {k: {} for k in KINDS}
         self.collisions: list[str] = []
         self.errors: list[str] = []
+        self.protected = self._load_protection()
         for root_name, base in self.roots.items():
             for kind, (folder, glob, sch) in KINDS.items():
                 for f in sorted((base / folder).glob(glob)):
@@ -219,6 +220,37 @@ class Kit:
         self.config = copy.deepcopy(cfgmod.load(project) if config is None else config)
         if self.config.get("offline") is True:
             self._go_offline()
+
+    def _load_protection(self) -> boundary.Protection:
+        """The `protected:` block of framework/components.yaml. Anything but a readable, well-formed block fails
+        closed: the error is reported (so nothing resolves or builds) and the set reserves every name, covers every
+        path and lets no mode place a role."""
+        try:
+            prot = boundary.ComponentMap.load(self.root / "framework" / "components.yaml").protected
+            if prot is None:
+                raise RuntimeError("framework/components.yaml: no protected: block")
+            return prot
+        except Exception as e:                      # noqa: BLE001 - whatever is wrong with the map, the answer is closed
+            self.errors.append(f"{e}; without a readable protected: block nothing is trusted (every name is reserved, "
+                               f"no role may write or be placed) - restore the block")
+            return boundary.Protection.closed_set()
+
+    def protected_paths(self) -> list[str]:
+        """The kit folders only forge.extend may write, as the policy lists them: the map's `paths`, then the folder (or
+        file) of each protected mode, env and connector that sits outside all of those (an instance inside one of
+        them is protected by it; one that moves to a folder of its own is listed from then on)."""
+        out = list(self.protected.paths)
+        for kind, label in PROTECTION_KIND.items():
+            for name in self.protected.names.get(label, ()):
+                d = self.get(kind, name)
+                if d is not None:
+                    out.append(os.path.relpath(d.path if kind == "Environment" else d.dir, self.root).replace(os.sep, "/"))
+        return [p for p in dict.fromkeys(out) if not any(o != p and boundary.under(p, o) for o in out)]
+
+    def covers(self, path: str) -> bool:
+        """Is `path` (kit-relative) inside a protected folder or protected instance?"""
+        path = os.path.normpath(path).replace(os.sep, "/")
+        return self.protected.closed or any(boundary.under(path, p) for p in self.protected_paths())
 
     def _apply_extends(self) -> None:
         """Resolve `extends:` at load time, so the resolver, lint, conformance and improve always see a complete
@@ -329,6 +361,9 @@ class Kit:
                 f"{kind} '{name}' is defined by both the framework ({other.rel}) and you ({where}); "
                 f"rename yours - framework names are reserved")
             return
+        if root_name == "user" and self.protected.reserved(PROTECTION_KIND.get(kind, ""), name):
+            raise SpecError(f"{where}: {kind.lower()} '{name}' is a protected name (framework/components.yaml "
+                            f"`protected:`): only {FRAMEWORK_EXTENDER} defines it; rename yours")
         self.docs[kind][name] = Doc(kind, name, root_name, f, meta, spec, lineage=[f.parent] if kind == "Mode" else [])
 
     # convenience
@@ -789,10 +824,10 @@ class _Ctx:
             gaps.append(f"{who}: unknown env '{env_name}' (have: {', '.join(sorted(kit.docs['Environment']))}); "
                         f"fix mode {mode} `roles:`")
             return None
-        if md.root == "user" and env.root == "framework" and env.name not in USER_FRAMEWORK_ENVS:
+        if not kit.protected.may_place(mode, env.name):
             gaps.append(f"mode {mode}: role {rd.name} works in the framework env {env.name} ({where}); user modes "
                         f"may put roles only in their own envs (envs/) or the framework envs "
-                        f"{' and '.join(USER_FRAMEWORK_ENVS)}")
+                        f"{' and '.join(kit.protected.open_envs())}")
             return None
         allowed = env.spec.get("tiers")
         if allowed and rd.tier not in allowed:
@@ -1236,9 +1271,21 @@ def _check_selectors(kit: Kit, md: Doc, mcfg: dict, gaps: list[str], warnings: l
         warnings += warns
 
 
+def owner_only(kit: Kit, run: str) -> bool:
+    """Is `run` (`<interface>.<endpoint>`, as a code step spells it) an endpoint its interface marks `ownerOnly`?
+    Such an endpoint is reached only by the owner's command (`Dispatcher.run_capability`), never by a step."""
+    iface, _, ep = run.rpartition(".")
+    idoc = kit.get("Interface", iface)
+    return bool(idoc is not None and (idoc.spec["endpoints"].get(ep) or {}).get("ownerOnly"))
+
+
 def _code_step(kit, md, ep, st, sw, ep_eff, gaps, seen_conn) -> Step:
     iface, ep_name = _split_use(st["run"])
     step = Step(id=st["id"], kind="code", with_=st.get("with", {}), when=st.get("when"))
+    if owner_only(kit, st["run"]):
+        gaps.append(f"{sw}: {st['run']} is for its owner only (ownerOnly): no step of any mode may run it; it is "
+                    f"reached by the owner's command (for improve findings: `bay approve <F-id>` in a terminal)")
+        return step
     if iface not in md.spec.get("needs", []):
         gaps.append(f"{sw}: runs {st['run']}, but mode {md.name} does not list {iface} in needs")
         return step
@@ -1319,14 +1366,12 @@ def _role_step(ctx: _Ctx, md: Doc, ep: dict, st: dict, sw: str, ep_eff, review: 
     return step
 
 
-def protected_writes(env: Doc) -> list[str]:
-    """Write paths of env that name a protected kit folder (PROTECTED) explicitly."""
-    out = []
-    for w in env.spec.get("fs", {}).get("write", []):
-        parts = Path(w).parts
-        if parts and parts[0] in PROTECTED:
-            out.append(w)
-    return out
+def protected_writes(kit: Kit, env: Doc) -> list[str]:
+    """Write paths of env that name a protected kit path (the component map's `protected:`: its folders and the
+    folders of its protected instances), leaving out one that lies inside another path the env also names."""
+    named = [w for w in env.spec.get("fs", {}).get("write", []) if kit.covers(w)]
+    norm = {w: os.path.normpath(w).replace(os.sep, "/") for w in named}
+    return [w for w in named if not any(norm[o] != norm[w] and boundary.under(norm[w], norm[o]) for o in named)]
 
 
 def _check_protected(kit: Kit, target: str, steps: list[Step], gaps: list[str]) -> None:
@@ -1336,7 +1381,7 @@ def _check_protected(kit: Kit, target: str, steps: list[Step], gaps: list[str]) 
         env = kit.get("Environment", st.env) if st.env else None
         if env is None:
             continue
-        bad = protected_writes(env)
+        bad = protected_writes(kit, env)
         if bad:
             who = f"role {st.role}" if st.role else f"code step {st.run}"
             gaps.append(f"{target} step {st.id}: {who} runs in env {env.name}, which can write {', '.join(bad)}; "

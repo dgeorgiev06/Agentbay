@@ -6,6 +6,31 @@
   "required": ["components"],
   "additionalProperties": false,
   "properties": {
+    "protected": {
+      "type": "object",
+      "description": "What only forge.extend may change, and the names it reserves. The kit refuses a map without this block (nothing is then writable and no name is free). `paths`: kit folders. `mode`, `connector`: names of protected instances, wherever their folder sits. `env`: protected envs; `modes` lists the unprotected modes that may put roles there (`*` = every one).",
+      "required": ["paths", "mode", "env", "connector"],
+      "additionalProperties": false,
+      "properties": {
+        "paths": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^(?!/)(?!\\.{1,2}(/|$))(?!.*/\\.\\.(/|$))[^\\\\]*[^/\\\\]$", "description": "A kit-relative folder: no leading or trailing '/', no '..'." }
+        },
+        "mode": { "$ref": "#/$defs/names" },
+        "connector": { "$ref": "#/$defs/names" },
+        "env": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
+          "additionalProperties": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "properties": {
+              "modes": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^(\\*|[a-z][a-z0-9-]*)$" } }
+            }
+          }
+        }
+      }
+    },
     "components": {
       "type": "object",
       "minProperties": 1,
@@ -35,5 +60,8 @@
         }
       }
     }
+  },
+  "$defs": {
+    "names": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" } }
   }
 }

@@ -43,7 +43,7 @@ from bay import registry, workflows
 from bay.adapter import BuildReport
 from bay.dispatch import use_shim
 from bay.ledger import now
-from bay.model import PROTECTED, ROOT_COORDINATOR, ResolvedRole, SpecError, System, skill_front_matter
+from bay.model import ROOT_COORDINATOR, ResolvedRole, SpecError, System, skill_front_matter
 from bay.protocol import WORKER_CONTRACT
 
 MARK_BEGIN = "<!-- agentbay:begin (generated; run ./bay build) -->"
@@ -434,10 +434,13 @@ class ClaudeCodeAdapter:
                          "write": list(fs.get("write", [])) if r.access == "write" and WRITE_TOOLS & set(r.tools)
                          else []}
         is_kit = project.resolve() == kit.resolve()
+        if system.kit.protected.closed:                # the map's `protected:` block was unreadable: no policy is safe
+            raise SpecError("framework/components.yaml has no readable protected: block; the guard policy is built "
+                            "from it, so nothing is built")
         # The shim is auto-allowed only when the kit is outside the project. If the kit is the project
         # or sits inside it, roles may be able to edit code the shim runs, so it prompts instead.
         pol = {"project": str(project.resolve()), "kit": str(kit.resolve()),
-               "protected": list(PROTECTED) if is_kit else [], "autoAllowShim": not _within(kit, project),
+               "protected": system.kit.protected_paths() if is_kit else [], "autoAllowShim": not _within(kit, project),
                "subagents": subs}
         rel = ".agentbay/guard.json"
         _write_json(project / rel, pol)

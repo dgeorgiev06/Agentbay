@@ -114,7 +114,8 @@ spec:
           top: { type: array, items: { $ref: improve.finding/v1 } }
       effects: [write]
     decide:
-      description: Record a human decision. Reached only from `bay approve <F-id>` (approve needs an interactive terminal); no workflow step calls it.
+      description: Record a human decision. Reached only from `bay approve <F-id>` (approve needs an interactive terminal); `ownerOnly` - the resolver and lint refuse every step of every mode that runs it.
+      ownerOnly: true
       in:
         type: object
         required: [id, decision, by]

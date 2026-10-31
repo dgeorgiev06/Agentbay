@@ -99,8 +99,8 @@ and connectors. A user role file is an error.
   `tiers` cap it. The env also caps the role's default tier, which is the model its unit is compiled with.
   Envs are the only place capabilities are bound; `agentbay.config.yaml` cannot rebind them. It can switch every
   env's `offline:` block on (`offline: true`), and can lower a cap but never raise the env's `limits`.
-- User modes may put roles only in their own envs (`envs/`) and the framework envs named in
-  `bay/model.py` `USER_FRAMEWORK_ENVS`.
+- User modes may put roles only in their own envs (`envs/`) and the protected envs the component map opens to
+  them (`framework/components.yaml` `protected:`, each env's `modes:`).
 - Code steps (`run:`) run in the coordinator's env for that feature; `bay check` warns when a store-reading
   mode puts a role in an env whose `items.store`/`items.source` bindings differ from it.
 

@@ -1,3 +1,11 @@
+# HANDOFF part 31: T-20261031-a2db (recorded with `bay plan`) - the four should-fix findings of the stage-5 review fixed
+
+Outcome: done. cf0c463 (DOD-2, DOD-8) and f86ef1f (DOD-13, R-4) on feat/0008-stage5, not pushed. Nits (DOD-10) left for slice 9.
+- DOD-2: `Store.upsert` drops `STORE_OWNED` (id, fingerprint, status, firstSeen, lastSeen, source, links, history, priority) from a candidate. annotate, verify, decide and handoff already whitelist keys or set status themselves; tests added for upsert (new and merge), annotate, verify, claim and handoff.
+- DOD-8: one ledger reader `bay.util.read_events` (ledger and improve-store); one protection loader `model.load_protection` (kit, scaffold, improve-store), fail closed; `Store(data_dir, now, protection)` has no hard-coded default, a closed set routes to forge.extend.
+- DOD-13/R-4: README layout and docs/INTERFACES.md (`ownerOnly`, `protected:`).
+- Evidence: `python3 tests/run.py -q`: "546 passed, 0 failed"; `./bay.sh check`: "✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)"; check --base: "290 changed paths (33 core, 3 docs, 199 extension, 22 feature, 33 other); 0 failing; B-11 docs: 0 hits". Goldens untouched.
+
 # HANDOFF part 30: T-20261031-3894 (recorded with `bay plan`) - stage 5 part H built (improve is an ordinary mode); slices 6 and 7 acceptance
 
 Outcome: done. Commit 2dd116e on feat/0008-stage5 (not pushed) holds the previous builder's edits, finished: improve left `protected.mode` (now `[cos, forge]`), `PROTECTED_INSTANCES` and framework-dev `fs.write` together. `improve-local` and the nine connectors stay protected (D3). No proposal edited.

@@ -154,6 +154,7 @@ touches:
   # slice 9 (owner amendment, 2026-10-31)
   - { path: schemas/, reason: "apiVersion agentbay/v3; rules and conformance schemas merge; improve.finding.v1, session.episode.v1 and selector.v1 move to the modes that own them; approvals.plan in the config schema", slice: 9 }
   - { path: framework/interfaces/, reason: "apiVersion agentbay/v3 in every interface", slice: 9 }
+  - { path: bay/limits.py, reason: "the ratchet compares against the base ceilings and writes limits.yaml only with --write at release", slice: 9 }
   - { path: bay/hook.py, reason: "same-behaviour trim (one-line return) paying for the plan gate under the bay/ ceiling", slice: 9 }
   - { path: bay/protocol.py, reason: "same-behaviour trim (parse_blocks as a comprehension, last block still wins) paying for the plan gate", slice: 9 }
   - { path: modes/forge/features/extend/, reason: "the re-check, plan step and review-round wording in the extend playbook and rules (B-3 needs the mode named)", slice: 9 }

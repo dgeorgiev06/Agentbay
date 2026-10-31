@@ -18,14 +18,19 @@ Branch feat/0008-slice9 from origin/main e20e165 (0.10.0). Parts 1, 2a, 2b, 3a, 
 - Clean after the demo leaves agentbay.config.yaml and .agentbay/data (the synced corpus; clean keeps user data).
 - `python3 tests/run.py tests/test_offline_golden.py tests/test_mail_briefing.py` -> 16 passed, 0 failed.
 
-## Last lines of the checks (3c builder)
+## Review fixes (part 3d)
 
-- `python3 tests/run.py -q`: "536 passed, 0 failed in 151.3s (2 workers)".
-- `./bay.sh check --limits --write --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: last line "✓ limits: 7 measures within their ceilings"; lint clean; "✓ 6 modes, 21 features, 5 roles (18 role units), 8 envs, 13 connectors resolve (agent profile claude-code)". Boundary line: "153 changed paths (54 core, 2 docs, 52 extension, 16 feature, 29 other); 12 failing (B-3: 12); B-11 docs: 0 hits". The command exits 1 because of the B-3 failures below.
+The slice 9 review failed DOD-5, DOD-8, DOD-9, DOD-13, R-4 and R-7 (all should-fix or nit). Fixed: the docs and CHANGELOG say any failed must item or blocker halts before release, and the halting test fails a must item rated should-fix; `recheck.commits` is a `<sha>..HEAD` range or null; `scaffold.proposal` uses `PROPOSAL_PATH` and a named `plan_reason`; `boundary.git` is public (dispatch no longer calls a private helper); fake.py's condition is parenthesised. To pay for `plan_reason`, `selector.vals` replaces the same function copied in selector, gmail-api, x-api and fake (corpus-store no longer calls the private `_vals`), and a trailing blank line in ledger_sources.py went. The removed `return None` lines stay removed (no line budget for them).
+
+## Last lines of the checks (3d builder, after the code commit; the docs-only commit after it changed no code)
+
+- `python3 tests/run.py -q`: "536 passed, 0 failed in 152.8s (2 workers)".
+- `./bay.sh check --limits --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs` (no `--write`; exit 0). Boundary line: "boundary origin/main...HEAD: 160 changed paths (59 core, 3 docs, 53 extension, 16 feature, 29 other); 0 failing; B-11 docs: 0 hits". Last line: "✓ limits: 7 measures within their ceilings". It also prints that bay_lines is 9618 against 9620 and kit_python_lines 6584 against 6588 ("the ceiling is now ..."); nothing was written, so the release step's `--write` records those two lower ceilings.
 
 ## Needs the owner before release
 
-- 12 B-3 failures: the feature rules.yaml files that 3b changed (apiVersion v3) in modes/cos/features/{next,run,status}, modes/delivery/features/{build,research}, modes/forge/features/create and modes/improve/features/{audit,backlog,implement,scan,triage,verify}. 0008's touches name only modes/forge/features/extend/, not these folders. Earlier parts' checks did not see them because 3b's edits were uncommitted at that time. Fix: add `modes/` (or the six feature folders) to the touches of docs/proposals/0008-simplify-without-losing-features.md (an amendment; the proposal sha changes and the gate asks again), then re-run the check; limits.yaml needs no second write.
+- The B-3 failures are fixed (5984063 added the feature folders to touches); the check above reports 0 failing.
+- `framework/limits.yaml` still says bay_lines 9620 and kit_python_lines 6588; the release step's `check --limits --write` lowers them to 9618 and 6584.
 - Run `./bay.sh build` once so the generated builder file lists `git mv`, `git rm` and `bay plan` (3a item 3).
 
 ## Not in this slice

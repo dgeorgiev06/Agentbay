@@ -68,18 +68,19 @@ Each extension is a folder (an env is one file) with its own `README.md` and, if
 `config.example.yaml`.
 
 ```
-modes/           your modes
-envs/            your envs (one file each)
-connectors/      your connectors
+modes/           modes: yours, and the shipped cos, forge, improve, ...
+envs/            envs, one file each (yours and the shipped ones)
+connectors/      connectors (yours and the shipped ones)
 content-types/   content types: fields, views and derived fields of a kind of item (post, email ship as examples)
 interfaces/      your interfaces
 adapters/        agent runtimes bay build compiles for, each with its agent profile
 framework/       shipped with the kit, never edited by users:
   roles/           the five roles
-  modes/ envs/ connectors/   framework extensions (cos, forge, improve, ...)
   interfaces/      core interfaces
   rules/           conformance rules
-  components.yaml  core paths and the contracts extensions implement
+  components.yaml  the component map: core paths, the contracts extensions implement, and a `protected:` block
+                   naming what only forge.extend may change (folders, and the shipped modes, envs and connectors
+                   that sit in modes/, envs/ and connectors/ among yours)
 schemas/         the contracts (apiVersion agentbay/v2) and data schemas
 bay/             resolver, lint, dispatcher, guard hook, run log, CLI
 coordinator/     Chief of Staff slash commands

@@ -112,7 +112,12 @@ steps that could write `framework/`, `bay/`, `schemas/` or `adapters/` outside `
 
 ## 4. Interface + Connector
 Interfaces: named endpoints with JSON-schema `in`/`out` and `effects` (`read|write|network|spend|delete`);
-`binding: connector` (code) or `tools` (runtime tools). A connector is `connector.yaml` + `entry` exposing
+`binding: connector` (code) or `tools` (runtime tools). `ownerOnly: true` on an endpoint: no step of any mode may
+run it (resolver and lint refuse it); only the owner's own command reaches it (`improve.findings/v1.decide`, via
+`bay approve <F-id>`). The component map's `protected:` block (`framework/components.yaml`) has the keys `paths`
+(folders), `mode`, `env` (each a name, optionally `{modes: [...]}`: the unprotected modes that may place roles there)
+and `connector`; all four are required, and a missing or malformed block fails closed (every name reserved, nothing
+writable or placeable). A connector is `connector.yaml` + `entry` exposing
 `create(ctx)`; `ctx` gives `config`, `secrets.get/store` (names allowed by env AND connector only),
 `http.request` (env allowlist enforced before every request, HTTPS only), `data_dir`, `caps`, `settings`,
 `sources` (connectors for capabilities it `needs`), `clock`, and for items.source connectors `source_id`,

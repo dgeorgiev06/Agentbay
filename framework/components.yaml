@@ -6,9 +6,11 @@
 # resolver and lint read it, and a protected name is reserved (nobody else can define a mode, env or connector of that
 # name). The kit refuses a map where the block is missing or malformed (nothing is writable, no name is free).
 #   paths:     kit folders; the guard denies a write there to any env that does not name the path (framework-dev does)
-#   mode:      protected modes (improve stays listed until the move of the extension folders is done)
+#   mode:      protected modes (improve stays listed until stage 5 part H)
 #   env:       protected envs; `modes:` = the unprotected modes that may put roles there (`*` = every one)
 #   connector: protected connectors (they scrub secrets, redact transcripts, hold the approval state)
+# Modes, envs and connectors all sit in modes/, envs/ and connectors/; a protected one is writable only where an
+# env's fs.write names its own folder (framework-dev does), so each protected instance path is in the policy.
 # Lint keeps framework-dev's fs.write in step with this block: it names every protected path it may write.
 protected:
   paths: [framework, bay, schemas, adapters]
@@ -35,14 +37,14 @@ components:
       - requirements.txt
       - CHANGELOG.md                 # release metadata: written by forge.extend's release step
     contracts:
-      mode:      { at: ["modes/<name>/", "framework/modes/<name>/"], schema: schemas/mode.schema.json, tests: tests/contracts/mode.py }
-      env:       { at: ["envs/<name>.yaml", "framework/envs/<name>.yaml"], schema: schemas/environment.schema.json }
-      connector: { at: ["connectors/<name>/", "framework/connectors/<name>/"], schema: schemas/connector.schema.json, tests: tests/contracts/connector.py }
+      mode:      { at: ["modes/<name>/"], schema: schemas/mode.schema.json, tests: tests/contracts/mode.py }
+      env:       { at: ["envs/<name>.yaml"], schema: schemas/environment.schema.json }
+      connector: { at: ["connectors/<name>/"], schema: schemas/connector.schema.json, tests: tests/contracts/connector.py }
       interface: { at: ["interfaces/<name>.yaml"], schema: schemas/interface.schema.json }
       adapter:   { at: ["adapters/<name>/"], schema: schemas/adapter.schema.json, protocol: bay/adapter.py }
   briefing:          # corpus store, SQL sandbox, selector matcher, the briefing base mode
     owns:
-      - framework/connectors/corpus-store/
+      - connectors/corpus-store/
       - bay/contenttypes.py
       - bay/sqlsandbox.py
       - bay/selector.py

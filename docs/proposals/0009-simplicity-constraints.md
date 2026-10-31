@@ -13,7 +13,8 @@ touches:
   - { path: README.md, reason: "documents `bay check --limits` and framework/limits.yaml" }
   - { path: docs/INTERFACES.md, reason: "the `limits` operation and limits.yaml as contracts" }
   - { path: docs/DESIGN.md, reason: "the ceilings and the ratchet, one paragraph" }
-  - { path: bay/model.py, reason: "cache parsed YAML in Kit by (path, mtime, size)" }
+  - { path: bay/model.py, reason: "cache parsed YAML in Kit by (path, mtime, size); `mode_envs`, `inline_refs` and `Doc.rel` tightened (same behaviour) to pay for the cache under the bay/ ceiling" }
+  - { path: framework/roles/reviewer.yaml, reason: "the reviewer lists its time sinks in its Result; `cites` field types" }
   - { path: tests/run.py, reason: "per-test timing; slowest 15; wall-time check against the ceiling" }
   - { path: tests/helpers.py, reason: "kit_copy hard-links files and copies only the file a test edits; built() shared per file" }
   - { path: framework/roles/builder.yaml, reason: "targeted tests while working, the full suite once before commit" }
@@ -75,7 +76,7 @@ Complexity 30 and 150 lines per function, enforced by the `deadcode` step, stay 
 - `touches:` may name a folder (`path/`). A rename inside it needs no amendment.
 - An amendment is for a change of scope or design only. A file a rename reached is not one.
 - HANDOFF.md keeps only the current work. History is in git.
-- A review that runs out of budget is resumed, never re-run from the start. The resume logs a `review.overrun` warning in the ledger: the items left, the budget used, and the time sinks in a few words (e.g. "test suite 2 runs, 6 min; read 40 files of a 288-path diff"). improve reads these to find what to make faster. The reviewer's Result lists its time sinks so the warning can say them.
+- A review that runs out of budget is resumed, never re-run from the start. The resume logs a `review.overrun` warning in the ledger: the items left, the budget used, and the time sinks in a few words (e.g. "test suite 2 runs, 6 min; read 40 files of a 288-path diff"). The reviewer's Result lists its time sinks so the warning can say them. improve reading these notes is deferred to 0008 slice 9 (owner decision, 2026-10-31).
 - A review gets the generated role file verbatim and the step plan; cos adds scope, not opinions.
 
 ### 5. Faster tests, every assertion kept

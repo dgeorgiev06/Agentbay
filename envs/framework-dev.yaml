@@ -18,7 +18,16 @@ spec:
       clis: [git status, git diff, git log, git show]
   fs:
     read: ["."]
-    write: [framework, bay, schemas, adapters, docs, tests]
+    # the four protected folders, then each protected mode, env and connector (lint keeps this in step with the
+    # protected: block of framework/components.yaml), then docs and tests
+    write: [framework, bay, schemas, adapters,
+            modes/cos, modes/forge, modes/improve,
+            envs/cos-local.yaml, envs/framework-dev.yaml, envs/improve-local.yaml, envs/local-authoring.yaml,
+            envs/workspace.yaml, envs/research.yaml,
+            connectors/artifact-graph, connectors/claude-transcripts, connectors/corpus-store, connectors/git,
+            connectors/improve-detect, connectors/improve-store, connectors/ledger, connectors/scaffold,
+            connectors/workflow-runner,
+            docs, tests]
   tiers: [balanced, deep]          # no fast tier for framework changes
   effects: [read, write]
   limits: { maxTurns: 120, maxMinutes: 60 }

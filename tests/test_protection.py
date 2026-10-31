@@ -8,6 +8,7 @@ import sys
 
 import yaml
 from helpers import KIT, cleanup, edit_yaml, gaps, kit_copy, project, system, tmpdir
+from layout import PROTECTED_INSTANCES
 from test_improve import D, findings, proj, scan
 
 from bay import boundary, dispatch, lint, model
@@ -42,7 +43,8 @@ def test_the_shipped_map_declares_what_the_old_fixed_list_protected():
     kit = model.Kit(KIT)
     assert not hasattr(model, "PROTECTED") and not hasattr(model, "USER_FRAMEWORK_ENVS")
     assert kit.protected.paths == ("framework", "bay", "schemas", "adapters") and not kit.protected.closed
-    assert kit.protected_paths() == ["framework", "bay", "schemas", "adapters"]   # instances sit inside framework/
+    # the four folders in the old order and spelling, then each protected instance where it sits (stage 5 part G)
+    assert kit.protected_paths() == ["framework", "bay", "schemas", "adapters", *PROTECTED_INSTANCES]
     assert set(kit.protected.names["env"]) == {e for e, d in kit.docs["Environment"].items() if d.root == "framework"}
     assert set(kit.protected.names["connector"]) == {c for c, d in kit.docs["Connector"].items() if d.root == "framework"}
     assert set(kit.protected.names["mode"]) == {m for m, d in kit.docs["Mode"].items() if d.root == "framework"}
@@ -55,8 +57,8 @@ def test_a_role_without_forge_extend_cannot_write_a_path_the_map_lists():
     k = _built(lambda d: d["protected"]["paths"].append("vault"))
     try:
         pol, decide = _guard(k)
-        assert pol["protected"] == ["framework", "bay", "schemas", "adapters", "vault"]
-        put = {"file_path": "vault/key.txt", "content": "x"}
+        assert pol["protected"] == ["framework", "bay", "schemas", "adapters", "vault", *PROTECTED_INSTANCES]
+        put ={"file_path": "vault/key.txt", "content": "x"}
         # workspace writes "." and delivery's builder works there, yet the map says only forge.extend may write vault/
         assert decide("Write", put, "builder--delivery") == "deny"
         assert decide("Write", {"file_path": "src/app.py", "content": "x"}, "builder--delivery") == "pass"
@@ -65,7 +67,7 @@ def test_a_role_without_forge_extend_cannot_write_a_path_the_map_lists():
         assert decide("Write", put, "builder--forge--framework-dev") == "deny"
         errs = lint.lint_protection(model.Kit(k, k))
         assert any("env framework-dev writes protected paths but not vault" in e for e in errs), errs
-        edit_yaml(k / "framework/envs/framework-dev.yaml", lambda d: d["spec"]["fs"]["write"].insert(4, "vault"))
+        edit_yaml(k / "envs/framework-dev.yaml", lambda d: d["spec"]["fs"]["write"].insert(4, "vault"))
         get("claude-code").build(system(k, k), k, k)
         _, decide = _guard(k)
         assert decide("Write", put, "builder--forge--framework-dev") == "pass"
@@ -80,7 +82,7 @@ def test_a_protected_folder_that_a_non_extender_env_names_is_a_resolver_gap():
     try:
         edit_yaml(k / MAP, lambda d: d["protected"]["paths"].append("vault"))
         edit_yaml(k / "modes/delivery/mode.yaml", lambda d: d["spec"]["roles"].update({"builder": "workspace"}))
-        edit_yaml(k / "framework/envs/workspace.yaml", lambda d: d["spec"]["fs"].update({"write": ["vault", "src"]}))
+        edit_yaml(k / "envs/workspace.yaml", lambda d: d["spec"]["fs"].update({"write": ["vault", "src"]}))
         g = [x for x in gaps(k) if "can write vault" in x]
         assert g and "only forge.extend may change the framework" in g[0], gaps(k)
         kit = model.Kit(k)
@@ -92,19 +94,24 @@ def test_a_protected_folder_that_a_non_extender_env_names_is_a_resolver_gap():
 def test_lint_keeps_framework_dev_in_step_with_the_map_both_ways():
     k = kit_copy()
     try:
-        edit_yaml(k / "framework/envs/framework-dev.yaml", lambda d: d["spec"]["fs"]["write"].remove("adapters"))
+        edit_yaml(k / "envs/framework-dev.yaml", lambda d: d["spec"]["fs"]["write"].remove("adapters"))
         errs = lint.lint_protection(model.Kit(k, k))
         assert any("framework-dev writes protected paths but not adapters" in e for e in errs), errs
     finally:
         cleanup(k)
     k = kit_copy()
+    try:                                  # a moved instance the env stops naming is reported, with its path
+        edit_yaml(k / "envs/framework-dev.yaml", lambda d: d["spec"]["fs"]["write"].remove("modes/cos"))
+        errs = lint.lint_protection(model.Kit(k, k))
+        assert any("framework-dev writes protected paths but not modes/cos" in e for e in errs), errs
+    finally:
+        cleanup(k)
+    k = kit_copy()
     try:                                  # an instance path the map no longer lists is stale in fs.write
-        edit_yaml(k / "framework/envs/framework-dev.yaml",
-                  lambda d: d["spec"]["fs"]["write"].append("framework/connectors/ledger"))
         assert not [e for e in lint.lint_protection(model.Kit(k, k)) if "fs.write names" in e]   # listed: fine
         edit_yaml(k / MAP, lambda d: d["protected"]["connector"].remove("ledger"))
         errs = lint.lint_protection(model.Kit(k, k))
-        assert any("fs.write names framework/connectors/ledger" in e for e in errs), errs
+        assert any("fs.write names connectors/ledger" in e for e in errs), errs
     finally:
         cleanup(k)
 
@@ -212,34 +219,36 @@ def test_a_closed_set_leaves_no_adapter_path_open_either():
 
 
 # ----------------------------------------------------------------- reserved names
-def test_a_user_extension_named_like_a_protected_one_is_refused():
-    k = kit_copy()
-    try:                                  # a framework name defined again by the user: the old collision, kept
-        (k / "connectors/ledger").mkdir()
-        fake = (k / "connectors/fake/connector.yaml").read_text().replace("name: fake", "name: ledger")
-        (k / "connectors/ledger/connector.yaml").write_text(fake)
-        assert any("Connector 'ledger'" in c and "reserved" in c for c in model.Kit(k).collisions)
-        assert gaps(k)
+def test_a_name_is_protected_wherever_it_sits_and_is_defined_once():
+    """Stage 5 part G: one folder per kind, so there is no second place for a protected name. The map protects an
+    instance by name wherever it sits; naming an ordinary one puts its path in the policy and asks framework-dev to
+    name it (D9); `Kit` loads no name twice."""
+    put = {"file_path": "connectors/fake/fake.py", "content": "x"}
+    k = _built()
+    try:
+        assert model.Kit(k, k).get("Connector", "fake").root == "user"
+        _, decide = _guard(k)
+        assert decide("Write", put, "builder--forge--local-authoring") == "pass"          # an ordinary connector
+    finally:
+        cleanup(k)
+    k = _built(lambda d: d["protected"]["connector"].append("fake"))
+    try:
+        kit = model.Kit(k, k)
+        assert kit.get("Connector", "fake").root == "framework" and kit.protected_paths()[-1] == "connectors/fake"
+        pol, decide = _guard(k)
+        assert pol["protected"][-1] == "connectors/fake"
+        assert decide("Write", put, "builder--forge--local-authoring") == "deny"
+        assert decide("Write", put, "builder--forge--framework-dev") == "deny"            # until framework-dev names it
+        errs = lint.lint_protection(kit)
+        assert any("env framework-dev writes protected paths but not connectors/fake" in e for e in errs), errs
     finally:
         cleanup(k)
     k = kit_copy()
-    try:                                  # a name the map protects that the framework does not define: refused by the map
-        edit_yaml(k / MAP, lambda d: d["protected"]["connector"].append("mine"))
-        (k / "connectors/mine").mkdir()
-        (k / "connectors/mine/connector.yaml").write_text(
-            (k / "connectors/fake/connector.yaml").read_text().replace("name: fake", "name: mine"))
-        kit = model.Kit(k)
-        assert any("connector 'mine' is a protected name" in e and "only forge.extend" in e for e in kit.errors), kit.errors
-        assert kit.get("Connector", "mine") is None
-        edit_yaml(k / MAP, lambda d: d["protected"]["connector"].remove("mine"))
-        assert model.Kit(k).get("Connector", "mine") is not None       # unprotected, the same file is an ordinary connector
-        # a user env named like a protected env, and a user mode named like a protected mode
-        edit_yaml(k / MAP, lambda d: (d["protected"]["env"].update({"my-env": {}}), d["protected"]["mode"].append("my-mode")))
-        (k / "envs/my-env.yaml").write_text((k / "envs/local-feeds.yaml").read_text().replace("name: local-feeds", "name: my-env"))
-        (k / "modes/my-mode").mkdir()
-        (k / "modes/my-mode/mode.yaml").write_text((k / "modes/delivery/mode.yaml").read_text().replace("name: delivery", "name: my-mode"))
-        errs = model.Kit(k).errors
-        assert any("environment 'my-env' is a protected name" in e for e in errs) and any("mode 'my-mode' is a protected name" in e for e in errs)
+    try:                                  # a name defined twice (an interface in both places) is an error, not a pick
+        (k / "interfaces").mkdir()
+        src = k / "framework/interfaces/items.store.v1.yaml"
+        (k / "interfaces/items.store.v1.yaml").write_text(src.read_text())
+        assert any("Interface 'items.store/v1' is defined twice" in e for e in model.Kit(k).errors)
     finally:
         cleanup(k)
 
@@ -346,7 +355,7 @@ def test_approval_from_chat_and_from_the_terminal_both_pass_the_gate():
         (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "approvals": {"chat": True}}))
         get("claude-code").build(system(k, k), k, k)
         pol, decide = _guard(k)
-        assert pol["protected"] == ["framework", "bay", "schemas", "adapters"]
+        assert pol["protected"] == ["framework", "bay", "schemas", "adapters", *PROTECTED_INSTANCES]
         assert decide("Bash", {"command": ".agentbay/bay approve C-1 --via chat --quote ok"}, None) != "deny"   # the main thread relays
         assert decide("Bash", {"command": ".agentbay/bay approve C-1"}, "builder--forge--framework-dev") == "deny"
         d = dispatch.Dispatcher(system(k, k), k)
@@ -387,7 +396,7 @@ def test_no_step_in_any_mode_may_call_improve_findings_decide():
         edit_yaml(k / "modes/delivery/mode.yaml", add)
 
     def improve_mode(k):                    # the improve mode itself
-        edit_yaml(k / "framework/modes/improve/mode.yaml", lambda d: d["spec"]["features"]["backlog"]["steps"].append(
+        edit_yaml(k / "modes/improve/mode.yaml", lambda d: d["spec"]["features"]["backlog"]["steps"].append(
             {"id": "decide", "run": DECIDE, "with": {"id": "F-1", "decision": "approve", "by": "user@tty"}}))
 
     def not_in_needs(k):                    # refused for what it is, not for a missing `needs`

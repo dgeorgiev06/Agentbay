@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 from golden_util import GOLDEN, compare, normal
 from helpers import KIT, cleanup, clock, edit_yaml, kit_copy, project, system
+from layout import PROTECTED_INSTANCES
 
 from bay import config, dispatch, lint, model, workflows
 from bay.model import Kit
@@ -250,7 +251,8 @@ def test_stage_syntax_table():
 # ------------------------------------------------------------------------------------------------ one parser (D6, D8)
 def test_the_reference_grammar_is_spelled_once_and_the_schemas_equal_it():
     root = KIT / "bay"
-    files = [*root.glob("*.py"), *(KIT / "framework" / "connectors").glob("*/*.py"), *(KIT / "adapters").glob("*/*.py")]
+    shipped = [KIT / p for p in PROTECTED_INSTANCES if p.startswith("connectors/")]      # the files scanned before the move
+    files = [*root.glob("*.py"), *(f for d in shipped for f in d.glob("*.py")), *(KIT / "adapters").glob("*/*.py")]
     spelled = [str(f.relative_to(KIT)) for f in files if re.search(r"\\\$\(?(\?:)?(in|steps)", f.read_text())]
     assert spelled == ["bay/workflows.py"], spelled
     mode = json.loads((KIT / "schemas" / "mode.schema.json").read_text())
@@ -264,7 +266,7 @@ def test_the_reference_grammar_is_spelled_once_and_the_schemas_equal_it():
 
 
 def test_the_dispatcher_and_the_cursor_share_one_skip_rule_and_one_substitution():
-    runner = (KIT / "framework" / "connectors" / "workflow-runner" / "workflow_runner.py").read_text()
+    runner = (KIT / "connectors" / "workflow-runner" / "workflow_runner.py").read_text()
     assert not hasattr(dispatch, "substitute") and "substitute" not in runner
     assert "wfmod.advance(" in runner and "wfmod.skip(" in (KIT / "bay" / "dispatch.py").read_text()
     for when, inp, steps in SKIP_ROWS:

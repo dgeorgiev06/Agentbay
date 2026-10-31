@@ -1,9 +1,10 @@
 """No core file names a content type or a connector (proposal 0006 B-1/B-7 and 0008 slice 5).
 
-Core = bay/, framework/ (its modes own no content type), schemas/, adapters/ and coordinator/ (python, json and
-yaml files; folders named tests and fixtures are skipped). The names are found, not listed: the folders of
-content-types/ (and each type's `kind` and view names), the view names of modes/*/views.yaml, and the folders of
-connectors/.
+Core = bay/, framework/, schemas/, adapters/ and coordinator/ plus the protected modes, envs and connectors (which
+sat in framework/ before stage 5 part G and own no content type) (python, json and yaml files; folders named tests
+and fixtures are skipped). The names are found, not listed: the folders of content-types/ (and each type's `kind` and
+view names), the view names of modes/*/views.yaml, and the connectors that implement items.source/v1 (the control-plane
+connectors, git and ledger among them, are core and name themselves everywhere).
 
 What counts as naming (identifiers and string literals only, never prose):
   * an identifier (variable, attribute, function, class, keyword, parameter, dict key) one of whose snake_case or
@@ -26,21 +27,23 @@ import re
 
 import yaml
 from helpers import KIT
+from layout import PROTECTED_INSTANCES
 
 from bay import contenttypes
 
-CORE = ("bay", "framework", "schemas", "adapters", "coordinator")
+CORE = ("bay", "framework", "schemas", "adapters", "coordinator", *PROTECTED_INSTANCES)
+SOURCE_IFACE = "items.source/v1"
 SKIP = {"tests", "fixtures", "__pycache__"}
 SUFFIXES = {".py", ".json", ".yaml", ".yml"}
 
 ALLOWED = {
     ("bay/selector.py", "email", "au.get('email')"):
         "the `email` field of an item/v1 author ({handle, name, email}); a field of the base record, not a content type",
-    ("framework/connectors/corpus-store/corpus_store.py", "email", "au.get('email')"):
+    ("connectors/corpus-store/corpus_store.py", "email", "au.get('email')"):
         "the same item/v1 author field, read when a row is stored",
-    ("framework/connectors/corpus-store/corpus_store.py", "email", "'email' not in author"):
+    ("connectors/corpus-store/corpus_store.py", "email", "'email' not in author"):
         "the same author field, checked when a handle holds an address",
-    ("framework/connectors/corpus-store/corpus_store.py", "email", "{'email': author.pop('handle'), **author}"):
+    ("connectors/corpus-store/corpus_store.py", "email", "{'email': author.pop('handle'), **author}"):
         "the same author field, written when a handle holds an address",
     ("schemas/data/item.v1.schema.json", "email", "/properties/author/properties: email"):
         "the item/v1 author's `email` property, the base record every type extends",
@@ -60,7 +63,11 @@ def names(root=KIT) -> tuple[set[str], set[str], set[str]]:
     views = {v for t in types.values() for v in t.docs}
     for f in root.glob("modes/*/views.yaml"):
         views |= set((yaml.safe_load(f.read_text()) or {}).get("views") or {})
-    conns = {d.name for d in (root / "connectors").iterdir() if d.is_dir()}
+    conns = set()
+    for f in (root / "connectors").glob("*/connector.yaml"):
+        impl = (yaml.safe_load(f.read_text()) or {}).get("spec", {}).get("implements") or []
+        if SOURCE_IFACE in ([impl] if isinstance(impl, str) else impl):
+            conns.add(f.parent.name)
     return kinds, views, conns
 
 
@@ -134,10 +141,9 @@ def data_hits(doc, kinds, views, conns, path=""):
 def core_files(root=KIT):
     for top in CORE:
         base = root / top
-        if base.is_dir():
-            for f in sorted(base.rglob("*")):
-                if f.is_file() and f.suffix in SUFFIXES and not SKIP & set(f.relative_to(root).parts):
-                    yield f
+        for f in sorted(base.rglob("*")) if base.is_dir() else [base]:      # a protected env is one file
+            if f.is_file() and f.suffix in SUFFIXES and not SKIP & set(f.relative_to(root).parts):
+                yield f
 
 
 def scan(root=KIT) -> set[tuple[str, str, str]]:

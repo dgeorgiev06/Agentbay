@@ -70,7 +70,7 @@ def test_scaffold_refuses_framework_names_and_overwrites():
             scaffold.create(k, kind, name)
             raise AssertionError("expected ScaffoldError")
         except scaffold.ScaffoldError as e:
-            assert "framework name" in str(e)
+            assert "protected name" in str(e) and "forge.extend" in str(e)
     try:
         scaffold.create(k, "role", "summarizer")                 # roles are framework-level
         raise AssertionError("expected ScaffoldError")

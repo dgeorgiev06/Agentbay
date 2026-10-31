@@ -236,7 +236,8 @@ def test_shipped_component_map_is_valid_and_lint_checks_it():
     assert model.schema_errors(doc, model.schema("components")) == []
     cmap = boundary.ComponentMap.load(KIT / "framework/components.yaml")
     assert cmap.owner("bay/selector.py") == "briefing" and cmap.owner("bay/cli.py") == "kernel"
-    assert cmap.extension("framework/modes/forge/mode.yaml")[1] == "framework/modes/forge/"
+    assert cmap.extension("modes/forge/mode.yaml")[1] == "modes/forge/"
+    assert cmap.extension("framework/modes/forge/mode.yaml") is None       # no second place for an instance
     kit = model.Kit(KIT)
     assert lint.lint_components(kit) == []
     bad = tmpdir()

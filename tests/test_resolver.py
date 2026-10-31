@@ -164,7 +164,7 @@ def test_config_schema_rejects_unknown_settings():
 
 def test_forge_create_cannot_be_placed_in_framework_writing_env():
     k = kit_copy()
-    edit_yaml(k / "framework/modes/forge/mode.yaml",
+    edit_yaml(k / "modes/forge/mode.yaml",
               lambda d: d["spec"]["features"]["create"].update({"roles": {"builder": "framework-dev"}}))
     assert_gap(k, "forge.create step fill", "env framework-dev, which can write framework, bay, schemas",
                "only forge.extend may change the framework")
@@ -181,7 +181,7 @@ def test_user_mode_cannot_write_framework():
     assert_gap(k, "mode delivery: role builder works in the framework env framework-dev",
                "delivery.build step implement", "user modes may put roles only in their own envs")
     # a framework mode is still checked for the framework boundary
-    edit_yaml(k / "framework/modes/improve/mode.yaml", lambda d: d["spec"]["roles"].update({"analyst": "framework-dev"}))
+    edit_yaml(k / "modes/improve/mode.yaml", lambda d: d["spec"]["roles"].update({"analyst": "framework-dev"}))
     assert_gap(k, "improve.scan step patterns", "env framework-dev", "only forge.extend may change the framework")
 
 

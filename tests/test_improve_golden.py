@@ -15,6 +15,7 @@ from pathlib import Path
 from golden_util import compare, normal
 from helpers import KIT, NOW, cleanup, clock, connector_pkg, project, system, tmpdir
 from improve_fixtures import make_ledger, make_transcripts
+from layout import PROTECTED_INSTANCES
 
 from bay import dispatch
 
@@ -246,8 +247,10 @@ def golden_change() -> dict:
         cleanup(repo)
 
 
-MOVING = ("bay/graph.py", "bay/conformance.py", "bay/util.py", "framework/connectors/", "framework/modes/",
-          "framework/envs/")
+# Only the protected instances: connectors/, modes/ and envs/ also hold user extensions (connectors/gmail-api has
+# findings of its own and never moved). A protected mode or connector is a folder (trailing /), an env one file.
+MOVING = ("bay/graph.py", "bay/conformance.py", "bay/util.py",
+          *(p if p.endswith(".yaml") else p + "/" for p in PROTECTED_INSTANCES))
 DEADCODE_KINDS = ("unused", "unused-constant", "compat-layer", "complexity")
 
 

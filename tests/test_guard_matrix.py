@@ -6,15 +6,17 @@ the file tools. Also recorded: the policy's `protected` list and per-unit scopes
 env, the resolver gaps of test_resolver.py:165-185 and the lint warnings about protected reach.
 
 The golden is generated from the code before stage 5. Later parts compare against it and may change only the rows
-their decisions name (D3, D4, D7). A failing compare means a decision changed (see golden_util)."""
+their decisions name (D3, D4, D7). A failing compare means a decision changed (see golden_util). Part G moved the
+shipped extensions: `undo_move` below names the path-only differences that follow, and the golden stays as taken."""
 from __future__ import annotations
 
+import copy
 import json
 import os
 
-from golden_util import compare, normal
+from golden_util import GOLDEN, compare, normal
 from helpers import KIT, cleanup, edit_yaml, gaps, kit_copy, project, system
-from layout import physical
+from layout import PROTECTED_INSTANCES, physical
 
 from bay import lint, model
 from bay.adapter import get
@@ -180,15 +182,67 @@ def resolver_gaps() -> dict:
     return out
 
 
+# ------------------------------------------------------------------------------------------------ the move (part G)
+# tests/golden/guard-matrix.json was taken before the shipped modes, envs and connectors left framework/ and is NOT
+# edited. Row keys are logical paths, so they did not change; what changed is where the rows' paths point, and so the
+# text of a reason. `undo_move` puts each named, path-only difference back, asserting it is there first, and the
+# result must equal the golden: every decision and every other word of every reason is the same as before the move.
+FOUR = ["framework", "bay", "schemas", "adapters"]       # the protected folders of the policy before the move
+DEV, LOCAL = "builder--forge--framework-dev", "builder--forge--local-authoring"
+CLAUSE = "{}/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+
+
+def undo_move(got: dict) -> dict:
+    """The matrix as it would read with the shipped extensions still under framework/, from the matrix of the new
+    layout. Named differences, and nothing else: (1) the policy lists each protected instance after the four folders,
+    and framework-dev's fs.write names them (D9); (2) a reason names the new path, and the protected entry that denied
+    the write (`modes/cos/` where `framework/` was); (3) local-authoring writes modes/, envs/ and connectors/, so a
+    protected instance in them is now denied by the protected entry, where it used to be outside its writable paths
+    (a deny both times)."""
+    got = copy.deepcopy(got)
+    pol, moved = got["policy"], PROTECTED_INSTANCES
+    assert pol["protected"] == FOUR + moved, pol["protected"]
+    pol["protected"] = FOUR
+    assert pol["units"][DEV]["write"] == [*FOUR, *moved, "docs", "tests"], pol["units"][DEV]["write"]
+    pol["units"][DEV]["write"] = [*FOUR, "docs", "tests"]
+    assert got["protectedWrites"]["framework-dev"] == FOUR + moved
+    got["protectedWrites"]["framework-dev"] = FOUR
+    local_writes = str(pol["units"][LOCAL]["write"])
+    dev_now, dev_was = str([*FOUR, *moved, "docs", "tests"]), str([*FOUR, "docs", "tests"])    # a reason quotes the list
+
+    def old(s: str, unit: str | None = None) -> str:
+        if unit == DEV:
+            s = s.replace(dev_now, dev_was)
+        for p in moved:
+            was = f"outside the role's writable paths {local_writes}" if unit == LOCAL else CLAUSE.format("framework")
+            s = s.replace(CLAUSE.format(p), was).replace(f"<project>/{p}", f"<project>/framework/{p}")
+        return s
+
+    for unit, rows_ in got["matrix"].items():
+        for row, (decision, reason) in rows_.items():
+            rows_[row] = [decision, old(reason, unit)]
+    got["lintWarnings"] = [old(w) for w in got["lintWarnings"]]
+    longer, shorter = ", ".join(FOUR + moved), ", ".join(FOUR)
+    assert any(longer in g for gs in got["resolverGaps"].values() for g in gs)
+    got["resolverGaps"] = {name: [old(g).replace(longer, shorter) for g in gs] for name, gs in got["resolverGaps"].items()}
+    return got
+
+
+def decisions(doc: dict) -> dict:
+    return {unit: {row: v[0] for row, v in rows_.items()} for unit, rows_ in doc["matrix"].items()}
+
+
 def test_guard_decision_matrix():
     k = build_kit()
     try:
         real = {str(k): "<project>", os.path.realpath(k): "<project>", str(k.parent): "<tmp>",
                 os.path.realpath(k.parent): "<tmp>"}
-        got = {"policy": policy_view(k), "protectedWrites": protected_view(k), "resolverGaps": resolver_gaps(),
-               "lintWarnings": [w for w in lint.warnings(model.Kit(k, k)) if "reaches" in w],
-               "matrix": matrix(k)}
-        compare("guard-matrix", normal(got, real))
+        got = normal({"policy": policy_view(k), "protectedWrites": protected_view(k), "resolverGaps": resolver_gaps(),
+                      "lintWarnings": [w for w in lint.warnings(model.Kit(k, k)) if "reaches" in w],
+                      "matrix": matrix(k)}, real)
+        want = json.loads((GOLDEN / "guard-matrix.json").read_text())
+        assert decisions(got) == decisions(want), "a guard decision changed"       # before any path is mapped
+        compare("guard-matrix", undo_move(got))
     finally:
         cleanup(k)
 

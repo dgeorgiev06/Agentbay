@@ -247,7 +247,7 @@ def test_the_functions_the_complexity_check_flagged_stay_under_its_threshold():
 
     da = detect_artifacts
     flagged = [("adapters/claude-code/claude_code.py", "ClaudeCodeAdapter._settings"),
-               ("bay/guard.py", "Guard._bash"), ("framework/connectors/ledger/ledger_sources.py", "ledger_verdicts"),
+               ("bay/guard.py", "Guard._bash"), ("connectors/ledger/ledger_sources.py", "ledger_verdicts"),
                ("bay/contenttypes.py", "_one"), ("bay/contenttypes.py", "check_mode_views"),
                ("bay/dispatch.py", "Dispatcher._plan")]
     for rel, qual in flagged:

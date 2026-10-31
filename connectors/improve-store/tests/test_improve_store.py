@@ -29,6 +29,25 @@ def S(d, now=NOW):
     return st.Store(d, now, {"forge", "improve"})
 
 
+def test_a_file_of_a_protected_instance_routes_to_forge_extend_like_the_protected_folders():
+    """The protected modes, envs and connectors sit in modes/, envs/ and connectors/ among user ones (stage 5 part G):
+    the route follows the component map's names, not the folder."""
+    d = tmpdir()
+    try:
+        paths = st.instance_paths({"mode": ("cos",), "env": ("workspace",), "connector": ("ledger",)})
+        assert paths == ("modes/cos", "envs/workspace.yaml", "connectors/ledger")
+        s = st.Store(d, NOW, {"cos"}, paths)
+        route = lambda *files: s.route_for({"scope": {"files": list(files)}})      # noqa: E731
+        assert route("framework/roles/builder.yaml") == "forge.extend"
+        assert route("connectors/ledger/ledger.py", "modes/cos/mode.yaml", "envs/workspace.yaml") == "forge.extend"
+        assert route("connectors/gmail-api/gmail_api.py") == "mode-fix"                       # an ordinary connector
+        assert route("modes/cosmos/mode.yaml", "connectors/ledger2/x.py", "envs/workspace.yaml.bak") == "mode-fix"
+        assert route("connectors/ledger/ledger.py", "connectors/gmail-api/gmail_api.py") == "mode-fix"   # all must be
+        assert st.Store(d, NOW).route_for({"scope": {"file": "connectors/ledger/ledger.py"}}) == "mode-fix"
+    finally:
+        cleanup(d)
+
+
 def test_dedup_by_fingerprint_merges_evidence_and_reopens_fixed():
     d = tmpdir()
     try:
@@ -129,9 +148,9 @@ def test_triage_links_only_same_file_across_lenses():
                     evidence=[{"kind": "file", "ref": "modes/feed-briefing/mode.yaml:12"}],
                     scope={"file": "modes/feed-briefing/mode.yaml"})
         slow = cand(kind="slow-step", key="feed-briefing.digest.gather")
-        ineff = cand(kind="inefficient-store-read", key="framework/connectors/corpus-store/corpus_store.py:CorpusStore.query",
-                     lens="artifacts", refs=(), evidence=[{"kind": "file", "ref": "framework/connectors/corpus-store/corpus_store.py:9"}],
-                     scope={"file": "framework/connectors/corpus-store/corpus_store.py"})
+        ineff = cand(kind="inefficient-store-read", key="connectors/corpus-store/corpus_store.py:CorpusStore.query",
+                     lens="artifacts", refs=(), evidence=[{"kind": "file", "ref": "connectors/corpus-store/corpus_store.py:9"}],
+                     scope={"file": "connectors/corpus-store/corpus_store.py"})
         ids = s.upsert([churn, conf, slow, ineff], "x")["new"]
         res = s.triage()
         assert [(l["a"], l["b"]) for l in res["links"]] == [tuple(sorted(ids[:2]))]

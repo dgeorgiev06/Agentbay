@@ -110,9 +110,14 @@ class Context:
 
 
 def _load_module(c: model.Doc):
+    """The connector's entry module. The connector's folder is its package: siblings of the entry import as
+    `from . import sibling` (or `from .sibling import x`) and resolve inside that folder only. Modules left by an
+    earlier load of the same name (another kit, an edited file) are dropped first, siblings included."""
     path = c.dir / c.spec["entry"]
     mod_name = f"agentbay_connector_{c.name.replace('-', '_')}"
-    spec = importlib.util.spec_from_file_location(mod_name, path)
+    for stale in [k for k in sys.modules if k == mod_name or k.startswith(f"{mod_name}.")]:
+        del sys.modules[stale]
+    spec = importlib.util.spec_from_file_location(mod_name, path, submodule_search_locations=[str(c.dir)])
     mod = importlib.util.module_from_spec(spec)
     sys.modules[mod_name] = mod
     spec.loader.exec_module(mod)

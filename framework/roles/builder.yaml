@@ -27,4 +27,5 @@ spec:
     - every changed file is listed in artifacts
   rules:
     - never commit or push unless the task says so
+    - never edit a file in tests/golden/ by hand; a changed behaviour is a named delta in the test
     - only run your env's command prefixes; Claude Code asks the user before each one

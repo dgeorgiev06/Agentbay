@@ -753,7 +753,7 @@ def cmd_limits(args) -> int:
     try:
         text = boundary.show(KIT, args.head, Path(args.proposal).resolve().relative_to(KIT).as_posix()) \
             if args.proposal else None
-        problems, notes = limits.check(KIT, args.base, text)
+        problems, notes = limits.check(KIT, args.base, text, args.write)
     except (RuntimeError, ValueError) as e:
         _die(f"✗ {e}")
     for line in [f"! {n}" for n in notes] + [f"✗ {p}" for p in problems]:
@@ -811,6 +811,7 @@ def main(argv=None):
     ck.add_argument("--docs", action="store_true", help="also run B-11 on the core docs")
     ck.add_argument("--json", action="store_true", help="the boundary report as JSON")
     ck.add_argument("--limits", action="store_true", help="also check the size ceilings in framework/limits.yaml")
+    ck.add_argument("--write", action="store_true", help="with --limits: write the counts as the new ceilings (at release)")
     ck.set_defaults(fn=cmd_check)
     b = sub.add_parser("build", help="compile modes and roles into a runtime"); b.add_argument("--runtime", default="claude-code")
     b.set_defaults(fn=cmd_build)

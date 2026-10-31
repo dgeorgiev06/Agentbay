@@ -476,7 +476,7 @@ def test_an_edit_after_approval_makes_the_gate_run_again():
         # the plan binds with the proposal: both paths and shas are shown, a chat approval names both prefixes
         p2 = _proposal(k, "0097-plan.md", APPROVED_FM)
         plan = k / "docs/plans/0097-plan.md"
-        plan.parent.mkdir(parents=True)
+        plan.parent.mkdir(parents=True, exist_ok=True)
         plan.write_text("# plan\nbuild order\n")
         r = _to_gate(d, p2)
         ap = r["next"]["approves"]

@@ -191,6 +191,8 @@ def resolver_gaps() -> dict:
 FOUR = ["framework", "bay", "schemas", "adapters"]       # the protected folders of the policy before the move
 DEV, LOCAL = "builder--forge--framework-dev", "builder--forge--local-authoring"
 IMPROVE = "modes/improve"
+DEV_CLIS = ["./bay.sh check", "python3 tests/run.py", "git status", "git diff", "git log", "git add", "git commit"]
+MV_RM = ["git mv", "git rm"]
 CLAUSE = "{}/ of the agentbay checkout is writable only by forge.extend (env must name it)"
 
 
@@ -200,7 +202,7 @@ def undo_move(got: dict) -> dict:
     and framework-dev's fs.write names them (D9); (2) a reason names the new path, and the protected entry that denied
     the write (`modes/cos/` where `framework/` was); (3) local-authoring writes modes/, envs/ and connectors/, so a
     protected instance in them is now denied by the protected entry, where it used to be outside its writable paths
-    (a deny both times)."""
+    (a deny both times); (4) framework-dev's clis and its "may only run" reasons also name `git mv` and `git rm`."""
     got = copy.deepcopy(got)
     pol, moved = got["policy"], PROTECTED_INSTANCES
     assert pol["protected"] == FOUR + moved, pol["protected"]
@@ -211,10 +213,15 @@ def undo_move(got: dict) -> dict:
     got["protectedWrites"]["framework-dev"] = FOUR
     local_writes = str(pol["units"][LOCAL]["write"])
     dev_now, dev_was = str([*FOUR, *moved, "docs", "tests"]), str([*FOUR, "docs", "tests"])    # a reason quotes the list
+    # (4) framework-dev may also run `git mv` and `git rm` (Part 3a): in its clis and in its "may only run" reasons
+    assert pol["units"][DEV]["clis"] == [*DEV_CLIS, *MV_RM, "git show"], pol["units"][DEV]["clis"]
+    pol["units"][DEV]["clis"] = [*DEV_CLIS, "git show"]
+    cli_now, cli_was = ", ".join([*DEV_CLIS, *MV_RM, "git show"]), ", ".join([*DEV_CLIS, "git show"])
+    assert any(cli_now in r for r in (r for _, r in got["matrix"][DEV].values()))
 
     def old(s: str, unit: str | None = None) -> str:
         if unit == DEV:
-            s = s.replace(dev_now, dev_was)
+            s = s.replace(dev_now, dev_was).replace(cli_now, cli_was)
         for p in [*moved, IMPROVE]:          # improve moved too; it is no longer protected (part H)
             was = f"outside the role's writable paths {local_writes}" if unit == LOCAL else CLAUSE.format("framework")
             s = s.replace(CLAUSE.format(p), was).replace(f"<project>/{p}", f"<project>/framework/{p}")

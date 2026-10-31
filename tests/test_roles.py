@@ -252,6 +252,7 @@ def test_user_modes_may_not_put_roles_in_framework_envs_other_than_workspace_and
     assert system(None).modes["delivery"].roles == {"researcher": "research", "builder": "workspace",
                                                     "reviewer": "workspace"}
     assert system(None).units()["analyst--improve"].env == "improve-local"
+    assert system(None).units()["lead--forge--framework-dev--step"].inference.model == "opus"    # the plan step's tier, not the role's
 
 
 def test_a_units_default_tier_is_checked_against_the_env_cap():

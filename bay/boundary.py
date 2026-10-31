@@ -38,8 +38,8 @@ from pathlib import Path
 import yaml
 
 DOCS = ("README.md", "docs/DESIGN.md", "docs/INTERFACES.md")
-OTHER = ("tests/", "HANDOFF.md", "docs/proposals/", "docs/research/", ".gitignore", ".gitattributes",
-         ".editorconfig", "LICENSE", "LICENSE.md")
+OTHER = ("tests/", "HANDOFF.md", "docs/proposals/", "docs/plans/", "docs/research/", ".gitignore",
+         ".gitattributes", ".editorconfig", "LICENSE", "LICENSE.md")
 # contracts whose instance names B-11 forbids in the core docs
 NAMED_CONTRACTS = ("mode", "connector", "env", "contentType")
 

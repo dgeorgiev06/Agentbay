@@ -51,7 +51,7 @@ Code steps run in the dispatcher, agentic steps as subagents; the `reviewer` giv
 Done item. A change to the framework also passes a code step, `deadcode`, before review: `improve.detect/v1.change`
 audits the tree and the tree at its merge-base with `origin/main`, and any new unused code or compatibility layer blocks the call. A second code step, `limits`, blocks a change that
 pushes the framework past a ceiling in `framework/limits.yaml`; run `./bay.sh check --limits` by hand. A count below
-its ceiling is written as the new ceiling; raising one needs an exception in the proposal.
+its ceiling is a note; `--write` (at release) writes it as the new ceiling; raising one needs an exception in the proposal.
 
 **Going live:** sign in as the source connector's `README.md` says, remove `offline: true` from
 agentbay.config.yaml and rebuild. Budget caps stop a sync before it exceeds one.

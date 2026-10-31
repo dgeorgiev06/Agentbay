@@ -711,7 +711,6 @@ def role_env(spec: dict, ep: dict | None, st: dict | None, role: str) -> str | N
         m = (layer or {}).get("roles")
         if isinstance(m, dict) and m.get(role):
             return m[role]
-    return None
 
 
 def step_role(st: dict, ep: dict) -> str | None:
@@ -1346,6 +1345,7 @@ def _role_step(ctx: _Ctx, md: Doc, ep: dict, st: dict, sw: str, ep_eff, review: 
                          if v), (rd.tier, ""))
     effort = src.get("effort") or feat.get("effort") or rd.effort
     step.inference = ctx.inference(tier, effort)
+    if rn == md.spec.get("coordinator"): u.inference = step.inference    # the generated file shows the model the step runs
     allowed = env.spec.get("tiers")
     if allowed and tier not in allowed:
         gaps.append(f"{sw}: {label} {rn} in env {env.name} runs at tier '{tier}' (from {origin}), which env "

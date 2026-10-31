@@ -330,7 +330,7 @@ class ClaudeCodeAdapter:
         bash = ([use_shim(r.unit)] if r.bay_uses else []) + r.clis
         if bash:
             extras.append("## Allowed Bash\nA guard hook allows only these, one simple command at a time "
-                          "(no pipes, ;, &&, redirects or $()): " + ", ".join(f"`{c}`" for c in bash) + ".")
+                          "(no pipes, ;, &&, redirects or $()): " + ", ".join(f"`{c}`" for c in [*bash, f"{BAY} plan"]) + ".")
         if r.budget:
             b = ", ".join(f"{k}={v}" for k, v in r.budget.items())
             extras.append(f"## Budget\nStay within: {b}. If you cannot finish, return status `partial`.")

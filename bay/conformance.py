@@ -103,10 +103,7 @@ def _features(k: model.Kit):
 
 def _vague(text: str) -> str | None:
     low = text.lower()
-    for w in VAGUE:
-        if re.search(rf"(?<![\w-]){re.escape(w)}(?![\w-])", low) and not ANCHOR.search(text):
-            return w
-    return None
+    return next((w for w in VAGUE if re.search(rf"(?<![\w-]){re.escape(w)}(?![\w-])", low) and not ANCHOR.search(text)), None)
 
 
 # ----------------------------------------------------------------------------- checks

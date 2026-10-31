@@ -88,9 +88,11 @@ def schema(name: str) -> dict:
 
 
 def data_schema(ref: str) -> dict:
-    """'item/v1' -> schemas/data/item.v1.schema.json; a content type's `<name>/v<N>` -> its fields.schema.json"""
+    """'item/v1' -> schemas/data/item.v1.schema.json or modes/<mode>/data/item.v1.schema.json; a content type's
+    `<name>/v<N>` -> its fields.schema.json"""
     name, _, ver = ref.partition("/")
     p = SCHEMAS / "data" / f"{name}.{ver}.schema.json"
+    p = next((q for q in (p, *sorted(KIT.glob(f"modes/*/data/{p.name}"))) if q.exists()), p)
     if not p.exists():
         from . import contenttypes
         found = contenttypes.fields_schema(ref)
@@ -105,20 +107,9 @@ VERSIONED = re.compile(r"^[a-z][a-z0-9.-]*/v[0-9]+$")   # `<name>/v<N>`: interfa
 
 
 def item_kinds(kit: Path = KIT) -> dict[str, set[int]]:
-    """Known item kinds: the content types of the kit (content-types/) and `<kind>/v<N>` data schemas that extend
-    item/v1. kind -> versions."""
+    """Known item kinds: the content types of the kit (content-types/). kind -> versions."""
     from . import contenttypes
-    out: dict[str, set[int]] = contenttypes.item_kinds(kit)
-    for f in sorted((kit / "schemas" / "data").glob("*.v*.schema.json")):
-        try:
-            doc = json.loads(f.read_text())
-        except ValueError:
-            continue
-        if any(isinstance(a, dict) and a.get("$ref") == "item/v1" for a in doc.get("allOf", [])):
-            name, _, ver = doc.get("title", "").partition("/v")
-            if name and ver.isdigit():
-                out.setdefault(name, set()).add(int(ver))
-    return out
+    return contenttypes.item_kinds(kit)
 
 
 def mode_envs(md: Doc) -> list[str]:

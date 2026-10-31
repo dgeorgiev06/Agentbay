@@ -2,7 +2,7 @@
 # Single source, read by the reviewers of forge.create and forge.extend (their review plans carry these
 # rules; see `review.rulesets` in modes/forge/mode.yaml) and by improve.audit, which runs every
 # `check` here deterministically and leaves rules without a check to the analyst in improve.audit.
-# `bay check` validates this file (schemas/conformance.schema.json, unique ids, known checks).
+# `bay check` validates this file (schemas/rules.schema.json, unique ids, known checks).
 apiVersion: agentbay/v2
 kind: Conformance
 metadata:

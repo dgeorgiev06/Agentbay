@@ -79,7 +79,11 @@ Details worth knowing: (a) deleting T2 left `proposal.load_touches` with no call
 
 Last line of each check: `python3 tests/run.py -q`: "536 passed, 0 failed in 160.9s (2 workers)"; `./bay.sh check`: "✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)"; `./bay.sh check --limits --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: "✓ limits: 7 measures within their ceilings" (boundary line: "31 changed paths (6 core, 5 extension, 20 other); 0 failing; B-11 docs: 0 hits").
 
-## Part 2b done (partial: item 7 only)
+## Part 2b done
+
+Items 10 and 11 were finished after item 7 (see the end of this section). Commits: 06754cc (item 7), then the items 10 and 11 commit. Bay 9600 lines (-21 against part 1's 9621 base; item 7 +5, data -4 and the item_kinds loop). Schemas 16 until `schemas/conformance.schema.json` (no consumers left) is `git rm`ed, then 15. Tests 536. Last lines: `python3 tests/run.py -q`: "536 passed, 0 failed in 144.1s (2 workers)"; `./bay.sh check --limits ...`: "✓ limits: 7 measures within their ceilings" (boundary: "33 changed paths (7 core, 5 extension, 21 other); 0 failing; B-11 docs: 0 hits"). framework/limits.yaml was rewritten again by the check (bay_lines 9600, schemas 16, tests 536) and is not committed.
+
+Earlier status, written after item 7 alone:
 
 Commit 06754cc on feat/0008-slice9: item 7. `workflows.advance` takes `fresh(stage, age)` and passes it to `skip`; `skip` lost `gate`; the dispatcher step loop calls advance, logs step.skipped per Move.skipped, raises CallError on refused/missing; `Dispatcher._skip` is gone, its freshness closure is `Dispatcher._fresh(step, mode, age)`. test_stage_syntax calls `workflows.skip`/`_fresh`, asserts `wfmod.advance(` in dispatch and no `_skip`.
 

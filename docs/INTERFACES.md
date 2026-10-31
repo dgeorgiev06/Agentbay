@@ -28,9 +28,9 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN.md
 | 7 | **Dispatcher** (`bay call/submit/use`) | `bay/dispatch.py` | rarely |
 | 8 | **TaskEnvelope / Result** | `schemas/task.schema.json` | rarely; version-bump it |
 | 9 | **LedgerEvent** | `schemas/event.schema.json` | rarely; version-bump it |
-| 10 | **Session, artifact and finding interfaces** | `framework/interfaces/`, `schemas/data/improve.finding.v1.schema.json` | you add a detector source or finding field |
-| 11 | **Briefing: items, selectors, corpus store, read-only SQL** | `framework/interfaces/items.*.yaml`, `schemas/data/`, `bay/selector.py`, `bay/sqlsandbox.py` | you add a source kind or a view |
-| 12 | **Conformance rules** | `framework/rules/conformance.yaml`, `schemas/conformance.schema.json` | you change what "fits the framework" means |
+| 10 | **Session, artifact and finding interfaces** | `framework/interfaces/`, the finding schema in a mode's data folder | you add a detector source or finding field |
+| 11 | **Briefing: items, selectors, corpus store, read-only SQL** | `framework/interfaces/items.*.yaml`, `schemas/data/`, a mode's data folder, `bay/selector.py`, `bay/sqlsandbox.py` | you add a source kind or a view |
+| 12 | **Conformance rules** | `framework/rules/conformance.yaml`, `schemas/rules.schema.json` | you change what "fits the framework" means |
 
 ## 1. Mode and features
 `mode.yaml` declares each feature (`spec.features.<name>`, called as `<mode>.<name>`), everything about it in one place:
@@ -341,7 +341,7 @@ author: {handle?: string, name?: string, email?: string}   # email is the author
   read is redacted and scanned.
 
 ## 12. Conformance rules
-`framework/rules/conformance.yaml` (`schemas/conformance.schema.json`, linted by `bay check`): rules with an id,
+`framework/rules/conformance.yaml` (`schemas/rules.schema.json`, linted by `bay check`): rules with an id,
 level, statement and optional deterministic `check`. A feature's
 `review.rulesets: [conformance]` adds them to the reviewer's plan; the framework's audit feature runs every rule
 that has a check and hands the rest to the analyst.

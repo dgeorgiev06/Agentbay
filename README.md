@@ -65,8 +65,11 @@ writes a minimal `agentbay.config.yaml` when the project has none. Settings can 
 the env's `limits:` is refused by lint and at run time. Capabilities stay bound only in `envs/<env>.yaml`; an
 env's `offline:` block names the stand-in sources that `offline: true` binds in their place.
 A mode endpoint with a `schedule:` (daily, weekly) runs from cron: `bay check` prints the command to schedule.
-The weekly improve report, for example (Mondays, 07:00):
-`0 7 * * 1  cd ~/code/my-repo && .agentbay/bay call improve.backlog '{}'`
+For example, a weekly report on Mondays at 07:00:
+
+```
+0 7 * * 1  cd ~/code/my-repo && .agentbay/bay call improve.backlog '{}'
+```
 
 ## Folder map
 

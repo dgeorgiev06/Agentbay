@@ -127,7 +127,7 @@ cannot contain code once something runs it. Hard isolation needs an OS sandbox.
   implement, `deadcode`, `limits`, review, release. The `plan` step runs the `lead` role as a deep subagent and
   writes `docs/plans/<id>.md` (named like the proposal) when `approvals.plan` asks for one: `large` (the default) means
   a proposal with 10 or more touches, any `exceptions:`, no readable `touches:`, or a touch at, under or above a
-  security-sensitive path (the guard, the dispatcher, secrets, the ledger, adapters, core rules and two schemas); `always` and `never` are as named. The gate always runs and approves the proposal's path and sha256
+  security-sensitive path (the guard, the dispatcher, secrets, the event log, adapters, core rules and two schemas); `always` and `never` are as named. The gate always runs and approves the proposal's path and sha256
   and, when the plan exists, the plan's; an edit or deletion of either after approval opens the gate again.
   Before review the call runs a code step, `deadcode` (`improve.detect/v1.change`), that blocks the
   call when the change adds unused code, an unused constant, a compatibility layer or a complexity finding that the

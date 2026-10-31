@@ -1,3 +1,32 @@
+# HANDOFF part 27: T-20261031-edd9 (recorded with `bay plan`) - stage 5 part E built (one workflow syntax, validator, skip and advance rule)
+
+Outcome: done. One code commit, dffef42, on feat/0008-stage5. No proposal edited; every path is in 0008's touches (boundary below).
+
+## To-do
+| Item | Commit | What |
+|---|---|---|
+| E1 parser | dffef42 | `bay/workflows.py` is the one stage-syntax module: the reference grammar once (`FIELD`, `PATH`, `REFERENCE`, `WHEN_PATTERN`, `FEATURE_WHEN_PATTERN`, `APPROVES_PATTERN`), `Stage` (also `Stage.of_step` for a mode step), `check_stages` (the validator for both), `skip`, `substitute` (moved from `bay/dispatch.py`, gone there), `advance` + `Move` (the cursor rule) |
+| E2 callers | dffef42 | `model._feature_steps` builds `Stage`s and calls `check_stages` (gate steps now carry `when` so the check sees it); `Dispatcher._skip` is `workflows.skip` plus a `fresh` callback for `stale > age`; `workflow_runner._advance` is `workflows.advance` plus the run file bookkeeping. Two executors kept (D6) |
+| E3 D7 | dffef42 | a gate with `when` in a project workflow: `structure_problems` (so `bay check` / lint) says `... step g: a gate takes no when: it passes only by `bay approve <runId>` ... Remove `when:` from this gate (put `when:` on the call stages around it ...)`; `advance` returns `refused` for it and the run fails with that text; `skip(gate=True)` is always False. The config schema still allows the key, so the message is the structure one, not a schema pattern error |
+| E4 D8 | dffef42 | one union grammar: a project `when` takes `!`; a feature `when` takes hyphens, nested paths, a step id in capitals and `$steps.<name>` without a field; `approves` takes the same paths. Schema patterns in `config.schema.json` / `mode.schema.json` equal the constants (test) |
+| HANDOFF | this commit | |
+
+## What part F (and later parts) must know
+- `workflows.py` no longer imports `model` at module level (lazy imports in `effects`, `_check_call`); `model.py` imports `workflows as wfmod`.
+- `stages.json` is UNCHANGED. `test_stage_syntax_table` undoes `EXPECTED_DELTAS` (rows checked against their new value, then put back to the golden's value; `OLD_PATTERNS` undoes the pattern text that schema messages quote; `EXPECTED_RUNNER_DELTAS` for the two `cos.next` rows) and then compares to the untouched golden. Deltas: project `when` `!$in.x`, `!$steps.a.x` accepted (D8); feature `when` `$in.x-y`, `$in.x.y`, `$steps.a.x-y`, `$steps.a.x.y`, `$steps.a`, `$steps.A.x` accepted (D8); project gate with `when` `$in.x`, `$steps.a.x`, `!$in.x`, `!$steps.a.x`, `$steps.nope.x` refused (D7). A gate with `when: stale > 2h` was and is a schema refusal. Nothing accepted before is refused except the D7 rows.
+- New tests (`tests/test_stage_syntax.py`): grammar spelled once in code and schema patterns equal it; dispatcher and cursor share skip/substitute; D7 refused at `structure_problems` and `lint.run`; no output passed to `cos.next` skips a gate (cursor refuses and the run fails; `skip(gate=True)`), a gate without `when` still waits.
+- Kept lenient on purpose so nothing accepted before is refused: a project `$steps.<name>` with no field or a capital id is not order-checked (as before); the `approved $in.f` feature form still crashes `Dispatcher._skip` with IndexError (recorded in the golden, not mine to fix here).
+- The `_grammar_problems` check repeats the schema patterns in code so the validator is right for a stage built in code; it also keeps the three pattern constants read in code (the kit audit's unused-constant count stayed 0 new; the improve golden is untouched).
+- Docs not touched (not in part E's touches): `docs/INTERFACES.md:164` still describes project stages; slice 9 can add that a project gate takes no `when`.
+- `-k` is the test filter (`python3 tests/run.py -k name`); a bare file name runs everything.
+
+## Evidence (run at dffef42)
+- `python3 tests/run.py -q` last line: `521 passed, 0 failed` (515 + 6 new).
+- `./bay.sh check` last line: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)` (line before: `✓ lint clean`; the same four warnings as before).
+- `./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs` last line: `boundary origin/main...HEAD: 65 changed paths (22 core, 24 extension, 1 feature, 18 other); 0 failing; B-11 docs: 0 hits`.
+- `./bay.sh build --project <scratch>/s6e`: `built 6 modes for claude-code`; `./bay.sh clean --project <scratch>/s6e`: last line `clean`; Glob `**/*` of s6e afterwards: only `agentbay.config.yaml` (the input I wrote).
+- Baselines: `tests/golden/` has no change in dffef42 (`git show --stat dffef42` lists no golden); `test_improve_golden`, `test_guard_decision_matrix`, `test_guard_matrix_for_a_project_with_the_kit_outside` and `test_stage_syntax_table` pass in the full run. Security tests unchanged; `test_workflows.py` and `test_dispatch.py` not edited.
+
 # HANDOFF part 26: T-20261031-653a (recorded with `bay plan`) - stage 5 part D built (sources and transcripts moved; bay/improve/ removed)
 
 Outcome: done. One code commit, cd8ba96, on feat/0008-stage5 (D1 to D5 are one commit: the moves, the imports and the tests cannot be green separately). No proposal edited; every path is in 0008's touches (boundary below).

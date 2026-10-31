@@ -1171,9 +1171,6 @@ def _feature_steps(kit: Kit, md: Doc, ctx: _Ctx, ep: dict, wf: list, where: str)
         steps.append(_role_step(ctx, md, ep, {"id": "review", "role": review["role"]}, f"{where} review",
                                 ep_eff, review=review))
     ctx.gaps += wfmod.check_stages([wfmod.Stage.of_step(x) for x in steps], where, wfmod.FEATURE_GATE_FIX)
-    for d in wfmod.duplicates([x.id for x in steps]):
-        ctx.gaps.append(f"{where}: duplicate step id '{d}'" + (" (the review step is injected from mode.yaml review; "
-                        "do not add a step called review)" if d == "review" else ""))
     return steps
 
 

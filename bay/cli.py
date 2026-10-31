@@ -187,14 +187,8 @@ def cmd_catalog(args):
     except FileNotFoundError as e:
         _die(f"✗ {e}")
     name = args.name
-    if args.json:
-        if not name:
-            _out(cat)
-            return
-        _out(_catalog_pick(cat, name))
-        return
-    if name:
-        _out(_catalog_pick(cat, name))
+    if name or args.json:
+        _out(_catalog_pick(cat, name) if name else cat)
         return
     print(f"registry built {cat['builtAt']} for {cat['runtime']}\n")
     for m in cat["modes"]:

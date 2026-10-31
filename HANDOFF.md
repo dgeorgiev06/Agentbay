@@ -1,3 +1,40 @@
+# HANDOFF part 30: T-20261031-3894 (recorded with `bay plan`) - stage 5 part H built (improve is an ordinary mode); slices 6 and 7 acceptance
+
+Outcome: done. Commit 2dd116e on feat/0008-stage5 (not pushed) holds the previous builder's edits, finished: improve left `protected.mode` (now `[cos, forge]`), `PROTECTED_INSTANCES` and framework-dev `fs.write` together. `improve-local` and the nine connectors stay protected (D3). No proposal edited.
+
+## Evidence (at 2dd116e plus this handoff)
+- `python3 tests/run.py -q`: `544 passed, 0 failed`.
+- `./bay.sh check`: `✓ lint clean` / `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)`. One warning is the stale `.agentbay/guard.json` (22 paths vs the map's 21); the checkout was not rebuilt.
+- `./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs`: `boundary origin/main...HEAD: 288 changed paths (32 core, 2 docs, 199 extension, 22 feature, 33 other); 0 failing; B-11 docs: 0 hits`.
+- build/clean on s6h: `built 6 modes for claude-code`, clean printed `clean`, Glob afterwards: only `agentbay.config.yaml`.
+
+## Deltas (the goldens are untouched: `git status --short -- tests/golden` empty)
+- Guard matrix, `EXPECTED_DELTAS` in `tests/test_guard_matrix.py`, six improve rows (`Edit/MultiEdit/NotebookEdit/Write` of `mode:improve/...`): `builder--delivery` and `builder--forge--local-authoring` deny -> pass (improve's folder is a user extension, D3); `builder--forge--framework-dev` pass -> deny (it named `modes/improve` only because improve was protected, D9). One resolver gap: improve with a role in `framework-dev` now gets the user-mode message.
+- Improve golden, `ROUTE_DELTAS` in `tests/test_improve_golden.py`, three route rows: `default`/`mode improve` forge.extend -> mode-fix; `shipped modes`/`mode improve` forge.extend -> mode-fix; `default`/`mode cos` mode-fix -> forge.extend (the store's default set is now `{cos, forge}`, the map's).
+- Stage-syntax baseline unchanged.
+
+## Tests added (D4 and part H)
+- `test_protection.py`: improve is an ordinary mode (origin `user`, env and connectors still protected); improve files writable by authoring writers, env and connectors denied; `bay new` no longer calls improve protected; `check --base` treats a new improve folder as an extension. Already there from part F: `test_no_step_in_any_mode_may_call_improve_findings_decide` (resolver and lint refuse a step running `improve.findings/v1.decide` in a user mode and in `modes/improve/mode.yaml`) and `test_bay_approve_of_a_backlog_item_from_a_terminal_still_works...` (terminal ok, `--via chat` refused with "decided at a terminal").
+- Case variants (`Cos`, `FORGE`, `LEDGER`, `Workspace`): `test_a_user_mode_named_cos_or_forge_in_another_case_is_stopped_everywhere` (bay new refuses, `check --base` fails the path, case-collision lint reports it).
+
+## Acceptance
+Slice 6:
+- `bay/improve/` gone: `git ls-files bay/improve` empty. PASS
+- scan and audit give the same findings: `test_improve_golden` passes with only the named route deltas. PASS
+- backlog item not approvable without the user: `test_approving_a_backlog_item_needs_a_terminal`, the terminal-only test above. PASS
+- deferred or open item cannot reach implement: `test_implement_only_for_approved_items_behind_a_gate_and_edits_nothing`. PASS
+- improve golden unchanged, matrix changed only on named rows, part G a pure `git mv` (R100 proof in part 29). PASS
+- dead-code: no new findings. Not run as a step (it runs inside forge.extend `deadcode`); `test_moving_files_have_no_deadcode_findings` passes.
+
+Slice 7:
+- one stage-syntax parser in `bay/`; workflow tests pass; `cos.run` starts a project workflow (part 27, in the 544). PASS
+- D3, D4, D7 deltas as named above and in parts 27 and 28. PASS
+- `framework/` holds only roles, interfaces, rules and the map: `git ls-files framework` lists `components.yaml`, 13 interfaces, 5 roles plus a skill, `rules/conformance.yaml`. PASS
+- protected components declared in the map and read by guard and `bay boundary`; user extension with a protected name refused; protected write without forge.extend denied; chat and terminal approval both pass the gate: `test_protection.py` (544 green). PASS
+- `bay catalog` unchanged except paths: compared in part 29. NOT re-diffed in this part; the one expected change is that improve's origin reads `user` (`test_improve_is_an_ordinary_mode...` asserts the root).
+
+Leftover: empty folders `framework/{modes,envs,connectors}/` may remain on disk; the checkout's `.agentbay/guard.json` is stale until `./bay.sh build`.
+
 # HANDOFF part 29: T-20261031-891e (recorded with `bay plan`) - stage 5 part G built (shipped modes, envs and connectors moved to the top-level folders)
 
 Outcome: done. Seven commits on feat/0008-stage5 (not pushed): one pure `git mv`, then six that follow it. No proposal edited; every path is in 0008's touches (boundary below). The tree is NOT green between b002722 and f8af1b4 (the loader still reads the old folders there); from f8af1b4 on, only the tests and docs lagged, and 683a4e3 is green.

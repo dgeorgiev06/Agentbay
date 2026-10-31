@@ -5,11 +5,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from helpers import KIT, cleanup, clock, kit_copy, project, system
+from helpers import KIT, cleanup, clock, connector_pkg, kit_copy, project, system
 from test_boundaries import built, tool
 
 from bay import dispatch, ledger
-from bay.improve import sources
+
+sources = connector_pkg("ledger", "ledger_sources")
 
 TID = "T-20261030-aaaa"
 VERDICT = {"summary": "reviewed outside the framework",

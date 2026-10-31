@@ -17,13 +17,8 @@ from pathlib import Path
 import yaml
 
 from bay import conformance, graph, model
-from bay.util import short_hash
+from bay.util import fingerprint, short_hash
 from . import detect_artifacts, detect_sessions
-
-
-def fingerprint(c: dict) -> str:
-    """The finding contract: improve-store keeps an identical copy (tests share one vector)."""
-    return short_hash(f"{c['kind']}|{c['detector']['key']}", 16)
 
 EPISODE_SUMMARY_FIELDS = ("id", "source", "kind", "target", "status", "agent", "agentType", "parent", "start",
                           "durationMs", "costUsd", "errors", "permissionPrompts", "interrupts", "instructionChanges",

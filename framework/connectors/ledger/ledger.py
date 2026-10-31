@@ -1,6 +1,7 @@
-"""ledger: session.events/v1 + review.verdicts/v1 over .agentbay/ledger and .agentbay/calls (bay.improve.sources)."""
-from bay.improve import sources
+"""ledger: session.events/v1 + review.verdicts/v1 over .agentbay/ledger and .agentbay/calls (ledger_sources.py in this folder)."""
 from bay.util import parse_time
+
+from . import ledger_sources as sources
 
 
 def window(ctx, since, until):

@@ -8,7 +8,7 @@ from improve_fixtures import CORES, SECRETS
 
 st = connector_pkg("improve-store", "store")
 
-# The finding contract: improve-detect keeps its own copy of `fingerprint`; both tests assert this same vector.
+# The finding contract: `fingerprint` lives in bay/util.py; improve-detect's test asserts this same vector.
 FINGERPRINT_VECTOR = ({"kind": "unused", "detector": {"key": "fn:app/core.py:never_called"}}, "62f5b3fa536c7238")   # tests/golden/improve.json
 
 

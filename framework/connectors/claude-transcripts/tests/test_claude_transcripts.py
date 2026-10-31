@@ -5,10 +5,10 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 
-from helpers import cleanup, model, tmpdir
+from helpers import cleanup, connector_pkg, model, tmpdir
 from improve_fixtures import ALL, CORES, make_transcripts, session_records
 
-from bay.improve import transcripts
+transcripts = connector_pkg("claude-transcripts", "parser")
 
 SCHEMA = model.data_schema("session.episode/v1")
 

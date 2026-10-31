@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from ..util import short_hash
+from bay.util import short_hash
 
 KNOWN = {"user", "assistant", "attachment", "system", "queue-operation", "last-prompt", "mode", "pr-link",
          "tools-used", "cost-state", "progress", "file-history-snapshot", "summary", "custom-title", "tag"}

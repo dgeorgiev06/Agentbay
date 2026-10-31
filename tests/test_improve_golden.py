@@ -1,6 +1,6 @@
 """Golden baseline of the improve mode (proposal 0008, stage 5 part A): what `improve.scan`, `improve.audit`, the
 store's routing, the reports and the dead-code check produce on data the tests build themselves (fixed clock), so
-moving improve's code out of bay/improve/ cannot change the reference. tests/golden/improve.json was generated from
+moving improve's code out of its old folder (now removed) cannot change the reference. tests/golden/improve.json was generated from
 the code before the move. A failing compare means a behavior changed (see golden_util).
 
 Every import of improve's own modules is in `mods()`: the move changes that function and nothing else."""
@@ -246,7 +246,7 @@ def golden_change() -> dict:
         cleanup(repo)
 
 
-MOVING = ("bay/improve/", "bay/graph.py", "bay/conformance.py", "bay/util.py", "framework/connectors/", "framework/modes/",
+MOVING = ("bay/graph.py", "bay/conformance.py", "bay/util.py", "framework/connectors/", "framework/modes/",
           "framework/envs/")
 DEADCODE_KINDS = ("unused", "unused-constant", "compat-layer", "complexity")
 

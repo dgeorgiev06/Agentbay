@@ -26,4 +26,4 @@ Turn the sessions of a window into redacted episodes and find recurring failures
 
 ## Failure handling
 - A source fails (unreadable ledger, no git): the step fails with the source named; nothing is written. Fix or unbind the source in improve-local.
-- The transcript format changed: unknown record types and malformed lines are counted in `stats`, never fatal; a file that cannot be read is named in `stats.errors`. Update bay/improve/transcripts.py when counts grow.
+- The transcript format changed: unknown record types and malformed lines are counted in `stats`, never fatal; a file that cannot be read is named in `stats.errors`. Update the claude-transcripts connector's parser.py when counts grow.

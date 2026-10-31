@@ -2,11 +2,12 @@
 import json
 import shutil
 
-from helpers import clock, cleanup, project, system
+from helpers import clock, cleanup, connector_pkg, project, system
 from improve_fixtures import CORES, make_git_repo
 
 from bay import connect
-from bay.improve import sources
+
+git_episodes = connector_pkg("git", "git_episodes").git_episodes
 
 
 def test_commits_reverts_and_churn_without_messages():
@@ -34,7 +35,7 @@ def test_commits_reverts_and_churn_without_messages():
 def test_not_a_repo_is_empty_not_an_error():
     p = project()
     try:
-        eps, stats = sources.git_episodes(p)
+        eps, stats = git_episodes(p)
         assert eps == [] and stats["note"] in ("not a git repository", "git not available")
     finally:
         cleanup(p)

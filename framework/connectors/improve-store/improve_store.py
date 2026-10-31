@@ -1,14 +1,29 @@
 """improve-store: improve.findings/v1 -> the store module of this folder (storage only; writes only ctx.data_dir)."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from bay import ledger, protocol
 from bay.connect import ConnectorError
-from bay.improve import sources
-from bay.util import duration
+from bay.util import duration, fingerprint
 
 from . import store as st
+
+
+def _read_events(project: Path) -> list[dict]:
+    """Ledger events for the run records of the backlog; a line that is not a ledger event is skipped."""
+    p = ledger.ledger_path(project)
+    out = []
+    if p.exists():
+        for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                e = json.loads(line) if line.strip() else None
+            except (ValueError, RecursionError):
+                e = None
+            if isinstance(e, dict) and all(isinstance(e.get(k), str) for k in ("type", "ts", "runId")):
+                out.append(e)
+    return out
 
 
 class ImproveStore:
@@ -32,7 +47,7 @@ class ImproveStore:
         cands = candidates or []
         res = self._do(self.store.upsert, cands, by)
         pruned = self.store.prune(duration(self.settings.get("retention") or "90d"))
-        ids = list(dict.fromkeys(f"F-{st.fingerprint(c)[:8]}" for c in cands))
+        ids = list(dict.fromkeys(f"F-{fingerprint(c)[:8]}" for c in cands))
         touched = list(dict.fromkeys(list(detected or []) + ids))
         return {"findings": ids, **res, "rejected": rejected or [], "summary": self._summary(touched),
                 "pruned": pruned}
@@ -59,7 +74,7 @@ class ImproveStore:
         return self._do(self.store.decide, id, decision, by, note or "")
 
     def backlog(self, top=None, week=None) -> dict:
-        evs = sources.read_events(Path(self.ctx.project)) if self.ctx.project else []
+        evs = _read_events(Path(self.ctx.project)) if self.ctx.project else []
         agents = {"groups": ledger.agent_groups(evs), "plans": ledger.plans(evs)}   # run records, as `status --agents`
         res = self._do(self.store.backlog, top or self.settings.get("backlogTop") or 10, week, agents)
         try:

@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from bay import secretscan
-from bay.util import short_hash
+from bay.util import fingerprint
 
 from . import report
 
@@ -36,11 +36,6 @@ MAX_EVIDENCE = 30
 
 class StoreError(Exception):
     pass
-
-
-def fingerprint(c: dict) -> str:
-    """The finding contract: improve-detect keeps an identical copy (tests share one vector)."""
-    return short_hash(f"{c['kind']}|{c['detector']['key']}", 16)
 
 
 def iso(dt: datetime) -> str:

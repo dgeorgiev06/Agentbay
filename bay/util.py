@@ -60,6 +60,12 @@ def short_hash(obj, n: int = 12) -> str:
     return hashlib.sha256(raw.encode("utf-8", "replace")).hexdigest()[:n]
 
 
+def fingerprint(c: dict) -> str:
+    """The improve finding contract: the id of a candidate is its kind and detector key (improve-detect and
+    improve-store both use it; the tests of both assert one shared vector)."""
+    return short_hash(f"{c['kind']}|{c['detector']['key']}", 16)
+
+
 MAX_WARNINGS = 20
 
 

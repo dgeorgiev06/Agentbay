@@ -11,7 +11,7 @@
     "thresholds": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Detector thresholds; defaults in bay/improve/detect_sessions.py and detect_artifacts.py.",
+      "description": "Detector thresholds; defaults in the improve-detect connector (detect_sessions.py and detect_artifacts.py).",
       "properties": {
         "reviewRounds": { "type": "integer", "minimum": 1 },
         "ruleRepeat": { "type": "integer", "minimum": 2 },

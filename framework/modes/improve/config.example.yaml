@@ -1,4 +1,4 @@
-# defaults shown (config.schema.json); detector thresholds default in bay/improve/
+# defaults shown (config.schema.json); detector thresholds default in framework/connectors/improve-detect/
 # window: 7d                      # default scan window (sessions started inside it)
 # retention: 90d                  # verified and wontfix findings not seen for this long are dropped
 # backlogTop: 10                  # items in the weekly backlog report

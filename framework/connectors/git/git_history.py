@@ -1,6 +1,7 @@
-"""git: session.events/v1 over `git log --numstat` of the project (bay.improve.sources.git_episodes)."""
-from bay.improve import sources
+"""git: session.events/v1 over `git log --numstat` of the project (git_episodes.py in this folder)."""
 from bay.util import parse_time
+
+from .git_episodes import git_episodes
 
 
 class GitHistory:
@@ -13,7 +14,7 @@ class GitHistory:
         now = self.ctx.now()
         s = parse_time(since or self.ctx.settings.get("window") or "7d", now)
         u = parse_time(until, now) if until else None
-        eps, stats = sources.git_episodes(self.ctx.project, s, u)
+        eps, stats = git_episodes(self.ctx.project, s, u)
         return {"episodes": eps, "stats": stats}
 
 

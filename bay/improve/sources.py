@@ -13,32 +13,14 @@ from datetime import datetime
 from pathlib import Path
 
 from .. import secretscan
-from . import short_hash
+from ..util import in_window, short_hash, warn
 
 EVIDENCE_CHARS = 300
 REVERT_BODY = re.compile(r"This reverts commit ([0-9a-f]{7,40})")
 
 
 MAX_SUBJECT = 200
-
-
-def in_window(ts: str | None, since: datetime | None, until: datetime | None) -> bool:
-    if not ts:
-        return since is None
-    try:
-        t = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-    except ValueError:
-        return False
-    return (since is None or t >= since) and (until is None or t <= until)
-
-
 LEDGER = ".agentbay/ledger/events.jsonl"
-MAX_WARNINGS = 20
-
-
-def warn(warnings: list | None, msg: str) -> None:
-    if warnings is not None and len(warnings) < MAX_WARNINGS:
-        warnings.append(msg)
 
 
 def read_events(project: Path, warnings: list | None = None) -> list[dict]:

@@ -20,7 +20,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from .. import secretscan
-from . import report, short_hash
+from ..util import short_hash
+from . import report
 
 STATUSES = ("open", "approved", "deferred", "wontfix", "in-progress", "fixed", "verified")
 DECISIONS = {"approve": "approved", "defer": "deferred", "wontfix": "wontfix"}

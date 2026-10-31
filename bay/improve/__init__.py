@@ -10,13 +10,3 @@ read-only role shims. Modules:
   conformance  framework/rules/conformance.yaml: load, validate, deterministic checks
   store        .agentbay/data/improve/findings.jsonl: dedup by fingerprint, triage, backlog, verify
 """
-from __future__ import annotations
-
-import hashlib
-import json
-
-
-def short_hash(obj, n: int = 12) -> str:
-    """Stable short hash of any JSON-able value (used instead of content, never reversible in practice)."""
-    raw = obj if isinstance(obj, str) else json.dumps(obj, sort_keys=True, ensure_ascii=False, default=str)
-    return hashlib.sha256(raw.encode("utf-8", "replace")).hexdigest()[:n]

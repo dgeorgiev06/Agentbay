@@ -4,9 +4,8 @@ Runs only on the dispatcher side; agents never read transcript files (improve-lo
 and the guard denies reads outside the project)."""
 from pathlib import Path
 
-from bay.improve import sources
 from bay.improve.transcripts import TranscriptSource
-from bay.util import parse_time
+from bay.util import in_window, parse_time
 
 DEFAULT_ROOT = "~/.claude/projects"
 
@@ -26,7 +25,7 @@ class Transcripts:
         s = parse_time(since or self.ctx.settings.get("window") or "7d", now)
         u = parse_time(until, now) if until else None
         eps, stats = self.src.episodes(since=s)
-        main = {e["id"] for e in eps if e["kind"] == "session" and sources.in_window(e.get("start"), s, u)}
+        main = {e["id"] for e in eps if e["kind"] == "session" and in_window(e.get("start"), s, u)}
         eps = [e for e in eps if e["id"] in main or e.get("parent") in main]
         return {"episodes": eps, "stats": stats}
 

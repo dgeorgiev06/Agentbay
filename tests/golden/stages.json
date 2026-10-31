@@ -1,0 +1,1178 @@
+{
+ "dispatcherSkip": [
+  {
+   "input": {
+    "x": 1
+   },
+   "skipped": false,
+   "steps": {},
+   "when": "$in.x"
+  },
+  {
+   "input": {
+    "x": 0
+   },
+   "skipped": true,
+   "steps": {},
+   "when": "$in.x"
+  },
+  {
+   "input": {
+    "x": ""
+   },
+   "skipped": true,
+   "steps": {},
+   "when": "$in.x"
+  },
+  {
+   "input": {
+    "x": []
+   },
+   "skipped": true,
+   "steps": {},
+   "when": "$in.x"
+  },
+  {
+   "input": {
+    "x": {
+     "y": 1
+    }
+   },
+   "skipped": false,
+   "steps": {},
+   "when": "$in.x"
+  },
+  {
+   "input": {},
+   "skipped": true,
+   "steps": {},
+   "when": "$in.x"
+  },
+  {
+   "input": {
+    "x": null
+   },
+   "skipped": true,
+   "steps": {},
+   "when": "$in.x"
+  },
+  {
+   "input": {
+    "x": false
+   },
+   "skipped": true,
+   "steps": {},
+   "when": "$in.x"
+  },
+  {
+   "input": {
+    "x": 1
+   },
+   "skipped": true,
+   "steps": {},
+   "when": "!$in.x"
+  },
+  {
+   "input": {
+    "x": 0
+   },
+   "skipped": false,
+   "steps": {},
+   "when": "!$in.x"
+  },
+  {
+   "input": {},
+   "skipped": false,
+   "steps": {},
+   "when": "!$in.x"
+  },
+  {
+   "input": {
+    "x": {
+     "y": 1
+    }
+   },
+   "skipped": false,
+   "steps": {},
+   "when": "$in.x.y"
+  },
+  {
+   "input": {
+    "x": {
+     "y": 0
+    }
+   },
+   "skipped": true,
+   "steps": {},
+   "when": "$in.x.y"
+  },
+  {
+   "input": {
+    "x": 1
+   },
+   "skipped": true,
+   "steps": {},
+   "when": "$in.x.y"
+  },
+  {
+   "input": {
+    "x-y": 1
+   },
+   "skipped": false,
+   "steps": {},
+   "when": "$in.x-y"
+  },
+  {
+   "input": {},
+   "skipped": false,
+   "steps": {
+    "a": {
+     "x": 1
+    }
+   },
+   "when": "$steps.a.x"
+  },
+  {
+   "input": {},
+   "skipped": true,
+   "steps": {
+    "a": {
+     "x": 0
+    }
+   },
+   "when": "$steps.a.x"
+  },
+  {
+   "input": {},
+   "skipped": true,
+   "steps": {
+    "a": {
+     "x": null
+    }
+   },
+   "when": "$steps.a.x"
+  },
+  {
+   "input": {},
+   "skipped": true,
+   "steps": {
+    "a": {}
+   },
+   "when": "$steps.a.x"
+  },
+  {
+   "input": {},
+   "skipped": true,
+   "steps": {},
+   "when": "$steps.a.x"
+  },
+  {
+   "input": {},
+   "skipped": true,
+   "steps": {
+    "a": {
+     "x": 1
+    }
+   },
+   "when": "!$steps.a.x"
+  },
+  {
+   "input": {},
+   "skipped": false,
+   "steps": {
+    "a": {
+     "x": 0
+    }
+   },
+   "when": "!$steps.a.x"
+  },
+  {
+   "input": {},
+   "skipped": false,
+   "steps": {},
+   "when": "!$steps.a.x"
+  },
+  {
+   "input": {},
+   "skipped": false,
+   "steps": {
+    "a": {
+     "x": {
+      "y": 2
+     }
+    }
+   },
+   "when": "$steps.a.x.y"
+  },
+  {
+   "input": {},
+   "skipped": false,
+   "steps": {
+    "a": {
+     "x-y": 2
+    }
+   },
+   "when": "$steps.a.x-y"
+  },
+  {
+   "input": {},
+   "skipped": "IndexError: list index out of range",
+   "steps": {},
+   "when": "$config.x"
+  },
+  {
+   "input": {
+    "y": 1
+   },
+   "skipped": false,
+   "steps": {},
+   "when": "$in.x|$in.y"
+  },
+  {
+   "input": {},
+   "skipped": true,
+   "steps": {},
+   "when": "$in.x|$in.y"
+  },
+  {
+   "input": {},
+   "skipped": "IndexError: list index out of range",
+   "steps": {},
+   "when": "true"
+  },
+  {
+   "input": {},
+   "skipped": "IndexError: list index out of range",
+   "steps": {},
+   "when": "x"
+  },
+  {
+   "input": {
+    "f": 1
+   },
+   "skipped": "IndexError: list index out of range",
+   "steps": {},
+   "when": "approved $in.f"
+  },
+  {
+   "skipped": true,
+   "status": {
+    "lastSync": "2026-10-27T11:00:00+00:00"
+   },
+   "when": "stale > 2h"
+  },
+  {
+   "skipped": false,
+   "status": {
+    "lastSync": "2026-10-27T09:00:00+00:00"
+   },
+   "when": "stale > 2h"
+  },
+  {
+   "skipped": false,
+   "status": {
+    "lastSync": "2026-10-27T11:00:00+00:00",
+    "stale": true
+   },
+   "when": "stale > 2h"
+  },
+  {
+   "skipped": false,
+   "status": {},
+   "when": "stale > 2h"
+  },
+  {
+   "skipped": true,
+   "status": {
+    "lastSync": "2026-10-27T11:00:00+00:00"
+   },
+   "when": "stale>2h"
+  },
+  {
+   "skipped": true,
+   "status": {
+    "lastSync": "2026-10-27T10:45:00+00:00"
+   },
+   "when": "stale > 90m"
+  },
+  {
+   "skipped": true,
+   "status": {
+    "lastSync": "2026-10-20T13:00:00+00:00"
+   },
+   "when": "stale > 1w"
+  },
+  {
+   "skipped": "ValueError: bad duration '2x' (expected e.g. 30m, 12h, 3d, 2w)",
+   "status": {
+    "lastSync": "2026-10-27T11:00:00+00:00"
+   },
+   "when": "stale > 2x"
+  }
+ ],
+ "feature": {
+  "gate": {
+   "approves bad": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/approves: '$steps.a.x' does not match '^\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*(\\\\|\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)?$'"
+    ]
+   },
+   "approves in": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "approves steps": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "no when": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   }
+  },
+  "gateWithWhen": {
+   "!$in.x": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "delivery.build step b: a gate takes no when: (it passes only by `bay approve`, or by a recorded approval of the exact content its approves: names)"
+    ]
+   },
+   "!$steps.a.x": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "delivery.build step b: a gate takes no when: (it passes only by `bay approve`, or by a recorded approval of the exact content its approves: names)"
+    ]
+   },
+   "$in.x": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "delivery.build step b: a gate takes no when: (it passes only by `bay approve`, or by a recorded approval of the exact content its approves: names)"
+    ]
+   },
+   "$steps.a.x": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "delivery.build step b: a gate takes no when: (it passes only by `bay approve`, or by a recorded approval of the exact content its approves: names)"
+    ]
+   },
+   "$steps.nope.x": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "delivery.build step b: a gate takes no when: (it passes only by `bay approve`, or by a recorded approval of the exact content its approves: names)"
+    ]
+   },
+   "stale > 2h": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "delivery.build step b: a gate takes no when: (it passes only by `bay approve`, or by a recorded approval of the exact content its approves: names)"
+    ]
+   }
+  },
+  "when": {
+   "": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   " $in.x": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: ' $in.x' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "! $in.x": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '! $in.x' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "!!$in.x": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '!!$in.x' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "!$in.x": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "!$steps.a.x": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "!approved $in.f": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "!stale > 2h": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '!stale > 2h' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "$config.x": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '$config.x' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "$in": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '$in' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "$in.": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '$in.' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "$in.1x": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '$in.1x' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "$in.X1": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "$in.x": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "$in.x ": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '$in.x ' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "$in.x-y": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '$in.x-y' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "$in.x.y": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '$in.x.y' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "$in.x1": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "$in.x|$in.y": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '$in.x|$in.y' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "$out.x": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '$out.x' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "$steps.A.x": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '$steps.A.x' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "$steps.a": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '$steps.a' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "$steps.a.x": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "$steps.a.x-y": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '$steps.a.x-y' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "$steps.a.x.y": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '$steps.a.x.y' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "$steps.b.x": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "delivery.build step b: when: $steps.b.x names 'b', which is not an earlier step"
+    ]
+   },
+   "$steps.nope.x": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "delivery.build step b: when: $steps.nope.x names 'nope', which is not an earlier step"
+    ]
+   },
+   "approved $in.f": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "stale > 1w": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "delivery.build step b: `when: stale > 1w` is for code steps (it asks a connector's status); a role step takes `$in.<f>` or `$steps.<id>.<f>`"
+    ]
+   },
+   "stale > 2": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: 'stale > 2' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "stale > 2h": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "delivery.build step b: `when: stale > 2h` is for code steps (it asks a connector's status); a role step takes `$in.<f>` or `$steps.<id>.<f>`"
+    ]
+   },
+   "stale > 2x": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: 'stale > 2x' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "stale > 90m": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "delivery.build step b: `when: stale > 90m` is for code steps (it asks a connector's status); a role step takes `$in.<f>` or `$steps.<id>.<f>`"
+    ]
+   },
+   "stale>2h": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "delivery.build step b: `when: stale>2h` is for code steps (it asks a connector's status); a role step takes `$in.<f>` or `$steps.<id>.<f>`"
+    ]
+   },
+   "true": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: 'true' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   },
+   "x": {
+    "accepted": false,
+    "layer": "resolve",
+    "problems": [
+     "<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: 'x' does not match '^(stale\\\\s*>\\\\s*[0-9]+[mhdw]|!?approved\\\\s+\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$in\\\\.[A-Za-z][A-Za-z0-9]*|!?\\\\$steps\\\\.[a-z][a-z0-9-]*\\\\.[A-Za-z][A-Za-z0-9]*)$'"
+    ]
+   }
+  }
+ },
+ "project": {
+  "gateWithWhen": {
+   "!$in.x": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: '!$in.x' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "!$steps.a.x": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: '!$steps.a.x' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "$in.x": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "$steps.a.x": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "$steps.nope.x": {
+    "accepted": false,
+    "layer": "structure",
+    "problems": [
+     "agentbay.config.yaml workflows.w step b: `$steps.nope.x` refers to unknown stage 'nope' (earlier stages: a)"
+    ]
+   },
+   "stale > 2h": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: 'stale > 2h' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   }
+  },
+  "undeclaredInput": [
+   "agentbay.config.yaml workflows.w step b: `$in.zz` is not declared in workflows.w.in.properties (x)",
+   "agentbay.config.yaml workflows.w step b: `$in.zz` is not declared in workflows.w.in.properties (x)"
+  ],
+  "when": {
+   "": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: '' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   " $in.x": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: ' $in.x' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "! $in.x": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: '! $in.x' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "!!$in.x": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: '!!$in.x' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "!$in.x": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: '!$in.x' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "!$steps.a.x": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: '!$steps.a.x' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "!approved $in.f": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: '!approved $in.f' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "!stale > 2h": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: '!stale > 2h' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "$config.x": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: '$config.x' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "$in": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: '$in' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "$in.": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: '$in.' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "$in.1x": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: '$in.1x' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "$in.X1": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "$in.x": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "$in.x ": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: '$in.x ' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "$in.x-y": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "$in.x.y": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "$in.x1": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "$in.x|$in.y": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: '$in.x|$in.y' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "$out.x": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: '$out.x' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "$steps.A.x": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "$steps.a": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "$steps.a.x": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "$steps.a.x-y": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "$steps.a.x.y": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "$steps.b.x": {
+    "accepted": false,
+    "layer": "structure",
+    "problems": [
+     "agentbay.config.yaml workflows.w step b: `$steps.b.x` refers to its own stage"
+    ]
+   },
+   "$steps.nope.x": {
+    "accepted": false,
+    "layer": "structure",
+    "problems": [
+     "agentbay.config.yaml workflows.w step b: `$steps.nope.x` refers to unknown stage 'nope' (earlier stages: a)"
+    ]
+   },
+   "approved $in.f": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: 'approved $in.f' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "stale > 1w": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: 'stale > 1w' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "stale > 2": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: 'stale > 2' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "stale > 2h": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: 'stale > 2h' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "stale > 2x": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: 'stale > 2x' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "stale > 90m": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: 'stale > 90m' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "stale>2h": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: 'stale>2h' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "true": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: 'true' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   },
+   "x": {
+    "accepted": false,
+    "layer": "schema",
+    "problems": [
+     "workflows/w/steps/1/when: 'x' does not match '^\\\\$(in|steps)\\\\.[A-Za-z][A-Za-z0-9-]*(\\\\.[A-Za-z][A-Za-z0-9-]*)*$'"
+    ]
+   }
+  },
+  "with": {
+   "alternative bad": {
+    "accepted": false,
+    "layer": "structure",
+    "problems": [
+     "agentbay.config.yaml workflows.w step b: `with` value '$in.x|$foo' at k starts with `$` but is not a reference ($in.<field>, $steps.<id>.<field>). It would be dropped, not passed. Use a reference, or quote the value differently if it is a literal."
+    ]
+   },
+   "alternative config": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "alternatives": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "config": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "dollar alone": {
+    "accepted": false,
+    "layer": "structure",
+    "problems": [
+     "agentbay.config.yaml workflows.w step b: `with` value '$' at k starts with `$` but is not a reference ($in.<field>, $steps.<id>.<field>). It would be dropped, not passed. Use a reference, or quote the value differently if it is a literal."
+    ]
+   },
+   "dollar word": {
+    "accepted": false,
+    "layer": "structure",
+    "problems": [
+     "agentbay.config.yaml workflows.w step b: `with` value '$foo' at k starts with `$` but is not a reference ($in.<field>, $steps.<id>.<field>). It would be dropped, not passed. Use a reference, or quote the value differently if it is a literal."
+    ]
+   },
+   "in": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "in a dict": {
+    "accepted": false,
+    "layer": "structure",
+    "problems": [
+     "agentbay.config.yaml workflows.w step b: `with` value '$bogus' at k.j starts with `$` but is not a reference ($in.<field>, $steps.<id>.<field>). It would be dropped, not passed. Use a reference, or quote the value differently if it is a literal."
+    ]
+   },
+   "in a list": {
+    "accepted": false,
+    "layer": "structure",
+    "problems": [
+     "agentbay.config.yaml workflows.w step b: `with` value '$bogus' at k[1] starts with `$` but is not a reference ($in.<field>, $steps.<id>.<field>). It would be dropped, not passed. Use a reference, or quote the value differently if it is a literal."
+    ]
+   },
+   "in hyphen": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "in nested": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "literal": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "negated": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "not a reference": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "number": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "steps": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "steps later": {
+    "accepted": false,
+    "layer": "structure",
+    "problems": [
+     "agentbay.config.yaml workflows.w step b: `$steps.c.x` refers to stage 'c', which runs later (earlier stages: a)"
+    ]
+   },
+   "steps nested": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   },
+   "steps self": {
+    "accepted": false,
+    "layer": "structure",
+    "problems": [
+     "agentbay.config.yaml workflows.w step b: `$steps.b.x` refers to its own stage"
+    ]
+   },
+   "steps unknown": {
+    "accepted": false,
+    "layer": "structure",
+    "problems": [
+     "agentbay.config.yaml workflows.w step b: `$steps.nope.x` refers to unknown stage 'nope' (earlier stages: a)"
+    ]
+   },
+   "undeclared in": {
+    "accepted": true,
+    "layer": null,
+    "problems": []
+   }
+  }
+ },
+ "runnerAdvance": [
+  {
+   "input": {},
+   "output": {
+    "x": 1
+   },
+   "result": {
+    "stage": "b",
+    "status": "stage-ready"
+   },
+   "when": "$steps.a.x"
+  },
+  {
+   "input": {},
+   "output": {
+    "x": 0
+   },
+   "result": {
+    "skipped": [
+     "b"
+    ],
+    "status": "done"
+   },
+   "when": "$steps.a.x"
+  },
+  {
+   "input": {},
+   "output": {},
+   "result": {
+    "skipped": [
+     "b"
+    ],
+    "status": "done"
+   },
+   "when": "$steps.a.x"
+  },
+  {
+   "input": {},
+   "output": {
+    "x": {
+     "y": 1
+    }
+   },
+   "result": {
+    "stage": "b",
+    "status": "stage-ready"
+   },
+   "when": "$steps.a.x.y"
+  },
+  {
+   "input": {},
+   "output": {
+    "x-y": 1
+   },
+   "result": {
+    "stage": "b",
+    "status": "stage-ready"
+   },
+   "when": "$steps.a.x-y"
+  },
+  {
+   "input": {
+    "x": 1
+   },
+   "output": {},
+   "result": {
+    "stage": "b",
+    "status": "stage-ready"
+   },
+   "when": "$in.x"
+  },
+  {
+   "input": {
+    "x": 0
+   },
+   "output": {},
+   "result": {
+    "skipped": [
+     "b"
+    ],
+    "status": "done"
+   },
+   "when": "$in.x"
+  },
+  {
+   "input": {},
+   "output": {},
+   "result": {
+    "skipped": [
+     "b"
+    ],
+    "status": "done"
+   },
+   "when": "$in.x"
+  },
+  {
+   "input": {
+    "x": {
+     "y": 1
+    }
+   },
+   "output": {},
+   "result": {
+    "stage": "b",
+    "status": "stage-ready"
+   },
+   "when": "$in.x.y"
+  },
+  {
+   "input": {
+    "x-y": 1
+   },
+   "output": {},
+   "result": {
+    "stage": "b",
+    "status": "stage-ready"
+   },
+   "when": "$in.x-y"
+  },
+  {
+   "input": {
+    "x": 0
+   },
+   "output": {},
+   "result": "rejected by the config schema",
+   "when": "!$in.x"
+  },
+  {
+   "input": {},
+   "output": {
+    "x": 0
+   },
+   "result": "rejected by the config schema",
+   "when": "!$steps.a.x"
+  },
+  {
+   "input": {},
+   "output": {},
+   "result": "rejected by the config schema",
+   "when": "$config.x"
+  },
+  {
+   "input": {},
+   "output": {},
+   "result": "rejected by the config schema",
+   "when": "stale > 2h"
+  },
+  {
+   "input": {},
+   "output": {},
+   "result": "rejected by the config schema",
+   "when": "true"
+  }
+ ]
+}

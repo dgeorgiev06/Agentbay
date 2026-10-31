@@ -1,3 +1,36 @@
+# HANDOFF part 28: T-20261031-9243 (recorded with `bay plan`) - stage 5 part F built (protection declared in the component map)
+
+Outcome: done. One code commit, 2d56a52, on feat/0008-stage5 (the pieces cannot be green apart: the loader, guard policy, lint and tests share one block). No proposal edited; every path is in 0008's touches (boundary below). Still the OLD folder layout.
+
+## To-do
+| Item | Commit | What |
+|---|---|---|
+| F1 map + schema | 2d56a52 | `framework/components.yaml` `protected:` (paths = the four dirs in the old order; mode cos, forge, improve; env cos-local, framework-dev, improve-local {modes: [improve]}, local-authoring, workspace {modes: ["*"]}, research {modes: ["*"]}; the nine connectors); `schemas/components.schema.json` `protected` (optional in the schema, required by the kit load) |
+| F2 loader | 2d56a52 | `boundary.Protection` (parse, `reserved`, `covers`, `may_place`, `open_envs`, `closed_set`); `model.Kit.protected`, `Kit.protected_paths()`, `Kit.covers()`; `PROTECTED` and `USER_FRAMEWORK_ENVS` removed (no fallback); `protected_writes(kit, env)`; `_check_protected`; `_unit` env rule reads `may_place` |
+| F3 fail closed | 2d56a52 | a missing/unreadable/malformed block puts an error in `kit.errors` (nothing resolves, `bay check` fails), makes `Kit.protected` closed (every name reserved, every path covered, nobody placed), and the claude-code adapter refuses to write a policy from a closed set |
+| F4 guard policy | 2d56a52 | adapter writes `guard.json` `protected` = `kit.protected_paths()` (map paths, then each protected instance folder not already inside one; today = the four dirs). `bay/guard.py` untouched (its loop is unchanged). lint warns when `.agentbay/guard.json` differs from the map (stale policy) |
+| F5 boundary | 2d56a52 | `boundary.classify` wraps the old rule: a path the base map protects (`protected.paths` folder, or a mode/env/connector of a protected name) that would pass only as a new extension fails with rule `protected` unless `touches:` lists it; existing-instance and B-3 rules are unchanged |
+| F6 lint | 2d56a52 | `lint_protection` (names exist, closure: envs a protected mode maps and connectors a protected env binds are protected, D9 sync both ways), `lint_owner_only`, the `reaches` warning reads the map; `_component_map` makes the other lint readers survive a bad map |
+| F7 D4 | 2d56a52 | `improve.findings/v1.decide` has `ownerOnly: true` (`schemas/interface.schema.json` key); `model._code_step` (resolver) and `lint_owner_only` refuse any step running an ownerOnly endpoint; `Dispatcher.run_capability` (`bay approve <F-id>`) untouched |
+| F8 tests | 2d56a52 | `tests/test_protection.py` (17 tests); `tests/test_guard_matrix.py` call `model.protected_writes(kit, env)` (signature only); `docs/DESIGN.md`, `docs/INTERFACES.md` lose the two lines naming `USER_FRAMEWORK_ENVS` |
+| HANDOFF | this commit | |
+
+## What part G (and later parts) must know
+- Instance paths: `Kit.protected_paths()` lists an instance folder only if it is not inside another protected path. Today every protected instance sits in `framework/`, so the policy is still the four dirs, and the matrix is identical. When G moves `framework/modes/cos` to `modes/cos` the policy gains that path; `lint_protection` then FAILS until `framework-dev` `fs.write` names it (D9: the guard lets an env write a protected path only if the env names it). So G must add each moved protected instance path to `framework/envs/framework-dev.yaml` (after `adapters`, before `docs`; keep the first four in order, `test_resolver.py:169` text). Only existing instances are listed, by where they sit, not by `at:` variant.
+- `improve` is in `protected.mode` until H; H removes it (and `improve-local`'s `modes: [improve]` is then what lets it use that env). `Doc.root` and `Kit.collisions` still exist (G replaces them); the collision message for a user doc named like a framework one is unchanged. The new map rule (`... is a protected name`) fires for a protected name with no framework doc.
+- `bay check --base`: a base map WITHOUT a `protected:` block protects nothing in the boundary check (origin/main's map has none, and this branch must pass against it); a base map with a malformed block makes the check error. Not "fail closed" for a missing block: owner decision needed. After this branch merges, the base always has the block; the exemption can then become an error (one line in `ComponentMap.protected_by`/`parse`).
+- Message of `_unit`'s env gap now names `open_envs()` in the map's order; the map lists `workspace` before `research` so the golden text (`workspace and research`) is unchanged.
+- `lint_extension_names` keeps its original conditional shape on purpose: the improve golden's `kitAudit.complexity` count (8) changed to 7 when I simplified it.
+- ownerOnly: `uses:` of a role cannot reach `decide` (write effect, shim is read-only), so only code steps needed the refusal.
+- Open: `bay new` still refuses reserved names through the collision/`is a framework name` path (G, `scaffold.py`).
+
+## Evidence (run at 2d56a52)
+- `python3 tests/run.py -q` last line: `538 passed, 0 failed` (521 + 17 new).
+- `./bay.sh check` last line: `✓ 6 modes, 21 features, 5 roles (17 role units), 8 envs, 13 connectors resolve (agent profile claude-code)` (line before: `✓ lint clean`; the same four warnings as before).
+- `./bay.sh check --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs` last line: `boundary origin/main...HEAD: 74 changed paths (27 core, 2 docs, 25 extension, 1 feature, 19 other); 0 failing; B-11 docs: 0 hits`.
+- `./bay.sh build --project <scratch>/s6f`: `built 6 modes for claude-code`; `./bay.sh clean --project <scratch>/s6f`: last line `clean`; Glob `**/*` of s6f afterwards: only `agentbay.config.yaml` (the input I wrote).
+- Baselines: `test_guard_decision_matrix` and `test_guard_matrix_for_a_project_with_the_kit_outside` pass with `tests/golden/guard-matrix*.json` UNCHANGED. EXPECTED_DELTAS rows: none (D3 adds no path to the policy in the old layout: every protected instance is inside `framework/`; D4 changes no guard decision; the D9 sync needs no new `fs.write` entry yet). `test_improve_golden` passes with `improve.json` unchanged; `test_stage_syntax_table` passes with `stages.json` unchanged. Security tests unchanged (`test_boundaries.py:296` still asserts the four dirs and passes); new cases are in `tests/test_protection.py`: role without forge.extend cannot write a map-listed path, user extension named like a protected one refused, edit and new folder of a protected component fail `check --base` without `touches:`, chat and terminal approvals both pass the gate, D4 (resolver and lint refuse, `bay approve <F-id>` works, chat refused), D9 lint both ways, closure, stale policy, 14 malformed/missing block variants fail closed.
+
 # HANDOFF part 27: T-20261031-edd9 (recorded with `bay plan`) - stage 5 part E built (one workflow syntax, validator, skip and advance rule)
 
 Outcome: done. One code commit, dffef42, on feat/0008-stage5. No proposal edited; every path is in 0008's touches (boundary below).

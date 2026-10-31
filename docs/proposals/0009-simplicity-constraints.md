@@ -16,6 +16,7 @@ touches:
   - { path: bay/model.py, reason: "cache parsed YAML in Kit by (path, mtime, size)" }
   - { path: tests/run.py, reason: "per-test timing; slowest 15; wall-time check against the ceiling" }
   - { path: tests/helpers.py, reason: "kit_copy hard-links files and copies only the file a test edits; built() shared per file" }
+  - { path: framework/roles/builder.yaml, reason: "targeted tests while working, the full suite once before commit" }
   - { path: tests/test_limits.py, reason: "NEW. fixture test for the check (ratchet, exception, count rule)" }
   - { path: tests/test_boundaries.py, reason: "guard decisions run in-process; 3 subprocess tests stay for the hook contract" }
   - { path: HANDOFF.md, reason: "cut to the current work" }
@@ -85,6 +86,8 @@ From the test audit. Together they are estimated to save 40 to 70 seconds of the
 - Guard decisions run in-process; three subprocess tests keep the hook contract (exit code, JSON shape, fail closed).
 - One built project per test file where tests only read it.
 - Per-test timing and a "slowest 15" line in `tests/run.py`.
+- `tests/run.py` runs test files in parallel (one worker per CPU); a file's tests stay in order, and output is the same summary.
+- Builders run only the tests for what they changed while working (`tests/run.py <file>`), and the full suite once before they commit. The full run still gates the commit (owner request, 2026-10-31).
 
 ## Not included
 

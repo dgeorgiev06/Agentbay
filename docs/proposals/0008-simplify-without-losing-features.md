@@ -157,6 +157,18 @@ touches:
   - { path: bay/limits.py, reason: "the ratchet compares against the base ceilings and writes limits.yaml only with --write at release", slice: 9 }
   - { path: bay/hook.py, reason: "same-behaviour trim (one-line return) paying for the plan gate under the bay/ ceiling", slice: 9 }
   - { path: bay/protocol.py, reason: "same-behaviour trim (parse_blocks as a comprehension, last block still wins) paying for the plan gate", slice: 9 }
+  - { path: modes/cos/features/next/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/cos/features/run/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/cos/features/status/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/delivery/features/build/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/delivery/features/research/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/forge/features/create/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/improve/features/audit/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/improve/features/backlog/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/improve/features/implement/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/improve/features/scan/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/improve/features/triage/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/improve/features/verify/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
   - { path: modes/forge/features/extend/, reason: "the re-check, plan step and review-round wording in the extend playbook and rules (B-3 needs the mode named)", slice: 9 }
   - { path: framework/limits.yaml, reason: "the ratchet writes the lower ceilings after the removals; an exception if the plan gate needs one", slice: 9 }
   # stage 5: slices 6-7 (owner amendment, 2026-10-30)

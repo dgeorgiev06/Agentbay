@@ -35,10 +35,8 @@ FIELDS = ("from", "to", "subject", "text", "in", "has", "since", "not")
 HAS = ("link", "attachment")
 
 
-def _vals(v) -> list[str]:
-    if v is None:
-        return []
-    return [str(x) for x in (v if isinstance(v, list) else [v])]
+def vals(v) -> list[str]:
+    return [] if v is None else [str(x) for x in (v if isinstance(v, list) else [v])]
 
 
 def _norm(s: str) -> str:
@@ -65,7 +63,7 @@ def _addr_match(value: str, addrs: list[str]) -> bool:
 def addr_matches(patterns, addr: str) -> bool:
     """Whether an address or handle matches any of `patterns` (the `from`/`to` rules: handle, address, domain,
     `*` wildcard). Used for sender lists such as a mode's `important` setting."""
-    return any(_addr_match(p, [addr or ""]) for p in _vals(patterns))
+    return any(_addr_match(p, [addr or ""]) for p in vals(patterns))
 
 
 def _container(v: str) -> str:
@@ -133,10 +131,10 @@ def matches(item: dict, sel: dict, now: datetime) -> bool:
     for f in FIELDS:
         if f == "not" or f not in sel:
             continue
-        if not _field(item, f, _vals(sel[f]), now):
+        if not _field(item, f, vals(sel[f]), now):
             return False
     for f, v in (sel.get("not") or {}).items():
-        if _field(item, f, _vals(v), now):
+        if _field(item, f, vals(v), now):
             return False
     return True
 
@@ -163,7 +161,7 @@ def mode_of(caps: dict, field: str) -> str | None:
 def wildcard(v) -> bool:
     """Whether a field value (one or a list) has a `*` value. Source APIs search exact handles and addresses,
     so such a field is matched locally only (all its values: they are ORed)."""
-    return any("*" in x for x in _vals(v))
+    return any("*" in x for x in vals(v))
 
 
 def split(sel: dict, caps: dict) -> tuple[dict, dict]:
@@ -179,7 +177,7 @@ def split(sel: dict, caps: dict) -> tuple[dict, dict]:
 
 def native_key(native: dict) -> str:
     """Canonical text of a native query: selectors with the same native query share one fetch and cursor."""
-    return json.dumps({k: sorted(_vals(v)) for k, v in sorted(native.items()) if k != "since"},
+    return json.dumps({k: sorted(vals(v)) for k, v in sorted(native.items()) if k != "since"},
                       sort_keys=True, separators=(",", ":"))
 
 

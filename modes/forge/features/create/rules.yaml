@@ -1,4 +1,4 @@
-apiVersion: agentbay/v2
+apiVersion: agentbay/v3
 kind: Rules
 rules:
   - { id: R-1, level: must, statement: "The created content passes bay check.", appliesTo: both, check: lint_clean, refs: [DOD-1] }

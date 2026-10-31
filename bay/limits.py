@@ -1,9 +1,9 @@
 """`bay check --limits`: the framework may not grow past framework/limits.yaml (proposal 0009).
 
 Every measure is counted from the files git lists (tracked or new, not ignored). A count over its ceiling fails. A
-count under it is written to limits.yaml (the ratchet: lowering is free). A ceiling above the one at the base needs
-an `exceptions: [{ measure, to, reason }]` entry in the proposal's front matter. A base without limits.yaml has no
-earlier ceilings, so the change that adds the file sets its own numbers.
+count that differs from its ceiling is a note, and `--write` (at release) writes it (the ratchet; a ceiling lowered
+earlier may climb back to the base's, never above). A ceiling above the one at the base needs an `exceptions:
+[{ measure, to, reason }]` entry in the proposal's front matter. A base without limits.yaml sets its own numbers.
 """
 from __future__ import annotations
 
@@ -66,8 +66,8 @@ def _exceptions(text: str | None) -> dict[str, int]:
     return {e["measure"]: e["to"] for e in raw}
 
 
-def check(repo: Path, base: str | None = None, proposal_text: str | None = None, write: bool = True) -> tuple[list[str], list[str]]:
-    """(problems, notes). Writes the lowered ceilings to limits.yaml unless `write` is False (the code step)."""
+def check(repo: Path, base: str | None = None, proposal_text: str | None = None, write: bool = False) -> tuple[list[str], list[str]]:
+    """(problems, notes). Writes the changed ceilings to limits.yaml only with `write` (`check --limits --write`)."""
     repo = Path(repo)
     path = repo / FILE
     if not path.is_file():
@@ -79,15 +79,16 @@ def check(repo: Path, base: str | None = None, proposal_text: str | None = None,
     allowed = _exceptions(proposal_text)
     problems, notes = [], []
     for m, n in count(repo).items():
+        lim = max(ceil[m], old.get(m, ceil[m]))                  # a ceiling lowered on this branch may climb back to the base's
         if ceil[m] > old.get(m, ceil[m]) and allowed.get(m, 0) < ceil[m]:
             problems.append(f"{m}: the ceiling {ceil[m]} is above {old[m]} at {base}; raising it needs "
                             f"`exceptions: [{{ measure: {m}, to: {ceil[m]}, reason }}]` in the proposal")
-        if n > ceil[m]:
-            problems.append(f"{m}: {n} is over the ceiling {ceil[m]} (+{n - ceil[m]}); remove what the change added "
+        if n > lim:
+            problems.append(f"{m}: {n} is over the ceiling {lim} (+{n - lim}); remove what the change added "
                             f"or put an exception in the proposal")
-        elif n < ceil[m]:
+        elif n != ceil[m]:
             text = re.sub(rf"^({m}:\s*)\d+", rf"\g<1>{n}", text, flags=re.M)
-            notes.append(f"{m}: {n} is under the ceiling {ceil[m]}; the ceiling is now {n}")
+            notes.append(f"{m}: {n} against the ceiling {ceil[m]}; the ceiling is now {n}")
     if notes and write:
         path.write_text(text, encoding="utf-8")
     return problems, notes

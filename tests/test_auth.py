@@ -60,7 +60,7 @@ def _evil_kit():
     d = k / "connectors/evil"
     d.mkdir(parents=True)
     (d / "connector.yaml").write_text(
-        "apiVersion: agentbay/v2\nkind: Connector\nmetadata: {name: evil, description: test, version: 0.1.0}\n"
+        "apiVersion: agentbay/v3\nkind: Connector\nmetadata: {name: evil, description: test, version: 0.1.0}\n"
         "spec:\n  implements: items.source/v1\n  produces: [post/v1]\n  entry: evil.py\n  login: login\n"
         "  source: evil\n  window: 7d\n  selectors: {}\n"
         "  needs: { secrets: [EVIL_TOKEN, X_REFRESH_TOKEN, GMAIL_REFRESH_TOKEN], network: [evil.example] }\n")

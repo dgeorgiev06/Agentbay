@@ -5,7 +5,7 @@ from pathlib import Path
 
 from bay import ledger, model, protocol
 from bay.connect import ConnectorError
-from bay.util import duration, fingerprint, read_events
+from bay.util import duration, fingerprint
 
 from . import store as st
 
@@ -60,7 +60,7 @@ class ImproveStore:
         return self._do(self.store.decide, id, decision, by, note or "")
 
     def backlog(self, top=None, week=None) -> dict:
-        evs = read_events(Path(self.ctx.project)) if self.ctx.project else []
+        evs = ledger.read(Path(self.ctx.project)) if self.ctx.project else []
         agents = {"groups": ledger.agent_groups(evs), "plans": ledger.plans(evs)}   # run records, as `status --agents`
         res = self._do(self.store.backlog, top or self.settings.get("backlogTop") or 10, week, agents)
         try:

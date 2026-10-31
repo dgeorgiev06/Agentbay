@@ -138,6 +138,17 @@ def test_a_candidate_cannot_set_the_fields_the_store_owns():
         assert "stopped" in s.handoff(fid, {}, "T-20261030-aaaa") and s.load()[fid]["status"] == "open"
         s.decide(fid, "approve", st.HUMAN)                     # the user's own approval still works
         assert "stopped" not in s.claim(fid)
+        # route, effort and impact pass one check on a new candidate and on an annotation: bad values are dropped
+        [bad, bool_, ok] = s.upsert([cand(key="b1", route="x", effort=0, impact=9), cand(key="b2", effort=True),
+                                     cand(key="b3", route="config", effort=2, impact=4)], "improve.scan")["new"]
+        got = s.load()
+        assert got[bad]["route"] == "forge.extend" and "effort" not in got[bad] and "impact" not in got[bad]
+        assert "effort" not in got[bool_]
+        assert (got[ok]["route"], got[ok]["effort"], got[ok]["impact"]) == ("config", 2, 4)
+        s.annotate([{"id": bad, "route": "x", "effort": True, "impact": 6}, {"id": ok, "route": "none", "effort": 5}], "x")
+        got = s.load()
+        assert got[bad]["route"] == "forge.extend" and "effort" not in got[bad] and "impact" not in got[bad]
+        assert (got[ok]["route"], got[ok]["effort"], got[ok]["impact"]) == ("none", 5, 4)
     finally:
         cleanup(d)
 

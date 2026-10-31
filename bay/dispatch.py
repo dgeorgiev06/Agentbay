@@ -20,26 +20,23 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 import secrets as _rand
 import time
+from contextlib import suppress
 from pathlib import Path
 
-from . import checks, config as cfgmod, connect, ledger, model, secretscan, vault, workflows as wfmod
-from .util import parse_time, read_json, utcnow, write_json
+from . import boundary, checks, config as cfgmod, connect, ledger, model, secretscan, vault, workflows as wfmod
+from .util import PROPOSAL_PATH, parse_time, read_json, utcnow, write_json
 
 VERDICT = "review.verdict/v1"
 # who `bay approve` records: a terminal approval, or one relayed from chat (bay/cli.py CHAT_BY); only these pass a
 # gate for a later call
 APPROVERS = ("user@tty", "user@chat-via-cos")
 FAIL_LEVELS = ("must", "must_not")
-# a proposal a propose step wrote: its output `artifacts` name it (docs/proposals/<id>.md)
-PROPOSAL_PATH = re.compile(r"^docs/proposals/[A-Za-z0-9][A-Za-z0-9._-]*\.md$")
 
 
 class CallError(Exception):
     """Bad input, missing grant, unknown target. Message says what to fix."""
-
 
 
 def _reads_stored(step, out: dict) -> bool:
@@ -165,10 +162,16 @@ class Dispatcher:
             if not sha and by == "user@chat-via-cos":
                 raise CallError(f"call {call_id}: a chat approval needs --sha <prefix> of the content shown "
                                 f"({subject['path']} at sha256 {_short(subject)})")
-            if sha and (len(sha) < 8 or not subject["sha256"].startswith(sha.lower())):
+            if "plan" in subject and not subject["plan"]["sha256"]:
+                raise CallError(f"call {call_id}: the plan step ran but {subject['plan']['path']} was not written; "
+                                f"nothing approved")
+            want = [subject["sha256"], *([subject["plan"]["sha256"]] if "plan" in subject else [])]
+            got = sha.lower().split("+")
+            if sha and (len(got) != len(want) or any(len(g) < 8 or not w.startswith(g) for g, w in zip(got, want))):
                 raise CallError(f"call {call_id}: --sha {sha} does not match the current content of "
-                                f"{subject['path']} (sha256 {_short(subject)}); nothing approved. Read it again "
-                                f"(`bay show {call_id}`)")
+                                f"{subject['path']} (sha256 {_short(subject)}){' and its plan' * (len(want) - 1)}; "
+                                f"nothing approved (a chat approval names a prefix of each sha, joined by +). Read it "
+                                f"again (`bay show {call_id}`)")
         data = {"approved": approved, "by": by, **({"quote": quote} if quote else {}),
                 **({"approves": subject} if subject else {})}
         state["steps"][step.id] = {"approved": approved, "by": by, **({"quote": quote} if quote else {}),
@@ -330,14 +333,22 @@ class Dispatcher:
 
     # ------------------------------------------------------------ engine
     def _advance(self, mode, feat, state) -> dict:
-        while state["cursor"] < len(feat.steps):
-            step = feat.steps[state["cursor"]]
+        stages = [wfmod.Stage.of_step(s) for s in feat.steps]
+        by_id = {s.id: s for s in feat.steps}
+        while True:
+            mv = wfmod.advance(stages, state["cursor"], state["input"], state["steps"],
+                               lambda st, age: self._fresh(by_id[st.id], mode, age))
+            for sid in mv.skipped:
+                state["steps"][sid] = None
+                self._ledger("step.skipped", self._event_base(mode, feat, by_id[sid], state["callId"]),
+                             summary=f"when: {by_id[sid].when}")
+            if mv.kind in ("refused", "missing"):          # fail closed; resolve already refuses both
+                raise CallError(mv.reason or f"{feat.name}: no step at position {mv.cursor}")
+            state["cursor"] = mv.cursor
+            if mv.kind == "done":
+                break
+            step = feat.steps[mv.cursor]
             base = self._event_base(mode, feat, step, state["callId"])
-            if step.when and self._skip(step, mode, feat, state):
-                state["steps"][step.id] = None
-                self._ledger("step.skipped", base, summary=f"when: {step.when}")
-                state["cursor"] += 1
-                continue
             if step.kind == "gate":
                 gate = self._gate_check(step, state)
                 state.setdefault("gates", {})[step.id] = gate
@@ -356,6 +367,8 @@ class Dispatcher:
                 continue
             if step.kind == "review" and "checks_done" not in state:
                 self._run_checks(feat, state)
+                with suppress(RuntimeError, OSError):          # outside git a later re-check names no commit range
+                    state["head"] = boundary.git(self.project, "rev-parse", "HEAD").strip()
             state["status"] = "awaiting-approval" if step.kind == "gate" else "needs-agent"
             plan = self._plan(mode, feat, step, state)
             state["plan"] = plan
@@ -382,23 +395,24 @@ class Dispatcher:
             state["status"] = "partial" if (failed_checks or state.get("stopped")) else "done"
         return self._finish(state, mode, feat)
 
-    def _skip(self, step, mode, feat, state) -> bool:
-        """The shared skip rule (`workflows.skip`); `stale > <age>` asks the step's connector for the store's status."""
-        def fresh(age) -> bool:
-            iface = step.run.rsplit(".", 1)[0]
-            st = self._invoke(step.env, step.connector, iface, "status", {}, settings=self._settings(mode), caps={})
-            last = st.get("lastSync")
-            if st.get("stale"):           # selectors or bound sources changed: sync re-scopes the store first
-                return False
-            return bool(last) and (self.clock() - parse_time(last, self.clock())) <= age
-        return wfmod.skip(step.when, state["input"], state["steps"], fresh, gate=step.kind == "gate")
+    def _fresh(self, step, mode, age) -> bool:
+        """`stale > <age>` (via `workflows.advance`): the step's connector says whether the store is fresher than that."""
+        iface = step.run.rsplit(".", 1)[0]
+        st = self._invoke(step.env, step.connector, iface, "status", {}, settings=self._settings(mode), caps={})
+        last = st.get("lastSync")
+        if st.get("stale"):           # selectors or bound sources changed: sync re-scopes the store first
+            return False
+        return bool(last) and (self.clock() - parse_time(last, self.clock())) <= age
 
     def _gate_subject(self, step, state) -> dict | None:
         """{path, sha256} of the project file a gate's `approves: $in.<f>` names, or None (no field, no such file
         inside the project). The dispatcher hashes the file itself; no connector output decides a gate."""
         if step.kind != "gate" or not step.approves:
             return None
-        return self._file_subject(step.approves, state)
+        sub = self._file_subject(step.approves, state)
+        pp = sub and f"docs/plans/{Path(sub['path']).stem}.md"       # the plan the lead wrote for this proposal
+        plan = pp and (self._file_subject(pp, state) or ({"path": pp, "sha256": None} if state["steps"].get("plan") else None))
+        return {**sub, "plan": plan} if plan else sub
 
     def _file_subject(self, expr: str, state) -> dict | None:
         """{path, sha256} of the project file `expr` names. A list (a step's `artifacts`) names the proposal that
@@ -434,7 +448,7 @@ class Dispatcher:
             # only the latest decision on the path counts: a later approval or rejection of other content
             # supersedes an earlier one, so reverting a file to old content does not revive its approval
             same_path = e
-            last = e if d["approves"].get("sha256") == subject["sha256"] and self._state_holds(e, step, subject) else None
+            last = e if d["approves"] == subject and self._state_holds(e, step, subject) else None
         out = {"approves": subject, "prior": None, "skipped": False}
         if last is not None and last["data"].get("approved") is True:
             d = last["data"]
@@ -463,7 +477,7 @@ class Dispatcher:
         rec = (prior.get("steps") or {}).get(step.id)
         d = e.get("data") or {}
         if not isinstance(rec, dict) or rec.get("approved") is not (d.get("approved") is True) \
-                or (rec.get("approves") or {}).get("sha256") != subject["sha256"]:
+                or rec.get("approves") != subject:
             return False
         return True
 
@@ -563,14 +577,15 @@ class Dispatcher:
         if errs:
             raise CallError(f"review verdict does not match {VERDICT}: " + "; ".join(errs[:5]))
         need = [d.id for d in feat.dod] + [r.id for r in feat.rules if r.for_reviewer() and r.applies(state["input"])]
-        got = {i["id"]: i for i in verdict["items"]}
+        rc = state.get("recheck") or {"carried": []}        # a re-check: the carried items stand unless the verdict gives one
+        got = {i["id"]: i for i in rc["carried"]} | {i["id"]: i for i in verdict["items"]}
         missing = [i for i in need if i not in got]
         if missing:
             raise CallError(f"review verdict is missing ids: {', '.join(missing)} (report pass|fail|n/a for each)")
         levels = {d.id: d.level for d in feat.dod} | {r.id: r.level for r in feat.rules}
         failed = [i for i in got.values()
                   if (i["verdict"] == "fail" and levels.get(i["id"]) in FAIL_LEVELS) or i.get("severity") == "blocker"]
-        state["steps"][step.id] = verdict
+        state["steps"][step.id] = {**verdict, "items": list(got.values())}
         state["review"] = {"failed": [i["id"] for i in failed], "items": len(got)}
         if failed:
             state["status"] = "partial"
@@ -595,7 +610,7 @@ class Dispatcher:
         if role.skills:                             # the playbook's short skill names -> the namespaced skills
             plan["skills"] = self._plan_skills(mode, feat, role)
         if step.kind == "review":
-            plan["review"] = self._review_brief(feat, state)
+            plan["review"] = self._review_brief(feat, state, step)
             return plan
         plan.update(self._executor_brief(feat, step, state, role))
         return plan
@@ -619,7 +634,25 @@ class Dispatcher:
         return {sk: sid for sk, sid in sorted(role.skill_names.items()) if sid in role.skills
                 and (feat.skills is None or not sid.startswith(mine) or sk in feat.skills)}
 
-    def _review_brief(self, feat, state) -> dict:
+    def _prior_review(self, state, step) -> dict | None:
+        """The re-check brief {priorCall, failed, commits, carried}: the newest other call of this feature that reviewed
+        the same approved files (path and sha256 at every gate) failed its full review, its state and ledger agree. After
+        a re-check, a pass or any changed file the review is full. No gate, check or step is touched here."""
+        subj = lambda s: {k: g.get("approves") for k, g in (s.get("gates") or {}).items()}      # noqa: E731
+        for e in reversed(ledger.read(self.project)):
+            d = e.get("data") or {}
+            if (e.get("type") == "step.completed" and e.get("source") == "dispatcher" and e.get("step") == step.id
+                    and e.get("callId") != state["callId"] and f"{e.get('mode')}.{e.get('endpoint')}" == state["target"]
+                    and isinstance(d.get("failed"), list) and any(subj(state).values())):
+                prior = read_json(self._calls_dir() / f"{e['callId']}.json") or {}
+                if (prior.get("review") or {}).get("failed") == d["failed"] and subj(prior) == subj(state):
+                    items = (prior.get("steps") or {}).get(step.id, {}).get("items", [])
+                    return None if not d["failed"] or prior.get("recheck") else {
+                        "priorCall": e["callId"], "failed": d["failed"],
+                        "commits": f"{prior['head']}..HEAD" if prior.get("head") else None,
+                        "carried": [i for i in items if i["id"] not in d["failed"] and i["verdict"] != "fail"]}
+
+    def _review_brief(self, feat, state, step) -> dict:
         """What the reviewer is given: the task, the DoD, the rules, the checks, the output and the verdict schema."""
         brief = {
             "task": {"target": state["target"], "input": state["input"]},
@@ -633,6 +666,8 @@ class Dispatcher:
         for name in (feat.review or {}).get("rulesets", []):
             # framework rule sets (e.g. conformance): judged with the DoD; cite their ids in evidence
             brief.setdefault("rulesets", {})[name] = model.ruleset(self.sys.kit.root, name)
+        if rc := self._prior_review(state, step):          # judge the failed items again; the others stand
+            state["recheck"] = brief["recheck"] = rc
         return brief
 
     def _executor_brief(self, feat, step, state, role) -> dict:
@@ -730,11 +765,9 @@ def inputs_record(args, project: Path) -> dict:
         raw = v if isinstance(v, str) else json.dumps(v, sort_keys=True, ensure_ascii=False)
         f = None
         if isinstance(v, str) and 0 < len(v) < 300 and "\n" not in v:
-            try:
+            with suppress(OSError, ValueError):
                 q = (project / v).resolve()
                 f = q if q.is_file() and q.is_relative_to(project.resolve()) else None
-            except (OSError, ValueError):
-                f = None
         if f is not None:
             out[k] = {"file": v, "sha256": hashlib.sha256(f.read_bytes()).hexdigest()}
         elif len(raw) <= 160:
@@ -787,5 +820,3 @@ def merge_outputs(outs: dict[str, dict]) -> dict:
 def use_shim(unit: str) -> str:
     """Project-relative path of a unit's use shim (generated by the adapter; unit = <role>--<mode>[--<env>])."""
     return f".agentbay/roles/{unit}/use"
-
-

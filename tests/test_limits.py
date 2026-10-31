@@ -33,12 +33,24 @@ def test_limits_count_the_ceiling_the_ratchet_and_the_exception():
     (repo / limits.FILE).write_text(_yaml({**NOW, "schemas": 5}))            # the ratchet lowered it: raise it again
     exc = "---\nexceptions:\n  - { measure: schemas, to: 5, reason: more }\n---\n"
     problems, notes = limits.check(repo, "HEAD", exc)
-    assert problems == [] and "now 2" in notes[0]                            # allowed, then lowered to the count
-    assert (repo / limits.FILE).read_text() == _yaml(NOW)
+    assert problems == [] and "now 2" in notes[0] and (repo / limits.FILE).read_text() == _yaml({**NOW, "schemas": 5})
+    problems, notes = limits.check(repo, "HEAD", exc, write=True)           # only --write lowers it, to the count
+    assert problems == [] and "now 2" in notes[0] and (repo / limits.FILE).read_text() == _yaml(NOW)
+    low = _yaml({**NOW, "schemas": 1})                                        # lowered below the base: the count may climb back
+    (repo / limits.FILE).write_text(low)
+    problems, notes = limits.check(repo, "HEAD")
+    assert problems == [] and "now 2" in notes[0] and (repo / limits.FILE).read_text() == low
+    assert limits.check(repo, "HEAD", write=True)[0] == [] and (repo / limits.FILE).read_text() == _yaml(NOW)
+    (repo / limits.FILE).write_text(low)
+    (repo / "schemas/t.json").write_text("{}\n")                             # but never above the base's ceiling
+    problems, _ = limits.check(repo, "HEAD", write=True)
+    assert len(problems) == 1 and "schemas: 3 is over the ceiling 2" in problems[0]
+    (repo / "schemas/t.json").unlink()
+    (repo / limits.FILE).write_text(_yaml(NOW))
     (repo / "schemas/t.json").write_text("{}\n")
     problems, _ = limits.check(repo, "HEAD")
     assert len(problems) == 1 and "schemas: 3 is over the ceiling 2" in problems[0]
     (repo / "schemas/t.json").unlink()
     (repo / limits.FILE).write_text(_yaml({**NOW, "schemas": 9}))
-    problems, notes = limits.check(repo, write=False)                        # the code step only reads
+    problems, notes = limits.check(repo)                                     # without --write (the code step) it only reads
     assert problems == [] and notes and (repo / limits.FILE).read_text() == _yaml({**NOW, "schemas": 9})

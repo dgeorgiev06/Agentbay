@@ -18,10 +18,7 @@ def git_episodes(project: Path, since: datetime | None = None, until: datetime |
     read only to detect reverts and are never returned."""
     args = ["git", "-C", str(project), "log", "--no-color", "--no-merges", "--numstat",
             "--format=%x1e%H%x1f%aI%x1f%s%x1f%b%x1f"]
-    if since:
-        args.append(f"--since={since.isoformat()}")
-    if until:
-        args.append(f"--until={until.isoformat()}")
+    args += [f"--{k}={v.isoformat()}" for k, v in (("since", since), ("until", until)) if v]
     try:
         r = run(args, capture_output=True, text=True, timeout=60)
     except (OSError, subprocess.SubprocessError):

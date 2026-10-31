@@ -1,4 +1,4 @@
-apiVersion: agentbay/v2
+apiVersion: agentbay/v3
 kind: Interface
 metadata:
   name: forge.scaffold
@@ -35,20 +35,23 @@ spec:
       description: >-
         The approval status in a proposal's front matter (`status: approved` with `approvedBy` and `date`). It is
         informational: it grants nothing: only a recorded `bay approve` of the proposal's exact content skips
-        `propose` and the `approve` gate.
+        `propose` and the `approve` gate. `plan` says whether the plan step runs before the gate: `approvals.plan` is
+        always, or large (the default) and the proposal is large or security-sensitive, and docs/plans/<id>.md does
+        not exist yet; `why` names the reason.
       in:
         type: object
-        required: [path]
         additionalProperties: false
         properties:
-          path: { type: string, pattern: "^docs/proposals/[A-Za-z0-9][A-Za-z0-9._-]*\\.md$" }
+          path: { description: "A proposal (docs/proposals/<id>.md), or the list of files the propose step wrote (its first docs/proposals file; none means no plan)." }
       out:
         type: object
-        required: [path]
+        required: [path, plan, why]
         additionalProperties: false
         properties:
           path: { type: string }
           status: { type: string }
           approvedBy: { type: string }
           date: { type: string }
+          plan: { type: boolean }
+          why: { type: string }
       effects: [read]

@@ -28,9 +28,7 @@ def _run_id(payload: dict) -> str:
 
 
 def _text(resp) -> str:
-    if isinstance(resp, str):
-        return resp
-    return json.dumps(resp, ensure_ascii=False)
+    return resp if isinstance(resp, str) else json.dumps(resp, ensure_ascii=False)
 
 
 def handle(phase: str, payload: dict) -> None:

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v2/Environment",
+  "$id": "agentbay/v3/Environment",
   "title": "Environment",
   "description": "The container: capability -> connector/tool bindings, secrets (names + provider), network allowlist, filesystem paths, allowed tiers, allowed effects, limits.",
   "type": "object",
@@ -13,7 +13,7 @@
   "additionalProperties": false,
   "properties": {
     "apiVersion": {
-      "const": "agentbay/v2"
+      "const": "agentbay/v3"
     },
     "kind": {
       "const": "Environment"

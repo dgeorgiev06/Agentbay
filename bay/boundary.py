@@ -38,8 +38,8 @@ from pathlib import Path
 import yaml
 
 DOCS = ("README.md", "docs/DESIGN.md", "docs/INTERFACES.md")
-OTHER = ("tests/", "HANDOFF.md", "docs/proposals/", "docs/research/", ".gitignore", ".gitattributes",
-         ".editorconfig", "LICENSE", "LICENSE.md")
+OTHER = ("tests/", "HANDOFF.md", "docs/proposals/", "docs/plans/", "docs/research/", ".gitignore",
+         ".gitattributes", ".editorconfig", "LICENSE", "LICENSE.md")
 # contracts whose instance names B-11 forbids in the core docs
 NAMED_CONTRACTS = ("mode", "connector", "env", "contentType")
 
@@ -200,7 +200,7 @@ class Contract:
 class ComponentMap:
     owns: dict[str, list[str]]
     contracts: list[Contract]
-    protected: Protection | None = None        # None: the map has no `protected:` block (see protected_by)
+    protected: Protection
 
     @classmethod
     def load(cls, path: Path) -> "ComponentMap":
@@ -226,8 +226,11 @@ class ComponentMap:
             for cname, c in (spec.get("contracts") or {}).items():
                 if c.get("at"):
                     contracts.append(Contract(comp, cname, list(c["at"])))
+        if "protected" not in doc:
+            raise RuntimeError(f"{MAP}: no protected: block; add one (paths, mode, env and connector), the check "
+                               f"judges a change by the base's map")
         try:
-            prot = Protection.parse(doc["protected"]) if "protected" in doc else None
+            prot = Protection.parse(doc["protected"])
         except ProtectedError as e:
             raise RuntimeError(f"{MAP}: protected: {e}") from None
         return cls(owns, contracts, prot)
@@ -250,12 +253,8 @@ class ComponentMap:
 
     def protected_by(self, path: str) -> str | None:
         """Why `path` is protected (a folder of `protected.paths`, or a file of a protected mode, env or connector
-        wherever its folder sits), else None. A map without a `protected:` block protects nothing here: the check
-        judges a change by the base's map, and a base that predates the block cannot say; the kit itself fails closed
-        on such a map (model.Kit)."""
+        wherever its folder sits), else None."""
         p = self.protected
-        if p is None:
-            return None
         for d in p.paths:
             if under(path, d):
                 return f"protected folder {d}/"
@@ -273,7 +272,7 @@ def stray(paths: list[str], cmap: ComponentMap) -> list[str]:
 
 
 # ----------------------------------------------------------------- git
-def _git(repo: Path, *args: str) -> str:
+def git(repo: Path, *args: str) -> str:
     r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
     if r.returncode:
         raise RuntimeError(f"git {' '.join(args)}: {r.stderr.strip()}")
@@ -287,14 +286,14 @@ def show(repo: Path, rev: str, path: str) -> str | None:
     """The text of `path` as committed at `rev`, or None when `rev` has no such file."""
     r = subprocess.run(["git", "-C", str(repo), "cat-file", "-e", f"{rev}:{path}"], capture_output=True)
     if r.returncode:
-        _git(repo, "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}")      # a bad rev is an error, not "absent"
+        git(repo, "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}")      # a bad rev is an error, not "absent"
         return None
-    return _git(repo, "show", f"{rev}:{path}")
+    return git(repo, "show", f"{rev}:{path}")
 
 
 def merge_base(repo: Path, base: str, head: str) -> str:
     """The commit `base...head` diffs against: the change is judged as of where it forked from base."""
-    out = _git(repo, "merge-base", base, head).strip()
+    out = git(repo, "merge-base", base, head).strip()
     if not out:
         raise RuntimeError(f"{base} and {head} have no common ancestor")
     return out
@@ -309,7 +308,7 @@ def map_at(repo: Path, base: str, head: str, mb: str | None = None) -> tuple[Com
     text = show(repo, mb, MAP)
     if text is not None:
         return ComponentMap.parse(text), base
-    status = _git(repo, "diff", "--name-status", "--no-renames", "--no-relative", "--no-ext-diff",
+    status = git(repo, "diff", "--name-status", "--no-renames", "--no-relative", "--no-ext-diff",
                   f"{base}...{head}", "--", MAP).split("\t", 1)[0].strip()
     if status == "A":
         return ComponentMap.parse(show(repo, head, MAP)), head
@@ -334,7 +333,7 @@ def changed(repo: Path, base: str, head: str = "HEAD") -> list[str]:
     """Every path the change adds, modifies or deletes. Renames are split into a deletion and an addition so both
     sides of a move are classified; the flags pin everything the user's git config could change (rename
     detection, relative paths, path quoting, external diff drivers)."""
-    out = _git(repo, "-c", "core.quotePath=false", "diff", "--name-status", "--no-renames", "--no-relative",
+    out = git(repo, "-c", "core.quotePath=false", "diff", "--name-status", "--no-renames", "--no-relative",
                "--no-ext-diff", "-z", f"{base}...{head}")
     parts = [p for p in out.split("\0")]
     paths = []
@@ -503,7 +502,7 @@ def check(repo: Path, base: str, head: str = "HEAD", proposal: str | None = None
     introduced = map_rev != base
     touches = [t for t in touches or [] if not t.get("planned")]     # planned entries authorize nothing yet
     at_base: set[str] = set()
-    for f in _git(repo, "-c", "core.quotePath=false", "ls-tree", "-r", "--name-only", "-z", mb).split("\0"):
+    for f in git(repo, "-c", "core.quotePath=false", "ls-tree", "-r", "--name-only", "-z", mb).split("\0"):
         parts = f.split("/")
         at_base.update("/".join(parts[:i]).casefold() for i in range(1, len(parts) + 1) if f)
 
@@ -517,7 +516,7 @@ def check(repo: Path, base: str, head: str = "HEAD", proposal: str | None = None
                     for p in changed(repo, base, head)]
     if docs:
         rep.docs_checked = True
-        tree = _git(repo, "ls-tree", "-r", "--name-only", head).splitlines()
-        texts = {d: _git(repo, "show", f"{head}:{d}") for d in DOCS if d in tree}
+        tree = git(repo, "ls-tree", "-r", "--name-only", head).splitlines()
+        texts = {d: git(repo, "show", f"{head}:{d}") for d in DOCS if d in tree}
         rep.doc_hits = doc_hits(texts, instance_names(tree, cmap))
     return rep

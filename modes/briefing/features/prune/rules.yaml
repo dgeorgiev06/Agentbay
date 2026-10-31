@@ -1,4 +1,4 @@
-apiVersion: agentbay/v2
+apiVersion: agentbay/v3
 kind: Rules
 rules:
   - { id: R-1, level: must, statement: "Honor deletions: an item deleted at the source is removed and never re-stored.", appliesTo: executor, refs: [DOD-1] }

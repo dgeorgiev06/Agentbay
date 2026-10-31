@@ -128,14 +128,10 @@ def _in_term(v: str) -> str:
     return f"label:{_label(v)}"
 
 
-def _vals(v) -> list[str]:
-    return [] if v is None else [str(x) for x in (v if isinstance(v, list) else [v])]
-
-
 def _terms(field: str, v) -> list[str]:
     """Gmail search terms for one native selector field (one term per value)."""
     out = []
-    for x in _vals(v):
+    for x in selmod.vals(v):
         if field in ("from", "to"):
             out.append(f"{field}:{_q(x.lstrip('@'))}")
         elif field == "in":
@@ -505,7 +501,7 @@ class GmailApi:
     def _in_label_ids(self, query: dict) -> set[str]:
         """Label ids named by the query's `in` (label:/in: prefixes and Gmail's dashes ignored)."""
         want = set()
-        for v in _vals(query.get("in")):
+        for v in selmod.vals(query.get("in")):
             v = v.strip()
             for pre in ("label:", "in:"):
                 if v.lower().startswith(pre):

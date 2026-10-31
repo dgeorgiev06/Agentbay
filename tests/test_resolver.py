@@ -161,22 +161,6 @@ def test_wrong_kind_is_rejected():
     assert_gap(k, "modes/old/mode.yaml", "kind must be Mode")
 
 
-def test_config_schema_rejects_unknown_settings():
-    from helpers import project
-    from bay import config
-    p = project({"modes": {"feed-briefing": {"lookback": "90d"}}})
-    gs = gaps(KIT, p)
-    assert any("lookback 90d exceeds mode lookbackMax 30d" in g for g in gs), gs
-    p = project({"modes": {"feed-briefing": {"bogus": 1}}})
-    assert any("modes.feed-briefing" in g and "bogus" in g for g in gaps(KIT, p))
-    p = project({"bindings": {"local-feeds": {"items.source/v1": ["fake"]}}})
-    try:
-        model.Kit(KIT, p)
-        raise AssertionError("expected ConfigError")
-    except config.ConfigError as e:
-        assert "bindings" in str(e)
-
-
 def test_forge_create_cannot_be_placed_in_framework_writing_env():
     k = kit_copy()
     edit_yaml(k / "modes/forge/mode.yaml",
@@ -230,9 +214,16 @@ def test_offline_switch_rebinds_the_source_and_closes_network_and_secrets():
     assert s.units()["analyst--feed-briefing"].env == "local-feeds"      # the env keeps its name
     assert s.modes["feed-briefing"].features["sync"].steps[0].connector == "corpus-store"
     from bay import config
-    for bad, word in (({"offline": "yes"}, "offline"), ({"envs": {"local-feeds": "workspace"}}, "envs")):
-        try:                                                  # not a boolean; the `envs:` map is gone
+    for bad, word in (({"offline": "yes"}, "offline"), ({"envs": {"local-feeds": "workspace"}}, "envs"),
+                      ({"bindings": {"local-feeds": {"items.source/v1": ["fake"]}}}, "bindings"),
+                      ({"approvals": {"plan": "bogus"}}, "approvals"),             # approvals.plan: large | always | never
+                      ({"apiVersion": "agentbay/v2"}, "this kit reads agentbay/v3, not 'agentbay/v2'; change the line to apiVersion: agentbay/v3")):
+        try:                                                  # not a boolean; the `envs:` and `bindings:` maps are gone
             model.Kit(KIT, project(bad))
             raise AssertionError("expected ConfigError")
         except config.ConfigError as e:
             assert word in str(e)
+    for rel in ("modes/briefing/mode.yaml", "envs/workspace.yaml"):         # a v2 mode and a v2 env are refused too
+        k = kit_copy()
+        edit_yaml(k / rel, lambda d: d.update(apiVersion="agentbay/v2"))
+        assert_gap(k, "apiVersion: this kit reads agentbay/v3, not 'agentbay/v2'; change the line to apiVersion: agentbay/v3")

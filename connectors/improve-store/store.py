@@ -4,7 +4,7 @@ rendered by report.py in this folder.
 
   upsert    candidates (detectors or resolved analyst findings); dedup by fingerprint, merge evidence,
             reopen a fixed/verified finding whose pattern comes back
-  annotate  root cause, proposed fix, route, effort from the analyst (after review); open findings only
+  annotate  root cause, fix, route, effort, impact from the analyst (_classify as upsert does); open findings only
   triage    "same file" links across lenses and priority = impact x frequency / effort
   decide    human decisions (approve | defer | wontfix); approve only via `bay approve <id>` in a terminal
   backlog   write reports/<isoweek>.md
@@ -51,6 +51,12 @@ def iso(dt: datetime) -> str:
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _classify(f: dict, src: dict) -> None:
+    if src.get("route") in ROUTES:
+        f["route"] = src["route"]
+    f.update({k: src[k] for k in ("effort", "impact") if type(src.get(k)) is int and 1 <= src[k] <= 5})
+
+
 def isoweek(dt: datetime) -> str:
     y, w, _ = dt.isocalendar()
     return f"{y}-W{w:02d}"
@@ -94,11 +100,8 @@ class Store:
     def route_for(self, f: dict) -> str:
         sc = f.get("scope") or {}
         files = [sc["file"]] if sc.get("file") else list(sc.get("files") or [])
-        if self.protection.closed or sc.get("framework") or sc.get("mode") in self.protection.names.get("mode", ()):
-            return "forge.extend"
-        if files and all(self._framework_file(x) for x in files):
-            return "forge.extend"
-        return "mode-fix"
+        owned = self.protection.closed or sc.get("framework") or sc.get("mode") in self.protection.names.get("mode", ())
+        return "forge.extend" if owned or files and all(self._framework_file(x) for x in files) else "mode-fix"
 
     def score(self, f: dict) -> None:
         impact = f.get("impact") or SEVERITY.get(f.get("severity", "medium"), 2)
@@ -121,10 +124,11 @@ class Store:
             if cur is None:
                 # the store owns these fields: whatever a candidate carries under them is dropped, so a candidate
                 # cannot arrive approved, with a forged history, or under another id
-                f = {**{k: v for k, v in c.items() if k not in STORE_OWNED},
+                f = {**{k: v for k, v in c.items() if k not in (*STORE_OWNED, "route", "effort", "impact")},
                      "id": fid, "fingerprint": fp, "status": "open", "firstSeen": iso(self.now), "source": by,
                      "links": [], "history": []}
                 f["evidence"] = c["evidence"][:MAX_EVIDENCE]
+                _classify(f, c)
                 f.setdefault("route", self.route_for(f))
                 self._hist(f, "open", by, "detected")
                 self.score(f)
@@ -166,11 +170,7 @@ class Store:
             for k in ("rootCause", "proposedFix", "costEstimate"):
                 if it.get(k):
                     f[k] = it[k]
-            if it.get("route") in ROUTES:
-                f["route"] = it["route"]
-            for k in ("effort", "impact"):
-                if isinstance(it.get(k), int) and 1 <= it[k] <= 5:
-                    f[k] = it[k]
+            _classify(f, it)
             self.score(f)
             self._hist(f, f["status"], by, "triaged: root cause and fix")
             done.append(f["id"])

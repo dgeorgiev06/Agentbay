@@ -46,7 +46,7 @@ def lint(kit: Path) -> list[str]:
         doc = yaml.safe_load(p.read_text(encoding="utf-8"))
     except yaml.YAMLError as e:
         return [f"{PATH}:1: invalid YAML: {e}"]
-    out = [f"{PATH}:1: conformance schema: {e}" for e in model.schema_errors(doc, model.schema("conformance"))]
+    out = [f"{PATH}:1: conformance schema: {e}" for e in model.schema_errors(doc, model.schema("rules"))]
     if out or not isinstance(doc, dict):
         return out
     lines = p.read_text(encoding="utf-8").splitlines()
@@ -103,10 +103,7 @@ def _features(k: model.Kit):
 
 def _vague(text: str) -> str | None:
     low = text.lower()
-    for w in VAGUE:
-        if re.search(rf"(?<![\w-]){re.escape(w)}(?![\w-])", low) and not ANCHOR.search(text):
-            return w
-    return None
+    return next((w for w in VAGUE if re.search(rf"(?<![\w-]){re.escape(w)}(?![\w-])", low) and not ANCHOR.search(text)), None)
 
 
 # ----------------------------------------------------------------------------- checks

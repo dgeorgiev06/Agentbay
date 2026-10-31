@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v2/Mode",
+  "$id": "agentbay/v3/Mode",
   "title": "Mode",
   "description": "A job playbook: one logical job. Its features each run steps: code steps (run: <capability>/v<N>.<endpoint>), agentic steps (role: <role>) and gates. Modes name capabilities, never concrete tools.",
   "type": "object",
@@ -13,7 +13,7 @@
   "additionalProperties": false,
   "properties": {
     "apiVersion": {
-      "const": "agentbay/v2"
+      "const": "agentbay/v3"
     },
     "kind": {
       "const": "Mode"
@@ -321,7 +321,7 @@
         },
         "when": {
           "type": "string",
-          "pattern": "^(stale\\s*>\\s*[0-9]+[mhdw]|!?approved\\s+\\$in\\.[A-Za-z][A-Za-z0-9-]*(?:\\.[A-Za-z][A-Za-z0-9-]*)*|!?\\$(?:in|steps)\\.[A-Za-z][A-Za-z0-9-]*(?:\\.[A-Za-z][A-Za-z0-9-]*)*)$",
+          "pattern": "^(stale\\s*>\\s*[0-9]+[mhdw]|!?\\$(?:in|steps)\\.[A-Za-z][A-Za-z0-9-]*(?:\\.[A-Za-z][A-Za-z0-9-]*)*)$",
           "description": "`stale > 2h` (code step: skip unless the store is older), `$in.<field>` or `$steps.<id>.<field>` (skip unless truthy); a leading `!` skips when true instead."
         },
         "task": {

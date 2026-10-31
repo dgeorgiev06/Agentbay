@@ -148,7 +148,7 @@ def project(config: dict | None = None, source: str = "fake") -> Path:
     """A project dir. source="fake" sets `offline: true` (fake sources, no network); "x-api" uses the real source."""
     p = tmpdir() / "proj"
     p.mkdir()
-    cfg = {"apiVersion": "agentbay/v2"}
+    cfg = {"apiVersion": "agentbay/v3"}
     if source == "fake":
         cfg["offline"] = True
     elif source != "x-api":

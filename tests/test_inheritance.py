@@ -16,7 +16,7 @@ def child(k, name="news-briefing", spec=None):
     """A second mode extending briefing, next to feed-briefing (each (role, mode, env) compiles on its own)."""
     d = k / "modes" / name
     d.mkdir(parents=True)
-    doc = {"apiVersion": "agentbay/v2", "kind": "Mode", "metadata": {"name": name, "version": "0.1.0"},
+    doc = {"apiVersion": "agentbay/v3", "kind": "Mode", "metadata": {"name": name, "version": "0.1.0"},
            "spec": {"extends": "briefing", "reads": ["post/v1"], **(spec or {})}}   # a briefing child says what it reads (B-6)
     (d / "mode.yaml").write_text(json.dumps(doc))
     self_describe(d)
@@ -58,7 +58,7 @@ def test_child_overrides_review_steps_roles_and_inherits_the_rest():
     assert [st.id for st in s.modes["feed-briefing"].features["prune"].steps] == ["trim", "review"]
     # a second child of the same base keeps the base behaviour
     (k / "envs/local-news.yaml").write_text(
-        "apiVersion: agentbay/v2\nkind: Environment\nmetadata: { name: local-news, description: Another briefing env. }\n"
+        "apiVersion: agentbay/v3\nkind: Environment\nmetadata: { name: local-news, description: Another briefing env. }\n"
         "spec:\n  bind:\n    items.source/v1: [fake]\n    items.store/v1: corpus-store\n  network: { allow: [] }\n"
         "  fs: { read: [\".\"], write: [\".agentbay/data/news\"] }\n  effects: [read, write, network, spend, delete]\n")
     child(k, spec={"purpose": "Mail.", "roles": {"analyst": "local-news", "researcher": "research"}})
@@ -119,7 +119,7 @@ def test_raw_child_may_be_partial_but_the_merged_mode_must_be_complete():
     k = kit_copy()
     d = k / "modes/orphan"
     d.mkdir()
-    (d / "mode.yaml").write_text(json.dumps({"apiVersion": "agentbay/v2", "kind": "Mode",
+    (d / "mode.yaml").write_text(json.dumps({"apiVersion": "agentbay/v3", "kind": "Mode",
                                              "metadata": {"name": "orphan", "version": "1"}, "spec": {"purpose": "x"}}))
     assert any("modes/orphan/mode.yaml" in p and "'features' is a required property" in p for p in problems(k))
 

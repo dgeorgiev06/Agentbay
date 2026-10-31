@@ -28,6 +28,7 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 
 import yaml
@@ -87,9 +88,11 @@ def schema(name: str) -> dict:
 
 
 def data_schema(ref: str) -> dict:
-    """'item/v1' -> schemas/data/item.v1.schema.json; a content type's `<name>/v<N>` -> its fields.schema.json"""
+    """'item/v1' -> schemas/data/item.v1.schema.json or modes/<mode>/data/item.v1.schema.json; a content type's
+    `<name>/v<N>` -> its fields.schema.json"""
     name, _, ver = ref.partition("/")
     p = SCHEMAS / "data" / f"{name}.{ver}.schema.json"
+    p = next((q for q in (p, *sorted(KIT.glob(f"modes/*/data/{p.name}"))) if q.exists()), p)
     if not p.exists():
         from . import contenttypes
         found = contenttypes.fields_schema(ref)
@@ -104,20 +107,9 @@ VERSIONED = re.compile(r"^[a-z][a-z0-9.-]*/v[0-9]+$")   # `<name>/v<N>`: interfa
 
 
 def item_kinds(kit: Path = KIT) -> dict[str, set[int]]:
-    """Known item kinds: the content types of the kit (content-types/) and `<kind>/v<N>` data schemas that extend
-    item/v1. kind -> versions."""
+    """Known item kinds: the content types of the kit (content-types/). kind -> versions."""
     from . import contenttypes
-    out: dict[str, set[int]] = contenttypes.item_kinds(kit)
-    for f in sorted((kit / "schemas" / "data").glob("*.v*.schema.json")):
-        try:
-            doc = json.loads(f.read_text())
-        except ValueError:
-            continue
-        if any(isinstance(a, dict) and a.get("$ref") == "item/v1" for a in doc.get("allOf", [])):
-            name, _, ver = doc.get("title", "").partition("/v")
-            if name and ver.isdigit():
-                out.setdefault(name, set()).add(int(ver))
-    return out
+    return contenttypes.item_kinds(kit)
 
 
 def mode_envs(md: Doc) -> list[str]:
@@ -152,7 +144,9 @@ def schema_errors(instance, sch: dict) -> list[str]:
     if jsonschema is None:
         return []
     v = jsonschema.Draft202012Validator(sch, format_checker=jsonschema.FormatChecker())
-    return [f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {e.message}"
+    why = lambda e: (f"this kit reads agentbay/v3, not {e.instance!r}; change the line to apiVersion: agentbay/v3 (the v2 shapes changed too, see CHANGELOG 1.0.0)"
+                     if e.validator == "const" and list(e.absolute_path) == ["apiVersion"] else e.message)
+    return [f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {why(e)}"
             for e in sorted(v.iter_errors(instance), key=lambda e: list(map(str, e.absolute_path)))]
 
 
@@ -201,10 +195,7 @@ def load_protection(root: Path) -> tuple[boundary.Protection, str | None]:
     improve store). Anything but a readable, well-formed block fails closed: (the closed set, the error) - the set
     reserves every name, covers every path and lets no mode place a role."""
     try:
-        prot = boundary.ComponentMap.load(Path(root) / "framework" / "components.yaml").protected
-        if prot is None:
-            raise RuntimeError("framework/components.yaml: no protected: block")
-        return prot, None
+        return boundary.ComponentMap.load(Path(root) / "framework" / "components.yaml").protected, None
     except Exception as e:                      # noqa: BLE001 - whatever is wrong with the map, the answer is closed
         return boundary.Protection.closed_set(), (
             f"{e}; without a readable protected: block nothing is trusted (every name is reserved, "
@@ -245,10 +236,11 @@ class Kit:
             self.errors.append(err)
         return prot
 
+    @cached_property
     def protected_paths(self) -> list[str]:
         """The kit folders only forge.extend may write, as the policy lists them: the map's `paths`, then the folder (or
         file) of each protected mode, env and connector that sits outside all of those (an instance inside one of
-        them is protected by it; one that moves to a folder of its own is listed from then on)."""
+        them is protected by it; one that moves to a folder of its own is listed from then on). Computed once."""
         out = list(self.protected.paths)
         for kind, label in PROTECTION_KIND.items():
             for name in self.protected.names.get(label, ()):
@@ -260,7 +252,7 @@ class Kit:
     def covers(self, path: str) -> bool:
         """Is `path` (kit-relative) inside a protected folder or protected instance?"""
         path = os.path.normpath(path).replace(os.sep, "/")
-        return self.protected.closed or any(boundary.under(path, p) for p in self.protected_paths())
+        return self.protected.closed or any(boundary.under(path, p) for p in self.protected_paths)
 
     def _apply_extends(self) -> None:
         """Resolve `extends:` at load time, so the resolver, lint, conformance and improve always see a complete
@@ -292,7 +284,7 @@ class Kit:
             own_path = d.dir / own if own else None
             d.config_files = [*p.config_files, *([own_path] if own_path and own_path not in p.config_files else [])]
             d.lineage, d.parent = [d.dir, *p.dirs], parent
-            full = {"apiVersion": "agentbay/v2", "kind": "Mode", "metadata": d.meta,
+            full = {"apiVersion": "agentbay/v3", "kind": "Mode", "metadata": d.meta,
                     "spec": {k: v for k, v in d.spec.items() if k != "extends"}}
             errs = schema_errors(full, schema("mode"))
             if errs:
@@ -375,7 +367,6 @@ class Kit:
     # convenience
     def get(self, kind: str, name: str) -> Doc | None:
         return self.docs[kind].get(name)
-
 
 
 def rel(p: Path) -> str:
@@ -722,7 +713,6 @@ def role_env(spec: dict, ep: dict | None, st: dict | None, role: str) -> str | N
         m = (layer or {}).get("roles")
         if isinstance(m, dict) and m.get(role):
             return m[role]
-    return None
 
 
 def step_role(st: dict, ep: dict) -> str | None:
@@ -806,14 +796,14 @@ class _Ctx:
             rd = resolve_role_def(kit, name, gaps)
             if rd:
                 self.roles[name] = rd
-        self.units: dict[tuple[str, str, str], ResolvedRole | None] = {}
+        self.units: dict[tuple[str, str, str, str], ResolvedRole | None] = {}
 
     def inference(self, tier: str, effort: str) -> Inference:
         p = self.profile or {}
         return Inference((p.get("tiers") or {}).get(tier, tier), (p.get("effort") or {}).get(effort, effort), tier)
 
     def unit(self, rn: str, md: Doc, env_name: str, kind: str, where: str) -> ResolvedRole | None:
-        key = (rn, md.name, env_name)
+        key = (rn, md.name, env_name, kind)
         if key not in self.units:
             self.units[key] = self._unit(self.roles[rn], md, env_name, kind, where)
         return self.units[key]
@@ -903,7 +893,8 @@ def name_units(modes: dict, gaps: list[str] | None = None) -> None:
         envs.setdefault((u.name, u.mode), set()).add(u.env)
     seen: dict[str, tuple] = {}
     for u in units.values():
-        u.unit = f"{u.name}--{u.mode}" + (f"--{u.env}" if len(envs[(u.name, u.mode)]) > 1 else "")
+        step = u.kind == "worker" and u.name == modes[u.mode].coordinator       # told apart from the coordinator's unit
+        u.unit = f"{u.name}--{u.mode}" + (f"--{u.env}" if len(envs[(u.name, u.mode)]) > 1 else "") + "--step" * step
         if gaps is not None and u.unit in seen and seen[u.unit] != (u.name, u.mode, u.env):
             gaps.append(f"two units are both named {u.unit} ({seen[u.unit]} and {(u.name, u.mode, u.env)}); rename "
                         f"a role or mode so `<role>--<mode>` stays unique")
@@ -1344,7 +1335,7 @@ def _role_step(ctx: _Ctx, md: Doc, ep: dict, st: dict, sw: str, ep_eff, review: 
     env_name = role_env(md.spec, ep, st, rn)
     if env_name is None:
         return step                       # no env: reported by role_env_problems (mode, feature, step)
-    u = ctx.unit(rn, md, env_name, "coordinator" if rn == md.spec.get("coordinator") else "worker", sw)
+    u = ctx.unit(rn, md, env_name, "worker", sw)       # the coordinator's role as a step runs as a subagent, not the main thread
     if u is None:
         return step
     env = kit.get("Environment", env_name)
@@ -1356,6 +1347,7 @@ def _role_step(ctx: _Ctx, md: Doc, ep: dict, st: dict, sw: str, ep_eff, review: 
                          if v), (rd.tier, ""))
     effort = src.get("effort") or feat.get("effort") or rd.effort
     step.inference = ctx.inference(tier, effort)
+    if rn == md.spec.get("coordinator"): u.inference = step.inference    # the generated file shows the model the step runs
     allowed = env.spec.get("tiers")
     if allowed and tier not in allowed:
         gaps.append(f"{sw}: {label} {rn} in env {env.name} runs at tier '{tier}' (from {origin}), which env "

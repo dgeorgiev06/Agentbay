@@ -12,7 +12,7 @@ from helpers import KIT, clock, edit_yaml, kit_copy, model, project, system
 from bay import dispatch
 from bay.adapter import get
 
-NEWS_ENV = """apiVersion: agentbay/v2
+NEWS_ENV = """apiVersion: agentbay/v3
 kind: Environment
 metadata: { name: local-news, description: A second offline briefing env with its own data folder. }
 spec:
@@ -32,7 +32,7 @@ def news_kit(step_override: bool = False):
     d = k / "modes/news-briefing"
     d.mkdir()
     (d / "mode.yaml").write_text(yaml.safe_dump({
-        "apiVersion": "agentbay/v2", "kind": "Mode", "metadata": {"name": "news-briefing", "version": "0.1.0"},
+        "apiVersion": "agentbay/v3", "kind": "Mode", "metadata": {"name": "news-briefing", "version": "0.1.0"},
         "spec": {"extends": "briefing", "purpose": "Brief me on the news.",
                  "roles": {"lead": "local-news", "analyst": "local-news", "reviewer": "local-news"},
                  "configDefaults": {"selectors": [{"id": "lido", "from": "lido"}]}}}))
@@ -47,8 +47,8 @@ def test_shipped_roles_are_five_generic_framework_roles_without_data_access():
     kit = model.Kit(KIT)
     assert set(kit.docs["Role"]) == {"lead", "analyst", "researcher", "builder", "reviewer"}
     assert all(d.root == "framework" and "uses" not in d.spec for d in kit.docs["Role"].values())
-    assert not (KIT / "roles").exists() and not (KIT / "agents").exists()
-    assert [d.name for d in kit.docs["Role"].values() if d.spec.get("access") == "write"] == ["builder"]
+    assert model.resolve(kit).roles["builder"].isolation == "none"                      # works in the checkout itself
+    assert [d.name for d in kit.docs["Role"].values() if d.spec.get("access") == "write"] == ["builder", "lead"]   # lead: forge.extend's plan step
 
 
 def test_access_comes_from_the_mode_needs_through_the_env():
@@ -191,7 +191,7 @@ def test_swapping_the_agent_profile_changes_only_the_model_names():
 
 
 # ------------------------------------------------------------------ grants, envs and tier caps
-NOTES_IFACE = """apiVersion: agentbay/v2
+NOTES_IFACE = """apiVersion: agentbay/v3
 kind: Interface
 metadata: { name: notes.edit, description: notes }
 spec:
@@ -239,7 +239,7 @@ def test_user_modes_may_not_put_roles_in_framework_envs_other_than_workspace_and
     d = k / "modes/spy"
     d.mkdir()
     (d / "mode.yaml").write_text(yaml.safe_dump({
-        "apiVersion": "agentbay/v2", "kind": "Mode", "metadata": {"name": "spy", "version": "0.1.0"},
+        "apiVersion": "agentbay/v3", "kind": "Mode", "metadata": {"name": "spy", "version": "0.1.0"},
         "spec": {"purpose": "read improve findings", "coordinator": "lead",
                  "roles": {"lead": "improve-local", "analyst": "improve-local"},
                  "needs": ["improve.findings/v1", "session.events/v1"],
@@ -252,6 +252,7 @@ def test_user_modes_may_not_put_roles_in_framework_envs_other_than_workspace_and
     assert system(None).modes["delivery"].roles == {"researcher": "research", "builder": "workspace",
                                                     "reviewer": "workspace"}
     assert system(None).units()["analyst--improve"].env == "improve-local"
+    assert system(None).units()["lead--forge--framework-dev--step"].inference.model == "opus"    # the plan step's tier, not the role's
 
 
 def test_a_units_default_tier_is_checked_against_the_env_cap():
@@ -272,7 +273,7 @@ def test_lint_warns_when_a_partial_roles_override_splits_a_store_reading_mode():
     d = k / "modes/news-briefing"
     d.mkdir()
     (d / "mode.yaml").write_text(
-        "apiVersion: agentbay/v2\nkind: Mode\nmetadata: { name: news-briefing, version: 0.1.0, description: news }\n"
+        "apiVersion: agentbay/v3\nkind: Mode\nmetadata: { name: news-briefing, version: 0.1.0, description: news }\n"
         "spec:\n  extends: briefing\n  purpose: Brief me on news from my sources for testing.\n"
         "  roles: { lead: local-news, analyst: local-news }\n  reads: [post/v1]\n")
     (k / "envs/local-news.yaml").write_text(NEWS_ENV)

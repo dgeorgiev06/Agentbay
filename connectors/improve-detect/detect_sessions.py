@@ -13,6 +13,8 @@ from collections import Counter, defaultdict
 from bay import checks
 from bay.secretscan import clip
 
+from .detect_artifacts import candidate as _candidate
+
 DEFAULTS = {"reviewRounds": 1, "ruleRepeat": 2, "slowStepMs": 600_000, "costlyStepUsd": 1.0,
             "costlySessionUsd": 10.0, "repeatCalls": 3, "permissionEvents": 3, "interrupts": 2,
             "churnCommits": 5, "severeFactor": 3, "statusQuestions": 2}
@@ -26,15 +28,9 @@ REVIEWER = re.compile(r"review", re.I)
 
 def candidate(kind: str, key: str, title: str, pattern: str, evidence: list[dict], scope: dict,
               severity: str = "medium", measure: dict | None = None, fix: str | None = None) -> dict:
-    eps = sorted({e["ref"] for e in evidence if e["kind"] == "episode"})
-    out = {"lens": "sessions", "kind": kind, "title": title, "pattern": pattern, "evidence": evidence,
-           "scope": scope, "severity": severity, "occurrences": max(1, len(eps) or len(evidence)),
-           "detector": {"name": kind, "key": key}}
-    if measure:
-        out["measure"] = measure
-    if fix:
-        out["proposedFix"] = fix
-    return out
+    eps = {e["ref"] for e in evidence if e["kind"] == "episode"}
+    return _candidate(kind, key, title, pattern, evidence, scope, severity, measure, fix, "sessions",
+                      len(eps) or len(evidence))
 
 
 def _recurring(evidence: list[dict], severe: bool) -> bool:

@@ -716,7 +716,7 @@ class CorpusStore:
             else:
                 check = check_pending[: int(remaining * DELETION_CHECK_SHARE)]
                 check_pending = []                              # one deletion pass per source per sync
-            local_in = sorted({v for s in group for v in selmod._vals(selmod.split(s, src.ctx.selectors)[1].get("in"))})
+            local_in = sorted({v for s in group for v in selmod.vals(selmod.split(s, src.ctx.selectors)[1].get("in"))})
             q = _query_request(cur, native, group, run_ids, start_src, remaining, check, now, feed)
             q.local_in = local_in
             res = self._fetch(con, src, src_id, q)

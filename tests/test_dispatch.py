@@ -40,10 +40,9 @@ def test_sync_runs_code_step_and_logs_events_with_cost():
     assert {k: done[k] for k in ("mode", "endpoint", "step", "env")} == \
         {"mode": "feed-briefing", "endpoint": "sync", "step": "fetch", "env": "local-feeds"}
     assert done["cost"] == {"items": 7, "usd": 0.0}
-    if model.jsonschema:
-        sch = json.loads((KIT / "schemas/event.schema.json").read_text())
-        for e in evs:
-            model.jsonschema.validate(e, sch)
+    sch = json.loads((KIT / "schemas/event.schema.json").read_text())
+    for e in evs:
+        model.jsonschema.validate(e, sch)
 
 
 def test_config_lookback_default_and_caps_strictest_wins():
@@ -246,6 +245,46 @@ def test_failed_review_halts_before_release():
     items[0] = {"id": items[0]["id"], "verdict": "fail", "evidence": "vocabulary drift", "severity": "blocker"}
     r = d.submit(r["callId"], "review", {"items": items})
     assert r["status"] == "partial" and "next" not in r
+    # a re-run on the same approved proposal: a scoped re-check of the failed items (once), else a full review
+    path = _proposal(k, "0096-recheck.md", "status: draft\n")
+    real_git, dispatch.boundary.git = dispatch.boundary.git, lambda *a: "abc123\n"      # the kit copy is no git checkout
+
+    def to_review():
+        r = d.call("forge.extend", {"goal": "recheck", "proposal": path})
+        if r["status"] == "awaiting-approval":              # first run, or the proposal changed: the owner decides
+            r = d.approve(r["callId"], True, by="user@tty")
+        return d.submit(r["callId"], "implement", ok)
+
+    def verdict(ids, fail=(), severity="blocker"):
+        return {"items": [{"id": i, "verdict": "fail" if i in fail else "pass", "evidence": "e",
+                           **({"severity": severity} if i in fail else {})} for i in ids]}
+    try:
+        r1 = to_review()
+        ids = [x["id"] for x in r1["next"]["review"]["definitionOfDone"] + r1["next"]["review"]["rules"]]
+        a, b = ids[:2]
+        assert "recheck" not in r1["next"]["review"]
+        assert d.submit(r1["callId"], "review", verdict(ids, [a], "should-fix"))["review"]["failed"] == [a]    # a failed must halts at any rating
+        r2 = to_review()
+        skipped = [e["step"] for e in ledger.read(k) if e.get("callId") == r2["callId"] and e["type"] == "step.skipped"]
+        rc = r2["next"]["review"]["recheck"]
+        assert "approve" in skipped and (rc["priorCall"], rc["failed"], rc["commits"]) == (r1["callId"], [a], "abc123..HEAD")
+        assert sorted(i["id"] for i in rc["carried"]) == sorted(set(ids) - {a})
+        err(lambda: d.submit(r2["callId"], "review", verdict([b])), "missing ids", a)          # every failed id is re-judged
+        r = d.submit(r2["callId"], "review", verdict([a]))
+        assert r["next"]["step"] == "release" and len(d._load(r2["callId"])["steps"]["review"]["items"]) == len(ids)
+        r3 = to_review()                                    # the last review passed: a full review
+        assert "recheck" not in r3["next"]["review"]
+        d.submit(r3["callId"], "review", verdict(ids, [a]))
+        r4 = to_review()
+        assert r4["next"]["review"]["recheck"]["priorCall"] == r3["callId"]
+        r = d.submit(r4["callId"], "review", verdict([a, b], [b]))                # a new verdict can fail a carried item
+        assert r["status"] == "partial" and r["review"]["failed"] == [b] and "next" not in r
+        assert "recheck" not in to_review()["next"]["review"]  # a second re-check is not allowed: full review
+        (k / path).write_text((k / path).read_text() + "edit\n")
+        assert "recheck" not in to_review()["next"]["review"]  # a changed proposal: the owner approved again, full review
+    finally:
+        dispatch.boundary.git = real_git
+        cleanup(k)
 
 
 def test_selector_change_forces_refresh_even_when_fresh():
@@ -298,9 +337,9 @@ def test_front_matter_marker_grants_nothing():
             r = d.call("forge.extend", {"goal": "build the proposal", "proposal": p})
             # an existing proposal has nothing to draft: propose is skipped, the gate runs (the marker passes nothing)
             assert r["status"] == "awaiting-approval" and r["next"]["step"] == "approve", fm
-            assert [e["step"] for e in ledger.read(k) if e.get("callId") == r["callId"] and e["type"] == "step.skipped"] == ["propose"]
+            assert [e["step"] for e in ledger.read(k) if e.get("callId") == r["callId"] and e["type"] == "step.skipped"] == ["propose", "plan"]
         r = _to_gate(d, p)
-        assert r["status"] == "awaiting-approval" and r["next"]["approves"] == {"path": p, "sha256": _sha(k / p)}
+        assert r["status"] == "awaiting-approval" and r["next"]["approves"] == {"path": p, "sha256": _sha(k / p)}   # no plan key
         assert "no recorded approval" in r["next"]["why"] and "informational" in r["next"]["why"]
         r = d.call("forge.extend", {"goal": "no proposal yet"})
         assert r["next"]["step"] == "propose"
@@ -328,7 +367,7 @@ def test_a_proposal_written_by_the_propose_step_is_bound_to_its_approval():
         r2 = d.call("forge.extend", {"goal": "design something new", "proposal": path})
         assert r2["next"]["step"] == "implement"
         assert [e["step"] for e in ledger.read(k) if e.get("callId") == r2["callId"] and e["type"] == "step.skipped"] \
-            == ["propose", "approve"]
+            == ["propose", "plan", "approve"]          # the small proposal needs no plan
         (k / path).write_text((k / path).read_text() + "edit\n")          # any edit: both run again
         assert d.call("forge.extend", {"goal": "build it again", "proposal": path})["next"]["step"] == "approve"
         # artifacts outside docs/proposals/ bind nothing
@@ -360,11 +399,11 @@ def test_the_step_result_accepts_what_the_worker_contract_returns():
 def test_gate_plan_and_show_name_the_chat_path_when_approvals_chat_is_on():
     k = kit_copy()
     try:
-        (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v2\napprovals: { chat: false }\n")
+        (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v3\napprovals: { chat: false }\n")
         d = dispatch.Dispatcher(system(k, k), k, clock=clock)
         r = _to_gate(d, _proposal(k, "0096-chat.md", ""))
         assert "approveFromChat" not in r["next"] and "approveFromChat" not in d.show(r["callId"])["next"]
-        (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v2\napprovals: { chat: true }\n")
+        (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v3\napprovals: { chat: true }\n")
         r = _to_gate(d, _proposal(k, "0096-chat.md", ""))
         for plan in (r["next"], d.show(r["callId"])["next"]):
             assert f"--via chat --quote" in plan["approveFromChat"] and r["callId"] in plan["approveFromChat"]
@@ -434,6 +473,51 @@ def test_an_edit_after_approval_makes_the_gate_run_again():
         d.approve(cid3, False, by="user@tty", reason="no")
         r = _to_gate(d, path)
         assert r["next"]["step"] == "approve" and "was rejected by user@tty" in r["next"]["why"]
+        # the plan binds with the proposal: both paths and shas are shown, a chat approval names both prefixes
+        p2 = _proposal(k, "0097-plan.md", APPROVED_FM)
+        plan = k / "docs/plans/0097-plan.md"
+        plan.parent.mkdir(parents=True, exist_ok=True)
+        plan.write_text("# plan\nbuild order\n")
+        r = _to_gate(d, p2)
+        ap = r["next"]["approves"]
+        assert ap["plan"] == {"path": "docs/plans/0097-plan.md", "sha256": _sha(plan)}, ap
+        s1, s2 = ap["sha256"][:8], ap["plan"]["sha256"][:8]
+
+        def refused(cid, sha):
+            try:
+                d.approve(cid, True, by="user@chat-via-cos", quote="yes", sha=sha)
+            except dispatch.CallError as e:
+                return str(e)
+            raise AssertionError("approved")
+        assert "does not match" in refused(r["callId"], s1) and "does not match" in refused(r["callId"], f"{s2}+{s1}")
+        plan.write_text("# plan\nedited while the gate waits\n")
+        assert "changed since the gate was shown" in refused(r["callId"], f"{s1}+{s2}")
+        ap = d.show(r["callId"])["next"]["approves"]
+        both = f"{ap['sha256'][:8]}+{ap['plan']['sha256'][:8]}"
+        assert d.approve(r["callId"], True, by="user@chat-via-cos", quote="yes", sha=both)["next"]["step"] == "implement"
+        assert d.call("forge.extend", {"goal": "build it", "proposal": p2})["next"]["step"] == "implement"   # unchanged: skipped
+        plan.write_text("# plan\nedited after approval\n")                      # a later call: the gate runs again
+        r = _to_gate(d, p2)
+        assert r["next"]["step"] == "approve" and "changed since" in r["next"]["why"], r["next"]
+        assert r["next"]["approves"]["plan"]["sha256"] == _sha(plan)
+        d.approve(r["callId"], True, by="user@tty")
+        plan.unlink()                                                           # deleting the plan re-opens the gate
+        assert "plan" not in _to_gate(d, p2)["next"]["approves"]
+        # the plan step: large (10+ touches, exceptions, no touches, a sensitive touch), approvals.plan always | never
+        def nxt(fm, setting=None):
+            (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v3\n" + (f"approvals: {{ plan: {setting} }}\n" if setting else ""))
+            (k / "docs/proposals/0090-x.md").write_text(f"---\n{fm}---\n# x\n")
+            return d.call("forge.extend", {"goal": "build it", "proposal": "docs/proposals/0090-x.md"})["next"]
+        one = "  - { path: README.md, reason: r }\n"
+        assert nxt(f"touches:\n{one * 9}")["step"] == "approve" and nxt("touches: []\n")["step"] == "approve"
+        for big in (f"touches:\n{one * 10}", "touches: []\nexceptions: [{ measure: tests, to: 9, reason: r }]\n", "",
+                    "touches:\n  - { path: bay/, reason: r }\n", "touches:\n  - { path: adapters/claude-code/x.py, reason: r }\n"):
+            step = nxt(big)
+            assert step["step"] == "plan" and step["effort"] == "high" and step["model"] == "opus", (big, step)
+            assert step["runAs"].startswith("subagent_type=lead--forge") and step["runAs"].endswith("--step"), step["runAs"]
+        assert nxt("touches: []\n", "always")["step"] == "plan"
+        gate = nxt("touches:\n  - { path: bay/dispatch.py, reason: r }\n", "never")           # never: the gate still runs
+        assert gate["step"] == "approve" and "plan" not in gate["approves"], gate
     finally:
         cleanup(k)
 

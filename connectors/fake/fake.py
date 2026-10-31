@@ -13,6 +13,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from bay.connect import ConnectorError
+from bay.selector import vals
 from bay.util import iso, parse_time
 
 SAMPLE = [
@@ -61,19 +62,15 @@ class Fake:
         lo = now - timedelta(days=7)
         if since:
             lo = max(lo, parse_time(since, now))
-        handles = {_v.lower().lstrip("@") for _v in _list(query.get("from"))}
-        where = {_v.lower() for _v in _list(query.get("in"))}
+        handles = {_v.lower().lstrip("@") for _v in vals(query.get("from"))}
+        where = {_v.lower() for _v in vals(query.get("in"))}
         rows = []
         for it in sorted(self.items, key=lambda x: int(x["id"]), reverse=True):
             created = now - timedelta(hours=float(it["ageHours"]))
-            if created < lo or created > now:
-                continue
-            if cursor and int(it["id"]) <= int(cursor):
+            if created < lo or created > now or (cursor and int(it["id"]) <= int(cursor)):
                 continue
             boxes = ["home"] + ([f"list:{it['list']}"] if it.get("list") else [])
-            if handles and it["handle"].lower() not in handles:
-                continue
-            if where and not where & set(boxes):
+            if (handles and it["handle"].lower() not in handles) or (where and not where & set(boxes)):
                 continue
             container = next((b for b in boxes if b in where), "home")
             rows.append({
@@ -90,10 +87,6 @@ class Fake:
         return {"items": kept, "cursor": kept[0]["extId"] if kept else None,
                 "truncated": len(rows) > maxItems, "requests": 0,
                 "billed": len(kept) + len(checks) - len(deleted), "checked": checks, "deleted": deleted}
-
-
-def _list(v) -> list[str]:
-    return [] if v is None else [str(x) for x in (v if isinstance(v, list) else [v])]
 
 
 def create(ctx) -> Fake:

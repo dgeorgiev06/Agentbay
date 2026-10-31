@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v2/cos/StageOut",
+  "$id": "agentbay/v3/cos/StageOut",
   "title": "StageOut",
   "description": "Where a workflow run stands, and what to do next. status stage-ready: make `nextCall` with `bay call`, drive it to a terminal status, then call cos.next with its callId, output and status. awaiting-approval: the user runs `bay approve <runId>`. done/blocked/failed: the run is over.",
   "type": "object",

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v2/cos/RunReq",
+  "$id": "agentbay/v3/cos/RunReq",
   "title": "RunReq",
   "description": "Start a run of a project workflow (agentbay.config.yaml workflows.<name>).",
   "type": "object",

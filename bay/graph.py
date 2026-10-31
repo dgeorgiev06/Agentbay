@@ -148,8 +148,9 @@ def _concepts(g: Graph, kit: Path) -> None:
 
 
 def _data_schemas(kit: Path):
-    """(node id, path) of each schemas/data/<name>.v<N>.schema.json and each content type's fields schema."""
-    for p in sorted((kit / "schemas" / "data").glob("*.schema.json")):
+    """(node id, path) of each <name>.v<N>.schema.json in schemas/data/ and the modes' data folders, and each content
+    type's fields schema."""
+    for p in sorted([*(kit / "schemas" / "data").glob("*.schema.json"), *kit.glob("modes/*/data/*.schema.json")]):
         base, _, ver = p.name.removesuffix(".schema.json").rpartition(".")
         yield f"schema:{base}/{ver}", p
     from . import contenttypes
@@ -355,4 +356,3 @@ def _python(g: Graph) -> None:
             g.edges.append(("ref:entry", f"py:{rel}", "entry"))
         elif any(p.stem in names for other, names in names_by_file.items() if other != rel):
             g.edges.append(("ref:import", f"py:{rel}", "import"))
-

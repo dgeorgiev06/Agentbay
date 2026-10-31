@@ -78,9 +78,6 @@ def test_role_shim_cannot_impersonate_another_role():
             r = sh(p, shim, *argv)
             assert r.returncode != 0, argv
             assert "status" not in r.stdout
-        # the old generic entry point is gone
-        r = sh(p, str(p / ".agentbay/bay"), "use", "--role", "briefing-lead", "items.store/v1.status", "{}")
-        assert r.returncode != 0 and "invalid choice" in r.stderr
     finally:
         cleanup(p)
 
@@ -107,6 +104,7 @@ def test_guard_scopes_bash_per_subagent():
                ("analyst--feed-briefing", "security find-generic-password -s agentbay -a X_REFRESH_TOKEN -w"),
                ("reviewer--delivery", "git push origin main"), ("reviewer--delivery", "git diff && rm -rf ."),
                ("builder--delivery", ".agentbay/bay secret set X_REFRESH_TOKEN"),
+               ("builder--delivery", ".agentbay/bay call feed-briefing.prune '{}'"),
                ("Explore", ".agentbay/bay call feed-briefing.sync '{}'")]   # non-agentbay subagent
         for agent, cmd in bad:
             d, r = tool(p, agent, "Bash", {"command": cmd})
@@ -148,7 +146,7 @@ def test_settings_have_no_wildcards():
         # the invariant behind the list: every pre-approved command is read-only
         assert not ({"call", "submit", "approve", "build", "clean", "secret", "auth", "new", "check", "plan"}
                     & set(COORDINATOR_CMDS))
-        assert not any("secret" in x or "build" in x or "roles/" in x for x in st["permissions"]["allow"])
+        assert not any("secret" in x or "build" in x or "roles/" in x or "approve" in x for x in st["permissions"]["allow"])
     finally:
         cleanup(p)
 
@@ -276,18 +274,6 @@ def test_git_file_writing_and_exec_flags_are_refused():
         cleanup(p)
 
 
-def test_guard_policy_tampering_does_not_reach_coordinator_commands():
-    """The review's exploit: add `.agentbay/bay call` to a role's clis. The edit itself is denied (above);
-    even with a tampered policy file, the session-wide deny rules still block the write path."""
-    p = built()
-    try:
-        d, _ = tool(p, "builder--delivery", "Edit", {"file_path": ".agentbay/guard.json", "old_string": "x", "new_string": "y"})
-        assert d == "deny"
-        assert tool(p, "builder--delivery", "Bash", {"command": ".agentbay/bay call feed-briefing.prune '{}'"})[0] == "deny"
-    finally:
-        cleanup(p)
-
-
 def test_missing_agent_type_is_treated_as_an_unknown_subagent():
     p = shared()
     try:
@@ -364,8 +350,6 @@ def test_approve_requires_a_terminal():
         r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "approve", "C-x"],
                            input="yes\n", text=True, capture_output=True)
         assert r.returncode != 0 and "not a TTY" in r.stderr
-        st = json.loads((p / ".claude/settings.json").read_text())
-        assert not any("approve" in a for a in st["permissions"]["allow"])
     finally:
         cleanup(p)
 
@@ -517,16 +501,6 @@ def test_se_more_git_flags_and_flag_values_are_path_checked():
         cleanup(p)
 
 
-def test_sf_builder_has_no_worktree_isolation():
-    p = built()
-    try:
-        s = system(p)
-        assert s.roles["builder"].isolation == "none"
-        assert "worktree" not in (p / ".agentbay/COORDINATOR.md").read_text()
-    finally:
-        cleanup(p)
-
-
 def test_n2_gate_plan_does_not_advertise_submit():
     from bay import dispatch
     from helpers import kit_copy
@@ -589,16 +563,18 @@ def test_n5_fake_fixture_must_stay_inside_the_project():
 
 # ---------------------------------------------------------------- confirmation review
 def test_use_shim_does_not_import_project_files():
-    """The auto-allowed shim must not import modules an agent wrote in the project (e.g. yaml.py)."""
+    """The auto-allowed shim of every unit must not import modules an agent wrote in the project (e.g. yaml.py)."""
     p = built()
     try:
         marker = p / "PWNED"
         (p / "yaml.py").write_text(f"open({str(marker)!r}, 'w').write('x')\n")
-        shim = p / ".agentbay/roles/analyst--feed-briefing/use"
-        r = sh(p, str(shim), "items.store/v1.query", "{}")
-        assert r.returncode == 0, r.stderr
-        assert not marker.exists(), "shim imported a project-root module"
-        assert "python3 -E" in shim.read_text() and "python3 -c" not in shim.read_text()
+        shims = sorted((p / ".agentbay/roles").glob("*/use"))
+        assert len(shims) > 1
+        for shim in shims:
+            r = sh(p, str(shim), "items.store/v1.query", "{}")      # a unit without that grant is refused: still no import
+            assert shim.parent.name != "analyst--feed-briefing" or r.returncode == 0, r.stderr
+            assert not marker.exists(), f"{shim.parent.name}: shim imported a project-root module"
+            assert "python3 -E" in shim.read_text() and "python3 -c" not in shim.read_text()
     finally:
         cleanup(p)
 
@@ -712,7 +688,7 @@ def test_chat_approval_passes_a_workflow_gate_and_the_ledger_says_chat_with_the_
 def test_chat_approval_passes_a_call_gate_and_rejects_with_a_reason():
     k = kit_copy()
     try:
-        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "approvals": {"chat": True}}))
+        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v3", "approvals": {"chat": True}}))
         d = _dispatch.Dispatcher(system(k, k), k)
         ok = {"status": "done", "summary": "s"}
         cid = d.submit(d.call("forge.extend", {"goal": "a small change"})["callId"], "propose", ok)["callId"]
@@ -769,8 +745,6 @@ def test_guard_denies_bay_approve_to_every_subagent_in_any_spelling():
                          "agent_type": "some-other-agent", "agent_id": "a1", "cwd": str(p)})[0] == "pass"
         # the main thread is not decided by the guard: settings.json makes Claude Code ask each time
         assert tool(p, None, "Bash", {"command": ".agentbay/bay approve C-1 --via chat --quote ok"}, agent_id=None)[0] == "pass"
-        st = json.loads((p / ".claude/settings.json").read_text())
-        assert not any("approve" in a for a in st["permissions"]["allow"])
     finally:
         cleanup(p)
 
@@ -828,7 +802,7 @@ def test_no_subagent_writes_the_ledger():
 def test_chat_approval_of_a_proposal_is_recorded_and_skips_the_next_gate_while_unchanged():
     k = kit_copy()
     try:
-        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v2", "approvals": {"chat": True}}))
+        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v3", "approvals": {"chat": True}}))
         (k / "docs/proposals").mkdir(parents=True, exist_ok=True)
         f = k / "docs/proposals/0099-chat.md"
         f.write_text("---\nstatus: approved\napprovedBy: user\ndate: 2026-10-29\ntouches: []\n---\n# chat\n")

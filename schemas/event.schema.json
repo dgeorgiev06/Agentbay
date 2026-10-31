@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v2/LedgerEvent",
+  "$id": "agentbay/v3/LedgerEvent",
   "title": "LedgerEvent",
   "description": "One line in .agentbay/ledger/events.jsonl. Append-only. System state is a fold over these events. durationMs, tokens, costUsd, tool, reason and permission.denied are optional: only events that have them carry them.",
   "type": "object",

@@ -330,7 +330,7 @@ class ClaudeCodeAdapter:
         bash = ([use_shim(r.unit)] if r.bay_uses else []) + r.clis
         if bash:
             extras.append("## Allowed Bash\nA guard hook allows only these, one simple command at a time "
-                          "(no pipes, ;, &&, redirects or $()): " + ", ".join(f"`{c}`" for c in bash) + ".")
+                          "(no pipes, ;, &&, redirects or $()): " + ", ".join(f"`{c}`" for c in [*bash, f"{BAY} plan"]) + ".")
         if r.budget:
             b = ", ".join(f"{k}={v}" for k, v in r.budget.items())
             extras.append(f"## Budget\nStay within: {b}. If you cannot finish, return status `partial`.")
@@ -440,7 +440,7 @@ class ClaudeCodeAdapter:
         # The shim is auto-allowed only when the kit is outside the project. If the kit is the project
         # or sits inside it, roles may be able to edit code the shim runs, so it prompts instead.
         pol = {"project": str(project.resolve()), "kit": str(kit.resolve()),
-               "protected": system.kit.protected_paths() if is_kit else [], "autoAllowShim": not _within(kit, project),
+               "protected": system.kit.protected_paths if is_kit else [], "autoAllowShim": not _within(kit, project),
                "subagents": subs}
         rel = ".agentbay/guard.json"
         _write_json(project / rel, pol)

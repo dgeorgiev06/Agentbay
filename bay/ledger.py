@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .util import warn
+
 RUN_TYPES = {"spawned", "completed", "failed", "reclaimed", "note"}
 STEP_TYPES = {"step.started", "step.completed", "step.failed", "step.skipped", "step.planned", "call.completed"}
 DATA_TYPES = {"data.read"}             # a role read connector data through its use shim
@@ -204,19 +206,22 @@ def agent_groups(events: list[dict]) -> list[dict]:
     return list(groups.values())
 
 
-def read(project: Path) -> list[dict]:
-    p = ledger_path(project)
-    if not p.exists():
-        return []
-    out = []
-    # one event per "\n" line: str.splitlines would also split on U+2028 and friends inside a summary
-    for line in p.read_text(encoding="utf-8").split("\n"):
-        try:
-            ev = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(ev, dict):
-            out.append(ev)
+def read(project: Path, warnings: list | None = None) -> list[dict]:
+    """The ledger's events (dicts with string type, ts and runId), read-only (it creates no folder); a line that is not
+    one is skipped and named (file:line) in `warnings`. The one reader of the dispatcher and of the connectors."""
+    p = Path(project) / LEDGER_FILE
+    out: list[dict] = []
+    if p.exists():
+        # one event per "\n" line: str.splitlines would also split on U+2028 and friends inside a summary
+        for n, line in enumerate(p.read_text(encoding="utf-8", errors="replace").split("\n"), 1):
+            try:
+                ev = json.loads(line)
+            except (ValueError, RecursionError):
+                ev = None
+            if isinstance(ev, dict) and all(isinstance(ev.get(k), str) for k in ("type", "ts", "runId")):
+                out.append(ev)
+            elif line.strip():
+                warn(warnings, f"{LEDGER_FILE}:{n}: not a ledger event, skipped")
     return out
 
 

@@ -128,7 +128,8 @@ def golden_kit_audit() -> dict:
         detect = r["next"]["previous"]["detect"]
         counts: dict[str, int] = {}
         for c in detect["candidates"]:
-            counts[c["kind"]] = counts.get(c["kind"], 0) + 1
+            if c["scope"].get("file") != "HANDOFF.md":      # the working plan changes every slice: not part of the reference
+                counts[c["kind"]] = counts.get(c["kind"], 0) + 1
         assert not counts.get("conformance"), [c["title"] for c in detect["candidates"] if c["kind"] == "conformance"]
         return {"countsPerKind": counts, "conformanceFindings": counts.get("conformance", 0),
                 "conformanceRules": detect["stats"]["conformanceRules"], "manual": [m["id"] for m in detect["manual"]]}
@@ -282,6 +283,10 @@ EXPECTED_DELTAS = {
         "was": 2, "now": 1,
         "why": "0009 cut the kit's own HANDOFF.md to the current work (commit 28556fd; it had 31 parts), so it is no "
                "longer over the 3000-word budget; only docs/INTERFACES.md is. Fixture-data results are unchanged."},
+    ("kitAudit", "countsPerKind", "doc-stale"): {
+        "was": 2, "now": 1,
+        "why": "golden_kit_audit no longer counts findings in HANDOFF.md (any edit of it changed the counts); the golden "
+               "held one for it, so only the one stale doc besides HANDOFF.md is counted. Fixture-data results are unchanged."},
 }
 
 

@@ -1,4 +1,4 @@
-apiVersion: agentbay/v2
+apiVersion: agentbay/v3
 kind: Role
 metadata:
   name: reviewer
@@ -25,6 +25,9 @@ spec:
     3. Give one verdict per DoD id and per rule id: pass | fail | n/a, each with
        concrete evidence (file:line, url, quoted output, command + result).
        n/a needs a reason.
+       When the brief carries `recheck`, give a verdict for the ids in `recheck.failed`
+       against the fix commits (`recheck.commits`). Items in `recheck.carried` passed
+       before and stand; fail one only with new evidence.
     4. Rate every fail: blocker | should-fix | nit, with a concrete suggested change.
     5. You review; you do not fix. Use only read-only commands.
     6. Submit a review.verdict/v1 JSON via the plan's `submit` command. Any failed

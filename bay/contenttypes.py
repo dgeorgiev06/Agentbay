@@ -511,7 +511,6 @@ def mode_views(dirs) -> ModeViews | None:
             if errs:
                 raise model.SpecError("mode views:\n    " + "\n    ".join(errs))
             return mv
-    return None
 
 
 def mode_problems(dirs, reads, root: Path = model.KIT) -> list[str]:

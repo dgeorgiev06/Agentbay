@@ -59,9 +59,10 @@ class Artifacts:
 
 
 def candidate(kind: str, key: str, title: str, pattern: str, evidence: list[dict], scope: dict,
-              severity: str = "low", measure: dict | None = None, fix: str | None = None) -> dict:
-    out = {"lens": "artifacts", "kind": kind, "title": title, "pattern": pattern, "evidence": evidence,
-           "scope": scope, "severity": severity, "occurrences": max(1, len(evidence)),
+              severity: str = "low", measure: dict | None = None, fix: str | None = None,
+              lens: str = "artifacts", occurrences: int = 0) -> dict:
+    out = {"lens": lens, "kind": kind, "title": title, "pattern": pattern, "evidence": evidence,
+           "scope": scope, "severity": severity, "occurrences": occurrences or max(1, len(evidence)),
            "detector": {"name": kind, "key": key}}
     if measure:
         out["measure"] = measure
@@ -262,9 +263,7 @@ def unused(a: Artifacts, th: dict) -> list[dict]:
         if "/templates/" in f"/{path}" or path.startswith("docs/"):
             continue
         refs = n["refs"] if k != "endpoint" else mentions[n["id"]]
-        if refs or k in ("mode",):
-            continue
-        if uses.get((k, n["name"]), 0):
+        if refs or k in ("mode",) or uses.get((k, n["name"]), 0):
             continue
         what = {"function": "function", "module": "module", "config-key": "config key"}.get(k, k)
         loc = f"{path}:{n['line']}" if n.get("line") else path

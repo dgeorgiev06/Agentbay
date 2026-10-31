@@ -1,4 +1,4 @@
-apiVersion: agentbay/v2
+apiVersion: agentbay/v3
 kind: Interface
 metadata:
   name: improve.detect
@@ -78,7 +78,7 @@ spec:
         Size-ceiling check for a change (bay/limits.py, proposal 0009). Counts the framework's measures and compares
         them with framework/limits.yaml; a ceiling above the one at `base` needs an exception in the front matter of
         `proposal` (a project path). `problems` are the exceeded or raised ceilings and end a code step blocked
-        (`stopped`); `notes` are ceilings the count is now under. Writes nothing: `bay check --limits` writes the ratchet.
+        (`stopped`); `notes` are counts that differ from their ceiling. Writes nothing: `bay check --limits --write` writes the ratchet, at release.
       in:
         type: object
         required: [base]

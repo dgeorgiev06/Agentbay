@@ -336,11 +336,12 @@ def cmd_approve(args):
     verb = "REJECT" if args.reject else "APPROVE"
     print(f"{verb} gate '{st['next']['step']}' of {st['target']}: {st['next']['gate']}")
     ap = st["next"].get("approves")
-    if ap:      # the exact content this approval covers; an edit after it makes the gate run again
-        print(f"  {ap['path']} at sha256 {ap['sha256']}")
-    sha = (args.sha or "").strip() if by == CHAT_BY else (ap["sha256"] if ap else "")
+    shown = [x for x in (ap, (ap or {}).get("plan")) if x]      # the exact content this approval covers (proposal, plan)
+    for x in shown:                                             # an edit after it makes the gate run again
+        print(f"  {x['path']} at sha256 {x['sha256']}")
+    sha = (args.sha or "").strip() if by == CHAT_BY else "+".join(str(x["sha256"]) for x in shown)
     if by == CHAT_BY and ap and not sha:
-        _die(f"✗ --via chat needs --sha <prefix> of the content shown: {ap['path']} at sha256 {ap['sha256']}")
+        _die("✗ --via chat needs --sha <8+ hex prefix of each sha256 shown above, joined by +>")
     _confirm(by)
     _run(lambda: d.approve(args.call, not args.reject, args.reason or "", by=by, quote=quote, sha=sha))
 
@@ -752,7 +753,7 @@ def cmd_limits(args) -> int:
     try:
         text = boundary.show(KIT, args.head, Path(args.proposal).resolve().relative_to(KIT).as_posix()) \
             if args.proposal else None
-        problems, notes = limits.check(KIT, args.base, text)
+        problems, notes = limits.check(KIT, args.base, text, args.write)
     except (RuntimeError, ValueError) as e:
         _die(f"✗ {e}")
     for line in [f"! {n}" for n in notes] + [f"✗ {p}" for p in problems]:
@@ -810,6 +811,7 @@ def main(argv=None):
     ck.add_argument("--docs", action="store_true", help="also run B-11 on the core docs")
     ck.add_argument("--json", action="store_true", help="the boundary report as JSON")
     ck.add_argument("--limits", action="store_true", help="also check the size ceilings in framework/limits.yaml")
+    ck.add_argument("--write", action="store_true", help="with --limits: write the counts as the new ceilings (at release)")
     ck.set_defaults(fn=cmd_check)
     b = sub.add_parser("build", help="compile modes and roles into a runtime"); b.add_argument("--runtime", default="claude-code")
     b.set_defaults(fn=cmd_build)

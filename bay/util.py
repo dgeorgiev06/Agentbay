@@ -24,9 +24,7 @@ def utcnow() -> datetime:
 
 
 def iso(dt: datetime | None) -> str | None:
-    if dt is None:
-        return None
-    return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return None if dt is None else dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def parse_time(text: str, now: datetime) -> datetime:
@@ -75,25 +73,7 @@ def warn(warnings: list | None, msg: str) -> None:
         warnings.append(msg)
 
 
-def read_events(project: Path, warnings: list | None = None) -> list[dict]:
-    """The ledger's events (dicts with string type, ts and runId), read-only; a line that is not one is skipped and
-    named (file:line) in `warnings`. The one reader of connectors that fold the ledger (ledger, improve-store)."""
-    from .ledger import LEDGER_FILE
-    p = Path(project) / LEDGER_FILE
-    out: list[dict] = []
-    if p.exists():
-        for n, line in enumerate(p.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
-            if not line.strip():
-                continue
-            try:
-                e = json.loads(line)
-            except (ValueError, RecursionError):
-                e = None
-            if isinstance(e, dict) and all(isinstance(e.get(k), str) for k in ("type", "ts", "runId")):
-                out.append(e)
-            else:
-                warn(warnings, f"{LEDGER_FILE}:{n}: not a ledger event, skipped")
-    return out
+PROPOSAL_PATH = re.compile(r"^docs/proposals/[A-Za-z0-9][A-Za-z0-9._-]*\.md$")     # where a forge.extend proposal lives
 
 
 def read_json(p: Path, default=None):

@@ -151,6 +151,26 @@ touches:
   - { path: connectors/gmail-api/tests/test_gmail_api.py, reason: "privacy hygiene: real company domains replaced with example domains (f06a5b2, b0df5f9); not part of 0008 or 0006", slice: 7 }
   - { path: framework/interfaces/workflow.run.v1.yaml, reason: "carried from 0006 slice 7a (Part G): chat approval wording for workflow gates (838fbb9)", slice: 7 }
   - { path: modes/mail-briefing/config.example.yaml, reason: "privacy hygiene: real company domains replaced with example domains (f06a5b2, b0df5f9); not part of 0008 or 0006", slice: 7 }
+  # slice 9 (owner amendment, 2026-10-31)
+  - { path: schemas/, reason: "apiVersion agentbay/v3; rules and conformance schemas merge; improve.finding.v1, session.episode.v1 and selector.v1 move to the modes that own them; approvals.plan in the config schema", slice: 9 }
+  - { path: framework/interfaces/, reason: "apiVersion agentbay/v3 in every interface", slice: 9 }
+  - { path: bay/limits.py, reason: "the ratchet compares against the base ceilings and writes limits.yaml only with --write at release", slice: 9 }
+  - { path: bay/hook.py, reason: "same-behaviour trim (one-line return) paying for the plan gate under the bay/ ceiling", slice: 9 }
+  - { path: bay/protocol.py, reason: "same-behaviour trim (parse_blocks as a comprehension, last block still wins) paying for the plan gate", slice: 9 }
+  - { path: modes/cos/features/next/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/cos/features/run/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/cos/features/status/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/delivery/features/build/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/delivery/features/research/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/forge/features/create/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/improve/features/audit/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/improve/features/backlog/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/improve/features/implement/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/improve/features/scan/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/improve/features/triage/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/improve/features/verify/, reason: "apiVersion agentbay/v3 in the feature rules (B-3 needs the mode named)", slice: 9 }
+  - { path: modes/forge/features/extend/, reason: "the re-check, plan step and review-round wording in the extend playbook and rules (B-3 needs the mode named)", slice: 9 }
+  - { path: framework/limits.yaml, reason: "the ratchet writes the lower ceilings after the removals; an exception if the plan gate needs one", slice: 9 }
   # stage 5: slices 6-7 (owner amendment, 2026-10-30)
   # bay/connect.py (connector packages, D2) is already covered by path by the slice 5 entry above.
   - { path: bay/conformance.py, reason: "NEW. moved from bay/improve/conformance.py: the conformance rules loader and checks, used by lint and by improve-detect", slice: 6 }
@@ -330,6 +350,9 @@ Each slice is sized for one builder (about 40 tool calls) and ends with `python3
    - Also carries item 7, after the workflow change: framework-shipped modes, envs and connectors move to the top-level `modes/`, `envs/` and `connectors/`. Acceptance: `framework/` holds only roles, the agent profile, rules, interfaces and the component map; protected components are declared in `framework/components.yaml` and the guard and `bay boundary` read them from it; a user extension with a protected name is refused; a write to a protected path without `forge.extend` is denied; approval of a protected change passes from chat or from the terminal; `bay catalog` is unchanged except for paths.
 8. **Agent run records.** Item 6 (the owner's addition). Acceptance: a subagent can run `bay plan` and no other `bay` command; plan events are scrubbed, size-limited and refused for another taskId; `step.started` carries inputs; `bay status` lists a dispatched agent even with the spawn hook off; a role-step submit without an outcome is refused; `bay show` prints outcome, to-do progress and inputs; `bay status --agents` groups runs by role, mode, model and tier from the ledger alone; a reviewer verdict cites outcome and to-do items; improve's weekly backlog reads the same figures. Stage 1 also built, beyond `bay plan`: `bay dispatched` (dispatches are logged even when spawn hooks are off); `bay review-record` (reviews run outside a framework step become visible to improve, but can never pass a gate); commit subjects in git episodes (to tell fix rounds from features); the transcripts fix (improve could read no sessions). Stage 1 carries slice 7a of 0006 (chat approvals, gates bound to recorded approvals), whose review fixes F-1..F-7 are included. The dead-code check reports no new findings.
 9. **Docs and release.** README, `docs/DESIGN.md`, `docs/INTERFACES.md`, changelog, version, schema `apiVersion` bump to `agentbay/v3` with v2 documents refused (feature shape and env changed), a scratch-repo build and clean round trip. Acceptance: all checks green with output quoted; a newcomer can follow the README from clone to first result; the dead-code check reports no new findings.
+   - Also (owner decisions, 2026-10-31; plan in HANDOFF): fixes for three defects: (1) a re-run after a failed review gets a scoped re-check; a failed must item still halts, and the next call's review brief carries the previous verdict and the fix commits, re-judging only the failed items; (2) the `approved $in.f` form is refused, not a crash; (3) improve's store checks a candidate's route, effort and impact.
+   - Plan gate: for a large or security-sensitive change, forge.extend runs a planning step (the `lead` role, opus) before the approval gate; the gate shows the plan with the proposal and binds the approval to both; `approvals.plan` (large | always | never, default large) in agentbay.config.yaml.
+   - Cleanups that only remove code: schemas 19 -> 15, one ledger reader, the dispatcher steps through `workflows.advance`, one proposal-path rule, obsolete and duplicate tests, and the improve golden no longer reads HANDOFF.md. Anything that adds code beyond the plan gate is deferred. A `bay check --base` against a base map without `protected:` fails.
 
 ## Decisions needed
 

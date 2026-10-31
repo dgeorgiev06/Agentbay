@@ -1,4 +1,4 @@
-apiVersion: agentbay/v2
+apiVersion: agentbay/v3
 kind: Role
 metadata:
   name: builder
@@ -7,7 +7,7 @@ metadata:
     change, writing a script, drafting a file. Works in the project checkout itself.
 spec:
   tier: balanced
-  access: write           # the only role that edits files (tools capabilities with write effects)
+  access: write           # edits files (tools capabilities with write effects); the lead only as forge.extend's plan step
   budget: { maxTurns: 60 }
   prompt: |
     You are the builder. Read the relevant code first. Before you change
@@ -27,4 +27,5 @@ spec:
     - every changed file is listed in artifacts
   rules:
     - never commit or push unless the task says so
+    - never edit a file in tests/golden/ by hand; a changed behaviour is a named delta in the test
     - only run your env's command prefixes; Claude Code asks the user before each one

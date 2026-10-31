@@ -157,18 +157,6 @@ def test_cli_build_and_clean_on_tmp_repo():
     assert r.returncode == 0 and (proj / "CLAUDE.md").read_text() == "# mine\n"
 
 
-def test_ledger_run_events_match_schema():
-    proj = tmpdir()
-    ledger.append(proj, "spawned", "r1", agent="builder", taskId="T-20260101-abcd", source="hook", summary="x")
-    ledger.append(proj, "completed", "r1", agent="builder", source="hook", data={"status": "partial"})
-    evs = ledger.read(proj)
-    if model.jsonschema:
-        schema = json.loads((KIT / "schemas/event.schema.json").read_text())
-        for e in evs:
-            model.jsonschema.validate(e, schema)
-    assert ledger.fold(evs)["r1"].state == "partial"
-
-
 def test_hook_never_fails():
     r = subprocess.run([sys.executable, str(KIT / "bay/hook.py"), "post"], input="not json", text=True,
                        capture_output=True, cwd=tmpdir())
@@ -190,7 +178,7 @@ def test_hook_records_spawn_and_result():
 def test_project_flag_accepted_before_or_after_subcommand():
     from bay import cli
     assert cli._hoist_project(["build", "--project", "/x"]) == ["--project", "/x", "build"]
-    assert cli._hoist_project(["--project=/x", "ls"]) == ["--project", "/x", "ls"]
+    assert cli._hoist_project(["--project=/x", "catalog"]) == ["--project", "/x", "catalog"]
     assert cli._hoist_project(["call", "m.e", "{}"]) == ["call", "m.e", "{}"]
 
 

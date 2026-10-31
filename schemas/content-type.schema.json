@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v2/ContentType",
+  "$id": "agentbay/v3/ContentType",
   "title": "ContentType",
   "description": "A content type (proposal 0006, Part B): the contract between the sources that produce one kind of item and the modes that read it. A folder content-types/<name>/ holds content-type.yaml (this file's shape), fields.schema.json (the fields the kind adds to item/v1) and views.sql (only CREATE VIEW v_<name> statements over the base tables). The store builds the views of the types it holds; agents query them.",
   "type": "object",
   "required": ["apiVersion", "kind", "metadata", "spec"],
   "additionalProperties": false,
   "properties": {
-    "apiVersion": { "const": "agentbay/v2" },
+    "apiVersion": { "const": "agentbay/v3" },
     "kind": { "const": "ContentType" },
     "metadata": {
       "type": "object",

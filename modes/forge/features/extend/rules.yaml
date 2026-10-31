@@ -1,15 +1,15 @@
-apiVersion: agentbay/v2
+apiVersion: agentbay/v3
 kind: Rules
 rules:
-  - { id: R-1, level: must, statement: "Review is mandatory on every forge.extend run (when: always, opus, high) and never disabled. It is one independent round; a second round is only for a blocker or a security finding.", appliesTo: both }
+  - { id: R-1, level: must, statement: "Review is mandatory on every forge.extend run (when: always, opus, high) and never disabled. It is one independent round; a second round is only for a blocker or a security finding, and it is a scoped re-check of the failed ids when the approved proposal is unchanged (a full review otherwise, and after a re-check).", appliesTo: both }
   - { id: R-2, level: must_not, statement: "Make a breaking contract change without an apiVersion bump.", appliesTo: both, refs: [DOD-11] }
   - { id: R-3, level: must, statement: "Framework modes still pass bay check and their tests after the change.", appliesTo: both, check: lint_clean, refs: [DOD-12] }
   - { id: R-4, level: must, statement: "Update README, docs/INTERFACES.md and docs/DESIGN.md in the same change.", appliesTo: both, refs: [DOD-13] }
   - { id: R-5, level: must_not, statement: "Put secret values in prompts, logs, the ledger, output or committed files.", appliesTo: both, check: no_secrets, refs: [DOD-2] }
-  - { id: R-6, level: must_not, statement: "Implement anything before the approval gate is passed by the user.", appliesTo: both }
+  - { id: R-6, level: must_not, statement: "Implement anything before the approval gate is passed by the user. Planning is not implementing: the plan step writes only docs/plans/<id>.md, and the gate binds that file with the proposal.", appliesTo: both }
   - { id: R-7, level: must, statement: "Re-run tests, lint, validate, the build/clean round trip and the fake-source demo; quote their output.", appliesTo: both, refs: [DOD-5] }
   - { id: R-8, level: must, statement: "Rate each finding blocker | should-fix | nit with a concrete suggested change; any blocker makes the result partial.", appliesTo: reviewer }
   - { id: R-9, level: must_not, statement: "Change the scope or design of the approved proposal. A file a rename reached inside a listed folder is not a change of scope.", appliesTo: both, refs: [DOD-7] }
-  - { id: R-10, level: must, statement: "Nits and should-fix findings go to a list in the review Result; they are not a fix round. The fix round for a blocker or security finding returns the implement result, with no confirmation pass.", appliesTo: both }
+  - { id: R-10, level: must, statement: "Nits and should-fix findings go to a list in the review Result; they are not a fix round. The fix round for a blocker or security finding returns the implement result, with no confirmation pass beyond the one scoped re-check.", appliesTo: both }
   - { id: R-11, level: should, statement: "List a folder (path/) in touches: where files inside it may be renamed; a rename inside a listed folder needs no amendment.", appliesTo: both, refs: [DOD-7] }
   - { id: R-12, level: must, statement: "Amend the proposal only for a change of scope or design, never to list a file a rename reached.", appliesTo: both, refs: [DOD-7] }

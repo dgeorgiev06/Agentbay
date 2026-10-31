@@ -1,4 +1,4 @@
-apiVersion: agentbay/v2
+apiVersion: agentbay/v3
 kind: Rules
 rules:
   - { id: R-1, level: must, statement: "Cite file:line evidence that exists, with the exact text and a rewrite, a measurement or the rule id.", appliesTo: both, refs: [DOD-1] }

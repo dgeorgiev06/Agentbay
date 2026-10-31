@@ -1,4 +1,4 @@
-apiVersion: agentbay/v2
+apiVersion: agentbay/v3
 kind: Rules
 rules:
   - { id: R-1, level: must, statement: "Search before stating anything about the current state of the world.", appliesTo: executor, refs: [DOD-2] }

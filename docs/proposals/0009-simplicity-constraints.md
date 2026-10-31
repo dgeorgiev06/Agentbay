@@ -68,6 +68,8 @@ Complexity 30 and 150 lines per function, enforced by the `deadcode` step, stay 
 - `touches:` may name a folder (`path/`). A rename inside it needs no amendment.
 - An amendment is for a change of scope or design only. A file a rename reached is not one.
 - HANDOFF.md keeps only the current work. History is in git.
+- A review that runs out of budget is resumed, never re-run from the start. The resume logs a `review.overrun` warning in the ledger: the items left, the budget used, and the time sinks in a few words (e.g. "test suite 2 runs, 6 min; read 40 files of a 288-path diff"). improve reads these to find what to make faster. The reviewer's Result lists its time sinks so the warning can say them.
+- A review gets the generated role file verbatim and the step plan; cos adds scope, not opinions.
 
 ### 5. Faster tests, every assertion kept
 

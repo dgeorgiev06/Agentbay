@@ -858,15 +858,6 @@ def stale_policy(kit: model.Kit, every: list[str]) -> list[str]:
             f"not the map); rebuild it with ./bay.sh build"]
 
 
-def _mode_envs(spec: dict) -> set[str]:
-    """Every env a mode's `roles:` maps, at the mode, a feature or a step."""
-    maps = [spec.get("roles")]
-    for ep in (spec.get("features") or {}).values():
-        maps.append(ep.get("roles"))
-        maps += [st.get("roles") for st in ep.get("steps") or [] if isinstance(st, dict)]
-    return {e for m in maps if isinstance(m, dict) for e in m.values() if isinstance(e, str)}
-
-
 def lint_protection(kit: model.Kit) -> list[str]:
     """The map's `protected:` block (proposal 0008, stage 5): every protected name exists as that kind, the set is
     closed (the envs a protected mode maps and the connectors a protected env binds are protected too), and every env
@@ -886,7 +877,7 @@ def lint_protection(kit: model.Kit) -> list[str]:
         md = kit.get("Mode", name)
         out += [f"{where}: protected mode {name} puts roles in env {e}, which is not protected; protect {e} too "
                 f"(the wiring of a protected mode is protected)"
-                for e in sorted(_mode_envs(md.spec) if md else ()) if e in kit.docs["Environment"] and e not in prot.place]
+                for e in sorted(model.mode_envs(md) if md else ()) if e in kit.docs["Environment"] and e not in prot.place]
     for e in prot.place:
         env = kit.get("Environment", e)
         for iface, b in (env.spec.get("bind", {}).items() if env else ()):

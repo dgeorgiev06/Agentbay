@@ -113,9 +113,12 @@ def item_kinds(kit: Path = KIT) -> dict[str, set[int]]:
 
 
 def mode_envs(md: Doc) -> list[str]:
-    """Every env a mode's `roles:` maps (mode-wide and per feature), in order."""
+    """Every env a mode's `roles:` maps (mode-wide, per feature and per step), in order."""
     s = md.spec
-    maps = [s.get("roles"), *((ep or {}).get("roles") for ep in (s.get("features") or {}).values())]
+    maps = [s.get("roles")]
+    for ep in ((s.get("features") or {}).values()):
+        ep = ep or {}
+        maps += [ep.get("roles"), *(st.get("roles") for st in ep.get("steps") or [] if isinstance(st, dict))]
     return list(dict.fromkeys(e for m in maps if isinstance(m, dict) for e in m.values() if isinstance(e, str)))
 
 

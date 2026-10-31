@@ -4,15 +4,15 @@ import sys
 
 from helpers import KIT, MemProvider, system
 
-from bay import cli, connect, vault
+from bay import connect, vault
 
 
 def _ctx(conn_name="gmail-api", values=None):
     s = system(None)
     conn = s.kit.get("Connector", conn_name)
-    env = cli._login_env(s, conn, None)
+    env = connect.login_env(s, conn, None)
     http = connect.Http([], who="test")
-    return cli.LoginContext(conn, env, MemProvider(values or {}), http, lambda url: None, say=lambda *_: None)
+    return connect.LoginContext(conn, env, MemProvider(values or {}), http, lambda url: None, say=lambda *_: None)
 
 
 def test_auth_refuses_without_a_terminal_and_names_the_connector():
@@ -31,7 +31,7 @@ def test_cli_names_no_connector_and_logins_are_declared():
 
 def test_login_env_is_the_one_env_binding_the_connector():
     s = system(None)
-    assert cli._login_env(s, s.kit.get("Connector", "gmail-api"), None).name == "local-mail"
+    assert connect.login_env(s, s.kit.get("Connector", "gmail-api"), None).name == "local-mail"
 
 
 def test_login_context_gives_only_the_connectors_declared_secrets():
@@ -79,10 +79,10 @@ def test_login_secret_access_equals_sync_access():
     k = _evil_kit()
     s = system(None, kit=k)
     conn = s.kit.get("Connector", "evil")
-    env = cli._login_env(s, conn, None)
+    env = connect.login_env(s, conn, None)
     assert env.name == "evil-env"
     prov = MemProvider({"X_REFRESH_TOKEN": "xsecret-123", "GMAIL_REFRESH_TOKEN": "gmail-orig"})
-    ctx = cli.LoginContext(conn, env, prov, connect.Http([], who="t"), lambda u: None, say=lambda *_: None)
+    ctx = connect.LoginContext(conn, env, prov,connect.Http([], who="t"), lambda u: None, say=lambda *_: None)
     for op in (lambda: ctx.secret("X_REFRESH_TOKEN"), lambda: ctx.store_secret("GMAIL_REFRESH_TOKEN", "attacker")):
         try:
             op()
@@ -91,13 +91,11 @@ def test_login_secret_access_equals_sync_access():
             assert "not allowed" in str(e)
     assert prov.get("GMAIL_REFRESH_TOKEN") == "gmail-orig"
     # nor can it log in through an env that does not bind it (local-mail allows GMAIL_REFRESH_TOKEN)
-    r = subprocess.run([sys.executable, "-c", "import sys; sys.argv=['x']; from bay import cli; "
-                        "from helpers import system; from pathlib import Path; "
-                        f"s=system(None, kit=Path({str(k)!r})); "
-                        "cli._login_env(s, s.kit.get('Connector','evil'), 'local-mail')"],
-                       cwd=KIT, capture_output=True, text=True, env={**__import__('os').environ,
-                                                                     "PYTHONPATH": f"{KIT}:{KIT}/tests"})
-    assert r.returncode == 1 and "does not bind connector evil" in r.stderr
+    try:
+        connect.login_env(s, conn, "local-mail")
+        raise AssertionError("login went through an env that does not bind the connector")
+    except connect.ConnectorError as e:
+        assert "does not bind connector evil" in str(e)
     # and lint refuses the connector: no env that binds it allows all its needs.secrets
     from bay import lint
     errs = [e for e in lint.run(k) if "connector evil declares a `login`" in e]

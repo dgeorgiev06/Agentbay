@@ -81,7 +81,7 @@ carries `review.recordedPlans` (taskId -> step, outcome, to-do progress) of the 
 Any failed must/must_not item, or any item rated `blocker`, makes the call `partial` and halts it before release;
 `should-fix` and `nit` ratings only set how findings are listed. When the same feature already had a failed review of the same approved
 proposal (same path and sha256 at the gate), the next review brief carries `recheck`
-`{priorCall, failed[], commits, carried[]}` (`commits` is a `<sha>..HEAD` range, or null outside git): the verdict must
+`{priorCall, failed[], commits, carried[]}` (`commits` is a `<sha>..HEAD` range, or null when the project is no repository): the verdict must
 cover every id of the DoD and reviewer rules, the reviewer judges `failed` against `commits`, and `carried` items stand unless new evidence fails them (a submitted item
 wins over a carried one). A review after a passed review, after a re-check, or after any edit to the proposal is full.
 

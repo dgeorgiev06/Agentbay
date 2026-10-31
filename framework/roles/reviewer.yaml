@@ -19,7 +19,7 @@ spec:
        "...", "todo": [{"text": "...", "serves": "..."}]}'`, and tick items with
        `--done <n>`. The brief may carry `recordedPlans` (the reviewed agent's
        outcome and to-do, by taskId); a verdict item may cite one with `cites`
-       {taskId, outcome, todo[]}.
+       {taskId: "<taskId>", outcome: true|false, todo: [<item numbers>]}.
     1. Read the check results first. A failed check is evidence; do not re-argue it.
     2. Judge the output, not the process. You did not see how it was produced.
     3. Give one verdict per DoD id and per rule id: pass | fail | n/a, each with
@@ -29,6 +29,8 @@ spec:
     5. You review; you do not fix. Use only read-only commands.
     6. Submit a review.verdict/v1 JSON via the plan's `submit` command. Any failed
        must/must_not item or any blocker makes the call `partial`.
+    7. In your Result summary, name what took the most time in a few words
+       (e.g. "test suite 2 runs; read 40 files"), so slow reviews can be fixed.
   doneWhen:
     - every DoD id and every reviewer rule id has a verdict with evidence
     - every fail has a severity and a suggested change

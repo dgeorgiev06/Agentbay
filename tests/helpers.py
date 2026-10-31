@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -53,7 +54,9 @@ def clock():
     return NOW
 
 
-_TMP = tempfile.TemporaryDirectory(prefix="agentbay-test-")   # one root per test run, removed at exit
+# one root per test run, removed at exit; on the kit's filesystem when /tmp is another one, so kit copies can hard-link
+_TMP = tempfile.TemporaryDirectory(prefix="agentbay-test-",
+                                   dir=None if os.stat(tempfile.gettempdir()).st_dev == os.stat(KIT).st_dev else KIT.parent)
 
 
 def tmpdir() -> Path:
@@ -65,16 +68,55 @@ def cleanup(p: Path) -> None:
     shutil.rmtree(p.parent if p.name in ("proj", "kit") else p, ignore_errors=True)
 
 
+def _link_or_copy(src, dst) -> None:
+    """Files in the kit's folders are hard links (a build or a test writes the top-level and dot files, so those are
+    copies); KitPath and the edit helpers break the link before a write (below), so the kit is never changed."""
+    if os.sep in os.path.relpath(src, KIT) and not os.path.relpath(src, KIT).startswith("."):
+        try:
+            return os.link(src, dst)
+        except OSError:
+            pass
+    shutil.copy2(src, dst)
+
+
+def unshare(path) -> None:
+    """Make `path` a private copy when it is a hard link into the real kit, before anything writes to it."""
+    if os.path.lexists(path) and os.stat(path).st_nlink > 1:
+        tmp = f"{path}.unshared"
+        shutil.copy2(path, tmp)
+        os.replace(tmp, path)
+
+
+class KitPath(type(Path())):
+    """A path inside a kit copy: a write (write_text, write_bytes, open for writing) first breaks the hard link, so the
+    real kit is never changed. Only paths made from kit_copy() are KitPaths; nothing global is patched."""
+
+    def write_text(self, *a, **kw):
+        unshare(self)
+        return super().write_text(*a, **kw)
+
+    def write_bytes(self, *a, **kw):
+        unshare(self)
+        return super().write_bytes(*a, **kw)
+
+    def open(self, mode="r", *a, **kw):
+        if set(mode) & set("wa+x"):
+            unshare(self)
+        return super().open(mode, *a, **kw)
+
+
 def kit_copy() -> Path:
-    """A full copy of the kit to mutate."""
+    """A full copy of the kit to mutate: hard links, so only the files a test writes are copies."""
     d = tmpdir() / "kit"
-    shutil.copytree(KIT, d, ignore=shutil.ignore_patterns(".git", "__pycache__", ".agentbay"))
-    return d
+    shutil.copytree(KIT, d, copy_function=_link_or_copy,
+                    ignore=shutil.ignore_patterns(".git", "__pycache__", ".agentbay"))
+    return KitPath(d)
 
 
 def edit_yaml(path: Path, fn) -> None:
     doc = yaml.safe_load(path.read_text())
     fn(doc)
+    unshare(path)
     path.write_text(yaml.safe_dump(doc, sort_keys=False))
 
 

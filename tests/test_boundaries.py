@@ -2,6 +2,7 @@
 import json
 import subprocess
 import sys
+import types
 
 from helpers import KIT, cleanup, kit_for, project, system, tmpdir
 from layout import PROTECTED_INSTANCES
@@ -18,12 +19,29 @@ def built(config=None):
     return p
 
 
+_SHARED: list = []
+_cleanup = cleanup
+
+
+def shared():
+    """One built project for the tests that only read it (guard decisions, the generated files); cleanup() leaves it be."""
+    if not _SHARED:
+        _SHARED.append(built())
+    return _SHARED[0]
+
+
+def cleanup(p):  # noqa: F811
+    if not _SHARED or p != _SHARED[0]:
+        _cleanup(p)
+
+
 def sh(p, *args, stdin=None):
     return subprocess.run(list(args), cwd=p, capture_output=True, text=True, input=stdin)
 
 
-def hook(p, agent, command):
-    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command},
+def hook(p, agent, command, tool_name="Bash", tool_input=None):
+    """The real hook process, for the three tests of the hook contract."""
+    payload = {"hook_event_name": "PreToolUse", "tool_name": tool_name, "tool_input": tool_input or {"command": command},
                "agent_type": agent, "agent_id": "a1", "cwd": str(p)}
     r = subprocess.run([sys.executable, str(KIT / "bay/guard.py")], input=json.dumps(payload), text=True,
                        capture_output=True, env={"CLAUDE_PROJECT_DIR": str(p), "PATH": "/usr/bin:/bin"})
@@ -75,9 +93,10 @@ def test_guard_scopes_bash_per_subagent():
               ("analyst--feed-briefing", f"{p}/{shim} items.store/v1.query '{{}}'"),
               ("reviewer--delivery", "git diff HEAD~1"), ("builder--delivery", "git status")]
         for agent, cmd in ok:
-            r = hook(p, agent, cmd)
-            assert r.returncode == 0 and "deny" not in r.stdout, (agent, cmd, r.stdout)
-            assert ('"allow"' in r.stdout) == ("/use " in cmd), (agent, cmd)   # only the own shim is auto-allowed
+            d, _ = tool(p, agent, "Bash", {"command": cmd})
+            assert d != "deny" and (d == "allow") == ("/use " in cmd), (agent, cmd, d)   # only the own shim is auto-allowed
+        r = hook(p, *ok[0])                                  # the hook contract, on the allowed shim call
+        assert r.returncode == 0 and "deny" not in r.stdout and '"allow"' in r.stdout, r.stdout
         bad = [("analyst--feed-briefing", ".agentbay/bay call feed-briefing.prune '{}'"),
                ("analyst--feed-briefing", ".agentbay/roles/lead--feed-briefing/use items.store/v1.status '{}'"),
                ("analyst--feed-briefing", f"python3 {KIT}/bay/cli.py call feed-briefing.sync '{{}}'"),
@@ -90,9 +109,10 @@ def test_guard_scopes_bash_per_subagent():
                ("builder--delivery", ".agentbay/bay secret set X_REFRESH_TOKEN"),
                ("Explore", ".agentbay/bay call feed-briefing.sync '{}'")]   # non-agentbay subagent
         for agent, cmd in bad:
-            r = hook(p, agent, cmd)
-            assert r.returncode == 2, (agent, cmd)
-            assert json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+            d, r = tool(p, agent, "Bash", {"command": cmd})
+            assert d == "deny" and r.returncode == 2, (agent, cmd)
+        r = hook(p, *bad[0])                                 # the hook contract, on a denied call: exit 2 and JSON
+        assert r.returncode == 2 and json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
         # main thread: no decision, normal permissions apply
         r = subprocess.run([sys.executable, str(KIT / "bay/guard.py")], text=True, capture_output=True,
                            input=json.dumps({"tool_name": "Bash", "tool_input": {"command": ".agentbay/bay call x"}}),
@@ -118,7 +138,7 @@ def test_unsafe_detection():
 
 
 def test_settings_have_no_wildcards():
-    p = built()
+    p = shared()
     try:
         st = json.loads((p / ".claude/settings.json").read_text())
         for perm in st["permissions"]["allow"]:
@@ -169,14 +189,21 @@ def tool(p, agent, tool_name, tool_input, agent_id="a1"):
         payload["agent_type"] = agent
     if agent_id:
         payload["agent_id"] = agent_id
-    r = subprocess.run([sys.executable, str(KIT / "bay/guard.py")], input=json.dumps(payload), text=True,
-                       capture_output=True, env={"CLAUDE_PROJECT_DIR": str(p), "PATH": "/usr/bin:/bin"})
-    decision = json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"] if r.stdout.strip() else "pass"
-    return decision, r
+    # in-process, as bay/guard.py main() decides it; the hook contract (exit code, JSON, fail closed) runs through a
+    # subprocess in test_guard_scopes_bash_per_subagent, test_guard_fails_closed_for_subagents and
+    # test_builder_cannot_edit_guard_policy_or_shims_or_settings
+    if agent or agent_id:
+        decision, reason = guard.Guard(json.loads((p / ".agentbay/guard.json").read_text()), p).decide(payload)
+    else:
+        decision, reason = guard.main_thread_decision(payload)
+        decision = decision if decision == "ask" else "pass"
+    decision = decision if decision in ("deny", "allow", "ask") else "pass"
+    return decision, types.SimpleNamespace(returncode=2 if decision == "deny" and (agent or agent_id) else 0,
+                                           stderr=reason if decision == "deny" else "")
 
 
 def test_builder_cannot_edit_guard_policy_or_shims_or_settings():
-    p = built()
+    p = shared()
     try:
         for path in (".agentbay/guard.json", ".agentbay/roles/analyst--feed-briefing/use", ".agentbay/bay",
                      ".claude/settings.json", ".claude/agents/builder.md", ".git/config",
@@ -184,6 +211,8 @@ def test_builder_cannot_edit_guard_policy_or_shims_or_settings():
             for t in ("Write", "Edit", "MultiEdit"):
                 d, r = tool(p, "builder--delivery", t, {"file_path": path, "content": "x"})
                 assert d == "deny" and r.returncode == 2, (t, path)
+        r = hook(p, "builder--delivery", None, "Write", {"file_path": ".agentbay/guard.json", "content": "x"})
+        assert r.returncode == 2 and json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
         d, _ = tool(p, "builder--delivery", "NotebookEdit", {"notebook_path": ".agentbay/x.ipynb", "new_source": "x"})
         assert d == "deny"
         d, _ = tool(p, "builder--delivery", "Write", {"file_path": "src/app.py", "content": "ok"})   # normal work still fine
@@ -195,7 +224,7 @@ def test_builder_cannot_edit_guard_policy_or_shims_or_settings():
 
 
 def test_store_is_not_reachable_with_file_tools():
-    p = built()
+    p = shared()
     try:
         sh(p, str(p / ".agentbay/bay"), "call", "feed-briefing.sync", "{}")
         store = ".agentbay/data/feeds/feed-briefing/corpus.db"
@@ -211,7 +240,7 @@ def test_store_is_not_reachable_with_file_tools():
 
 
 def test_path_normalization_and_symlinks():
-    p = built()
+    p = shared()
     try:
         (p / "docs").mkdir()
         (p / "docs/link").symlink_to(p / ".agentbay")
@@ -224,7 +253,7 @@ def test_path_normalization_and_symlinks():
 
 
 def test_writes_limited_to_env_fs_write_and_kit_is_off_limits():
-    p = built()
+    p = shared()
     try:
         # analyst's env (local-feeds) writes only .agentbay/data/feeds, which is itself control plane
         assert tool(p, "analyst--feed-briefing", "Write", {"file_path": "notes.md", "content": "x"})[0] == "deny"
@@ -235,7 +264,7 @@ def test_writes_limited_to_env_fs_write_and_kit_is_off_limits():
 
 
 def test_git_file_writing_and_exec_flags_are_refused():
-    p = built()
+    p = shared()
     try:
         for cmd in ("git diff --output=.agentbay/guard.json", "git diff --output .agentbay/x", "git log --output=x",
                     "git diff --ext-diff", "git log -p --textconv", "git diff --no-index /etc/passwd x",
@@ -260,7 +289,7 @@ def test_guard_policy_tampering_does_not_reach_coordinator_commands():
 
 
 def test_missing_agent_type_is_treated_as_an_unknown_subagent():
-    p = built()
+    p = shared()
     try:
         for t, ti in (("Bash", {"command": ".agentbay/bay call feed-briefing.sync '{}'"}),
                       ("Bash", {"command": "./.agentbay/roles/analyst--feed-briefing/use items.store/v1.query '{}'"}),
@@ -410,7 +439,7 @@ def test_b2_forge_extend_installed_only_in_the_agentbay_checkout():
 
 
 def test_safety_rule_only_the_own_shim_is_auto_allowed():
-    p = built()
+    p = shared()
     try:
         g = guard_for(p)
         assert decide(g, "analyst--feed-briefing", "Bash", {"command": ".agentbay/roles/analyst--feed-briefing/use items.store/v1.query '{}'"}) == "allow"
@@ -431,7 +460,7 @@ def test_safety_rule_only_the_own_shim_is_auto_allowed():
 
 
 def test_sa_grep_glob_patterns_against_control_plane_probes():
-    p = built()
+    p = shared()
     try:
         g = guard_for(p)
         for ti in ({"pattern": ".agent*/**"}, {"pattern": "**/.agentbay/**/*.jsonl"}, {"pattern": ".claude/*.json"},
@@ -448,7 +477,7 @@ def test_sa_grep_glob_patterns_against_control_plane_probes():
 
 
 def test_sb_unknown_subagents_interpreter_code_and_globs():
-    p = built()
+    p = shared()
     try:
         g = guard_for(p)
         for cmd in ("bash -c 'cat x'", "sh -c ls", "zsh -c ls", "python3 -c 'print(1)'", "python -c x",
@@ -463,7 +492,7 @@ def test_sb_unknown_subagents_interpreter_code_and_globs():
 
 
 def test_sd_never_write_list_for_all_subagents():
-    p = built()
+    p = shared()
     try:
         g = guard_for(p, ci=False)
         for path in ("CLAUDE.md", "docs/CLAUDE.md", "CLAUDE.local.md", ".mcp.json", "agentbay.config.yaml", ".envrc",
@@ -477,7 +506,7 @@ def test_sd_never_write_list_for_all_subagents():
 
 
 def test_se_more_git_flags_and_flag_values_are_path_checked():
-    p = built()
+    p = shared()
     try:
         g = guard_for(p)
         for cmd in ("git diff --pathspec-from-file=list.txt", "git log -Oorder.txt", "git diff -O order",

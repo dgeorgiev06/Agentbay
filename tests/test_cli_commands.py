@@ -32,21 +32,13 @@ def test_the_cli_has_about_fifteen_commands_and_no_old_names():
         cleanup(p)
 
 
-def test_check_takes_boundary_options_only_with_a_base():
-    p = project()
-    try:
-        r = cli(p, "check", "--docs")
-        assert r.returncode != 0 and "--base" in r.stderr
-    finally:
-        cleanup(p)
-
-
-def test_check_json_prints_only_the_boundary_json_on_stdout():
+def test_check_takes_boundary_options_only_with_a_base_and_json_prints_only_the_boundary_json():
     import json
     p = project()
     try:
-        r = cli(p, "check", "--json")
-        assert r.returncode != 0 and "--base" in r.stderr
+        for option in ("--docs", "--json"):
+            r = cli(p, "check", option)
+            assert r.returncode != 0 and "--base" in r.stderr, option
         r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "check", "--base", "HEAD", "--json"],
                            capture_output=True, text=True, cwd=KIT)
         assert isinstance(json.loads(r.stdout), dict), r.stdout

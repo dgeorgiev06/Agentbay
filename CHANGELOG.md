@@ -2,6 +2,28 @@
 
 Earlier versions: see docs/proposals/
 
+## 0.10.0 - 2026-10-31
+
+Proposal 0009: constraints against complicating the framework.
+
+### Added
+
+- `framework/limits.yaml`: ceilings for lines in `bay/`, lines of kit Python, CLI commands, folders under `framework/`, schemas, top-level folders and the test count. `bay check --limits` counts them; a count above its ceiling fails, a lower count becomes the new ceiling. A raise needs an `exceptions:` entry in the proposal the owner approves.
+- forge.extend runs a `limits` step after `deadcode` (`improve.detect/v1.limits`); a change over a ceiling ends `blocked`.
+- `tests/run.py` prints per-test time, the slowest 15 and the wall time, runs test files in parallel (`-j N`), selects a file by argument, and fails if the real checkout changed during the run.
+
+### Changed
+
+- forge.extend: one independent review per change; a second round only for a blocker or a security finding; nits go to a list; touches may name a folder; an amendment is for scope or design only; HANDOFF.md holds only the current work.
+- Builders run the tests for what they changed while working and the full suite once before they commit.
+- The reviewer role states the `cites` types and names its time sinks in its Result.
+- Tests: parsed YAML is cached; kit copies are hard-linked and break the link on write; guard decisions run in-process (three subprocess tests keep the hook contract); read-only tests share one built project. Suite: 556.6 s -> about 150 s (2 workers), same 546 tests.
+
+### Known issues
+
+- improve does not yet read `review.overrun` notes (0008 slice 9).
+- A failed must item halts a call, and the re-run call asks for a review again, although the leaner rules allow a second round only for a blocker or a security finding.
+
 ## 0.9.0 - 2026-10-31
 
 improve is a plain mode, workflows have one implementation, and the kit's modes, envs and connectors live in the top-level folders. Protection is declared in the component map. The schema apiVersion stays `agentbay/v2` until slice 9.

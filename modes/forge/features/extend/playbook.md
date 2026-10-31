@@ -13,8 +13,9 @@ Two rules skip work. When `proposal` names an existing file, `propose` is skippe
 2. `approve`: approval gate. The call stops with `awaiting-approval`; only the user passes it, with `bay approve <callId>` in an interactive terminal (or from chat, when they turned `approvals.chat` on). The approval covers the proposal's exact content (path and sha256, shown with the gate).
 3. `implement`: the builder implements the approved proposal on a branch: code, schemas, framework modes, docs and tests.
 4. `deadcode`: a code step, `improve.detect/v1.change` against `origin/main`. The coordinator runs `git fetch origin` before extend (an unresolved or stale base is the usual cause of a false block). It audits the working tree and the tree at the merge-base of the base and HEAD and ends the call `blocked` when the change adds any unused code, unused constant, compatibility layer or complexity finding. Findings that already existed at the base do not count. Remove or wire up what it names, then re-run extend with `proposal` set.
-5. `review`: the reviewer (opus, high effort) checks every DoD item and rule below.
-6. `release`: changelog entry, version bump in bay/__init__.py, schema apiVersion bump when contracts changed; all checks green.
+5. `limits`: a code step, `improve.detect/v1.limits` against `origin/main` and the call's `proposal`. It ends the call `blocked` when a count is over its ceiling in `framework/limits.yaml` or a ceiling was raised without an `exceptions:` entry in the proposal. It writes nothing; the builder's `./bay.sh check --limits` writes the lowered ceilings.
+6. `review`: one independent review by the reviewer (opus, high effort) of every DoD item and rule below. The reviewer gets the generated role file verbatim and the step plan; the coordinator adds scope, not opinions. Nits and should-fix items go to a list in the Result and are not a fix round. A second round runs only for a blocker or a security finding, and its fix result is the implement result: no confirmation pass. A review that runs out of budget is resumed, never re-run from the start; the coordinator logs the overrun with `.agentbay/bay note <callId> "review.overrun: items left <n>; budget used <turns, minutes>; time sinks <a few words>"` (the reviewer's Result lists its time sinks for this).
+7. `release`: changelog entry, version bump in bay/__init__.py, schema apiVersion bump when contracts changed; all checks green.
 
 ## Definition of Done
 - [DOD-1] (must) Design conformance: the change uses the fixed vocabulary (Chief of Staff, Mode, Role, Agent, Environment, Connector, capability interface) and keeps the layering mode -> role -> agent -> env -> connector.
@@ -31,6 +32,12 @@ Two rules skip work. When `proposal` names an existing file, `propose` is skippe
 - [DOD-12] (must) Framework modes still pass `bay check` and their tests after the change.
 - [DOD-13] (must) README, docs/INTERFACES.md and docs/DESIGN.md are updated in the same change.
 - [DOD-14] (must) No new unused code or compatibility layers: the `deadcode` step reports no new finding.
+- [DOD-15] (must) Limits: `./bay.sh check --limits --base origin/main --proposal <proposal>` passes, quoted in the evidence. No measure in `framework/limits.yaml` is over its ceiling and none is raised without an `exceptions:` entry in the proposal's front matter; a count under a ceiling is written back as the new ceiling in the same change. The test count does not grow: a change that adds a test removes or merges at least one the change made obsolete.
+
+## Proposals and handoff
+- `touches:` may name a folder (`path/`); a rename inside it needs no amendment.
+- Amend a proposal only for a change of scope or design, never for a file a rename reached.
+- `HANDOFF.md` keeps only the current work; history is in git.
 
 ## Outputs
 A `Result`: proposal path, branch, changed files in `artifacts`, release notes in `summary`.

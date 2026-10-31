@@ -2,7 +2,8 @@
 """agentbay control plane.
 
   check [--base <ref>]   lint + resolve every mode endpoint (fails with every gap); with --base, also check the
-                         change against framework/components.yaml and a proposal's touches: (--proposal, --docs)
+                         change against framework/components.yaml and a proposal's touches: (--proposal, --docs);
+                         --limits checks the size ceilings in framework/limits.yaml
   build | clean          compile modes/roles into a runtime (claude-code) / remove it; build writes a minimal
                          agentbay.config.yaml when the project has none
   config                 every agentbay.config.yaml setting, with type, default and description (from the schemas)
@@ -111,6 +112,8 @@ def cmd_check(args):
         bad = _validate(args)
     if args.base:
         bad = cmd_boundary(args) or bad
+    if args.limits:
+        bad = cmd_limits(args) or bad
     sys.exit(1 if bad else 0)
 
 
@@ -743,6 +746,22 @@ def cmd_boundary(args) -> int:
     return rep.exit_code
 
 
+def cmd_limits(args) -> int:
+    """`bay check --limits`: the size ceilings in framework/limits.yaml; with --base also whether one was raised."""
+    from bay import boundary, limits
+    try:
+        text = boundary.show(KIT, args.head, Path(args.proposal).resolve().relative_to(KIT).as_posix()) \
+            if args.proposal else None
+        problems, notes = limits.check(KIT, args.base, text)
+    except (RuntimeError, ValueError) as e:
+        _die(f"✗ {e}")
+    for line in [f"! {n}" for n in notes] + [f"✗ {p}" for p in problems]:
+        print(line)
+    if not problems:
+        print(f"✓ limits: {len(limits.MEASURES)} measures within their ceilings")
+    return 1 if problems else 0
+
+
 def _hoist_project(argv: list[str]) -> list[str]:
     """Accept --project anywhere (`bay build --project x` as well as `bay --project x build`)."""
     out, proj = [], []
@@ -790,6 +809,7 @@ def main(argv=None):
     ck.add_argument("--proposal", help="the proposal whose front-matter touches: lists the allowed crossings")
     ck.add_argument("--docs", action="store_true", help="also run B-11 on the core docs")
     ck.add_argument("--json", action="store_true", help="the boundary report as JSON")
+    ck.add_argument("--limits", action="store_true", help="also check the size ceilings in framework/limits.yaml")
     ck.set_defaults(fn=cmd_check)
     b = sub.add_parser("build", help="compile modes and roles into a runtime"); b.add_argument("--runtime", default="claude-code")
     b.set_defaults(fn=cmd_build)

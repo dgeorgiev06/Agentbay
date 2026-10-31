@@ -235,9 +235,11 @@ def test_forge_extend_runs_deadcode_between_implement_and_review():
     try:
         feat = system(p).modes["forge"].features["extend"]
         ids = [s.id for s in feat.steps]
-        assert ids.index("implement") + 1 == ids.index("deadcode") and ids.index("deadcode") + 1 == ids.index("review")
-        step = feat.steps[ids.index("deadcode")]
-        assert step.run == "improve.detect/v1.change"
+        assert ids.index("implement") + 1 == ids.index("deadcode") and ids.index("deadcode") + 1 == ids.index("limits")
+        assert ids.index("limits") + 1 == ids.index("review")
+        assert feat.steps[ids.index("deadcode")].run == "improve.detect/v1.change"
+        assert feat.steps[ids.index("limits")].run == "improve.detect/v1.limits"
+        assert feat.steps[ids.index("limits")].with_["proposal"] == "$in.proposal|$steps.propose.artifacts"
     finally:
         cleanup(p)
 

@@ -189,6 +189,7 @@ def resolver_gaps() -> dict:
 # result must equal the golden: every decision and every other word of every reason is the same as before the move.
 FOUR = ["framework", "bay", "schemas", "adapters"]       # the protected folders of the policy before the move
 DEV, LOCAL = "builder--forge--framework-dev", "builder--forge--local-authoring"
+IMPROVE = "modes/improve"
 CLAUSE = "{}/ of the agentbay checkout is writable only by forge.extend (env must name it)"
 
 
@@ -213,7 +214,7 @@ def undo_move(got: dict) -> dict:
     def old(s: str, unit: str | None = None) -> str:
         if unit == DEV:
             s = s.replace(dev_now, dev_was)
-        for p in moved:
+        for p in [*moved, IMPROVE]:          # improve moved too; it is no longer protected (part H)
             was = f"outside the role's writable paths {local_writes}" if unit == LOCAL else CLAUSE.format("framework")
             s = s.replace(CLAUSE.format(p), was).replace(f"<project>/{p}", f"<project>/framework/{p}")
         return s
@@ -228,8 +229,50 @@ def undo_move(got: dict) -> dict:
     return got
 
 
+# Part H (D3, D4): improve is an ordinary mode, so the rows of its files (and only those) change. Every row is named with
+# its decision in the golden (was) and now. Reasons:
+#   - local-authoring and the workspace writer (builder--delivery) may write user extensions, and improve's mode folder is one
+#     now (D3), so deny -> pass. The protected parts of improve (improve-local, its nine connectors) are not rows here.
+#   - framework-dev (forge.extend's builder) named modes/improve only because it was protected (D9: lint keeps its
+#     fs.write in step with the map). It writes protected paths, not user extensions, so pass -> deny. Findings about
+#     improve itself route to a mode-fix task, not forge.extend (D4).
+USER_MODE_GAP = ("mode improve: role analyst works in the framework env framework-dev (improve.scan step patterns); "
+                 "user modes may put roles only in their own envs (envs/) or the framework envs workspace and research")
+IMPROVE_ROWS = ["Edit mode:improve/mode.yaml", "MultiEdit mode:improve/mode.yaml", "NotebookEdit mode:improve/n.ipynb",
+                "Write mode:improve/README.md", "Write mode:improve/features/scan/playbook.md",
+                "Write mode:improve/mode.yaml"]
+EXPECTED_DELTAS: dict = {
+    **{("builder--delivery", r): ("deny", "pass") for r in IMPROVE_ROWS},
+    **{(LOCAL, r): ("deny", "pass") for r in IMPROVE_ROWS},
+    **{(DEV, r): ("pass", "deny") for r in IMPROVE_ROWS},
+}
+
+
+def put_back(got: dict, want: dict) -> dict:
+    """The matrix with each EXPECTED_DELTAS row (asserted first) set to the golden's decision and reason."""
+    got = copy.deepcopy(got)
+    for (unit, row), (was, now) in EXPECTED_DELTAS.items():
+        assert got["matrix"][unit][row][0] == now and want["matrix"][unit][row][0] == was, (unit, row)
+        got["matrix"][unit][row] = want["matrix"][unit][row]
+    # the resolver gap for an improve role in a framework-writing env: improve is a user mode now, so the resolver gives
+    # the user-mode message (once, as for any user mode) instead of one "only forge.extend" line per step
+    name = "improve in a framework-writing env"
+    now, was = got["resolverGaps"][name], want["resolverGaps"][name]
+    assert now[0] == USER_MODE_GAP and not any("only forge.extend" in g for g in now), now
+    assert [g for g in was if "only forge.extend" in g] and [g for g in now if g not in was] == [USER_MODE_GAP]
+    got["resolverGaps"][name] = was
+    return got
+
+
 def decisions(doc: dict) -> dict:
     return {unit: {row: v[0] for row, v in rows_.items()} for unit, rows_ in doc["matrix"].items()}
+
+
+def changed(got: dict, want: dict) -> dict:
+    """{(caller, row): (was, now)} for every decision that differs from the golden's."""
+    a, b = decisions(got), decisions(want)
+    assert a.keys() == b.keys() and all(a[u].keys() == b[u].keys() for u in a), "the rows themselves changed"
+    return {(u, row): (b[u][row], a[u][row]) for u in a for row in a[u] if a[u][row] != b[u][row]}
 
 
 def test_guard_decision_matrix():
@@ -241,8 +284,9 @@ def test_guard_decision_matrix():
                       "lintWarnings": [w for w in lint.warnings(model.Kit(k, k)) if "reaches" in w],
                       "matrix": matrix(k)}, real)
         want = json.loads((GOLDEN / "guard-matrix.json").read_text())
-        assert decisions(got) == decisions(want), "a guard decision changed"       # before any path is mapped
-        compare("guard-matrix", undo_move(got))
+        diff = changed(got, want)
+        assert diff == EXPECTED_DELTAS, "a guard decision changed:\n" + "\n".join(f"{key}: {v}" for key, v in diff.items())
+        compare("guard-matrix", undo_move(put_back(got, want)))
     finally:
         cleanup(k)
 

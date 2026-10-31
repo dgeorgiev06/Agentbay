@@ -9,7 +9,7 @@ FOLDERS = {"mode": "modes", "env": "envs", "connector": "connectors"}
 # The paths of the protected instances, in the order the guard policy lists them after the four protected folders (the
 # map's order per kind): written out so a change to the protected set shows in the test, not only in the map.
 PROTECTED_INSTANCES = [
-    "modes/cos", "modes/forge", "modes/improve",
+    "modes/cos", "modes/forge",
     "envs/cos-local.yaml", "envs/framework-dev.yaml", "envs/improve-local.yaml", "envs/local-authoring.yaml",
     "envs/workspace.yaml", "envs/research.yaml",
     "connectors/artifact-graph", "connectors/claude-transcripts", "connectors/corpus-store", "connectors/git",

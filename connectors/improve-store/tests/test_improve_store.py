@@ -26,7 +26,7 @@ def cand(kind="slow-step", key="forge.extend.implement", lens="sessions", refs=(
 
 
 def S(d, now=NOW):
-    return st.Store(d, now, {"forge", "improve"})
+    return st.Store(d, now, {"cos", "forge"})
 
 
 def test_a_file_of_a_protected_instance_routes_to_forge_extend_like_the_protected_folders():
@@ -44,6 +44,11 @@ def test_a_file_of_a_protected_instance_routes_to_forge_extend_like_the_protecte
         assert route("modes/cosmos/mode.yaml", "connectors/ledger2/x.py", "envs/workspace.yaml.bak") == "mode-fix"
         assert route("connectors/ledger/ledger.py", "connectors/gmail-api/gmail_api.py") == "mode-fix"   # all must be
         assert st.Store(d, NOW).route_for({"scope": {"file": "connectors/ledger/ledger.py"}}) == "mode-fix"
+        # improve is an ordinary mode (stage 5 part H): a finding about it, or its files, is a mode-fix task
+        s = st.Store(d, NOW, {"cos", "forge"}, paths)
+        assert s.route_for({"scope": {"mode": "improve"}}) == "mode-fix"
+        assert route("modes/improve/mode.yaml", "modes/improve/features/scan/playbook.md") == "mode-fix"
+        assert s.route_for({"scope": {"mode": "forge"}}) == "forge.extend"
     finally:
         cleanup(d)
 

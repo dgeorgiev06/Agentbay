@@ -156,7 +156,7 @@ ROUTE_SCOPES = {
 def golden_routes() -> dict:
     store = mods()[4]
     out = {}
-    for label, framework_modes in (("default", None), ("shipped modes", {"cos", "forge", "improve"})):
+    for label, framework_modes in (("default", None), ("shipped modes", {"cos", "forge"})):
         s = store.Store(tmpdir(), NOW, framework_modes)
         out[label] = {name: s.route_for({"scope": sc}) for name, sc in ROUTE_SCOPES.items()}
     return out
@@ -179,7 +179,7 @@ def fixed_candidates() -> list:
 def golden_reports() -> dict:
     store = mods()[4]
     tmp = tmpdir()
-    s = store.Store(tmp, NOW, {"cos", "forge", "improve"})
+    s = store.Store(tmp, NOW, {"cos", "forge"})
     res = s.upsert(fixed_candidates(), "improve.scan")
     s.triage()
     ids = res["new"]
@@ -280,9 +280,25 @@ EXPECTED_DELTAS = {
 }
 
 
+# Stage 5 part H (D4): improve is an ordinary mode, so a finding about the improve mode routes to a mode-fix task, and cos,
+# a protected mode, routes to forge.extend (the store's default set was {forge, improve}; the map's is {cos, forge}).
+# tests/golden/improve.json is NOT edited: each row is asserted at its new value, then put back to the golden's.
+ROUTE_DELTAS = {
+    ("routes", "default", "mode cos"): {"was": "mode-fix", "now": "forge.extend"},
+    ("routes", "default", "mode improve"): {"was": "forge.extend", "now": "mode-fix"},
+    ("routes", "shipped modes", "mode improve"): {"was": "forge.extend", "now": "mode-fix"},
+}
+
+
 def test_improve_golden():
     got = {"scan": golden_scan(), "audit": golden_audit(), "kitAudit": golden_kit_audit(), "routes": golden_routes(),
            "reports": golden_reports(), "change": golden_change()}
+    for path, delta in ROUTE_DELTAS.items():
+        node = got
+        for key in path[:-1]:
+            node = node[key]
+        assert node[path[-1]] == delta["now"] != delta["was"], (path, delta, node[path[-1]])
+        node[path[-1]] = delta["was"]
     for path, delta in EXPECTED_DELTAS.items():
         node = got
         for key in path:

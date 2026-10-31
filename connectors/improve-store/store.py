@@ -60,7 +60,7 @@ class Store:
         self.dir = Path(data_dir)
         self.path = self.dir / "findings.jsonl"
         self.now = now
-        self.framework_modes = framework_modes or {"forge", "improve"}
+        self.framework_modes = framework_modes or {"cos", "forge"}     # the map's protected modes
         self.protected_paths = tuple(protected_paths)
 
     # ------------------------------------------------------------------ io

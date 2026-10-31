@@ -243,7 +243,7 @@ def test_a_protected_name_is_reserved_and_defined_once():
     from bay import model, scaffold
     k = kit_copy()
     try:
-        for kind, name in (("mode", "cos"), ("mode", "improve"), ("connector", "scaffold"), ("env", "workspace")):
+        for kind, name in (("mode", "cos"), ("mode", "forge"), ("connector", "scaffold"), ("env", "workspace")):
             try:
                 scaffold.create(k, kind, name, implements="items.source/v1")
                 raise AssertionError(f"bay new {kind} {name} was allowed")

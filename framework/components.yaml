@@ -6,7 +6,8 @@
 # resolver and lint read it, and a protected name is reserved (nobody else can define a mode, env or connector of that
 # name). The kit refuses a map where the block is missing or malformed (nothing is writable, no name is free).
 #   paths:     kit folders; the guard denies a write there to any env that does not name the path (framework-dev does)
-#   mode:      protected modes (improve stays listed until stage 5 part H)
+#   mode:      protected modes (improve is an ordinary mode: its findings are decided only by `bay approve <F-id>`, the
+#              interface marks that endpoint ownerOnly, so no mode file can call it)
 #   env:       protected envs; `modes:` = the unprotected modes that may put roles there (`*` = every one)
 #   connector: protected connectors (they scrub secrets, redact transcripts, hold the approval state)
 # Modes, envs and connectors all sit in modes/, envs/ and connectors/; a protected one is writable only where an
@@ -14,7 +15,7 @@
 # Lint keeps framework-dev's fs.write in step with this block: it names every protected path it may write.
 protected:
   paths: [framework, bay, schemas, adapters]
-  mode: [cos, forge, improve]
+  mode: [cos, forge]
   env:
     cos-local: {}
     framework-dev: {}

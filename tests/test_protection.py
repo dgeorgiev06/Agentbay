@@ -343,6 +343,38 @@ def test_a_malformed_protected_block_makes_check_base_refuse_and_the_judging_map
                       touches=[MAP, "adapters/claude-code/adapter.yaml"]).failures
 
 
+# ----------------------------------------------------------------- case variants of a protected name
+def test_a_user_mode_named_cos_or_forge_in_another_case_is_stopped_everywhere():
+    """A protected name is matched exactly, but a folder `modes/Cos/` is the same folder as `modes/cos/` on a
+    case-insensitive filesystem. Three things stop it: `bay new` (names are lowercase), the boundary check (a
+    case-only new folder is not a new extension, F-4) and the case-collision lint on the tracked paths (F-4)."""
+    from types import SimpleNamespace
+
+    from bay import scaffold
+    k = kit_copy()
+    try:
+        for kind, name in (("mode", "Cos"), ("mode", "FORGE"), ("connector", "Ledger"), ("env", "Workspace")):
+            try:
+                scaffold.create(k, kind, name, implements="items.source/v1")
+                raise AssertionError(f"bay new {kind} {name} was allowed")
+            except scaffold.ScaffoldError as e:
+                assert "lowercase" in str(e), str(e)
+            assert not [p for p in (k / "modes").iterdir() if p.name in ("Cos", "FORGE")]
+    finally:
+        cleanup(k)
+    variants = {"modes/Cos/mode.yaml": "y\n", "modes/FORGE/mode.yaml": "y\n", "connectors/LEDGER/connector.yaml": "y\n",
+                "envs/Cos-Local.yaml": "y\n"}
+    base = {**BASE, "modes/forge/mode.yaml": "x\n"}
+    for path in variants:
+        rep = _check({path: variants[path]}, base=base)
+        assert [f.path for f in rep.failures] == [path] and rep.exit_code == 1, path
+    repo = _repo(base, variants, BOUNDARY_MAP)
+    errs = lint.lint_case_and_manifests(SimpleNamespace(root=repo))
+    for want in ("modes/Cos", "modes/FORGE", "connectors/LEDGER", "envs/Cos-Local.yaml"):
+        assert any(want in e and "differs only in case" in e for e in errs), (want, errs)
+    assert not lint.lint_case_and_manifests(SimpleNamespace(root=_repo(base, {}, BOUNDARY_MAP)))
+
+
 # ----------------------------------------------------------------- approvals still pass the gate
 def _cli_approve(k, cid, *args):
     return subprocess.run([sys.executable, str(k / "bay/cli.py"), "approve", cid, *args, "--project", str(k)],
@@ -369,6 +401,75 @@ def test_approval_from_chat_and_from_the_terminal_both_pass_the_gate():
         assert _cli_approve(k, tty).returncode != 0           # a plain CLI call without a TTY is still refused
     finally:
         cleanup(k)
+
+
+# ----------------------------------------------------------------- improve is an ordinary mode (part H)
+WRITERS = ("builder--forge--local-authoring", "builder--delivery")
+
+
+def test_improve_is_an_ordinary_mode_while_its_env_and_connectors_stay_protected():
+    kit = model.Kit(KIT)
+    assert set(kit.protected.names["mode"]) == {"cos", "forge"} and "modes/improve" not in kit.protected_paths()
+    assert not kit.protected.reserved("mode", "improve")
+    s = model.resolve(kit)
+    assert [s.modes[m].root for m in ("improve", "cos", "forge", "delivery")] == ["user", "framework", "framework", "user"]
+    # D3: the env and the nine connectors stay protected; only improve (and the protected modes) may use improve-local
+    assert "improve-local" in kit.protected.names["env"] and kit.protected.may_place("improve", "improve-local")
+    assert not kit.protected.may_place("delivery", "improve-local") and kit.protected.may_place("delivery", "workspace")
+    for c in ("improve-detect", "improve-store", "claude-transcripts", "ledger", "git", "artifact-graph"):
+        assert kit.protected.reserved("connector", c), c
+    assert lint.lint_protection(kit) == []
+    k = kit_copy()
+    try:                                      # a user mode cannot put a role in improve-local
+        edit_yaml(k / "modes/delivery/mode.yaml", lambda d: d["spec"]["roles"].update({"builder": "improve-local"}))
+        assert any("works in the framework env improve-local" in g for g in gaps(k)), gaps(k)
+    finally:
+        cleanup(k)
+
+
+def test_improve_files_are_writable_like_any_user_mode_and_its_env_and_connectors_are_not():
+    k = _built()
+    try:
+        _, decide = _guard(k)
+        for who in WRITERS:
+            for path in ("modes/improve/mode.yaml", "modes/improve/README.md", "modes/improve/features/scan/playbook.md"):
+                assert decide("Write", {"file_path": path, "content": "x"}, who) == "pass", (who, path)
+                assert decide("Edit", {"file_path": path, "old_string": "a", "new_string": "b"}, who) == "pass", (who, path)
+            for path in ("envs/improve-local.yaml", "connectors/improve-store/store.py", "connectors/improve-detect/pipeline.py",
+                         "connectors/claude-transcripts/parser.py", "modes/cos/mode.yaml", "modes/forge/mode.yaml"):
+                assert decide("Write", {"file_path": path, "content": "x"}, who) == "deny", (who, path)
+        # improve's own analyst writes nothing; forge.extend's builder writes protected paths only (D9), so a change to
+        # improve goes through a mode-fix task (forge.create's builder), not forge.extend
+        assert decide("Write", {"file_path": "modes/improve/mode.yaml", "content": "x"}, "analyst--improve") == "deny"
+        assert decide("Write", {"file_path": "modes/improve/mode.yaml", "content": "x"}, "builder--forge--framework-dev") == "deny"
+        assert decide("Write", {"file_path": "modes/cos/mode.yaml", "content": "x"}, "builder--forge--framework-dev") == "pass"
+    finally:
+        cleanup(k)
+
+
+def test_bay_new_no_longer_calls_improve_a_protected_name():
+    from bay import scaffold
+    k = kit_copy()
+    try:
+        try:
+            scaffold.create(k, "mode", "improve")
+            raise AssertionError("the existing mode was overwritten")
+        except scaffold.ScaffoldError as e:
+            assert "protected name" not in str(e) and "already exists" in str(e), str(e)
+        scaffold.create(k, "feature", "extra", target="improve")           # a feature may be added to an ordinary mode
+        assert (k / "modes/improve/features/extra").is_dir()
+    finally:
+        cleanup(k)
+
+
+def test_check_base_treats_a_new_improve_folder_as_a_new_extension_but_not_its_connectors_or_cos():
+    shipped = yaml.safe_load((KIT / MAP).read_text())                   # the real map, as the base's map
+    change = {"modes/improve/mode.yaml": "y\n", "modes/cos/mode.yaml": "y\n", "connectors/improve-store/connector.yaml": "y\n",
+              "connectors/mine/connector.yaml": "y\n"}
+    rep = boundary.check(_repo({"bay/cli.py": "x\n"}, change, shipped), "HEAD~1", "HEAD", None, [])
+    assert sorted(f.path for f in rep.failures) == ["connectors/improve-store/connector.yaml", "modes/cos/mode.yaml"], \
+        [(f.path, f.rule) for f in rep.failures]
+    assert {f.rule for f in rep.failures} == {"protected"}
 
 
 # ----------------------------------------------------------------- D4: improve.findings decide is ownerOnly

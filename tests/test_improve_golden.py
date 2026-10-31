@@ -245,6 +245,27 @@ def golden_change() -> dict:
         cleanup(repo)
 
 
+MOVING = ("bay/improve/", "bay/graph.py", "bay/conformance.py", "bay/util.py", "framework/connectors/", "framework/modes/",
+          "framework/envs/")
+DEADCODE_KINDS = ("unused", "unused-constant", "compat-layer", "complexity")
+
+
+def test_moving_files_have_no_deadcode_findings():
+    """The dead-code step compares fingerprints, and a fingerprint holds the file path: a finding in a file that moves
+    is new at its new path and would block the step. So the files stage 5 moves (improve's code, the shipped connectors
+    and modes) must have none now; a finding found here is fixed before the move, not after."""
+    detect_artifacts, graph, pipeline, _, _ = mods()
+    pl = pipeline.Pipeline({"artifact-graph": FakeGraph(KIT)}, KIT, KIT, {}, datetime(2026, 10, 30))
+    arts = pl.artifacts("project")
+    found = []
+    for kind in DEADCODE_KINDS:
+        for c in detect_artifacts.run(arts, {}, only=kind):
+            where = c["scope"].get("file") or c["detector"]["key"]
+            if where.startswith(MOVING):
+                found.append(f"{kind} {c['detector']['key']}")
+    assert not found, found
+
+
 def test_improve_golden():
     got = {"scan": golden_scan(), "audit": golden_audit(), "kitAudit": golden_kit_audit(), "routes": golden_routes(),
            "reports": golden_reports(), "change": golden_change()}

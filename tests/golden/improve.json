@@ -221,7 +221,7 @@
    "C-7"
   ],
   "countsPerKind": {
-   "complexity": 9,
+   "complexity": 8,
    "doc-size": 2,
    "doc-stale": 2,
    "inefficient-store-read": 3,

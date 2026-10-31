@@ -690,15 +690,7 @@ class CorpusStore:
             raise StoreError(f"connector {name} declares no `source`; set spec.source in its connector.yaml "
                              f"so stored items and deletions are keyed correctly")
         feed = src.ctx.change_feed
-        groups: dict[str, tuple[dict, list[dict]]] = {}
-        for s in sels:
-            native, _ = selmod.split(s, src.ctx.selectors)
-            groups.setdefault(selmod.native_key(native), (native, []))[1].append(s)
-        start_src = run.window_from
-        if src.ctx.window and now - duration(src.ctx.window) > start_src:
-            start_src = now - duration(src.ctx.window)
-            run.warnings.append(f"{name}: lookback {lookback} is longer than the source API serves "
-                                f"({src.ctx.window}); items before {iso(start_src)} come only from the store")
+        groups, start_src = self._plan_source(now, lookback, run, name, src, sels)
         rep = run.sources.setdefault(name, {"fetched": 0, "added": 0, "billed": 0, "requests": 0, "truncated": False,
                                             "checked": 0, "deleted": 0, "queries": []})
         check_pending = self._check_candidates(con, state, src_id, start_src)
@@ -747,18 +739,39 @@ class CorpusStore:
                 if not self._join(con, state, run, sr, cur, q, res, native, group, ids, sels, now):
                     return
                 continue
-            have = parse_time(cur["from"], now)
-            if not (feed and q.incremental and have > q.start):
-                continue
-            remaining, why = self._remaining(state, run.billed, run.max_items, self._cost(src))
-            if remaining <= 0:
-                run.stopped = run.stopped or (f"{why or 'maxItems'} cap reached before {name} backfilled the window; "
-                                              f"coverage still starts {cur['from']}")
-                continue
-            bq = _Query({"query": q.req["query"], "since": iso(q.start), "until": cur["from"], "maxItems": remaining},
-                        q.start, have, False, "older", q.window)
-            if not self._apply(con, state, run, sr, cur, bq, self._fetch(con, src, src_id, bq), ids, sels, now):
+            if not self._backfill(con, state, run, sr, cur, q, ids, sels, now):
                 return
+
+    @staticmethod
+    def _plan_source(now, lookback, run: "_SyncRun", name: str, src, sels) -> tuple[dict, datetime]:
+        """One source's selectors grouped by native query, and where its window starts (the lookback, cut to what
+        the source API serves, with a warning)."""
+        groups: dict[str, tuple[dict, list[dict]]] = {}
+        for s in sels:
+            native, _ = selmod.split(s, src.ctx.selectors)
+            groups.setdefault(selmod.native_key(native), (native, []))[1].append(s)
+        start_src = run.window_from
+        if src.ctx.window and now - duration(src.ctx.window) > start_src:
+            start_src = now - duration(src.ctx.window)
+            run.warnings.append(f"{name}: lookback {lookback} is longer than the source API serves "
+                                f"({src.ctx.window}); items before {iso(start_src)} come only from the store")
+        return groups, start_src
+
+    def _backfill(self, con, state, run: "_SyncRun", sr: "_SourceRun", cur: dict, q: "_Query", ids: list[str],
+                  sels, now) -> bool:
+        """After a followed change-feed query: list the window older than what is stored, within the remaining
+        budget. False when the source is blocked."""
+        have = parse_time(cur["from"], now)
+        if not (sr.src.ctx.change_feed and q.incremental and have > q.start):
+            return True
+        remaining, why = self._remaining(state, run.billed, run.max_items, self._cost(sr.src))
+        if remaining <= 0:
+            run.stopped = run.stopped or (f"{why or 'maxItems'} cap reached before {sr.name} backfilled the window; "
+                                          f"coverage still starts {cur['from']}")
+            return True
+        bq = _Query({"query": q.req["query"], "since": iso(q.start), "until": cur["from"], "maxItems": remaining},
+                    q.start, have, False, "older", q.window)
+        return self._apply(con, state, run, sr, cur, bq, self._fetch(con, sr.src, sr.src_id, bq), ids, sels, now)
 
     def _join(self, con, state, run: "_SyncRun", sr: "_SourceRun", cur: dict, replay: "_Query", res: dict,
               native: dict, group: list[dict], ids: list[str], sels, now) -> bool:

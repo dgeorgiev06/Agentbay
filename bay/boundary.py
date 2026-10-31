@@ -308,7 +308,7 @@ def map_at(repo: Path, base: str, head: str, mb: str | None = None) -> tuple[Com
     text = show(repo, mb, MAP)
     if text is not None:
         return ComponentMap.parse(text), base
-    status = git(repo, "diff","--name-status", "--no-renames", "--no-relative", "--no-ext-diff",
+    status = git(repo, "diff", "--name-status", "--no-renames", "--no-relative", "--no-ext-diff",
                   f"{base}...{head}", "--", MAP).split("\t", 1)[0].strip()
     if status == "A":
         return ComponentMap.parse(show(repo, head, MAP)), head
@@ -333,7 +333,7 @@ def changed(repo: Path, base: str, head: str = "HEAD") -> list[str]:
     """Every path the change adds, modifies or deletes. Renames are split into a deletion and an addition so both
     sides of a move are classified; the flags pin everything the user's git config could change (rename
     detection, relative paths, path quoting, external diff drivers)."""
-    out = git(repo, "-c", "core.quotePath=false", "diff","--name-status", "--no-renames", "--no-relative",
+    out = git(repo, "-c", "core.quotePath=false", "diff", "--name-status", "--no-renames", "--no-relative",
                "--no-ext-diff", "-z", f"{base}...{head}")
     parts = [p for p in out.split("\0")]
     paths = []
@@ -502,7 +502,7 @@ def check(repo: Path, base: str, head: str = "HEAD", proposal: str | None = None
     introduced = map_rev != base
     touches = [t for t in touches or [] if not t.get("planned")]     # planned entries authorize nothing yet
     at_base: set[str] = set()
-    for f in git(repo, "-c","core.quotePath=false", "ls-tree", "-r", "--name-only", "-z", mb).split("\0"):
+    for f in git(repo, "-c", "core.quotePath=false", "ls-tree", "-r", "--name-only", "-z", mb).split("\0"):
         parts = f.split("/")
         at_base.update("/".join(parts[:i]).casefold() for i in range(1, len(parts) + 1) if f)
 

@@ -22,7 +22,7 @@ Branch feat/0008-slice9 from origin/main e20e165 (0.10.0). Parts 1, 2a, 2b, 3a, 
 
 The slice 9 review failed DOD-5, DOD-8, DOD-9, DOD-13, R-4 and R-7 (all should-fix or nit). Fixed: the docs and CHANGELOG say any failed must item or blocker halts before release, and the halting test fails a must item rated should-fix; `recheck.commits` is a `<sha>..HEAD` range or null; `scaffold.proposal` uses `PROPOSAL_PATH` and a named `plan_reason`; `boundary.git` is public (dispatch no longer calls a private helper); fake.py's condition is parenthesised. To pay for `plan_reason`, `selector.vals` replaces the same function copied in selector, gmail-api, x-api and fake (corpus-store no longer calls the private `_vals`), and a trailing blank line in ledger_sources.py went. The removed `return None` lines stay removed (no line budget for them).
 
-## Last lines of the checks (3d builder, after the code commit; the docs-only commit after it changed no code)
+## Last lines of the checks (3d builder, at 3147c06)
 
 - `python3 tests/run.py -q`: "536 passed, 0 failed in 152.8s (2 workers)".
 - `./bay.sh check --limits --base origin/main --proposal docs/proposals/0008-simplify-without-losing-features.md --docs` (no `--write`; exit 0). Boundary line: "boundary origin/main...HEAD: 160 changed paths (59 core, 3 docs, 53 extension, 16 feature, 29 other); 0 failing; B-11 docs: 0 hits". Last line: "✓ limits: 7 measures within their ceilings". It also prints that bay_lines is 9618 against 9620 and kit_python_lines 6584 against 6588 ("the ceiling is now ..."); nothing was written, so the release step's `--write` records those two lower ceilings.
@@ -36,3 +36,8 @@ The slice 9 review failed DOD-5, DOD-8, DOD-9, DOD-13, R-4 and R-7 (all should-f
 ## Not in this slice
 
 improve reading `review.overrun` notes (adds code, owner deferred); the `tests:` keys in framework/components.yaml that name missing contract test files; audit renames and moves of test files; the per-call `uses:` scope; deleting `proposal.load_touches` (kept for its test, bay/proposal.py is not in 0008's touches).
+
+## Release 1.0.0 (coordinator)
+
+- Re-run after the fix round, on a scratch project (`offline: true`): `./bay.sh build --project` then `bay call feed-briefing.sync '{}'` -> done, 7 fetched, 7 added, $0.00; `bay call mail-briefing.sync '{}'` -> done, 6 fetched, 6 added, $0.00; `./bay.sh clean --project` -> `clean`.
+- Ceilings written with `bay check --limits --write` at release.

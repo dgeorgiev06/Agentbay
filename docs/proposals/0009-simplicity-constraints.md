@@ -4,10 +4,15 @@ touches:
   - { path: bay/limits.py, reason: "NEW. counts the size budget, compares with the ceilings, reads exceptions from the proposal (about 80 lines)" }
   - { path: bay/cli.py, reason: "`bay check --limits` (a flag, not a new command)" }
   - { path: framework/limits.yaml, reason: "NEW. the ceilings, one number per line" }
-  - { path: framework/modes/forge/mode.yaml, reason: "`limits` code step in forge.extend after `deadcode`; one review round; fix result is the implement result" }
-  - { path: framework/modes/forge/features/extend/playbook.md, reason: "DOD-15 limits; leaner review and amendment rules" }
-  - { path: framework/modes/forge/features/extend/rules.yaml, reason: "R-1 and R-9 reworded; new rules for nits, touches by folder, amendments" }
-  - { path: bay/boundary.py, reason: "a touches entry that ends in `/` covers the folder" }
+  - { path: modes/forge/mode.yaml, reason: "`limits` code step in forge.extend after `deadcode`; one review round; fix result is the implement result" }
+  - { path: modes/forge/features/extend/playbook.md, reason: "DOD-15 limits; leaner review and amendment rules" }
+  - { path: modes/forge/features/extend/rules.yaml, reason: "R-1 and R-9 reworded; new rules for nits, touches by folder, amendments" }
+  - { path: framework/components.yaml, reason: "the kernel owns framework/limits.yaml" }
+  - { path: framework/interfaces/improve.detect.v1.yaml, reason: "a `limits` operation, so forge.extend runs the check as a code step like `deadcode`" }
+  - { path: connectors/improve-detect/, reason: "implements the `limits` operation by calling bay/limits.py" }
+  - { path: README.md, reason: "documents `bay check --limits` and framework/limits.yaml" }
+  - { path: docs/INTERFACES.md, reason: "the `limits` operation and limits.yaml as contracts" }
+  - { path: docs/DESIGN.md, reason: "the ceilings and the ratchet, one paragraph" }
   - { path: bay/model.py, reason: "cache parsed YAML in Kit by (path, mtime, size)" }
   - { path: tests/run.py, reason: "per-test timing; slowest 15; wall-time check against the ceiling" }
   - { path: tests/helpers.py, reason: "kit_copy hard-links files and copies only the file a test edits; built() shared per file" }
@@ -37,7 +42,7 @@ One rule: a change may not make the framework bigger than its ceiling. A determi
 
 ### 1. Size ceilings
 
-`framework/limits.yaml` holds one number per measure. Today's values are the ceilings:
+`framework/limits.yaml` holds one number per measure. The ceilings are measured when 0009 lands, including its own code (the base has no limits.yaml, so 0009 sets its own numbers). Values on main before 0009:
 
 | Measure | Today |
 |---|---|

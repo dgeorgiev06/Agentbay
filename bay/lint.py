@@ -343,7 +343,7 @@ def lint_roles(kit: model.Kit) -> list[str]:
     out = []
     for kind in ("Role", "Environment", "Connector"):
         for d in kit.docs[kind].values():
-            raw = yaml.safe_load(d.path.read_text()) or {}
+            raw = model.load_yaml(d.path) or {}
             if "review" in (raw.get("spec") or {}):
                 out.append(f"{_where(d.path, _line_of(d.path, r'^\s+review:'))}: review settings found in {'an' if kind[0] in 'AEIOU' else 'a'} {kind}; "
                            f"configure review only in mode.yaml features.<feature>.review")

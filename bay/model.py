@@ -26,6 +26,7 @@ import fnmatch
 import json
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -121,11 +122,9 @@ def item_kinds(kit: Path = KIT) -> dict[str, set[int]]:
 
 def mode_envs(md: Doc) -> list[str]:
     """Every env a mode's `roles:` maps (mode-wide and per feature), in order."""
-    s, out = md.spec, []
-    for m in [s.get("roles"), *((ep or {}).get("roles") for ep in (s.get("features") or {}).values())]:
-        if isinstance(m, dict):
-            out += [e for e in m.values() if isinstance(e, str)]
-    return list(dict.fromkeys(out))
+    s = md.spec
+    maps = [s.get("roles"), *((ep or {}).get("roles") for ep in (s.get("features") or {}).values())]
+    return list(dict.fromkeys(e for m in maps if isinstance(m, dict) for e in m.values() if isinstance(e, str)))
 
 
 def ruleset(kit: Path, name: str) -> list[dict]:
@@ -142,10 +141,7 @@ def inline_refs(s):
     if isinstance(s, dict):
         ref = s.get("$ref")
         if isinstance(ref, str) and not ref.startswith("#") and "/v" in ref:
-            sub = dict(data_schema(ref))
-            sub.pop("$schema", None)
-            sub.pop("$id", None)
-            return inline_refs(sub)
+            return inline_refs({k: v for k, v in data_schema(ref).items() if k not in ("$schema", "$id")})
         return {k: inline_refs(v) for k, v in s.items()}
     if isinstance(s, list):
         return [inline_refs(x) for x in s]
@@ -160,12 +156,19 @@ def schema_errors(instance, sch: dict) -> list[str]:
             for e in sorted(v.iter_errors(instance), key=lambda e: list(map(str, e.absolute_path)))]
 
 
+_YAML: dict = {}      # (file identity, mtime, size) -> parsed; a file touched in the last 2 s is never kept, so a same-size edit shows
+
+
 def load_yaml(path: Path):
+    st = path.stat()
+    key = (st.st_dev, st.st_ino, st.st_mtime_ns, st.st_size)       # a hard link of the file shares its entry
     try:
-        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        doc = _YAML.get(key) or yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as e:
         raise SpecError(f"{path}: invalid YAML: {e}") from e
-    return doc
+    if st.st_mtime_ns < time.time_ns() - 2_000_000_000:
+        _YAML[key] = doc
+    return copy.deepcopy(doc)             # callers mutate what they get (extends, offline); the cache keeps its own
 
 
 @dataclass
@@ -190,10 +193,7 @@ class Doc:
 
     @property
     def rel(self) -> str:
-        try:
-            return str(self.path.relative_to(KIT))
-        except ValueError:
-            return str(self.path)
+        return rel(self.path)
 
 
 def load_protection(root: Path) -> tuple[boundary.Protection, str | None]:
@@ -327,8 +327,8 @@ class Kit:
         out: dict[str, dict] = {}
         for y in sorted((self.root / "adapters").glob("*/adapter.yaml")):
             try:
-                meta = yaml.safe_load(y.read_text(encoding="utf-8"))
-            except (OSError, UnicodeDecodeError, yaml.YAMLError):
+                meta = load_yaml(y)
+            except (OSError, UnicodeDecodeError, SpecError):
                 continue                   # lint_adapters reports an unreadable adapter.yaml
             if isinstance(meta, dict) and isinstance(meta.get("profile"), dict):
                 out[y.parent.name] = meta["profile"]

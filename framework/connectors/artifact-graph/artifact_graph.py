@@ -1,9 +1,8 @@
-"""artifact-graph: artifacts.read/v1 over the project (or the kit) files and reference graph (bay.improve.graph)."""
+"""artifact-graph: artifacts.read/v1 over the project (or the kit) files and reference graph (bay.graph)."""
 from pathlib import Path
 
-from bay import secretscan
+from bay import graph, secretscan
 from bay.connect import ConnectorError
-from bay.improve import graph
 
 REFUSED_DIRS = {".agentbay", ".claude", ".git"}
 MAX_BYTES = 1_000_000

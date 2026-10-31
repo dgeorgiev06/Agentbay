@@ -6,7 +6,8 @@ from pathlib import Path
 
 from helpers import cleanup, kit_copy, tmpdir
 
-from bay.improve import conformance, detect_artifacts as da, detect_sessions as ds, graph
+from bay import conformance, graph
+from bay.improve import detect_artifacts as da, detect_sessions as ds
 
 TH = ds.thresholds({"thresholds": {"slowStepMs": 1000, "costlyStepUsd": 1.0}})
 

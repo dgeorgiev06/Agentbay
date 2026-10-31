@@ -12,8 +12,8 @@ from pathlib import Path
 
 import yaml
 
-from .. import model, playbook as pbk, rules as rulesmod
-from ..secretscan import clip
+from . import model, playbook as pbk, rules as rulesmod
+from .secretscan import clip
 
 PATH = Path("framework") / "rules" / "conformance.yaml"
 TOOLS = ("Read", "Write", "Edit", "MultiEdit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch", "NotebookEdit")

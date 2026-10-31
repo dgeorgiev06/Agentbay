@@ -16,9 +16,9 @@ from pathlib import Path
 
 import yaml
 
-from .. import model
+from .. import conformance, graph, model
 from ..util import short_hash
-from . import conformance, detect_artifacts, detect_sessions, graph
+from . import detect_artifacts, detect_sessions
 from .store import fingerprint
 
 EPISODE_SUMMARY_FIELDS = ("id", "source", "kind", "target", "status", "agent", "agentType", "parent", "start",

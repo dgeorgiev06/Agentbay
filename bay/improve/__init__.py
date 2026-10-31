@@ -5,8 +5,6 @@ read-only role shims. Modules:
 
   transcripts  defensive Claude Code transcript parser -> redacted session.episode/v1
   sources      ledger events/verdicts and git history -> session.episode/v1, review verdicts
-  graph        project/kit files and the reference graph (artifacts.read/v1)
   detectors    deterministic session and artifact detectors -> candidate improve.finding/v1
-  conformance  framework/rules/conformance.yaml: load, validate, deterministic checks
-  store        .agentbay/data/improve/findings.jsonl: dedup by fingerprint, triage, backlog, verify
+  store       .agentbay/data/improve/findings.jsonl: dedup by fingerprint, triage, backlog, verify
 """

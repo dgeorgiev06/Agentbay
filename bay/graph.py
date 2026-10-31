@@ -135,7 +135,7 @@ def build(root: Path, kit: Path | None = None) -> Graph:
 
 # ----------------------------------------------------------------------------- agentbay concepts
 def _concepts(g: Graph, kit: Path) -> None:
-    from .. import model
+    from . import model
     k = model.Kit(kit)
     rel = lambda p: Path(p).resolve().relative_to(kit.resolve()).as_posix()   # noqa: E731
     _concept_nodes(g, k, kit, rel)
@@ -152,7 +152,7 @@ def _data_schemas(kit: Path):
     for p in sorted((kit / "schemas" / "data").glob("*.schema.json")):
         base, _, ver = p.name.removesuffix(".schema.json").rpartition(".")
         yield f"schema:{base}/{ver}", p
-    from .. import contenttypes
+    from . import contenttypes
     for ct in contenttypes.scan(kit)[0].values():
         yield f"schema:{ct.ref}", ct.dir / contenttypes.FIELDS
 

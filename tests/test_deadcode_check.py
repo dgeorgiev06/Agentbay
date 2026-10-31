@@ -8,8 +8,7 @@ from pathlib import Path
 
 from helpers import KIT, cleanup, clock, kit_copy, project, system, tmpdir
 
-from bay import dispatch
-from bay.improve import graph
+from bay import dispatch, graph
 from bay.improve.pipeline import Pipeline
 
 GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]

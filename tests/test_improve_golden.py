@@ -22,7 +22,8 @@ HUMAN = "user@tty"
 
 
 def mods():
-    from bay.improve import detect_artifacts, graph, pipeline, report, store
+    from bay import graph
+    from bay.improve import detect_artifacts, pipeline, report, store
     return detect_artifacts, graph, pipeline, report, store
 
 

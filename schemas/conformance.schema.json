@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agentbay/v2/Conformance",
   "title": "Conformance rules",
-  "description": "framework/rules/conformance.yaml: the single source of semantic framework rules. Read by forge.create/forge.extend reviewers (review.rulesets) and improve.audit. `check` names a deterministic check in bay/improve/conformance.py; rules without one are judged by the analyst (improve.audit) or reviewer.",
+  "description": "framework/rules/conformance.yaml: the single source of semantic framework rules. Read by forge.create/forge.extend reviewers (review.rulesets) and improve.audit. `check` names a deterministic check in bay/conformance.py; rules without one are judged by the analyst (improve.audit) or reviewer.",
   "type": "object",
   "required": ["apiVersion", "kind", "rules"],
   "additionalProperties": false,

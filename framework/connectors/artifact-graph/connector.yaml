@@ -2,7 +2,7 @@ apiVersion: agentbay/v2
 kind: Connector
 metadata:
   name: artifact-graph
-  description: Project or kit files, their text, and the reference graph of agentbay concepts and Python definitions (bay.improve.graph). Read-only.
+  description: Project or kit files, their text, and the reference graph of agentbay concepts and Python definitions (bay.graph). Read-only.
   version: 0.1.0
 spec:
   implements: artifacts.read/v1

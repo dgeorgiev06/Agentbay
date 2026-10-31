@@ -874,8 +874,8 @@ def lint_case_and_manifests(kit: model.Kit) -> list[str]:
 
 
 def lint_rulesets(kit: model.Kit) -> list[str]:
-    """framework/rules/conformance.yaml: schema, unique ids, known checks (bay/improve/conformance.py)."""
+    """framework/rules/conformance.yaml: schema, unique ids, known checks (bay/conformance.py)."""
     if not (kit.root / "framework" / "rules").is_dir():
         return []
-    from .improve import conformance
+    from . import conformance
     return conformance.lint(kit.root)

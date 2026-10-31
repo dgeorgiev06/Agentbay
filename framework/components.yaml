@@ -33,6 +33,7 @@ components:
       - framework/rules/
       - framework/interfaces/
       - framework/components.yaml
+      - framework/limits.yaml
       - coordinator/
       - bay.sh
       - requirements.txt

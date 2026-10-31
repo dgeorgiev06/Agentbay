@@ -278,6 +278,10 @@ EXPECTED_DELTAS = {
         "why": "stage 5 part C moved improve's store.py into connectors/improve-store/; the detector scans only files "
                "under /connectors/, so Store.query and Store.claim (each re-reads the findings file per call) now count. "
                "Fixture-data results (scan, audit, routes, reports, change) are unchanged."},
+    ("kitAudit", "countsPerKind", "doc-size"): {
+        "was": 2, "now": 1,
+        "why": "0009 cut the kit's own HANDOFF.md to the current work (commit 28556fd; it had 31 parts), so it is no "
+               "longer over the 3000-word budget; only docs/INTERFACES.md is. Fixture-data results are unchanged."},
 }
 
 
@@ -300,9 +304,12 @@ def test_improve_golden():
             node = node[key]
         assert node[path[-1]] == delta["now"] != delta["was"], (path, delta, node[path[-1]])
         node[path[-1]] = delta["was"]
+    want = json.loads((KIT / "tests" / "golden" / "improve.json").read_text())
     for path, delta in EXPECTED_DELTAS.items():
-        node = got
-        for key in path:
-            node = node[key]
-        assert node == delta["now"] != delta["was"], f"{'/'.join(path)}: expected {delta['was']} -> {delta['now']} ({delta['why']}), got {node}"
+        node, old = got, want
+        for key in path[:-1]:
+            node, old = node[key], old[key]
+        assert node[path[-1]] == delta["now"] != delta["was"], \
+            f"{'/'.join(path)}: expected {delta['was']} -> {delta['now']} ({delta['why']}), got {node[path[-1]]}"
+        node[path[-1]] = old[path[-1]]                  # the golden is not edited: put back its value
     compare("improve", got)

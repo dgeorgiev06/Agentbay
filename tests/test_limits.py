@@ -38,3 +38,7 @@ def test_limits_count_the_ceiling_the_ratchet_and_the_exception():
     (repo / "schemas/t.json").write_text("{}\n")
     problems, _ = limits.check(repo, "HEAD")
     assert len(problems) == 1 and "schemas: 3 is over the ceiling 2" in problems[0]
+    (repo / "schemas/t.json").unlink()
+    (repo / limits.FILE).write_text(_yaml({**NOW, "schemas": 9}))
+    problems, notes = limits.check(repo, write=False)                        # the code step only reads
+    assert problems == [] and notes and (repo / limits.FILE).read_text() == _yaml({**NOW, "schemas": 9})

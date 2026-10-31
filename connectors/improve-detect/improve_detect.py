@@ -1,4 +1,5 @@
 """improve-detect: improve.detect/v1 -> the pipeline module of this folder (read-only)."""
+from bay import limits
 from bay.connect import ConnectorError
 
 from .pipeline import Pipeline
@@ -23,6 +24,18 @@ class ImproveDetect:
             return self.p.change(base)
         except ValueError as e:
             raise ConnectorError(str(e)) from None
+
+    def limits(self, base, proposal=None) -> dict:
+        """bay/limits.py on the project; read-only (the builder's `check --limits` writes the ratchet)."""
+        root = self.p.project.resolve()
+        path = (root / proposal).resolve() if proposal else None
+        try:
+            if base.startswith("-") or path and not path.is_relative_to(root):
+                raise ValueError("base must be a git revision and proposal a path inside the project")
+            problems, notes = limits.check(root, base, path.read_text(encoding="utf-8") if path else None, write=False)
+        except (RuntimeError, ValueError, OSError) as e:
+            raise ConnectorError(str(e)) from None
+        return {"problems": problems, "notes": notes, **({"stopped": "; ".join(problems)} if problems else {})}
 
     def resolve(self, findings=None) -> dict:
         return self.p.resolve(findings or [])

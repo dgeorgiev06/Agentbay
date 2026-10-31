@@ -66,8 +66,8 @@ def _exceptions(text: str | None) -> dict[str, int]:
     return {e["measure"]: e["to"] for e in raw}
 
 
-def check(repo: Path, base: str | None = None, proposal_text: str | None = None) -> tuple[list[str], list[str]]:
-    """(problems, notes). Writes the lowered ceilings to limits.yaml."""
+def check(repo: Path, base: str | None = None, proposal_text: str | None = None, write: bool = True) -> tuple[list[str], list[str]]:
+    """(problems, notes). Writes the lowered ceilings to limits.yaml unless `write` is False (the code step)."""
     repo = Path(repo)
     path = repo / FILE
     if not path.is_file():
@@ -88,6 +88,6 @@ def check(repo: Path, base: str | None = None, proposal_text: str | None = None)
         elif n < ceil[m]:
             text = re.sub(rf"^({m}:\s*)\d+", rf"\g<1>{n}", text, flags=re.M)
             notes.append(f"{m}: {n} is under the ceiling {ceil[m]}; the ceiling is now {n}")
-    if notes:
+    if notes and write:
         path.write_text(text, encoding="utf-8")
     return problems, notes

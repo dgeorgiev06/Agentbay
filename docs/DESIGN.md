@@ -111,7 +111,11 @@ cannot contain code once something runs it. Hard isolation needs an OS sandbox.
 - `forge.extend`, which changes the framework and runs its tests, is installed only when the project is the
   agentbay checkout. Before review it runs a code step, `deadcode` (`improve.detect/v1.change`), that blocks the
   call when the change adds unused code, an unused constant, a compatibility layer or a complexity finding that the
-  merge-base with `origin/main` did not have. The base tree is exported as plain files and never run.
+  merge-base with `origin/main` did not have. The base tree is exported as plain files and never run. A second
+  code step, `limits` (`improve.detect/v1.limits`), keeps the framework from growing: `framework/limits.yaml` holds a
+  ceiling for each size measure (lines in `bay/`, kit connector lines, CLI commands, folders, schemas, tests). A change
+  may not exceed one; a lower count becomes the new ceiling (a ratchet, lowering is free); a raise needs an exception
+  in the proposal front matter that the owner approves with the proposal. `bay check --limits` runs the same check.
 
 ## Briefings: corpus store and read-only SQL
 

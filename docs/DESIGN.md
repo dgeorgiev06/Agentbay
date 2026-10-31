@@ -126,7 +126,7 @@ instead of re-listed. A source whose login is missing or expired returns `blocke
 run, `bay auth <connector>`; a digest or ask then goes on with the stored items and ends `partial`, the gap in
 its coverage. Each connector's README says how it reads its source.
 
-The `corpus-store` connector keeps one SQLite store per mode (`<env data>/<mode>/corpus.db`, owner-only,
+The store connector (the framework connector that implements `items.store/v1`) keeps one SQLite store per mode (`<env data>/<mode>/corpus.db`, owner-only,
 with FTS5 when available) and its internal state (cursors, coverage, budget, deletions) in a separate
 `state.json` agents never open. **Scope invariant:** the store holds exactly the items of the sources bound
 to the mode's env that match a current selector. Every sync and prune enforces it without refetching; after
@@ -150,5 +150,6 @@ way, so every stage keeps its own grants, effects, budget, review and gates, and
 
 The framework ships instances of the same contracts: the root mode, the mode that builds agentbay itself
 (scaffolds, and proposal-driven changes to the framework), and the mode that finds recurring failures, with
-the connectors they use. Each is described in the README of its folder under `framework/modes/` or
-`framework/connectors/`; `bay catalog` lists them.
+the connectors they use. They sit in `modes/`, `envs/` and `connectors/` beside yours; the `protected:` block of
+`framework/components.yaml` names the ones only `forge.extend` may change, and `framework/` itself holds the roles,
+rules, interfaces and that map. Each is described in the README of its folder; `bay catalog` lists them.

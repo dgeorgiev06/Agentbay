@@ -301,7 +301,7 @@ author: {handle?: string, name?: string, email?: string}   # email is the author
   selectors or bound sources, sync re-scopes in its own transaction before fetching, and until a sync or
   prune has run every read endpoint except `status` refuses with an error saying to run sync. sync and
   prune of one mode never run at once (a per-mode lock), and spend is saved before the items commit.
-- **corpus-store** (framework connector) keeps one store per mode, `<env data folder>/<mode>/corpus.db`
+- **The store connector** (the framework connector that implements this interface) keeps one store per mode, `<env data folder>/<mode>/corpus.db`
   (settings.mode from the dispatcher; a use-shim read uses its unit's mode and env). The file, -wal and -shm
   are 0600; WAL mode, `user_version` = 3 (`store_meta` records the content types and their versions). A store of any other version is refused (move the folder aside and sync
   again); stores are never converted:

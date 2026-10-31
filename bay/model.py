@@ -216,6 +216,8 @@ class Kit:
                         self._load(kind, root_name, f, sch)
                     except SpecError as e:
                         self.errors.append(str(e))
+        for kind in PROTECTION_KIND:         # protected first, then the rest (each by name): the order every listing had
+            self.docs[kind] = dict(sorted(self.docs[kind].items(), key=lambda kv: kv[1].root != "framework"))
         self._apply_extends()
         from . import config as cfgmod
         self.config = copy.deepcopy(cfgmod.load(project) if config is None else config)

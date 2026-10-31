@@ -30,6 +30,13 @@ SEVERITY = {"low": 1, "medium": 2, "high": 3, "severe": 5}
 EFFORT = {"config": 1, "mode-fix": 2, "forge.extend": 3, "none": 1}
 ROUTES = ("forge.extend", "mode-fix", "config", "none")
 FRAMEWORK_DIRS = ("framework/", "bay/", "schemas/", "docs/", "tests/")
+
+
+def instance_paths(names: dict) -> tuple[str, ...]:
+    """Where the protected modes, envs and connectors (the component map's names) sit: files there change through
+    forge.extend like the folders in FRAMEWORK_DIRS."""
+    return (*(f"modes/{n}" for n in names.get("mode", ())), *(f"envs/{n}.yaml" for n in names.get("env", ())),
+            *(f"connectors/{n}" for n in names.get("connector", ())))
 HUMAN = "user@tty"
 MAX_EVIDENCE = 30
 
@@ -48,11 +55,13 @@ def isoweek(dt: datetime) -> str:
 
 
 class Store:
-    def __init__(self, data_dir: Path, now: datetime, framework_modes: set[str] | None = None):
+    def __init__(self, data_dir: Path, now: datetime, framework_modes: set[str] | None = None,
+                 protected_paths: tuple[str, ...] = ()):
         self.dir = Path(data_dir)
         self.path = self.dir / "findings.jsonl"
         self.now = now
         self.framework_modes = framework_modes or {"forge", "improve"}
+        self.protected_paths = tuple(protected_paths)
 
     # ------------------------------------------------------------------ io
     def load(self) -> dict[str, dict]:
@@ -76,12 +85,15 @@ class Store:
         tmp.replace(self.path)
 
     # ------------------------------------------------------------------ helpers
+    def _framework_file(self, x: str) -> bool:
+        return x.startswith(FRAMEWORK_DIRS) or any(x == p or x.startswith(p + "/") for p in self.protected_paths)
+
     def route_for(self, f: dict) -> str:
         sc = f.get("scope") or {}
         files = [sc["file"]] if sc.get("file") else list(sc.get("files") or [])
         if sc.get("framework") or sc.get("mode") in self.framework_modes:
             return "forge.extend"
-        if files and all(x.startswith(FRAMEWORK_DIRS) for x in files):
+        if files and all(self._framework_file(x) for x in files):
             return "forge.extend"
         return "mode-fix"
 

@@ -593,8 +593,8 @@ def warnings(kit: model.Kit) -> list[str]:
                        f"(search is slower and unranked; items_fts is absent from sql). Use a Python built with "
                        f"FTS5 (python.org and Homebrew builds have it) for ranked full-text search")
     if kit.project is not None and kit.project.resolve() == kit.root.resolve():
-        roots = kit.protected_paths()
-        out += stale_policy(kit, roots)
+        out += stale_policy(kit, kit.protected_paths())
+        roots = list(kit.protected.paths)     # the folders; a write path of modes/ that reaches modes/cos is by design
         for env in kit.docs["Environment"].values():
             for w in env.spec.get("fs", {}).get("write", []):
                 hits = [d for d in roots if w in (".", "", "./") or Path(d).is_relative_to(Path(w))]
@@ -688,7 +688,7 @@ def lint_self_description(kit: model.Kit) -> list[str]:
 
 def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Kit | None = None) -> list[str]:
     kit = kit or model.Kit(kit_root or model.KIT, project)
-    out = list(kit.errors) + list(kit.collisions)
+    out = list(kit.errors)
     seen: set[str] = set()
     # parents first; a child's problem that is its parent's problem (same file:line, the same message with the
     # child's mode name) is reported once, as the parent's

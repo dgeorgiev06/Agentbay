@@ -7,12 +7,12 @@
 Each distinct (role, mode, env) a mode uses compiles to its own unit (`<role>--<mode>`, plus `--<env>` when
 the mode runs that role in several envs): its own subagent, use shim, guard policy and store access.
 
-Two roots are loaded: `framework/` (shipped with the kit, never edited by users)
-and the kit root (user content). Both have the same layout:
+Modes, envs and connectors live in one folder each at the kit root, whoever wrote them:
 
-    interfaces/<name>.v<N>.yaml   modes/<name>/mode.yaml   envs/<name>.yaml
-    connectors/<name>/connector.yaml
+    modes/<name>/mode.yaml   envs/<name>.yaml   connectors/<name>/connector.yaml   interfaces/<name>.v<N>.yaml
 
+`framework/` holds roles, rules, interfaces and the component map. Which instances only forge.extend may change is
+the map's `protected:` block (a protected instance's `Doc.root` is "framework", any other "user").
 Roles (roles/<name>.yaml) exist only under framework/; a user file of that kind is an error.
 
 `resolve(kit)` walks every feature and fails with ALL gaps at once, each one a
@@ -61,8 +61,10 @@ PROTECTION_KIND = {"Mode": "mode", "Environment": "env", "Connector": "connector
 FRAMEWORK_EXTENDER = "forge.extend"
 USER_ROLE = ("roles are framework-level; customize behaviour in your mode's playbooks/skills, or propose a new "
              "role via forge.extend")
-# Kinds loaded from framework/ only; user space is modes/, envs/, connectors/ (and interfaces/).
+# Kinds loaded from framework/ only (roles); modes, envs and connectors are read from the kit root only (a protected
+# name is protected by framework/components.yaml, wherever it sits); interfaces come from both.
 FRAMEWORK_ONLY = {"Role": USER_ROLE}
+SOURCES = {"Role": ("framework", "user"), "Interface": ("framework", "user")}   # kind -> roots read; others: user only
 ROOT_COORDINATOR = "cos"      # the mode whose coordinator owns the main thread; its playbook is the preamble
 
 
@@ -199,14 +201,13 @@ class Kit:
 
     def __init__(self, kit: Path = KIT, project: Path | None = None, config: dict | None = None):
         self.root = kit
-        self.roots = {"framework": kit / "framework", "user": kit}
         self.project = project
         self.docs: dict[str, dict[str, Doc]] = {k: {} for k in KINDS}
-        self.collisions: list[str] = []
         self.errors: list[str] = []
         self.protected = self._load_protection()
-        for root_name, base in self.roots.items():
-            for kind, (folder, glob, sch) in KINDS.items():
+        for kind, (folder, glob, sch) in KINDS.items():
+            for root_name in SOURCES.get(kind, ("user",)):
+                base = kit / "framework" if root_name == "framework" else kit
                 for f in sorted((base / folder).glob(glob)):
                     if root_name == "user" and kind in FRAMEWORK_ONLY:
                         self.errors.append(f"{rel(f)}: {FRAMEWORK_ONLY[kind]}")
@@ -356,14 +357,10 @@ class Kit:
             if name != expect:
                 raise SpecError(f"{where}: metadata.name '{name}' must match '{expect}'")
         if name in self.docs[kind]:
-            other = self.docs[kind][name]
-            self.collisions.append(
-                f"{kind} '{name}' is defined by both the framework ({other.rel}) and you ({where}); "
-                f"rename yours - framework names are reserved")
-            return
-        if root_name == "user" and self.protected.reserved(PROTECTION_KIND.get(kind, ""), name):
-            raise SpecError(f"{where}: {kind.lower()} '{name}' is a protected name (framework/components.yaml "
-                            f"`protected:`): only {FRAMEWORK_EXTENDER} defines it; rename yours")
+            raise SpecError(f"{kind} '{name}' is defined twice ({self.docs[kind][name].rel} and {where}); "
+                            f"rename one - a name is one {kind.lower()}")
+        if kind in PROTECTION_KIND:      # one folder per kind: "framework" is a label for a protected name
+            root_name = "framework" if self.protected.reserved(PROTECTION_KIND[kind], name) else "user"
         self.docs[kind][name] = Doc(kind, name, root_name, f, meta, spec, lineage=[f.parent] if kind == "Mode" else [])
 
     # convenience
@@ -980,7 +977,7 @@ def code_env(kit: Kit, mode: Doc, iface: str, ep: dict | None = None) -> tuple[D
 
 
 def resolve(kit: Kit) -> System:
-    gaps: list[str] = list(kit.errors) + list(kit.collisions)
+    gaps: list[str] = list(kit.errors)
     ctx = _Ctx(kit, gaps)
     modes: dict[str, ResolvedMode] = {}
     warnings: list[str] = []

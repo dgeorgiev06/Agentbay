@@ -4,11 +4,21 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from bay import ledger, protocol
+from bay import boundary, ledger, protocol
 from bay.connect import ConnectorError
 from bay.util import duration, fingerprint
 
 from . import store as st
+
+
+def _protection(kit):
+    """The component map's `protected:` set (what only forge.extend changes), or None when there is no kit or map."""
+    if not kit:
+        return None
+    try:
+        return boundary.ComponentMap.load(Path(kit) / "framework" / "components.yaml").protected
+    except (OSError, RuntimeError):
+        return None
 
 
 def _read_events(project: Path) -> list[dict]:
@@ -29,8 +39,9 @@ def _read_events(project: Path) -> list[dict]:
 class ImproveStore:
     def __init__(self, ctx):
         self.ctx = ctx
-        fw = {p.name for p in (Path(ctx.kit) / "framework" / "modes").iterdir() if p.is_dir()} if ctx.kit else set()
-        self.store = st.Store(ctx.data_dir, ctx.now(), fw or None)
+        prot = _protection(ctx.kit)
+        self.store = st.Store(ctx.data_dir, ctx.now(), set(prot.names["mode"]) if prot else None,
+                              st.instance_paths(prot.names) if prot else ())
         self.settings = ctx.settings or {}
 
     def _summary(self, ids: list[str]) -> list[dict]:

@@ -32,6 +32,6 @@
         "docWords": { "type": "integer", "minimum": 100, "description": "doc-size: words per markdown file (default 3000)." }
       }
     },
-    "historyDocs": { "type": "array", "items": { "type": "string" }, "default": ["docs/proposals/"], "description": "Path prefixes of markdown kept as history: doc-size and doc-stale skip them." }
+    "historyDocs": { "type": "array", "items": { "type": "string" }, "default": ["docs/proposals/", "docs/plans/"], "description": "Path prefixes of markdown kept as history: doc-size and doc-stale skip them." }
   }
 }

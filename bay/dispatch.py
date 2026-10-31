@@ -22,9 +22,10 @@ import hashlib
 import json
 import secrets as _rand
 import time
+from contextlib import suppress
 from pathlib import Path
 
-from . import checks, config as cfgmod, connect, ledger, model, secretscan, vault, workflows as wfmod
+from . import boundary, checks, config as cfgmod, connect, ledger, model, secretscan, vault, workflows as wfmod
 from .util import PROPOSAL_PATH, parse_time, read_json, utcnow, write_json
 
 VERDICT = "review.verdict/v1"
@@ -36,7 +37,6 @@ FAIL_LEVELS = ("must", "must_not")
 
 class CallError(Exception):
     """Bad input, missing grant, unknown target. Message says what to fix."""
-
 
 
 def _reads_stored(step, out: dict) -> bool:
@@ -361,6 +361,8 @@ class Dispatcher:
                 continue
             if step.kind == "review" and "checks_done" not in state:
                 self._run_checks(feat, state)
+                with suppress(RuntimeError, OSError):          # outside git a later re-check names no commit range
+                    state["head"] = boundary._git(self.project, "rev-parse", "HEAD").strip()
             state["status"] = "awaiting-approval" if step.kind == "gate" else "needs-agent"
             plan = self._plan(mode, feat, step, state)
             state["plan"] = plan
@@ -566,14 +568,15 @@ class Dispatcher:
         if errs:
             raise CallError(f"review verdict does not match {VERDICT}: " + "; ".join(errs[:5]))
         need = [d.id for d in feat.dod] + [r.id for r in feat.rules if r.for_reviewer() and r.applies(state["input"])]
-        got = {i["id"]: i for i in verdict["items"]}
+        rc = state.get("recheck") or {"carried": []}        # a re-check: the carried items stand unless the verdict gives one
+        got = {i["id"]: i for i in rc["carried"]} | {i["id"]: i for i in verdict["items"]}
         missing = [i for i in need if i not in got]
         if missing:
             raise CallError(f"review verdict is missing ids: {', '.join(missing)} (report pass|fail|n/a for each)")
         levels = {d.id: d.level for d in feat.dod} | {r.id: r.level for r in feat.rules}
         failed = [i for i in got.values()
                   if (i["verdict"] == "fail" and levels.get(i["id"]) in FAIL_LEVELS) or i.get("severity") == "blocker"]
-        state["steps"][step.id] = verdict
+        state["steps"][step.id] = {**verdict, "items": list(got.values())}
         state["review"] = {"failed": [i["id"] for i in failed], "items": len(got)}
         if failed:
             state["status"] = "partial"
@@ -598,7 +601,7 @@ class Dispatcher:
         if role.skills:                             # the playbook's short skill names -> the namespaced skills
             plan["skills"] = self._plan_skills(mode, feat, role)
         if step.kind == "review":
-            plan["review"] = self._review_brief(feat, state)
+            plan["review"] = self._review_brief(feat, state, step)
             return plan
         plan.update(self._executor_brief(feat, step, state, role))
         return plan
@@ -622,7 +625,25 @@ class Dispatcher:
         return {sk: sid for sk, sid in sorted(role.skill_names.items()) if sid in role.skills
                 and (feat.skills is None or not sid.startswith(mine) or sk in feat.skills)}
 
-    def _review_brief(self, feat, state) -> dict:
+    def _prior_review(self, state, step) -> dict | None:
+        """The re-check brief {priorCall, failed, commits, carried}: the newest other call of this feature that reviewed
+        the same approved files (path and sha256 at every gate) failed its full review, its state and ledger agree. After
+        a re-check, a pass or any changed file the review is full. No gate, check or step is touched here."""
+        subj = lambda s: {k: g.get("approves") for k, g in (s.get("gates") or {}).items()}      # noqa: E731
+        for e in reversed(ledger.read(self.project)):
+            d = e.get("data") or {}
+            if (e.get("type") == "step.completed" and e.get("source") == "dispatcher" and e.get("step") == step.id
+                    and e.get("callId") != state["callId"] and f"{e.get('mode')}.{e.get('endpoint')}" == state["target"]
+                    and isinstance(d.get("failed"), list) and any(subj(state).values())):
+                prior = read_json(self._calls_dir() / f"{e['callId']}.json") or {}
+                if (prior.get("review") or {}).get("failed") == d["failed"] and subj(prior) == subj(state):
+                    items = (prior.get("steps") or {}).get(step.id, {}).get("items", [])
+                    return None if not d["failed"] or prior.get("recheck") else {
+                        "priorCall": e["callId"], "failed": d["failed"],
+                        "commits": f"{prior['head']}..HEAD" if prior.get("head") else None,
+                        "carried": [i for i in items if i["id"] not in d["failed"] and i["verdict"] != "fail"]}
+
+    def _review_brief(self, feat, state, step) -> dict:
         """What the reviewer is given: the task, the DoD, the rules, the checks, the output and the verdict schema."""
         brief = {
             "task": {"target": state["target"], "input": state["input"]},
@@ -636,6 +657,8 @@ class Dispatcher:
         for name in (feat.review or {}).get("rulesets", []):
             # framework rule sets (e.g. conformance): judged with the DoD; cite their ids in evidence
             brief.setdefault("rulesets", {})[name] = model.ruleset(self.sys.kit.root, name)
+        if rc := self._prior_review(state, step):          # judge the failed items again; the others stand
+            state["recheck"] = brief["recheck"] = rc
         return brief
 
     def _executor_brief(self, feat, step, state, role) -> dict:

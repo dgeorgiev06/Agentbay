@@ -59,9 +59,10 @@ class Artifacts:
 
 
 def candidate(kind: str, key: str, title: str, pattern: str, evidence: list[dict], scope: dict,
-              severity: str = "low", measure: dict | None = None, fix: str | None = None) -> dict:
-    out = {"lens": "artifacts", "kind": kind, "title": title, "pattern": pattern, "evidence": evidence,
-           "scope": scope, "severity": severity, "occurrences": max(1, len(evidence)),
+              severity: str = "low", measure: dict | None = None, fix: str | None = None,
+              lens: str = "artifacts", occurrences: int = 0) -> dict:
+    out = {"lens": lens, "kind": kind, "title": title, "pattern": pattern, "evidence": evidence,
+           "scope": scope, "severity": severity, "occurrences": occurrences or max(1, len(evidence)),
            "detector": {"name": kind, "key": key}}
     if measure:
         out["measure"] = measure

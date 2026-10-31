@@ -321,7 +321,7 @@
         },
         "when": {
           "type": "string",
-          "pattern": "^(stale\\s*>\\s*[0-9]+[mhdw]|!?approved\\s+\\$in\\.[A-Za-z][A-Za-z0-9-]*(?:\\.[A-Za-z][A-Za-z0-9-]*)*|!?\\$(?:in|steps)\\.[A-Za-z][A-Za-z0-9-]*(?:\\.[A-Za-z][A-Za-z0-9-]*)*)$",
+          "pattern": "^(stale\\s*>\\s*[0-9]+[mhdw]|!?\\$(?:in|steps)\\.[A-Za-z][A-Za-z0-9-]*(?:\\.[A-Za-z][A-Za-z0-9-]*)*)$",
           "description": "`stale > 2h` (code step: skip unless the store is older), `$in.<field>` or `$steps.<id>.<field>` (skip unless truthy); a leading `!` skips when true instead."
         },
         "task": {

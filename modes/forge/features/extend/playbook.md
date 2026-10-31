@@ -44,4 +44,4 @@ A `Result`: proposal path, branch, changed files in `artifacts`, release notes i
 
 ## Failure handling
 - Proposal rejected at the gate: the call ends `blocked` with the user's reason; nothing is implemented.
-- Review finds a failed must or a blocker: the call ends `partial` before release; fix and re-run extend with `proposal` set.
+- Review finds a failed must or a blocker: the call ends `partial` before release; fix and re-run extend with `proposal` set. If the proposal is unchanged since the owner approved it, the re-run's review is a scoped re-check (once): the brief's `recheck` names the failed ids, the fix commits and the items that passed; judge the failed ids again. A changed proposal, or a re-run after a re-check, gets a full review.

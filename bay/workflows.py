@@ -49,7 +49,7 @@ PATH = rf"{FIELD}(?:\.{FIELD})*"
 REFERENCE = rf"\$(?:in|steps)\.{PATH}"
 STALE = r"stale\s*>\s*[0-9]+[mhdw]"
 WHEN_PATTERN = rf"^!?{REFERENCE}$"                                                    # a project stage
-FEATURE_WHEN_PATTERN = rf"^({STALE}|!?approved\s+\$in\.{PATH}|!?{REFERENCE})$"        # a mode feature's step
+FEATURE_WHEN_PATTERN = rf"^({STALE}|!?{REFERENCE})$"                                  # a mode feature's step
 APPROVES_PATTERN = rf"^\$in\.{PATH}(\|\$steps\.{PATH})?$"
 
 REF = re.compile(r"^\$(in|steps|config)\.")          # what `with:` substitutes (a `$config.` value too)
@@ -199,7 +199,6 @@ def check_stages(stages: list[Stage], where: str, gate_fix: str, wf: Workflow | 
             out += _check_dollars(st, at)
         seen[st.id] = st
     return out
-
 
 
 def _grammar_problems(st: Stage, at: str, project: bool) -> list[str]:

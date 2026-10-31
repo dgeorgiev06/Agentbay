@@ -194,6 +194,15 @@ def refused_gate_row(stage_id: str = "b"):
             "problems": [f"agentbay.config.yaml workflows.w step {stage_id}: {GATE_WHEN} {workflows.PROJECT_GATE_FIX}"]}
 
 
+D9 = "D9: a feature `when: approved $in.f` is refused at load (the dispatcher cannot evaluate it; it crashed)"
+
+
+def refused_when_row(when: str):
+    return {"accepted": False, "layer": "resolve", "problems": [
+        f"<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '{when}' does not match "
+        f"{workflows.FEATURE_WHEN_PATTERN!r}"]}
+
+
 EXPECTED_DELTAS = {
     **{("project", "when", f): {"was": False, "now": accepted_row(), "why": D8_PROJECT}
        for f in ("!$in.x", "!$steps.a.x")},
@@ -202,6 +211,8 @@ EXPECTED_DELTAS = {
                       "$steps.nope.x": False}.items()},
     **{("feature", "when", f): {"was": False, "now": accepted_row(), "why": D8_FEATURE}
        for f in ("$in.x-y", "$in.x.y", "$steps.a.x-y", "$steps.a.x.y", "$steps.a", "$steps.A.x")},
+    **{("feature", "when", f): {"was": True, "now": refused_when_row(f), "why": D9}
+       for f in ("approved $in.f", "!approved $in.f")},
 }
 EXPECTED_RUNNER_DELTAS = {          # (when, input, output) -> (was, now): the project `when` the schema used to refuse
     ("!$in.x", '{"x": 0}', "{}"): ("rejected by the config schema", {"stage": "b", "status": "stage-ready"}),

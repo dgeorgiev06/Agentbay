@@ -245,6 +245,46 @@ def test_failed_review_halts_before_release():
     items[0] = {"id": items[0]["id"], "verdict": "fail", "evidence": "vocabulary drift", "severity": "blocker"}
     r = d.submit(r["callId"], "review", {"items": items})
     assert r["status"] == "partial" and "next" not in r
+    # a re-run on the same approved proposal: a scoped re-check of the failed items (once), else a full review
+    path = _proposal(k, "0096-recheck.md", "status: draft\n")
+    real_git, dispatch.boundary._git = dispatch.boundary._git, lambda *a: "abc123\n"      # the kit copy is no git checkout
+
+    def to_review():
+        r = d.call("forge.extend", {"goal": "recheck", "proposal": path})
+        if r["status"] == "awaiting-approval":              # first run, or the proposal changed: the owner decides
+            r = d.approve(r["callId"], True, by="user@tty")
+        return d.submit(r["callId"], "implement", ok)
+
+    def verdict(ids, fail=()):
+        return {"items": [{"id": i, "verdict": "fail" if i in fail else "pass", "evidence": "e",
+                           **({"severity": "blocker"} if i in fail else {})} for i in ids]}
+    try:
+        r1 = to_review()
+        ids = [x["id"] for x in r1["next"]["review"]["definitionOfDone"] + r1["next"]["review"]["rules"]]
+        a, b = ids[:2]
+        assert "recheck" not in r1["next"]["review"]
+        assert d.submit(r1["callId"], "review", verdict(ids, [a]))["review"]["failed"] == [a]    # still halts
+        r2 = to_review()
+        skipped = [e["step"] for e in ledger.read(k) if e.get("callId") == r2["callId"] and e["type"] == "step.skipped"]
+        rc = r2["next"]["review"]["recheck"]
+        assert "approve" in skipped and (rc["priorCall"], rc["failed"], rc["commits"]) == (r1["callId"], [a], "abc123..HEAD")
+        assert sorted(i["id"] for i in rc["carried"]) == sorted(set(ids) - {a})
+        err(lambda: d.submit(r2["callId"], "review", verdict([b])), "missing ids", a)          # every failed id is re-judged
+        r = d.submit(r2["callId"], "review", verdict([a]))
+        assert r["next"]["step"] == "release" and len(d._load(r2["callId"])["steps"]["review"]["items"]) == len(ids)
+        r3 = to_review()                                    # the last review passed: a full review
+        assert "recheck" not in r3["next"]["review"]
+        d.submit(r3["callId"], "review", verdict(ids, [a]))
+        r4 = to_review()
+        assert r4["next"]["review"]["recheck"]["priorCall"] == r3["callId"]
+        r = d.submit(r4["callId"], "review", verdict([a, b], [b]))                # a new verdict can fail a carried item
+        assert r["status"] == "partial" and r["review"]["failed"] == [b] and "next" not in r
+        assert "recheck" not in to_review()["next"]["review"]  # a second re-check is not allowed: full review
+        (k / path).write_text((k / path).read_text() + "edit\n")
+        assert "recheck" not in to_review()["next"]["review"]  # a changed proposal: the owner approved again, full review
+    finally:
+        dispatch.boundary._git = real_git
+        cleanup(k)
 
 
 def test_selector_change_forces_refresh_even_when_fresh():

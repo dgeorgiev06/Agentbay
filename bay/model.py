@@ -367,7 +367,6 @@ class Kit:
         return self.docs[kind].get(name)
 
 
-
 def rel(p: Path) -> str:
     """Kit-relative path for messages (absolute if outside the kit)."""
     try:

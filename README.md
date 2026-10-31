@@ -1,6 +1,6 @@
 # agentbay
 
-Jobs for Claude Code, defined as data. You describe a **mode** (a job with endpoints): which of the
+Jobs for Claude Code, defined as data. You describe a **mode** (a job made of features): which of the
 framework's **roles** do its steps, the **environment** each role works in, the capabilities it needs, and its
 playbooks, skills and rules. **Connectors** do the deterministic work, and one **agent profile** says how an
 LLM product runs the roles. agentbay checks the wiring, compiles it into Claude Code, and runs it through one
@@ -51,7 +51,9 @@ Code steps run in the dispatcher, agentic steps as subagents; the `reviewer` giv
 Done item. A change to the framework also passes a code step, `deadcode`, before review: `improve.detect/v1.change`
 audits the tree and the tree at its merge-base with `origin/main`, and any new unused code or compatibility layer blocks the call. A second code step, `limits`, blocks a change that
 pushes the framework past a ceiling in `framework/limits.yaml`; run `./bay.sh check --limits` by hand. A count below
-its ceiling is a note; `--write` (at release) writes it as the new ceiling; raising one needs an exception in the proposal.
+its ceiling is a note (and may climb back to the base branch's value); `--write` (at release) writes it as the new ceiling; raising one needs an exception in the proposal.
+Before the approval gate, a large or security-sensitive proposal also gets a plan (`docs/plans/<id>.md`, written by
+the `lead` role); the gate binds the proposal and the plan. `approvals: { plan: large|always|never }` sets when (default `large`).
 
 **Going live:** sign in as the source connector's `README.md` says, remove `offline: true` from
 agentbay.config.yaml and rebuild. Budget caps stop a sync before it exceeds one.
@@ -63,6 +65,8 @@ writes a minimal `agentbay.config.yaml` when the project has none. Settings can 
 the env's `limits:` is refused by lint and at run time. Capabilities stay bound only in `envs/<env>.yaml`; an
 env's `offline:` block names the stand-in sources that `offline: true` binds in their place.
 A mode endpoint with a `schedule:` (daily, weekly) runs from cron: `bay check` prints the command to schedule.
+The weekly improve report, for example (Mondays, 07:00):
+`0 7 * * 1  cd ~/code/my-repo && .agentbay/bay call improve.backlog '{}'`
 
 ## Folder map
 
@@ -83,7 +87,7 @@ framework/       shipped with the kit, never edited by users:
   components.yaml  the component map: core paths, the contracts extensions implement, and a `protected:` block
                    naming what only forge.extend may change (folders, and the shipped modes, envs and connectors
                    that sit in modes/, envs/ and connectors/ among yours)
-schemas/         the contracts (apiVersion agentbay/v3) and data schemas
+schemas/         the contracts (apiVersion agentbay/v3; a v2 file is refused with the fix) and data schemas
 bay/             resolver, lint, dispatcher, guard hook, run log, CLI
 coordinator/     Chief of Staff slash commands
 tests/           python3 tests/run.py (connector tests live next to each connector)
@@ -96,13 +100,13 @@ tests/           python3 tests/run.py (connector tests live next to each connect
 
 | command | does |
 |---|---|
-| `bay check [--base <ref> --proposal <file>]` | lint and resolve everything; with `--base`, also check a change against core ownership |
+| `bay check [--base <ref> --proposal <file>] [--limits [--write]]` | lint and resolve everything; with `--base`, also check a change against core ownership; `--limits` checks the ceilings, `--write` records lower counts (release only) |
 | `bay build` / `bay clean` | compile into a project / remove what was generated |
 | `bay catalog [<name>] [--roles]`, `bay describe <name>` | what is installed, resolved; `--roles` lists the role units |
 | `bay show <mode> --resolved` | a mode's features after `extends`, with the file each comes from |
 | `bay call <mode>.<endpoint> '<json>'` | run a feature |
 | `bay submit <callId> <step> '<json>'`, `bay show <callId>`, `bay show reclaim <runId>` | hand back a step's output; current state; mark a stuck run reclaimed |
-| `bay approve <callId\|runId> [--reject]` | pass an approval gate (your terminal; or `--via chat --quote "<msg>" --sha <hex>`, relayed by the Chief of Staff, when `approvals: { chat: true }` is set) |
+| `bay approve <callId\|runId> [--reject]` | pass an approval gate (your terminal; or `--via chat --quote "<msg>" --sha <hex>` (the sha256 prefixes of what you saw, `<proposal>+<plan>` when a plan exists), relayed by the Chief of Staff, when `approvals: { chat: true }` is set) |
 | `bay approve <F-id> [--defer\|--wontfix]` | decide a backlog item from the analysis mode (your terminal only, never from chat) |
 | `bay status [--agents\|--log]`, `bay note <ref> "text"` | calls, steps, cost, agent runs (grouped by role, mode, model, tier); the raw run log; a note |
 | `bay note task`, `bay note dispatch <taskId> --agent <name> --input <x>`, `bay note review <taskId> '<json>'`, `bay plan <taskId> [--done <n>]` | agent run records: a fresh taskId; the Chief of Staff logs each dispatch and outside review; a subagent first records its outcome and to-do (`bay plan` is its only `bay` command) |
@@ -124,7 +128,7 @@ starts from a proposal that lists every core path it touches. Recipes:
 
 The guard hook narrows what subagents can ask to do; it is defense in depth, not isolation, and cannot contain
 code once something runs it. Nothing that runs code is auto-approved except a role's own read-only data shim;
-the main thread is pre-approved only for `bay show|status|log|note|task|catalog`. Approval gates, secrets,
+the main thread is pre-approved only for `bay show|status|note|catalog`. Approval gates, secrets,
 browser logins and backlog approvals need your terminal; gates alone can be opened to chat (`approvals: { chat: true }`,
 off by default, recorded as `user@chat-via-cos`).
 Details: [docs/DESIGN.md#safety-model](docs/DESIGN.md#safety-model).

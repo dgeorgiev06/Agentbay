@@ -4,7 +4,7 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN.md
 
 ```
  modes/  envs/  connectors/  interfaces/       you (user space)
- framework/{roles,modes,envs,connectors,interfaces}/   the framework (roles only here; an agent profile is in adapters/<name>/adapter.yaml)
+ framework/{roles,interfaces,rules}/   the framework (roles only here; an agent profile is in adapters/<name>/adapter.yaml)
     │
     ├─> bay check ─> model.resolve() ─> System ──> Adapter.build ──> .claude/agents/<role>--<mode>.md, COORDINATOR.md, catalog
     │                  (exact gaps)                                  (claude-code now; headless / cloud next)
@@ -29,8 +29,12 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN.md
 | 8 | **TaskEnvelope / Result** | `schemas/task.schema.json` | rarely; version-bump it |
 | 9 | **LedgerEvent** | `schemas/event.schema.json` | rarely; version-bump it |
 | 10 | **Session, artifact and finding interfaces** | `framework/interfaces/`, the finding schema in a mode's data folder | you add a detector source or finding field |
-| 11 | **Briefing: items, selectors, corpus store, read-only SQL** | `framework/interfaces/items.*.yaml`, `schemas/data/`, a mode's data folder, `bay/selector.py`, `bay/sqlsandbox.py` | you add a source kind or a view |
+| 11 | **Briefing: items, selectors, corpus store, read-only SQL** | `framework/interfaces/items.*.yaml`, `schemas/data/` (item, coverage, verdict), the data folder of the mode that owns a schema (selector, finding, episode), `bay/selector.py`, `bay/sqlsandbox.py` | you add a source kind or a view |
 | 12 | **Conformance rules** | `framework/rules/conformance.yaml`, `schemas/rules.schema.json` | you change what "fits the framework" means |
+
+Every contract document starts `apiVersion: agentbay/v3` (the `$id` of each schema carries it too). `agentbay/v2` is
+refused by `bay check` and at run time with "apiVersion: this kit reads agentbay/v3, not '<found>'; change the line
+to apiVersion: agentbay/v3 (the v2 shapes changed too, see CHANGELOG 1.0.0)"; there is no reader or migration.
 
 ## 1. Mode and features
 `mode.yaml` declares each feature (`spec.features.<name>`, called as `<mode>.<name>`), everything about it in one place:
@@ -74,6 +78,13 @@ Deterministic checks (`bay/checks.py`): `citations_resolve`, `citations_min:<n>`
 The reviewer returns `review.verdict/v1`: per id `pass|fail|n/a`, evidence, severity, and optionally `cites`
 `{taskId, outcome, todo[]}` (the recorded outcome and to-do items the verdict rests on). The review brief
 carries `review.recordedPlans` (taskId -> step, outcome, to-do progress) of the agents it judges.
+Halting is by the reviewer's rating: a failed item rated `blocker`, or a failed must/must_not item with no rating,
+ends the call `partial` before release; a failed must item rated `should-fix` or `nit` is listed in the Result and the
+call goes on to release, ending `partial`. When the same feature already had a failed review of the same approved
+proposal (same path and sha256 at the gate), the next review brief carries `recheck`
+`{priorCall, failed[], commits[], carried[]}`: the verdict must cover every id of the DoD and reviewer rules, the
+reviewer judges `failed` against `commits`, and `carried` items stand unless new evidence fails them (a submitted item
+wins over a carried one). A review after a passed review, after a re-check, or after any edit to the proposal is full.
 
 ## 3. Role / Agent profile / Environment
 Ownership: the framework owns roles; the agent profile is part of a runtime adapter; the user owns modes, envs
@@ -176,7 +187,7 @@ of stage effects. Run state is in `.agentbay/data/workflows/`, written only by t
 ## 7. Dispatcher
 `bay call <mode>.<endpoint> '<json>'` -> `{callId, status, output | next, checks, review, cost}`.
 Status: `done | partial | blocked | failed | needs-agent | awaiting-approval`.
-`bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic step (usage goes to the step's event); `bay show <callId>` prints the current state (`bay show reclaim <runId>` marks a stuck run reclaimed); approval gates pass only with `bay approve <callId>` in an interactive terminal (a project workflow's gate the same way, with its `W-...` run id), or with `bay approve <id> --via chat --quote "<the owner's message>" --sha <8+ hex>` (the sha256 prefix of the content the owner saw; refused if the file changed) when agentbay.config.yaml sets `approvals: { chat: true }` (recorded as `by: user@chat-via-cos` with the quote). A role's generated shim
+`bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic step (usage goes to the step's event); `bay show <callId>` prints the current state (`bay show reclaim <runId>` marks a stuck run reclaimed); approval gates pass only with `bay approve <callId>` in an interactive terminal (a project workflow's gate the same way, with its `W-...` run id), or with `bay approve <id> --via chat --quote "<the owner's message>" --sha <8+ hex>` (the sha256 prefix of the content the owner saw; refused if the file changed) when agentbay.config.yaml sets `approvals: { chat: true }` (recorded as `by: user@chat-via-cos` with the quote). A gate with `approves:` whose call also has a plan file (`docs/plans/<proposal name>.md`) records both `{path, sha256}` pairs; the chat `--sha` is then `<proposal prefix>+<plan prefix>` (each 8+ hex, in that order), the terminal passes the same, and `bay approve` prints both. A later edit or deletion of either file re-opens the gate; an approval of a proposal that had no plan still matches a proposal without one. `approvals.plan` (`large` | `always` | `never`, default `large`) decides whether `forge.extend` runs its `plan` step (the `lead` role, which has `access: write` for that one file): `large` means 10 or more touches, `exceptions:`, no readable `touches:`, or a touch at, under or above a security-sensitive path; the step is skipped when the plan file exists. A role's generated shim
 `.agentbay/roles/<role>--<mode>/use <iface>/v<N>.<ep> '<json>'` (unit fixed inside: role, mode and env; read-only endpoints of the mode's needs)
 is the only way an agent reads connector data; the guard hook stops subagents from running anything else. Secret values are redacted from everything it returns or logs.
 
@@ -215,7 +226,7 @@ with `mode, endpoint, step, role, agent, env, cost`.
 | `session.events/v1` | `episodes {since, until}` -> `session.episode/v1[]` + stats (read-only); a commit in an episode carries its scrubbed subject (200 characters) |
 | `review.verdicts/v1` | `verdicts {since, until}` -> verdicts with round and subject |
 | `artifacts.read/v1` | `files`, `graph` (nodes with refs, edges), `text` (refuses .agentbay/.claude/.git/.env) |
-| `improve.detect/v1` | `sessions`, `artifacts`, `resolve`, `recheck`, `change {base}` (read-only: candidates; `change` writes only a temporary export, removed on return). `change` audits the working tree and the tree at the merge-base of `base` and HEAD (exported from that revision's history; never run) and returns `{new, existing}`: the unused, unused-constant, compat-layer and complexity findings whose fingerprint is absent at the merge-base, and how many already existed. `forge.extend` runs it as its `deadcode` step between `implement` and `review`; any new finding (`stopped`) ends the call `blocked` (DOD-14). `limits {base, proposal?}` (read-only) runs `bay/limits.py` and returns `{problems, notes}`; `forge.extend` runs it as its `limits` step after `deadcode`, and a ceiling exceeded or raised without an exception (`stopped`) ends the call `blocked` (DOD-15). `framework/limits.yaml`, owned by the kernel, holds one whole number per measure (`bay_lines`, `kit_python_lines`, `cli_commands`, `framework_folders`, `schemas`, `top_level_folders`, `tests`); `bay check --limits` fails a count over its ceiling and writes a lower count as the new ceiling. A raise needs `exceptions: [{ measure, to, reason }]` in the proposal's front matter |
+| `improve.detect/v1` | `sessions`, `artifacts`, `resolve`, `recheck`, `change {base}` (read-only: candidates; `change` writes only a temporary export, removed on return). `change` audits the working tree and the tree at the merge-base of `base` and HEAD (exported from that revision's history; never run) and returns `{new, existing}`: the unused, unused-constant, compat-layer and complexity findings whose fingerprint is absent at the merge-base, and how many already existed. `forge.extend` runs it as its `deadcode` step between `implement` and `review`; any new finding (`stopped`) ends the call `blocked` (DOD-14). `limits {base, proposal?}` (read-only) runs `bay/limits.py` and returns `{problems, notes}`; `forge.extend` runs it as its `limits` step after `deadcode`, and a ceiling exceeded or raised without an exception (`stopped`) ends the call `blocked` (DOD-15). `framework/limits.yaml`, owned by the kernel, holds one whole number per measure (`bay_lines`, `kit_python_lines`, `cli_commands`, `framework_folders`, `schemas`, `top_level_folders`, `tests`); `bay check --limits` fails a count over its ceiling (or over the base ceiling, whichever is higher: a ceiling lowered earlier on a branch may climb back to the base value, never above it) and writes nothing; a lower count is a note, and `--write` (the release step, once) writes it as the new ceiling. A raise needs `exceptions: [{ measure, to, reason }]` in the proposal's front matter |
 | `improve.findings/v1` | `upsert`, `annotate`, `query`, `get`, `triage`, `decide`, `backlog`, `claim`, `handoff`, `verify` (storage) |
 
 The framework connectors that implement them are bound in the framework env of the mode that uses them; each

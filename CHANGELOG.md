@@ -2,6 +2,47 @@
 
 Earlier versions: see docs/proposals/
 
+## 1.0.0 - 2026-10-31
+
+Proposal 0008, slice 9: the framework is simpler and the contracts are versioned `agentbay/v3`. Documents that say `agentbay/v2` are refused (see Changed).
+
+### Added
+
+- A plan step in forge.extend, before the approval gate: for a large or security-sensitive proposal the `lead` role writes `docs/plans/<id>.md`. `approvals.plan` is `large` (default), `always` or `never`. The gate binds the proposal and the plan (path and sha256); an edit or deletion of either opens it again. A chat approval passes `--sha <proposal prefix>+<plan prefix>`.
+- A scoped re-check: when a review failed and the approved proposal is unchanged, the re-run's review brief carries `recheck` (the failed ids, the fix commits, the items that passed) and the reviewer judges the failed ids again. A changed proposal, or a re-run after a re-check, gets a full review.
+- `bay check --limits --write` (an option, not a command).
+- The builder role never hand-edits `tests/golden/`; framework-dev may run `git mv` and `git rm`.
+
+### Changed
+
+- `apiVersion: agentbay/v3` in every schema, mode, env, connector, interface, role, content type, config and rule file. A v2 file is refused with "this kit reads agentbay/v3, not '<found>'; change the line to apiVersion: agentbay/v3"; there is no reader and no migration.
+- Schemas: one rules schema serves feature rules and conformance rules (the conformance schema is gone), and the finding, episode and selector schemas moved from `schemas/data/` to the data folders of the modes that own them. Schemas 19 -> 15.
+- The limits ratchet: a count is checked against the higher of its ceiling and the base branch's, so a ceiling lowered earlier on a branch may climb back to the base value, never above it. `bay check --limits` writes nothing; `--write`, at release, records lower counts.
+- Review halts by the reviewer's rating: only a blocker, or a failed must item with no rating, stops the call before release. A failed must item rated should-fix or nit is listed and the call ends `partial` after release.
+- One ledger reader (`bay.ledger.read`); the dispatcher steps through `workflows.advance`; the proposal path pattern is shared.
+- A base component map without a `protected:` block is an error in `bay check --base`.
+- improve-store validates route, effort and impact on upsert as it does on annotate.
+- Tests: 546 -> 536 after an audit (duplicates and dead assertions removed; every behaviour is still asserted). Ceilings written by the ratchet: see framework/limits.yaml.
+- Docs read against the code: README, DESIGN, INTERFACES (the main-thread pre-approved list is `show|status|note|catalog`).
+
+### Removed
+
+- `schemas/conformance.schema.json`, the form `when: approved $in.f` (it crashed; it is refused when the mode loads), `Dispatcher._skip`, and `util.read_events`.
+- The review-round known issue of 0.10.0 and the `protected:` known issue of 0.9.0 (both fixed above).
+
+### Security
+
+- The refusal of v2 documents echoes the found value repr-quoted; it is file content, not a secret.
+- `git mv` and `git rm` in framework-dev are checked against the control plane only, not against `fs.write`: a framework-dev builder could move or remove a tracked file outside its writable paths. Bounded: tracked files only, each command is prompted, git keeps the content and review reads the diff.
+- The plan step runs in the same env as the proposal step, so it has no write reach that step lacks.
+
+### Known issues
+
+- improve does not yet read `review.overrun` notes.
+- Per-feature `uses:` is the intersection of open calls' `uses:`; per-call scope is a follow-up.
+- Slice 9 parts ran with the guard off (owner decision): with it active, framework-dev's `fs.write` does not reach README.md, CHANGELOG.md, HANDOFF.md, content-types/ or the unprotected modes, envs and connectors.
+- `bay/proposal.py` `load_touches` is kept only for its test; it can go with a later touch of that file.
+
 ## 0.10.0 - 2026-10-31
 
 Proposal 0009: constraints against complicating the framework.

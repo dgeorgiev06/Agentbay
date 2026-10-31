@@ -42,7 +42,18 @@ neither; one that runs a role needs a playbook). It is called as `<mode>.<featur
 deterministic `check` (`citations_resolve`, `no_secrets`, `lint_clean`, ...), and stack with mode
 constraints, role rules and project `extraRules`; the strictest wins. Review is configured only in
 `mode.yaml`: the reviewer gets the task, the DoD, the rules and the check results, and returns one verdict per
-id (`review.verdict/v1`). A failed must item or a blocker makes the call `partial`.
+id (`review.verdict/v1`). A failed must item or a blocker makes the call `partial`; the call halts before
+release only when a failed item is rated blocker (a security finding is) or is a must item with no rating. A failed
+must item rated should-fix or nit goes to the Result's list and the call goes on to release, ending `partial`.
+After a halt, the re-run gets one more round (R-1) that is a scoped re-check when the approved proposal is
+unchanged: the brief carries `recheck` (the failed ids, the fix commits, the items that passed), the reviewer judges
+the failed ids again, and a carried item can still fail on new evidence. A changed proposal, or a re-run after a
+re-check, gets a full review.
+
+Every document (mode, env, role, interface, content type, connector, config) carries `apiVersion: agentbay/v3`. A
+file with another value, `agentbay/v2` included, is refused with "this kit reads agentbay/v3, not '<found>'; change
+the line to apiVersion: agentbay/v3": there is no reader and no migration, and the v2 shapes changed too (see
+the CHANGELOG, 1.0.0).
 
 ## Compile: units
 
@@ -97,9 +108,12 @@ cannot contain code once something runs it. Hard isolation needs an OS sandbox.
 - **Nothing that runs code is auto-approved.** The guard allows without a prompt only a role's own read-only
   use shim, run as `python3 -E <kit>/bay/use_shim.py`; when the kit is inside the project, even that prompts.
   Every other subagent command prompts you. The main thread is pre-approved only for
-  `bay show|status|log|note|task|catalog`; `bay call` and `bay submit` run connector code and prompt, and
-  `bay approve` prompts too. With `approvals: { chat: true }` (off by default), `bay approve --via chat --quote --sha`
-  (the sha256 prefix of what you saw) passes a gate without a terminal; it is recorded as `user@chat-via-cos`. This trusts the main thread to
+  `bay show|status|note|catalog` (`show reclaim`, `note dispatch` and `note review` ask); `bay call` and
+  `bay submit` run connector code and prompt, and `bay approve` prompts too. With `approvals: { chat: true }`
+  (off by default), `bay approve --via chat --quote --sha` passes a gate without a terminal; the sha is the sha256
+  prefix (8+ hex) of what you saw, and when the gate binds a plan as well as the proposal it is the two prefixes
+  joined by `+`, proposal first (`<proposal>+<plan>`); one prefix, or the wrong order, is refused. It is recorded as
+  `user@chat-via-cos`. This trusts the main thread to
   relay your words, so it is weaker than a terminal. Secrets and logins never leave the terminal.
 - **What subagents cannot touch:** the guard hook runs on Bash and every file tool. It denies `.agentbay/`,
   `.claude/`, `.git`, `CLAUDE.md`, `.mcp.json`, `agentbay.config.yaml`, `.env*`, `.envrc`, `Makefile`,
@@ -109,13 +123,21 @@ cannot contain code once something runs it. Hard isolation needs an OS sandbox.
 - **Your terminal only:** approval gates, backlog approvals and `bay secret set` refuse a non-interactive
   stdin.
 - `forge.extend`, which changes the framework and runs its tests, is installed only when the project is the
-  agentbay checkout. Before review it runs a code step, `deadcode` (`improve.detect/v1.change`), that blocks the
+  agentbay checkout. Its steps are: draft a proposal (unless one is named), a `plan` step, the approval gate,
+  implement, `deadcode`, `limits`, review, release. The `plan` step runs the `lead` role as a deep subagent and
+  writes `docs/plans/<id>.md` (named like the proposal) when `approvals.plan` asks for one: `large` (the default) means
+  a proposal with 10 or more touches, any `exceptions:`, no readable `touches:`, or a touch at, under or above a
+  security-sensitive path (the guard, the dispatcher, secrets, the ledger, adapters, core rules and two schemas); `always` and `never` are as named. The gate always runs and approves the proposal's path and sha256
+  and, when the plan exists, the plan's; an edit or deletion of either after approval opens the gate again.
+  Before review the call runs a code step, `deadcode` (`improve.detect/v1.change`), that blocks the
   call when the change adds unused code, an unused constant, a compatibility layer or a complexity finding that the
   merge-base with `origin/main` did not have. The base tree is exported as plain files and never run. A second
   code step, `limits` (`improve.detect/v1.limits`), keeps the framework from growing: `framework/limits.yaml` holds a
   ceiling for each size measure (lines in `bay/`, kit connector lines, CLI commands, folders, schemas, tests). A change
-  may not exceed one; a lower count becomes the new ceiling (a ratchet, lowering is free); a raise needs an exception
-  in the proposal front matter that the owner approves with the proposal. `bay check --limits` runs the same check.
+  may not exceed one, measured against the ceiling or the base branch's, whichever is higher (so a ceiling lowered earlier on
+  the branch may climb back to the base value, never above it); a lower count is a note, and `bay check --limits --write`,
+  run once at release, writes it as the new ceiling (a ratchet, lowering is free); a raise needs an exception
+  in the proposal front matter that the owner approves with the proposal. `bay check --limits` runs the same check and writes nothing.
 
 ## Briefings: corpus store and read-only SQL
 

@@ -40,10 +40,9 @@ def test_sync_runs_code_step_and_logs_events_with_cost():
     assert {k: done[k] for k in ("mode", "endpoint", "step", "env")} == \
         {"mode": "feed-briefing", "endpoint": "sync", "step": "fetch", "env": "local-feeds"}
     assert done["cost"] == {"items": 7, "usd": 0.0}
-    if model.jsonschema:
-        sch = json.loads((KIT / "schemas/event.schema.json").read_text())
-        for e in evs:
-            model.jsonschema.validate(e, sch)
+    sch = json.loads((KIT / "schemas/event.schema.json").read_text())
+    for e in evs:
+        model.jsonschema.validate(e, sch)
 
 
 def test_config_lookback_default_and_caps_strictest_wins():

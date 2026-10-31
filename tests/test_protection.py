@@ -44,7 +44,7 @@ def test_the_shipped_map_declares_what_the_old_fixed_list_protected():
     assert not hasattr(model, "PROTECTED") and not hasattr(model, "USER_FRAMEWORK_ENVS")
     assert kit.protected.paths == ("framework", "bay", "schemas", "adapters") and not kit.protected.closed
     # the four folders in the old order and spelling, then each protected instance where it sits (stage 5 part G)
-    assert kit.protected_paths() == ["framework", "bay", "schemas", "adapters", *PROTECTED_INSTANCES]
+    assert kit.protected_paths == ["framework", "bay", "schemas", "adapters", *PROTECTED_INSTANCES]
     assert set(kit.protected.names["env"]) == {e for e, d in kit.docs["Environment"].items() if d.root == "framework"}
     assert set(kit.protected.names["connector"]) == {c for c, d in kit.docs["Connector"].items() if d.root == "framework"}
     assert set(kit.protected.names["mode"]) == {m for m, d in kit.docs["Mode"].items() if d.root == "framework"}
@@ -234,7 +234,7 @@ def test_a_name_is_protected_wherever_it_sits_and_is_defined_once():
     k = _built(lambda d: d["protected"]["connector"].append("fake"))
     try:
         kit = model.Kit(k, k)
-        assert kit.get("Connector", "fake").root == "framework" and kit.protected_paths()[-1] == "connectors/fake"
+        assert kit.get("Connector", "fake").root == "framework" and kit.protected_paths[-1] == "connectors/fake"
         pol, decide = _guard(k)
         assert pol["protected"][-1] == "connectors/fake"
         assert decide("Write", put, "builder--forge--local-authoring") == "deny"
@@ -409,7 +409,7 @@ WRITERS = ("builder--forge--local-authoring", "builder--delivery")
 
 def test_improve_is_an_ordinary_mode_while_its_env_and_connectors_stay_protected():
     kit = model.Kit(KIT)
-    assert set(kit.protected.names["mode"]) == {"cos", "forge"} and "modes/improve" not in kit.protected_paths()
+    assert set(kit.protected.names["mode"]) == {"cos", "forge"} and "modes/improve" not in kit.protected_paths
     assert not kit.protected.reserved("mode", "improve")
     s = model.resolve(kit)
     assert [s.modes[m].root for m in ("improve", "cos", "forge", "delivery")] == ["user", "framework", "framework", "user"]

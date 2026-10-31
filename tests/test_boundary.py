@@ -9,12 +9,13 @@ import yaml
 from helpers import KIT, tmpdir
 from bay import boundary, lint, model, proposal
 
+PROT = {"paths": ["locked"], "mode": [], "env": {}, "connector": []}      # a block every map needs; protects nothing here
 MAP = {"components": {
     "kernel": {"owns": ["bay/", "schemas/"],
                "contracts": {"mode": {"at": ["modes/<name>/"]}, "env": {"at": ["envs/<name>.yaml"]},
                              "connector": {"at": ["connectors/<name>/"]}}},
     "briefing": {"owns": ["bay/selector.py", "modes/briefing/"],
-                 "contracts": {"contentType": {"at": ["content-types/<name>/"]}}}}}
+                 "contracts": {"contentType": {"at": ["content-types/<name>/"]}}}}, "protected": PROT}
 
 BASE_FILES = {
     "framework/components.yaml": yaml.safe_dump(MAP),
@@ -213,22 +214,21 @@ def test_front_matter_parser():
     assert [e["path"] for e in t] == ["bay/", "x/"] and t[1]["planned"] is True
     assert proposal.touches("# no front matter\n") == []
     assert proposal.touches("---\ntouches: []\n---\n") == []
+    f = tmpdir() / "0001-x.md"                                       # from a file: the error names the file
+    f.write_text(text)
+    assert [e["path"] for e in proposal.load_touches(f)] == ["bay/", "x/"]
+    f.write_text("---\ntouches: bay/\n---\n")
+    try:
+        proposal.load_touches(f)
+        raise AssertionError("accepted a touches: that is not a list")
+    except proposal.ProposalError as e:
+        assert str(e).startswith(str(f))
     for bad in ("---\ntouches: [{path: bay/}]\n---\n", "---\ntouches: bay/\n---\n", "---\ntouches: []\n"):
         try:
             proposal.touches(bad)
         except proposal.ProposalError:
             continue
         raise AssertionError(f"accepted: {bad!r}")
-
-
-SLICES_BUILT = {1, 2, 3, 7}   # step-1 slices (some or all of them) landed on this branch (HANDOFF.md)
-
-
-def test_proposal_0006_declares_its_crossings():
-    t = proposal.load_touches(KIT / "docs/proposals/0006-component-contracts-and-content-types.md")
-    paths = {e["path"] for e in t}
-    assert {"bay/boundary.py", "bay/proposal.py", "framework/components.yaml"} <= paths
-    assert all(e.get("planned") for e in t if e.get("slice", 1) not in SLICES_BUILT)   # other slices are not built yet
 
 
 def test_shipped_component_map_is_valid_and_lint_checks_it():
@@ -318,7 +318,8 @@ def test_a_map_introduced_by_the_change_gives_no_new_extension_pass_n1():
     # the reviewer's backdoor: base has no map; the change adds one that makes bay/<name> an extension folder
     evil = {"components": {"kernel": {"owns": ["bay/cli.py"],
                                       "contracts": {"mode": {"at": ["modes/<name>/"]},
-                                                    "adapter": {"at": ["adapters/<name>/", "bay/<name>"]}}}}}
+                                                    "adapter": {"at": ["adapters/<name>/", "bay/<name>"]}}}},
+            "protected": PROT}
     repo = tmpdir()
     _git(repo, "init", "-q", "-b", "main")
     _commit(repo, {"README.md": "# kit\n", "modes/mail/mode.yaml": "x\n",
@@ -357,12 +358,24 @@ def test_a_base_without_a_map_fails_unless_the_change_adds_it_n1():
         assert "does not exist at main" in str(e)
 
 
+def test_a_base_map_without_protected_is_an_error():
+    repo = _repo({})
+    _commit(repo, {MAP_PATH: yaml.safe_dump({"components": MAP["components"]})})
+    _commit(repo, {"bay/cli.py": "z\n"})
+    try:
+        boundary.check(repo, "HEAD~1", "HEAD", None, [])
+        raise AssertionError("checked against a base map without protected:")
+    except RuntimeError as e:
+        assert str(e).startswith(f"{MAP_PATH}: no protected: block; add one"), str(e)
+
+
 def test_new_and_the_map_are_decided_at_the_merge_base_n2():
     # the reviewer's stale fork: main deletes a mode (and drops bay/ from kernel owns) after pr forked; pr edits it
     repo = _repo({})
     _git(repo, "checkout", "-q", "-b", "pr")
     _git(repo, "checkout", "-q", "main")
-    loose = {"components": {"kernel": {"owns": ["schemas/"], "contracts": MAP["components"]["kernel"]["contracts"]}}}
+    loose = {"components": {"kernel": {"owns": ["schemas/"], "contracts": MAP["components"]["kernel"]["contracts"]}},
+             "protected": PROT}
     _commit(repo, {"modes/mail": None, MAP_PATH: yaml.safe_dump(loose)})
     _git(repo, "checkout", "-q", "pr")
     _commit(repo, {"modes/mail/mode.yaml": "y\n", "bay/cli.py": "y\n"})

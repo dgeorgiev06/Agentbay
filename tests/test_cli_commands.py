@@ -9,7 +9,7 @@ from bay import ledger
 COMMANDS = {"check", "build", "clean", "catalog", "describe", "call", "submit", "show", "approve", "new", "secret",
             "auth", "config", "status", "note", "plan"}
 OLD = ("validate", "lint", "boundary", "ls", "reclaim", "log", "task", "improve", "dispatched", "review-record",
-       "mode", "feature", "connector", "env")
+       "mode", "feature", "connector", "env", "use")
 
 
 def cli(p, *args):
@@ -36,8 +36,8 @@ def test_check_takes_boundary_options_only_with_a_base_and_json_prints_only_the_
     import json
     p = project()
     try:
-        for option in ("--docs", "--json"):
-            r = cli(p, "check", option)
+        for option in (["--docs"], ["--json"], ["--proposal", "docs/proposals/x.md"]):
+            r = cli(p, "check", *option)
             assert r.returncode != 0 and "--base" in r.stderr, option
         r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "check", "--base", "HEAD", "--json"],
                            capture_output=True, text=True, cwd=KIT)

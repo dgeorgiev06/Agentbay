@@ -5,7 +5,6 @@ import base64
 import hashlib
 import json
 import re
-import subprocess
 import sys
 import threading
 import urllib.parse
@@ -697,12 +696,6 @@ def test_a_bad_base64_part_is_skipped_with_a_reason_and_listing_stops_on_a_repea
     out = make(fake).fetch(since=SINCE, maxItems=50)
     assert [i["extId"] for i in out["items"]] == ["18a0001"]
     assert len([q for q in fake.log if q["path"].endswith("/messages")]) == 2         # second page added nothing
-
-
-def test_bay_auth_gmail_needs_an_interactive_terminal():
-    r = subprocess.run([sys.executable, "-m", "bay.cli", "auth", "gmail"], cwd=KIT, stdin=subprocess.DEVNULL,
-                       capture_output=True, text=True, timeout=60)
-    assert r.returncode != 0 and "interactive terminal" in r.stderr
 
 
 # ------------------------------------------------------------------ store and views end to end

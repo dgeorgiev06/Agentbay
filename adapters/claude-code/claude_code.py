@@ -440,7 +440,7 @@ class ClaudeCodeAdapter:
         # The shim is auto-allowed only when the kit is outside the project. If the kit is the project
         # or sits inside it, roles may be able to edit code the shim runs, so it prompts instead.
         pol = {"project": str(project.resolve()), "kit": str(kit.resolve()),
-               "protected": system.kit.protected_paths() if is_kit else [], "autoAllowShim": not _within(kit, project),
+               "protected": system.kit.protected_paths if is_kit else [], "autoAllowShim": not _within(kit, project),
                "subagents": subs}
         rel = ".agentbay/guard.json"
         _write_json(project / rel, pol)

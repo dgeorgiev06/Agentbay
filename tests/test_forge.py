@@ -39,8 +39,8 @@ def test_feature_role_env_connector_scaffolds_are_lint_clean():
     s = model.resolve(model.Kit(k))
     wk = s.modes["feed-briefing"].features["weekly"]
     assert wk.review is None and [st.role for st in wk.steps] == ["analyst"]   # read-only: review off by default
-    text = (k / "modes/feed-briefing/mode.yaml").read_text()                   # one block: no endpoint, no workflow
-    assert "  features:\n    weekly:" in text and "steps:" in text and "workflows" not in text and "endpoints" not in text
+    text = (k / "modes/feed-briefing/mode.yaml").read_text()                   # one block per feature
+    assert "  features:\n    weekly:" in text and "steps:" in text
     # write effects -> review on by default
     scaffold.create(k, "feature", "export", target="delivery", role="builder", effects=["read", "write"],
                     intent="Export a file")

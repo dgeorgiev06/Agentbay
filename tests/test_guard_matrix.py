@@ -132,9 +132,10 @@ def build_kit():
     get("claude-code").build(system(k, k), k, k)
     led = k / ".agentbay/ledger"
     led.mkdir(parents=True, exist_ok=True)
-    events = [{"v": 1, "type": "agent.dispatch", "runId": f"T-20261031-a00{i}", "taskId": f"T-20261031-a00{i}", "agent": u}
-              for i, u in enumerate(UNITS)]
-    events.append({"v": 1, "type": "agent.dispatch", "runId": "T-20261031-b000", "taskId": "T-20261031-b000", "agent": "other"})
+    events = [{"v": 1, "ts": "2026-10-31T00:00:00+00:00", "type": "agent.dispatch", "runId": f"T-20261031-a00{i}",
+               "taskId": f"T-20261031-a00{i}", "agent": u} for i, u in enumerate(UNITS)]
+    events.append({"v": 1, "ts": "2026-10-31T00:00:00+00:00", "type": "agent.dispatch", "runId": "T-20261031-b000",
+                   "taskId": "T-20261031-b000", "agent": "other"})
     (led / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
     return k
 

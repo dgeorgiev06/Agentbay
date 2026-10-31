@@ -27,17 +27,6 @@ def extend(d):
     return d.call("forge.extend", {"goal": "build the proposal", "proposal": PATH})
 
 
-def test_existing_proposal_without_approval_skips_propose_and_stops_at_the_gate():
-    k, d = fresh()
-    try:
-        r = extend(d)
-        assert r["status"] == "awaiting-approval" and r["next"]["step"] == "approve"
-        assert r["next"]["approves"]["path"] == PATH
-        assert any(e["type"] == "step.skipped" and e.get("step") == "propose" for e in ledger.read(k))
-    finally:
-        cleanup(k)
-
-
 def test_f1_chat_approval_needs_the_sha_of_the_content_shown():
     k, d = fresh()
     try:
@@ -111,7 +100,6 @@ def test_f6_a_later_rejection_supersedes_an_earlier_approval():
         d.approve(extend(d)["callId"], True, by="user@tty", sha=sha(k / PATH))
         assert extend(d)["next"]["step"] == "implement"
         # a rejection of the same content, recorded by the gate: later decision wins
-        d.approve  # (the approved call moved on, so reject through a call that waits)
         k2 = (k / PATH)
         k2.write_text(k2.read_text() + "\nv2\n")
         d.approve(extend(d)["callId"], False, by="user@tty", reason="no")

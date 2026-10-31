@@ -20,21 +20,18 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 import secrets as _rand
 import time
 from pathlib import Path
 
 from . import checks, config as cfgmod, connect, ledger, model, secretscan, vault, workflows as wfmod
-from .util import parse_time, read_json, utcnow, write_json
+from .util import PROPOSAL_PATH, parse_time, read_json, utcnow, write_json
 
 VERDICT = "review.verdict/v1"
 # who `bay approve` records: a terminal approval, or one relayed from chat (bay/cli.py CHAT_BY); only these pass a
 # gate for a later call
 APPROVERS = ("user@tty", "user@chat-via-cos")
 FAIL_LEVELS = ("must", "must_not")
-# a proposal a propose step wrote: its output `artifacts` name it (docs/proposals/<id>.md)
-PROPOSAL_PATH = re.compile(r"^docs/proposals/[A-Za-z0-9][A-Za-z0-9._-]*\.md$")
 
 
 class CallError(Exception):

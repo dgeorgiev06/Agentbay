@@ -200,7 +200,7 @@ class Contract:
 class ComponentMap:
     owns: dict[str, list[str]]
     contracts: list[Contract]
-    protected: Protection | None = None        # None: the map has no `protected:` block (see protected_by)
+    protected: Protection
 
     @classmethod
     def load(cls, path: Path) -> "ComponentMap":
@@ -226,8 +226,11 @@ class ComponentMap:
             for cname, c in (spec.get("contracts") or {}).items():
                 if c.get("at"):
                     contracts.append(Contract(comp, cname, list(c["at"])))
+        if "protected" not in doc:
+            raise RuntimeError(f"{MAP}: no protected: block; add one (paths, mode, env and connector), the check "
+                               f"judges a change by the base's map")
         try:
-            prot = Protection.parse(doc["protected"]) if "protected" in doc else None
+            prot = Protection.parse(doc["protected"])
         except ProtectedError as e:
             raise RuntimeError(f"{MAP}: protected: {e}") from None
         return cls(owns, contracts, prot)
@@ -250,12 +253,8 @@ class ComponentMap:
 
     def protected_by(self, path: str) -> str | None:
         """Why `path` is protected (a folder of `protected.paths`, or a file of a protected mode, env or connector
-        wherever its folder sits), else None. A map without a `protected:` block protects nothing here: the check
-        judges a change by the base's map, and a base that predates the block cannot say; the kit itself fails closed
-        on such a map (model.Kit)."""
+        wherever its folder sits), else None."""
         p = self.protected
-        if p is None:
-            return None
         for d in p.paths:
             if under(path, d):
                 return f"protected folder {d}/"

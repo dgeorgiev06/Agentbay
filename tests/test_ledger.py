@@ -13,9 +13,8 @@ SCHEMA = json.loads((KIT / "schemas/event.schema.json").read_text())
 
 
 def valid(evs):
-    if model.jsonschema:
-        for e in evs:
-            model.jsonschema.validate(e, SCHEMA)
+    for e in evs:
+        model.jsonschema.validate(e, SCHEMA)
 
 
 def cli(p, *args):
@@ -51,6 +50,9 @@ def test_note_attaches_to_existing_run_by_run_id_or_task_id():
         runs = ledger.fold(ledger.read(p))
         assert list(runs) == ["toolu_1"] and runs["toolu_1"].notes == ["on the run", "on the task"]
         assert ledger.standalone_notes(ledger.read(p)) == []
+        ledger.append(p, "completed", "toolu_1", agent="builder", source="hook", data={"status": "partial"})
+        valid(ledger.read(p))
+        assert ledger.fold(ledger.read(p))["toolu_1"].state == "partial"
     finally:
         cleanup(p)
 

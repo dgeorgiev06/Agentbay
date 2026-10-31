@@ -10,7 +10,8 @@ from datetime import datetime
 from pathlib import Path
 
 from bay import secretscan
-from bay.util import in_window, read_events, short_hash, warn
+from bay.ledger import read as read_ledger
+from bay.util import in_window, short_hash, warn
 
 EVIDENCE_CHARS = 300
 
@@ -132,7 +133,7 @@ def ledger_episodes(project: Path, since: datetime | None = None, until: datetim
     """Calls (one episode per callId, with steps), agent runs (spawned/completed + guard decisions) and
     instruction-change notes."""
     warnings: list[str] = []
-    evs = [e for e in read_events(project, warnings) if in_window(e.get("ts"), since, until)]
+    evs = [e for e in read_ledger(project, warnings) if in_window(e.get("ts"), since, until)]
     fold = _LedgerFold()
     for e in evs:
         fold.event(e)
@@ -205,7 +206,7 @@ def ledger_verdicts(project: Path, kit: Path | None = None, since: datetime | No
 def _last_event_ts(project: Path) -> dict[str, str]:
     """The timestamp of the latest ledger event of each call."""
     last_ts: dict[str, str] = {}
-    for e in read_events(project):
+    for e in read_ledger(project):
         if e.get("callId"):
             last_ts[e["callId"]] = max(last_ts.get(e["callId"], ""), e.get("ts", ""))
     return last_ts
@@ -258,7 +259,7 @@ def _review_items(f: Path, step: str, raw: list, tx: dict, warnings: list[str]) 
 def _recorded_reviews(project: Path, since: datetime | None, until: datetime | None) -> list[dict]:
     """Reviews the coordinator recorded (`bay note review`)."""
     out = []
-    for e in read_events(project):
+    for e in read_ledger(project):
         if e["type"] != "review.recorded" or not in_window(e.get("ts"), since, until):
             continue
         items = [{k: (secretscan.scrub(v)[:EVIDENCE_CHARS] if k == "evidence" else v)

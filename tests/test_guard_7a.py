@@ -67,6 +67,5 @@ def test_f7_adapter_asks_before_bay_approve_variants_and_denies_edits_of_the_own
         assert sorted(allowed) == [".agentbay/bay " + c for c in ("catalog", "note", "show", "status")]
         deny = perms.get("deny", []) + perms.get("ask", [])
         assert any(x.startswith("Edit(") and "agentbay.config.yaml" in x for x in deny), deny
-        assert not any("approve" in x for x in perms.get("allow", []))
     finally:
         cleanup(p)

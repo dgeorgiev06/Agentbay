@@ -593,7 +593,7 @@ def warnings(kit: model.Kit) -> list[str]:
                        f"(search is slower and unranked; items_fts is absent from sql). Use a Python built with "
                        f"FTS5 (python.org and Homebrew builds have it) for ranked full-text search")
     if kit.project is not None and kit.project.resolve() == kit.root.resolve():
-        out += stale_policy(kit, kit.protected_paths())
+        out += stale_policy(kit, kit.protected_paths)
         roots = list(kit.protected.paths)     # the folders; a write path of modes/ that reaches modes/cos is by design
         for env in kit.docs["Environment"].values():
             for w in env.spec.get("fs", {}).get("write", []):
@@ -899,7 +899,7 @@ def _protected_paths_in_sync(kit: model.Kit) -> list[str]:
     cmap = _component_map(kit.root / "framework" / "components.yaml")
     if cmap is None:
         return []
-    every, out = kit.protected_paths(), []
+    every, out = kit.protected_paths, []
     for env in sorted(kit.docs["Environment"].values(), key=lambda d: d.name):
         writes = [os.path.normpath(w).replace(os.sep, "/") for w in env.spec.get("fs", {}).get("write", [])]
         if any(kit.covers(w) for w in writes):

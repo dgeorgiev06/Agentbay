@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 
 from helpers import KIT, cleanup, clock, connector_pkg, kit_copy, project, system
-from test_boundaries import built, tool
 
 from bay import dispatch, ledger
 
@@ -43,7 +42,6 @@ def test_review_record_appends_a_scrubbed_event_improve_reads_and_refuses_bad_in
                     {"items": [{"id": "DOD-1", "verdict": "pass", "evidence": "x" * 1001}]}, {"nope": 1}):
             assert cli(p, "note", "review", TID, json.dumps(bad)).returncode != 0, bad
         assert cli(p, "note", "review", "T-1", json.dumps(VERDICT)).returncode != 0          # not a taskId
-        assert cli(p, "review-record", TID, json.dumps(VERDICT)).returncode != 0             # the old name is gone
         assert len([e for e in ledger.read(p) if e["type"] == "review.recorded"]) == 1
     finally:
         cleanup(p)
@@ -65,18 +63,5 @@ def test_a_recorded_review_passes_no_gate_and_nothing_in_the_dispatcher_reads_it
         assert {x: after[x] for x in ("status", "next")} == {x: before[x] for x in ("status", "next")}
         assert "review.recorded" in ledger.TYPES and "review.recorded" not in ledger.RUN_TYPES | ledger.STEP_TYPES
         assert ledger.fold(ledger.read(k)) == {}                                  # it creates no run
-        for src in ("bay/dispatch.py", "bay/approvals.py", "bay/checks.py"):
-            f = KIT / src
-            assert not f.exists() or "review.recorded" not in f.read_text(), src   # no gate or step reads it
     finally:
         cleanup(k)
-
-
-def test_a_subagent_may_not_record_a_review():
-    p = built()
-    try:
-        ledger.append(p, "agent.dispatch", TID, source="coordinator", taskId=TID, agent="builder--delivery")
-        c = f".agentbay/bay note review {TID} '{json.dumps(VERDICT)}'"
-        assert tool(p, "builder--delivery", "Bash", {"command": c})[0] == "deny"
-    finally:
-        cleanup(p)

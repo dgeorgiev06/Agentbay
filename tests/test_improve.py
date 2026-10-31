@@ -80,6 +80,9 @@ def test_mode_and_env_containment():
         pol = json.loads((p / ".agentbay/guard.json").read_text())["subagents"]
         role = "analyst--improve"
         assert pol[role]["read"] == ["."] and pol[role]["write"] == [], pol[role]   # no ~/.claude for roles
+        r = subprocess.run([str(p / ".agentbay/roles/analyst--improve/use"), "improve.findings/v1.scan", "{}"],
+                           cwd=p, capture_output=True, text=True)                   # the shim refuses what is not granted
+        assert r.returncode != 0 and "not granted" in r.stderr
         d = D(p)
         for role, target in (("analyst--improve", "improve.findings/v1.upsert"),
                              ("analyst--improve", "improve.detect/v1.sessions"),       # dispatcherOnly
@@ -234,8 +237,6 @@ def test_approving_a_backlog_item_needs_a_terminal():
         r = cli("approve", fid, "--via", "chat", "--quote", "yes approve it", "--sha", "abcdef12")     # never from chat
         assert r.returncode != 0 and "decided at a terminal" in r.stderr
         assert [f for f in findings(p) if f["id"] == fid][0]["status"] == "open"
-        for old in (("improve", "decide", fid, "approve"), ("improve", "weekly")):                      # the old names are gone
-            assert cli(*old).returncode != 0
         r = cli("approve", fid, "--defer", "--reason", "next quarter")
         assert r.returncode == 0, r.stderr
         f = [f for f in findings(p) if f["id"] == fid][0]
@@ -277,24 +278,6 @@ def test_audit_on_the_kit_itself():
         assert all(f["lens"] == "artifacts" and f["evidence"] for f in fs)
     finally:
         cleanup(k)
-
-
-def test_improve_role_shims_follow_the_kit_script_pattern():
-    p = proj(transcripts=False)
-    try:
-        get("claude-code").build(system(p), p, kit_for(p))
-        for unit in ("analyst--improve",):
-            sh = (p / f".agentbay/roles/{unit}/use").read_text()
-            assert "python3 -E" in sh and "bay/use_shim.py" in sh and "python3 -c" not in sh, sh
-        (p / "yaml.py").write_text("raise SystemExit('project code ran')\n")    # must never be imported
-        r = subprocess.run([str(p / ".agentbay/roles/analyst--improve/use"), "improve.findings/v1.query", "{}"],
-                           cwd=p, capture_output=True, text=True)
-        assert r.returncode == 0 and json.loads(r.stdout)["findings"] == [], r.stderr
-        r = subprocess.run([str(p / ".agentbay/roles/analyst--improve/use"), "improve.findings/v1.scan", "{}"],
-                           cwd=p, capture_output=True, text=True)
-        assert r.returncode != 0 and "not granted" in r.stderr
-    finally:
-        cleanup(p)
 
 
 def test_use_output_is_secret_scanned():

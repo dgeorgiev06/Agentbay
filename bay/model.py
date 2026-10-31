@@ -28,6 +28,7 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 
 import yaml
@@ -201,10 +202,7 @@ def load_protection(root: Path) -> tuple[boundary.Protection, str | None]:
     improve store). Anything but a readable, well-formed block fails closed: (the closed set, the error) - the set
     reserves every name, covers every path and lets no mode place a role."""
     try:
-        prot = boundary.ComponentMap.load(Path(root) / "framework" / "components.yaml").protected
-        if prot is None:
-            raise RuntimeError("framework/components.yaml: no protected: block")
-        return prot, None
+        return boundary.ComponentMap.load(Path(root) / "framework" / "components.yaml").protected, None
     except Exception as e:                      # noqa: BLE001 - whatever is wrong with the map, the answer is closed
         return boundary.Protection.closed_set(), (
             f"{e}; without a readable protected: block nothing is trusted (every name is reserved, "
@@ -245,10 +243,11 @@ class Kit:
             self.errors.append(err)
         return prot
 
+    @cached_property
     def protected_paths(self) -> list[str]:
         """The kit folders only forge.extend may write, as the policy lists them: the map's `paths`, then the folder (or
         file) of each protected mode, env and connector that sits outside all of those (an instance inside one of
-        them is protected by it; one that moves to a folder of its own is listed from then on)."""
+        them is protected by it; one that moves to a folder of its own is listed from then on). Computed once."""
         out = list(self.protected.paths)
         for kind, label in PROTECTION_KIND.items():
             for name in self.protected.names.get(label, ()):
@@ -260,7 +259,7 @@ class Kit:
     def covers(self, path: str) -> bool:
         """Is `path` (kit-relative) inside a protected folder or protected instance?"""
         path = os.path.normpath(path).replace(os.sep, "/")
-        return self.protected.closed or any(boundary.under(path, p) for p in self.protected_paths())
+        return self.protected.closed or any(boundary.under(path, p) for p in self.protected_paths)
 
     def _apply_extends(self) -> None:
         """Resolve `extends:` at load time, so the resolver, lint, conformance and improve always see a complete

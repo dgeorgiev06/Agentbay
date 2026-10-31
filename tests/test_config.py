@@ -10,13 +10,6 @@ from helpers import KIT, cleanup, kit_copy, project, tmpdir
 from bay import config, lint, model
 
 
-def test_no_committed_example_and_no_offline_env_copies():
-    assert not (KIT / "agentbay.config.example.yaml").exists()
-    assert not (KIT / "envs/local-feeds-offline.yaml").exists() and not (KIT / "envs/local-mail-offline.yaml").exists()
-    for name in ("local-feeds", "local-mail"):
-        assert "bind" in model.Kit(KIT).get("Environment", name).spec["offline"]
-
-
 def test_config_prints_every_setting_from_the_schemas():
     text = config.describe(model.Kit(KIT, None))
     assert "offline: boolean (default false)" in text and "agent: string" in text and "secrets: object" in text
@@ -53,6 +46,9 @@ def test_caps_take_the_strictest_and_refuse_a_setting_above_the_env_limit():
     got = config.caps(merged, limits, settings)
     assert (got["spendUsd"], got["maxItemsPerRun"], got["monthlyItems"]) == (1, 200, 3000)
     assert config.caps({}, {}, {"spendUsd": 99})["costPerItemUsd"] == config.COST_PER_ITEM_USD   # no env limit: no ceiling
+    from helpers import gaps
+    gs = gaps(KIT, project({"modes": {"feed-briefing": {"lookback": "90d"}}}))                  # the mode's own limit
+    assert any("lookback 90d exceeds mode lookbackMax 30d" in g for g in gs), gs
     try:
         config.caps({}, limits, {"spendUsd": 6})
         raise AssertionError("expected ConfigError")

@@ -4,6 +4,12 @@ id: "0010"
 touches:
   - { path: components/, reason: "NEW top-level folder. Every mode, source connector, content type and the shared tools component move here; the move table lists each" }
   - { path: modes/, reason: "REMOVED. Its seven folders move to components/<name>/ (a rename of every file inside)" }
+  - { path: modes/cos/features/run/, reason: "slice 0: its playbook and rules are never read (code-only feature) and go" }
+  - { path: modes/cos/features/next/, reason: "slice 0: its playbook and rules are never read (code-only feature) and go" }
+  - { path: modes/cos/features/status/, reason: "slice 0: its playbook and rules are never read (code-only feature) and go" }
+  - { path: modes/improve/features/backlog/, reason: "slice 0: its playbook and rules are never read (code-only feature) and go" }
+  - { path: modes/improve/features/verify/, reason: "slice 0: its playbook and rules are never read (code-only feature) and go" }
+  - { path: modes/forge/features/extend/, reason: "slice 0 b17: the playbook states each fact once; rules R-2, R-4, R-7 and R-9 go" }
   - { path: connectors/, reason: "REMOVED. 3 source connectors become components; 10 become `connectors/` inside their owner" }
   - { path: content-types/, reason: "REMOVED. email and post become components/email/ and components/post/" }
   - { path: envs/, reason: "REMOVED. Each env moves into the component of the mode it binds (components/tools/ for the two shared ones)" }

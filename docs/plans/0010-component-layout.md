@@ -63,20 +63,13 @@ If the builder reaches turn 50, it lists what is left.
 
 ## Slice 2
 
-**2a. Protection from manifests** (35 turns).
-- `protected` goes into the four schemas and onto cos, forge, the nine connectors and the six envs.
-- `model.load_protection` builds `Protection` from the loader, plus every component's `interfaces/` folder by convention. An unreadable manifest protects its whole folder.
-- `boundary.py`: `Protection.parse`, `_names`, `_folder` and the map's protected parsing go. The `Protection` class stays, because `improve-store/store.py:23` imports it.
-- `kernel.yaml` loses `protected:`.
-- `lint_protection`: the existence check goes, the closure stays, and the fs.write sync is computed. Scaffold's sensitive-path list is derived.
-- `guard.py` keeps reading guard.json (a stdlib hook); only its messages change.
-- Tests: rewrite the two malformed-block tests in place for an unreadable manifest, and delete `test_boundary::test_a_base_map_without_protected_is_an_error`. A `protected:` field edit joins `test_an_edit_to_a_protected_component_without_touches_fails_check_base`. Net -1.
+**2a. Close the move window** (owner, 2026-11-01: protection stays one list in `kernel.yaml`). `components/forge/envs/framework-dev.yaml` `fs.write` drops the temporary `components` entry and keeps `README.md` (every framework change updates it, DOD-13), as one named guard delta. `MOVE_WINDOW_*` and the window handling in `undo_move` go from `test_guard_matrix.py`; `test_protection.py`'s improve write by framework-dev goes back to deny. `kernel.yaml`'s 14 comment lines become the three-line header the proposal states. The last `layout.py` importer outside `tests/` (`components/improve/tests/test_improve_golden.py`) reads `kit.protected_paths`. Then `./bay.sh build`.
 
-**2b. layout.py goes** (20 turns). `test_protection.py:47` pins the expected protected paths written out in the test. The five other importers read `kit.protected_paths`, and `physical()` becomes a loader lookup in `test_guard_matrix`. Then `./bay.sh build`.
+**2b. layout.py goes** (20 turns). `test_protection.py:47` pins the expected protected paths written out in the test. The other importers read `kit.protected_paths`, and `physical()` becomes a loader lookup in `test_guard_matrix`. Then `./bay.sh build`.
 
 ## Slice 3
 
-**3a. Boundary** (30 turns). The `Contract`/`at:` matching gives way to the loader's component folders, and `kernel.yaml` keeps only `owns:`. Test: extend `test_boundary.py`.
+**3a. Boundary** (30 turns). The `Contract`/`at:` matching gives way to the loader's component folders, and `kernel.yaml` keeps `owns:` and `protected:`; `contracts:` and the briefing entry go, and the three briefing files in `bay/` are listed under the kernel's `owns:`. The lint check for a stale nested path in `framework-dev`'s `fs.write` is restored. Test: extend `test_boundary.py`.
 
 **3b. Limits and placement** (30 turns).
 - `component_spread` in `limits.py`, and a base file may lack a measure.

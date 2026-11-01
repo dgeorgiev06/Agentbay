@@ -19,6 +19,7 @@ touches:
   - { path: bay/model.py, reason: "discovery by one glob per kind; protection from manifests; lint's mode_envs folds in (slice 0)" }
   - { path: bay/lint.py, reason: "reference-resolves check and the T2 rules (slice 0); component-folder checks, the old-folder refusal, framework-dev fs.write sync, internal-connector placement" }
   - { path: bay/connect.py, reason: "connector login moves in from bay/cli.py, dropping the copy of connect's limits (slice 0)" }
+  - { path: bay/workflows.py, reason: "same-behaviour payer for bay_lines (slice 0): the grammar re-check the schemas already make goes, and the duplicate-id check folds into check_stages" }
   - { path: bay/templates/, reason: "NEW; the forge templates move here (decision 2)" }
   - { path: bay/contenttypes.py, reason: "FOLDER goes; the loader finds content types" }
   - { path: bay/conformance.py, reason: "reads the commands at adapters/claude-code/commands" }
@@ -31,7 +32,7 @@ touches:
   - { path: bay/scaffold.py, reason: "stays in bay/ because `bay new` imports it; scaffold targets under components/; templates move to bay/templates/; the sensitive-path list comes from manifests" }
   - { path: bay/limits.py, reason: "count components/**; component_spread; a base ceilings file with fewer measures" }
   - { path: bay/graph.py, reason: "data schemas and skills under components/" }
-  - { path: bay/cli.py, reason: "`bay build` writes skills as <component>--<skill>; connector login leaves for bay/connect.py; no new command" }
+  - { path: bay/cli.py, reason: "`bay build` writes skills as <component>--<skill>; connector login leaves for bay/connect.py; cmd_catalog's two identical branches become one (slice 0 payer); no new command" }
   - { path: adapters/claude-code/, reason: "generated paths, the skill namespace, commands from coordinator/, test_adapter.py" }
   - { path: tests/, reason: "9 test files and 3 golden files move out; layout.py goes; run.py discovers components/**/tests/ and adapters/*/tests/" }
   - { path: README.md, reason: "layout, vocabulary, how to add a component" }

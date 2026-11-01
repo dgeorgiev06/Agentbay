@@ -10,6 +10,18 @@ touches:
   - { path: modes/improve/features/backlog/, reason: "slice 0: its playbook and rules are never read (code-only feature) and go" }
   - { path: modes/improve/features/verify/, reason: "slice 0: its playbook and rules are never read (code-only feature) and go" }
   - { path: modes/forge/features/extend/, reason: "slice 0 b17: the playbook states each fact once; rules R-2, R-4, R-7 and R-9 go" }
+  - { path: modes/mail-briefing/features/digest/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: modes/mail-briefing/features/ask/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: modes/delivery/features/build/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: modes/delivery/features/research/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: modes/briefing/features/prune/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: modes/briefing/features/digest/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: modes/briefing/features/ask/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: modes/improve/features/triage/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: modes/improve/features/implement/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: modes/improve/features/scan/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: modes/improve/features/audit/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: modes/forge/features/create/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
   - { path: connectors/, reason: "REMOVED. 3 source connectors become components; 10 become `connectors/` inside their owner" }
   - { path: content-types/, reason: "REMOVED. email and post become components/email/ and components/post/" }
   - { path: envs/, reason: "REMOVED. Each env moves into the component of the mode it binds (components/tools/ for the two shared ones)" }

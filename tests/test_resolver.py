@@ -223,7 +223,8 @@ def test_offline_switch_rebinds_the_source_and_closes_network_and_secrets():
             raise AssertionError("expected ConfigError")
         except config.ConfigError as e:
             assert word in str(e)
-    for rel in ("modes/briefing/mode.yaml", "envs/workspace.yaml"):         # a v2 mode and a v2 env are refused too
-        k = kit_copy()
-        edit_yaml(k / rel, lambda d: d.update(apiVersion="agentbay/v2"))
-        assert_gap(k, "apiVersion: this kit reads agentbay/v3, not 'agentbay/v2'; change the line to apiVersion: agentbay/v3")
+    for rel in ("modes/briefing/mode.yaml", "envs/workspace.yaml"):         # a v2 or v3 mode and env are refused too
+        for old in ("agentbay/v2", "agentbay/v3"):
+            k = kit_copy()
+            edit_yaml(k / rel, lambda d: d.update(apiVersion=old))
+            assert_gap(k, f"apiVersion: this kit reads agentbay/v4, not '{old}'; change the line to apiVersion: agentbay/v4 and move it under components/<name>/ (see CHANGELOG)")

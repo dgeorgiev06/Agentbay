@@ -1,4 +1,4 @@
-apiVersion: agentbay/v3
+apiVersion: agentbay/v4
 kind: Interface
 metadata:
   name: items.source

@@ -32,9 +32,10 @@ The contracts. Everything else is replaceable. Design and vocabulary: [DESIGN.md
 | 11 | **Briefing: items, selectors, corpus store, read-only SQL** | `framework/interfaces/items.*.yaml`, `schemas/data/` (item, coverage, verdict), the data folder of the mode that owns a schema (selector, finding, episode), `bay/selector.py`, `bay/sqlsandbox.py` | you add a source kind or a view |
 | 12 | **Conformance rules** | `framework/rules/conformance.yaml`, `schemas/rules.schema.json` | you change what "fits the framework" means |
 
-Every contract document starts `apiVersion: agentbay/v3` (the `$id` of each schema carries it too). `agentbay/v2` is
-refused by `bay check` and at run time with "apiVersion: this kit reads agentbay/v3, not '<found>'; change the line
-to apiVersion: agentbay/v3 (the v2 shapes changed too, see CHANGELOG 1.0.0)"; there is no reader or migration.
+Every contract document starts `apiVersion: agentbay/v4` (the `$id` of each schema carries it too); config and ledger
+events stay `agentbay/v3`. `agentbay/v2` and `v3` are refused by `bay check` and at run time with "apiVersion: this kit
+reads agentbay/v4, not '<found>'; change the line to apiVersion: agentbay/v4 and move it under components/<name>/ (see
+CHANGELOG)"; there is no reader or migration.
 
 ## 1. Mode and features
 `mode.yaml` declares each feature (`spec.features.<name>`, called as `<mode>.<name>`), everything about it in one place:

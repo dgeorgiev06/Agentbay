@@ -1,4 +1,4 @@
-apiVersion: agentbay/v3
+apiVersion: agentbay/v4
 kind: Environment
 metadata:
   name: framework-dev

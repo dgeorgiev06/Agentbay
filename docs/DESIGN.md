@@ -48,10 +48,10 @@ unchanged: the brief carries `recheck` (the failed ids, the fix commits, the ite
 the failed ids again, and a carried item can still fail on new evidence. A changed proposal, or a re-run after a
 re-check, gets a full review.
 
-Every document (mode, env, role, interface, content type, connector, config) carries `apiVersion: agentbay/v3`. A
-file with another value, `agentbay/v2` included, is refused with "this kit reads agentbay/v3, not '<found>'; change
-the line to apiVersion: agentbay/v3": there is no reader and no migration, and the v2 shapes changed too (see
-the CHANGELOG, 1.0.0).
+Every document (mode, env, role, interface, content type, connector) carries `apiVersion: agentbay/v4`; config and
+ledger events stay `agentbay/v3`. A file with another value, v2 and v3 included, is refused with "this kit reads
+agentbay/v4, not '<found>'; change the line to apiVersion: agentbay/v4 and move it under components/<name>/": there
+is no reader and no migration (see the CHANGELOG).
 
 ## Compile: units
 

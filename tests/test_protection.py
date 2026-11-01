@@ -9,13 +9,24 @@ import sys
 import yaml
 from helpers import KIT, cleanup, edit_yaml, gaps, kit_copy, project, system, tmpdir
 from improve_fixtures import D, findings, proj, scan
-from layout import PROTECTED_INSTANCES
 
 from bay import boundary, dispatch, lint, model
 from bay.adapter import get
 from bay.guard import Guard
 
 MAP = "framework/kernel.yaml"
+# The protected instances, in the order the policy lists them after the four folders: written out here, so a change to
+# the protected set of framework/kernel.yaml shows in this test.
+EXPECTED_PROTECTED = [
+    "components/cos", "components/forge",
+    "components/improve/envs/improve-local.yaml", "components/tools/envs/workspace.yaml",
+    "components/tools/envs/research.yaml",
+    "components/claude-transcripts", "components/briefing/connectors/corpus-store",
+    "components/improve/connectors/artifact-graph", "components/improve/connectors/git",
+    "components/improve/connectors/improve-detect", "components/improve/connectors/improve-store",
+    "components/improve/connectors/ledger",
+    "components/briefing/interfaces", "components/improve/interfaces", "components/tools/interfaces",
+]
 
 
 def _guard(k, agent=None):
@@ -42,9 +53,9 @@ def _built(edit=None):
 def test_the_shipped_map_declares_what_the_old_fixed_list_protected():
     kit = model.Kit(KIT)
     assert not hasattr(model, "PROTECTED") and not hasattr(model, "USER_FRAMEWORK_ENVS")
-    assert kit.protected.paths == ("framework", "bay", "schemas", "adapters", *PROTECTED_INSTANCES) and not kit.protected.closed
+    assert kit.protected.paths == ("framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED) and not kit.protected.closed
     # the four folders in the old order and spelling, then each protected instance where it sits (stage 5 part G)
-    assert kit.protected_paths == ["framework", "bay", "schemas", "adapters", *PROTECTED_INSTANCES]
+    assert kit.protected_paths == ["framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED]
     assert set(kit.protected.names["env"]) == {e for e, d in kit.docs["Environment"].items() if d.root == "framework"}
     assert set(kit.protected.names["connector"]) == {c for c, d in kit.docs["Connector"].items() if d.root == "framework"}
     assert set(kit.protected.names["mode"]) == {m for m, d in kit.docs["Mode"].items() if d.root == "framework"}
@@ -57,7 +68,7 @@ def test_a_role_without_forge_extend_cannot_write_a_path_the_map_lists():
     k = _built(lambda d: d["protected"]["paths"].append("vault"))
     try:
         pol, decide = _guard(k)
-        assert pol["protected"] == ["framework", "bay", "schemas", "adapters", *PROTECTED_INSTANCES, "vault"]
+        assert pol["protected"] == ["framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED, "vault"]
         put ={"file_path": "vault/key.txt", "content": "x"}
         # workspace writes "." and delivery's builder works there, yet the map says only forge.extend may write vault/
         assert decide("Write", put, "builder--delivery") == "deny"
@@ -387,7 +398,7 @@ def test_approval_from_chat_and_from_the_terminal_both_pass_the_gate():
         (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v3", "approvals": {"chat": True}}))
         get("claude-code").build(system(k, k), k, k)
         pol, decide = _guard(k)
-        assert pol["protected"] == ["framework", "bay", "schemas", "adapters", *PROTECTED_INSTANCES]
+        assert pol["protected"] == ["framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED]
         assert decide("Bash", {"command": ".agentbay/bay approve C-1 --via chat --quote ok"}, None) != "deny"   # the main thread relays
         assert decide("Bash", {"command": ".agentbay/bay approve C-1"}, "builder--forge--framework-dev") == "deny"
         d = dispatch.Dispatcher(system(k, k), k)

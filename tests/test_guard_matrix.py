@@ -1,6 +1,6 @@
 """Golden baseline of every guard decision (proposal 0008, stage 5 part A): the kit built as its own project, then for
 each subagent unit, the unknown subagent and the main thread the decision (and its reason) of the real `Guard` for
-logical paths (written by `layout.physical`, so the rows survive the move of the extension folders), for Bash command
+logical paths (resolved by `physical` through the loader, so the rows survive the move of the extension folders), for Bash command
 spellings (every bay launcher, approve, config, secrets, interpreters, git flags, `bay plan`, the role shim) and for
 the file tools. Also recorded: the policy's `protected` list and per-unit scopes, `protected_writes(env)` for every
 env, the resolver gaps of test_resolver.py:165-185 and the lint warnings about protected reach.
@@ -16,11 +16,30 @@ import os
 
 from golden_util import GOLDEN, compare, normal
 from helpers import KIT, cleanup, edit_yaml, gaps, kit_copy, project, system
-from layout import PROTECTED_INSTANCES, RENAMED, physical
 
 from bay import lint, model
 from bay.adapter import get
 from bay.guard import Guard
+
+# Two paths that are not extensions: the map was renamed, and a user file sat in the old modes folder.
+RENAMED = {"framework/components.yaml": "framework/kernel.yaml", "modes/x.yaml": "components/x.yaml"}
+_KIT: list = []
+
+
+def physical(logical: str) -> str:
+    """The kit path of a logical row path (`mode:<name>/<rest>`, `env:<name>`, `connector:<name>/<rest>`), from the loader.
+    A name the kit does not have (`brand-new`) sits where a new user extension would: a mode or connector at the top of
+    components/, an env in an ordinary mode's folder (briefing)."""
+    kind, sep, rest = logical.partition(":")
+    if not sep:
+        return RENAMED.get(logical, logical)
+    if not _KIT:
+        _KIT.append(model.Kit(KIT))
+    name, slash, tail = rest.partition("/")
+    d = _KIT[0].get({"mode": "Mode", "env": "Environment", "connector": "Connector"}[kind], name)
+    if kind == "env":
+        return model.rel(d.path) if d else f"components/briefing/envs/{name}.yaml"
+    return (model.rel(d.dir) if d else f"components/{name}") + slash + tail
 
 UNITS = ("builder--delivery", "builder--forge--local-authoring", "builder--forge--framework-dev", "reviewer--forge",
          "analyst--improve")
@@ -230,7 +249,7 @@ def undo_move(got: dict) -> dict:
     protected instance in them is now denied by the protected entry, where it used to be outside its writable paths
     (a deny both times); (4) framework-dev's clis and its "may only run" reasons also name `git mv` and `git rm`."""
     got = copy.deepcopy(got)
-    pol, moved = got["policy"], PROTECTED_INSTANCES
+    pol, moved = got["policy"], model.Kit(KIT).protected_paths[len(FOUR):]
     assert pol["protected"] == FOUR + moved, pol["protected"]
     pol["protected"] = FOUR
     assert pol["units"][LOCAL]["write"] == ["components", "agentbay.config.yaml"], pol["units"][LOCAL]["write"]

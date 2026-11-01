@@ -1,7 +1,7 @@
 """No core file names a content type or a connector (proposal 0006 B-1/B-7 and 0008 slice 5).
 
-Core = bay/, framework/, schemas/, adapters/ and coordinator/ plus the protected modes, envs and connectors (which
-sat in framework/ before stage 5 part G and own no content type) (python, json and yaml files; folders named tests
+Core = the kit's protected paths (bay/, framework/, schemas/, adapters/ and the protected components, envs, connectors
+and interfaces, which own no content type) (python, json and yaml files; folders named tests
 and fixtures are skipped). The names are found, not listed: the folders of content-types/ (and each type's `kind` and
 view names), the view names of modes/*/views.yaml, and the connectors that implement items.source/v1 (the control-plane
 connectors, git and ledger among them, are core and name themselves everywhere).
@@ -27,11 +27,10 @@ import re
 
 import yaml
 from helpers import KIT
-from layout import PROTECTED_INSTANCES
 
-from bay import contenttypes
+from bay import contenttypes, model
 
-CORE = ("bay", "framework", "schemas", "adapters", "coordinator", *PROTECTED_INSTANCES)
+CORE = tuple(model.Kit(KIT).protected_paths)
 SOURCE_IFACE = "items.source/v1"
 SKIP = {"tests", "fixtures", "__pycache__"}
 SUFFIXES = {".py", ".json", ".yaml", ".yml"}

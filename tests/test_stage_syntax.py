@@ -14,7 +14,6 @@ from types import SimpleNamespace
 
 from golden_util import GOLDEN, compare, normal
 from helpers import KIT, cleanup, clock, edit_yaml, kit_copy, project, system
-from layout import PROTECTED_INSTANCES
 
 from bay import config, dispatch, lint, model, workflows
 from bay.model import Kit
@@ -272,7 +271,8 @@ def test_stage_syntax_table():
 # ------------------------------------------------------------------------------------------------ one parser (D6, D8)
 def test_the_reference_grammar_is_spelled_once_and_the_schemas_equal_it():
     root = KIT / "bay"
-    shipped = [KIT / p for p in PROTECTED_INSTANCES if p.startswith("connectors/")]      # the files scanned before the move
+    shipped = [KIT / p for p in Kit(KIT).protected_paths if (KIT / p / "connector.yaml").exists()]    # scanned before the move
+    assert len(shipped) == 7, shipped
     files = [*root.glob("*.py"), *(f for d in shipped for f in d.glob("*.py")), *(KIT / "adapters").glob("*/*.py")]
     spelled = [str(f.relative_to(KIT)) for f in files if re.search(r"\\\$\(?(\?:)?(in|steps)", f.read_text())]
     assert spelled == ["bay/workflows.py"], spelled

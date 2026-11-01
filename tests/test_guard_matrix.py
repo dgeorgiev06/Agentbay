@@ -234,7 +234,7 @@ def undo_move(got: dict) -> dict:
     assert pol["protected"] == FOUR + moved, pol["protected"]
     pol["protected"] = FOUR
     assert pol["units"][LOCAL]["write"] == ["components", "agentbay.config.yaml"], pol["units"][LOCAL]["write"]
-    window = [*MOVE_WINDOW_DIRS, "docs", "tests", "README.md"]       # the temporary 0010 part 0b entries (see MOVE_WINDOW_DELTAS)
+    window = ["docs", "tests", "README.md"]       # README.md is the one named delta (README_DELTAS)
     assert pol["units"][DEV]["write"] == [*FOUR, *moved, *window], pol["units"][DEV]["write"]
     pol["units"][DEV]["write"] = [*FOUR, "docs", "tests"]
     assert got["protectedWrites"]["framework-dev"] == FOUR + moved
@@ -292,25 +292,10 @@ IMPROVE_DELTAS: dict = {
     **{(LOCAL, r): ("deny", "pass") for r in IMPROVE_ROWS},
     **{(DEV, r): ("pass", "deny") for r in IMPROVE_ROWS},
 }
-# TEMPORARY, for 0010 slice 1 (plan 0010 part 0b): framework-dev's fs.write names the whole folders modes, connectors,
-# envs, content-types, coordinator, components and README.md, so the move can be built through it. That suspends D9
-# (forge.extend's builder writes protected paths only) for the unprotected paths below: deny -> pass. The protected
-# paths (cos, forge, the protected envs and connectors) are not rows here and still deny every non-framework role.
-# Part 2a removes the broad entries (lint syncs fs.write from the manifests), this group goes, and D9 holds again.
-# The IMPROVE_DELTAS rows of DEV (pass -> deny) net to pass -> pass while the window is open: modes/ covers improve.
-MOVE_WINDOW_DIRS = ["components"]
-MOVE_WINDOW_ROWS = ["Edit connector:fake/connector.yaml", "Edit mode:briefing/mode.yaml",
-                    "MultiEdit connector:fake/connector.yaml", "MultiEdit mode:briefing/mode.yaml", "Write README.md",
-                    "Write connector:brand-new/x.py", "Write connector:fake/connector.yaml",
-                    "Write connector:gmail-api/connector.yaml", "Write env:brand-new",
-                    "Write env:local-feeds", "Write mode:brand-new/mode.yaml", "Write mode:briefing/mode.yaml",
-                    "Write mode:delivery/mode.yaml", "Write mode:feed-briefing/mode.yaml",
-                    "Write mode:mail-briefing/mode.yaml", "Write modes/x.yaml"]
-MOVE_WINDOW_DELTAS: dict = {
-    **{(DEV, r): ("deny", "pass") for r in MOVE_WINDOW_ROWS},
-    **{(DEV, r): ("pass", "pass") for r in IMPROVE_ROWS},      # IMPROVE_DELTAS' pass -> deny, undone by modes/
-}
-EXPECTED_DELTAS: dict = {**IMPROVE_DELTAS, **MOVE_WINDOW_DELTAS}
+# README.md (0010 part 2a): framework-dev's fs.write names it because every framework change updates the README (DOD-13).
+# It is not protected, so the one row is deny -> pass; every other row of an unprotected path stays a deny (D9).
+README_DELTAS: dict = {(DEV, "Write README.md"): ("deny", "pass")}
+EXPECTED_DELTAS: dict = {**IMPROVE_DELTAS, **README_DELTAS}
 NET_DELTAS = {k: v for k, v in EXPECTED_DELTAS.items() if v[0] != v[1]}
 
 
@@ -352,6 +337,8 @@ def test_guard_decision_matrix():
         want = json.loads((GOLDEN / "guard-matrix.json").read_text())
         diff = changed(got, want)
         assert diff == NET_DELTAS, "a guard decision changed:\n" + "\n".join(f"{key}: {v}" for key, v in diff.items())
+        kit = model.Kit(k, k)       # no changed decision is on a protected path: those equal the golden
+        assert not [r for _, r in NET_DELTAS if kit.covers(physical(r.split(" ", 1)[1]))], NET_DELTAS
         compare("guard-matrix", undo_move(put_back(got, want)))
     finally:
         cleanup(k)

@@ -19,7 +19,8 @@ spec:
   fs:
     read: ["."]
     # the four protected folders, then each protected component, env, connector and interfaces folder (lint keeps
-    # this in step with the protected: block of framework/kernel.yaml), then the other components, docs and tests
+    # this in step with the protected: block of framework/kernel.yaml), then docs, tests and README.md (every framework
+    # change updates it, DOD-13)
     write: [framework, bay, schemas, adapters,
             components/cos, components/forge,
             components/improve/envs/improve-local.yaml, components/tools/envs/workspace.yaml,
@@ -29,7 +30,7 @@ spec:
             components/improve/connectors/improve-detect, components/improve/connectors/improve-store,
             components/improve/connectors/ledger,
             components/briefing/interfaces, components/improve/interfaces, components/tools/interfaces,
-            components, docs, tests, README.md]
+            docs, tests, README.md]
   tiers: [balanced, deep]          # no fast tier for framework changes
   effects: [read, write]
   limits: { maxTurns: 120, maxMinutes: 60 }

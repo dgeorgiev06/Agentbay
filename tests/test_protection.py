@@ -441,8 +441,7 @@ def test_improve_files_are_writable_like_any_user_mode_and_its_env_and_connector
         # improve's own analyst writes nothing; forge.extend's builder writes protected paths only (D9), so a change to
         # improve goes through a mode-fix task (forge.create's builder), not forge.extend
         assert decide("Write", {"file_path": "components/improve/mode.yaml", "content": "x"}, "analyst--improve") == "deny"
-        # TEMPORARY (0010 slice 1, plan part 0b): framework-dev's fs.write names the whole modes/ folder until part 2a
-        assert decide("Write", {"file_path": "components/improve/mode.yaml", "content": "x"}, "builder--forge--framework-dev") == "pass"
+        assert decide("Write", {"file_path": "components/improve/mode.yaml", "content": "x"}, "builder--forge--framework-dev") == "deny"
         assert decide("Write", {"file_path": "components/cos/mode.yaml", "content": "x"}, "builder--forge--framework-dev") == "pass"
     finally:
         cleanup(k)

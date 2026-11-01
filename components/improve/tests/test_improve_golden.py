@@ -15,9 +15,8 @@ from pathlib import Path
 from golden_util import compare, normal
 from helpers import KIT, NOW, cleanup, clock, connector_pkg, project, system, tmpdir
 from improve_fixtures import make_ledger, make_transcripts
-from layout import PROTECTED_INSTANCES
 
-from bay import dispatch
+from bay import dispatch, model
 from bay.boundary import Protection
 
 GOLDEN = KIT / "components" / "improve" / "tests" / "golden"
@@ -254,7 +253,7 @@ def golden_change() -> dict:
 # Only the protected instances: connectors/, modes/ and envs/ also hold user extensions (connectors/gmail-api has
 # findings of its own and never moved). A protected mode or connector is a folder (trailing /), an env one file.
 MOVING = ("bay/graph.py", "bay/conformance.py", "bay/util.py",
-          *(p if p.endswith(".yaml") else p + "/" for p in PROTECTED_INSTANCES))
+          *(p if p.endswith(".yaml") else p + "/" for p in model.Kit(KIT).protected_paths if p.startswith("components/")))
 DEADCODE_KINDS = ("unused", "unused-constant", "compat-layer", "complexity")
 
 

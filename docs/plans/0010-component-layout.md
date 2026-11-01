@@ -33,16 +33,7 @@ Every part ends with `python3 tests/run.py -q` green and `./bay.sh check` clean,
 
 The declared-playbook check at lint.py:101-103 becomes part of it. `model.py:1023` stops reading a missing playbook as `""`. Test: +1, a table-driven `test_lint` case that deletes one target per group. Budget +30.
 
-**0f. T2 rules** (25 turns).
-- Lint refuses a playbook or rules file on a feature with no role step, and a rule with `refs:`, no `check:` and not `appliesTo: reviewer`.
-- Unread keys become a schema refusal: `policies` leaves `schemas/mode.schema.json`, the four mode.yaml files and the mode template.
-- Extend's R-11 and R-12 keep their text and lose `refs:`.
-- Test: +1 `test_lint` case. Budget +15.
-
-**0g. Offenders** (20 turns, no bay/ code).
-- `git rm` the files of rows a10, a12-a16, a19, a20, a24 and a25, and drop the lines that declare them.
-- b17: extend's playbook states each fact once; R-2, R-4, R-7 and R-9 go.
-- Test: `test_inheritance.py:43` expects briefing's heading.
+**0f. Two T2 rules and their offenders** (owner-approved plan T-20261101-8f30; rule 2 moved to 0012, 0g merged in). Commit A removes the 12 unreachable files (briefing sync playbook and rules, the three cos playbooks and rules, improve backlog and verify playbooks and rules) and their `mode.yaml` lines, drops `policies` from `schemas/mode.schema.json`, the four mode.yaml files and the mode template, and does b17 (extend's playbook states each fact once; R-2, R-4, R-7 and R-9 go; R-11 and R-12 keep `refs:`). Commit B adds rule 1 (playbook or rules on a feature with no role or review step) and the schema refusal for unread keys, one table-driven `test_lint` case, and same-behaviour payers in `bay/lint.py` (net -2 bay lines). Tests 538 to 539. Also rows a10, a12-a16, a19.
 
 ## Slice 1
 

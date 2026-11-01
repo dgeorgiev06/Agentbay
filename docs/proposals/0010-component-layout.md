@@ -30,6 +30,7 @@ touches:
   - { path: coordinator/, reason: "REMOVED. Its only reader is the claude-code adapter, so its commands move to adapters/claude-code/commands/" }
   - { path: framework/interfaces/, reason: "REMOVED. Each interface moves into the component that owns it" }
   - { path: framework/components.yaml, reason: "renamed framework/kernel.yaml; keeps only what the kernel owns; the protected: lists, the briefing entry and the unread keys go" }
+  - { path: framework/kernel.yaml, reason: "the renamed component map (slice 1): owns, the interim contracts and the 19 protected paths until 2a derives protection from manifests" }
   - { path: framework/limits.yaml, reason: "top_level_folders 11 to 7, framework_folders 3 to 2, schemas 15 to 16, new measure component_spread" }
   - { path: framework/roles/, reason: "the golden rule reads `golden/` folders" }
   - { path: framework/rules/conformance.yaml, reason: "C-7 vocabulary (component, internal connector); component-folder rule" }

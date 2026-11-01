@@ -1,0 +1,59 @@
+# The kernel map (proposal 0006, Part A; renamed from components.yaml by 0010). Core components own paths and define
+# contracts; an extension is a component folder components/<name>/. `bay check --base` reads this map.
+# Core files live only under core `owns:` paths (B-4, checked by lint). `owns:` entries are path globs: a trailing `/` owns everything below it.
+#
+# `protected:` is what only forge.extend may change (proposal 0008, stage 5): the guard, `bay check --base`, the
+# resolver and lint read it, and a protected name is reserved (nobody else can define a mode, env or connector of that
+# name). The kit refuses a map where the block is missing or malformed (nothing is writable, no name is free).
+#   paths:     kit folders; the guard denies a write there to any env that does not name the path (framework-dev does).
+#              Since 0010 it lists each protected component, env and connector at its place in components/, and the
+#              interfaces/ folders of briefing, improve and tools (slice 2 reads all of this from the manifests)
+#   mode:      protected modes (improve is an ordinary mode: its findings are decided only by `bay approve <F-id>`, the
+#              interface marks that endpoint ownerOnly, so no mode file can call it)
+#   env:       protected envs; `modes:` = the unprotected modes that may put roles there (`*` = every one)
+#   connector: protected connectors (they scrub secrets, redact transcripts, hold the approval state)
+# Lint keeps framework-dev's fs.write in step with this block: it names every protected path it may write.
+protected:
+  paths: [framework, bay, schemas, adapters,
+          components/cos, components/forge,
+          components/improve/envs/improve-local.yaml, components/tools/envs/workspace.yaml,
+          components/tools/envs/research.yaml,
+          components/claude-transcripts, components/briefing/connectors/corpus-store,
+          components/improve/connectors/artifact-graph, components/improve/connectors/git,
+          components/improve/connectors/improve-detect, components/improve/connectors/improve-store,
+          components/improve/connectors/ledger,
+          components/briefing/interfaces, components/improve/interfaces, components/tools/interfaces]
+  mode: [cos, forge]
+  env:
+    cos-local: {}
+    framework-dev: {}
+    improve-local: { modes: [improve] }
+    local-authoring: {}
+    workspace: { modes: ["*"] }
+    research: { modes: ["*"] }
+  connector: [artifact-graph, claude-transcripts, corpus-store, git, improve-detect, improve-store, ledger, scaffold, workflow-runner]
+components:
+  kernel:           # loader, resolver, lint, registry, dispatcher, ledger, guard, CLI
+    owns:
+      - bay/
+      - schemas/
+      - framework/roles/
+      - framework/rules/
+      - framework/kernel.yaml
+      - framework/limits.yaml
+      - bay.sh
+      - requirements.txt
+      - CHANGELOG.md                 # release metadata: written by forge.extend's release step
+    contracts:
+      # interim (3a replaces it with the loader): every component folder is one extension. The contract keeps the name
+      # `mode`, which B-3 (features of an existing mode) and the protected mode names are keyed on.
+      mode:      { at: ["components/<name>/"], schema: schemas/mode.schema.json }
+      adapter:   { at: ["adapters/<name>/"], schema: schemas/adapter.schema.json, protocol: bay/adapter.py }
+  briefing:          # corpus store, SQL sandbox, selector matcher, the briefing base mode
+    owns:
+      - components/briefing/
+      - bay/contenttypes.py
+      - bay/sqlsandbox.py
+      - bay/selector.py
+    contracts:
+      source:      { implements: items.source/v1, tests: tests/contracts/items_source.py }

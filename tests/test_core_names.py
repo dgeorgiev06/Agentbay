@@ -39,11 +39,11 @@ SUFFIXES = {".py", ".json", ".yaml", ".yml"}
 ALLOWED = {
     ("bay/selector.py", "email", "au.get('email')"):
         "the `email` field of an item/v1 author ({handle, name, email}); a field of the base record, not a content type",
-    ("connectors/corpus-store/corpus_store.py", "email", "au.get('email')"):
+    ("components/briefing/connectors/corpus-store/corpus_store.py", "email", "au.get('email')"):
         "the same item/v1 author field, read when a row is stored",
-    ("connectors/corpus-store/corpus_store.py", "email", "'email' not in author"):
+    ("components/briefing/connectors/corpus-store/corpus_store.py", "email", "'email' not in author"):
         "the same author field, checked when a handle holds an address",
-    ("connectors/corpus-store/corpus_store.py", "email", "{'email': author.pop('handle'), **author}"):
+    ("components/briefing/connectors/corpus-store/corpus_store.py", "email", "{'email': author.pop('handle'), **author}"):
         "the same author field, written when a handle holds an address",
     ("schemas/data/item.v1.schema.json", "email", "/properties/author/properties: email"):
         "the item/v1 author's `email` property, the base record every type extends",
@@ -61,10 +61,10 @@ def names(root=KIT) -> tuple[set[str], set[str], set[str]]:
     types, _ = contenttypes.scan(root)
     kinds = set(types) | {t.kind for t in types.values()}
     views = {v for t in types.values() for v in t.docs}
-    for f in root.glob("modes/*/views.yaml"):
+    for f in root.glob("components/*/views.yaml"):
         views |= set((yaml.safe_load(f.read_text()) or {}).get("views") or {})
     conns = set()
-    for f in (root / "connectors").glob("*/connector.yaml"):
+    for f in (root / "components").glob("**/connector.yaml"):
         impl = (yaml.safe_load(f.read_text()) or {}).get("spec", {}).get("implements") or []
         if SOURCE_IFACE in ([impl] if isinstance(impl, str) else impl):
             conns.add(f.parent.name)

@@ -62,7 +62,7 @@ agentbay.config.yaml and rebuild. Budget caps stop a sync before it exceeds one.
 
 `bay config` prints every setting, with its type, default and description, from the schemas. `bay build`
 writes a minimal `agentbay.config.yaml` when the project has none. Settings can only lower a cap: a value above
-the env's `limits:` is refused by lint and at run time. Capabilities stay bound only in `envs/<env>.yaml`; an
+the env's `limits:` is refused by lint and at run time. Capabilities stay bound only in an env manifest (`components/<name>/envs/<env>.yaml`); an
 env's `offline:` block names the stand-in sources that `offline: true` binds in their place.
 A mode endpoint with a `schedule:` (daily, weekly) runs from cron: `bay check` prints the command to schedule.
 For example, a weekly report on Mondays at 07:00:
@@ -87,9 +87,9 @@ framework/       shipped with the kit, never edited by users:
   roles/           the five roles
   interfaces/      core interfaces
   rules/           conformance rules
-  components.yaml  the component map: core paths, the contracts extensions implement, and a `protected:` block
+  kernel.yaml      the kernel map: core paths, the contracts extensions implement, and a `protected:` block
                    naming what only forge.extend may change (folders, and the shipped modes, envs and connectors
-                   that sit in modes/, envs/ and connectors/ among yours)
+                   that sit in components/ among yours)
 schemas/         the contracts (apiVersion agentbay/v4; a v3 file is refused with the fix) and data schemas
 bay/             resolver, lint, dispatcher, guard hook, run log, CLI
 coordinator/     Chief of Staff slash commands

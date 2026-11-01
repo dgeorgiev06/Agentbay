@@ -21,11 +21,11 @@ def normal(obj, replace: dict[str, str] | None = None):
     return json.loads(SHA12.sub("<sha12>", text))
 
 
-def compare(name: str, got) -> None:
-    f = GOLDEN / f"{name}.json"
+def compare(name: str, got, folder=GOLDEN) -> None:
+    f = folder / f"{name}.json"
     text = json.dumps(got, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
     if not f.exists():
-        GOLDEN.mkdir(exist_ok=True)
+        folder.mkdir(exist_ok=True)
         f.write_text(text)
         raise AssertionError(f"{f} did not exist and was written from the current code; review it, commit it, "
                              f"and run again")

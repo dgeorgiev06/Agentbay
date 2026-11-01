@@ -111,7 +111,7 @@ and connectors. A user role file is an error.
   Envs are the only place capabilities are bound; `agentbay.config.yaml` cannot rebind them. It can switch every
   env's `offline:` block on (`offline: true`), and can lower a cap but never raise the env's `limits`.
 - User modes may put roles only in their own envs (`envs/`) and the protected envs the component map opens to
-  them (`framework/components.yaml` `protected:`, each env's `modes:`).
+  them (`framework/kernel.yaml` `protected:`, each env's `modes:`).
 - Code steps (`run:`) run in the coordinator's env for that feature; `bay check` warns when a store-reading
   mode puts a role in an env whose `items.store`/`items.source` bindings differ from it.
 
@@ -125,7 +125,7 @@ steps that could write `framework/`, `bay/`, `schemas/` or `adapters/` outside `
 Interfaces: named endpoints with JSON-schema `in`/`out` and `effects` (`read|write|network|spend|delete`);
 `binding: connector` (code) or `tools` (runtime tools). `ownerOnly: true` on an endpoint: no step of any mode may
 run it (resolver and lint refuse it); only the owner's own command reaches it (`improve.findings/v1.decide`, via
-`bay approve <F-id>`). The component map's `protected:` block (`framework/components.yaml`) has the keys `paths`
+`bay approve <F-id>`). The component map's `protected:` block (`framework/kernel.yaml`) has the keys `paths`
 (folders), `mode`, `env` (each a name, optionally `{modes: [...]}`: the unprotected modes that may place roles there)
 and `connector`; all four are required, and a missing or malformed block fails closed (every name reserved, nothing
 writable or placeable). A connector is `connector.yaml` + `entry` exposing

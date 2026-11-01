@@ -97,7 +97,7 @@ ROLE = {"role": "builder", "out": "Result", "task": "Do it and return a Result."
 
 def feature_result(k, step_b: dict) -> dict:
     """delivery.build with steps a (a role step) and b (`step_b`), resolved with the rest of the kit."""
-    edit_yaml(k / "modes/delivery/mode.yaml",
+    edit_yaml(k / "components/delivery/mode.yaml",
               lambda doc: doc["spec"]["features"]["build"].update({"steps": [{"id": "a", **ROLE}, {"id": "b", **step_b}]}))
     try:
         model.resolve(Kit(k, k))
@@ -199,7 +199,7 @@ D9 = "D9: a feature `when: approved $in.f` is refused at load (the dispatcher ca
 
 def refused_when_row(when: str):
     return {"accepted": False, "layer": "resolve", "problems": [
-        f"<kit>/modes/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '{when}' does not match "
+        f"<kit>/components/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '{when}' does not match "
         f"{workflows.FEATURE_WHEN_PATTERN!r}"]}
 
 
@@ -233,6 +233,17 @@ def undo_pattern_text(node):
     return node
 
 
+PATH_DELTA = ("<kit>/modes/delivery/mode.yaml", "<kit>/components/delivery/mode.yaml")   # 0010 part 1: modes/ became components/
+PATH_DELTA_ROWS = 17                  # messages that still quote the new path after the named deltas put back 6 golden rows (23 in all)
+
+
+def undo_path_delta(got: dict) -> dict:
+    """`got` with the renamed mode path put back to the golden's spelling, checking that exactly the named rows had it."""
+    text = json.dumps(got, sort_keys=True)
+    assert text.count(PATH_DELTA[1]) == PATH_DELTA_ROWS, text.count(PATH_DELTA[1])
+    return json.loads(text.replace(PATH_DELTA[1], PATH_DELTA[0]))
+
+
 def undo_expected_deltas(got: dict) -> dict:
     """`got` with every named delta checked and put back to the golden's value."""
     golden = json.loads((GOLDEN / "stages.json").read_text())
@@ -249,7 +260,7 @@ def undo_expected_deltas(got: dict) -> dict:
             was, now = EXPECTED_RUNNER_DELTAS[key]
             assert row["result"] == now, f"{key}: expected {now} (D8), got {row['result']}"
             row["result"] = was
-    return undo_pattern_text(got)
+    return undo_path_delta(undo_pattern_text(got))
 
 
 def test_stage_syntax_table():
@@ -276,7 +287,7 @@ def test_the_reference_grammar_is_spelled_once_and_the_schemas_equal_it():
 
 
 def test_the_dispatcher_and_the_cursor_share_one_skip_rule_and_one_substitution():
-    runner = (KIT / "connectors" / "workflow-runner" / "workflow_runner.py").read_text()
+    runner = (KIT / "components" / "cos" / "connectors" / "workflow-runner" / "workflow_runner.py").read_text()
     assert not hasattr(dispatch, "substitute") and "substitute" not in runner
     assert "wfmod.advance(" in runner and "wfmod.advance(" in (KIT / "bay" / "dispatch.py").read_text()
     assert not hasattr(dispatch.Dispatcher, "_skip")

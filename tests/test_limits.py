@@ -6,8 +6,8 @@ from bay import limits
 
 FILES = {
     "bay/cli.py": "sub.add_parser('a')\nsub.add_parser('b')\n", "bay/util.py": "x = 1\n",
-    "connectors/c/c.py": "y = 1\nz = 2",                                     # no final newline: still 2 lines
-    "connectors/c/tests/test_c.py": "def test_a():\n    pass\n\n\ndef test_b():\n    pass\n",
+    "components/c/c.py": "y = 1\nz = 2",                                     # no final newline: still 2 lines
+    "components/c/tests/test_c.py": "def test_a():\n    pass\n\n\ndef test_b():\n    pass\n",
     "framework/roles/r.yaml": "x\n", "framework/rules/r.yaml": "x\n", "schemas/s.json": "{}\n",
     "schemas/data/d.json": "{}\n",
 }

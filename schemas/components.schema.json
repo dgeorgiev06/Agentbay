@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "components.schema.json",
-  "title": "framework/components.yaml: core components, the paths they own, the contracts they define",
+  "title": "framework/kernel.yaml: core components, the paths they own, the contracts they define",
   "type": "object",
   "required": ["components"],
   "additionalProperties": false,

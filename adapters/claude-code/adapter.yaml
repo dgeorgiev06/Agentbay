@@ -1,4 +1,4 @@
-# A runtime adapter (contract: framework/components.yaml `adapter`, protocol bay/adapter.py).
+# A runtime adapter (contract: framework/kernel.yaml `adapter`, protocol bay/adapter.py).
 name: claude-code
 module: claude_code.py
 class: ClaudeCodeAdapter

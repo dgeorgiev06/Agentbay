@@ -172,7 +172,7 @@ def test_secrets_never_in_ledger_output_or_store_on_success():
     p.joinpath("agentbay.config.yaml").write_text(
         p.joinpath("agentbay.config.yaml").read_text() + "connectors: {x-api: {userId: '42'}}\nsecrets: {provider: env}\n")
     import sys
-    sys.path.insert(0, str(KIT / "connectors/x-api/tests"))
+    sys.path.insert(0, str(KIT / "components/x-api/tests"))
     from test_x_api import pages, routes  # noqa: E402
     r, _ = routes(pages(2, 2))
     http = FakeHttp(r)
@@ -548,7 +548,7 @@ def test_a_gate_takes_no_when_and_approves_goes_on_a_gate_only():
             wf = doc["spec"]["features"]["extend"]["steps"]
             next(s for s in wf if s.get("id") == "approve")["when"] = "!$steps.proposal.approved"
             next(s for s in wf if s.get("id") == "implement")["approves"] = "$in.proposal"
-        edit_yaml(k / "modes/forge/mode.yaml", edit)
+        edit_yaml(k / "components/forge/mode.yaml", edit)
         try:
             model.resolve(model.Kit(k, k))
             raise AssertionError("resolved")
@@ -565,7 +565,7 @@ def test_when_names_only_an_earlier_step():
     try:
         def edit(doc):
             doc["spec"]["features"]["extend"]["steps"][1]["when"] = "!$steps.release.approved"
-        edit_yaml(k / "modes/forge/mode.yaml", edit)
+        edit_yaml(k / "components/forge/mode.yaml", edit)
         try:
             model.resolve(model.Kit(k, k))
             raise AssertionError("resolved")

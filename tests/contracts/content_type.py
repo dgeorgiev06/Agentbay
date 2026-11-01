@@ -1,5 +1,5 @@
-"""The content type contract (framework/components.yaml, contract `contentType`): what every folder
-content-types/<name>/ must satisfy, run by tests/test_content_types.py against each type the kit finds.
+"""The content type contract (the loader's ContentType kind): what every folder
+components/<name>/ holding a content-type.yaml must satisfy, run by tests/test_content_types.py against each type the kit finds.
 
     check(root, name) -> list of problems (empty: the contract holds)
 
@@ -18,7 +18,7 @@ from pathlib import Path
 
 from bay import contenttypes, model, sqlsandbox as sbx
 
-STORE = Path(__file__).resolve().parents[2] / "connectors" / "corpus-store" / "corpus_store.py"
+STORE = Path(__file__).resolve().parents[2] / "components" / "briefing" / "connectors" / "corpus-store" / "corpus_store.py"
 
 
 def _store_module():

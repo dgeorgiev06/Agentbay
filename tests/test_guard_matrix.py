@@ -16,7 +16,7 @@ import os
 
 from golden_util import GOLDEN, compare, normal
 from helpers import KIT, cleanup, edit_yaml, gaps, kit_copy, project, system
-from layout import PROTECTED_INSTANCES, physical
+from layout import PROTECTED_INSTANCES, RENAMED, physical
 
 from bay import lint, model
 from bay.adapter import get
@@ -190,10 +190,36 @@ def resolver_gaps() -> dict:
 # result must equal the golden: every decision and every other word of every reason is the same as before the move.
 FOUR = ["framework", "bay", "schemas", "adapters"]       # the protected folders of the policy before the move
 DEV, LOCAL = "builder--forge--framework-dev", "builder--forge--local-authoring"
-IMPROVE = "modes/improve"
+IMPROVE = "components/improve"
 DEV_CLIS = ["./bay.sh check", "python3 tests/run.py", "git status", "git diff", "git log", "git add", "git commit"]
 MV_RM = ["git mv", "git rm"]
 CLAUSE = "{}/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+
+
+# 0010 part 1: every extension is a component folder, so the new physical path of a row differs from the one the golden
+# quotes in a reason. PATH_DELTAS names each: the new path -> the golden's (the shipped extensions under framework/, the
+# others in modes/, envs/ and connectors/). Row keys are logical and did not change; only path strings in reasons do.
+GOLDEN_FRAMEWORK = {"mode": {"cos", "forge", "improve"},
+                    "env": {"cos-local", "framework-dev", "improve-local", "local-authoring", "workspace", "research"},
+                    "connector": {"artifact-graph", "claude-transcripts", "corpus-store", "git", "improve-detect",
+                                  "improve-store", "ledger", "scaffold", "workflow-runner"}}
+GOLDEN_FOLDER = {"mode": "modes", "env": "envs", "connector": "connectors"}
+GOLDEN_LOCAL_WRITE = ["modes", "envs", "connectors", "agentbay.config.yaml"]       # local-authoring's fs.write then
+
+
+def golden_physical(logical: str) -> str:
+    kind, _, rest = logical.partition(":")
+    name = rest.partition("/")[0]
+    path = f"{GOLDEN_FOLDER[kind]}/{rest}.yaml" if kind == "env" else f"{GOLDEN_FOLDER[kind]}/{rest}"
+    return f"framework/{path}" if name in GOLDEN_FRAMEWORK[kind] else path
+
+
+def path_deltas() -> dict:
+    logical = {lp for lp in [*WRITE_PATHS, *READ_PATHS, *EDIT_PATHS, "mode:improve/n.ipynb"] if ":" in lp}
+    out = {physical(lp): golden_physical(lp) for lp in logical}
+    out.update({new: old for old, new in RENAMED.items()})
+    assert len(set(out)) == len(out) and all(a != b for a, b in out.items()), out
+    return dict(sorted(out.items(), key=lambda kv: -len(kv[0])))                   # longest first
 
 
 def undo_move(got: dict) -> dict:
@@ -207,12 +233,16 @@ def undo_move(got: dict) -> dict:
     pol, moved = got["policy"], PROTECTED_INSTANCES
     assert pol["protected"] == FOUR + moved, pol["protected"]
     pol["protected"] = FOUR
+    assert pol["units"][LOCAL]["write"] == ["components", "agentbay.config.yaml"], pol["units"][LOCAL]["write"]
     window = [*MOVE_WINDOW_DIRS, "docs", "tests", "README.md"]       # the temporary 0010 part 0b entries (see MOVE_WINDOW_DELTAS)
     assert pol["units"][DEV]["write"] == [*FOUR, *moved, *window], pol["units"][DEV]["write"]
     pol["units"][DEV]["write"] = [*FOUR, "docs", "tests"]
     assert got["protectedWrites"]["framework-dev"] == FOUR + moved
     got["protectedWrites"]["framework-dev"] = FOUR
-    local_writes = str(pol["units"][LOCAL]["write"])
+    local_now, local_was = str(pol["units"][LOCAL]["write"]), str(GOLDEN_LOCAL_WRITE)
+    pol["units"][LOCAL]["write"] = GOLDEN_LOCAL_WRITE
+    deltas = path_deltas()
+    local_writes = local_was
     dev_now, dev_was = str([*FOUR, *moved, *window]),str([*FOUR, "docs", "tests"])    # a reason quotes the list
     # (4) framework-dev may also run `git mv` and `git rm` (Part 3a): in its clis and in its "may only run" reasons
     assert pol["units"][DEV]["clis"] == [*DEV_CLIS, *MV_RM, "git show"], pol["units"][DEV]["clis"]
@@ -221,11 +251,15 @@ def undo_move(got: dict) -> dict:
     assert any(cli_now in r for r in (r for _, r in got["matrix"][DEV].values()))
 
     def old(s: str, unit: str | None = None) -> str:
+        if unit == LOCAL:
+            s = s.replace(local_now, local_was)
         if unit == DEV:
             s = s.replace(dev_now, dev_was).replace(cli_now, cli_was)
         for p in [*moved, IMPROVE]:          # improve moved too; it is no longer protected (part H)
             was = f"outside the role's writable paths {local_writes}" if unit == LOCAL else CLAUSE.format("framework")
-            s = s.replace(CLAUSE.format(p), was).replace(f"<project>/{p}", f"<project>/framework/{p}")
+            s = s.replace(CLAUSE.format(p), was)
+        for new, was_path in deltas.items():
+            s = s.replace(f"<project>/{new}", f"<project>/{was_path}")
         return s
 
     for unit, rows_ in got["matrix"].items():
@@ -234,7 +268,10 @@ def undo_move(got: dict) -> dict:
     got["lintWarnings"] = [old(w) for w in got["lintWarnings"]]
     longer, shorter = ", ".join(FOUR + moved), ", ".join(FOUR)
     assert any(longer in g for gs in got["resolverGaps"].values() for g in gs)
-    got["resolverGaps"] = {name: [old(g).replace(longer, shorter) for g in gs] for name, gs in got["resolverGaps"].items()}
+    envs_now, envs_was = "their own envs (components/<name>/envs/)", "their own envs (envs/)"
+    assert any(envs_now in g for gs in got["resolverGaps"].values() for g in gs)
+    got["resolverGaps"] = {name: [old(g).replace(longer, shorter).replace(envs_now, envs_was) for g in gs]
+                           for name, gs in got["resolverGaps"].items()}
     return got
 
 
@@ -246,7 +283,7 @@ def undo_move(got: dict) -> dict:
 #     fs.write in step with the map). It writes protected paths, not user extensions, so pass -> deny. Findings about
 #     improve itself route to a mode-fix task, not forge.extend (D4).
 USER_MODE_GAP = ("mode improve: role analyst works in the framework env framework-dev (improve.scan step patterns); "
-                 "user modes may put roles only in their own envs (envs/) or the framework envs workspace and research")
+                 "user modes may put roles only in their own envs (components/<name>/envs/) or the framework envs workspace and research")
 IMPROVE_ROWS = ["Edit mode:improve/mode.yaml", "MultiEdit mode:improve/mode.yaml", "NotebookEdit mode:improve/n.ipynb",
                 "Write mode:improve/README.md", "Write mode:improve/features/scan/playbook.md",
                 "Write mode:improve/mode.yaml"]
@@ -261,11 +298,11 @@ IMPROVE_DELTAS: dict = {
 # paths (cos, forge, the protected envs and connectors) are not rows here and still deny every non-framework role.
 # Part 2a removes the broad entries (lint syncs fs.write from the manifests), this group goes, and D9 holds again.
 # The IMPROVE_DELTAS rows of DEV (pass -> deny) net to pass -> pass while the window is open: modes/ covers improve.
-MOVE_WINDOW_DIRS = ["modes", "connectors", "envs", "content-types", "coordinator", "components"]
+MOVE_WINDOW_DIRS = ["components"]
 MOVE_WINDOW_ROWS = ["Edit connector:fake/connector.yaml", "Edit mode:briefing/mode.yaml",
                     "MultiEdit connector:fake/connector.yaml", "MultiEdit mode:briefing/mode.yaml", "Write README.md",
                     "Write connector:brand-new/x.py", "Write connector:fake/connector.yaml",
-                    "Write connector:gmail-api/connector.yaml", "Write content-types/x/y.py", "Write env:brand-new",
+                    "Write connector:gmail-api/connector.yaml", "Write env:brand-new",
                     "Write env:local-feeds", "Write mode:brand-new/mode.yaml", "Write mode:briefing/mode.yaml",
                     "Write mode:delivery/mode.yaml", "Write mode:feed-briefing/mode.yaml",
                     "Write mode:mail-briefing/mode.yaml", "Write modes/x.yaml"]
@@ -320,6 +357,14 @@ def test_guard_decision_matrix():
         cleanup(k)
 
 
+def undo_kit_path(got: dict) -> dict:
+    """The one path the kit-outside probe names moved (modes/briefing/ -> components/briefing/); the decision and the rest
+    of every reason are the golden's. Asserted present, so the put-back cannot hide a missing row."""
+    text = json.dumps(got, sort_keys=True)
+    assert text.count("<kit>/components/briefing/mode.yaml") == 2, text.count("<kit>/components/briefing/mode.yaml")
+    return json.loads(text.replace("<kit>/components/briefing/mode.yaml", "<kit>/modes/briefing/mode.yaml"))
+
+
 def test_guard_matrix_for_a_project_with_the_kit_outside():
     """autoAllowShim, the kit as a folder agents may not write, and no protected list."""
     p = project()
@@ -335,7 +380,7 @@ def test_guard_matrix_for_a_project_with_the_kit_outside():
             shim = f".agentbay/roles/{u}/use"
             for label, tool, ti in (
                     [("kit file", "Write", {"file_path": str(KIT / "bay/guard.py")}),
-                     ("kit mode", "Write", {"file_path": str(KIT / "modes/briefing/mode.yaml")}),
+                     ("kit mode", "Write", {"file_path": str(KIT / "components/briefing/mode.yaml")}),
                      ("src", "Write", {"file_path": "src/app.py"}), ("bay dir of project", "Write", {"file_path": "bay/x.py"}),
                      ("config", "Write", {"file_path": "agentbay.config.yaml"}),
                      ("ledger", "Read", {"file_path": ".agentbay/ledger/events.jsonl"}),
@@ -347,8 +392,8 @@ def test_guard_matrix_for_a_project_with_the_kit_outside():
                        ("approve", "Bash", {"command": ".agentbay/bay approve C-1"})]):
                 d, r = g.decide({**pa, "tool_name": tool, "tool_input": ti})
                 out[f"{u} {label}"] = [d, r]
-        compare("guard-matrix-project", normal(out, {str(p): "<project>", os.path.realpath(p): "<project>",
+        compare("guard-matrix-project", undo_kit_path(normal(out, {str(p): "<project>", os.path.realpath(p): "<project>",
                                                      str(p.parent): "<tmp>", os.path.realpath(p.parent): "<tmp>",
-                                                     str(KIT): "<kit>"}))
+                                                     str(KIT): "<kit>"})))
     finally:
         cleanup(p)

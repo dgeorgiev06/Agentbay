@@ -13,7 +13,7 @@
     connectors:
       my-source: { userId: "12345" }
 
-Capabilities are bound only in envs/<env>.yaml (no override here). `bay build` writes a minimal file when a
+Capabilities are bound only in components/<mode>/envs/<env>.yaml (no override here). `bay build` writes a minimal file when a
 project has none; `bay config` prints every setting from the schemas.
 
 Settings can only tighten: a numeric cap is the minimum of the mode constraint and the config, and a config

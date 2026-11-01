@@ -18,7 +18,7 @@ from . import boundary, proposal
 FILE = "framework/limits.yaml"
 MEASURES = ("bay_lines", "kit_python_lines", "cli_commands", "framework_folders", "schemas", "top_level_folders",
             "tests")
-_TEST_FILE = re.compile(r"(?:tests|(?:connectors|content-types)/[^/]+/tests)/test_[^/]*\.py")
+_TEST_FILE = re.compile(r"(?:tests|(?:components|adapters)/(?:.+/)?tests)/test_[^/]*\.py")
 
 
 def _lines(path: Path) -> int:
@@ -34,7 +34,7 @@ def count(repo: Path) -> dict[str, int]:
                           "-z"], capture_output=True, text=True, check=True).stdout
     paths = [p for p in out.split("\0") if p and (repo / p).is_file()]
     py = [p for p in paths if p.endswith(".py")]
-    kit = [p for p in py if p.split("/")[0] in ("connectors", "adapters", "content-types")
+    kit = [p for p in py if p.split("/")[0] in ("components", "adapters")
            and "tests" not in p.split("/")]
     read = lambda p: (repo / p).read_text(encoding="utf-8")        # noqa: E731
     return {

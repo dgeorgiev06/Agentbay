@@ -2,7 +2,7 @@
 
 It reads `git diff --name-status --no-renames <base>...<head>` and classifies each changed path (deletions
 and both sides of a move included) with
-framework/components.yaml and the proposal's `touches:`:
+framework/kernel.yaml and the proposal's `touches:`:
 
 - core (B-1): under a component's `owns:`; passes only if a `touches:` glob matches.
 - extension (B-2): under a contract's `at:`; passes if the extension is new in the diff or listed.
@@ -178,7 +178,7 @@ class Contract:
     at: list[str]
 
     def instance(self, path: str) -> str | None:
-        """The instance root (`modes/x/`, `envs/x.yaml`) that `path` falls in, or None."""
+        """The instance root (`components/x/`) that `path` falls in, or None."""
         for pat in self.at:
             head, _, tail = pat.partition("<name>")
             rx = re.escape(head) + r"([^/]+?)" + re.escape(tail)
@@ -279,7 +279,7 @@ def git(repo: Path, *args: str) -> str:
     return r.stdout
 
 
-MAP = "framework/components.yaml"
+MAP = "framework/kernel.yaml"
 
 
 def show(repo: Path, rev: str, path: str) -> str | None:
@@ -457,7 +457,7 @@ def _classify(path: str, cmap: ComponentMap, touches: list[dict], is_new, propos
     if "/" not in path:                  # an ordinary repo-root file (TODO.md, .env.example): not framework code
         return Finding(path, "other", "repo root", True)
     return Finding(path, "unowned", "unowned", listed, "unowned",
-                   "" if listed else "not under any component or extension in framework/components.yaml")
+                   "" if listed else "not under any component or extension in framework/kernel.yaml")
 
 
 def doc_hits(texts: dict[str, str], names: dict[str, str]) -> list[dict]:
@@ -507,8 +507,8 @@ def check(repo: Path, base: str, head: str = "HEAD", proposal: str | None = None
         at_base.update("/".join(parts[:i]).casefold() for i in range(1, len(parts) + 1) if f)
 
     def is_new(root: str) -> bool:
-        """An extension root is new when no path at the merge-base matches it, ignoring case (F-4: `modes/Mail/`
-        next to `modes/mail/` is an edit of mail on a case-insensitive filesystem, not a new mode)."""
+        """An extension root is new when no path at the merge-base matches it, ignoring case (F-4: `components/Mail/`
+        next to `components/mail/` is an edit of mail on a case-insensitive filesystem, not a new mode)."""
         return root.rstrip("/").casefold() not in at_base
 
     rep = Report(base, head, proposal, map_rev=map_rev)

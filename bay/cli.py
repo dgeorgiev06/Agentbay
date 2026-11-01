@@ -2,7 +2,7 @@
 """agentbay control plane.
 
   check [--base <ref>]   lint + resolve every mode endpoint (fails with every gap); with --base, also check the
-                         change against framework/components.yaml and a proposal's touches: (--proposal, --docs);
+                         change against framework/kernel.yaml and a proposal's touches: (--proposal, --docs);
                          --limits checks the size ceilings in framework/limits.yaml
   build | clean          compile modes/roles into a runtime (claude-code) / remove it; build writes a minimal
                          agentbay.config.yaml when the project has none

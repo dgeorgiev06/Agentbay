@@ -23,6 +23,35 @@ CORES = ["PLANTEDkeyAAAA", "PLANTEDbearerTOKEN", "MIIEpPLANTEDprivateKEY", "PLAN
 ALL = " ".join(SECRETS.values())
 
 
+def proj(keep_text=False, transcripts=True):
+    """A project with the transcript connector pointed at fixture transcripts and a fixture ledger."""
+    from helpers import project, tmpdir
+    root = tmpdir() / "cc"
+    root.mkdir()
+    p = project({"connectors": {"claude-transcripts": {"root": str(root), **({"keepText": True} if keep_text else {})}}})
+    if transcripts:
+        make_transcripts(root, p)
+    make_ledger(p)
+    return p
+
+
+def D(p, kit=None):
+    from bay import dispatch
+    from helpers import clock, system
+    return dispatch.Dispatcher(system(p, kit), p, clock=clock)
+
+
+def findings(p):
+    f = p / ".agentbay/data/improve/findings.jsonl"
+    return [json.loads(x) for x in f.read_text().splitlines()] if f.exists() else []
+
+
+def scan(d, patterns=None):
+    r = d.call("improve.scan", {"since": "7d"})
+    assert r["status"] == "needs-agent" and r["next"]["role"] == "analyst", r
+    return r, d.submit(r["callId"], "patterns", {"findings": patterns or []})
+
+
 def _w(path: Path, records: list, tail: str = "") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(json.dumps(r) + "\n" for r in records) + tail, encoding="utf-8")

@@ -1,0 +1,7 @@
+apiVersion: agentbay/v4
+kind: Component
+metadata:
+  name: tools
+  description: "The tools every mode may use: workspace read and write, git read and web research, with the envs that bind them."
+spec:
+  version: 1

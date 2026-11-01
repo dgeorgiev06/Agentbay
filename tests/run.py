@@ -34,10 +34,8 @@ def kit_state() -> str | None:
 
 
 def files() -> list[Path]:
-    out = sorted(HERE.glob("test_*.py"))
-    for base in (KIT / "connectors", KIT / "content-types"):
-        out += sorted(base.glob("*/tests/test_*.py"))
-    return out
+    return sorted(HERE.glob("test_*.py")) + sorted(KIT.glob("components/**/tests/test_*.py")) \
+        + sorted(KIT.glob("adapters/*/tests/test_*.py"))
 
 
 def run_file(f: Path, k: str, quiet: bool) -> tuple[str, int, int, list[tuple[float, str]]]:

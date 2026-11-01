@@ -405,7 +405,7 @@ def lint_contract_versions(kit: model.Kit) -> list[str]:
             k, _, v = n.partition("/v")
             if k not in kinds:
                 out.append(f"{where}: {owner} {key}: unknown item kind '{n}' (known: {known}); add a "
-                           f"content type for the kind (content-types/<name>/) or fix the name")
+                           f"content type for the kind (components/<name>/) or fix the name")
             elif int(v) not in kinds[k]:
                 out.append(f"{where}: {owner} {key}: item kind {k} has no version {v} (known: {known})")
 
@@ -516,7 +516,7 @@ def lint_extension_names(kit: model.Kit) -> list[str]:
     path) are not extensions and are not scanned; framework instances may load each other (they ship and change
     together, only through forge.extend), never a user extension. A static scan cannot be complete (a name can be
     computed at run time); it catches the spelled-out forms."""
-    cpath = kit.root / "framework" / "components.yaml"
+    cpath = kit.root / "framework" / "kernel.yaml"
     cmap = _component_map(cpath) if cpath.exists() else None
 
     def relk(f: Path) -> str:
@@ -584,7 +584,7 @@ def warnings(kit: model.Kit) -> list[str]:
                        f"FTS5 (python.org and Homebrew builds have it) for ranked full-text search")
     if kit.project is not None and kit.project.resolve() == kit.root.resolve():
         out += stale_policy(kit, kit.protected_paths)
-        roots = list(kit.protected.paths)     # the folders; a write path of modes/ that reaches modes/cos is by design
+        roots = [p for p in kit.protected.paths if "/" not in p]   # the folders; components/ reaching components/cos is by design
         for env in kit.docs["Environment"].values():
             for w in env.spec.get("fs", {}).get("write", []):
                 hits = [d for d in roots if w in (".", "", "./") or Path(d).is_relative_to(Path(w))]
@@ -813,8 +813,8 @@ def lint_skill_names(kit: model.Kit) -> list[str]:
 
 
 def lint_components(kit: model.Kit) -> list[str]:
-    """framework/components.yaml (proposal 0006, Part A): its schema, and every `owns:` glob names a real path."""
-    path = kit.root / "framework" / "components.yaml"
+    """framework/kernel.yaml (proposal 0006, Part A): its schema, and every `owns:` glob names a real path."""
+    path = kit.root / "framework" / "kernel.yaml"
     if not path.exists():
         return []
     try:
@@ -845,7 +845,7 @@ def stale_policy(kit: model.Kit, every: list[str]) -> list[str]:
     if have == every:
         return []
     return [f".agentbay/guard.json: its protected list ({len(have) if isinstance(have, list) else 'none'} paths) is not "
-            f"the one framework/components.yaml `protected:` gives ({len(every)} paths: the guard enforces the policy, "
+            f"the one framework/kernel.yaml `protected:` gives ({len(every)} paths: the guard enforces the policy, "
             f"not the map); rebuild it with ./bay.sh build"]
 
 
@@ -858,7 +858,7 @@ def lint_protection(kit: model.Kit) -> list[str]:
     prot = kit.protected
     if prot.closed:
         return []
-    path = kit.root / "framework" / "components.yaml"
+    path = kit.root / "framework" / "kernel.yaml"
     where = _where(path, _line_of(path, r"^protected:"))
     out = []
     for kind, label in model.PROTECTION_KIND.items():
@@ -878,7 +878,7 @@ def lint_protection(kit: model.Kit) -> list[str]:
 
 
 def _protected_paths_in_sync(kit: model.Kit) -> list[str]:
-    cmap = _component_map(kit.root / "framework" / "components.yaml")
+    cmap = _component_map(kit.root / "framework" / "kernel.yaml")
     if cmap is None:
         return []
     every, out = kit.protected_paths, []
@@ -892,9 +892,9 @@ def _protected_paths_in_sync(kit: model.Kit) -> list[str]:
         for w in writes:
             ext = cmap.extension(w) or cmap.extension(w + "/")
             if ext and ext[0].name in boundary.PROTECTED_KINDS and ext[1].rstrip("/") == w \
-                    and not kit.protected.reserved(ext[0].name, ext[0].instance_name(ext[1])):
+                    and not any(kit.protected.reserved(k, ext[0].instance_name(ext[1])) for k in boundary.PROTECTED_KINDS):
                 out.append(f"{env.rel}: env {env.name} fs.write names {w}, which the protected: block of "
-                           f"framework/components.yaml does not list; remove it or protect the {ext[0].name}")
+                           f"framework/kernel.yaml does not list; remove it or protect the {ext[0].name}")
     return out
 
 
@@ -914,7 +914,7 @@ def lint_owner_only(kit: model.Kit) -> list[str]:
 def lint_ownership(kit: model.Kit) -> list[str]:
     """B-4 (proposal 0006, Part F): every tracked file of the kit is under a core `owns:` path, an extension
     folder (`at:`) or the boundary's other set. Runs only when the kit is a git checkout."""
-    path = kit.root / "framework" / "components.yaml"
+    path = kit.root / "framework" / "kernel.yaml"
     r = subprocess.run(["git", "-C", str(kit.root), "ls-files", "-z"], capture_output=True)
     if not path.exists() or r.returncode:
         return []
@@ -924,16 +924,18 @@ def lint_ownership(kit: model.Kit) -> list[str]:
         return []
     return [f"{f}: not under a core owns: path, an extension folder or the boundary's other set (B-4). Move it "
             f"into the folder of the component or extension it belongs to, or add it to that component's owns: "
-            f"in framework/components.yaml" for f in boundary.stray(files, cmap)]
+            f"in framework/kernel.yaml" for f in boundary.stray(files, cmap)]
 
 
-MANIFESTS = {"mode": "mode.yaml", "connector": "connector.yaml", "adapter": "adapter.yaml"}
+MANIFESTS = {"mode": ("mode.yaml", "connector.yaml", "content-type.yaml", "component.yaml"),   # the interim contract is named mode (B-3 keys on it)
+             "adapter": ("adapter.yaml",)}
+OLD_FOLDERS = ("modes/", "envs/", "connectors/", "content-types/", "coordinator/", "framework/interfaces/", "interfaces/")
 
 
 def lint_case_and_manifests(kit: model.Kit) -> list[str]:
     """F-4: no two tracked paths differ only in case (one checkout of them would clobber the other on macOS or
     Windows, and `bay check --base` treats them as one), and every extension folder carries its manifest."""
-    path = kit.root / "framework" / "components.yaml"
+    path = kit.root / "framework" / "kernel.yaml"
     r = subprocess.run(["git", "-C", str(kit.root), "ls-files", "-z"], capture_output=True)
     if not path.exists() or r.returncode:
         return []
@@ -955,9 +957,11 @@ def lint_case_and_manifests(kit: model.Kit) -> list[str]:
         if ext and ext[0].name in MANIFESTS and ext[1].endswith("/"):
             roots.setdefault(ext[1], set()).add(f[len(ext[1]):])
     for root, inside in sorted(roots.items()):
-        if MANIFESTS[cmap.extension(root + "x")[0].name] not in inside:
-            out.append(f"{root}: extension folder without its manifest "
-                       f"{MANIFESTS[cmap.extension(root + 'x')[0].name]}")
+        want = MANIFESTS[cmap.extension(root + "x")[0].name]
+        if not inside.intersection(want):
+            out.append(f"{root}: extension folder without its manifest {' or '.join(want)}")
+    out += [f"{d}: the old layout is not read (agentbay/v4); move it to components/<name>/"
+            for d in OLD_FOLDERS if any(f.startswith(d) for f in files)]
     return list(dict.fromkeys(out))
 
 

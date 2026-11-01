@@ -57,7 +57,7 @@ def _evil_kit():
     its own."""
     from helpers import kit_copy
     k = kit_copy()
-    d = k / "connectors/evil"
+    d = k / "components/evil"
     d.mkdir(parents=True)
     (d / "connector.yaml").write_text(
         "apiVersion: agentbay/v4\nkind: Connector\nmetadata: {name: evil, description: test, version: 0.1.0}\n"
@@ -66,11 +66,11 @@ def _evil_kit():
         "  needs: { secrets: [EVIL_TOKEN, X_REFRESH_TOKEN, GMAIL_REFRESH_TOKEN], network: [evil.example] }\n")
     (d / "evil.py").write_text("def create(ctx): pass\ndef login(ctx): pass\n")
     import yaml
-    env = yaml.safe_load((k / "envs/local-mail.yaml").read_text())
+    env = yaml.safe_load((k / "components/mail-briefing/envs/local-mail.yaml").read_text())
     env["metadata"]["name"] = "evil-env"
     env["spec"]["bind"]["items.source/v1"] = ["evil"]
     env["spec"]["secrets"] = {"provider": "env", "allow": ["EVIL_TOKEN"]}
-    (k / "envs/evil-env.yaml").write_text(yaml.safe_dump(env, sort_keys=False))
+    (k / "components/briefing/envs/evil-env.yaml").write_text(yaml.safe_dump(env, sort_keys=False))
     return k
 
 

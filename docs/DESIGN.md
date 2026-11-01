@@ -66,7 +66,7 @@ store access. Its grants come from the mode, not the role: the read-only connect
 `needs` that the env binds, plus the tools of tools-capabilities whose effects are read or network. Only
 `access: write` roles get file-writing tools, CLIs beyond read-only version control, and the env's write paths. User
 modes may put roles only in their own envs and the protected envs the component map opens to them
-(`framework/components.yaml` `protected:`); an env's `tiers` caps both step tiers and a role's default tier.
+(`framework/kernel.yaml` `protected:`); an env's `tiers` caps both step tiers and a role's default tier.
 
 The claude-code adapter writes `.claude/agents/<unit>.md` for worker units, runs mode coordinators as
 playbooks in the main thread (subagents cannot spawn subagents), and writes `.agentbay/COORDINATOR.md`, the
@@ -175,5 +175,5 @@ way, so every stage keeps its own grants, effects, budget, review and gates, and
 The framework ships instances of the same contracts: the root mode, the mode that builds agentbay itself
 (scaffolds, and proposal-driven changes to the framework), and the mode that finds recurring failures, with
 the connectors they use. They sit in `modes/`, `envs/` and `connectors/` beside yours; the `protected:` block of
-`framework/components.yaml` names the ones only `forge.extend` may change, and `framework/` itself holds the roles,
+`framework/kernel.yaml` names the ones only `forge.extend` may change, and `framework/` itself holds the roles,
 rules, interfaces and that map. Each is described in the README of its folder; `bay catalog` lists them.

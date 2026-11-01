@@ -12,23 +12,21 @@ from bay import boundary, lint, model, proposal
 PROT = {"paths": ["locked"], "mode": [], "env": {}, "connector": []}      # a block every map needs; protects nothing here
 MAP = {"components": {
     "kernel": {"owns": ["bay/", "schemas/"],
-               "contracts": {"mode": {"at": ["modes/<name>/"]}, "env": {"at": ["envs/<name>.yaml"]},
-                             "connector": {"at": ["connectors/<name>/"]}}},
-    "briefing": {"owns": ["bay/selector.py", "modes/briefing/"],
-                 "contracts": {"contentType": {"at": ["content-types/<name>/"]}}}}, "protected": PROT}
+               "contracts": {"mode": {"at": ["components/<name>/"]}}},      # interim: one contract, as the shipped map
+    "briefing": {"owns": ["bay/selector.py", "components/briefing/"]}}, "protected": PROT}
 
 BASE_FILES = {
-    "framework/components.yaml": yaml.safe_dump(MAP),
+    "framework/kernel.yaml": yaml.safe_dump(MAP),
     "bay/cli.py": "x\n", "bay/selector.py": "x\n", "schemas/a.json": "{}\n",
-    "modes/briefing/mode.yaml": "x\n",
-    "modes/mail/mode.yaml": "x\n", "modes/mail/features/digest/playbook.md": "x\n",
-    "modes/mail/features/ask/playbook.md": "x\n",
-    "connectors/gmail/connector.yaml": "x\n", "envs/local.yaml": "x\n",
+    "components/briefing/mode.yaml": "x\n",
+    "components/mail/mode.yaml": "x\n", "components/mail/features/digest/playbook.md": "x\n",
+    "components/mail/features/ask/playbook.md": "x\n",
+    "components/gmail/connector.yaml": "x\n", "components/mail/envs/local.yaml": "x\n",
     "README.md": "# kit\n", "tests/test_x.py": "x\n",
 }
 
 
-MAP_PATH = "framework/components.yaml"
+MAP_PATH = "framework/kernel.yaml"
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -78,31 +76,31 @@ def test_moves_and_deletions_are_classified_on_both_sides():
     _git(repo, "config", "diff.relative", "true")
     rep = boundary.check(repo, "HEAD~1", "HEAD", None, [])
     assert _failing(rep) == ["bay/cli.py"] and rep.failures[0].rule == "B-1"
-    repo = _repo({}, moves=(("modes/mail", "modes/post"),))
+    repo = _repo({}, moves=(("components/mail", "components/post"),))
     rep = boundary.check(repo, "HEAD~1", "HEAD", None, [])
-    assert set(_failing(rep)) == {"modes/mail/mode.yaml", "modes/mail/features/digest/playbook.md",
-                                  "modes/mail/features/ask/playbook.md"}
+    assert set(_failing(rep)) == {"components/mail/mode.yaml", "components/mail/features/digest/playbook.md",
+                                  "components/mail/features/ask/playbook.md", "components/mail/envs/local.yaml"}
     assert {f.rule for f in rep.failures} <= {"B-2", "B-3"}
     _r = _repo({})
-    _git(_r, "rm", "-q", "connectors/gmail/connector.yaml")
+    _git(_r, "rm", "-q", "components/gmail/connector.yaml")
     _git(_r, "commit", "-q", "-m", "d")
     rep = boundary.check(_r, "HEAD~1", "HEAD", None, [])
-    assert _failing(rep) == ["connectors/gmail/connector.yaml"] and rep.failures[0].rule == "B-2"
+    assert _failing(rep) == ["components/gmail/connector.yaml"] and rep.failures[0].rule == "B-3"
 
 
 def test_case_only_new_folder_is_not_a_new_extension():
-    """F-4: `modes/Mail/` beside `modes/mail/` is the same folder on a case-insensitive filesystem."""
-    rep = _check({"modes/Mail/features/x/playbook.md": "y\n", "connectors/GMAIL/connector.yaml": "y\n"})
-    assert set(_failing(rep)) == {"modes/Mail/features/x/playbook.md", "connectors/GMAIL/connector.yaml"}
-    assert not _failing(_check({"modes/post/mode.yaml": "y\n"}))
+    """F-4: `components/Mail/` beside `components/mail/` is the same folder on a case-insensitive filesystem."""
+    rep = _check({"components/Mail/features/x/playbook.md": "y\n", "components/GMAIL/connector.yaml": "y\n"})
+    assert set(_failing(rep)) == {"components/Mail/features/x/playbook.md", "components/GMAIL/connector.yaml"}
+    assert not _failing(_check({"components/post/mode.yaml": "y\n"}))
 
 
 def test_lint_rejects_case_collisions_and_extension_folders_without_manifest():
     from types import SimpleNamespace
-    repo = _repo({"modes/Mail/x.md": "y\n", "connectors/rss/feed.py": "y\n"})
+    repo = _repo({"components/Mail/x.md": "y\n", "components/rss/feed.py": "y\n"})
     errs = lint.lint_case_and_manifests(SimpleNamespace(root=repo))
-    assert any("differs only in case" in e and "modes/Mail" in e and "modes/mail" in e for e in errs), errs
-    assert any(e.startswith("connectors/rss/: extension folder without its manifest connector.yaml") for e in errs)
+    assert any("differs only in case" in e and "components/Mail" in e and "components/mail" in e for e in errs), errs
+    assert any(e.startswith("components/rss/: extension folder without its manifest mode.yaml or connector.yaml or content-type.yaml or component.yaml") for e in errs)
     assert not lint.lint_case_and_manifests(SimpleNamespace(root=_repo({})))
 
 
@@ -114,40 +112,40 @@ def test_planned_touches_authorize_nothing_f10():
 
 
 def test_new_extension_folder_passes():
-    rep = _check({"connectors/x-api/connector.yaml": "x\n", "modes/feed/mode.yaml": "x\n",
-                  "modes/feed/features/digest/playbook.md": "x\n", "envs/new.yaml": "x\n",
-                  "content-types/post/type.yaml": "x\n", "tests/test_y.py": "x\n"})
+    rep = _check({"components/x-api/connector.yaml": "x\n", "components/feed/mode.yaml": "x\n",
+                  "components/feed/features/digest/playbook.md": "x\n", "components/feed/envs/new.yaml": "x\n",
+                  "components/post/content-type.yaml": "x\n", "tests/test_y.py": "x\n"})
     assert _failing(rep) == [] and rep.exit_code == 0
     assert {f.cls for f in rep.findings} == {"extension", "other"}
 
 
 def test_existing_extension_edit_fails_unless_listed():
-    rep = _check({"connectors/gmail/connector.yaml": "y\n", "envs/local.yaml": "y\n"})
-    assert _failing(rep) == ["connectors/gmail/connector.yaml", "envs/local.yaml"]
-    assert all(f.rule == "B-2" for f in rep.failures)
-    rep = _check({"connectors/gmail/connector.yaml": "y\n", "envs/local.yaml": "y\n"},
-                 touches=["connectors/gmail/", "envs/local.yaml"])
+    rep = _check({"components/gmail/connector.yaml": "y\n", "components/mail/envs/local.yaml": "y\n"})
+    assert _failing(rep) == ["components/gmail/connector.yaml", "components/mail/envs/local.yaml"]
+    assert all(f.rule == "B-3" for f in rep.failures)
+    rep = _check({"components/gmail/connector.yaml": "y\n", "components/mail/envs/local.yaml": "y\n"},
+                 touches=["components/gmail/", "components/mail/envs/local.yaml"])
     assert _failing(rep) == []
 
 
 def test_feature_folder_in_existing_mode_needs_its_own_listing():
-    change = {"modes/mail/features/digest/playbook.md": "y\n", "modes/mail/mode.yaml": "y\n"}
+    change = {"components/mail/features/digest/playbook.md": "y\n", "components/mail/mode.yaml": "y\n"}
     rep = _check(change)
-    assert {f.path: f.rule for f in rep.failures} == {"modes/mail/features/digest/playbook.md": "B-3",
-                                                     "modes/mail/mode.yaml": "B-3"}
+    assert {f.path: f.rule for f in rep.failures} == {"components/mail/features/digest/playbook.md": "B-3",
+                                                     "components/mail/mode.yaml": "B-3"}
     # a whole-mode entry covers mode-wide files but not a feature folder
-    rep = _check(change, touches=["modes/mail/"])
-    assert _failing(rep) == ["modes/mail/features/digest/playbook.md"]
-    assert "list modes/mail/features/digest/" in rep.failures[0].why
-    rep = _check(change, touches=["modes/mail/mode.yaml", "modes/mail/features/digest/"])
+    rep = _check(change, touches=["components/mail/"])
+    assert _failing(rep) == ["components/mail/features/digest/playbook.md"]
+    assert "list components/mail/features/digest/" in rep.failures[0].why
+    rep = _check(change, touches=["components/mail/mode.yaml", "components/mail/features/digest/"])
     assert _failing(rep) == []
     # another feature stays unlisted
-    rep = _check({"modes/mail/features/ask/playbook.md": "y\n"}, touches=["modes/mail/features/digest/"])
-    assert _failing(rep) == ["modes/mail/features/ask/playbook.md"]
+    rep = _check({"components/mail/features/ask/playbook.md": "y\n"}, touches=["components/mail/features/digest/"])
+    assert _failing(rep) == ["components/mail/features/ask/playbook.md"]
 
 
 def test_feature_folder_in_new_mode_passes():
-    rep = _check({"modes/news/mode.yaml": "x\n", "modes/news/features/digest/playbook.md": "x\n"})
+    rep = _check({"components/news/mode.yaml": "x\n", "components/news/features/digest/playbook.md": "x\n"})
     assert _failing(rep) == []
 
 
@@ -166,7 +164,7 @@ def test_repo_root_files_pass_but_a_core_edit_does_not_and_the_kernel_owns_the_c
     assert _failing(rep) == [] and rep.exit_code == 0
     rep = _check({"TODO.md": "x\n", "notes.txt": "x\n", "bay/cli.py": "y\n"})
     assert _failing(rep) == ["bay/cli.py"]
-    shipped = boundary.ComponentMap.load(KIT / "framework/components.yaml")
+    shipped = boundary.ComponentMap.load(KIT / "framework/kernel.yaml")
     assert shipped.owner("CHANGELOG.md") == "kernel"
     assert not any(f.ok is False for f in [boundary.classify("TODO.md", shipped, [], lambda r: False, None)])
     f = boundary.classify("CHANGELOG.md", shipped, [], lambda r: False, None)
@@ -174,14 +172,14 @@ def test_repo_root_files_pass_but_a_core_edit_does_not_and_the_kernel_owns_the_c
 
 
 def test_docs_check_names_instances_outside_fences_and_fails():
-    readme = "# kit\nUse the gmail connector.\n```\nmodes/mail/ and local\n```\nSee git.read/v1 and mailbox.\n"
+    readme = "# kit\nUse the mail mode.\n```\nmodes/mail/ and local\n```\nSee git.read/v1 and mailbox.\n"
     rep = _check({"README.md": readme}, touches=["README.md"], docs=True)
-    assert [(h["file"], h["line"], h["name"]) for h in rep.doc_hits] == [("README.md", 2, "gmail")]
-    assert rep.exit_code == 1 and "README.md:2: names extension connector 'gmail'" in rep.lines()[0]
+    assert [(h["file"], h["line"], h["name"]) for h in rep.doc_hits] == [("README.md", 2, "mail")]
+    assert rep.exit_code == 1 and "README.md:2: names extension mode 'mail'" in rep.lines()[0]
     assert "B-11 docs: 1 hits" in rep.summary() and not rep.failures
-    clean = _check({"README.md": "# kit\nUse a connector.\n```\ngmail\n```\n"}, touches=["README.md"], docs=True)
+    clean = _check({"README.md": "# kit\nUse a mode.\n```\nmail\n```\n"}, touches=["README.md"], docs=True)
     assert clean.doc_hits == [] and clean.exit_code == 0
-    texts = {"docs/DESIGN.md": "a `modes/news/` b\n~~~\nnews\n~~~\n"}
+    texts = {"docs/DESIGN.md": "a `components/news/` b\n~~~\nnews\n~~~\n"}
     assert [h["line"] for h in boundary.doc_hits(texts, {"news": "mode"})] == [1]
 
 
@@ -203,9 +201,9 @@ def test_glob_matching():
     assert m("bay/*.py", "bay/cli.py") and not m("bay/*.py", "bay/adapters/base.py")
     assert m("bay/**/*.py", "bay/adapters/base.py") and m("bay/**/*.py", "bay/cli.py")
     assert m("interfaces/items.*", "interfaces/items.source.v1.yaml") and not m("interfaces/items.*", "interfaces/x.yaml")
-    assert m("modes/*/features/digest/", "modes/mail/features/digest/playbook.md")
+    assert m("components/*/features/digest/", "components/mail/features/digest/playbook.md")
     assert m("./README.md", "README.md") and m("bay/cl?.py", "bay/cli.py")
-    assert boundary.literal_prefix("modes/mail/features/*/") == "modes/mail/features/"
+    assert boundary.literal_prefix("components/mail/features/*/") == "components/mail/features/"
 
 
 def test_front_matter_parser():
@@ -232,22 +230,22 @@ def test_front_matter_parser():
 
 
 def test_shipped_component_map_is_valid_and_lint_checks_it():
-    doc = model.load_yaml(KIT / "framework/components.yaml")
+    doc = model.load_yaml(KIT / "framework/kernel.yaml")
     assert model.schema_errors(doc, model.schema("components")) == []
-    cmap = boundary.ComponentMap.load(KIT / "framework/components.yaml")
+    cmap = boundary.ComponentMap.load(KIT / "framework/kernel.yaml")
     assert cmap.owner("bay/selector.py") == "briefing" and cmap.owner("bay/cli.py") == "kernel"
-    assert cmap.extension("modes/forge/mode.yaml")[1] == "modes/forge/"
-    assert cmap.extension("framework/modes/forge/mode.yaml") is None       # no second place for an instance
+    assert cmap.extension("components/forge/mode.yaml")[1] == "components/forge/"
+    assert cmap.extension("framework/components/forge/mode.yaml") is None       # no second place for an instance
     kit = model.Kit(KIT)
     assert lint.lint_components(kit) == []
     bad = tmpdir()
     (bad / "framework").mkdir()
-    (bad / "framework/components.yaml").write_text(yaml.safe_dump(
-        {"components": {"kernel": {"owns": ["nowhere/"], "contracts": {"mode": {"at": ["modes/"]}}}}}))
+    (bad / "framework/kernel.yaml").write_text(yaml.safe_dump(
+        {"components": {"kernel": {"owns": ["nowhere/"], "contracts": {"mode": {"at": ["components/"]}}}}}))
     kit.root = bad
     errs = lint.lint_components(kit)
     assert len(errs) == 1 and "components schema" in errs[0]
-    (bad / "framework/components.yaml").write_text(yaml.safe_dump({"components": {"kernel": {"owns": ["nowhere/"]}}}))
+    (bad / "framework/kernel.yaml").write_text(yaml.safe_dump({"components": {"kernel": {"owns": ["nowhere/"]}}}))
     errs = lint.lint_components(kit)
     assert len(errs) == 1 and "owns 'nowhere/'" in errs[0]
 
@@ -256,15 +254,15 @@ def test_ownership_lint_names_stray_tracked_files_b4():
     repo = _repo({"TODO.md": "x\n", "notes.txt": "x\n", "tools/x.sh": "x\n", "framework/stray.yaml": "x\n",
                   "docs/DESIGN.md": "x\n", "adapters/claude-code/adapter.yaml": "x\n"})
     (repo / "untracked.txt").write_text("x\n")                 # only tracked files count
-    assert boundary.stray(["bay/cli.py", "modes/mail/mode.yaml", "tests/test_x.py", "README.md", "notes.txt",
+    assert boundary.stray(["bay/cli.py", "components/mail/mode.yaml", "tests/test_x.py", "README.md", "notes.txt",
                            "TODO.md", "tools/x.sh"],
-                          boundary.ComponentMap.load(repo / "framework/components.yaml")) == ["tools/x.sh"]
+                          boundary.ComponentMap.load(repo / "framework/kernel.yaml")) == ["tools/x.sh"]
     kit = model.Kit(KIT)
     kit.root = repo
     errs = lint.lint_ownership(kit)
-    assert [e.split(":", 1)[0] for e in errs] == ["adapters/claude-code/adapter.yaml", "framework/components.yaml",
+    assert [e.split(":", 1)[0] for e in errs] == ["adapters/claude-code/adapter.yaml", "framework/kernel.yaml",
                                                   "framework/stray.yaml", "tools/x.sh"]   # MAP owns neither
-    assert "(B-4)" in errs[0] and "framework/components.yaml" in errs[0]
+    assert "(B-4)" in errs[0] and "framework/kernel.yaml" in errs[0]
     kit.root = tmpdir()                                            # not a git checkout: nothing to check
     assert lint.lint_ownership(kit) == []
     kit.root = KIT
@@ -275,13 +273,13 @@ def test_a_change_to_the_component_map_is_judged_by_the_base_map_f14():
     new_map = {"components": {**MAP["components"],
                               "plugins": {"owns": ["plugins/core.py"],
                                           "contracts": {"plugin": {"at": ["plugins/<name>/"]}}}}}
-    change = {"framework/components.yaml": yaml.safe_dump(new_map), "plugins/p/x.py": "x\n",
+    change = {"framework/kernel.yaml": yaml.safe_dump(new_map), "plugins/p/x.py": "x\n",
               ".github/workflows/ci.yml": "on: push\n"}
-    rep = _check(change, touches=["framework/components.yaml"])
+    rep = _check(change, touches=["framework/kernel.yaml"])
     assert _failing(rep) == [".github/workflows/ci.yml", "plugins/p/x.py"]      # head's map would pass plugins/p/
     assert {f.cls for f in rep.failures} == {"unowned"} and rep.map_rev == "HEAD~1"
     assert not any(ln.startswith("component map:") for ln in rep.lines())
-    rep = _check(change, touches=["framework/components.yaml", "plugins/p/", ".github/"])
+    rep = _check(change, touches=["framework/kernel.yaml", "plugins/p/", ".github/"])
     assert not _failing(rep)
 
 
@@ -292,14 +290,14 @@ def test_a_map_introduced_by_the_change_judges_that_change_and_says_so_f14():
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "c")
     (repo / "framework").mkdir()
-    (repo / "framework/components.yaml").write_text(yaml.safe_dump(MAP))
+    (repo / "framework/kernel.yaml").write_text(yaml.safe_dump(MAP))
     (repo / "bay").mkdir()
     (repo / "bay/cli.py").write_text("x\n")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "c")
     rep = boundary.check(repo, "HEAD~1", "HEAD", None, [])
     assert rep.map_rev == "HEAD" and "bay/cli.py" in _failing(rep)
-    assert ("component map: none at HEAD~1; judged by framework/components.yaml at HEAD (introduced here; every "
+    assert ("component map: none at HEAD~1; judged by framework/kernel.yaml at HEAD (introduced here; every "
             "changed path outside other must be in touches:)") in rep.lines()
 
 
@@ -317,21 +315,21 @@ def _commit(repo: Path, files: dict[str, str | None]) -> None:
 def test_a_map_introduced_by_the_change_gives_no_new_extension_pass_n1():
     # the reviewer's backdoor: base has no map; the change adds one that makes bay/<name> an extension folder
     evil = {"components": {"kernel": {"owns": ["bay/cli.py"],
-                                      "contracts": {"mode": {"at": ["modes/<name>/"]},
+                                      "contracts": {"mode": {"at": ["components/<name>/"]},
                                                     "adapter": {"at": ["adapters/<name>/", "bay/<name>"]}}}},
             "protected": PROT}
     repo = tmpdir()
     _git(repo, "init", "-q", "-b", "main")
-    _commit(repo, {"README.md": "# kit\n", "modes/mail/mode.yaml": "x\n",
-                   "modes/mail/features/digest/playbook.md": "x\n"})
-    _commit(repo, {MAP_PATH: yaml.safe_dump(evil), "bay/backdoor.py": "# evil\n", "modes/new/mode.yaml": "x\n",
-                   "modes/mail/features/digest/playbook.md": "y\n", "tests/test_y.py": "x\n"})
+    _commit(repo, {"README.md": "# kit\n", "components/mail/mode.yaml": "x\n",
+                   "components/mail/features/digest/playbook.md": "x\n"})
+    _commit(repo, {MAP_PATH: yaml.safe_dump(evil), "bay/backdoor.py": "# evil\n", "components/new/mode.yaml": "x\n",
+                   "components/mail/features/digest/playbook.md": "y\n", "tests/test_y.py": "x\n"})
     rep = boundary.check(repo, "HEAD~1", "HEAD", None, [])
     assert rep.map_rev == "HEAD" and rep.exit_code == 1
-    assert _failing(rep) == ["bay/backdoor.py", MAP_PATH, "modes/mail/features/digest/playbook.md",
-                             "modes/new/mode.yaml"]                       # no new-extension pass; tests/ is other
+    assert _failing(rep) == ["bay/backdoor.py", "components/mail/features/digest/playbook.md",
+                             "components/new/mode.yaml", MAP_PATH]                       # no new-extension pass; tests/ is other
     assert "no new-extension pass" in next(f.why for f in rep.failures if f.path == "bay/backdoor.py")
-    ok = [{"path": t} for t in (MAP_PATH, "bay/backdoor.py", "modes/mail/features/digest/", "modes/new/")]
+    ok = [{"path": t} for t in (MAP_PATH, "bay/backdoor.py", "components/mail/features/digest/", "components/new/")]
     assert not _failing(boundary.check(repo, "HEAD~1", "HEAD", None, ok))
 
 
@@ -376,11 +374,11 @@ def test_new_and_the_map_are_decided_at_the_merge_base_n2():
     _git(repo, "checkout", "-q", "main")
     loose = {"components": {"kernel": {"owns": ["schemas/"], "contracts": MAP["components"]["kernel"]["contracts"]}},
              "protected": PROT}
-    _commit(repo, {"modes/mail": None, MAP_PATH: yaml.safe_dump(loose)})
+    _commit(repo, {"components/mail": None, MAP_PATH: yaml.safe_dump(loose)})
     _git(repo, "checkout", "-q", "pr")
-    _commit(repo, {"modes/mail/mode.yaml": "y\n", "bay/cli.py": "y\n"})
+    _commit(repo, {"components/mail/mode.yaml": "y\n", "bay/cli.py": "y\n"})
     rep = boundary.check(repo, "main", "pr", None, [])
-    assert _failing(rep) == ["bay/cli.py", "modes/mail/mode.yaml"]     # existing at the fork, core in its map
+    assert _failing(rep) == ["bay/cli.py", "components/mail/mode.yaml"]     # existing at the fork, core in its map
     assert {f.rule for f in rep.failures} == {"B-1", "B-3"} and rep.map_rev == "main"
 
 

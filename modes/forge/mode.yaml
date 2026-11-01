@@ -44,6 +44,4 @@ spec:
         - { id: release, role: builder, out: Result, task: "Changelog entry, version bump in bay/__init__.py (and schema apiVersion if contracts changed); `./bay.sh check --limits --write --base origin/main --proposal <proposal>` once and commit framework/limits.yaml; all checks green." }
   coordinator: lead
   roles: { lead: local-authoring, builder: local-authoring, reviewer: workspace }   # user space only
-  constraints:
-    policies: [framework-is-read-only-outside-extend]
   needs: [forge.scaffold/v1, workspace.read/v1, workspace.write/v1, git.read/v1, improve.detect/v1]

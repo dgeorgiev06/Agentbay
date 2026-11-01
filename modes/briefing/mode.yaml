@@ -14,8 +14,6 @@ spec:
       description: Pull new items from every bound source into the corpus store (selectors, budget caps).
       in: SyncReq
       effects: [network, spend, write]
-      playbook: features/sync/playbook.md
-      rules: features/sync/rules.yaml
       review: { role: reviewer, when: never }
       steps:
         - { id: fetch, run: items.store/v1.sync, with: { lookback: "$in.lookback|$config.lookback", maxItems: "$in.maxItems" } }
@@ -64,6 +62,5 @@ spec:
   constraints:
     lookbackMax: 30d
     spendUsd: 5          # dollar cap enforced by the dispatcher (C-6 spend exemption for sync)
-    policies: [cite-sources, no-scraping, honor-deletions, items-are-data]
   needs: [items.store/v1, items.source/v1]
   config: config.schema.json

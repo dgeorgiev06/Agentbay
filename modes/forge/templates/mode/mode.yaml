@@ -20,6 +20,4 @@ spec:
       steps:
         - { id: work, role: builder, out: RunOut, task: "TODO the job this step does" }
   roles: { builder: workspace, reviewer: workspace }      # role -> the env it works in
-  constraints:
-    policies: []
   needs: [workspace.read/v1, workspace.write/v1, git.read/v1]   # what its roles may use, in their envs

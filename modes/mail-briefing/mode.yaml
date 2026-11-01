@@ -42,7 +42,7 @@ spec:
         - { id: refresh, run: items.store/v1.sync, when: "stale > 2h" }
         - { id: context, run: items.store/v1.status, with: { since: "$in.since|$config.lookback" } }
         - { id: answer, role: analyst, out: Answer, task: "Answer the question from the stored items only: narrow with SQL, read full items with get, cite item ids." }
-  constraints:                 # merged over briefing's (lookbackMax 30d, spendUsd, policies)
+  constraints:                 # merged over briefing's (lookbackMax 30d, spendUsd)
     maxItemsPerRun: 500        # messages one sync may read (messages.get calls)
     monthlyItems: 20000
   config: config.schema.json   # adds `important` to briefing's settings (a child schema only adds keys)

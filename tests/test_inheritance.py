@@ -30,8 +30,7 @@ def test_feed_briefing_is_complete_after_extends():
     s = md.spec
     assert set(s["features"]) == {"sync", "digest", "ask", "prune"} and s["coordinator"] == "lead"
     assert s["features"]["digest"]["playbook"] == "../briefing/features/digest/playbook.md"     # rebased
-    assert s["features"]["sync"]["playbook"] == "../briefing/features/sync/playbook.md"        # inherited
-    assert s["features"]["sync"]["rules"] == "../briefing/features/sync/rules.yaml"            # inherited
+    assert "playbook" not in s["features"]["sync"] and "rules" not in s["features"]["sync"]    # code only
     assert s["features"]["sync"]["effects"] == ["network", "spend", "write"]                   # merged per key
     assert s["config"] == "../briefing/config.schema.json" and "abstract" not in s and "extends" in s
     assert s["constraints"]["maxItemsPerRun"] == 500 and s["constraints"]["lookbackMax"] == "30d"
@@ -40,7 +39,7 @@ def test_feed_briefing_is_complete_after_extends():
     assert m.features["sync"].in_schema["properties"].keys() == {"lookback", "maxItems"}       # parent type
     assert "question" in m.features["ask"].in_schema["properties"]                             # parent type
     assert {"feed-briefing--digest", "feed-briefing--grounded-qa", "feed-briefing--corpus-sql"} <= set(m.skills)
-    assert m.playbook.startswith("# feed-briefing (coordinator playbook")                      # own playbook.md
+    assert m.playbook.startswith("# briefing (coordinator playbook")                           # inherited playbook.md
     assert m.config["selectors"] == [{"id": "home"}]
 
 

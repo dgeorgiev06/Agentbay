@@ -287,6 +287,10 @@ EXPECTED_DELTAS = {
         "was": 2, "now": 1,
         "why": "golden_kit_audit no longer counts findings in HANDOFF.md (any edit of it changed the counts); the golden "
                "held one for it, so only the one stale doc besides HANDOFF.md is counted. Fixture-data results are unchanged."},
+    ("kitAudit", "countsPerKind", "slop-duplicate-rule"): {
+        "was": 15, "now": 9,
+        "why": "0010 part 0f removed the 12 unreachable cos, sync, backlog and verify files and extend's rules R-2, R-4, "
+               "R-7 and R-9, so six near-duplicate statement pairs are gone. Fixture-data results are unchanged."},
 }
 
 

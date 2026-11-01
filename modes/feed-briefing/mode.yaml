@@ -10,7 +10,7 @@ spec:
   extends: briefing
   reads: [post/v1]          # the item kind its features read (B-6)
   purpose: Keep me briefed on what people I follow say; answer questions about it.
-  constraints:                 # merged over briefing's (lookbackMax, spendUsd, policies)
+  constraints:                 # merged over briefing's (lookbackMax, spendUsd)
     monthlyItems: 3000
     maxItemsPerRun: 500
   configDefaults:              # briefing's config schema, with this mode's default selector

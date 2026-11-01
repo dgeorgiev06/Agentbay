@@ -89,7 +89,7 @@ def test_a_file_a_feature_names_must_exist():
     k = kit_copy()
     (k / RULES).unlink()
     # an inherited feature is reported once, as the parent's, at the parent's mode.yaml line, normalized path
-    has(k, "modes/briefing/mode.yaml:22: feature briefing.digest rules file "
+    has(k, "modes/briefing/mode.yaml:20: feature briefing.digest rules file "
            "modes/briefing/features/digest/rules.yaml does not exist")
     assert not [x for x in problems(k) if "feed-briefing.digest rules file" in x]
 
@@ -120,12 +120,8 @@ def test_a_feature_that_runs_an_agent_needs_a_playbook_and_a_code_only_one_needs
     has(k, "feature briefing.ask runs an agent but has no `playbook`")
     assert len([x for x in problems(k) if "ask runs an agent but has no `playbook`" in x]) == 1
     # sync has code steps only: no playbook, no rules, no folder, and lint stays clean
-    k = kit_copy()
-    shutil.rmtree(k / "modes/briefing/features/sync")
-    edit_yaml(k / "modes/briefing/mode.yaml",
-              lambda d: [d["spec"]["features"]["sync"].pop(key) for key in ("playbook", "rules")])
-    assert problems(k) == [], problems(k)
-    s = model.resolve(model.Kit(k))
+    assert problems(KIT) == []
+    s = model.resolve(model.Kit(KIT))
     sync = s.modes["feed-briefing"].features["sync"]
     assert sync.playbook_path is None and sync.dod == [] and sync.rules == []
     assert all(st.kind == "code" for st in sync.steps)

@@ -59,8 +59,6 @@ spec:
       in: BacklogReq
       out: BacklogOut
       effects: [read, write]
-      playbook: features/backlog/playbook.md
-      rules: features/backlog/rules.yaml
       review: { when: never }
       schedule: weekly
       steps:
@@ -86,8 +84,6 @@ spec:
       in: FindingRef
       out: VerifyOut
       effects: [read, write]
-      playbook: features/verify/playbook.md
-      rules: features/verify/rules.yaml
       review: { when: never }
       steps:
         - { id: finding, run: improve.findings/v1.get, with: { id: "$in.id" } }
@@ -95,8 +91,6 @@ spec:
         - { id: apply, run: improve.findings/v1.verify, with: { id: "$in.id", present: "$steps.recheck.present", newData: "$steps.recheck.newData", note: "$steps.recheck.note" } }
   coordinator: lead
   roles: { lead: improve-local, analyst: improve-local, reviewer: workspace }   # role -> env
-  constraints:
-    policies: [never-modify-artifacts, human-approves-every-fix, redact-transcripts]
   # what its roles may read (read-only endpoints, through the env each role works in) and its code steps use
   needs: [improve.findings/v1, improve.detect/v1, session.events/v1, review.verdicts/v1, artifacts.read/v1, workspace.read/v1, git.read/v1]
   config: config.schema.json

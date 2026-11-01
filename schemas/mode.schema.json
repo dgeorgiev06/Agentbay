@@ -225,12 +225,6 @@
               "type": "integer",
               "minimum": 0,
               "description": "Items one sync may read."
-            },
-            "policies": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
             }
           }
         },

@@ -98,14 +98,16 @@ def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[
     for key in ("playbook", "rules"):
         if ep.get(key):
             out += _need(kit, md.dir / ep[key], where, f"feature {target} {key} file")
+            if not agentic:
+                out.append(f"{where}: feature {target} has no role step, so its `{key}` is never read; remove the "
+                           f"file and the `{key}:` line (a review step counts as a role step)")
     for t in (ep.get("in"), ep.get("out"), *(st.get("out") for st in ep["steps"])):
         if t:
             out += _need(kit, model.type_file(md.dirs, t), where, f"feature {target} type {t}")
 
     if ep.get("playbook") and (md.dir / ep["playbook"]).exists():
         pb = pbk.parse(md.dir / ep["playbook"])
-        for line, msg in pb.problems:
-            out.append(f"{_where(pb.path, line)}: {msg}")
+        out += [f"{_where(pb.path, line)}: {msg}" for line, msg in pb.problems]
         dod_ids = pb.dod_ids
 
     if ep.get("rules") and (md.dir / ep["rules"]).exists():
@@ -259,8 +261,7 @@ def lint_rules(path: Path, dod_ids: list[str], ep: dict, md: model.Doc) -> list[
                 out.append(f"{_where(path, _line_of(path, rf'^{re.escape(k)}:'))}: review settings found in rules file; "
                            f"configure review only in mode.yaml features.<feature>.review")
     errs =model.schema_errors(doc, model.schema("rules"))
-    for e in errs:
-        out.append(f"{_where(path, 1)}: rules schema: {e}")
+    out += [f"{_where(path, 1)}: rules schema: {e}" for e in errs]
     if errs or not isinstance(doc, dict):
         return out
     seen: dict[str, int] = {}
@@ -345,12 +346,6 @@ def lint_roles(kit: model.Kit) -> list[str]:
     return out
 
 
-# Interfaces whose connectors must say which `source` they stamp on items, how far back (`window`) the
-# source API reaches, and which selector fields its native search handles: the store keys items and
-# deletions on `source` and splits every selector by that table.
-SOURCE_INTERFACES = ("items.source/v1",)
-
-
 def _binds(env, conn_name: str) -> bool:
     for v in (env.spec.get("bind") or {}).values():
         if conn_name in (v if isinstance(v, list) else [v] if isinstance(v, str) else []):
@@ -373,7 +368,7 @@ def lint_connectors(kit: model.Kit) -> list[str]:
         impl = c.spec["implements"]
         impl = [impl] if isinstance(impl, str) else impl
         for iface in impl:
-            if iface in SOURCE_INTERFACES:
+            if iface == model.SOURCE_IFACE:           # the store keys items and deletions on these fields
                 for key, why in (("source", "the value stamped on every item's `source`; the store keys items "
                                             "and deletions on it"),
                                  ("window", "how far back the source API serves (e.g. 7d); older history "

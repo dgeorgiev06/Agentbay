@@ -1,6 +1,4 @@
 """bay check (lint half): one test per failure mode, plus the shipped kit is clean."""
-import shutil
-
 from helpers import KIT, cleanup, edit_yaml, kit_copy, project
 
 from bay import lint, model
@@ -125,6 +123,34 @@ def test_a_feature_that_runs_an_agent_needs_a_playbook_and_a_code_only_one_needs
     sync = s.modes["feed-briefing"].features["sync"]
     assert sync.playbook_path is None and sync.dod == [] and sync.rules == []
     assert all(st.kind == "code" for st in sync.steps)
+
+
+def _give_sync_files(d):
+    d["spec"]["features"]["sync"].update(playbook="features/digest/playbook.md", rules="features/digest/rules.yaml")
+
+
+def _add_policies(d):
+    d["spec"]["constraints"]["policies"] = ["cite-sources"]
+
+
+T2_RULES = [
+    ("agent text on a code-only feature", _give_sync_files,
+     ["modes/briefing/mode.yaml:13: feature briefing.sync has no role step, so its `playbook` is never read",
+      "modes/briefing/mode.yaml:13: feature briefing.sync has no role step, so its `rules` is never read"]),
+    ("an unread manifest key", _add_policies,
+     ["modes/briefing/mode.yaml", "Additional properties are not allowed ('policies' was unexpected)"]),
+]
+
+
+def test_agent_text_nothing_reads_and_unread_manifest_keys_are_refused():
+    for group, edit, needles in T2_RULES:
+        k = kit_copy()
+        edit_yaml(k / "modes/briefing/mode.yaml", edit)
+        try:
+            for needle in needles:
+                has(k, needle)
+        except AssertionError as e:
+            raise AssertionError(f"{group}: {e}") from None
 
 
 def test_review_settings_only_in_mode_yaml():

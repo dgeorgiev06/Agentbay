@@ -83,7 +83,7 @@ def test_child_can_add_its_own_feature_and_type():
     k = kit_copy()
     d = child(k, spec={"purpose": "Mail.", "features": {"triage": {
         "in": "TriageReq", "effects": ["read"], "playbook": "features/triage/playbook.md",
-        "rules": "features/triage/rules.yaml", "steps": [{"id": "look", "run": "items.store/v1.query"}]}}})
+        "rules": "features/triage/rules.yaml", "review": {"role": "reviewer", "when": "always"}, "uses": [], "steps": [{"id": "look", "run": "items.store/v1.query"}]}}})
     (d / "types").mkdir()
     (d / "types/TriageReq.schema.json").write_text('{"type": "object"}')
     (d / "features/triage").mkdir(parents=True)

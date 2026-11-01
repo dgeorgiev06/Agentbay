@@ -10,10 +10,7 @@ from helpers import KIT, tmpdir
 from bay import boundary, lint, model, proposal
 
 PROT = {"paths": ["locked"], "mode": [], "env": {}, "connector": []}      # a block every map needs; protects nothing here
-MAP = {"components": {
-    "kernel": {"owns": ["bay/", "schemas/"],
-               "contracts": {"mode": {"at": ["components/<name>/"]}}},      # interim: one contract, as the shipped map
-    "briefing": {"owns": ["bay/selector.py", "components/briefing/"]}}, "protected": PROT}
+MAP = {"owns": ["bay/", "bay/selector.py", "schemas/", "adapters/"], "protected": PROT}      # flat, as the shipped map
 
 BASE_FILES = {
     "framework/kernel.yaml": yaml.safe_dump(MAP),
@@ -62,7 +59,7 @@ def _failing(rep) -> list[str]:
 def test_core_edit_fails_without_touches_and_passes_with():
     rep = _check({"bay/cli.py": "y\n", "bay/selector.py": "y\n"})
     assert _failing(rep) == ["bay/cli.py", "bay/selector.py"] and rep.exit_code == 1
-    assert {f.owner for f in rep.failures} == {"kernel", "briefing"}       # most specific owns: wins
+    assert {f.owner for f in rep.failures} == {"kernel"}                   # one owner: the kernel
     line = rep.lines()[0]
     assert line.startswith("bay/cli.py: kernel - core path owned by kernel (B-1) - add it to touches: in")
     rep = _check({"bay/cli.py": "y\n", "bay/selector.py": "y\n"}, touches=["bay/*.py"])
@@ -97,8 +94,11 @@ def test_case_only_new_folder_is_not_a_new_extension():
 
 def test_lint_rejects_case_collisions_and_extension_folders_without_manifest():
     from types import SimpleNamespace
-    repo = _repo({"components/Mail/x.md": "y\n", "components/rss/feed.py": "y\n"})
+    repo = _repo({"components/Mail/x.md": "y\n", "components/rss/feed.py": "y\n", "adapters/zed/zed.py": "y\n",
+                  "adapters/ok/adapter.yaml": "y\n"})
     errs = lint.lint_case_and_manifests(SimpleNamespace(root=repo))
+    assert any(e.startswith("adapters/zed/: extension folder without its manifest adapter.yaml") for e in errs), errs
+    assert not any("adapters/ok/" in e for e in errs)
     assert any("differs only in case" in e and "components/Mail" in e and "components/mail" in e for e in errs), errs
     assert any(e.startswith("components/rss/: extension folder without its manifest mode.yaml or connector.yaml or content-type.yaml or component.yaml") for e in errs)
     assert not lint.lint_case_and_manifests(SimpleNamespace(root=_repo({})))
@@ -232,20 +232,25 @@ def test_front_matter_parser():
 def test_shipped_component_map_is_valid_and_lint_checks_it():
     doc = model.load_yaml(KIT / "framework/kernel.yaml")
     assert model.schema_errors(doc, model.schema("components")) == []
+    assert set(doc) == {"owns", "protected"}                                   # nothing else: no contracts, no wrapper
     cmap = boundary.ComponentMap.load(KIT / "framework/kernel.yaml")
-    assert cmap.owner("bay/selector.py") == "briefing" and cmap.owner("bay/cli.py") == "kernel"
-    assert cmap.extension("components/forge/mode.yaml")[1] == "components/forge/"
-    assert cmap.extension("framework/components/forge/mode.yaml") is None       # no second place for an instance
+    assert all(cmap.owner(p) == "kernel" for p in ("bay/selector.py", "bay/cli.py", "adapters/claude-code/adapter.yaml"))
+    assert cmap.owner("components/briefing/mode.yaml") is None                 # a component owns itself by being a folder
+    assert boundary.root("components/forge/mode.yaml") == ("components/forge/", "forge")
+    assert boundary.root("framework/components/forge/mode.yaml") is None       # no second place for a component
+    for kind, (globs, _) in model.KINDS.items():                               # the helper finds what the loader finds
+        for f in (p for g in globs if kind != "Role" for p in KIT.glob(g)):
+            assert boundary.root(f.relative_to(KIT).as_posix()), f
     kit = model.Kit(KIT)
     assert lint.lint_components(kit) == []
     bad = tmpdir()
     (bad / "framework").mkdir()
-    (bad / "framework/kernel.yaml").write_text(yaml.safe_dump(
+    (bad / "framework/kernel.yaml").write_text(yaml.safe_dump(         # the old wrapper and contracts are refused
         {"components": {"kernel": {"owns": ["nowhere/"], "contracts": {"mode": {"at": ["components/"]}}}}}))
     kit.root = bad
     errs = lint.lint_components(kit)
-    assert len(errs) == 1 and "components schema" in errs[0]
-    (bad / "framework/kernel.yaml").write_text(yaml.safe_dump({"components": {"kernel": {"owns": ["nowhere/"]}}}))
+    assert errs and all("components schema" in e for e in errs)
+    (bad / "framework/kernel.yaml").write_text(yaml.safe_dump({"owns": ["nowhere/"], "protected": PROT}))
     errs = lint.lint_components(kit)
     assert len(errs) == 1 and "owns 'nowhere/'" in errs[0]
 
@@ -260,8 +265,7 @@ def test_ownership_lint_names_stray_tracked_files_b4():
     kit = model.Kit(KIT)
     kit.root = repo
     errs = lint.lint_ownership(kit)
-    assert [e.split(":", 1)[0] for e in errs] == ["adapters/claude-code/adapter.yaml", "framework/kernel.yaml",
-                                                  "framework/stray.yaml", "tools/x.sh"]   # MAP owns neither
+    assert [e.split(":", 1)[0] for e in errs] == ["framework/kernel.yaml", "framework/stray.yaml", "tools/x.sh"]   # MAP owns neither
     assert "(B-4)" in errs[0] and "framework/kernel.yaml" in errs[0]
     kit.root = tmpdir()                                            # not a git checkout: nothing to check
     assert lint.lint_ownership(kit) == []
@@ -270,13 +274,11 @@ def test_ownership_lint_names_stray_tracked_files_b4():
 
 
 def test_a_change_to_the_component_map_is_judged_by_the_base_map_f14():
-    new_map = {"components": {**MAP["components"],
-                              "plugins": {"owns": ["plugins/core.py"],
-                                          "contracts": {"plugin": {"at": ["plugins/<name>/"]}}}}}
+    new_map = {**MAP, "owns": [*MAP["owns"], "plugins/"]}
     change = {"framework/kernel.yaml": yaml.safe_dump(new_map), "plugins/p/x.py": "x\n",
               ".github/workflows/ci.yml": "on: push\n"}
     rep = _check(change, touches=["framework/kernel.yaml"])
-    assert _failing(rep) == [".github/workflows/ci.yml", "plugins/p/x.py"]      # head's map would pass plugins/p/
+    assert _failing(rep) == [".github/workflows/ci.yml", "plugins/p/x.py"]      # head's map would call plugins/p core
     assert {f.cls for f in rep.failures} == {"unowned"} and rep.map_rev == "HEAD~1"
     assert not any(ln.startswith("component map:") for ln in rep.lines())
     rep = _check(change, touches=["framework/kernel.yaml", "plugins/p/", ".github/"])
@@ -313,11 +315,9 @@ def _commit(repo: Path, files: dict[str, str | None]) -> None:
 
 
 def test_a_map_introduced_by_the_change_gives_no_new_extension_pass_n1():
-    # the reviewer's backdoor: base has no map; the change adds one that makes bay/<name> an extension folder
-    evil = {"components": {"kernel": {"owns": ["bay/cli.py"],
-                                      "contracts": {"mode": {"at": ["components/<name>/"]},
-                                                    "adapter": {"at": ["adapters/<name>/", "bay/<name>"]}}}},
-            "protected": PROT}
+    # the reviewer's backdoor: base has no map; the change adds one that owns almost nothing (a map can no longer
+    # declare an extension folder, so it cannot make bay/<name> one)
+    evil = {"owns": ["bay/cli.py"], "protected": PROT}
     repo = tmpdir()
     _git(repo, "init", "-q", "-b", "main")
     _commit(repo, {"README.md": "# kit\n", "components/mail/mode.yaml": "x\n",
@@ -328,7 +328,7 @@ def test_a_map_introduced_by_the_change_gives_no_new_extension_pass_n1():
     assert rep.map_rev == "HEAD" and rep.exit_code == 1
     assert _failing(rep) == ["bay/backdoor.py", "components/mail/features/digest/playbook.md",
                              "components/new/mode.yaml", MAP_PATH]                       # no new-extension pass; tests/ is other
-    assert "no new-extension pass" in next(f.why for f in rep.failures if f.path == "bay/backdoor.py")
+    assert "no new-extension pass" in next(f.why for f in rep.failures if f.path == "components/new/mode.yaml")
     ok = [{"path": t} for t in (MAP_PATH, "bay/backdoor.py", "components/mail/features/digest/", "components/new/")]
     assert not _failing(boundary.check(repo, "HEAD~1", "HEAD", None, ok))
 
@@ -358,7 +358,7 @@ def test_a_base_without_a_map_fails_unless_the_change_adds_it_n1():
 
 def test_a_base_map_without_protected_is_an_error():
     repo = _repo({})
-    _commit(repo, {MAP_PATH: yaml.safe_dump({"components": MAP["components"]})})
+    _commit(repo, {MAP_PATH: yaml.safe_dump({"owns": MAP["owns"]})})
     _commit(repo, {"bay/cli.py": "z\n"})
     try:
         boundary.check(repo, "HEAD~1", "HEAD", None, [])
@@ -372,8 +372,7 @@ def test_new_and_the_map_are_decided_at_the_merge_base_n2():
     repo = _repo({})
     _git(repo, "checkout", "-q", "-b", "pr")
     _git(repo, "checkout", "-q", "main")
-    loose = {"components": {"kernel": {"owns": ["schemas/"], "contracts": MAP["components"]["kernel"]["contracts"]}},
-             "protected": PROT}
+    loose = {"owns": ["schemas/"], "protected": PROT}
     _commit(repo, {"components/mail": None, MAP_PATH: yaml.safe_dump(loose)})
     _git(repo, "checkout", "-q", "pr")
     _commit(repo, {"components/mail/mode.yaml": "y\n", "bay/cli.py": "y\n"})
@@ -384,7 +383,7 @@ def test_new_and_the_map_are_decided_at_the_merge_base_n2():
 
 def test_a_malformed_component_map_is_a_one_line_error_n3():
     for text, want in (("components: [unclosed\n", "not valid YAML"), ("- a\n", "must be a mapping"),
-                       ("components: [a]\n", "components: must map")):
+                       ("owns: a\n", "owns: must be a list")):
         try:
             boundary.ComponentMap.parse(text)
             raise AssertionError(f"parsed {text!r}")

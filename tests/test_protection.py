@@ -120,9 +120,15 @@ def test_lint_keeps_framework_dev_in_step_with_the_map_both_ways():
     k = kit_copy()
     try:                                  # an instance path the map no longer lists is stale in fs.write
         assert not [e for e in lint.lint_protection(model.Kit(k, k)) if "fs.write names" in e]   # listed: fine
-        edit_yaml(k / MAP, lambda d: d["protected"]["mode"].remove("cos"))   # interim contract: only a mode root is an instance
+        edit_yaml(k / MAP, lambda d: d["protected"]["mode"].remove("cos"))
         errs = lint.lint_protection(model.Kit(k, k))
         assert any("fs.write names components/cos" in e for e in errs), errs
+        edit_yaml(k / MAP, lambda d: d["protected"]["mode"].append("cos"))
+        edit_yaml(k / MAP, lambda d: d["protected"]["connector"].remove("ledger"))     # a nested connector, then a nested env
+        edit_yaml(k / MAP, lambda d: d["protected"]["env"].pop("improve-local"))
+        errs = lint.lint_protection(model.Kit(k, k))
+        for nested in ("components/improve/connectors/ledger", "components/improve/envs/improve-local.yaml"):
+            assert any(f"fs.write names {nested}," in e for e in errs), (nested, errs)
     finally:
         cleanup(k)
 
@@ -298,9 +304,7 @@ def _repo(base: dict, change: dict, mapdoc: dict):
 
 BOUNDARY_MAP = {
     "protected": {"paths": ["adapters", "components/improve/connectors/ledger"], "mode": ["cos"], "env": {"cos-local": {}}, "connector": ["ledger"]},
-    "components": {"kernel": {"owns": ["bay/"], "contracts": {
-        "mode": {"at": ["components/<name>/"]},          # interim: one contract for every component folder
-        "adapter": {"at": ["adapters/<name>/"]}}}}}
+    "owns": ["bay/", "adapters/"]}
 BASE = {"bay/cli.py": "x\n", "components/cos/mode.yaml": "x\n", "components/cos/features/run/playbook.md": "x\n",
         "components/mail/mode.yaml": "x\n", "components/cos/envs/cos-local.yaml": "x\n", "components/briefing/envs/mine.yaml": "x\n",
         "components/improve/connectors/ledger/connector.yaml": "x\n", "components/gmail/connector.yaml": "x\n",
@@ -330,9 +334,9 @@ def test_an_edit_to_a_protected_component_without_touches_fails_check_base():
 def test_a_new_folder_of_a_protected_name_or_in_a_protected_folder_is_not_a_new_extension():
     base = {k: v for k, v in BASE.items() if not k.startswith(("components/cos", "components/improve"))}
     for path in ("components/cos/mode.yaml", "components/cos/envs/cos-local.yaml", "components/improve/connectors/ledger/ledger.py", "adapters/other/adapter.yaml"):
-        rep = _check({path: "y\n"}, base=base)
-        assert [f.path for f in rep.failures] == [path] and rep.failures[0].rule == "protected", path
-        assert "only forge.extend" in rep.lines()[0] and "even when the folder is new" in rep.lines()[0]
+        rep = _check({path: "y\n"}, base=base)       # an adapter is kernel-owned (B-1): never new, listed or it fails
+        assert [f.path for f in rep.failures] == [path] and rep.failures[0].rule == ("B-1" if path.startswith("adapters") else "protected"), path
+        assert path.startswith("adapters") or "only forge.extend" in rep.lines()[0] and "even when the folder is new" in rep.lines()[0]
         assert not _check({path: "y\n"}, touches=[path], base=base).failures, path
     assert not _check({"components/cosmos/mode.yaml": "y\n", "components/ledger2/connector.yaml": "y\n"}, base=base).failures
 

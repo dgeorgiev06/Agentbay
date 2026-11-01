@@ -824,11 +824,10 @@ def lint_components(kit: model.Kit) -> list[str]:
     out = [f"{_where(path, 1)}: components schema: {e}" for e in model.schema_errors(doc, model.schema("components"))]
     if out:
         return out
-    for comp, spec in doc["components"].items():
-        for g in spec["owns"]:
-            if not any(kit.root.glob(g.rstrip("/"))):
-                out.append(f"{_where(path, _line_of(path, re.escape(g)))}: component {comp} owns '{g}', which matches "
-                           f"no path in the kit. Fix the path or remove it")
+    for g in doc["owns"]:
+        if not any(kit.root.glob(g.rstrip("/"))):
+            out.append(f"{_where(path, _line_of(path, re.escape(g)))}: the kernel owns '{g}', which matches "
+                       f"no path in the kit. Fix the path or remove it")
     return out
 
 
@@ -889,12 +888,13 @@ def _protected_paths_in_sync(kit: model.Kit) -> list[str]:
             if missing:
                 out.append(f"{env.rel}: env {env.name} writes protected paths but not {', '.join(missing)}; the guard "
                            f"lets an env write a protected path only if the env names it - add them to fs.write")
-        for w in writes:
-            ext = cmap.extension(w) or cmap.extension(w + "/")
-            if ext and ext[0].name in boundary.PROTECTED_KINDS and ext[1].rstrip("/") == w \
-                    and not any(kit.protected.reserved(k, ext[0].instance_name(ext[1])) for k in boundary.PROTECTED_KINDS):
+        for w in writes:       # a component folder, one of its envs or one of its internal connectors
+            m = re.fullmatch(r"components/([^/]+)(?:/envs/([^/]+)\.yaml|/connectors/([^/]+))?", w)
+            kinds = [("env", m[2])] if m and m[2] else [("connector", m[3])] if m and m[3] else \
+                    [("mode", m[1]), ("connector", m[1])] if m else []
+            if kinds and not any(kit.protected.reserved(k, n) for k, n in kinds):
                 out.append(f"{env.rel}: env {env.name} fs.write names {w}, which the protected: block of "
-                           f"framework/kernel.yaml does not list; remove it or protect the {ext[0].name}")
+                           f"framework/kernel.yaml does not list; remove it or protect the {kinds[0][0]}")
     return out
 
 
@@ -927,8 +927,6 @@ def lint_ownership(kit: model.Kit) -> list[str]:
             f"in framework/kernel.yaml" for f in boundary.stray(files, cmap)]
 
 
-MANIFESTS = {"mode": ("mode.yaml", "connector.yaml", "content-type.yaml", "component.yaml"),   # the interim contract is named mode (B-3 keys on it)
-             "adapter": ("adapter.yaml",)}
 OLD_FOLDERS = ("modes/", "envs/", "connectors/", "content-types/", "coordinator/", "framework/interfaces/", "interfaces/")
 
 
@@ -949,17 +947,15 @@ def lint_case_and_manifests(kit: model.Kit) -> list[str]:
             if other != p:
                 out.append(f"{p}: differs only in case from {other}; rename one (paths must be unique ignoring case)")
                 seen[p.casefold()] = p
-    cmap, roots = _component_map(path), {}
-    if cmap is None:
-        return list(dict.fromkeys(out))
-    for f in files:
-        ext = cmap.extension(f)
-        if ext and ext[0].name in MANIFESTS and ext[1].endswith("/"):
-            roots.setdefault(ext[1], set()).add(f[len(ext[1]):])
-    for root, inside in sorted(roots.items()):
-        want = MANIFESTS[cmap.extension(root + "x")[0].name]
+    roots = {}
+    for f in files:                      # a component folder carries a manifest of the loader's table, an adapter its own
+        m = re.match(r"(?:components|adapters)/[^/]+/", f)
+        if m:
+            roots.setdefault(m[0], set()).add(f[m.end():])
+    for folder, inside in sorted(roots.items()):
+        want = ("adapter.yaml",) if folder.startswith("adapters/") else tuple(boundary.MANIFEST_KINDS)
         if not inside.intersection(want):
-            out.append(f"{root}: extension folder without its manifest {' or '.join(want)}")
+            out.append(f"{folder}: extension folder without its manifest {' or '.join(want)}")
     out += [f"{d}: the old layout is not read (agentbay/v4); move it to components/<name>/"
             for d in OLD_FOLDERS if any(f.startswith(d) for f in files)]
     return list(dict.fromkeys(out))

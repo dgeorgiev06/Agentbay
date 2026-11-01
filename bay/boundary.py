@@ -4,14 +4,14 @@ It reads `git diff --name-status --no-renames <base>...<head>` and classifies ea
 and both sides of a move included) with
 framework/kernel.yaml and the proposal's `touches:`:
 
-- core (B-1): under a component's `owns:`; passes only if a `touches:` glob matches.
-- extension (B-2): under a contract's `at:`; passes if the extension is new in the diff or listed.
-- feature (B-3): inside an existing mode, `features/<f>/` passes only when a `touches:` entry names that
-  feature (its literal prefix reaches `<mode>/features/`); a whole-mode entry does not cover features.
-  Mode-wide files (mode.yaml, playbook.md, ...) must be listed too.
+- core (B-1): under the kernel's `owns:`; passes only if a `touches:` glob matches.
+- extension (B-2): a component folder `components/<name>/`; a new one passes (unless protected), listed or not.
+- feature (B-3): inside an existing component, `features/<f>/` passes only when a `touches:` entry names that
+  feature (its literal prefix reaches `<component>/features/`); a whole-component entry does not cover features.
+  Component-wide files (mode.yaml, playbook.md, ...) must be listed too.
 - docs: README.md, docs/DESIGN.md, docs/INTERFACES.md change only when listed.
 - other: tests/, the proposal, HANDOFF.md, proposal/research records and repo meta pass.
-- a file in the repo root that no component owns (TODO.md, CLAUDE.md) passes: it is not framework code.
+- a file in the repo root that the kernel does not own (TODO.md, CLAUDE.md) passes: it is not framework code.
 - anything else is unowned and fails unless listed (CI config under `.github/` included).
 
 Inputs come from commits, never the working tree (F-14): the component map and the "is this extension new" tree
@@ -20,9 +20,8 @@ the map is judged by the map it edits), and the proposal's `touches:` as of `<he
 map (status A) is judged by its own map at `<head>`; it then gets no new-extension pass, so every changed path
 outside other must be listed (N-1), and the report says so. Any other base without a map is an error.
 
-B-11 (`--docs`): the core docs must not name a discovered extension instance (a mode, connector, env or
-content-type folder name) outside a fenced block. Instances inside a core `owns:` path (the briefing base mode,
-corpus-store) are core, not extensions, so naming them is allowed. Each hit fails the check.
+B-11 (`--docs`): the core docs must not name a component folder (its kind is its manifest file) outside a fenced
+block. A folder inside a core `owns:` path is core, not an extension, so naming it is allowed. Each hit fails the check.
 
 Glob syntax for `owns:` and `touches:`: `*` and `?` stay within one path segment, `**` crosses
 segments, and a trailing `/` means the folder and everything under it.
@@ -40,8 +39,10 @@ import yaml
 DOCS = ("README.md", "docs/DESIGN.md", "docs/INTERFACES.md")
 OTHER = ("tests/", "HANDOFF.md", "docs/proposals/", "docs/plans/", "docs/research/", ".gitignore",
          ".gitattributes", ".editorconfig", "LICENSE", "LICENSE.md")
-# contracts whose instance names B-11 forbids in the core docs
-NAMED_CONTRACTS = ("mode", "connector", "env", "contentType")
+# the manifest file of a component folder -> its kind (B-11 forbids naming these folders in the core docs)
+MANIFEST_KINDS = {"mode.yaml": "mode", "connector.yaml": "connector", "content-type.yaml": "contentType",
+                  "component.yaml": "component"}
+_COMPONENT = re.compile(r"components/([^/]+)/")
 
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 
@@ -80,7 +81,6 @@ def literal_prefix(glob: str) -> str:
 
 
 # ----------------------------------------------------------------- protection
-PROTECTED_KINDS = ("mode", "env", "connector")      # the contracts whose instances can be protected
 _NAME = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
@@ -171,35 +171,16 @@ class Protection:
 
 
 # ----------------------------------------------------------------- the map
-@dataclass
-class Contract:
-    component: str
-    name: str
-    at: list[str]
-
-    def instance(self, path: str) -> str | None:
-        """The instance root (`components/x/`) that `path` falls in, or None."""
-        for pat in self.at:
-            head, _, tail = pat.partition("<name>")
-            rx = re.escape(head) + r"([^/]+?)" + re.escape(tail)
-            m = re.match(rx + ("" if tail.endswith("/") else "$"), path)
-            if m:
-                return m.group(0)
-        return None
-
-    def instance_name(self, root: str) -> str:
-        for pat in self.at:
-            head, _, tail = pat.partition("<name>")
-            m = re.fullmatch(re.escape(head) + r"([^/]+?)" + re.escape(tail), root)
-            if m:
-                return m.group(1)
-        return root
+def root(path: str) -> tuple[str, str] | None:
+    """The component folder `path` is inside: (`components/x/`, `x`), or None. Folders are found by this one
+    convention, as the loader finds them (`components/*/<manifest>`)."""
+    m = _COMPONENT.match(path)
+    return (m.group(0), m.group(1)) if m else None
 
 
 @dataclass
 class ComponentMap:
-    owns: dict[str, list[str]]
-    contracts: list[Contract]
+    owns: list[str]
     protected: Protection
 
     @classmethod
@@ -215,17 +196,11 @@ class ComponentMap:
         if doc is None:
             doc = {}
         if not isinstance(doc, dict):
-            raise RuntimeError(f"{MAP}: the document must be a mapping with a components: key, not a "
+            raise RuntimeError(f"{MAP}: the document must be a mapping with owns: and protected: keys, not a "
                                f"{type(doc).__name__}")
-        owns, contracts = {}, []
-        comps = doc.get("components") or {}
-        if not isinstance(comps, dict) or not all(isinstance(v, dict) for v in comps.values()):
-            raise RuntimeError(f"{MAP}: components: must map each component name to a mapping")
-        for comp, spec in comps.items():
-            owns[comp] = list(spec.get("owns") or [])
-            for cname, c in (spec.get("contracts") or {}).items():
-                if c.get("at"):
-                    contracts.append(Contract(comp, cname, list(c["at"])))
+        owns = doc.get("owns") or []
+        if not isinstance(owns, list) or not all(isinstance(g, str) for g in owns):
+            raise RuntimeError(f"{MAP}: owns: must be a list of paths")
         if "protected" not in doc:
             raise RuntimeError(f"{MAP}: no protected: block; add one (paths, mode, env and connector), the check "
                                f"judges a change by the base's map")
@@ -233,42 +208,28 @@ class ComponentMap:
             prot = Protection.parse(doc["protected"])
         except ProtectedError as e:
             raise RuntimeError(f"{MAP}: protected: {e}") from None
-        return cls(owns, contracts, prot)
+        return cls(owns, prot)
 
     def owner(self, path: str) -> str | None:
-        """The core component owning `path`; the most specific `owns:` glob wins."""
-        best = None
-        for comp, globs in self.owns.items():
-            for g in globs:
-                if match(g, path) and (best is None or len(literal_prefix(g)) > best[0]):
-                    best = (len(literal_prefix(g)), comp)
-        return best[1] if best else None
-
-    def extension(self, path: str) -> tuple[Contract, str] | None:
-        for c in self.contracts:
-            root = c.instance(path)
-            if root:
-                return c, root
-        return None
+        """`kernel` when `path` is under one of the kernel's `owns:` globs."""
+        return "kernel" if any(match(g, path) for g in self.owns) else None
 
     def protected_by(self, path: str) -> str | None:
-        """Why `path` is protected (a folder of `protected.paths`, or a file of a protected mode, env or connector
-        wherever its folder sits), else None."""
+        """Why `path` is protected (a folder of `protected.paths`, or a file of a protected mode wherever its
+        folder sits), else None."""
         p = self.protected
         for d in p.paths:
             if under(path, d):
                 return f"protected folder {d}/"
-        ext = self.extension(path)
-        if ext and ext[0].name in PROTECTED_KINDS and p.reserved(ext[0].name, ext[0].instance_name(ext[1])):
-            return f"protected {ext[0].name} {ext[0].instance_name(ext[1])}"
-        return None
+        rt = root(path)
+        return f"protected mode {rt[1]}" if rt and p.reserved("mode", rt[1]) else None
 
 
 def stray(paths: list[str], cmap: ComponentMap) -> list[str]:
-    """B-4: the paths that are neither core docs, other, a repo-root file, under a core `owns:` path nor in an
-    extension folder."""
+    """B-4: the paths that are neither core docs, other, a repo-root file, under a core `owns:` path nor in a
+    component folder."""
     return [p for p in paths if p not in DOCS and not any(match(g, p) for g in OTHER) and "/" in p
-            and not cmap.owner(p) and not cmap.extension(p)]
+            and not cmap.owner(p) and not root(p)]
 
 
 # ----------------------------------------------------------------- git
@@ -433,28 +394,24 @@ def _classify(path: str, cmap: ComponentMap, touches: list[dict], is_new, propos
     comp = cmap.owner(path)
     if comp:
         return Finding(path, "core", comp, listed, "B-1", "" if listed else f"core path owned by {comp} (B-1)")
-    ext = cmap.extension(path)
-    if ext:
-        c, root = ext
-        label = f"{c.name} {c.instance_name(root)}"
-        if is_new(root):
+    rt = root(path)
+    if rt:
+        folder, name = rt
+        label = f"component {name}"
+        if is_new(folder):
             if introduced:
                 return Finding(path, "extension", label, listed, "B-2",
-                               "" if listed else "new extension folder, judged by the component map this change "
+                               "" if listed else "new component folder, judged by the component map this change "
                                "introduces: no new-extension pass, list it (B-2)")
             return Finding(path, "extension", label, True, "B-2")
-        if c.name == "mode":
-            m = re.match(re.escape(root) + r"features/([^/]+)/", path)
-            if m:
-                feat = m.group(0)
-                ok = any(match(g, path) and literal_prefix(g).startswith(root + "features/") for g in globs)
-                return Finding(path, "feature", f"{label} feature {m.group(1)}", ok, "B-3",
-                               "" if ok else f"feature folder of an existing mode; list {feat} (B-3)")
-            return Finding(path, "extension", label, listed, "B-3",
-                           "" if listed else f"mode-wide file of an existing mode; list it (B-3)")
-        return Finding(path, "extension", label, listed, "B-2",
-                       "" if listed else f"existing {c.name} folder {root} (B-2)")
-    if "/" not in path:                  # an ordinary repo-root file (TODO.md, .env.example): not framework code
+        m = re.match(re.escape(folder) + r"features/([^/]+)/", path)
+        if m:
+            ok = any(match(g, path) and literal_prefix(g).startswith(folder + "features/") for g in globs)
+            return Finding(path, "feature", f"{label} feature {m.group(1)}", ok, "B-3",
+                           "" if ok else f"feature folder of an existing component; list {m.group(0)} (B-3)")
+        return Finding(path, "extension", label, listed, "B-3",
+                       "" if listed else "component-wide file of an existing component; list it (B-3)")
+    if "/" not in path:                 # an ordinary repo-root file (TODO.md, .env.example): not framework code
         return Finding(path, "other", "repo root", True)
     return Finding(path, "unowned", "unowned", listed, "unowned",
                    "" if listed else "not under any component or extension in framework/kernel.yaml")
@@ -486,9 +443,9 @@ def doc_hits(texts: dict[str, str], names: dict[str, str]) -> list[dict]:
 def instance_names(paths: list[str], cmap: ComponentMap) -> dict[str, str]:
     names = {}
     for p in paths:
-        ext = cmap.extension(p)
-        if ext and ext[0].name in NAMED_CONTRACTS and cmap.owner(ext[1]) is None:   # core-owned: not an extension
-            names.setdefault(ext[0].instance_name(ext[1]), ext[0].name)
+        rt = root(p)
+        if rt and p[len(rt[0]):] in MANIFEST_KINDS and cmap.owner(rt[0]) is None:   # core-owned: not an extension
+            names.setdefault(rt[1], MANIFEST_KINDS[p[len(rt[0]):]])
     return names
 
 

@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "components.schema.json",
-  "title": "framework/kernel.yaml: core components, the paths they own, the contracts they define",
+  "title": "framework/kernel.yaml: the paths the kernel owns and the protected set",
   "type": "object",
-  "required": ["components"],
+  "required": ["owns", "protected"],
   "additionalProperties": false,
   "properties": {
     "protected": {
@@ -31,35 +31,7 @@
         }
       }
     },
-    "components": {
-      "type": "object",
-      "minProperties": 1,
-      "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
-      "additionalProperties": {
-        "type": "object",
-        "required": ["owns"],
-        "additionalProperties": false,
-        "properties": {
-          "owns": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
-          "contracts": {
-            "type": "object",
-            "propertyNames": { "pattern": "^[a-z][A-Za-z0-9]*$" },
-            "additionalProperties": {
-              "type": "object",
-              "additionalProperties": false,
-              "anyOf": [{ "required": ["at"] }, { "required": ["implements"] }],
-              "properties": {
-                "at": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "<name>" } },
-                "schema": { "type": "string" },
-                "tests": { "type": "string" },
-                "protocol": { "type": "string" },
-                "implements": { "type": "string", "pattern": "^[a-z][a-z0-9.-]*/v[0-9]+$" }
-              }
-            }
-          }
-        }
-      }
-    }
+    "owns": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "description": "The paths the boundary check treats as core (globs; a trailing / owns everything below)." }
   },
   "$defs": {
     "names": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" } }

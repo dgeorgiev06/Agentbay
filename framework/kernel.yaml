@@ -20,28 +20,17 @@ protected:
     workspace: { modes: ["*"] }
     research: { modes: ["*"] }
   connector: [artifact-graph, claude-transcripts, corpus-store, git, improve-detect, improve-store, ledger, scaffold, workflow-runner]
-components:
-  kernel:           # loader, resolver, lint, registry, dispatcher, ledger, guard, CLI
-    owns:
-      - bay/
-      - schemas/
-      - framework/roles/
-      - framework/rules/
-      - framework/kernel.yaml
-      - framework/limits.yaml
-      - bay.sh
-      - requirements.txt
-      - CHANGELOG.md                 # release metadata: written by forge.extend's release step
-    contracts:
-      # interim (3a replaces it with the loader): every component folder is one extension. The contract keeps the name
-      # `mode`, which B-3 (features of an existing mode) and the protected mode names are keyed on.
-      mode:      { at: ["components/<name>/"], schema: schemas/mode.schema.json }
-      adapter:   { at: ["adapters/<name>/"], schema: schemas/adapter.schema.json, protocol: bay/adapter.py }
-  briefing:          # corpus store, SQL sandbox, selector matcher, the briefing base mode
-    owns:
-      - components/briefing/
-      - bay/contenttypes.py
-      - bay/sqlsandbox.py
-      - bay/selector.py
-    contracts:
-      source:      { implements: items.source/v1, tests: tests/contracts/items_source.py }
+owns:               # the kernel: loader, resolver, lint, registry, dispatcher, ledger, guard, CLI
+  - bay/
+  - bay/contenttypes.py              # the briefing files the kernel imports
+  - bay/sqlsandbox.py
+  - bay/selector.py
+  - schemas/
+  - adapters/
+  - framework/roles/
+  - framework/rules/
+  - framework/kernel.yaml
+  - framework/limits.yaml
+  - bay.sh
+  - requirements.txt
+  - CHANGELOG.md                     # release metadata: written by forge.extend's release step

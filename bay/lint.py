@@ -51,18 +51,14 @@ def _entry_line(path: Path, section: str, name: str) -> int | None:
     return None
 
 
-def _lineage_where(md: model.Doc, section: str, name: str) -> tuple[Path, int]:
-    """The mode.yaml (own, else the nearest ancestor's) whose `section` (features) declares `name`,
-    and that line: inherited parts are reported where they are written."""
+def _ep_where(md: model.Doc, ep_name: str) -> tuple[Path, int]:
+    """The mode.yaml (own, else the nearest ancestor's) whose features declare `ep_name`, and that line:
+    inherited parts are reported where they are written."""
     for d in md.dirs:
-        i = _entry_line(d / "mode.yaml", section, name)
+        i = _entry_line(d / "mode.yaml", "features", ep_name)
         if i is not None:
             return d / "mode.yaml", i + 1
     return md.path, 1
-
-
-def _ep_where(md: model.Doc, ep_name: str) -> tuple[Path, int]:
-    return _lineage_where(md, "features", ep_name)
 
 
 def _ep_key_where(md: model.Doc, ep_name: str, key: str) -> tuple[Path, int]:
@@ -83,9 +79,9 @@ def _ep_key_where(md: model.Doc, ep_name: str, key: str) -> tuple[Path, int]:
     return _ep_where(md, ep_name)
 
 
-def _file(md: model.Doc, relpath: str, kit: model.Kit) -> str:
-    """A mode-relative path (possibly inherited, `../briefing/...`) as a normalized kit-relative path."""
-    return os.path.relpath(os.path.normpath(md.dir / relpath), kit.root)
+def _need(kit: model.Kit, p: Path, where: str, what: str) -> list[str]:
+    path = os.path.relpath(os.path.normpath(p), kit.root)
+    return [] if p.exists() else [f"{where}: {what} {path} does not exist; restore it or remove the reference"]
 
 
 def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[str]:
@@ -98,9 +94,13 @@ def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[
     if agentic and not ep.get("playbook"):
         out.append(f"{_where(mfile, ep_line)}: feature {target} runs an agent but has no `playbook`; add "
                    f"`playbook: features/{ep_name}/playbook.md` (a feature with only code steps needs none)")
+    where = _where(mfile, ep_line)
     for key in ("playbook", "rules"):
-        if ep.get(key) and not (md.dir / ep[key]).exists():
-            out.append(f"{_where(mfile, ep_line)}: feature {target} {key} file {_file(md, ep[key], kit)} does not exist")
+        if ep.get(key):
+            out += _need(kit, md.dir / ep[key], where, f"feature {target} {key} file")
+    for t in (ep.get("in"), ep.get("out"), *(st.get("out") for st in ep["steps"])):
+        if t:
+            out += _need(kit, model.type_file(md.dirs, t), where, f"feature {target} type {t}")
 
     if ep.get("playbook") and (md.dir / ep["playbook"]).exists():
         pb = pbk.parse(md.dir / ep["playbook"])
@@ -243,12 +243,8 @@ def lint_adapters(kit: model.Kit) -> list[str]:
     its `module` a file inside the folder. Checked without importing any adapter code."""
     from . import adapter
     _, bad = adapter.scan(kit.root / "adapters")
-    return [_rel(e, kit) for errs in bad.values() for e in errs]
-
-
-def _rel(msg: str, kit: model.Kit) -> str:
     root = str(kit.root.resolve()) + "/"
-    return msg.replace(root, "").replace(str(kit.root) + "/", "")
+    return [e.replace(root, "").replace(str(kit.root) + "/", "") for errs in bad.values() for e in errs]
 
 
 def lint_rules(path: Path, dod_ids: list[str], ep: dict, md: model.Doc) -> list[str]:
@@ -300,7 +296,6 @@ def _kind_enum(md: model.Doc, ep: dict) -> list[str] | None:
     p = model.type_file(md.dirs, ep["in"])
     if not p.exists():
         return None
-    import json
     s = json.loads(p.read_text())
     return (s.get("properties", {}).get("kind") or {}).get("enum")
 
@@ -718,6 +713,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     for md in kit.docs["Mode"].values():
         out += contenttypes.mode_problems(md.dirs, _as_list(md.spec.get("reads")), kit.root)
     out += lint_extension_names(kit)
+    out += lint_references(kit)
     out += lint_rulesets(kit)
     out += lint_components(kit)
     out += lint_protection(kit)
@@ -968,6 +964,37 @@ def lint_case_and_manifests(kit: model.Kit) -> list[str]:
             out.append(f"{root}: extension folder without its manifest "
                        f"{MANIFESTS[cmap.extension(root + 'x')[0].name]}")
     return list(dict.fromkeys(out))
+
+
+BAY_IMPORT = re.compile(r"^\s*(?:from bay import ([^#\n]+)|(?:from|import) bay\.(\w+))", re.M)
+
+
+def lint_references(kit: model.Kit) -> list[str]:
+    """What the adapter runs, connector code imports and manifests name exists; text is read, nothing imported."""
+    out: list[str] = []
+    srcs = [(f, re.findall(r'\bbay["\s/]+(\w+)\.py', f.read_text(encoding="utf-8")))
+            for f in kit.root.glob("adapters/*/*.py")]
+    for c in kit.docs["Connector"].values():
+        for f in (p for p in _extension_files(c, ("**/*.py",)) if p.suffix == ".py"):
+            srcs.append((f, [x.split()[0] for m in BAY_IMPORT.finditer(f.read_text(encoding="utf-8"))
+                             for x in (m[1] or m[2]).split(",")]))
+    for f, names in srcs:
+        for n in sorted(set(names)):
+            out += _need(kit, kit.root / "bay" / f"{n}.py", model.rel(f), "module")
+    for md in kit.docs["Mode"].values():
+        if md.spec.get("coordinator") and not any((d / "playbook.md").exists() for d in md.dirs):
+            out.append(f"{model.rel(md.dir)}/: mode {md.name} has a coordinator but no playbook.md in its extends chain")
+    files = [d.path for d in kit.docs["Interface"].values()]
+    for md in kit.docs["Mode"].values():
+        files += [*md.config_files, *(q for d in md.dirs for q in (d / "types").glob("*.schema.json"))]
+    files += [ct.dir / contenttypes.FIELDS for ct in contenttypes.scan(kit.root)[0].values()]
+    for f in sorted(set(files)):
+        for ref in sorted(set(re.findall(r"\$ref\W+([a-z][a-z0-9.-]*/v\d+)", f.read_text(encoding="utf-8")))):
+            try:
+                model.data_schema(ref, kit.root)
+            except model.SpecError as e:
+                out.append(f"{_where(f, _line_of(f, re.escape(ref)))}: $ref {ref}: {e}")
+    return out
 
 
 def lint_rulesets(kit: model.Kit) -> list[str]:

@@ -87,17 +87,17 @@ def schema(name: str) -> dict:
     return json.loads((SCHEMAS / f"{name}.schema.json").read_text())
 
 
-def data_schema(ref: str) -> dict:
+def data_schema(ref: str, root: Path = KIT) -> dict:
     """'item/v1' -> schemas/data/item.v1.schema.json or modes/<mode>/data/item.v1.schema.json; a content type's
     `<name>/v<N>` -> its fields.schema.json"""
     name, _, ver = ref.partition("/")
-    p = SCHEMAS / "data" / f"{name}.{ver}.schema.json"
-    p = next((q for q in (p, *sorted(KIT.glob(f"modes/*/data/{p.name}"))) if q.exists()), p)
+    p = root / "schemas" / "data" / f"{name}.{ver}.schema.json"
+    p = next((q for q in (p, *sorted(root.glob(f"modes/*/data/{p.name}"))) if q.exists()), p)
     if not p.exists():
         from . import contenttypes
-        found = contenttypes.fields_schema(ref)
+        found = contenttypes.fields_schema(ref, root)
         if found is None:
-            raise SpecError(f"unknown data schema '{ref}' (expected {p.relative_to(KIT)} or a content type "
+            raise SpecError(f"unknown data schema '{ref}' (expected {p.relative_to(root)} or a content type "
                             f"{name} of version {ver})")
         return found
     return json.loads(p.read_text())
@@ -1019,6 +1019,8 @@ def resolve_mode(kit: Kit, md: Doc, ctx: _Ctx, warnings: list[str] | None = None
             features[ep_name] = feat
     _check_selectors(kit, md, mcfg, gaps, warnings if warnings is not None else [])
     pb_file = next((d / "playbook.md" for d in md.dirs if (d / "playbook.md").exists()), md.dir / "playbook.md")
+    if s.get("coordinator") and not pb_file.exists():
+        gaps.append(f"mode {name}: coordinator {s['coordinator']} has no playbook ({rel(pb_file)} not found)")
     return ResolvedMode(
         name=name, version=md.meta["version"], root=md.root, purpose=s["purpose"].strip(), path=md.dir,
         coordinator=s.get("coordinator"), roles=dict(roles),

@@ -94,6 +94,26 @@ def test_a_file_a_feature_names_must_exist():
     assert not [x for x in problems(k) if "feed-briefing.digest rules file" in x]
 
 
+DELETED_TARGETS = [
+    ("adapter script", "bay/hook.py", "module bay/hook.py does not exist"),
+    ("bay module a connector imports", "bay/graph.py", "module bay/graph.py does not exist"),
+    ("coordinator playbook", "modes/improve/playbook.md", "mode improve has a coordinator but no playbook.md"),
+    ("data schema named by $ref", "modes/improve/data/session.episode.v1.schema.json", "$ref session.episode/v1"),
+    ("feature type", "modes/cos/types/StageOut.schema.json",
+     "feature cos.run type StageOut modes/cos/types/StageOut.schema.json does not exist"),
+]
+
+
+def test_a_reference_to_a_deleted_file_is_refused_in_every_group():
+    for group, rel, needle in DELETED_TARGETS:
+        k = kit_copy()
+        (k / rel).unlink()
+        try:
+            has(k, needle)
+        except AssertionError as e:
+            raise AssertionError(f"{group}: {e}") from None
+
+
 def test_a_feature_that_runs_an_agent_needs_a_playbook_and_a_code_only_one_needs_no_files():
     k = kit_copy()
     edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["features"]["ask"].pop("playbook"))

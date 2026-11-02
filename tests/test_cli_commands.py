@@ -103,18 +103,6 @@ def test_help_after_note_and_show_prints_help_instead_of_being_refused():
         cleanup(p)
 
 
-def test_show_reclaim_marks_a_run_and_status_log_prints_events():
-    p = project()
-    try:
-        assert cli(p, "show", "reclaim", "R-1", "--reason", "stuck").returncode == 0
-        assert any(e["type"] == "reclaimed" for e in ledger.read(p))
-        assert cli(p, "show", "reclaim").returncode != 0
-        r = cli(p, "status", "--log", "-n", "1")
-        assert r.returncode == 0 and '"reclaimed"' in r.stdout
-    finally:
-        cleanup(p)
-
-
 def test_catalog_roles_lists_the_role_units():
     r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "catalog", "--roles"], capture_output=True, text=True)
     assert r.returncode == 0 and "role units" in r.stdout and "builder--forge--framework-dev" in r.stdout

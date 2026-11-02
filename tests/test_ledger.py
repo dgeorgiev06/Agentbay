@@ -248,5 +248,13 @@ def test_a_dispatched_agent_is_listed_by_status_without_the_spawn_hook():
         g = json.loads(cli(p, "status", "--agents", "--json").stdout)
         assert g == [dict(g[0], role="builder", mode="forge", model="sonnet", tier="balanced", runs=1)]
         assert "builder" in cli(p, "status", "--agents").stdout
+        assert cli(p, "show", "reclaim", TID, "--reason", "stuck").returncode == 0
+        runs = ledger.fold(ledger.read(p))
+        assert [(r.task_id, r.state, r.agent) for r in runs.values()] == [(TID, "reclaimed", "builder--forge--framework-dev")]
+        out = cli(p, "status").stdout
+        assert "RUNNING AGENTS (0)" in out and TID in out.split("RECENT AGENTS")[1]
+        r = cli(p, "status", "--log", "-n", "1")
+        assert r.returncode == 0 and '"reclaimed"' in r.stdout
+        assert cli(p, "show", "reclaim").returncode != 0
     finally:
         cleanup(p)

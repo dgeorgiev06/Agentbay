@@ -52,17 +52,23 @@ def test_role_shim_reads_only_its_grants_and_cannot_write_spend_or_delete():
     try:
         shim = p / ".agentbay/roles/analyst--feed-briefing/use"
         assert shim.exists() and not (p / ".agentbay/roles/reviewer--delivery/use").exists()   # no grants -> no shim
-        sh(p, str(p / ".agentbay/bay"), "call", "feed-briefing.sync", "{}")
+        sh(p, str(p / ".agentbay/bay"), "call", "feed-briefing.sync", '{"maxItems": 5}')   # a denied sync would add more
         r = sh(p, str(shim), "items.store/v1.query", '{"author": "lido"}')
         assert r.returncode == 0 and {x["author"]["handle"] for x in json.loads(r.stdout)["items"]} == {"lido"}
         reads = [json.loads(x) for x in (p / ".agentbay/ledger/events.jsonl").read_text().splitlines()
                  if '"data.read"' in x]
         assert reads and reads[-1]["role"] == "analyst" and reads[-1]["mode"] == "feed-briefing" and reads[-1]["summary"] == "items.store/v1.query"
-        for ep in ("items.store/v1.sync", "items.store/v1.prune", "items.source/v1.fetch"):
-            r = sh(p, str(shim), ep, "{}")
+        data = p / ".agentbay/data"
+        def snapshot():
+            return {str(f): f.read_bytes() for f in sorted(data.rglob("*")) if f.is_file()}
+        before = snapshot()
+        for ep, arg in (("items.store/v1.sync", "{}"), ("items.store/v1.prune", '{"olderThan": "1m"}'),   # 1m empties the fixture
+                        ("items.source/v1.fetch", "{}")):
+            r = sh(p, str(shim), ep, arg)
             assert r.returncode != 0 and "not granted" in r.stderr, (ep, r.stderr)
-        before = (p / ".agentbay/data/feeds/feed-briefing/corpus.db").read_bytes()
-        assert before == (p / ".agentbay/data/feeds/feed-briefing/corpus.db").read_bytes()
+            assert snapshot() == before, ep   # a refusal that still ran the call would show here
+        r = sh(p, str(shim), "items.store/v1.query", '{"author": "lido"}')
+        assert {x["author"]["handle"] for x in json.loads(r.stdout)["items"]} == {"lido"}
     finally:
         cleanup(p)
 

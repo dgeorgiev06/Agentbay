@@ -2,6 +2,16 @@
 
 Earlier versions: see docs/proposals/
 
+## 1.1.2 - 2026-11-02
+
+Proposal 0014: test defects. Three tests passed without proving what they claimed. Nothing breaks, so there is no Upgrading section.
+
+### Fixed
+
+- The role shim test now compares the corpus file around the denied write, spend and delete calls, and its prune call would empty the corpus if it ran.
+- The git connector test is skipped, not passed, when git is missing, and `tests/run.py` prints and counts skips.
+- `cos.run` and `cos.next` now fail the call, not only the run, when the run cannot take the report: the stage has left an edited workflow, or the workflow holds a gate with `when:`. `bay approve W-...` still returns and records the owner's decision in the ledger, with the run `failed`.
+
 ## 1.1.1 - 2026-11-02
 
 Proposal 0013: ledger truth. The ledger now says what is really open and what is really running. Nothing breaks, so there is no Upgrading section.

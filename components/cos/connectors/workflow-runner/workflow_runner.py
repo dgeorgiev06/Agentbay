@@ -79,7 +79,7 @@ class WorkflowRunner:
         cur.update({"state": "completed", "status": "approved"})
         run["results"][cur["id"]] = {"approved": True, "by": by, **({"quote": quote} if quote else {})}
         run["cursor"] += 1
-        return self._advance(run, wf)
+        return self._advance(run, wf, strict=False)
 
     def show(self, runId: str = None, open: bool = False) -> dict:
         if runId:
@@ -90,7 +90,7 @@ class WorkflowRunner:
         return {"runs": [_public(r) for r in sorted(runs, key=lambda r: r["startedAt"], reverse=True)]}
 
     # ------------------------------------------------------------ engine
-    def _advance(self, run: dict, wf) -> dict:
+    def _advance(self, run: dict, wf, strict: bool = True) -> dict:
         """Walk stages until one needs the coordinator (a call), needs the user (a gate), or the run ends."""
         mv = wfmod.advance([wf.stage(r["id"]) for r in run["stages"]], run["cursor"], run["input"], run["results"])
         for rec in run["stages"][run["cursor"]:mv.cursor]:
@@ -99,11 +99,11 @@ class WorkflowRunner:
         run["cursor"] = mv.cursor
         extra = {"skipped": mv.skipped} if mv.skipped else {}
         if mv.kind in ("missing", "refused"):   # the workflow was edited under a live run, or holds a gate with `when:`
-            rec = run["stages"][mv.cursor]
-            run["status"] = "failed"
-            run["reason"] = mv.reason or (f"stage '{rec['id']}' is no longer in workflows.{run['workflow']}; "
-                                          f"the workflow changed after this run started. Start a new run.")
-            return self._finish(run)
+            run.update(status="failed", reason=mv.reason or f"stage '{run['stages'][mv.cursor]['id']}' is no longer in workflows.{run['workflow']}; the workflow changed after this run started. Start a new run.")
+            out = self._finish(run)
+            if strict:   # start and next cannot take the report, so the call fails; approve returns, so the owner's decision is ledgered
+                raise ConnectorError(f"{run['reason']} (run {run['runId']} is failed)")
+            return out
         if mv.kind == "done":
             run["status"] = "done"
             return self._finish(run, extra)

@@ -1,6 +1,7 @@
 """git connector: commits as episodes with revert detection and churn; subjects are scrubbed, bodies are never returned."""
 import json
 import shutil
+import unittest
 
 from helpers import clock, cleanup, connector_pkg, project, system
 from improve_fixtures import CORES, make_git_repo
@@ -12,7 +13,7 @@ git_episodes = connector_pkg("git", "git_episodes").git_episodes
 
 def test_commits_reverts_and_churn_without_messages():
     if not shutil.which("git"):
-        return
+        raise unittest.SkipTest("git is not installed")
     p = project()
     try:
         bad = make_git_repo(p)

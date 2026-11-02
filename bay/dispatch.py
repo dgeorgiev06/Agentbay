@@ -93,7 +93,7 @@ class Dispatcher:
                     raise CallError(f"step {step.id}: output does not match {step.out}: " + "; ".join(errs[:5]))
             state["steps"][step.id] = output
             self._ledger("step.completed", base, summary=f"{step.role} submitted")
-            self._close_runs(call_id, step, output)
+        self._close_runs(call_id, step, output)
         state["cursor"] += 1
         if state.get("halt"):
             state["output"] = self._endpoint_output(feat, state)

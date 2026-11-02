@@ -120,8 +120,11 @@ def test_digest_done_when_review_passes():
                           "citations": [urls[0], g["items"][1]["id"]]}]}
     r = d.submit(r["callId"], "themes", digest)
     ids = [x["id"] for x in r["next"]["review"]["definitionOfDone"]] + [x["id"] for x in r["next"]["review"]["rules"]]
+    tid = "T-20261102-0001"
+    ledger.append(p, "agent.dispatch", tid, source="coordinator", taskId=tid, callId=r["callId"], step="review", agent="r")
     r = d.submit(r["callId"], "review", {"items": [{"id": i, "verdict": "pass", "evidence": "checked"} for i in ids]})
     assert r["status"] == "done" and all(c["ok"] for c in r["checks"])
+    assert [x.state for x in ledger.fold(ledger.read(p)).values() if x.task_id == tid] == ["done"]
 
 
 def test_stale_refresh_is_skipped_when_fresh():

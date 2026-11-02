@@ -32,12 +32,14 @@
   note <ref> "text" [--instruction]            record a note (--instruction: a mid-run instruction change)
   note task                                    print a fresh taskId
   note dispatch <taskId> --agent <name> ...    the coordinator's dispatch log
+  note done <taskId>                           a dispatched agent finished (no hook needed)
   note review <taskId> '<review.verdict/v1>'   a review that ran outside a framework step
   plan <taskId> '<json>' | --done <n>          a dispatched agent's outcome and to-do (the only command subagents run)
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
@@ -103,11 +105,7 @@ def cmd_check(args):
     """`bay check`: lint, then resolve everything; with --base, also the change's boundary check."""
     if (args.proposal or args.docs or args.json) and not args.base:
         _die("✗ --proposal, --docs and --json belong to the boundary check: pass --base <ref> too")
-    if args.json:                                   # stdout is the JSON report only; the lint lines go to stderr
-        import contextlib
-        with contextlib.redirect_stdout(sys.stderr):
-            bad = _validate(args)
-    else:
+    with (contextlib.redirect_stdout(sys.stderr) if args.json else contextlib.nullcontext()):   # --json: stdout is the report only
         bad = _validate(args)
     if args.base:
         bad = cmd_boundary(args) or bad
@@ -595,6 +593,12 @@ def cmd_note(args):
         if len(words) != 3:
             _die("✗ usage: bay note review <taskId> '<review.verdict/v1 json>'")
         _note_review(args, words[1], words[2])
+    elif verb == "done":
+        if len(words) != 2 or not ledger.TASK_ID.match(words[1]) or not ledger.dispatched_agent(ledger.read(args.project), words[1]):
+            _die("✗ usage: bay note done <taskId>   (a taskId the coordinator dispatched; it records that its agent finished)")
+        ledger.append(args.project, "completed", _find_run(args.project, words[1]), source="coordinator", taskId=words[1],
+                      data={"status": "done"})
+        print("done recorded")
     else:
         if len(words) != 2:
             _die("✗ usage: bay note <runId|taskId|callId> \"text\"")
@@ -608,19 +612,15 @@ def cmd_note(args):
         print("noted")
 
 
-def cmd_reclaim(args):
-    rid = _find_run(args.project, args.run)
-    ledger.append(args.project, "reclaimed", rid, source="cli", summary=args.reason)
-    print(f"reclaimed {rid}")
-
-
 def cmd_show(args):
     """`bay show <callId>`; `bay show reclaim <runId>` marks a stuck run as reclaimed (a write, so it is its own
     prefix for a permission rule)."""
     if args.ref[0] == "reclaim":
         if len(args.ref) != 2:
             _die("✗ usage: bay show reclaim <runId> [--reason ...]")
-        return cmd_reclaim(argparse.Namespace(project=args.project, run=args.ref[1], reason=args.reason or "reclaimed by coordinator"))
+        rid = _find_run(args.project, args.ref[1])
+        ledger.append(args.project, "reclaimed", rid, source="cli", summary=args.reason or "reclaimed by coordinator")
+        return print(f"reclaimed {rid}")
     if args.resolved:
         if len(args.ref) != 1 or args.reason:
             _die("✗ usage: bay show <mode> --resolved")

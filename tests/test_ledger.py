@@ -256,5 +256,11 @@ def test_a_dispatched_agent_is_listed_by_status_without_the_spawn_hook():
         r = cli(p, "status", "--log", "-n", "1")
         assert r.returncode == 0 and '"reclaimed"' in r.stdout
         assert cli(p, "show", "reclaim").returncode != 0
+        n = len(ledger.read(p))
+        assert cli(p, "note", "done", "T-20261030-9999").returncode != 0 and len(ledger.read(p)) == n
+        _dispatch(p, OTHER)
+        assert cli(p, "note", "done", OTHER).stdout.strip() == "done recorded"
+        assert {(r.task_id, r.state, r.agent) for r in ledger.fold(ledger.read(p)).values()} == {
+            (TID, "reclaimed", "builder--forge--framework-dev"), (OTHER, "done", "builder--forge--framework-dev")}
     finally:
         cleanup(p)

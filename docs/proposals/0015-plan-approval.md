@@ -28,6 +28,15 @@ touches:
   - { path: docs/DESIGN.md, reason: "the threat model, plan approval, the new `approve` setting, the guard note, the bypass statement; paid for by cuts (see Cost)" }
   - { path: docs/INTERFACES.md, reason: "`bay approve`, `bay plan --revise`, the plan file, the new event, the step-plan guard field; paid for by cuts (see Cost)" }
   - { path: tests/, reason: "existing tests extended or rewritten; no test is added without one removed" }
+  - { path: components/gmail-api/tests/, reason: "from the plan step: config fixtures move to agentbay/v4" }
+  - { path: components/briefing/tests/, reason: "from the plan step: config fixtures move to agentbay/v4" }
+  - { path: components/mail-briefing/tests/, reason: "from the plan step: config fixtures move to agentbay/v4" }
+  - { path: schemas/mode.schema.json, reason: "from the plan step: the gate description names approve.from, not approvals.chat" }
+  - { path: components/improve/connectors/improve-store/store.py, reason: "from the plan step: backlog decisions follow approve.from instead of user@tty only (protected path)" }
+  - { path: components/improve/playbook.md, reason: "from the plan step: backlog decisions may come from chat when approve.from allows it" }
+  - { path: components/improve/features/implement/playbook.md, reason: "from the plan step: same" }
+  - { path: components/improve/README.md, reason: "from the plan step: same" }
+  - { path: components/mail-briefing/playbook.md, reason: "from the plan step: bay auth runs from the app with its permission prompt" }
   - { path: bay/__init__.py, reason: "release step: version" }
   - { path: CHANGELOG.md, reason: "release step: entry, with an Upgrading section" }
   - { path: framework/limits.yaml, reason: "release step: the ceilings are written down to the real counts" }

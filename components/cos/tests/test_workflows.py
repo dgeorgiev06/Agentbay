@@ -8,7 +8,7 @@ import json
 
 from helpers import KIT, clock, cleanup, project, system, tmpdir
 
-from bay import dispatch, lint, registry, workflows as wfmod
+from bay import dispatch, ledger, lint, registry, workflows as wfmod
 from bay.adapter import get
 from bay.model import Kit
 
@@ -205,6 +205,8 @@ def test_editing_the_workflow_under_a_live_run_fails_loudly():
     import yaml
     d, p = _d()
     rid = d.call("cos.run", {"workflow": "morning", "input": {"lookback": "1d"}})["output"]["runId"]
+    gated = d.call("cos.run", {"workflow": "morning", "input": {"lookback": "1d"}})["output"]["runId"]
+    d.call("cos.next", {"runId": gated, "callId": "C-y", "status": "done", "output": {"added": 1}})
     cfg = yaml.safe_load((p / "agentbay.config.yaml").read_text())
     cfg["workflows"]["morning"]["steps"] = [{"id": "other", "call": "feed-briefing.sync"}]
     (p / "agentbay.config.yaml").write_text(yaml.safe_dump(cfg))
@@ -212,6 +214,11 @@ def test_editing_the_workflow_under_a_live_run_fails_loudly():
     out = d2.call("cos.next", {"runId": rid, "callId": "C-x", "status": "done", "output": {"added": 1}})
     assert out["status"] == "failed" and "no longer in workflows.morning" in out["error"]
     assert d2.call("cos.status", {"runId": rid})["output"]["runs"][0]["status"] == "failed"
+    cfg["workflows"]["morning"]["steps"] = [{"id": "sync", "call": "feed-briefing.sync"}, {"id": "ship", "gate": "send the digest?"}]
+    (p / "agentbay.config.yaml").write_text(yaml.safe_dump(cfg))
+    d3 = dispatch.Dispatcher(system(p), p, clock=clock)
+    assert d3.approve_run(gated, True, "user@tty")["status"] == "failed"
+    assert [e["summary"] for e in ledger.read(p) if e["type"] == "step.completed" and e["runId"] == gated] == ["gate approved by user@tty"]
     cleanup(p)
 
 

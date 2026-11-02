@@ -74,8 +74,9 @@ invent a workflow or edit the config to make one.
    them to run `.agentbay/bay approve <runId>` in their own terminal (or answer in chat;
    see "Gates from chat"). On `done`,
    `blocked` or `failed`, the run is over - report the outcome and the `reason`.
-   A `cos.next` call that itself fails with "the workflow changed after this run started"
-   means the run has ended: report it and start a new run.
+   A `cos.run` or `cos.next` call that itself fails with an error naming the workflow (it changed after
+   the run started, or a gate takes no `when:`) means the run has ended: report the error, and start a new
+   run once the config is fixed.
 
 Tell the user which stage of which workflow is running, not every call you make.
 `.agentbay/bay call cos.status '{"open": true}'` lists runs that have not ended.

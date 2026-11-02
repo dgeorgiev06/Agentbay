@@ -194,7 +194,7 @@ The root mode (a framework mode; its README names its endpoints) supplies the pr
 `{id, call: <mode>.<endpoint>, with?, when?}` or `{id, gate: <text>}`, using the same `$in` and `$steps.<id>`
 substitution as a feature's steps. `bay check` checks structure (ids, `$steps` order, gate references), then
 targets against the registry and each `with` against the endpoint's input schema. Run state is in
-`.agentbay/data/workflows/`, written only by the connector bound to `workflow.run/v1`. A stage report the run cannot take fails the call.
+`.agentbay/data/workflows/`, written only by the connector bound to `workflow.run/v1`. A report the run cannot take fails `cos.run` or `cos.next`; `approve` returns it.
 
 ## 7. Dispatcher
 `bay call <mode>.<endpoint> '<json>'` -> `{callId, status, output | next, checks, review, cost}`.

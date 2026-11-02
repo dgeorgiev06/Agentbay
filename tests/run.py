@@ -39,8 +39,8 @@ def files() -> list[Path]:
         + sorted(KIT.glob("adapters/*/tests/test_*.py"))
 
 
-def run_file(f: Path, k: str, quiet: bool) -> tuple[str, int, int, list[tuple[float, str]], int]:
-    """Run one file's tests in order: (its output, passed, failed, [(seconds, name)], skipped)."""
+def run_file(f: Path, k: str, quiet: bool) -> tuple[str, int, int, int, list[tuple[float, str]]]:
+    """Run one file's tests in order: (its output, passed, failed, skipped, [(seconds, name)])."""
     passed = failed = skipped = 0
     times: list[tuple[float, str]] = []
     buf = io.StringIO()
@@ -65,7 +65,7 @@ def run_file(f: Path, k: str, quiet: bool) -> tuple[str, int, int, list[tuple[fl
                 print(f"✗ {f.stem}::{name}")
                 traceback.print_exc()
             times.append((time.perf_counter() - t0, f"{f.stem}::{name}"))
-    return buf.getvalue(), passed, failed, times, skipped
+    return buf.getvalue(), passed, failed, skipped, times
 
 
 def main(argv: list[str]) -> int:
@@ -87,8 +87,8 @@ def main(argv: list[str]) -> int:
         results = [run_file(f, k, quiet) for f in todo]
     for out, *_ in results:
         print(out, end="")
-    passed, failed, skipped = (sum(r[i] for r in results) for i in (1, 2, 4))
-    times = [t for r in results for t in r[3]]
+    passed, failed, skipped = (sum(r[i] for r in results) for i in (1, 2, 3))
+    times = [t for r in results for t in r[4]]
     wall = time.perf_counter() - start
     slow = ", ".join(f"{n} {t:.1f}s" for t, n in sorted(times, reverse=True)[:15])
     print(f"{'' if quiet else chr(10)}slowest 15: {slow}")

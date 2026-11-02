@@ -20,15 +20,13 @@ A mode names capabilities, never a connector or a tool. Adding a source is one c
 an env, and no mode, role or playbook changes. A role file outside the framework is an error. A mode customizes a
 role through its playbooks, skills and rules, and a new role is a `forge.extend` proposal.
 
-A mode may `extends:` another. The kit resolves inheritance when it loads, so every later stage sees a complete
-mode. A child's feature replaces its parent's feature of that name whole, never key by key. Roles, constraints
+A mode may `extends:` another. The kit resolves inheritance when it loads. A child's feature replaces its parent's feature of that name whole, never key by key. Roles, constraints
 and config defaults merge entry by entry, `needs` are unioned, and inherited paths are rebased to the child's
 folder. `abstract: true` marks a base that is linted but never installed or called.
 
 ## Components
 
-A component is one folder in `components/` with one manifest. The name of the manifest says what kind of
-component it is.
+A component is one folder in `components/` with one manifest, whose name says its kind.
 
 | Manifest | Kind | For |
 |---|---|---|
@@ -37,19 +35,18 @@ component it is.
 | `content-type.yaml` | content type | the fields and views of one kind of item |
 | `component.yaml` | shared component | interfaces and envs that several modes use |
 
-A mode is one kind of component. It also holds what only it needs: its envs, interfaces, skills, types, data
+A mode also holds what only it needs: its envs, interfaces, skills, types, data
 files, tests and internal connectors. The loader finds these by folder name, so the manifest does not list them.
 A component uses another only through what the other provides: an interface name in `needs:`, a content type in
 `reads:`, a parent in `extends:`, or an env or connector name in a binding.
 
-A connector that declares network access, secrets or a file path outside the project is a source connector, and
-it is a component of its own. Adding a source is adding one folder. Every other connector is an internal
-connector: code that the framework runs behind an interface, such as the one that writes the findings store. It
+A connector that declares network access, secrets or a file path outside the project is a source connector and a
+component of its own. Every other connector is internal: code that the framework runs behind an interface, such as the one that writes the findings store. It
 lives in `connectors/<name>/` inside the component that owns it. `bay check` reports a misplaced connector and
 says where to move it.
 
-The kernel is not a component. `bay/`, `schemas/`, `framework/` and `adapters/` hold the loader, the dispatcher,
-the contracts, the roles and the runtime adapters. `framework/kernel.yaml` holds only `owns:` and `protected:`.
+The kernel is not a component. `bay/`, `schemas/`, `framework/` and `adapters/` hold the loader, dispatcher,
+contracts, roles and runtime adapters. `framework/kernel.yaml` holds only `owns:` and `protected:`.
 
 ## Features
 
@@ -83,8 +80,8 @@ reviews.
 
 `bay check` lints and then resolves every endpoint. It fails with every gap at once, each naming the concept and
 the fix. The gaps include unknown names, unbound capabilities, effects that the endpoint does not declare or the
-env does not allow, tiers the env does not allow, connector needs (hosts, secrets, paths) beyond the env, and steps
-that could write `framework/`, `bay/`, `schemas/` or `adapters/` outside `forge.extend`.
+env does not allow, tiers the env does not allow, connector needs (hosts, secrets, paths) beyond the env, steps
+that could write `framework/`, `bay/`, `schemas/` or `adapters/` outside `forge.extend`, and a coordinator that is not on a main-thread runtime.
 
 Each distinct (role, mode, env) that a mode uses compiles to one **unit**, named `<role>--<mode>`, plus `--<env>`
 when the mode runs that role in several envs. A unit is its own subagent, use shim, guard policy entry and store
@@ -115,7 +112,9 @@ from everything returned or logged.
 The run log is the append-only file `events.jsonl` under `.agentbay/`, and `bay status` folds it into calls,
 steps, runs and cost. The dispatcher, hooks, guard, use shims and `bay note` each write their own events. The Chief
 of Staff logs each dispatch, and a subagent records its outcome and to-do list with `bay plan`, the only `bay`
-command it may run. Every value is scanned for secrets and redacted before it is written.
+command it may run. `bay status` lists unfinished work with no event for 24 hours under `STALE?`; it asks the
+owner to look and closes nothing. With dispatches but no hook event, it says the hook is not loaded: finishes then
+come only from `bay submit`, `bay note done` or `bay show reclaim`. Every value is scanned for secrets and redacted before it is written.
 [INTERFACES.md section 9](INTERFACES.md#9-ledgerevent) lists the event types.
 
 ## Safety model
@@ -126,7 +125,7 @@ cannot contain code once something runs it. Hard isolation needs an OS sandbox.
 - **Nothing that runs code is auto-approved.** The guard allows without a prompt only a role's own read-only use
   shim (`python3 -E <kit>/bay/use_shim.py`), and when the kit is inside the project, even that prompts. Every other
   subagent command prompts you. The main thread is pre-approved only for `bay show|status|note|catalog`, and
-  `show reclaim`, `note dispatch` and `note review` ask. `bay call`, `bay submit` and `bay approve` prompt.
+  `show reclaim`, `show close`, `note dispatch` and `note review` ask. `bay call`, `bay submit` and `bay approve` prompt.
 - **Approval gates pass in your terminal.** `bay approve <callId>` needs an interactive terminal. A project
   workflow's gate takes its `W-...` run id the same way. A gate with `approves:` records the path and sha256 of
   the file it binds, and an edit or deletion of that file reopens the gate.

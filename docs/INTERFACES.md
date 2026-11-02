@@ -60,10 +60,9 @@ The placement rule decides where a connector sits. A connector that declares `ne
 `fs` path under `~` or `/` is a source connector and sits at `components/<name>/`. Any other connector sits at
 `components/<owner>/connectors/<name>/`, in the component that owns it.
 
-`bay check` refuses three layout mistakes. It refuses a connector in the wrong place, and the message names the
-folder to move it to. It refuses a component folder without a manifest. It refuses a leftover `modes/`, `envs/`,
-`connectors/`, `content-types/`, `coordinator/` or `interfaces/` folder at the top level, or an `interfaces/` folder
-under `framework/`, with "move it to components/<name>/".
+`bay check` refuses a connector in the wrong place (the message names the folder to move it to), a component folder
+without a manifest, and a leftover `modes/`, `envs/`, `connectors/`, `content-types/`, `coordinator/` or
+`interfaces/` folder at the top level, or an `interfaces/` folder under `framework/`, with "move it to components/<name>/".
 
 ## 1. Mode and features
 `mode.yaml` declares each feature (`spec.features.<name>`, called as `<mode>.<name>`) in one place: `in` and `out`
@@ -79,9 +78,8 @@ step names, else the feature, else the mode. A mode `needs: [items.store/v1]`, a
 `needs` are what its roles may read. `configDefaults:` replaces config-schema defaults for this mode (a child never
 copies its parent's schema).
 
-**Inheritance.** `extends: <mode>` is resolved when the kit is loaded (`bay/model.py` `merge_mode`), so the
-resolver, lint, conformance, the detectors and adapters always see a complete mode. DESIGN says what a child
-replaces and what it merges. The rest is detail.
+**Inheritance.** `extends: <mode>` is resolved when the kit is loaded (`bay/model.py` `merge_mode`), so every
+reader sees a complete mode. DESIGN says what a child replaces and what it merges.
 - `bay show <mode> --resolved` prints the result with the mode.yaml each feature comes from. A child's
   `coordinator` replaces its parent's.
 - **`uses:` and `skills:`** (per feature) scope what its role steps get. `uses` lists the read endpoints
@@ -129,7 +127,7 @@ bind:
   is never granted to an agent. `bay check` rejects a runtime binding that lists file-writing abilities or CLIs
   beyond read-only version control under a capability without the `write` effect.
 - Tier: step (a review: its review block) > feature > role default. The profile maps a tier to a model, and the
-  env's `tiers` cap both step tiers and the role's default tier, which is the model its unit is compiled with.
+  env's `tiers` cap both step tiers and the role's default tier.
   Envs are the only place capabilities are bound. `agentbay.config.yaml` can switch every env's `offline:` block on
   and can lower a cap, never raise it.
 - User modes may put roles only in their own envs (`components/<name>/envs/`) and the protected envs that
@@ -137,8 +135,7 @@ bind:
 - Code steps (`run:`) run in the coordinator's env for that feature; `bay check` warns when a store-reading
   mode puts a role in an env whose `items.store`/`items.source` bindings differ from it.
 
-`bay/model.py` resolves all of this and reports every gap at once, as DESIGN lists under Compile. It also reports
-a coordinator that is not on a main-thread runtime, and agents granted non-read connector endpoints.
+`bay/model.py` resolves all of this and reports every gap at once, as DESIGN lists under Compile.
 
 ## 4. Interface + Connector
 An interface lives in `interfaces/` of the component that owns it, which is the component whose mode needs it.
@@ -155,8 +152,7 @@ own command reaches it (`improve.findings/v1.decide`, via `bay approve <F-id>`).
 `framework/kernel.yaml` has two keys. `owns:` lists the paths the boundary check treats as core (globs; a trailing
 `/` owns everything below). `protected:` lists what only `forge.extend` may change and has four required keys.
 `paths` lists folders. `mode`, `env` and `connector` list names, wherever their folders sit. An `env` entry can be
-`{modes: [...]}`, the unprotected modes that may place roles there (`*` is every mode). A missing or malformed
-block fails closed: every name is reserved, and nothing is writable or placeable.
+`{modes: [...]}`, the unprotected modes that may place roles there (`*` is every mode). A bad block fails closed: every name is reserved.
 
 A connector is `connector.yaml` + `entry` exposing `create(ctx)`; `ctx` gives `config`, `secrets.get/store` (names
 allowed by env AND connector only), `http.request` (env allowlist enforced before every request, HTTPS only),
@@ -189,8 +185,7 @@ without importing it.
 
 The build names a component's skill `.claude/skills/<component>--<skill>/` and a role's skill `<role>--<skill>`
 (lowercase letters, digits and hyphens, at most 64), and rewrites the `name:` in the copied SKILL.md to match.
-Playbooks and role prompts keep naming the short name; lint checks each reference against the skills of the mode's
-chain, or the role's own.
+Playbooks and role prompts keep the short name.
 
 ## 6. Project workflows and the root coordinator
 The root mode (a framework mode; its README names its endpoints) supplies the preamble of the generated
@@ -203,10 +198,11 @@ targets against the registry and each `with` against the endpoint's input schema
 
 ## 7. Dispatcher
 `bay call <mode>.<endpoint> '<json>'` -> `{callId, status, output | next, checks, review, cost}`.
-Status: `done | partial | blocked | failed | needs-agent | awaiting-approval`.
+Status: `done | partial | blocked | failed | needs-agent | awaiting-approval | abandoned`. `abandoned` means a person ended the call.
 `bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic
 step (usage goes to the step's event); `bay show <callId>` prints the current state (`bay show reclaim <runId>`
-marks a stuck run reclaimed). Approval gates pass with `bay approve`; the terminal and chat paths, the sha, and
+marks a stuck run reclaimed; `bay show close <callId> --reason <text>` ends an open call as abandoned).
+`forge.extend` takes an optional `replaces: <callId>`; the new call closes that open call as abandoned. Approval gates pass with `bay approve`; the terminal and chat paths, the sha, and
 the plan file are in the [safety model](DESIGN.md#safety-model). A role's generated shim
 `.agentbay/roles/<role>--<mode>/use <iface>/v<N>.<ep> '<json>'` is its only way to read connector data, and the
 guard hook stops subagents from running anything else.
@@ -220,8 +216,9 @@ written. Any event may carry `durationMs`, `tokens {input, output, cacheRead, ca
 - Dispatcher: `step.started`, `step.completed`, `step.failed`, `step.skipped`, `step.planned` and `call.completed`,
   with `mode, endpoint, step, role, agent, env, cost`. `step.started` carries a step's inputs in `data.inputs` (the
   value, or its sha256 plus a scrubbed preview).
-- Agent runs, from hooks and the coordinator: `spawned`, `completed`, `failed`, `reclaimed` and `note`. A note
-  attaches to a run by runId or taskId, or stands alone, and never creates a run. `data.kind` is `note`,
+- Agent runs, from hooks and the coordinator: `spawned`, `completed`, `failed`, `reclaimed` and `note`. `bay note done <taskId>`
+  appends `completed` for a dispatched agent when no hook records it. A reclaimed or completed run stays so, even
+  if known only from its `agent.dispatch`. A note attaches to a run by runId or taskId, or stands alone, and never creates a run. `data.kind` is `note`,
   `instruction-change` or `decision`.
 - Guard: `permission.denied` (tool, agent, reason; never the command). Use shims: `data.read` (role, env,
   endpoint, item count).
@@ -234,7 +231,8 @@ written. Any event may carry `durationMs`, `tokens {input, output, cacheRead, ca
   step. It changes no call, gate or approval.
 
 `bay status --agents` groups runs by role, mode, model and tier from these events alone, and `bay show` prints
-outcome, to-do progress and inputs.
+outcome, to-do progress and inputs. `bay status` lists work with no event for 24 hours under `STALE?` (`--json`: a
+`stale` list), and says when the spawn hook is not loaded.
 
 ## 10. Session, artifact and finding interfaces
 These interfaces are files in `interfaces/` of the component that owns them, and the finding and episode schemas

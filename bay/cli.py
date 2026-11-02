@@ -16,6 +16,7 @@
   show <callId>                        current state of a call (result or the step it waits on)
   show <mode> --resolved               the mode's features after `extends`, each with the file it comes from
   show reclaim <runId>                 mark a stuck run as reclaimed
+  show close <callId> --reason <text>  end an open call as abandoned
   approve <callId|runId> [--reject]    pass an approval gate of a call, or of a workflow run (W-...)
                                        (you, in a terminal; never an agent)
           [--via chat --quote "<msg>"] from chat, relayed by the Chief of Staff, when approvals.chat is on
@@ -32,12 +33,14 @@
   note <ref> "text" [--instruction]            record a note (--instruction: a mid-run instruction change)
   note task                                    print a fresh taskId
   note dispatch <taskId> --agent <name> ...    the coordinator's dispatch log
+  note done <taskId>                           a dispatched agent finished (no hook needed)
   note review <taskId> '<review.verdict/v1>'   a review that ran outside a framework step
   plan <taskId> '<json>' | --done <n>          a dispatched agent's outcome and to-do (the only command subagents run)
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
@@ -103,11 +106,7 @@ def cmd_check(args):
     """`bay check`: lint, then resolve everything; with --base, also the change's boundary check."""
     if (args.proposal or args.docs or args.json) and not args.base:
         _die("✗ --proposal, --docs and --json belong to the boundary check: pass --base <ref> too")
-    if args.json:                                   # stdout is the JSON report only; the lint lines go to stderr
-        import contextlib
-        with contextlib.redirect_stdout(sys.stderr):
-            bad = _validate(args)
-    else:
+    with (contextlib.redirect_stdout(sys.stderr) if args.json else contextlib.nullcontext()):   # --json: stdout is the report only
         bad = _validate(args)
     if args.base:
         bad = cmd_boundary(args) or bad
@@ -516,12 +515,29 @@ def _note_dispatch(args, task: str):
     print("dispatch recorded")
 
 
-def _ago(ts: str) -> str:
+def _secs(ts: str) -> int:
     from datetime import datetime, timezone
-    if not ts:
-        return ""
-    s = int((datetime.now(timezone.utc) - datetime.fromisoformat(ts)).total_seconds())
-    return f"{s}s" if s < 90 else f"{s // 60}m" if s < 5400 else f"{s // 3600}h"
+    return int((datetime.now(timezone.utc) - datetime.fromisoformat(ts)).total_seconds())
+
+
+def _ago(ts: str) -> str:
+    s = _secs(ts) if ts else -1
+    return "" if s < 0 else f"{s}s" if s < 90 else f"{s // 60}m" if s < 5400 else f"{s // 3600}h"
+
+
+def _stale(runs, calls):
+    return ([r for r in runs if r.state == "running" and r.started and _secs(r.started) > STALE_S],
+            [c for c in calls if c.state in ("running", "waiting") and _secs(c.ts) > STALE_S])
+
+
+def _print_stale(evs, stale_runs, stale_calls):
+    if any(e["type"] == "agent.dispatch" for e in evs) and not any(e.get("source") == "hook" for e in evs):
+        print("\nthe spawn hook is not loaded: agents finish in the ledger only by `bay submit`, `bay note done` or `bay show reclaim`")
+    print(f"\nSTALE? ({len(stale_runs) + len(stale_calls)}) no event for 24h and not finished: look, then `show reclaim` or `show close`")
+    for c in stale_calls:
+        print(f"  {c.call_id:<18} {c.mode + '.' + c.endpoint:<24} {c.state:<8} step={c.last_step:<10} {_ago(c.ts):>4}")
+    for r in stale_runs:
+        print(f"  {r.run_id[:14]:<14} {r.agent:<14} {r.task_id or '-':<16} {_ago(r.started):>4}  {r.summary[:60]}")
 
 
 def cmd_status(args):
@@ -543,12 +559,14 @@ def cmd_status(args):
     runs = list(ledger.fold(evs).values())
     calls = list(ledger.fold_calls(evs).values())
     notes = ledger.standalone_notes(evs)
+    stale_runs, stale_calls = _stale(runs, calls)
     if args.json:
-        print(json.dumps({"runs": [r.__dict__ for r in runs], "calls": [c.__dict__ for c in calls],
-                          "notes": notes}, indent=2))
+        print(json.dumps({"runs": [r.__dict__ for r in runs], "calls": [c.__dict__ for c in calls], "notes": notes,
+                          "stale": [r.run_id for r in stale_runs] + [c.call_id for c in stale_calls]}, indent=2))
         return
-    live = [r for r in runs if r.state == "running"]
+    live = [r for r in runs if r.state == "running" and r not in stale_runs]
     done = [r for r in runs if r.state != "running"][-args.n:]
+    calls = [c for c in calls if c not in stale_calls]
     print(f"CALLS ({len(calls)})")
     for c in calls[-args.n:]:
         cost = f"items={c.cost.get('items', 0)} usd={c.cost.get('usd', 0)}" if c.cost else ""
@@ -556,7 +574,8 @@ def cmd_status(args):
     print(f"\nRUNNING AGENTS ({len(live)})")
     for r in live:
         print(f"  {r.run_id[:14]:<14} {r.agent:<14} {r.task_id or '-':<16} {_ago(r.started):>4}  {r.summary[:60]}")
-    print(f"\nRECENT AGENTS ({len(done)} of {len(runs) - len(live)})")
+    _print_stale(evs, stale_runs, stale_calls)
+    print(f"\nRECENT AGENTS ({len(done)} of {len(runs) - len(live) - len(stale_runs)})")
     for r in done:
         print(f"  {r.run_id[:14]:<14} {r.agent:<14} {r.task_id or '-':<16} {r.state:<9} {r.summary[:70]}")
     if notes:
@@ -573,6 +592,7 @@ def _find_run(project, key) -> str:
     return key  # a task, call or anything else: the note stays standalone (it never creates a run)
 
 
+STALE_S = 86400
 DISPATCH_FLAGS = ("agent", "call", "step", "model", "tier", "role", "mode", "summary", "input")
 
 
@@ -595,6 +615,12 @@ def cmd_note(args):
         if len(words) != 3:
             _die("✗ usage: bay note review <taskId> '<review.verdict/v1 json>'")
         _note_review(args, words[1], words[2])
+    elif verb == "done":
+        if len(words) != 2 or not ledger.TASK_ID.match(words[1]) or not ledger.dispatched_agent(ledger.read(args.project), words[1]):
+            _die("✗ usage: bay note done <taskId>   (a taskId the coordinator dispatched; it records that its agent finished)")
+        ledger.append(args.project, "completed", _find_run(args.project, words[1]), source="coordinator", taskId=words[1],
+                      data={"status": "done"})
+        print("done recorded")
     else:
         if len(words) != 2:
             _die("✗ usage: bay note <runId|taskId|callId> \"text\"")
@@ -608,25 +634,23 @@ def cmd_note(args):
         print("noted")
 
 
-def cmd_reclaim(args):
-    rid = _find_run(args.project, args.run)
-    ledger.append(args.project, "reclaimed", rid, source="cli", summary=args.reason)
-    print(f"reclaimed {rid}")
-
-
 def cmd_show(args):
-    """`bay show <callId>`; `bay show reclaim <runId>` marks a stuck run as reclaimed (a write, so it is its own
-    prefix for a permission rule)."""
-    if args.ref[0] == "reclaim":
-        if len(args.ref) != 2:
-            _die("✗ usage: bay show reclaim <runId> [--reason ...]")
-        return cmd_reclaim(argparse.Namespace(project=args.project, run=args.ref[1], reason=args.reason or "reclaimed by coordinator"))
+    """`bay show <callId>`; `bay show reclaim <runId>` marks a stuck run as reclaimed and `bay show close <callId>
+    --reason ...` ends an open call (writes, so each is its own prefix for a permission rule)."""
+    if args.ref[0] in ("reclaim", "close"):
+        if len(args.ref) != 2 or (args.ref[0] == "close" and not args.reason):
+            _die("✗ usage: bay show reclaim <runId> [--reason ...] | bay show close <callId> --reason ...")
+        if args.ref[0] == "close":
+            return _run(lambda: _dispatcher(args).close(args.ref[1], args.reason))
+        rid = _find_run(args.project, args.ref[1])
+        ledger.append(args.project, "reclaimed", rid, source="cli", summary=args.reason or "reclaimed by coordinator")
+        return print(f"reclaimed {rid}")
     if args.resolved:
         if len(args.ref) != 1 or args.reason:
             _die("✗ usage: bay show <mode> --resolved")
         return cmd_show_resolved(args)
     if args.reason or len(args.ref) != 1:
-        _die("✗ usage: bay show <callId>   (--reason goes with `show reclaim`)")
+        _die("✗ usage: bay show <callId>   (--reason goes with `show reclaim` and `show close`)")
     d = _dispatcher(args)
     _run(lambda: d.show(args.ref[0]))
 
@@ -704,7 +728,7 @@ def _hoist_project(argv: list[str]) -> list[str]:
 
 def _verb_first(argv: list[str]) -> None:
     """`note` and `show` are pre-approved by prefix in the generated permissions, and their writes (`note dispatch`,
-    `note review`, `show reclaim`) are asked by a longer prefix. So nothing may stand between the command and its
+    `note review`, `show reclaim`, `show close`) are asked by a longer prefix. So nothing may stand between the command and its
     verb: an option there (or `--project`, which is otherwise accepted anywhere) would run the write unasked."""
     i = 0
     while i < len(argv) and argv[i].startswith("-"):      # a global option before the command
@@ -713,7 +737,7 @@ def _verb_first(argv: list[str]) -> None:
             and argv[i + 1] not in ("-h", "--help"):
         cmd = argv[i]
         verbs = "`bay note dispatch <taskId> --agent ...`, `bay note review <taskId> '<json>'`" if cmd == "note" \
-            else "`bay show reclaim <runId> --reason ...`"
+            else "`bay show reclaim <runId> --reason ...`, `bay show close <callId> --reason ...`"
         _die(f"✗ `bay {cmd}`: no option may come before the verb or ref (got {argv[i + 1]!r}); put options after it: {verbs}")
 
 
@@ -753,8 +777,8 @@ def main(argv=None):
     su.add_argument("call"); su.add_argument("step"); su.add_argument("output")
     su.add_argument("--usage", help='what the runtime reported for the step: \'{"tokens": N, "costUsd": X, "durationMs": N}\'')
     su.set_defaults(fn=cmd_submit)
-    sh = sub.add_parser("show", help="the state of a call; `show reclaim <runId>` marks a stuck run as reclaimed")
-    sh.add_argument("ref", nargs="+"); sh.add_argument("--reason", help="show reclaim: why")
+    sh = sub.add_parser("show", help="the state of a call; `show reclaim <runId>` marks a stuck run as reclaimed, `show close <callId>` ends an open call")
+    sh.add_argument("ref", nargs="+"); sh.add_argument("--reason", help="show reclaim, show close: why")
     sh.add_argument("--resolved", action="store_true", help="show <mode>: its features after `extends`, with the file each comes from")
     sh.set_defaults(fn=cmd_show)
     ap_ = sub.add_parser("approve", help="pass (or --reject) an approval gate; interactive terminal, or chat when "

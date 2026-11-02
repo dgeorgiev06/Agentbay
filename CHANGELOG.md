@@ -2,6 +2,27 @@
 
 Earlier versions: see docs/proposals/
 
+## 1.1.1 - 2026-11-02
+
+Proposal 0013: ledger truth. The ledger now says what is really open and what is really running. Nothing breaks, so there is no Upgrading section.
+
+### Added
+
+- `bay note done <taskId>` records that an agent reported back, so its run closes without the hook.
+- `bay show close --reason` ends a call that is open and says why.
+- `forge.extend` takes an optional `replaces` field. A new call that replaces an open call abandons the old one.
+- `bay status` has a STALE? section. It lists runs and calls with no event for 24 hours and no finish, apart from live work.
+- `bay status` prints a line when the spawn hook is not loaded. `bay status --json` carries a `stale` list.
+
+### Fixed
+
+- The reclaim fix: `show reclaim` now closes a run that was only logged with `bay note dispatch`. It no longer goes back to running.
+- Review submit now closes its run, so a finished review no longer looks live.
+
+### Changed
+
+- CHANGELOG.md is a history doc. Docs checks treat it as history, not as current behavior.
+
 ## 1.1.0 - 2026-11-02
 
 Proposal 0010: one folder per component. This release breaks where extensions live. The owner keeps the major version, so it is 1.1.0.

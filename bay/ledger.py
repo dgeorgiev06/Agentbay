@@ -264,12 +264,11 @@ def fold(events: list[dict]) -> dict[str, Run]:
             r.summary = e.get("summary", r.summary)
         elif t == "reclaimed":
             r.ended, r.state = e["ts"], "reclaimed"
-    seen = {r.task_id for r in runs.values() if r.task_id}
     for e in events:
-        if e.get("type") == "agent.dispatch" and e.get("taskId") and e["taskId"] not in seen:
-            runs[e["runId"]] = Run(e["runId"], agent=e.get("agent", "?"), task_id=e["taskId"], state="running",
-                                   started=e["ts"], summary=e.get("summary", ""))
-            seen.add(e["taskId"])
+        t = e.get("taskId")
+        if e.get("type") == "agent.dispatch" and t and not any(x.task_id == t and x.run_id != e["runId"] for x in runs.values()):
+            r = runs.setdefault(e["runId"], Run(e["runId"], started=e["ts"], summary=e.get("summary", "")))
+            r.agent, r.task_id, r.started = e.get("agent", "?"), t, r.started or e["ts"]
     for n in notes:
         for r in _note_targets(n, runs):
             r.notes.append(n.get("summary", ""))
@@ -295,7 +294,7 @@ class Call:
     mode: str = ""
     endpoint: str = ""
     last_step: str = ""
-    state: str = "running"         # running | waiting | done | partial | blocked | failed
+    state: str = "running"         # running | waiting | done | partial | blocked | failed | abandoned
     ts: str = ""
     cost: dict = field(default_factory=dict)
     duration_ms: int | None = None

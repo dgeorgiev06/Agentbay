@@ -44,11 +44,13 @@ ASKED = (
     ".agentbay/bay show re{claim,} R-1",
     ".agentbay/bay note dis\\\npatch T-20261030-abcd --agent x",
     "./bay.sh note {review,} T-20261030-abcd '{}'",
+    ".agentbay/bay show 'close' C-1 --reason r",
 )
 NOT_ASKED = (
     ".agentbay/bay note T-20261030-abcd \"text about dispatch\"",
     ".agentbay/bay note T-20261030-abcd dispatch",
     ".agentbay/bay note task",
+    ".agentbay/bay note done T-20261030-abcd",
     ".agentbay/bay status",
     ".agentbay/bay status --log -n 20",
     ".agentbay/bay show C-20261030-abcd",

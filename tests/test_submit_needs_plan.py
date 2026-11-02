@@ -120,3 +120,31 @@ def test_plan_ownership_is_per_agent_type_not_per_run():
             ledger.record_plan(k, "T-20261030-9999", {"outcome": "o", "todo": [{"text": "t", "serves": "s"}]})
     finally:
         cleanup(k)
+
+
+def test_a_closed_call_is_abandoned_and_refuses_submit_and_approve():
+    k, d, cid = _at_propose()
+    try:
+        assert d.close(cid, "dropped")["status"] == "abandoned"
+        assert d.show(cid)["reason"] == "dropped"
+        assert ledger.fold_calls(ledger.read(k))[cid].state == "abandoned"
+        with pytest.raises(dispatch.CallError, match="abandoned"):
+            d.submit_strict(cid, "propose", {"status": "done", "summary": "s"})
+        with pytest.raises(dispatch.CallError, match="not awaiting approval"):
+            d.approve(cid, True)
+        with pytest.raises(dispatch.CallError, match="only an open call can be closed"):
+            d.close(cid, "again")
+        old = d.call("forge.extend", {"goal": "a change"})["callId"]
+        new = d.call("forge.extend", {"goal": "a change", "replaces": old})["callId"]
+        assert d.show(old)["reason"] == f"replaced by {new}"
+        files = sorted(p.name for p in (k / ".agentbay" / "calls").iterdir())
+        with pytest.raises(dispatch.CallError, match="only an open call can be closed"):
+            d.call("forge.extend", {"goal": "a change", "replaces": cid})
+        other = k / ".agentbay" / "calls" / "C-20261030-abcdef.json"
+        other.write_text((k / ".agentbay" / "calls" / f"{old}.json").read_text().replace("forge.extend", "forge.create"))
+        files.append(other.name)
+        with pytest.raises(dispatch.CallError, match="not forge.extend"):
+            d.call("forge.extend", {"goal": "a change", "replaces": "C-20261030-abcdef"})
+        assert sorted(p.name for p in (k / ".agentbay" / "calls").iterdir()) == files
+    finally:
+        cleanup(k)

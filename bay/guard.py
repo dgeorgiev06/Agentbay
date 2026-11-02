@@ -14,12 +14,10 @@ comes from a subagent; the main thread sends neither.
   * other subagent (agent_type unknown, or agent_id without agent_type): may not
     touch .agentbay/ or the kit CLI in any way; everything else falls through
     to normal permissions.
-  * main thread (no agent fields): no decision, except "ask" for `note dispatch`, `note review`, `show reclaim`
-    in any quoting or launcher spelling (the ask rules below match only the plain text; `approve` needs no
-    hook: no allow rule covers it);
-    settings.json applies (explicit
-    `bay show|status|note|catalog` allows, with `show reclaim`, `note dispatch`, `note review` and `approve`
-    asking; Edit deny rules; `bay call` and `bay submit` always prompt).
+  * main thread (no agent fields): no decision, except "ask" for `note dispatch`, `note review`, `show reclaim`,
+    `show close` in any quoting or launcher spelling (the ask rules match only the plain text; `approve` needs no
+    hook: no allow rule covers it); settings.json applies (explicit `bay show|status|note|catalog` allows with
+    those writes and `approve` asking; Edit deny rules; `bay call` and `bay submit` always prompt).
     Claude Code versions that do not send agent fields therefore look like the
     main thread; agentbay requires a version that does (documented).
 
@@ -89,7 +87,7 @@ def runs_approve(cmd: str, words: list[str]) -> bool:
 
 
 # `approve` is not here: no allow rule covers it, so any spelling of it already gets Claude Code's prompt
-ASK_VERBS = {"note": ("dispatch", "review"), "show": ("reclaim",)}
+ASK_VERBS = {"note": ("dispatch", "review"), "show": ("reclaim", "close")}
 # a word with one of these may expand to an asked verb (`{dispatch,}`, `${X:-dispatch}`, a backslash-newline join)
 EXPANSION_CHARS = "{$`\n"
 
@@ -106,7 +104,7 @@ def _launcher_end(words: list[str], i: int) -> int | None:
 
 
 def asked_bay_write(cmd: str) -> str | None:
-    """For the main thread: the name of the kit command (`note dispatch`, `note review`, `show reclaim`)
+    """For the main thread: the name of the kit command (`note dispatch`, `note review`, `show reclaim`, `show close`)
     that `cmd` runs, judged on the shell words so quoting, escaping and spacing do not hide it; else None.
     Claude Code's ask rules match the command text, which `note 'dispatch'` or `show re\\claim` does not match."""
     try:
@@ -198,11 +196,7 @@ def norm(path: str, cwd: Path) -> Path:
 
 
 def under(p: Path, root: Path) -> bool:
-    try:
-        p.relative_to(root)
-        return True
-    except ValueError:
-        return False
+    return p.is_relative_to(root)
 
 
 def case_insensitive(probe: Path) -> bool:

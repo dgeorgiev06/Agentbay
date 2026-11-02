@@ -1,6 +1,7 @@
 """Ledger: richer events (durations, tokens, cost, permission decisions, instruction changes); notes never
 create runs."""
 import json
+from datetime import datetime, timedelta, timezone
 import subprocess
 import sys
 
@@ -248,5 +249,30 @@ def test_a_dispatched_agent_is_listed_by_status_without_the_spawn_hook():
         g = json.loads(cli(p, "status", "--agents", "--json").stdout)
         assert g == [dict(g[0], role="builder", mode="forge", model="sonnet", tier="balanced", runs=1)]
         assert "builder" in cli(p, "status", "--agents").stdout
+        assert cli(p, "show", "reclaim", TID, "--reason", "stuck").returncode == 0
+        runs = ledger.fold(ledger.read(p))
+        assert [(r.task_id, r.state, r.agent) for r in runs.values()] == [(TID, "reclaimed", "builder--forge--framework-dev")]
+        out = cli(p, "status").stdout
+        assert "RUNNING AGENTS (0)" in out and TID in out.split("RECENT AGENTS")[1]
+        r = cli(p, "status", "--log", "-n", "1")
+        assert r.returncode == 0 and '"reclaimed"' in r.stdout
+        assert cli(p, "show", "reclaim").returncode != 0
+        n = len(ledger.read(p))
+        assert cli(p, "note", "done", "T-20261030-9999").returncode != 0 and len(ledger.read(p)) == n
+        _dispatch(p, OTHER)
+        assert cli(p, "note", "done", OTHER).stdout.strip() == "done recorded"
+        assert {(r.task_id, r.state, r.agent) for r in ledger.fold(ledger.read(p)).values()} == {
+            (TID, "reclaimed", "builder--forge--framework-dev"), (OTHER, "done", "builder--forge--framework-dev")}
+        old_tid = "T-20261030-aaaa"
+        ts = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat(timespec="seconds")
+        with open(ledger.ledger_path(p), "a") as f:
+            f.write(json.dumps({"v": 1, "ts": ts, "type": "agent.dispatch", "runId": old_tid, "taskId": old_tid,
+                                "agent": "builder--forge--framework-dev", "source": "coordinator"}) + "\n")
+        out = cli(p, "status").stdout
+        assert old_tid in out.split("STALE?")[1].split("RECENT AGENTS")[0] and old_tid not in out.split("STALE?")[0]
+        assert json.loads(cli(p, "status", "--json").stdout)["stale"] == [old_tid]
+        assert "the spawn hook is not loaded" in out
+        ledger.append(p, "spawned", "toolu_9", agent="builder", source="hook")
+        assert "the spawn hook is not loaded" not in cli(p, "status").stdout
     finally:
         cleanup(p)

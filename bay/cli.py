@@ -16,6 +16,7 @@
   show <callId>                        current state of a call (result or the step it waits on)
   show <mode> --resolved               the mode's features after `extends`, each with the file it comes from
   show reclaim <runId>                 mark a stuck run as reclaimed
+  show close <callId> --reason <text>  end an open call as abandoned
   approve <callId|runId> [--reject]    pass an approval gate of a call, or of a workflow run (W-...)
                                        (you, in a terminal; never an agent)
           [--via chat --quote "<msg>"] from chat, relayed by the Chief of Staff, when approvals.chat is on
@@ -613,11 +614,13 @@ def cmd_note(args):
 
 
 def cmd_show(args):
-    """`bay show <callId>`; `bay show reclaim <runId>` marks a stuck run as reclaimed (a write, so it is its own
-    prefix for a permission rule)."""
-    if args.ref[0] == "reclaim":
-        if len(args.ref) != 2:
-            _die("✗ usage: bay show reclaim <runId> [--reason ...]")
+    """`bay show <callId>`; `bay show reclaim <runId>` marks a stuck run as reclaimed and `bay show close <callId>
+    --reason ...` ends an open call (writes, so each is its own prefix for a permission rule)."""
+    if args.ref[0] in ("reclaim", "close"):
+        if len(args.ref) != 2 or (args.ref[0] == "close" and not args.reason):
+            _die("✗ usage: bay show reclaim <runId> [--reason ...] | bay show close <callId> --reason ...")
+        if args.ref[0] == "close":
+            return _run(lambda: _dispatcher(args).close(args.ref[1], args.reason))
         rid = _find_run(args.project, args.ref[1])
         ledger.append(args.project, "reclaimed", rid, source="cli", summary=args.reason or "reclaimed by coordinator")
         return print(f"reclaimed {rid}")
@@ -626,7 +629,7 @@ def cmd_show(args):
             _die("✗ usage: bay show <mode> --resolved")
         return cmd_show_resolved(args)
     if args.reason or len(args.ref) != 1:
-        _die("✗ usage: bay show <callId>   (--reason goes with `show reclaim`)")
+        _die("✗ usage: bay show <callId>   (--reason goes with `show reclaim` and `show close`)")
     d = _dispatcher(args)
     _run(lambda: d.show(args.ref[0]))
 
@@ -704,7 +707,7 @@ def _hoist_project(argv: list[str]) -> list[str]:
 
 def _verb_first(argv: list[str]) -> None:
     """`note` and `show` are pre-approved by prefix in the generated permissions, and their writes (`note dispatch`,
-    `note review`, `show reclaim`) are asked by a longer prefix. So nothing may stand between the command and its
+    `note review`, `show reclaim`, `show close`) are asked by a longer prefix. So nothing may stand between the command and its
     verb: an option there (or `--project`, which is otherwise accepted anywhere) would run the write unasked."""
     i = 0
     while i < len(argv) and argv[i].startswith("-"):      # a global option before the command
@@ -713,7 +716,7 @@ def _verb_first(argv: list[str]) -> None:
             and argv[i + 1] not in ("-h", "--help"):
         cmd = argv[i]
         verbs = "`bay note dispatch <taskId> --agent ...`, `bay note review <taskId> '<json>'`" if cmd == "note" \
-            else "`bay show reclaim <runId> --reason ...`"
+            else "`bay show reclaim <runId> --reason ...`, `bay show close <callId> --reason ...`"
         _die(f"✗ `bay {cmd}`: no option may come before the verb or ref (got {argv[i + 1]!r}); put options after it: {verbs}")
 
 
@@ -753,8 +756,8 @@ def main(argv=None):
     su.add_argument("call"); su.add_argument("step"); su.add_argument("output")
     su.add_argument("--usage", help='what the runtime reported for the step: \'{"tokens": N, "costUsd": X, "durationMs": N}\'')
     su.set_defaults(fn=cmd_submit)
-    sh = sub.add_parser("show", help="the state of a call; `show reclaim <runId>` marks a stuck run as reclaimed")
-    sh.add_argument("ref", nargs="+"); sh.add_argument("--reason", help="show reclaim: why")
+    sh = sub.add_parser("show", help="the state of a call; `show reclaim <runId>` marks a stuck run as reclaimed, `show close <callId>` ends an open call")
+    sh.add_argument("ref", nargs="+"); sh.add_argument("--reason", help="show reclaim, show close: why")
     sh.add_argument("--resolved", action="store_true", help="show <mode>: its features after `extends`, with the file each comes from")
     sh.set_defaults(fn=cmd_show)
     ap_ = sub.add_parser("approve", help="pass (or --reject) an approval gate; interactive terminal, or chat when "

@@ -63,9 +63,21 @@ class Dispatcher:
         if errs:
             raise CallError(f"{target}: input does not match {feat.in_type or 'schema'}: " + "; ".join(errs))
         call_id = f"C-{self.clock():%Y%m%d}-{_rand.token_hex(3)}"
+        if inp.get("replaces"):
+            if (other := self._load(inp["replaces"])["target"]) != target:
+                raise CallError(f"replaces names a call of {other}, not {target}")
+            self.close(inp["replaces"], f"replaced by {call_id}")
         state = {"callId": call_id, "target": target, "input": inp, "steps": {}, "cursor": 0,
                  "status": "running", "checks": [], "cost": {"items": 0, "usd": 0.0}, "t0": time.time()}
         return self._advance(mode, feat, state)
+
+    def close(self, call_id: str, reason: str) -> dict:
+        state = self._load(call_id)
+        if state["status"] not in ("running", "needs-agent", "awaiting-approval"):
+            raise CallError(f"call {call_id} is {state['status']}; only an open call can be closed")
+        state["status"], state["result"] = "abandoned", {"reason": reason}
+        mode, feat = self.sys.feature(state["target"])
+        return self._finish(state, mode, feat)
 
     def submit(self, call_id: str, step_id: str, output, usage: dict | None = None) -> dict:
         """`usage` (optional, from the runtime that ran the step): {tokens: {...}|int, costUsd, durationMs}."""
@@ -174,8 +186,7 @@ class Dispatcher:
                                 f"again (`bay show {call_id}`)")
         data = {"approved": approved, "by": by, **({"quote": quote} if quote else {}),
                 **({"approves": subject} if subject else {})}
-        state["steps"][step.id] = {"approved": approved, "by": by, **({"quote": quote} if quote else {}),
-                                   **({"approves": subject} if subject else {})}
+        state["steps"][step.id] = dict(data)
         if not approved:
             state["status"] = "blocked"
             state["result"] = {"reason": reason or "rejected at the approval gate"}
@@ -223,11 +234,8 @@ class Dispatcher:
     def _recorded_plans(self, call_id: str) -> dict:
         """taskId -> {step, outcome, todo} of the agents dispatched for a call: what the reviewer judges the run against;
         a verdict item may cite them (`cites`)."""
-        evs = ledger.read(self.project)
-        plans = ledger.plans(evs)
-        return {e["taskId"]: {"step": e.get("step"), "outcome": plans[e["taskId"]]["outcome"],
-                              "todo": plans[e["taskId"]]["todo"]}
-                for e in evs if e.get("type") == "agent.dispatch" and e.get("callId") == call_id and e.get("taskId") in plans}
+        return {a["taskId"]: {"step": a["step"], "outcome": a["outcome"], "todo": a["todo"]}
+                for a in self._agents(call_id).get("agents", []) if a["progress"]}
 
     def use(self, unit: str, target: str, inp: dict | None = None) -> dict:
         """Read-only connector access for one compiled unit (a role in one mode and one env). Reached only
@@ -476,10 +484,8 @@ class Dispatcher:
             return False
         rec = (prior.get("steps") or {}).get(step.id)
         d = e.get("data") or {}
-        if not isinstance(rec, dict) or rec.get("approved") is not (d.get("approved") is True) \
-                or rec.get("approves") != subject:
-            return False
-        return True
+        return isinstance(rec, dict) and rec.get("approved") is (d.get("approved") is True) \
+            and rec.get("approves") == subject
 
     def _run_code(self, mode, feat, step, state, base) -> None:
         env = self.sys.env(step.env)

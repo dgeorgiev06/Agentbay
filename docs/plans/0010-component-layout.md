@@ -71,11 +71,7 @@ If the builder reaches turn 50, it lists what is left.
 
 **3a. Boundary** (30 turns). The `Contract`/`at:` matching gives way to the loader's component folders, and `kernel.yaml` keeps `owns:` and `protected:`; `contracts:` and the briefing entry go, and the three briefing files in `bay/` are listed under the kernel's `owns:`. The lint check for a stale nested path in `framework-dev`'s `fs.write` is restored. Test: extend `test_boundary.py`.
 
-**3b. Limits and placement** (30 turns).
-- `component_spread` in `limits.py`, and a base file may lack a measure.
-- `limits.yaml` gains `component_spread: 1`, and `tests` goes to 540 if the count needs it.
-- The placement lint (decision 7).
-- Test: +1 `test_limits` case; the placement rule joins the 0e table. Budget +20.
+**3b. Limits and placement** (owner-approved plan T-20261102-4170, with changes: `component_spread` dropped; decision 7's cross-component binding sentence deleted). `limits.check`: the ceiling is the largest of the file ceiling, the base ceiling and an approved exception's `to`, so a count up to the exception passes without editing `limits.yaml`; the over-ceiling message names the exception. Lint's placement rule in `lint_connectors`: a connector with `needs.network`, `needs.secrets` or an `fs` path starting with `~` or `/` must be a top-level component; any other connector must sit in its owner's `connectors/`. Tests: the `test_limits` exception cases and two `test_lint` T2 rows; no new test.
 
 **3c. Docs** (35 turns). README, DESIGN (with the B-1..B-12 table in the safety model), INTERFACES (row b18) and the C-7 vocabulary. Changelog, version and `--write` belong to release.
 
@@ -90,7 +86,6 @@ If the builder reaches turn 50, it lists what is left.
 | top_level_folders | 11 | 7 | At release. |
 | schemas | 15 | 16 | Exception; raised in 1b. |
 | tests | 536 | 539 (≤ 540) | 0c +1, 0e +1, 0f +1, 2a -1, 3b +1. Every other change extends a test. |
-| component_spread | none | 1 | 5 today; added in 3b. |
 
 **Recount.** `tests: 540` holds for 0010 alone with 1 to spare, because only the rename test was added since the first count. `bay_lines` closes only with the part budgets above. The estimate is about +73 gross against about -80 of cuts and payers, so a 0e or 0f overrun has to be paid inside its own part.
 

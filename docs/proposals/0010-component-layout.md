@@ -5,23 +5,41 @@ touches:
   - { path: components/, reason: "NEW top-level folder. Every mode, source connector, content type and the shared tools component move here; the move table lists each" }
   - { path: modes/, reason: "REMOVED. Its seven folders move to components/<name>/ (a rename of every file inside)" }
   - { path: modes/cos/features/run/, reason: "slice 0: its playbook and rules are never read (code-only feature) and go" }
+  - { path: components/cos/features/run/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: modes/cos/features/next/, reason: "slice 0: its playbook and rules are never read (code-only feature) and go" }
+  - { path: components/cos/features/next/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: modes/cos/features/status/, reason: "slice 0: its playbook and rules are never read (code-only feature) and go" }
+  - { path: components/cos/features/status/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: modes/improve/features/backlog/, reason: "slice 0: its playbook and rules are never read (code-only feature) and go" }
+  - { path: components/improve/features/backlog/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: modes/improve/features/verify/, reason: "slice 0: its playbook and rules are never read (code-only feature) and go" }
+  - { path: components/improve/features/verify/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: modes/forge/features/extend/, reason: "slice 0 b17: the playbook states each fact once; rules R-2, R-4, R-7 and R-9 go" }
+  - { path: components/forge/features/extend/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: modes/mail-briefing/features/digest/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: components/mail-briefing/features/digest/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: modes/mail-briefing/features/ask/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: components/mail-briefing/features/ask/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: modes/delivery/features/build/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: components/delivery/features/build/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: modes/delivery/features/research/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: components/delivery/features/research/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: modes/briefing/features/prune/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: components/briefing/features/prune/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: modes/briefing/features/digest/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: components/briefing/features/digest/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: modes/briefing/features/ask/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: components/briefing/features/ask/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: modes/improve/features/triage/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: components/improve/features/triage/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: modes/improve/features/implement/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: components/improve/features/implement/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: modes/improve/features/scan/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: components/improve/features/scan/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: modes/improve/features/audit/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: components/improve/features/audit/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: modes/forge/features/create/, reason: "slice 1: apiVersion agentbay/v4 in its rules.yaml, then the move" }
+  - { path: components/forge/features/create/, reason: "the same feature folder after the move (fixes and review rounds edit it here)" }
   - { path: connectors/, reason: "REMOVED. 3 source connectors become components; 10 become `connectors/` inside their owner" }
   - { path: content-types/, reason: "REMOVED. email and post become components/email/ and components/post/" }
   - { path: envs/, reason: "REMOVED. Each env moves into the component of the mode it binds (components/tools/ for the two shared ones)" }
@@ -31,7 +49,7 @@ touches:
   - { path: framework/interfaces/, reason: "REMOVED. Each interface moves into the component that owns it" }
   - { path: framework/components.yaml, reason: "renamed framework/kernel.yaml; keeps only what the kernel owns; the protected: lists, the briefing entry and the unread keys go" }
   - { path: framework/kernel.yaml, reason: "the renamed component map (slice 1): owns, the interim contracts and and the 19 protected paths" }
-  - { path: framework/limits.yaml, reason: "top_level_folders 11 to 7, framework_folders 3 to 2, schemas 15 to 16, new measure component_spread" }
+  - { path: framework/limits.yaml, reason: "top_level_folders 11 to 7, framework_folders 3 to 2, schemas 15 to 16" }
   - { path: framework/roles/, reason: "the golden rule reads `golden/` folders" }
   - { path: framework/rules/conformance.yaml, reason: "C-7 vocabulary (component, internal connector); component-folder rule" }
   - { path: schemas/, reason: "apiVersion v4 (slice 1 names the two that stay); NEW component.schema.json; `protected` field on mode, connector, environment, component" }
@@ -49,7 +67,7 @@ touches:
   - { path: bay/boundary.py, reason: "B-1 to B-3 at component-folder granularity; reads kernel.yaml" }
   - { path: bay/guard.py, reason: "messages name the new paths" }
   - { path: bay/scaffold.py, reason: "stays in bay/ because `bay new` imports it; scaffold targets under components/; templates move to bay/templates/" }
-  - { path: bay/limits.py, reason: "count components/**; component_spread; a base ceilings file with fewer measures" }
+  - { path: bay/limits.py, reason: "count components/**; a count up to an approved exception passes without editing limits.yaml" }
   - { path: bay/graph.py, reason: "data schemas and skills under components/" }
   - { path: bay/cli.py, reason: "`bay build` writes skills as <component>--<skill>; connector login leaves for bay/connect.py; cmd_catalog's two identical branches become one (slice 0 payer); no new command" }
   - { path: adapters/claude-code/, reason: "generated paths, the skill namespace, commands from coordinator/, test_adapter.py" }
@@ -218,7 +236,7 @@ Interfaces live with the component whose mode needs them (as 0006 D3 did for `it
 ### 6. Limits
 
 - `top_level_folders` 11 to 7 and `framework_folders` 3 to 2: lower, no exception. `schemas` rises from 15 to 16 for this proposal: `component.schema.json` is added. 0012 slice 1 removes `task.schema.json` and the ceiling returns to 15 (exception below).
-- NEW `component_spread`: the largest number of top-level folders a mode reaches by the rule of the measurement above (its folder, parent, env files, bound connectors, interface owners, content types). Target and ceiling 1 once slice 3 lands. It can only tighten: it goes 5 to 1, and a mode that reaches a second top-level folder fails. It needs `bay/limits.py` to read a base `limits.yaml` that lacks the measure (a missing base value means the new measure sets its own).
+- `component_spread` was planned here and dropped by the owner (3b): after the move the loader reads only `components/*`, so the measure could only be 1. The layout is held by the loader, lint's refusal of leftover old folders, the placement rule and `top_level_folders`, which only falls.
 - `kit_python_lines` counts `components/` (replacing `connectors` and `content-types`) and excludes `tests/` folders as now. `tests` counts `components/**/tests/test_*.py` by the same pattern. The move adds no kit Python, so this proposal needs no `kit_python_lines` exception. 0011 raises that ceiling for the new checkers and adds the `comment_lines` measure; 0012 lowers `tests` and `comment_lines` further.
 - Exceptions are in the front matter: `schemas` to 16 and `tests` to 540, each with its reason. `bay_lines` has no exception: 0010 adds about 50 lines net and pays for them in slice 0 with same-behaviour cuts pulled forward from 0012.
 
@@ -228,7 +246,7 @@ Of the 13 connectors, 2 reach an outside system over the network (`gmail-api`, `
 
 A connector is a manifest (interface it implements, content types it produces, secrets, network, cost, selectors, config) plus code the kit runs in its own process, with effects, network allowlist, secrets and budget enforced by the dispatcher, and agents unable to reach it directly. A plain script has none of these guarantees. The internal ones need exactly that enforcement (`ledger` reads the ledger, `improve-store` writes findings, `scaffold` writes the tree), so they are not scripts either. "Connector" is also fixed vocabulary (DOD-1, C-7); renaming it would touch every schema, rule and doc and add no guarantee.
 
-The rule, checkable by lint from the manifest: a connector that declares `network`, `secrets` or an `fs` path outside the project (`~` or absolute) is a source connector and is a top-level component, because it is the replaceable, user-addable part (adding one is one folder). Any other connector is internal code of the component that owns it and lives in that component's `connectors/<name>/`, with its tests beside it; lint says "move it into the component that owns it". Owners: `corpus-store` in briefing, `improve-detect` and `improve-store` in improve, `scaffold` in forge, `workflow-runner` in cos. `ledger`, `git` and `artifact-graph` go to improve: they implement `session.events`, `review.verdicts` and `artifacts.read`, which improve owns, and improve is their only consumer. `git` reads only `.git` inside the project, so it is internal. An env may name a connector in another component's `connectors/` only for an interface that component provides.
+The rule, checkable by lint from the manifest: a connector that declares `network`, `secrets` or an `fs` path outside the project (`~` or absolute) is a source connector and is a top-level component, because it is the replaceable, user-addable part (adding one is one folder). Any other connector is internal code of the component that owns it and lives in that component's `connectors/<name>/`, with its tests beside it; lint says "move it into the component that owns it". Owners: `corpus-store` in briefing, `improve-detect` and `improve-store` in improve, `scaffold` in forge, `workflow-runner` in cos. `ledger`, `git` and `artifact-graph` go to improve: they implement `session.events`, `review.verdicts` and `artifacts.read`, which improve owns, and improve is their only consumer. `git` reads only `.git` inside the project, so it is internal.
 
 Fakes live in the content-type component they imitate: `fake-mail` in `email`, `fake` in `post`. They emit that type's fixtures, one fake serves every real source of the type (IMAP later), the offline demo of DOD-5 needs them in the shipped tree, and they depend only on the type and `items.source/v1`.
 
@@ -251,7 +269,7 @@ Each ends with the tests green and `bay check` clean. No old path keeps working:
    Two more items belong here. The deadcode change detector (`improve-detect`'s `change`) becomes rename-aware: it matches findings across git renames (base path to head path), so a finding that existed at the base in a moved file is not new. Its test is `tests/test_deadcode_check.py::test_a_finding_in_a_renamed_file_is_not_new`. And the `bay_lines` payers (decision 6): connector login moves from `bay/cli.py` into `bay/connect.py`, removing the copy of connect's limits, and lint's `mode_envs` folds into `bay/model.py`. Both moved here from 0012 slice 3.
 1. **Move.** The table of decision 5, the loader table, scaffold and adapter paths, test discovery, `apiVersion: agentbay/v4` in every manifest and every extension schema (the layout is a breaking change to where extensions live; `config.schema.json` and `event.schema.json` stay at v3, because config files and the ledger do not change), the 9 test files and 3 golden files, docs paths. `lint` refuses a leftover `modes/`, `envs/`, `connectors/`, `content-types/` or `coordinator/` folder with "move it to components/<name>/"; it is a refusal, not support. Protection still read from `kernel.yaml` with its old lists, paths rewritten. Builders work with the guard on: `framework-dev`'s `fs.write` gains the paths the move needs, namely the unprotected component folders, `README.md` and the mode files slice 0 edits. Slice 2 derives the protected part of that list from the manifests; the owner answers each prompted `git mv` or `git rm`.
 2. **Close the move window.** `framework-dev`'s `fs.write` goes back to the protected paths plus docs, tests and README.md (D9 holds again); the temporary guard deltas go; `kernel.yaml`'s comment becomes a three-line header; `tests/layout.py` is removed and its importers read the list from `kernel.yaml`.
-3. **Boundary, limits, docs.** Component-granularity B-1 to B-3, `component_spread`, the internal-connector placement lint, README, DESIGN, INTERFACES, C-7 vocabulary. The B-1..B-12 table of 0006 Part F moves into DESIGN's safety model, because code cites those ids; DESIGN keeps its link to `proposals/`. Row b18.
+3. **Boundary, limits, docs.** Component-granularity B-1 to B-3, a count up to an approved exception passes without editing limits.yaml, the internal-connector placement lint, README, DESIGN, INTERFACES, C-7 vocabulary. The B-1..B-12 table of 0006 Part F moves into DESIGN's safety model, because code cites those ids; DESIGN keeps its link to `proposals/`. Row b18.
 
 The move is mechanical and its review is the table plus the loader diff. Slice 0 comes first so that every later slice, the move included, is checked against the reference check.
 
@@ -263,7 +281,7 @@ A rule that code can check is a check, never prose: the audit found prose rules 
 |---|---|---|
 | A referenced file is missing and check stays green | every reference resolves | 0 |
 | Agent text on a code-only feature, unread manifest keys | the T2 lint rules | 0 |
-| A component spread over folders | `component_spread`, ceiling only falls | 3 |
+| A component spread over folders | the loader reads only `components/*`; lint refuses old folders and misplaced connectors; `top_level_folders` only falls | 1, 3 |
 
 Each rule in `framework/rules/conformance.yaml` (moving to the kernel) names its `check:`. A rule without one is a judgement call, and stays one line in a role or a standards skill, which the reviewer checks.
 

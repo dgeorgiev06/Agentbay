@@ -40,9 +40,8 @@ files, tests and internal connectors. The loader finds these by folder name, so 
 A component uses another only through what the other provides: an interface name in `needs:`, a content type in
 `reads:`, a parent in `extends:`, or an env or connector name in a binding.
 
-A connector that declares network access, secrets or a file path outside the project is a source connector, and
-it is a component of its own. Every other connector is an internal
-connector: code that the framework runs behind an interface, such as the one that writes the findings store. It
+A connector that declares network access, secrets or a file path outside the project is a source connector and a
+component of its own. Every other connector is internal: code that the framework runs behind an interface, such as the one that writes the findings store. It
 lives in `connectors/<name>/` inside the component that owns it. `bay check` reports a misplaced connector and
 says where to move it.
 
@@ -81,8 +80,8 @@ reviews.
 
 `bay check` lints and then resolves every endpoint. It fails with every gap at once, each naming the concept and
 the fix. The gaps include unknown names, unbound capabilities, effects that the endpoint does not declare or the
-env does not allow, tiers the env does not allow, connector needs (hosts, secrets, paths) beyond the env, and steps
-that could write `framework/`, `bay/`, `schemas/` or `adapters/` outside `forge.extend`.
+env does not allow, tiers the env does not allow, connector needs (hosts, secrets, paths) beyond the env, steps
+that could write `framework/`, `bay/`, `schemas/` or `adapters/` outside `forge.extend`, and a coordinator that is not on a main-thread runtime.
 
 Each distinct (role, mode, env) that a mode uses compiles to one **unit**, named `<role>--<mode>`, plus `--<env>`
 when the mode runs that role in several envs. A unit is its own subagent, use shim, guard policy entry and store

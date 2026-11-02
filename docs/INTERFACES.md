@@ -62,7 +62,7 @@ The placement rule decides where a connector sits. A connector that declares `ne
 
 `bay check` refuses a connector in the wrong place (the message names the folder to move it to), a component folder
 without a manifest, and a leftover `modes/`, `envs/`, `connectors/`, `content-types/`, `coordinator/` or
-`interfaces/` folder at the top level or under `framework/`, with "move it to components/<name>/".
+`interfaces/` folder at the top level, or an `interfaces/` folder under `framework/`, with "move it to components/<name>/".
 
 ## 1. Mode and features
 `mode.yaml` declares each feature (`spec.features.<name>`, called as `<mode>.<name>`) in one place: `in` and `out`

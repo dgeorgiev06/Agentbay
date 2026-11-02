@@ -10,6 +10,7 @@ Only the dispatcher calls `instantiate`. A connector gets:
 """
 from __future__ import annotations
 
+import fnmatch
 import importlib.util
 import json
 import sys
@@ -140,6 +141,82 @@ def data_dir(env: model.Doc, project: Path, kit: Path, conn: model.Doc) -> Path:
     return project / writes[0]
 
 
+def _net(env: model.Doc, conn: model.Doc) -> list[str]:
+    return [h for h in conn.spec.get("needs", {}).get("network", [])
+            if model.host_allowed(h, env.spec.get("network", {}).get("allow", []))]
+
+
+def _accessor(prov, env: model.Doc, conn: model.Doc) -> vault.SecretAccessor:
+    return vault.SecretAccessor(prov, env.spec.get("secrets", {}).get("allow", []),
+                                conn.spec.get("needs", {}).get("secrets", []), conn.name)
+
+
+class LoginContext:
+    """The API a connector's `login` entry gets from `bay auth <connector>`: the same secret access a sync gets
+    (names both in the env's `secrets.allow` and the connector's `needs.secrets`, read and store, through the
+    env's provider), an Http limited to its declared hosts that the env allows, the browser and the terminal.
+    The entry runs in-process, so this limits the API it is handed, not what the process can do: a connector's
+    code is trusted the same way during a login as during a sync."""
+
+    def __init__(self, conn, env, prov, http, open_browser, say=print):
+        self.connector, self.env, self.http, self.open_browser, self.say = conn.name, env.name, http, open_browser, say
+        self._prov = prov
+        self._declared = list(conn.spec.get("needs", {}).get("secrets", []))
+        self._acc = _accessor(prov, env, conn)
+        self.provider = prov.name
+
+    def _check(self, name: str) -> None:
+        if not any(fnmatch.fnmatchcase(name, p) for p in self._declared):
+            raise vault.SecretError(f"connector {self.connector} does not declare secret {name} (needs.secrets)")
+
+    def secret(self, name: str) -> str | None:
+        self._check(name)
+        return self._acc.get(name, optional=True)
+
+    def store_secret(self, name: str, value: str) -> bool:
+        self._check(name)
+        n = len(self._acc.warnings)
+        self._acc.store(name, value)
+        return len(self._acc.warnings) == n
+
+
+def login_env(system: model.System, conn: model.Doc, name: str | None) -> model.Doc:
+    """The env to log in through: --env (which must bind the connector), else the one env that binds it."""
+    envs = system.kit.docs["Environment"]
+    binds = lambda e: any(conn.name in model.connectors_of(v) for v in (e.spec.get("bind") or {}).values())  # noqa: E731
+    if name:
+        if name not in envs:
+            raise ConnectorError(f"unknown env '{name}'")
+        if not binds(envs[name]):
+            raise ConnectorError(f"env {name} does not bind connector {conn.name}; a login goes through an env that "
+                                 f"uses it")
+        return envs[name]
+    found = [e for e in envs.values() if binds(e)]
+    if len(found) != 1:
+        which = ", ".join(e.name for e in found) or "none"
+        raise ConnectorError(f"{len(found)} envs bind connector {conn.name} ({which}); name one with --env")
+    return found[0]
+
+
+def login(system: model.System, conn_name: str, env_name: str | None) -> None:
+    """Run the connector's declared `login` entry through the env that binds it (`bay auth <connector>`)."""
+    import webbrowser
+    conn = system.kit.get("Connector", conn_name)
+    if conn is None:
+        raise ConnectorError(f"unknown connector '{conn_name}'")
+    entry = conn.spec.get("login")
+    if not entry:
+        have = sorted(c.name for c in system.kit.docs["Connector"].values() if c.spec.get("login"))
+        raise ConnectorError(f"connector {conn.name} declares no `login` entry (connectors with one: "
+                             f"{', '.join(have) or 'none'})")
+    env = login_env(system, conn, env_name)
+    fn = getattr(_load_module(conn), entry, None)
+    if not callable(fn):
+        raise ConnectorError(f"connector {conn.name}: {conn.spec['entry']} has no function {entry} (its declared `login`)")
+    fn(LoginContext(conn, env, secrets_provider(system, env), Http(_net(env, conn), who=f"bay auth {conn.name}"),
+                    webbrowser.open))
+
+
 def instantiate(system: model.System, env_name: str, conn_name: str, iface: str, project: Path, *,
                 transport: Transport | None = None, provider=None, caps: dict | None = None,
                 settings: dict | None = None, clock=None):
@@ -149,10 +226,8 @@ def instantiate(system: model.System, env_name: str, conn_name: str, iface: str,
         raise ConnectorError(f"unknown connector '{conn_name}'")
     mod = _load_module(c)
     needs = c.spec.get("needs", {})
-    allow_net = env.spec.get("network", {}).get("allow", [])
-    net = [h for h in needs.get("network", []) if model.host_allowed(h, allow_net)]
     prov = secrets_provider(system, env, provider) if needs.get("secrets") else vault.EnvProvider({})
-    acc = vault.SecretAccessor(prov, env.spec.get("secrets", {}).get("allow", []), needs.get("secrets", []), conn_name)
+    acc = _accessor(prov, env, c)
     sources = {}
     for sub in needs.get("capabilities", []):
         for cn in model.connectors_of(env.spec["bind"].get(sub)):
@@ -161,7 +236,7 @@ def instantiate(system: model.System, env_name: str, conn_name: str, iface: str,
     ctx = Context(
         name=conn_name, interface=iface, env=env_name,
         config=dict((system.kit.config.get("connectors") or {}).get(conn_name) or {}),
-        secrets=acc, http=Http(net, transport, conn_name), data_dir=data_dir(env, project, system.kit.root, c),
+        secrets=acc, http=Http(_net(env, c), transport, conn_name), data_dir=data_dir(env, project, system.kit.root, c),
         caps=dict(caps or {}), settings=dict(settings or {}), sources=sources, clock=clock or utcnow,
         window=c.spec.get("window"), source_id=c.spec.get("source"), cost_per_item=c.spec.get("costPerItemUsd"),
         exact_labels=bool(c.spec.get("exactLabels")), change_feed=bool(c.spec.get("changeFeed")),

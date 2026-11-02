@@ -12,7 +12,7 @@ from helpers import KIT, clock, edit_yaml, kit_copy, model, project, system
 from bay import dispatch
 from bay.adapter import get
 
-NEWS_ENV = """apiVersion: agentbay/v3
+NEWS_ENV = """apiVersion: agentbay/v4
 kind: Environment
 metadata: { name: local-news, description: A second offline briefing env with its own data folder. }
 spec:
@@ -28,11 +28,11 @@ spec:
 def news_kit(step_override: bool = False):
     """feed-briefing plus news-briefing (also extending briefing) whose roles work in env local-news."""
     k = kit_copy()
-    (k / "envs/local-news.yaml").write_text(NEWS_ENV)
-    d = k / "modes/news-briefing"
+    (k / "components/briefing/envs/local-news.yaml").write_text(NEWS_ENV)
+    d = k / "components/news-briefing"
     d.mkdir()
     (d / "mode.yaml").write_text(yaml.safe_dump({
-        "apiVersion": "agentbay/v3", "kind": "Mode", "metadata": {"name": "news-briefing", "version": "0.1.0"},
+        "apiVersion": "agentbay/v4", "kind": "Mode", "metadata": {"name": "news-briefing", "version": "0.1.0"},
         "spec": {"extends": "briefing", "purpose": "Brief me on the news.",
                  "roles": {"lead": "local-news", "analyst": "local-news", "reviewer": "local-news"},
                  "configDefaults": {"selectors": [{"id": "lido", "from": "lido"}]}}}))
@@ -131,8 +131,8 @@ def test_one_reader_role_in_two_modes_and_envs_compiles_separately_with_separate
 
 def test_a_step_override_runs_one_role_in_two_envs_within_one_mode():
     k = kit_copy()
-    (k / "envs/local-news.yaml").write_text(NEWS_ENV)
-    edit_yaml(k / "modes/briefing/mode.yaml",
+    (k / "components/briefing/envs/local-news.yaml").write_text(NEWS_ENV)
+    edit_yaml(k / "components/briefing/mode.yaml",
               lambda d: d["spec"]["features"]["digest"]["steps"][2].update({"roles": {"analyst": "local-news"}}))
     p = project()
     s = system(p, k)
@@ -191,7 +191,7 @@ def test_swapping_the_agent_profile_changes_only_the_model_names():
 
 
 # ------------------------------------------------------------------ grants, envs and tier caps
-NOTES_IFACE = """apiVersion: agentbay/v3
+NOTES_IFACE = """apiVersion: agentbay/v4
 kind: Interface
 metadata: { name: notes.edit, description: notes }
 spec:
@@ -206,15 +206,14 @@ def test_a_read_capability_never_gives_read_roles_write_tools_or_paths():
     """Review case t6: a read-effect tools capability bound to Edit/Write and arbitrary CLIs."""
     from bay import lint
     k = kit_copy()
-    (k / "interfaces").mkdir(exist_ok=True)              # user interfaces/ may not exist in a clean checkout
-    (k / "interfaces/notes.edit.v1.yaml").write_text(NOTES_IFACE)
-    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["bind"].update(
+    (k / "components/briefing/interfaces/notes.edit.v1.yaml").write_text(NOTES_IFACE)
+    edit_yaml(k / "components/briefing/envs/local-feeds.yaml", lambda d: d["spec"]["bind"].update(
         {"notes.edit/v1": {"tools": ["Edit", "Write", "Bash"], "clis": ["rm", "git push"]}}))
-    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["needs"].append("notes.edit/v1"))
-    env = k / "envs/local-feeds.yaml"
+    edit_yaml(k / "components/briefing/mode.yaml", lambda d: d["spec"]["needs"].append("notes.edit/v1"))
+    env = k / "components/briefing/envs/local-feeds.yaml"
     line = next(i for i, ln in enumerate(env.read_text().splitlines(), 1) if "notes.edit/v1:" in ln)
     ps = lint.run(k)
-    assert any(p.endswith(f"envs/local-feeds.yaml:{line}: env local-feeds binds Edit, Write, rm, git push under "
+    assert any(p.endswith(f"components/briefing/envs/local-feeds.yaml:{line}: env local-feeds binds Edit, Write, rm, git push under "
                           f"notes.edit/v1, which has no `write` effect; file-writing tools and CLIs other than git "
                           f"status, git diff, git log, git show belong under a capability with the write effect "
                           f"(e.g. workspace.write/v1)") for p in ps), ps
@@ -236,17 +235,17 @@ def test_user_modes_may_not_put_roles_in_framework_envs_other_than_workspace_and
     """Review case t7: a user mode reading improve's findings and episodes through env improve-local."""
     from helpers import assert_gap
     k = kit_copy()
-    d = k / "modes/spy"
+    d = k / "components/spy"
     d.mkdir()
     (d / "mode.yaml").write_text(yaml.safe_dump({
-        "apiVersion": "agentbay/v3", "kind": "Mode", "metadata": {"name": "spy", "version": "0.1.0"},
+        "apiVersion": "agentbay/v4", "kind": "Mode", "metadata": {"name": "spy", "version": "0.1.0"},
         "spec": {"purpose": "read improve findings", "coordinator": "lead",
                  "roles": {"lead": "improve-local", "analyst": "improve-local"},
                  "needs": ["improve.findings/v1", "session.events/v1"],
                  "features": {"look": {"effects": ["read"], "review": {"when": "never"},
                                        "steps": [{"id": "a", "role": "analyst", "task": "x"}]}}}}))
     assert_gap(k, "mode spy: role analyst works in the framework env improve-local (spy.look step a)",
-               "user modes may put roles only in their own envs (envs/) or the framework envs workspace and research")
+               "user modes may put roles only in their own envs (components/<name>/envs/) or the framework envs workspace and research")
     assert_gap(k, "mode spy: role lead works in the framework env improve-local")
     # workspace and research stay open to user modes (delivery uses both); framework modes are unaffected
     assert system(None).modes["delivery"].roles == {"researcher": "research", "builder": "workspace",
@@ -259,8 +258,8 @@ def test_a_units_default_tier_is_checked_against_the_env_cap():
     """Review case t1: the reviewer's subagent compiled with opus (deep) in an env capped to fast, balanced."""
     from helpers import assert_gap
     k = kit_copy()
-    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"].update({"tiers": ["fast", "balanced"]}))
-    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["features"]["digest"]["review"].update(
+    edit_yaml(k / "components/briefing/envs/local-feeds.yaml", lambda d: d["spec"].update({"tiers": ["fast", "balanced"]}))
+    edit_yaml(k / "components/briefing/mode.yaml", lambda d: d["spec"]["features"]["digest"]["review"].update(
         {"tier": "balanced"}))
     assert_gap(k, "mode feed-briefing: role reviewer in env local-feeds: its default tier 'deep' (the model its "
                   "subagent is compiled with) is not allowed by env local-feeds (allows: fast, balanced)")
@@ -270,17 +269,17 @@ def test_lint_warns_when_a_partial_roles_override_splits_a_store_reading_mode():
     """Review case t10: a child moves lead and analyst to the offline env but inherits reviewer in local-feeds."""
     from bay import lint
     k = kit_copy()
-    d = k / "modes/news-briefing"
+    d = k / "components/news-briefing"
     d.mkdir()
     (d / "mode.yaml").write_text(
-        "apiVersion: agentbay/v3\nkind: Mode\nmetadata: { name: news-briefing, version: 0.1.0, description: news }\n"
+        "apiVersion: agentbay/v4\nkind: Mode\nmetadata: { name: news-briefing, version: 0.1.0, description: news }\n"
         "spec:\n  extends: briefing\n  purpose: Brief me on news from my sources for testing.\n"
         "  roles: { lead: local-news, analyst: local-news }\n  reads: [post/v1]\n")
-    (k / "envs/local-news.yaml").write_text(NEWS_ENV)
+    (k / "components/briefing/envs/local-news.yaml").write_text(NEWS_ENV)
     from helpers import self_describe
     self_describe(d)
     ws = lint.warnings(model.Kit(k))
-    assert any("modes/news-briefing/mode.yaml:7: mode news-briefing puts role reviewer in env local-feeds, whose "
+    assert any("components/news-briefing/mode.yaml:7: mode news-briefing puts role reviewer in env local-feeds, whose "
                "items.store/items.source bindings differ from env local-news, where its code steps (sync, "
                "prune) run" in w for w in ws), ws
     assert not any("mode feed-briefing puts role" in w for w in lint.warnings(model.Kit(KIT)))   # shipped: no split
@@ -290,10 +289,10 @@ def test_lint_warns_when_a_partial_roles_override_splits_a_store_reading_mode():
 def test_lint_reports_an_unknown_env_in_a_roles_map_with_file_and_line():
     from bay import lint
     k = kit_copy()
-    base = k / "modes/briefing/mode.yaml"
+    base = k / "components/briefing/mode.yaml"
     base.write_text(base.read_text().replace("reviewer: local-feeds }", "reviewer: nowhere }"))
     line = next(i for i, ln in enumerate(base.read_text().splitlines(), 1) if ln.startswith("  roles:"))
     ps = lint.run(k)
-    assert any(p.endswith(f"modes/briefing/mode.yaml:{line}: mode briefing: `roles:` puts role reviewer in unknown "
+    assert any(p.endswith(f"components/briefing/mode.yaml:{line}: mode briefing: `roles:` puts role reviewer in unknown "
                           f"env 'nowhere' (have: cos-local, framework-dev, improve-local, local-authoring, local-feeds, "
                           f"local-mail, research, workspace)") for p in ps), ps

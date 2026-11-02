@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v3/Mode",
+  "$id": "agentbay/v4/Mode",
   "title": "Mode",
   "description": "A job playbook: one logical job. Its features each run steps: code steps (run: <capability>/v<N>.<endpoint>), agentic steps (role: <role>) and gates. Modes name capabilities, never concrete tools.",
   "type": "object",
@@ -13,7 +13,7 @@
   "additionalProperties": false,
   "properties": {
     "apiVersion": {
-      "const": "agentbay/v3"
+      "const": "agentbay/v4"
     },
     "kind": {
       "const": "Mode"
@@ -82,7 +82,7 @@
               },
               "in": {
                 "type": "string",
-                "description": "Type name: modes/<mode>/types/<Name>.schema.json"
+                "description": "Type name: components/<mode>/types/<Name>.schema.json"
               },
               "out": {
                 "type": "string"
@@ -225,12 +225,6 @@
               "type": "integer",
               "minimum": 0,
               "description": "Items one sync may read."
-            },
-            "policies": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
             }
           }
         },

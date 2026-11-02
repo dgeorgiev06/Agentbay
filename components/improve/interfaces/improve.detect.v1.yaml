@@ -1,0 +1,147 @@
+apiVersion: agentbay/v4
+kind: Interface
+metadata:
+  name: improve.detect
+  description: >-
+    improve's deterministic analysis over session.events/v1, review.verdicts/v1 and artifacts.read/v1. Returns
+    candidate findings (improve.finding/v1 without id, status and history); it never writes - improve.findings/v1
+    stores them.
+spec:
+  version: 1
+  binding: connector
+  dispatcherOnly: true        # code steps only: no role reads it, even in a mode that needs it
+  endpoints:
+    sessions:
+      description: Session lens - episodes in the window -> session detectors. Also returns episode summaries (counts and names only) for the analyst.
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          since: { type: string, description: "ISO-8601 or relative (7d)" }
+          until: { type: string }
+      out:
+        type: object
+        required: [candidates, episodes, stats, window]
+        additionalProperties: false
+        properties:
+          candidates: { type: array, items: { type: object } }
+          episodes: { type: array, items: { type: object }, description: "episode summaries (max 300)" }
+          episodesTotal: { type: integer }
+          stats: { type: object }
+          window: { type: object }
+          warnings: { type: array, items: { type: string } }
+      effects: [read]
+    artifacts:
+      description: Artifact lens - slop, unused, inefficient, complexity, doc size and staleness, compatibility-layer and conformance detectors over files and the reference graph.
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          root: { enum: [project, kit] }
+      out:
+        type: object
+        required: [candidates, manual, stats]
+        additionalProperties: false
+        properties:
+          candidates: { type: array, items: { type: object } }
+          manual: { type: array, description: "conformance rules without a deterministic check, for the analyst (audit)" }
+          stats: { type: object }
+          warnings: { type: array, items: { type: string } }
+      effects: [read]
+    change:
+      description: >-
+        Dead-code check for a change. Audits the working tree and the tree at the merge-base of `base` and HEAD (a
+        git revision, exported with git archive; its code is never run; an unresolved `base` is refused with the
+        fetch to run) and returns the unused, unused-constant, compat-layer and complexity findings absent there,
+        with the count of those that already existed. Findings are compared uncapped as a multiset of
+        kind + detector key: compat-layer is one finding per file and complexity one per function, so a further
+        marker in an already-flagged file is not new. `stopped` names the new findings when there are any, which
+        ends a code step blocked. Writes nothing but a temporary export of the base tree, removed on return.
+      in:
+        type: object
+        required: [base]
+        additionalProperties: false
+        properties:
+          base: { type: string, minLength: 1, description: "git revision, e.g. origin/main" }
+      out:
+        type: object
+        required: [new, existing]
+        additionalProperties: false
+        properties:
+          new: { type: array, items: { type: object } }
+          existing: { type: integer, minimum: 0 }
+          stopped: { type: string }
+          warnings: { type: array, items: { type: string } }
+      effects: [read]
+    limits:
+      description: >-
+        Size-ceiling check for a change (bay/limits.py, proposal 0009). Counts the framework's measures and compares
+        them with framework/limits.yaml; a ceiling above the one at `base` needs an exception in the front matter of
+        `proposal` (a project path). `problems` are the exceeded or raised ceilings and end a code step blocked
+        (`stopped`); `notes` are counts that differ from their ceiling. Writes nothing: `bay check --limits --write` writes the ratchet, at release.
+      in:
+        type: object
+        required: [base]
+        additionalProperties: false
+        properties:
+          base: { type: string, minLength: 1, description: "git revision, e.g. origin/main" }
+          proposal: { type: [string, array], items: { type: string }, description: "project path of the proposal whose exceptions: apply; a list (the propose step's artifacts) names its first docs/proposals/*.md" }
+      out:
+        type: object
+        required: [problems, notes]
+        additionalProperties: false
+        properties:
+          problems: { type: array, items: { type: string } }
+          notes: { type: array, items: { type: string } }
+          stopped: { type: string }
+      effects: [read]
+    resolve:
+      description: >-
+        Check analyst findings: every evidence ref must resolve (episode in the sources, file and line that
+        exist, commit in git, rule id); measurement-only evidence is refused; session patterns need >= 2 episodes
+        unless severe. Accepted findings come back as candidates.
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          findings:
+            type: array
+            items:
+              type: object
+              required: [lens, title, pattern, evidence]
+              additionalProperties: false
+              properties:
+                lens: { enum: [sessions, artifacts] }
+                title: { type: string, maxLength: 200 }
+                pattern: { type: string, maxLength: 600 }
+                evidence: { type: array, minItems: 1, items: { type: object } }
+                scope: { type: object }
+                severity: { enum: [low, medium, high, severe] }
+                rootCause: { type: string, maxLength: 800 }
+                proposedFix: { type: string, maxLength: 800 }
+                rule: { type: string }
+      out:
+        type: object
+        required: [accepted, rejected]
+        additionalProperties: false
+        properties:
+          accepted: { type: array, items: { type: object } }
+          rejected: { type: array, items: { type: object } }
+      effects: [read]
+    recheck:
+      description: Re-run a finding's detector on data newer than its fix; `present` is null when the finding has no deterministic detector.
+      in:
+        type: object
+        required: [finding]
+        additionalProperties: false
+        properties:
+          finding: { $ref: improve.finding/v1 }
+      out:
+        type: object
+        required: [present, newData]
+        additionalProperties: false
+        properties:
+          present: { type: [boolean, "null"] }
+          newData: { type: integer, minimum: 0 }
+          note: { type: string }
+      effects: [read]

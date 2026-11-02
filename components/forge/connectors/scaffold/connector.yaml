@@ -1,0 +1,10 @@
+apiVersion: agentbay/v4
+kind: Connector
+metadata:
+  name: scaffold
+  description: Renders forge templates into user space. Same code as the `bay new <kind>` CLI.
+spec:
+  implements: forge.scaffold/v1
+  entry: scaffold.py
+  needs:
+    fs: { write: [components] }

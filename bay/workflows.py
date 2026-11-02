@@ -169,11 +169,6 @@ def bare_when(when: str | None) -> str:
     return when[1:] if when.startswith("!") else when
 
 
-def duplicates(ids: list[str]) -> list[str]:
-    """Ids that occur more than once, in order of first repeat."""
-    return list(dict.fromkeys(i for n, i in enumerate(ids) if i in ids[:n]))
-
-
 def check_stages(stages: list[Stage], where: str, gate_fix: str, wf: Workflow | None = None) -> list[str]:
     """The one validator of the stage syntax. `where` names the feature or workflow; `gate_fix` ends the message
     for a gate with `when:`. Both kinds: a gate takes no `when:`, a `when:` that reads a step reads an earlier one,
@@ -183,9 +178,10 @@ def check_stages(stages: list[Stage], where: str, gate_fix: str, wf: Workflow | 
     seen: dict[str, Stage] = {}
     for st in stages:
         at = f"{where} step {st.id}"
-        if wf is not None and st.id in seen:
-            out.append(f"{at}: duplicate stage id '{st.id}'")
-        out += _grammar_problems(st, at, project=wf is not None)
+        if st.id in seen:
+            out.append(f"{at}: duplicate {'stage' if wf else 'step'} id '{st.id}'" + (
+                " (the review step is injected from mode.yaml review; do not add a step called review)"
+                if st.id == "review" and not wf else ""))
         if st.kind == "gate" and st.when:
             out.append(f"{at}: a gate takes no when: {gate_fix}")
         else:
@@ -198,18 +194,6 @@ def check_stages(stages: list[Stage], where: str, gate_fix: str, wf: Workflow | 
         if wf is not None:
             out += _check_dollars(st, at)
         seen[st.id] = st
-    return out
-
-
-def _grammar_problems(st: Stage, at: str, project: bool) -> list[str]:
-    """`when:` and `approves:` against the grammar. The schemas say the same at load; this keeps the validator
-    right for a stage that was built in code."""
-    out = []
-    if st.when and not re.match(WHEN_PATTERN if project else FEATURE_WHEN_PATTERN, st.when):
-        out.append(f"{at}: when: {st.when!r} is not a reference ($in.<field>, $steps.<id>.<field>, a leading `!` negates)"
-                   + ("" if project else " or `stale > <age>`"))
-    if st.approves and not re.match(APPROVES_PATTERN, st.approves):
-        out.append(f"{at}: approves: {st.approves!r} is not `$in.<field>` (optionally `|$steps.<id>.<field>`)")
     return out
 
 

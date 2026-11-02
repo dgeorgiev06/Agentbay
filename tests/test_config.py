@@ -62,7 +62,7 @@ def test_the_old_price_key_is_refused_by_the_schemas_with_no_alias():
     got = gaps(KIT, project({"modes": {"feed-briefing": {"costPerPostUsd": 0.01}}}))
     assert any("costPerPostUsd" in g for g in got), got
     k = kit_copy()
-    f = k / "connectors/fake/connector.yaml"
+    f = k / "components/post/connectors/fake/connector.yaml"
     f.write_text(f.read_text().replace("costPerItemUsd", "costPerPostUsd"))
     assert any("costPerPostUsd" in e for e in lint.run(k)), "a connector declaring the old key must fail lint"
 
@@ -80,14 +80,14 @@ def test_lint_reports_a_missing_readme_and_a_bad_fragment():
     k = kit_copy()
     try:
         assert not [e for e in lint.lint_self_description(model.Kit(k, None))]
-        frag = k / "connectors/x-api/config.example.yaml"
+        frag = k / "components/x-api/config.example.yaml"
         frag.write_text(frag.read_text() + "maxPages: 0\n")
-        (k / "connectors/fake/README.md").unlink()
-        (k / "connectors/fake-mail/config.example.yaml").unlink()
+        (k / "components/post/connectors/fake/README.md").unlink()
+        (k / "components/email/connectors/fake-mail/config.example.yaml").unlink()
         errs = lint.lint_self_description(model.Kit(k, None))
-        assert any(e.startswith("connectors/fake/: connector fake has no README.md") for e in errs)
-        assert any(e.startswith("connectors/fake-mail/: connector fake-mail takes settings but has no "
+        assert any(e.startswith("components/post/connectors/fake/: connector fake has no README.md") for e in errs)
+        assert any(e.startswith("components/email/connectors/fake-mail/: connector fake-mail takes settings but has no "
                                 "config.example.yaml") for e in errs)
-        assert any(e.startswith("connectors/x-api/config.example.yaml: maxPages") for e in errs)
+        assert any(e.startswith("components/x-api/config.example.yaml: maxPages") for e in errs)
     finally:
         cleanup(k)

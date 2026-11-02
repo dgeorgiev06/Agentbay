@@ -1,179 +1,227 @@
 # agentbay design
 
-agentbay compiles jobs described as data into a runtime (Claude Code today) and runs them through one
-dispatcher. This document describes the system as it is; the contracts are in [INTERFACES.md](INTERFACES.md)
-and the history of each decision is in [proposals/](proposals/).
+agentbay compiles jobs described as data into a runtime (Claude Code today) and runs them through one dispatcher.
+This document describes the system as it is. The contracts are in [INTERFACES.md](INTERFACES.md), and the
+reasoning behind each decision is in [proposals/](proposals/).
 
 ## Concepts
 
 | Concept | Is | Who writes it |
 |---|---|---|
-| **Role** | a generic job: prompt, `doneWhen`, rules, skills, default tier (fast, balanced, deep), access (read or write). Five ship: `lead`, `analyst`, `researcher`, `builder`, `reviewer` | framework (`framework/roles/`) |
-| **Mode** | one logical job: purpose, features (in/out, effects, steps), the roles it uses and the env each works in (`roles:`), the capabilities it needs, constraints, playbooks, skills, rules | you (`modes/`), or the framework |
-| **Agent profile** | how one LLM product runs roles: runtime per kind of role (coordinator, worker), tier -> model, effort values. Selected once with `agent:` (default `claude-code`) | the runtime adapter (`adapters/<name>/adapter.yaml`, `profile:`) |
-| **Environment** | what a role can touch: capability bindings, secrets (names and provider), network allowlist, filesystem paths, allowed tiers, effects, limits | you (`envs/`), or the framework |
-| **Connector** | code implementing a capability interface; holds the secrets and network use | you (`connectors/`), or the framework |
-| **Capability interface** | a versioned contract: named endpoints with JSON-schema in/out and declared effects (`read`, `write`, `network`, `spend`, `delete`) | `interfaces/`, `framework/interfaces/` |
+| **Role** | a generic job: prompt, `doneWhen`, rules, skills, default tier (fast, balanced or deep) and access (read or write). Five ship: `lead`, `analyst`, `researcher`, `builder`, `reviewer` | the framework |
+| **Mode** | one job: purpose, features (input and output types, effects, steps), the roles it uses and the env each works in, the capabilities it needs, constraints, playbooks, skills and rules | you, or the framework |
+| **Agent profile** | how one LLM product runs roles: the runtime for each kind of role, the model for each tier, and the effort values. `agent:` selects it (default `claude-code`) | the runtime adapter, in the `profile:` of its `adapter.yaml` |
+| **Environment** | what a role can touch: capability bindings, secrets, network allowlist, filesystem paths, allowed tiers, effects and limits | you, or the framework |
+| **Connector** | code that implements a capability interface and holds the secrets and the network use | you, or the framework |
+| **Capability interface** | a versioned contract: named endpoints with JSON-schema input and output and declared effects (`read`, `write`, `network`, `spend`, `delete`) | the component that owns it |
+| **Component** | a folder that holds one mode, source connector, content type or shared set. It is the unit you add, move or remove | you, or the framework |
 
-Modes name capabilities, never connectors or tools. Adding a source is one connector plus one binding line in
-an env; no mode, role or playbook changes. A user file under `roles/` is an error: a mode
-customizes a role through its playbooks, skills and rules, and a new role is a `forge.extend` proposal.
+A mode names capabilities, never a connector or a tool. Adding a source is one component plus one binding line in
+an env, and no mode, role or playbook changes. A role file outside the framework is an error. A mode customizes a
+role through its playbooks, skills and rules, and a new role is a `forge.extend` proposal.
 
-A mode may `extends:` another. Inheritance is resolved when the kit loads (a child's feature replaces its
-parent's feature of that name whole, never key by key; `roles`/constraints/configDefaults entry by entry, needs are unioned, inherited paths
-are rebased), so every later stage sees a complete mode. `abstract: true` marks a base that is linted but
-never installed (`modes/briefing`).
+A mode may `extends:` another. The kit resolves inheritance when it loads, so every later stage sees a complete
+mode. A child's feature replaces its parent's feature of that name whole, never key by key. Roles, constraints
+and config defaults merge entry by entry, `needs` are unioned, and inherited paths are rebased to the child's
+folder. `abstract: true` marks a base that is linted but never installed or called.
+
+## Components
+
+A component is one folder in `components/` with one manifest. The name of the manifest says what kind of
+component it is.
+
+| Manifest | Kind | For |
+|---|---|---|
+| `mode.yaml` | mode | one job |
+| `connector.yaml` | source connector | code that reaches a system outside the project |
+| `content-type.yaml` | content type | the fields and views of one kind of item |
+| `component.yaml` | shared component | interfaces and envs that several modes use |
+
+A mode is one kind of component. It also holds what only it needs: its envs, interfaces, skills, types, data
+files, tests and internal connectors. The loader finds these by folder name, so the manifest does not list them.
+A component uses another only through what the other provides: an interface name in `needs:`, a content type in
+`reads:`, a parent in `extends:`, or an env or connector name in a binding.
+
+A connector that declares network access, secrets or a file path outside the project is a source connector, and
+it is a component of its own. Adding a source is adding one folder. Every other connector is an internal
+connector: code that the framework runs behind an interface, such as the one that writes the findings store. It
+lives in `connectors/<name>/` inside the component that owns it. `bay check` reports a misplaced connector and
+says where to move it.
+
+The kernel is not a component. `bay/`, `schemas/`, `framework/` and `adapters/` hold the loader, the dispatcher,
+the contracts, the roles and the runtime adapters. `framework/kernel.yaml` holds only `owns:` and `protected:`.
 
 ## Features
 
-A feature is one block under `features:` in `mode.yaml`: its input and output types, effects, ordered `steps`,
-an optional review block, and a playbook and rules file when it needs them (a feature that runs no role needs
-neither; one that runs a role needs a playbook). It is called as `<mode>.<feature>`. The steps are:
+A feature is one block under `features:` in `mode.yaml`. It has input and output types, effects, ordered `steps`,
+an optional review block, and a playbook and rules file when it needs them. A feature that runs no role needs
+neither file, and one that runs a role needs a playbook. It is called as `<mode>.<feature>`. The steps are:
 
-- `run: <capability>/v<N>.<endpoint>`: deterministic code, run by the dispatcher in the coordinator's env;
-- `role: <role>`: an agentic step, run by that role in the env the step, feature or mode `roles:` names;
-- `gate: <text>`: an approval gate only you pass, with `bay approve` in a terminal (or from chat, if you opt in);
-  `approves: $in.<f>` ties it to a file's exact content, so a later call on the unchanged file skips it;
-- `{review: here}`: where the review step goes (default: last).
+- `run: <capability>/v<N>.<endpoint>` is deterministic code, which the dispatcher runs in the coordinator's env.
+- `role: <role>` is an agentic step. That role runs it in the env that the step, the feature or the mode `roles:` names.
+- `gate: <text>` is an approval gate that only you pass, with `bay approve` in a terminal (or from chat, if you opt in). `approves: $in.<f>` ties the gate to the exact content of a file, so a later call on the unchanged file skips it.
+- `{review: here}` marks where the review step goes. The default is last.
 
-`with:` substitutes `$in.x`, `$steps.<id>.x` and `$config.x` (with `a|b` fallbacks); `when:` skips a step
-(`stale > 2h`, `$in.<field>` or `$steps.<id>.<field>`; `!` negates). A playbook has the sections Purpose, Inputs, Steps, Definition of Done
-(`- [DOD-n] (must|should|must_not) ...`), Outputs and Failure handling. Rules reference DoD ids, may name a
-deterministic `check` (`citations_resolve`, `no_secrets`, `lint_clean`, ...), and stack with mode
-constraints, role rules and project `extraRules`; the strictest wins. Review is configured only in
-`mode.yaml`: the reviewer gets the task, the DoD, the rules and the check results, and returns one verdict per
-id (`review.verdict/v1`). Any failed must or must_not item, and any item rated blocker, makes the call `partial` and halts it before release;
-the should-fix and nit ratings only set how the findings are listed. After a halt, the re-run gets one more round (R-1) that is a scoped re-check when the approved proposal is
-unchanged: the brief carries `recheck` (the failed ids, the fix commits, the items that passed), the reviewer judges
-the failed ids again, and a carried item can still fail on new evidence. A changed proposal, or a re-run after a
-re-check, gets a full review.
+`with:` substitutes `$in.x`, `$steps.<id>.x` and `$config.x`, with `a|b` fallbacks. `when:` skips a step
+(`stale > 2h`, `$in.<field>` or `$steps.<id>.<field>`; `!` negates). A playbook has the sections Purpose, Inputs,
+Steps, Definition of Done (`- [DOD-n] (must|should|must_not) ...`), Outputs and Failure handling. Rules refer to
+Definition of Done ids and can name a deterministic `check` (`citations_resolve`, `no_secrets`, `lint_clean`).
+Rules stack with mode constraints, role rules and project `extraRules`, and the strictest wins.
 
-Every document (mode, env, role, interface, content type, connector, config) carries `apiVersion: agentbay/v3`. A
-file with another value, `agentbay/v2` included, is refused with "this kit reads agentbay/v3, not '<found>'; change
-the line to apiVersion: agentbay/v3": there is no reader and no migration, and the v2 shapes changed too (see
-the CHANGELOG, 1.0.0).
+Review is configured only in `mode.yaml`. The reviewer gets the task, the Definition of Done, the rules and the
+check results, and returns one verdict for each id (`review.verdict/v1`). A failed must or must_not item, or any
+item rated blocker, makes the call `partial` and halts it before release. The ratings should-fix and nit only
+set how the findings are listed.
+
+After a halt, the next run is a scoped re-check when the approved proposal is unchanged. The review brief then
+carries `recheck`: the failed ids, the commits made since, and the items that passed. The reviewer judges the
+failed ids against those commits, and a passed item stands unless new evidence fails it. The verdict must still
+cover every id. A changed proposal, a review after a passed review, and a review after a re-check are full
+reviews.
 
 ## Compile: units
 
-`bay check` lints and then resolves every endpoint, failing with every gap at once, each naming the
-concept and the fix: unknown names, unbound capabilities, effects the endpoint does not declare or the env
-does not allow, tiers the env does not allow, connector needs (hosts, secrets, paths) beyond the env, and
-steps that could write `framework/`, `bay/`, `schemas/` or `adapters/` outside `forge.extend`.
+`bay check` lints and then resolves every endpoint. It fails with every gap at once, each naming the concept and
+the fix. The gaps include unknown names, unbound capabilities, effects that the endpoint does not declare or the
+env does not allow, tiers the env does not allow, connector needs (hosts, secrets, paths) beyond the env, and steps
+that could write `framework/`, `bay/`, `schemas/` or `adapters/` outside `forge.extend`.
 
-Each distinct (role, mode, env) a mode uses compiles to one **unit**, named `<role>--<mode>` (plus `--<env>`
-when the mode runs that role in several envs). A unit is its own subagent, use shim, guard policy entry and
-store access. Its grants come from the mode, not the role: the read-only connector endpoints of the mode's
-`needs` that the env binds, plus the tools of tools-capabilities whose effects are read or network. Only
-`access: write` roles get file-writing tools, CLIs beyond read-only version control, and the env's write paths. User
-modes may put roles only in their own envs and the protected envs the component map opens to them
-(`framework/components.yaml` `protected:`); an env's `tiers` caps both step tiers and a role's default tier.
+Each distinct (role, mode, env) that a mode uses compiles to one **unit**, named `<role>--<mode>`, plus `--<env>`
+when the mode runs that role in several envs. A unit is its own subagent, use shim, guard policy entry and store
+access. Its grants come from the mode, not the role. They are the read-only connector endpoints of the mode's
+`needs` that the env binds, plus the capabilities that the env binds to the runtime itself (such as web research)
+when their effects are read or network. Only `access: write` roles get the file-editing abilities (Edit, Write,
+MultiEdit, NotebookEdit), CLIs beyond read-only version control, and the env's write paths. An env's `tiers` caps
+both the tiers of steps and a role's default tier.
 
-The claude-code adapter writes `.claude/agents/<unit>.md` for worker units, runs mode coordinators as
-playbooks in the main thread (subagents cannot spawn subagents), and writes `.agentbay/COORDINATOR.md`, the
-registry (`.agentbay/catalog.json`), the use shims, `.agentbay/guard.json` and the hooks. Builds are
-idempotent, merge with your own `CLAUDE.md`, settings and MCP servers, and `clean` restores them.
+The claude-code adapter writes `.claude/agents/<unit>.md` for worker units and runs mode coordinators as playbooks
+in the main thread, because subagents cannot spawn subagents. It also writes `.agentbay/COORDINATOR.md`, the
+registry, the use shims, `.agentbay/guard.json` and the hooks. Builds merge with your own `CLAUDE.md`, settings
+and MCP servers, and `clean` restores them.
 
 ## Dispatcher
 
-`bay call <mode>.<endpoint> '<json>'` is the only way to run an endpoint. It validates input and output
-against the types, runs code steps with the connector runtime (secrets resolved from the env's provider,
-HTTP checked against the env allowlist before every request), enforces budget caps, and returns an agentic
-step as a step plan (`needs-agent`): the role unit, tier, model, task, playbook, rules and inputs. The
-coordinator runs it and hands the output back with `bay submit`; the call continues until `done`, `partial`,
-`blocked` or `failed`, or stops at a gate (`awaiting-approval`). Agents read connector data only through
-their unit's use shim, `.agentbay/roles/<unit>/use <capability>/v<N>.<endpoint> '<json>'`, which fixes
-role, mode and env and serves read-only endpoints. Secret values are redacted from everything returned or
-logged.
+`bay call <mode>.<endpoint> '<json>'` is the only way to run an endpoint. It validates input and output against
+the types, runs code steps with the connector runtime, and enforces budget caps. The runtime resolves secrets from
+the env's provider and checks every HTTP request against the env allowlist. An agentic step comes back as a step
+plan with the status `needs-agent`: the role unit, tier, model, task, playbook, rules and inputs. The coordinator
+runs the plan and returns the output with `bay submit`. The call continues until it is `done`, `partial`,
+`blocked` or `failed`, or stops at a gate (`awaiting-approval`). Agents read connector data only through their
+unit's use shim, which fixes the role, mode and env and serves read-only endpoints. Secret values are redacted
+from everything returned or logged.
 
 ## Run log
 
-The run log (`events.jsonl` under `.agentbay/`) is append-only; state is a fold over it. The dispatcher writes `step.*` and
-`call.completed` (mode, endpoint, step, role, agent, env, cost, optional `durationMs`/`tokens`/`costUsd`),
-hooks write agent runs (`spawned`, `completed`, `failed`), the guard writes `permission.denied` (never the
-command), shims write `data.read`, and `bay note` writes notes (an instruction change, a decision). Agent
-runs are recorded by the parties that know them: the Chief of Staff logs each dispatch (`bay note dispatch`, with
-inputs) and any review it ran outside a review step (`bay note review`); a subagent records its outcome and
-to-do list first (`bay plan`, items ticked with `--done`), the only `bay` command it may run. A reviewer's
-verdict can cite them (`cites`), and `bay status --agents` groups runs by role, mode, model and tier. Notes
-attach to a run, task or call and never create a run. Every value is pattern-scanned for secrets and redacted
-before it is written. `bay status` folds the run log into calls, steps, runs and cost.
+The run log is the append-only file `events.jsonl` under `.agentbay/`, and `bay status` folds it into calls,
+steps, runs and cost. The dispatcher, hooks, guard, use shims and `bay note` each write their own events. The Chief
+of Staff logs each dispatch, and a subagent records its outcome and to-do list with `bay plan`, the only `bay`
+command it may run. Every value is scanned for secrets and redacted before it is written.
+[INTERFACES.md section 9](INTERFACES.md#9-ledgerevent) lists the event types.
 
 ## Safety model
 
-**Hooks are defense in depth, not isolation.** The guard narrows what Claude Code subagents can ask to do; it
+**Hooks are defense in depth, not isolation.** The guard narrows what Claude Code subagents can ask to do. It
 cannot contain code once something runs it. Hard isolation needs an OS sandbox.
 
-- **Nothing that runs code is auto-approved.** The guard allows without a prompt only a role's own read-only
-  use shim, run as `python3 -E <kit>/bay/use_shim.py`; when the kit is inside the project, even that prompts.
-  Every other subagent command prompts you. The main thread is pre-approved only for
-  `bay show|status|note|catalog` (`show reclaim`, `note dispatch` and `note review` ask); `bay call` and
-  `bay submit` run connector code and prompt, and `bay approve` prompts too. With `approvals: { chat: true }`
-  (off by default), `bay approve --via chat --quote --sha` passes a gate without a terminal; the sha is the sha256
-  prefix (8+ hex) of what you saw, and when the gate binds a plan as well as the proposal it is the two prefixes
-  joined by `+`, proposal first (`<proposal>+<plan>`); one prefix, or the wrong order, is refused. It is recorded as
-  `user@chat-via-cos`. This trusts the main thread to
-  relay your words, so it is weaker than a terminal. Secrets and logins never leave the terminal.
-- **What subagents cannot touch:** the guard hook runs on Bash and every file tool. It denies `.agentbay/`,
-  `.claude/`, `.git`, `CLAUDE.md`, `.mcp.json`, `agentbay.config.yaml`, `.env*`, `.envrc`, `Makefile`,
-  `bay.sh`, editor folders, `.github/workflows/` and the kit; writes outside the env's `fs.write`; inline
-  interpreter code; and risky version-control flags. Paths are compared case-folded where the disk is case-insensitive
-  and by inode (hard links are not detected). It fails closed.
-- **Your terminal only:** approval gates, backlog approvals and `bay secret set` refuse a non-interactive
-  stdin.
-- `forge.extend`, which changes the framework and runs its tests, is installed only when the project is the
-  agentbay checkout. Its steps are: draft a proposal (unless one is named), a `plan` step, the approval gate,
-  implement, `deadcode`, `limits`, review, release. The `plan` step runs the `lead` role as a deep subagent and
-  writes `docs/plans/<id>.md` (named like the proposal) when `approvals.plan` asks for one: `large` (the default) means
-  a proposal with 10 or more touches, any `exceptions:`, no readable `touches:`, or a touch at, under or above a
-  security-sensitive path (the guard, the dispatcher, secrets, the event log, adapters, core rules and two schemas); `always` and `never` are as named. The gate always runs and approves the proposal's path and sha256
-  and, when the plan exists, the plan's; an edit or deletion of either after approval opens the gate again.
-  Before review the call runs a code step, `deadcode` (`improve.detect/v1.change`), that blocks the
-  call when the change adds unused code, an unused constant, a compatibility layer or a complexity finding that the
-  merge-base with `origin/main` did not have. The base tree is exported as plain files and never run. A second
-  code step, `limits` (`improve.detect/v1.limits`), keeps the framework from growing: `framework/limits.yaml` holds a
-  ceiling for each size measure (lines in `bay/`, kit connector lines, CLI commands, folders, schemas, tests). A change
-  may not exceed one, measured against the ceiling or the base branch's, whichever is higher (so a ceiling lowered earlier on
-  the branch may climb back to the base value, never above it); a lower count is a note, and `bay check --limits --write`,
-  run once at release, writes it as the new ceiling (a ratchet, lowering is free); a raise needs an exception
-  in the proposal front matter that the owner approves with the proposal. `bay check --limits` runs the same check and writes nothing.
+- **Nothing that runs code is auto-approved.** The guard allows without a prompt only a role's own read-only use
+  shim (`python3 -E <kit>/bay/use_shim.py`), and when the kit is inside the project, even that prompts. Every other
+  subagent command prompts you. The main thread is pre-approved only for `bay show|status|note|catalog`, and
+  `show reclaim`, `note dispatch` and `note review` ask. `bay call`, `bay submit` and `bay approve` prompt.
+- **Approval gates pass in your terminal.** `bay approve <callId>` needs an interactive terminal. A project
+  workflow's gate takes its `W-...` run id the same way. A gate with `approves:` records the path and sha256 of
+  the file it binds, and an edit or deletion of that file reopens the gate.
+- **Chat approval is opt-in.** With `approvals: { chat: true }` in agentbay.config.yaml (off by default),
+  `bay approve <id> --via chat --quote "<your message>" --sha <hex>` passes a gate without a terminal. The Chief of
+  Staff relays your exact words. The sha is the sha256 prefix (8 or more hex digits) of what you saw, and the
+  approval is refused if the file changed. The ledger records `user@chat-via-cos` and the quote. This is weaker
+  than a terminal, because it trusts the main thread to relay your words. Secrets, logins and backlog approvals
+  never go through chat.
+- **What subagents cannot touch.** The guard hook runs on Bash and on every file tool. It denies `.agentbay/`,
+  `.claude/`, `.git`, `CLAUDE.md`, `.mcp.json`, `agentbay.config.yaml`, `.env*`, `.envrc`, `Makefile`, `bay.sh`,
+  editor folders, `.github/workflows/` and the kit. It also denies writes outside the env's `fs.write`, inline
+  interpreter code and risky version-control flags. Paths are compared case-folded where the disk is
+  case-insensitive, and by inode (hard links are not detected). The guard fails closed.
+- **Your terminal only.** Approval gates, backlog approvals and `bay secret set` refuse a non-interactive stdin.
 
-## Briefings: corpus store and read-only SQL
+**What only `forge.extend` may write.** `framework/kernel.yaml` lists it under `protected:`, in one place. The list
+covers the rules that bind agents (the guard, approval gates, secrets, the run log and the boundary check) and the
+framework's own components. `paths` names folders, and `mode`, `env` and `connector` name instances that stay
+protected wherever their folder sits. Protected names are reserved, so a user component cannot take one. A user
+mode may place roles only in an unprotected env, or in a protected env whose entry opens it to that mode. The list
+fails closed: when the file is missing or unreadable, every name is reserved and nothing is writable or
+placeable. The guard keeps agents out of these paths, and `bay check --base` rejects a change to one unless the
+proposal lists it.
 
-`modes/briefing` is an abstract base (sync, digest, ask, prune). Each child mode extends it for one kind of
-source, in its own env with its own store, secrets and role units.
-Sources implement `items.source/v1` and return `item/v1` items (`id` is `<source>:<extId>`; a content type, a
-folder `content-types/<name>/` read by `bay/contenttypes.py`, adds fields and the views agents query; a mode may add views of its own over the types it reads, `views.sql`
-and `views.yaml` in its folder). A connector declares which selector fields its search handles; the store
-fetches with that native part and re-applies the whole selector with one shared matcher (`bay/selector.py`),
-so behaviour is the same on every source. A source that declares `changeFeed: true` is followed by cursor
-instead of re-listed. A source whose login is missing or expired returns `blocked` with the one command to
-run, `bay auth <connector>`; a digest or ask then goes on with the stored items and ends `partial`, the gap in
-its coverage. Each connector's README says how it reads its source.
+**`forge.extend`** changes the framework and runs its tests. It is installed only when the project is the agentbay
+checkout. Its steps are: draft a proposal (unless one is named), a `plan` step, the approval gate, implement,
+`deadcode`, `limits`, review and release.
 
-The store connector (the framework connector that implements `items.store/v1`) keeps one SQLite store per mode (`<env data>/<mode>/corpus.db`, owner-only,
-with FTS5 when available) and its internal state (cursors, coverage, budget, deletions) in a separate
-`state.json` agents never open. **Scope invariant:** the store holds exactly the items of the sources bound
-to the mode's env that match a current selector. Every sync and prune enforces it without refetching; after
-a change of selectors or sources every read except `status` is refused until a sync re-scopes. Billing
-counts every item a source returns, and spend is saved before the items commit.
+- **Plan.** The `plan` step runs the `lead` role as a deep subagent and writes `docs/plans/<id>.md`, named like the
+  proposal, when `approvals.plan` asks for one. The value `large` (the default) asks for a plan when the proposal
+  has 10 or more touches or any `exceptions:`, has no readable `touches:`, or touches a security-sensitive path
+  (the guard, the dispatcher, secrets, the run log, adapters, core rules and two schemas). The values `always` and
+  `never` do what they say. The step is skipped when the plan file exists.
+- **Gate.** The gate always runs. It approves the proposal and, when a plan exists, the plan too. For a chat
+  approval, `--sha` is both prefixes joined by `+`, proposal first (`<proposal>+<plan>`). One prefix, or the wrong
+  order, is refused.
+- **Dead code.** The `deadcode` step (`improve.detect/v1.change`) blocks the call when the change adds unused code,
+  an unused constant, a compatibility layer or a complexity finding that the merge-base with `origin/main` did not
+  have. The base tree is exported as plain files and never run.
+- **Size.** The `limits` step (`improve.detect/v1.limits`) keeps the framework from growing. `framework/limits.yaml`
+  holds a ceiling for each size measure: lines in `bay/`, lines of kit connector code, CLI commands, folders,
+  schemas and tests. A change may not exceed a ceiling, or the base branch's ceiling when that is higher. A raise
+  needs an exception in the proposal's front matter, which the owner approves with the proposal, and a count up to
+  the approved exception passes without editing `limits.yaml`. A lower count is a note. At release,
+  `bay check --limits --write` records it as the new ceiling, so ceilings only fall. Without `--write` the check
+  changes nothing.
 
-Agents query with `items.store/v1.sql`: one SELECT over the views (`v_items`, the views of the content
-types the store holds, `v_fts`) and the store tables, on a read-only connection,
-behind an authorizer with a function allowlist, a pre-pass that refuses FTS shadow tables, and time, heap,
-row, byte and cell limits. Item text and attachment text are secret-scrubbed at ingest and every read is
-redacted and scanned again.
+The boundary checks keep the framework's parts independent. Code cites these ids, and `bay check` runs them.
 
-## Project workflows
+| Id | Rule | Enforced by |
+|---|---|---|
+| B-1 | A change touches a kernel path only when its proposal lists it. | `bay check --base` |
+| B-2 | A change edits only the component folders it creates or its proposal lists. | `bay check --base` |
+| B-3 | In an existing component, a feature folder or a component-wide file changes only when the proposal lists it. | `bay check --base` |
+| B-4 | Every tracked file is under a kernel path or in a component folder, apart from docs, tests, records and repo-root files. | lint |
+| B-5 | Contracts are honoured: schemas check their shape, and contract tests check each instance. | lint, tests |
+| B-6 | Contracts are versioned: `needs:`, `implements:`, `reads:` and `produces:` name `<name>/v<N>` and agree. | lint |
+| B-7 | No connector loads another connector's code. Lint scans the code and the files its manifest names; READMEs and top-level tests are exempt, and review covers names built at run time. | lint |
+| B-8 | Skills stay in the component that owns them. The build writes them as `<owner>--<skill>`, and lint rejects a clash or an undeclared reference. | build, lint |
+| B-9 | A role step reaches only the endpoints in its feature's `uses:`. | the use shim at run time |
+| B-10 | Agent SQL runs only over fixed views with functions from a fixed list. | the SQL sandbox |
+| B-11 | The core docs name no component outside a fenced block. | `bay check --docs` |
+| B-12 | The code has no compatibility layer. | the `deadcode` step |
 
-A project workflow is stages in `agentbay.config.yaml`, each a `call: <mode>.<endpoint>` or a `gate:`. The
-root mode's endpoints, over `workflow.run/v1`, return the call to make; the coordinator makes it the ordinary
-way, so every stage keeps its own grants, effects, budget, review and gates, and nothing recurses.
-`bay check` checks each stage's target and input and prints the union of stage effects.
+## Digests from a corpus store
 
-## Framework modes and connectors
+An abstract base mode defines the four features of every digest mode: `sync`, `digest`, `ask` and `prune`. Each
+child mode extends it for one kind of source, with its own env, store, secrets and role units.
 
-The framework ships instances of the same contracts: the root mode, the mode that builds agentbay itself
-(scaffolds, and proposal-driven changes to the framework), and the mode that finds recurring failures, with
-the connectors they use. They sit in `modes/`, `envs/` and `connectors/` beside yours; the `protected:` block of
-`framework/components.yaml` names the ones only `forge.extend` may change, and `framework/` itself holds the roles,
-rules, interfaces and that map. Each is described in the README of its folder; `bay catalog` lists them.
+Sources implement `items.source/v1` and return `item/v1` items whose `id` is `<source>:<extId>`. A content type
+adds the fields of one kind of item and the views that agents query. A connector declares which selector fields
+its search handles. The store fetches with that native part and applies the whole selector again with one shared
+matcher, `bay/selector.py`, so every source behaves the same way. A source whose login is missing or expired
+returns `blocked` with the command to run, `bay auth <connector>`. A digest or an ask then continues on the stored
+items and ends `partial`, and the gap appears in its coverage. The README of the component that owns the base mode
+describes the item envelope, selectors, store layout and SQL limits.
+
+The store connector keeps one SQLite store for each mode. Its internal state (cursors, coverage, budget,
+deletions) is in a separate `state.json` that agents never open.
+
+**Scope invariant.** The store holds exactly the items of the sources bound to the mode's env that match a
+current selector. Every sync and prune enforces this without fetching again. After a change of selectors or
+sources, every read except `status` is refused until a sync re-scopes the store. Billing counts every item a
+source returns, and the spend is saved before the items are committed.
+
+Agents query with `items.store/v1.sql`: one SELECT over fixed views, on a read-only connection, with limits on
+time, memory, rows, bytes and cell length. The store scrubs item text for secrets when it ingests it, and every
+read is redacted and scanned again.
+
+## Composing modes
+
+A mode's steps call capability interfaces, never another mode's endpoints, and a feature's `uses:` grants only
+interface read endpoints. Modes compose from outside in two ways. A project workflow is a list of stages in
+`agentbay.config.yaml` that the Chief of Staff runs through the root mode's `run` and `next` endpoints. A handoff is
+an endpoint that returns a `next` call for the Chief of Staff to run: the findings mode hands an approved fix to
+the framework-change mode this way. Each call goes through the dispatcher on its own, so it keeps its own grants,
+effects, budget, review and gates.

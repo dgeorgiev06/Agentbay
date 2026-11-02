@@ -1,4 +1,4 @@
-"""Feature rules (modes/<mode>/features/<feature>/rules.yaml).
+"""Feature rules (components/<mode>/features/<feature>/rules.yaml).
 
 Rules stack with mode constraints, role rules and project extraRules.
 Strictest wins: when two rules share an id, the higher level is kept

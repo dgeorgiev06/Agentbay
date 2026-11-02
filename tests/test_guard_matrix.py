@@ -1,6 +1,6 @@
 """Golden baseline of every guard decision (proposal 0008, stage 5 part A): the kit built as its own project, then for
 each subagent unit, the unknown subagent and the main thread the decision (and its reason) of the real `Guard` for
-logical paths (written by `layout.physical`, so the rows survive the move of the extension folders), for Bash command
+logical paths (resolved by `physical` through the loader, so the rows survive the move of the extension folders), for Bash command
 spellings (every bay launcher, approve, config, secrets, interpreters, git flags, `bay plan`, the role shim) and for
 the file tools. Also recorded: the policy's `protected` list and per-unit scopes, `protected_writes(env)` for every
 env, the resolver gaps of test_resolver.py:165-185 and the lint warnings about protected reach.
@@ -16,11 +16,30 @@ import os
 
 from golden_util import GOLDEN, compare, normal
 from helpers import KIT, cleanup, edit_yaml, gaps, kit_copy, project, system
-from layout import PROTECTED_INSTANCES, physical
 
 from bay import lint, model
 from bay.adapter import get
 from bay.guard import Guard
+
+# Two paths that are not extensions: the map was renamed, and a user file sat in the old modes folder.
+RENAMED = {"framework/components.yaml": "framework/kernel.yaml", "modes/x.yaml": "components/x.yaml"}
+_KIT: list = []
+
+
+def physical(logical: str) -> str:
+    """The kit path of a logical row path (`mode:<name>/<rest>`, `env:<name>`, `connector:<name>/<rest>`), from the loader.
+    A name the kit does not have (`brand-new`) sits where a new user extension would: a mode or connector at the top of
+    components/, an env in an ordinary mode's folder (briefing)."""
+    kind, sep, rest = logical.partition(":")
+    if not sep:
+        return RENAMED.get(logical, logical)
+    if not _KIT:
+        _KIT.append(model.Kit(KIT))
+    name, slash, tail = rest.partition("/")
+    d = _KIT[0].get({"mode": "Mode", "env": "Environment", "connector": "Connector"}[kind], name)
+    if kind == "env":
+        return model.rel(d.path) if d else f"components/briefing/envs/{name}.yaml"
+    return (model.rel(d.dir) if d else f"components/{name}") + slash + tail
 
 UNITS = ("builder--delivery", "builder--forge--local-authoring", "builder--forge--framework-dev", "reviewer--forge",
          "analyst--improve")
@@ -190,10 +209,36 @@ def resolver_gaps() -> dict:
 # result must equal the golden: every decision and every other word of every reason is the same as before the move.
 FOUR = ["framework", "bay", "schemas", "adapters"]       # the protected folders of the policy before the move
 DEV, LOCAL = "builder--forge--framework-dev", "builder--forge--local-authoring"
-IMPROVE = "modes/improve"
+IMPROVE = "components/improve"
 DEV_CLIS = ["./bay.sh check", "python3 tests/run.py", "git status", "git diff", "git log", "git add", "git commit"]
 MV_RM = ["git mv", "git rm"]
 CLAUSE = "{}/ of the agentbay checkout is writable only by forge.extend (env must name it)"
+
+
+# 0010 part 1: every extension is a component folder, so the new physical path of a row differs from the one the golden
+# quotes in a reason. PATH_DELTAS names each: the new path -> the golden's (the shipped extensions under framework/, the
+# others in modes/, envs/ and connectors/). Row keys are logical and did not change; only path strings in reasons do.
+GOLDEN_FRAMEWORK = {"mode": {"cos", "forge", "improve"},
+                    "env": {"cos-local", "framework-dev", "improve-local", "local-authoring", "workspace", "research"},
+                    "connector": {"artifact-graph", "claude-transcripts", "corpus-store", "git", "improve-detect",
+                                  "improve-store", "ledger", "scaffold", "workflow-runner"}}
+GOLDEN_FOLDER = {"mode": "modes", "env": "envs", "connector": "connectors"}
+GOLDEN_LOCAL_WRITE = ["modes", "envs", "connectors", "agentbay.config.yaml"]       # local-authoring's fs.write then
+
+
+def golden_physical(logical: str) -> str:
+    kind, _, rest = logical.partition(":")
+    name = rest.partition("/")[0]
+    path = f"{GOLDEN_FOLDER[kind]}/{rest}.yaml" if kind == "env" else f"{GOLDEN_FOLDER[kind]}/{rest}"
+    return f"framework/{path}" if name in GOLDEN_FRAMEWORK[kind] else path
+
+
+def path_deltas() -> dict:
+    logical = {lp for lp in [*WRITE_PATHS, *READ_PATHS, *EDIT_PATHS, "mode:improve/n.ipynb"] if ":" in lp}
+    out = {physical(lp): golden_physical(lp) for lp in logical}
+    out.update({new: old for old, new in RENAMED.items()})
+    assert len(set(out)) == len(out) and all(a != b for a, b in out.items()), out
+    return dict(sorted(out.items(), key=lambda kv: -len(kv[0])))                   # longest first
 
 
 def undo_move(got: dict) -> dict:
@@ -204,15 +249,20 @@ def undo_move(got: dict) -> dict:
     protected instance in them is now denied by the protected entry, where it used to be outside its writable paths
     (a deny both times); (4) framework-dev's clis and its "may only run" reasons also name `git mv` and `git rm`."""
     got = copy.deepcopy(got)
-    pol, moved = got["policy"], PROTECTED_INSTANCES
+    pol, moved = got["policy"], model.Kit(KIT).protected_paths[len(FOUR):]
     assert pol["protected"] == FOUR + moved, pol["protected"]
     pol["protected"] = FOUR
-    assert pol["units"][DEV]["write"] == [*FOUR, *moved, "docs", "tests"], pol["units"][DEV]["write"]
+    assert pol["units"][LOCAL]["write"] == ["components", "agentbay.config.yaml"], pol["units"][LOCAL]["write"]
+    window = ["docs", "tests", "README.md"]       # README.md is the one named delta (README_DELTAS)
+    assert pol["units"][DEV]["write"] == [*FOUR, *moved, *window], pol["units"][DEV]["write"]
     pol["units"][DEV]["write"] = [*FOUR, "docs", "tests"]
     assert got["protectedWrites"]["framework-dev"] == FOUR + moved
     got["protectedWrites"]["framework-dev"] = FOUR
-    local_writes = str(pol["units"][LOCAL]["write"])
-    dev_now, dev_was = str([*FOUR, *moved, "docs", "tests"]), str([*FOUR, "docs", "tests"])    # a reason quotes the list
+    local_now, local_was = str(pol["units"][LOCAL]["write"]), str(GOLDEN_LOCAL_WRITE)
+    pol["units"][LOCAL]["write"] = GOLDEN_LOCAL_WRITE
+    deltas = path_deltas()
+    local_writes = local_was
+    dev_now, dev_was = str([*FOUR, *moved, *window]),str([*FOUR, "docs", "tests"])    # a reason quotes the list
     # (4) framework-dev may also run `git mv` and `git rm` (Part 3a): in its clis and in its "may only run" reasons
     assert pol["units"][DEV]["clis"] == [*DEV_CLIS, *MV_RM, "git show"], pol["units"][DEV]["clis"]
     pol["units"][DEV]["clis"] = [*DEV_CLIS, "git show"]
@@ -220,11 +270,15 @@ def undo_move(got: dict) -> dict:
     assert any(cli_now in r for r in (r for _, r in got["matrix"][DEV].values()))
 
     def old(s: str, unit: str | None = None) -> str:
+        if unit == LOCAL:
+            s = s.replace(local_now, local_was)
         if unit == DEV:
             s = s.replace(dev_now, dev_was).replace(cli_now, cli_was)
         for p in [*moved, IMPROVE]:          # improve moved too; it is no longer protected (part H)
             was = f"outside the role's writable paths {local_writes}" if unit == LOCAL else CLAUSE.format("framework")
-            s = s.replace(CLAUSE.format(p), was).replace(f"<project>/{p}", f"<project>/framework/{p}")
+            s = s.replace(CLAUSE.format(p), was)
+        for new, was_path in deltas.items():
+            s = s.replace(f"<project>/{new}", f"<project>/{was_path}")
         return s
 
     for unit, rows_ in got["matrix"].items():
@@ -233,7 +287,10 @@ def undo_move(got: dict) -> dict:
     got["lintWarnings"] = [old(w) for w in got["lintWarnings"]]
     longer, shorter = ", ".join(FOUR + moved), ", ".join(FOUR)
     assert any(longer in g for gs in got["resolverGaps"].values() for g in gs)
-    got["resolverGaps"] = {name: [old(g).replace(longer, shorter) for g in gs] for name, gs in got["resolverGaps"].items()}
+    envs_now, envs_was = "their own envs (components/<name>/envs/)", "their own envs (envs/)"
+    assert any(envs_now in g for gs in got["resolverGaps"].values() for g in gs)
+    got["resolverGaps"] = {name: [old(g).replace(longer, shorter).replace(envs_now, envs_was) for g in gs]
+                           for name, gs in got["resolverGaps"].items()}
     return got
 
 
@@ -245,15 +302,20 @@ def undo_move(got: dict) -> dict:
 #     fs.write in step with the map). It writes protected paths, not user extensions, so pass -> deny. Findings about
 #     improve itself route to a mode-fix task, not forge.extend (D4).
 USER_MODE_GAP = ("mode improve: role analyst works in the framework env framework-dev (improve.scan step patterns); "
-                 "user modes may put roles only in their own envs (envs/) or the framework envs workspace and research")
+                 "user modes may put roles only in their own envs (components/<name>/envs/) or the framework envs workspace and research")
 IMPROVE_ROWS = ["Edit mode:improve/mode.yaml", "MultiEdit mode:improve/mode.yaml", "NotebookEdit mode:improve/n.ipynb",
                 "Write mode:improve/README.md", "Write mode:improve/features/scan/playbook.md",
                 "Write mode:improve/mode.yaml"]
-EXPECTED_DELTAS: dict = {
+IMPROVE_DELTAS: dict = {
     **{("builder--delivery", r): ("deny", "pass") for r in IMPROVE_ROWS},
     **{(LOCAL, r): ("deny", "pass") for r in IMPROVE_ROWS},
     **{(DEV, r): ("pass", "deny") for r in IMPROVE_ROWS},
 }
+# README.md (0010 part 2a): framework-dev's fs.write names it because every framework change updates the README (DOD-13).
+# It is not protected, so the one row is deny -> pass; every other row of an unprotected path stays a deny (D9).
+README_DELTAS: dict = {(DEV, "Write README.md"): ("deny", "pass")}
+EXPECTED_DELTAS: dict = {**IMPROVE_DELTAS, **README_DELTAS}
+NET_DELTAS = {k: v for k, v in EXPECTED_DELTAS.items() if v[0] != v[1]}
 
 
 def put_back(got: dict, want: dict) -> dict:
@@ -293,10 +355,20 @@ def test_guard_decision_matrix():
                       "matrix": matrix(k)}, real)
         want = json.loads((GOLDEN / "guard-matrix.json").read_text())
         diff = changed(got, want)
-        assert diff == EXPECTED_DELTAS, "a guard decision changed:\n" + "\n".join(f"{key}: {v}" for key, v in diff.items())
+        assert diff == NET_DELTAS, "a guard decision changed:\n" + "\n".join(f"{key}: {v}" for key, v in diff.items())
+        kit = model.Kit(k, k)       # no changed decision is on a protected path: those equal the golden
+        assert not [r for _, r in NET_DELTAS if kit.covers(physical(r.split(" ", 1)[1]))], NET_DELTAS
         compare("guard-matrix", undo_move(put_back(got, want)))
     finally:
         cleanup(k)
+
+
+def undo_kit_path(got: dict) -> dict:
+    """The one path the kit-outside probe names moved (modes/briefing/ -> components/briefing/); the decision and the rest
+    of every reason are the golden's. Asserted present, so the put-back cannot hide a missing row."""
+    text = json.dumps(got, sort_keys=True)
+    assert text.count("<kit>/components/briefing/mode.yaml") == 2, text.count("<kit>/components/briefing/mode.yaml")
+    return json.loads(text.replace("<kit>/components/briefing/mode.yaml", "<kit>/modes/briefing/mode.yaml"))
 
 
 def test_guard_matrix_for_a_project_with_the_kit_outside():
@@ -314,7 +386,7 @@ def test_guard_matrix_for_a_project_with_the_kit_outside():
             shim = f".agentbay/roles/{u}/use"
             for label, tool, ti in (
                     [("kit file", "Write", {"file_path": str(KIT / "bay/guard.py")}),
-                     ("kit mode", "Write", {"file_path": str(KIT / "modes/briefing/mode.yaml")}),
+                     ("kit mode", "Write", {"file_path": str(KIT / "components/briefing/mode.yaml")}),
                      ("src", "Write", {"file_path": "src/app.py"}), ("bay dir of project", "Write", {"file_path": "bay/x.py"}),
                      ("config", "Write", {"file_path": "agentbay.config.yaml"}),
                      ("ledger", "Read", {"file_path": ".agentbay/ledger/events.jsonl"}),
@@ -326,8 +398,8 @@ def test_guard_matrix_for_a_project_with_the_kit_outside():
                        ("approve", "Bash", {"command": ".agentbay/bay approve C-1"})]):
                 d, r = g.decide({**pa, "tool_name": tool, "tool_input": ti})
                 out[f"{u} {label}"] = [d, r]
-        compare("guard-matrix-project", normal(out, {str(p): "<project>", os.path.realpath(p): "<project>",
+        compare("guard-matrix-project", undo_kit_path(normal(out, {str(p): "<project>", os.path.realpath(p): "<project>",
                                                      str(p.parent): "<tmp>", os.path.realpath(p.parent): "<tmp>",
-                                                     str(KIT): "<kit>"}))
+                                                     str(KIT): "<kit>"})))
     finally:
         cleanup(p)

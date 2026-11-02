@@ -1,6 +1,6 @@
 """Content types (proposal 0006, Part B): the loader.
 
-A content type is a folder content-types/<name>/ in the kit: content-type.yaml (shape: schemas/content-type.schema.json),
+A content type is a folder components/<name>/ in the kit: content-type.yaml (shape: schemas/content-type.schema.json),
 fields.schema.json (what the kind adds to item/v1), views.sql (only `CREATE VIEW v_<name> AS ...` statements) and,
 for a type with derived fields, derive.py. The type may also declare child tables (one row per element of a list
 field, with an optional FTS5 index) and the fields derive.py computes when the store writes an item.
@@ -22,7 +22,6 @@ from pathlib import Path
 
 from . import model
 
-FOLDER = "content-types"
 YAML, FIELDS, VIEWS, DERIVE = "content-type.yaml", "fields.schema.json", "views.sql", "derive.py"
 _CREATE = re.compile(r"(?is)^\s*CREATE\s+VIEW\s+(v_[A-Za-z0-9_]+)\s+AS\s")
 _cache: dict = {}
@@ -286,20 +285,18 @@ def scan(root: Path = model.KIT) -> tuple[dict[str, ContentType], list[str]]:
     """Every content type of the kit at `root` and every problem found, by file. Cached while the files stay
     as they are."""
     root = Path(root)
-    base = root / FOLDER
-    files = sorted(p for p in base.glob(f"*/*") if p.is_file())
+    dirs = sorted(y.parent for y in (root / "components").glob(f"*/{YAML}"))
+    files = sorted(p for d in dirs for p in d.glob("*") if p.is_file())
     key = (str(root), tuple((str(p), p.stat().st_mtime_ns, p.stat().st_size) for p in files))
     if key in _cache:
         return _cache[key]
     types: dict[str, ContentType] = {}
     problems: list[str] = []
-    for y in sorted(base.glob(f"*/{YAML}")):
-        ct, errs = _one(y.parent)
+    for d in dirs:
+        ct, errs = _one(d)
         problems += errs
         if ct is not None:
             types[ct.name] = ct
-    for d in sorted(p for p in base.glob("*") if p.is_dir() and not (p / YAML).exists()):
-        problems.append(f"{model.rel(d)}: a content type folder needs {YAML}")
     from . import sqlsandbox as sbx
     seen: dict[str, str] = {}
     for ct in list(types.values()):

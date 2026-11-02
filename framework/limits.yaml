@@ -1,7 +1,7 @@
-bay_lines: 9618
-kit_python_lines: 6584
+bay_lines: 9572
+kit_python_lines: 6580
 cli_commands: 16
-framework_folders: 3
-schemas: 15
-top_level_folders: 11
-tests: 536
+framework_folders: 2
+schemas: 16
+top_level_folders: 7
+tests: 539

@@ -7,13 +7,13 @@
 Each distinct (role, mode, env) a mode uses compiles to its own unit (`<role>--<mode>`, plus `--<env>` when
 the mode runs that role in several envs): its own subagent, use shim, guard policy and store access.
 
-Modes, envs and connectors live in one folder each at the kit root, whoever wrote them:
+Everything but roles lives in a component folder, whoever wrote it (KINDS says which file makes what):
 
-    modes/<name>/mode.yaml   envs/<name>.yaml   connectors/<name>/connector.yaml   interfaces/<name>.v<N>.yaml
+    components/<name>/{mode,connector,content-type,component}.yaml   components/<name>/envs/<name>.yaml
+    components/<name>/connectors/<connector>/connector.yaml (a connector internal to the component)
 
-`framework/` holds roles, rules, interfaces and the component map. Which instances only forge.extend may change is
-the map's `protected:` block (a protected instance's `Doc.root` is "framework", any other "user").
-Roles (roles/<name>.yaml) exist only under framework/; a user file of that kind is an error.
+`framework/` holds roles, rules and the kernel map. Which instances only forge.extend may change is the map's
+`protected:` block (a protected instance's `Doc.root` is "framework", any other "user").
 
 `resolve(kit)` walks every feature and fails with ALL gaps at once, each one a
 human-readable sentence naming the concept and what to fix. The `System` it
@@ -45,12 +45,13 @@ from . import workflows as wfmod
 
 KIT = Path(__file__).resolve().parent.parent
 SCHEMAS = KIT / "schemas"
-KINDS = {  # kind -> (folder, glob, schema)
-    "Interface": ("interfaces", "*.yaml", "interface"),
-    "Mode": ("modes", "*/mode.yaml", "mode"),
-    "Role": ("roles", "*.yaml", "role"),
-    "Environment": ("envs", "*.yaml", "environment"),
-    "Connector": ("connectors", "*/connector.yaml", "connector"),
+KINDS = {  # kind -> (kit-relative globs, schema)
+    "Interface": (("components/*/interfaces/*.yaml",), "interface"),
+    "Mode": (("components/*/mode.yaml",), "mode"),
+    "Role": (("framework/roles/*.yaml",), "role"),
+    "Environment": (("components/*/envs/*.yaml",), "environment"),
+    "Connector": (("components/*/connector.yaml", "components/*/connectors/*/connector.yaml"), "connector"),
+    "Component": (("components/*/component.yaml",), "component"),
 }
 EFFECTS = ["read", "write", "network", "spend", "delete"]
 DEFAULT_AGENT = "claude-code"          # the agent profile when agentbay.config.yaml sets no `agent:`
@@ -63,10 +64,6 @@ PROTECTION_KIND = {"Mode": "mode", "Environment": "env", "Connector": "connector
 FRAMEWORK_EXTENDER = "forge.extend"
 USER_ROLE = ("roles are framework-level; customize behaviour in your mode's playbooks/skills, or propose a new "
              "role via forge.extend")
-# Kinds loaded from framework/ only (roles); modes, envs and connectors are read from the kit root only (a protected
-# name is protected by framework/components.yaml, wherever it sits); interfaces come from both.
-FRAMEWORK_ONLY = {"Role": USER_ROLE}
-SOURCES = {"Role": ("framework", "user"), "Interface": ("framework", "user")}   # kind -> roots read; others: user only
 ROOT_COORDINATOR = "cos"      # the mode whose coordinator owns the main thread; its playbook is the preamble
 
 
@@ -87,17 +84,17 @@ def schema(name: str) -> dict:
     return json.loads((SCHEMAS / f"{name}.schema.json").read_text())
 
 
-def data_schema(ref: str) -> dict:
-    """'item/v1' -> schemas/data/item.v1.schema.json or modes/<mode>/data/item.v1.schema.json; a content type's
+def data_schema(ref: str, root: Path = KIT) -> dict:
+    """'item/v1' -> schemas/data/item.v1.schema.json or components/<name>/data/item.v1.schema.json; a content type's
     `<name>/v<N>` -> its fields.schema.json"""
     name, _, ver = ref.partition("/")
-    p = SCHEMAS / "data" / f"{name}.{ver}.schema.json"
-    p = next((q for q in (p, *sorted(KIT.glob(f"modes/*/data/{p.name}"))) if q.exists()), p)
+    p = root / "schemas" / "data" / f"{name}.{ver}.schema.json"
+    p = next((q for q in (p, *sorted(root.glob(f"components/*/data/{p.name}"))) if q.exists()), p)
     if not p.exists():
         from . import contenttypes
-        found = contenttypes.fields_schema(ref)
+        found = contenttypes.fields_schema(ref, root)
         if found is None:
-            raise SpecError(f"unknown data schema '{ref}' (expected {p.relative_to(KIT)} or a content type "
+            raise SpecError(f"unknown data schema '{ref}' (expected {p.relative_to(root)} or a content type "
                             f"{name} of version {ver})")
         return found
     return json.loads(p.read_text())
@@ -107,15 +104,18 @@ VERSIONED = re.compile(r"^[a-z][a-z0-9.-]*/v[0-9]+$")   # `<name>/v<N>`: interfa
 
 
 def item_kinds(kit: Path = KIT) -> dict[str, set[int]]:
-    """Known item kinds: the content types of the kit (content-types/). kind -> versions."""
+    """Known item kinds: the content types of the kit (components/). kind -> versions."""
     from . import contenttypes
     return contenttypes.item_kinds(kit)
 
 
 def mode_envs(md: Doc) -> list[str]:
-    """Every env a mode's `roles:` maps (mode-wide and per feature), in order."""
+    """Every env a mode's `roles:` maps (mode-wide, per feature and per step), in order."""
     s = md.spec
-    maps = [s.get("roles"), *((ep or {}).get("roles") for ep in (s.get("features") or {}).values())]
+    maps = [s.get("roles")]
+    for ep in ((s.get("features") or {}).values()):
+        ep = ep or {}
+        maps += [ep.get("roles"), *(st.get("roles") for st in ep.get("steps") or [] if isinstance(st, dict))]
     return list(dict.fromkeys(e for m in maps if isinstance(m, dict) for e in m.values() if isinstance(e, str)))
 
 
@@ -144,7 +144,8 @@ def schema_errors(instance, sch: dict) -> list[str]:
     if jsonschema is None:
         return []
     v = jsonschema.Draft202012Validator(sch, format_checker=jsonschema.FormatChecker())
-    why = lambda e: (f"this kit reads agentbay/v3, not {e.instance!r}; change the line to apiVersion: agentbay/v3 (the v2 shapes changed too, see CHANGELOG 1.0.0)"
+    why = lambda e: (f"this kit reads {e.validator_value}, not {e.instance!r}; change the line to apiVersion: {e.validator_value}"
+                     f"{' and move it under components/<name>/ (see CHANGELOG)' * e.validator_value.endswith('4')}"
                      if e.validator == "const" and list(e.absolute_path) == ["apiVersion"] else e.message)
     return [f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {why(e)}"
             for e in sorted(v.iter_errors(instance), key=lambda e: list(map(str, e.absolute_path)))]
@@ -191,11 +192,11 @@ class Doc:
 
 
 def load_protection(root: Path) -> tuple[boundary.Protection, str | None]:
-    """The one loader of the `protected:` block of <root>/framework/components.yaml (used by the kit, scaffold and the
+    """The one loader of the `protected:` block of <root>/framework/kernel.yaml (used by the kit, scaffold and the
     improve store). Anything but a readable, well-formed block fails closed: (the closed set, the error) - the set
     reserves every name, covers every path and lets no mode place a role."""
     try:
-        return boundary.ComponentMap.load(Path(root) / "framework" / "components.yaml").protected, None
+        return boundary.ComponentMap.load(Path(root) / "framework" / "kernel.yaml").protected, None
     except Exception as e:                      # noqa: BLE001 - whatever is wrong with the map, the answer is closed
         return boundary.Protection.closed_set(), (
             f"{e}; without a readable protected: block nothing is trusted (every name is reserved, "
@@ -211,17 +212,14 @@ class Kit:
         self.docs: dict[str, dict[str, Doc]] = {k: {} for k in KINDS}
         self.errors: list[str] = []
         self.protected = self._load_protection()
-        for kind, (folder, glob, sch) in KINDS.items():
-            for root_name in SOURCES.get(kind, ("user",)):
-                base = kit / "framework" if root_name == "framework" else kit
-                for f in sorted((base / folder).glob(glob)):
-                    if root_name == "user" and kind in FRAMEWORK_ONLY:
-                        self.errors.append(f"{rel(f)}: {FRAMEWORK_ONLY[kind]}")
-                        continue
-                    try:
-                        self._load(kind, root_name, f, sch)
-                    except SpecError as e:
-                        self.errors.append(str(e))
+        for kind, (globs, sch) in KINDS.items():
+            for f in sorted(p for g in globs for p in kit.glob(g)):
+                try:
+                    self._load(kind, "framework" if kind == "Role" else "user", f, sch)
+                except SpecError as e:
+                    self.errors.append(str(e))
+        for f in sorted(kit.glob("roles/*.yaml")):      # roles are framework-level: a user file of that kind is an error
+            self.errors.append(f"{rel(f)}: {USER_ROLE}")
         for kind in PROTECTION_KIND:         # protected first, then the rest (each by name): the order every listing had
             self.docs[kind] = dict(sorted(self.docs[kind].items(), key=lambda kv: kv[1].root != "framework"))
         self._apply_extends()
@@ -284,7 +282,7 @@ class Kit:
             own_path = d.dir / own if own else None
             d.config_files = [*p.config_files, *([own_path] if own_path and own_path not in p.config_files else [])]
             d.lineage, d.parent = [d.dir, *p.dirs], parent
-            full = {"apiVersion": "agentbay/v3", "kind": "Mode", "metadata": d.meta,
+            full = {"apiVersion": "agentbay/v4", "kind": "Mode", "metadata": d.meta,
                     "spec": {k: v for k, v in d.spec.items() if k != "extends"}}
             errs = schema_errors(full, schema("mode"))
             if errs:
@@ -354,7 +352,7 @@ class Kit:
                 raise SpecError(f"{where}: interface {name} must be in a file named {want}")
         else:
             name = meta["name"]
-            expect = f.parent.name if f.name in ("mode.yaml", "connector.yaml") else f.stem
+            expect = f.parent.name if f.name in ("mode.yaml", "connector.yaml", "component.yaml") else f.stem
             if name != expect:
                 raise SpecError(f"{where}: metadata.name '{name}' must match '{expect}'")
         if name in self.docs[kind]:
@@ -822,14 +820,14 @@ class _Ctx:
             return None
         if not kit.protected.may_place(mode, env.name):
             gaps.append(f"mode {mode}: role {rd.name} works in the framework env {env.name} ({where}); user modes "
-                        f"may put roles only in their own envs (envs/) or the framework envs "
+                        f"may put roles only in their own envs (components/<name>/envs/) or the framework envs "
                         f"{' and '.join(kit.protected.open_envs())}")
             return None
         allowed = env.spec.get("tiers")
         if allowed and rd.tier not in allowed:
             gaps.append(f"mode {mode}: role {rd.name} in env {env.name}: its default tier '{rd.tier}' (the model its "
                         f"subagent is compiled with) is not allowed by env {env.name} (allows: {', '.join(allowed)}); "
-                        f"add '{rd.tier}' to `tiers` in envs/{env.name}.yaml or put the role in another env")
+                        f"add '{rd.tier}' to `tiers` in {env.rel} or put the role in another env")
         tools: list[str] = []
         clis: list[str] = []
         bay_uses: list[str] = []
@@ -1016,6 +1014,8 @@ def resolve_mode(kit: Kit, md: Doc, ctx: _Ctx, warnings: list[str] | None = None
             features[ep_name] = feat
     _check_selectors(kit, md, mcfg, gaps, warnings if warnings is not None else [])
     pb_file = next((d / "playbook.md" for d in md.dirs if (d / "playbook.md").exists()), md.dir / "playbook.md")
+    if s.get("coordinator") and not pb_file.exists():
+        gaps.append(f"mode {name}: coordinator {s['coordinator']} has no playbook ({rel(pb_file)} not found)")
     return ResolvedMode(
         name=name, version=md.meta["version"], root=md.root, purpose=s["purpose"].strip(), path=md.dir,
         coordinator=s.get("coordinator"), roles=dict(roles),
@@ -1168,9 +1168,6 @@ def _feature_steps(kit: Kit, md: Doc, ctx: _Ctx, ep: dict, wf: list, where: str)
         steps.append(_role_step(ctx, md, ep, {"id": "review", "role": review["role"]}, f"{where} review",
                                 ep_eff, review=review))
     ctx.gaps += wfmod.check_stages([wfmod.Stage.of_step(x) for x in steps], where, wfmod.FEATURE_GATE_FIX)
-    for d in wfmod.duplicates([x.id for x in steps]):
-        ctx.gaps.append(f"{where}: duplicate step id '{d}'" + (" (the review step is injected from mode.yaml review; "
-                        "do not add a step called review)" if d == "review" else ""))
     return steps
 
 
@@ -1352,7 +1349,7 @@ def _role_step(ctx: _Ctx, md: Doc, ep: dict, st: dict, sw: str, ep_eff, review: 
     if allowed and tier not in allowed:
         gaps.append(f"{sw}: {label} {rn} in env {env.name} runs at tier '{tier}' (from {origin}), which env "
                     f"{env.name} does not allow (allows: {', '.join(allowed)}); set an allowed `tier:` on the step, "
-                    f"feature or role, or add '{tier}' to `tiers` in envs/{env.name}.yaml")
+                    f"feature or role, or add '{tier}' to `tiers` in {env.rel}")
     effs: list[str] = []
     for use in u.uses:
         iface, ep_ = _split_use(use)

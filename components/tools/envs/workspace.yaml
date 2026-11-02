@@ -1,0 +1,17 @@
+apiVersion: agentbay/v4
+kind: Environment
+metadata:
+  name: workspace
+  description: The project checkout. Read/edit files, narrow git commands. No network, no secrets, no spend; web research is env research.
+spec:
+  bind:
+    workspace.read/v1: { tools: [Read, Glob, Grep] }
+    workspace.write/v1:
+      tools: [Edit, Write, Bash]
+      clis: [git status, git diff, git log, git add, git worktree]
+    git.read/v1:
+      tools: [Bash]
+      clis: [git status, git diff, git log, git show]
+  fs: { read: ["."], write: ["."] }
+  effects: [read, write]
+  limits: { maxTurns: 60, maxMinutes: 30 }

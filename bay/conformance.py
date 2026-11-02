@@ -295,7 +295,7 @@ def vocabulary(kit: Path, rule: dict) -> list[dict]:
             files.append(d.path)
             if kind == "Mode":
                 files += sorted(d.dir.glob("**/*.md")) + sorted(d.dir.glob("features/*/rules.yaml"))
-    files += sorted((kit / "coordinator").glob("**/*.md")) + [kit / "README.md"]
+    files += sorted((kit / "adapters" / "claude-code" / "commands").glob("**/*.md")) + [kit / "README.md"]
     for f in dict.fromkeys(files):
         if not f.exists():
             continue

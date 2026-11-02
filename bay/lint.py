@@ -51,18 +51,14 @@ def _entry_line(path: Path, section: str, name: str) -> int | None:
     return None
 
 
-def _lineage_where(md: model.Doc, section: str, name: str) -> tuple[Path, int]:
-    """The mode.yaml (own, else the nearest ancestor's) whose `section` (features) declares `name`,
-    and that line: inherited parts are reported where they are written."""
+def _ep_where(md: model.Doc, ep_name: str) -> tuple[Path, int]:
+    """The mode.yaml (own, else the nearest ancestor's) whose features declare `ep_name`, and that line:
+    inherited parts are reported where they are written."""
     for d in md.dirs:
-        i = _entry_line(d / "mode.yaml", section, name)
+        i = _entry_line(d / "mode.yaml", "features", ep_name)
         if i is not None:
             return d / "mode.yaml", i + 1
     return md.path, 1
-
-
-def _ep_where(md: model.Doc, ep_name: str) -> tuple[Path, int]:
-    return _lineage_where(md, "features", ep_name)
 
 
 def _ep_key_where(md: model.Doc, ep_name: str, key: str) -> tuple[Path, int]:
@@ -83,9 +79,9 @@ def _ep_key_where(md: model.Doc, ep_name: str, key: str) -> tuple[Path, int]:
     return _ep_where(md, ep_name)
 
 
-def _file(md: model.Doc, relpath: str, kit: model.Kit) -> str:
-    """A mode-relative path (possibly inherited, `../briefing/...`) as a normalized kit-relative path."""
-    return os.path.relpath(os.path.normpath(md.dir / relpath), kit.root)
+def _need(kit: model.Kit, p: Path, where: str, what: str) -> list[str]:
+    path = os.path.relpath(os.path.normpath(p), kit.root)
+    return [] if p.exists() else [f"{where}: {what} {path} does not exist; restore it or remove the reference"]
 
 
 def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[str]:
@@ -98,14 +94,20 @@ def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[
     if agentic and not ep.get("playbook"):
         out.append(f"{_where(mfile, ep_line)}: feature {target} runs an agent but has no `playbook`; add "
                    f"`playbook: features/{ep_name}/playbook.md` (a feature with only code steps needs none)")
+    where = _where(mfile, ep_line)
     for key in ("playbook", "rules"):
-        if ep.get(key) and not (md.dir / ep[key]).exists():
-            out.append(f"{_where(mfile, ep_line)}: feature {target} {key} file {_file(md, ep[key], kit)} does not exist")
+        if ep.get(key):
+            out += _need(kit, md.dir / ep[key], where, f"feature {target} {key} file")
+            if not agentic:
+                out.append(f"{where}: feature {target} has no role step, so its `{key}` is never read; remove the "
+                           f"file and the `{key}:` line (a review step counts as a role step)")
+    for t in (ep.get("in"), ep.get("out"), *(st.get("out") for st in ep["steps"])):
+        if t:
+            out += _need(kit, model.type_file(md.dirs, t), where, f"feature {target} type {t}")
 
     if ep.get("playbook") and (md.dir / ep["playbook"]).exists():
         pb = pbk.parse(md.dir / ep["playbook"])
-        for line, msg in pb.problems:
-            out.append(f"{_where(pb.path, line)}: {msg}")
+        out += [f"{_where(pb.path, line)}: {msg}" for line, msg in pb.problems]
         dod_ids = pb.dod_ids
 
     if ep.get("rules") and (md.dir / ep["rules"]).exists():
@@ -243,12 +245,8 @@ def lint_adapters(kit: model.Kit) -> list[str]:
     its `module` a file inside the folder. Checked without importing any adapter code."""
     from . import adapter
     _, bad = adapter.scan(kit.root / "adapters")
-    return [_rel(e, kit) for errs in bad.values() for e in errs]
-
-
-def _rel(msg: str, kit: model.Kit) -> str:
     root = str(kit.root.resolve()) + "/"
-    return msg.replace(root, "").replace(str(kit.root) + "/", "")
+    return [e.replace(root, "").replace(str(kit.root) + "/", "") for errs in bad.values() for e in errs]
 
 
 def lint_rules(path: Path, dod_ids: list[str], ep: dict, md: model.Doc) -> list[str]:
@@ -263,8 +261,7 @@ def lint_rules(path: Path, dod_ids: list[str], ep: dict, md: model.Doc) -> list[
                 out.append(f"{_where(path, _line_of(path, rf'^{re.escape(k)}:'))}: review settings found in rules file; "
                            f"configure review only in mode.yaml features.<feature>.review")
     errs =model.schema_errors(doc, model.schema("rules"))
-    for e in errs:
-        out.append(f"{_where(path, 1)}: rules schema: {e}")
+    out += [f"{_where(path, 1)}: rules schema: {e}" for e in errs]
     if errs or not isinstance(doc, dict):
         return out
     seen: dict[str, int] = {}
@@ -300,7 +297,6 @@ def _kind_enum(md: model.Doc, ep: dict) -> list[str] | None:
     p = model.type_file(md.dirs, ep["in"])
     if not p.exists():
         return None
-    import json
     s = json.loads(p.read_text())
     return (s.get("properties", {}).get("kind") or {}).get("enum")
 
@@ -350,12 +346,6 @@ def lint_roles(kit: model.Kit) -> list[str]:
     return out
 
 
-# Interfaces whose connectors must say which `source` they stamp on items, how far back (`window`) the
-# source API reaches, and which selector fields its native search handles: the store keys items and
-# deletions on `source` and splits every selector by that table.
-SOURCE_INTERFACES = ("items.source/v1",)
-
-
 def _binds(env, conn_name: str) -> bool:
     for v in (env.spec.get("bind") or {}).values():
         if conn_name in (v if isinstance(v, list) else [v] if isinstance(v, str) else []):
@@ -375,10 +365,19 @@ def lint_connectors(kit: model.Kit) -> list[str]:
                 out.append(f"{_where(c.path, _line_of(c.path, r'^\s+login:'))}: connector {c.name} declares a "
                            f"`login` but no env that binds it allows all of its needs.secrets ({', '.join(needs)}); "
                            f"`bay auth` gives a login only the secrets a sync through that env would get")
+        nd = c.spec.get("needs", {})
+        outside = bool(nd.get("network") or nd.get("secrets") or any(
+            str(p).startswith(("~", "/")) for ops in (nd.get("fs") or {}).values() for p in ops))
+        if outside != (c.dir.parent.name == "components"):     # decision 7: a source connector is a component of its own
+            out.append(f"{_where(c.path, _line_of(c.path, r'^spec:'))}: connector {c.name} " + (
+                "reaches outside the project (needs.network, needs.secrets or an fs path under ~ or /), so it must be "
+                "a top-level component: components/<name>/" if outside else
+                "reaches nothing outside the project, so move it into the component that owns it: "
+                "components/<owner>/connectors/<name>/"))
         impl = c.spec["implements"]
         impl = [impl] if isinstance(impl, str) else impl
         for iface in impl:
-            if iface in SOURCE_INTERFACES:
+            if iface == model.SOURCE_IFACE:           # the store keys items and deletions on these fields
                 for key, why in (("source", "the value stamped on every item's `source`; the store keys items "
                                             "and deletions on it"),
                                  ("window", "how far back the source API serves (e.g. 7d); older history "
@@ -415,7 +414,7 @@ def lint_contract_versions(kit: model.Kit) -> list[str]:
             k, _, v = n.partition("/v")
             if k not in kinds:
                 out.append(f"{where}: {owner} {key}: unknown item kind '{n}' (known: {known}); add a "
-                           f"content type for the kind (content-types/<name>/) or fix the name")
+                           f"content type for the kind (components/<name>/) or fix the name")
             elif int(v) not in kinds[k]:
                 out.append(f"{where}: {owner} {key}: item kind {k} has no version {v} (known: {known})")
 
@@ -526,7 +525,7 @@ def lint_extension_names(kit: model.Kit) -> list[str]:
     path) are not extensions and are not scanned; framework instances may load each other (they ship and change
     together, only through forge.extend), never a user extension. A static scan cannot be complete (a name can be
     computed at run time); it catches the spelled-out forms."""
-    cpath = kit.root / "framework" / "components.yaml"
+    cpath = kit.root / "framework" / "kernel.yaml"
     cmap = _component_map(cpath) if cpath.exists() else None
 
     def relk(f: Path) -> str:
@@ -594,7 +593,7 @@ def warnings(kit: model.Kit) -> list[str]:
                        f"FTS5 (python.org and Homebrew builds have it) for ranked full-text search")
     if kit.project is not None and kit.project.resolve() == kit.root.resolve():
         out += stale_policy(kit, kit.protected_paths)
-        roots = list(kit.protected.paths)     # the folders; a write path of modes/ that reaches modes/cos is by design
+        roots = [p for p in kit.protected.paths if "/" not in p]   # the folders; components/ reaching components/cos is by design
         for env in kit.docs["Environment"].values():
             for w in env.spec.get("fs", {}).get("write", []):
                 hits = [d for d in roots if w in (".", "", "./") or Path(d).is_relative_to(Path(w))]
@@ -718,6 +717,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     for md in kit.docs["Mode"].values():
         out += contenttypes.mode_problems(md.dirs, _as_list(md.spec.get("reads")), kit.root)
     out += lint_extension_names(kit)
+    out += lint_references(kit)
     out += lint_rulesets(kit)
     out += lint_components(kit)
     out += lint_protection(kit)
@@ -822,8 +822,8 @@ def lint_skill_names(kit: model.Kit) -> list[str]:
 
 
 def lint_components(kit: model.Kit) -> list[str]:
-    """framework/components.yaml (proposal 0006, Part A): its schema, and every `owns:` glob names a real path."""
-    path = kit.root / "framework" / "components.yaml"
+    """framework/kernel.yaml (proposal 0006, Part A): its schema, and every `owns:` glob names a real path."""
+    path = kit.root / "framework" / "kernel.yaml"
     if not path.exists():
         return []
     try:
@@ -833,11 +833,10 @@ def lint_components(kit: model.Kit) -> list[str]:
     out = [f"{_where(path, 1)}: components schema: {e}" for e in model.schema_errors(doc, model.schema("components"))]
     if out:
         return out
-    for comp, spec in doc["components"].items():
-        for g in spec["owns"]:
-            if not any(kit.root.glob(g.rstrip("/"))):
-                out.append(f"{_where(path, _line_of(path, re.escape(g)))}: component {comp} owns '{g}', which matches "
-                           f"no path in the kit. Fix the path or remove it")
+    for g in doc["owns"]:
+        if not any(kit.root.glob(g.rstrip("/"))):
+            out.append(f"{_where(path, _line_of(path, re.escape(g)))}: the kernel owns '{g}', which matches "
+                       f"no path in the kit. Fix the path or remove it")
     return out
 
 
@@ -854,17 +853,8 @@ def stale_policy(kit: model.Kit, every: list[str]) -> list[str]:
     if have == every:
         return []
     return [f".agentbay/guard.json: its protected list ({len(have) if isinstance(have, list) else 'none'} paths) is not "
-            f"the one framework/components.yaml `protected:` gives ({len(every)} paths: the guard enforces the policy, "
+            f"the one framework/kernel.yaml `protected:` gives ({len(every)} paths: the guard enforces the policy, "
             f"not the map); rebuild it with ./bay.sh build"]
-
-
-def _mode_envs(spec: dict) -> set[str]:
-    """Every env a mode's `roles:` maps, at the mode, a feature or a step."""
-    maps = [spec.get("roles")]
-    for ep in (spec.get("features") or {}).values():
-        maps.append(ep.get("roles"))
-        maps += [st.get("roles") for st in ep.get("steps") or [] if isinstance(st, dict)]
-    return {e for m in maps if isinstance(m, dict) for e in m.values() if isinstance(e, str)}
 
 
 def lint_protection(kit: model.Kit) -> list[str]:
@@ -876,7 +866,7 @@ def lint_protection(kit: model.Kit) -> list[str]:
     prot = kit.protected
     if prot.closed:
         return []
-    path = kit.root / "framework" / "components.yaml"
+    path = kit.root / "framework" / "kernel.yaml"
     where = _where(path, _line_of(path, r"^protected:"))
     out = []
     for kind, label in model.PROTECTION_KIND.items():
@@ -886,7 +876,7 @@ def lint_protection(kit: model.Kit) -> list[str]:
         md = kit.get("Mode", name)
         out += [f"{where}: protected mode {name} puts roles in env {e}, which is not protected; protect {e} too "
                 f"(the wiring of a protected mode is protected)"
-                for e in sorted(_mode_envs(md.spec) if md else ()) if e in kit.docs["Environment"] and e not in prot.place]
+                for e in sorted(model.mode_envs(md) if md else ()) if e in kit.docs["Environment"] and e not in prot.place]
     for e in prot.place:
         env = kit.get("Environment", e)
         for iface, b in (env.spec.get("bind", {}).items() if env else ()):
@@ -896,7 +886,7 @@ def lint_protection(kit: model.Kit) -> list[str]:
 
 
 def _protected_paths_in_sync(kit: model.Kit) -> list[str]:
-    cmap = _component_map(kit.root / "framework" / "components.yaml")
+    cmap = _component_map(kit.root / "framework" / "kernel.yaml")
     if cmap is None:
         return []
     every, out = kit.protected_paths, []
@@ -907,12 +897,13 @@ def _protected_paths_in_sync(kit: model.Kit) -> list[str]:
             if missing:
                 out.append(f"{env.rel}: env {env.name} writes protected paths but not {', '.join(missing)}; the guard "
                            f"lets an env write a protected path only if the env names it - add them to fs.write")
-        for w in writes:
-            ext = cmap.extension(w) or cmap.extension(w + "/")
-            if ext and ext[0].name in boundary.PROTECTED_KINDS and ext[1].rstrip("/") == w \
-                    and not kit.protected.reserved(ext[0].name, ext[0].instance_name(ext[1])):
+        for w in writes:       # a component folder, one of its envs or one of its internal connectors
+            m = re.fullmatch(r"components/([^/]+)(?:/envs/([^/]+)\.yaml|/connectors/([^/]+))?", w)
+            kinds = [("env", m[2])] if m and m[2] else [("connector", m[3])] if m and m[3] else \
+                    [("mode", m[1]), ("connector", m[1])] if m else []
+            if kinds and not any(kit.protected.reserved(k, n) for k, n in kinds):
                 out.append(f"{env.rel}: env {env.name} fs.write names {w}, which the protected: block of "
-                           f"framework/components.yaml does not list; remove it or protect the {ext[0].name}")
+                           f"framework/kernel.yaml does not list; remove it or protect the {kinds[0][0]}")
     return out
 
 
@@ -932,7 +923,7 @@ def lint_owner_only(kit: model.Kit) -> list[str]:
 def lint_ownership(kit: model.Kit) -> list[str]:
     """B-4 (proposal 0006, Part F): every tracked file of the kit is under a core `owns:` path, an extension
     folder (`at:`) or the boundary's other set. Runs only when the kit is a git checkout."""
-    path = kit.root / "framework" / "components.yaml"
+    path = kit.root / "framework" / "kernel.yaml"
     r = subprocess.run(["git", "-C", str(kit.root), "ls-files", "-z"], capture_output=True)
     if not path.exists() or r.returncode:
         return []
@@ -942,16 +933,16 @@ def lint_ownership(kit: model.Kit) -> list[str]:
         return []
     return [f"{f}: not under a core owns: path, an extension folder or the boundary's other set (B-4). Move it "
             f"into the folder of the component or extension it belongs to, or add it to that component's owns: "
-            f"in framework/components.yaml" for f in boundary.stray(files, cmap)]
+            f"in framework/kernel.yaml" for f in boundary.stray(files, cmap)]
 
 
-MANIFESTS = {"mode": "mode.yaml", "connector": "connector.yaml", "adapter": "adapter.yaml"}
+OLD_FOLDERS = ("modes/", "envs/", "connectors/", "content-types/", "coordinator/", "framework/interfaces/", "interfaces/")
 
 
 def lint_case_and_manifests(kit: model.Kit) -> list[str]:
     """F-4: no two tracked paths differ only in case (one checkout of them would clobber the other on macOS or
     Windows, and `bay check --base` treats them as one), and every extension folder carries its manifest."""
-    path = kit.root / "framework" / "components.yaml"
+    path = kit.root / "framework" / "kernel.yaml"
     r = subprocess.run(["git", "-C", str(kit.root), "ls-files", "-z"], capture_output=True)
     if not path.exists() or r.returncode:
         return []
@@ -965,18 +956,49 @@ def lint_case_and_manifests(kit: model.Kit) -> list[str]:
             if other != p:
                 out.append(f"{p}: differs only in case from {other}; rename one (paths must be unique ignoring case)")
                 seen[p.casefold()] = p
-    cmap, roots = _component_map(path), {}
-    if cmap is None:
-        return list(dict.fromkeys(out))
-    for f in files:
-        ext = cmap.extension(f)
-        if ext and ext[0].name in MANIFESTS and ext[1].endswith("/"):
-            roots.setdefault(ext[1], set()).add(f[len(ext[1]):])
-    for root, inside in sorted(roots.items()):
-        if MANIFESTS[cmap.extension(root + "x")[0].name] not in inside:
-            out.append(f"{root}: extension folder without its manifest "
-                       f"{MANIFESTS[cmap.extension(root + 'x')[0].name]}")
+    roots = {}
+    for f in files:                      # a component folder carries a manifest of the loader's table, an adapter its own
+        m = re.match(r"(?:components|adapters)/[^/]+/", f)
+        if m:
+            roots.setdefault(m[0], set()).add(f[m.end():])
+    for folder, inside in sorted(roots.items()):
+        want = ("adapter.yaml",) if folder.startswith("adapters/") else tuple(boundary.MANIFEST_KINDS)
+        if not inside.intersection(want):
+            out.append(f"{folder}: extension folder without its manifest {' or '.join(want)}")
+    out += [f"{d}: the old layout is not read (agentbay/v4); move it to components/<name>/"
+            for d in OLD_FOLDERS if any(f.startswith(d) for f in files)]
     return list(dict.fromkeys(out))
+
+
+BAY_IMPORT = re.compile(r"^\s*(?:from bay import ([^#\n]+)|(?:from|import) bay\.(\w+))", re.M)
+
+
+def lint_references(kit: model.Kit) -> list[str]:
+    """What the adapter runs, connector code imports and manifests name exists; text is read, nothing imported."""
+    out: list[str] = []
+    srcs = [(f, re.findall(r'\bbay["\s/]+(\w+)\.py', f.read_text(encoding="utf-8")))
+            for f in kit.root.glob("adapters/*/*.py")]
+    for c in kit.docs["Connector"].values():
+        for f in (p for p in _extension_files(c, ("**/*.py",)) if p.suffix == ".py"):
+            srcs.append((f, [x.split()[0] for m in BAY_IMPORT.finditer(f.read_text(encoding="utf-8"))
+                             for x in (m[1] or m[2]).split(",")]))
+    for f, names in srcs:
+        for n in sorted(set(names)):
+            out += _need(kit, kit.root / "bay" / f"{n}.py", model.rel(f), "module")
+    for md in kit.docs["Mode"].values():
+        if md.spec.get("coordinator") and not any((d / "playbook.md").exists() for d in md.dirs):
+            out.append(f"{model.rel(md.dir)}/: mode {md.name} has a coordinator but no playbook.md in its extends chain")
+    files = [d.path for d in kit.docs["Interface"].values()]
+    for md in kit.docs["Mode"].values():
+        files += [*md.config_files, *(q for d in md.dirs for q in (d / "types").glob("*.schema.json"))]
+    files += [ct.dir / contenttypes.FIELDS for ct in contenttypes.scan(kit.root)[0].values()]
+    for f in sorted(set(files)):
+        for ref in sorted(set(re.findall(r"\$ref\W+([a-z][a-z0-9.-]*/v\d+)", f.read_text(encoding="utf-8")))):
+            try:
+                model.data_schema(ref, kit.root)
+            except model.SpecError as e:
+                out.append(f"{_where(f, _line_of(f, re.escape(ref)))}: $ref {ref}: {e}")
+    return out
 
 
 def lint_rulesets(kit: model.Kit) -> list[str]:

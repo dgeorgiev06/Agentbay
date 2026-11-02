@@ -18,7 +18,7 @@ from . import boundary, proposal
 FILE = "framework/limits.yaml"
 MEASURES = ("bay_lines", "kit_python_lines", "cli_commands", "framework_folders", "schemas", "top_level_folders",
             "tests")
-_TEST_FILE = re.compile(r"(?:tests|(?:connectors|content-types)/[^/]+/tests)/test_[^/]*\.py")
+_TEST_FILE = re.compile(r"(?:tests|(?:components|adapters)/(?:.+/)?tests)/test_[^/]*\.py")
 
 
 def _lines(path: Path) -> int:
@@ -34,7 +34,7 @@ def count(repo: Path) -> dict[str, int]:
                           "-z"], capture_output=True, text=True, check=True).stdout
     paths = [p for p in out.split("\0") if p and (repo / p).is_file()]
     py = [p for p in paths if p.endswith(".py")]
-    kit = [p for p in py if p.split("/")[0] in ("connectors", "adapters", "content-types")
+    kit = [p for p in py if p.split("/")[0] in ("components", "adapters")
            and "tests" not in p.split("/")]
     read = lambda p: (repo / p).read_text(encoding="utf-8")        # noqa: E731
     return {
@@ -79,13 +79,14 @@ def check(repo: Path, base: str | None = None, proposal_text: str | None = None,
     allowed = _exceptions(proposal_text)
     problems, notes = [], []
     for m, n in count(repo).items():
-        lim = max(ceil[m], old.get(m, ceil[m]))                  # a ceiling lowered on this branch may climb back to the base's
+        lim = max(ceil[m], old.get(m, ceil[m]), allowed.get(m, 0))   # a lowered ceiling may climb back to the base's; an exception allows up to its `to`
         if ceil[m] > old.get(m, ceil[m]) and allowed.get(m, 0) < ceil[m]:
             problems.append(f"{m}: the ceiling {ceil[m]} is above {old[m]} at {base}; raising it needs "
                             f"`exceptions: [{{ measure: {m}, to: {ceil[m]}, reason }}]` in the proposal")
         if n > lim:
-            problems.append(f"{m}: {n} is over the ceiling {lim} (+{n - lim}); remove what the change added "
-                            f"or put an exception in the proposal")
+            problems.append(f"{m}: {n} is over the ceiling {lim} (+{n - lim}); " + (
+                f"the proposal's exception allows up to {allowed[m]}" if m in allowed else
+                "remove what the change added or put an exception in the proposal"))
         elif n != ceil[m]:
             text = re.sub(rf"^({m}:\s*)\d+", rf"\g<1>{n}", text, flags=re.M)
             notes.append(f"{m}: {n} against the ceiling {ceil[m]}; the ceiling is now {n}")

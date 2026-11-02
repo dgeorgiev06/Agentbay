@@ -2,7 +2,7 @@
 """agentbay control plane.
 
   check [--base <ref>]   lint + resolve every mode endpoint (fails with every gap); with --base, also check the
-                         change against framework/components.yaml and a proposal's touches: (--proposal, --docs);
+                         change against framework/kernel.yaml and a proposal's touches: (--proposal, --docs);
                          --limits checks the size ceilings in framework/limits.yaml
   build | clean          compile modes/roles into a runtime (claude-code) / remove it; build writes a minimal
                          agentbay.config.yaml when the project has none
@@ -38,7 +38,6 @@
 from __future__ import annotations
 
 import argparse
-import fnmatch
 import json
 import os
 import sys
@@ -188,14 +187,8 @@ def cmd_catalog(args):
     except FileNotFoundError as e:
         _die(f"✗ {e}")
     name = args.name
-    if args.json:
-        if not name:
-            _out(cat)
-            return
-        _out(_catalog_pick(cat, name))
-        return
-    if name:
-        _out(_catalog_pick(cat, name))
+    if name or args.json:
+        _out(_catalog_pick(cat, name) if name else cat)
         return
     print(f"registry built {cat['builtAt']} for {cat['runtime']}\n")
     for m in cat["modes"]:
@@ -455,89 +448,17 @@ def cmd_secret(args):
     print(f"stored {args.name} in {args.provider}")
 
 
-class LoginContext:
-    """The API a connector's `login` entry gets from `bay auth <connector>`: the same secret access a sync gets
-    (names both in the env's `secrets.allow` and the connector's `needs.secrets`, read and store, through the
-    env's provider), an Http limited to its declared hosts that the env allows, the browser and the terminal.
-    The entry runs in-process, so this limits the API it is handed, not what the process can do: a connector's
-    code is trusted the same way during a login as during a sync."""
-
-    def __init__(self, conn, env, prov, http, open_browser, say=print):
-        self.connector, self.env, self.http, self.open_browser, self.say = conn.name, env.name, http, open_browser, say
-        self._prov = prov
-        self._declared = list(conn.spec.get("needs", {}).get("secrets", []))
-        self._acc = vault.SecretAccessor(prov, env.spec.get("secrets", {}).get("allow", []), self._declared,
-                                         conn.name)
-        self.provider = prov.name
-
-    def _check(self, name: str) -> None:
-        if not any(fnmatch.fnmatchcase(name, p) for p in self._declared):
-            raise vault.SecretError(f"connector {self.connector} does not declare secret {name} (needs.secrets)")
-
-    def secret(self, name: str) -> str | None:
-        self._check(name)
-        return self._acc.get(name, optional=True)
-
-    def store_secret(self, name: str, value: str) -> bool:
-        self._check(name)
-        n = len(self._acc.warnings)
-        self._acc.store(name, value)
-        return len(self._acc.warnings) == n
-
-
-def binds_connector(env, conn_name: str) -> bool:
-    """True when the env binds the connector under some interface."""
-    for v in (env.spec.get("bind") or {}).values():
-        vals = v if isinstance(v, list) else [v] if isinstance(v, str) else []
-        if conn_name in vals:
-            return True
-    return False
-
-
-def _login_env(s, conn, name: str | None):
-    """The env to log in through: --env (which must bind the connector), else the one env that binds it."""
-    envs = s.kit.docs["Environment"]
-    if name:
-        if name not in envs:
-            _die(f"✗ unknown env '{name}'")
-        if not binds_connector(envs[name], conn.name):
-            _die(f"✗ env {name} does not bind connector {conn.name}; a login goes through an env that uses it")
-        return envs[name]
-    found = [e for e in envs.values() if binds_connector(e, conn.name)]
-    if len(found) != 1:
-        which = ", ".join(e.name for e in found) or "none"
-        _die(f"✗ {len(found)} envs bind connector {conn.name} ({which}); name one with --env")
-    return found[0]
-
-
 def cmd_auth(args):
     """`bay auth <connector>`: runs the connector's declared `login` entry (e.g. an OAuth browser login that stores
     a refresh token). Interactive terminal only, like `secret set`: an agent can neither start a login nor replace
     a token."""
-    import webbrowser
     from bay import connect
     if not sys.stdin.isatty():
         _die(f"✗ bay auth {args.connector} needs an interactive terminal (stdin is not a TTY) and your browser; "
              f"run it yourself in a terminal.")
     s = _system(args)
-    conn = s.kit.get("Connector", args.connector)
-    if conn is None:
-        _die(f"✗ unknown connector '{args.connector}'")
-    entry = conn.spec.get("login")
-    if not entry:
-        have = sorted(c.name for c in s.kit.docs["Connector"].values() if c.spec.get("login"))
-        _die(f"✗ connector {conn.name} declares no `login` entry (connectors with one: {', '.join(have) or 'none'})")
-    env = _login_env(s, conn, args.env)
-    mod = connect._load_module(conn)
-    fn = getattr(mod, entry, None)
-    if not callable(fn):
-        _die(f"✗ connector {conn.name}: {conn.spec['entry']} has no function {entry} (its declared `login`)")
-    allow = [h for h in conn.spec.get("needs", {}).get("network", [])
-             if connect.model.host_allowed(h, env.spec.get("network", {}).get("allow", []))]
-    http = connect.Http(allow, who=f"bay auth {conn.name}")
-    ctx = LoginContext(conn, env, connect.secrets_provider(s, env), http, webbrowser.open)
     try:
-        fn(ctx)
+        connect.login(s, args.connector, args.env)
     except (connect.ConnectorError, vault.SecretError) as e:
         _die(f"✗ {e}")
 

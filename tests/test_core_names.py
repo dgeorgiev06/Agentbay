@@ -1,7 +1,7 @@
 """No core file names a content type or a connector (proposal 0006 B-1/B-7 and 0008 slice 5).
 
-Core = bay/, framework/, schemas/, adapters/ and coordinator/ plus the protected modes, envs and connectors (which
-sat in framework/ before stage 5 part G and own no content type) (python, json and yaml files; folders named tests
+Core = the kit's protected paths (bay/, framework/, schemas/, adapters/ and the protected components, envs, connectors
+and interfaces, which own no content type) (python, json and yaml files; folders named tests
 and fixtures are skipped). The names are found, not listed: the folders of content-types/ (and each type's `kind` and
 view names), the view names of modes/*/views.yaml, and the connectors that implement items.source/v1 (the control-plane
 connectors, git and ledger among them, are core and name themselves everywhere).
@@ -27,11 +27,10 @@ import re
 
 import yaml
 from helpers import KIT
-from layout import PROTECTED_INSTANCES
 
-from bay import contenttypes
+from bay import contenttypes, model
 
-CORE = ("bay", "framework", "schemas", "adapters", "coordinator", *PROTECTED_INSTANCES)
+CORE = tuple(model.Kit(KIT).protected_paths)
 SOURCE_IFACE = "items.source/v1"
 SKIP = {"tests", "fixtures", "__pycache__"}
 SUFFIXES = {".py", ".json", ".yaml", ".yml"}
@@ -39,11 +38,11 @@ SUFFIXES = {".py", ".json", ".yaml", ".yml"}
 ALLOWED = {
     ("bay/selector.py", "email", "au.get('email')"):
         "the `email` field of an item/v1 author ({handle, name, email}); a field of the base record, not a content type",
-    ("connectors/corpus-store/corpus_store.py", "email", "au.get('email')"):
+    ("components/briefing/connectors/corpus-store/corpus_store.py", "email", "au.get('email')"):
         "the same item/v1 author field, read when a row is stored",
-    ("connectors/corpus-store/corpus_store.py", "email", "'email' not in author"):
+    ("components/briefing/connectors/corpus-store/corpus_store.py", "email", "'email' not in author"):
         "the same author field, checked when a handle holds an address",
-    ("connectors/corpus-store/corpus_store.py", "email", "{'email': author.pop('handle'), **author}"):
+    ("components/briefing/connectors/corpus-store/corpus_store.py", "email", "{'email': author.pop('handle'), **author}"):
         "the same author field, written when a handle holds an address",
     ("schemas/data/item.v1.schema.json", "email", "/properties/author/properties: email"):
         "the item/v1 author's `email` property, the base record every type extends",
@@ -61,10 +60,10 @@ def names(root=KIT) -> tuple[set[str], set[str], set[str]]:
     types, _ = contenttypes.scan(root)
     kinds = set(types) | {t.kind for t in types.values()}
     views = {v for t in types.values() for v in t.docs}
-    for f in root.glob("modes/*/views.yaml"):
+    for f in root.glob("components/*/views.yaml"):
         views |= set((yaml.safe_load(f.read_text()) or {}).get("views") or {})
     conns = set()
-    for f in (root / "connectors").glob("*/connector.yaml"):
+    for f in (root / "components").glob("**/connector.yaml"):
         impl = (yaml.safe_load(f.read_text()) or {}).get("spec", {}).get("implements") or []
         if SOURCE_IFACE in ([impl] if isinstance(impl, str) else impl):
             conns.add(f.parent.name)

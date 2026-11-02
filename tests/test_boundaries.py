@@ -5,9 +5,8 @@ import sys
 import types
 
 from helpers import KIT, cleanup, kit_for, project, system, tmpdir
-from layout import PROTECTED_INSTANCES
 
-from bay import guard, vault
+from bay import guard, model, vault
 from bay.adapter import get, module
 
 COORDINATOR_CMDS = module("claude-code").COORDINATOR_CMDS
@@ -309,23 +308,23 @@ def test_protected_kit_dirs_when_the_project_is_the_kit():
     try:
         get("claude-code").build(system(k, k), k, k)
         pol = json.loads((k / ".agentbay/guard.json").read_text())
-        # the four folders of the old policy, in their old order, then exactly the protected instances (stage 5 part G)
-        assert pol["protected"] == ["framework", "bay", "schemas", "adapters", *PROTECTED_INSTANCES]
+        # the policy lists exactly what the kit's protected list gives (test_protection pins that list)
+        assert pol["protected"] == model.Kit(KIT).protected_paths
         assert tool(k, "builder--forge--local-authoring", "Write",
-                    {"file_path": "modes/cos/mode.yaml", "content": "x"})[0] == "deny"
+                    {"file_path": "components/cos/mode.yaml", "content": "x"})[0] == "deny"
         assert tool(k, "builder--forge--local-authoring", "Write",
-                    {"file_path": "connectors/ledger/ledger.py", "content": "x"})[0] == "deny"
+                    {"file_path": "components/improve/connectors/ledger/ledger.py", "content": "x"})[0] == "deny"
         assert tool(k, "builder--forge--framework-dev", "Write",
-                    {"file_path": "modes/cos/mode.yaml", "content": "x"})[0] == "pass"
+                    {"file_path": "components/cos/mode.yaml", "content": "x"})[0] == "pass"
         assert tool(k, "builder--delivery", "Write", {"file_path": "bay/guard.py", "content": "x"})[0] == "deny"
         assert tool(k, "builder--delivery", "Write", {"file_path": "framework/roles/x.yaml", "content": "x"})[0] == "deny"
-        assert tool(k, "builder--forge--local-authoring", "Write", {"file_path": "modes/x.yaml", "content": "x"})[0] == "pass"
+        assert tool(k, "builder--forge--local-authoring", "Write", {"file_path": "components/x.yaml", "content": "x"})[0] == "pass"
         assert tool(k, "builder--forge--local-authoring", "Write", {"file_path": "roles/x.yaml", "content": "x"})[0] == "deny"
         assert tool(k, "builder--forge--local-authoring", "Write", {"file_path": "bay.sh", "content": "x"})[0] == "deny"
         assert tool(k, "builder--forge--framework-dev", "Write", {"file_path": "bay/x.py", "content": "x"})[0] == "pass"
         st = json.loads((k / ".claude/settings.json").read_text())
         assert not any(d.startswith("Edit(//") for d in st["permissions"]["deny"])   # kit inside project
-        from bay import lint, model
+        from bay import lint
         assert any("reaches framework/" in w for w in lint.warnings(model.Kit(k, k)))
     finally:
         cleanup(k)

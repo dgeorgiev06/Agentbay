@@ -1,6 +1,4 @@
 """bay check (lint half): one test per failure mode, plus the shipped kit is clean."""
-import shutil
-
 from helpers import KIT, cleanup, edit_yaml, kit_copy, project
 
 from bay import lint, model
@@ -18,8 +16,8 @@ def has(k, *needles, p=None):
     raise AssertionError(f"no lint problem with {needles}; got:\n  " + "\n  ".join(ps))
 
 
-PB = "modes/briefing/features/digest/playbook.md"
-RULES = "modes/briefing/features/digest/rules.yaml"
+PB = "components/briefing/features/digest/playbook.md"
+RULES = "components/briefing/features/digest/rules.yaml"
 
 
 def sub(k, rel, old, new):
@@ -89,26 +87,83 @@ def test_a_file_a_feature_names_must_exist():
     k = kit_copy()
     (k / RULES).unlink()
     # an inherited feature is reported once, as the parent's, at the parent's mode.yaml line, normalized path
-    has(k, "modes/briefing/mode.yaml:22: feature briefing.digest rules file "
-           "modes/briefing/features/digest/rules.yaml does not exist")
+    has(k, "components/briefing/mode.yaml:20: feature briefing.digest rules file "
+           "components/briefing/features/digest/rules.yaml does not exist")
     assert not [x for x in problems(k) if "feed-briefing.digest rules file" in x]
+
+
+DELETED_TARGETS = [
+    ("adapter script", "bay/hook.py", "module bay/hook.py does not exist"),
+    ("bay module a connector imports", "bay/graph.py", "module bay/graph.py does not exist"),
+    ("coordinator playbook", "components/improve/playbook.md", "mode improve has a coordinator but no playbook.md"),
+    ("data schema named by $ref", "components/improve/data/session.episode.v1.schema.json", "$ref session.episode/v1"),
+    ("feature type", "components/cos/types/StageOut.schema.json",
+     "feature cos.run type StageOut components/cos/types/StageOut.schema.json does not exist"),
+]
+
+
+def test_a_reference_to_a_deleted_file_is_refused_in_every_group():
+    for group, rel, needle in DELETED_TARGETS:
+        k = kit_copy()
+        (k / rel).unlink()
+        try:
+            has(k, needle)
+        except AssertionError as e:
+            raise AssertionError(f"{group}: {e}") from None
 
 
 def test_a_feature_that_runs_an_agent_needs_a_playbook_and_a_code_only_one_needs_no_files():
     k = kit_copy()
-    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["features"]["ask"].pop("playbook"))
+    edit_yaml(k / "components/briefing/mode.yaml", lambda d: d["spec"]["features"]["ask"].pop("playbook"))
     has(k, "feature briefing.ask runs an agent but has no `playbook`")
     assert len([x for x in problems(k) if "ask runs an agent but has no `playbook`" in x]) == 1
     # sync has code steps only: no playbook, no rules, no folder, and lint stays clean
-    k = kit_copy()
-    shutil.rmtree(k / "modes/briefing/features/sync")
-    edit_yaml(k / "modes/briefing/mode.yaml",
-              lambda d: [d["spec"]["features"]["sync"].pop(key) for key in ("playbook", "rules")])
-    assert problems(k) == [], problems(k)
-    s = model.resolve(model.Kit(k))
+    assert problems(KIT) == []
+    s = model.resolve(model.Kit(KIT))
     sync = s.modes["feed-briefing"].features["sync"]
     assert sync.playbook_path is None and sync.dod == [] and sync.rules == []
     assert all(st.kind == "code" for st in sync.steps)
+
+
+def _give_sync_files(d):
+    d["spec"]["features"]["sync"].update(playbook="features/digest/playbook.md", rules="features/digest/rules.yaml")
+
+
+def _add_policies(d):
+    d["spec"]["constraints"]["policies"] = ["cite-sources"]
+
+
+def _reach_out(d):
+    d["spec"]["needs"]["fs"] = {"read": ["~/.ledger"]}
+
+
+def _reach_nothing(d):
+    d["spec"]["needs"].pop("secrets"), d["spec"]["needs"].pop("network")
+
+
+MODE = "components/briefing/mode.yaml"
+T2_RULES = [
+    ("agent text on a code-only feature", MODE, _give_sync_files,
+     ["components/briefing/mode.yaml:13: feature briefing.sync has no role step, so its `playbook` is never read",
+      "components/briefing/mode.yaml:13: feature briefing.sync has no role step, so its `rules` is never read"]),
+    ("an unread manifest key", MODE, _add_policies,
+     ["components/briefing/mode.yaml", "Additional properties are not allowed ('policies' was unexpected)"]),
+    ("an internal connector that reaches outside the project", "components/improve/connectors/ledger/connector.yaml",
+     _reach_out, ["connector ledger reaches outside the project", "must be a top-level component"]),
+    ("a source connector that reaches nothing outside", "components/gmail-api/connector.yaml", _reach_nothing,
+     ["connector gmail-api reaches nothing outside the project", "components/<owner>/connectors/<name>/"]),
+]
+
+
+def test_agent_text_nothing_reads_and_unread_manifest_keys_are_refused():
+    for group, rel, edit, needles in T2_RULES:
+        k = kit_copy()
+        edit_yaml(k / rel, edit)
+        try:
+            for needle in needles:
+                has(k, needle)
+        except AssertionError as e:
+            raise AssertionError(f"{group}: {e}") from None
 
 
 def test_review_settings_only_in_mode_yaml():
@@ -125,14 +180,14 @@ def test_review_settings_only_in_mode_yaml():
 
 def test_review_role_must_exist_and_be_in_the_mode():
     k = kit_copy()
-    edit_yaml(k / "modes/briefing/mode.yaml",
+    edit_yaml(k / "components/briefing/mode.yaml",
               lambda d: d["spec"]["features"]["digest"]["review"].update({"role": "ghost"}))
     has(k, "briefing.digest review role 'ghost' does not exist")
     # once for the base and its children that inherit the feature (mail-briefing declares its own digest)
     assert len([x for x in problems(k) if "review role 'ghost' does not exist" in x
-                and "modes/briefing/mode.yaml" in x]) == 1
+                and "components/briefing/mode.yaml" in x]) == 1
     k = kit_copy()
-    edit_yaml(k / "modes/briefing/mode.yaml",
+    edit_yaml(k / "components/briefing/mode.yaml",
               lambda d: d["spec"]["features"]["digest"]["review"].update({"role": "researcher"}))
     has(k, "briefing.digest review: role researcher is not in mode briefing `roles:`", "add `researcher: <env>`")
 
@@ -142,7 +197,7 @@ def line_of(path, needle):
 
 
 def test_role_env_errors_name_mode_feature_and_step():
-    base = "modes/briefing/mode.yaml"
+    base = "components/briefing/mode.yaml"
     # a step naming a role that is not in the mode
     k = kit_copy()
     sub(k, base, "{ id: answer, role: analyst,", "{ id: answer, role: researcher,")
@@ -164,7 +219,7 @@ def test_role_env_errors_name_mode_feature_and_step():
     k = kit_copy()
     sub(k, base, "{ id: answer, role: analyst,", "{ id: answer, role: analyst, roles: { reviewer: workspace },")
     sub(k, base, "{ id: prune, run: items.store/v1.prune,", "{ id: prune, roles: { lead: workspace }, run: items.store/v1.prune,")
-    edit_yaml(k / "modes/briefing/mode.yaml", lambda d: d["spec"]["features"]["ask"].update({"roles": {"builder": "workspace"}}))
+    edit_yaml(k / "components/briefing/mode.yaml", lambda d: d["spec"]["features"]["ask"].update({"roles": {"builder": "workspace"}}))
     has(k, "briefing.ask step answer: `roles:` names reviewer, but this step runs role analyst")
     has(k, "briefing.prune step prune: `roles:` applies to role and review steps only")
     has(k, "briefing.ask: `roles:` gives role builder an env, but mode briefing does not list builder")
@@ -191,15 +246,15 @@ def test_a_user_space_role_is_an_error():
 def test_an_offline_env_with_a_network_host_or_a_secret_is_refused():
     k = kit_copy()
     assert not [p for p in lint.lint_offline(model.Kit(k))]
-    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["offline"].update({"network": {"allow": ["api.x.com"]}}))
+    edit_yaml(k / "components/briefing/envs/local-feeds.yaml", lambda d: d["spec"]["offline"].update({"network": {"allow": ["api.x.com"]}}))
     errs = lint.lint_offline(model.Kit(k))
-    assert len(errs) == 1 and "envs/local-feeds.yaml:" in errs[0] and "offline with network host api.x.com" in errs[0]
+    assert len(errs) == 1 and "components/briefing/envs/local-feeds.yaml:" in errs[0] and "offline with network host api.x.com" in errs[0]
     assert errs[0] in lint.run(k)
-    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["offline"].pop("network"))
-    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["offline"].update({"secrets": {"allow": ["X_CLIENT_ID"]}}))
+    edit_yaml(k / "components/briefing/envs/local-feeds.yaml", lambda d: d["spec"]["offline"].pop("network"))
+    edit_yaml(k / "components/briefing/envs/local-feeds.yaml", lambda d: d["spec"]["offline"].update({"secrets": {"allow": ["X_CLIENT_ID"]}}))
     assert any("offline with secret X_CLIENT_ID" in p for p in lint.lint_offline(model.Kit(k)))
-    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["offline"].pop("secrets"))
-    edit_yaml(k / "envs/local-feeds.yaml", lambda d: d["spec"]["offline"]["bind"].update({"git.read/v1": "fake"}))
+    edit_yaml(k / "components/briefing/envs/local-feeds.yaml", lambda d: d["spec"]["offline"].pop("secrets"))
+    edit_yaml(k / "components/briefing/envs/local-feeds.yaml", lambda d: d["spec"]["offline"]["bind"].update({"git.read/v1": "fake"}))
     assert any("offline binds git.read/v1, which the env does not bind" in p for p in lint.lint_offline(model.Kit(k)))
 
 
@@ -222,13 +277,13 @@ def test_forge_extend_review_cannot_be_disabled_or_weakened():
                 ep.pop("review")
             else:
                 ep["review"].update(change)
-        edit_yaml(k / "modes/forge/mode.yaml", f)
-        has(k, "modes/forge/mode.yaml", "forge.extend must declare review", "cannot be disabled")
+        edit_yaml(k / "components/forge/mode.yaml", f)
+        has(k, "components/forge/mode.yaml", "forge.extend must declare review", "cannot be disabled")
 
 
 def test_kind_scoped_rules_are_linted():
     k = kit_copy()
-    sub(k, "modes/forge/features/create/rules.yaml", "when: { kind: env }", "when: { kind: plugin }")
+    sub(k, "components/forge/features/create/rules.yaml", "when: { kind: env }", "when: { kind: plugin }")
     has(k, "rule R-8 when.kind 'plugin' is not one of")
     k = kit_copy()
     (k / RULES).write_text((k / RULES).read_text().rstrip() + "\n  - { id: R-9, level: must, statement: \"x y z\", "
@@ -254,17 +309,17 @@ def test_a_protected_name_is_reserved_and_defined_once():
             raise AssertionError("a feature was added to a protected mode")
         except scaffold.ScaffoldError as e:
             assert "mode 'cos' is protected" in str(e), str(e)
-        assert not (k / "modes/cos/features/extra").exists()
+        assert not (k / "components/cos/features/extra").exists()
         # a second definition under another folder name is a name mismatch, never a second mode 'cos'
-        (k / "modes/cos2").mkdir()
-        (k / "modes/cos2/mode.yaml").write_text((k / "modes/cos/mode.yaml").read_text())
+        (k / "components/cos2").mkdir()
+        (k / "components/cos2/mode.yaml").write_text((k / "components/cos/mode.yaml").read_text())
         errs = model.Kit(k).errors
-        assert any("modes/cos2/mode.yaml" in e and "must match 'cos2'" in e for e in errs), errs
+        assert any("components/cos2/mode.yaml" in e and "must match 'cos2'" in e for e in errs), errs
     finally:
         cleanup(k)
     k = kit_copy()
     try:
-        edit_yaml(k / "framework/components.yaml", lambda d: d["protected"]["mode"].append("ghost"))
+        edit_yaml(k / "framework/kernel.yaml", lambda d: d["protected"]["mode"].append("ghost"))
         has(k, "protected mode 'ghost' does not exist")
     finally:
         cleanup(k)
@@ -272,17 +327,17 @@ def test_a_protected_name_is_reserved_and_defined_once():
 
 def test_modes_must_not_name_connectors_or_tools():
     k = kit_copy()
-    sub(k, "modes/briefing/mode.yaml", "needs: [items.store/v1, items.source/v1]",
+    sub(k, "components/briefing/mode.yaml", "needs: [items.store/v1, items.source/v1]",
         "needs: [items.store/v1, items.source/v1]   # ok comment mentions x-api\n  # x-api in comment is fine")
     assert problems(k) == []
     k = kit_copy()
-    sub(k, "modes/briefing/mode.yaml", "with: { olderThan:", "with: { source: x-api, olderThan:")
+    sub(k, "components/briefing/mode.yaml", "with: { olderThan:", "with: { source: x-api, olderThan:")
     has(k, "mode names connector 'x-api'")
 
 
 def test_orphan_feature_folder():
     k = kit_copy()
-    (k / "modes/briefing/features/stray").mkdir()
+    (k / "components/briefing/features/stray").mkdir()
     has(k, "features/stray: feature folder is not referenced by any feature")
 
 
@@ -321,10 +376,10 @@ def test_extra_rules_stack_strictest_wins():
 
 def test_feed_source_connectors_must_declare_source_and_window():
     k = kit_copy()
-    edit_yaml(k / "connectors/x-api/connector.yaml", lambda d: d["spec"].pop("source"))
-    has(k, "connectors/x-api/connector.yaml:", "connector x-api implements items.source/v1 but declares no spec.source")
+    edit_yaml(k / "components/x-api/connector.yaml", lambda d: d["spec"].pop("source"))
+    has(k, "components/x-api/connector.yaml:", "connector x-api implements items.source/v1 but declares no spec.source")
     k = kit_copy()
-    edit_yaml(k / "connectors/fake/connector.yaml", lambda d: d["spec"].pop("window"))
+    edit_yaml(k / "components/post/connectors/fake/connector.yaml", lambda d: d["spec"].pop("window"))
     has(k, "connector fake implements items.source/v1 but declares no spec.window")
 
 
@@ -336,25 +391,25 @@ def test_schedule_is_a_warning_not_an_error():
     assert problems(KIT) == []
     # improve.backlog runs after the agent steps: the advisory points at the README recipe, not at a bare cron call
     w = next(w for w in ws if "improve.backlog declares schedule" in w)
-    assert "modes/improve/README.md" in w and "call improve.backlog" not in w
+    assert "components/improve/README.md" in w and "call improve.backlog" not in w
 
 
 def test_run_steps_use_versioned_capability_spelling():
     k = kit_copy()
-    sub(k, "modes/briefing/mode.yaml", "run: items.store/v1.prune", "run: feed.store.prune")
-    has(k, "modes/briefing/mode.yaml", "does not match")
+    sub(k, "components/briefing/mode.yaml", "run: items.store/v1.prune", "run: feed.store.prune")
+    has(k, "components/briefing/mode.yaml", "does not match")
 
 
 def test_same_skill_name_in_two_modes_is_fine_b8():
     k = kit_copy()        # briefing and mail-briefing both ship corpus-sql and digest: namespaced, no clash
-    assert (k / "modes/mail-briefing/skills/digest/SKILL.md").exists() and (k / "modes/briefing/skills/digest").exists()
+    assert (k / "components/mail-briefing/skills/digest/SKILL.md").exists() and (k / "components/briefing/skills/digest").exists()
     assert not [p for p in problems(k) if "skill" in p]
 
 
 def test_unknown_skill_reference_fails_lint_b8():
     k = kit_copy()
-    sub(k, "modes/mail-briefing/features/ask/playbook.md", "the corpus-sql skill", "the `mail-sql` skill")
-    x = has(k, "modes/mail-briefing/features/ask/playbook.md:14", "names skill 'mail-sql'",
+    sub(k, "components/mail-briefing/features/ask/playbook.md", "the corpus-sql skill", "the `mail-sql` skill")
+    x = has(k, "components/mail-briefing/features/ask/playbook.md:14", "names skill 'mail-sql'",
             "not in mode mail-briefing's chain", "corpus-sql")
     assert "skills/mail-sql/SKILL.md" in x
     sub(k, "framework/roles/researcher.yaml", "Follow the research-brief skill", "Follow the `brief-x` skill")
@@ -364,7 +419,7 @@ def test_unknown_skill_reference_fails_lint_b8():
 def test_skill_name_over_64_characters_fails_lint_b8():
     k = kit_copy()
     long = "a" * (64 - len("mail-briefing--") + 1)
-    d = k / "modes/mail-briefing/skills" / long
+    d = k / "components/mail-briefing/skills" / long
     d.mkdir()
     (d / "SKILL.md").write_text(f"---\nname: {long}\ndescription: too long once namespaced\n---\n# Long\n")
     x = has(k, f"skill name 'mail-briefing--{long}'", "65 characters", "shorten the skill folder name")
@@ -374,11 +429,11 @@ def test_skill_name_over_64_characters_fails_lint_b8():
 
 def test_skill_references_match_any_case_and_the_skill_x_f8():
     k = kit_copy()
-    sub(k, "modes/mail-briefing/features/ask/playbook.md", "the corpus-sql skill", "The pattern-analysis Skill")
-    has(k, "modes/mail-briefing/features/ask/playbook.md:14", "names skill 'pattern-analysis'")   # built elsewhere
+    sub(k, "components/mail-briefing/features/ask/playbook.md", "the corpus-sql skill", "The pattern-analysis Skill")
+    has(k, "components/mail-briefing/features/ask/playbook.md:14", "names skill 'pattern-analysis'")   # built elsewhere
     k = kit_copy()
-    sub(k, "modes/mail-briefing/features/ask/playbook.md", "the corpus-sql skill", "the skill `mail-sql`")
-    has(k, "modes/mail-briefing/features/ask/playbook.md:14", "names skill 'mail-sql'")
+    sub(k, "components/mail-briefing/features/ask/playbook.md", "the corpus-sql skill", "the skill `mail-sql`")
+    has(k, "components/mail-briefing/features/ask/playbook.md:14", "names skill 'mail-sql'")
     from bay import lint
     assert lint._skill_refs("Use the skill to answer; the skill corpus-sql helps.", {"corpus-sql"}) == [(1, "corpus-sql")]
 
@@ -391,8 +446,8 @@ def test_skill_references_count_only_backticked_or_known_names_n4():
     assert lint._skill_refs("the skill `mail-sql`; the `mail-sql` skill; the digest skill; (corpus-sql skill)",
                             known) == [(1, "mail-sql"), (1, "mail-sql"), (1, "digest"), (1, "corpus-sql")]
     k = kit_copy()                                         # prose next to a reference is not flagged by lint
-    sub(k, "modes/mail-briefing/features/ask/playbook.md", "the corpus-sql skill",
+    sub(k, "components/mail-briefing/features/ask/playbook.md", "the corpus-sql skill",
         "the corpus-sql skill (the right skill, the same skill; the skill whatever)")
     assert not [p for p in problems(k) if "names skill" in p]
-    sub(k, "modes/mail-briefing/features/ask/playbook.md", "the right skill", "the `mail-sql` skill")
-    has(k, "modes/mail-briefing/features/ask/playbook.md:14", "names skill 'mail-sql'")
+    sub(k, "components/mail-briefing/features/ask/playbook.md", "the right skill", "the `mail-sql` skill")
+    has(k, "components/mail-briefing/features/ask/playbook.md:14", "names skill 'mail-sql'")

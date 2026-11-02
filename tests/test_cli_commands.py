@@ -2,7 +2,7 @@
 import subprocess
 import sys
 
-from helpers import KIT, cleanup, project
+from helpers import KIT, cleanup, kit_copy, project
 
 from bay import ledger
 
@@ -39,9 +39,12 @@ def test_check_takes_boundary_options_only_with_a_base_and_json_prints_only_the_
         for option in (["--docs"], ["--json"], ["--proposal", "docs/proposals/x.md"]):
             r = cli(p, "check", *option)
             assert r.returncode != 0 and "--base" in r.stderr, option
-        r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "check", "--base", "HEAD", "--json"],
-                           capture_output=True, text=True, cwd=KIT)
-        assert isinstance(json.loads(r.stdout), dict), r.stdout
+        k = kit_copy()      # a throwaway repo: the base must hold the map, which the checkout's own HEAD may not yet
+        for g in (("init", "-q", "-b", "main"), ("add", "-A"), ("commit", "-q", "-m", "c")):
+            subprocess.run(["git", "-C", str(k), "-c", "user.email=t@t", "-c", "user.name=t", *g], check=True)
+        r = subprocess.run([sys.executable, str(k / "bay/cli.py"), "check", "--base", "HEAD", "--json"],
+                           capture_output=True, text=True, cwd=k)
+        assert isinstance(json.loads(r.stdout), dict), r.stdout + r.stderr
     finally:
         cleanup(p)
 

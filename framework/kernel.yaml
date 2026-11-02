@@ -1,0 +1,36 @@
+# protected: the one list of what only forge.extend may write - the rules that bind agents (guard, gates, secrets, ledger,
+# boundary) and the framework's own components. Protected names are reserved; an unreadable file protects everything.
+# owns: the paths the boundary check treats as core (globs; a trailing / owns everything below).
+protected:
+  paths: [framework, bay, schemas, adapters,
+          components/cos, components/forge,
+          components/improve/envs/improve-local.yaml, components/tools/envs/workspace.yaml,
+          components/tools/envs/research.yaml,
+          components/claude-transcripts, components/briefing/connectors/corpus-store,
+          components/improve/connectors/artifact-graph, components/improve/connectors/git,
+          components/improve/connectors/improve-detect, components/improve/connectors/improve-store,
+          components/improve/connectors/ledger,
+          components/briefing/interfaces, components/improve/interfaces, components/tools/interfaces]
+  mode: [cos, forge]
+  env:
+    cos-local: {}
+    framework-dev: {}
+    improve-local: { modes: [improve] }
+    local-authoring: {}
+    workspace: { modes: ["*"] }
+    research: { modes: ["*"] }
+  connector: [artifact-graph, claude-transcripts, corpus-store, git, improve-detect, improve-store, ledger, scaffold, workflow-runner]
+owns:               # the kernel: loader, resolver, lint, registry, dispatcher, ledger, guard, CLI
+  - bay/
+  - bay/contenttypes.py              # the briefing files the kernel imports
+  - bay/sqlsandbox.py
+  - bay/selector.py
+  - schemas/
+  - adapters/
+  - framework/roles/
+  - framework/rules/
+  - framework/kernel.yaml
+  - framework/limits.yaml
+  - bay.sh
+  - requirements.txt
+  - CHANGELOG.md                     # release metadata: written by forge.extend's release step

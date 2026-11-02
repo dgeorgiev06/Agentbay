@@ -2,6 +2,45 @@
 
 Earlier versions: see docs/proposals/
 
+## 1.1.0 - 2026-11-02
+
+Proposal 0010: one folder per component. This release breaks where extensions live. The owner keeps the major version, so it is 1.1.0.
+
+### Upgrading
+
+1. Move your own modes, envs, connectors and content types under `components/<name>/`. An env goes in the `envs/` folder of the mode it serves. A connector that only one mode uses goes in that mode's `connectors/` folder.
+2. Set `apiVersion: agentbay/v4` in every manifest and every extension schema. Config files and the ledger stay at `agentbay/v3`.
+3. Run `bay build`.
+
+### Added
+
+- One folder per component. Every mode, source connector, content type and shared tool set lives in `components/<name>/` and holds one manifest. The loader finds what a component provides by folder name, so no file lists it.
+- A check that every reference resolves. `bay check` fails when a manifest, an adapter or a feature points at a file that does not exist.
+- Two new lint rules. One refuses a playbook or rules file on a feature with no role or review step. The other refuses a manifest key that no code reads.
+- Lint refuses a leftover `modes/`, `envs/`, `connectors/`, `content-types/` or `coordinator/` folder.
+- The connector placement rule. A connector that declares `network`, `secrets` or a file path outside the project is a component of its own. Any other connector lives in the `connectors/` folder of the component that owns it.
+- Skills are named `<component>--<skill>`.
+
+### Changed
+
+- Protection is one flat list in `framework/kernel.yaml`, with `owns` and `protected`. `framework/components.yaml` is renamed `framework/kernel.yaml`.
+- The dead-code check is rename-aware. A finding that already existed at the base in a file that git moved is no longer reported as new.
+- Limits pass up to an approved exception. A count up to an approved exception passes without an edit to `framework/limits.yaml`.
+- `bay new env` needs `--mode`, because an env now lives in its mode's folder.
+- `forge.create` scaffolds under `components/`.
+- The Claude Code commands moved from `coordinator/` to `adapters/claude-code/commands/`.
+- Tests and interfaces moved into the component that owns them.
+- Ceilings written by the release: see `framework/limits.yaml`.
+
+### Removed
+
+- A root `roles/` or `interfaces/` folder is refused. Roles stay in `framework/roles/`, and interfaces live in their component.
+- The `contracts:` block of the component map, and the playbooks, rules and READMEs that no agent or code read.
+
+### Known issues
+
+- The review's nits are not fixed in this release. They are queued.
+
 ## 1.0.0 - 2026-10-31
 
 Proposal 0008, slice 9: the framework is simpler and the contracts are versioned `agentbay/v3`. Documents that say `agentbay/v2` are refused (see Changed).

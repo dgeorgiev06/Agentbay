@@ -281,9 +281,10 @@ EXPECTED_DELTAS = {
                "under /connectors/, so Store.query and Store.claim (each re-reads the findings file per call) now count. "
                "Fixture-data results (scan, audit, routes, reports, change) are unchanged."},
     ("kitAudit", "countsPerKind", "doc-size"): {
-        "was": 2, "now": 1,
-        "why": "0009 cut the kit's own HANDOFF.md to the current work (commit 28556fd; it had 31 parts), so it is no "
-               "longer over the 3000-word budget; only docs/INTERFACES.md is. Fixture-data results are unchanged."},
+        "was": 2, "now": 0,
+        "why": "0009 cut the kit's own HANDOFF.md to the current work (commit 28556fd; it had 31 parts), and 0010 part 3c "
+               "moved the item, selector, store and SQL detail of docs/INTERFACES.md into the README of the component that "
+               "owns it, so no kit document is over the 3000-word budget. Fixture-data results are unchanged."},
     ("kitAudit", "countsPerKind", "doc-stale"): {
         "was": 2, "now": 1,
         "why": "golden_kit_audit no longer counts findings in HANDOFF.md (any edit of it changed the counts); the golden "
@@ -319,7 +320,8 @@ def test_improve_golden():
         node, old = got, want
         for key in path[:-1]:
             node, old = node[key], old[key]
-        assert node[path[-1]] == delta["now"] != delta["was"], \
-            f"{'/'.join(path)}: expected {delta['was']} -> {delta['now']} ({delta['why']}), got {node[path[-1]]}"
+        now = node.get(path[-1], 0)                     # a kind with no finding has no count
+        assert now == delta["now"] != delta["was"], \
+            f"{'/'.join(path)}: expected {delta['was']} -> {delta['now']} ({delta['why']}), got {now}"
         node[path[-1]] = old[path[-1]]                  # the golden is not edited: put back its value
     compare("improve", got, GOLDEN)

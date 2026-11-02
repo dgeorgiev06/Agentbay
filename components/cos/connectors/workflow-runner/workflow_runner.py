@@ -100,10 +100,10 @@ class WorkflowRunner:
         extra = {"skipped": mv.skipped} if mv.skipped else {}
         if mv.kind in ("missing", "refused"):   # the workflow was edited under a live run, or holds a gate with `when:`
             rec = run["stages"][mv.cursor]
-            run["status"] = "failed"
-            run["reason"] = mv.reason or (f"stage '{rec['id']}' is no longer in workflows.{run['workflow']}; "
-                                          f"the workflow changed after this run started. Start a new run.")
-            return self._finish(run)
+            run.update(status="failed", reason=mv.reason or (f"stage '{rec['id']}' is no longer in workflows.{run['workflow']}; "
+                                                              f"the workflow changed after this run started. Start a new run."))
+            self._finish(run)
+            raise ConnectorError(run["reason"])   # the report could not be taken, so the call fails, not just the run
         if mv.kind == "done":
             run["status"] = "done"
             return self._finish(run, extra)

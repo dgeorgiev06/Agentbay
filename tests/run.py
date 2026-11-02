@@ -14,6 +14,7 @@ import subprocess
 import sys
 import time
 import traceback
+import unittest
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
@@ -38,9 +39,9 @@ def files() -> list[Path]:
         + sorted(KIT.glob("adapters/*/tests/test_*.py"))
 
 
-def run_file(f: Path, k: str, quiet: bool) -> tuple[str, int, int, list[tuple[float, str]]]:
-    """Run one file's tests in order: (its output, passed, failed, [(seconds, name)])."""
-    passed = failed = 0
+def run_file(f: Path, k: str, quiet: bool) -> tuple[str, int, int, list[tuple[float, str]], int]:
+    """Run one file's tests in order: (its output, passed, failed, [(seconds, name)], skipped)."""
+    passed = failed = skipped = 0
     times: list[tuple[float, str]] = []
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
@@ -56,12 +57,15 @@ def run_file(f: Path, k: str, quiet: bool) -> tuple[str, int, int, list[tuple[fl
                 passed += 1
                 if not quiet:
                     print(f"✓ {f.stem}::{name}")
+            except unittest.SkipTest as e:
+                skipped += 1
+                print(f"- {f.stem}::{name} skipped: {e}")
             except Exception:
                 failed += 1
                 print(f"✗ {f.stem}::{name}")
                 traceback.print_exc()
             times.append((time.perf_counter() - t0, f"{f.stem}::{name}"))
-    return buf.getvalue(), passed, failed, times
+    return buf.getvalue(), passed, failed, times, skipped
 
 
 def main(argv: list[str]) -> int:
@@ -83,12 +87,12 @@ def main(argv: list[str]) -> int:
         results = [run_file(f, k, quiet) for f in todo]
     for out, *_ in results:
         print(out, end="")
-    passed, failed = sum(r[1] for r in results), sum(r[2] for r in results)
+    passed, failed, skipped = (sum(r[i] for r in results) for i in (1, 2, 4))
     times = [t for r in results for t in r[3]]
     wall = time.perf_counter() - start
     slow = ", ".join(f"{n} {t:.1f}s" for t, n in sorted(times, reverse=True)[:15])
     print(f"{'' if quiet else chr(10)}slowest 15: {slow}")
-    print(f"{passed} passed, {failed} failed in {wall:.1f}s ({'1 worker' if jobs <= 1 else f'{jobs} workers'})")
+    print(f"{passed} passed, {failed} failed, {skipped} skipped in {wall:.1f}s ({'1 worker' if jobs <= 1 else f'{jobs} workers'})")
     if kit_state() != before:
         print("✗ the run changed the real kit (git status or diff differs from before it): a test wrote through a hard link")
         failed += 1

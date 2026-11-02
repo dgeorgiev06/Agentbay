@@ -58,11 +58,15 @@ def test_role_shim_reads_only_its_grants_and_cannot_write_spend_or_delete():
         reads = [json.loads(x) for x in (p / ".agentbay/ledger/events.jsonl").read_text().splitlines()
                  if '"data.read"' in x]
         assert reads and reads[-1]["role"] == "analyst" and reads[-1]["mode"] == "feed-briefing" and reads[-1]["summary"] == "items.store/v1.query"
-        for ep in ("items.store/v1.sync", "items.store/v1.prune", "items.source/v1.fetch"):
-            r = sh(p, str(shim), ep, "{}")
+        corpus = p / ".agentbay/data/feeds/feed-briefing/corpus.db"
+        before = corpus.read_bytes()
+        for ep, arg in (("items.store/v1.sync", "{}"), ("items.store/v1.prune", '{"olderThan": "1m"}'),   # 1m empties the fixture
+                        ("items.source/v1.fetch", "{}")):
+            r = sh(p, str(shim), ep, arg)
             assert r.returncode != 0 and "not granted" in r.stderr, (ep, r.stderr)
-        before = (p / ".agentbay/data/feeds/feed-briefing/corpus.db").read_bytes()
-        assert before == (p / ".agentbay/data/feeds/feed-briefing/corpus.db").read_bytes()
+        assert corpus.read_bytes() == before
+        r = sh(p, str(shim), "items.store/v1.query", '{"author": "lido"}')
+        assert {x["author"]["handle"] for x in json.loads(r.stdout)["items"]} == {"lido"}
     finally:
         cleanup(p)
 

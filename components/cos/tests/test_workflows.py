@@ -210,9 +210,8 @@ def test_editing_the_workflow_under_a_live_run_fails_loudly():
     (p / "agentbay.config.yaml").write_text(yaml.safe_dump(cfg))
     d2 = dispatch.Dispatcher(system(p), p, clock=clock)
     out = d2.call("cos.next", {"runId": rid, "callId": "C-x", "status": "done", "output": {"added": 1}})
-    # the call succeeds: it correctly reports that the *run* failed
-    assert out["status"] == "done"
-    assert out["output"]["status"] == "failed" and "no longer in workflows.morning" in out["output"]["reason"]
+    assert out["status"] == "failed" and "no longer in workflows.morning" in out["error"]
+    assert d2.call("cos.status", {"runId": rid})["output"]["runs"][0]["status"] == "failed"
     cleanup(p)
 
 

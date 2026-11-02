@@ -39,7 +39,7 @@ the line to change; there is no reader or migration for it.
 
 ## Components
 
-A component is a folder `components/<name>/` with one manifest. The manifest decides its kind, and names are
+A component is a folder `components/<name>/` with one manifest. The manifest decides its kind; names are
 unique across kinds.
 
 | Manifest | Kind | Schema |
@@ -49,15 +49,15 @@ unique across kinds.
 | `content-type.yaml` | ContentType | `schemas/content-type.schema.json` |
 | `component.yaml` | Component | `schemas/component.schema.json` |
 
-What a component provides is found by folder name, and the manifest lists none of it. The folders are
+The folder name finds what a component provides; the manifest lists none of it. The folders are
 `interfaces/` (one `<name>.v<N>.yaml` per interface), `envs/` (one file per env), `skills/<skill>/SKILL.md`,
 `types/`, `data/`, `connectors/<name>/` (internal connectors), `features/` and `tests/`. The loader in
-`bay/model.py` has one table from kind to manifest file name and finds every instance with
+`bay/model.py` maps kind to manifest file name and finds every instance with
 `components/*/<manifest>`. What a component needs stays in its manifest: `needs:` (interfaces), `reads:` (content
 types) and `extends:` (a parent mode).
 
 The placement rule decides where a connector sits. A connector that declares `needs.network`, `needs.secrets` or an
-`fs` path under `~` or `/` is a source connector and sits at `components/<name>/`. Any other connector sits at
+`fs` path under `~` or `/` is a source connector at `components/<name>/`. Any other connector sits at
 `components/<owner>/connectors/<name>/`, in the component that owns it.
 
 `bay check` refuses a connector in the wrong place (the message names the folder to move it to), a component folder
@@ -65,7 +65,7 @@ without a manifest, and a leftover `modes/`, `envs/`, `connectors/`, `content-ty
 `interfaces/` folder at the top level, or an `interfaces/` folder under `framework/`, with "move it to components/<name>/".
 
 ## 1. Mode and features
-`mode.yaml` declares each feature (`spec.features.<name>`, called as `<mode>.<name>`) in one place: `in` and `out`
+`mode.yaml` declares each feature (`spec.features.<name>`, called as `<mode>.<name>`): `in` and `out`
 (type names in `types/`), `effects`, `steps`, an optional `playbook` and `rules`, an optional
 `review: {role, when: always|never, tier?, effort?}`, optional `tier` and `effort` for its role steps, and optional
 `roles: {role: env}` overrides. There is no separate endpoint, workflow or feature file.
@@ -73,8 +73,8 @@ without a manifest, and a leftover `modes/`, `envs/`, `connectors/`, `content-ty
 Steps are ordered. A step is `run: <capability>/v<N>.<endpoint>` (code), `role: <role>` (agentic; may set `tier`,
 `effort` and `roles: {<its role>: <env>}`), `gate: <text>` (approval; never with `when:`; `approves: $in.<field>`
 records that file's path and sha256) or `{review: here}` (where the injected review step goes). A mode's
-`roles: {role: env}` lists the framework roles it uses and the env each works in. A step runs in the env that the
-step names, else the feature, else the mode. A mode `needs: [items.store/v1]`, and the read-only endpoints of its
+`roles: {role: env}` lists the framework roles it uses and the env each works in. A step runs in the env it
+names, else the feature's, else the mode's. A mode `needs: [items.store/v1]`, and the read-only endpoints of its
 `needs` are what its roles may read. `configDefaults:` replaces config-schema defaults for this mode (a child never
 copies its parent's schema).
 
@@ -194,7 +194,7 @@ The root mode (a framework mode; its README names its endpoints) supplies the pr
 `{id, call: <mode>.<endpoint>, with?, when?}` or `{id, gate: <text>}`, using the same `$in` and `$steps.<id>`
 substitution as a feature's steps. `bay check` checks structure (ids, `$steps` order, gate references), then
 targets against the registry and each `with` against the endpoint's input schema. Run state is in
-`.agentbay/data/workflows/`, written only by the connector bound to `workflow.run/v1`.
+`.agentbay/data/workflows/`, written only by the connector bound to `workflow.run/v1`. A stage report the run cannot take fails the call.
 
 ## 7. Dispatcher
 `bay call <mode>.<endpoint> '<json>'` -> `{callId, status, output | next, checks, review, cost}`.

@@ -330,9 +330,9 @@ def test_no_output_passed_to_cos_next_skips_a_gate():
         d = dispatch.Dispatcher(system(p), p, clock=clock)
         for output in ({"ok": 0}, {"ok": ""}, {}, {"ok": 1}):
             run = d.call("cos.run", {"workflow": "w", "input": {}})["output"]
-            nxt = d.call("cos.next", {"runId": run["runId"], "callId": "C-x", "status": "done", "output": output})["output"]
-            assert nxt["status"] == "failed" and "a gate takes no when:" in nxt["reason"], nxt
-            assert "skipped" not in nxt and "gate" not in nxt
+            nxt = d.call("cos.next", {"runId": run["runId"], "callId": "C-x", "status": "done", "output": output})
+            assert nxt["status"] == "failed" and "a gate takes no when:" in nxt["error"], nxt
+            assert "output" not in nxt
     finally:
         cleanup(p)
     stages = [workflows.Stage(id="g", gate="ok?", when="!$in.nope")]

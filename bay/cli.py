@@ -515,12 +515,29 @@ def _note_dispatch(args, task: str):
     print("dispatch recorded")
 
 
-def _ago(ts: str) -> str:
+def _secs(ts: str) -> int:
     from datetime import datetime, timezone
-    if not ts:
-        return ""
-    s = int((datetime.now(timezone.utc) - datetime.fromisoformat(ts)).total_seconds())
-    return f"{s}s" if s < 90 else f"{s // 60}m" if s < 5400 else f"{s // 3600}h"
+    return int((datetime.now(timezone.utc) - datetime.fromisoformat(ts)).total_seconds())
+
+
+def _ago(ts: str) -> str:
+    s = _secs(ts) if ts else -1
+    return "" if s < 0 else f"{s}s" if s < 90 else f"{s // 60}m" if s < 5400 else f"{s // 3600}h"
+
+
+def _stale(runs, calls):
+    return ([r for r in runs if r.state == "running" and r.started and _secs(r.started) > STALE_S],
+            [c for c in calls if c.state in ("running", "waiting") and _secs(c.ts) > STALE_S])
+
+
+def _print_stale(evs, stale_runs, stale_calls):
+    if any(e["type"] == "agent.dispatch" for e in evs) and not any(e.get("source") == "hook" for e in evs):
+        print("\nthe spawn hook is not loaded: agents finish in the ledger only by `bay submit`, `bay note done` or `bay show reclaim`")
+    print(f"\nSTALE? ({len(stale_runs) + len(stale_calls)}) no event for 24h and not finished: look, then `show reclaim` or `show close`")
+    for c in stale_calls:
+        print(f"  {c.call_id:<18} {c.mode + '.' + c.endpoint:<24} {c.state:<8} step={c.last_step:<10} {_ago(c.ts):>4}")
+    for r in stale_runs:
+        print(f"  {r.run_id[:14]:<14} {r.agent:<14} {r.task_id or '-':<16} {_ago(r.started):>4}  {r.summary[:60]}")
 
 
 def cmd_status(args):
@@ -542,12 +559,14 @@ def cmd_status(args):
     runs = list(ledger.fold(evs).values())
     calls = list(ledger.fold_calls(evs).values())
     notes = ledger.standalone_notes(evs)
+    stale_runs, stale_calls = _stale(runs, calls)
     if args.json:
-        print(json.dumps({"runs": [r.__dict__ for r in runs], "calls": [c.__dict__ for c in calls],
-                          "notes": notes}, indent=2))
+        print(json.dumps({"runs": [r.__dict__ for r in runs], "calls": [c.__dict__ for c in calls], "notes": notes,
+                          "stale": [r.run_id for r in stale_runs] + [c.call_id for c in stale_calls]}, indent=2))
         return
-    live = [r for r in runs if r.state == "running"]
+    live = [r for r in runs if r.state == "running" and r not in stale_runs]
     done = [r for r in runs if r.state != "running"][-args.n:]
+    calls = [c for c in calls if c not in stale_calls]
     print(f"CALLS ({len(calls)})")
     for c in calls[-args.n:]:
         cost = f"items={c.cost.get('items', 0)} usd={c.cost.get('usd', 0)}" if c.cost else ""
@@ -555,7 +574,8 @@ def cmd_status(args):
     print(f"\nRUNNING AGENTS ({len(live)})")
     for r in live:
         print(f"  {r.run_id[:14]:<14} {r.agent:<14} {r.task_id or '-':<16} {_ago(r.started):>4}  {r.summary[:60]}")
-    print(f"\nRECENT AGENTS ({len(done)} of {len(runs) - len(live)})")
+    _print_stale(evs, stale_runs, stale_calls)
+    print(f"\nRECENT AGENTS ({len(done)} of {len(runs) - len(live) - len(stale_runs)})")
     for r in done:
         print(f"  {r.run_id[:14]:<14} {r.agent:<14} {r.task_id or '-':<16} {r.state:<9} {r.summary[:70]}")
     if notes:
@@ -572,6 +592,7 @@ def _find_run(project, key) -> str:
     return key  # a task, call or anything else: the note stays standalone (it never creates a run)
 
 
+STALE_S = 86400
 DISPATCH_FLAGS = ("agent", "call", "step", "model", "tier", "role", "mode", "summary", "input")
 
 

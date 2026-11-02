@@ -1,6 +1,7 @@
 """Ledger: richer events (durations, tokens, cost, permission decisions, instruction changes); notes never
 create runs."""
 import json
+from datetime import datetime, timedelta, timezone
 import subprocess
 import sys
 
@@ -262,5 +263,16 @@ def test_a_dispatched_agent_is_listed_by_status_without_the_spawn_hook():
         assert cli(p, "note", "done", OTHER).stdout.strip() == "done recorded"
         assert {(r.task_id, r.state, r.agent) for r in ledger.fold(ledger.read(p)).values()} == {
             (TID, "reclaimed", "builder--forge--framework-dev"), (OTHER, "done", "builder--forge--framework-dev")}
+        old_tid = "T-20261030-aaaa"
+        ts = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat(timespec="seconds")
+        with open(ledger.ledger_path(p), "a") as f:
+            f.write(json.dumps({"v": 1, "ts": ts, "type": "agent.dispatch", "runId": old_tid, "taskId": old_tid,
+                                "agent": "builder--forge--framework-dev", "source": "coordinator"}) + "\n")
+        out = cli(p, "status").stdout
+        assert old_tid in out.split("STALE?")[1].split("RECENT AGENTS")[0] and old_tid not in out.split("STALE?")[0]
+        assert json.loads(cli(p, "status", "--json").stdout)["stale"] == [old_tid]
+        assert "the spawn hook is not loaded" in out
+        ledger.append(p, "spawned", "toolu_9", agent="builder", source="hook")
+        assert "the spawn hook is not loaded" not in cli(p, "status").stdout
     finally:
         cleanup(p)

@@ -19,8 +19,11 @@ touches:
   - { path: docs/DESIGN.md, reason: "the status paragraph says what stale means and what the hook adds" }
   - { path: bay/__init__.py, reason: "release step: version" }
   - { path: CHANGELOG.md, reason: "release step: entry" }
+  - { path: framework/limits.yaml, reason: "release step: the lowered ceilings" }
+  - { path: components/improve/config.schema.json, reason: "the historyDocs default gains CHANGELOG.md" }
+  - { path: components/forge/features/extend/playbook.md, reason: "Inputs names the optional `replaces`" }
 exceptions:
-  - { measure: bay_lines, to: 9650, reason: "bay_lines is at its ceiling today (9572); the five code changes add about 70 lines to ledger.py, cli.py and dispatch.py, and the release lowers the ceiling to the real count" }
+  - { measure: bay_lines, to: 9595, reason: "about 37 lines added in ledger.py, cli.py and dispatch.py, about 20 paid by same-behaviour cuts in those files (the plan names each); net about +17 plus a 6-line margin; the release lowers the ceiling to the real count" }
 ---
 
 # 0013: Ledger truth

@@ -314,7 +314,8 @@ def test_doc_size_and_stale_references():
                          "Code: `pkg/mod.py` `real()`, `pkg/mod.py` `gone`, `pkg/mod.py:KNOWN`, `pkg/old.py`.\n"
                          "Generated: `.agentbay/roles/<unit>/use`, `modes/<name>/mode.yaml`, `items.store/v1`.\n",
         "docs/api.md": "# API\n" + "word " * 120,
-        "docs/proposals/0001-old.md": "[gone](../removed.md) " + "history " * 200})
+        "docs/proposals/0001-old.md": "[gone](../removed.md) " + "history " * 200,
+        "CHANGELOG.md": "# Changelog\n" + "entry " * 200})
     try:
         th = da.thresholds({"thresholds": {"docWords": 100}})
         size = da.doc_size(arts(root), th)
@@ -329,7 +330,7 @@ def test_doc_size_and_stale_references():
         assert stale[0]["evidence"][0]["ref"] == "docs/guide.md:3"
         # history docs are skipped by default and can be configured
         assert [x["scope"]["file"] for x in da.doc_size(arts(root), da.thresholds(
-            {"thresholds": {"docWords": 100}, "historyDocs": []}))] == ["docs/api.md", "docs/proposals/0001-old.md"]
+            {"thresholds": {"docWords": 100}, "historyDocs": []}))] == ["CHANGELOG.md", "docs/api.md", "docs/proposals/0001-old.md"]
     finally:
         cleanup(root.parent)
 

@@ -6,6 +6,7 @@ Change the agentbay framework itself (concepts, schemas, CLI, runtime, framework
 ## Inputs
 - `goal` (required): the change wanted.
 - `proposal` (optional): an existing docs/proposals/<id>.md to implement; `context` (optional).
+- `replaces` (optional): an open forge.extend call this one supersedes; starting this call closes it as abandoned.
 
 ## Steps
 Two rules skip work. When `proposal` names an existing file, `propose` is skipped (there is nothing to draft) and the call stops at `approve`. The gate is skipped only when the ledger holds the user's `bay approve` (terminal or chat) of that proposal path with the sha256 of its current content, recorded by the same gate step and still held in that call's state; a later decision on the path supersedes an earlier one, and any edit since the approval makes the gate run again. The front-matter `status:` grants nothing. A proposal the `propose` step writes is bound to its approval through that step's `artifacts` (list its docs/proposals/<id>.md path). A chat approval carries `--sha <prefix>` of the content shown: with a plan, a prefix of each sha256 (8+ hex), proposal first, joined by `+`. The step plan and `bay show <callId>` say why the gate ran or was skipped, and name the chat path when `approvals.chat` is on.

@@ -117,11 +117,11 @@ tests/           python3 tests/run.py (the tests of a component live in its own 
 | `bay catalog [<name>] [--roles]`, `bay describe <name>` | what is installed, resolved; `--roles` lists the role units |
 | `bay show <mode> --resolved` | a mode's features after `extends`, with the file each comes from |
 | `bay call <mode>.<endpoint> '<json>'` | run a feature |
-| `bay submit <callId> <step> '<json>'`, `bay show <callId>`, `bay show reclaim <runId>` | hand back a step's output; current state; mark a stuck run reclaimed |
+| `bay submit <callId> <step> '<json>'`, `bay show <callId>`, `bay show reclaim <runId>`, `bay show close <callId> --reason <text>` | hand back a step's output; current state; mark a stuck run reclaimed; end an open call as abandoned |
 | `bay approve <callId\|runId> [--reject]` | pass an approval gate in your terminal, or from chat when `approvals: { chat: true }` is set |
 | `bay approve <F-id> [--defer\|--wontfix]` | decide a backlog item from the analysis mode (your terminal only, never from chat) |
 | `bay status [--agents\|--log]`, `bay note <ref> "text"` | calls, steps, cost, agent runs (grouped by role, mode, model, tier); the raw run log; a note |
-| `bay note task`, `bay note dispatch <taskId> --agent <name> --input <x>`, `bay note review <taskId> '<json>'`, `bay plan <taskId> [--done <n>]` | agent run records: a fresh taskId; the Chief of Staff logs each dispatch and outside review; a subagent first records its outcome and to-do (`bay plan` is its only `bay` command) |
+| `bay note task`, `bay note dispatch <taskId> --agent <name> --input <x>`, `bay note done <taskId>`, `bay note review <taskId> '<json>'`, `bay plan <taskId> [--done <n>]` | agent run records: a fresh taskId; the Chief of Staff logs each dispatch, its finish and outside review; a subagent first records its outcome and to-do (`bay plan` is its only `bay` command) |
 | `bay new mode <name>`, `bay new feature <name> --mode <mode>`, `bay new connector <name> --implements <interface>`, `bay new env <name> --mode <mode>` | create a component, a feature, a source connector or an env from a template |
 | `bay secret set <NAME>` | store a secret (read from your terminal, never echoed) |
 | `bay auth <connector>` | a connector's browser login |

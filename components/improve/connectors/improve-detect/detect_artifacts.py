@@ -23,7 +23,7 @@ from bay.secretscan import clip
 
 DEFAULTS = {"nearDuplicate": 0.7, "contextTokens": 6000, "maxFindingsPerDetector": 50,
             "maxComplexity": 30, "maxFunctionLines": 150, "docWords": 3000}
-HISTORY_DOCS = ("docs/proposals/", "docs/plans/")    # records of past decisions: never sized or checked for staleness
+HISTORY_DOCS = ("docs/proposals/", "docs/plans/", "CHANGELOG.md")    # records of past decisions: never sized or checked for staleness
 FILLER = {
     "in order to": "to", "it is important to note that": "", "it's important to note that": "",
     "please note that": "", "it should be noted that": "", "make sure to": "", "be sure to": "",

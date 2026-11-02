@@ -7,6 +7,9 @@ implement -> review -> release, and a failed review stops it before release.
 - "change how agentbay works" (including a new framework role) -> `.agentbay/bay call forge.extend '{"goal": "..."}'`.
   When the call returns `awaiting-approval`, show the user the proposal; they run
   `.agentbay/bay approve <callId>` in their own terminal. Continue with `.agentbay/bay show <callId>`.
+  To restart an extend, pass `"replaces": "<callId>"` so the old open call is closed as abandoned.
+- When an agent you dispatched outside a step reports back, run `.agentbay/bay note done <taskId>`. To end a stuck
+  call, the user approves `.agentbay/bay show close <callId> --reason "..."`.
 - Before every `forge.extend` call, run `git fetch origin` yourself, so the deadcode base (origin/main) is current.
 
 Run each builder and reviewer step exactly as the plan says (subagent name, model, effort) and submit its

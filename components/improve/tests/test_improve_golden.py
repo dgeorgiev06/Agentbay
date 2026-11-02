@@ -286,9 +286,10 @@ EXPECTED_DELTAS = {
                "moved the item, selector, store and SQL detail of docs/INTERFACES.md into the README of the component that "
                "owns it, so no kit document is over the 3000-word budget. Fixture-data results are unchanged."},
     ("kitAudit", "countsPerKind", "doc-stale"): {
-        "was": 2, "now": 1,
+        "was": 2, "now": 0,
         "why": "golden_kit_audit no longer counts findings in HANDOFF.md (any edit of it changed the counts); the golden "
-               "held one for it, so only the one stale doc besides HANDOFF.md is counted. Fixture-data results are unchanged."},
+               "held one for it, and 0013 part 5 made CHANGELOG.md a history doc, which was the other. Fixture-data "
+               "results are unchanged."},
     ("kitAudit", "countsPerKind", "slop-duplicate-rule"): {
         "was": 15, "now": 9,
         "why": "0010 part 0f removed the 12 unreachable cos, sync, backlog and verify files and extend's rules R-2, R-4, "

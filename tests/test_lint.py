@@ -133,19 +133,32 @@ def _add_policies(d):
     d["spec"]["constraints"]["policies"] = ["cite-sources"]
 
 
+def _reach_out(d):
+    d["spec"]["needs"]["fs"] = {"read": ["~/.ledger"]}
+
+
+def _reach_nothing(d):
+    d["spec"]["needs"].pop("secrets"), d["spec"]["needs"].pop("network")
+
+
+MODE = "components/briefing/mode.yaml"
 T2_RULES = [
-    ("agent text on a code-only feature", _give_sync_files,
+    ("agent text on a code-only feature", MODE, _give_sync_files,
      ["components/briefing/mode.yaml:13: feature briefing.sync has no role step, so its `playbook` is never read",
       "components/briefing/mode.yaml:13: feature briefing.sync has no role step, so its `rules` is never read"]),
-    ("an unread manifest key", _add_policies,
+    ("an unread manifest key", MODE, _add_policies,
      ["components/briefing/mode.yaml", "Additional properties are not allowed ('policies' was unexpected)"]),
+    ("an internal connector that reaches outside the project", "components/improve/connectors/ledger/connector.yaml",
+     _reach_out, ["connector ledger reaches outside the project", "must be a top-level component"]),
+    ("a source connector that reaches nothing outside", "components/gmail-api/connector.yaml", _reach_nothing,
+     ["connector gmail-api reaches nothing outside the project", "components/<owner>/connectors/<name>/"]),
 ]
 
 
 def test_agent_text_nothing_reads_and_unread_manifest_keys_are_refused():
-    for group, edit, needles in T2_RULES:
+    for group, rel, edit, needles in T2_RULES:
         k = kit_copy()
-        edit_yaml(k / "components/briefing/mode.yaml", edit)
+        edit_yaml(k / rel, edit)
         try:
             for needle in needles:
                 has(k, needle)

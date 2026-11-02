@@ -79,13 +79,14 @@ def check(repo: Path, base: str | None = None, proposal_text: str | None = None,
     allowed = _exceptions(proposal_text)
     problems, notes = [], []
     for m, n in count(repo).items():
-        lim = max(ceil[m], old.get(m, ceil[m]))                  # a ceiling lowered on this branch may climb back to the base's
+        lim = max(ceil[m], old.get(m, ceil[m]), allowed.get(m, 0))   # a lowered ceiling may climb back to the base's; an exception allows up to its `to`
         if ceil[m] > old.get(m, ceil[m]) and allowed.get(m, 0) < ceil[m]:
             problems.append(f"{m}: the ceiling {ceil[m]} is above {old[m]} at {base}; raising it needs "
                             f"`exceptions: [{{ measure: {m}, to: {ceil[m]}, reason }}]` in the proposal")
         if n > lim:
-            problems.append(f"{m}: {n} is over the ceiling {lim} (+{n - lim}); remove what the change added "
-                            f"or put an exception in the proposal")
+            problems.append(f"{m}: {n} is over the ceiling {lim} (+{n - lim}); " + (
+                f"the proposal's exception allows up to {allowed[m]}" if m in allowed else
+                "remove what the change added or put an exception in the proposal"))
         elif n != ceil[m]:
             text = re.sub(rf"^({m}:\s*)\d+", rf"\g<1>{n}", text, flags=re.M)
             notes.append(f"{m}: {n} against the ceiling {ceil[m]}; the ceiling is now {n}")

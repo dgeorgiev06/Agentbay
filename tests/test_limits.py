@@ -49,7 +49,12 @@ def test_limits_count_the_ceiling_the_ratchet_and_the_exception():
     (repo / limits.FILE).write_text(_yaml(NOW))
     (repo / "schemas/t.json").write_text("{}\n")
     problems, _ = limits.check(repo, "HEAD")
-    assert len(problems) == 1 and "schemas: 3 is over the ceiling 2" in problems[0]
+    assert len(problems) == 1 and "schemas: 3 is over the ceiling 2" in problems[0] and "exception" in problems[0]
+    problems, notes = limits.check(repo, "HEAD", exc)                        # an exception to 5 passes 3 without editing the file
+    assert problems == [] and "now 3" in notes[0] and (repo / limits.FILE).read_text() == _yaml(NOW)
+    short = exc.replace("to: 5", "to: 2")                                    # past the exception: the message names it
+    problems, _ = limits.check(repo, "HEAD", short)
+    assert len(problems) == 1 and "exception allows up to 2" in problems[0]
     (repo / "schemas/t.json").unlink()
     (repo / limits.FILE).write_text(_yaml({**NOW, "schemas": 9}))
     problems, notes = limits.check(repo)                                     # without --write (the code step) it only reads

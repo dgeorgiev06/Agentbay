@@ -365,6 +365,15 @@ def lint_connectors(kit: model.Kit) -> list[str]:
                 out.append(f"{_where(c.path, _line_of(c.path, r'^\s+login:'))}: connector {c.name} declares a "
                            f"`login` but no env that binds it allows all of its needs.secrets ({', '.join(needs)}); "
                            f"`bay auth` gives a login only the secrets a sync through that env would get")
+        nd = c.spec.get("needs", {})
+        outside = bool(nd.get("network") or nd.get("secrets") or any(
+            str(p).startswith(("~", "/")) for ops in (nd.get("fs") or {}).values() for p in ops))
+        if outside != (c.dir.parent.name == "components"):     # decision 7: a source connector is a component of its own
+            out.append(f"{_where(c.path, _line_of(c.path, r'^spec:'))}: connector {c.name} " + (
+                "reaches outside the project (needs.network, needs.secrets or an fs path under ~ or /), so it must be "
+                "a top-level component: components/<name>/" if outside else
+                "reaches nothing outside the project, so move it into the component that owns it: "
+                "components/<owner>/connectors/<name>/"))
         impl = c.spec["implements"]
         impl = [impl] if isinstance(impl, str) else impl
         for iface in impl:

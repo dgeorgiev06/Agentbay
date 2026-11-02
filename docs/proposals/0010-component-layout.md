@@ -49,6 +49,9 @@ touches:
   - { path: framework/interfaces/, reason: "REMOVED. Each interface moves into the component that owns it" }
   - { path: framework/components.yaml, reason: "renamed framework/kernel.yaml; keeps only what the kernel owns; the protected: lists, the briefing entry and the unread keys go" }
   - { path: framework/kernel.yaml, reason: "the renamed component map (slice 1): owns, the interim contracts and and the 19 protected paths" }
+  - { path: components/briefing/README.md, reason: "3c: the briefing detail INTERFACES no longer repeats (item envelope, content types, selectors, store layout, SQL sandbox); an owner-approved edit" }
+  - { path: components/improve/tests/test_improve_golden.py, reason: "3c: named doc-size delta once INTERFACES is under its word budget; an owner-approved edit" }
+  - { path: components/gmail-api/README.md, reason: "3c: its selector link points at the briefing README; an owner-approved edit" }
   - { path: framework/limits.yaml, reason: "top_level_folders 11 to 7, framework_folders 3 to 2, schemas 15 to 16" }
   - { path: framework/roles/, reason: "the golden rule reads `golden/` folders" }
   - { path: framework/rules/conformance.yaml, reason: "C-7 vocabulary (component, internal connector); component-folder rule" }
@@ -127,7 +130,7 @@ The repo gets one folder, `components/`, and every component is `components/<nam
 | `mode.yaml` | Mode | a mode (the file keeps its present shape) |
 | `connector.yaml` | Connector | a connector that reaches outside (decision 7) |
 | `content-type.yaml` | ContentType | a content type |
-| `component.yaml` | Component (NEW) | everything else: `tools`, then `python`, `unslop`, `comments` (0011) and later languages. It has `name`, `version`, `description`, `needs`, `protected`. |
+| `component.yaml` | Component (NEW) | everything else: `tools`, then `python`, `unslop`, `comments` (0011) and later languages. It has `name`, `version`, `description`, `needs`. |
 
 Everything a component provides is found by folder convention, not listed, because a list of what a folder contains repeats the folder and drifts (the lesson of 0006): `interfaces/*.yaml` (interfaces it owns), `envs/*.yaml`, `skills/*/SKILL.md`, `types/`, `data/`, `connectors/<name>/` (decision 7), `features/`, `templates/`, `tests/`. What it needs stays in the manifest as today: `needs:` (interfaces), `reads:` (content types), `extends:`. `bay ls` and the catalog list what a folder provides by reading it. Alternative rejected: one new `component.yaml` for every component with the old files as bodies; it doubles the files to add a connector (DOD-10) and wraps what already declares needs and produces.
 
@@ -213,7 +216,7 @@ The unit is a folder. Every file under a moved folder keeps its relative path, s
 | `tests/test_offline_golden.py`, `tests/golden/feed-briefing.json`, `tests/golden/mail-briefing.json` | `components/briefing/tests/` (goldens in its `tests/golden/`) |
 | `connectors/*/tests/` (gmail-api, x-api, artifact-graph, claude-transcripts, corpus-store, git, improve-detect, improve-store, ledger) | `tests/` inside each connector's new folder |
 
-New: `components/tools/component.yaml` (with `interfaces/` and `envs/` above); 0011 adds the standards components. Removed: `tests/layout.py` (a hand list of protected paths that the manifests now give), the empty `modes/`, `envs/`, `connectors/`, `content-types/`, `coordinator/`, `framework/interfaces/`.
+New: `components/tools/component.yaml` (with `interfaces/` and `envs/` above); 0011 adds the standards components. Removed: `tests/layout.py` (a hand list of the protected paths that `kernel.yaml` gives), the empty `modes/`, `envs/`, `connectors/`, `content-types/`, `coordinator/`, `framework/interfaces/`.
 
 Stays in `tests/`: every other test file and `tests/golden/guard-matrix*.json` and `stages.json`, because they test `bay/` or run across components. The move adds or removes no test except those that depended on `layout.py`. The "never edit a file in tests/golden/ by hand" rule covers any `golden/` folder.
 

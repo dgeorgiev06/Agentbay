@@ -21,7 +21,8 @@ def sub(k, rel, old, new):
 
 def test_shipped_modes_and_connectors_declare_versioned_kinds():
     kit = model.Kit(KIT)
-    assert {"post": {1}, "email": {1}}.items() <= model.item_kinds(KIT).items()
+    kinds = model.item_kinds(KIT)
+    assert {k: kinds.get(k) for k in ("post", "email")} == {"post": {1}, "email": {1}}
     assert kit.docs["Mode"]["feed-briefing"].spec["reads"] == ["post/v1"]
     assert kit.docs["Mode"]["mail-briefing"].spec["reads"] == ["email/v1"]
     assert "reads" not in kit.docs["Mode"]["store"].spec            # the abstract base declares none

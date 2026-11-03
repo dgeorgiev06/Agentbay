@@ -16,7 +16,7 @@ CREATE VIEW v_todos AS SELECT w.*,
     json_extract(i.ext, '$.delegation.status') AS delegationStatus,
     json_extract(i.ext, '$.delegation.callId') AS delegationCallId,
     coalesce(json_array_length(i.ext, '$.history'), 0) AS historyCount
-  FROM temp.v_items v JOIN main.items i ON i.pk = v.rid WHERE i.kind = 'todo') w;
+  FROM temp.v_items v JOIN main.items i ON i.pk = v.rid WHERE i.kind = 'todoitem') w;
 
 -- v_agenda: the to-dos still to do, each in one bucket. Delegated comes first (a to-do handed to build or
 -- research whose delegation is not done or failed), then waiting, overdue, today, someday and upcoming.

@@ -5,7 +5,7 @@ metadata:
   description: "A to-do (kind todo): due and start dates, priority, status, recurrence and delegation; the store keeps its change history in a child table. Written by the owner or an agent, never produced by a source."
 spec:
   version: 1
-  kind: todo
+  kind: todoitem
   tables:
     history:
       from: history
@@ -17,7 +17,7 @@ spec:
   views:
     v_todos:
       item: true
-      includes: { view: v_items, note: "kind = 'todo' only; title is the to-do, text its notes, labels its tags, threadId the series of a recurring to-do" }
+      includes: { view: v_items, note: "kind = 'todoitem' only; title is the to-do, text its notes, labels its tags, threadId the series of a recurring to-do" }
       columns:
         - { name: priority, type: INTEGER, description: "1 urgent, 2 high, 3 normal (the default), 4 someday" }
         - { name: status, type: TEXT, description: "open, doing, waiting, done or dropped (default open)" }

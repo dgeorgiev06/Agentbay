@@ -1,7 +1,7 @@
 # todo-item
 
-A to-do: the item kind `todo` (`todo/v1`). No source produces it. The owner or an agent writes it with source
-`local`. Modes that read it declare `reads: [todo/v1]`.
+A to-do: the item kind `todoitem` (`todoitem/v1`). No source produces it. The owner or an agent writes it with source
+`local`. Modes that read it declare `reads: [todoitem/v1]`.
 
 - `fields.schema.json`: the fields a to-do adds to the base item. The base `title` is the to-do, `text` its notes,
   `labels` its tags and `threadId` the series of a recurring to-do. New fields:

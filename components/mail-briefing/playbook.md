@@ -18,6 +18,7 @@ and always repeat the coverage note in plain words.
 
 When the source's login expired, `sync` ends `blocked` and a digest or ask ends `partial` on the stored mail; both
 name the `bay auth <connector>` command to run (in the reason, or in the coverage note). Deliver what the partial
-call produced, say plainly that newer mail was not read, and tell the user to run that command (`./bay.sh auth
-<connector>` or `.agentbay/bay auth <connector>`) in their own terminal; it needs their browser and cannot be run
-for them.
+call produced, say plainly that newer mail was not read, and offer to run that command (`.agentbay/bay auth
+<connector>`). Run it only if the user says yes, with a Bash timeout of at least 300 seconds: the login waits that
+long for the browser. Claude Code asks the user before it runs, and the user finishes the login in the browser on
+the machine running bay. They may run `./bay.sh auth <connector>` in a terminal instead.

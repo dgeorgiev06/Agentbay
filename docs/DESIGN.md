@@ -35,14 +35,12 @@ A component is one folder in `components/` with one manifest, whose name says it
 | `content-type.yaml` | content type | the fields and views of one kind of item |
 | `component.yaml` | shared component | interfaces and envs that several modes use |
 
-A mode also holds what only it needs: its envs, interfaces, skills, types, data
-files, tests and internal connectors. The loader finds these by folder name, so the manifest does not list them.
+A mode also holds what only it needs (envs, interfaces, skills, types, data files, tests, internal connectors). The loader finds these by folder name; the manifest lists none.
 A component uses another only through what the other provides: an interface name in `needs:`, a content type in
 `reads:`, a parent in `extends:`, or an env or connector name in a binding.
 
 A connector that declares network access, secrets or a file path outside the project is a source connector and a
-component of its own. Every other connector is internal: code that the framework runs behind an interface, such as the one that writes the findings store. It
-lives in `connectors/<name>/` inside the component that owns it. `bay check` reports a misplaced connector and
+component of its own. Every other connector is internal (code the framework runs behind an interface, such as the one that writes the findings store) and lives in `connectors/<name>/` inside its owner. `bay check` reports a misplaced connector and
 says where to move it.
 
 The kernel is not a component. `bay/`, `schemas/`, `framework/` and `adapters/` hold the loader, dispatcher,
@@ -52,18 +50,18 @@ contracts, roles and runtime adapters. `framework/kernel.yaml` holds only `owns:
 
 A feature is one block under `features:` in `mode.yaml`. It has input and output types, effects, ordered `steps`,
 an optional review block, and a playbook and rules file when it needs them. A feature that runs no role needs
-neither file, and one that runs a role needs a playbook. It is called as `<mode>.<feature>`. The steps are:
+neither file; one that runs a role needs a playbook. It is called as `<mode>.<feature>`. The steps are:
 
 - `run: <capability>/v<N>.<endpoint>` is deterministic code, which the dispatcher runs in the coordinator's env.
 - `role: <role>` is an agentic step. That role runs it in the env that the step, the feature or the mode `roles:` names.
-- `gate: <text>` is an approval gate that only you pass, with `bay approve` in a terminal (or from chat, if you opt in). `approves: $in.<f>` ties the gate to the exact content of a file, so a later call on the unchanged file skips it.
+- `gate: <text>` is an approval gate that only you pass, with `bay approve` in a terminal (or from chat, if `approve.from` allows it). `approves: $in.<f>` ties the gate to the exact content of a file, so a later call on the unchanged file skips it.
 - `{review: here}` marks where the review step goes. The default is last.
 
 `with:` substitutes `$in.x`, `$steps.<id>.x` and `$config.x`, with `a|b` fallbacks. `when:` skips a step
 (`stale > 2h`, `$in.<field>` or `$steps.<id>.<field>`; `!` negates). A playbook has the sections Purpose, Inputs,
 Steps, Definition of Done (`- [DOD-n] (must|should|must_not) ...`), Outputs and Failure handling. Rules refer to
 Definition of Done ids and can name a deterministic `check` (`citations_resolve`, `no_secrets`, `lint_clean`).
-Rules stack with mode constraints, role rules and project `extraRules`, and the strictest wins.
+Rules stack with mode constraints, role rules and project `extraRules`; the strictest wins.
 
 Review is configured only in `mode.yaml`. The reviewer gets the task, the Definition of Done, the rules and the
 check results, and returns one verdict for each id (`review.verdict/v1`). A failed must or must_not item, or any
@@ -72,15 +70,14 @@ set how the findings are listed.
 
 After a halt, the next run is a scoped re-check when the approved proposal is unchanged. The review brief then
 carries `recheck`: the failed ids, the commits made since, and the items that passed. The reviewer judges the
-failed ids against those commits, and a passed item stands unless new evidence fails it. The verdict must still
-cover every id. A changed proposal, a review after a passed review, and a review after a re-check are full
-reviews.
+failed ids against those commits; a passed item stands unless new evidence fails it. The verdict must still cover
+every id. A changed proposal, a review after a passed review, and a review after a re-check are full reviews.
 
 ## Compile: units
 
 `bay check` lints and then resolves every endpoint. It fails with every gap at once, each naming the concept and
-the fix. The gaps include unknown names, unbound capabilities, effects that the endpoint does not declare or the
-env does not allow, tiers the env does not allow, connector needs (hosts, secrets, paths) beyond the env, steps
+the fix. The gaps include unknown names, unbound capabilities, effects the endpoint does not declare or the
+env forbids, tiers the env forbids, connector needs (hosts, secrets, paths) beyond the env, steps
 that could write `framework/`, `bay/`, `schemas/` or `adapters/` outside `forge.extend`, and a coordinator that is not on a main-thread runtime.
 
 Each distinct (role, mode, env) that a mode uses compiles to one **unit**, named `<role>--<mode>`, plus `--<env>`
@@ -93,8 +90,8 @@ both the tiers of steps and a role's default tier.
 
 The claude-code adapter writes `.claude/agents/<unit>.md` for worker units and runs mode coordinators as playbooks
 in the main thread, because subagents cannot spawn subagents. It also writes `.agentbay/COORDINATOR.md`, the
-registry, the use shims, `.agentbay/guard.json` and the hooks. Builds merge with your own `CLAUDE.md`, settings
-and MCP servers, and `clean` restores them.
+registry, the use shims, `.agentbay/guard.json` and the hooks. Builds merge with your `CLAUDE.md`, settings and
+MCP servers; `clean` restores them.
 
 ## Dispatcher
 
@@ -104,75 +101,75 @@ the env's provider and checks every HTTP request against the env allowlist. An a
 plan with the status `needs-agent`: the role unit, tier, model, task, playbook, rules and inputs. The coordinator
 runs the plan and returns the output with `bay submit`. The call continues until it is `done`, `partial`,
 `blocked` or `failed`, or stops at a gate (`awaiting-approval`). Agents read connector data only through their
-unit's use shim, which fixes the role, mode and env and serves read-only endpoints. Secret values are redacted
-from everything returned or logged.
+unit's use shim, which fixes the role, mode and env and serves read-only endpoints. Secret values are scanned for and
+redacted from everything returned or logged.
 
 ## Run log
 
 The run log is the append-only file `events.jsonl` under `.agentbay/`, and `bay status` folds it into calls,
-steps, runs and cost. The dispatcher, hooks, guard, use shims and `bay note` each write their own events. The Chief
+steps, runs and cost. The dispatcher, hooks, guard, use shims and `bay note` each write events. The Chief
 of Staff logs each dispatch, and a subagent records its outcome and to-do list with `bay plan`, the only `bay`
-command it may run. `bay status` lists unfinished work with no event for 24 hours under `STALE?`; it asks the
-owner to look and closes nothing. With dispatches but no hook event, it says the hook is not loaded: finishes then
-come only from `bay submit`, `bay note done` or `bay show reclaim`. Every value is scanned for secrets and redacted before it is written.
+command it may run. `bay status` lists unfinished work with no event for 24 hours under `STALE?`; it closes nothing. With dispatches but no hook event, or no guard check in 2 minutes, it says the
+hooks are not loaded (start Claude Code inside the project): finishes then come only from `bay submit`,
+`bay note done` or `bay show reclaim`.
 [INTERFACES.md section 9](INTERFACES.md#9-ledgerevent) lists the event types.
 
 ## Safety model
 
-**Hooks are defense in depth, not isolation.** The guard narrows what Claude Code subagents can ask to do. It
-cannot contain code once something runs it. Hard isolation needs an OS sandbox.
+**Threat model.** agentbay protects the rules that bind agents (guard, dispatcher, gates, secrets, run log, boundary
+check), your authority (the framework changes only through `forge.extend`, with approval and review) and your
+secrets. It defends against agent mistakes and overreach, prompt injection through data agents read, and extensions
+that overreach, not against you. The guard narrows what subagents can ask to do; these are guardrails, not a hard
+boundary, and hard isolation needs an OS sandbox. One bypass is known: code a builder runs, such as a test, runs outside
+the guard. Around it stand the gate, plan approval, the whole-diff review, the boundary check, `deadcode` and `limits`.
 
 - **Nothing that runs code is auto-approved.** The guard allows without a prompt only a role's own read-only use
-  shim (`python3 -E <kit>/bay/use_shim.py`), and when the kit is inside the project, even that prompts. Every other
-  subagent command prompts you. The main thread is pre-approved only for `bay show|status|note|catalog`, and
-  `show reclaim`, `show close`, `note dispatch` and `note review` ask. `bay call`, `bay submit` and `bay approve` prompt.
-- **Approval gates pass in your terminal.** `bay approve <callId>` needs an interactive terminal. A project
-  workflow's gate takes its `W-...` run id the same way. A gate with `approves:` records the path and sha256 of
-  the file it binds, and an edit or deletion of that file reopens the gate.
-- **Chat approval is opt-in.** With `approvals: { chat: true }` in agentbay.config.yaml (off by default),
-  `bay approve <id> --via chat --quote "<your message>" --sha <hex>` passes a gate without a terminal. The Chief of
-  Staff relays your exact words. The sha is the sha256 prefix (8 or more hex digits) of what you saw, and the
-  approval is refused if the file changed. The ledger records `user@chat-via-cos` and the quote. This is weaker
-  than a terminal, because it trusts the main thread to relay your words. Secrets, logins and backlog approvals
-  never go through chat.
+  shim (`python3 -E <kit>/bay/use_shim.py`; with the kit inside the project, even that prompts). Every other subagent
+  command prompts. The main thread is pre-approved only for `bay show|status|note|catalog`. `show reclaim`,
+  `show close`, `note dispatch`, `note review`, `call`, `submit`, `approve` and `auth` ask.
+- **Approval follows `approve.from`.** `approve: { from: [terminal, chat] }` in agentbay.config.yaml says where you
+  decide (default `[terminal]`). Gates and backlog items (`bay approve <F-id>`) share it. A terminal approval
+  needs an interactive stdin. From chat, `bay approve <id> --via chat --quote "<your message>" --sha <hex>` passes a
+  gate: the Chief of Staff relays your exact words, the sha is the sha256 prefix (8+ hex digits) of what you saw, and
+  a changed file is refused. A backlog item takes no sha. The ledger records `user@chat-via-cos` and the quote. Chat
+  is weaker than a terminal: it trusts the main thread.
+- **A gate binds content.** A gate with `approves:` records the path and sha256 of its file (a workflow gate takes
+  its `W-...` run id). If the file changes, even after the gate passed, the next submit returns the call to the gate
+  and `bay approve` resumes it where it was; nothing built on the unseen change is accepted. `bay show` says who
+  approved.
+- **Secrets and logins.** `bay secret set` needs an interactive stdin whatever `from` says. `bay auth` needs the
+  browser on the machine running bay, not a terminal.
+- **Plan approval.** `approve.plans` lists role steps (`<mode>.<endpoint>` or `<mode>.<endpoint>.<step>`). Each
+  runs a planner first (env `plan-writer`: it writes one file in `docs/plans/` and runs only `bay plan`; tier and
+  effort from `approve.planner`), then a gate on that file, then the step as a fresh agent given the plan. A
+  step with `when:` cannot be listed by name (the endpoint form skips it), and an entry that matches nothing fails
+  `bay check`.
 - **What subagents cannot touch.** The guard hook runs on Bash and on every file tool. It denies `.agentbay/`,
   `.claude/`, `.git`, `CLAUDE.md`, `.mcp.json`, `agentbay.config.yaml`, `.env*`, `.envrc`, `Makefile`, `bay.sh`,
   editor folders, `.github/workflows/` and the kit. It also denies writes outside the env's `fs.write`, inline
   interpreter code and risky version-control flags. Paths are compared case-folded where the disk is
   case-insensitive, and by inode (hard links are not detected). The guard fails closed.
-- **Your terminal only.** Approval gates, backlog approvals and `bay secret set` refuse a non-interactive stdin.
 
-**What only `forge.extend` may write.** `framework/kernel.yaml` lists it under `protected:`, in one place. The list
-covers the rules that bind agents (the guard, approval gates, secrets, the run log and the boundary check) and the
-framework's own components. `paths` names folders, and `mode`, `env` and `connector` name instances that stay
-protected wherever their folder sits. Protected names are reserved, so a user component cannot take one. A user
-mode may place roles only in an unprotected env, or in a protected env whose entry opens it to that mode. The list
-fails closed: when the file is missing or unreadable, every name is reserved and nothing is writable or
-placeable. The guard keeps agents out of these paths, and `bay check --base` rejects a change to one unless the
-proposal lists it.
+**What only `forge.extend` may write.** `framework/kernel.yaml` lists it under `protected:` (INTERFACES.md gives the
+format, the fail-closed rule and which modes may place roles in a protected env). Protected names are reserved. The
+guard keeps agents out of these paths, and `bay check --base` rejects a change to one unless the proposal lists it.
 
 **`forge.extend`** changes the framework and runs its tests. It is installed only when the project is the agentbay
 checkout. Its steps are: draft a proposal (unless one is named), a `plan` step, the approval gate, implement,
 `deadcode`, `limits`, review and release.
 
 - **Plan.** The `plan` step runs the `lead` role as a deep subagent and writes `docs/plans/<id>.md`, named like the
-  proposal, when `approvals.plan` asks for one. The value `large` (the default) asks for a plan when the proposal
-  has 10 or more touches or any `exceptions:`, has no readable `touches:`, or touches a security-sensitive path
-  (the guard, the dispatcher, secrets, the run log, adapters, core rules and two schemas). The values `always` and
-  `never` do what they say. The step is skipped when the plan file exists.
-- **Gate.** The gate always runs. It approves the proposal and, when a plan exists, the plan too. For a chat
-  approval, `--sha` is both prefixes joined by `+`, proposal first (`<proposal>+<plan>`). One prefix, or the wrong
-  order, is refused.
+  proposal, when the proposal is large (10 or more touches, any `exceptions:`, no readable `touches:`) or touches a
+  security-sensitive path. It is skipped when the plan file exists.
+- **Gate.** The gate always runs. It approves the proposal and, when a plan exists, the plan too; a chat `--sha` is
+  then both prefixes joined by `+`, proposal first (one prefix, or the wrong order, is refused).
 - **Dead code.** The `deadcode` step (`improve.detect/v1.change`) blocks the call when the change adds unused code,
   an unused constant, a compatibility layer or a complexity finding that the merge-base with `origin/main` did not
   have. The base tree is exported as plain files and never run.
-- **Size.** The `limits` step (`improve.detect/v1.limits`) keeps the framework from growing. `framework/limits.yaml`
-  holds a ceiling for each size measure: lines in `bay/`, lines of kit connector code, CLI commands, folders,
-  schemas and tests. A change may not exceed a ceiling, or the base branch's ceiling when that is higher. A raise
-  needs an exception in the proposal's front matter, which the owner approves with the proposal, and a count up to
-  the approved exception passes without editing `limits.yaml`. A lower count is a note. At release,
-  `bay check --limits --write` records it as the new ceiling, so ceilings only fall. Without `--write` the check
-  changes nothing.
+- **Size.** The `limits` step (`improve.detect/v1.limits`) keeps the framework from growing: no measure in
+  `framework/limits.yaml` (code lines, CLI commands, folders, schemas, tests) may exceed its ceiling, or the base branch's if higher. A raise needs an `exceptions:` entry in the proposal's front
+  matter, approved with it; a count up to it passes without editing `limits.yaml`. A lower count is a note. At release,
+  `bay check --limits --write` records the count as the new ceiling, so ceilings only fall.
 
 The boundary checks keep the framework's parts independent. Code cites these ids, and `bay check` runs them.
 

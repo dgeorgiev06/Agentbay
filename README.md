@@ -118,13 +118,13 @@ tests/           python3 tests/run.py (the tests of a component live in its own 
 | `bay show <mode> --resolved` | a mode's features after `extends`, with the file each comes from |
 | `bay call <mode>.<endpoint> '<json>'` | run a feature |
 | `bay submit <callId> <step> '<json>'`, `bay show <callId>`, `bay show reclaim <runId>`, `bay show close <callId> --reason <text>` | hand back a step's output; current state; mark a stuck run reclaimed; end an open call as abandoned |
-| `bay approve <callId\|runId> [--reject]` | pass an approval gate in your terminal, or from chat when `approvals: { chat: true }` is set |
-| `bay approve <F-id> [--defer\|--wontfix]` | decide a backlog item from the analysis mode (your terminal only, never from chat) |
+| `bay approve <callId\|runId> [--reject]` | pass an approval gate in your terminal, or from chat when `approve.from` lists chat |
+| `bay approve <F-id> [--defer\|--wontfix]` | decide a backlog item from the analysis mode (follows `approve.from`, like a gate) |
 | `bay status [--agents\|--log]`, `bay note <ref> "text"` | calls, steps, cost, agent runs (grouped by role, mode, model, tier); the raw run log; a note |
 | `bay note task`, `bay note dispatch <taskId> --agent <name> --input <x>`, `bay note done <taskId>`, `bay note review <taskId> '<json>'`, `bay plan <taskId> [--done <n>]` | agent run records: a fresh taskId; the Chief of Staff logs each dispatch, its finish and outside review; a subagent first records its outcome and to-do (`bay plan` is its only `bay` command) |
 | `bay new mode <name>`, `bay new feature <name> --mode <mode>`, `bay new connector <name> --implements <interface>`, `bay new env <name> --mode <mode>` | create a component, a feature, a source connector or an env from a template |
 | `bay secret set <NAME>` | store a secret (read from your terminal, never echoed) |
-| `bay auth <connector>` | a connector's browser login |
+| `bay auth <connector>` | a connector's browser login (Claude Code asks first; needs the browser on this machine) |
 | `bay config` | print every agentbay.config.yaml setting, from the schemas |
 
 Run as `./bay.sh <command>` in the kit, or `.agentbay/bay <command>` in a built project. A component's `README.md`
@@ -158,7 +158,8 @@ text for its `goal` and `deliverable`, so the example states them in words.
 
 The guard hook narrows what subagents can ask to do; it is defense in depth, not isolation, and cannot contain
 code once something runs it. Nothing that runs code is auto-approved except a role's own read-only data shim;
-the main thread is pre-approved only for `bay show|status|note|catalog`. Approval gates, secrets,
-browser logins and backlog approvals need your terminal; gates alone can be opened to chat (`approvals: { chat: true }`,
-off by default, recorded as `user@chat-via-cos`).
+the main thread is pre-approved only for `bay show|status|note|catalog`. `bay secret set`
+needs your terminal. Approval gates and backlog approvals follow `approve.from` in agentbay.config.yaml (default
+`[terminal]`; chat is recorded as `user@chat-via-cos`). `approve.plans` makes a listed step show its plan for your
+approval before it runs. `bay auth` asks first in Claude Code.
 Details: [docs/DESIGN.md#safety-model](docs/DESIGN.md#safety-model).

@@ -21,7 +21,8 @@ write, spend and delete belongs to the endpoint you call.
    - `needs-agent`: run `next` as it says. `runAs: subagent_type=<name>` -> Agent
      tool with that `subagent_type` and `model`; the prompt STARTS with a task block
      (mint the id with `.agentbay/bay note task`) and includes the plan's task,
-     playbook, rules, definition of done and inputs. `runAs: main-thread playbook`
+     playbook, rules, definition of done and inputs. The brief states the goal, the inputs and the limits, and
+     nothing about how to do the work; the agent writes its own plan. `runAs: main-thread playbook`
      -> do it yourself following that mode's coordinator playbook.
      Before every Agent dispatch, log it: `.agentbay/bay note dispatch <taskId> --agent <subagent_type>
      --call <callId> --step <stepId> --model <m> --tier <t> --role <r> --mode <mode> --input <path or id>`
@@ -34,7 +35,7 @@ write, spend and delete belongs to the endpoint you call.
      these from the ledger to find slow and costly steps.
    - `awaiting-approval`: show the user what is being approved and ask them to run
      `.agentbay/bay approve <callId>` (or `--reject`) in their own terminal. If they
-     turned on approvals from chat, they may answer in chat instead; see "Gates from
+     allowed chat in `approve.from`, they may answer in chat instead; see "Gates from
      chat". Afterwards `.agentbay/bay show <callId>` gives you the next step.
    - `done` / `partial` / `blocked` / `failed`: report.
 4. **Record.** Steps are logged automatically; log each dispatch with `bay note dispatch` (step 3) and your
@@ -83,7 +84,7 @@ Tell the user which stage of which workflow is running, not every call you make.
 
 ## Gates from chat
 
-Only when the user set `approvals: { chat: true }` in `agentbay.config.yaml`. You never
+Only when `approve.from` in `agentbay.config.yaml` lists `chat`. You never
 set it, and you never ask a subagent to.
 
 - Relay an approval only when the user's latest message clearly approves that specific
@@ -95,8 +96,10 @@ set it, and you never ask a subagent to.
   A rejection is the same with `--reject` (and `--reason` when they gave one).
 - Claude Code asks the user before the command runs; that prompt is part of the check.
 - The ledger records it as `user@chat-via-cos` with the quote, never as a terminal
-  approval. Never infer approval, and never relay one for a secret, a login or an improve backlog item
-  (`bay approve <F-id>`): `bay secret set`, `bay auth` and backlog decisions stay in the user's terminal.
+  approval. Never infer approval.
+- An improve backlog item (`bay approve <F-id>`) follows `approve.from` like a gate: relay the user's decision
+  only when their message clearly decides that item. It takes no `--sha`. `bay secret set` stays in the
+  user's terminal. `bay auth` is not an approval: run it only when the user asks for a login.
 
 ## Status questions
 For "what's going on", "what's running", "what did X do": run

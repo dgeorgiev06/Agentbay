@@ -4,13 +4,13 @@
 On demand, turn one user-approved finding into a reviewed fix request for forge: a forge.extend proposal draft (framework) or a mode-fix task envelope (user mode). improve never edits code.
 
 ## Inputs
-- `id` (required): the finding id. Its status must be `approved` by the user (`bay approve <id>` in a terminal).
+- `id` (required): the finding id. Its status must be `approved` by the user (`bay approve <id>`, in a terminal or, when `approve.from` lists chat, from chat).
 
 ## Steps
 1. `claim`: the dispatcher runs `improve.findings/v1.claim` (code). An item that is not approved by the user stops the call as `blocked`.
 2. `draft`: the analyst (pattern-analysis skill) writes the `Draft`: route, title, problem, evidence, change, compatibility and tests (forge.extend), or a task envelope goal, deliverable and constraints (mode-fix). No code.
 3. `review`: the reviewer (opus, high effort) checks the draft against the finding's evidence and the DoD and rules below.
-4. `approve`: approval gate. The call stops with `awaiting-approval`; only the user passes it, with `bay approve <callId>` in an interactive terminal.
+4. `approve`: approval gate. The call stops with `awaiting-approval`; only the user passes it, with `bay approve <callId>` in an interactive terminal (or from chat, when `approve.from` lists chat).
 5. `handoff`: the dispatcher runs `improve.findings/v1.handoff` (code): it writes the draft under `.agentbay/data/improve/handoffs/`, marks the finding `in-progress`, and returns `next`: the `forge.extend` call (its propose step writes docs/proposals/<id>.md behind its own approval gate) or the task envelope.
 
 ## Definition of Done

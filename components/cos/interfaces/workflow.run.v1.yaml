@@ -64,7 +64,7 @@ spec:
     approve:
       description: >-
         Pass or reject the gate a run waits on. Reached only from `bay approve` (interactive terminal, or `--via chat`
-        when the project's approvals.chat is on).
+        when the project's approve.from lists chat).
       in:
         type: object
         required: [runId, approved]

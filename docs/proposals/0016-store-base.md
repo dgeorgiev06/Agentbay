@@ -12,7 +12,7 @@ touches:
   - { path: bay/limits.py, reason: "kit_python_lines and tests count bay-side kit code only for adapters/ and the protected components" }
   - { path: bay/sqlsandbox.py, reason: "two error messages name items.store/v2" }
   - { path: bay/templates/, reason: "the example in the TODO comments of the feature and mode templates names items.store/v2" }
-  - { path: bay/workflows.py, reason: "the docstring example called briefing.digest, a mode that no longer exists" }
+  - { path: bay/workflows.py, reason: "the docstring example called briefing.digest, a mode that no longer exists; review round 1: a `*` path part maps the rest of a `$steps`/`$in` path over a list, so the delete removes the ids its preview found" }
   - { path: schemas/connector.schema.json, reason: "`needs.optional`: capabilities the connector uses when the env binds them" }
   - { path: schemas/mode.schema.json, reason: "two example endpoint names in descriptions say items.store/v2" }
   - { path: framework/kernel.yaml, reason: "components/store is protected and core-owned (B-11 would otherwise find the word `store` 16 times in the core docs); `store` is a reserved mode name; two protected paths of components/briefing collapse into one" }
@@ -226,6 +226,17 @@ The first review (call C-20261103-5460dd) found no blocker and three should-fix 
 5. **Nits.** `update` refuses a `set` that is not an object; the stale comment in line 3 of mail's `views.sql` is fixed.
 
 These stay within the bay_lines exception of 9695. If they do not, the builder stops and says by how much.
+
+## Review round 2 fixes
+
+The second review found no blocker and no security finding; DOD-13 failed as should-fix and DOD-8 had four nits. The owner chose a small fix round in chat on 2026-11-03. This round does these and nothing else:
+
+1. **Docs.** docs/DESIGN.md names the `*` path part with the other substitution forms (it applies to project workflows too), paid for within the 3000-word budget.
+2. **Delete output.** The delete feature always returns `{deleted, missing, remembered}`, also when the preview found nothing (then nothing is removed and no reviewer runs on a no-op if the step machinery allows it without new kernel lines), and its `missing` includes the ids the gate listed as missing.
+3. **Duplicates.** A repeated id is shown and removed once.
+4. **A direct test of `*`** in an existing test function (the test count stays 462): a list, an empty list, a missing path and a dict key named `*`.
+
+The bay_lines exception of 9695 holds.
 
 ## Citations re-checked against 2.0.0
 

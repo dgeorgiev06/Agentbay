@@ -2,6 +2,7 @@
 mode's `needs`; each (role, mode, env) compiles to its own subagent, use shim, guard entry and store; one agent
 profile maps tiers to models."""
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -291,6 +292,12 @@ def test_lint_reports_an_unknown_env_in_a_roles_map_with_file_and_line():
     base.write_text(base.read_text().replace("reviewer: local-feeds }", "reviewer: nowhere }"))
     line = next(i for i, ln in enumerate(base.read_text().splitlines(), 1) if ln.startswith("  roles:"))
     ps = lint.run(k)
-    assert any(p.endswith(f"components/feed-briefing/mode.yaml:{line}: mode feed-briefing: `roles:` puts role reviewer in unknown "
-                          f"env 'nowhere' (have: cos-local, framework-dev, improve-local, local-authoring, local-feeds, "
-                          f"local-mail, plan-writer, research, store-local, workspace)") for p in ps), ps
+    pattern = re.compile(rf"/components/feed-briefing/mode\.yaml:{line}: mode feed-briefing: `roles:` puts role "
+                         rf"reviewer in unknown env 'nowhere' \(have: (.*)\)$")
+    hit = [p for p in ps if pattern.search(p)]
+    assert hit, ps
+    have = set(pattern.search(hit[0]).group(1).split(", "))
+    shipped = {"cos-local", "framework-dev", "improve-local", "local-authoring", "local-feeds",
+               "local-mail", "plan-writer", "research", "store-local", "workspace"}
+    missing = shipped - have
+    assert not missing, f"shipped envs not listed: {sorted(missing)} in {hit[0]}"

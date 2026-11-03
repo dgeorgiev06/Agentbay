@@ -2,6 +2,14 @@
 
 Earlier versions: see docs/proposals/
 
+## 3.0.2 - 2026-11-03
+
+Proposal 0019: the kit tests no longer assume the shipped envs, agents and modes are the only ones.
+
+### Changed
+
+- The kit tests check that the shipped envs, agents and modes are present, and no longer that they are the only ones, so a user mode with its own env no longer breaks them.
+
 ## 3.0.1 - 2026-11-03
 
 Proposal 0018: the kit tests no longer assume the shipped content types are the only ones.

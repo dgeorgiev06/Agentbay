@@ -17,6 +17,8 @@ touches:
   - { path: framework/roles/lead.yaml, reason: "its comment and prompt say the planning step is also what `approve.plans` adds" }
   - { path: components/tools/envs/plan-writer.yaml, reason: "new env: reads the project, writes docs/plans/ only, runs no command but `bay plan`" }
   - { path: adapters/claude-code/claude_code.py, reason: "the generated coordinator text names `approve.from`; `bay auth` joins the commands that always ask" }
+  - { path: components/improve/tests/test_improve.py, reason: "from part 2 (owner approved 2026-11-02): backlog approval from chat changes the expected refusal text" }
+  - { path: components/improve/connectors/improve-store/tests/test_improve_store.py, reason: "from part 2 (owner approved 2026-11-02): the store's approver constant is a tuple" }
   - { path: components/forge/envs/framework-dev.yaml, reason: "from the plan step: it lists the new plan-writer env, or lint fails" }
   - { path: components/forge/mode.yaml, reason: "the comment on the plan step; one line in the propose step's task about `touches:`" }
   - { path: components/forge/connectors/scaffold/scaffold.py, reason: "the plan step is always `large`, so the `approvals.plan` lookup goes" }

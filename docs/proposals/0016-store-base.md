@@ -3,6 +3,7 @@
 id: "0016"
 status: draft
 touches:
+  - { path: bay/graph.py, reason: "from the plan step: it reads needs.capabilities, so it learns needs.optional (0 net lines)" }
   - { path: bay/model.py, reason: "STORE_IFACE is items.store/v2; the one-level check replaces the cycle check in _apply_extends; merge_mode lets a child's feature inherit playbook and rules; check_connector skips an unbound `needs.optional` capability" }
   - { path: bay/lint.py, reason: "`local` is a reserved source name; the three messages that spell items.store/v1" }
   - { path: bay/connect.py, reason: "instantiate loads the connectors of `needs.optional` capabilities that the env binds" }

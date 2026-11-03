@@ -451,6 +451,12 @@ def test_an_edit_after_approval_makes_the_gate_run_again():
         original = f.read_text()
         cid = _to_gate(d, path)["callId"]
         d.approve(cid, True, by="user@tty")
+        assert "approved by user@tty on" in d.show(cid)["gates"]["approve"]
+        f.write_text(original + "\nAmended while implement ran.\n")
+        r = d.submit(cid, "implement", {"status": "done", "summary": "built"})
+        assert r["status"] == "awaiting-approval" and "changed since user@tty approved it" in r["next"]["why"], r
+        r = d.approve(cid, True, by="user@tty")
+        assert r["status"] != "awaiting-approval" and r.get("next", {}).get("step") != "implement", r      # resumes after implement
         f.write_text(original + "\nOne more slice, added after approval.\n")
         r = _to_gate(d, path)
         assert r["status"] == "awaiting-approval" and r["next"]["step"] == "approve", r

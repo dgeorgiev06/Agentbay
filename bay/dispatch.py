@@ -190,13 +190,15 @@ class Dispatcher:
         data = {"approved": approved, "by": by, **({"quote": quote} if quote else {}),
                 **({"approves": subject} if subject else {})}
         state["steps"][step.id] = dict(data)
+        state["gates"][step.id]["why"] = (f"approved by {by} on {self.clock():%Y-%m-%d} (sha256 {_short(subject)})" if approved
+                                          else f"rejected by {by} on {self.clock():%Y-%m-%d}")
         if not approved:
             state["status"] = "blocked"
             state["result"] = {"reason": reason or "rejected at the approval gate"}
             self._ledger("step.completed", base, summary=f"gate rejected by {by}", data=data)
             return self._finish(state, mode, feat)
         self._ledger("step.completed", base, summary=f"gate approved by {by}", data=data)
-        state["cursor"] += 1
+        state["cursor"] = state.pop("resume", None) or state["cursor"] + 1
         return self._advance(mode, feat, state)
 
     def approve_run(self, run_id: str, approved: bool, by: str, reason: str = "", quote: str = "") -> dict:
@@ -346,6 +348,9 @@ class Dispatcher:
     def _advance(self, mode, feat, state) -> dict:
         stages = [wfmod.Stage.of_step(s) for s in feat.steps]
         by_id = {s.id: s for s in feat.steps}
+        if (i := self._reopened(feat, state)) is not None:
+            state.setdefault("resume", state["cursor"])
+            state["cursor"] = i
         while True:
             mv = wfmod.advance(stages, state["cursor"], state["input"], state["steps"],
                                lambda st, age: self._fresh(by_id[st.id], mode, age))
@@ -368,7 +373,7 @@ class Dispatcher:
                     state["steps"][step.id] = {"approved": True, "by": prior["by"], "priorCall": prior["callId"]}
                     self._ledger("step.skipped", base, summary=gate["why"],
                                  data={"approves": gate["approves"], "priorCall": prior["callId"]})
-                    state["cursor"] += 1
+                    state["cursor"] = state.pop("resume", None) or state["cursor"] + 1
                     continue
             if step.kind == "code":
                 self._run_code(mode, feat, step, state, base)
@@ -405,6 +410,12 @@ class Dispatcher:
             failed_checks = [c for c in state["checks"] if not c["ok"] and c["level"] in FAIL_LEVELS]
             state["status"] = "partial" if (failed_checks or state.get("stopped")) else "done"
         return self._finish(state, mode, feat)
+
+    def _reopened(self, feat, state):
+        """Index of the first passed gate whose subject changed since it passed: an approval covers only what the owner saw."""
+        for i, st in enumerate(feat.steps[:state["cursor"]]):
+            if (g := state.get("gates", {}).get(st.id)) and g["approves"] != self._gate_subject(st, state):
+                return i
 
     def _fresh(self, step, mode, age) -> bool:
         """`stale > <age>` (via `workflows.advance`): the step's connector says whether the store is fresher than that."""

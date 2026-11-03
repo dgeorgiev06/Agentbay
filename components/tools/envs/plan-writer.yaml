@@ -1,0 +1,13 @@
+apiVersion: agentbay/v4
+kind: Environment
+metadata:
+  name: plan-writer
+  description: Where an approve.plans planner works. Reads the project, writes docs/plans/ only, runs no command but `bay plan`.
+spec:
+  bind:
+    workspace.read/v1: { tools: [Read, Glob, Grep] }
+    workspace.write/v1: { tools: [Write, Edit, Bash], clis: [] }     # Bash only for `bay plan`
+  fs: { read: ["."], write: [docs/plans] }
+  tiers: [balanced, deep]
+  effects: [read, write]
+  limits: { maxTurns: 40, maxMinutes: 20 }

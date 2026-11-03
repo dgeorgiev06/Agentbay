@@ -795,6 +795,8 @@ class _Ctx:
             if rd:
                 self.roles[name] = rd
         self.units: dict[tuple[str, str, str, str], ResolvedRole | None] = {}
+        self.planable: set[str] = set()       # every <mode>.<endpoint>.<step> approve.plans may list
+        self.listed: set[str] = set()         # the approve.plans entries that matched a feature or step
 
     def inference(self, tier: str, effort: str) -> Inference:
         p = self.profile or {}
@@ -986,6 +988,8 @@ def resolve(kit: Kit) -> System:
         m = resolve_mode(kit, md, ctx, warnings)
         if m:
             modes[mname] = m
+    gaps += [f"agentbay.config.yaml approve.plans: {e} matches no endpoint or step (have: {', '.join(sorted(ctx.planable))})"
+             for e in (kit.config.get("approve") or {}).get("plans", []) if e not in ctx.listed]
     name_units(modes, gaps)
     coord_rt = ((ctx.profile.get("runtime") or {}).get("coordinator") if ctx.profile else None)
     if coord_rt and coord_rt != "claude-code-main" and any(m.coordinator for m in modes.values()):
@@ -1141,6 +1145,29 @@ def _mode_constraints(md: Doc, mcfg: dict, gaps: list[str]) -> dict:
     return constraints
 
 
+PLAN_TASK = ("Write the plan for step {id} to docs/plans/<callId>-{id}.md (the callId is in this step's submit command): "
+             "the outcome, the items, the files and the risks. Implement nothing. List the file in `artifacts`.")
+PLAN_FOLLOW = "Follow the approved plan named in previous.{id}-plan.artifacts; report partial if it cannot be followed."
+
+
+def _plan_steps(ctx: _Ctx, md: Doc, ep: dict, st: dict, sw: str, where: str, ep_eff) -> list[Step]:
+    """The plan step and its gate for a role step that agentbay.config.yaml `approve.plans` lists, else []."""
+    sid, cfg = st["id"], ctx.kit.config.get("approve") or {}
+    ctx.planable.add(f"{where}.{sid}")
+    hit = [e for e in (where, f"{where}.{sid}") if e in (cfg.get("plans") or [])]
+    ctx.listed.update(hit)
+    if st.get("when") and f"{where}.{sid}" in hit:
+        ctx.gaps.append(f"agentbay.config.yaml approve.plans: {where}.{sid}: step {sid} has a `when:`; a gate cannot be "
+                        f"skipped, so list a step without one")
+    if not hit or st.get("when"):
+        return []
+    planner = {"tier": "deep", "effort": "high", **(cfg.get("planner") or {})}
+    plan = {"id": f"{sid}-plan", "role": "lead", "roles": {"lead": "plan-writer"}, **planner, "task": PLAN_TASK.format(id=sid)}
+    gate = Step(id=f"{sid}-approve", kind="gate", approves=f"$steps.{sid}-plan.artifacts",
+                task=f"The user approves the plan in docs/plans/ before step {sid} runs.")
+    return [_role_step(ctx, md, ep, plan, sw, ep_eff), gate]
+
+
 def _feature_steps(kit: Kit, md: Doc, ctx: _Ctx, ep: dict, wf: list, where: str) -> list[Step]:
     """The feature's steps, with the review step injected at its `{review: here}` marker (else at the end)."""
     ep_eff = ep["effects"]
@@ -1163,7 +1190,10 @@ def _feature_steps(kit: Kit, md: Doc, ctx: _Ctx, ep: dict, wf: list, where: str)
             # a gate passes only by a recorded approval (`bay approve`), never by a `when:` skip (check_stages says so)
             steps.append(Step(id=st["id"], kind="gate", task=st["gate"], approves=st.get("approves"), when=st.get("when")))
         else:
-            steps.append(_role_step(ctx, md, ep, st, sw, ep_eff))
+            pre = _plan_steps(ctx, md, ep, st, sw, where, ep_eff)
+            if pre:
+                st = {**st, "task": f"{st.get('task', '')} {PLAN_FOLLOW.format(id=st['id'])}".strip()}
+            steps += [*pre, _role_step(ctx, md, ep, st, sw, ep_eff)]
     if review_on and not marker:
         steps.append(_role_step(ctx, md, ep, {"id": "review", "role": review["role"]}, f"{where} review",
                                 ep_eff, review=review))

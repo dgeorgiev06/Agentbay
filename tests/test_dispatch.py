@@ -1,9 +1,10 @@
 """Dispatcher: schemas, grants, effects, budget, step plans, review, ledger, secrets."""
 import json
 
-from helpers import KIT, SECRETS, FakeHttp, MemProvider, cleanup, clock, edit_yaml, jresp, kit_copy, model, project, system
+from helpers import KIT, SECRETS, FakeHttp, MemProvider, cleanup, clock, edit_yaml, jresp, kit_copy, kit_for, model, project, system
 
-from bay import dispatch, ledger, vault
+from bay import dispatch, guard, ledger, vault
+from bay.adapter import get
 
 
 def D(p, kit=None, **kw):
@@ -574,3 +575,44 @@ def test_when_names_only_an_earlier_step():
         assert any("when: !$steps.release.approved" in g and "not an earlier step" in g for g in gaps), gaps
     finally:
         cleanup(k)
+
+
+def test_a_listed_step_is_planned_approved_and_then_run_by_a_fresh_agent():
+    task = {"goal": "build the thing now", "deliverable": "a file"}
+    p = project({"approve": {"from": ["terminal", "chat"], "plans": ["delivery.build.implement"]}})
+    d = D(p)
+    nx = d.call("delivery.build", task)["next"]
+    assert (nx["step"], nx["env"], nx["tier"], nx["model"]) == ("implement-plan", "plan-writer", "deep", "opus")
+    get("claude-code").build(system(p), p, kit_for(p))
+    pol = json.loads((p / ".agentbay/guard.json").read_text())
+    unit = nx["runAs"].split("=")[1]
+    assert pol["subagents"][unit]["write"] == ["docs/plans"] and pol["subagents"][unit]["clis"] == []
+    g = guard.Guard(pol, p)
+
+    def verdict(tool, ti):
+        return g.decide({"tool_name": tool, "tool_input": ti, "cwd": str(p), "agent_type": unit, "agent_id": "a1"})[0]
+    assert verdict("Write", {"file_path": "docs/plans/x.md", "content": "p"}) == "pass"
+    for bad in ("bay/guard.py", "docs/proposals/x.md", "docs/x.md", "src/a.py", "agentbay.config.yaml", "docs/plans/../x.md"):
+        assert verdict("Write", {"file_path": bad, "content": "x"}) == "deny", bad
+    assert verdict("Bash", {"command": "git status"}) == "deny"
+    # a gate with no plan file never passes: the plan step listed a proposal, nothing, or a file that is not there
+    (p / "docs/proposals").mkdir(parents=True)
+    (p / "docs/proposals/x.md").write_text("---\ntouches: []\n---\n# x\n")
+    for listed in (["docs/proposals/x.md"], [], ["docs/plans/ghost.md"]):
+        r = d.submit(d.call("delivery.build", task)["callId"], "implement-plan",
+                     {"status": "done", "summary": "planned", "artifacts": listed})
+        assert r["status"] == "awaiting-approval" and not r["next"].get("approves"), r
+        err(lambda: d.approve(r["callId"], True, by="user@tty"), "nothing approved", "docs/plans/")
+        assert d.show(r["callId"])["status"] == "awaiting-approval"
+    cid = d.call("delivery.build", task)["callId"]
+    plan = f"docs/plans/{cid}-implement.md"
+    (p / "docs").joinpath("plans").mkdir()
+    (p / plan).write_text("# plan\nitems\n")
+    r = d.submit(cid, "implement-plan", {"status": "done", "summary": "planned", "artifacts": [plan]})
+    assert r["status"] == "awaiting-approval" and r["next"]["approves"] == {"path": plan, "sha256": _sha(p / plan)}
+    err(lambda: d.approve(cid, True, by="user@chat-via-cos", quote="yes", sha="00000000"), "does not match")
+    r = d.approve(cid, True, by="user@chat-via-cos", quote="yes", sha=_sha(p / plan)[:8])
+    assert r["next"]["step"] == "implement" and r["next"]["previous"]["implement-plan"]["artifacts"] == [plan]
+    assert "Follow the approved plan" in r["next"]["task"]
+    q = project({"approve": {"plans": ["delivery.build"], "planner": {"tier": "balanced"}}})
+    assert D(q).call("delivery.build", task)["next"]["model"] == "sonnet"

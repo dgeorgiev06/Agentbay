@@ -302,7 +302,7 @@ def undo_move(got: dict) -> dict:
 #     fs.write in step with the map). It writes protected paths, not user extensions, so pass -> deny. Findings about
 #     improve itself route to a mode-fix task, not forge.extend (D4).
 USER_MODE_GAP = ("mode improve: role analyst works in the framework env framework-dev (improve.scan step patterns); "
-                 "user modes may put roles only in their own envs (components/<name>/envs/) or the framework envs workspace and research")
+                 "user modes may put roles only in their own envs (components/<name>/envs/) or the framework envs plan-writer and workspace and research")
 IMPROVE_ROWS = ["Edit mode:improve/mode.yaml", "MultiEdit mode:improve/mode.yaml", "NotebookEdit mode:improve/n.ipynb",
                 "Write mode:improve/README.md", "Write mode:improve/features/scan/playbook.md",
                 "Write mode:improve/mode.yaml"]
@@ -331,6 +331,8 @@ def put_back(got: dict, want: dict) -> dict:
     assert now[0] == USER_MODE_GAP and not any("only forge.extend" in g for g in now), now
     assert [g for g in was if "only forge.extend" in g] and [g for g in now if g not in was] == [USER_MODE_GAP]
     got["resolverGaps"][name] = was
+    name = "user mode in a framework-writing env"             # plan-writer is a third open env
+    got["resolverGaps"][name] = [g.replace("plan-writer and ", "") for g in got["resolverGaps"][name]]
     return got
 
 

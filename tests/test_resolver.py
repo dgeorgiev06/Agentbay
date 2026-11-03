@@ -223,6 +223,9 @@ def test_offline_switch_rebinds_the_source_and_closes_network_and_secrets():
             raise AssertionError("expected ConfigError")
         except config.ConfigError as e:
             assert word in str(e)
+    for entry, word in (("delivery.nope", "matches no endpoint or step (have: delivery.build.implement"),
+                        ("forge.extend.plan", "step plan has a `when:`; a gate cannot be skipped")):
+        assert_gap(KIT, f"approve.plans: {entry}", word, project=project({"approve": {"plans": [entry]}}))
     for rel in ("components/briefing/mode.yaml", "components/tools/envs/workspace.yaml"):         # a v2 or v3 mode and env are refused too
         for old in ("agentbay/v2", "agentbay/v3"):
             k = kit_copy()

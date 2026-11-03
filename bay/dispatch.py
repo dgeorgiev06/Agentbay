@@ -26,7 +26,7 @@ from contextlib import suppress
 from pathlib import Path
 
 from . import boundary, checks, config as cfgmod, connect, ledger, model, secretscan, vault, workflows as wfmod
-from .util import PROPOSAL_PATH, parse_time, read_json, utcnow, write_json
+from .util import PLAN_PATH, PROPOSAL_PATH, parse_time, read_json, utcnow, write_json
 
 VERDICT = "review.verdict/v1"
 # who `bay approve` records: a terminal approval, or one relayed from chat (bay/cli.py CHAT_BY); only these pass a
@@ -159,6 +159,9 @@ class Dispatcher:
         base.update(_usage_fields(None, state.get("plannedAt")))
         shown = (state.get("plan") or {}).get("approves")
         subject = self._gate_subject(step, state)
+        if approved and (step.approves or "").startswith("$steps.") and subject is None:
+            raise CallError(f"call {call_id}: {step.id} approves the file the plan step lists in docs/plans/, and there "
+                            f"is none; nothing approved")
         if approved and subject != shown:
             # the owner approves the content the gate showed; an edit since then needs a fresh look
             gate = self._gate_check(step, state, subject)
@@ -418,7 +421,7 @@ class Dispatcher:
         if step.kind != "gate" or not step.approves:
             return None
         sub = self._file_subject(step.approves, state)
-        pp = sub and f"docs/plans/{Path(sub['path']).stem}.md"       # the plan the lead wrote for this proposal
+        pp = sub and PROPOSAL_PATH.match(sub['path']) and f"docs/plans/{Path(sub['path']).stem}.md"       # the plan the lead wrote for this proposal
         plan = pp and (self._file_subject(pp, state) or ({"path": pp, "sha256": None} if state["steps"].get("plan") else None))
         return {**sub, "plan": plan} if plan else sub
 
@@ -427,7 +430,7 @@ class Dispatcher:
         step wrote: its first docs/proposals/<id>.md."""
         path = wfmod.substitute({"v": expr}, state["input"], state["steps"], {}).get("v")
         if isinstance(path, list):
-            path = next((x for x in path if isinstance(x, str) and PROPOSAL_PATH.match(x)), None)
+            path = next((x for x in path if isinstance(x, str) and (PLAN_PATH if expr.startswith('$steps.') else PROPOSAL_PATH).match(x)), None)
         if not isinstance(path, str) or not path:
             return None
         root = self.project.resolve()

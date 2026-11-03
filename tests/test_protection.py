@@ -26,6 +26,7 @@ EXPECTED_PROTECTED = [
     "components/improve/connectors/improve-detect", "components/improve/connectors/improve-store",
     "components/improve/connectors/ledger",
     "components/briefing/interfaces", "components/improve/interfaces", "components/tools/interfaces",
+    "components/tools/envs/plan-writer.yaml",
 ]
 
 
@@ -53,13 +54,13 @@ def _built(edit=None):
 def test_the_shipped_map_declares_what_the_old_fixed_list_protected():
     kit = model.Kit(KIT)
     assert not hasattr(model, "PROTECTED") and not hasattr(model, "USER_FRAMEWORK_ENVS")
-    assert kit.protected.paths == ("framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED) and not kit.protected.closed
+    assert kit.protected.paths == ("framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED[:-1]) and not kit.protected.closed
     # the four folders in the old order and spelling, then each protected instance where it sits (stage 5 part G)
     assert kit.protected_paths == ["framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED]
     assert set(kit.protected.names["env"]) == {e for e, d in kit.docs["Environment"].items() if d.root == "framework"}
     assert set(kit.protected.names["connector"]) == {c for c, d in kit.docs["Connector"].items() if d.root == "framework"}
     assert set(kit.protected.names["mode"]) == {m for m, d in kit.docs["Mode"].items() if d.root == "framework"}
-    assert kit.protected.open_envs() == ["workspace", "research"]
+    assert kit.protected.open_envs() == ["plan-writer", "workspace", "research"]
     assert model.schema_errors(model.load_yaml(KIT / MAP), model.schema("components")) == []
     assert lint.lint_protection(kit) == [] and lint.lint_owner_only(kit) == []
 
@@ -68,7 +69,7 @@ def test_a_role_without_forge_extend_cannot_write_a_path_the_map_lists():
     k = _built(lambda d: d["protected"]["paths"].append("vault"))
     try:
         pol, decide = _guard(k)
-        assert pol["protected"] == ["framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED, "vault"]
+        assert pol["protected"] == ["framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED[:-1], "vault", EXPECTED_PROTECTED[-1]]
         put ={"file_path": "vault/key.txt", "content": "x"}
         # workspace writes "." and delivery's builder works there, yet the map says only forge.extend may write vault/
         assert decide("Write", put, "builder--delivery") == "deny"
@@ -274,7 +275,7 @@ def test_a_user_mode_may_place_roles_only_in_the_protected_envs_the_map_opens_to
     try:
         edit_yaml(k / "components/delivery/mode.yaml", lambda d: d["spec"]["roles"].update({"builder": "local-authoring"}))
         assert any("works in the framework env local-authoring" in g and "research and workspace" not in g
-                   and "workspace and research" in g for g in gaps(k)), gaps(k)
+                   and "plan-writer and workspace and research" in g for g in gaps(k)), gaps(k)
         edit_yaml(k / MAP, lambda d: d["protected"]["env"].update({"local-authoring": {"modes": ["delivery"]}}))
         assert not [g for g in gaps(k) if "works in the framework env" in g]
         edit_yaml(k / MAP, lambda d: d["protected"]["env"].update({"local-authoring": {}, "workspace": {"modes": []}}))

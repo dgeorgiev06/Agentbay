@@ -245,7 +245,7 @@ def test_user_modes_may_not_put_roles_in_framework_envs_other_than_workspace_and
                  "features": {"look": {"effects": ["read"], "review": {"when": "never"},
                                        "steps": [{"id": "a", "role": "analyst", "task": "x"}]}}}}))
     assert_gap(k, "mode spy: role analyst works in the framework env improve-local (spy.look step a)",
-               "user modes may put roles only in their own envs (components/<name>/envs/) or the framework envs workspace and research")
+               "user modes may put roles only in their own envs (components/<name>/envs/) or the framework envs plan-writer and workspace and research")
     assert_gap(k, "mode spy: role lead works in the framework env improve-local")
     # workspace and research stay open to user modes (delivery uses both); framework modes are unaffected
     assert system(None).modes["delivery"].roles == {"researcher": "research", "builder": "workspace",
@@ -295,4 +295,4 @@ def test_lint_reports_an_unknown_env_in_a_roles_map_with_file_and_line():
     ps = lint.run(k)
     assert any(p.endswith(f"components/briefing/mode.yaml:{line}: mode briefing: `roles:` puts role reviewer in unknown "
                           f"env 'nowhere' (have: cos-local, framework-dev, improve-local, local-authoring, local-feeds, "
-                          f"local-mail, research, workspace)") for p in ps), ps
+                          f"local-mail, plan-writer, research, workspace)") for p in ps), ps

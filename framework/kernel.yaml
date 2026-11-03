@@ -17,6 +17,7 @@ protected:
     framework-dev: {}
     improve-local: { modes: [improve] }
     local-authoring: {}
+    plan-writer: { modes: ["*"] }
     workspace: { modes: ["*"] }
     research: { modes: ["*"] }
   connector: [artifact-graph, claude-transcripts, corpus-store, git, improve-detect, improve-store, ledger, scaffold, workflow-runner]

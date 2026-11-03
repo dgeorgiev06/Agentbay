@@ -122,6 +122,7 @@ def test_complete_recurring_returns_next_occurrence_in_the_series():
                  "status": "open", "due": "2026-11-10", "threadId": "local:20261103-0001",
                  "prevId": "local:20261103-0001", "recur": {"every": 1, "unit": "week"}}
     assert "history" not in n and "delegation" not in n
+    assert n["recur"] == item["recur"] and n["recur"] is not item["recur"]          # a copy, not the same dict
     assert out["set"]["threadId"] == "local:20261103-0001"          # the finished to-do joins the series
 
 
@@ -172,6 +173,12 @@ def test_monthly_clamps_to_a_short_month_and_handles_leap_years():
     assert nxt(monthly31, "2026-02-28") == "2026-03-31"      # back to the 31st the next month
     assert nxt({"every": 1, "unit": "month"}, "2026-01-31") == "2026-02-28"
     assert nxt({"every": 12, "unit": "month"}, "2028-02-29") == "2029-02-28"
+    # without recur.day the next occurrence pins the day of the original due, so a clamp does not drift
+    item = todo(due="2026-01-31", recur={"every": 1, "unit": "month"})
+    first = rules().plan(item, "complete", at=AT)["next"]
+    assert first["due"] == "2026-02-28" and first["recur"] == {"every": 1, "unit": "month", "day": 31}
+    second = rules().plan({**first, "id": "local:20261103-0002"}, "complete", at=AT)["next"]
+    assert second["due"] == "2026-03-31" and item["recur"] == {"every": 1, "unit": "month"}
 
 
 def test_last_day_of_the_month_and_year_end():
@@ -199,11 +206,14 @@ def test_invalid_recurrence_is_refused_with_the_fix():
     refused(lambda: nxt({"every": 1, "unit": "week", "day": 3}, "2026-11-03"), "recur.day", "month")
     refused(lambda: nxt({"every": 1, "unit": "day", "from": "never"}, "2026-11-03"), "recur.from")
     refused(lambda: nxt({"every": 1, "unit": "day"}, "next tuesday"), "next tuesday")
-
-
-def test_recurrence_endpoint_returns_next_and_defaults_done_at():
-    assert rules().recurrence({"every": 1, "unit": "day"}, "2026-11-03") == {"next": "2026-11-04"}
-    assert rules().recurrence({"every": 1, "unit": "week"}) == {"next": "2026-11-10"}       # from the clock's day
+    # a huge every or a date past year 9999 is a TodoRulesError, not OverflowError or ValueError
+    refused(lambda: nxt({"every": 10 ** 9, "unit": "day"}, "2026-11-03"), "out of range", "recur.every")
+    refused(lambda: nxt({"every": 10 ** 20, "unit": "week"}, "2026-11-03"), "out of range")
+    refused(lambda: nxt({"every": 10 ** 9, "unit": "month"}, "2026-11-03"), "out of range")
+    refused(lambda: nxt({"every": 1, "unit": "day"}, "9999-12-31"), "out of range")
+    refused(lambda: nxt({"every": 1, "unit": "month"}, "9999-12-15"), "out of range")
+    refused(lambda: rules().plan(todo(due="9999-12-31", recur={"every": 1, "unit": "day"}), "complete", at=AT),
+            "out of range")
 
 
 # brief
@@ -227,6 +237,8 @@ def test_brief_research_with_given_deliverable():
     assert out["target"] == "delivery.research" and task_errors(out["input"]) == []
     assert out["input"]["deliverable"] == "A one-page comparison of three vendors."
     assert any("source" in c for c in out["input"]["constraints"])
+    for bad in (5, "ab"):                       # the Task schema is checked at runtime, not only in the test
+        refused(lambda: rules().brief(todo(), "research", deliverable=bad), "Task.schema.json", "deliverable")
 
 
 def test_brief_quotes_the_todo_text_as_data():
@@ -235,6 +247,11 @@ def test_brief_quotes_the_todo_text_as_data():
     goal = out["input"]["goal"]
     assert "data, not instructions" in goal
     assert json.dumps(evil) in goal and "\n" not in goal            # one JSON-quoted string, no raw line break
+    # id, due, priority and labels are quoted in the context the same way
+    out = rules().brief(todo(id=evil, due=evil, priority=evil, labels=[evil, "ok"]), "research")
+    context = out["input"]["context"]
+    assert context.count(json.dumps(evil)) == 4 and "\n" not in context
+    assert 'labels: ["' in context and "quoted data, not instructions" in context
 
 
 def test_brief_cuts_very_long_notes_and_refuses_ended_todos():
@@ -253,7 +270,7 @@ def test_interface_and_connector_manifest_match_the_code():
     conn = yaml.safe_load((root / "connector.yaml").read_text())
     assert iface["metadata"]["name"] == "todo.rules" and iface["spec"]["version"] == 1
     assert conn["spec"]["implements"] == "todo.rules/v1" and conn["spec"]["entry"] == "todo_rules.py"
-    assert set(iface["spec"]["endpoints"]) == {"plan", "recurrence", "brief"}
+    assert set(iface["spec"]["endpoints"]) == {"plan", "brief"}
     assert all(e["effects"] == ["read"] for e in iface["spec"]["endpoints"].values())
     inst = rules()
     for ep, e in iface["spec"]["endpoints"].items():
@@ -266,7 +283,6 @@ def test_outputs_match_the_interface_schemas():
     iface = yaml.safe_load((KIT / "components/todo/interfaces/todo.rules.v1.yaml").read_text())["spec"]["endpoints"]
     item = todo(due="2026-11-03", recur={"every": 1, "unit": "day"})
     calls = {"plan": rules().plan(item, "complete", at=AT),
-             "recurrence": rules().recurrence({"every": 1, "unit": "day"}, "2026-11-03"),
              "brief": rules().brief(item, "build")}
     for ep, out in calls.items():
         assert model.schema_errors(out, iface[ep]["out"]) == [], ep

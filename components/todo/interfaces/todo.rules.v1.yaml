@@ -36,25 +36,6 @@ spec:
           set: { type: object }
           next: { type: [object, "null"] }
       effects: [read]
-    recurrence:
-      description: >-
-        The due date of the occurrence after `due`, from a recur {every, unit day|week|month, on?, day?, from?}.
-        With from done the count starts at the day of `doneAt`. The time part of a datetime due is kept.
-      in:
-        type: object
-        required: [recur]
-        additionalProperties: false
-        properties:
-          recur: { type: object }
-          due: { type: [string, "null"], description: "ISO date or datetime of the occurrence just finished." }
-          doneAt: { type: string, description: "ISO date or datetime it was finished; default now. Used when from is done or there is no due." }
-      out:
-        type: object
-        required: [next]
-        additionalProperties: false
-        properties:
-          next: { type: string }
-      effects: [read]
     brief:
       description: >-
         The exact input of the delegation call for a to-do: target delivery.build or delivery.research and the Task

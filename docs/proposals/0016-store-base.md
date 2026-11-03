@@ -27,6 +27,7 @@ touches:
   - { path: components/gmail-api/README.md, reason: "the link to the briefing README points to the store README" }
   - { path: components/gmail-api/tests/, reason: "mode dirs, items.store/v2, `rows`" }
   - { path: components/improve/connectors/improve-detect/tests/, reason: "fixtures edit components/briefing paths and list briefing.* endpoints" }
+  - { path: components/improve/tests/test_improve_golden.py, reason: "the golden delta for slop-duplicate-rule drops from 9 to 7: mail's ask playbook and rules are removed (it inherits the store's)" }
   - { path: tests/, reason: "existing tests rewritten for store, v2, rows, one level; two tests added, two merged away; the guard-matrix golden is not edited (a named rename in the test)" }
   - { path: README.md, reason: "the data-flow example says `extends store`" }
   - { path: docs/DESIGN.md, reason: "one-level inheritance, the store base, local items, delete, the limits scope; paid for by cuts (see Cost)" }

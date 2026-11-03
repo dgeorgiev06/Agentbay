@@ -128,6 +128,8 @@ def test_a_closed_call_is_abandoned_and_refuses_submit_and_approve():
         assert d.close(cid, "dropped")["status"] == "abandoned"
         assert d.show(cid)["reason"] == "dropped"
         assert ledger.fold_calls(ledger.read(k))[cid].state == "abandoned"
+        done = [e for e in ledger.read(k) if e["type"] == "call.completed" and e["callId"] == cid]
+        assert done[-1]["summary"] == "dropped"
         with pytest.raises(dispatch.CallError, match="abandoned"):
             d.submit_strict(cid, "propose", {"status": "done", "summary": "s"})
         with pytest.raises(dispatch.CallError, match="not awaiting approval"):

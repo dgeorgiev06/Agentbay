@@ -106,10 +106,10 @@ class KitPath(type(Path())):
 
 
 def kit_copy() -> Path:
-    """A full copy of the kit to mutate: hard links, so only the files a test writes are copies."""
+    """A full copy of the kit to mutate: hard links, so only the files a test writes are copies. The owner's config is left out."""
     d = tmpdir() / "kit"
     shutil.copytree(KIT, d, copy_function=_link_or_copy,
-                    ignore=shutil.ignore_patterns(".git", "__pycache__", ".agentbay"))
+                    ignore=shutil.ignore_patterns(".git", "__pycache__", ".agentbay", "agentbay.config.yaml"))
     return KitPath(d)
 
 
@@ -148,7 +148,7 @@ def project(config: dict | None = None, source: str = "fake") -> Path:
     """A project dir. source="fake" sets `offline: true` (fake sources, no network); "x-api" uses the real source."""
     p = tmpdir() / "proj"
     p.mkdir()
-    cfg = {"apiVersion": "agentbay/v3"}
+    cfg = {"apiVersion": "agentbay/v4"}
     if source == "fake":
         cfg["offline"] = True
     elif source != "x-api":

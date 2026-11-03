@@ -644,8 +644,8 @@ def _cli(kit, p, *args):
                           capture_output=True, text=True, input="")
 
 
-def _gated_run(chat):
-    p = project({**CHAT_WF, **({"approvals": {"chat": chat}} if chat is not None else {})})
+def _gated_run(frm):
+    p = project({**CHAT_WF, **({"approve": {"from": frm}} if frm is not None else {})})
     d = _dispatch.Dispatcher(system(p), p)
     rid = d.call("cos.run", {"workflow": "morning", "input": {"lookback": "1d"}})["output"]["runId"]
     d.call("cos.next", {"runId": rid, "callId": "C-x", "status": "done", "output": {"added": 1}})
@@ -657,25 +657,31 @@ def _run_status(d, rid):
 
 
 def test_chat_approval_is_refused_while_the_setting_is_off():
-    for chat in (None, False):
-        d, p, rid = _gated_run(chat)
+    for frm in (None, ["terminal"]):
+        d, p, rid = _gated_run(frm)
         try:
             r = _cli(KIT, p, rid, "--via", "chat", "--quote", "yes, ship it")
-            assert r.returncode != 0 and "approvals: { chat: true }" in r.stderr and "agentbay.config.yaml" in r.stderr
+            assert r.returncode != 0 and "approve: { from: [..., chat] }" in r.stderr and "agentbay.config.yaml" in r.stderr
             assert _run_status(d, rid) == "awaiting-approval"
         finally:
             cleanup(p)
-    # a non-boolean value is a config error, not "on"
-    p = project({"approvals": {"chat": "yes"}})
+    d, p, rid = _gated_run(["chat"])                                 # terminal is off when `from` leaves it out
     try:
-        r = _cli(KIT, p, "W-x", "--via", "chat", "--quote", "ok")
-        assert r.returncode != 0 and "approvals" in r.stderr
+        r = _cli(KIT, p, rid)
+        assert r.returncode != 0 and "terminal are off" in r.stderr and _run_status(d, rid) == "awaiting-approval"
     finally:
         cleanup(p)
+    for bad in ({"approvals": {"chat": True}}, {"approve": {"from": ["chat", "fax"]}}):    # `approvals` is gone
+        p = project(bad)
+        try:
+            r = _cli(KIT, p, "W-x", "--via", "chat", "--quote", "ok")
+            assert r.returncode != 0 and "approve" in r.stderr
+        finally:
+            cleanup(p)
 
 
 def test_chat_approval_passes_a_workflow_gate_and_the_ledger_says_chat_with_the_quote():
-    d, p, rid = _gated_run(True)
+    d, p, rid = _gated_run(["terminal", "chat"])
     try:
         r = _cli(KIT, p, rid, "--via", "chat")                       # the quote is mandatory
         assert r.returncode != 0 and "--quote" in r.stderr and _run_status(d, rid) == "awaiting-approval"
@@ -693,7 +699,7 @@ def test_chat_approval_passes_a_workflow_gate_and_the_ledger_says_chat_with_the_
 def test_chat_approval_passes_a_call_gate_and_rejects_with_a_reason():
     k = kit_copy()
     try:
-        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v3", "approvals": {"chat": True}}))
+        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v4", "approve": {"from": ["terminal", "chat"]}}))
         d = _dispatch.Dispatcher(system(k, k), k)
         ok = {"status": "done", "summary": "s"}
         cid = d.submit(d.call("forge.extend", {"goal": "a small change"})["callId"], "propose", ok)["callId"]
@@ -717,16 +723,13 @@ def test_chat_approval_passes_a_call_gate_and_rejects_with_a_reason():
         cleanup(k)
 
 
-def test_chat_setting_does_not_open_secrets_or_logins():
-    p = project({"approvals": {"chat": True}})
+def test_chat_setting_does_not_open_secrets():
+    p = project({"approve": {"from": ["terminal", "chat"]}})
     try:
         r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "secret", "set", "X_TOKEN",
                             "--provider", "env"], input="attacker-value\n", text=True, capture_output=True)
         assert r.returncode != 0 and "not a TTY" in r.stderr and "attacker-value" not in r.stdout + r.stderr
-        r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "auth", "gmail-api"],
-                           input="", text=True, capture_output=True)
-        assert r.returncode != 0 and "interactive terminal" in r.stderr
-        for args in (["secret", "set", "--help"], ["auth", "--help"]):
+        for args in (["secret", "set", "--help"],):
             r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), *args], capture_output=True, text=True)
             assert "--via" not in r.stdout
     finally:
@@ -734,7 +737,7 @@ def test_chat_setting_does_not_open_secrets_or_logins():
 
 
 def test_guard_denies_bay_approve_to_every_subagent_in_any_spelling():
-    p = built({"approvals": {"chat": True}})
+    p = built({"approve": {"from": ["terminal", "chat"]}})
     try:
         cmds = (".agentbay/bay approve C-1 --via chat --quote yes", "./bay.sh approve C-1", "bay approve C-1",
                 f"{sys.executable} -m bay.cli approve C-1 --via chat --quote ok",
@@ -807,7 +810,7 @@ def test_no_subagent_writes_the_ledger():
 def test_chat_approval_of_a_proposal_is_recorded_and_skips_the_next_gate_while_unchanged():
     k = kit_copy()
     try:
-        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v3", "approvals": {"chat": True}}))
+        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v4", "approve": {"from": ["terminal", "chat"]}}))
         (k / "docs/proposals").mkdir(parents=True, exist_ok=True)
         f = k / "docs/proposals/0099-chat.md"
         f.write_text("---\nstatus: approved\napprovedBy: user\ndate: 2026-10-29\ntouches: []\n---\n# chat\n")

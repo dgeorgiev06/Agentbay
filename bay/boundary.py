@@ -6,8 +6,7 @@ framework/kernel.yaml and the proposal's `touches:`:
 
 - core (B-1): under the kernel's `owns:`; passes only if a `touches:` glob matches.
 - extension (B-2): a component folder `components/<name>/`; a new one passes (unless protected), listed or not.
-- feature (B-3): inside an existing component, `features/<f>/` passes only when a `touches:` entry names that
-  feature (its literal prefix reaches `<component>/features/`); a whole-component entry does not cover features.
+- feature (B-3): inside an existing component, `features/<f>/` passes when a `touches:` entry lists it.
   Component-wide files (mode.yaml, playbook.md, ...) must be listed too.
 - docs: README.md, docs/DESIGN.md, docs/INTERFACES.md change only when listed.
 - other: tests/, the proposal, HANDOFF.md, proposal/research records and repo meta pass.
@@ -406,9 +405,8 @@ def _classify(path: str, cmap: ComponentMap, touches: list[dict], is_new, propos
             return Finding(path, "extension", label, True, "B-2")
         m = re.match(re.escape(folder) + r"features/([^/]+)/", path)
         if m:
-            ok = any(match(g, path) and literal_prefix(g).startswith(folder + "features/") for g in globs)
-            return Finding(path, "feature", f"{label} feature {m.group(1)}", ok, "B-3",
-                           "" if ok else f"feature folder of an existing component; list {m.group(0)} (B-3)")
+            return Finding(path, "feature", f"{label} feature {m.group(1)}", listed, "B-3",
+                           "" if listed else f"feature folder of an existing component; list {m.group(0)} (B-3)")
         return Finding(path, "extension", label, listed, "B-3",
                        "" if listed else "component-wide file of an existing component; list it (B-3)")
     if "/" not in path:                 # an ordinary repo-root file (TODO.md, .env.example): not framework code

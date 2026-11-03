@@ -39,6 +39,7 @@ subagents.
 """
 from __future__ import annotations
 
+import contextlib
 import fnmatch
 import json
 import os
@@ -67,7 +68,7 @@ PROBES = (".agentbay/guard.json", ".agentbay/bay", ".agentbay/roles/role/use", "
           ".claude/settings.json", ".claude/settings.local.json", ".claude/agents/agent.md")
 
 
-# the owner's settings file: it turns approvals from chat on (proposal 0006, Part G), so no subagent may name it in
+# the owner's settings file: it sets `approve.from`, which opens approvals from chat, so no subagent may name it in
 # a Bash command (a write by redirect, cp, mv, sed -i, tee, ...); file tools are refused by NEVER_FILES
 CONFIG_FILE = "agentbay.config.yaml"
 # the kit CLI in any spelling: bay, bay.sh, .agentbay/bay, bay/cli.py, `python -m bay.cli`
@@ -573,12 +574,15 @@ def main() -> int:
     try:
         payload = json.load(sys.stdin)
         subagent = bool(payload.get("agent_id") or payload.get("agent_type"))
+        project = Path(os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd())
+        with contextlib.suppress(OSError):      # a failed write must never deny
+            with os.fdopen(os.open(project / ".agentbay/ledger/guard.seen", os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o644), "w") as hb:
+                os.utime(hb.fileno())      # not through a symlink
         if not subagent:
             decision, reason = main_thread_decision(payload)
             if decision == "ask":
                 _emit("ask", reason)
             return 0
-        project = Path(os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd())
         policy = json.loads((project / POLICY).read_text())
         decision, reason = Guard(policy, project).decide(payload)
         if decision == "deny":

@@ -5,7 +5,7 @@ A call walks the feature's steps:
   role step   -> stop and return a step plan; the coordinator runs the role and
                  resumes with `bay submit <callId> <stepId> '<json>'`
   gate step   -> stop with status awaiting-approval; only `bay approve <callId>` (interactive
-                 terminal, or `--via chat` when approvals.chat is on; never pre-approved) passes or
+                 terminal, or `--via chat` when approve.from lists chat; never pre-approved) passes or
                  rejects it. A gate with `approves: $in.<f>` approves that file's exact content: the
                  ledger records its path and sha256, and a later call naming the same unchanged file
                  skips the gate (any edit makes it run again). Nothing else skips a gate.
@@ -103,6 +103,7 @@ class Dispatcher:
                 errs = model.schema_errors(output, sch)
                 if errs:
                     raise CallError(f"step {step.id}: output does not match {step.out}: " + "; ".join(errs[:5]))
+            self._require_plan_file(state, feat, step, output)
             state["steps"][step.id] = output
             self._ledger("step.completed", base, summary=f"{step.role} submitted")
         self._close_runs(call_id, step, output)
@@ -111,6 +112,11 @@ class Dispatcher:
             state["output"] = self._endpoint_output(feat, state)
             return self._finish(state, mode, feat)
         return self._advance(mode, feat, state)
+
+    def _require_plan_file(self, state, feat, step, output) -> None:
+        if ((gate := (feat.steps + [None])[state["cursor"] + 1]) and gate.kind == "gate" and gate.approves == f"$steps.{step.id}.artifacts"
+                and self._file_subject(gate.approves, {**state, "steps": {step.id: output}}) is None):
+            raise CallError(f"step {step.id}: write the plan to {_plan_path(state['callId'], gate.approves)} and list it in artifacts")
 
     def _close_runs(self, call_id: str, step, output) -> None:
         """A step's submit ends every run still open that was dispatched to this call and step (and the run whose
@@ -148,7 +154,7 @@ class Dispatcher:
     def approve(self, call_id: str, approved: bool, reason: str = "", by: str = "user", quote: str = "",
                 sha: str = "") -> dict:
         """Pass or reject the approval gate a call is waiting on. Called only from `bay approve`, which needs an
-        interactive terminal, or `--via chat` with the project's approvals.chat on; never pre-approved for Claude
+        interactive terminal, or `--via chat` when the project's approve.from lists chat; never pre-approved for Claude
         Code. `quote` is the owner's message a chat approval relays; the ledger keeps it next to `by`."""
         state = self._load(call_id)
         mode, feat = self.sys.feature(state["target"])
@@ -159,6 +165,9 @@ class Dispatcher:
         base.update(_usage_fields(None, state.get("plannedAt")))
         shown = (state.get("plan") or {}).get("approves")
         subject = self._gate_subject(step, state)
+        if approved and (step.approves or "").startswith("$steps.") and subject is None:
+            raise CallError(f"call {call_id}: {step.id} approves the file the plan step lists in docs/plans/, and there "
+                            f"is none (expected {_plan_path(call_id, step.approves)}); nothing approved")
         if approved and subject != shown:
             # the owner approves the content the gate showed; an edit since then needs a fresh look
             gate = self._gate_check(step, state, subject)
@@ -187,13 +196,15 @@ class Dispatcher:
         data = {"approved": approved, "by": by, **({"quote": quote} if quote else {}),
                 **({"approves": subject} if subject else {})}
         state["steps"][step.id] = dict(data)
+        state["gates"][step.id]["why"] = (f"approved by {by} on {self.clock():%Y-%m-%d} (sha256 {_short(subject)})" if approved
+                                          else f"rejected by {by} on {self.clock():%Y-%m-%d}")
         if not approved:
             state["status"] = "blocked"
             state["result"] = {"reason": reason or "rejected at the approval gate"}
             self._ledger("step.completed", base, summary=f"gate rejected by {by}", data=data)
             return self._finish(state, mode, feat)
         self._ledger("step.completed", base, summary=f"gate approved by {by}", data=data)
-        state["cursor"] += 1
+        state["cursor"] = state.pop("resume", None) or state["cursor"] + 1
         return self._advance(mode, feat, state)
 
     def approve_run(self, run_id: str, approved: bool, by: str, reason: str = "", quote: str = "") -> dict:
@@ -343,6 +354,9 @@ class Dispatcher:
     def _advance(self, mode, feat, state) -> dict:
         stages = [wfmod.Stage.of_step(s) for s in feat.steps]
         by_id = {s.id: s for s in feat.steps}
+        if (i := self._reopened(feat, state)) is not None:
+            state.setdefault("resume", state["cursor"])
+            state["cursor"] = i
         while True:
             mv = wfmod.advance(stages, state["cursor"], state["input"], state["steps"],
                                lambda st, age: self._fresh(by_id[st.id], mode, age))
@@ -358,14 +372,14 @@ class Dispatcher:
             step = feat.steps[mv.cursor]
             base = self._event_base(mode, feat, step, state["callId"])
             if step.kind == "gate":
-                gate = self._gate_check(step, state)
+                gate = self._resume_note(feat, state, self._gate_check(step, state))
                 state.setdefault("gates", {})[step.id] = gate
                 if gate["skipped"]:
                     prior = gate["prior"]
                     state["steps"][step.id] = {"approved": True, "by": prior["by"], "priorCall": prior["callId"]}
                     self._ledger("step.skipped", base, summary=gate["why"],
                                  data={"approves": gate["approves"], "priorCall": prior["callId"]})
-                    state["cursor"] += 1
+                    state["cursor"] = state.pop("resume", None) or state["cursor"] + 1
                     continue
             if step.kind == "code":
                 self._run_code(mode, feat, step, state, base)
@@ -403,6 +417,21 @@ class Dispatcher:
             state["status"] = "partial" if (failed_checks or state.get("stopped")) else "done"
         return self._finish(state, mode, feat)
 
+    def _reopened(self, feat, state):
+        """Index of the first passed gate whose subject changed since it passed: an approval covers only what the owner saw."""
+        for i, st in enumerate(feat.steps[:state["cursor"]]):
+            if (g := state.get("gates", {}).get(st.id)) and g["approves"] != self._gate_subject(st, state):
+                return i
+
+    @staticmethod
+    def _resume_note(feat, state, gate: dict) -> dict:
+        """A reopened gate says which step's result came after the change (it is kept) and where the call resumes."""
+        r = state.get("resume")
+        if r is not None and not gate["skipped"]:
+            at = feat.steps[r].id if r < len(feat.steps) else "the end"
+            gate["why"] += f"; {feat.steps[r - 1].id} came after the change and its result is kept; the call resumes at {at} once this passes"
+        return gate
+
     def _fresh(self, step, mode, age) -> bool:
         """`stale > <age>` (via `workflows.advance`): the step's connector says whether the store is fresher than that."""
         iface = step.run.rsplit(".", 1)[0]
@@ -418,15 +447,19 @@ class Dispatcher:
         if step.kind != "gate" or not step.approves:
             return None
         sub = self._file_subject(step.approves, state)
-        pp = sub and f"docs/plans/{Path(sub['path']).stem}.md"       # the plan the lead wrote for this proposal
+        pp = sub and PROPOSAL_PATH.match(sub['path']) and f"docs/plans/{Path(sub['path']).stem}.md"       # the plan the lead wrote for this proposal
         plan = pp and (self._file_subject(pp, state) or ({"path": pp, "sha256": None} if state["steps"].get("plan") else None))
         return {**sub, "plan": plan} if plan else sub
 
     def _file_subject(self, expr: str, state) -> dict | None:
         """{path, sha256} of the project file `expr` names. A list (a step's `artifacts`) names the proposal that
-        step wrote: its first docs/proposals/<id>.md."""
+        step wrote: its first docs/proposals/<id>.md. A plan step's output (list or string) must name this call's
+        docs/plans/<callId>-<step>.md, nothing else."""
         path = wfmod.substitute({"v": expr}, state["input"], state["steps"], {}).get("v")
-        if isinstance(path, list):
+        if expr.startswith("$steps."):
+            want = _plan_path(state["callId"], expr)
+            path = want if want in (path if isinstance(path, list) else [path]) else None
+        elif isinstance(path, list):
             path = next((x for x in path if isinstance(x, str) and PROPOSAL_PATH.match(x)), None)
         if not isinstance(path, str) or not path:
             return None
@@ -442,8 +475,8 @@ class Dispatcher:
         if subject is ...:
             subject = self._gate_subject(step, state)
         if subject is None:
-            why = "the gate runs: it approves no file" + (f" ({step.approves} names none in the project)"
-                                                          if step.approves else "")
+            names = f"expected {_plan_path(state['callId'], step.approves)}" if (step.approves or "").startswith("$steps.") else f"{step.approves} names none in the project"
+            why = "the gate runs: it approves no file" + (f" ({names})" if step.approves else "")
             return {"skipped": False, "why": why, "approves": None, "prior": None}
         last = same_path = None
         mode_name, _, ep = str(state.get("target", "")).partition(".")
@@ -451,7 +484,8 @@ class Dispatcher:
             d = e.get("data") or {}
             if (e.get("type") != "step.completed" or e.get("source") != "dispatcher" or d.get("by") not in APPROVERS
                     or e.get("mode") != mode_name or e.get("endpoint") != ep or e.get("step") != step.id
-                    or not isinstance(d.get("approves"), dict) or d["approves"].get("path") != subject["path"]):
+                    or not isinstance(d.get("approves"), dict) or d["approves"].get("path") != subject["path"]
+                    or (e.get("callId") != state["callId"] and (step.approves or "").startswith("$steps."))):   # defence in depth: the path already carries this callId
                 continue
             # only the latest decision on the path counts: a later approval or rejection of other content
             # supersedes an earlier one, so reverting a file to old content does not revive its approval
@@ -692,12 +726,12 @@ class Dispatcher:
         }
 
     def _chat_path(self, call_id: str) -> dict:
-        """With `approvals.chat` on, the gate plan also names the chat path (the owner's own words, quoted)."""
+        """With chat in `approve.from`, the gate plan also names the chat path (the owner's own words, quoted)."""
         try:
-            on = cfgmod.chat_approvals(cfgmod.load(self.project))
+            on = "chat" in cfgmod.approve_from(cfgmod.load(self.project))
         except cfgmod.ConfigError:
             return {}
-        return {"approveFromChat": f"approvals.chat is on: when the user's latest message clearly approves this gate, "
+        return {"approveFromChat": f"approve.from lists chat: when the user's latest message clearly approves this gate, "
                                    f".agentbay/bay approve {call_id} --via chat --quote \"<their exact message>\" "
                                    f"(never infer approval)"} if on else {}
 
@@ -712,7 +746,8 @@ class Dispatcher:
     def _finish(self, state, mode, feat) -> dict:
         ledger.append(self.project, "call.completed", state["callId"], source="dispatcher", callId=state["callId"],
                       mode=mode.name, endpoint=feat.name, cost=state["cost"],
-                      summary=state.get("stopped") or (state.get("result") or {}).get("error") or state["status"],
+                      summary=state.get("stopped") or (state.get("result") or {}).get("error") or (state.get("result") or {}).get("reason")
+                      or state["status"],
                       data={"status": state["status"]},
                       durationMs=int((time.time() - state["t0"]) * 1000) if state.get("t0") else None,
                       costUsd=state["cost"].get("usd") or None)
@@ -789,6 +824,10 @@ def _short(subject) -> str:
 
 def _ms(t0: float) -> int:
     return max(0, int((time.monotonic() - t0) * 1000))
+
+
+def _plan_path(call_id: str, expr: str) -> str:
+    return f"docs/plans/{call_id}-{expr[7:].removesuffix('-plan.artifacts')}.md"
 
 
 def _usage_fields(usage: dict | None, planned_at: float | None) -> dict:

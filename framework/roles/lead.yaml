@@ -7,7 +7,7 @@ metadata:
     endpoints, dispatches each step plan, and delivers the result to the user.
 spec:
   tier: balanced
-  access: write           # only as a subagent: a feature step that writes its one named file (forge.extend's plan)
+  access: write           # only as a subagent: a feature step that writes its one named file (forge.extend's plan, and the plan step approve.plans adds)
   prompt: |
     You coordinate one mode from the Chief of Staff's main thread; the mode's coordinator playbook says how.
     Invoke endpoints only through `.agentbay/bay call <mode>.<endpoint>`. Run each step plan exactly as it

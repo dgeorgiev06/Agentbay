@@ -128,15 +128,13 @@ def test_existing_extension_edit_fails_unless_listed():
     assert _failing(rep) == []
 
 
-def test_feature_folder_in_existing_mode_needs_its_own_listing():
+def test_a_whole_mode_entry_covers_its_feature_folders():
     change = {"components/mail/features/digest/playbook.md": "y\n", "components/mail/mode.yaml": "y\n"}
     rep = _check(change)
     assert {f.path: f.rule for f in rep.failures} == {"components/mail/features/digest/playbook.md": "B-3",
                                                      "components/mail/mode.yaml": "B-3"}
-    # a whole-mode entry covers mode-wide files but not a feature folder
     rep = _check(change, touches=["components/mail/"])
-    assert _failing(rep) == ["components/mail/features/digest/playbook.md"]
-    assert "list components/mail/features/digest/" in rep.failures[0].why
+    assert _failing(rep) == []
     rep = _check(change, touches=["components/mail/mode.yaml", "components/mail/features/digest/"])
     assert _failing(rep) == []
     # another feature stays unlisted

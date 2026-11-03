@@ -93,8 +93,7 @@ reader sees a complete mode. DESIGN says what a child replaces and what it merge
 - `abstract: true` marks a base that is linted but never resolved, installed or called. It is not inherited.
 
 ## 2. Playbook + rules
-Playbook H2 sections in order: Purpose, Inputs, Steps (numbered), Definition of Done
-(`- [DOD-n] (must|should|must_not) ...`), Outputs, Failure handling.
+Playbook H2 sections follow the order in [DESIGN.md](DESIGN.md#features); Steps are numbered.
 Rules: `{id: R-n, level, statement, appliesTo: executor|reviewer|both, check?, refs?, when?: {kind}}`.
 Endpoint `schedule` is declarative only (lint warns); run it from cron.
 Deterministic checks (`bay/checks.py`): `citations_resolve`, `citations_min:<n>`, `no_secrets`, `lint_clean`.
@@ -135,7 +134,7 @@ bind:
 - Code steps (`run:`) run in the coordinator's env for that feature; `bay check` warns when a store-reading
   mode puts a role in an env whose `items.store`/`items.source` bindings differ from it.
 
-`bay/model.py` resolves all of this and reports every gap at once, as DESIGN lists under Compile.
+`bay/model.py` resolves all of this and reports every gap at once (DESIGN, Compile).
 
 ## 4. Interface + Connector
 An interface lives in `interfaces/` of the component that owns it, which is the component whose mode needs it.
@@ -160,8 +159,7 @@ allowed by env AND connector only), `http.request` (env allowlist enforced befor
 connectors `source_id`, `window`, `cost_per_item` and `selectors` (the capability table).
 
 A connector that needs an interactive login (for example an OAuth browser flow that stores a refresh token) names a
-function of its `entry` in `login:`. `bay auth <connector> [--env <env>]` runs it, from an interactive terminal
-only, so an agent can neither start a login nor replace a token. The function gets `secret(name)` and
+function of its `entry` in `login:`. `bay auth <connector> [--env <env>]` runs it; Claude Code always asks first. The function gets `secret(name)` and
 `store_secret(name, value)` for names in both the env's `secrets.allow` and the connector's `needs.secrets`, `http`
 limited to the connector's declared hosts that the env allows, `open_browser(url)` and `say(text)`. The entry runs
 in-process, so this limits the API it is handed, not what the process can do. `bay check` refuses a `login:` whose
@@ -201,9 +199,8 @@ targets against the registry and each `with` against the endpoint's input schema
 Status: `done | partial | blocked | failed | needs-agent | awaiting-approval | abandoned`. `abandoned` means a person ended the call.
 `bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic
 step (usage goes to the step's event); `bay show <callId>` prints the current state (`bay show reclaim <runId>`
-marks a stuck run reclaimed; `bay show close <callId> --reason <text>` ends an open call as abandoned).
-`forge.extend` takes an optional `replaces: <callId>`; the new call closes that open call as abandoned. Approval gates pass with `bay approve`; the terminal and chat paths, the sha, and
-the plan file are in the [safety model](DESIGN.md#safety-model). A role's generated shim
+marks a stuck run reclaimed; `bay show close <callId> --reason <text>` ends an open call as abandoned, with the reason in the ledger).
+An input type that declares `replaces: <callId>` (`forge.extend` does) closes that open call as abandoned. Gates pass with `bay approve` ([safety model](DESIGN.md#safety-model)); a changed file returns the call to its passed gate at the next submit. `approve.plans` lists role steps (`<mode>.<endpoint>[.<step>]`) that get a plan step and a gate first; `approve.planner` sets their tier and effort. A role's generated shim
 `.agentbay/roles/<role>--<mode>/use <iface>/v<N>.<ep> '<json>'` is its only way to read connector data, and the
 guard hook stops subagents from running anything else.
 
@@ -232,7 +229,7 @@ written. Any event may carry `durationMs`, `tokens {input, output, cacheRead, ca
 
 `bay status --agents` groups runs by role, mode, model and tier from these events alone, and `bay show` prints
 outcome, to-do progress and inputs. `bay status` lists work with no event for 24 hours under `STALE?` (`--json`: a
-`stale` list), and says when the spawn hook is not loaded.
+`stale` list), and says when a hook is not loaded.
 
 ## 10. Session, artifact and finding interfaces
 These interfaces are files in `interfaces/` of the component that owns them, and the finding and episode schemas

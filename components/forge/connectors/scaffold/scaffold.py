@@ -1,5 +1,5 @@
 """forge.scaffold/v1 -> bay.scaffold (the single source of truth for templates)."""
-from bay import boundary, config, scaffold
+from bay import boundary, scaffold
 from bay.connect import ConnectorError
 from bay.proposal import ProposalError, front_matter
 from bay.util import PROPOSAL_PATH
@@ -17,12 +17,11 @@ def kit_project(ctx):
     return ctx.project
 
 
-def plan_reason(fm, want, hits) -> str:
+def plan_reason(fm, hits) -> str:
     """Why the plan step runs for this proposal, or "" when no rule asks for one (`hits`: touched path prefixes, None if unreadable)."""
     sensitive = any(boundary.under(s, t) or boundary.under(t, s) for s in SENSITIVE for t in hits or ())
-    reasons = (("approvals.plan is always", want == "always"), ("touches: is missing or unreadable", hits is None),
-               ("touches: lists 10 or more paths", len(hits or ()) >= 10), ("the front matter has exceptions:", "exceptions" in fm),
-               ("touches: includes a security-sensitive path", sensitive))
+    reasons = (("touches: is missing or unreadable", hits is None), ("touches: lists 10 or more paths", len(hits or ()) >= 10),
+               ("the front matter has exceptions:", "exceptions" in fm), ("touches: includes a security-sensitive path", sensitive))
     return next((why for why, hit in reasons if hit), "")
 
 
@@ -35,7 +34,7 @@ class Scaffold:
 
     def proposal(self, path=None) -> dict:
         """A proposal's front matter status, approvedBy and date (informational; only `bay approve` passes the gate),
-        and `plan`: whether the plan step runs (approvals.plan, `large` unless set; no docs/plans/<id>.md yet)."""
+        and `plan`: whether the plan step runs (a large or sensitive proposal; no docs/plans/<id>.md yet)."""
         root, named = kit_project(self.ctx), isinstance(path, str)
         found = next((x for x in ([path] if named else path or []) if PROPOSAL_PATH.match(x)), "")
         p = (root / found).resolve()
@@ -47,11 +46,11 @@ class Scaffold:
             fm = front_matter(p.read_text(encoding="utf-8"))
         except ProposalError as e:
             raise ConnectorError(f"{found}: {e}") from e
-        want, raw = (config.load(root).get("approvals") or {}).get("plan") or "large", fm.get("touches")
+        raw = fm.get("touches")
         hits = [boundary.literal_prefix(str(e.get("path"))) for e in raw if isinstance(e, dict)] if isinstance(raw, list) else None
-        why = plan_reason(fm, want, hits)
+        why = plan_reason(fm, hits)
         return {"path": found, **{k: str(fm[k]) for k in ("status", "approvedBy", "date") if fm.get(k)},
-                "plan": want != "never" and bool(why) and not (root / "docs" / "plans" / f"{p.stem}.md").exists(), "why": why}
+                "plan": bool(why) and not (root / "docs" / "plans" / f"{p.stem}.md").exists(), "why": why}
 
 
 def create(ctx):

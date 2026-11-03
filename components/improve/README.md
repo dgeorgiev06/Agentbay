@@ -31,7 +31,7 @@ its roles read through use shims.
   complexity, doc size and stale doc references, compatibility layers and their age) and the rules in
   `framework/rules/conformance.yaml` that have a check, handing the rest to the analyst.
 - **triage** ranks findings (`improve.finding/v1`) and has the analyst explain root causes; **backlog** writes
-  the weekly report; you decide each item in your terminal; **implement** (on demand, behind a gate) drafts a
+  the weekly report; you decide each item in your terminal, or in chat if `approve.from` lists it; **implement** (on demand, behind a gate) drafts a
   forge.extend proposal or a task envelope; **verify** re-runs the detector after the fix.
 
 Weekly, from cron, start only the scan:

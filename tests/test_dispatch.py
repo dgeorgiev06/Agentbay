@@ -1,9 +1,10 @@
 """Dispatcher: schemas, grants, effects, budget, step plans, review, ledger, secrets."""
 import json
 
-from helpers import KIT, SECRETS, FakeHttp, MemProvider, cleanup, clock, edit_yaml, jresp, kit_copy, model, project, system
+from helpers import KIT, SECRETS, FakeHttp, MemProvider, cleanup, clock, edit_yaml, jresp, kit_copy, kit_for, model, project, system
 
-from bay import dispatch, ledger, vault
+from bay import dispatch, guard, ledger, vault
+from bay.adapter import get
 
 
 def D(p, kit=None, **kw):
@@ -399,14 +400,14 @@ def test_the_step_result_accepts_what_the_worker_contract_returns():
         cleanup(k)
 
 
-def test_gate_plan_and_show_name_the_chat_path_when_approvals_chat_is_on():
+def test_gate_plan_and_show_name_the_chat_path_when_approve_from_lists_chat():
     k = kit_copy()
     try:
-        (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v3\napprovals: { chat: false }\n")
+        (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v4\napprove: { from: [terminal] }\n")
         d = dispatch.Dispatcher(system(k, k), k, clock=clock)
         r = _to_gate(d, _proposal(k, "0096-chat.md", ""))
         assert "approveFromChat" not in r["next"] and "approveFromChat" not in d.show(r["callId"])["next"]
-        (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v3\napprovals: { chat: true }\n")
+        (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v4\napprove: { from: [terminal, chat] }\n")
         r = _to_gate(d, _proposal(k, "0096-chat.md", ""))
         for plan in (r["next"], d.show(r["callId"])["next"]):
             assert f"--via chat --quote" in plan["approveFromChat"] and r["callId"] in plan["approveFromChat"]
@@ -450,6 +451,13 @@ def test_an_edit_after_approval_makes_the_gate_run_again():
         original = f.read_text()
         cid = _to_gate(d, path)["callId"]
         d.approve(cid, True, by="user@tty")
+        assert "approved by user@tty on" in d.show(cid)["gates"]["approve"]
+        f.write_text(original + "\nAmended while implement ran.\n")
+        r = d.submit(cid, "implement", {"status": "done", "summary": "built"})
+        assert r["status"] == "awaiting-approval" and "changed since user@tty approved it" in r["next"]["why"], r
+        assert "implement came after the change and its result is kept; the call resumes at " in r["next"]["why"]
+        r = d.approve(cid, True, by="user@tty")
+        assert r["status"] != "awaiting-approval" and r.get("next", {}).get("step") != "implement", r      # resumes after implement
         f.write_text(original + "\nOne more slice, added after approval.\n")
         r = _to_gate(d, path)
         assert r["status"] == "awaiting-approval" and r["next"]["step"] == "approve", r
@@ -506,9 +514,9 @@ def test_an_edit_after_approval_makes_the_gate_run_again():
         d.approve(r["callId"], True, by="user@tty")
         plan.unlink()                                                           # deleting the plan re-opens the gate
         assert "plan" not in _to_gate(d, p2)["next"]["approves"]
-        # the plan step: large (10+ touches, exceptions, no touches, a sensitive touch), approvals.plan always | never
-        def nxt(fm, setting=None):
-            (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v3\n" + (f"approvals: {{ plan: {setting} }}\n" if setting else ""))
+        # the plan step: large (10+ touches, exceptions, no touches, a sensitive touch), a large proposal
+        def nxt(fm):
+            (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v4\n")
             (k / "docs/proposals/0090-x.md").write_text(f"---\n{fm}---\n# x\n")
             return d.call("forge.extend", {"goal": "build it", "proposal": "docs/proposals/0090-x.md"})["next"]
         one = "  - { path: README.md, reason: r }\n"
@@ -518,9 +526,6 @@ def test_an_edit_after_approval_makes_the_gate_run_again():
             step = nxt(big)
             assert step["step"] == "plan" and step["effort"] == "high" and step["model"] == "opus", (big, step)
             assert step["runAs"].startswith("subagent_type=lead--forge") and step["runAs"].endswith("--step"), step["runAs"]
-        assert nxt("touches: []\n", "always")["step"] == "plan"
-        gate = nxt("touches:\n  - { path: bay/dispatch.py, reason: r }\n", "never")           # never: the gate still runs
-        assert gate["step"] == "approve" and "plan" not in gate["approves"], gate
     finally:
         cleanup(k)
 
@@ -577,3 +582,57 @@ def test_when_names_only_an_earlier_step():
         assert any("when: !$steps.release.approved" in g and "not an earlier step" in g for g in gaps), gaps
     finally:
         cleanup(k)
+
+
+def test_a_listed_step_is_planned_approved_and_then_run_by_a_fresh_agent():
+    task = {"goal": "build the thing now", "deliverable": "a file"}
+    p = project({"approve": {"from": ["terminal", "chat"], "plans": ["delivery.build.implement"]}})
+    d = D(p)
+    nx = d.call("delivery.build", task)["next"]
+    assert (nx["step"], nx["env"], nx["tier"], nx["model"]) == ("implement-plan", "plan-writer", "deep", "opus")
+    get("claude-code").build(system(p), p, kit_for(p))
+    pol = json.loads((p / ".agentbay/guard.json").read_text())
+    unit = nx["runAs"].split("=")[1]
+    assert pol["subagents"][unit]["write"] == ["docs/plans"] and pol["subagents"][unit]["clis"] == []
+    g = guard.Guard(pol, p)
+
+    def verdict(tool, ti):
+        return g.decide({"tool_name": tool, "tool_input": ti, "cwd": str(p), "agent_type": unit, "agent_id": "a1"})[0]
+    assert verdict("Write", {"file_path": "docs/plans/x.md", "content": "p"}) == "pass"
+    for bad in ("bay/guard.py", "docs/proposals/x.md", "docs/x.md", "src/a.py", "agentbay.config.yaml", "docs/plans/../x.md"):
+        assert verdict("Write", {"file_path": bad, "content": "x"}) == "deny", bad
+    assert verdict("Bash", {"command": "git status"}) == "deny"
+    # a gate with no plan file never passes: the plan step listed a proposal, nothing, or a file that is not there
+    (p / "docs/proposals").mkdir(parents=True)
+    (p / "docs/proposals/x.md").write_text("---\ntouches: []\n---\n# x\n")
+    (p / "README.md").write_text("readme\n")
+    (p / "docs/plans").mkdir()
+    (p / "docs/plans/C-1-implement.md").write_text("# another call's plan\n")
+    for listed in (["docs/proposals/x.md"], [], ["docs/plans/ghost.md"], "README.md", "docs/proposals/x.md",
+                   "docs/plans/../proposals/x.md", ["docs/plans/C-1-implement.md"]):
+        cid = d.call("delivery.build", task)["callId"]
+        e = err(lambda: d.submit(cid, "implement-plan", {"status": "done", "summary": "planned", "artifacts": listed}),
+                f"docs/plans/{cid}-implement.md")
+        assert "artifacts" in e and d.show(cid)["next"]["step"] == "implement-plan"
+    cid = d.call("delivery.build", task)["callId"]
+    want = f"docs/plans/{cid}-implement.md"
+    err(lambda: d.submit(cid, "implement-plan", {"status": "done", "summary": "p", "artifacts": [want]}), want)     # not written yet
+    (p / want).write_text("# plan\n")
+    r = d.submit(cid, "implement-plan", {"status": "done", "summary": "p", "artifacts": [want]})
+    assert r["status"] == "awaiting-approval"
+    (p / want).unlink()                                                       # deleted after submit: the gate binds nothing
+    err(lambda: d.approve(cid, True, by="user@tty"), "nothing approved", want)
+    assert want in d.show(cid)["gates"]["implement-approve"] or d.show(cid)["status"] == "awaiting-approval"
+    cid = d.call("delivery.build", task)["callId"]
+    plan = f"docs/plans/{cid}-implement.md"
+    (p / plan).write_text("# plan\nitems\n")
+    r = d.submit(cid, "implement-plan", {"status": "done", "summary": "planned", "artifacts": [plan]})
+    assert r["status"] == "awaiting-approval" and r["next"]["approves"] == {"path": plan, "sha256": _sha(p / plan)}
+    err(lambda: d.approve(cid, True, by="user@chat-via-cos", quote="yes", sha="00000000"), "does not match")
+    r = d.approve(cid, True, by="user@chat-via-cos", quote="yes", sha=_sha(p / plan)[:8])
+    assert r["next"]["step"] == "implement" and r["next"]["previous"]["implement-plan"]["artifacts"] == [plan]
+    assert "Follow the approved plan" in r["next"]["task"]
+    c2 = d.call("delivery.build", task)["callId"]
+    err(lambda: d.submit(c2, "implement-plan", {"status": "done", "summary": "planned", "artifacts": [plan]}), f"docs/plans/{c2}-implement.md")
+    q = project({"approve": {"plans": ["delivery.build"], "planner": {"tier": "balanced"}}})
+    assert D(q).call("delivery.build", task)["next"]["model"] == "sonnet"

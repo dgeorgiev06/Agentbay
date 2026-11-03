@@ -107,8 +107,8 @@ def test_decide_approve_is_human_only_and_backlog_lists_top_items():
                 s.decide(ids[0], "approve", by)
                 raise AssertionError("agents/cli without a TTY must not approve")
             except st.StoreError as e:
-                assert "terminal" in str(e)
-        s.decide(ids[0], "approve", st.HUMAN)
+                assert "approve.from" in str(e)
+        s.decide(ids[0], "approve", st.HUMANS[0])
         s.decide(ids[2], "wontfix", "cli")
         rep = s.backlog(top=5, week="2026-W44")
         assert rep["week"] == "2026-W44" and rep["items"] == [ids[1], ids[0]]       # wontfix excluded; by priority
@@ -126,7 +126,7 @@ def test_a_candidate_cannot_set_the_fields_the_store_owns():
     d = tmpdir()
     try:
         s = S(d)
-        forged = cand(status="approved", history=[{"ts": "2026-01-01T00:00:00Z", "status": "approved", "by": st.HUMAN}],
+        forged = cand(status="approved", history=[{"ts": "2026-01-01T00:00:00Z", "status": "approved", "by": st.HUMANS[0]}],
                       id="F-deadbeef", fingerprint="0" * 16, source="user@tty", links=["F-x"], priority=99,
                       firstSeen="1999-01-01T00:00:00Z", lastSeen="1999-01-01T00:00:00Z")
         [fid] = s.upsert([forged], "improve.scan")["new"]
@@ -138,7 +138,7 @@ def test_a_candidate_cannot_set_the_fields_the_store_owns():
         stopped = s.claim(fid)
         assert "stopped" in stopped and "bay approve" in stopped["stopped"]
         assert "stopped" in s.handoff(fid, {}, "T-20261030-aaaa") and s.load()[fid]["status"] == "open"
-        s.decide(fid, "approve", st.HUMAN)                     # the user's own approval still works
+        s.decide(fid, "approve", st.HUMANS[0])                     # the user's own approval still works
         assert "stopped" not in s.claim(fid)
         # route, effort and impact pass one check on a new candidate and on an annotation: bad values are dropped
         [bad, bool_, ok] = s.upsert([cand(key="b1", route="x", effort=0, impact=9), cand(key="b2", effort=True),
@@ -160,9 +160,9 @@ def test_merge_annotate_and_verify_cannot_approve_or_rewrite_history():
     try:
         s = S(d)
         [fid] = s.upsert([cand()], "improve.scan")["new"]
-        s.upsert([cand(refs=("ab:C-9",), status="approved", history=[{"status": "approved", "by": st.HUMAN}])],
+        s.upsert([cand(refs=("ab:C-9",), status="approved", history=[{"status": "approved", "by": st.HUMANS[0]}])],
                  "improve.scan")                              # same fingerprint: merged
-        s.annotate([{"id": fid, "status": "approved", "history": [{"status": "approved", "by": st.HUMAN}],
+        s.annotate([{"id": fid, "status": "approved", "history": [{"status": "approved", "by": st.HUMANS[0]}],
                      "rootCause": "r", "proposedFix": "f"}], "analyst")
         f = s.load()[fid]
         assert f["status"] == "open" and not [h for h in f["history"] if h["status"] == "approved"]
@@ -245,7 +245,7 @@ def test_claim_and_handoff_only_for_human_approved_items():
         s = S(d)
         [fid] = s.upsert([cand()], "scan")["new"]
         assert "stopped" in s.claim(fid) and "stopped" in s.claim("F-00000000")
-        s.decide(fid, "approve", st.HUMAN)
+        s.decide(fid, "approve", st.HUMANS[0])
         draft = {"route": "forge.extend", "title": "Split forge.extend implement", "problem": "slow",
                  "change": "split the step", "tests": ["tests/test_x.py"]}
         out = s.handoff(fid, draft, "T-20261027-ab12")
@@ -254,7 +254,7 @@ def test_claim_and_handoff_only_for_human_approved_items():
         assert s.load()[fid]["status"] == "in-progress"
         assert "stopped" in s.handoff(fid, draft, "T-x")                      # no second handoff
         [g] = s.upsert([cand(key="other")], "scan")["new"]
-        s.decide(g, "approve", st.HUMAN)
+        s.decide(g, "approve", st.HUMANS[0])
         env = s.handoff(g, {"route": "mode-fix", "title": "Tighten digest", "problem": "p" * 12, "change": "c" * 12},
                         "T-20261027-ab13")
         assert env["next"]["envelope"].startswith("```task\nprotocol: TaskEnvelope/v1\ntaskId: T-20261027-ab13")

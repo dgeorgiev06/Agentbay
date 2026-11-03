@@ -19,15 +19,15 @@
   show close <callId> --reason <text>  end an open call as abandoned
   approve <callId|runId> [--reject]    pass an approval gate of a call, or of a workflow run (W-...)
                                        (you, in a terminal; never an agent)
-          [--via chat --quote "<msg>"] from chat, relayed by the Chief of Staff, when approvals.chat is on
-  approve <F-id> [--defer|--wontfix]   decide an improve backlog item (a terminal only; never from chat)
+          [--via chat --quote "<msg>"] from chat, relayed by the Chief of Staff, when approve.from lists chat
+  approve <F-id> [--defer|--wontfix]   decide an improve backlog item (where approve.from allows)
   (agents read data only through .agentbay/roles/<role>--<mode>/use, generated per role unit by build)
 
   new mode <name> | new feature <name> --mode <m>
   new connector <name> --implements <iface> | new env <name>     scaffolds (forge templates)
   secret set <NAME>      store a secret in the keychain (value read from stdin, never echoed)
   auth <connector>       run a connector's declared login (e.g. a browser sign-in that stores its token);
-                         interactive terminal only
+                         asks first; needs the browser on this machine
 
   status [--agents|--log]                      calls, steps and agent runs; the raw ledger
   note <ref> "text" [--instruction]            record a note (--instruction: a mid-run instruction change)
@@ -44,6 +44,7 @@ import contextlib
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 KIT = Path(__file__).resolve().parent.parent
@@ -276,25 +277,27 @@ CHAT_BY = "user@chat-via-cos"
 
 
 def _approval_channel(args) -> tuple[str, str]:
-    """(by, quote) for `bay approve`. A terminal approval needs a TTY. A chat approval (`--via chat`) needs the
-    project's `approvals: { chat: true }` and the owner's message quoted verbatim; the ledger labels it
-    user@chat-via-cos, so it is never mistaken for a terminal one (proposal 0006, Part G)."""
+    """(by, quote) for `bay approve`. The channel (`--via tty`, the default, or `--via chat`) must be listed in the
+    project's `approve.from`. A terminal approval needs a TTY. A chat approval needs the owner's message quoted
+    verbatim; the ledger labels it user@chat-via-cos, so it is never mistaken for a terminal one."""
+    from bay import config as cfgmod
+    try:
+        allowed = cfgmod.approve_from(cfgmod.load(args.project))
+    except cfgmod.ConfigError as e:
+        _die(f"✗ {e}")
     if args.via != "chat":
         if args.quote:
             _die("✗ --quote goes with --via chat (a terminal approval needs no quote)")
+        if "terminal" not in allowed:
+            _die(f"✗ approvals from a terminal are off: `approve.from` in {cfgmod.NAME} lists {allowed}. Use `--via chat`.")
         if not sys.stdin.isatty():
             _die("✗ bay approve needs an interactive terminal (stdin is not a TTY). Approval gates are for you, not "
-                 "for agents: run it yourself in a terminal. (Approvals from chat need `approvals: { chat: true }` "
+                 "for agents: run it yourself in a terminal. (Approvals from chat need `approve: { from: [..., chat] }` "
                  "in agentbay.config.yaml and `--via chat`.)")
         return "user@tty", ""
-    from bay import config as cfgmod
-    try:
-        cfg = cfgmod.load(args.project)
-    except cfgmod.ConfigError as e:
-        _die(f"✗ {e}")
-    if not cfgmod.chat_approvals(cfg):
-        _die("✗ approvals from chat are off: `bay approve --via chat` needs `approvals: { chat: true }` in "
-             f"{cfgmod.NAME} (set it yourself; the default is off). Otherwise run `bay approve` in a terminal.")
+    if "chat" not in allowed:
+        _die("✗ approvals from chat are off: `bay approve --via chat` needs `approve: { from: [..., chat] }` in "
+             f"{cfgmod.NAME} (set it yourself; the default is [terminal]). Otherwise run `bay approve` in a terminal.")
     quote = (args.quote or "").strip()
     if not quote:
         _die("✗ --via chat needs --quote \"<the owner's exact message approving this gate>\"")
@@ -384,28 +387,23 @@ def role_use_main(unit: str, project: Path, argv: list[str]) -> None:
 
 
 def _decide_finding(args):
-    """`bay approve <F-id>`: the owner's decision on an improve backlog item. Approving needs an interactive terminal
-    (never an agent, never chat); `--defer` and `--wontfix` record the other two decisions."""
-    if args.reject or args.via == "chat" or args.quote or args.sha:
-        _die("✗ a backlog item is decided at a terminal: `bay approve <F-id>` approves it, `--defer` or `--wontfix` "
-             "decide otherwise (--reject, --via, --quote and --sha are for gates)")
+    """`bay approve <F-id>`: the owner's decision on an improve backlog item. Approving follows the same channel as a
+    gate (`approve.from`); `--defer` and `--wontfix` record the other two decisions."""
+    if args.reject or args.sha:
+        _die("✗ --reject and --sha are for gates; a backlog item is approved, or decided with --defer or --wontfix")
     if args.defer and args.wontfix:
         _die("✗ pass --defer or --wontfix, not both")
     decision = "defer" if args.defer else "wontfix" if args.wontfix else "approve"
-    tty = sys.stdin.isatty()
+    by, quote = ("user@tty" if sys.stdin.isatty() else "cli", "")
     if decision == "approve":
-        if not tty:
-            _die(f"✗ bay approve {args.call} needs an interactive terminal (stdin is not a TTY). Approving a "
-                 "fix is your decision, not an agent's: run it yourself in a terminal.")
-        if input(f"APPROVE {args.call} for implementation on demand? Type yes to confirm: ").strip().lower() != "yes":
-            _die("not confirmed; nothing changed")
+        by, quote = _approval_channel(args)
+        _confirm(by)
     d = _dispatcher(args)
-    by = "user@tty" if tty else "cli"
     _run(lambda: d.run_capability("improve", "improve.findings/v1.decide",
                                   {"id": args.call, "decision": decision, "by": by,
                                    **({"note": args.reason} if args.reason else {})}))
     ledger.append(args.project, "note", args.call, source="cli", summary=f"approve {args.call} {decision}",
-                  data={"kind": "decision"})
+                  data={"kind": "decision", **({"quote": quote} if quote else {})})
 
 
 # ------------------------------------------------------------------ scaffolds & secrets
@@ -449,12 +447,8 @@ def cmd_secret(args):
 
 def cmd_auth(args):
     """`bay auth <connector>`: runs the connector's declared `login` entry (e.g. an OAuth browser login that stores
-    a refresh token). Interactive terminal only, like `secret set`: an agent can neither start a login nor replace
-    a token."""
+    a refresh token)."""
     from bay import connect
-    if not sys.stdin.isatty():
-        _die(f"✗ bay auth {args.connector} needs an interactive terminal (stdin is not a TTY) and your browser; "
-             f"run it yourself in a terminal.")
     s = _system(args)
     try:
         connect.login(s, args.connector, args.env)
@@ -526,7 +520,7 @@ def _ago(ts: str) -> str:
 
 
 def _stale(runs, calls):
-    return ([r for r in runs if r.state == "running" and r.started and _secs(r.started) > STALE_S],
+    return ([r for r in runs if r.state == "running" and r.started and _secs(r.last or r.started) > STALE_S],
             [c for c in calls if c.state in ("running", "waiting") and _secs(c.ts) > STALE_S])
 
 
@@ -575,6 +569,9 @@ def cmd_status(args):
     for r in live:
         print(f"  {r.run_id[:14]:<14} {r.agent:<14} {r.task_id or '-':<16} {_ago(r.started):>4}  {r.summary[:60]}")
     _print_stale(evs, stale_runs, stale_calls)
+    seen = args.project / ".agentbay/ledger/guard.seen"
+    if not seen.exists() or time.time() - seen.stat().st_mtime > 120:
+        print("\nguard: no tool call was checked in the last 2 minutes. In a Claude Code session this means its hooks are not loaded: start it inside the project")
     print(f"\nRECENT AGENTS ({len(done)} of {len(runs) - len(live) - len(stale_runs)})")
     for r in done:
         print(f"  {r.run_id[:14]:<14} {r.agent:<14} {r.task_id or '-':<16} {r.state:<9} {r.summary[:70]}")
@@ -782,10 +779,10 @@ def main(argv=None):
     sh.add_argument("--resolved", action="store_true", help="show <mode>: its features after `extends`, with the file each comes from")
     sh.set_defaults(fn=cmd_show)
     ap_ = sub.add_parser("approve", help="pass (or --reject) an approval gate; interactive terminal, or chat when "
-                                         "approvals.chat is on; an F-id decides an improve backlog item")
+                                         "approve.from lists chat; an F-id decides an improve backlog item")
     ap_.add_argument("call"); ap_.add_argument("--reject", action="store_true"); ap_.add_argument("--reason")
     ap_.add_argument("--via", choices=["tty", "chat"], default="tty",
-                     help="chat: relayed by the Chief of Staff; needs approvals: { chat: true } in agentbay.config.yaml")
+                     help="chat: relayed by the Chief of Staff; needs approve: { from: [.., chat] } in agentbay.config.yaml")
     ap_.add_argument("--quote", help="--via chat: the owner's exact message approving this gate (recorded in the ledger)")
     ap_.add_argument("--sha", help="--via chat: sha256 prefix (8+ hex) of the content shown to the owner; the approval "
                                    "is refused if the file changed")
@@ -804,7 +801,7 @@ def main(argv=None):
     se = sub.add_parser("secret", help="store a secret in the keychain (interactive terminal only)")
     se.add_argument("action", choices=["set"]); se.add_argument("name")
     se.add_argument("--provider", default="keychain"); se.set_defaults(fn=cmd_secret)
-    au = sub.add_parser("auth", help="sign in to a source in your browser (interactive terminal only)")
+    au = sub.add_parser("auth", help="sign in to a source in your browser (asks first; needs the browser on this machine)")
     au.add_argument("connector"); au.add_argument("--env", help="env to log in through (default: the one binding it)")
     au.set_defaults(fn=cmd_auth)
     sub.add_parser("config", help="print every agentbay.config.yaml setting, from the schemas").set_defaults(fn=cmd_config)

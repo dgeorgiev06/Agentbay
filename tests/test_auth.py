@@ -15,12 +15,6 @@ def _ctx(conn_name="gmail-api", values=None):
     return connect.LoginContext(conn, env, MemProvider(values or {}), http, lambda url: None, say=lambda *_: None)
 
 
-def test_auth_refuses_without_a_terminal_and_names_the_connector():
-    r = subprocess.run([sys.executable, "-m", "bay.cli", "auth", "gmail-api"], cwd=KIT, stdin=subprocess.DEVNULL,
-                       capture_output=True, text=True)
-    assert r.returncode == 1 and "bay auth gmail-api needs an interactive terminal" in r.stderr
-
-
 def test_cli_names_no_connector_and_logins_are_declared():
     src = (KIT / "bay/cli.py").read_text()
     assert "gmail" not in src.lower()

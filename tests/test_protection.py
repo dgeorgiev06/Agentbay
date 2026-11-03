@@ -26,6 +26,7 @@ EXPECTED_PROTECTED = [
     "components/improve/connectors/improve-detect", "components/improve/connectors/improve-store",
     "components/improve/connectors/ledger",
     "components/briefing/interfaces", "components/improve/interfaces", "components/tools/interfaces",
+    "components/tools/envs/plan-writer.yaml",
 ]
 
 
@@ -53,13 +54,13 @@ def _built(edit=None):
 def test_the_shipped_map_declares_what_the_old_fixed_list_protected():
     kit = model.Kit(KIT)
     assert not hasattr(model, "PROTECTED") and not hasattr(model, "USER_FRAMEWORK_ENVS")
-    assert kit.protected.paths == ("framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED) and not kit.protected.closed
+    assert kit.protected.paths == ("framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED[:-1]) and not kit.protected.closed
     # the four folders in the old order and spelling, then each protected instance where it sits (stage 5 part G)
     assert kit.protected_paths == ["framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED]
     assert set(kit.protected.names["env"]) == {e for e, d in kit.docs["Environment"].items() if d.root == "framework"}
     assert set(kit.protected.names["connector"]) == {c for c, d in kit.docs["Connector"].items() if d.root == "framework"}
     assert set(kit.protected.names["mode"]) == {m for m, d in kit.docs["Mode"].items() if d.root == "framework"}
-    assert kit.protected.open_envs() == ["workspace", "research"]
+    assert kit.protected.open_envs() == ["plan-writer", "workspace", "research"]
     assert model.schema_errors(model.load_yaml(KIT / MAP), model.schema("components")) == []
     assert lint.lint_protection(kit) == [] and lint.lint_owner_only(kit) == []
 
@@ -68,7 +69,7 @@ def test_a_role_without_forge_extend_cannot_write_a_path_the_map_lists():
     k = _built(lambda d: d["protected"]["paths"].append("vault"))
     try:
         pol, decide = _guard(k)
-        assert pol["protected"] == ["framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED, "vault"]
+        assert pol["protected"] == ["framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED[:-1], "vault", EXPECTED_PROTECTED[-1]]
         put ={"file_path": "vault/key.txt", "content": "x"}
         # workspace writes "." and delivery's builder works there, yet the map says only forge.extend may write vault/
         assert decide("Write", put, "builder--delivery") == "deny"
@@ -274,7 +275,7 @@ def test_a_user_mode_may_place_roles_only_in_the_protected_envs_the_map_opens_to
     try:
         edit_yaml(k / "components/delivery/mode.yaml", lambda d: d["spec"]["roles"].update({"builder": "local-authoring"}))
         assert any("works in the framework env local-authoring" in g and "research and workspace" not in g
-                   and "workspace and research" in g for g in gaps(k)), gaps(k)
+                   and "plan-writer and workspace and research" in g for g in gaps(k)), gaps(k)
         edit_yaml(k / MAP, lambda d: d["protected"]["env"].update({"local-authoring": {"modes": ["delivery"]}}))
         assert not [g for g in gaps(k) if "works in the framework env" in g]
         edit_yaml(k / MAP, lambda d: d["protected"]["env"].update({"local-authoring": {}, "workspace": {"modes": []}}))
@@ -323,9 +324,8 @@ def test_an_edit_to_a_protected_component_without_touches_fails_check_base():
         rep = _check({path: "y\n"})
         assert [f.path for f in rep.failures] == [path] and rep.exit_code == 1, path
         assert not _check({path: "y\n"}, touches=[path]).failures, path
-    # a feature of a protected mode keeps its B-3 rule: a whole-mode entry does not list it
     rep = _check({"components/cos/features/run/playbook.md": "y\n"}, touches=["components/cos/"])
-    assert [f.rule for f in rep.failures] == ["B-3"]
+    assert not rep.failures
     # an unprotected component of the same kinds is unchanged: edits still need touches (B-2), new ones do not
     assert [f.path for f in _check({"components/mail/mode.yaml": "y\n"}).failures] == ["components/mail/mode.yaml"]
     assert not _check({"components/news/mode.yaml": "y\n", "components/news/envs/new.yaml": "y\n", "components/rss/connector.yaml": "y\n"}).failures
@@ -399,7 +399,7 @@ def _cli_approve(k, cid, *args):
 def test_approval_from_chat_and_from_the_terminal_both_pass_the_gate():
     k = kit_copy()
     try:
-        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v3", "approvals": {"chat": True}}))
+        (k / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v4", "approve": {"from": ["terminal", "chat"]}}))
         get("claude-code").build(system(k, k), k, k)
         pol, decide = _guard(k)
         assert pol["protected"] == ["framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED]
@@ -546,10 +546,15 @@ def test_bay_approve_of_a_backlog_item_from_a_terminal_still_works_and_the_owner
         def cli(*a):
             return subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "approve", fid, *a],
                                   capture_output=True, text=True, input="yes\n")
-        r = cli("--via", "chat", "--quote", "yes", "--sha", "abcdef12")
-        assert r.returncode != 0 and "decided at a terminal" in r.stderr             # never from chat
-        r = cli("--defer", "--reason", "later")                                        # `bay approve <F-id>` still decides
+        r = cli("--via", "chat", "--quote", "yes")
+        assert r.returncode != 0 and "approvals from chat are off" in r.stderr
+        cfg = p / "agentbay.config.yaml"
+        cfg.write_text(cfg.read_text() + "approve: {from: [chat]}\n")
+        r = cli("--via", "chat", "--quote", "yes please")
         assert r.returncode == 0, r.stderr
-        assert [f for f in findings(p) if f["id"] == fid][0]["status"] == "deferred"
+        h = [f for f in findings(p) if f["id"] == fid][0]["history"][-1]
+        assert h["status"] == "approved" and h["by"] == "user@chat-via-cos"
+        from bay import ledger
+        assert any((e.get("data") or {}).get("quote") == "yes please" for e in ledger.read(p))
     finally:
         cleanup(p)

@@ -1,0 +1,40 @@
+apiVersion: agentbay/v4
+kind: ContentType
+metadata:
+  name: todo-item
+  description: "A to-do (kind todo): due and start dates, priority, status, recurrence and delegation; the store keeps its change history in a child table. Written by the owner or an agent, never produced by a source."
+spec:
+  version: 1
+  kind: todo
+  tables:
+    history:
+      from: history
+      columns:
+        - { name: at, type: TEXT }
+        - { name: field, type: TEXT }
+        - { name: from_value, from: from, type: TEXT }
+        - { name: to_value, from: to, type: TEXT }
+  views:
+    v_todos:
+      item: true
+      includes: { view: v_items, note: "kind = 'todo' only; title is the to-do, text its notes, labels its tags, threadId the series of a recurring to-do" }
+      columns:
+        - { name: priority, type: INTEGER, description: "1 urgent, 2 high, 3 normal (the default), 4 someday" }
+        - { name: status, type: TEXT, description: "open, doing, waiting, done or dropped (default open)" }
+        - { name: due, type: TEXT, description: "ISO date or datetime, or null" }
+        - { name: start, type: TEXT, description: "ISO date or datetime before which the to-do is not meant to be worked on, or null" }
+        - { name: completedAt, type: TEXT, description: "when it was done, or null" }
+        - { name: droppedAt, type: TEXT, description: "when it was dropped, or null" }
+        - { name: recur, type: JSON, description: "recurrence {every, unit day|week|month, on, day, from}, or null" }
+        - { name: prevId, type: TEXT, description: "id of the occurrence before this one in the series, or null" }
+        - { name: delegation, type: JSON, description: "{target build|research, callId, status, summary, artifacts, at}, or null" }
+        - { name: delegationTarget, type: TEXT, description: "delegation.target" }
+        - { name: delegationStatus, type: TEXT, description: "delegation.status" }
+        - { name: delegationCallId, type: TEXT, description: "delegation.callId" }
+        - { name: historyCount, type: INTEGER, description: "number of recorded changes (rows of the history table)" }
+        - { name: isOverdue, type: INTEGER, description: "1 when it is open, doing or waiting and its due day is before today (local time)" }
+        - { name: dueToday, type: INTEGER, description: "1 when it is open, doing or waiting and its due day is today (local time)" }
+    v_agenda:
+      includes: { view: v_todos, note: "open, doing and waiting to-dos only, ordered by priority and then due date (no due date last)" }
+      columns:
+        - { name: bucket, type: TEXT, description: "delegated (handed to build or research, not finished), waiting, overdue, today, someday (priority 4) or upcoming" }

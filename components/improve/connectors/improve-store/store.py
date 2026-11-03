@@ -182,7 +182,7 @@ class Store:
         if decision not in DECISIONS:
             raise StoreError(f"decision must be one of {', '.join(DECISIONS)}")
         if decision == "approve" and by not in HUMANS:
-            raise StoreError("approve is a human decision: run `bay approve <id>` in your terminal")
+            raise StoreError("approve is a human decision: run `bay approve <id>` where approve.from allows")
         fs = self.load()
         f = fs.get(fid)
         if f is None:
@@ -263,7 +263,7 @@ class Store:
         approved = [h for h in f.get("history", []) if h["status"] == "approved" and h["by"] in HUMANS]
         if f["status"] != "approved" or not approved:
             return {"stopped": f"{fid} is {f['status']}; implement runs only for items you approved with "
-                               f"`bay approve {fid}` in your terminal", "finding": f}
+                               f"`bay approve {fid}` (where approve.from allows)", "finding": f}
         return {"finding": f}
 
     def handoff(self, fid: str, draft: dict, task_id: str) -> dict:

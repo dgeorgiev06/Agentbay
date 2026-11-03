@@ -134,13 +134,13 @@ the guard. Around it stand the gate, plan approval, the whole-diff review, the b
   a changed file is refused. A backlog item takes no sha. The ledger records `user@chat-via-cos` and the quote. Chat
   is weaker than a terminal: it trusts the main thread.
 - **A gate binds content.** A gate with `approves:` records the path and sha256 of its file (a workflow gate takes
-  its `W-...` run id). If the file changes, even after the gate passed, the next submit returns the call to the gate
-  and `bay approve` resumes it where it was; nothing built on the unseen change is accepted. `bay show` says who
-  approved.
+  its `W-...` run id). If the file changes after the gate passed, the next submit returns the call to the gate. The
+  result submitted with the unseen edit is kept; once re-approved the call resumes after it (reject discards). `bay
+  show` says who approved.
 - **Secrets and logins.** `bay secret set` needs an interactive stdin whatever `from` says. `bay auth` needs the
   browser on the machine running bay, not a terminal.
 - **Plan approval.** `approve.plans` lists role steps (`<mode>.<endpoint>` or `<mode>.<endpoint>.<step>`). Each
-  runs a planner first (env `plan-writer`: it writes one file in `docs/plans/` and runs only `bay plan`; tier and
+  runs a planner first (env `plan-writer`: it writes only under `docs/plans/` and runs only `bay plan`; tier and
   effort from `approve.planner`), then a gate on that file, then the step as a fresh agent given the plan. A
   step with `when:` cannot be listed by name (the endpoint form skips it), and an entry that matches nothing fails
   `bay check`.

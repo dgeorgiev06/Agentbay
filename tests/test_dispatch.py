@@ -455,6 +455,7 @@ def test_an_edit_after_approval_makes_the_gate_run_again():
         f.write_text(original + "\nAmended while implement ran.\n")
         r = d.submit(cid, "implement", {"status": "done", "summary": "built"})
         assert r["status"] == "awaiting-approval" and "changed since user@tty approved it" in r["next"]["why"], r
+        assert "implement came after the change and its result is kept; the call resumes at " in r["next"]["why"]
         r = d.approve(cid, True, by="user@tty")
         assert r["status"] != "awaiting-approval" and r.get("next", {}).get("step") != "implement", r      # resumes after implement
         f.write_text(original + "\nOne more slice, added after approval.\n")
@@ -604,7 +605,11 @@ def test_a_listed_step_is_planned_approved_and_then_run_by_a_fresh_agent():
     # a gate with no plan file never passes: the plan step listed a proposal, nothing, or a file that is not there
     (p / "docs/proposals").mkdir(parents=True)
     (p / "docs/proposals/x.md").write_text("---\ntouches: []\n---\n# x\n")
-    for listed in (["docs/proposals/x.md"], [], ["docs/plans/ghost.md"]):
+    (p / "README.md").write_text("readme\n")
+    (p / "docs/plans").mkdir()
+    (p / "docs/plans/C-1-implement.md").write_text("# another call's plan\n")
+    for listed in (["docs/proposals/x.md"], [], ["docs/plans/ghost.md"], "README.md", "docs/proposals/x.md",
+                   "docs/plans/../proposals/x.md", ["docs/plans/C-1-implement.md"]):
         r = d.submit(d.call("delivery.build", task)["callId"], "implement-plan",
                      {"status": "done", "summary": "planned", "artifacts": listed})
         assert r["status"] == "awaiting-approval" and not r["next"].get("approves"), r
@@ -612,7 +617,6 @@ def test_a_listed_step_is_planned_approved_and_then_run_by_a_fresh_agent():
         assert d.show(r["callId"])["status"] == "awaiting-approval"
     cid = d.call("delivery.build", task)["callId"]
     plan = f"docs/plans/{cid}-implement.md"
-    (p / "docs").joinpath("plans").mkdir()
     (p / plan).write_text("# plan\nitems\n")
     r = d.submit(cid, "implement-plan", {"status": "done", "summary": "planned", "artifacts": [plan]})
     assert r["status"] == "awaiting-approval" and r["next"]["approves"] == {"path": plan, "sha256": _sha(p / plan)}
@@ -620,5 +624,8 @@ def test_a_listed_step_is_planned_approved_and_then_run_by_a_fresh_agent():
     r = d.approve(cid, True, by="user@chat-via-cos", quote="yes", sha=_sha(p / plan)[:8])
     assert r["next"]["step"] == "implement" and r["next"]["previous"]["implement-plan"]["artifacts"] == [plan]
     assert "Follow the approved plan" in r["next"]["task"]
+    c2 = d.call("delivery.build", task)["callId"]
+    r = d.submit(c2, "implement-plan", {"status": "done", "summary": "planned", "artifacts": [plan]})
+    assert r["status"] == "awaiting-approval" and not r["next"].get("approves"), r
     q = project({"approve": {"plans": ["delivery.build"], "planner": {"tier": "balanced"}}})
     assert D(q).call("delivery.build", task)["next"]["model"] == "sonnet"

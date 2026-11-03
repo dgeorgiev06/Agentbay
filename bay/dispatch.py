@@ -26,7 +26,7 @@ from contextlib import suppress
 from pathlib import Path
 
 from . import boundary, checks, config as cfgmod, connect, ledger, model, secretscan, vault, workflows as wfmod
-from .util import PLAN_PATH, PROPOSAL_PATH, parse_time, read_json, utcnow, write_json
+from .util import PROPOSAL_PATH, parse_time, read_json, utcnow, write_json
 
 VERDICT = "review.verdict/v1"
 # who `bay approve` records: a terminal approval, or one relayed from chat (bay/cli.py CHAT_BY); only these pass a
@@ -366,7 +366,7 @@ class Dispatcher:
             step = feat.steps[mv.cursor]
             base = self._event_base(mode, feat, step, state["callId"])
             if step.kind == "gate":
-                gate = self._gate_check(step, state)
+                gate = self._resume_note(feat, state, self._gate_check(step, state))
                 state.setdefault("gates", {})[step.id] = gate
                 if gate["skipped"]:
                     prior = gate["prior"]
@@ -417,6 +417,15 @@ class Dispatcher:
             if (g := state.get("gates", {}).get(st.id)) and g["approves"] != self._gate_subject(st, state):
                 return i
 
+    @staticmethod
+    def _resume_note(feat, state, gate: dict) -> dict:
+        """A reopened gate says which step's result came after the change (it is kept) and where the call resumes."""
+        r = state.get("resume")
+        if r is not None and not gate["skipped"]:
+            at = feat.steps[r].id if r < len(feat.steps) else "the end"
+            gate["why"] += f"; {feat.steps[r - 1].id} came after the change and its result is kept; the call resumes at {at} once this passes"
+        return gate
+
     def _fresh(self, step, mode, age) -> bool:
         """`stale > <age>` (via `workflows.advance`): the step's connector says whether the store is fresher than that."""
         iface = step.run.rsplit(".", 1)[0]
@@ -438,10 +447,14 @@ class Dispatcher:
 
     def _file_subject(self, expr: str, state) -> dict | None:
         """{path, sha256} of the project file `expr` names. A list (a step's `artifacts`) names the proposal that
-        step wrote: its first docs/proposals/<id>.md."""
+        step wrote: its first docs/proposals/<id>.md. A plan step's output (list or string) must name this call's
+        docs/plans/<callId>-<step>.md, nothing else."""
         path = wfmod.substitute({"v": expr}, state["input"], state["steps"], {}).get("v")
-        if isinstance(path, list):
-            path = next((x for x in path if isinstance(x, str) and (PLAN_PATH if expr.startswith('$steps.') else PROPOSAL_PATH).match(x)), None)
+        if expr.startswith("$steps."):
+            want = f"docs/plans/{state['callId']}-{expr[7:].partition('-plan')[0]}.md"
+            path = want if want in (path if isinstance(path, list) else [path]) else None
+        elif isinstance(path, list):
+            path = next((x for x in path if isinstance(x, str) and PROPOSAL_PATH.match(x)), None)
         if not isinstance(path, str) or not path:
             return None
         root = self.project.resolve()
@@ -465,7 +478,8 @@ class Dispatcher:
             d = e.get("data") or {}
             if (e.get("type") != "step.completed" or e.get("source") != "dispatcher" or d.get("by") not in APPROVERS
                     or e.get("mode") != mode_name or e.get("endpoint") != ep or e.get("step") != step.id
-                    or not isinstance(d.get("approves"), dict) or d["approves"].get("path") != subject["path"]):
+                    or not isinstance(d.get("approves"), dict) or d["approves"].get("path") != subject["path"]
+                    or (e.get("callId") != state["callId"] and (step.approves or "").startswith("$steps."))):
                 continue
             # only the latest decision on the path counts: a later approval or rejection of other content
             # supersedes an earlier one, so reverting a file to old content does not revive its approval

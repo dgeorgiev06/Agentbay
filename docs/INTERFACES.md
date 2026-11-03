@@ -196,7 +196,7 @@ targets against the registry and each `with` against the endpoint's input schema
 
 ## 7. Dispatcher
 `bay call <mode>.<endpoint> '<json>'` -> `{callId, status, output | next, checks, review, cost}`.
-Status: `done | partial | blocked | failed | needs-agent | awaiting-approval | abandoned`. `abandoned` means a person ended the call .
+Status: `done | partial | blocked | failed | needs-agent | awaiting-approval | abandoned`. `abandoned` means a person ended the call.
 `bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic
 step (usage goes to the step's event); `bay show <callId>` prints the current state (`bay show reclaim <runId>`
 marks a stuck run reclaimed; `bay show close <callId> --reason <text>` ends an open call as abandoned, with the reason in the ledger).

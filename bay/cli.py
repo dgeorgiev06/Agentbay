@@ -20,14 +20,14 @@
   approve <callId|runId> [--reject]    pass an approval gate of a call, or of a workflow run (W-...)
                                        (you, in a terminal; never an agent)
           [--via chat --quote "<msg>"] from chat, relayed by the Chief of Staff, when approve.from lists chat
-  approve <F-id> [--defer|--wontfix]   decide an improve backlog item (a terminal only; never from chat)
+  approve <F-id> [--defer|--wontfix]   decide an improve backlog item (where approve.from allows)
   (agents read data only through .agentbay/roles/<role>--<mode>/use, generated per role unit by build)
 
   new mode <name> | new feature <name> --mode <m>
   new connector <name> --implements <iface> | new env <name>     scaffolds (forge templates)
   secret set <NAME>      store a secret in the keychain (value read from stdin, never echoed)
   auth <connector>       run a connector's declared login (e.g. a browser sign-in that stores its token);
-                         interactive terminal only
+                         asks first; needs the browser on this machine
 
   status [--agents|--log]                      calls, steps and agent runs; the raw ledger
   note <ref> "text" [--instruction]            record a note (--instruction: a mid-run instruction change)
@@ -801,7 +801,7 @@ def main(argv=None):
     se = sub.add_parser("secret", help="store a secret in the keychain (interactive terminal only)")
     se.add_argument("action", choices=["set"]); se.add_argument("name")
     se.add_argument("--provider", default="keychain"); se.set_defaults(fn=cmd_secret)
-    au = sub.add_parser("auth", help="sign in to a source in your browser (interactive terminal only)")
+    au = sub.add_parser("auth", help="sign in to a source in your browser (asks first; needs the browser on this machine)")
     au.add_argument("connector"); au.add_argument("--env", help="env to log in through (default: the one binding it)")
     au.set_defaults(fn=cmd_auth)
     sub.add_parser("config", help="print every agentbay.config.yaml setting, from the schemas").set_defaults(fn=cmd_config)

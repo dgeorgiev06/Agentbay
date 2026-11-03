@@ -107,7 +107,7 @@ def test_decide_approve_is_human_only_and_backlog_lists_top_items():
                 s.decide(ids[0], "approve", by)
                 raise AssertionError("agents/cli without a TTY must not approve")
             except st.StoreError as e:
-                assert "terminal" in str(e)
+                assert "approve.from" in str(e)
         s.decide(ids[0], "approve", st.HUMANS[0])
         s.decide(ids[2], "wontfix", "cli")
         rep = s.backlog(top=5, week="2026-W44")

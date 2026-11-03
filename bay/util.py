@@ -74,7 +74,6 @@ def warn(warnings: list | None, msg: str) -> None:
 
 
 PROPOSAL_PATH = re.compile(r"^docs/proposals/[A-Za-z0-9][A-Za-z0-9._-]*\.md$")     # where a forge.extend proposal lives
-PLAN_PATH = re.compile(r"^docs/plans/[A-Za-z0-9][A-Za-z0-9._-]*\.md$")
 
 
 def read_json(p: Path, default=None):

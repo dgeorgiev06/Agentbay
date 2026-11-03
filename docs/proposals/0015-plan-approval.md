@@ -19,6 +19,7 @@ touches:
   - { path: adapters/claude-code/claude_code.py, reason: "the generated coordinator text names `approve.from`; `bay auth` joins the commands that always ask" }
   - { path: components/improve/tests/test_improve.py, reason: "from part 2 (owner approved 2026-11-02): backlog approval from chat changes the expected refusal text" }
   - { path: components/improve/connectors/improve-store/tests/test_improve_store.py, reason: "from part 2 (owner approved 2026-11-02): the store's approver constant is a tuple" }
+  - { path: components/improve/interfaces/improve.findings.v1.yaml, reason: "from review: its approve description still says a terminal is needed" }
   - { path: components/forge/envs/framework-dev.yaml, reason: "from the plan step: it lists the new plan-writer env, or lint fails" }
   - { path: components/forge/mode.yaml, reason: "the comment on the plan step; one line in the propose step's task about `touches:`" }
   - { path: components/forge/connectors/scaffold/scaffold.py, reason: "the plan step is always `large`, so the `approvals.plan` lookup goes" }
@@ -45,7 +46,7 @@ touches:
   - { path: CHANGELOG.md, reason: "release step: entry, with an Upgrading section" }
   - { path: framework/limits.yaml, reason: "release step: the ceilings are written down to the real counts" }
 exceptions:
-  - { measure: bay_lines, to: 9650, reason: "the item-by-item estimate in Cost is about +48 lines in bay/ against a ceiling that is already reached, and the payers that can be named from today's code are already counted in it. 9650 is an upper bound with a 7-line margin. The plan step must name every payer it finds first, and the release lowers the ceiling to the real count." }
+  - { measure: bay_lines, to: 9670, reason: "raised from 9650 for the review fix round (owner allowed a small extension, 2026-11-02): the plan gate accepts only docs/plans/<callId>-<step>.md and never skips from another call's approval. Before: the item-by-item estimate in Cost is about +48 lines in bay/ against a ceiling that is already reached, and the payers that can be named from today's code are already counted in it. 9650 is an upper bound with a 7-line margin. The plan step must name every payer it finds first, and the release lowers the ceiling to the real count." }
 ---
 
 # 0015: Plan approval as a gate, and process gaps
@@ -221,3 +222,7 @@ The owner took every recommendation below in chat on 2026-11-02 ("Agree with rec
 2. The `<mode.endpoint>` form covers every role step of the endpoint that has no `when:`; the step form picks one (rejected: only endpoints with a single role step).
 3. `auth` always asks (a word added to `_want_ask`) (rejected: relying on Claude Code's default prompt alone).
 4. The `bay_lines` exception is 9650, with the heartbeat first to drop if it must shrink.
+
+## Review fix round (2026-11-03)
+
+The first review found two blockers in item 2, both reproduced. A string `artifacts` from the plan step skipped the docs/plans/ check, so a plan gate could bind and pass any file. And a plan gate was skipped when another call had approved the same plan file. The fix: a plan gate's subject must be exactly `docs/plans/<callId>-<step>.md` of this call, whether the step returns a string or a list; a plan gate is never skipped because of an approval recorded in another call; the plan step's output is validated. Each repro becomes a row of the plan-gate test. The fix round also corrects DESIGN's reopen sentence (the result submitted with an unseen edit is kept, and the reopened gate says which step it came from and where the call resumes), the help and contract text that still says backlog approvals and `bay auth` need a terminal, and the reviewer's nits (`approve.from` needs at least one entry; the heartbeat does not follow a symlink).

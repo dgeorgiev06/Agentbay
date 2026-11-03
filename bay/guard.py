@@ -39,6 +39,7 @@ subagents.
 """
 from __future__ import annotations
 
+import contextlib
 import fnmatch
 import json
 import os
@@ -573,12 +574,14 @@ def main() -> int:
     try:
         payload = json.load(sys.stdin)
         subagent = bool(payload.get("agent_id") or payload.get("agent_type"))
+        project = Path(os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd())
+        with contextlib.suppress(OSError):      # a failed write must never deny
+            (project / ".agentbay/ledger/guard.seen").touch()
         if not subagent:
             decision, reason = main_thread_decision(payload)
             if decision == "ask":
                 _emit("ask", reason)
             return 0
-        project = Path(os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd())
         policy = json.loads((project / POLICY).read_text())
         decision, reason = Guard(policy, project).decide(payload)
         if decision == "deny":

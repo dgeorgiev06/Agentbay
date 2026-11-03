@@ -274,5 +274,16 @@ def test_a_dispatched_agent_is_listed_by_status_without_the_spawn_hook():
         assert "the spawn hook is not loaded" in out
         ledger.append(p, "spawned", "toolu_9", agent="builder", source="hook")
         assert "the spawn hook is not loaded" not in cli(p, "status").stdout
+        ticking = "T-20261030-bbbb"
+        with open(ledger.ledger_path(p), "a") as f:
+            for kind, when in (("agent.dispatch", ts), ("note", datetime.now(timezone.utc) - timedelta(minutes=5))):
+                f.write(json.dumps({"v": 1, "ts": when if isinstance(when, str) else when.isoformat(timespec="seconds"),
+                                    "type": kind, "runId": ticking, "taskId": ticking, "agent": "builder--forge--framework-dev",
+                                    "source": "coordinator", "summary": "tick"}) + "\n")
+        assert ticking not in cli(p, "status").stdout.split("STALE?")[1].split("RECENT AGENTS")[0]
+        assert "guard: no tool call was checked" in cli(p, "status").stdout
+        subprocess.run([sys.executable, str(KIT / "bay/guard.py")], input=json.dumps({"tool_name": "Read", "cwd": str(p)}),
+                       text=True, env={"CLAUDE_PROJECT_DIR": str(p), "PATH": "/usr/bin:/bin"})
+        assert "guard: no tool call was checked" not in cli(p, "status").stdout
     finally:
         cleanup(p)

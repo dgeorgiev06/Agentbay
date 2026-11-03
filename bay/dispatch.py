@@ -726,7 +726,8 @@ class Dispatcher:
     def _finish(self, state, mode, feat) -> dict:
         ledger.append(self.project, "call.completed", state["callId"], source="dispatcher", callId=state["callId"],
                       mode=mode.name, endpoint=feat.name, cost=state["cost"],
-                      summary=state.get("stopped") or (state.get("result") or {}).get("error") or state["status"],
+                      summary=state.get("stopped") or (state.get("result") or {}).get("error") or (state.get("result") or {}).get("reason")
+                      or state["status"],
                       data={"status": state["status"]},
                       durationMs=int((time.time() - state["t0"]) * 1000) if state.get("t0") else None,
                       costUsd=state["cost"].get("usd") or None)

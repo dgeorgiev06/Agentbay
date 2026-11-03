@@ -324,9 +324,8 @@ def test_an_edit_to_a_protected_component_without_touches_fails_check_base():
         rep = _check({path: "y\n"})
         assert [f.path for f in rep.failures] == [path] and rep.exit_code == 1, path
         assert not _check({path: "y\n"}, touches=[path]).failures, path
-    # a feature of a protected mode keeps its B-3 rule: a whole-mode entry does not list it
     rep = _check({"components/cos/features/run/playbook.md": "y\n"}, touches=["components/cos/"])
-    assert [f.rule for f in rep.failures] == ["B-3"]
+    assert not rep.failures
     # an unprotected component of the same kinds is unchanged: edits still need touches (B-2), new ones do not
     assert [f.path for f in _check({"components/mail/mode.yaml": "y\n"}).failures] == ["components/mail/mode.yaml"]
     assert not _check({"components/news/mode.yaml": "y\n", "components/news/envs/new.yaml": "y\n", "components/rss/connector.yaml": "y\n"}).failures

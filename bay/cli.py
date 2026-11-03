@@ -44,6 +44,7 @@ import contextlib
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 KIT = Path(__file__).resolve().parent.parent
@@ -519,7 +520,7 @@ def _ago(ts: str) -> str:
 
 
 def _stale(runs, calls):
-    return ([r for r in runs if r.state == "running" and r.started and _secs(r.started) > STALE_S],
+    return ([r for r in runs if r.state == "running" and r.started and _secs(r.last or r.started) > STALE_S],
             [c for c in calls if c.state in ("running", "waiting") and _secs(c.ts) > STALE_S])
 
 
@@ -568,6 +569,9 @@ def cmd_status(args):
     for r in live:
         print(f"  {r.run_id[:14]:<14} {r.agent:<14} {r.task_id or '-':<16} {_ago(r.started):>4}  {r.summary[:60]}")
     _print_stale(evs, stale_runs, stale_calls)
+    seen = args.project / ".agentbay/ledger/guard.seen"
+    if not seen.exists() or time.time() - seen.stat().st_mtime > 120:
+        print("\nguard: no tool call was checked in the last 2 minutes. In a Claude Code session this means its hooks are not loaded: start it inside the project")
     print(f"\nRECENT AGENTS ({len(done)} of {len(runs) - len(live) - len(stale_runs)})")
     for r in done:
         print(f"  {r.run_id[:14]:<14} {r.agent:<14} {r.task_id or '-':<16} {r.state:<9} {r.summary[:70]}")

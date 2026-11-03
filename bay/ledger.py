@@ -234,6 +234,7 @@ class Run:
     started: str = ""
     ended: str = ""
     summary: str = ""
+    last: str = ""
     notes: list[str] = field(default_factory=list)
 
 
@@ -272,6 +273,10 @@ def fold(events: list[dict]) -> dict[str, Run]:
     for n in notes:
         for r in _note_targets(n, runs):
             r.notes.append(n.get("summary", ""))
+    for e in events:
+        for r in runs.values():
+            if e.get("runId") == r.run_id or (r.task_id and e.get("taskId") == r.task_id):
+                r.last = max(r.last, e["ts"])
     return runs
 
 

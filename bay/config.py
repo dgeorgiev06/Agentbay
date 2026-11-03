@@ -1,9 +1,9 @@
 """agentbay.config.yaml: per-project user settings.
 
-    apiVersion: agentbay/v3
+    apiVersion: agentbay/v4
     offline: true                               # the fake sources, no network, no secrets, $0
     secrets: { provider: env }                  # override env provider (e.g. on Linux)
-    approvals: { chat: true }                   # let gates be approved from chat (default off)
+    approve: { from: [terminal, chat] }         # where the owner decides (default [terminal])
     modes:
       feed-briefing:
         lookback: 3d
@@ -33,7 +33,7 @@ FRAGMENT = "config.example.yaml"   # an extension's sample settings, checked aga
 MINIMAL = """\
 # Settings for agentbay in this project. Every setting is optional; `bay config` lists them all.
 # `offline: true` runs the shipped envs on fake sources (no network, no secrets, $0).
-apiVersion: agentbay/v3
+apiVersion: agentbay/v4
 """
 
 
@@ -50,6 +50,8 @@ def load(project: Path | None) -> dict:
     from .model import schema, schema_errors
     doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     errs = schema_errors(doc, schema("config"))
+    if "approvals" in doc:
+        errs.append("`approvals` is now `approve: { from: [...] }`")
     if errs:
         raise ConfigError(f"{p}:\n    " + "\n    ".join(errs))
     return doc
@@ -64,10 +66,10 @@ def write_minimal(project: Path) -> bool:
     return True
 
 
-def chat_approvals(cfg: dict) -> bool:
-    """`approvals: { chat: true }`: the owner lets the Chief of Staff relay a gate approval from chat
-    (`bay approve --via chat`). Off unless set to exactly true (proposal 0006, Part G)."""
-    return (cfg.get("approvals") or {}).get("chat") is True
+def approve_from(cfg: dict) -> list:
+    """`approve: { from: [terminal, chat] }`: where the owner may decide (`bay approve`, `--via chat` relayed by the
+    Chief of Staff). Default [terminal]."""
+    return (cfg.get("approve") or {}).get("from") or ["terminal"]
 
 
 def config_path(project: Path | None, rel: str) -> Path:

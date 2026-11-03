@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v3/Config",
+  "$id": "agentbay/v4/Config",
   "title": "agentbay.config.yaml",
   "description": "Per-project user settings. modes.<name> is validated against that mode's config schema; connectors.<name> against the connector's config schema. Settings can only tighten mode constraints and env limits: a cap above the env's `limits:` is refused. Capabilities are bound only in an env manifest (components/<name>/envs/<env>.yaml); there is no config-level binding override.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "apiVersion": {
-      "const": "agentbay/v3"
+      "const": "agentbay/v4"
     },
     "agent": {
       "type": "string",
@@ -37,21 +37,50 @@
         }
       }
     },
-    "approvals": {
+    "approve": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Approval gates. chat: true lets `bay approve --via chat --quote ...` pass a gate without a terminal, relayed by the Chief of Staff and labelled user@chat-via-cos in the ledger. Default off.",
+      "description": "Who decides and what needs a plan. from: where the owner can decide a gate or a backlog item, terminal (an interactive `bay approve`) and/or chat (`bay approve --via chat --quote ...`, relayed by the Chief of Staff and labelled user@chat-via-cos in the ledger); default [terminal]. plans: role steps that run a plan step and an approval gate before the step itself, as <mode>.<endpoint> or <mode>.<endpoint>.<step>. planner: tier and effort of those plan steps.",
       "properties": {
-        "chat": {
-          "type": "boolean"
+        "from": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "terminal",
+              "chat"
+            ]
+          },
+          "default": [
+            "terminal"
+          ]
         },
-        "plan": {
-          "enum": [
-            "large",
-            "always",
-            "never"
-          ],
-          "description": "When forge.extend runs a planning step before the approval gate: for a large or security-sensitive proposal (the default), always, or never. The gate itself always runs and binds the plan with the proposal."
+        "plans": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)?$"
+          },
+          "default": []
+        },
+        "planner": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tier": {
+              "enum": [
+                "fast",
+                "balanced",
+                "deep"
+              ]
+            },
+            "effort": {
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ]
+            }
+          }
         }
       }
     },

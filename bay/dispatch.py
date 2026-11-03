@@ -5,7 +5,7 @@ A call walks the feature's steps:
   role step   -> stop and return a step plan; the coordinator runs the role and
                  resumes with `bay submit <callId> <stepId> '<json>'`
   gate step   -> stop with status awaiting-approval; only `bay approve <callId>` (interactive
-                 terminal, or `--via chat` when approvals.chat is on; never pre-approved) passes or
+                 terminal, or `--via chat` when approve.from lists chat; never pre-approved) passes or
                  rejects it. A gate with `approves: $in.<f>` approves that file's exact content: the
                  ledger records its path and sha256, and a later call naming the same unchanged file
                  skips the gate (any edit makes it run again). Nothing else skips a gate.
@@ -148,7 +148,7 @@ class Dispatcher:
     def approve(self, call_id: str, approved: bool, reason: str = "", by: str = "user", quote: str = "",
                 sha: str = "") -> dict:
         """Pass or reject the approval gate a call is waiting on. Called only from `bay approve`, which needs an
-        interactive terminal, or `--via chat` with the project's approvals.chat on; never pre-approved for Claude
+        interactive terminal, or `--via chat` when the project's approve.from lists chat; never pre-approved for Claude
         Code. `quote` is the owner's message a chat approval relays; the ledger keeps it next to `by`."""
         state = self._load(call_id)
         mode, feat = self.sys.feature(state["target"])
@@ -692,12 +692,12 @@ class Dispatcher:
         }
 
     def _chat_path(self, call_id: str) -> dict:
-        """With `approvals.chat` on, the gate plan also names the chat path (the owner's own words, quoted)."""
+        """With chat in `approve.from`, the gate plan also names the chat path (the owner's own words, quoted)."""
         try:
-            on = cfgmod.chat_approvals(cfgmod.load(self.project))
+            on = "chat" in cfgmod.approve_from(cfgmod.load(self.project))
         except cfgmod.ConfigError:
             return {}
-        return {"approveFromChat": f"approvals.chat is on: when the user's latest message clearly approves this gate, "
+        return {"approveFromChat": f"approve.from lists chat: when the user's latest message clearly approves this gate, "
                                    f".agentbay/bay approve {call_id} --via chat --quote \"<their exact message>\" "
                                    f"(never infer approval)"} if on else {}
 

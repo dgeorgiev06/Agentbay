@@ -125,7 +125,7 @@ def _want_deny(kit: Path, project: Path) -> list[str]:
         want.append(f"Edit(/{kit.resolve()}/**)")
     elif kit.resolve() != project.resolve():              # kit nested inside the project
         want.append(f"Edit(/{kit.resolve().relative_to(project.resolve()).as_posix()}/**)")
-    want.append("Edit(/agentbay.config.yaml)")           # the owner's settings (approvals.chat among them)
+    want.append("Edit(/agentbay.config.yaml)")           # the owner's settings (approve.from among them)
     return want
 
 
@@ -553,7 +553,7 @@ does everything else (build, clean, secret, scaffolds). Subagents run no `{BAY}`
 - `{BAY} note review <taskId> '<review.verdict/v1 json>'` -> record a review run outside a framework step (asks)
 - `{BAY} show reclaim <runId>` / `show close <callId> --reason ...` -> mark a stuck run reclaimed; end an open call as abandoned (asks)
 - `{BAY} approve <callId|runId> --via chat --quote "<the user's exact message>"` -> relay a gate approval from
-  chat; only if the user set `approvals: {{ chat: true }}` and their latest message clearly approves that gate (asks)
+  chat; only if the user set `approve: {{ from: [.., chat] }}` and their latest message clearly approves that gate (asks)
 - `{BAY} describe <mode|role>` -> full resolved definition (asks)
 """
         rel = Path(".agentbay/COORDINATOR.md")

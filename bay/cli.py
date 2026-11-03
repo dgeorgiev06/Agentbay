@@ -19,7 +19,7 @@
   show close <callId> --reason <text>  end an open call as abandoned
   approve <callId|runId> [--reject]    pass an approval gate of a call, or of a workflow run (W-...)
                                        (you, in a terminal; never an agent)
-          [--via chat --quote "<msg>"] from chat, relayed by the Chief of Staff, when approvals.chat is on
+          [--via chat --quote "<msg>"] from chat, relayed by the Chief of Staff, when approve.from lists chat
   approve <F-id> [--defer|--wontfix]   decide an improve backlog item (a terminal only; never from chat)
   (agents read data only through .agentbay/roles/<role>--<mode>/use, generated per role unit by build)
 
@@ -276,25 +276,27 @@ CHAT_BY = "user@chat-via-cos"
 
 
 def _approval_channel(args) -> tuple[str, str]:
-    """(by, quote) for `bay approve`. A terminal approval needs a TTY. A chat approval (`--via chat`) needs the
-    project's `approvals: { chat: true }` and the owner's message quoted verbatim; the ledger labels it
-    user@chat-via-cos, so it is never mistaken for a terminal one (proposal 0006, Part G)."""
+    """(by, quote) for `bay approve`. The channel (`--via tty`, the default, or `--via chat`) must be listed in the
+    project's `approve.from`. A terminal approval needs a TTY. A chat approval needs the owner's message quoted
+    verbatim; the ledger labels it user@chat-via-cos, so it is never mistaken for a terminal one."""
+    from bay import config as cfgmod
+    try:
+        allowed = cfgmod.approve_from(cfgmod.load(args.project))
+    except cfgmod.ConfigError as e:
+        _die(f"✗ {e}")
     if args.via != "chat":
         if args.quote:
             _die("✗ --quote goes with --via chat (a terminal approval needs no quote)")
+        if "terminal" not in allowed:
+            _die(f"✗ approvals from a terminal are off: `approve.from` in {cfgmod.NAME} lists {allowed}. Use `--via chat`.")
         if not sys.stdin.isatty():
             _die("✗ bay approve needs an interactive terminal (stdin is not a TTY). Approval gates are for you, not "
-                 "for agents: run it yourself in a terminal. (Approvals from chat need `approvals: { chat: true }` "
+                 "for agents: run it yourself in a terminal. (Approvals from chat need `approve: { from: [..., chat] }` "
                  "in agentbay.config.yaml and `--via chat`.)")
         return "user@tty", ""
-    from bay import config as cfgmod
-    try:
-        cfg = cfgmod.load(args.project)
-    except cfgmod.ConfigError as e:
-        _die(f"✗ {e}")
-    if not cfgmod.chat_approvals(cfg):
-        _die("✗ approvals from chat are off: `bay approve --via chat` needs `approvals: { chat: true }` in "
-             f"{cfgmod.NAME} (set it yourself; the default is off). Otherwise run `bay approve` in a terminal.")
+    if "chat" not in allowed:
+        _die("✗ approvals from chat are off: `bay approve --via chat` needs `approve: { from: [..., chat] }` in "
+             f"{cfgmod.NAME} (set it yourself; the default is [terminal]). Otherwise run `bay approve` in a terminal.")
     quote = (args.quote or "").strip()
     if not quote:
         _die("✗ --via chat needs --quote \"<the owner's exact message approving this gate>\"")
@@ -782,10 +784,10 @@ def main(argv=None):
     sh.add_argument("--resolved", action="store_true", help="show <mode>: its features after `extends`, with the file each comes from")
     sh.set_defaults(fn=cmd_show)
     ap_ = sub.add_parser("approve", help="pass (or --reject) an approval gate; interactive terminal, or chat when "
-                                         "approvals.chat is on; an F-id decides an improve backlog item")
+                                         "approve.from lists chat; an F-id decides an improve backlog item")
     ap_.add_argument("call"); ap_.add_argument("--reject", action="store_true"); ap_.add_argument("--reason")
     ap_.add_argument("--via", choices=["tty", "chat"], default="tty",
-                     help="chat: relayed by the Chief of Staff; needs approvals: { chat: true } in agentbay.config.yaml")
+                     help="chat: relayed by the Chief of Staff; needs approve: { from: [.., chat] } in agentbay.config.yaml")
     ap_.add_argument("--quote", help="--via chat: the owner's exact message approving this gate (recorded in the ledger)")
     ap_.add_argument("--sha", help="--via chat: sha256 prefix (8+ hex) of the content shown to the owner; the approval "
                                    "is refused if the file changed")

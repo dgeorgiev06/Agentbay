@@ -327,7 +327,7 @@
         },
         "gate": {
           "type": "string",
-          "description": "Approval gate: the dispatcher stops with status awaiting-approval and shows this text; only the owner passes it, with `bay approve <callId>` (a terminal, or `--via chat` when approvals.chat is on). A gate takes no `when:`."
+          "description": "Approval gate: the dispatcher stops with status awaiting-approval and shows this text; only the owner passes it, with `bay approve <callId>` (a terminal, or `--via chat` when `approve.from` lists chat). A gate takes no `when:`."
         },
         "approves": {
           "type": "string",

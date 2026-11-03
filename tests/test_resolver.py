@@ -216,8 +216,8 @@ def test_offline_switch_rebinds_the_source_and_closes_network_and_secrets():
     from bay import config
     for bad, word in (({"offline": "yes"}, "offline"), ({"envs": {"local-feeds": "workspace"}}, "envs"),
                       ({"bindings": {"local-feeds": {"items.source/v1": ["fake"]}}}, "bindings"),
-                      ({"approvals": {"plan": "bogus"}}, "approvals"),             # approvals.plan: large | always | never
-                      ({"apiVersion": "agentbay/v2"}, "this kit reads agentbay/v3, not 'agentbay/v2'; change the line to apiVersion: agentbay/v3")):
+                      ({"approve": {"from": ["fax"]}}, "approve"),                 # approve.from: terminal | chat
+                      ({"apiVersion": "agentbay/v2"}, "this kit reads agentbay/v4, not 'agentbay/v2'; change the line to apiVersion: agentbay/v4")):
         try:                                                  # not a boolean; the `envs:` and `bindings:` maps are gone
             model.Kit(KIT, project(bad))
             raise AssertionError("expected ConfigError")

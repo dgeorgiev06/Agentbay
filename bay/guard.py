@@ -67,7 +67,7 @@ PROBES = (".agentbay/guard.json", ".agentbay/bay", ".agentbay/roles/role/use", "
           ".claude/settings.json", ".claude/settings.local.json", ".claude/agents/agent.md")
 
 
-# the owner's settings file: it turns approvals from chat on (proposal 0006, Part G), so no subagent may name it in
+# the owner's settings file: it sets `approve.from`, which opens approvals from chat, so no subagent may name it in
 # a Bash command (a write by redirect, cp, mv, sed -i, tee, ...); file tools are refused by NEVER_FILES
 CONFIG_FILE = "agentbay.config.yaml"
 # the kit CLI in any spelling: bay, bay.sh, .agentbay/bay, bay/cli.py, `python -m bay.cli`

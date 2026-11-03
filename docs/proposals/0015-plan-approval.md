@@ -7,7 +7,6 @@ touches:
   - { path: bay/cli.py, reason: "`from` replaces the chat switch; a backlog id follows the same channel; `bay auth` loses its terminal check; `bay status` ages a run from its last event and says when the guard has not run" }
   - { path: bay/dispatch.py, reason: "a changed approved file returns the call to its gate; a recorded approval is shown by `bay show`; the close reason reaches the ledger summary; a plan file can be a gate's subject" }
   - { path: bay/model.py, reason: "resolve expands each listed role step into plan step, gate and the step itself, as it already injects the review step" }
-  - { path: bay/lint.py, reason: "every `approve.plans` entry must name a real endpoint or role step without `when:`" }
   - { path: bay/ledger.py, reason: "a run records the time of its last event" }
   - { path: bay/guard.py, reason: "every hook call touches a heartbeat file" }
   - { path: bay/boundary.py, reason: "B-3: a listed mode folder covers its feature folders" }
@@ -18,6 +17,7 @@ touches:
   - { path: framework/roles/lead.yaml, reason: "its comment and prompt say the planning step is also what `approve.plans` adds" }
   - { path: components/tools/envs/plan-writer.yaml, reason: "new env: reads the project, writes docs/plans/ only, runs no command but `bay plan`" }
   - { path: adapters/claude-code/claude_code.py, reason: "the generated coordinator text names `approve.from`; `bay auth` joins the commands that always ask" }
+  - { path: components/forge/envs/framework-dev.yaml, reason: "from the plan step: it lists the new plan-writer env, or lint fails" }
   - { path: components/forge/mode.yaml, reason: "the comment on the plan step; one line in the propose step's task about `touches:`" }
   - { path: components/forge/connectors/scaffold/scaffold.py, reason: "the plan step is always `large`, so the `approvals.plan` lookup goes" }
   - { path: components/forge/interfaces/forge.scaffold.v1.yaml, reason: "the shorter description of `proposal`" }

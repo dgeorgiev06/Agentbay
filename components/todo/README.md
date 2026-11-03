@@ -15,7 +15,7 @@ From `store`:
 | feature | does |
 |---|---|
 | `todo.add` | store a to-do (`{"item": {"kind": "todoitem", "title": "...", ...}}`) |
-| `todo.update` | change fields of a to-do |
+| `todo.update` | change fields of a to-do. This mode checks them first (see below) |
 | `todo.delete` | show the to-dos, ask, then remove them for good (a reviewer checks the result) |
 | `todo.query`, `todo.get` | read to-dos |
 | `todo.ask` | answer a question from the stored to-dos, with citations |
@@ -45,6 +45,14 @@ takes the same shape.
 3. `update` writes the new status, the time and one more entry in the history.
 4. `add` stores the next occurrence. It runs only when the plan returned one, which happens for a recurring to-do
    that is completed or dropped (not when its series is dropped).
+
+`todo.update` runs `todo.rules/v1.fields` before it writes. It refuses `status`, `completedAt`, `droppedAt`,
+`history`, `delegation`, `prevId` and `threadId`, because only the rules above write them. The error names the
+feature to use, for example `use todo.complete / todo.reopen / todo.drop / todo.status`.
+
+Reopening a recurring to-do does not remove the occurrence that completing it added. Then two are open. The Chief of
+Staff tells you that the later occurrence still exists and offers `todo.delete` on it. The delete is gated, and you
+decide.
 
 The finished to-do stays, with its history. The next one has the same title, notes, labels and priority, the same
 series (`threadId`) and a `prevId` that points back.

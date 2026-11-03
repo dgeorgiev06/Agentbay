@@ -14,6 +14,14 @@ spec:
     move them when I ask; repeat the ones that recur; and hand one to an agent only after I have seen the exact call.
   roles: { lead: todo-local, analyst: todo-local, reviewer: todo-local }   # role -> env
   features:
+    update:
+      description: Change the plain fields of a to-do (title, notes, labels, dates, priority, recurrence). Status, history and delegation change only through complete, reopen, drop, status, delegate and track.
+      in: UpdateReq
+      effects: [read, write]
+      review: { role: reviewer, when: never }
+      steps:
+        - { id: check, run: todo.rules/v1.fields, with: { set: "$in.set" } }
+        - { id: update, run: items.store/v2.update, with: { id: "$in.id", set: "$steps.check.set" } }
     agenda:
       description: What is on my plate - the open, doing and waiting to-dos with their bucket (delegated, waiting, overdue, today, someday, upcoming), by priority or by due date.
       in: AgendaReq

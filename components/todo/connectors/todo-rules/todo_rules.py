@@ -271,9 +271,35 @@ def track_delegation(item: dict, call_id: str, status: str, summary) -> dict:
     return {"id": _id(item), "set": {"delegation": new}}      # status and history of the to-do stay as they are
 
 
+# fields
+
+GUARDED = {      # a field only the rules write -> the feature that changes it
+    "status": "todo.complete / todo.reopen / todo.drop / todo.status",
+    "completedAt": "todo.complete / todo.reopen",
+    "droppedAt": "todo.drop / todo.reopen",
+    "history": "todo.complete / todo.reopen / todo.drop / todo.status",
+    "delegation": "todo.delegate / todo.track",
+    "prevId": "todo.complete / todo.drop (they keep the series)",
+    "threadId": "todo.complete / todo.drop (they keep the series)",
+}
+
+
+def check_fields(fields) -> dict:
+    if not isinstance(fields, dict):
+        raise TodoRulesError("set must be an object of fields to change")
+    bad = [k for k in GUARDED if k in fields]
+    if bad:
+        raise TodoRulesError("update cannot set " + ", ".join(bad) + "; use "
+                             + "; ".join(f"{k}: {GUARDED[k]}" for k in bad))
+    return {"set": fields}
+
+
 class TodoRules:
     def __init__(self, ctx):
         self.ctx = ctx
+
+    def fields(self, set) -> dict:    # noqa: A002
+        return check_fields(set)
 
     def plan(self, items, action, status=None, scope=None, at=None, missing=None) -> dict:
         return plan_change(_one(items, missing), action, status, scope, at or _now(self.ctx))

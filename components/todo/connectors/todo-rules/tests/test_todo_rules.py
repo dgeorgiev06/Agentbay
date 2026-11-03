@@ -294,7 +294,7 @@ def test_interface_and_connector_manifest_match_the_code():
     conn = yaml.safe_load((root / "connector.yaml").read_text())
     assert iface["metadata"]["name"] == "todo.rules" and iface["spec"]["version"] == 1
     assert conn["spec"]["implements"] == "todo.rules/v1" and conn["spec"]["entry"] == "todo_rules.py"
-    assert set(iface["spec"]["endpoints"]) == {"plan", "brief", "track"}
+    assert set(iface["spec"]["endpoints"]) == {"plan", "brief", "track", "fields"}
     assert all(e["effects"] == ["read"] for e in iface["spec"]["endpoints"].values())
     inst = tr.create(Ctx())
     for ep, e in iface["spec"]["endpoints"].items():
@@ -316,6 +316,18 @@ def test_outputs_match_the_interface_schemas():
     assert calls["track"] == {"id": item["id"], "set": {"delegation": {
         "target": "research", "callId": "C-2", "status": "done", "at": AT, "summary": "Found three vendors."}}}
     refused(lambda: rules().track(item, "C-2", "done"), "no delegation", "todo.delegate")
+    # fields: a plain edit passes unchanged; the fields only the rules write are refused with the feature to use
+    plain = {"title": "New title", "due": "2026-11-20", "priority": 1, "labels": ["a"], "recur": None}
+    real = tr.create(Ctx())
+    assert real.fields(plain) == {"set": plain}
+    assert model.schema_errors(real.fields(plain), iface["fields"]["out"]) == []
+    refused(lambda: real.fields({"title": "x", "status": "done"}), "cannot set status", "todo.complete", "todo.status")
+    refused(lambda: real.fields({"delegation": {"target": "build"}}), "delegation", "todo.delegate", "todo.track")
+    refused(lambda: real.fields({"history": []}), "history", "todo.reopen")
+    for key in ("completedAt", "droppedAt", "prevId", "threadId"):
+        refused(lambda key=key: real.fields({key: None}), key)
+    refused(lambda: real.fields({"status": "open", "history": []}), "status", "history")
+    refused(lambda: real.fields("status"), "object")
     assert model.schema_errors({"items": [item], "action": "complete"}, iface["plan"]["in"]) == []
     assert model.schema_errors({"items": [item], "action": "fly"}, iface["plan"]["in"]) != []
     assert model.schema_errors({"items": [item, item], "action": "complete"}, iface["plan"]["in"]) != []

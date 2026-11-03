@@ -2,10 +2,10 @@
 
 The rules of the todo mode, as a small code connector. It implements the interface `todo.rules/v1`.
 
-It holds no data. It reads no store, uses no network and writes no file. All three endpoints are pure functions of
+It holds no data. It reads no store, uses no network and writes no file. All four endpoints are pure functions of
 their input, so all have the effect `read`. The caller reads the to-do first and writes the result afterwards.
 
-Every endpoint takes `items`, the list that `items.store/v2.get` returns, with exactly one to-do, and optionally
+Every endpoint but `fields` takes `items`, the list that `items.store/v2.get` returns, with exactly one to-do, and optionally
 `missing`, the ids that get did not find. An empty `items` is refused with `no to-do with that id (<id>); check the
 id with todo.query`. More than one to-do is refused too.
 
@@ -13,7 +13,7 @@ It works on `todoitem/v1` items (see `components/todoitem`).
 
 ## Files
 
-- `components/todo/interfaces/todo.rules.v1.yaml`: the interface. Three endpoints, `plan`, `brief` and `track`, with
+- `components/todo/interfaces/todo.rules.v1.yaml`: the interface. Four endpoints, `plan`, `brief`, `track` and `fields`, with
   input and output schemas.
 - `connector.yaml`: the connector manifest, in this folder.
 - `todo_rules.py`: the code. Python standard library only.
@@ -85,6 +85,14 @@ with `at` the time of the call.
 - `context` quotes the to-do id, priority, due date and labels the same way. No to-do field is plain prose.
 - `deliverable` defaults to a sensible one for the target.
 - A to-do that is done or dropped is refused.
+
+### fields
+
+Input: `{set}`. Output: `{set}`, the same fields.
+
+The check for `todo.update`. It refuses `status`, `completedAt`, `droppedAt`, `history`, `delegation`, `prevId` and
+`threadId`, and the error names the feature to use, for example `use todo.complete / todo.reopen / todo.drop /
+todo.status`. It takes no `items`: it looks at the fields only.
 
 ### track
 

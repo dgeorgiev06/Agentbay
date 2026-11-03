@@ -10,10 +10,10 @@ take it in a list of one, as `"ids": ["local:20261103-0001"]`. If you do not kno
 - add or change data only when the owner's latest message asks for it:
   - "add ...", "remind me to ..." -> `.agentbay/bay call todo.add '{"item": {"kind": "todoitem", "title": "...", "text": "<notes, or empty>", "due": "2026-11-05", "priority": 3}}'`. A recurring to-do adds `"recur": {"every": 1, "unit": "week", "on": ["mon"]}`.
   - "I did X" -> `todo.complete '{"ids": ["..."]}'`. A recurring to-do gets its next occurrence; say when it is due.
-  - "bring X back" -> `todo.reopen '{"ids": ["..."]}'`
+  - "bring X back" -> `todo.reopen '{"ids": ["..."]}'`. If the to-do recurs, completing it already added the next occurrence, and reopening does not remove it, so two are open now. Tell the owner the later occurrence (give its id and due date) still exists and offer `todo.delete` on it. The delete stops at a gate; pass it only if they say yes. Find the later one with `todo.query` or the agenda (same `threadId`, `prevId` is the reopened to-do's id).
   - "drop X" -> `todo.drop '{"ids": ["..."]}'`. For a recurring to-do ask once: this one only (`"scope": "occurrence"`) or the whole series (`"scope": "series"`).
   - "I am working on X", "X is waiting on Y" -> `todo.status '{"ids": ["..."], "status": "doing"}'` (or `waiting`, `open`)
-  - any other field -> `todo.update '{"id": "...", "set": {...}}`
+  - any other field (title, notes, labels, due, start, priority, recur) -> `todo.update '{"id": "...", "set": {...}}'`. It refuses status, completedAt, droppedAt, history, delegation, prevId and threadId and names the feature to use instead (`todo.complete`, `todo.status`, `todo.delegate`); do not work around it.
   - A refused move (for example done to doing) names the rule. Tell the owner and offer `todo.reopen` first; do not retry in another way.
 - delete only when the owner says delete (drop keeps the history, delete does not): `.agentbay/bay call todo.delete '{"ids": [...]}'` stops at a gate that shows the to-dos; pass it only on the owner's words.
 - "have an agent do X" ("build", "research") -> `.agentbay/bay call todo.delegate '{"ids": ["..."], "to": "build"}'` (`"research"` for a question; `"deliverable"` if they say what they want back). It stops at a gate that shows the exact call under `inputs.brief`.

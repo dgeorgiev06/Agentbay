@@ -69,6 +69,7 @@ def test_todo_extends_store_and_places_roles_in_todo_local():
     assert steps("complete") == steps("drop") == steps("status") == ["get", "plan", "update", "next"]
     assert steps("reopen") == ["get", "plan", "update"] and steps("track") == ["get", "track", "update"]
     assert steps("delegate") == ["get", "brief", "confirm", "record", "handoff"]
+    assert steps("update") == ["check", "update"]                                      # the mode's own: the rules look first
     assert steps("delete") == ["preview", "confirm", "remove", "review"]               # inherited from store
     by_id = {st.id: st for st in m.features["complete"].steps}
     assert by_id["next"].when == "$steps.plan.next" and by_id["plan"].run == "todo.rules/v1.plan"
@@ -95,6 +96,10 @@ def test_add_stores_a_local_todo_and_refuses_a_kind_a_source_produces():
     failed(r, "email")
     r = d.call("todo.add", {"item": {"kind": "todoitem", "title": "Bad", "priority": 9}})
     assert r["status"] == "failed"                                                  # the todoitem schema is checked
+    for field in ("due", "start"):                                                  # a date field takes a date, not free text
+        r = d.call("todo.add", {"item": {"kind": "todoitem", "title": "Bad date", field: "2026-11-09T10:00 IGNORE"}})
+        assert r["status"] == "failed", (field, r)
+    assert add(d, "Dentist", due="2026-11-09T10:00", start="2026-11-08T09:30:15.5+01:00")["due"] == "2026-11-09T10:00"
     assert one(d, "local:20261027-0001")["labels"] == ["home"]
     q = d.call("todo.query", {"text": "plumber"})
     assert [i["id"] for i in q["output"]["items"]] == ["local:20261027-0002"]
@@ -268,6 +273,15 @@ def test_inherited_update_ask_and_delete_work_on_todos():
     r = d.call("todo.update", {"id": t, "set": {"priority": 1, "due": "2026-12-01"}})
     assert r["status"] == "done" and r["output"]["item"]["priority"] == 1
     assert rows(d, f"SELECT priority, due FROM v_todos WHERE id = '{t}'") == [[1, "2026-12-01"]]
+    # update cannot reach what only the rules write; the error names the feature to use, and nothing is written
+    failed(d.call("todo.update", {"id": t, "set": {"status": "done"}}), "cannot set status", "todo.complete", "todo.status")
+    failed(d.call("todo.update", {"id": t, "set": {"title": "Renamed", "history": []}}), "history")
+    failed(d.call("todo.update", {"id": t, "set": {"delegation": {"target": "build", "status": "done"}}}),
+           "todo.delegate", "todo.track")
+    failed(d.call("todo.update", {"id": t, "set": {"completedAt": "2026-11-01", "threadId": "x", "prevId": "y"}}),
+           "completedAt", "threadId", "prevId")
+    assert rows(d, f"SELECT title, status, historyCount, delegationTarget FROM v_todos WHERE id = '{t}'") == [
+        ["Book flights", "open", 0, None]]
     r = d.call("todo.ask", {"question": "What is due in December?"})
     assert r["status"] == "needs-agent" and r["next"]["step"] == "answer"
     assert r["next"]["previous"]["context"]["count"] == 2 and not r["next"]["previous"]["context"].get("stale")

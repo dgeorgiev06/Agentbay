@@ -209,8 +209,8 @@ def test_approving_a_backlog_item_needs_a_terminal():
                                   capture_output=True, text=True, input="yes\n")
         r = cli("approve", fid)
         assert r.returncode != 0 and "interactive terminal" in r.stderr
-        r = cli("approve", fid, "--via", "chat", "--quote", "yes approve it", "--sha", "abcdef12")     # never from chat
-        assert r.returncode != 0 and "decided at a terminal" in r.stderr
+        r = cli("approve", fid, "--via", "chat", "--quote", "yes approve it")     # chat is off
+        assert r.returncode != 0 and "approvals from chat are off" in r.stderr
         assert [f for f in findings(p) if f["id"] == fid][0]["status"] == "open"
         r = cli("approve", fid, "--defer", "--reason", "next quarter")
         assert r.returncode == 0, r.stderr

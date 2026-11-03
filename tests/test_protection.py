@@ -546,10 +546,15 @@ def test_bay_approve_of_a_backlog_item_from_a_terminal_still_works_and_the_owner
         def cli(*a):
             return subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "approve", fid, *a],
                                   capture_output=True, text=True, input="yes\n")
-        r = cli("--via", "chat", "--quote", "yes", "--sha", "abcdef12")
-        assert r.returncode != 0 and "decided at a terminal" in r.stderr             # never from chat
-        r = cli("--defer", "--reason", "later")                                        # `bay approve <F-id>` still decides
+        r = cli("--via", "chat", "--quote", "yes")
+        assert r.returncode != 0 and "approvals from chat are off" in r.stderr
+        cfg = p / "agentbay.config.yaml"
+        cfg.write_text(cfg.read_text() + "approve: {from: [chat]}\n")
+        r = cli("--via", "chat", "--quote", "yes please")
         assert r.returncode == 0, r.stderr
-        assert [f for f in findings(p) if f["id"] == fid][0]["status"] == "deferred"
+        h = [f for f in findings(p) if f["id"] == fid][0]["history"][-1]
+        assert h["status"] == "approved" and h["by"] == "user@chat-via-cos"
+        from bay import ledger
+        assert any((e.get("data") or {}).get("quote") == "yes please" for e in ledger.read(p))
     finally:
         cleanup(p)

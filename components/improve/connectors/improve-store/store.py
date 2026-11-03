@@ -34,7 +34,7 @@ FRAMEWORK_DIRS = ("framework/", "bay/", "schemas/", "docs/", "tests/")
 
 
 STORE_OWNED = ("id", "fingerprint", "status", "firstSeen", "lastSeen", "source", "links", "history", "priority")
-HUMAN = "user@tty"
+HUMANS = ("user@tty", "user@chat-via-cos")
 MAX_EVIDENCE = 30
 
 
@@ -181,7 +181,7 @@ class Store:
     def decide(self, fid: str, decision: str, by: str, note: str = "") -> dict:
         if decision not in DECISIONS:
             raise StoreError(f"decision must be one of {', '.join(DECISIONS)}")
-        if decision == "approve" and by != HUMAN:
+        if decision == "approve" and by not in HUMANS:
             raise StoreError("approve is a human decision: run `bay approve <id>` in your terminal")
         fs = self.load()
         f = fs.get(fid)
@@ -260,7 +260,7 @@ class Store:
         f = self.load().get(fid)
         if f is None:
             return {"stopped": f"unknown finding '{fid}'"}
-        approved = [h for h in f.get("history", []) if h["status"] == "approved" and h["by"] == HUMAN]
+        approved = [h for h in f.get("history", []) if h["status"] == "approved" and h["by"] in HUMANS]
         if f["status"] != "approved" or not approved:
             return {"stopped": f"{fid} is {f['status']}; implement runs only for items you approved with "
                                f"`bay approve {fid}` in your terminal", "finding": f}

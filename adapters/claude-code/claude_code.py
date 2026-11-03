@@ -130,11 +130,11 @@ def _want_deny(kit: Path, project: Path) -> list[str]:
 
 
 def _want_ask() -> list[str]:
-    """`bay approve` in any spelling always asks the user first (the main thread relays chat approvals
+    """`bay approve` and `bay auth` in any spelling always ask the user first (the main thread relays chat approvals
     only through this prompt); a subagent is refused by the guard hook either way. So do the writes that share a
     prefix with a pre-approved command (`show reclaim`, `show close`, `note dispatch`, `note review`)."""
     spellings = (BAY, "./bay.sh", "bay", "bay.sh", "python3 -m bay.cli", "python3 bay/cli.py", "python3 */bay/cli.py")
-    return [f"Bash({s} {verb}:*)" for verb in ("approve", *ASKED_UNDER_COORDINATOR_CMDS) for s in spellings]
+    return [f"Bash({s} {verb}:*)" for verb in ("approve", "auth", *ASKED_UNDER_COORDINATOR_CMDS) for s in spellings]
 
 
 def _install_hooks(hooks: dict, kit: Path) -> None:

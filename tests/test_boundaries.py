@@ -723,16 +723,13 @@ def test_chat_approval_passes_a_call_gate_and_rejects_with_a_reason():
         cleanup(k)
 
 
-def test_chat_setting_does_not_open_secrets_or_logins():
+def test_chat_setting_does_not_open_secrets():
     p = project({"approve": {"from": ["terminal", "chat"]}})
     try:
         r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "secret", "set", "X_TOKEN",
                             "--provider", "env"], input="attacker-value\n", text=True, capture_output=True)
         assert r.returncode != 0 and "not a TTY" in r.stderr and "attacker-value" not in r.stdout + r.stderr
-        r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), "--project", str(p), "auth", "gmail-api"],
-                           input="", text=True, capture_output=True)
-        assert r.returncode != 0 and "interactive terminal" in r.stderr
-        for args in (["secret", "set", "--help"], ["auth", "--help"]):
+        for args in (["secret", "set", "--help"],):
             r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), *args], capture_output=True, text=True)
             assert "--via" not in r.stdout
     finally:

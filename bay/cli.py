@@ -386,28 +386,23 @@ def role_use_main(unit: str, project: Path, argv: list[str]) -> None:
 
 
 def _decide_finding(args):
-    """`bay approve <F-id>`: the owner's decision on an improve backlog item. Approving needs an interactive terminal
-    (never an agent, never chat); `--defer` and `--wontfix` record the other two decisions."""
-    if args.reject or args.via == "chat" or args.quote or args.sha:
-        _die("✗ a backlog item is decided at a terminal: `bay approve <F-id>` approves it, `--defer` or `--wontfix` "
-             "decide otherwise (--reject, --via, --quote and --sha are for gates)")
+    """`bay approve <F-id>`: the owner's decision on an improve backlog item. Approving follows the same channel as a
+    gate (`approve.from`); `--defer` and `--wontfix` record the other two decisions."""
+    if args.reject or args.sha:
+        _die("✗ --reject and --sha are for gates; a backlog item is approved, or decided with --defer or --wontfix")
     if args.defer and args.wontfix:
         _die("✗ pass --defer or --wontfix, not both")
     decision = "defer" if args.defer else "wontfix" if args.wontfix else "approve"
-    tty = sys.stdin.isatty()
+    by, quote = ("user@tty" if sys.stdin.isatty() else "cli", "")
     if decision == "approve":
-        if not tty:
-            _die(f"✗ bay approve {args.call} needs an interactive terminal (stdin is not a TTY). Approving a "
-                 "fix is your decision, not an agent's: run it yourself in a terminal.")
-        if input(f"APPROVE {args.call} for implementation on demand? Type yes to confirm: ").strip().lower() != "yes":
-            _die("not confirmed; nothing changed")
+        by, quote = _approval_channel(args)
+        _confirm(by)
     d = _dispatcher(args)
-    by = "user@tty" if tty else "cli"
     _run(lambda: d.run_capability("improve", "improve.findings/v1.decide",
                                   {"id": args.call, "decision": decision, "by": by,
                                    **({"note": args.reason} if args.reason else {})}))
     ledger.append(args.project, "note", args.call, source="cli", summary=f"approve {args.call} {decision}",
-                  data={"kind": "decision"})
+                  data={"kind": "decision", **({"quote": quote} if quote else {})})
 
 
 # ------------------------------------------------------------------ scaffolds & secrets
@@ -451,12 +446,8 @@ def cmd_secret(args):
 
 def cmd_auth(args):
     """`bay auth <connector>`: runs the connector's declared `login` entry (e.g. an OAuth browser login that stores
-    a refresh token). Interactive terminal only, like `secret set`: an agent can neither start a login nor replace
-    a token."""
+    a refresh token)."""
     from bay import connect
-    if not sys.stdin.isatty():
-        _die(f"✗ bay auth {args.connector} needs an interactive terminal (stdin is not a TTY) and your browser; "
-             f"run it yourself in a terminal.")
     s = _system(args)
     try:
         connect.login(s, args.connector, args.env)

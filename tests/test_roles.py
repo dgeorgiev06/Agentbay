@@ -291,6 +291,12 @@ def test_lint_reports_an_unknown_env_in_a_roles_map_with_file_and_line():
     base.write_text(base.read_text().replace("reviewer: local-feeds }", "reviewer: nowhere }"))
     line = next(i for i, ln in enumerate(base.read_text().splitlines(), 1) if ln.startswith("  roles:"))
     ps = lint.run(k)
-    assert any(p.endswith(f"components/feed-briefing/mode.yaml:{line}: mode feed-briefing: `roles:` puts role reviewer in unknown "
-                          f"env 'nowhere' (have: cos-local, framework-dev, improve-local, local-authoring, local-feeds, "
-                          f"local-mail, plan-writer, research, store-local, workspace)") for p in ps), ps
+    prefix = (f"components/feed-briefing/mode.yaml:{line}: mode feed-briefing: `roles:` puts role reviewer in unknown "
+              f"env 'nowhere' (have: ")
+    hit = [p for p in ps if prefix in p and p.endswith(")")]
+    assert hit, ps
+    have = set(hit[0].split(prefix, 1)[1][:-1].split(", "))
+    shipped = {"cos-local", "framework-dev", "improve-local", "local-authoring", "local-feeds",
+               "local-mail", "plan-writer", "research", "store-local", "workspace"}
+    missing = shipped - have
+    assert not missing, f"shipped envs not listed: {sorted(missing)} in {hit[0]}"

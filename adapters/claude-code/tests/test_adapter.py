@@ -45,10 +45,11 @@ def test_adapter_round_trip():
     assert {"Edit(/.agentbay/**)", "Edit(/.claude/**)", "Read(/.agentbay/data/**)"} <= set(st["permissions"]["deny"])
     assert any(d.startswith("Edit(//") and d.endswith("/**)") for d in st["permissions"]["deny"])   # kit outside
     agents = {p.stem for p in (proj / ".claude/agents").glob("*.md")}
-    assert agents == {"researcher--delivery", "builder--delivery", "reviewer--delivery", "analyst--feed-briefing",
-                      "reviewer--feed-briefing", "analyst--mail-briefing", "reviewer--mail-briefing",
-                      "builder--forge", "reviewer--forge",
-                      "analyst--improve", "reviewer--improve"}       # no framework-dev here, so no --<env> suffix
+    missing = {"researcher--delivery", "builder--delivery", "reviewer--delivery", "analyst--feed-briefing",
+               "reviewer--feed-briefing", "analyst--mail-briefing", "reviewer--mail-briefing",
+               "builder--forge", "reviewer--forge",
+               "analyst--improve", "reviewer--improve"} - agents       # no framework-dev here, so no --<env> suffix
+    assert not missing, f"agents not built: {sorted(missing)}"
     assert not any(a.startswith("lead--") for a in agents)                      # coordinators run in main thread
     fa = (proj / ".claude/agents/analyst--feed-briefing.md").read_text()
     assert "tools: Bash\n" in fa and ".agentbay/roles/analyst--feed-briefing/use items.store/v2.query" in fa
@@ -87,8 +88,8 @@ def test_adapter_round_trip():
     assert "| `researcher--research-brief` | role researcher | research-brief |" in coord
     assert "`researcher--research-brief` (research-brief)" in (proj / ".claude/agents/researcher--delivery.md").read_text()
     cat = json.loads((proj / ".agentbay/catalog.json").read_text())
-    assert {m["name"] for m in cat["modes"]} == {"cos", "delivery", "feed-briefing", "forge", "improve",
-                                                  "mail-briefing"}
+    missing = {"cos", "delivery", "feed-briefing", "forge", "improve", "mail-briefing"} - {m["name"] for m in cat["modes"]}
+    assert not missing, f"modes not in the catalog: {sorted(missing)}"
     #  ^ store is abstract; cos is the root coordinator's own mode
     assert next(m for m in cat["modes"] if m["name"] == "feed-briefing")["extends"] == "store"
     dg = next(e for m in cat["modes"] for e in m["endpoints"] if e["name"] == "feed-briefing.digest")

@@ -115,7 +115,7 @@ def test_connector_scaffold_for_feed_source_declares_source_and_window():
     scaffold.create(k, "connector", "rss", implements="items.source/v1", intent="RSS feeds")
     spec = model.Kit(k).get("Connector", "rss").spec
     assert spec["source"] == "rss" and spec["window"] == "7d" and spec["selectors"]["since"] == "native"
-    scaffold.create(k, "connector", "store2", implements="items.store/v1", intent="Another store")
+    scaffold.create(k, "connector", "store2", implements="items.store/v2", intent="Another store")
     assert "source" not in model.Kit(k).get("Connector", "store2").spec
     assert lint.run(k) == []
 

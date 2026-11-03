@@ -263,9 +263,9 @@ def test_a_name_is_protected_wherever_it_sits_and_is_defined_once():
         cleanup(k)
     k = kit_copy()
     try:                                  # a name defined twice (an interface in both places) is an error, not a pick
-        src = k / "components/briefing/interfaces/items.store.v1.yaml"
-        (k / "components/improve/interfaces/items.store.v1.yaml").write_text(src.read_text())
-        assert any("Interface 'items.store/v1' is defined twice" in e for e in model.Kit(k).errors)
+        src = k / "components/briefing/interfaces/items.store.v2.yaml"
+        (k / "components/improve/interfaces/items.store.v2.yaml").write_text(src.read_text())
+        assert any("Interface 'items.store/v2' is defined twice" in e for e in model.Kit(k).errors)
     finally:
         cleanup(k)
 

@@ -27,7 +27,7 @@ def fake_cfg(**kw) -> dict:
 
 
 def store(p, sels=None, **settings):
-    return connect.instantiate(system(p), "local-mail", "corpus-store", "items.store/v1", p, clock=clock,
+    return connect.instantiate(system(p), "local-mail", "corpus-store", "items.store/v2", p, clock=clock,
                                caps={"maxItemsPerRun": 500},
                                settings={"mode": "mail-briefing", "lookback": "30d", "lookbackMax": "30d",
                                          "selectors": sels or SELS,
@@ -51,10 +51,10 @@ def test_mail_briefing_extends_briefing_and_places_roles_in_local_mail():
     assert "important" not in s.modes["feed-briefing"].config                  # mail-only setting, not shared
     dig = m.features["digest"]
     assert [st.id for st in dig.steps] == ["refresh", "gather", "digest", "review"]
-    assert dig.steps[1].run == "items.store/v1.threads" and dig.out_type == "Digest"
+    assert dig.steps[1].run == "items.store/v2.rows" and dig.out_type == "Digest"
     assert "needsReply" in dig.out_schema["properties"]                         # the mail Digest type
     u = s.units()["analyst--mail-briefing"]
-    assert u.env == "local-mail" and "items.store/v1.threads" in u.bay_uses
+    assert u.env == "local-mail" and "items.store/v2.rows" in u.bay_uses
     assert not [x for x in u.bay_uses if x.endswith((".sync", ".prune"))]       # read endpoints only
     assert {t for t in u.tools} & {"Write", "Edit"} == set()
     rules = {r.statement for r in dig.rules}
@@ -85,7 +85,7 @@ def test_offline_sync_digest_and_ask():
     assert r["status"] == "needs-agent" and r["next"]["step"] == "digest"
     plan = r["next"]
     assert plan["role"] == "analyst" and plan["env"] == "local-mail" and "analyst--mail-briefing" in plan["runAs"]
-    th = {t["threadId"]: t for t in plan["previous"]["gather"]["threads"]}
+    th = {t["threadId"]: t for t in plan["previous"]["gather"]["rows"]}
     assert th["t-pilot"]["needsReply"] and th["t-pilot"]["important"] and th["t-pilot"]["lastId"] == "fake-mail:m003"
     assert th["t-pilot"]["ids"] == ["fake-mail:m001", "fake-mail:m002", "fake-mail:m003"]
     assert not th["t-sol"]["important"] and th["t-sol"]["attachments"][0]["name"] == "report.pdf"
@@ -110,7 +110,7 @@ def test_offline_sync_digest_and_ask():
     r = d.call("mail-briefing.ask", {"question": "What did Dana ask for?"})
     assert r["status"] == "needs-agent" and r["next"]["step"] == "answer"
     assert r["next"]["previous"]["context"]["count"] == 6
-    out = d.use("analyst--mail-briefing", "items.store/v1.sql",
+    out = d.use("analyst--mail-briefing", "items.store/v2.sql",
                 {"sql": "SELECT id, sender, needsReply FROM v_threads t JOIN v_email e ON e.id = t.lastId "
                         "WHERE t.needsReply = 1 ORDER BY id"})
     assert [r_[0] for r_ in out["rows"]] == ["fake-mail:m003", "fake-mail:m004", "fake-mail:m006"]   # m005: bulk
@@ -126,10 +126,10 @@ def test_two_modes_on_separate_envs_keep_separate_stores_and_units():
     assert d.call("mail-briefing.sync", {})["status"] == "done"
     assert (p / ".agentbay/data/feeds/feed-briefing/corpus.db").exists() and db(p).exists()
     assert not (p / ".agentbay/data/feeds/mail-briefing").exists() and not (p / ".agentbay/data/mail/feed-briefing").exists()
-    feed = d.use("analyst--feed-briefing", "items.store/v1.sql", {"sql": "SELECT DISTINCT kind, source FROM v_items"})
-    mail = d.use("analyst--mail-briefing", "items.store/v1.sql", {"sql": "SELECT DISTINCT kind, source FROM v_items"})
+    feed = d.use("analyst--feed-briefing", "items.store/v2.sql", {"sql": "SELECT DISTINCT kind, source FROM v_items"})
+    mail = d.use("analyst--mail-briefing", "items.store/v2.sql", {"sql": "SELECT DISTINCT kind, source FROM v_items"})
     assert feed["rows"] == [["post", "fake"]] and mail["rows"] == [["email", "fake-mail"]]
-    fd = d.use("analyst--feed-briefing", "items.store/v1.describe", {})          # feed-briefing's describe: no mail
+    fd = d.use("analyst--feed-briefing", "items.store/v2.describe", {})          # feed-briefing's describe: no mail
     assert [v["name"] for v in fd["views"]] == ["v_items", "v_posts", "v_fts"]
     assert "attachments" not in fd["fts"] and "addr_key" not in fd["functions"]
     feed_env = s.kit.docs["Environment"]["local-feeds"].spec
@@ -143,7 +143,7 @@ def test_threads_endpoint_marks_important_senders_and_filters():
     p = project()
     st = store(p)
     st.sync()
-    t = st.threads(since="30d", important=["*@partner.example", "cfo@example.com"])["threads"]
+    t = st.rows("threads", since="30d", important=["*@partner.example", "cfo@example.com"])["rows"]
     assert [x["threadId"] for x in t] == ["t-board", "t-pilot", "t-news", "t-sol"]        # newest activity first
     imp = {x["threadId"]: x["important"] for x in t}
     assert imp == {"t-board": True, "t-pilot": True, "t-news": False, "t-sol": False}
@@ -151,8 +151,8 @@ def test_threads_endpoint_marks_important_senders_and_filters():
     assert pilot["messages"] == 3 and pilot["lastSender"] == "dana@partner.example" and pilot["lastFromMe"] is False
     assert set(pilot["participants"]) == {"dana@partner.example", "legal@partner.example", "me@example.com"}
     assert pilot["matched"] == ["inbox", "sent"] and pilot["attachments"][0]["textChars"] > 0
-    assert [x["threadId"] for x in st.threads(since="8h")["threads"]] == ["t-board", "t-pilot"]
-    assert [x["threadId"] for x in st.threads(since="30d", selector="sent")["threads"]] == ["t-pilot"]
+    assert [x["threadId"] for x in st.rows("threads", since="8h")["rows"]] == ["t-board", "t-pilot"]
+    assert [x["threadId"] for x in st.rows("threads", since="30d", selector="sent")["rows"]] == ["t-pilot"]
 
 
 def test_exact_labels_replace_the_stored_set_and_can_end_the_scope():
@@ -231,7 +231,7 @@ def test_a_blocked_source_keeps_cursors_and_reads_and_digest_and_ask_go_on_parti
     r = d.call("mail-briefing.digest", {"since": "7d"})                         # stale: the refresh runs, is blocked
     assert r["status"] == "needs-agent" and r["next"]["step"] == "digest"      # ... and the digest reads what is stored
     gather = r["next"]["previous"]["gather"]
-    assert len(gather["threads"]) == 4 and "bay auth gmail" in gather["coverage"]["note"]
+    assert len(gather["rows"]) == 4 and "bay auth gmail" in gather["coverage"]["note"]
     assert gather["coverage"]["complete"] is False
     digest = {"period": {"from": "2026-10-20T12:00:00Z", "to": "2026-10-27T12:00:00Z"}, "needsReply": [], "asks": [],
               "groups": [], "attachments": [], "coverage": gather["coverage"],
@@ -277,7 +277,7 @@ def test_a_store_of_another_schema_version_is_refused_not_converted():
         con.commit()
         con.close()
         st = store(p)
-        for call in (st.query, st.describe, lambda: st.threads(since="30d"), st.sync):
+        for call in (st.query, st.describe, lambda: st.rows("threads", since="30d"), st.sync):
             try:
                 call()
                 raise AssertionError("expected a refusal")
@@ -328,10 +328,10 @@ def test_threads_needs_a_view_from_the_mode_and_a_mode_view_reads_only_views_of_
     st = store(p, modeDirs=[str(KIT / "components" / "briefing")])             # a mode with no views of its own
     st.sync()
     try:
-        st.threads(since="30d")
+        st.rows("threads", since="30d")
         raise AssertionError("expected a refusal")
     except connect.ConnectorError as e:
-        assert "defines no rows for `threads`" in str(e) and "views.yaml" in str(e)
+        assert "defines no rows named `threads`" in str(e) and "views.yaml" in str(e)
     assert st.sql("SELECT count(*) FROM v_email")["rows"][0][0] > 0
     assert "v_threads" in st.sql("SELECT count(*) FROM v_threads")["error"]
     ok = _mode_dir("CREATE VIEW v_x AS SELECT id FROM v_email;", ["id"])

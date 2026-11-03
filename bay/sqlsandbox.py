@@ -1,4 +1,4 @@
-"""Read-only SQL over a corpus store (items.store/v1.sql), sandboxed for agents.
+"""Read-only SQL over a corpus store (items.store/v2.sql), sandboxed for agents.
 
 Scope is structural, not filtered here: the store file holds exactly the mode's scope (items of the sources
 bound to the mode's env that match at least one current selector; corpus-store deletes everything else on
@@ -347,7 +347,7 @@ class Sandbox:
         msg = str(e) or type(e).__name__
         low = msg.lower()
         if self.denied:
-            return f"query refused: {self.denied[0]}. Run items.store/v1.describe for the views and columns."
+            return f"query refused: {self.denied[0]}. Run items.store/v2.describe for the views and columns."
         if "not authorized" in low or "prohibited" in low:
             return f"query refused ({msg}); only read-only SELECTs over {self._only()} are allowed"
         if "out of memory" in low or isinstance(e, MemoryError):
@@ -366,7 +366,7 @@ class Sandbox:
             return "the store is read-only here: use SELECT only"
         if "no such table" in low:
             return f"{msg}; you can query {self._only()}"
-        return f"SQL error: {msg}. Run items.store/v1.describe for column names."
+        return f"SQL error: {msg}. Run items.store/v2.describe for column names."
 
 
 def _bare(sql: str) -> str:

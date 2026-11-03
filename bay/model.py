@@ -466,7 +466,7 @@ class ResolvedRole:
     inference: Inference             # the role's default tier and effort on the profile
     tools: list[str]
     clis: list[str]
-    bay_uses: list[str]              # "items.store/v1.sql": dispatcher-mediated reads
+    bay_uses: list[str]              # "items.store/v2.sql": dispatcher-mediated reads
     skills: dict[str, Path]          # skill name in the runtime (`<mode>--<skill>`, `<role>--<skill>`) -> folder
     isolation: str
     budget: dict
@@ -478,7 +478,7 @@ class ResolvedRole:
 class Step:
     id: str
     kind: str                         # "code" | "role" | "review" | "gate"
-    run: str | None = None            # "items.store/v1.sync"
+    run: str | None = None            # "items.store/v2.sync"
     role: str | None = None
     agent: str | None = None
     env: str | None = None
@@ -1272,7 +1272,7 @@ def _check_uses_and_skills(md: Doc, feat: Feature, where: str, gaps: list[str]) 
 
 
 SOURCE_IFACE = "items.source/v1"
-STORE_IFACE = "items.store/v1"
+STORE_IFACE = "items.store/v2"
 
 
 def _check_selectors(kit: Kit, md: Doc, mcfg: dict, gaps: list[str], warnings: list[str]) -> None:

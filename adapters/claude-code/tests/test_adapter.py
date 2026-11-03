@@ -51,7 +51,7 @@ def test_adapter_round_trip():
                       "analyst--improve", "reviewer--improve"}       # no framework-dev here, so no --<env> suffix
     assert not any(a.startswith("lead--") for a in agents)                      # coordinators run in main thread
     fa = (proj / ".claude/agents/analyst--feed-briefing.md").read_text()
-    assert "tools: Bash\n" in fa and ".agentbay/roles/analyst--feed-briefing/use items.store/v1.query" in fa
+    assert "tools: Bash\n" in fa and ".agentbay/roles/analyst--feed-briefing/use items.store/v2.query" in fa
     assert "Result/v1" in fa and "--role" not in fa and "mode `feed-briefing`, env `local-feeds`" in fa
     assert "corpus-sql" in fa                                                   # the mode's skills
     rv = (proj / ".claude/agents/reviewer--delivery.md").read_text()

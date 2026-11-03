@@ -6,11 +6,11 @@ Brief me on my email for a period, by thread: what needs my reply, the deadlines
 ## Inputs
 - `since` / `until` (optional): ISO-8601 or relative (`7d`). Default: config `lookback`.
 - `selector` (optional): one selector id. `focus` (optional): a topic to emphasize.
-- From previous steps: `gather.threads` (threads with activity in the period: subject, participants, first and last date, message count, `lastSender`, `lastFromMe`, `lastToMe`, `needsReply`, `important`, `matched`, `ids`, `lastText`, `attachments`) and `gather.coverage`.
+- From previous steps: `gather.rows` (threads with activity in the period: subject, participants, first and last date, message count, `lastSender`, `lastFromMe`, `lastToMe`, `needsReply`, `important`, `matched`, `ids`, `lastText`, `attachments`) and `gather.coverage`.
 
 ## Steps
 1. `refresh`: the dispatcher syncs the store if it is older than 2h, the selectors changed or the source was blocked. When the source is blocked (an expired login) the call goes on with the stored mail and ends `partial`; the coverage note names the `bay auth <connector>` command to run. With nothing stored yet the call ends `blocked`.
-2. `gather`: the dispatcher reads the rows of this mode's `v_threads` active in the period (`items.store/v1.threads`, as `views.yaml` of the mode defines them), marking those with a sender on the `important` list.
+2. `gather`: the dispatcher reads the rows of this mode's `v_threads` active in the period (`items.store/v2.rows` with `name: threads`, as `views.yaml` of the mode defines them), marking those with a sender on the `important` list.
 3. `digest`: the analyst follows the digest skill: reads the threads, opens the messages it relies on with `get`/`thread` (and attachment text through `v_attachments`), and returns the Digest.
 4. `review`: the reviewer checks the digest against this Definition of Done and the rules.
 

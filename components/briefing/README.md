@@ -4,7 +4,7 @@ The base of every source briefing. It is never installed or called itself: a mod
 gets its features and overrides what differs (purpose, constraints, `configDefaults`, types, playbooks,
 rules, review, roles and their envs).
 
-**Contract:** needs `items.store/v1` and `items.source/v1` (bound in the env). Features:
+**Contract:** needs `items.store/v2` and `items.source/v1` (bound in the env). Features:
 
 | feature | does |
 |---|---|
@@ -18,7 +18,7 @@ rules, review, roles and their envs).
 only adds settings; it changes a default through `configDefaults`. Each child ships its own
 `config.example.yaml`.
 
-The endpoints of `items.source/v1` and `items.store/v1` are documented in their interface files in `interfaces/`.
+The endpoints of `items.source/v1` and `items.store/v2` are documented in their interface files in `interfaces/`.
 The rest of this page describes what those files do not: the item envelope, content types, selectors, the
 store layout and the SQL sandbox.
 
@@ -90,7 +90,7 @@ the window start when every selector of the query has its own `since`.
 
 ## Read-only SQL
 
-Agents query the store with `items.store/v1.sql`. The sandbox in `bay/sqlsandbox.py` works as follows.
+Agents query the store with `items.store/v2.sql`. The sandbox in `bay/sqlsandbox.py` works as follows.
 
 - The queries run over temporary views: `v_items`, the views of the store's content types (`views.sql`, with
   columns documented by `describe` from `content-type.yaml`), `v_fts`, and the full-text views of the types. A

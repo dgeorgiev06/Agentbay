@@ -6,7 +6,7 @@ metadata:
 spec:
   bind:
     items.source/v1: [x-api]          # add a source = add a connector here
-    items.store/v1: corpus-store
+    items.store/v2: corpus-store
     workspace.read/v1: { tools: [Read, Glob, Grep] }
   secrets: { provider: keychain, allow: [X_CLIENT_ID, X_CLIENT_SECRET, X_REFRESH_TOKEN] }
   network: { allow: [api.x.com] }

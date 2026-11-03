@@ -134,7 +134,7 @@ def dispatcher_skip() -> list:
                 got = f"{type(e).__name__}: {e}"
             out.append({"when": when, "input": inp, "steps": steps, "skipped": got})
         for when, status in STALE_ROWS:
-            step = model.Step(id="b", kind="code", run="items.store/v1.sync", when=when)
+            step = model.Step(id="b", kind="code", run="items.store/v2.sync", when=when)
             d._invoke = lambda *a, _s=status, **kw: _s
             d._settings = lambda mode: {}
             try:

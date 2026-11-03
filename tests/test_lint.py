@@ -218,7 +218,7 @@ def test_role_env_errors_name_mode_feature_and_step():
     # a step override naming another role, `roles:` on a code step, a feature override of a role not in the mode
     k = kit_copy()
     sub(k, base, "{ id: answer, role: analyst,", "{ id: answer, role: analyst, roles: { reviewer: workspace },")
-    sub(k, base, "{ id: prune, run: items.store/v1.prune,", "{ id: prune, roles: { lead: workspace }, run: items.store/v1.prune,")
+    sub(k, base, "{ id: prune, run: items.store/v2.prune,", "{ id: prune, roles: { lead: workspace }, run: items.store/v2.prune,")
     edit_yaml(k / "components/briefing/mode.yaml", lambda d: d["spec"]["features"]["ask"].update({"roles": {"builder": "workspace"}}))
     has(k, "briefing.ask step answer: `roles:` names reviewer, but this step runs role analyst")
     has(k, "briefing.prune step prune: `roles:` applies to role and review steps only")
@@ -327,8 +327,8 @@ def test_a_protected_name_is_reserved_and_defined_once():
 
 def test_modes_must_not_name_connectors_or_tools():
     k = kit_copy()
-    sub(k, "components/briefing/mode.yaml", "needs: [items.store/v1, items.source/v1]",
-        "needs: [items.store/v1, items.source/v1]   # ok comment mentions x-api\n  # x-api in comment is fine")
+    sub(k, "components/briefing/mode.yaml", "needs: [items.store/v2, items.source/v1]",
+        "needs: [items.store/v2, items.source/v1]   # ok comment mentions x-api\n  # x-api in comment is fine")
     assert problems(k) == []
     k = kit_copy()
     sub(k, "components/briefing/mode.yaml", "with: { olderThan:", "with: { source: x-api, olderThan:")
@@ -399,7 +399,7 @@ def test_schedule_is_a_warning_not_an_error():
 
 def test_run_steps_use_versioned_capability_spelling():
     k = kit_copy()
-    sub(k, "components/briefing/mode.yaml", "run: items.store/v1.prune", "run: feed.store.prune")
+    sub(k, "components/briefing/mode.yaml", "run: items.store/v2.prune", "run: feed.store.prune")
     has(k, "components/briefing/mode.yaml", "does not match")
 
 

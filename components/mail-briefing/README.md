@@ -14,7 +14,7 @@ expired, naming the `bay auth <connector>` command to run; a digest or question 
 mail and ends `partial`.
 
 **Views:** `views.sql` defines `v_threads` (one row per thread, with `needsReply`) over the email content type's
-`v_email`; `views.yaml` documents its columns and tells `items.store/v1.threads` how to read it (window, selector,
+`v_email`; `views.yaml` documents its columns and tells `items.store/v2.rows` how to read it (window, selector,
 the sender column `important` is matched against, and the per-row details).
 
 **Settings:** briefing's plus `important` (senders whose threads are weighed first), in

@@ -12,5 +12,5 @@ Agent tool with `subagent_type` and `model` from the plan and paste the plan's
 task, playbook, rules and inputs into a TaskEnvelope. Submit the subagent's JSON
 with the plan's `submit` command. Repeat until the call is `done`, `partial` or
 `blocked`. Deliver the output with clickable citations (for a cited item id, look up
-its url with your use shim: `items.store/v1.get '{"ids": [...]}'`), and always repeat
+its url with your use shim: `items.store/v2.get '{"ids": [...]}'`), and always repeat
 the coverage note and any budget stop in plain words.

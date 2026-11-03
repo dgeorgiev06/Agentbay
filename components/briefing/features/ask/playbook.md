@@ -6,11 +6,11 @@ Answer a question using only stored items, found with read-only SQL, with citati
 ## Inputs
 - `question` (required).
 - `since` (optional, default config `lookback`), `author` (optional), `selector` (optional): scope hints.
-- From previous steps: `context` (`items.store/v1.status`: count, per-selector counts, coverage for the window, engine).
+- From previous steps: `context` (`items.store/v2.status`: count, per-selector counts, coverage for the window, engine).
 
 ## Steps
 1. `refresh`: the dispatcher syncs the store if it is older than 2h or the selectors changed.
-2. `context`: the dispatcher reads the store status for the window (`items.store/v1.status`).
+2. `context`: the dispatcher reads the store status for the window (`items.store/v2.status`).
 3. `answer`: the analyst follows the corpus-sql skill: `describe`, then narrow with `sql` (or `search`/`facets`), then read full content of the few relevant items with `get`/`thread`, and answers citing item ids.
 
 ## Definition of Done

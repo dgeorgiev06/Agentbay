@@ -6,11 +6,11 @@ Answer a question about my email using only stored messages and attachment text,
 ## Inputs
 - `question` (required).
 - `since` (optional, default config `lookback`), `author` (optional, a sender address or domain), `selector` (optional): scope hints.
-- From previous steps: `context` (`items.store/v1.status`: count, per-selector counts, coverage for the window, engine, and `blocked` when the login expired).
+- From previous steps: `context` (`items.store/v2.status`: count, per-selector counts, coverage for the window, engine, and `blocked` when the login expired).
 
 ## Steps
 1. `refresh`: the dispatcher syncs the store if it is older than 2h, the selectors changed or the source was blocked. A blocked source (an expired login) does not stop the call when mail is stored: it goes on and ends `partial`, with the gap in `context.coverage`.
-2. `context`: the dispatcher reads the store status for the window (`items.store/v1.status`).
+2. `context`: the dispatcher reads the store status for the window (`items.store/v2.status`).
 3. `answer`: the analyst follows the corpus-sql skill: `describe`, then narrows with `sql` over `v_email`, `v_attachments` and this mode's `v_threads` (or `v_fts` / `v_attachment_fts`), reads the few relevant messages in full with `get`/`thread`, and answers citing message ids.
 
 ## Definition of Done

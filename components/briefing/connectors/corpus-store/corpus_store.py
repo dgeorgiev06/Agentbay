@@ -1,4 +1,4 @@
-"""corpus-store: items.store/v1 on one SQLite file per mode (stdlib sqlite3), plus its state file.
+"""corpus-store: items.store/v2 on one SQLite file per mode (stdlib sqlite3), plus its state file.
 
 Files, in <env write path>/<mode>/ (e.g. .agentbay/data/feeds/feed-briefing/), one pair per mode so two
 briefing modes on one env never share items or tags. Both are created 0600 (SQLite gives -wal and -shm the
@@ -1172,20 +1172,20 @@ class CorpusStore:
         return sbx.clean({"views": views, "fts": fts, "functions": sorted(sbx.FUNCTIONS), "limits": limits,
                           "coverage": self.coverage(state)})
 
-    def threads(self, since=None, until=None, selector=None, important=None, limit=100) -> dict:
-        """The rows of the view the mode's views.yaml names under `threads`, active in the window, in that order,
+    def rows(self, name, since=None, until=None, selector=None, important=None, limit=100) -> dict:
+        """The rows of the view the mode's views.yaml names under `rows.<name>`, active in the window, in that order,
         each with the details the mode asks for and `important` (a value of the mode's sender column matches one
-        of the patterns). A mode without such a view gets an error that names the fix."""
+        of the patterns). A mode without such a name gets an error that names the fix."""
         mode = self._mode()
-        th = mode.threads if mode else None
+        th = (mode.rows or {}).get(name) if mode else None
         if th is None:
-            raise StoreError(f"mode {self.ctx.settings.get('mode')} defines no rows for `threads`: give the mode "
-                             f"views.sql and views.yaml (a view, and a `threads:` block naming it and its window, "
-                             f"selector and sender columns)")
+            raise StoreError(f"mode {self.ctx.settings.get('mode')} defines no rows named `{name}`: give the mode "
+                             f"views.sql and views.yaml (a view, and a `rows: {{ {name}: ... }}` block naming it and "
+                             f"its window, selector and sender columns)")
         now = self.ctx.now()
         lo = parse_time(since, now) if since else None
         if not self.path.exists():
-            return {"threads": [], "coverage": self.coverage(load_state(self.state_path), lo)}
+            return {"rows": [], "coverage": self.coverage(load_state(self.state_path), lo)}
         where, args = [], []
         if since:
             where.append(f"t.{th['window']} >= ?")
@@ -1216,7 +1216,7 @@ class CorpusStore:
                 out.append(t)
         finally:
             con.close()
-        return sbx.clean({"threads": out, "coverage": self.coverage(state, lo)})
+        return sbx.clean({"rows": out, "coverage": self.coverage(state, lo)})
 
     def sql(self, sql, limit=None) -> dict:
         try:

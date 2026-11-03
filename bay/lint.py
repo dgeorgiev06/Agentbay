@@ -586,7 +586,7 @@ def warnings(kit: model.Kit) -> list[str]:
                 out.append(f"{_where(*_ep_key_where(md, ep_name, 'schedule'))}: {target} declares "
                            f"schedule '{ep['schedule']}' but no runtime acts on it; {how}")
     out += split_store_warnings(kit)
-    stores = [c.name for c in kit.docs["Connector"].values() if "items.store/v1" in (
+    stores = [c.name for c in kit.docs["Connector"].values() if "items.store/v2" in (
         [c.spec["implements"]] if isinstance(c.spec["implements"], str) else c.spec["implements"])]
     if stores:
         from .sqlsandbox import fts5_available

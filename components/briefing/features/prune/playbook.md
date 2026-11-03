@@ -7,7 +7,7 @@ Keep the store within retention, honor deletions made at the source, and drop it
 - `olderThan` (optional, e.g. `30d`). Default: config `retention`, else the mode's `lookbackMax`.
 
 ## Steps
-1. `prune`: the dispatcher runs `items.store/v1.prune` (code step, no agent).
+1. `prune`: the dispatcher runs `items.store/v2.prune` (code step, no agent).
 2. The store re-tags items if the selectors changed, then removes items older than the cutoff, every item whose id is on the deleted list, and items matching no selector.
 3. `review`: the reviewer checks the result (`removed`, `remaining`, `deleted`, `unmatched`, `cutoff`) against this Definition of Done and the rules before the call completes.
 

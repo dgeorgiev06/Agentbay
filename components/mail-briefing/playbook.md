@@ -13,7 +13,7 @@ Agent tool with `subagent_type` and `model` from the plan and paste the plan's
 task, playbook, rules and inputs into a TaskEnvelope. Submit the subagent's JSON
 with the plan's `submit` command. Repeat until the call is `done`, `partial` or
 `blocked`. Deliver the output with the sender and date of every entry and its message
-ids (look up a message's url with your use shim: `items.store/v1.get '{"ids": [...]}'`),
+ids (look up a message's url with your use shim: `items.store/v2.get '{"ids": [...]}'`),
 and always repeat the coverage note in plain words.
 
 When the source's login expired, `sync` ends `blocked` and a digest or ask ends `partial` on the stored mail; both

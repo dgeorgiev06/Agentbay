@@ -47,7 +47,7 @@ def test_child_overrides_review_steps_roles_and_inherits_the_rest():
     k = kit_copy()
     edit_yaml(k / "components/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("features", {}).update(
         {"ask": whole_feature(k, "ask", review={"role": "reviewer", "when": "always", "tier": "balanced"}),
-         "prune": whole_feature(k, "prune", steps=[{"id": "trim", "run": "items.store/v1.prune",
+         "prune": whole_feature(k, "prune", steps=[{"id": "trim", "run": "items.store/v2.prune",
                                                     "with": {"olderThan": "7d"}}])}))
     s = model.resolve(model.Kit(k))
     ask = s.modes["feed-briefing"].features["ask"]
@@ -58,7 +58,7 @@ def test_child_overrides_review_steps_roles_and_inherits_the_rest():
     # a second child of the same base keeps the base behaviour
     (k / "components/briefing/envs/local-news.yaml").write_text(
         "apiVersion: agentbay/v4\nkind: Environment\nmetadata: { name: local-news, description: Another briefing env. }\n"
-        "spec:\n  bind:\n    items.source/v1: [fake]\n    items.store/v1: corpus-store\n  network: { allow: [] }\n"
+        "spec:\n  bind:\n    items.source/v1: [fake]\n    items.store/v2: corpus-store\n  network: { allow: [] }\n"
         "  fs: { read: [\".\"], write: [\".agentbay/data/news\"] }\n  effects: [read, write, network, spend, delete]\n")
     child(k, spec={"purpose": "Mail.", "roles": {"analyst": "local-news", "researcher": "research"}})
     s = model.resolve(model.Kit(k))
@@ -89,13 +89,13 @@ def test_child_can_add_its_own_feature_and_type():
     k = kit_copy()
     d = child(k, spec={"purpose": "Mail.", "features": {"triage": {
         "in": "TriageReq", "effects": ["read"], "playbook": "features/triage/playbook.md",
-        "rules": "features/triage/rules.yaml", "review": {"role": "reviewer", "when": "always"}, "uses": [], "steps": [{"id": "look", "run": "items.store/v1.query"}]}}})
+        "rules": "features/triage/rules.yaml", "review": {"role": "reviewer", "when": "always"}, "uses": [], "steps": [{"id": "look", "run": "items.store/v2.query"}]}}})
     (d / "types").mkdir()
     (d / "types/TriageReq.schema.json").write_text('{"type": "object"}')
     (d / "features/triage").mkdir(parents=True)
     pb = (k / "components/briefing/features/prune/playbook.md").read_text().replace("briefing.prune", "news-briefing.triage")
-    (d / "features/triage/playbook.md").write_text(pb.replace("`prune`: the dispatcher runs `items.store/v1.prune`",
-                                                              "`look`: the dispatcher runs `items.store/v1.query`"))
+    (d / "features/triage/playbook.md").write_text(pb.replace("`prune`: the dispatcher runs `items.store/v2.prune`",
+                                                              "`look`: the dispatcher runs `items.store/v2.query`"))
     (d / "features/triage/rules.yaml").write_text((k / "components/briefing/features/prune/rules.yaml").read_text())
     s = model.resolve(model.Kit(k))
     assert set(s.modes["news-briefing"].features) == {"sync", "digest", "ask", "prune", "triage"}
@@ -163,7 +163,7 @@ def test_lint_lines_of_inherited_parts_point_at_the_parent_mode_yaml():
     k = kit_copy()
     edit_yaml(k / "components/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("features", {}).update(
         {"prune": whole_feature(k, "prune", steps=[{"id": "trim", "roles": {"lead": "workspace"},
-                                                    "run": "items.store/v1.prune"}])}))
+                                                    "run": "items.store/v2.prune"}])}))
     step = line_of(k / "components/feed-briefing/mode.yaml", "      - id: trim")
     ps = problems(k)
     assert any(f"components/feed-briefing/mode.yaml:{step}: feed-briefing.prune step trim: `roles:` applies to role and "

@@ -13,8 +13,8 @@ def test_shipped_kit_resolves():
     review = d.steps[-1]
     assert review.role == "reviewer" and review.inference.model == "opus" and review.inference.effort == "high"
     units = s.units()
-    assert units["analyst--feed-briefing"].bay_uses == [f"items.store/v1.{e}" for e in (
-        "describe", "sql", "get", "thread", "threads", "facets", "search", "query", "status")]
+    assert units["analyst--feed-briefing"].bay_uses == [f"items.store/v2.{e}" for e in (
+        "describe", "sql", "get", "thread", "rows", "facets", "search", "query", "status")]
     assert "briefing" not in s.modes and s.modes["feed-briefing"].extends == "briefing"    # abstract base
     assert "Edit" not in units["reviewer--feed-briefing"].tools
     assert s.agent == "claude-code" and set(model.Kit(KIT).profiles()) == {"claude-code"}   # one profile
@@ -83,9 +83,9 @@ def test_env_tier_cap_names_mode_feature_step_role_env_and_tier():
 
 def test_unbound_capability():
     k = kit_copy()
-    edit_yaml(k / "components/briefing/envs/local-feeds.yaml", lambda d: d["spec"]["bind"].pop("items.store/v1"))
-    g = assert_gap(k, "feed-briefing.sync step fetch", "items.store/v1 is not bound in env local-feeds", "unbound capability")
-    assert "add `items.store/v1: <connector>`" in g
+    edit_yaml(k / "components/briefing/envs/local-feeds.yaml", lambda d: d["spec"]["bind"].pop("items.store/v2"))
+    g = assert_gap(k, "feed-briefing.sync step fetch", "items.store/v2 is not bound in env local-feeds", "unbound capability")
+    assert "add `items.store/v2: <connector>`" in g
     # (the analyst then simply has no store grant in that env: test_roles)
     k = kit_copy()
     edit_yaml(k / "components/briefing/connectors/corpus-store/connector.yaml",
@@ -141,7 +141,7 @@ def test_unknown_connector_and_wrong_interface():
     assert_gap(k, "binds items.source/v1 to unknown connector 'bsky'")
     k = kit_copy()
     edit_yaml(k / "components/briefing/envs/local-feeds.yaml", lambda d: d["spec"]["bind"].update({"items.source/v1": ["corpus-store"]}))
-    assert_gap(k, "connector corpus-store is bound to items.source/v1 but implements items.store/v1")
+    assert_gap(k, "connector corpus-store is bound to items.source/v1 but implements items.store/v2")
 
 
 def test_coordinator_must_run_in_main_thread():
@@ -210,7 +210,7 @@ def test_offline_switch_rebinds_the_source_and_closes_network_and_secrets():
     assert real["bind"]["items.source/v1"] == ["x-api"] and real["network"]["allow"] == ["api.x.com"]
     k = model.Kit(KIT, project())
     off = k.get("Environment", "local-feeds").spec
-    assert off["bind"]["items.source/v1"] == ["fake"] and off["bind"]["items.store/v1"] == "corpus-store"
+    assert off["bind"]["items.source/v1"] == ["fake"] and off["bind"]["items.store/v2"] == "corpus-store"
     assert off["network"] == {"allow": []} and off["secrets"]["allow"] == []
     assert k.get("Environment", "local-mail").spec["bind"]["items.source/v1"] == ["fake-mail"]
     assert k.get("Environment", "workspace").spec == model.Kit(KIT, project(source="x-api")).get(

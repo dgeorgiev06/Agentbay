@@ -18,7 +18,7 @@ metadata: { name: local-news, description: A second offline briefing env with it
 spec:
   bind:
     items.source/v1: [fake]
-    items.store/v1: corpus-store
+    items.store/v2: corpus-store
   network: { allow: [] }
   fs: { read: ["."], write: [".agentbay/data/news"] }
   effects: [read, write, network, spend, delete]
@@ -55,8 +55,8 @@ def test_access_comes_from_the_mode_needs_through_the_env():
     s = system(project())
     u = s.units()
     feed, imp = u["analyst--feed-briefing"], u["analyst--improve"]
-    assert feed.bay_uses == [f"items.store/v1.{e}" for e in
-                             ("describe", "sql", "get", "thread", "threads", "facets", "search", "query", "status")]
+    assert feed.bay_uses == [f"items.store/v2.{e}" for e in
+                             ("describe", "sql", "get", "thread", "rows", "facets", "search", "query", "status")]
     assert {x.rsplit(".", 1)[0] for x in imp.bay_uses} == {"improve.findings/v1", "session.events/v1",
                                                             "review.verdicts/v1", "artifacts.read/v1"}
     assert "improve.findings/v1.upsert" not in imp.bay_uses and "improve.findings/v1.verify" not in imp.bay_uses
@@ -67,12 +67,12 @@ def test_access_comes_from_the_mode_needs_through_the_env():
     p = project()
     d = dispatch.Dispatcher(system(p), p, clock=clock)
     call(d, "feed-briefing.sync")
-    assert d.use("analyst--feed-briefing", "items.store/v1.query", {})["items"]
+    assert d.use("analyst--feed-briefing", "items.store/v2.query", {})["items"]
     for unit, target in (("analyst--feed-briefing", "improve.findings/v1.query"),
                          ("analyst--feed-briefing", "session.events/v1.episodes"),
-                         ("analyst--feed-briefing", "items.store/v1.sync"),
-                         ("analyst--feed-briefing", "items.store/v1.prune"),
-                         ("analyst--improve", "items.store/v1.query"),
+                         ("analyst--feed-briefing", "items.store/v2.sync"),
+                         ("analyst--feed-briefing", "items.store/v2.prune"),
+                         ("analyst--improve", "items.store/v2.query"),
                          ("analyst--improve", "improve.findings/v1.upsert"),
                          ("analyst--improve", "improve.detect/v1.artifacts")):
         try:
@@ -101,9 +101,9 @@ def test_one_reader_role_in_two_modes_and_envs_compiles_separately_with_separate
     from bay.guard import Guard
     g = Guard(json.loads((p / ".agentbay/guard.json").read_text()), p, ci=False)
     payload = {"agent_type": "analyst--feed-briefing", "agent_id": "a1", "tool_name": "Bash", "cwd": str(p),
-               "tool_input": {"command": ".agentbay/roles/analyst--news-briefing/use items.store/v1.query '{}'"}}
+               "tool_input": {"command": ".agentbay/roles/analyst--news-briefing/use items.store/v2.query '{}'"}}
     assert g.decide(payload)[0] == "deny"
-    payload["tool_input"]["command"] = ".agentbay/roles/analyst--feed-briefing/use items.store/v1.query '{}'"
+    payload["tool_input"]["command"] = ".agentbay/roles/analyst--feed-briefing/use items.store/v2.query '{}'"
     assert g.decide(payload)[0] == "allow"
     # separate stores: each mode syncs into its env's data folder and each shim reads only its own
     d = dispatch.Dispatcher(s, p, clock=clock)
@@ -111,13 +111,13 @@ def test_one_reader_role_in_two_modes_and_envs_compiles_separately_with_separate
     assert (p / ".agentbay/data/feeds/feed-briefing/corpus.db").exists()
     assert (p / ".agentbay/data/news/news-briefing/corpus.db").exists()
     assert not (p / ".agentbay/data/news/feed-briefing").exists() and not (p / ".agentbay/data/feeds/news-briefing").exists()
-    feed = {x["author"]["handle"] for x in d.use("analyst--feed-briefing", "items.store/v1.query", {})["items"]}
-    news = {x["author"]["handle"] for x in d.use("analyst--news-briefing", "items.store/v1.query", {})["items"]}
+    feed = {x["author"]["handle"] for x in d.use("analyst--feed-briefing", "items.store/v2.query", {})["items"]}
+    news = {x["author"]["handle"] for x in d.use("analyst--news-briefing", "items.store/v2.query", {})["items"]}
     assert news == {"lido"} and len(feed) > 1
-    news_sql = d.use("analyst--news-briefing", "items.store/v1.sql", {"sql": "SELECT count(*) AS n FROM v_items"})
+    news_sql = d.use("analyst--news-briefing", "items.store/v2.sql", {"sql": "SELECT count(*) AS n FROM v_items"})
     assert json.dumps(news_sql).count("lido") == 0 and news_sql["rows"][0][0] == 1, news_sql
     for unit, mode in (("analyst--feed-briefing", "feed-briefing"), ("analyst--news-briefing", "news-briefing")):
-        r = subprocess.run([str(p / f".agentbay/roles/{unit}/use"), "items.store/v1.status", "{}"], cwd=p,
+        r = subprocess.run([str(p / f".agentbay/roles/{unit}/use"), "items.store/v2.status", "{}"], cwd=p,
                            capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
     reads = [json.loads(x) for x in (p / ".agentbay/ledger/events.jsonl").read_text().splitlines() if '"data.read"' in x]
@@ -149,9 +149,9 @@ def test_a_step_override_runs_one_role_in_two_envs_within_one_mode():
     call(d, "feed-briefing.sync")
     # each unit reads the store of its own env: nothing was synced in local-news, so that unit finds an empty
     # store (and is told to sync), never the other env's items
-    feed = d.use("analyst--feed-briefing--local-feeds", "items.store/v1.query", {})["items"]
+    feed = d.use("analyst--feed-briefing--local-feeds", "items.store/v2.query", {})["items"]
     assert feed
-    news = d.use("analyst--feed-briefing--local-news", "items.store/v1.query", {})
+    news = d.use("analyst--feed-briefing--local-news", "items.store/v2.query", {})
     assert news["items"] == [] and "run the mode's sync" in news["coverage"]["note"]
     assert not (p / ".agentbay/data/news/feed-briefing/corpus.db").exists()
 

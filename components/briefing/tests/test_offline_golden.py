@@ -25,7 +25,7 @@ def project(cfg: dict | None = None):
 
 
 def sql(d, unit, q):
-    return d.use(unit, "items.store/v1.sql", {"sql": q, "limit": 50})
+    return d.use(unit, "items.store/v2.sql", {"sql": q, "limit": 50})
 
 
 def collect(mode: str, unit: str, cfg: dict, reads: dict) -> dict:
@@ -34,8 +34,8 @@ def collect(mode: str, unit: str, cfg: dict, reads: dict) -> dict:
     r = d.call(f"{mode}.sync", {})
     assert r["status"] == "done", r
     out = {"sync": r["output"],
-           "describe": d.use(unit, "items.store/v1.describe", {}),
-           "status": d.use(unit, "items.store/v1.status", {})}
+           "describe": d.use(unit, "items.store/v2.describe", {}),
+           "status": d.use(unit, "items.store/v2.status", {})}
     out["sql"] = {name: sql(d, unit, q) for name, q in reads["sql"].items()}
     for name, (endpoint, args) in reads.get("use", {}).items():
         out[name] = d.use(unit, endpoint, args)
@@ -73,8 +73,8 @@ def generic_names(got: dict) -> None:
 
 
 def mail_deltas(want: dict, got: dict) -> None:
-    """The three documented changes of mail-briefing's describe (proposal 0008, item 3, decision (a)); the golden
-    file stays as it was and everything else must match it exactly."""
+    """The three documented changes of mail-briefing's describe (proposal 0008, item 3, decision (a)) and the key of
+    its `rows` read (proposal 0016); the golden file stays as it was and everything else must match it exactly."""
     want, got = json.loads(json.dumps(want)), json.loads(json.dumps(got))
     # 1. no v_posts: the store holds the content types the mode reads, and v_posts had no rows here
     assert want["sql"]["v_posts"]["rows"] == [[0]]
@@ -90,6 +90,9 @@ def mail_deltas(want: dict, got: dict) -> None:
     # 2. no addr_key function: fromMe, toMe and bulk are stored
     assert "addr_key" in want["describe"]["functions"]
     want["describe"]["functions"].remove("addr_key")
+    # 4. the list of the `threads` read is called `rows`
+    assert want["threads"]["threads"] == got["threads"]["rows"]
+    del want["threads"]["threads"], got["threads"]["rows"]
     assert got == want
 
 
@@ -112,5 +115,5 @@ def test_mail_briefing_offline_golden():
             "v_attachment_fts": "SELECT id, name, snippet FROM v_attachment_fts WHERE fts MATCH 'commitment' "
                                 "ORDER BY rank, id",
             "v_posts": "SELECT count(*) FROM v_posts"},
-        "use": {"threads": ("items.store/v1.threads", {"since": "30d", "important": ["*@partner.example"]})}})
+        "use": {"threads": ("items.store/v2.rows", {"name": "threads", "since": "30d", "important": ["*@partner.example"]})}})
     compare("mail-briefing", got, mail_deltas)

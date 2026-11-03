@@ -312,7 +312,7 @@ def test_doc_size_and_stale_references():
         "pkg/mod.py": "def real():\n    return 1\n\nKNOWN = 2\n",
         "docs/guide.md": "# Guide\n\nSee [design](DESIGN.md), [api](api.md#top) and [site](https://example.com).\n"
                          "Code: `pkg/mod.py` `real()`, `pkg/mod.py` `gone`, `pkg/mod.py:KNOWN`, `pkg/old.py`.\n"
-                         "Generated: `.agentbay/roles/<unit>/use`, `modes/<name>/mode.yaml`, `items.store/v1`.\n",
+                         "Generated: `.agentbay/roles/<unit>/use`, `modes/<name>/mode.yaml`, `items.store/v2`.\n",
         "docs/api.md": "# API\n" + "word " * 120,
         "docs/proposals/0001-old.md": "[gone](../removed.md) " + "history " * 200,
         "CHANGELOG.md": "# Changelog\n" + "entry " * 200})
@@ -420,7 +420,7 @@ def test_conformance_checks_on_a_kit_copy():
         base = {r["rule"]: len(r["violations"]) for r in conformance.run(k)}
         # C-1: a workflow step the playbook never mentions
         pb = k / "components/briefing/features/prune/playbook.md"
-        pb.write_text(pb.read_text().replace("`prune`: the dispatcher runs `items.store/v1.prune` (code step, no agent).",
+        pb.write_text(pb.read_text().replace("`prune`: the dispatcher runs `items.store/v2.prune` (code step, no agent).",
                                              "The store trims."))
         # C-4: a backticked tool in a playbook; C-7: retired vocabulary
         pb2 = k / "components/briefing/features/ask/playbook.md"

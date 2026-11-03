@@ -291,9 +291,10 @@ EXPECTED_DELTAS = {
                "held one for it, and 0013 part 5 made CHANGELOG.md a history doc, which was the other. Fixture-data "
                "results are unchanged."},
     ("kitAudit", "countsPerKind", "slop-duplicate-rule"): {
-        "was": 15, "now": 9,
+        "was": 15, "now": 7,
         "why": "0010 part 0f removed the 12 unreachable cos, sync, backlog and verify files and extend's rules R-2, R-4, "
-               "R-7 and R-9, so six near-duplicate statement pairs are gone. Fixture-data results are unchanged."},
+               "R-7 and R-9, so six near-duplicate statement pairs are gone; 0016 part 4 deleted mail-briefing's ask rules, "
+               "whose statements the store's ask rules now carry, so two more pairs are gone. Fixture-data results are unchanged."},
 }
 
 

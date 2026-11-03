@@ -27,15 +27,20 @@ def _lines(path: Path) -> int:
 
 
 def count(repo: Path) -> dict[str, int]:
-    """Each measure: python lines in bay/; python lines in connectors, adapters and content types (tests/ folders
+    """Each measure: python lines in bay/; python lines in adapters and protected components (tests/ folders
     excluded); `sub.add_parser` calls in bay/cli.py; folders directly under framework/; files in schemas/; top-level
-    folders; `def test_` at module level in the test files tests/run.py runs."""
+    folders; `def test_` at module level in the test files tests/run.py runs, only in tests/, adapters and protected
+    components (framework/kernel.yaml)."""
+    kernel = repo / "framework/kernel.yaml"
+    if not kernel.is_file():
+        raise RuntimeError("framework/kernel.yaml does not exist; the limits count the protected components it lists")
+    cmap = boundary.ComponentMap.load(kernel)
+    core = lambda p: p.startswith("adapters/") or cmap.protected_by(p) is not None      # noqa: E731
     out = subprocess.run(["git", "-C", str(repo), "-c", "core.quotePath=false", "ls-files", "-co", "--exclude-standard",
                           "-z"], capture_output=True, text=True, check=True).stdout
     paths = [p for p in out.split("\0") if p and (repo / p).is_file()]
     py = [p for p in paths if p.endswith(".py")]
-    kit = [p for p in py if p.split("/")[0] in ("components", "adapters")
-           and "tests" not in p.split("/")]
+    kit = [p for p in py if p.split("/")[0] in ("components", "adapters") and "tests" not in p.split("/") and core(p)]
     read = lambda p: (repo / p).read_text(encoding="utf-8")        # noqa: E731
     return {
         "bay_lines": sum(_lines(repo / p) for p in py if p.startswith("bay/")),
@@ -44,7 +49,7 @@ def count(repo: Path) -> dict[str, int]:
         "framework_folders": len({p.split("/")[1] for p in paths if p.startswith("framework/") and p.count("/") > 1}),
         "schemas": sum(p.startswith("schemas/") for p in paths),
         "top_level_folders": len({p.split("/")[0] for p in paths if "/" in p}),
-        "tests": sum(len(re.findall(r"^def test_", read(p), re.M)) for p in paths if _TEST_FILE.fullmatch(p)),
+        "tests": sum(len(re.findall(r"^def test_", read(p), re.M)) for p in paths if _TEST_FILE.fullmatch(p) and (p.startswith("tests/") or core(p))),
     }
 
 

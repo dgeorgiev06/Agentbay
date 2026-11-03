@@ -203,13 +203,14 @@ def _mode(g: Graph, name: str, d, profile: str, rel) -> None:
         eid = f"endpoint:{name}.{ep}"
         g.node(eid, "endpoint", f"{name}.{ep}", rel(d.path))
         g.edge(f"mode:{name}", eid, "endpoint")
-        _endpoint_edges(g, name, eid, e, e["steps"], bool(cfg))
+        _endpoint_edges(g, name, eid, e, e["steps"], bool(cfg), d)
 
 
-def _endpoint_edges(g: Graph, mode: str, eid: str, e: dict, steps: list, has_config: bool) -> None:
+def _endpoint_edges(g: Graph, mode: str, eid: str, e: dict, steps: list, has_config: bool, d) -> None:
+    owner = lambda t: next((p.name for p in d.dirs if (p / "types" / f"{t}.schema.json").exists()), mode)   # a type may be inherited
     for t in (e.get("in"), e.get("out")):
         if t:
-            g.edge(eid, f"type:{mode}/{t}", "type")
+            g.edge(eid, f"type:{owner(t)}/{t}", "type")
     if (e.get("review") or {}).get("role"):
         g.edge(eid, f"role:{e['review']['role']}", "review")
     for env in (e.get("roles") or {}).values():
@@ -220,7 +221,7 @@ def _endpoint_edges(g: Graph, mode: str, eid: str, e: dict, steps: list, has_con
         if st.get("role"):
             g.edge(eid, f"role:{st['role']}", "step")
         if st.get("out"):
-            g.edge(eid, f"type:{mode}/{st['out']}", "type")
+            g.edge(eid, f"type:{owner(st['out'])}/{st['out']}", "type")
         if st.get("run"):
             g.edge(eid, f"interface:{st['run'].rsplit('.', 1)[0]}", "run")
     if has_config:
@@ -240,7 +241,7 @@ def _binding_edges(g: Graph, k, connectors_of) -> None:
         impl = d.spec["implements"]
         for iface in [impl] if isinstance(impl, str) else impl:
             g.edge(f"connector:{name}", f"interface:{iface}", "implements")
-        for iface in d.spec.get("needs", {}).get("capabilities", []):
+        for iface in [*d.spec.get("needs", {}).get("capabilities", []), *d.spec.get("needs", {}).get("optional", [])]:
             g.edge(f"connector:{name}", f"interface:{iface}", "needs")
 
 

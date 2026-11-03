@@ -16,11 +16,11 @@ reasoning behind each decision is in [proposals/](proposals/).
 | **Capability interface** | a versioned contract: named endpoints with JSON-schema input and output and declared effects (`read`, `write`, `network`, `spend`, `delete`) | the component that owns it |
 | **Component** | a folder that holds one mode, source connector, content type or shared set. It is the unit you add, move or remove | you, or the framework |
 
-A mode names capabilities, never a connector or a tool. Adding a source is one component plus one binding line in
+A mode names capabilities, never a connector or tool. Adding a source is one component plus one binding line in
 an env, and no mode, role or playbook changes. A role file outside the framework is an error. A mode customizes a
 role through its playbooks, skills and rules, and a new role is a `forge.extend` proposal.
 
-A mode may `extends:` another. The kit resolves inheritance when it loads. A child's feature replaces its parent's feature of that name whole, never key by key. Roles, constraints
+A mode may `extends:` one abstract mode that extends nothing, so inheritance is one level deep. The kit resolves it at load. A child's feature replaces its parent's feature of that name whole, never key by key, except that a feature with no `playbook` or `rules` inherits the parent's. Roles, constraints
 and config defaults merge entry by entry, `needs` are unioned, and inherited paths are rebased to the child's
 folder. `abstract: true` marks a base that is linted but never installed or called.
 
@@ -35,13 +35,12 @@ A component is one folder in `components/` with one manifest, whose name says it
 | `content-type.yaml` | content type | the fields and views of one kind of item |
 | `component.yaml` | shared component | interfaces and envs that several modes use |
 
-A mode also holds what only it needs (envs, interfaces, skills, types, data files, tests, internal connectors). The loader finds these by folder name; the manifest lists none.
+A mode also holds what only it needs (envs, interfaces, skills, types, data, tests, internal connectors).
 A component uses another only through what the other provides: an interface name in `needs:`, a content type in
 `reads:`, a parent in `extends:`, or an env or connector name in a binding.
 
 A connector that declares network access, secrets or a file path outside the project is a source connector and a
-component of its own. Every other connector is internal (code the framework runs behind an interface, such as the one that writes the findings store) and lives in `connectors/<name>/` inside its owner. `bay check` reports a misplaced connector and
-says where to move it.
+component of its own. Every other connector is internal and lives in `connectors/<name>/` inside its owner.
 
 The kernel is not a component. `bay/`, `schemas/`, `framework/` and `adapters/` hold the loader, dispatcher,
 contracts, roles and runtime adapters. `framework/kernel.yaml` holds only `owns:` and `protected:`.
@@ -50,14 +49,14 @@ contracts, roles and runtime adapters. `framework/kernel.yaml` holds only `owns:
 
 A feature is one block under `features:` in `mode.yaml`. It has input and output types, effects, ordered `steps`,
 an optional review block, and a playbook and rules file when it needs them. A feature that runs no role needs
-neither file; one that runs a role needs a playbook. It is called as `<mode>.<feature>`. The steps are:
+neither; one that does needs a playbook. It is called as `<mode>.<feature>`. The steps are:
 
 - `run: <capability>/v<N>.<endpoint>` is deterministic code, which the dispatcher runs in the coordinator's env.
 - `role: <role>` is an agentic step. That role runs it in the env that the step, the feature or the mode `roles:` names.
 - `gate: <text>` is an approval gate that only you pass, with `bay approve` in a terminal (or from chat, if `approve.from` allows it). `approves: $in.<f>` ties the gate to the exact content of a file, so a later call on the unchanged file skips it.
-- `{review: here}` marks where the review step goes. The default is last.
+- `{review: here}` marks where review goes (default last).
 
-`with:` substitutes `$in.x`, `$steps.<id>.x` and `$config.x`, with `a|b` fallbacks. `when:` skips a step
+`with:` substitutes `$in.x`, `$steps.<id>.x` and `$config.x`, with `a|b` fallbacks; a `*` path part maps the rest over a list (`$steps.get.items.*.id`), in project workflows too. `when:` skips a step
 (`stale > 2h`, `$in.<field>` or `$steps.<id>.<field>`; `!` negates). A playbook has the sections Purpose, Inputs,
 Steps, Definition of Done (`- [DOD-n] (must|should|must_not) ...`), Outputs and Failure handling. Rules refer to
 Definition of Done ids and can name a deterministic `check` (`citations_resolve`, `no_secrets`, `lint_clean`).
@@ -65,13 +64,11 @@ Rules stack with mode constraints, role rules and project `extraRules`; the stri
 
 Review is configured only in `mode.yaml`. The reviewer gets the task, the Definition of Done, the rules and the
 check results, and returns one verdict for each id (`review.verdict/v1`). A failed must or must_not item, or any
-item rated blocker, makes the call `partial` and halts it before release. The ratings should-fix and nit only
-set how the findings are listed.
-
+item rated blocker, makes the call `partial` and halts it before release.
 After a halt, the next run is a scoped re-check when the approved proposal is unchanged. The review brief then
 carries `recheck`: the failed ids, the commits made since, and the items that passed. The reviewer judges the
 failed ids against those commits; a passed item stands unless new evidence fails it. The verdict must still cover
-every id. A changed proposal, a review after a passed review, and a review after a re-check are full reviews.
+every id. A changed proposal, or a review after a passed review or a re-check, is a full review.
 
 ## Compile: units
 
@@ -100,18 +97,16 @@ the types, runs code steps with the connector runtime, and enforces budget caps.
 the env's provider and checks every HTTP request against the env allowlist. An agentic step comes back as a step
 plan with the status `needs-agent`: the role unit, tier, model, task, playbook, rules and inputs. The coordinator
 runs the plan and returns the output with `bay submit`. The call continues until it is `done`, `partial`,
-`blocked` or `failed`, or stops at a gate (`awaiting-approval`). Agents read connector data only through their
+`blocked` or `failed`, or stops at a gate. Agents read connector data only through their
 unit's use shim, which fixes the role, mode and env and serves read-only endpoints. Secret values are scanned for and
 redacted from everything returned or logged.
 
 ## Run log
 
 The run log is the append-only file `events.jsonl` under `.agentbay/`, and `bay status` folds it into calls,
-steps, runs and cost. The dispatcher, hooks, guard, use shims and `bay note` each write events. The Chief
-of Staff logs each dispatch, and a subagent records its outcome and to-do list with `bay plan`, the only `bay`
-command it may run. `bay status` lists unfinished work with no event for 24 hours under `STALE?`; it closes nothing. With dispatches but no hook event, or no guard check in 2 minutes, it says the
-hooks are not loaded (start Claude Code inside the project): finishes then come only from `bay submit`,
-`bay note done` or `bay show reclaim`.
+steps, runs and cost. A subagent
+records its plan with `bay plan`, the only `bay` command it may run. `bay status` lists unfinished work with no event for 24 hours under `STALE?`; it closes nothing. With no hook events it says the
+hooks are not loaded; start Claude Code inside the project.
 [INTERFACES.md section 9](INTERFACES.md#9-ledgerevent) lists the event types.
 
 ## Safety model
@@ -140,8 +135,7 @@ the guard. Around it stand the gate, plan approval, the whole-diff review, the b
 - **Secrets and logins.** `bay secret set` needs an interactive stdin whatever `from` says. `bay auth` needs the
   browser on the machine running bay, not a terminal.
 - **Plan approval.** `approve.plans` lists role steps (`<mode>.<endpoint>` or `<mode>.<endpoint>.<step>`). Each
-  runs a planner first (env `plan-writer`: it writes only under `docs/plans/` and runs only `bay plan`; tier and
-  effort from `approve.planner`), then a gate on that file (`docs/plans/<callId>-<step>.md`; another call's approval never skips it), then the step as a fresh agent given the plan. A
+  runs a planner first (env `plan-writer`: it writes only under `docs/plans/` and runs only `bay plan`), then a gate on that file (`docs/plans/<callId>-<step>.md`), then the step as a fresh agent given the plan. A
   step with `when:` cannot be listed by name (the endpoint form skips it), and an unmatched entry fails
   `bay check`.
 - **What subagents cannot touch.** The guard hook runs on Bash and on every file tool. It denies `.agentbay/`,
@@ -165,9 +159,9 @@ checkout. Its steps are: draft a proposal (unless one is named), a `plan` step, 
   then both prefixes joined by `+`, proposal first (one prefix, or the wrong order, is refused).
 - **Dead code.** The `deadcode` step (`improve.detect/v1.change`) blocks the call when the change adds unused code,
   an unused constant, a compatibility layer or a complexity finding that the merge-base with `origin/main` did not
-  have. The base tree is exported as plain files and never run.
+  have.
 - **Size.** The `limits` step (`improve.detect/v1.limits`) keeps the framework from growing: no measure in
-  `framework/limits.yaml` (code lines, CLI commands, folders, schemas, tests) may exceed its ceiling, or the base branch's if higher. A raise needs an `exceptions:` entry in the proposal's front
+  `framework/limits.yaml` (code lines, CLI commands, folders, schemas, tests) may exceed its ceiling, or the base branch's if higher. Code and test counts cover framework code only: `adapters/` and the `kernel.yaml` protected paths. A raise needs an `exceptions:` entry in the proposal's front
   matter, approved with it; a count up to it passes without editing `limits.yaml`. A lower count is a note. At release,
   `bay check --limits --write` records the count as the new ceiling, so ceilings only fall.
 
@@ -188,10 +182,12 @@ The boundary checks keep the framework's parts independent. Code cites these ids
 | B-11 | The core docs name no component outside a fenced block. | `bay check --docs` |
 | B-12 | The code has no compatibility layer. | the `deadcode` step |
 
-## Digests from a corpus store
+## The corpus store
 
-An abstract base mode defines the four features of every digest mode: `sync`, `digest`, `ask` and `prune`. Each
-child mode extends it for one kind of source, with its own env, store, secrets and role units.
+`store` is the abstract base of every mode that keeps items. Its features are `add`, `update`, `delete`, `query`, `get` and `ask`. Each
+child extends it for one kind of source and declares its own `sync`, `digest` and `prune`, with its own env, store, secrets and role units. The base env is store-local.
+
+`delete` runs four steps: preview, your gate, removal, reviewer (always on: rule C-6 never exempts delete effects). A deleted synced item is remembered in `state.json` and never stored again; the source is untouched. `add` and `update` refuse the kinds that sources produce, and fail closed when the kinds are unknown.
 
 Sources implement `items.source/v1` and return `item/v1` items whose `id` is `<source>:<extId>`. A content type
 adds the fields of one kind of item and the views that agents query. A connector declares which selector fields
@@ -205,11 +201,11 @@ The store connector keeps one SQLite store for each mode. Its internal state (cu
 deletions) is in a separate `state.json` that agents never open.
 
 **Scope invariant.** The store holds exactly the items of the sources bound to the mode's env that match a
-current selector. Every sync and prune enforces this without fetching again. After a change of selectors or
+current selector, plus the local items (source `local`), which prune and scope cleanup keep. Every sync and prune enforces this without fetching again. After a change of selectors or
 sources, every read except `status` is refused until a sync re-scopes the store. Billing counts every item a
 source returns, and the spend is saved before the items are committed.
 
-Agents query with `items.store/v1.sql`: one SELECT over fixed views, on a read-only connection, with limits on
+Agents query with `items.store/v2.sql`: one SELECT over fixed views, on a read-only connection, with limits on
 time, memory, rows, bytes and cell length. The store scrubs item text for secrets when it ingests it, and every
 read is redacted and scanned again.
 

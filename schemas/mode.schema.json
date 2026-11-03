@@ -116,7 +116,7 @@
                   "type": "string",
                   "pattern": "^[a-z][a-z0-9.-]*/v[0-9]+\\.[a-z][A-Za-z0-9]*$"
                 },
-                "description": "The read endpoints (<interface>/v<N>.<endpoint>, e.g. items.store/v1.sql) this feature's role steps may call through the use shim. Each must be granted to a role of the feature; `[]` means none. Required when a role of the feature is granted any."
+                "description": "The read endpoints (<interface>/v<N>.<endpoint>, e.g. items.store/v2.sql) this feature's role steps may call through the use shim. Each must be granted to a role of the feature; `[]` means none. Required when a role of the feature is granted any."
               },
               "skills": {
                 "type": "array",
@@ -304,7 +304,7 @@
         "run": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)*/v[0-9]+\\.[a-z][a-z0-9-]*$",
-          "description": "Code step: <capability>/v<N>.<endpoint>, e.g. items.store/v1.sync (same spelling as role `uses`)."
+          "description": "Code step: <capability>/v<N>.<endpoint>, e.g. items.store/v2.sync (same spelling as role `uses`)."
         },
         "role": {
           "type": "string"

@@ -1,0 +1,69 @@
+apiVersion: agentbay/v4
+kind: Mode
+metadata:
+  name: store
+  version: 0.2.0
+  description: Base mode for modes that keep items in a local corpus store - add, update, delete, query, get and a grounded ask, with or without a source.
+spec:
+  # Not installed or called itself: a mode with `extends: store` gets these features and adds what differs
+  # (a source, sync, prune, digest, its own ask, constraints, config, roles and their envs).
+  abstract: true
+  purpose: Keep my items in a local store; add, change and remove them when I ask; answer questions about them from the stored items only.
+  features:
+    add:
+      description: Store a local item (never an item a source produces).
+      in: AddReq
+      effects: [write]
+      review: { role: reviewer, when: never }
+      steps:
+        - { id: add, run: items.store/v2.add, with: { item: "$in.item" } }
+    update:
+      description: Change fields of a local item.
+      in: UpdateReq
+      effects: [write]
+      review: { role: reviewer, when: never }
+      steps:
+        - { id: update, run: items.store/v2.update, with: { id: "$in.id", set: "$in.set" } }
+    delete:
+      description: Remove items from the store after you have seen them; a synced item is not stored again.
+      in: Ids
+      effects: [read, write, delete]
+      playbook: features/delete/playbook.md
+      rules: features/delete/rules.yaml
+      review: { role: reviewer, when: always, tier: balanced, effort: low }
+      uses: [items.store/v2.get, items.store/v2.status]      # the reviewer checks what was removed
+      skills: []
+      steps:
+        - { id: preview, run: items.store/v2.get, with: { ids: "$in.ids" } }
+        - { id: confirm, gate: "Remove these items from the store? A synced item is also kept from coming back; the source itself is not touched." }
+        - { id: remove, run: items.store/v2.delete, with: { ids: "$steps.preview.items.*.id", missing: "$steps.preview.missing" } }   # only what the preview found; nothing found removes nothing
+    query:
+      description: Stored items newest first, filtered by window, author, substring, selector or ids.
+      in: QueryReq
+      effects: [read]
+      review: { role: reviewer, when: never }
+      steps:
+        - { id: query, run: items.store/v2.query, with: { since: "$in.since", until: "$in.until", author: "$in.author", text: "$in.text", selector: "$in.selector", limit: "$in.limit", ids: "$in.ids" } }
+    get:
+      description: Full items for a few ids.
+      in: Ids
+      effects: [read]
+      review: { role: reviewer, when: never }
+      steps:
+        - { id: get, run: items.store/v2.get, with: { ids: "$in.ids" } }
+    ask:
+      description: Answer a question from stored items via read-only SQL, with citations.
+      in: Question
+      out: Answer
+      effects: [read]
+      playbook: features/ask/playbook.md
+      rules: features/ask/rules.yaml
+      review: { role: reviewer, when: never }
+      uses: [items.store/v2.describe, items.store/v2.sql, items.store/v2.query, items.store/v2.search, items.store/v2.facets, items.store/v2.get, items.store/v2.thread, items.store/v2.status]
+      skills: [corpus-sql, grounded-qa]
+      steps:
+        - { id: context, run: items.store/v2.status, with: { since: "$in.since" } }
+        - { id: answer, role: analyst, out: Answer, task: "Answer the question from the stored items only: narrow with SQL, read full items with get, cite item ids." }
+  coordinator: lead
+  roles: { lead: store-local, analyst: store-local, reviewer: store-local }   # role -> env
+  needs: [items.store/v2]

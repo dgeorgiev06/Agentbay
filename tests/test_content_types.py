@@ -119,23 +119,23 @@ def test_the_child_table_and_the_derived_fields_come_from_the_type():
     assert kept and all("text" not in a for a in kept)                  # moveOut: the text lives in the table only
     con.close()
     q = "SELECT id, fromMe, toMe, bulk FROM v_email ORDER BY id"
-    before = d.use("analyst--mail-briefing", "items.store/v1.sql", {"sql": q})["rows"]
+    before = d.use("analyst--mail-briefing", "items.store/v2.sql", {"sql": q})["rows"]
     assert before and any(r[1] for r in before) and any(r[2] for r in before) and any(r[3] for r in before)
     con = sqlite3.connect(db)                  # another deriveVersion on record: the writer recomputes, fetching nothing
     con.execute("UPDATE items SET derived = '{}'")
     con.execute("UPDATE store_meta SET value = '0' WHERE key = 'derive:email'")
     con.commit()
     con.close()
-    assert {r[1] for r in d.use("analyst--mail-briefing", "items.store/v1.sql", {"sql": q})["rows"]} == {0}
+    assert {r[1] for r in d.use("analyst--mail-briefing", "items.store/v2.sql", {"sql": q})["rows"]} == {0}
     pruned = d.call("mail-briefing.prune", {})
     assert pruned["next"]["review"]["output"]["removed"] == 0, pruned          # the code step ran; it deleted nothing
-    after = d.use("analyst--mail-briefing", "items.store/v1.sql", {"sql": q})["rows"]
+    after = d.use("analyst--mail-briefing", "items.store/v2.sql", {"sql": q})["rows"]
     assert after == before
     con = sqlite3.connect(db)
     assert con.execute("SELECT value FROM store_meta WHERE key = 'derive:email'").fetchone() == ("1",)
     con.close()
     assert d.call("feed-briefing.sync", {})["status"] == "done"
-    err = d.use("analyst--feed-briefing", "items.store/v1.sql", {"sql": "SELECT count(*) FROM v_email"})["error"]
+    err = d.use("analyst--feed-briefing", "items.store/v2.sql", {"sql": "SELECT count(*) FROM v_email"})["error"]
     assert "v_email" in err                                        # the feed store holds only the types its mode reads
 
 
@@ -149,7 +149,7 @@ def test_a_store_records_its_content_types_and_refuses_another_version():
     con.execute("UPDATE store_meta SET value = '2' WHERE key = 'type:post'")
     con.commit()
     con.close()
-    err = d.use("analyst--feed-briefing", "items.store/v1.sql", {"sql": "SELECT 1"})["error"]
+    err = d.use("analyst--feed-briefing", "items.store/v2.sql", {"sql": "SELECT 1"})["error"]
     assert "content type post v2" in err and "kit has v1" in err and "move the folder aside and sync again" in err
     again = d.call("feed-briefing.sync", {})
     assert again["status"] == "failed" and "move the folder aside and sync again" in again["error"]

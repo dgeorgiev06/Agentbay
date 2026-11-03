@@ -21,11 +21,11 @@ EXPECTED_PROTECTED = [
     "components/cos", "components/forge",
     "components/improve/envs/improve-local.yaml", "components/tools/envs/workspace.yaml",
     "components/tools/envs/research.yaml",
-    "components/claude-transcripts", "components/briefing/connectors/corpus-store",
+    "components/claude-transcripts", "components/store",
     "components/improve/connectors/artifact-graph", "components/improve/connectors/git",
     "components/improve/connectors/improve-detect", "components/improve/connectors/improve-store",
     "components/improve/connectors/ledger",
-    "components/briefing/interfaces", "components/improve/interfaces", "components/tools/interfaces",
+    "components/improve/interfaces", "components/tools/interfaces",
     "components/tools/envs/plan-writer.yaml",
 ]
 
@@ -263,9 +263,9 @@ def test_a_name_is_protected_wherever_it_sits_and_is_defined_once():
         cleanup(k)
     k = kit_copy()
     try:                                  # a name defined twice (an interface in both places) is an error, not a pick
-        src = k / "components/briefing/interfaces/items.store.v1.yaml"
-        (k / "components/improve/interfaces/items.store.v1.yaml").write_text(src.read_text())
-        assert any("Interface 'items.store/v1' is defined twice" in e for e in model.Kit(k).errors)
+        src = k / "components/store/interfaces/items.store.v2.yaml"
+        (k / "components/improve/interfaces/items.store.v2.yaml").write_text(src.read_text())
+        assert any("Interface 'items.store/v2' is defined twice" in e for e in model.Kit(k).errors)
     finally:
         cleanup(k)
 
@@ -307,10 +307,10 @@ BOUNDARY_MAP = {
     "protected": {"paths": ["adapters", "components/improve/connectors/ledger"], "mode": ["cos"], "env": {"cos-local": {}}, "connector": ["ledger"]},
     "owns": ["bay/", "adapters/"]}
 BASE = {"bay/cli.py": "x\n", "components/cos/mode.yaml": "x\n", "components/cos/features/run/playbook.md": "x\n",
-        "components/mail/mode.yaml": "x\n", "components/cos/envs/cos-local.yaml": "x\n", "components/briefing/envs/mine.yaml": "x\n",
+        "components/mail/mode.yaml": "x\n", "components/cos/envs/cos-local.yaml": "x\n", "components/feed-briefing/envs/mine.yaml": "x\n",
         "components/improve/connectors/ledger/connector.yaml": "x\n", "components/gmail/connector.yaml": "x\n",
         "adapters/claude-code/adapter.yaml": "x\n",
-        "components/briefing/mode.yaml": "x\n", "components/improve/component.yaml": "x\n"}   # every folder has its manifest
+        "components/feed-briefing/mode.yaml": "x\n", "components/improve/component.yaml": "x\n"}   # every folder has its manifest
 
 
 def _check(change, touches=(), base=BASE, mapdoc=BOUNDARY_MAP):
@@ -424,7 +424,7 @@ WRITERS = ("builder--forge--local-authoring", "builder--delivery")
 
 def test_improve_is_an_ordinary_mode_while_its_env_and_connectors_stay_protected():
     kit = model.Kit(KIT)
-    assert set(kit.protected.names["mode"]) == {"cos", "forge"} and "components/improve" not in kit.protected_paths
+    assert set(kit.protected.names["mode"]) == {"cos", "forge", "store"} and "components/improve" not in kit.protected_paths
     assert not kit.protected.reserved("mode", "improve")
     s = model.resolve(kit)
     assert [s.modes[m].root for m in ("improve", "cos", "forge", "delivery")] == ["user", "framework", "framework", "user"]

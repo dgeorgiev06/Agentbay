@@ -10,6 +10,8 @@ FILES = {
     "components/c/tests/test_c.py": "def test_a():\n    pass\n\n\ndef test_b():\n    pass\n",
     "framework/roles/r.yaml": "x\n", "framework/rules/r.yaml": "x\n", "schemas/s.json": "{}\n",
     "schemas/data/d.json": "{}\n",
+    "framework/kernel.yaml": "owns: []\nprotected: { paths: [components/c], mode: [], env: {}, connector: [] }\n",
+    "components/u/u.py": "w = 1\n", "components/u/tests/test_u.py": "def test_u():\n    pass\n",
 }
 NOW = {"bay_lines": 3, "kit_python_lines": 2, "cli_commands": 2, "framework_folders": 2, "schemas": 2,
        "top_level_folders": 4, "tests": 2}
@@ -26,7 +28,14 @@ def test_limits_count_the_ceiling_the_ratchet_and_the_exception():
         (repo / p).write_text(text)
     for args in (("init", "-q"), ("add", "-A"), ("commit", "-q", "-m", "c")):
         subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", *args], check=True)
-    assert limits.count(repo) == NOW and limits.check(repo, "HEAD") == ([], [])
+    assert limits.count(repo) == NOW and limits.check(repo, "HEAD") == ([], [])        # components/u is not protected: not counted
+    (repo / "framework/kernel.yaml").rename(repo / "k.yaml")
+    try:
+        limits.check(repo, "HEAD")
+        raise AssertionError("a missing kernel.yaml must stop the check")
+    except RuntimeError as e:
+        assert "framework/kernel.yaml does not exist" in str(e)
+    (repo / "k.yaml").rename(repo / "framework/kernel.yaml")
     (repo / limits.FILE).write_text(_yaml({**NOW, "schemas": 5}))            # raised above the base's ceiling
     problems, _ = limits.check(repo, "HEAD")
     assert len(problems) == 1 and "exceptions" in problems[0]

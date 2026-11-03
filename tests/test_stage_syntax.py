@@ -134,7 +134,7 @@ def dispatcher_skip() -> list:
                 got = f"{type(e).__name__}: {e}"
             out.append({"when": when, "input": inp, "steps": steps, "skipped": got})
         for when, status in STALE_ROWS:
-            step = model.Step(id="b", kind="code", run="items.store/v1.sync", when=when)
+            step = model.Step(id="b", kind="code", run="items.store/v2.sync", when=when)
             d._invoke = lambda *a, _s=status, **kw: _s
             d._settings = lambda mode: {}
             try:
@@ -272,6 +272,7 @@ def test_stage_syntax_table():
 def test_the_reference_grammar_is_spelled_once_and_the_schemas_equal_it():
     root = KIT / "bay"
     shipped = [KIT / p for p in Kit(KIT).protected_paths if (KIT / p / "connector.yaml").exists()]    # scanned before the move
+    shipped.append(KIT / "components/store/connectors/corpus-store")        # inside the protected folder components/store
     assert len(shipped) == 7, shipped
     files = [*root.glob("*.py"), *(f for d in shipped for f in d.glob("*.py")), *(KIT / "adapters").glob("*/*.py")]
     spelled = [str(f.relative_to(KIT)) for f in files if re.search(r"\\\$\(?(\?:)?(in|steps)", f.read_text())]
@@ -297,6 +298,11 @@ def test_the_dispatcher_and_the_cursor_share_one_skip_rule_and_one_substitution(
             mv = workflows.advance(stages, 1, inp, steps)
             skipped = workflows.skip(when, inp, steps)
             assert (mv.kind == "done") == skipped and (mv.skipped == ["b"]) == skipped, (when, inp, steps)
+    sub = lambda ref, steps: workflows.substitute({"v": ref}, {}, steps, {})   # `*` maps the rest of a path over a list
+    assert sub("$steps.p.items.*.id", {"p": {"items": [{"id": "a"}, {"x": 1}, {"id": "b"}]}}) == {"v": ["a", "b"]}
+    assert sub("$steps.p.items.*.id", {"p": {"items": []}}) == {"v": []}
+    assert sub("$steps.p.items.*.id", {"p": {}}) == {}
+    assert sub("$steps.p.d.*", {"p": {"d": {"*": 7}}}) == {"v": 7}
 
 
 # ------------------------------------------------------------------------------------------------ D7: a gate takes no when

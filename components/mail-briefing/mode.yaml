@@ -5,15 +5,34 @@ metadata:
   version: 0.1.0
   description: Thread-based briefings and grounded Q&A over your email, read-only, kept to the selectors you set.
 spec:
-  # Everything not set here comes from components/briefing (features sync and prune; skills it does not override).
-  # digest and ask below replace briefing's whole (a child's feature never merges key by key).
-  extends: briefing
+  # Everything not set here comes from components/store (features add, update, delete, query and get; the ask
+  # playbook and rules; the types it shares). A feature declared here replaces the store's whole.
+  extends: store
   reads: [email/v1]          # the item kind its features read (B-6)
   purpose: >-
     Keep me briefed on my email: what needs my reply, the deadlines and asks, what important senders wrote and
     which attachments matter; answer questions about it from the stored messages only.
   roles: { lead: local-mail, analyst: local-mail, reviewer: local-mail }   # role -> env
   features:
+    sync:
+      description: Pull new items from every bound source into the corpus store (selectors, budget caps).
+      in: SyncReq
+      effects: [network, spend, write]
+      review: { role: reviewer, when: never }
+      steps:
+        - { id: fetch, run: items.store/v2.sync, with: { lookback: "$in.lookback|$config.lookback", maxItems: "$in.maxItems" } }
+    prune:
+      description: Drop items past retention, items deleted at the source and items no selector matches.
+      in: PruneReq
+      effects: [read, write, delete]
+      playbook: features/prune/playbook.md
+      rules: features/prune/rules.yaml
+      review: { role: reviewer, when: always, tier: balanced, effort: medium }
+      schedule: daily
+      uses: [items.store/v2.status, items.store/v2.sql]      # the reviewer checks what was dropped
+      skills: []
+      steps:
+        - { id: prune, run: items.store/v2.prune, with: { olderThan: "$in.olderThan|$config.retention" } }
     digest:
       description: Thread-based digest - needs reply, deadlines and asks, by selector or sender (important first), notable attachments.
       in: DigestReq
@@ -22,30 +41,31 @@ spec:
       playbook: features/digest/playbook.md
       rules: features/digest/rules.yaml
       review: { role: reviewer, when: always, tier: deep, effort: high }
-      uses: [items.store/v1.describe, items.store/v1.sql, items.store/v1.get, items.store/v1.thread]   # get/thread: the messages; sql: v_attachments text
+      uses: [items.store/v2.describe, items.store/v2.sql, items.store/v2.get, items.store/v2.thread]   # get/thread: the messages; sql: v_attachments text
       skills: [digest, corpus-sql]
       steps:
-        - { id: refresh, run: items.store/v1.sync, when: "stale > 2h" }      # code step, no agent
-        - { id: gather, run: items.store/v1.threads, with: { since: "$in.since|$config.lookback", until: "$in.until", selector: "$in.selector", important: "$config.important", limit: 200 } }
+        - { id: refresh, run: items.store/v2.sync, when: "stale > 2h" }      # code step, no agent
+        - { id: gather, run: items.store/v2.rows, with: { name: threads, since: "$in.since|$config.lookback", until: "$in.until", selector: "$in.selector", important: "$config.important", limit: 200 } }
         - { id: digest, role: analyst, out: Digest, task: "Write the mail digest from the gathered threads." }
     ask:
       description: Answer a question from stored email via read-only SQL over v_email, v_threads and v_attachments, citing message ids.
       in: Question
       out: Answer
       effects: [read, network, spend, write]
-      playbook: features/ask/playbook.md
-      rules: features/ask/rules.yaml
       review: { role: reviewer, when: never }
-      uses: [items.store/v1.describe, items.store/v1.sql, items.store/v1.search, items.store/v1.facets, items.store/v1.get, items.store/v1.thread, items.store/v1.threads, items.store/v1.status]
+      uses: [items.store/v2.describe, items.store/v2.sql, items.store/v2.search, items.store/v2.facets, items.store/v2.get, items.store/v2.thread, items.store/v2.rows, items.store/v2.status]
       skills: [corpus-sql, grounded-qa]
       steps:
-        - { id: refresh, run: items.store/v1.sync, when: "stale > 2h" }
-        - { id: context, run: items.store/v1.status, with: { since: "$in.since|$config.lookback" } }
+        - { id: refresh, run: items.store/v2.sync, when: "stale > 2h" }
+        - { id: context, run: items.store/v2.status, with: { since: "$in.since|$config.lookback" } }
         - { id: answer, role: analyst, out: Answer, task: "Answer the question from the stored items only: narrow with SQL, read full items with get, cite item ids." }
-  constraints:                 # merged over briefing's (lookbackMax 30d, spendUsd)
+  constraints:
+    lookbackMax: 30d
+    spendUsd: 5          # dollar cap enforced by the dispatcher (C-6 spend exemption for sync)
     maxItemsPerRun: 500        # messages one sync may read (messages.get calls)
     monthlyItems: 20000
-  config: config.schema.json   # adds `important` to briefing's settings (a child schema only adds keys)
+  needs: [items.source/v1]
+  config: config.schema.json
   configDefaults:              # this mode's defaults
     lookback: 30d
     selectors: [{ id: inbox, in: inbox }, { id: sent, in: sent }]   # sent mail: so needs-reply sees your replies

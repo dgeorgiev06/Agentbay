@@ -385,6 +385,9 @@ def lint_connectors(kit: model.Kit) -> list[str]:
                     if not c.spec.get(key):
                         out.append(f"{_where(c.path, _line_of(c.path, r'^spec:'))}: connector {c.name} implements "
                                    f"{iface} but declares no spec.{key} ({why})")
+                if c.spec.get("source") == "local":
+                    out.append(f"{_where(c.path, _line_of(c.path, r'^spec:'))}: `local` is the source of items "
+                               f"written with add; choose another spec.source")
                 if not c.spec.get("selectors"):
                     out.append(f"{_where(c.path, _line_of(c.path, r'^spec:'))}: connector {c.name} implements {iface} "
                                f"but declares no spec.selectors (which selector fields its native search handles: "
@@ -583,7 +586,7 @@ def warnings(kit: model.Kit) -> list[str]:
                 out.append(f"{_where(*_ep_key_where(md, ep_name, 'schedule'))}: {target} declares "
                            f"schedule '{ep['schedule']}' but no runtime acts on it; {how}")
     out += split_store_warnings(kit)
-    stores = [c.name for c in kit.docs["Connector"].values() if "items.store/v1" in (
+    stores = [c.name for c in kit.docs["Connector"].values() if "items.store/v2" in (
         [c.spec["implements"]] if isinstance(c.spec["implements"], str) else c.spec["implements"])]
     if stores:
         from .sqlsandbox import fts5_available

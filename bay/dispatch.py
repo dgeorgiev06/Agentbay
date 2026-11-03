@@ -582,6 +582,9 @@ class Dispatcher:
         s["mode"] = mode.name                     # connectors that keep per-mode data (corpus-store) key on it
         s["reads"] = list(mode.reads)             # ... and make it for the content types the mode reads
         s["modeDirs"] = [str(d) for d in mode.dirs]   # ... and with the views the mode defines (views.sql there)
+        s["sourceKinds"] = sorted({k for c in self.sys.kit.docs["Connector"].values()   # the kind guard of add and update
+                                   if model.SOURCE_IFACE in ([c.spec["implements"]] if isinstance(c.spec["implements"], str)
+                                                             else c.spec["implements"]) for k in c.spec.get("produces", [])})
         if "lookbackMax" in mode.constraints:
             s["lookbackMax"] = mode.constraints["lookbackMax"]
         return s

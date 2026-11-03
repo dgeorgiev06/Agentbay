@@ -229,7 +229,7 @@ def instantiate(system: model.System, env_name: str, conn_name: str, iface: str,
     prov = secrets_provider(system, env, provider) if needs.get("secrets") else vault.EnvProvider({})
     acc = _accessor(prov, env, c)
     sources = {}
-    for sub in needs.get("capabilities", []):
+    for sub in [*needs.get("capabilities", []), *needs.get("optional", [])]:
         for cn in model.connectors_of(env.spec["bind"].get(sub)):
             sources[cn] = instantiate(system, env_name, cn, sub, project, transport=transport, provider=provider,
                                       caps=caps, settings=settings, clock=clock)

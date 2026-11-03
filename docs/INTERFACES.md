@@ -60,9 +60,8 @@ The placement rule decides where a connector sits. A connector that declares `ne
 `fs` path under `~` or `/` is a source connector at `components/<name>/`. Any other connector sits at
 `components/<owner>/connectors/<name>/`, in the component that owns it.
 
-`bay check` refuses a connector in the wrong place (the message names the folder to move it to), a component folder
-without a manifest, and a leftover `modes/`, `envs/`, `connectors/`, `content-types/`, `coordinator/` or
-`interfaces/` folder at the top level, or an `interfaces/` folder under `framework/`, with "move it to components/<name>/".
+`bay check` refuses a connector in the wrong place, a component folder without a manifest, and a leftover top-level
+`modes/`, `envs/`, `connectors/`, `content-types/`, `coordinator/` or `interfaces/` folder.
 
 ## 1. Mode and features
 `mode.yaml` declares each feature (`spec.features.<name>`, called as `<mode>.<name>`): `in` and `out`
@@ -74,7 +73,7 @@ Steps are ordered. A step is `run: <capability>/v<N>.<endpoint>` (code), `role: 
 `effort` and `roles: {<its role>: <env>}`), `gate: <text>` (approval; never with `when:`; `approves: $in.<field>`
 records that file's path and sha256) or `{review: here}` (where the injected review step goes). A mode's
 `roles: {role: env}` lists the framework roles it uses and the env each works in. A step runs in the env it
-names, else the feature's, else the mode's. A mode `needs: [items.store/v1]`, and the read-only endpoints of its
+names, else the feature's, else the mode's. A mode `needs: [items.store/v2]`, and the read-only endpoints of its
 `needs` are what its roles may read. `configDefaults:` replaces config-schema defaults for this mode (a child never
 copies its parent's schema).
 
@@ -83,13 +82,15 @@ reader sees a complete mode. DESIGN says what a child replaces and what it merge
 - `bay show <mode> --resolved` prints the result with the mode.yaml each feature comes from. A child's
   `coordinator` replaces its parent's.
 - **`uses:` and `skills:`** (per feature) scope what its role steps get. `uses` lists the read endpoints
-  (`items.store/v1.sql`) they may call through the use shim, each granted to a role of the feature; it is required
+  (`items.store/v2.sql`) they may call through the use shim, each granted to a role of the feature; it is required
   when a role is granted any (`[]` for none). While a call of the feature waits on a role unit, that unit's shim
   reaches only the `uses` (with no such open call the role-level grant applies). `skills` lists the mode's skills
   the step plan hands them (absent: all); a playbook may name only those.
 - Types, skills and the coordinator `playbook.md` are looked up in the child first, then its ancestors.
-- A child file may be partial; the merged result is validated against the full schema. Inheritance cycles and
-  missing parents are reported with the file to fix.
+- `extends:` names an abstract mode that extends nothing: one level. A child feature with no `playbook` or `rules`
+  inherits the parent's.
+- A child file may be partial; the merged result is validated against the full schema. A parent that is missing, not
+  abstract or itself a child is reported with the file to fix.
 - `abstract: true` marks a base that is linted but never resolved, installed or called. It is not inherited.
 
 ## 2. Playbook + rules
@@ -155,11 +156,11 @@ own command reaches it (`improve.findings/v1.decide`, via `bay approve <F-id>`).
 
 A connector is `connector.yaml` + `entry` exposing `create(ctx)`; `ctx` gives `config`, `secrets.get/store` (names
 allowed by env AND connector only), `http.request` (env allowlist enforced before every request, HTTPS only),
-`data_dir`, `caps`, `settings`, `sources` (connectors for capabilities it `needs`), `clock`, and for items.source
+`data_dir`, `caps`, `settings`, `sources` (connectors for capabilities it `needs`; `needs.optional` lists those used only when the env binds them), `clock`, and for items.source
 connectors `source_id`, `window`, `cost_per_item` and `selectors` (the capability table).
 
 A connector that needs an interactive login (for example an OAuth browser flow that stores a refresh token) names a
-function of its `entry` in `login:`. `bay auth <connector> [--env <env>]` runs it; Claude Code always asks first. The function gets `secret(name)` and
+function of its `entry` in `login:`. `bay auth <connector> [--env <env>]` runs it. The function gets `secret(name)` and
 `store_secret(name, value)` for names in both the env's `secrets.allow` and the connector's `needs.secrets`, `http`
 limited to the connector's declared hosts that the env allows, `open_browser(url)` and `say(text)`. The entry runs
 in-process, so this limits the API it is handed, not what the process can do. `bay check` refuses a `login:` whose
@@ -176,8 +177,7 @@ Obligations: idempotent; touches only files recorded in `.agentbay/manifest.json
 user-authored CLAUDE.md, `.claude/settings.json`, `.mcp.json`, never clobbers; `clean` restores them;
 writes the registry via `bay.registry.write`. The catalog is the same for every runtime, and an adapter supplies
 only its own `runtime` name, so a second runtime discovers the same modes, endpoints (with resolved input and
-output schemas), roles and project workflows. The claude-code adapter also writes `Edit` deny rules on
-`.agentbay/**`, `.claude/**` and the kit. A runtime is a folder `adapters/<name>/` with `adapter.yaml` (name =
+output schemas), roles and project workflows. A runtime is a folder `adapters/<name>/` with `adapter.yaml` (name =
 folder, module inside the folder, class). Lint finds it by folder and checks it, and reports a malformed entry
 without importing it.
 
@@ -237,9 +237,8 @@ are in its `data/` folder. Read the endpoints and fields there. A finding's dedu
 hash of its kind and its detector key.
 
 ## 11. Items, selectors and the corpus store
-The item envelope, content types, selectors, the store layout and the SQL sandbox are described in the README of the
-component that owns the base source mode. The endpoints are in the interface files `items.source.v1.yaml` and
-`items.store.v1.yaml`.
+The item envelope, content types, selectors, the store layout and the SQL sandbox are in the README of `components/store`.
+The endpoints are in `items.source.v1.yaml` and `items.store.v2.yaml`. `items.store/v2` has `add`, `update`, `delete` and `rows`.
 
 ## 12. Conformance rules
 `framework/rules/conformance.yaml` (`schemas/rules.schema.json`, linted by `bay check`): rules with an id,
@@ -253,12 +252,12 @@ that has a check and hands the rest to the analyst.
   in the env of the mode that uses the source, add `bsky` to the `items.source/v1` binding and its host and secret
   names to `network.allow` and `secrets.allow`. Modes, roles and playbooks are untouched. A source that produces a
   new kind of item also needs a content type component.
-- **New kind of digest** -> a mode component that extends the base source mode, with its own purpose, constraints,
+- **New kind of digest** -> a mode component that extends `store`, with its own purpose, constraints,
   `configDefaults` and env. Its analyst compiles to its own unit (`analyst--<mode>`) with its own store.
 
   ```yaml
   spec:
-    extends: briefing          # sync, digest, ask and prune come from the base
+    extends: store             # add, update, delete, query, get and ask come from the base; declare sync, digest, prune
     reads: [post/v1]           # the item kinds its features read
   ```
 - **New feature** -> `bay new feature weekly --mode <mode> --effects read`, fill the playbook and rules, `bay check`.

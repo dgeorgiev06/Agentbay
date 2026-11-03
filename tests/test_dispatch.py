@@ -80,7 +80,7 @@ def test_agentic_step_returns_plan_then_review_then_partial_on_failed_must():
     assert nxt["skills"]["corpus-sql"] == "feed-briefing--corpus-sql"          # playbook's short name -> namespaced
     posts = nxt["previous"]["gather"]["items"]
     assert len(posts) == 7 and all(p["matched"] == ["home"] for p in posts)
-    assert any(t.endswith("items.store/v1.sql '<json>'") for t in nxt["tools"])
+    assert any(t.endswith("items.store/v2.sql '<json>'") for t in nxt["tools"])
     urls = [x["url"] for x in posts]
     digest = {"period": {"from": "2026-10-24T12:00:00Z", "to": "2026-10-27T12:00:00Z"},
               "themes": [{"title": "Institutional staking", "summary": "Banks and custodians add staking.",
@@ -139,11 +139,11 @@ def test_stale_refresh_is_skipped_when_fresh():
 def test_use_enforces_role_grants():
     p = project()
     D(p).call("feed-briefing.sync", {})
-    out = D(p).use("analyst--feed-briefing", "items.store/v1.query", {"author": "lido"})
+    out = D(p).use("analyst--feed-briefing", "items.store/v2.query", {"author": "lido"})
     assert {x["author"]["handle"] for x in out["items"]} == {"lido"}
-    err(lambda: D(p).use("reviewer--delivery", "items.store/v1.query", {}), "not granted items.store/v1.query")
-    err(lambda: D(p).use("analyst", "items.store/v1.query", {}), "unknown role unit 'analyst'")
-    err(lambda: D(p).use("analyst--feed-briefing", "items.store/v1.sync", {}), "not granted items.store/v1.sync")
+    err(lambda: D(p).use("reviewer--delivery", "items.store/v2.query", {}), "not granted items.store/v2.query")
+    err(lambda: D(p).use("analyst", "items.store/v2.query", {}), "unknown role unit 'analyst'")
+    err(lambda: D(p).use("analyst--feed-briefing", "items.store/v2.sync", {}), "not granted items.store/v2.sync")
 
 
 def test_effects_rechecked_at_runtime():

@@ -25,11 +25,11 @@ spec:
             components/cos, components/forge,
             components/improve/envs/improve-local.yaml, components/tools/envs/workspace.yaml,
             components/tools/envs/research.yaml,
-            components/claude-transcripts, components/briefing/connectors/corpus-store,
+            components/claude-transcripts, components/store,
             components/improve/connectors/artifact-graph, components/improve/connectors/git,
             components/improve/connectors/improve-detect, components/improve/connectors/improve-store,
             components/improve/connectors/ledger,
-            components/briefing/interfaces, components/improve/interfaces, components/tools/interfaces,
+            components/improve/interfaces, components/tools/interfaces,
             components/tools/envs/plan-writer.yaml,
             docs, tests, README.md]
   tiers: [balanced, deep]          # no fast tier for framework changes

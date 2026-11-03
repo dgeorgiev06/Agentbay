@@ -422,11 +422,11 @@ _PARAM = re.compile(r":([A-Za-z_]\w*)")
 @dataclass(frozen=True)
 class ModeViews:
     """The views a mode defines over the content types it reads: views.sql (only `CREATE VIEW v_<name> AS ...`)
-    and views.yaml (`views`: the documented columns of each; `threads`: how items.store/v1.threads reads one)."""
+    and views.yaml (`views`: the documented columns of each; `rows`: name -> how items.store/v2.rows reads one)."""
     dir: Path
     docs: dict        # view name -> {columns}
     views: tuple      # (view name, CREATE TEMP VIEW statement) in file order
-    threads: dict | None = None
+    rows: dict | None = None
 
     def view_names(self) -> list[str]:
         return [v for v, _ in self.views]
@@ -443,8 +443,10 @@ def _mode_one(d: Path) -> tuple[ModeViews | None, list[str]]:
         doc = model.load_yaml(yml)
     except (OSError, model.SpecError) as e:
         return None, [f"{model.rel(d)}: a mode that defines views needs {VIEWS} and {YAML_MODE} ({e})"]
-    if not isinstance(doc, dict) or not isinstance(doc.get("views"), dict) or set(doc) - {"views", "threads"}:
-        return None, [f"{model.rel(yml)}: must be a mapping with `views` (view -> columns) and optionally `threads`"]
+    if isinstance(doc, dict) and "threads" in doc:
+        return None, [f"{model.rel(yml)}: `threads:` is now `rows: {{ threads: ... }}`"]
+    if not isinstance(doc, dict) or not isinstance(doc.get("views"), dict) or set(doc) - {"views", "rows"}:
+        return None, [f"{model.rel(yml)}: must be a mapping with `views` (view -> columns) and optionally `rows` (name -> block)"]
     views = []
     for stmt in _statements(text):
         m = _CREATE.match(stmt)
@@ -466,16 +468,14 @@ def _mode_one(d: Path) -> tuple[ModeViews | None, list[str]]:
         cols = dd.get("columns") if isinstance(dd, dict) else None
         if not cols or not all(isinstance(c, dict) and {"name", "type", "description"} <= set(c) for c in cols):
             out.append(f"{model.rel(yml)}: views.{v}.columns must list {{name, type, description}} entries")
-    out += _threads_problems(doc.get("threads"), docs, yml)
+    out += [p for n, th in (doc.get("rows") or {}).items() for p in _row_problems(n, th, docs, yml)]
     if out:
         return None, out
-    return ModeViews(d, {v: docs[v] for v in names}, tuple(views), doc.get("threads")), []
+    return ModeViews(d, {v: docs[v] for v in names}, tuple(views), doc.get("rows")), []
 
 
-def _threads_problems(th, docs: dict, yml: Path) -> list[str]:
-    if th is None:
-        return []
-    where = f"{model.rel(yml)}: threads"
+def _row_problems(name: str, th, docs: dict, yml: Path) -> list[str]:
+    where = f"{model.rel(yml)}: rows.{name}"
     if not isinstance(th, dict) or th.get("view") not in docs:
         return [f"{where}.view must name a view documented under `views`"]
     cols = {c["name"] for c in (docs[th["view"]].get("columns") or []) if isinstance(c, dict) and "name" in c}
@@ -512,7 +512,7 @@ def mode_views(dirs) -> ModeViews | None:
 
 def mode_problems(dirs, reads, root: Path = model.KIT) -> list[str]:
     """Everything wrong with the views of the mode whose folders are `dirs` and which `reads` the item kinds
-    `reads` (`<kind>/v<N>`): the files, the types the views may read, the documented columns and the threads rules."""
+    `reads` (`<kind>/v<N>`): the files, the types the views may read, the documented columns and the rows rules."""
     for d in map(Path, dirs):
         if (d / VIEWS).exists() or (d / YAML_MODE).exists():
             mv, errs = _mode_one(d)
@@ -540,7 +540,7 @@ def check_mode_views(mv: ModeViews, reads, root: Path = model.KIT) -> list[str]:
         stored = _build_empty_store(con, mv, types, fts)
         con.set_authorizer(_mode_view_authorizer(stored, own, readable, reads_seen))
         cols_of = _view_column_problems(con, mv, kinds, reads_seen, problems)
-        _threads_query_problems(con, mv, cols_of, reads_seen, problems)
+        _rows_query_problems(con, mv, cols_of, reads_seen, problems)
     except sqlite3.Error as e:
         problems.append(f"{model.rel(mv.dir / VIEWS)}: {e}")
     finally:
@@ -613,23 +613,23 @@ def _view_column_problems(con, mv: ModeViews, kinds: set[str], reads_seen: list[
     return cols_of
 
 
-def _threads_query_problems(con, mv: ModeViews, cols_of: dict[str, list[str]], reads_seen: list[str],
-                            problems: list[str]) -> None:
-    """The threads rules: the columns they name exist, and the order and detail queries run."""
-    th = mv.threads
-    if not th or th["view"] not in cols_of:
-        return
+def _rows_query_problems(con, mv: ModeViews, cols_of: dict[str, list[str]], reads_seen: list[str],
+                         problems: list[str]) -> None:
+    """The rows rules: the columns they name exist, and the order and detail queries run."""
     yml = model.rel(mv.dir / YAML_MODE)
-    for key in ("window", "selector", "important", *th.get("json", []), *th.get("flags", [])):
-        c = th[key] if key in th else key
-        if c not in cols_of[th["view"]]:
-            problems.append(f"{yml}: threads names column {c}, which {th['view']} does not have")
-    queries = {"order": f"SELECT * FROM {th['view']} ORDER BY {th['order']} LIMIT 0",
-               **{f"details.{n}": d["sql"] for n, d in (th.get("details") or {}).items()}}
-    for name, q in queries.items():
-        reads_seen.clear()
-        try:
-            con.execute(q, {p: None for p in _PARAM.findall(q)}).fetchall()
-        except sqlite3.Error as e:
-            bad = f" (it reads {', '.join(dict.fromkeys(reads_seen))})" if reads_seen else ""
-            problems.append(f"{yml}: threads.{name} cannot run{bad}: {e}")
+    for rn, th in (mv.rows or {}).items():
+        if th["view"] not in cols_of:
+            continue
+        for key in ("window", "selector", "important", *th.get("json", []), *th.get("flags", [])):
+            c = th[key] if key in th else key
+            if c not in cols_of[th["view"]]:
+                problems.append(f"{yml}: rows.{rn} names column {c}, which {th['view']} does not have")
+        queries = {"order": f"SELECT * FROM {th['view']} ORDER BY {th['order']} LIMIT 0",
+                   **{f"details.{n}": d["sql"] for n, d in (th.get("details") or {}).items()}}
+        for name, q in queries.items():
+            reads_seen.clear()
+            try:
+                con.execute(q, {p: None for p in _PARAM.findall(q)}).fetchall()
+            except sqlite3.Error as e:
+                bad = f" (it reads {', '.join(dict.fromkeys(reads_seen))})" if reads_seen else ""
+                problems.append(f"{yml}: rows.{rn}.{name} cannot run{bad}: {e}")

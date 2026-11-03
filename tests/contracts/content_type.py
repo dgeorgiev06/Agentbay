@@ -18,7 +18,7 @@ from pathlib import Path
 
 from bay import contenttypes, model, sqlsandbox as sbx
 
-STORE = Path(__file__).resolve().parents[2] / "components" / "briefing" / "connectors" / "corpus-store" / "corpus_store.py"
+STORE = Path(__file__).resolve().parents[2] / "components" / "store" / "connectors" / "corpus-store" / "corpus_store.py"
 
 
 def _store_module():

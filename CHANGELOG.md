@@ -2,6 +2,39 @@
 
 Earlier versions: see docs/proposals/
 
+## 3.0.0 - 2026-11-03
+
+Proposal 0016: a store base mode. The base mode `briefing` becomes `store`, and `items.store/v1` becomes `items.store/v2`. Both break existing modes and connectors, so this is a major version.
+
+### Upgrading
+
+1. A user mode with `extends: briefing` now needs `extends: store`. The base no longer provides `sync`, `digest` or `prune`, so the mode declares its own.
+2. Replace every use of `items.store/v1` with `items.store/v2`. In `views.yaml`, the `threads:` block becomes `rows:` with a `name` for each block, and a call to the `threads` endpoint becomes `rows` with `name`.
+3. corpus-store's `items.source/v1` capability moved to `needs.optional`. A connector or env that lists it under `needs.capabilities` moves it there.
+4. Run `bay build`.
+
+### Added
+
+- `store`, an abstract base mode that owns the database. It gives every child `add`, `update`, `delete`, `query`, `get` and `ask`, and runs with no source bound.
+- `items.store/v2` endpoints `add`, `update` and `delete`, and local items with the reserved source `local`. Sync, prune and scope changes never remove a local item.
+- `delete` asks first: it shows the items, waits at a gate, removes exactly the items it showed, and always returns `{deleted, missing, remembered}`. A synced item is remembered, so no later sync stores it again, and the source is never contacted.
+- `add` refuses a kind that a source produces, and `update` refuses a synced item.
+- `needs.optional` in the connector manifest lists capabilities the connector uses when the env binds them.
+- A `*` path part in `with:` maps the rest of a `$steps` or `$in` path over a list.
+
+### Changed
+
+- `mail-briefing` and `feed-briefing` extend `store` directly and declare their own `sync`, `digest` and `prune`.
+- `rows` replaces `threads`: it takes a `name` and returns `{rows, coverage}`.
+- `components/store/` is core-owned, so the limits count it as framework code. `store` is a reserved mode name.
+- Inheritance is one level deep.
+
+### Removed
+
+- `components/briefing/`: its files moved to `components/store/`, `components/feed-briefing/` and `components/mail-briefing/`.
+- `items.store/v1`, with no alias.
+- The `threads` endpoint and the `threads:` block of `views.yaml`.
+
 ## 2.0.0 - 2026-11-03
 
 Proposal 0015: plan approval as a gate. This release breaks one config key, so it is a major version.

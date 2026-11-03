@@ -2,6 +2,7 @@
 mode's `needs`; each (role, mode, env) compiles to its own subagent, use shim, guard entry and store; one agent
 profile maps tiers to models."""
 import json
+import shutil
 import subprocess
 import sys
 
@@ -18,24 +19,28 @@ metadata: { name: local-news, description: A second offline briefing env with it
 spec:
   bind:
     items.source/v1: [fake]
-    items.store/v1: corpus-store
+    items.store/v2: corpus-store
   network: { allow: [] }
   fs: { read: ["."], write: [".agentbay/data/news"] }
   effects: [read, write, network, spend, delete]
 """
 
 
-def news_kit(step_override: bool = False):
-    """feed-briefing plus news-briefing (also extending briefing) whose roles work in env local-news."""
-    k = kit_copy()
-    (k / "components/briefing/envs/local-news.yaml").write_text(NEWS_ENV)
+def news_mode(k, roles, defaults=None):
+    """news-briefing: a copy of feed-briefing (source, sync, digest, ask, prune) whose roles work in env local-news."""
+    (k / "components/feed-briefing/envs/local-news.yaml").write_text(NEWS_ENV)
     d = k / "components/news-briefing"
-    d.mkdir()
-    (d / "mode.yaml").write_text(yaml.safe_dump({
-        "apiVersion": "agentbay/v4", "kind": "Mode", "metadata": {"name": "news-briefing", "version": "0.1.0"},
-        "spec": {"extends": "briefing", "purpose": "Brief me on the news.",
-                 "roles": {"lead": "local-news", "analyst": "local-news", "reviewer": "local-news"},
-                 "configDefaults": {"selectors": [{"id": "lido", "from": "lido"}]}}}))
+    shutil.copytree(k / "components/feed-briefing", d, ignore=shutil.ignore_patterns("envs"))
+    edit_yaml(d / "mode.yaml", lambda doc: (doc["metadata"].update({"name": "news-briefing"}),
+                                            doc["spec"].update({"roles": roles, "configDefaults": defaults or {}})))
+    return d
+
+
+def news_kit(step_override: bool = False):
+    """feed-briefing plus news-briefing, whose roles work in env local-news."""
+    k = kit_copy()
+    news_mode(k, dict.fromkeys(("lead", "analyst", "reviewer"), "local-news"),
+              {"selectors": [{"id": "lido", "from": "lido"}]})
     return k
 
 
@@ -55,8 +60,8 @@ def test_access_comes_from_the_mode_needs_through_the_env():
     s = system(project())
     u = s.units()
     feed, imp = u["analyst--feed-briefing"], u["analyst--improve"]
-    assert feed.bay_uses == [f"items.store/v1.{e}" for e in
-                             ("describe", "sql", "get", "thread", "threads", "facets", "search", "query", "status")]
+    assert feed.bay_uses == [f"items.store/v2.{e}" for e in
+                             ("describe", "sql", "get", "thread", "rows", "facets", "search", "query", "status")]
     assert {x.rsplit(".", 1)[0] for x in imp.bay_uses} == {"improve.findings/v1", "session.events/v1",
                                                             "review.verdicts/v1", "artifacts.read/v1"}
     assert "improve.findings/v1.upsert" not in imp.bay_uses and "improve.findings/v1.verify" not in imp.bay_uses
@@ -67,12 +72,12 @@ def test_access_comes_from_the_mode_needs_through_the_env():
     p = project()
     d = dispatch.Dispatcher(system(p), p, clock=clock)
     call(d, "feed-briefing.sync")
-    assert d.use("analyst--feed-briefing", "items.store/v1.query", {})["items"]
+    assert d.use("analyst--feed-briefing", "items.store/v2.query", {})["items"]
     for unit, target in (("analyst--feed-briefing", "improve.findings/v1.query"),
                          ("analyst--feed-briefing", "session.events/v1.episodes"),
-                         ("analyst--feed-briefing", "items.store/v1.sync"),
-                         ("analyst--feed-briefing", "items.store/v1.prune"),
-                         ("analyst--improve", "items.store/v1.query"),
+                         ("analyst--feed-briefing", "items.store/v2.sync"),
+                         ("analyst--feed-briefing", "items.store/v2.prune"),
+                         ("analyst--improve", "items.store/v2.query"),
                          ("analyst--improve", "improve.findings/v1.upsert"),
                          ("analyst--improve", "improve.detect/v1.artifacts")):
         try:
@@ -101,9 +106,9 @@ def test_one_reader_role_in_two_modes_and_envs_compiles_separately_with_separate
     from bay.guard import Guard
     g = Guard(json.loads((p / ".agentbay/guard.json").read_text()), p, ci=False)
     payload = {"agent_type": "analyst--feed-briefing", "agent_id": "a1", "tool_name": "Bash", "cwd": str(p),
-               "tool_input": {"command": ".agentbay/roles/analyst--news-briefing/use items.store/v1.query '{}'"}}
+               "tool_input": {"command": ".agentbay/roles/analyst--news-briefing/use items.store/v2.query '{}'"}}
     assert g.decide(payload)[0] == "deny"
-    payload["tool_input"]["command"] = ".agentbay/roles/analyst--feed-briefing/use items.store/v1.query '{}'"
+    payload["tool_input"]["command"] = ".agentbay/roles/analyst--feed-briefing/use items.store/v2.query '{}'"
     assert g.decide(payload)[0] == "allow"
     # separate stores: each mode syncs into its env's data folder and each shim reads only its own
     d = dispatch.Dispatcher(s, p, clock=clock)
@@ -111,13 +116,13 @@ def test_one_reader_role_in_two_modes_and_envs_compiles_separately_with_separate
     assert (p / ".agentbay/data/feeds/feed-briefing/corpus.db").exists()
     assert (p / ".agentbay/data/news/news-briefing/corpus.db").exists()
     assert not (p / ".agentbay/data/news/feed-briefing").exists() and not (p / ".agentbay/data/feeds/news-briefing").exists()
-    feed = {x["author"]["handle"] for x in d.use("analyst--feed-briefing", "items.store/v1.query", {})["items"]}
-    news = {x["author"]["handle"] for x in d.use("analyst--news-briefing", "items.store/v1.query", {})["items"]}
+    feed = {x["author"]["handle"] for x in d.use("analyst--feed-briefing", "items.store/v2.query", {})["items"]}
+    news = {x["author"]["handle"] for x in d.use("analyst--news-briefing", "items.store/v2.query", {})["items"]}
     assert news == {"lido"} and len(feed) > 1
-    news_sql = d.use("analyst--news-briefing", "items.store/v1.sql", {"sql": "SELECT count(*) AS n FROM v_items"})
+    news_sql = d.use("analyst--news-briefing", "items.store/v2.sql", {"sql": "SELECT count(*) AS n FROM v_items"})
     assert json.dumps(news_sql).count("lido") == 0 and news_sql["rows"][0][0] == 1, news_sql
     for unit, mode in (("analyst--feed-briefing", "feed-briefing"), ("analyst--news-briefing", "news-briefing")):
-        r = subprocess.run([str(p / f".agentbay/roles/{unit}/use"), "items.store/v1.status", "{}"], cwd=p,
+        r = subprocess.run([str(p / f".agentbay/roles/{unit}/use"), "items.store/v2.status", "{}"], cwd=p,
                            capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
     reads = [json.loads(x) for x in (p / ".agentbay/ledger/events.jsonl").read_text().splitlines() if '"data.read"' in x]
@@ -131,8 +136,8 @@ def test_one_reader_role_in_two_modes_and_envs_compiles_separately_with_separate
 
 def test_a_step_override_runs_one_role_in_two_envs_within_one_mode():
     k = kit_copy()
-    (k / "components/briefing/envs/local-news.yaml").write_text(NEWS_ENV)
-    edit_yaml(k / "components/briefing/mode.yaml",
+    (k / "components/feed-briefing/envs/local-news.yaml").write_text(NEWS_ENV)
+    edit_yaml(k / "components/feed-briefing/mode.yaml",
               lambda d: d["spec"]["features"]["digest"]["steps"][2].update({"roles": {"analyst": "local-news"}}))
     p = project()
     s = system(p, k)
@@ -149,9 +154,9 @@ def test_a_step_override_runs_one_role_in_two_envs_within_one_mode():
     call(d, "feed-briefing.sync")
     # each unit reads the store of its own env: nothing was synced in local-news, so that unit finds an empty
     # store (and is told to sync), never the other env's items
-    feed = d.use("analyst--feed-briefing--local-feeds", "items.store/v1.query", {})["items"]
+    feed = d.use("analyst--feed-briefing--local-feeds", "items.store/v2.query", {})["items"]
     assert feed
-    news = d.use("analyst--feed-briefing--local-news", "items.store/v1.query", {})
+    news = d.use("analyst--feed-briefing--local-news", "items.store/v2.query", {})
     assert news["items"] == [] and "run the mode's sync" in news["coverage"]["note"]
     assert not (p / ".agentbay/data/news/feed-briefing/corpus.db").exists()
 
@@ -206,14 +211,14 @@ def test_a_read_capability_never_gives_read_roles_write_tools_or_paths():
     """Review case t6: a read-effect tools capability bound to Edit/Write and arbitrary CLIs."""
     from bay import lint
     k = kit_copy()
-    (k / "components/briefing/interfaces/notes.edit.v1.yaml").write_text(NOTES_IFACE)
-    edit_yaml(k / "components/briefing/envs/local-feeds.yaml", lambda d: d["spec"]["bind"].update(
+    (k / "components/store/interfaces/notes.edit.v1.yaml").write_text(NOTES_IFACE)
+    edit_yaml(k / "components/feed-briefing/envs/local-feeds.yaml", lambda d: d["spec"]["bind"].update(
         {"notes.edit/v1": {"tools": ["Edit", "Write", "Bash"], "clis": ["rm", "git push"]}}))
-    edit_yaml(k / "components/briefing/mode.yaml", lambda d: d["spec"]["needs"].append("notes.edit/v1"))
-    env = k / "components/briefing/envs/local-feeds.yaml"
+    edit_yaml(k / "components/feed-briefing/mode.yaml", lambda d: d["spec"]["needs"].append("notes.edit/v1"))
+    env = k / "components/feed-briefing/envs/local-feeds.yaml"
     line = next(i for i, ln in enumerate(env.read_text().splitlines(), 1) if "notes.edit/v1:" in ln)
     ps = lint.run(k)
-    assert any(p.endswith(f"components/briefing/envs/local-feeds.yaml:{line}: env local-feeds binds Edit, Write, rm, git push under "
+    assert any(p.endswith(f"components/feed-briefing/envs/local-feeds.yaml:{line}: env local-feeds binds Edit, Write, rm, git push under "
                           f"notes.edit/v1, which has no `write` effect; file-writing tools and CLIs other than git "
                           f"status, git diff, git log, git show belong under a capability with the write effect "
                           f"(e.g. workspace.write/v1)") for p in ps), ps
@@ -258,28 +263,21 @@ def test_a_units_default_tier_is_checked_against_the_env_cap():
     """Review case t1: the reviewer's subagent compiled with opus (deep) in an env capped to fast, balanced."""
     from helpers import assert_gap
     k = kit_copy()
-    edit_yaml(k / "components/briefing/envs/local-feeds.yaml", lambda d: d["spec"].update({"tiers": ["fast", "balanced"]}))
-    edit_yaml(k / "components/briefing/mode.yaml", lambda d: d["spec"]["features"]["digest"]["review"].update(
+    edit_yaml(k / "components/feed-briefing/envs/local-feeds.yaml", lambda d: d["spec"].update({"tiers": ["fast", "balanced"]}))
+    edit_yaml(k / "components/feed-briefing/mode.yaml", lambda d: d["spec"]["features"]["digest"]["review"].update(
         {"tier": "balanced"}))
     assert_gap(k, "mode feed-briefing: role reviewer in env local-feeds: its default tier 'deep' (the model its "
                   "subagent is compiled with) is not allowed by env local-feeds (allows: fast, balanced)")
 
 
 def test_lint_warns_when_a_partial_roles_override_splits_a_store_reading_mode():
-    """Review case t10: a child moves lead and analyst to the offline env but inherits reviewer in local-feeds."""
+    """Review case t10: a child moves lead and analyst to the offline env but keeps reviewer in local-feeds."""
     from bay import lint
     k = kit_copy()
-    d = k / "components/news-briefing"
-    d.mkdir()
-    (d / "mode.yaml").write_text(
-        "apiVersion: agentbay/v4\nkind: Mode\nmetadata: { name: news-briefing, version: 0.1.0, description: news }\n"
-        "spec:\n  extends: briefing\n  purpose: Brief me on news from my sources for testing.\n"
-        "  roles: { lead: local-news, analyst: local-news }\n  reads: [post/v1]\n")
-    (k / "components/briefing/envs/local-news.yaml").write_text(NEWS_ENV)
-    from helpers import self_describe
-    self_describe(d)
+    d = news_mode(k, {"lead": "local-news", "analyst": "local-news", "reviewer": "local-feeds"})
+    line = next(i for i, ln in enumerate((d / "mode.yaml").read_text().splitlines(), 1) if ln.startswith("  roles:"))
     ws = lint.warnings(model.Kit(k))
-    assert any("components/news-briefing/mode.yaml:7: mode news-briefing puts role reviewer in env local-feeds, whose "
+    assert any(f"components/news-briefing/mode.yaml:{line}: mode news-briefing puts role reviewer in env local-feeds, whose "
                "items.store/items.source bindings differ from env local-news, where its code steps (sync, "
                "prune) run" in w for w in ws), ws
     assert not any("mode feed-briefing puts role" in w for w in lint.warnings(model.Kit(KIT)))   # shipped: no split
@@ -289,10 +287,10 @@ def test_lint_warns_when_a_partial_roles_override_splits_a_store_reading_mode():
 def test_lint_reports_an_unknown_env_in_a_roles_map_with_file_and_line():
     from bay import lint
     k = kit_copy()
-    base = k / "components/briefing/mode.yaml"
+    base = k / "components/feed-briefing/mode.yaml"
     base.write_text(base.read_text().replace("reviewer: local-feeds }", "reviewer: nowhere }"))
     line = next(i for i, ln in enumerate(base.read_text().splitlines(), 1) if ln.startswith("  roles:"))
     ps = lint.run(k)
-    assert any(p.endswith(f"components/briefing/mode.yaml:{line}: mode briefing: `roles:` puts role reviewer in unknown "
+    assert any(p.endswith(f"components/feed-briefing/mode.yaml:{line}: mode feed-briefing: `roles:` puts role reviewer in unknown "
                           f"env 'nowhere' (have: cos-local, framework-dev, improve-local, local-authoring, local-feeds, "
-                          f"local-mail, plan-writer, research, workspace)") for p in ps), ps
+                          f"local-mail, plan-writer, research, store-local, workspace)") for p in ps), ps

@@ -38,11 +38,11 @@ SUFFIXES = {".py", ".json", ".yaml", ".yml"}
 ALLOWED = {
     ("bay/selector.py", "email", "au.get('email')"):
         "the `email` field of an item/v1 author ({handle, name, email}); a field of the base record, not a content type",
-    ("components/briefing/connectors/corpus-store/corpus_store.py", "email", "au.get('email')"):
+    ("components/store/connectors/corpus-store/corpus_store.py", "email", "au.get('email')"):
         "the same item/v1 author field, read when a row is stored",
-    ("components/briefing/connectors/corpus-store/corpus_store.py", "email", "'email' not in author"):
+    ("components/store/connectors/corpus-store/corpus_store.py", "email", "'email' not in author"):
         "the same author field, checked when a handle holds an address",
-    ("components/briefing/connectors/corpus-store/corpus_store.py", "email", "{'email': author.pop('handle'), **author}"):
+    ("components/store/connectors/corpus-store/corpus_store.py", "email", "{'email': author.pop('handle'), **author}"):
         "the same author field, written when a handle holds an address",
     ("schemas/data/item.v1.schema.json", "email", "/properties/author/properties: email"):
         "the item/v1 author's `email` property, the base record every type extends",

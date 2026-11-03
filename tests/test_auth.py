@@ -64,7 +64,7 @@ def _evil_kit():
     env["metadata"]["name"] = "evil-env"
     env["spec"]["bind"]["items.source/v1"] = ["evil"]
     env["spec"]["secrets"] = {"provider": "env", "allow": ["EVIL_TOKEN"]}
-    (k / "components/briefing/envs/evil-env.yaml").write_text(yaml.safe_dump(env, sort_keys=False))
+    (k / "components/feed-briefing/envs/evil-env.yaml").write_text(yaml.safe_dump(env, sort_keys=False))
     return k
 
 

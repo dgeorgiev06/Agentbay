@@ -51,7 +51,7 @@ def test_adapter_round_trip():
                       "analyst--improve", "reviewer--improve"}       # no framework-dev here, so no --<env> suffix
     assert not any(a.startswith("lead--") for a in agents)                      # coordinators run in main thread
     fa = (proj / ".claude/agents/analyst--feed-briefing.md").read_text()
-    assert "tools: Bash\n" in fa and ".agentbay/roles/analyst--feed-briefing/use items.store/v1.query" in fa
+    assert "tools: Bash\n" in fa and ".agentbay/roles/analyst--feed-briefing/use items.store/v2.query" in fa
     assert "Result/v1" in fa and "--role" not in fa and "mode `feed-briefing`, env `local-feeds`" in fa
     assert "corpus-sql" in fa                                                   # the mode's skills
     rv = (proj / ".claude/agents/reviewer--delivery.md").read_text()
@@ -73,12 +73,13 @@ def test_adapter_round_trip():
         return [ln for ln in p.read_text().splitlines() if not ln.startswith("name:")]
     for n in built:                                                         # name: is the namespaced folder name
         assert f"\nname: {n}\n" in (sk_dir / n / "SKILL.md").read_text()
-    for sk in ("digest", "corpus-sql", "grounded-qa"):  # same short name in two modes: no clobbering
-        assert body(sk_dir / f"feed-briefing--{sk}/SKILL.md") == body(KIT / f"components/briefing/skills/{sk}/SKILL.md")
+    for sk, home in (("digest", "feed-briefing"), ("corpus-sql", "store"), ("grounded-qa", "store")):   # same short name in two modes: no clobbering
+        assert body(sk_dir / f"feed-briefing--{sk}/SKILL.md") == body(KIT / f"components/{home}/skills/{sk}/SKILL.md")
     for sk in ("digest", "corpus-sql"):                 # mail-briefing overrides these, for itself only
         assert body(sk_dir / f"mail-briefing--{sk}/SKILL.md") == body(KIT / f"components/mail-briefing/skills/{sk}/SKILL.md")
-        assert body(KIT / f"components/mail-briefing/skills/{sk}/SKILL.md") != body(KIT / f"components/briefing/skills/{sk}/SKILL.md")
-    assert body(sk_dir / "mail-briefing--grounded-qa/SKILL.md") == body(KIT / "components/briefing/skills/grounded-qa/SKILL.md")
+        home = "feed-briefing" if sk == "digest" else "store"
+        assert body(KIT / f"components/mail-briefing/skills/{sk}/SKILL.md") != body(KIT / f"components/{home}/skills/{sk}/SKILL.md")
+    assert body(sk_dir / "mail-briefing--grounded-qa/SKILL.md") == body(KIT / "components/store/skills/grounded-qa/SKILL.md")
     ma = (proj / ".claude/agents/analyst--mail-briefing.md").read_text()
     assert "`feed-briefing--corpus-sql` (corpus-sql)" in fa and "mail-briefing--" not in fa
     assert "`mail-briefing--corpus-sql` (corpus-sql)" in ma and "feed-briefing--" not in ma
@@ -88,8 +89,8 @@ def test_adapter_round_trip():
     cat = json.loads((proj / ".agentbay/catalog.json").read_text())
     assert {m["name"] for m in cat["modes"]} == {"cos", "delivery", "feed-briefing", "forge", "improve",
                                                   "mail-briefing"}
-    #  ^ briefing is abstract; cos is the root coordinator's own mode
-    assert next(m for m in cat["modes"] if m["name"] == "feed-briefing")["extends"] == "briefing"
+    #  ^ store is abstract; cos is the root coordinator's own mode
+    assert next(m for m in cat["modes"] if m["name"] == "feed-briefing")["extends"] == "store"
     dg = next(e for m in cat["modes"] for e in m["endpoints"] if e["name"] == "feed-briefing.digest")
     assert dg["review"]["role"] == "reviewer" and [s["kind"] for s in dg["steps"]][-1] == "review"
     assert {r["subagent"] for r in cat["roles"]} == agents
@@ -343,14 +344,14 @@ def test_lint_reports_a_skill_md_whose_front_matter_never_closes_f15():
     from helpers import cleanup, kit_copy
     k = kit_copy()
     try:
-        f = k / "components/briefing/skills/digest/SKILL.md"
+        f = k / "components/feed-briefing/skills/digest/SKILL.md"
         f.write_text(f.read_text().replace("\n---\n", "\n\n", 1))
-        g = k / "components/briefing/skills/grounded-qa/SKILL.md"
+        g = k / "components/store/skills/grounded-qa/SKILL.md"
         g.write_text("---\n- not\n- a mapping\n---\n# x\n")
         errs = lint.run(k)
-        want = "components/briefing/skills/digest/SKILL.md:1: front matter opens with '---' on line 1 but has no closing"
+        want = "components/feed-briefing/skills/digest/SKILL.md:1: front matter opens with '---' on line 1 but has no closing"
         assert sum(want in e for e in errs) == 1                  # once, though two modes inherit the skill
-        assert any("components/briefing/skills/grounded-qa/SKILL.md:1: front matter must be a YAML mapping" in e
+        assert any("components/store/skills/grounded-qa/SKILL.md:1: front matter must be a YAML mapping" in e
                    for e in errs)
     finally:
         cleanup(k)

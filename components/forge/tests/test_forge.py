@@ -40,7 +40,7 @@ def test_feature_role_env_connector_scaffolds_are_lint_clean():
     wk = s.modes["feed-briefing"].features["weekly"]
     assert wk.review is None and [st.role for st in wk.steps] == ["analyst"]   # read-only: review off by default
     text = (k / "components/feed-briefing/mode.yaml").read_text()                   # one block per feature
-    assert "  features:\n    weekly:" in text and "steps:" in text
+    assert text.count("\n    weekly:\n") == 1 and "steps:" in text
     # write effects -> review on by default
     scaffold.create(k, "feature", "export", target="delivery", role="builder", effects=["read", "write"],
                     intent="Export a file")
@@ -56,7 +56,7 @@ def test_adding_a_source_is_connector_plus_one_binding():
     k = kit_copy()
     before = {p: (k / p).read_text() for p in ("components/feed-briefing/mode.yaml", "framework/roles/analyst.yaml")}
     scaffold.create(k, "connector", "bsky", implements="items.source/v1", intent="Bluesky timeline")
-    edit_yaml(k / "components/briefing/envs/local-feeds.yaml", lambda d: d["spec"]["bind"].update({"items.source/v1": ["x-api", "bsky"]}))
+    edit_yaml(k / "components/feed-briefing/envs/local-feeds.yaml", lambda d: d["spec"]["bind"].update({"items.source/v1": ["x-api", "bsky"]}))
     edit_yaml(k / "components/bsky/connector.yaml", lambda d: d["spec"]["needs"].update({"network": ["api.x.com"]}))
     s = model.resolve(model.Kit(k))
     assert s.env("local-feeds").spec["bind"]["items.source/v1"] == ["x-api", "bsky"]
@@ -115,7 +115,7 @@ def test_connector_scaffold_for_feed_source_declares_source_and_window():
     scaffold.create(k, "connector", "rss", implements="items.source/v1", intent="RSS feeds")
     spec = model.Kit(k).get("Connector", "rss").spec
     assert spec["source"] == "rss" and spec["window"] == "7d" and spec["selectors"]["since"] == "native"
-    scaffold.create(k, "connector", "store2", implements="items.store/v1", intent="Another store")
+    scaffold.create(k, "connector", "store2", implements="items.store/v2", intent="Another store")
     assert "source" not in model.Kit(k).get("Connector", "store2").spec
     assert lint.run(k) == []
 

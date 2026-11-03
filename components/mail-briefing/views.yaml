@@ -1,4 +1,4 @@
-# The views this mode defines (views.sql) over the content types it reads, and how items.store/v1.threads reads them.
+# The views this mode defines (views.sql) over the content types it reads, and how items.store/v2.rows reads each of its rows.
 views:
   v_threads:
     columns:
@@ -20,25 +20,26 @@ views:
       - { name: hasAttachments, type: INTEGER, description: "" }
       - { name: attachmentCount, type: INTEGER, description: "" }
 
-# items.store/v1.threads returns the rows of `view` active in the window (`window` column, between since and until),
+# items.store/v2.rows returns the rows of `view` active in the window (`window` column, between since and until),
 # those a selector matches (`selector` column, a JSON array), in `order`; JSON columns come back as arrays and `flags`
 # as booleans; `important` marks rows whose `important` column (a JSON array of addresses) has an address matching
 # the `important` setting. Each detail runs once per row with the row's columns as :name parameters.
-threads:
-  view: v_threads
-  window: lastDate
-  selector: matched
-  important: senders
-  order: "lastDate DESC, threadId"
-  json: [participants, senders, matched]
-  flags: [lastFromMe, lastToMe, lastBulk, needsReply, hasAttachments]
-  details:
-    ids:
-      as: values
-      sql: "SELECT id FROM v_email WHERE source = :source AND threadId = :threadId ORDER BY createdAt, id LIMIT 50"
-    lastText:
-      as: value
-      sql: "SELECT substr(text, 1, 500) FROM v_email WHERE id = :lastId"
-    attachments:
-      as: rows
-      sql: "SELECT id, name, mime, size, textChars, reason FROM v_attachments WHERE source = :source AND threadId = :threadId ORDER BY createdAt, n LIMIT 20"
+rows:
+  threads:
+    view: v_threads
+    window: lastDate
+    selector: matched
+    important: senders
+    order: "lastDate DESC, threadId"
+    json: [participants, senders, matched]
+    flags: [lastFromMe, lastToMe, lastBulk, needsReply, hasAttachments]
+    details:
+      ids:
+        as: values
+        sql: "SELECT id FROM v_email WHERE source = :source AND threadId = :threadId ORDER BY createdAt, id LIMIT 50"
+      lastText:
+        as: value
+        sql: "SELECT substr(text, 1, 500) FROM v_email WHERE id = :lastId"
+      attachments:
+        as: rows
+        sql: "SELECT id, name, mime, size, textChars, reason FROM v_attachments WHERE source = :source AND threadId = :threadId ORDER BY createdAt, n LIMIT 20"

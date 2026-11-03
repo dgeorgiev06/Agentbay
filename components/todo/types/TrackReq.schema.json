@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "required": ["ids", "callId", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "ids": { "type": "array", "items": { "type": "string" }, "minItems": 1, "maxItems": 1, "description": "The id of the to-do, in a list of one." },
+    "callId": { "type": "string", "minLength": 1, "description": "The id of the delegated call." },
+    "status": { "type": "string", "minLength": 1, "description": "The status of the delegated call (needs-agent, awaiting-approval, done, partial, blocked, failed)." },
+    "summary": { "type": "string", "description": "A line on what the call produced." }
+  }
+}

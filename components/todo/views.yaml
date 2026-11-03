@@ -1,0 +1,39 @@
+# The view this mode defines (views.sql) over the todoitem type, and how items.store/v2.rows reads its rows.
+views:
+  v_plate:
+    columns:
+      - { name: id, type: TEXT, description: "to-do id, local:<extId>; cite it" }
+      - { name: title, type: TEXT, description: "the to-do" }
+      - { name: text, type: TEXT, description: "its notes" }
+      - { name: labels, type: JSON, description: "its tags" }
+      - { name: threadId, type: TEXT, description: "the series of a recurring to-do, or null" }
+      - { name: priority, type: INTEGER, description: "1 urgent, 2 high, 3 normal, 4 someday" }
+      - { name: status, type: TEXT, description: "open, doing or waiting" }
+      - { name: due, type: TEXT, description: "ISO date or datetime, or null" }
+      - { name: dueDay, type: TEXT, description: "the local day of due, or null" }
+      - { name: delegationTarget, type: TEXT, description: "build or research when handed to an agent, else null" }
+      - { name: delegationStatus, type: TEXT, description: "status of the delegation (handed-off, then the delegated call's status)" }
+      - { name: delegationCallId, type: TEXT, description: "id of the delegated call, or null before it is tracked" }
+      - { name: isOverdue, type: INTEGER, description: "1 when the due day is before today" }
+      - { name: dueToday, type: INTEGER, description: "1 when the due day is today" }
+      - { name: bucket, type: TEXT, description: "delegated, waiting, overdue, today, someday or upcoming (the first that fits, in that order)" }
+
+# items.store/v2.rows returns these rows in `order`. `since` and `until` would cut by the due day (`window`); `selector`
+# keeps the to-dos that carry that label (`selector` column, a JSON array). `important` is not used by this mode.
+rows:
+  agenda:
+    view: v_plate
+    window: dueDay
+    selector: labels
+    important: labels
+    order: "priority, due IS NULL, due, id"
+    json: [labels]
+    flags: [isOverdue, dueToday]
+  due:
+    view: v_plate
+    window: dueDay
+    selector: labels
+    important: labels
+    order: "due IS NULL, due, priority, id"
+    json: [labels]
+    flags: [isOverdue, dueToday]

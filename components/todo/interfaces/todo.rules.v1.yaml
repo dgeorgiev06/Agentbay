@@ -3,9 +3,11 @@ kind: Interface
 metadata:
   name: todo.rules
   description: >-
-    The rules of a to-do list as pure functions: which status moves are allowed, when a recurring to-do comes next
-    and the exact delegation call for a to-do. Every endpoint only reads its input. None touches a store, so the
-    caller reads the to-do first and writes the result afterwards.
+    The rules of a to-do list as pure functions: which status moves are allowed, when a recurring to-do comes next,
+    the exact delegation call for a to-do and how a delegation is tracked. Every endpoint only reads its input. None
+    touches a store, so the caller reads the to-do first (items.store/v2.get) and writes the result afterwards.
+    Each endpoint takes the `items` list that get returns, with exactly one to-do, and the `missing` list of the same
+    call so that an unknown id is named in the error.
 spec:
   version: 1
   binding: connector
@@ -14,25 +16,28 @@ spec:
       description: >-
         Check one status change of a todoitem and say what to write. open, doing and waiting move freely among
         themselves; any of them can go to done or dropped; done and dropped can go back to open. Any other move is
-        refused with an error that names it. `set` holds the fields to update (status, completedAt or droppedAt,
-        threadId when the to-do starts a series, and the whole history list with one new entry
+        refused with an error that names it. An empty `items` is refused: "no to-do with that id; check the id with
+        todo.query". `id` is the id of the to-do to update. `set` holds the fields to update (status, completedAt
+        or droppedAt, threadId when the to-do starts a series, and the whole history list with one new entry
         {at, field, from, to} appended). `next` is the new todoitem for the next occurrence when a recurring to-do
         is completed or dropped, else null. scope series on a drop ends the series, so `next` is null.
       in:
         type: object
-        required: [item, action]
+        required: [items, action]
         additionalProperties: false
         properties:
-          item: { type: object, required: [title], description: "The stored todoitem (id, status, due, recur, history, ...)." }
+          items: { type: array, maxItems: 1, items: { type: object, required: [title], description: "The stored todoitem (id, status, due, recur, history, ...), as items.store/v2.get returns it." } }
+          missing: { type: array, items: { type: string }, description: "The ids get did not find; named in the error when items is empty." }
           action: { enum: [complete, reopen, drop, status] }
           status: { enum: [open, doing, waiting, done, dropped], description: "The new status; required for action status." }
           scope: { enum: [occurrence, series], description: "Default occurrence. series is accepted only when the to-do is dropped." }
           at: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}(T.+)?$", description: "When the change happens; default now." }
       out:
         type: object
-        required: [set, next]
+        required: [id, set, next]
         additionalProperties: false
         properties:
+          id: { type: string }
           set: { type: object }
           next: { type: [object, "null"] }
       effects: [read]
@@ -40,20 +45,59 @@ spec:
       description: >-
         The exact input of the delegation call for a to-do: target delivery.build or delivery.research and the Task
         input (goal, deliverable, context, constraints), valid against the Task schema. The to-do text is quoted in
-        the goal as data. Refused for a done or dropped to-do.
+        the goal as data. Refused for a done or dropped to-do, and for an empty `items`. `delegation` is the record
+        to store on the to-do ({target build|research, status handed-off, at}).
       in:
         type: object
-        required: [item, to]
+        required: [items, to]
         additionalProperties: false
         properties:
-          item: { type: object, required: [title] }
+          items: { type: array, maxItems: 1, items: { type: object, required: [title] } }
+          missing: { type: array, items: { type: string } }
           to: { enum: [build, research] }
           deliverable: { type: string, minLength: 3 }
       out:
         type: object
-        required: [target, input]
+        required: [id, target, input, delegation]
         additionalProperties: false
         properties:
+          id: { type: string }
           target: { enum: [delivery.build, delivery.research] }
           input: { type: object, required: [goal, deliverable] }
+          delegation:
+            type: object
+            required: [target, status, at]
+            additionalProperties: false
+            properties:
+              target: { enum: [build, research] }
+              status: { enum: [handed-off] }
+              at: { type: string }
+      effects: [read]
+    track:
+      description: >-
+        The delegation of a to-do after the delegated call changed: the recorded delegation with the new callId,
+        status and summary. Refused for a to-do with no delegation and for an empty `items`. It never changes the
+        status of the to-do: a finished delegation does not complete it.
+      in:
+        type: object
+        required: [items, callId, status]
+        additionalProperties: false
+        properties:
+          items: { type: array, maxItems: 1, items: { type: object, required: [title] } }
+          missing: { type: array, items: { type: string } }
+          callId: { type: string, minLength: 1 }
+          status: { type: string, minLength: 1, description: "The status of the delegated call (for example needs-agent, done, partial, blocked, failed)." }
+          summary: { type: string }
+      out:
+        type: object
+        required: [id, set]
+        additionalProperties: false
+        properties:
+          id: { type: string }
+          set:
+            type: object
+            required: [delegation]
+            additionalProperties: false
+            properties:
+              delegation: { type: object }
       effects: [read]

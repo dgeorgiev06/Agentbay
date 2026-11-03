@@ -2,15 +2,19 @@
 
 The rules of the todo mode, as a small code connector. It implements the interface `todo.rules/v1`.
 
-It holds no data. It reads no store, uses no network and writes no file. Both endpoints are pure functions of their
-input, so both have the effect `read`. The caller reads the to-do first and writes the result afterwards.
+It holds no data. It reads no store, uses no network and writes no file. All three endpoints are pure functions of
+their input, so all have the effect `read`. The caller reads the to-do first and writes the result afterwards.
+
+Every endpoint takes `items`, the list that `items.store/v2.get` returns, with exactly one to-do, and optionally
+`missing`, the ids that get did not find. An empty `items` is refused with `no to-do with that id (<id>); check the
+id with todo.query`. More than one to-do is refused too.
 
 It works on `todoitem/v1` items (see `components/todoitem`).
 
 ## Files
 
-- `components/todo/interfaces/todo.rules.v1.yaml`: the interface. Two endpoints, `plan` and `brief`, with input and
-  output schemas.
+- `components/todo/interfaces/todo.rules.v1.yaml`: the interface. Three endpoints, `plan`, `brief` and `track`, with
+  input and output schemas.
 - `connector.yaml`: the connector manifest, in this folder.
 - `todo_rules.py`: the code. Python standard library only.
 - `tests/test_todo_rules.py`: the tests.
@@ -19,9 +23,10 @@ It works on `todoitem/v1` items (see `components/todoitem`).
 
 ### plan
 
-Input: `{item, action: complete|reopen|drop|status, status?, scope?: occurrence|series, at?}`.
-Output: `{set, next}`.
+Input: `{items, missing?, action: complete|reopen|drop|status, status?, scope?: occurrence|series, at?}`.
+Output: `{id, set, next}`.
 
+- `id` is the id of the to-do, for the `update` that writes `set`.
 - `set` holds the fields to update: `status`, `completedAt` or `droppedAt`, and `history`. `history` is the whole
   list with one new entry `{at, field, from, to}` at the end. A reopen sets `completedAt` and `droppedAt` to null.
 - `next` is a new todoitem for the next occurrence, or null.
@@ -65,11 +70,12 @@ When a recurring to-do is completed or dropped, `next` has:
 
 ### brief
 
-Input: `{item, to: build|research, deliverable?}`.
-Output: `{target: delivery.build|delivery.research, input}`.
+Input: `{items, missing?, to: build|research, deliverable?}`.
+Output: `{id, target: delivery.build|delivery.research, input, delegation}`.
 
 `input` is the exact Task input of that call: `goal`, `deliverable`, `context` and `constraints`. The todo mode shows
-it at its gate.
+it at its gate. `delegation` is the record to store on the to-do: `{target: build|research, status: handed-off, at}`,
+with `at` the time of the call.
 
 - It is checked at run time against `components/delivery/types/Task.schema.json`, found from the kit root. If that
   file is missing, or the input does not match, `brief` raises a `TodoRulesError`. A `deliverable` that is not a
@@ -79,6 +85,15 @@ it at its gate.
 - `context` quotes the to-do id, priority, due date and labels the same way. No to-do field is plain prose.
 - `deliverable` defaults to a sensible one for the target.
 - A to-do that is done or dropped is refused.
+
+### track
+
+Input: `{items, missing?, callId, status, summary?}`.
+Output: `{id, set: {delegation}}`.
+
+`delegation` is the recorded delegation with the new `callId` and `status`, and the `summary` when given. The target
+and the hand-off time stay. A to-do with no delegation is refused. The status of the to-do itself is never changed: a
+finished delegation does not complete it.
 
 ## Tests
 

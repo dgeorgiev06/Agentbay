@@ -27,8 +27,23 @@ class Ctx:
         return datetime(2026, 11, 3, 10, 0, 0, tzinfo=timezone.utc)
 
 
+class One:
+    """The endpoints with one to-do, as the tests read: the connector takes the `items` list that get returns."""
+    def __init__(self):
+        self.real = tr.create(Ctx())
+
+    def plan(self, item, action, **kw):
+        return self.real.plan([item], action, **kw)
+
+    def brief(self, item, to, **kw):
+        return self.real.brief([item], to, **kw)
+
+    def track(self, item, call_id, status, **kw):
+        return self.real.track([item], call_id, status, **kw)
+
+
 def rules():
-    return tr.create(Ctx())
+    return One()
 
 
 def todo(**kw):
@@ -99,6 +114,14 @@ def test_reopen_of_an_open_todo_and_bad_inputs_are_refused():
     refused(lambda: rules().plan(todo(), "status", at=AT), "needs status")
     refused(lambda: rules().plan(todo(), "snooze", at=AT), "snooze")
     refused(lambda: rules().plan(todo(), "complete", scope="series", at=AT), "scope series")
+    # no to-do: the id the caller could not read is named, and the fix
+    real = tr.create(Ctx())
+    refused(lambda: real.plan([], "complete", missing=["local:nope"]), "no to-do with that id", "local:nope",
+            "check the id with todo.query")
+    refused(lambda: real.brief([], "build"), "no to-do with that id", "todo.query")
+    refused(lambda: real.track([], "C-1", "done"), "no to-do with that id")
+    refused(lambda: real.plan([todo(), todo()], "complete"), "exactly one")
+    refused(lambda: real.plan([{"title": "No id"}], "complete"), "no id")
 
 
 def test_missing_status_counts_as_open():
@@ -226,6 +249,7 @@ def test_brief_build_input_is_valid_against_the_task_schema():
     item = todo(text="Rename the flag.\nThen stop.", due="2026-11-10", labels=["code"], priority=1)
     out = rules().brief(item, "build")
     assert out["target"] == "delivery.build" and task_errors(out["input"]) == []
+    assert out["id"] == item["id"] and out["delegation"] == {"target": "build", "status": "handed-off", "at": AT}
     t = out["input"]
     assert "local:20261103-0001" in t["context"] and "2026-11-10" in t["context"] and "code" in t["context"]
     assert t["deliverable"] == tr.DEFAULT_DELIVERABLE["build"]
@@ -270,9 +294,9 @@ def test_interface_and_connector_manifest_match_the_code():
     conn = yaml.safe_load((root / "connector.yaml").read_text())
     assert iface["metadata"]["name"] == "todo.rules" and iface["spec"]["version"] == 1
     assert conn["spec"]["implements"] == "todo.rules/v1" and conn["spec"]["entry"] == "todo_rules.py"
-    assert set(iface["spec"]["endpoints"]) == {"plan", "brief"}
+    assert set(iface["spec"]["endpoints"]) == {"plan", "brief", "track"}
     assert all(e["effects"] == ["read"] for e in iface["spec"]["endpoints"].values())
-    inst = rules()
+    inst = tr.create(Ctx())
     for ep, e in iface["spec"]["endpoints"].items():
         assert callable(getattr(inst, ep))
         for arg in e["in"]["properties"]:
@@ -282,9 +306,17 @@ def test_interface_and_connector_manifest_match_the_code():
 def test_outputs_match_the_interface_schemas():
     iface = yaml.safe_load((KIT / "components/todo/interfaces/todo.rules.v1.yaml").read_text())["spec"]["endpoints"]
     item = todo(due="2026-11-03", recur={"every": 1, "unit": "day"})
+    sent = {**item, "delegation": {"target": "research", "callId": "C-1", "status": "handed-off", "at": AT}}
     calls = {"plan": rules().plan(item, "complete", at=AT),
-             "brief": rules().brief(item, "build")}
+             "brief": rules().brief(item, "build"),
+             "track": rules().track(sent, "C-2", "done", summary="Found three vendors.")}
     for ep, out in calls.items():
         assert model.schema_errors(out, iface[ep]["out"]) == [], ep
-    assert model.schema_errors({"item": item, "action": "complete"}, iface["plan"]["in"]) == []
-    assert model.schema_errors({"item": item, "action": "fly"}, iface["plan"]["in"]) != []
+    # track keeps the target and the hand-off time, changes the call and status, and leaves the to-do's own status
+    assert calls["track"] == {"id": item["id"], "set": {"delegation": {
+        "target": "research", "callId": "C-2", "status": "done", "at": AT, "summary": "Found three vendors."}}}
+    refused(lambda: rules().track(item, "C-2", "done"), "no delegation", "todo.delegate")
+    assert model.schema_errors({"items": [item], "action": "complete"}, iface["plan"]["in"]) == []
+    assert model.schema_errors({"items": [item], "action": "fly"}, iface["plan"]["in"]) != []
+    assert model.schema_errors({"items": [item, item], "action": "complete"}, iface["plan"]["in"]) != []
+    assert model.schema_errors({"item": item, "action": "complete"}, iface["plan"]["in"]) != []

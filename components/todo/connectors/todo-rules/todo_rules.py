@@ -1,7 +1,9 @@
 """todo-rules: todo.rules/v1 as pure functions. No store, no network, no files written.
 
-plan   a status change of a todoitem -> the fields to set and the next occurrence (or None)
-brief  the delegation call (delivery.build or delivery.research) for a todoitem
+plan   a status change of a todoitem -> its id, the fields to set and the next occurrence (or None)
+brief  the delegation call (delivery.build or delivery.research) for a todoitem, and the delegation to record
+track  the delegation of a todoitem after a new status of the call, merged with what is recorded
+Each takes `items`, the list items.store/v2.get returns, and uses its one to-do (and `missing` for the error).
 next_due (internal) computes the due date of the next occurrence for plan.
 """
 import calendar
@@ -146,11 +148,27 @@ def _next_item(item: dict, due: str, at: str) -> dict:
     if recur.get("unit") == "month" and not recur.get("day"):
         recur["day"] = _day(item.get("due") or at).day     # pin the day, so Jan 31 -> Feb 28 -> Mar 31
     nxt = {"kind": "todoitem", "title": item["title"], "status": "open", "due": due,
-           "threadId": series, "prevId": item["id"], "recur": recur}
-    for key in ("text", "labels", "priority"):
+           "threadId": series, "prevId": item["id"], "recur": recur, "text": item.get("text") or ""}   # item/v1 requires text
+    for key in ("labels", "priority"):
         if item.get(key) not in (None, "", []):
             nxt[key] = item[key]
     return nxt
+
+
+def _one(items, missing) -> dict:
+    """The one to-do the caller read with items.store/v2.get (`items`, and `missing` for the ids it did not find)."""
+    if not isinstance(items, list) or len(items) > 1:
+        raise TodoRulesError("items must hold exactly one to-do")
+    if not items:
+        ids = ", ".join(str(m) for m in missing or [])
+        raise TodoRulesError(f"no to-do with that id{f' ({ids})' if ids else ''}; check the id with todo.query")
+    return items[0]
+
+
+def _id(item: dict) -> str:
+    if not item.get("id"):
+        raise TodoRulesError("the to-do has no id; read it with todo.get first")
+    return item["id"]
 
 
 def plan_change(item: dict, action: str, status, scope, at: str) -> dict:
@@ -182,7 +200,7 @@ def plan_change(item: dict, action: str, status, scope, at: str) -> dict:
         if not item.get("threadId"):
             fields["threadId"] = nxt["threadId"]       # the finished to-do joins the series
     fields["history"] = [*(item.get("history") or []), {"at": at, "field": "status", "from": cur, "to": new}]
-    return {"set": fields, "next": nxt}
+    return {"id": _id(item), "set": fields, "next": nxt}
 
 
 # brief
@@ -214,7 +232,7 @@ def _check_task(task: dict) -> None:
         raise TodoRulesError("the delegation input does not match Task.schema.json: " + "; ".join(errs))
 
 
-def make_brief(item: dict, to: str, deliverable) -> dict:
+def make_brief(item: dict, to: str, deliverable, at: str) -> dict:
     status = item.get("status", "open")
     if status in ENDED:
         raise TodoRulesError(f"cannot delegate a to-do that is {status}; reopen it first")
@@ -237,18 +255,34 @@ def make_brief(item: dict, to: str, deliverable) -> dict:
             "context": " ".join(parts),
             "constraints": list(CONSTRAINTS[to])}
     _check_task(task)
-    return {"target": TARGETS[to], "input": task}
+    return {"id": _id(item), "target": TARGETS[to], "input": task,
+            "delegation": {"target": to, "status": "handed-off", "at": at}}
+
+
+# track
+
+def track_delegation(item: dict, call_id: str, status: str, summary) -> dict:
+    old = item.get("delegation")
+    if not isinstance(old, dict) or not old.get("target"):
+        raise TodoRulesError("this to-do has no delegation to track; hand it off with todo.delegate first")
+    new = {**old, "callId": call_id, "status": status}
+    if summary is not None:
+        new["summary"] = summary
+    return {"id": _id(item), "set": {"delegation": new}}      # status and history of the to-do stay as they are
 
 
 class TodoRules:
     def __init__(self, ctx):
         self.ctx = ctx
 
-    def plan(self, item, action, status=None, scope=None, at=None) -> dict:
-        return plan_change(item, action, status, scope, at or _now(self.ctx))
+    def plan(self, items, action, status=None, scope=None, at=None, missing=None) -> dict:
+        return plan_change(_one(items, missing), action, status, scope, at or _now(self.ctx))
 
-    def brief(self, item, to, deliverable=None) -> dict:
-        return make_brief(item, to, deliverable)
+    def brief(self, items, to, deliverable=None, missing=None) -> dict:
+        return make_brief(_one(items, missing), to, deliverable, _now(self.ctx))
+
+    def track(self, items, callId, status, summary=None, missing=None) -> dict:
+        return track_delegation(_one(items, missing), callId, status, summary)
 
 
 def create(ctx):

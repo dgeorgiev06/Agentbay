@@ -3,7 +3,7 @@
 id: "0016"
 status: draft
 touches:
-  - { path: bay/graph.py, reason: "from the plan step: it reads needs.capabilities, so it learns needs.optional (0 net lines)" }
+  - { path: bay/graph.py, reason: "from the plan step: it reads needs.capabilities, so it learns needs.optional; inherited types resolve to the mode that holds the file (+1 net line)" }
   - { path: bay/model.py, reason: "STORE_IFACE is items.store/v2; the one-level check replaces the cycle check in _apply_extends; merge_mode lets a child's feature inherit playbook and rules; check_connector skips an unbound `needs.optional` capability" }
   - { path: bay/lint.py, reason: "`local` is a reserved source name; the three messages that spell items.store/v1" }
   - { path: bay/connect.py, reason: "instantiate loads the connectors of `needs.optional` capabilities that the env binds" }
@@ -82,7 +82,7 @@ Which features exist after the change:
 
 *Today.* See Problem. `needs: [items.store/v1, items.source/v1]` sits in the base (`mode.yaml:65`), so a child without a source would fail `bay check`: the connector's `needs.capabilities: [items.source/v1]` (`corpus-store/connector.yaml:14-15`) makes `check_connector` flag every env that binds no source (`bay/model.py:672-676`).
 
-*Change.* `components/store/mode.yaml` is `abstract: true`, `needs: [items.store/v2]`, with six features, all `review: never`:
+*Change.* `components/store/mode.yaml` is `abstract: true`, `needs: [items.store/v2]`, with six features. `delete` is reviewed always (conformance rule C-6 never exempts delete effects); the other five are `review: never`:
 
 | Feature | Steps | Effects |
 |---|---|---|
@@ -214,6 +214,18 @@ The owner took every recommendation below in chat on 2026-11-03 ("Agree with rec
 4. **Which components count as framework code for the limits.** The protected list in `kernel.yaml`. The alternative is a separate list in `limits.yaml`, which would say it more explicitly and be one more thing to keep in step. Recommended: `kernel.yaml`.
 5. **Release number.** 3.0.0, because a mode that extends `briefing` stops resolving. 2.1.0 would understate it. Recommended: 3.0.0.
 6. **Guard-matrix golden.** A named rename in the test now, a reviewed regeneration later (0012 slice 8). Recommended as written.
+
+## Review round 1 fixes
+
+The first review (call C-20261103-5460dd) found no blocker and three should-fix items. The owner decided the input types in chat on 2026-11-03 ("Yes"). This fix round does these and nothing else:
+
+1. **Input types.** `components/store/types/` gains `AddReq` (`item`, with `kind` required), `UpdateReq` (`id`, `set`), `Ids` (`ids`, 1 to 50; used by `delete` and `get`) and `QueryReq` (the optional filters of `query`). Each copies the matching input of items.store/v2 and refuses unknown keys. The five features get `in:` lines; no `out:` types, as for `sync` and `prune`.
+2. **The preview binds the delete.** The `remove` step deletes exactly the ids the `preview` step returned, never the call input. An id the preview did not find is shown as missing at the gate and is not removed or remembered.
+3. **`local` is refused at run time.** A source connector whose source name is `local` is refused when the store syncs, with an error naming the connector, in addition to `bay check`.
+4. **Playbooks.** The mail-briefing and feed-briefing coordinator playbooks gain the store playbook's lines that add, update and delete run only when the owner asks.
+5. **Nits.** `update` refuses a `set` that is not an object; the stale comment in line 3 of mail's `views.sql` is fixed.
+
+These stay within the bay_lines exception of 9695. If they do not, the builder stops and says by how much.
 
 ## Citations re-checked against 2.0.0
 

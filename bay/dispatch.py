@@ -103,6 +103,7 @@ class Dispatcher:
                 errs = model.schema_errors(output, sch)
                 if errs:
                     raise CallError(f"step {step.id}: output does not match {step.out}: " + "; ".join(errs[:5]))
+            self._require_plan_file(state, feat, step, output)
             state["steps"][step.id] = output
             self._ledger("step.completed", base, summary=f"{step.role} submitted")
         self._close_runs(call_id, step, output)
@@ -111,6 +112,11 @@ class Dispatcher:
             state["output"] = self._endpoint_output(feat, state)
             return self._finish(state, mode, feat)
         return self._advance(mode, feat, state)
+
+    def _require_plan_file(self, state, feat, step, output) -> None:
+        if ((gate := (feat.steps + [None])[state["cursor"] + 1]) and gate.kind == "gate" and gate.approves == f"$steps.{step.id}.artifacts"
+                and self._file_subject(gate.approves, {**state, "steps": {step.id: output}}) is None):
+            raise CallError(f"step {step.id}: write the plan to {_plan_path(state['callId'], gate.approves)} and list it in artifacts")
 
     def _close_runs(self, call_id: str, step, output) -> None:
         """A step's submit ends every run still open that was dispatched to this call and step (and the run whose
@@ -161,7 +167,7 @@ class Dispatcher:
         subject = self._gate_subject(step, state)
         if approved and (step.approves or "").startswith("$steps.") and subject is None:
             raise CallError(f"call {call_id}: {step.id} approves the file the plan step lists in docs/plans/, and there "
-                            f"is none; nothing approved")
+                            f"is none (expected {_plan_path(call_id, step.approves)}); nothing approved")
         if approved and subject != shown:
             # the owner approves the content the gate showed; an edit since then needs a fresh look
             gate = self._gate_check(step, state, subject)
@@ -451,7 +457,7 @@ class Dispatcher:
         docs/plans/<callId>-<step>.md, nothing else."""
         path = wfmod.substitute({"v": expr}, state["input"], state["steps"], {}).get("v")
         if expr.startswith("$steps."):
-            want = f"docs/plans/{state['callId']}-{expr[7:].partition('-plan')[0]}.md"
+            want = _plan_path(state["callId"], expr)
             path = want if want in (path if isinstance(path, list) else [path]) else None
         elif isinstance(path, list):
             path = next((x for x in path if isinstance(x, str) and PROPOSAL_PATH.match(x)), None)
@@ -469,8 +475,8 @@ class Dispatcher:
         if subject is ...:
             subject = self._gate_subject(step, state)
         if subject is None:
-            why = "the gate runs: it approves no file" + (f" ({step.approves} names none in the project)"
-                                                          if step.approves else "")
+            names = f"expected {_plan_path(state['callId'], step.approves)}" if (step.approves or "").startswith("$steps.") else f"{step.approves} names none in the project"
+            why = "the gate runs: it approves no file" + (f" ({names})" if step.approves else "")
             return {"skipped": False, "why": why, "approves": None, "prior": None}
         last = same_path = None
         mode_name, _, ep = str(state.get("target", "")).partition(".")
@@ -479,7 +485,7 @@ class Dispatcher:
             if (e.get("type") != "step.completed" or e.get("source") != "dispatcher" or d.get("by") not in APPROVERS
                     or e.get("mode") != mode_name or e.get("endpoint") != ep or e.get("step") != step.id
                     or not isinstance(d.get("approves"), dict) or d["approves"].get("path") != subject["path"]
-                    or (e.get("callId") != state["callId"] and (step.approves or "").startswith("$steps."))):
+                    or (e.get("callId") != state["callId"] and (step.approves or "").startswith("$steps."))):   # defence in depth: the path already carries this callId
                 continue
             # only the latest decision on the path counts: a later approval or rejection of other content
             # supersedes an earlier one, so reverting a file to old content does not revive its approval
@@ -818,6 +824,10 @@ def _short(subject) -> str:
 
 def _ms(t0: float) -> int:
     return max(0, int((time.monotonic() - t0) * 1000))
+
+
+def _plan_path(call_id: str, expr: str) -> str:
+    return f"docs/plans/{call_id}-{expr[7:].removesuffix('-plan.artifacts')}.md"
 
 
 def _usage_fields(usage: dict | None, planned_at: float | None) -> dict:

@@ -141,8 +141,8 @@ the guard. Around it stand the gate, plan approval, the whole-diff review, the b
   browser on the machine running bay, not a terminal.
 - **Plan approval.** `approve.plans` lists role steps (`<mode>.<endpoint>` or `<mode>.<endpoint>.<step>`). Each
   runs a planner first (env `plan-writer`: it writes only under `docs/plans/` and runs only `bay plan`; tier and
-  effort from `approve.planner`), then a gate on that file, then the step as a fresh agent given the plan. A
-  step with `when:` cannot be listed by name (the endpoint form skips it), and an entry that matches nothing fails
+  effort from `approve.planner`), then a gate on that file (`docs/plans/<callId>-<step>.md`; another call's approval never skips it), then the step as a fresh agent given the plan. A
+  step with `when:` cannot be listed by name (the endpoint form skips it), and an unmatched entry fails
   `bay check`.
 - **What subagents cannot touch.** The guard hook runs on Bash and on every file tool. It denies `.agentbay/`,
   `.claude/`, `.git`, `CLAUDE.md`, `.mcp.json`, `agentbay.config.yaml`, `.env*`, `.envrc`, `Makefile`, `bay.sh`,

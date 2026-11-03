@@ -2,6 +2,39 @@
 
 Earlier versions: see docs/proposals/
 
+## 2.0.0 - 2026-11-03
+
+Proposal 0015: plan approval as a gate. This release breaks one config key, so it is a major version.
+
+### Upgrading
+
+1. In `agentbay.config.yaml`, replace `approvals: { chat: true }` with `approve: { from: [terminal, chat] }`. Without chat, write `approve: { from: [terminal] }` or leave it out.
+2. `approvals.plan` is gone. Delete it. The plan step of `forge.extend` is always on.
+3. Run `bay build`.
+
+### Added
+
+- `approve.plans` lists role steps (`<mode>.<endpoint>` or `<mode>.<endpoint>.<step>`). Each listed step gets a plan step and an approval gate before it runs, and the step then runs as a fresh agent given the approved plan.
+- The plan gate binds one file, `docs/plans/<callId>-<step>.md`. Another call's approval never skips it.
+- The plan step's submit is refused unless its `artifacts` names that file and the file exists. The error names the path.
+- `approve.planner` sets the tier and effort of the planner. The planner can write only under `docs/plans/` and run only `bay plan`.
+- `bay status` prints a line when no tool call was checked by the guard in the last 2 minutes.
+
+### Changed
+
+- `approve.from` says where you decide, for gates and for backlog items alike. A backlog item can now be approved from chat when `from` lists it.
+- An approval covers only what you saw. If an approved file changes, the next submit returns the call to its gate, and `bay approve` refuses content that changed since the gate was shown. `bay show` says who approved.
+- `bay auth` no longer needs a terminal. Claude Code asks first, as before.
+- B-3 covers feature folders: a listed mode folder covers the folders of its features.
+- A run is called stale from its last event, not from its start.
+- `bay show close --reason` puts the reason in the ledger.
+- The config schema is `agentbay/v4`.
+
+### Fixed
+
+- The guard heartbeat file opens without blocking and is created with mode 0644.
+- The plan gate recovers the step id exactly, so a step id that contains `-plan` works.
+
 ## 1.1.2 - 2026-11-02
 
 Proposal 0014: test defects. Three tests passed without proving what they claimed. Nothing breaks, so there is no Upgrading section.

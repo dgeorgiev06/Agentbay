@@ -610,11 +610,19 @@ def test_a_listed_step_is_planned_approved_and_then_run_by_a_fresh_agent():
     (p / "docs/plans/C-1-implement.md").write_text("# another call's plan\n")
     for listed in (["docs/proposals/x.md"], [], ["docs/plans/ghost.md"], "README.md", "docs/proposals/x.md",
                    "docs/plans/../proposals/x.md", ["docs/plans/C-1-implement.md"]):
-        r = d.submit(d.call("delivery.build", task)["callId"], "implement-plan",
-                     {"status": "done", "summary": "planned", "artifacts": listed})
-        assert r["status"] == "awaiting-approval" and not r["next"].get("approves"), r
-        err(lambda: d.approve(r["callId"], True, by="user@tty"), "nothing approved", "docs/plans/")
-        assert d.show(r["callId"])["status"] == "awaiting-approval"
+        cid = d.call("delivery.build", task)["callId"]
+        e = err(lambda: d.submit(cid, "implement-plan", {"status": "done", "summary": "planned", "artifacts": listed}),
+                f"docs/plans/{cid}-implement.md")
+        assert "artifacts" in e and d.show(cid)["next"]["step"] == "implement-plan"
+    cid = d.call("delivery.build", task)["callId"]
+    want = f"docs/plans/{cid}-implement.md"
+    err(lambda: d.submit(cid, "implement-plan", {"status": "done", "summary": "p", "artifacts": [want]}), want)     # not written yet
+    (p / want).write_text("# plan\n")
+    r = d.submit(cid, "implement-plan", {"status": "done", "summary": "p", "artifacts": [want]})
+    assert r["status"] == "awaiting-approval"
+    (p / want).unlink()                                                       # deleted after submit: the gate binds nothing
+    err(lambda: d.approve(cid, True, by="user@tty"), "nothing approved", want)
+    assert want in d.show(cid)["gates"]["implement-approve"] or d.show(cid)["status"] == "awaiting-approval"
     cid = d.call("delivery.build", task)["callId"]
     plan = f"docs/plans/{cid}-implement.md"
     (p / plan).write_text("# plan\nitems\n")
@@ -625,7 +633,6 @@ def test_a_listed_step_is_planned_approved_and_then_run_by_a_fresh_agent():
     assert r["next"]["step"] == "implement" and r["next"]["previous"]["implement-plan"]["artifacts"] == [plan]
     assert "Follow the approved plan" in r["next"]["task"]
     c2 = d.call("delivery.build", task)["callId"]
-    r = d.submit(c2, "implement-plan", {"status": "done", "summary": "planned", "artifacts": [plan]})
-    assert r["status"] == "awaiting-approval" and not r["next"].get("approves"), r
+    err(lambda: d.submit(c2, "implement-plan", {"status": "done", "summary": "planned", "artifacts": [plan]}), f"docs/plans/{c2}-implement.md")
     q = project({"approve": {"plans": ["delivery.build"], "planner": {"tier": "balanced"}}})
     assert D(q).call("delivery.build", task)["next"]["model"] == "sonnet"

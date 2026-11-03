@@ -576,7 +576,7 @@ def main() -> int:
         subagent = bool(payload.get("agent_id") or payload.get("agent_type"))
         project = Path(os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd())
         with contextlib.suppress(OSError):      # a failed write must never deny
-            with os.fdopen(os.open(project / ".agentbay/ledger/guard.seen", os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW), "w") as hb:
+            with os.fdopen(os.open(project / ".agentbay/ledger/guard.seen", os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o644), "w") as hb:
                 os.utime(hb.fileno())      # not through a symlink
         if not subagent:
             decision, reason = main_thread_decision(payload)

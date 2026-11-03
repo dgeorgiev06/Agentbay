@@ -6,14 +6,15 @@ protected:
           components/cos, components/forge,
           components/improve/envs/improve-local.yaml, components/tools/envs/workspace.yaml,
           components/tools/envs/research.yaml,
-          components/claude-transcripts, components/briefing/connectors/corpus-store,
+          components/claude-transcripts, components/store,
           components/improve/connectors/artifact-graph, components/improve/connectors/git,
           components/improve/connectors/improve-detect, components/improve/connectors/improve-store,
           components/improve/connectors/ledger,
-          components/briefing/interfaces, components/improve/interfaces, components/tools/interfaces]
-  mode: [cos, forge]
+          components/improve/interfaces, components/tools/interfaces]
+  mode: [cos, forge, store]
   env:
     cos-local: {}
+    store-local: {}
     framework-dev: {}
     improve-local: { modes: [improve] }
     local-authoring: {}
@@ -27,6 +28,7 @@ owns:               # the kernel: loader, resolver, lint, registry, dispatcher, 
   - bay/sqlsandbox.py
   - bay/selector.py
   - schemas/
+  - components/store/
   - adapters/
   - framework/roles/
   - framework/rules/

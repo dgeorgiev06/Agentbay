@@ -202,9 +202,9 @@ So one exception (`bay_lines`), and `framework/limits.yaml` changes only at the 
 - **Extensibility (DOD-4).** A new source is still one connector and one env binding line. Its `produces` feeds the kind guard with no other edit.
 - **Out of scope.** The to-do mode and its content type, test effectiveness (0017), the guard-matrix regeneration (0012 slice 8), a `note/v1` kind for annotating mail, and the rest of 0012.
 
-## Choices for the owner
+## Owner decisions
 
-Each has my recommendation, taken in the text above unless you say otherwise.
+The owner took every recommendation below in chat on 2026-11-03 ("Agree with recommendation"). For choice 4 that is the kernel.yaml protected list as written here.
 
 1. **`components/store/` is core-owned in `kernel.yaml`.** Needed because B-11 finds the word `store` 16 times in the core docs. The alternative is a base name the docs do not use as a bare word, such as `data-store`. Recommended: keep `store`, as you approved.
 2. **`rows` returns `{rows, coverage}`.** The mail golden and the mail tests then change one key, as a named delta. The alternative is to key the list by the name asked for (`{threads: [...]}`), which leaves every mail line alone but makes the interface's output schema dynamic. Recommended: the fixed `rows`.

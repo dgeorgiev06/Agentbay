@@ -559,6 +559,9 @@ class CorpusStore:
         if it.get("source") != src_id or it.get("id") != f"{src_id}:{it.get('extId')}":
             raise StoreError(f"connector {src_name} returned item {it.get('id')!r} with source {it.get('source')!r}; "
                              f"it declares source '{src_id}' and ids must be '{src_id}:<extId>'")
+        self._check_schema(it, f"connector {src_name}")
+
+    def _check_schema(self, it: dict, who: str) -> None:
         kind = it.get("kind", "item")
         if kind not in self._schemas:
             try:
@@ -567,7 +570,7 @@ class CorpusStore:
                 self._schemas[kind] = model.inline_refs(model.data_schema("item/v1"))
         errs = model.schema_errors(it, self._schemas[kind])
         if errs:
-            raise StoreError(f"connector {src_name}: item {it['id']} does not match {kind}/v1: {'; '.join(errs[:3])}")
+            raise StoreError(f"{who}: item {it.get('id')} does not match {kind}/v1: {'; '.join(errs[:3])}")
 
     def _upsert(self, con, it: dict, sels: list[dict], now, exact: bool = False) -> tuple[bool, bool]:
         """(new, kept) for a scrubbed item (scrub_item), so it matches on exactly what will be stored. Labels
@@ -584,8 +587,14 @@ class CorpusStore:
             if old is not None:                                  # changed at the source and left the scope
                 con.execute("DELETE FROM items WHERE pk = ?", (old["pk"],))
             return False, False
-        ct = self._cts.get(merged["kind"])
-        row = item_row(merged, ct)
+        return self._write_row(con, merged, tags), True
+
+    def _write_row(self, con, it: dict, tags: list[str]) -> bool:
+        """Insert or replace the row of a scrubbed, validated item with its selector tags (sync, add and update
+        all end here); True when the row is new."""
+        old = con.execute("SELECT pk FROM items WHERE source = ? AND ext_id = ?", (it["source"], it["extId"])).fetchone()
+        ct = self._cts.get(it["kind"])
+        row = item_row(it, ct)
         if old is None:
             cols = ", ".join(row)
             pk = con.execute(f"INSERT INTO items ({cols}) VALUES ({', '.join('?' * len(row))})",
@@ -597,8 +606,8 @@ class CorpusStore:
         con.executemany("INSERT INTO item_selectors (item, selector) VALUES (?, ?)", [(pk, t) for t in tags])
         for table in (ct.tables or {}) if ct else ():
             con.execute(f"DELETE FROM {table} WHERE item = ?", (pk,))
-            con.executemany(ct.table_insert(table), [(pk, *r) for r in ct.table_rows(table, merged)])
-        return old is None, True
+            con.executemany(ct.table_insert(table), [(pk, *r) for r in ct.table_rows(table, it)])
+        return old is None
 
     def _enforce_scope(self, con, state: dict, sels: list[dict], now) -> dict:
         """Make the store hold exactly the mode's scope (see module doc); returns what it removed or re-tagged.
@@ -609,9 +618,9 @@ class CorpusStore:
         bound = self._bound()
         out = {"unbound": 0, "unmatched": 0, "rematched": 0}
         marks = ", ".join("?" * len(bound))
-        out["unbound"] = con.execute(f"DELETE FROM items WHERE source NOT IN ({marks})" if bound
-                                     else "DELETE FROM items", bound).rowcount
-        for (pk,) in con.execute("SELECT pk FROM items").fetchall():
+        out["unbound"] = con.execute(f"DELETE FROM items WHERE source != 'local' AND source NOT IN ({marks})" if bound
+                                     else "DELETE FROM items WHERE source != 'local'", bound).rowcount
+        for (pk,) in con.execute("SELECT pk FROM items WHERE source != 'local'").fetchall():
             tags = sorted(selmod.match_ids(_stored(con, pk), sels, now))
             have = sorted(t for (t,) in con.execute("SELECT selector FROM item_selectors WHERE item = ?", (pk,)))
             if not tags:
@@ -952,6 +961,87 @@ class CorpusStore:
         cur["from"], cur["to"], cur["lastSync"] = iso(src_from), iso(now), iso(now)
         cur["covers"] = iso(covers)          # what coverage reports; `from` is what was fetched (backfill decisions)
 
+    def _guard_kind(self, kind: str) -> None:
+        """Local writes may only name a kind the mode reads that no source produces; no `sourceKinds` refuses all."""
+        names = lambda key: {k.partition("/v")[0] for k in self.ctx.settings.get(key) or []}
+        if self.ctx.settings.get("sourceKinds") is None:
+            raise StoreError("add and update are refused: the mode settings carry no `sourceKinds`, so the store cannot "
+                             "tell local kinds from the kinds a source produces")
+        if kind in names("sourceKinds"):
+            raise StoreError(f"kind {kind!r} is produced by a source and cannot be written locally; a source's "
+                             f"items arrive by sync, and `delete` drops one (a note kind for annotating is deferred)")
+        if kind not in names("reads"):
+            raise StoreError(f"kind {kind!r} is not one this mode reads ({', '.join(sorted(names('reads'))) or 'none'})")
+
+    def _locked(self, work):
+        """work(con, state) in one transaction under the writer lock; none of the local writes scopes the store."""
+        with self._exclusive():
+            state = load_state(self.state_path)
+            return self._transact(lambda con: work(con, state), state, json.loads(json.dumps(state)))
+
+    def add(self, item) -> dict:
+        if not isinstance(item, dict) or not isinstance(item.get("kind"), str):
+            raise StoreError("add needs an item with a `kind`")
+        if "source" in item or "id" in item:
+            raise StoreError("add fills `source` (local) and `id` itself; remove them from the item")
+        self._guard_kind(item["kind"])
+        now = iso(self.ctx.now())
+
+        def work(con, state):
+            ext = item.get("extId")
+            if ext is None:
+                day = f"{now[:4]}{now[5:7]}{now[8:10]}"
+                last = con.execute("SELECT max(ext_id) FROM items WHERE source = 'local' AND ext_id LIKE ?",
+                                   (day + "-%",)).fetchone()[0]
+                ext = f"{day}-{int(last.rpartition('-')[2]) + 1 if last else 1:04d}"
+            it = scrub_item({"author": {"handle": "local"}, "createdAt": now, "fetchedAt": now, **item,
+                             "source": "local", "extId": ext, "id": f"local:{ext}"})
+            self._check_schema(it, "add")
+            if con.execute("SELECT 1 FROM items WHERE source = 'local' AND ext_id = ?", (it["extId"],)).fetchone():
+                raise StoreError(f"{it['id']} exists; use update")
+            self._write_row(con, it, [])
+            return {"item": {**it, "matched": []}}
+        return self._locked(work)
+
+    def update(self, id, set) -> dict:    # noqa: A002
+        if id.partition(":")[0] != "local":
+            raise StoreError(f"{id} is not a local item and cannot be changed; `delete` drops a synced item (a note "
+                             f"kind for annotating one is deferred)")
+        if fixed := sorted({"id", "source", "extId", "kind", "createdAt"} & set.keys()):
+            raise StoreError(f"update cannot set {', '.join(fixed)}; delete the item and add a new one")
+
+        def work(con, state):
+            row = con.execute("SELECT pk, kind FROM items WHERE source = 'local' AND ext_id = ?",
+                              (id.partition(":")[2],)).fetchone()
+            if row is None:
+                raise StoreError(f"unknown id {id}")
+            self._guard_kind(row["kind"])
+            it = scrub_item({**_stored(con, row["pk"]), **set})
+            self._check_schema(it, "update")
+            self._write_row(con, it, [])
+            return {"item": {**it, "matched": []}}
+        return self._locked(work)
+
+    def delete(self, ids) -> dict:
+        ids = list(dict.fromkeys(scrub(str(i)) for i in ids))
+        if not 1 <= len(ids) <= 50:
+            raise StoreError("delete takes 1 to 50 ids")
+
+        def work(con, state):
+            out = {"deleted": [], "missing": [], "remembered": []}
+            for i in ids:
+                row = con.execute("SELECT pk, source, ext_id FROM items WHERE source || ':' || ext_id = ?", (i,)).fetchone()
+                if row is None:
+                    out["missing"].append(i)
+                    continue
+                con.execute("DELETE FROM items WHERE pk = ?", (row["pk"],))
+                out["deleted"].append(i)
+                if row["source"] != "local":                   # saved before the commit: no sync may bring it back
+                    out["remembered"].append(i)
+            state["deleted"] = sorted(set(state["deleted"]) | set(out["remembered"]))
+            return out
+        return self._locked(work)
+
     def prune(self, olderThan=None, deletedIds=None) -> dict:
         now = self.ctx.now()
         retention = olderThan or self.ctx.settings.get("retention") or self.ctx.settings.get("lookbackMax")
@@ -967,12 +1057,12 @@ class CorpusStore:
     def _prune(self, con, state, sels, now, cutoff, deleted_ids) -> dict:
         before = con.execute("SELECT count(*) FROM items").fetchone()[0]
         scope = self._enforce_scope(con, state, sels, now)
-        deleted = set(state["deleted"]) | {scrub(str(x)) for x in deleted_ids or []}   # as stored
+        deleted = set(state["deleted"]) | {scrub(str(x)) for x in deleted_ids or [] if not str(x).startswith("local:")}
         n_deleted = 0
         for k in deleted:
             src, _, xid = k.partition(":")
             n_deleted += con.execute("DELETE FROM items WHERE source = ? AND ext_id = ?", (src, xid)).rowcount
-        con.execute("DELETE FROM items WHERE created_at < ?", (cutoff,))
+        con.execute("DELETE FROM items WHERE created_at < ? AND source != 'local'", (cutoff,))
         remaining = con.execute("SELECT count(*) FROM items").fetchone()[0]
         state["deleted"] = sorted(deleted)
         for cur in state["cursors"].values():

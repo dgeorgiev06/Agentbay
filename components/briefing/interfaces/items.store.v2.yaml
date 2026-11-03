@@ -3,10 +3,11 @@ kind: Interface
 metadata:
   name: items.store
   description: >-
-    Local corpus of item/v1 items with selector tags, per-query cursors, budget usage and coverage. sync and
-    prune are dispatcher code steps; every other endpoint is read-only and reachable by agents through their
-    role's use shim. The store holds exactly the mode's scope (items of the sources bound to its env that
-    match at least one current selector); internal state lives in a separate state.json. While the
+    Local corpus of item/v1 items with selector tags, per-query cursors, budget usage and coverage. sync, prune,
+    add, update and delete are dispatcher code steps; every other endpoint is read-only and reachable by agents
+    through their role's use shim. The store holds exactly the mode's scope (items of the sources bound to its env
+    that match at least one current selector, plus the local items written with add, which no sync, scope change
+    or prune removes); internal state lives in a separate state.json. While the
     configured selectors or bound sources differ from the scope last applied, every read endpoint except
     status refuses with an error saying to run sync (status reports `stale`). While a source is blocked (its
     login expired) reads still work on what is stored; status reports `stale` and `blocked`, and coverage
@@ -69,6 +70,62 @@ spec:
           unmatched: { type: integer, description: "Items deleted because no current selector matches them." }
           unbound: { type: integer, description: "Items deleted because their source is no longer bound to the mode's env." }
           cutoff: { type: string }
+      effects: [write, delete]
+    add:
+      description: >-
+        Store a local item (source `local`, id `local:<extId>`). Refused: a kind the mode does not read or that any
+        items.source connector produces (email, post), a given `source` or `id`, and an extId already stored. Fills
+        extId (yyyymmdd-nnnn), author, createdAt and fetchedAt when not given; the text is scrubbed of secrets.
+      in:
+        type: object
+        required: [item]
+        additionalProperties: false
+        properties:
+          item: { type: object, required: [kind], description: "An item/v1 without id and source; the fields of its kind." }
+      out:
+        type: object
+        required: [item]
+        additionalProperties: false
+        properties:
+          item: { $ref: item/v1 }
+      effects: [write]
+    update:
+      description: >-
+        Change fields of a local item. Refused: an item that is not local (use `delete`; a note kind for annotating a
+        synced item is deferred), a `set` naming id, source, extId, kind or createdAt, and an unknown id.
+      in:
+        type: object
+        required: [id, set]
+        additionalProperties: false
+        properties:
+          id: { type: string }
+          set: { type: object }
+      out:
+        type: object
+        required: [item]
+        additionalProperties: false
+        properties:
+          item: { $ref: item/v1 }
+      effects: [write]
+    delete:
+      description: >-
+        Remove items from the store. A synced item's id (<source>:<extId>) is also saved in state.json, so no later
+        sync stores it again; the source is never contacted (items.source has only fetch), so a mailbox keeps its
+        message. A local item is removed outright.
+      in:
+        type: object
+        required: [ids]
+        additionalProperties: false
+        properties:
+          ids: { type: array, items: { type: string }, minItems: 1, maxItems: 50 }
+      out:
+        type: object
+        required: [deleted, missing, remembered]
+        additionalProperties: false
+        properties:
+          deleted: { type: array, items: { type: string } }
+          missing: { type: array, items: { type: string } }
+          remembered: { type: array, items: { type: string }, description: "Deleted ids that sync will not store again." }
       effects: [write, delete]
     describe:
       description: What agents can query with `sql` - views, columns, types, row counts, sample values, the full-text table and limits.

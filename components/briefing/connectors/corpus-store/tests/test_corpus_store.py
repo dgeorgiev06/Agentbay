@@ -13,6 +13,21 @@ from helpers import NOW, clock, project, system  # noqa: E402
 from bay import connect  # noqa: E402
 
 HOME = [{"id": "home", "in": "home"}]
+LOCAL = {"reads": ["post/v1", "item/v1"], "sourceKinds": ["email/v1", "post/v1"]}   # what the dispatcher passes
+
+
+def refused(fn, *args, **kw) -> str:
+    try:
+        fn(*args, **kw)
+    except Exception as e:
+        return str(e)
+    raise AssertionError("expected a refusal")
+
+
+class Tripwire(dict):
+    """Stands in for the bound sources: any use of them fails the test."""
+    def __getattribute__(self, name):
+        raise AssertionError(f"a local write touched the sources ({name})")
 
 
 def store(p, caps=None, settings=None, now=clock, fixture=None, online=False):
@@ -185,6 +200,20 @@ def test_prune_retention_and_deletions():
     store(p).sync(lookback="1d")   # a deleted item is never re-stored
     assert "fake:1009" not in ids(p)
     assert rows(p, "SELECT count(*) AS n FROM item_selectors")[0]["n"] == 4      # tags follow deletes
+    victim = sorted(ids(p))[0]
+    mine = store(p, settings=LOCAL).add({"kind": "item", "text": "mine"})["item"]["id"]
+    st = store(p, settings=LOCAL)
+    fake = st.ctx.sources["fake"]
+    calls = list(fake.calls)
+    st.ctx.sources = Tripwire()                                # delete never reaches a source
+    assert refused(st.delete, []) and st.delete([victim, "fake:nope"]) == {
+        "deleted": [victim], "missing": ["fake:nope"], "remembered": [victim]}
+    assert victim not in ids(p) and victim in state(p)["deleted"] and fake.calls == calls
+    store(p, settings=LOCAL).prune(olderThan="30d", deletedIds=[mine])               # prune cannot be used to delete a local item
+    assert mine in ids(p) and mine not in state(p)["deleted"]
+    assert st.delete([mine])["remembered"] == [] and mine not in ids(p)
+    store(p, settings=LOCAL).sync(lookback="7d")               # the record is honoured by a later sync
+    assert victim not in ids(p)
 
 
 def test_source_reported_deletions_are_honored_on_sync():
@@ -246,6 +275,41 @@ def test_connector_without_source_or_with_foreign_ids_is_rejected():
     except Exception as e:
         assert "ids must be 'fake:<extId>'" in str(e)
     assert ids(p) == set()                            # one transaction: nothing half-written
+    add_and_update_refuse_what_a_source_produces_and_fail_closed()
+
+
+def add_and_update_refuse_what_a_source_produces_and_fail_closed():
+    p = project()
+    store(p, settings=LOCAL).sync(lookback="3d")
+    st = store(p, settings=LOCAL)
+    before = rows(p, "SELECT * FROM items ORDER BY pk")
+    for kind in ("email", "post"):
+        assert "produced by a source" in refused(st.add, {"kind": kind, "text": "x"})
+    assert "not one this mode reads" in refused(st.add, {"kind": "todo", "text": "x"})
+    assert "fills `source`" in refused(st.add, {"kind": "item", "text": "x", "source": "fake"})
+    assert "fills `source`" in refused(st.add, {"kind": "item", "text": "x", "id": "fake:1"})
+    for kw in ({"sourceKinds": None}, {"reads": None}):          # no list: fail closed, whatever the kind
+        bare = store(p, settings={**LOCAL, **kw})
+        bare.ctx.settings.pop(next(iter(kw)))
+        assert refused(bare.add, {"kind": "item", "text": "x"})
+    first = st.add({"kind": "item", "text": "x", "extId": "n1"})["item"]["id"]
+    assert "exists; use update" in refused(st.add, {"kind": "item", "text": "y", "extId": "n1"})
+    assert rows(p, "SELECT body FROM items WHERE ext_id = 'n1'") == [{"body": "x"}]
+    assert "not a local item" in refused(st.update, "fake:1008", {"text": "edited"})
+    for field in ("id", "source", "extId", "kind", "createdAt"):
+        assert "cannot set" in refused(st.update, first, {field: "z"})
+    assert "unknown id" in refused(st.update, "local:nope", {"text": "z"})
+    plant(p, [("local", "evil", "planted email", None)])        # a local row of a produced kind is still not editable
+    con = sqlite3.connect(db(p))
+    con.execute("UPDATE items SET kind = 'email' WHERE ext_id = 'evil'")
+    con.commit()
+    con.close()
+    assert "produced by a source" in refused(st.update, "local:evil", {"text": "z"})
+    gone = store(p, settings=LOCAL)
+    gone.ctx.settings.pop("sourceKinds")
+    assert refused(gone.update, first, {"text": "z"})
+    kept = [r for r in rows(p, "SELECT * FROM items ORDER BY pk") if r["source"] == "fake"]
+    assert kept == [r for r in before if r["source"] == "fake"]    # no synced row changed
 
 
 def test_store_writes_only_inside_env_write_path():
@@ -389,24 +453,52 @@ def plant(p, rows_):
 def test_out_of_scope_rows_are_deleted_by_sync_and_prune():
     for run in ("sync", "prune"):
         p = project()
-        store(p).sync(lookback="3d")
+        store(p, settings=LOCAL).sync(lookback="3d")
+        mine = store(p, settings=LOCAL).add({"kind": "item", "text": "keepme", "createdAt": "2026-01-01T00:00:00Z"})["item"]["id"]
         plant(p, [("x", "900", "acquisition zebra unbound source", "home"),       # source not bound offline
                   ("fake", "901", "acquisition zebra no tag", None),             # matches no selector
                   ("fake", "902", "acquisition zebra removed selector", "gone")])  # tagged by a removed selector
-        st = store(p)
+        st = store(p, settings=LOCAL)
         out = st.sync(lookback="3d") if run == "sync" else st.prune(olderThan="30d")
         if run == "prune":
             assert out["unbound"] == 1 and out["unmatched"] == 2
         else:
             assert out["outOfScope"] == 3
-        assert not {"x:900", "fake:901", "fake:902"} & ids(p) and len(ids(p)) == 7, run
+        assert not {"x:900", "fake:901", "fake:902"} & ids(p) and len(ids(p)) == 8 and mine in ids(p), run
         con = sqlite3.connect(db(p))
         try:
             assert con.execute("SELECT count(*) FROM items_fts WHERE items_fts MATCH 'zebra'").fetchone()[0] == 0
-            assert con.execute("SELECT count(*) FROM items_fts").fetchone()[0] == 7
+            assert con.execute("SELECT count(*) FROM items_fts").fetchone()[0] == 8
             assert con.execute("SELECT count(*) FROM item_selectors WHERE selector != 'home'").fetchone()[0] == 0
         finally:
             con.close()
+    store(p, settings=LOCAL).prune(olderThan="1m")             # the age cut removes every synced item, not mine
+    assert ids(p) == {mine}
+    q = project()
+    store(q, settings=LOCAL).sync(lookback="3d")
+    kept = store(q, settings=LOCAL).add({"kind": "item", "text": "keepme"})["item"]["id"]
+    store(q, settings={**LOCAL, "selectors": [{"id": "none", "in": "nowhere"}]}).sync(lookback="3d")
+    assert ids(q) == {kept}                                    # a selector change removes the synced items, not mine
+    no_source_store_neither_crashes_nor_wipes_its_items()
+    assert store(p, settings=LOCAL).update(mine, {"text": "changed"})["item"]["text"] == "changed"
+    assert rows(p, "SELECT body FROM items")[0]["body"] == "changed"
+
+
+def no_source_store_neither_crashes_nor_wipes_its_items():
+    p = project()
+    synced = store(p, settings=LOCAL)
+    synced.sync(lookback="3d")
+    bare = store(p, settings={**LOCAL, "selectors": [], "sources": []})     # the two traps: _selectors() and _enforce_scope
+    bare.ctx.sources = Tripwire()
+    new = bare.add({"kind": "item", "text": "first"})["item"]["id"]
+    bare.update(new, {"text": "second"})
+    assert len(ids(p)) == 8 and bare.delete([new])["deleted"] == [new] and len(ids(p)) == 7
+    fresh = project()
+    lone = store(fresh, settings={**LOCAL, "selectors": [], "sources": []})
+    a = lone.add({"kind": "item", "text": "one"})["item"]["id"]
+    b = lone.add({"kind": "item", "text": "two"})["item"]["id"]
+    assert (a, b) == ("local:20261027-0001", "local:20261027-0002")
+    assert lone.status()["stale"] is False and sorted(i["id"] for i in lone.query()["items"]) == [a, b]
 
 
 def test_unbinding_a_source_removes_its_items_and_cursors():

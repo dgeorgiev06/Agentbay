@@ -2,6 +2,14 @@
 
 Earlier versions: see docs/proposals/
 
+## 3.0.1 - 2026-11-03
+
+Proposal 0018: the kit tests no longer assume the shipped content types are the only ones.
+
+### Changed
+
+- The kit tests check that the shipped content types `post` and `email` are present at version 1, and no longer that they are the only ones, so a user content type no longer breaks them.
+
 ## 3.0.0 - 2026-11-03
 
 Proposal 0016: a store base mode. The base mode `briefing` becomes `store`, and `items.store/v1` becomes `items.store/v2`. Both break existing modes and connectors, so this is a major version.

@@ -381,6 +381,9 @@ def test_feed_source_connectors_must_declare_source_and_window():
     k = kit_copy()
     edit_yaml(k / "components/post/connectors/fake/connector.yaml", lambda d: d["spec"].pop("window"))
     has(k, "connector fake implements items.source/v1 but declares no spec.window")
+    k = kit_copy()
+    edit_yaml(k / "components/post/connectors/fake/connector.yaml", lambda d: d["spec"].update({"source": "local"}))
+    has(k, "`local` is the source of items written with add; choose another spec.source")
 
 
 def test_schedule_is_a_warning_not_an_error():

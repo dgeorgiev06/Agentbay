@@ -77,6 +77,12 @@ def test_a_child_feature_is_never_merged_key_by_key_with_its_parents():
         {"ask": {"review": {"role": "reviewer", "when": "always", "tier": "balanced"}}}))
     gs = __import__("helpers").gaps(k)
     assert any("spec/features/ask: 'steps' is a required property" in g for g in gs), gs     # the rest is not inherited
+    k = kit_copy()
+    edit_yaml(k / "components/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("features", {}).update(
+        {"ask": {k2: v for k2, v in whole_feature(k, "ask").items() if k2 not in ("playbook", "rules")}}))
+    ask = model.resolve(model.Kit(k)).modes["feed-briefing"].features["ask"]
+    assert ask.playbook_path == k / "components/briefing/features/ask/playbook.md" and ask.dod
+    assert problems(k) == []
 
 
 def test_child_can_add_its_own_feature_and_type():
@@ -104,10 +110,15 @@ def test_missing_parent_and_cycles_are_errors_naming_the_fix():
     k = kit_copy()
     edit_yaml(k / "components/briefing/mode.yaml", lambda d: d["spec"].update({"extends": "feed-briefing"}))
     ps = problems(k)
-    assert any("mode inheritance cycle" in p and "briefing -> feed-briefing -> briefing" in p for p in ps), ps
+    assert any("components/briefing/mode.yaml" in p and "extends 'feed-briefing', which is not an abstract base" in p
+               for p in ps), ps
     k = kit_copy()
     edit_yaml(k / "components/feed-briefing/mode.yaml", lambda d: d["spec"].update({"extends": "feed-briefing"}))
-    assert any("cycle: feed-briefing -> feed-briefing" in p for p in problems(k))
+    assert any("extends 'feed-briefing', which is not an abstract base" in p for p in problems(k))
+    k = kit_copy()
+    edit_yaml(k / "components/feed-briefing/mode.yaml", lambda d: d["spec"].update({"extends": "mail-briefing"}))
+    assert any("components/feed-briefing/mode.yaml" in p and "extends 'mail-briefing', which is not an abstract base" in p
+               for p in problems(k))
 
 
 def test_raw_child_may_be_partial_but_the_merged_mode_must_be_complete():

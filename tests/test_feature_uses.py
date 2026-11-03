@@ -88,7 +88,7 @@ def test_a_childs_feature_replaces_its_parents_whole_and_the_rest_is_inherited()
         "b": {"effects": ["read"], "playbook": "features/b/playbook.md", "steps": [{"id": "y", "run": "items.store/v1.sync"}]}}}
     child = {"features": {"a": {"effects": ["write"], "steps": [{"id": "z", "run": "items.store/v1.prune"}]}}}
     out = model.merge_mode(parent, child, Path("/m/parent"), Path("/m/child"))
-    assert out["features"]["a"] == child["features"]["a"]                  # no uses, skills, review or playbook left over
+    assert out["features"]["a"] == {**child["features"]["a"], "playbook": "../parent/features/a/playbook.md"}   # no uses, skills or review left over; only the playbook (and rules) fall back, rebased
     assert out["features"]["b"]["playbook"] == "../parent/features/b/playbook.md"        # inherited, rebased
 
 

@@ -122,6 +122,13 @@
                 "type": "string"
               },
               "description": "Other interfaces this connector calls (bound in the same env)."
+            },
+            "optional": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Interfaces used when the env binds them."
             }
           }
         },

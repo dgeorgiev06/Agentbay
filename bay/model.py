@@ -258,7 +258,7 @@ class Kit:
         modes = self.docs["Mode"]
         done: dict[str, bool] = {}
 
-        def resolve(name: str, trail: list[str]) -> None:
+        def resolve(name: str) -> None:
             if name in done:
                 if not done[name]:
                     raise SpecError(f"{modes[name].rel}: extends a mode that does not resolve")
@@ -270,13 +270,12 @@ class Kit:
                 d.config_files = [d.dir / own] if own else []
                 done[name] = True
                 return
-            if parent == name or parent in trail:
-                loop = trail[trail.index(parent):] if parent in trail else []
-                chain = " -> ".join([*loop, name, parent])
-                raise SpecError(f"{d.rel}: mode inheritance cycle: {chain}; remove one `extends`")
             if parent not in modes:
                 raise SpecError(f"{d.rel}: extends unknown mode '{parent}' (have: {', '.join(sorted(modes)) or 'none'})")
-            resolve(parent, [*trail, name])
+            if not modes[parent].spec.get("abstract") or modes[parent].spec.get("extends"):
+                raise SpecError(f"{d.rel}: extends '{parent}', which is not an abstract base (or extends another "
+                                f"mode); a mode extends an abstract mode directly")
+            resolve(parent)
             p = modes[parent]
             d.spec = merge_mode(p.spec, d.spec, p.dir, d.dir)
             own_path = d.dir / own if own else None
@@ -291,7 +290,7 @@ class Kit:
 
         for name in sorted(modes):
             try:
-                resolve(name, [])
+                resolve(name)
             except SpecError as e:
                 done[name] = False
                 self.errors.append(str(e))
@@ -377,7 +376,8 @@ def rel(p: Path) -> str:
 
 def merge_mode(parent: dict, child: dict, pdir: Path, cdir: Path) -> dict:
     """A child mode spec over its parent's. A child's feature replaces the parent's feature of that name whole
-    (0006 Part E: never a key-by-key merge; a feature it does not declare is inherited unchanged);
+    (0006 Part E: never a key-by-key merge, except that it inherits the parent's `playbook` and `rules` when it names
+    none; a feature it does not declare is inherited unchanged);
     `roles` (role -> env), constraints and configDefaults merge entry by entry; needs are unioned;
     anything else the child sets replaces the parent's. Paths the child inherits
     (playbook, rules, config) are rebased so they still resolve from the child's folder. `abstract` is not
@@ -398,7 +398,8 @@ def merge_mode(parent: dict, child: dict, pdir: Path, cdir: Path) -> dict:
         if k == "features":
             eps = out.setdefault("features", {})
             for name, e in v.items():
-                eps[name] = copy.deepcopy(e)
+                old = eps.get(name, {})
+                eps[name] = {**{k: old[k] for k in ("playbook", "rules") if k in old and k not in e}, **copy.deepcopy(e)}
         elif k in ("constraints", "configDefaults") or (k == "roles" and isinstance(v, dict)
                                                          and isinstance(out.get(k), dict)):
             out[k] = {**out.get(k, {}), **copy.deepcopy(v)}
@@ -669,10 +670,11 @@ def check_connector(kit: Kit, env: Doc, conn_name: str, iface: str, gaps: list[s
             if not path_within(p, fs.get(mode_, [])):
                 gaps.append(f"env {env.name}: connector {conn_name} needs fs.{mode_} {p}, "
                             f"which is outside env fs.{mode_} {fs.get(mode_, [])}")
-    for sub in needs.get("capabilities", []):
+    for sub in [*needs.get("capabilities", []), *needs.get("optional", [])]:
         b = _bound(env, sub)
         if b is None:
-            gaps.append(f"env {env.name}: connector {conn_name} needs capability {sub}, which env {env.name} does not bind")
+            if sub not in needs.get("optional", []):
+                gaps.append(f"env {env.name}: connector {conn_name} needs capability {sub}, which env {env.name} does not bind")
             continue
         for cn in connectors_of(b):
             check_connector(kit, env, cn, sub, gaps, seen)

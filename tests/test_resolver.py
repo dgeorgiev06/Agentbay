@@ -87,6 +87,11 @@ def test_unbound_capability():
     g = assert_gap(k, "feed-briefing.sync step fetch", "items.store/v1 is not bound in env local-feeds", "unbound capability")
     assert "add `items.store/v1: <connector>`" in g
     # (the analyst then simply has no store grant in that env: test_roles)
+    k = kit_copy()
+    edit_yaml(k / "components/briefing/connectors/corpus-store/connector.yaml",
+              lambda d: d["spec"]["needs"].update({"capabilities": [], "optional": ["items.source/v1"]}))
+    edit_yaml(k / "components/briefing/envs/local-feeds.yaml", lambda d: d["spec"]["bind"].pop("items.source/v1"))
+    assert not any("needs capability" in g for g in gaps(k))
 
 
 def test_effect_not_allowed_by_env():

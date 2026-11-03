@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agentbay/data/todoitem/v1",
   "title": "todoitem/v1",
-  "description": "item/v1 kind extension for a to-do: kind `todo`. The envelope carries the to-do (`title`), its notes (`text`), tags (`labels`) and, for a recurring to-do, the series (`threadId`). This adds dates (ISO date or datetime), priority, status, recurrence, the occurrence before (`prevId`), delegation to a mode and the change history. No source produces it: the owner or an agent writes it, with source `local`.",
+  "description": "item/v1 kind extension for a to-do: kind `todoitem`. The envelope carries the to-do (`title`), its notes (`text`), tags (`labels`) and, for a recurring to-do, the series (`threadId`). This adds dates (ISO date or datetime), priority, status, recurrence, the occurrence before (`prevId`), delegation to a mode and the change history. No source produces it: the owner or an agent writes it, with source `local`.",
   "allOf": [{ "$ref": "item/v1" }],
   "required": ["title"],
   "properties": {

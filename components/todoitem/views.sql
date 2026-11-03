@@ -1,14 +1,18 @@
 -- v_todos: one row per to-do, every v_items column and then the to-do fields. isOverdue and dueToday are computed
--- per query against today's local date (date('now','localtime')); the due day is date(due).
+-- per query against today's local date (date('now','localtime')); dueDay is the local day of due (a value with Z or an
+-- offset is converted with 'localtime'; a plain date or a datetime without a zone is already local).
 CREATE VIEW v_todos AS SELECT w.*,
     CASE WHEN w.status IN ('open', 'doing', 'waiting') AND w.due IS NOT NULL
-         AND date(w.due) < date('now', 'localtime') THEN 1 ELSE 0 END AS isOverdue,
+         AND w.dueDay < date('now', 'localtime') THEN 1 ELSE 0 END AS isOverdue,
     CASE WHEN w.status IN ('open', 'doing', 'waiting') AND w.due IS NOT NULL
-         AND date(w.due) = date('now', 'localtime') THEN 1 ELSE 0 END AS dueToday
+         AND w.dueDay = date('now', 'localtime') THEN 1 ELSE 0 END AS dueToday
   FROM (SELECT v.*,
     coalesce(json_extract(i.ext, '$.priority'), 3) AS priority,
     coalesce(json_extract(i.ext, '$.status'), 'open') AS status,
-    json_extract(i.ext, '$.due') AS due, json_extract(i.ext, '$.start') AS start,
+    json_extract(i.ext, '$.due') AS due,
+    CASE WHEN json_extract(i.ext, '$.due') LIKE '%Z' OR json_extract(i.ext, '$.due') GLOB '*T*[+-][0-9][0-9]:[0-9][0-9]'
+         THEN date(json_extract(i.ext, '$.due'), 'localtime') ELSE date(json_extract(i.ext, '$.due')) END AS dueDay,
+    json_extract(i.ext, '$.start') AS start,
     json_extract(i.ext, '$.completedAt') AS completedAt, json_extract(i.ext, '$.droppedAt') AS droppedAt,
     json_extract(i.ext, '$.recur') AS recur, json_extract(i.ext, '$.prevId') AS prevId,
     json_extract(i.ext, '$.delegation') AS delegation,

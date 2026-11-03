@@ -298,6 +298,11 @@ def test_the_dispatcher_and_the_cursor_share_one_skip_rule_and_one_substitution(
             mv = workflows.advance(stages, 1, inp, steps)
             skipped = workflows.skip(when, inp, steps)
             assert (mv.kind == "done") == skipped and (mv.skipped == ["b"]) == skipped, (when, inp, steps)
+    sub = lambda ref, steps: workflows.substitute({"v": ref}, {}, steps, {})   # `*` maps the rest of a path over a list
+    assert sub("$steps.p.items.*.id", {"p": {"items": [{"id": "a"}, {"x": 1}, {"id": "b"}]}}) == {"v": ["a", "b"]}
+    assert sub("$steps.p.items.*.id", {"p": {"items": []}}) == {"v": []}
+    assert sub("$steps.p.items.*.id", {"p": {}}) == {}
+    assert sub("$steps.p.d.*", {"p": {"d": {"*": 7}}}) == {"v": 7}
 
 
 # ------------------------------------------------------------------------------------------------ D7: a gate takes no when

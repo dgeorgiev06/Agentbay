@@ -1027,13 +1027,16 @@ class CorpusStore:
             return {"item": {**it, "matched": []}}
         return self._locked(work)
 
-    def delete(self, ids) -> dict:
+    def delete(self, ids, missing=None) -> dict:
         ids = list(dict.fromkeys(scrub(str(i)) for i in ids))
-        if not 1 <= len(ids) <= 50:
-            raise StoreError("delete takes 1 to 50 ids")
+        if len(ids) > 50:
+            raise StoreError("delete takes up to 50 ids")
+        seen = list(dict.fromkeys(scrub(str(i)) for i in missing or []))     # ids the caller found missing: reported, never touched
+        if not ids:
+            return {"deleted": [], "missing": seen, "remembered": []}
 
         def work(con, state):
-            out = {"deleted": [], "missing": [], "remembered": []}
+            out = {"deleted": [], "missing": list(seen), "remembered": []}
             for i in ids:
                 row = con.execute("SELECT pk, source, ext_id FROM items WHERE source || ':' || ext_id = ?", (i,)).fetchone()
                 if row is None:
@@ -1137,6 +1140,7 @@ class CorpusStore:
         return sbx.clean({"items": [row_item(r) for r in rows], "coverage": self.coverage(state, lo)})
 
     def get(self, ids) -> dict:
+        ids = list(dict.fromkeys(ids))                                       # a repeated id is shown once
         if not self.path.exists():
             return {"items": [], "missing": list(ids)}
         con = self._ro()

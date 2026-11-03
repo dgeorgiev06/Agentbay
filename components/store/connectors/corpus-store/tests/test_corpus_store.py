@@ -203,11 +203,14 @@ def test_prune_retention_and_deletions():
     victim = sorted(ids(p))[0]
     mine = store(p, settings=LOCAL).add({"kind": "item", "text": "mine"})["item"]["id"]
     st = store(p, settings=LOCAL)
+    assert [i["id"] for i in store(p, settings=LOCAL).get([victim, victim])["items"]] == [victim]   # a repeated id is shown once
     fake = st.ctx.sources["fake"]
     calls = list(fake.calls)
     st.ctx.sources = Tripwire()                                # delete never reaches a source
-    assert refused(st.delete, []) and st.delete([victim, "fake:nope"]) == {
-        "deleted": [victim], "missing": ["fake:nope"], "remembered": [victim]}
+    assert st.delete([], missing=["fake:gone", "fake:gone"]) == {                    # nothing found: nothing removed
+        "deleted": [], "missing": ["fake:gone"], "remembered": []} and victim in ids(p)
+    assert st.delete([victim, victim, "fake:nope"], missing=["fake:gone"]) == {
+        "deleted": [victim], "missing": ["fake:gone", "fake:nope"], "remembered": [victim]}
     assert victim not in ids(p) and victim in state(p)["deleted"] and fake.calls == calls
     store(p, settings=LOCAL).prune(olderThan="30d", deletedIds=[mine])               # prune cannot be used to delete a local item
     assert mine in ids(p) and mine not in state(p)["deleted"]

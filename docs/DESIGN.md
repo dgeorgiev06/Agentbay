@@ -49,14 +49,14 @@ contracts, roles and runtime adapters. `framework/kernel.yaml` holds only `owns:
 
 A feature is one block under `features:` in `mode.yaml`. It has input and output types, effects, ordered `steps`,
 an optional review block, and a playbook and rules file when it needs them. A feature that runs no role needs
-neither file; one that runs a role needs a playbook. It is called as `<mode>.<feature>`. The steps are:
+neither; one that does needs a playbook. It is called as `<mode>.<feature>`. The steps are:
 
 - `run: <capability>/v<N>.<endpoint>` is deterministic code, which the dispatcher runs in the coordinator's env.
 - `role: <role>` is an agentic step. That role runs it in the env that the step, the feature or the mode `roles:` names.
 - `gate: <text>` is an approval gate that only you pass, with `bay approve` in a terminal (or from chat, if `approve.from` allows it). `approves: $in.<f>` ties the gate to the exact content of a file, so a later call on the unchanged file skips it.
-- `{review: here}` marks where the review step goes. The default is last.
+- `{review: here}` marks where review goes (default last).
 
-`with:` substitutes `$in.x`, `$steps.<id>.x` and `$config.x`, with `a|b` fallbacks. `when:` skips a step
+`with:` substitutes `$in.x`, `$steps.<id>.x` and `$config.x`, with `a|b` fallbacks; a `*` path part maps the rest over a list (`$steps.get.items.*.id`), in project workflows too. `when:` skips a step
 (`stale > 2h`, `$in.<field>` or `$steps.<id>.<field>`; `!` negates). A playbook has the sections Purpose, Inputs,
 Steps, Definition of Done (`- [DOD-n] (must|should|must_not) ...`), Outputs and Failure handling. Rules refer to
 Definition of Done ids and can name a deterministic `check` (`citations_resolve`, `no_secrets`, `lint_clean`).
@@ -187,7 +187,7 @@ The boundary checks keep the framework's parts independent. Code cites these ids
 `store` is the abstract base of every mode that keeps items. Its features are `add`, `update`, `delete`, `query`, `get` and `ask`. Each
 child extends it for one kind of source and declares its own `sync`, `digest` and `prune`, with its own env, store, secrets and role units. The base env is store-local.
 
-`delete` runs four steps: preview, your gate, removal, then a reviewer. Review is always on, because conformance rule C-6 never exempts delete effects. A deleted synced item is remembered in `state.json` and never stored again; the source is untouched. `add` and `update` refuse the kinds that sources produce, and fail closed when the kinds are unknown.
+`delete` runs four steps: preview, your gate, removal, reviewer (always on: rule C-6 never exempts delete effects). A deleted synced item is remembered in `state.json` and never stored again; the source is untouched. `add` and `update` refuse the kinds that sources produce, and fail closed when the kinds are unknown.
 
 Sources implement `items.source/v1` and return `item/v1` items whose `id` is `<source>:<extId>`. A content type
 adds the fields of one kind of item and the views that agents query. A connector declares which selector fields

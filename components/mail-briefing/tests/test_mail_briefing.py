@@ -142,9 +142,19 @@ def test_offline_sync_digest_and_ask():
     ids = [x["id"] for x in r["next"]["review"]["definitionOfDone"]] + [x["id"] for x in r["next"]["review"]["rules"]]
     r = d.submit(r["callId"], "review", {"items": [{"id": i, "verdict": "pass", "evidence": "checked"} for i in ids]})
     assert r["status"] == "done" and r["output"]["deleted"] == r["output"]["remembered"] == ["fake-mail:m006"]
+    assert r["output"]["missing"] == ["fake-mail:m001"]                       # what the gate listed as missing is kept
     assert d.call("mail-briefing.sync", {})["status"] == "done" and count() == 0
     kept = json.loads(sp.read_text())["deleted"]
     assert "fake-mail:m006" in kept and "fake-mail:m001" not in kept and count("fake-mail:m001") == 1   # the preview bound the removal
+    r = d.call("mail-briefing.delete", {"ids": ["fake-mail:m001", "fake-mail:m001", "fake-mail:nope"]})
+    assert [m["id"] for m in r["next"]["inputs"]["preview"]["items"]] == ["fake-mail:m001"]          # a repeated id is shown once
+    r = d.call("mail-briefing.delete", {"ids": ["fake-mail:nope"]})
+    assert r["status"] == "awaiting-approval" and r["next"]["inputs"]["preview"]["items"] == []
+    r = d.approve(r["callId"], True)                                           # nothing found: nothing removed, same output shape
+    ids = [x["id"] for x in r["next"]["review"]["definitionOfDone"]] + [x["id"] for x in r["next"]["review"]["rules"]]
+    r = d.submit(r["callId"], "review", {"items": [{"id": i, "verdict": "pass", "evidence": "checked"} for i in ids]})
+    assert r["status"] == "done" and r["output"] == {"deleted": [], "missing": ["fake-mail:nope"], "remembered": []}
+    assert count("fake-mail:m001") == 1
     for ep, inp in (("add", {"item": {"kind": "email", "text": "x"}}), ("update", {"id": "fake-mail:m001", "set": {"text": "x"}}),
                     ("delete", {"ids": ["fake-mail:m001"]})):                 # the use shim: read endpoints only
         for unit in ("analyst--mail-briefing", "reviewer--mail-briefing"):

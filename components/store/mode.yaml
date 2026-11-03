@@ -36,7 +36,7 @@ spec:
       steps:
         - { id: preview, run: items.store/v2.get, with: { ids: "$in.ids" } }
         - { id: confirm, gate: "Remove these items from the store? A synced item is also kept from coming back; the source itself is not touched." }
-        - { id: remove, run: items.store/v2.delete, when: "$steps.preview.items", with: { ids: "$steps.preview.items.*.id" } }   # only what the preview found
+        - { id: remove, run: items.store/v2.delete, with: { ids: "$steps.preview.items.*.id", missing: "$steps.preview.missing" } }   # only what the preview found; nothing found removes nothing
     query:
       description: Stored items newest first, filtered by window, author, substring, selector or ids.
       in: QueryReq

@@ -9,7 +9,7 @@ Remove the items the owner named from the store, after showing them and asking, 
 ## Steps
 1. `preview`: the dispatcher reads the items with `items.store/v2.get`; the gate shows them and lists the ids it did not find under `missing`.
 2. `confirm`: a gate. The owner approves with `bay approve` or rejects; nothing is removed before.
-3. `remove`: the dispatcher runs `items.store/v2.delete` (code step, no agent) on exactly the ids the preview found, never on the call's `ids`; with none found it is skipped. One transaction removes the rows and saves the id of a synced item in the store's deleted list.
+3. `remove`: the dispatcher runs `items.store/v2.delete` (code step, no agent) on exactly the ids the preview found, never on the call's `ids`; with none found nothing is removed. Its `missing` includes the ids the preview listed. One transaction removes the rows and saves the id of a synced item in the store's deleted list.
 4. `review`: the reviewer checks the result (`deleted`, `missing`, `remembered`) against this Definition of Done and the rules before the call completes.
 
 ## Definition of Done
@@ -18,7 +18,7 @@ Remove the items the owner named from the store, after showing them and asking, 
 - [DOD-3] (must) Every deleted id whose source is not `local` is in `remembered`.
 
 ## Outputs
-`{deleted, missing, remembered}`.
+`{deleted, missing, remembered}`, always, also when the preview found nothing. A repeated id is shown and removed once.
 
 ## Failure handling
 - Rejected at the gate: the call ends blocked and nothing is removed.

@@ -117,7 +117,8 @@ spec:
         required: [ids]
         additionalProperties: false
         properties:
-          ids: { type: array, items: { type: string }, minItems: 1, maxItems: 50 }
+          ids: { type: array, items: { type: string }, maxItems: 50, description: "An empty list removes nothing." }
+          missing: { type: array, items: { type: string }, description: "Ids the caller already found missing; returned under `missing`, never touched." }
       out:
         type: object
         required: [deleted, missing, remembered]

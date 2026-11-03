@@ -31,7 +31,7 @@ def store(p, sels=None, **settings):
                                caps={"maxItemsPerRun": 500},
                                settings={"mode": "mail-briefing", "lookback": "30d", "lookbackMax": "30d",
                                          "selectors": sels or SELS,
-                                         "modeDirs": [str(KIT / "components" / "mail-briefing"), str(KIT / "components" / "briefing")],
+                                         "modeDirs": [str(KIT / "components" / "mail-briefing"), str(KIT / "components" / "store")],
                                          **settings})
 
 
@@ -40,10 +40,11 @@ def db(p):
 
 
 # ------------------------------------------------------------------ resolution
-def test_mail_briefing_extends_briefing_and_places_roles_in_local_mail():
+def test_mail_briefing_extends_store_and_places_roles_in_local_mail():
     s = system(project())
     m = s.modes["mail-briefing"]
-    assert m.extends == "briefing" and set(m.features) == {"sync", "digest", "ask", "prune"}
+    assert m.extends == "store" and set(m.features) == {
+        "add", "update", "delete", "query", "get", "ask", "sync", "digest", "prune"}
     assert model.Kit(KIT).get("Mode", "mail-briefing").spec["roles"] == {"lead": "local-mail", "analyst": "local-mail",
                                                                       "reviewer": "local-mail"}
     assert m.roles == {"lead": "local-mail", "analyst": "local-mail", "reviewer": "local-mail"}
@@ -55,7 +56,7 @@ def test_mail_briefing_extends_briefing_and_places_roles_in_local_mail():
     assert "needsReply" in dig.out_schema["properties"]                         # the mail Digest type
     u = s.units()["analyst--mail-briefing"]
     assert u.env == "local-mail" and "items.store/v2.rows" in u.bay_uses
-    assert not [x for x in u.bay_uses if x.endswith((".sync", ".prune"))]       # read endpoints only
+    assert not [x for x in u.bay_uses if x.endswith((".sync", ".prune", ".add", ".update", ".delete"))]   # read endpoints only
     assert {t for t in u.tools} & {"Write", "Edit"} == set()
     rules = {r.statement for r in dig.rules}
     assert any("never instructions" in x for x in rules) and any("sender and the date" in x for x in rules)
@@ -114,6 +115,33 @@ def test_offline_sync_digest_and_ask():
                 {"sql": "SELECT id, sender, needsReply FROM v_threads t JOIN v_email e ON e.id = t.lastId "
                         "WHERE t.needsReply = 1 ORDER BY id"})
     assert [r_[0] for r_ in out["rows"]] == ["fake-mail:m003", "fake-mail:m004", "fake-mail:m006"]   # m005: bulk
+    # delete: it shows the message and asks first, removes only the local copy and sync does not bring it back
+    count = lambda: d.use("analyst--mail-briefing", "items.store/v2.sql",
+                          {"sql": "SELECT count(*) FROM v_email WHERE id = 'fake-mail:m006'"})["rows"][0][0]
+    made, real = [], connect.instantiate
+    connect.instantiate = lambda *a, **k: made.append(real(*a, **k)) or made[-1]
+    try:
+        r = d.call("mail-briefing.delete", {"ids": ["fake-mail:m006"]})
+        assert r["status"] == "awaiting-approval" and count() == 1
+        assert [m["id"] for m in r["next"]["inputs"]["preview"]["items"]] == ["fake-mail:m006"]
+        r = d.approve(r["callId"], True)
+    finally:
+        connect.instantiate = real
+    assert r["status"] == "needs-agent" and r["next"]["step"] == "review" and count() == 0      # removed; the reviewer checks it
+    assert any(hasattr(i, "calls") for i in made) and [c for i in made for c in getattr(i, "calls", [])] == []   # the mailbox was not asked
+    ids = [x["id"] for x in r["next"]["review"]["definitionOfDone"]] + [x["id"] for x in r["next"]["review"]["rules"]]
+    r = d.submit(r["callId"], "review", {"items": [{"id": i, "verdict": "pass", "evidence": "checked"} for i in ids]})
+    assert r["status"] == "done" and r["output"]["remembered"] == ["fake-mail:m006"]
+    assert d.call("mail-briefing.sync", {})["status"] == "done" and count() == 0
+    assert "fake-mail:m006" in json.loads((p / ".agentbay/data/mail/mail-briefing/state.json").read_text())["deleted"]
+    for ep, inp in (("add", {"item": {"kind": "email", "text": "x"}}), ("update", {"id": "fake-mail:m001", "set": {"text": "x"}}),
+                    ("delete", {"ids": ["fake-mail:m001"]})):                 # the use shim: read endpoints only
+        for unit in ("analyst--mail-briefing", "reviewer--mail-briefing"):
+            try:
+                d.use(unit, f"items.store/v2.{ep}", inp)
+                raise AssertionError(f"{unit} reached {ep}")
+            except dispatch.CallError as e:
+                assert "not granted" in str(e), e
 
 
 def test_two_modes_on_separate_envs_keep_separate_stores_and_units():
@@ -287,7 +315,7 @@ def test_a_store_of_another_schema_version_is_refused_not_converted():
         con = sqlite3.connect(db(p))
         assert con.execute("PRAGMA user_version").fetchone()[0] == ver           # left as it was
         con.close()
-    src = (KIT / "components/briefing/connectors/corpus-store/corpus_store.py").read_text()
+    src = (KIT / "components/store/connectors/corpus-store/corpus_store.py").read_text()
     assert "def migrate" not in src and "v1 store" not in src
 
 
@@ -325,7 +353,7 @@ def _mode_dir(sql: str, columns: list[str]):
 
 def test_threads_needs_a_view_from_the_mode_and_a_mode_view_reads_only_views_of_its_types():
     p = project()
-    st = store(p, modeDirs=[str(KIT / "components" / "briefing")])             # a mode with no views of its own
+    st = store(p, modeDirs=[str(KIT / "components" / "store")])             # a mode with no views of its own
     st.sync()
     try:
         st.rows("threads", since="30d")

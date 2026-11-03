@@ -24,7 +24,7 @@ def test_shipped_modes_and_connectors_declare_versioned_kinds():
     assert model.item_kinds(KIT) == {"post": {1}, "email": {1}}
     assert kit.docs["Mode"]["feed-briefing"].spec["reads"] == ["post/v1"]
     assert kit.docs["Mode"]["mail-briefing"].spec["reads"] == ["email/v1"]
-    assert "reads" not in kit.docs["Mode"]["briefing"].spec            # the abstract base declares none
+    assert "reads" not in kit.docs["Mode"]["store"].spec            # the abstract base declares none
     for c, kind in (("x-api", "post/v1"), ("fake", "post/v1"), ("gmail-api", "email/v1"), ("fake-mail", "email/v1")):
         assert kit.docs["Connector"][c].spec["produces"] == [kind]
     assert not [p for p in lint.lint_contract_versions(kit)]

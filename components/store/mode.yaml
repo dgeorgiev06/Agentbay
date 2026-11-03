@@ -1,66 +1,64 @@
 apiVersion: agentbay/v4
 kind: Mode
 metadata:
-  name: briefing
-  version: 0.1.0
-  description: Base mode for source briefings (items of the content types a child mode reads) - sync, digest, ask, prune over a local corpus store.
+  name: store
+  version: 0.2.0
+  description: Base mode for modes that keep items in a local corpus store - add, update, delete, query, get and a grounded ask, with or without a source.
 spec:
-  # Not installed or called itself: per-source modes `extends: briefing` and override what differs
-  # (purpose, constraints, configDefaults, types, steps, playbooks, rules, review, roles and their envs).
+  # Not installed or called itself: a mode with `extends: store` gets these features and adds what differs
+  # (a source, sync, prune, digest, its own ask, constraints, config, roles and their envs).
   abstract: true
-  purpose: Keep me briefed on items from my sources; answer questions about them from the stored items only.
+  purpose: Keep my items in a local store; add, change and remove them when I ask; answer questions about them from the stored items only.
   features:
-    sync:
-      description: Pull new items from every bound source into the corpus store (selectors, budget caps).
-      in: SyncReq
-      effects: [network, spend, write]
+    add:
+      description: Store a local item (never an item a source produces).
+      effects: [write]
       review: { role: reviewer, when: never }
       steps:
-        - { id: fetch, run: items.store/v2.sync, with: { lookback: "$in.lookback|$config.lookback", maxItems: "$in.maxItems" } }
-    digest:
-      description: Themes across recent items, each grounded in stored items.
-      in: DigestReq
-      out: Digest
-      effects: [read, network, spend, write]
-      playbook: features/digest/playbook.md
-      rules: features/digest/rules.yaml
-      review: { role: reviewer, when: always, tier: deep, effort: high }
-      uses: [items.store/v2.describe, items.store/v2.sql, items.store/v2.query, items.store/v2.get, items.store/v2.thread]   # B-9
-      skills: [digest, corpus-sql]                                                                     # B-8
+        - { id: add, run: items.store/v2.add, with: { item: "$in.item" } }
+    update:
+      description: Change fields of a local item.
+      effects: [write]
+      review: { role: reviewer, when: never }
       steps:
-        - { id: refresh, run: items.store/v2.sync, when: "stale > 2h" }      # code step, no agent
-        - { id: gather, run: items.store/v2.query, with: { since: "$in.since|$config.lookback", until: "$in.until", author: "$in.author", selector: "$in.selector", limit: 500 } }
-        - { id: themes, role: analyst, out: Digest, task: "Write the digest from the gathered items." }
+        - { id: update, run: items.store/v2.update, with: { id: "$in.id", set: "$in.set" } }
+    delete:
+      description: Remove items from the store after you have seen them; a synced item is not stored again.
+      effects: [read, write, delete]
+      playbook: features/delete/playbook.md
+      rules: features/delete/rules.yaml
+      review: { role: reviewer, when: always, tier: balanced, effort: low }
+      uses: [items.store/v2.get, items.store/v2.status]      # the reviewer checks what was removed
+      skills: []
+      steps:
+        - { id: preview, run: items.store/v2.get, with: { ids: "$in.ids" } }
+        - { id: confirm, gate: "Remove these items from the store? A synced item is also kept from coming back; the source itself is not touched." }
+        - { id: remove, run: items.store/v2.delete, with: { ids: "$in.ids" } }
+    query:
+      description: Stored items newest first, filtered by window, author, substring, selector or ids.
+      effects: [read]
+      review: { role: reviewer, when: never }
+      steps:
+        - { id: query, run: items.store/v2.query, with: { since: "$in.since", until: "$in.until", author: "$in.author", text: "$in.text", selector: "$in.selector", limit: "$in.limit", ids: "$in.ids" } }
+    get:
+      description: Full items for a few ids.
+      effects: [read]
+      review: { role: reviewer, when: never }
+      steps:
+        - { id: get, run: items.store/v2.get, with: { ids: "$in.ids" } }
     ask:
       description: Answer a question from stored items via read-only SQL, with citations.
       in: Question
       out: Answer
-      effects: [read, network, spend, write]
+      effects: [read]
       playbook: features/ask/playbook.md
       rules: features/ask/rules.yaml
       review: { role: reviewer, when: never }
       uses: [items.store/v2.describe, items.store/v2.sql, items.store/v2.query, items.store/v2.search, items.store/v2.facets, items.store/v2.get, items.store/v2.thread, items.store/v2.status]
       skills: [corpus-sql, grounded-qa]
       steps:
-        - { id: refresh, run: items.store/v2.sync, when: "stale > 2h" }
-        - { id: context, run: items.store/v2.status, with: { since: "$in.since|$config.lookback" } }
+        - { id: context, run: items.store/v2.status, with: { since: "$in.since" } }
         - { id: answer, role: analyst, out: Answer, task: "Answer the question from the stored items only: narrow with SQL, read full items with get, cite item ids." }
-    prune:
-      description: Drop items past retention, items deleted at the source and items no selector matches.
-      in: PruneReq
-      effects: [read, write, delete]
-      playbook: features/prune/playbook.md
-      rules: features/prune/rules.yaml
-      review: { role: reviewer, when: always, tier: balanced, effort: medium }
-      schedule: daily
-      uses: [items.store/v2.status, items.store/v2.sql]      # the reviewer checks what was dropped
-      skills: []
-      steps:
-        - { id: prune, run: items.store/v2.prune, with: { olderThan: "$in.olderThan|$config.retention" } }
   coordinator: lead
-  roles: { lead: local-feeds, analyst: local-feeds, reviewer: local-feeds }   # role -> env
-  constraints:
-    lookbackMax: 30d
-    spendUsd: 5          # dollar cap enforced by the dispatcher (C-6 spend exemption for sync)
-  needs: [items.store/v2, items.source/v1]
-  config: config.schema.json
+  roles: { lead: store-local, analyst: store-local, reviewer: store-local }   # role -> env
+  needs: [items.store/v2]

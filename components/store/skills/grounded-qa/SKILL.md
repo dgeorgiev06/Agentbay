@@ -1,6 +1,6 @@
 ---
 name: grounded-qa
-description: Answer a question strictly from stored items with citations. Use for briefing ask `answer` steps, together with corpus-sql.
+description: Answer a question strictly from stored items with citations. Use for ask `answer` steps, together with corpus-sql.
 ---
 # Grounded Q&A
 

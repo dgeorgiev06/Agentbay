@@ -272,6 +272,7 @@ def test_stage_syntax_table():
 def test_the_reference_grammar_is_spelled_once_and_the_schemas_equal_it():
     root = KIT / "bay"
     shipped = [KIT / p for p in Kit(KIT).protected_paths if (KIT / p / "connector.yaml").exists()]    # scanned before the move
+    shipped.append(KIT / "components/store/connectors/corpus-store")        # inside the protected folder components/store
     assert len(shipped) == 7, shipped
     files = [*root.glob("*.py"), *(f for d in shipped for f in d.glob("*.py")), *(KIT / "adapters").glob("*/*.py")]
     spelled = [str(f.relative_to(KIT)) for f in files if re.search(r"\\\$\(?(\?:)?(in|steps)", f.read_text())]

@@ -1,6 +1,6 @@
 """Golden baseline of feed-briefing and mail-briefing on the offline sources (proposal 0008, slice 5): the sync
 output, `describe` and `status` of the store, and a fixed set of reads, all under the fixed clock. The reference
-is components/briefing/tests/golden/<mode>.json, generated from the code as it was before content types moved out of the core, then changed once for the generic names of decision (e)
+is components/store/tests/golden/<mode>.json, generated from the code as it was before content types moved out of the core, then changed once for the generic names of decision (e)
 (column descriptions, the `items` cost key). A
 failing compare means a behavior changed: there is no update switch, change the code back or explain the delta.
 A missing file is written once and the test fails, so a new golden is always a visible new file in git."""
@@ -13,7 +13,7 @@ from helpers import KIT, clock, system, tmpdir
 
 from bay import dispatch
 
-GOLDEN = KIT / "components" / "briefing" / "tests" / "golden"
+GOLDEN = KIT / "components" / "store" / "tests" / "golden"
 
 
 def project(cfg: dict | None = None):

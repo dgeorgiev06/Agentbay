@@ -1,22 +1,22 @@
-# briefing (abstract base mode)
+# store (abstract base mode)
 
-The base of every source briefing. It is never installed or called itself: a mode with `extends: briefing`
-gets its features and overrides what differs (purpose, constraints, `configDefaults`, types, playbooks,
-rules, review, roles and their envs).
+The base of every mode that keeps items in the local corpus store, with or without a source. It is never installed
+or called itself: a mode with `extends: store` gets its features and adds what differs (a source, `sync`, `prune`,
+`digest`, its own `ask`, constraints, config schema, roles and their envs). It has no config schema; the children
+carry theirs. A child extends it directly: one level, nothing deeper.
 
-**Contract:** needs `items.store/v2` and `items.source/v1` (bound in the env). Features:
+**Contract:** needs `items.store/v2`; a child that reads a source adds `items.source/v1` to its `needs`. Features:
 
 | feature | does |
 |---|---|
-| `sync` | pull new items from every bound source into the corpus store (selectors, budget caps) |
-| `digest` | themes across recent items, each grounded in stored items |
-| `ask` | answer a question from stored items through read-only SQL, with citations |
-| `prune` | drop items past retention, deleted at the source or matched by no selector (`schedule: daily`) |
+| `store.add` | store a local item (source `local`, id `local:<extId>`); a kind a source produces is refused |
+| `store.update` | change fields of a local item; a synced item is refused |
+| `store.delete` | show the items, ask, then remove them (a reviewer checks the result); a synced item is not stored again, and the source is never touched |
+| `store.query`, `store.get` | read items |
+| `store.ask` | answer a question from stored items through read-only SQL, with citations |
 
-**Settings** (`config.schema.json`, under `modes.<child>` in agentbay.config.yaml): `lookback`, `retention`,
-`maxItemsPerRun`, `monthlyItems`, `spendUsd`, `costPerItemUsd` and `selectors`. A child's own config schema
-only adds settings; it changes a default through `configDefaults`. Each child ships its own
-`config.example.yaml`.
+Local items are part of the store's scope: no sync, scope change or prune removes them. A store with no source
+and no selectors is never stale, so its reads are not refused. `store-local` is the env of the base itself.
 
 The endpoints of `items.source/v1` and `items.store/v2` are documented in their interface files in `interfaces/`.
 The rest of this page describes what those files do not: the item envelope, content types, selectors, the

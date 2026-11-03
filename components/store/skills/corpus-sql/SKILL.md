@@ -1,6 +1,6 @@
 ---
 name: corpus-sql
-description: Query the corpus store with read-only SQL (items.store/v2.sql) and cite item ids. Use whenever a briefing step needs to find items beyond what the plan gave you.
+description: Query the corpus store with read-only SQL (items.store/v2.sql) and cite item ids. Use whenever a step needs to find items beyond what the plan gave you.
 ---
 # Corpus SQL
 

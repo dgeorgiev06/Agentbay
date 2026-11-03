@@ -1,4 +1,4 @@
-# read-only mail (sign in: README.md of the mail connector your env binds); briefing's settings plus `important`
+# read-only mail (sign in: README.md of the mail connector your env binds); the settings of config.schema.json
 lookback: 30d                     # first sync reads the last 30 days (= lookbackMax)
 selectors:
   - { id: partners, from: "*@partner.example" }               # `*` is matched locally: the source lists every message

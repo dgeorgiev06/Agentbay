@@ -38,7 +38,7 @@ and the status stays `stale` until you sign in again.
 
 ## Selectors in Gmail notation
 
-Modes write selectors in the neutral vocabulary (`selector/v1`, described in [the briefing README](../briefing/README.md)); this connector turns the native fields
+Modes write selectors in the neutral vocabulary (`selector/v1`, described in [the store README](../store/README.md)); this connector turns the native fields
 into a Gmail search query:
 
 | Selector | Gmail search |

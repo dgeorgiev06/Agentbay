@@ -28,7 +28,7 @@ needs one new adapter, not new modes.
 
 ```
 Chief of Staff (your main Claude Code session)
-  └─ bay call feed-briefing.digest ──> Mode feed-briefing (extends briefing), feature digest
+  └─ bay call feed-briefing.digest ──> Mode feed-briefing (extends store), feature digest
         refresh   run: items.store/v1.sync   ─ code ─> Env local-feeds ─> corpus-store ─> x-api (api.x.com)
         gather    run: items.store/v1.query  ─ code
         themes    role: analyst    ─ subagent analyst--feed-briefing (balanced: sonnet) in Env local-feeds

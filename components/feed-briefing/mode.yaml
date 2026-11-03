@@ -2,16 +2,67 @@ apiVersion: agentbay/v4
 kind: Mode
 metadata:
   name: feed-briefing
-  version: 0.2.0
+  version: 0.3.0
   description: Briefings and grounded Q&A over posts from accounts you follow.
 spec:
-  # Everything not set here comes from components/briefing (features sync, digest, ask, prune; their playbooks,
-  # rules and review; roles; skills).
-  extends: briefing
+  # Everything not set here comes from components/store (features add, update, delete, query and get; the ask
+  # playbook and rules; the types Question, Answer, SyncReq, PruneReq and DigestReq; the corpus-sql and grounded-qa skills).
+  extends: store
   reads: [post/v1]          # the item kind its features read (B-6)
   purpose: Keep me briefed on what people I follow say; answer questions about it.
-  constraints:                 # merged over briefing's (lookbackMax, spendUsd)
+  roles: { lead: local-feeds, analyst: local-feeds, reviewer: local-feeds }   # role -> env
+  features:
+    sync:
+      description: Pull new items from every bound source into the corpus store (selectors, budget caps).
+      in: SyncReq
+      effects: [network, spend, write]
+      review: { role: reviewer, when: never }
+      steps:
+        - { id: fetch, run: items.store/v2.sync, with: { lookback: "$in.lookback|$config.lookback", maxItems: "$in.maxItems" } }
+    digest:
+      description: Themes across recent items, each grounded in stored items.
+      in: DigestReq
+      out: Digest
+      effects: [read, network, spend, write]
+      playbook: features/digest/playbook.md
+      rules: features/digest/rules.yaml
+      review: { role: reviewer, when: always, tier: deep, effort: high }
+      uses: [items.store/v2.describe, items.store/v2.sql, items.store/v2.query, items.store/v2.get, items.store/v2.thread]   # B-9
+      skills: [digest, corpus-sql]                                                                     # B-8
+      steps:
+        - { id: refresh, run: items.store/v2.sync, when: "stale > 2h" }      # code step, no agent
+        - { id: gather, run: items.store/v2.query, with: { since: "$in.since|$config.lookback", until: "$in.until", author: "$in.author", selector: "$in.selector", limit: 500 } }
+        - { id: themes, role: analyst, out: Digest, task: "Write the digest from the gathered items." }
+    ask:
+      description: Answer a question from stored items via read-only SQL, with citations.
+      in: Question
+      out: Answer
+      effects: [read, network, spend, write]
+      review: { role: reviewer, when: never }
+      uses: [items.store/v2.describe, items.store/v2.sql, items.store/v2.query, items.store/v2.search, items.store/v2.facets, items.store/v2.get, items.store/v2.thread, items.store/v2.status]
+      skills: [corpus-sql, grounded-qa]
+      steps:
+        - { id: refresh, run: items.store/v2.sync, when: "stale > 2h" }
+        - { id: context, run: items.store/v2.status, with: { since: "$in.since|$config.lookback" } }
+        - { id: answer, role: analyst, out: Answer, task: "Answer the question from the stored items only: narrow with SQL, read full items with get, cite item ids." }
+    prune:
+      description: Drop items past retention, items deleted at the source and items no selector matches.
+      in: PruneReq
+      effects: [read, write, delete]
+      playbook: features/prune/playbook.md
+      rules: features/prune/rules.yaml
+      review: { role: reviewer, when: always, tier: balanced, effort: medium }
+      schedule: daily
+      uses: [items.store/v2.status, items.store/v2.sql]      # the reviewer checks what was dropped
+      skills: []
+      steps:
+        - { id: prune, run: items.store/v2.prune, with: { olderThan: "$in.olderThan|$config.retention" } }
+  constraints:
+    lookbackMax: 30d
+    spendUsd: 5          # dollar cap enforced by the dispatcher (C-6 spend exemption for sync)
     monthlyItems: 3000
     maxItemsPerRun: 500
-  configDefaults:              # briefing's config schema, with this mode's default selector
+  needs: [items.source/v1]
+  config: config.schema.json
+  configDefaults:
     selectors: [{ id: home }]  # no fields: each source's default stream (the X home timeline)

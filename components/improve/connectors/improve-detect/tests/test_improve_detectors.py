@@ -419,32 +419,31 @@ def test_conformance_checks_on_a_kit_copy():
         assert conformance.lint(k) == []
         base = {r["rule"]: len(r["violations"]) for r in conformance.run(k)}
         # C-1: a workflow step the playbook never mentions
-        pb = k / "components/briefing/features/prune/playbook.md"
+        pb = k / "components/feed-briefing/features/prune/playbook.md"
         pb.write_text(pb.read_text().replace("`prune`: the dispatcher runs `items.store/v2.prune` (code step, no agent).",
                                              "The store trims."))
         # C-4: a backticked tool in a playbook; C-7: retired vocabulary
-        pb2 = k / "components/briefing/features/ask/playbook.md"
+        pb2 = k / "components/store/features/ask/playbook.md"
         pb2.write_text(pb2.read_text().replace("## Outputs", "Use `Bash` and a sub-agent.\n\n## Outputs"))
         # C-5: a read-only endpoint that writes
-        st = k / "components/briefing/connectors/corpus-store/corpus_store.py"
+        st = k / "components/store/connectors/corpus-store/corpus_store.py"
         st.write_text(st.read_text().replace("    def status(self", "    def status(self, *a, **kw):\n"
                                              "        self.path.write_text('')\n        return self._status()\n\n"
                                              "    def _status(self", 1))
         # C-6: without a dollar cap, spend needs review (sync and ask); without review, delete is flagged (prune)
         mode = k / "components/feed-briefing/mode.yaml"
         mode.write_text(mode.read_text().replace("    spendUsd: 5\n", ""))
-        base_mode = k / "components/briefing/mode.yaml"
+        base_mode = k / "components/feed-briefing/mode.yaml"
         base_mode.write_text(base_mode.read_text().replace("    spendUsd: 5          # dollar cap enforced by the dispatcher (C-6 spend exemption for sync)\n", "")
                              .replace("      review: { role: reviewer, when: always, tier: balanced, effort: medium }\n      schedule: daily", "      schedule: daily"))
         res = {r["rule"]: r for r in conformance.run(k)}
-        assert len(res["C-1"]["violations"]) == base["C-1"] + 3 and "prune" in res["C-1"]["violations"][-1]["detail"]   # briefing, feed- and mail-briefing
+        assert len(res["C-1"]["violations"]) == base["C-1"] + 1 and "prune" in res["C-1"]["violations"][-1]["detail"]   # feed-briefing's own prune playbook
         assert any("'Bash'" in v["detail"] for v in res["C-4"]["violations"])
         assert any("sub-agent" in v["detail"] and v["rewrite"].endswith("subagent.") for v in res["C-7"]["violations"])
         assert any("status" in v["detail"] and "write_text" in v["detail"] for v in res["C-5"]["violations"])
         assert base["C-6"] == 0
         assert sorted(v["detail"].split()[0] for v in res["C-6"]["violations"]) == \
-            ["briefing.ask", "briefing.prune", "briefing.sync", "feed-briefing.ask", "feed-briefing.prune",
-             "feed-briefing.sync", "mail-briefing.ask", "mail-briefing.prune", "mail-briefing.sync"]
+            ["feed-briefing.ask", "feed-briefing.prune", "feed-briefing.sync"]
         cands = da.conformance(da.Artifacts(files=[], text=lambda p: None, graph={}, conformance=list(res.values())),
                                da.thresholds({}))
         assert {c["scope"]["rule"] for c in cands} >= {"C-1", "C-4", "C-5", "C-6", "C-7"}

@@ -27,7 +27,7 @@ SECRETS = {"GMAIL_CLIENT_ID": "cid-1234.apps.googleusercontent.com",
 SINCE = "2026-09-27T12:00:00Z"        # NOW - 30d
 WORK = [{"id": "work", "in": "label:Work"}]
 INBOX = [{"id": "inbox", "in": "inbox"}, {"id": "sent", "in": "sent"}]
-MODE_DIRS = [str(KIT / "components" / "mail-briefing"), str(KIT / "components" / "briefing")]   # where the mode's views.sql is
+MODE_DIRS = [str(KIT / "components" / "mail-briefing"), str(KIT / "components" / "store")]   # where the mode's views.sql is
 
 
 def project(cfg: dict | None = None):

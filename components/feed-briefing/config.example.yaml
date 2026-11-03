@@ -1,4 +1,4 @@
-# validated against components/briefing/config.schema.json (feed-briefing extends briefing)
+# validated against components/feed-briefing/config.schema.json
 lookback: 3d                      # default window for sync/digest/ask (<= lookbackMax 30d)
 retention: 30d                    # prune drops posts older than this
 maxItemsPerRun: 200

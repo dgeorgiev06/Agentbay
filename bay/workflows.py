@@ -12,7 +12,7 @@ mode's author. A *project* workflow is a list of stages across modes, written by
             call: feed-briefing.sync
             with: { lookback: 1d }
           - id: digest
-            call: briefing.digest
+            call: feed-briefing.digest
             with: { since: "$steps.sync.until" }
             when: $steps.sync.added
           - id: ship

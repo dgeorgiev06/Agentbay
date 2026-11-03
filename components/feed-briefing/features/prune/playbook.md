@@ -1,4 +1,4 @@
-# briefing.prune
+# feed-briefing.prune
 
 ## Purpose
 Keep the store within retention, honor deletions made at the source, and drop items no selector matches any more.

@@ -1,0 +1,12 @@
+apiVersion: agentbay/v4
+kind: Environment
+metadata:
+  name: store-local
+  description: The local corpus store and nothing else. Only the dispatcher touches the connector; agents read the store only through their role's use shim.
+spec:
+  bind:
+    items.store/v2: corpus-store
+    workspace.read/v1: { tools: [Read, Glob, Grep] }
+  fs: { read: ["."], write: [".agentbay/data/store"] }
+  effects: [read, write, delete]
+  limits: { maxTurns: 40, maxMinutes: 20 }

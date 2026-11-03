@@ -1,4 +1,4 @@
-# briefing.digest
+# feed-briefing.digest
 
 ## Purpose
 Summarize what my sources said in a period as a few themes, every one grounded in stored items.

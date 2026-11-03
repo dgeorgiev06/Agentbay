@@ -263,6 +263,9 @@ def test_connector_without_source_or_with_foreign_ids_is_rejected():
     except Exception as e:
         assert "declares no `source`" in str(e)
     st = store(p)
+    st.ctx.sources["fake"].ctx.source_id = "local"                # the reserved source of add: refused, naming the connector
+    assert "connector fake declares source `local`" in refused(st.sync, lookback="1d") and ids(p) == set()
+    st = store(p)
     real = st.ctx.sources["fake"].fetch
 
     def foreign(**kw):
@@ -293,6 +296,7 @@ def add_and_update_refuse_what_a_source_produces_and_fail_closed():
         bare.ctx.settings.pop(next(iter(kw)))
         assert refused(bare.add, {"kind": "item", "text": "x"})
     first = st.add({"kind": "item", "text": "x", "extId": "n1"})["item"]["id"]
+    assert "object" in refused(st.update, first, ["text"])
     assert "exists; use update" in refused(st.add, {"kind": "item", "text": "y", "extId": "n1"})
     assert rows(p, "SELECT body FROM items WHERE ext_id = 'n1'") == [{"body": "x"}]
     assert "not a local item" in refused(st.update, "fake:1008", {"text": "edited"})

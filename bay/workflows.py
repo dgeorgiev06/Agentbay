@@ -292,6 +292,15 @@ _MISSING = object()
 def substitute(template, inp: dict, steps: dict, settings: dict):
     """"$in.x", "$steps.id.x", "$config.x", "$in.x|$config.y" (first present) -> values.
     Keys whose value is missing are dropped."""
+    def dig(cur, parts):              # a `*` part maps the rest of the path over a list: $steps.get.items.*.id
+        for n, part in enumerate(parts):
+            if part == "*" and isinstance(cur, list):
+                return [x for x in (dig(c, parts[n + 1:]) for c in cur) if x is not _MISSING]
+            if not isinstance(cur, dict) or part not in cur or cur[part] is None:
+                return _MISSING
+            cur = cur[part]
+        return cur
+
     def val(v):
         if isinstance(v, str) and v.startswith("$") and "|" in v:
             for alt in v.split("|"):
@@ -304,12 +313,7 @@ def substitute(template, inp: dict, steps: dict, settings: dict):
             src = {"in": inp, "steps": steps, "config": settings}.get(head)
             if src is None:
                 return _MISSING
-            cur = src
-            for part in rest.split("."):
-                if not isinstance(cur, dict) or part not in cur or cur[part] is None:
-                    return _MISSING
-                cur = cur[part]
-            return cur
+            return dig(src, rest.split("."))
         if isinstance(v, dict):
             return {k: x for k, x in ((k, val(x)) for k, x in v.items()) if x is not _MISSING}
         return v

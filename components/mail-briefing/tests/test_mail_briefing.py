@@ -116,14 +116,24 @@ def test_offline_sync_digest_and_ask():
                         "WHERE t.needsReply = 1 ORDER BY id"})
     assert [r_[0] for r_ in out["rows"]] == ["fake-mail:m003", "fake-mail:m004", "fake-mail:m006"]   # m005: bulk
     # delete: it shows the message and asks first, removes only the local copy and sync does not bring it back
-    count = lambda: d.use("analyst--mail-briefing", "items.store/v2.sql",
-                          {"sql": "SELECT count(*) FROM v_email WHERE id = 'fake-mail:m006'"})["rows"][0][0]
+    count = lambda i="fake-mail:m006": d.use("analyst--mail-briefing", "items.store/v2.sql",
+                                             {"sql": f"SELECT count(*) FROM v_email WHERE id = '{i}'"})["rows"][0][0]
+    sp = p / ".agentbay/data/mail/mail-briefing/state.json"
+    con = sqlite3.connect(db(p))
+    con.execute("DELETE FROM items WHERE ext_id = 'm001'")             # not stored when the owner looks
+    con.commit()
+    con.close()
+    r = d.call("mail-briefing.delete", {"ids": ["fake-mail:m006", "fake-mail:m001"]})
+    assert r["status"] == "awaiting-approval" and count() == 1 and count("fake-mail:m001") == 0
+    assert [m["id"] for m in r["next"]["inputs"]["preview"]["items"]] == ["fake-mail:m006"]
+    assert r["next"]["inputs"]["preview"]["missing"] == ["fake-mail:m001"]
+    seen = json.loads(sp.read_text())
+    seen["cursors"] = {}
+    sp.write_text(json.dumps(seen))
+    assert d.call("mail-briefing.sync", {})["status"] == "done" and count("fake-mail:m001") == 1   # stored before approval
     made, real = [], connect.instantiate
     connect.instantiate = lambda *a, **k: made.append(real(*a, **k)) or made[-1]
     try:
-        r = d.call("mail-briefing.delete", {"ids": ["fake-mail:m006"]})
-        assert r["status"] == "awaiting-approval" and count() == 1
-        assert [m["id"] for m in r["next"]["inputs"]["preview"]["items"]] == ["fake-mail:m006"]
         r = d.approve(r["callId"], True)
     finally:
         connect.instantiate = real
@@ -131,9 +141,10 @@ def test_offline_sync_digest_and_ask():
     assert any(hasattr(i, "calls") for i in made) and [c for i in made for c in getattr(i, "calls", [])] == []   # the mailbox was not asked
     ids = [x["id"] for x in r["next"]["review"]["definitionOfDone"]] + [x["id"] for x in r["next"]["review"]["rules"]]
     r = d.submit(r["callId"], "review", {"items": [{"id": i, "verdict": "pass", "evidence": "checked"} for i in ids]})
-    assert r["status"] == "done" and r["output"]["remembered"] == ["fake-mail:m006"]
+    assert r["status"] == "done" and r["output"]["deleted"] == r["output"]["remembered"] == ["fake-mail:m006"]
     assert d.call("mail-briefing.sync", {})["status"] == "done" and count() == 0
-    assert "fake-mail:m006" in json.loads((p / ".agentbay/data/mail/mail-briefing/state.json").read_text())["deleted"]
+    kept = json.loads(sp.read_text())["deleted"]
+    assert "fake-mail:m006" in kept and "fake-mail:m001" not in kept and count("fake-mail:m001") == 1   # the preview bound the removal
     for ep, inp in (("add", {"item": {"kind": "email", "text": "x"}}), ("update", {"id": "fake-mail:m001", "set": {"text": "x"}}),
                     ("delete", {"ids": ["fake-mail:m001"]})):                 # the use shim: read endpoints only
         for unit in ("analyst--mail-briefing", "reviewer--mail-briefing"):

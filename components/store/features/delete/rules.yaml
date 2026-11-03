@@ -1,6 +1,6 @@
 apiVersion: agentbay/v4
 kind: Rules
 rules:
-  - { id: R-1, level: must, statement: "Remove only the ids the call names, after the owner approved them at the gate.", appliesTo: executor, refs: [DOD-2] }
+  - { id: R-1, level: must, statement: "Remove only the ids the preview found, after the owner approved them at the gate.", appliesTo: executor, refs: [DOD-2] }
   - { id: R-2, level: must_not, statement: "Contact a source or change anything outside the mode's store.", appliesTo: executor }
   - { id: R-3, level: must, statement: "List the id of a deleted synced item in `remembered`, so no sync stores it again.", appliesTo: both, refs: [DOD-3] }

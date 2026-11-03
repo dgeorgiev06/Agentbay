@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "since": { "type": "string" },
+    "until": { "type": "string" },
+    "author": { "type": "string" },
+    "text": { "type": "string" },
+    "selector": { "type": "string" },
+    "limit": { "type": "integer", "minimum": 1, "maximum": 1000 },
+    "ids": { "type": "array", "items": { "type": "string" }, "description": "Exact <source>:<extId> ids." }
+  }
+}

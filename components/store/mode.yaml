@@ -12,18 +12,21 @@ spec:
   features:
     add:
       description: Store a local item (never an item a source produces).
+      in: AddReq
       effects: [write]
       review: { role: reviewer, when: never }
       steps:
         - { id: add, run: items.store/v2.add, with: { item: "$in.item" } }
     update:
       description: Change fields of a local item.
+      in: UpdateReq
       effects: [write]
       review: { role: reviewer, when: never }
       steps:
         - { id: update, run: items.store/v2.update, with: { id: "$in.id", set: "$in.set" } }
     delete:
       description: Remove items from the store after you have seen them; a synced item is not stored again.
+      in: Ids
       effects: [read, write, delete]
       playbook: features/delete/playbook.md
       rules: features/delete/rules.yaml
@@ -33,15 +36,17 @@ spec:
       steps:
         - { id: preview, run: items.store/v2.get, with: { ids: "$in.ids" } }
         - { id: confirm, gate: "Remove these items from the store? A synced item is also kept from coming back; the source itself is not touched." }
-        - { id: remove, run: items.store/v2.delete, with: { ids: "$in.ids" } }
+        - { id: remove, run: items.store/v2.delete, when: "$steps.preview.items", with: { ids: "$steps.preview.items.*.id" } }   # only what the preview found
     query:
       description: Stored items newest first, filtered by window, author, substring, selector or ids.
+      in: QueryReq
       effects: [read]
       review: { role: reviewer, when: never }
       steps:
         - { id: query, run: items.store/v2.query, with: { since: "$in.since", until: "$in.until", author: "$in.author", text: "$in.text", selector: "$in.selector", limit: "$in.limit", ids: "$in.ids" } }
     get:
       description: Full items for a few ids.
+      in: Ids
       effects: [read]
       review: { role: reviewer, when: never }
       steps:

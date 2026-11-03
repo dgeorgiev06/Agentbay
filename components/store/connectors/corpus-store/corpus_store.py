@@ -658,6 +658,9 @@ class CorpusStore:
         lb_max = self.ctx.settings.get("lookbackMax")
         if lb_max and lb > duration(lb_max):
             raise StoreError(f"lookback {lookback} exceeds the mode's lookbackMax {lb_max}")
+        if bad := sorted(n for n, src in self.ctx.sources.items() if src.ctx.source_id == "local"):
+            raise StoreError(f"connector {bad[0]} declares source `local`, which is the source of items written with "
+                             f"add; choose another spec.source")
         sels = self._selectors()
         with self._exclusive():
             state = load_state(self.state_path)
@@ -1004,6 +1007,8 @@ class CorpusStore:
         return self._locked(work)
 
     def update(self, id, set) -> dict:    # noqa: A002
+        if not isinstance(set, dict):
+            raise StoreError("update takes `set` as an object of fields to change")
         if id.partition(":")[0] != "local":
             raise StoreError(f"{id} is not a local item and cannot be changed; `delete` drops a synced item (a note "
                              f"kind for annotating one is deferred)")

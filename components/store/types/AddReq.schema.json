@@ -1,0 +1,8 @@
+{
+  "type": "object",
+  "required": ["item"],
+  "additionalProperties": false,
+  "properties": {
+    "item": { "type": "object", "required": ["kind"], "description": "An item/v1 without id and source; the fields of its kind." }
+  }
+}

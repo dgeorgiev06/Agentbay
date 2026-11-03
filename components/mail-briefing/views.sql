@@ -1,6 +1,6 @@
 -- v_threads: one row per email thread, built on the email content type's v_email (the only view this mode reads).
 -- Needs-reply is this mode's own rule: the last message is from someone else, addressed to me and not bulk.
--- `senders` is what the store matches the `important` setting against (views.yaml, threads.important).
+-- `senders` is what the store matches the `important` setting against (views.yaml, rows.threads.important).
 CREATE VIEW v_threads AS SELECT t.source, t.threadId, t.subject, t.messages, t.firstDate, t.lastDate, t.lastId,
     t.lastSender, t.lastFromMe, t.lastToMe, t.lastBulk,
     (t.lastFromMe = 0 AND t.lastToMe = 1 AND t.lastBulk = 0) AS needsReply,

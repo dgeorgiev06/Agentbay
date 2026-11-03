@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "required": ["id", "set"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string" },
+    "set": { "type": "object" }
+  }
+}

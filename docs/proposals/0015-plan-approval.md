@@ -117,7 +117,7 @@ The write scope needs no new guard logic. The adapter gives a role writable path
 | worker, every step of a feature | the feature's `tier:` in its `mode.yaml` | `build: { tier: deep, ... }` (the planner is unaffected: the injected step carries its own tier) |
 | what a tier means | `profile.tiers` in `adapters/claude-code/adapter.yaml` | `tiers: { fast: haiku, balanced: sonnet, deep: opus }` |
 
-If the owner would rather keep zero new settings, the fallback is a constant in the expansion (deep, high), changed only through forge.extend; I recommend the key because the owner asked for configurability. This is one of the open choices.
+If the owner would rather keep zero new settings, the fallback is a constant in the expansion (deep, high), changed only through forge.extend; I recommend the key because the owner asked for configurability. The owner chose the key (decision 1 below).
 
 *Limits of what the goal asks.* Three points the goal does not hold as stated, with the nearest simple alternative.
 1. "Reuse forge.extend's plan step": its machinery is reused, but not the step itself, for the reasons above. forge.extend keeps its own plan step and gate, which already bind proposal and plan together, so listing `forge.extend.implement` would add a second gate and is pointless; it is the way to get the old `always`, if the owner wants a plan for every proposal.
@@ -211,11 +211,11 @@ So one exception (`bay_lines`), no change to `framework/limits.yaml` except by t
 - **Version.** 2.0.0, with an Upgrading section in the CHANGELOG.
 - **Out of scope.** Test effectiveness (proposal 0016), a no-terminal path for `bay secret set`, an OS sandbox, push notifications.
 
-## Open choices for the owner
+## Owner decisions
 
-Positions marked recommended; confirm or change at the gate.
+The owner took every recommendation below in chat on 2026-11-02 ("Agree with recommendation and 4 is yes").
 
-1. `approve.planner` as a config key (recommended), or a constant deep/high changed only through forge.extend.
-2. The `<mode.endpoint>` form covers every role step of the endpoint that has no `when:` (recommended; the step form picks one), or only endpoints with a single role step.
-3. `auth` always asks (a word added to `_want_ask`) (recommended), or relies on Claude Code's default prompt alone.
-4. The `bay_lines` exception at 9650, with the heartbeat first to drop (recommended).
+1. `approve.planner` is a config key (rejected: a constant deep/high changed only through forge.extend).
+2. The `<mode.endpoint>` form covers every role step of the endpoint that has no `when:`; the step form picks one (rejected: only endpoints with a single role step).
+3. `auth` always asks (a word added to `_want_ask`) (rejected: relying on Claude Code's default prompt alone).
+4. The `bay_lines` exception is 9650, with the heartbeat first to drop if it must shrink.

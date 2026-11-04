@@ -350,15 +350,6 @@ def lint_connectors(kit: model.Kit) -> list[str]:
                 out.append(f"{_where(c.path, _line_of(c.path, r'^\s+login:'))}: connector {c.name} declares a "
                            f"`login` but no env that binds it allows all of its needs.secrets ({', '.join(needs)}); "
                            f"`bay auth` gives a login only the secrets a sync through that env would get")
-        nd = c.spec.get("needs", {})
-        outside = bool(nd.get("network") or nd.get("secrets") or any(
-            str(p).startswith(("~", "/")) for ops in (nd.get("fs") or {}).values() for p in ops))
-        if outside != (c.dir.parent.name == "components"):
-            out.append(f"{_where(c.path, _line_of(c.path, r'^spec:'))}: connector {c.name} " + (
-                "reaches outside the project (needs.network, needs.secrets or an fs path under ~ or /), so it must be "
-                "a top-level component: components/<name>/" if outside else
-                "reaches nothing outside the project, so move it into the component that owns it: "
-                "components/<owner>/connectors/<name>/"))
         impl = c.spec["implements"]
         impl = [impl] if isinstance(impl, str) else impl
         for iface in impl:
@@ -398,7 +389,7 @@ def lint_contract_versions(kit: model.Kit) -> list[str]:
             k, _, v = n.partition("/v")
             if k not in kinds:
                 out.append(f"{where}: {owner} {key}: unknown item kind '{n}' (known: {known}); add a "
-                           f"content type for the kind (components/<name>/) or fix the name")
+                           f"content type for the kind (components/modes/<mode>/content-types/) or fix the name")
             elif int(v) not in kinds[k]:
                 out.append(f"{where}: {owner} {key}: item kind {k} has no version {v} (known: {known})")
 
@@ -861,7 +852,7 @@ def _protected_paths_in_sync(kit: model.Kit) -> list[str]:
                 out.append(f"{env.rel}: env {env.name} writes protected paths but not {', '.join(missing)}; the guard "
                            f"lets an env write a protected path only if the env names it - add them to fs.write")
         for w in writes:
-            m = re.fullmatch(r"components/([^/]+)(?:/envs/([^/]+)\.yaml|/connectors/([^/]+))?", w)
+            m = re.fullmatch(r"components/(?:base|modes)/([^/]+)(?:/envs/([^/]+)\.yaml|/connectors/([^/]+))?", w)
             kinds = [("env", m[2])] if m and m[2] else [("connector", m[3])] if m and m[3] else \
                     [("mode", m[1]), ("connector", m[1])] if m else []
             kinds = [(k, n) for k, n in kinds if kit.get(doc_of[k], n)]
@@ -965,14 +956,14 @@ def lint_case_and_manifests(kit: model.Kit) -> list[str]:
                 seen[p.casefold()] = p
     roots = {}
     for f in files:
-        m = re.match(r"(?:components|adapters)/[^/]+/", f)
+        m = re.match(r"(?:components/(?:base|modes)|adapters)/[^/]+/", f)
         if m:
             roots.setdefault(m[0], set()).add(f[m.end():])
     for folder, inside in sorted(roots.items()):
         want = ("adapter.yaml",) if folder.startswith("adapters/") else tuple(boundary.MANIFEST_KINDS)
         if not inside.intersection(want):
             out.append(f"{folder}: extension folder without its manifest {' or '.join(want)}")
-    out += [f"{d}: the old layout is not read (agentbay/v4); move it to components/<name>/"
+    out += [f"{d}: the old layout is not read (agentbay/v4); move it to components/modes/<name>/"
             for d in OLD_FOLDERS if any(f.startswith(d) for f in files)]
     return list(dict.fromkeys(out))
 

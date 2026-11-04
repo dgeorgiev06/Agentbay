@@ -9,7 +9,7 @@ def load(k, name="fake"):
 
 
 def add_siblings(k, value):
-    folder = k / "components/post/connectors/fake"
+    folder = k / "components/modes/feed-briefing/connectors/fake"
     (folder / "helper.py").write_text(f"VALUE = {value}\n")
     (folder / "more.py").write_text("from . import helper\n\n\ndef twice():\n    return helper.VALUE * 2\n")
     entry = folder / "fake.py"
@@ -45,7 +45,7 @@ def test_a_sibling_named_like_another_connectors_entry_is_still_caught_by_b7():
     k = kit_copy()
     try:
         assert not [p for p in lint.lint_extension_names(model.Kit(k)) if "B-7" in p]
-        folder = k / "components/x-api"
+        folder = k / "components/modes/feed-briefing/connectors/x-api"
         (folder / "fake.py").write_text("Y = 1\n")
         entry = folder / "x_api.py"
         entry.write_text(entry.read_text() + "\nfrom .fake import Y\n")

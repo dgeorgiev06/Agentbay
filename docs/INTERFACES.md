@@ -236,7 +236,7 @@ are in its `data/` folder. A finding's dedup key is its `fingerprint`, the
 hash of its kind and its detector key.
 
 ## 11. Items, selectors and the corpus store
-The item envelope, content types, selectors, the store layout and the SQL sandbox are in the README of `components/store`.
+The item envelope, content types, selectors, the store layout and the SQL sandbox are in the README of `components/base/store`.
 The endpoints are in `items.source.v1.yaml` and `items.store.v2.yaml`.
 ## 12. Conformance rules
 `framework/rules/conformance.yaml` (`schemas/rules.schema.json`, linted by `bay check`): rules with an id,

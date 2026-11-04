@@ -115,7 +115,7 @@ def edit_yaml(path: Path, fn) -> None:
 
 def whole_feature(kit: Path, name: str, **over) -> dict:
     """feed-briefing's feature `name` as a mode that sets it must write it: the whole block, with `over` set."""
-    block = yaml.safe_load((kit / "components/feed-briefing/mode.yaml").read_text())["spec"]["features"][name]
+    block = yaml.safe_load((kit / "components/modes/feed-briefing/mode.yaml").read_text())["spec"]["features"][name]
     return {**block, **over}
 
 

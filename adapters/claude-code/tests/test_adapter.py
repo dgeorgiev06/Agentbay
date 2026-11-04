@@ -74,13 +74,13 @@ def test_adapter_round_trip():
         return [ln for ln in p.read_text().splitlines() if not ln.startswith("name:")]
     for n in built:
         assert f"\nname: {n}\n" in (sk_dir / n / "SKILL.md").read_text()
-    for sk, home in (("digest", "feed-briefing"), ("corpus-sql", "store"), ("grounded-qa", "store")):
+    for sk, home in (("digest", "modes/feed-briefing"), ("corpus-sql", "base/store"), ("grounded-qa", "base/store")):
         assert body(sk_dir / f"feed-briefing--{sk}/SKILL.md") == body(KIT / f"components/{home}/skills/{sk}/SKILL.md")
     for sk in ("digest", "corpus-sql"):
-        assert body(sk_dir / f"mail-briefing--{sk}/SKILL.md") == body(KIT / f"components/mail-briefing/skills/{sk}/SKILL.md")
-        home = "feed-briefing" if sk == "digest" else "store"
-        assert body(KIT / f"components/mail-briefing/skills/{sk}/SKILL.md") != body(KIT / f"components/{home}/skills/{sk}/SKILL.md")
-    assert body(sk_dir / "mail-briefing--grounded-qa/SKILL.md") == body(KIT / "components/store/skills/grounded-qa/SKILL.md")
+        assert body(sk_dir / f"mail-briefing--{sk}/SKILL.md") == body(KIT / f"components/modes/mail-briefing/skills/{sk}/SKILL.md")
+        home = "modes/feed-briefing" if sk == "digest" else "base/store"
+        assert body(KIT / f"components/modes/mail-briefing/skills/{sk}/SKILL.md") != body(KIT / f"components/{home}/skills/{sk}/SKILL.md")
+    assert body(sk_dir / "mail-briefing--grounded-qa/SKILL.md") == body(KIT / "components/base/store/skills/grounded-qa/SKILL.md")
     ma = (proj / ".claude/agents/analyst--mail-briefing.md").read_text()
     assert "`feed-briefing--corpus-sql` (corpus-sql)" in fa and "mail-briefing--" not in fa
     assert "`mail-briefing--corpus-sql` (corpus-sql)" in ma and "feed-briefing--" not in ma
@@ -344,14 +344,14 @@ def test_lint_reports_a_skill_md_whose_front_matter_never_closes_f15():
     from helpers import cleanup, kit_copy
     k = kit_copy()
     try:
-        f = k / "components/feed-briefing/skills/digest/SKILL.md"
+        f = k / "components/modes/feed-briefing/skills/digest/SKILL.md"
         f.write_text(f.read_text().replace("\n---\n", "\n\n", 1))
-        g = k / "components/store/skills/grounded-qa/SKILL.md"
+        g = k / "components/base/store/skills/grounded-qa/SKILL.md"
         g.write_text("---\n- not\n- a mapping\n---\n# x\n")
         errs = lint.run(k)
-        want = "components/feed-briefing/skills/digest/SKILL.md:1: front matter opens with '---' on line 1 but has no closing"
+        want = "components/modes/feed-briefing/skills/digest/SKILL.md:1: front matter opens with '---' on line 1 but has no closing"
         assert sum(want in e for e in errs) == 1
-        assert any("components/store/skills/grounded-qa/SKILL.md:1: front matter must be a YAML mapping" in e
+        assert any("components/base/store/skills/grounded-qa/SKILL.md:1: front matter must be a YAML mapping" in e
                    for e in errs)
     finally:
         cleanup(k)

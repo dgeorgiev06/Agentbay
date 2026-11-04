@@ -87,7 +87,7 @@ ROLE = {"role": "builder", "out": "Result", "task": "Do it and return a Result."
 
 def feature_result(k, step_b: dict) -> dict:
     """delivery.build with steps a (a role step) and b (`step_b`), resolved with the rest of the kit."""
-    edit_yaml(k / "components/delivery/mode.yaml",
+    edit_yaml(k / "components/base/delivery/mode.yaml",
               lambda doc: doc["spec"]["features"]["build"].update({"steps": [{"id": "a", **ROLE}, {"id": "b", **step_b}]}))
     try:
         model.resolve(Kit(k, k))
@@ -184,7 +184,7 @@ D9 = "D9: a feature `when: approved $in.f` is refused at load (the dispatcher ca
 
 def refused_when_row(when: str):
     return {"accepted": False, "layer": "resolve", "problems": [
-        f"<kit>/components/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '{when}' does not match "
+        f"<kit>/components/base/delivery/mode.yaml:\n    spec/features/build/steps/1/when: '{when}' does not match "
         f"{workflows.FEATURE_WHEN_PATTERN!r}"]}
 
 
@@ -218,7 +218,7 @@ def undo_pattern_text(node):
     return node
 
 
-PATH_DELTA = ("<kit>/modes/delivery/mode.yaml", "<kit>/components/delivery/mode.yaml")
+PATH_DELTA = ("<kit>/modes/delivery/mode.yaml", "<kit>/components/base/delivery/mode.yaml")
 PATH_DELTA_ROWS = 17
 
 
@@ -257,7 +257,7 @@ def test_stage_syntax_table():
 def test_the_reference_grammar_is_spelled_once_and_the_schemas_equal_it():
     root = KIT / "bay"
     shipped = [KIT / p for p in Kit(KIT).protected_paths if (KIT / p / "connector.yaml").exists()]
-    shipped.append(KIT / "components/store/connectors/corpus-store")
+    shipped.append(KIT / "components/base/store/connectors/corpus-store")
     assert len(shipped) == 7, shipped
     files = [*root.glob("*.py"), *(f for d in shipped for f in d.glob("*.py")), *(KIT / "adapters").glob("*/*.py")]
     spelled = [str(f.relative_to(KIT)) for f in files if re.search(r"\\\$\(?(\?:)?(in|steps)", f.read_text())]
@@ -273,7 +273,7 @@ def test_the_reference_grammar_is_spelled_once_and_the_schemas_equal_it():
 
 
 def test_the_dispatcher_and_the_cursor_share_one_skip_rule_and_one_substitution():
-    runner = (KIT / "components" / "cos" / "connectors" / "workflow-runner" / "workflow_runner.py").read_text()
+    runner = (KIT / "components" / "base" / "cos" / "connectors" / "workflow-runner" / "workflow_runner.py").read_text()
     assert not hasattr(dispatch, "substitute") and "substitute" not in runner
     assert "wfmod.advance(" in runner and "wfmod.advance(" in (KIT / "bay" / "dispatch.py").read_text()
     assert not hasattr(dispatch.Dispatcher, "_skip")

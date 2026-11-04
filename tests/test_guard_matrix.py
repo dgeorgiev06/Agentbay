@@ -189,7 +189,7 @@ def resolver_gaps() -> dict:
 
 FOUR = ["framework", "bay", "schemas", "adapters"]
 DEV, LOCAL = "builder--forge--framework-dev", "builder--forge--local-authoring"
-IMPROVE = "components/improve"
+IMPROVE = "components/base/improve"
 DEV_CLIS = ["./bay.sh check", "python3 tests/run.py", "git status", "git diff", "git log", "git add", "git commit"]
 MV_RM = ["git mv", "git rm"]
 CHECKS = ["./bay.sh check", "python3 tests/run.py"]
@@ -275,7 +275,7 @@ def undo_move(got: dict) -> dict:
     got["lintWarnings"] = [old(w) for w in got["lintWarnings"]]
     longer, shorter = ", ".join(FOUR + moved), ", ".join(FOUR)
     assert any(longer in g for gs in got["resolverGaps"].values() for g in gs)
-    envs_now, envs_was = "their own envs (components/<name>/envs/)", "their own envs (envs/)"
+    envs_now, envs_was = "their own envs (components/modes/<name>/envs/)", "their own envs (envs/)"
     assert any(envs_now in g for gs in got["resolverGaps"].values() for g in gs)
     got["resolverGaps"] = {name: [old(g).replace(longer, shorter).replace(envs_now, envs_was) for g in gs]
                            for name, gs in got["resolverGaps"].items()}
@@ -283,7 +283,7 @@ def undo_move(got: dict) -> dict:
 
 
 USER_MODE_GAP = ("mode improve: role analyst works in the framework env framework-dev (improve.scan step patterns); "
-                 "user modes may put roles only in their own envs (components/<name>/envs/) or the framework envs plan-writer and workspace and research")
+                 "user modes may put roles only in their own envs (components/modes/<name>/envs/) or the framework envs plan-writer and workspace and research")
 IMPROVE_ROWS = ["Edit mode:improve/mode.yaml", "MultiEdit mode:improve/mode.yaml", "NotebookEdit mode:improve/n.ipynb",
                 "Write mode:improve/README.md", "Write mode:improve/features/scan/playbook.md",
                 "Write mode:improve/mode.yaml"]

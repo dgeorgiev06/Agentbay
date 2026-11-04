@@ -91,8 +91,8 @@ needs a `standards` step, `needs: standards.check/v1` and an env that binds the 
 before the step does, each with the kit's config and a fixed list of flags:
 
 ```bash
-python3 -I -m ruff check --config components/python/ruff.toml <path>
-python3 -I -m mypy --config-file components/python/mypy.ini <path>
+python3 -I -m ruff check --config components/base/python/ruff.toml <path>
+python3 -I -m mypy --config-file components/base/python/mypy.ini <path>
 ```
 
 **Going live:** sign in as the source connector's `README.md` says, remove `offline: true` from

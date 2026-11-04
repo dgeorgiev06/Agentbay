@@ -3,15 +3,15 @@
 # owns: the paths the boundary check treats as core (globs; a trailing / owns everything below).
 protected:
   paths: [framework, bay, schemas, adapters,
-          components/cos, components/forge,
-          components/improve/envs/improve-local.yaml, components/tools/envs/workspace.yaml,
-          components/tools/envs/research.yaml,
-          components/claude-transcripts, components/store,
-          components/improve/connectors/artifact-graph, components/improve/connectors/git,
-          components/improve/connectors/improve-detect, components/improve/connectors/improve-store,
-          components/improve/connectors/ledger,
-          components/improve/interfaces, components/tools/interfaces,
-          components/python, components/comments]
+          components/base/cos, components/base/forge,
+          components/base/improve/envs/improve-local.yaml, components/base/tools/envs/workspace.yaml,
+          components/base/tools/envs/research.yaml,
+          components/base/improve/connectors/claude-transcripts, components/base/store,
+          components/base/improve/connectors/artifact-graph, components/base/improve/connectors/git,
+          components/base/improve/connectors/improve-detect, components/base/improve/connectors/improve-store,
+          components/base/improve/connectors/ledger,
+          components/base/improve/interfaces, components/base/tools/interfaces,
+          components/base/python, components/base/comments]
   mode: [cos, forge, store]
   env:
     cos-local: {}
@@ -30,9 +30,9 @@ owns:               # the kernel: loader, resolver, lint, registry, dispatcher, 
   - bay/sqlsandbox.py
   - bay/selector.py
   - schemas/
-  - components/store/
-  - components/python/
-  - components/comments/
+  - components/base/store/
+  - components/base/python/
+  - components/base/comments/
   - adapters/
   - framework/roles/
   - framework/rules/

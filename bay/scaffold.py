@@ -35,6 +35,14 @@ def _write(kit: Path, rel: str, text: str, files: list[str]) -> None:
     files.append(rel)
 
 
+def _mode_folder(kit: Path, name: str) -> str:
+    for tier in ("base", "modes"):
+        folder = f"components/{tier}/{name}"
+        if (kit / folder / "mode.yaml").exists():
+            return folder
+    return f"components/modes/{name}"
+
+
 def _q(s: str) -> str:
     return s.replace('"', "'")
 
@@ -71,7 +79,7 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
     files: list[str] = []
     todo: list[str] = []
     if kind == "mode":
-        base = f"components/{name}"
+        base = _mode_folder(kit, name)
         _write(kit, f"{base}/mode.yaml", _render("mode/mode.yaml", name=name, intent=intent), files)
         _write(kit, f"{base}/playbook.md", _render("mode/playbook.md", name=name), files)
         _write(kit, f"{base}/README.md", _render("mode/README.md", name=name, intent=raw_intent), files)
@@ -85,7 +93,8 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
     elif kind == "feature":
         if not target:
             raise ScaffoldError("kind=feature needs a target mode (--mode <mode>)")
-        mfile = kit / "components" / target / "mode.yaml"
+        home = _mode_folder(kit, target)
+        mfile = kit / home / "mode.yaml"
         if _protected(kit, "mode", target):
             raise ScaffoldError(f"mode '{target}' is protected (framework/kernel.yaml `protected:`): it is changed "
                                 f"via forge.extend")
@@ -108,20 +117,22 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
         rv = review_block(effects, reviewer) if reviewer else "      # review: add a reviewer role to the mode to enable"
         ft = _render("feature/feature.yaml", name=name, intent=intent, effects=", ".join(effects), review=rv, role=role)
         text = _insert_under(mfile.read_text(), "  features:", ft)
-        _write(kit, f"components/{target}/features/{name}/playbook.md",
+        _write(kit, f"{home}/features/{name}/playbook.md",
                _render("feature/playbook.md", mode=target, name=name, intent=intent, role=role), files)
-        _write(kit, f"components/{target}/features/{name}/rules.yaml", _render("feature/rules.yaml"), files)
+        _write(kit, f"{home}/features/{name}/rules.yaml", _render("feature/rules.yaml"), files)
         mfile.write_text(text)
-        files.append(f"components/{target}/mode.yaml")
-        todo = [f"fill the TODOs in components/{target}/features/{name}/", "run `./bay.sh check`"]
+        files.append(f"{home}/mode.yaml")
+        todo = [f"fill the TODOs in {home}/features/{name}/", "run `./bay.sh check`"]
     elif kind == "connector":
         if not implements:
             raise ScaffoldError("kind=connector needs --implements <interface>/v<N> (e.g. items.source/v1)")
+        if not target:
+            raise ScaffoldError("kind=connector needs the mode that binds it (--mode <mode>)")
         iface = _find_interface(kit, implements)
         module = name.replace("-", "_")
         host = "api.example.com"
         methods = "\n".join(_method(ep, spec) for ep, spec in iface["spec"]["endpoints"].items())
-        base = f"components/{name}"
+        base = f"{_mode_folder(kit, target)}/connectors/{name}"
         src = ""
         if implements.startswith("items.source/"):
             from . import model
@@ -147,7 +158,7 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
     elif kind == "env":
         if not target:
             raise ScaffoldError("kind=env needs the mode whose folder it goes in (--mode <mode>)")
-        base = f"components/{target}/envs/{name}.yaml"
+        base = f"{_mode_folder(kit, target)}/envs/{name}.yaml"
         _write(kit, base, _render("env/env.yaml", name=name, intent=intent), files)
         todo = [f"bind capabilities in {base}", f"put roles in it from a mode's `roles:` (<role>: {name})"]
     return {"kind": kind, "name": name, "files": files, "todo": todo}
@@ -163,7 +174,7 @@ def _method(ep: str, spec: dict) -> str:
 
 def _find_interface(kit: Path, ref: str) -> dict:
     name, _, ver = ref.partition("/")
-    for p in kit.glob(f"components/*/interfaces/{name}.{ver}.yaml"):
+    for p in kit.glob(f"components/*/*/interfaces/{name}.{ver}.yaml"):
         return yaml.safe_load(p.read_text())
     raise ScaffoldError(f"unknown interface '{ref}'")
 

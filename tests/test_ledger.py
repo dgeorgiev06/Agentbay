@@ -165,13 +165,13 @@ def test_audit_parses_source_that_contains_secret_shaped_code():
     import importlib.util
     from types import SimpleNamespace
     spec = importlib.util.spec_from_file_location(
-        "artifact_graph", KIT / "components/improve/connectors/artifact-graph/artifact_graph.py")
+        "artifact_graph", KIT / "components/base/improve/connectors/artifact-graph/artifact_graph.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     a = mod.Artifacts(SimpleNamespace(kit=KIT, project=KIT))
-    raw = a.raw_text("components/x-api/x_api.py", "kit")
+    raw = a.raw_text("components/modes/feed-briefing/connectors/x-api/x_api.py", "kit")
     ast.parse(raw)
-    assert "[REDACTED" in a.text("components/x-api/x_api.py", "kit")["text"]
+    assert "[REDACTED" in a.text("components/modes/feed-briefing/connectors/x-api/x_api.py", "kit")["text"]
 
 
 TID, OTHER = "T-20261030-abcd", "T-20261030-ffff"

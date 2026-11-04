@@ -26,12 +26,12 @@ from . import workflows as wfmod
 KIT = Path(__file__).resolve().parent.parent
 SCHEMAS = KIT / "schemas"
 KINDS = {
-    "Interface": (("components/*/interfaces/*.yaml",), "interface"),
-    "Mode": (("components/*/mode.yaml",), "mode"),
+    "Interface": (("components/*/*/interfaces/*.yaml",), "interface"),
+    "Mode": (("components/*/*/mode.yaml",), "mode"),
     "Role": (("framework/roles/*.yaml",), "role"),
-    "Environment": (("components/*/envs/*.yaml",), "environment"),
-    "Connector": (("components/*/connector.yaml", "components/*/connectors/*/connector.yaml"), "connector"),
-    "Component": (("components/*/component.yaml",), "component"),
+    "Environment": (("components/*/*/envs/*.yaml",), "environment"),
+    "Connector": (("components/*/*/connectors/*/connector.yaml",), "connector"),
+    "Component": (("components/base/*/component.yaml",), "component"),
 }
 EFFECTS = ["read", "write", "network", "spend", "delete"]
 DEFAULT_AGENT = "claude-code"
@@ -68,7 +68,7 @@ def data_schema(ref: str, root: Path = KIT) -> dict:
     """The schema of a data ref such as 'item/v1', from schemas/data or a component's data folder."""
     name, _, ver = ref.partition("/")
     p = root / "schemas" / "data" / f"{name}.{ver}.schema.json"
-    p = next((q for q in (p, *sorted(root.glob(f"components/*/data/{p.name}"))) if q.exists()), p)
+    p = next((q for q in (p, *sorted(root.glob(f"components/*/*/data/{p.name}"))) if q.exists()), p)
     if not p.exists():
         from . import contenttypes
         found = contenttypes.fields_schema(ref, root)
@@ -124,7 +124,8 @@ def schema_errors(instance, sch: dict) -> list[str]:
         return []
     v = jsonschema.Draft202012Validator(sch, format_checker=jsonschema.FormatChecker())
     why = lambda e: (f"this kit reads {e.validator_value}, not {e.instance!r}; change the line to apiVersion: {e.validator_value}"
-                     f"{' and move it under components/<name>/ (see CHANGELOG)' * e.validator_value.endswith('4')}"
+                     f"{' and move it under components/modes/<name>/' * e.validator_value.endswith('4')}"
+                     f"{' (see CHANGELOG)' * e.validator_value.endswith('4')}"
                      if e.validator == "const" and list(e.absolute_path) == ["apiVersion"] else e.message)
     return [f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {why(e)}"
             for e in sorted(v.iter_errors(instance), key=lambda e: list(map(str, e.absolute_path)))]
@@ -778,7 +779,7 @@ class _Ctx:
             return None
         if not kit.protected.may_place(mode, env.name):
             gaps.append(f"mode {mode}: role {rd.name} works in the framework env {env.name} ({where}); user modes "
-                        f"may put roles only in their own envs (components/<name>/envs/) or the framework envs "
+                        f"may put roles only in their own envs (components/modes/<name>/envs/) or the framework envs "
                         f"{' and '.join(kit.protected.open_envs())}")
             return None
         allowed = env.spec.get("tiers")

@@ -17,7 +17,7 @@ OTHER = ("tests/", "HANDOFF.md", "docs/proposals/", "docs/plans/", "docs/researc
          ".gitattributes", ".editorconfig", "LICENSE", "LICENSE.md")
 MANIFEST_KINDS = {"mode.yaml": "mode", "connector.yaml": "connector", "content-type.yaml": "contentType",
                   "component.yaml": "component"}
-_COMPONENT = re.compile(r"components/([^/]+)/")
+_COMPONENT = re.compile(r"components/(?:base|modes)/([^/]+)/")
 SHA = re.compile(r"^[0-9a-f]{7,40}$")
 GIT_TIMEOUT = 60
 ARCHIVE_TIMEOUT = 120
@@ -144,7 +144,7 @@ class Protection:
 
 
 def root(path: str) -> tuple[str, str] | None:
-    """The component folder `path` is inside: (`components/x/`, `x`), or None."""
+    """The component folder `path` is inside: (`components/base/x/` or `components/modes/x/`, `x`), or None."""
     m = _COMPONENT.match(path)
     return (m.group(0), m.group(1)) if m else None
 

@@ -1,0 +1,416 @@
+"""mail-briefing on the offline fake-mail source (env local-mail): resolution, the end-to-end path and its views."""
+from __future__ import annotations
+
+import json
+import sqlite3
+
+import yaml
+from helpers import KIT, NOW, clock, system, tmpdir
+
+from bay import connect, contenttypes, dispatch, model, sqlsandbox as sbx
+
+SELS = [{"id": "inbox", "in": "inbox"}, {"id": "sent", "in": "sent"}]
+
+
+def project(cfg: dict | None = None):
+    p = tmpdir() / "proj"
+    p.mkdir()
+    (p / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v4", "offline": True,
+                                                            **(cfg or {})}))
+    return p
+
+
+def fake_cfg(**kw) -> dict:
+    return {"connectors": {"fake-mail": kw}}
+
+
+def store(p, sels=None, **settings):
+    return connect.instantiate(system(p), "local-mail", "corpus-store", "items.store/v2", p, clock=clock,
+                               caps={"maxItemsPerRun": 500},
+                               settings={"mode": "mail-briefing", "lookback": "30d", "lookbackMax": "30d",
+                                         "selectors": sels or SELS,
+                                         "modeDirs": [str(KIT / "components" / "modes" / "mail-briefing"),
+                                                 str(KIT / "components" / "base" / "store")],
+                                         **settings})
+
+
+def db(p):
+    return p / ".agentbay/data/mail/mail-briefing/corpus.db"
+
+
+def test_mail_briefing_extends_store_and_places_roles_in_local_mail():
+    s = system(project())
+    m = s.modes["mail-briefing"]
+    assert m.extends == "store" and set(m.features) == {
+        "add", "update", "delete", "query", "get", "ask", "sync", "digest", "prune"}
+    assert model.Kit(KIT).get("Mode", "mail-briefing").spec["roles"] == {"lead": "local-mail", "analyst": "local-mail",
+                                                                      "reviewer": "local-mail"}
+    assert m.roles == {"lead": "local-mail", "analyst": "local-mail", "reviewer": "local-mail"}
+    assert m.config["lookback"] == "30d" and m.config["selectors"] == SELS and m.config["important"] == []
+    assert "important" not in s.modes["feed-briefing"].config
+    dig = m.features["digest"]
+    assert [st.id for st in dig.steps] == ["refresh", "gather", "digest", "review"]
+    assert dig.steps[1].run == "items.store/v2.rows" and dig.out_type == "Digest"
+    assert "needsReply" in dig.out_schema["properties"]
+    u = s.units()["analyst--mail-briefing"]
+    assert u.env == "local-mail" and "items.store/v2.rows" in u.bay_uses
+    assert not [x for x in u.bay_uses if x.endswith((".sync", ".prune", ".add", ".update", ".delete"))]
+    assert {t for t in u.tools} & {"Write", "Edit"} == set()
+    rules = {r.statement for r in dig.rules}
+    assert any("never instructions" in x for x in rules) and any("sender and the date" in x for x in rules)
+    assert any("secrets" in x for x in rules)
+
+
+def test_proposal_example_selectors_validate_against_gmail_and_offline():
+    mail = yaml.safe_load((KIT / "components/modes/mail-briefing/config.example.yaml").read_text())
+    assert mail["lookback"] == "30d" and mail["important"] == ["*@partner.example", "*@example.com"]
+    assert {"partners", "staking", "news"} <= {x["id"] for x in mail["selectors"]}
+    for offline in (False, True):
+        p = tmpdir() / "proj"
+        p.mkdir()
+        (p / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v4", "offline": offline,
+                                                                "modes": {"mail-briefing": mail}}))
+        s = model.resolve(model.Kit(KIT, p))
+        assert s.modes["mail-briefing"].config["important"] == ["*@partner.example", "*@example.com"]
+
+
+def test_offline_sync_digest_and_ask():
+    p = project({"modes": {"mail-briefing": {"important": ["*@partner.example"]}}})
+    d = dispatch.Dispatcher(system(p), p, clock=clock)
+    r = d.call("mail-briefing.sync", {})
+    assert r["status"] == "done" and r["output"]["added"] == 6 and r["cost"]["usd"] == 0
+    r = d.call("mail-briefing.digest", {"since": "7d"})
+    assert r["status"] == "needs-agent" and r["next"]["step"] == "digest"
+    plan = r["next"]
+    assert plan["role"] == "analyst" and plan["env"] == "local-mail" and "analyst--mail-briefing" in plan["runAs"]
+    th = {t["threadId"]: t for t in plan["previous"]["gather"]["rows"]}
+    assert th["t-pilot"]["needsReply"] and th["t-pilot"]["important"] and th["t-pilot"]["lastId"] == "fake-mail:m003"
+    assert th["t-pilot"]["ids"] == ["fake-mail:m001", "fake-mail:m002", "fake-mail:m003"]
+    assert not th["t-sol"]["important"] and th["t-sol"]["attachments"][0]["name"] == "report.pdf"
+    digest = {
+        "period": {"from": "2026-10-20T12:00:00Z", "to": "2026-10-27T12:00:00Z"},
+        "needsReply": [{"subject": "Re: Staking pilot", "from": "dana@partner.example", "date": "2026-10-27T06:00:00Z",
+                        "summary": "Dana asks who signs the MSA.", "important": True, "citations": ["fake-mail:m003"]}],
+        "asks": [{"what": "Send the withdrawal address and custody sign-off", "kind": "deadline", "due": "Friday Oct 30",
+                  "from": "dana@partner.example", "date": "2026-10-25T10:00:00Z", "citations": ["fake-mail:m001"]}],
+        "groups": [{"title": "Solana delegation report", "important": False, "sender": "ops@bank.example",
+                    "summary": "Bank Ops sent the October report: 6.9% APY, no slashing.", "citations": ["fake-mail:m004"]}],
+        "attachments": [{"name": "term-sheet.docx", "from": "dana@partner.example", "date": "2026-10-25T10:00:00Z",
+                         "why": "Fee 8% of rewards, 32,000 ETH minimum.", "textExtracted": True,
+                         "citations": ["fake-mail:m001"]}],
+        "coverage": plan["previous"]["gather"]["coverage"]}
+    r = d.submit(r["callId"], "digest", digest)
+    assert r["status"] == "needs-agent" and r["next"]["step"] == "review"
+    assert all(c["ok"] for c in r["next"]["review"]["checks"]), r["next"]["review"]["checks"]
+    ids = [x["id"] for x in r["next"]["review"]["definitionOfDone"]] + [x["id"] for x in r["next"]["review"]["rules"]]
+    r = d.submit(r["callId"], "review", {"items": [{"id": i, "verdict": "pass", "evidence": "checked"} for i in ids]})
+    assert r["status"] == "done"
+    r = d.call("mail-briefing.ask", {"question": "What did Dana ask for?"})
+    assert r["status"] == "needs-agent" and r["next"]["step"] == "answer"
+    assert r["next"]["previous"]["context"]["count"] == 6
+    out = d.use("analyst--mail-briefing", "items.store/v2.sql",
+                {"sql": "SELECT id, sender, needsReply FROM v_threads t JOIN v_email e ON e.id = t.lastId "
+                        "WHERE t.needsReply = 1 ORDER BY id"})
+    assert [r_[0] for r_ in out["rows"]] == ["fake-mail:m003", "fake-mail:m004", "fake-mail:m006"]
+    count = lambda i="fake-mail:m006": d.use("analyst--mail-briefing", "items.store/v2.sql",
+                                             {"sql": f"SELECT count(*) FROM v_email WHERE id = '{i}'"})["rows"][0][0]
+    sp = p / ".agentbay/data/mail/mail-briefing/state.json"
+    con = sqlite3.connect(db(p))
+    con.execute("DELETE FROM items WHERE ext_id = 'm001'")
+    con.commit()
+    con.close()
+    r = d.call("mail-briefing.delete", {"ids": ["fake-mail:m006", "fake-mail:m001"]})
+    assert r["status"] == "awaiting-approval" and count() == 1 and count("fake-mail:m001") == 0
+    assert [m["id"] for m in r["next"]["inputs"]["preview"]["items"]] == ["fake-mail:m006"]
+    assert r["next"]["inputs"]["preview"]["missing"] == ["fake-mail:m001"]
+    seen = json.loads(sp.read_text())
+    seen["cursors"] = {}
+    sp.write_text(json.dumps(seen))
+    assert d.call("mail-briefing.sync", {})["status"] == "done" and count("fake-mail:m001") == 1
+    made, real = [], connect.instantiate
+    connect.instantiate = lambda *a, **k: made.append(real(*a, **k)) or made[-1]
+    try:
+        r = d.approve(r["callId"], True)
+    finally:
+        connect.instantiate = real
+    assert r["status"] == "needs-agent" and r["next"]["step"] == "review" and count() == 0
+    assert any(hasattr(i, "calls") for i in made) and [c for i in made for c in getattr(i, "calls", [])] == []
+    ids = [x["id"] for x in r["next"]["review"]["definitionOfDone"]] + [x["id"] for x in r["next"]["review"]["rules"]]
+    r = d.submit(r["callId"], "review", {"items": [{"id": i, "verdict": "pass", "evidence": "checked"} for i in ids]})
+    assert r["status"] == "done" and r["output"]["deleted"] == r["output"]["remembered"] == ["fake-mail:m006"]
+    assert r["output"]["missing"] == ["fake-mail:m001"]
+    assert d.call("mail-briefing.sync", {})["status"] == "done" and count() == 0
+    kept = json.loads(sp.read_text())["deleted"]
+    assert "fake-mail:m006" in kept and "fake-mail:m001" not in kept and count("fake-mail:m001") == 1
+    r = d.call("mail-briefing.delete", {"ids": ["fake-mail:m001", "fake-mail:m001", "fake-mail:nope"]})
+    assert [m["id"] for m in r["next"]["inputs"]["preview"]["items"]] == ["fake-mail:m001"]
+    r = d.call("mail-briefing.delete", {"ids": ["fake-mail:nope"]})
+    assert r["status"] == "awaiting-approval" and r["next"]["inputs"]["preview"]["items"] == []
+    r = d.approve(r["callId"], True)
+    ids = [x["id"] for x in r["next"]["review"]["definitionOfDone"]] + [x["id"] for x in r["next"]["review"]["rules"]]
+    r = d.submit(r["callId"], "review", {"items": [{"id": i, "verdict": "pass", "evidence": "checked"} for i in ids]})
+    assert r["status"] == "done" and r["output"] == {"deleted": [], "missing": ["fake-mail:nope"], "remembered": []}
+    assert count("fake-mail:m001") == 1
+    for ep, inp in (("add", {"item": {"kind": "email", "text": "x"}}), ("update", {"id": "fake-mail:m001", "set": {"text": "x"}}),
+                    ("delete", {"ids": ["fake-mail:m001"]})):
+        for unit in ("analyst--mail-briefing", "reviewer--mail-briefing"):
+            try:
+                d.use(unit, f"items.store/v2.{ep}", inp)
+                raise AssertionError(f"{unit} reached {ep}")
+            except dispatch.CallError as e:
+                assert "not granted" in str(e), e
+
+
+def test_two_modes_on_separate_envs_keep_separate_stores_and_units():
+    p = project()
+    s = system(p)
+    u = s.units()
+    assert u["analyst--feed-briefing"].env == "local-feeds" and u["analyst--mail-briefing"].env == "local-mail"
+    d = dispatch.Dispatcher(s, p, clock=clock)
+    assert d.call("feed-briefing.sync", {})["status"] == "done"
+    assert d.call("mail-briefing.sync", {})["status"] == "done"
+    assert (p / ".agentbay/data/feeds/feed-briefing/corpus.db").exists() and db(p).exists()
+    assert not (p / ".agentbay/data/feeds/mail-briefing").exists() and not (p / ".agentbay/data/mail/feed-briefing").exists()
+    feed = d.use("analyst--feed-briefing", "items.store/v2.sql", {"sql": "SELECT DISTINCT kind, source FROM v_items"})
+    mail = d.use("analyst--mail-briefing", "items.store/v2.sql", {"sql": "SELECT DISTINCT kind, source FROM v_items"})
+    assert feed["rows"] == [["post", "fake"]] and mail["rows"] == [["email", "fake-mail"]]
+    fd = d.use("analyst--feed-briefing", "items.store/v2.describe", {})
+    assert [v["name"] for v in fd["views"]] == ["v_items", "v_posts", "v_fts"]
+    assert "attachments" not in fd["fts"] and "addr_key" not in fd["functions"]
+    feed_env = s.kit.docs["Environment"]["local-feeds"].spec
+    mail_env = s.kit.docs["Environment"]["local-mail"].spec
+    assert not set(feed_env["secrets"]["allow"]) & set(mail_env["secrets"]["allow"])
+    assert not set(feed_env["network"]["allow"]) & set(mail_env["network"]["allow"])
+
+
+def test_threads_endpoint_marks_important_senders_and_filters():
+    p = project()
+    st = store(p)
+    st.sync()
+    t = st.rows("threads", since="30d", important=["*@partner.example", "cfo@example.com"])["rows"]
+    assert [x["threadId"] for x in t] == ["t-board", "t-pilot", "t-news", "t-sol"]
+    imp = {x["threadId"]: x["important"] for x in t}
+    assert imp == {"t-board": True, "t-pilot": True, "t-news": False, "t-sol": False}
+    pilot = next(x for x in t if x["threadId"] == "t-pilot")
+    assert pilot["messages"] == 3 and pilot["lastSender"] == "dana@partner.example" and pilot["lastFromMe"] is False
+    assert set(pilot["participants"]) == {"dana@partner.example", "legal@partner.example", "me@example.com"}
+    assert pilot["matched"] == ["inbox", "sent"] and pilot["attachments"][0]["textChars"] > 0
+    assert [x["threadId"] for x in st.rows("threads", since="8h")["rows"]] == ["t-board", "t-pilot"]
+    assert [x["threadId"] for x in st.rows("threads", since="30d", selector="sent")["rows"]] == ["t-pilot"]
+
+
+def test_exact_labels_replace_the_stored_set_and_can_end_the_scope():
+    p = project()
+    work = [{"id": "work", "in": "label:Work"}]
+    st = store(p, work)
+    st.sync()
+    assert {i["id"] for i in st.query()["items"]} == {"fake-mail:m001", "fake-mail:m002", "fake-mail:m003"}
+    st = store(p, work)
+    src = st.ctx.sources["fake-mail"]
+    real = src.fetch
+
+    def relabeled(**kw):
+        out = real(**{**kw, "cursor": None, "since": "2026-09-27T12:00:00Z"})
+        for it in out["items"]:
+            if it["extId"] == "m001":
+                it["labels"] = ["INBOX"]
+        return out
+    src.fetch = relabeled
+    st.sync()
+    ids = {i["id"] for i in st.query()["items"]}
+    assert "fake-mail:m001" not in ids and len(ids) == 2
+    feed = system(project()).kit.get("Connector", "fake").spec
+    assert not feed.get("exactLabels")
+
+
+def test_removed_ids_leave_the_store_but_are_not_remembered():
+    p = project(fake_cfg(removed=["m005"]))
+    st = store(p)
+    st.sync()
+    assert "fake-mail:m005" not in {i["id"] for i in st.query()["items"]}
+    p2 = project()
+    st = store(p2)
+    st.sync()
+    st = store(p2)
+    real = st.ctx.sources["fake-mail"].fetch
+    st.ctx.sources["fake-mail"].fetch = lambda **kw: {**real(**kw), "removed": ["m005"]}
+    out = st.sync()
+    state = json.loads((p2 / ".agentbay/data/mail/mail-briefing/state.json").read_text())
+    assert out["deleted"] == 1 and "fake-mail:m005" not in state["deleted"]
+    assert "fake-mail:m005" not in {i["id"] for i in store(p2).query()["items"]}
+    con = sqlite3.connect(db(p2))
+    con.execute("UPDATE items SET created_at = '2026-01-01T00:00:00Z'")
+    con.commit()
+    con.close()
+    state["cursors"] = {}
+    (p2 / ".agentbay/data/mail/mail-briefing/state.json").write_text(json.dumps(state))
+    store(p2).sync()
+    assert "fake-mail:m005" in {i["id"] for i in store(p2).query()["items"]}
+
+
+def _block(p, connector: str, reason: str) -> None:
+    cfgp = p / "agentbay.config.yaml"
+    cfg = yaml.safe_load(cfgp.read_text())
+    cfg.setdefault("connectors", {})[connector] = {"blocked": reason}
+    cfgp.write_text(yaml.safe_dump(cfg))
+
+
+def test_a_blocked_source_keeps_cursors_and_reads_and_digest_and_ask_go_on_partial():
+    p = project()
+    st = store(p)
+    st.sync()
+    before = json.loads((p / ".agentbay/data/mail/mail-briefing/state.json").read_text())["cursors"]
+    _block(p, "fake-mail", "gmail-api: the Gmail login has expired; run `bay auth gmail-api`")
+    st = store(p)
+    out = st.sync()
+    assert "bay auth gmail" in out["stopped"] and out["sources"]["fake-mail"]["blocked"]
+    assert "bay auth gmail" in out["blocked"]["fake-mail"]
+    state = json.loads((p / ".agentbay/data/mail/mail-briefing/state.json").read_text())
+    assert state["cursors"] == before and "fake-mail" in state["blocked"]
+    s = st.status()
+    assert s["stale"] is True and s["coverage"]["complete"] is False and "bay auth gmail" in s["coverage"]["note"]
+    assert len(st.query()["items"]) == 6 and st.sql("SELECT count(*) FROM v_email")["rows"] == [[6]]
+    d = dispatch.Dispatcher(system(p), p, clock=clock)
+    assert d.call("mail-briefing.sync", {})["status"] == "blocked"
+    r = d.call("mail-briefing.digest", {"since": "7d"})
+    assert r["status"] == "needs-agent" and r["next"]["step"] == "digest"
+    gather = r["next"]["previous"]["gather"]
+    assert len(gather["rows"]) == 4 and "bay auth gmail" in gather["coverage"]["note"]
+    assert gather["coverage"]["complete"] is False
+    digest = {"period": {"from": "2026-10-20T12:00:00Z", "to": "2026-10-27T12:00:00Z"}, "needsReply": [], "asks": [],
+              "groups": [], "attachments": [], "coverage": gather["coverage"],
+              "notes": "Gmail was not read: the login expired; run `bay auth gmail-api`. Stored mail only."}
+    r = d.submit(r["callId"], "digest", digest)
+    ids = [x["id"] for x in r["next"]["review"]["definitionOfDone"]] + [x["id"] for x in r["next"]["review"]["rules"]]
+    r = d.submit(r["callId"], "review", {"items": [{"id": i, "verdict": "pass", "evidence": "ok"} for i in ids]})
+    assert r["status"] == "partial" and "bay auth gmail" in r["stopped"]
+    r = d.call("mail-briefing.ask", {"question": "What did Dana ask for?"})
+    assert r["status"] == "needs-agent" and r["next"]["step"] == "answer"
+    ctx = r["next"]["previous"]["context"]
+    assert ctx["count"] == 6 and ctx["stale"] is True and "bay auth gmail" in ctx["coverage"]["note"]
+    answer = {"answer": "Dana asked for the withdrawal address (stored mail only; run `bay auth gmail-api`).",
+              "citations": ["fake-mail:m001"], "confidence": "medium", "coverage": ctx["coverage"]}
+    assert d.submit(r["callId"], "answer", answer)["status"] == "partial"
+
+
+def test_a_blocked_source_with_an_empty_store_blocks_digest_and_feed_briefing_behaves_the_same():
+    p = project()
+    _block(p, "fake-mail", "gmail-api: there is no Gmail login yet; run `bay auth gmail-api`")
+    d = dispatch.Dispatcher(system(p), p, clock=clock)
+    r = d.call("mail-briefing.digest", {})
+    assert r["status"] == "blocked" and "bay auth gmail" in r["reason"]
+    p = project()
+    d = dispatch.Dispatcher(system(p), p, clock=clock)
+    assert d.call("feed-briefing.sync", {})["status"] == "done"
+    _block(p, "fake", "fake: the X login has expired; run `bay secret set X_REFRESH_TOKEN`")
+    d = dispatch.Dispatcher(system(p), p, clock=clock)
+    assert d.call("feed-briefing.sync", {})["status"] == "blocked"
+    r = d.call("feed-briefing.digest", {})
+    assert r["status"] == "needs-agent" and "X_REFRESH_TOKEN" in r["next"]["previous"]["gather"]["coverage"]["note"]
+    r = d.call("feed-briefing.ask", {"question": "anything on staking?"})
+    assert r["status"] == "needs-agent" and r["next"]["previous"]["context"]["stale"] is True
+
+
+def test_a_store_of_another_schema_version_is_refused_not_converted():
+    p = project()
+    store(p).sync()
+    for ver, fix in ((1, "move the folder aside and sync again"), (4, "update agentbay")):
+        con = sqlite3.connect(db(p))
+        con.execute(f"PRAGMA user_version = {ver}")
+        con.commit()
+        con.close()
+        st = store(p)
+        for call in (st.query, st.describe, lambda: st.rows("threads", since="30d"), st.sync):
+            try:
+                call()
+                raise AssertionError("expected a refusal")
+            except (connect.ConnectorError, sbx.SqlError) as e:
+                assert f"schema v{ver}" in str(e) and fix in str(e), e
+        assert fix in st.sql("SELECT 1")["error"]
+        con = sqlite3.connect(db(p))
+        assert con.execute("PRAGMA user_version").fetchone()[0] == ver
+        con.close()
+    src = (KIT / "components/base/store/connectors/corpus-store/corpus_store.py").read_text()
+    assert "def migrate" not in src and "v1 store" not in src
+
+
+def test_sandbox_reads_the_mail_views_and_refuses_shadow_tables_and_writes():
+    p = project()
+    st = store(p)
+    st.sync()
+    ok = st.sql("SELECT a.id, a.name, e.sender FROM v_attachments a JOIN v_email e ON e.id = a.id ORDER BY a.id, a.n")
+    assert ok["rows"] == [["fake-mail:m001", "term-sheet.docx", "dana@partner.example"],
+                          ["fake-mail:m004", "report.pdf", "ops@bank.example"]]
+    assert st.sql("SELECT count(*) FROM attachments")["rows"] == [[2]]
+    for bad, why in (("SELECT * FROM attachments_fts_data", "not allowed"), ("SELECT * FROM attachments_fts_content", "not allowed"),
+                     ("DELETE FROM attachments", "read-only"), ("SELECT * FROM sqlite_master", "not allowed"),
+                     ("WITH v_attachments AS (SELECT 1) SELECT * FROM v_attachments", "may not be named")):
+        err = st.sql(bad)["error"]
+        assert err, bad
+    d = st.describe()
+    names = [v["name"] for v in d["views"]]
+    want = ["v_items", "v_email", "v_attachments", "v_posts", "v_threads", "v_fts", "v_attachment_fts"]
+    assert [n for n in names if n in want] == want
+    assert {v["name"]: v["rows"] for v in d["views"]}["v_threads"] == 4
+    assert d["fts"]["attachments"]["view"] == "v_attachment_fts" and set(sbx.COLUMNS) == set(sbx.VIEWS)
+    assert "addr_key" not in d["functions"]
+
+
+def _mode_dir(sql: str, columns: list[str]):
+    d = tmpdir() / "mode"
+    d.mkdir()
+    (d / "views.sql").write_text(sql)
+    (d / "views.yaml").write_text(yaml.safe_dump({"views": {"v_x": {"columns": [
+        {"name": c, "type": "TEXT", "description": ""} for c in columns]}}}))
+    return d
+
+
+def test_threads_needs_a_view_from_the_mode_and_a_mode_view_reads_only_views_of_its_types():
+    p = project()
+    st = store(p, modeDirs=[str(KIT / "components" / "base" / "store")])
+    st.sync()
+    try:
+        st.rows("threads", since="30d")
+        raise AssertionError("expected a refusal")
+    except connect.ConnectorError as e:
+        assert "defines no rows named `threads`" in str(e) and "views.yaml" in str(e)
+    assert st.sql("SELECT count(*) FROM v_email")["rows"][0][0] > 0
+    assert "v_threads" in st.sql("SELECT count(*) FROM v_threads")["error"]
+    ok = _mode_dir("CREATE VIEW v_x AS SELECT id FROM v_email;", ["id"])
+    assert contenttypes.mode_problems([ok], ["email/v1"]) == []
+    for sql, why in (("CREATE VIEW v_x AS SELECT ext_id AS id FROM main.items;", "it reads items"),
+                     ("CREATE VIEW v_x AS SELECT id FROM v_posts;", "v_posts"),
+                     ("CREATE VIEW v_x AS SELECT id FROM v_attachments JOIN attachments ON 1;", "attachments"),
+                     ("CREATE VIEW v_x AS SELECT randomblob(4) AS id FROM v_email;", "randomblob")):
+        bad = contenttypes.mode_problems([_mode_dir(sql, ["id"])], ["email/v1"])
+        assert bad and why in bad[0] and "v_x" in bad[0], (sql, bad)
+    wrong = contenttypes.mode_problems([_mode_dir("CREATE VIEW v_x AS SELECT id, sender FROM v_email;", ["id"])],
+                                       ["email/v1"])
+    assert wrong and "documents columns" in wrong[0]
+
+
+def test_attachments_and_their_full_text_rows_go_with_their_message():
+    p = project()
+    st = store(p)
+    st.sync()
+    st = store(p, [{"id": "sent", "in": "sent"}])
+    st.sync()
+    con = sqlite3.connect(db(p))
+    assert con.execute("SELECT count(*) FROM attachments").fetchone()[0] == 0
+    assert con.execute("SELECT count(*) FROM attachments_fts").fetchone()[0] == 0
+    assert con.execute("SELECT count(*) FROM attachments_fts WHERE attachments_fts MATCH 'commitment'").fetchone()[0] == 0
+    con.close()
+    assert st.sql("SELECT count(*) FROM v_attachment_fts WHERE fts MATCH 'commitment'")["rows"] == [[0]]
+
+
+def test_a_selector_since_is_not_a_coverage_gap_and_dropping_it_backfills():
+    p = project()
+    news = [{"id": "news", "in": "Newsletters", "since": "7d"}]
+    out = store(p, news).sync(lookback="30d")
+    assert out["coverage"]["complete"] is True and out["coverage"]["from"] == "2026-09-27T12:00:00Z"
+    assert out["sources"]["fake-mail"]["queries"][0]["mode"] == "since"
+    st = store(p, news)
+    assert st.sync(lookback="30d")["sources"]["fake-mail"]["queries"][0]["mode"] == "cursor"
+    out = store(p, [{"id": "news", "in": "Newsletters"}]).sync(lookback="30d")
+    q = out["sources"]["fake-mail"]["queries"][0]
+    assert q["mode"] == "since" and out["coverage"]["complete"] is True

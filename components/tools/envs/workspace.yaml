@@ -5,7 +5,8 @@ metadata:
   description: The project checkout. Read/edit files, narrow git commands. No network, no secrets, no spend; web research is env research.
 spec:
   bind:
-    # a test runner runs code the agent wrote, outside the guard: protected paths are not a hard limit; `bay check --base` and review catch the result
+    # a test runner runs code the agent wrote, outside the guard: protected paths are not a hard limit;
+    # `bay check --base` and review catch the result
     workspace.read/v1: { tools: [Read, Glob, Grep, Bash], clis: [./bay.sh check, python3 tests/run.py] }
     workspace.write/v1:
       tools: [Edit, Write, Bash]

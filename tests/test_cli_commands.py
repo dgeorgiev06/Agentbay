@@ -59,8 +59,9 @@ def test_note_task_mints_an_id_and_dispatch_and_review_take_the_task_first():
         tid = r.stdout.strip()
         assert cli(p, "note", "dispatch", tid).returncode != 0                       # --agent is required
         dispatch = ("note", "dispatch", tid, "--agent", "builder--delivery")
-        r = cli(p, *dispatch)                                                        # no guard heartbeat: refused, no event
-        assert r.returncode != 0 and "--unguarded" in r.stderr and not any(e["type"] == "agent.dispatch" for e in ledger.read(p))
+        r = cli(p, *dispatch)                                                   # no guard heartbeat: refused, no event
+        dispatched = [e for e in ledger.read(p) if e["type"] == "agent.dispatch"]
+        assert r.returncode != 0 and "--unguarded" in r.stderr and not dispatched
         assert cli(p, *dispatch, "--unguarded", "").returncode != 0                  # an empty reason is no reason
         assert cli(p, *dispatch, "--unguarded", "   ").returncode != 0               # nor is one of only spaces
         assert cli(p, *dispatch, "--unguarded", "x").returncode == 0
@@ -83,7 +84,7 @@ def test_note_task_mints_an_id_and_dispatch_and_review_take_the_task_first():
         real = p / "real.seen"
         real.touch()
         seen.symlink_to(real)
-        assert cli(p, *dispatch).returncode != 0                                     # nor is a symlink, however fresh its target
+        assert cli(p, *dispatch).returncode != 0                                     # nor is a symlink
         seen.unlink()
         assert cli(p, "note", tid, "text", "--agent", "x").returncode != 0           # dispatch flags need `dispatch`
         assert sum(e["type"] == "agent.dispatch" and e["taskId"] == tid for e in ledger.read(p)) == 2

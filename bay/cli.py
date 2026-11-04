@@ -503,17 +503,20 @@ def _note_dispatch(args, task: str):
     if not ledger.TASK_ID.match(task):
         _die(f"✗ '{task}' is not a taskId (`bay note task` mints one)")
     args.unguarded = (args.unguarded or "").strip()      # a reason of only spaces is no reason
-    if not args.unguarded and _guard_silent(args.project, 900):     # 900: the hook touches the file before the user answers the prompt
-        _die('✗ no guard hook call in the last 15 minutes: hooks are not loaded. Start Claude Code inside the project, or pass --unguarded "<reason>"')
+    # 900 seconds: the hook touches the file before the user answers the prompt
+    if not args.unguarded and _guard_silent(args.project, 900):
+        _die("✗ no guard hook call in the last 15 minutes: hooks are not loaded. "
+             'Start Claude Code inside the project, or pass --unguarded "<reason>"')
     ledger.append(args.project, "agent.dispatch", task, source="coordinator", taskId=task,
                   callId=args.call, step=args.step, agent=args.agent, summary=args.summary or "",
                   data={k: v for k, v in (("model", args.model), ("tier", args.tier), ("role", args.role),
-                                          ("mode", args.mode), ("inputs", args.input), ("unguarded", args.unguarded)) if v})
+                                          ("mode", args.mode), ("inputs", args.input),
+                                          ("unguarded", args.unguarded)) if v})
     print("dispatch recorded")
 
 
 def _guard_silent(project: Path, secs: int = 120) -> bool:
-    """True when no hook call touched .agentbay/ledger/guard.seen in the last `secs` seconds: its hooks are not loaded."""
+    """True when no hook call touched .agentbay/ledger/guard.seen in the last `secs` seconds: hooks are not loaded."""
     p = project / ".agentbay/ledger/guard.seen"      # not a symlink or a directory, and not dated in the future
     return p.is_symlink() or not p.is_file() or not 0 <= time.time() - p.stat().st_mtime <= secs
 
@@ -545,9 +548,13 @@ def _print_stale(evs, stale_runs, stale_calls):
 
 def _print_guard(project: Path, evs: list) -> None:
     if _guard_silent(project):
-        print("\nguard: no tool call was checked in the last 2 minutes. In a Claude Code session this means its hooks are not loaded: start it inside the project")
-    for i, e in enumerate(e for e in evs if (e.get("data") or {}).get("unguarded")):
-        print(("\nunguarded dispatches:\n" if not i else "") + f"  {e['taskId']}: {e['data']['unguarded'][:70]}")
+        print("\nguard: no tool call was checked in the last 2 minutes. In a Claude Code session this means "
+              "its hooks are not loaded: start it inside the project")
+    unguarded = [e for e in evs if (e.get("data") or {}).get("unguarded")]
+    if unguarded:
+        print("\nunguarded dispatches:")
+    for e in unguarded:
+        print(f"  {e['taskId']}: {e['data']['unguarded'][:70]}")
 
 
 def cmd_status(args):
@@ -613,14 +620,16 @@ def cmd_note(args):
     words = args.words
     verb = words[0]
     if verb not in ("task", "dispatch", "review") and any(getattr(args, f) for f in DISPATCH_FLAGS):
-        _die("✗ --agent, --call, --step, --model, --tier, --role, --mode, --summary, --input and --unguarded go with `note dispatch`")
+        _die("✗ --agent, --call, --step, --model, --tier, --role, --mode, --summary, --input and --unguarded "
+             "go with `note dispatch`")
     if verb == "task":
         if len(words) != 1:
             _die("✗ `bay note task` takes no arguments")
         print(protocol.new_task_id())
     elif verb == "dispatch":
         if len(words) != 2:
-            _die("✗ usage: bay note dispatch <taskId> --agent <subagent_type> [--call --step --model --tier --role --mode --input --unguarded <reason>]")
+            _die("✗ usage: bay note dispatch <taskId> --agent <subagent_type> "
+                 "[--call --step --model --tier --role --mode --input --unguarded <reason>]")
         _note_dispatch(args, words[1])
     elif verb == "review":
         if len(words) != 3:

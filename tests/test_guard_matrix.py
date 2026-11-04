@@ -333,7 +333,8 @@ README_DELTAS: dict = {(DEV, "Write README.md"): ("deny", "pass")}
 # 0020 items 1 and 2: ten rows, deny -> pass. The builders may run the checks and `git commit`; the reviewer the checks.
 RUN_TESTS = ["Bash python3 tests/run.py -q", "Bash python3 tests/run.py tests/test_improve.py"]
 CHECK_DELTAS: dict = {
-    **{("builder--delivery", r): ("deny", "pass") for r in ["Bash ./bay.sh check", "Bash git commit -m 'about bay approve'", *RUN_TESTS]},
+    **{("builder--delivery", r): ("deny", "pass")
+       for r in ["Bash ./bay.sh check", "Bash git commit -m 'about bay approve'", *RUN_TESTS]},
     **{(LOCAL, r): ("deny", "pass") for r in ["Bash git commit -m 'about bay approve'", *RUN_TESTS]},
     **{("reviewer--forge", r): ("deny", "pass") for r in ["Bash ./bay.sh check", *RUN_TESTS]},
 }
@@ -393,9 +394,11 @@ def undo_kit_path(got: dict) -> dict:
     of every reason are the golden's. Asserted present, so the put-back cannot hide a missing row."""
     text = json.dumps(got, sort_keys=True)
     assert text.count("<kit>/components/briefing/mode.yaml") == 2, text.count("<kit>/components/briefing/mode.yaml")
-    now, was = (", ".join(c) for c in CHECK_CLIS["builder--delivery"])      # 0020: delivery's clis in its four deny reasons
+    # 0020: delivery's clis in its four deny reasons
+    now, was = (", ".join(c) for c in CHECK_CLIS["builder--delivery"])
     assert text.count(now) == 4, text.count(now)
-    return json.loads(text.replace("<kit>/components/briefing/mode.yaml", "<kit>/modes/briefing/mode.yaml").replace(now, was))
+    text = text.replace("<kit>/components/briefing/mode.yaml", "<kit>/modes/briefing/mode.yaml")
+    return json.loads(text.replace(now, was))
 
 
 def test_guard_matrix_for_a_project_with_the_kit_outside():

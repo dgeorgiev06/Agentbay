@@ -473,26 +473,43 @@ class Guard:
 
     def _git_command(self, entry, words, cwd, first) -> tuple[str, str] | None:
         """Denies for git flags that write or read files or run programs, and for an unsafe `worktree add`."""
-        bad = [w for w in words[first:] if w.startswith(GIT_BAD_FLAGS) or abbrev(w, GIT_BAD_FLAGS) or BUNDLE_O.match(w)]
-        if bad:
-            return "deny", f"agentbay: git flag {bad[0]} is not allowed (it writes or reads files or runs programs)"
+        for word in words[first:]:
+            if word.startswith(GIT_BAD_FLAGS) or abbrev(word, GIT_BAD_FLAGS) or BUNDLE_O.match(word):
+                return "deny", f"agentbay: git flag {word} is not allowed (it writes or reads files or runs programs)"
         if words[1:3] == ["worktree", "add"]:
             return self._worktree_add(entry, words[3:], cwd)
-        if words[1] in ("mv", "rm"):        # each path (flag-like ones after `--` too), judged as the file tools would
-            cut = words.index("--") if "--" in words else len(words)
-            args = [w for w in words[2:cut] if not w.startswith("-")] + words[cut + 1:]
-            why = next(((a, f"only {' '.join(GIT_PATH_FLAGS)} are allowed") for a in words[2:cut] if a.startswith("-") and a not in GIT_PATH_FLAGS), None) or \
-                next(((a, w) for a in args if (w := self._git_path_denied(entry, a, cwd))), None)
-            return ("deny", f"agentbay: git {words[1]} {why[0]}: {why[1]}") if why else None
+        if words[1] in ("mv", "rm"):
+            return self._git_mv_rm(entry, words, cwd)
+        return None
+
+    def _git_mv_rm(self, entry, words, cwd) -> tuple[str, str] | None:
+        """Denies a `git mv` or `git rm` with a flag outside GIT_PATH_FLAGS, or with a path the role may not write.
+        Every path counts, flag-like ones after `--` too, judged as the file tools would."""
+        verb = words[1]
+        cut = words.index("--") if "--" in words else len(words)
+        options = [w for w in words[2:cut] if w.startswith("-")]
+        paths = [w for w in words[2:cut] if not w.startswith("-")] + words[cut + 1:]
+        for option in options:
+            if option not in GIT_PATH_FLAGS:
+                return "deny", f"agentbay: git {verb} {option}: only {' '.join(GIT_PATH_FLAGS)} are allowed"
+        for path in paths:
+            reason = self._git_path_denied(entry, path, cwd)
+            if reason:
+                return "deny", f"agentbay: git {verb} {path}: {reason}"
         return None
 
     def _git_path_denied(self, entry, a, cwd) -> str | None:
         """Why the role may not write `a` or a never-written or protected path inside it (`git rm -r .`), or None."""
         if a.startswith(":") or any(c in a for c in "*?[\\"):
             return "git pathspec magic and globs are not allowed; name each path"
-        p, held = norm(a, cwd), (*NEVER_DIRS, *NEVER_FILES, *map("/".join, NEVER_SEQS), *self.policy.get("protected", []))
-        return next((w for x in [p, *(self.project / h for h in held)] if self.inside(x, p) and (
-            w := self.never_write(x) or self._write_denied(entry, x))), None)
+        target = norm(a, cwd)
+        held = (*NEVER_DIRS, *NEVER_FILES, *map("/".join, NEVER_SEQS), *self.policy.get("protected", []))
+        for path in [target, *(self.project / h for h in held)]:
+            if self.inside(path, target):
+                reason = self.never_write(path) or self._write_denied(entry, path)
+                if reason:
+                    return reason
+        return None
 
     @staticmethod
     def _deny_unlisted(entry) -> tuple[str, str]:

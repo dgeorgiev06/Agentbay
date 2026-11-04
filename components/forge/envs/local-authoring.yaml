@@ -14,7 +14,9 @@ spec:
     artifacts.read/v1: artifact-graph
     # a test runner runs code the agent wrote, outside the guard: `fs.write` below is not a hard limit;
     # `bay check --base` and review catch the result
-    workspace.read/v1: { tools: [Read, Glob, Grep, Bash], clis: [./bay.sh check, python3 tests/run.py] }
+    workspace.read/v1:
+      tools: [Read, Glob, Grep, Bash]
+      clis: [./bay.sh check, python3 tests/run.py, python3 -I -m ruff check, python3 -I -m mypy]
     workspace.write/v1:
       tools: [Edit, Write, Bash]
       clis: [git add, git commit, git mv, git rm]

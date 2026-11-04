@@ -213,8 +213,8 @@ def test_a_read_capability_never_gives_read_roles_write_tools_or_paths():
     ps = lint.run(k)
     assert any(p.endswith(f"components/feed-briefing/envs/local-feeds.yaml:{line}: env local-feeds binds Edit, Write, rm, git push under "
                           f"notes.edit/v1, which has no `write` effect; file-writing tools and CLIs other than git "
-                          f"status, git diff, git log, git show, ./bay.sh check, python3 tests/run.py "
-                          f"belong under a capability with the write effect "
+                          f"status, git diff, git log, git show, ./bay.sh check, python3 tests/run.py, "
+                          f"python3 -I -m ruff check, python3 -I -m mypy belong under a capability with the write effect "
                           f"(e.g. workspace.write/v1)") for p in ps), ps
     p = project(source="x-api")
     s = system(p, k)

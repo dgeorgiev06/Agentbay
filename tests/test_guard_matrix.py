@@ -193,12 +193,14 @@ IMPROVE = "components/improve"
 DEV_CLIS = ["./bay.sh check", "python3 tests/run.py", "git status", "git diff", "git log", "git add", "git commit"]
 MV_RM = ["git mv", "git rm"]
 CHECKS = ["./bay.sh check", "python3 tests/run.py"]
+LINT = ["python3 -I -m ruff check", "python3 -I -m mypy"]
 READ = ["git status", "git diff", "git log"]
 CHECK_CLIS = {
-    "builder--delivery": ([*CHECKS, *READ, "git add", "git worktree", "git commit", *MV_RM, "git show"],
+    "builder--delivery": ([*CHECKS, *LINT, *READ, "git add", "git worktree", "git commit", *MV_RM, "git show"],
                           [*READ, "git add", "git worktree", "git show"]),
-    LOCAL: ([*CHECKS, "git add", "git commit", *MV_RM, *READ, "git show"], ["./bay.sh check", *READ, "git show"]),
-    "reviewer--forge": ([*CHECKS, *READ, "git show"], [*READ, "git show"]),
+    LOCAL: ([*CHECKS, *LINT, "git add", "git commit", *MV_RM, *READ, "git show"],
+            ["./bay.sh check", *READ, "git show"]),
+    "reviewer--forge": ([*CHECKS, *LINT, *READ, "git show"], [*READ, "git show"]),
 }
 CLAUSE = "{}/ of the agentbay checkout is writable only by forge.extend (env must name it)"
 
@@ -243,9 +245,10 @@ def undo_move(got: dict) -> dict:
     deltas = path_deltas()
     local_writes = local_was
     dev_now, dev_was = str([*FOUR, *moved, *window]),str([*FOUR, "docs", "tests"])
-    assert pol["units"][DEV]["clis"] == [*DEV_CLIS, *MV_RM, "git show"], pol["units"][DEV]["clis"]
+    dev_clis = [*CHECKS, *LINT, *READ, "git add", "git commit", *MV_RM, "git show"]
+    assert pol["units"][DEV]["clis"] == dev_clis, pol["units"][DEV]["clis"]
     pol["units"][DEV]["clis"] = [*DEV_CLIS, "git show"]
-    cli_now, cli_was = ", ".join([*DEV_CLIS, *MV_RM, "git show"]), ", ".join([*DEV_CLIS, "git show"])
+    cli_now, cli_was = ", ".join(dev_clis), ", ".join([*DEV_CLIS, "git show"])
     assert any(cli_now in r for r in (r for _, r in got["matrix"][DEV].values()))
     for unit, (now, was) in CHECK_CLIS.items():
         assert pol["units"][unit]["clis"] == now, pol["units"][unit]["clis"]

@@ -38,7 +38,8 @@ DEFAULT_AGENT = "claude-code"
 AGENT_SAFE_EFFECTS = {"read"}
 READ_TOOL_EFFECTS = {"read", "network"}
 WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
-READ_ONLY_CLIS = ("git status", "git diff", "git log", "git show", "./bay.sh check", "python3 tests/run.py")
+READ_ONLY_CLIS = ("git status", "git diff", "git log", "git show", "./bay.sh check", "python3 tests/run.py",
+                  "python3 -I -m ruff check", "python3 -I -m mypy")
 LEVEL_RANK = {"should": 1, "must": 2, "must_not": 2}
 PROTECTION_KIND = {"Mode": "mode", "Environment": "env", "Connector": "connector"}
 FRAMEWORK_EXTENDER = "forge.extend"

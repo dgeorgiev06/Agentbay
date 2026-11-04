@@ -90,7 +90,7 @@
               },
               "in": {
                 "type": "string",
-                "description": "Type name: components/<mode>/types/<Name>.schema.json"
+                "description": "Type name: components/<tier>/<mode>/types/<Name>.schema.json"
               },
               "out": {
                 "type": "string"

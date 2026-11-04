@@ -41,7 +41,7 @@ rules:
     check: review_on_side_effects
   - id: C-7
     level: should
-    statement: Content uses the fixed vocabulary (Chief of Staff, Mode, Feature, Role, Agent, Environment, Component, Connector, capability interface, content type, item, subagent). A component is a folder in `components/` that holds one mode, source connector, content type or shared set. A connector is code behind a capability interface; a source connector reaches outside the project and is a component of its own, and an internal connector sits inside the component that owns it. A content type is the versioned kind of an item (`<kind>/v<N>`), and an item is the unit a source produces and the store keeps. Retired or synonym terms are replaced.
+    statement: Content uses the fixed vocabulary (Chief of Staff, Mode, Feature, Role, Agent, Environment, Component, Connector, capability interface, content type, item, subagent). A component is a folder under `components/base/` or `components/modes/` that holds one mode, with its connectors and content types, or one shared set. A connector is code behind a capability interface and lives in the mode that binds it. A content type is the versioned kind of an item (`<kind>/v<N>`), and an item is the unit a source produces and the store keeps. Retired or synonym terms are replaced.
     appliesTo: [mode, feature, role, connector, env]
     check: vocabulary
     terms:

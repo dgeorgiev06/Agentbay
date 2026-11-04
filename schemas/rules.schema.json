@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agentbay/v4/Rules",
   "title": "Rules",
-  "description": "Two shapes of rules file. kind Rules (the default): components/<mode>/features/<feature>/rules.yaml; rules stack with mode constraints and role rules, strictest wins; review configuration does NOT belong here (it lives in mode.yaml). kind Conformance: framework/rules/conformance.yaml, the single source of semantic framework rules, read by forge.create/forge.extend reviewers (review.rulesets) and improve.audit; `check` names a deterministic check in bay/conformance.py, and rules without one are judged by the analyst (improve.audit) or reviewer.",
+  "description": "Two shapes of rules file. kind Rules (the default): components/<tier>/<mode>/features/<feature>/rules.yaml; rules stack with mode constraints and role rules, strictest wins; review configuration does NOT belong here (it lives in mode.yaml). kind Conformance: framework/rules/conformance.yaml, the single source of semantic framework rules, read by forge.create/forge.extend reviewers (review.rulesets) and improve.audit; `check` names a deterministic check in bay/conformance.py, and rules without one are judged by the analyst (improve.audit) or reviewer.",
   "type": "object",
   "required": ["rules"],
   "additionalProperties": false,

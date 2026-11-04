@@ -1,7 +1,7 @@
 # agentbay design
 
 agentbay compiles jobs described as data into a runtime (Claude Code today) and runs them through one dispatcher.
-This document describes the system as it is. The contracts are in [INTERFACES.md](INTERFACES.md), and the
+This document describes the system. The contracts are in [INTERFACES.md](INTERFACES.md), and the
 reasoning behind each decision is in [proposals/](proposals/).
 
 ## Concepts
@@ -14,10 +14,10 @@ reasoning behind each decision is in [proposals/](proposals/).
 | **Environment** | what a role can touch: capability bindings, secrets, network allowlist, filesystem paths, allowed tiers, effects and limits | you, or the framework |
 | **Connector** | code that implements a capability interface and holds the secrets and the network use | you, or the framework |
 | **Capability interface** | a versioned contract: named endpoints with JSON-schema input and output and declared effects (`read`, `write`, `network`, `spend`, `delete`) | the component that owns it |
-| **Component** | a folder that holds one mode, source connector, content type or shared set. It is the unit you add, move or remove | you, or the framework |
+| **Component** | a folder that holds one mode and its connectors and content types, or one shared set. It is the unit you add, move or remove | you, or the framework |
 
-A mode names capabilities, never a connector or tool. Adding a source is one component plus one binding line in
-an env, and no mode, role or playbook changes. A role file outside the framework is an error. A mode customizes a
+A mode names capabilities, never a connector or tool. Adding a source is one connector plus one binding line in
+an env; no mode, role or playbook changes. A role file outside the framework is an error. A mode customizes a
 role through its playbooks, skills and rules, and a new role is a `forge.extend` proposal.
 
 A mode may `extends:` one abstract mode that extends nothing, so inheritance is one level deep. A child's feature replaces its parent's feature of that name whole, never key by key, except that a feature with no `playbook` or `rules` inherits the parent's. Roles, constraints
@@ -26,21 +26,21 @@ folder. `abstract: true` marks a base that is linted but never installed or call
 
 ## Components
 
-A component is one folder in `components/` with one manifest.
+A component is one folder with one manifest, in `components/base/` (shipped) or `components/modes/` (yours).
 
 | Manifest | Kind | For |
 |---|---|---|
 | `mode.yaml` | mode | one job |
-| `connector.yaml` | source connector | code that reaches a system outside the project |
+| `connector.yaml` | connector | code behind a capability, often a source |
 | `content-type.yaml` | content type | the fields and views of one kind of item |
 | `component.yaml` | shared component | interfaces and envs that several modes use |
 
-A mode also holds what only it needs (envs, interfaces, skills, types, data, tests, internal connectors).
+A mode also holds what it needs (envs, interfaces, skills, types, data, tests, `connectors/`, `content-types/`).
 A component uses another only through what the other provides: an interface name in `needs:`, a content type in
 `reads:`, a parent in `extends:`, or an env or connector name in a binding.
 
-A connector that declares network access, secrets or a file path outside the project is a source connector and a
-component of its own. Every other connector is internal and lives in `connectors/<name>/` inside its owner.
+A mode may use the connectors and content types of its own folder and of `base/`, and of another mode it lists in
+`composes:`; `bay check` verifies it. A part many modes need moves to `base/` through `forge.extend`.
 
 The kernel is not a component. `bay/`, `schemas/`, `framework/` and `adapters/` hold the loader, dispatcher,
 contracts, roles and runtime adapters. `framework/kernel.yaml` holds only `owns:` and `protected:`.

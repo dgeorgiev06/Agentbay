@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agentbay/v4/Component",
   "title": "Component",
-  "description": "A component that is not a mode, a connector or a content type (proposal 0010): a folder components/<name>/ holding component.yaml (this file's shape) and whatever it provides by convention (interfaces/, envs/, skills/, data/, tests/). Its name is unique across all components.",
+  "description": "A component that is not a mode, a connector or a content type (proposal 0010): a shared set: a folder components/base/<name>/ holding component.yaml (this file's shape) and whatever it provides by convention (interfaces/, envs/, skills/, data/, tests/). Its name is unique across all components.",
   "type": "object",
   "required": ["apiVersion", "kind", "metadata", "spec"],
   "additionalProperties": false,

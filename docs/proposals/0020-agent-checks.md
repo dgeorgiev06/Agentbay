@@ -106,6 +106,16 @@ Taken by the owner in chat on 2026-11-03:
 
 Not yet decided, and stated as written above: `improve`'s reviewer gets the two check commands because it shares env `workspace` (item 2; the alternative is a second reviewer env), and the release number is 3.1.0 because the guard check changes default behaviour (3.0.3 would understate it).
 
+## Review round 1 fixes
+
+The first review (call C-20261104-328613) found one security blocker and four should-fix items. This fix round does these and nothing else, within the bay_lines exception of 9715 (the builder stops and says by how much if not):
+
+1. **Blocker: shortened long options.** git accepts unambiguous prefixes of long options, so `git rm --pathspec-from=paths.txt` passes the guard and removes `bay/guard.py`. For `git mv` and `git rm`, the guard allows only a fixed list of flags (`-r`, `-f`, `-n`, `-q`, `-k`, `-v`, `--cached`, `--dry-run`, `--force`, `--quiet`, `--`) and denies any other word starting with `-` before `--`; `GIT_BAD_FLAGS` also catches any prefix of a banned long option. Both forms go into the test_n3 table.
+2. **Reviewers cannot write through the check command.** `./bay.sh check --limits --write` rewrites `framework/limits.yaml`; the guard denies `--write` on `./bay.sh check` for a role whose env does not write `framework/`.
+3. **A failed must-level C-n halts the call.** The review halt logic reads the level of a conformance rule from its ruleset, as it does for DoD and rules.
+4. **The heartbeat read is strict.** The dispatch check reads `guard.seen` without following symlinks, requires a regular file, treats a modified time in the future as stale, and refuses a reason of only spaces.
+5. **Docs.** DESIGN says plainly that a role that may run the test runner can run code it wrote; the comment in `local-authoring.yaml` is restored; `bay status` puts the unguarded dispatches under one heading; the two joins in INTERFACES get their spaces back.
+
 ## Release 3.1.0
 
 `bay/__init__.py` to 3.1.0; a CHANGELOG entry with an Upgrading note (run `./bay.sh build`; in a session without hooks pass `--unguarded "<reason>"` to `bay note dispatch`); `./bay.sh check --limits --write` lowers `bay_lines` to the real count. The release step prints the tag, push and `gh release create` commands for the owner.

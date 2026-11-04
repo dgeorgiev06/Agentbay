@@ -1,5 +1,5 @@
 ---
-# Approval is recorded in the ledger by `bay approve`; this file grants nothing. Design only: nothing is changed before the gate. Scope chosen by the owner in chat on 2026-11-04 ("Core only"): slices 1, 3, 5 and 6 of the old draft; slice 2 (improve-detect split) and slice 4 (unslop) are dropped. Every line cited was read on feat/standards at 3.1.0 (main 8c395b0). The ruff and mypy finding counts are NOT measured here (see Measured and not measured).
+# Approval is recorded in the ledger by `bay approve`; this file grants nothing. Design only: nothing is changed before the gate. Scope chosen by the owner in chat on 2026-11-04 ("Core only"): slices 1, 3, 5 and 6 of the old draft; slice 2 (improve-detect split) and slice 4 (unslop) are dropped. Every line cited was read on feat/standards at 3.1.0 (main 8c395b0). The ruff and mypy finding counts were measured by the coordinator (see Measured and not measured).
 id: "0011"
 status: draft
 touches:
@@ -74,12 +74,13 @@ Re-measured on 3.1.0 with the commands I am allowed (`./bay.sh check --limits`, 
 | full-line `#` comments | at least 96 in `bay/`, 25 in `adapters/` | search, per file; docstring lines not counted |
 | `noqa` markers | 44 in 29 `.py` files | search |
 
-**Not measured: the ruff and mypy finding counts.** The task asked for them with the installed ruff 0.17.3 and mypy 2.4.1, but running either is outside the Bash commands this builder may use (`./bay.sh check`, `python3 tests/run.py`, `git`, `bay plan`), so I did not run them and give no number. The old draft's figures (2279 ruff findings, 638 mypy errors, 63 unformatted files) were taken with ruff 0.16.9 and mypy 2.3.1 on an older tree and are withdrawn. Before approval, whoever has the shell runs, from the checkout, with the installed versions:
+**Measured by the coordinator on 2026-11-04 (feat/standards at 3.1.0), with the installed ruff 0.17.3 and mypy 2.4.1.** The old draft's figures (2279 ruff findings, 638 mypy errors, 63 unformatted files; ruff 0.16.9, mypy 2.3.1, older tree) are withdrawn.
 
-- `python3 -m ruff check --no-cache --ignore-noqa --config components/python/ruff.toml bay adapters components --statistics` (after the file exists; until then with the starting selection of item 2)
-- `python3 -m mypy --config-file components/python/mypy.ini bay adapters components`
+- ruff, selection `E,F,W,B`, line length 120, `--isolated --no-cache`: 173 findings in `bay/` and `adapters/` (E501 140, E702 18, B007 4, E731 3, B904 3, B905 3, E701 1, F401 1); 369 with `components/` added. About 2 seconds.
+- mypy `--strict --ignore-missing-imports`: 635 errors in 27 of 30 files of `bay/` (about 5 seconds); `adapters/claude-code` alone reports 646, because it follows its imports into `bay/`.
+- Not settled by this run: the modules in folders with a hyphen (`components/mail-briefing`, `components/improve/connectors/improve-detect`), which are not valid package names; the plan step decides the mypy scope (open decision 8). The timeouts below (120 s ruff, 300 s mypy) are far above the measured times and may be lowered.
 
-and writes the totals into the table above. The pins in item 2 are the installed versions, taken from the task, not from a run. Two things the run must also settle, both flagged as risks: whether mypy can name the modules in folders with a hyphen (`components/mail-briefing`, `components/improve/connectors/improve-detect` are not valid package names), and how long each tool takes on the whole tree (the timeouts below are set before any measurement).
+All these findings exist today, so under item 1 they are `existing` and block nothing.
 
 ## Item 1: a `standards` step, new findings only (slice 1)
 
@@ -168,7 +169,7 @@ All measures are covered. Estimates are mine until the code is written.
 3. **Release number: 3.2.0.** Recommended. A patch release would understate a step that can block a call.
 4. **No `comments:` block in `component.yaml`.** One language does not justify a schema change. Recommended: the table of syntax inside the counter. The old draft's block is the alternative.
 5. **No skill group `standards:*`.** Recommended: the rule is one sentence in the builder prompt, two DoD items and the comments README. Skills for the python rules can come with a later proposal.
-6. **Starting rule selection `E`, `F`, `W`, `B`, line length 120, `mypy --strict`.** Unvalidated: the old draft's brief is not in the repo and the finding counts are not measured. Recommended: the plan step fixes the selection after the counts are measured and every code is checked with `ruff rule` on 0.17.3; a rule that produces more than a few new findings per ordinary change is left out.
+6. **Starting rule selection `E`, `F`, `W`, `B`, line length 120, `mypy --strict`.** Unvalidated: the old draft's brief is not in the repo; the counts are now measured (173 ruff findings in bay/ and adapters/, mostly E501). Recommended: the plan step fixes the selection with those counts and every code is checked with `ruff rule` on 0.17.3; a rule that produces more than a few new findings per ordinary change is left out.
 7. **Tests: exception to 465, or merge.** Recommended: the exception stands as the upper bound and the plan step tries to merge three tests the change makes redundant before it is used; otherwise the three behaviours go untested, which I would not accept.
 8. **mypy scope.** Hyphenated folders may not be nameable as modules. Recommended: whole project if the first real run is clean; otherwise `bay/` (a valid package) and the Python the run can name, with the rest listed in the README. This cannot be decided without the measurement above.
 9. **`long_lines` stays** (previous section). Recommended: keep.

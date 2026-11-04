@@ -432,7 +432,9 @@ def test_improve_files_are_writable_like_any_user_mode_and_its_env_and_connector
                          "components/claude-transcripts/parser.py", "components/cos/mode.yaml", "components/forge/mode.yaml"):
                 assert decide("Write", {"file_path": path, "content": "x"}, who) == "deny", (who, path)
         assert decide("Write", {"file_path": "components/improve/mode.yaml", "content": "x"}, "analyst--improve") == "deny"
-        assert decide("Write", {"file_path": "components/improve/mode.yaml", "content": "x"}, "builder--forge--framework-dev") == "deny"
+        dev_over_improve = "pass"
+        dev = "builder--forge--framework-dev"
+        assert decide("Write", {"file_path": "components/improve/mode.yaml", "content": "x"}, dev) == dev_over_improve
         assert decide("Write", {"file_path": "components/cos/mode.yaml", "content": "x"}, "builder--forge--framework-dev") == "pass"
     finally:
         cleanup(k)

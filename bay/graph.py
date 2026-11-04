@@ -7,6 +7,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -240,7 +241,7 @@ def _binding_edges(g: Graph, k, connectors_of) -> None:
             g.edge(f"connector:{name}", f"interface:{iface}", "needs")
 
 
-def _schema_ref_edges(g: Graph, k, kit: Path) -> None:
+def _schema_ref_edges(g: Graph, k: Any, kit: Path) -> None:
     for name, d in k.docs["Interface"].items():
         for ref in set(re.findall(r"\$ref['\"]?\s*:\s*['\"]?([a-z][a-z0-9.-]*/v[0-9]+)", d.path.read_text())):
             g.edge(f"interface:{name}", f"schema:{ref}", "ref")

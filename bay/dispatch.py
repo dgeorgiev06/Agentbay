@@ -676,7 +676,7 @@ class Dispatcher:
     def _prior_review(self, state, step) -> dict | None:
         """The re-check brief {priorCall, failed, commits, carried} from the newest failed review of the same files."""
 
-        def subj(s):
+        def subj(s: dict[str, Any]) -> dict[str, Any]:
             return {k: g.get("approves") for k, g in (s.get("gates") or {}).items()}
 
         for e in reversed(ledger.read(self.project)):
@@ -734,7 +734,7 @@ class Dispatcher:
                                    f".agentbay/bay approve {call_id} --via chat --quote \"<their exact message>\" "
                                    f"(never infer approval)"} if on else {}
 
-    def _endpoint_output(self, feat, state):
+    def _endpoint_output(self, feat: Any, state: dict[str, Any]) -> Any:
         for st in reversed(feat.steps):
             if st.kind in ("review", "gate"):
                 continue

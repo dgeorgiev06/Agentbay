@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from email.utils import getaddresses, parseaddr
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import Any
 
 from bay import selector as selmod
 from bay import vault
@@ -788,5 +789,5 @@ def cli_login(ctx) -> None:
             "`bay auth gmail-api` again.")
 
 
-def create(ctx) -> GmailApi:
+def create(ctx: Any) -> GmailApi:
     return GmailApi(ctx)

@@ -168,6 +168,18 @@ def connector_pkg(name: str, module: str | None = None):
     return importlib.import_module(f"{pkg.__name__}.{module}") if module else pkg
 
 
+def no_code_checks(d) -> None:
+    """The checkout copy is not a git repo, so the `deadcode` and `standards` steps report no new finding here."""
+    real = d._invoke
+
+    def invoke(env, conn, iface, ep, args, **kw):
+        if iface == "improve.detect/v1":
+            return {"new": [], "existing": 0}
+        return real(env, conn, iface, ep, args, **kw)
+    d._invoke = invoke
+    d._standards = lambda *args: {"new": [], "existing": 0}
+
+
 def kit_for(project_dir: Path | None) -> Path:
     return KIT
 

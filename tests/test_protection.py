@@ -21,6 +21,7 @@ EXPECTED_PROTECTED = [
     "components/improve/connectors/improve-detect", "components/improve/connectors/improve-store",
     "components/improve/connectors/ledger",
     "components/improve/interfaces", "components/tools/interfaces",
+    "components/python", "components/comments",
     "components/tools/envs/plan-writer.yaml",
 ]
 

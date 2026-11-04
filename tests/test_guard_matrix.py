@@ -235,7 +235,7 @@ def undo_move(got: dict) -> dict:
     assert pol["protected"] == FOUR + moved, pol["protected"]
     pol["protected"] = FOUR
     assert pol["units"][LOCAL]["write"] == ["components", "agentbay.config.yaml"], pol["units"][LOCAL]["write"]
-    window = ["docs", "tests", "README.md"]
+    window = ["requirements-dev.txt", "docs", "tests", "README.md"]
     assert pol["units"][DEV]["write"] == [*FOUR, *moved, *window], pol["units"][DEV]["write"]
     pol["units"][DEV]["write"] = [*FOUR, "docs", "tests"]
     assert got["protectedWrites"]["framework-dev"] == FOUR + moved

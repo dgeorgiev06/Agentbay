@@ -2,7 +2,7 @@
 import json
 
 from helpers import (KIT, SECRETS, FakeHttp, MemProvider, cleanup, clock, edit_yaml, jresp, kit_copy, kit_for,
-                     load_module, model, project, system)
+                     load_module, model, no_code_checks, project, system)
 
 from bay import dispatch, guard, ledger, vault
 from bay.adapter import get
@@ -202,17 +202,10 @@ def test_redact_is_a_last_line_of_defence():
     assert "super-secret-value-123" not in (p / ".agentbay/ledger/events.jsonl").read_text()
 
 
-def no_deadcode(d):
-    """The checkout copy is not a git repo, so forge.extend's `deadcode` step reports no new finding here."""
-    real = d._invoke
-    d._invoke = lambda env, conn, iface, ep, args, **kw: \
-        {"new": [], "existing": 0} if iface == "improve.detect/v1" else real(env, conn, iface, ep, args, **kw)
-
-
 def test_gate_stops_and_resumes_only_on_approval():
     k = kit_copy()
     d = dispatch.Dispatcher(system(k, k), k, clock=clock)
-    no_deadcode(d)
+    no_code_checks(d)
     r = d.call("forge.extend", {"goal": "add a bluesky source"})
     assert r["status"] == "needs-agent" and r["next"]["step"] == "propose"
     assert r["next"]["runAs"] == "subagent_type=builder--forge--framework-dev"
@@ -238,7 +231,7 @@ def test_gate_stops_and_resumes_only_on_approval():
 def test_failed_review_halts_before_release():
     k = kit_copy()
     d = dispatch.Dispatcher(system(k, k), k, clock=clock)
-    no_deadcode(d)
+    no_code_checks(d)
     r = d.call("forge.extend", {"goal": "x change"})
     ok = {"status": "done", "summary": "s"}
     r = d.submit(r["callId"], "propose", ok)

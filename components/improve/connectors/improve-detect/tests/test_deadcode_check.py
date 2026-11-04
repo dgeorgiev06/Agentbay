@@ -245,21 +245,14 @@ def test_a_new_finding_blocks_the_extend_call_before_review():
 
 STUB_CHECKER = ("apiVersion: agentbay/v4\nkind: Connector\nmetadata:\n  name: {name}\n  description: A stub checker.\n"
                 "spec:\n  implements: standards.check/v1\n  entry: stub.py\n")
-STANDARDS_STEP = {"id": "standards", "run": "standards.check/v1.findings", "with": {"base": "$call.base"}}
 
 
-def add_standards_step(k: Path, names: list[str]) -> None:
+def bind_stub_checkers(k: Path, names: list[str]) -> None:
     for name in names:
         folder = k / "components" / "forge" / "connectors" / name
         folder.mkdir(parents=True)
         (folder / "connector.yaml").write_text(STUB_CHECKER.format(name=name))
         (folder / "stub.py").write_text("def create(ctx):\n    return None\n")
-
-    def mode(doc):
-        steps = doc["spec"]["features"]["extend"]["steps"]
-        steps.insert([s.get("id") for s in steps].index("limits") + 1, STANDARDS_STEP)
-        doc["spec"]["needs"].append("standards.check/v1")
-    edit_yaml(k / "components" / "forge" / "mode.yaml", mode)
     edit_yaml(k / "components" / "forge" / "envs" / "local-authoring.yaml",
               lambda doc: doc["spec"]["bind"].update({"standards.check/v1": names}))
 
@@ -270,7 +263,7 @@ def test_forge_extend_runs_deadcode_and_several_standards_checkers_between_imple
         feat = system(p).modes["forge"].features["extend"]
         ids = [s.id for s in feat.steps]
         assert ids.index("implement") + 1 == ids.index("deadcode") and ids.index("deadcode") + 1 == ids.index("limits")
-        assert ids.index("limits") + 1 == ids.index("review")
+        assert ids[ids.index("limits"):] == ["limits", "standards", "review", "release", "release-standards"]
         assert feat.steps[ids.index("deadcode")].run == "improve.detect/v1.change"
         assert feat.steps[ids.index("limits")].run == "improve.detect/v1.limits"
         assert feat.steps[ids.index("limits")].with_["proposal"] == "$in.proposal|$steps.propose.artifacts"
@@ -283,11 +276,11 @@ def test_forge_extend_runs_deadcode_and_several_standards_checkers_between_imple
         write(repo, {"base.py": "a = 1\n"})
         git(repo, "add", "base.py")
         git(repo, "commit", "-q", "-m", "base")
-        add_standards_step(k, ["stub-a", "stub-b"])
+        bind_stub_checkers(k, ["stub-a", "stub-b"])
         d = dispatch.Dispatcher(system(k, k), k, clock=clock)
         steps = system(k, k).modes["forge"].features["extend"].steps
-        assert [s.id for s in steps][-5:-1] == ["deadcode", "limits", "standards", "review"]
-        assert steps[-3].connectors == ["stub-a", "stub-b"]
+        assert steps[ids.index("standards")].connectors == ["stub-a", "stub-b"]
+        assert steps[ids.index("release-standards")].connectors == ["stub-a", "stub-b"]
         real = d._invoke
 
         def fake(env, conn, iface, ep, args, **kw):

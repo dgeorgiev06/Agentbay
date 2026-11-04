@@ -3,7 +3,7 @@ import json
 import subprocess
 import sys
 
-from helpers import KIT, clock, cleanup, connector_pkg, kit_copy, kit_for, project, system, tmpdir
+from helpers import KIT, clock, cleanup, connector_pkg, kit_copy, kit_for, no_code_checks, project, system, tmpdir
 from improve_fixtures import CORES, D, findings, proj, scan
 
 from bay import dispatch, ledger
@@ -220,6 +220,7 @@ def test_forge_reviewers_get_the_conformance_rules():
     k = kit_copy()
     try:
         d = dispatch.Dispatcher(system(k, k), k, clock=clock)
+        no_code_checks(d)
         r = d.call("forge.create", {"kind": "env", "name": "summaries", "target": "feed-briefing", "intent": "Where summaries are written"})
         rv = d.submit(r["callId"], "fill", {"status": "done", "summary": "filled the env"})
         conf = rv["next"]["review"]["rulesets"]["conformance"]

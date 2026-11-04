@@ -25,4 +25,4 @@ In a project other than the kit, `rule: off` turns the rule off:
 It is read from the base's `agentbay.config.yaml` (`configRoot`), so a change cannot switch the rule off for itself.
 In the kit the setting is ignored.
 
-    python3 tests/run.py components/comments/tests/test_comments_check.py
+    python3 tests/run.py components/python/tests/test_python_check.py

@@ -257,7 +257,7 @@ def test_a_config_that_raises_an_env_limit_is_refused_and_one_that_lowers_it_pas
     assert not lint.lint_config_limits(model.Kit(KIT, project()))
 
 
-def test_forge_extend_review_cannot_be_disabled_or_weakened():
+def test_forge_extend_review_and_standards_cannot_be_disabled_or_weakened():
     for change in ({"when": "never"}, {"tier": "balanced"}, {"effort": "medium"}, None):
         k = kit_copy()
 
@@ -269,6 +269,20 @@ def test_forge_extend_review_cannot_be_disabled_or_weakened():
                 ep["review"].update(change)
         edit_yaml(k / "components/forge/mode.yaml", f)
         has(k, "components/forge/mode.yaml", "forge.extend must declare review", "cannot be disabled")
+    for mode, feature, step_id, before in (("forge", "extend", "release-standards", None),
+                                           ("delivery", "build", "standards", None),
+                                           ("forge", "create", "standards", "fill")):
+        k = kit_copy()
+
+        def move(d, feature=feature, step_id=step_id, before=before):
+            steps = d["spec"]["features"][feature]["steps"]
+            step = next(s for s in steps if s["id"] == step_id)
+            steps.remove(step)
+            if before:
+                steps.insert([s["id"] for s in steps].index(before), step)
+        edit_yaml(k / f"components/{mode}/mode.yaml", move)
+        found = [p for p in problems(k) if "standards.check/v1.findings" in p]
+        assert len(found) == 1 and f"{mode}.{feature}: role builder" in found[0], found
 
 
 def test_kind_scoped_rules_are_linted():

@@ -31,7 +31,8 @@ spec:
             components/improve/connectors/improve-detect, components/improve/connectors/improve-store,
             components/improve/connectors/ledger,
             components/improve/interfaces, components/tools/interfaces,
-            components/tools/envs/plan-writer.yaml,
+            components/python, components/comments,
+            components/tools/envs/plan-writer.yaml, requirements-dev.txt,
             docs, tests, README.md]
   tiers: [balanced, deep]          # no fast tier for framework changes
   effects: [read, write]

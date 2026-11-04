@@ -13,6 +13,7 @@ import yaml
 from . import boundary, checks, config as cfgmod, contenttypes, model, playbook as pbk, rules as rulesmod, workflows as wfmod
 
 MANDATORY_REVIEW = {"forge.extend": {"when": "always", "tier": "deep", "effort": "high"}}
+STANDARDS_RUN = f"{model.STANDARDS_IFACE}.findings"
 TOOL_NAMES = {"Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch", "Task", "Agent"}
 
 
@@ -690,6 +691,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     out += lint_components(kit)
     out += lint_protection(kit)
     out += lint_owner_only(kit)
+    out += lint_standards_steps(kit)
     out += lint_ownership(kit)
     out += lint_case_and_manifests(kit)
     out += lint_config_schemas(kit)
@@ -849,6 +851,7 @@ def _protected_paths_in_sync(kit: model.Kit) -> list[str]:
     if cmap is None:
         return []
     every, out = kit.protected_paths, []
+    doc_of = {label: doc for doc, label in model.PROTECTION_KIND.items()}
     for env in sorted(kit.docs["Environment"].values(), key=lambda d: d.name):
         writes = [os.path.normpath(w).replace(os.sep, "/") for w in env.spec.get("fs", {}).get("write", [])]
         if any(kit.covers(w) for w in writes):
@@ -860,6 +863,7 @@ def _protected_paths_in_sync(kit: model.Kit) -> list[str]:
             m = re.fullmatch(r"components/([^/]+)(?:/envs/([^/]+)\.yaml|/connectors/([^/]+))?", w)
             kinds = [("env", m[2])] if m and m[2] else [("connector", m[3])] if m and m[3] else \
                     [("mode", m[1]), ("connector", m[1])] if m else []
+            kinds = [(k, n) for k, n in kinds if kit.get(doc_of[k], n)]
             if kinds and not any(kit.protected.reserved(k, n) for k, n in kinds):
                 out.append(f"{env.rel}: env {env.name} fs.write names {w}, which the protected: block of "
                            f"framework/kernel.yaml does not list; remove it or protect the {kinds[0][0]}")
@@ -876,6 +880,44 @@ def lint_owner_only(kit: model.Kit) -> list[str]:
                     out.append(f"{_where(md.path, _line_of(md.path, re.escape(st['run'])))}: step {st.get('id')} of "
                                f"{md.name}.{ep_name} runs {st['run']}, which is ownerOnly: only the owner's command "
                                f"reaches it (`bay approve <F-id>` in a terminal); no step may")
+    return out
+
+
+def _writes_checked(env: model.Doc, globs: list[str]) -> bool:
+    """The env may write a folder or a file one of the language globs matches."""
+    paths = (env.spec.get("fs") or {}).get("write") or []
+    return any(Path(p).suffix == "" or any(fnmatch.fnmatch(Path(p).name, g) for g in globs) for p in paths)
+
+
+def _last_checked_writers(kit: model.Kit, md: model.Doc, ep: dict, steps: list[dict], globs: list[str]) -> dict:
+    """{role: index of its last step} for each role of the feature that may write checked files."""
+    last = {}
+    for i, st in enumerate(steps):
+        role = model.step_role(st, ep)
+        role_doc = kit.docs["Role"].get(role)
+        env = kit.docs["Environment"].get(model.role_env(md.spec, ep, st, role))
+        if role_doc and env and role_doc.spec.get("access") == "write" and _writes_checked(env, globs):
+            last[role] = i
+    return last
+
+
+def lint_standards_steps(kit: model.Kit) -> list[str]:
+    """A role that may write checked files needs a standards step after its last step, once an env binds checkers."""
+    globs = [g for c in kit.docs["Component"].values() for g in (c.spec.get("language") or {}).get("files", [])]
+    bound = any(model.STANDARDS_IFACE in (e.spec.get("bind") or {}) for e in kit.docs["Environment"].values())
+    if not globs or not bound:
+        return []
+    out = []
+    for md in sorted(kit.docs["Mode"].values(), key=lambda d: d.name):
+        for ep_name, ep in (md.spec.get("features") or {}).items():
+            steps = [st for st in ep.get("steps") or [] if isinstance(st, dict)]
+            for role, i in _last_checked_writers(kit, md, ep, steps, globs).items():
+                if not any(st.get("run") == STANDARDS_RUN for st in steps[i + 1:]):
+                    sid = steps[i].get("id")
+                    out.append(f"{_where(*_step_where(md, ep_name, sid))}: {md.name}.{ep_name}: role {role} may write "
+                               f"files a language component checks in its last step {sid}, and no step after it runs "
+                               f"{STANDARDS_RUN}; add `- {{ id: standards, run: {STANDARDS_RUN}, "
+                               f"with: {{ base: \"$call.base\" }} }}` after it")
     return out
 
 

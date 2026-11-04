@@ -25,7 +25,7 @@ def test_bay_new_mode_is_lint_clean_and_resolves():
     assert lint.run(k) == []
     s = model.resolve(model.Kit(k))
     f = s.modes["release-notes"].features["run"]
-    assert f.review["when"] == "always" and [st.kind for st in f.steps] == ["role", "review"]
+    assert f.review["when"] == "always" and [st.kind for st in f.steps] == ["role", "code", "review"]
 
 
 def test_feature_role_env_connector_scaffolds_are_lint_clean():

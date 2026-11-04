@@ -9,6 +9,7 @@ spec:
   bind:
     forge.scaffold/v1: scaffold
     improve.detect/v1: improve-detect       # forge.extend's dead-code check
+    standards.check/v1: [python-check, comments-check]
     session.events/v1: ledger
     review.verdicts/v1: ledger
     artifacts.read/v1: artifact-graph

@@ -1,4 +1,4 @@
-"""comments-check: one finding per comment line, compared with the call's start commit."""
+"""comments-check cases, run by the python-check test through bay.standards.check."""
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -66,7 +66,7 @@ def new_in(base: dict, tree: dict, kit: Path, rename: tuple[str, str] | None = N
         cleanup(repo)
 
 
-def test_comments_check_blocks_a_file_whose_comment_lines_rise():
+def comments_check_blocks_a_file_whose_comment_lines_rise():
     kit = make_kit()
     out = new_in({"a.py": "x = 1\n", "d.py": DOC_ONE}, {"a.py": "x = 1\n# note\n", "d.py": DOC_TWO}, kit)
     found = sorted((r["file"], r["line"], r["message"]) for r in out["new"])

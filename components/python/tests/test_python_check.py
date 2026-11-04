@@ -8,10 +8,11 @@ from types import SimpleNamespace
 
 import yaml
 
-from helpers import KIT, cleanup, connector_pkg, tmpdir
+from helpers import KIT, cleanup, connector_pkg, load_module, tmpdir
 
 from bay import standards
 
+COMMENTS_CASES = KIT / "components/comments/tests/comments_cases.py"
 REAL_RUN = standards.run_module
 python_check = connector_pkg("python-check", "python_check")
 LANGUAGE = yaml.safe_load((KIT / "components/python/component.yaml").read_text())["spec"]["language"]
@@ -160,3 +161,4 @@ def test_python_findings_are_blocked_only_when_new_against_the_call_start():
     finally:
         standards.run_module = REAL_RUN
     planted_config_plugin_and_module_are_ignored()
+    load_module(COMMENTS_CASES).comments_check_blocks_a_file_whose_comment_lines_rise()

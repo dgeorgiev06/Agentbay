@@ -27,5 +27,6 @@ spec:
       review: { role: reviewer, when: always, tier: balanced, effort: medium }
       steps:
         - { id: implement, role: builder, out: Result, task: "Implement the deliverable and return a Result." }
+        - { id: standards, run: standards.check/v1.findings, with: { base: "$call.base" } }
   roles: { researcher: research, builder: workspace, reviewer: workspace }   # role -> env
-  needs: [workspace.read/v1, workspace.write/v1, git.read/v1, web.research/v1]   # what its roles may use
+  needs: [workspace.read/v1, workspace.write/v1, git.read/v1, web.research/v1, standards.check/v1]   # what its roles may use

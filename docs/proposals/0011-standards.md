@@ -178,6 +178,18 @@ The plan step replayed PRs #20 to #27 and found the per-file comment counter wou
 5. **The plan step's amendments are taken:** `requirements-dev.txt` in framework-dev's write list; `components/python` and `components/comments` under `owns:` in `framework/kernel.yaml`; the plan's security fixes (configs read from the merge-base export, `python3 -I -m` for every tool call, the guard requiring the protected config paths, `# mypy:` and `type: ignore` reported as findings, `standards.check/v1` dispatcherOnly).
 6. **Exceptions:** slice 0 removes roughly 870 lines from `bay/` and several hundred from the kit, more than items 1 to 4 add, so the `bay_lines` and `kit_python_lines` exceptions are no longer needed; the release writes the lower ceilings. `tests` takes the plan's merge: 463.
 
+## Owner decisions on reuse (2026-11-04; these replace anything above that disagrees)
+
+The owner asked that every mode writing code can use the check and that another language is easy to add. Four changes, decided in chat ("Yes"):
+
+1. **The base is the call's start commit.** The dispatcher records `git rev-parse HEAD` when any call starts and a step reads it as `$call.base`. `forge.extend`, `delivery.build` and any other feature use `with: { base: "$call.base" }`. This closes a hole in the draft: with base `HEAD`, a delivery builder that commits its work would make every finding look existing. A project with no git repository has no base and the step ends blocked, naming the reason.
+2. **The dispatcher owns the comparison; a checker only reports.** `standards.check/v1` becomes one operation, `findings { root }`: run the tools on one folder and return `{file, line, rule, message}` rows. The dispatcher's standards step exports the base to a temporary folder (`git archive`, extracted with `filter="data"`, removed on exit), asks every bound checker for findings on the base and on the working tree, compares them as a multiset keyed by file, rule and message (renames followed with `git diff -M`), and blocks on anything new. The configs are read from the base. Another language is then one folder (a checker of about 40 lines, its config, and its comment syntax in its `component.yaml`) plus its name in the binding lists; no mode, role, playbook or kernel edit.
+3. **Comments are one checker for every language.** `comments-check` holds the rule and the counter; each language component declares only its comment syntax (python: `#` and docstrings; a future go: `//` and `/* */`).
+4. **A feature that writes code must have the step.** A new lint rule: a feature with a role whose env may write a path a bound checker covers, and no `standards` step after that role's last step, is a gap that names the feature. A future mode that writes Python cannot ship without the check.
+5. **A project keeps its own config.** In a project built with `--project`, a `ruff.toml`, `pyproject.toml` ruff section or `mypy.ini` at the project root, read from the base commit, replaces the kit default for that project. The no-comments rule is fixed for kit code and is a project setting elsewhere, on by default.
+
+Cost: about +45 `bay_lines` (start commit, the comparison moved into the dispatcher, the lint rule), and the python checker loses about the same in kit Python. Both still end well under today's ceilings after slice 0. One more test, merged into an existing one, so `tests` stays 463.
+
 ## Open decisions, with my recommendation
 
 1. **Builders and reviewers get `ruff check` and `mypy` as commands (item 2).** Cost: the flag list in `guard.py`, +14 `bay_lines`. The alternative is the code step only, where a builder learns a finding after the whole implement step. Recommended: give the commands; it is what 0020 did for tests, and the cost is in the exception.

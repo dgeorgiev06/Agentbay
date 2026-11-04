@@ -981,9 +981,81 @@ def lint_case_and_manifests(kit: model.Kit) -> list[str]:
     return list(dict.fromkeys(out))
 
 
-def _home(path: Path) -> str:
-    """The `<tier>/<name>` folder under components/ that holds `path`."""
-    return re.search(r"components/((?:base|modes)/[^/]+)", path.as_posix()).group(1)
+def _home(path: Path) -> str | None:
+    """The `<tier>/<name>` folder under components/ that holds `path`, or None for a path outside it."""
+    found = re.search(r"components/((?:base|modes)/[^/]+)", path.as_posix())
+    return found.group(1) if found else None
+
+
+def _mode_name(home: str | None) -> str | None:
+    """The mode name of a `modes/<name>` home, or None for a base home or no home."""
+    if home is None:
+        return None
+    tier, _, name = home.partition("/")
+    return name if tier == "modes" else None
+
+
+def _env_connectors(env: model.Doc) -> list[str]:
+    """The connectors an env binds, online and offline."""
+    bound = list((env.spec.get("bind") or {}).values())
+    bound += list(((env.spec.get("offline") or {}).get("bind") or {}).values())
+    names: set[str] = set()
+    for binding in bound:
+        if not isinstance(binding, dict):
+            names.update(_as_list(binding))
+    return sorted(names)
+
+
+def _mode_uses(kit: model.Kit, md: model.Doc, home: str, types: dict[str, Any]) -> list[tuple[str, str | None]]:
+    """What a mode uses, as (description, home folder): content types it reads and connectors its envs bind."""
+    uses: list[tuple[str, str | None]] = []
+    for kind in _as_list(md.spec.get("reads")):
+        type_name = kind.partition("/")[0]
+        if type_name in types:
+            uses.append((f"reads content type {kind}", _home(types[type_name].dir)))
+    envs = kit.docs["Environment"]
+    env_names = set(model.mode_envs(md))
+    for env in envs.values():
+        if _home(env.path) == home:
+            env_names.add(env.name)
+    for env_name in sorted(env_names & set(envs)):
+        for conn in _env_connectors(envs[env_name]):
+            if conn in kit.docs["Connector"]:
+                description = f"uses env {env_name}, which binds connector {conn}"
+                uses.append((description, _home(kit.docs["Connector"][conn].path)))
+    return uses
+
+
+def _undeclared_uses(md: model.Doc, home: str, composes: list[str], uses: list[tuple[str, str | None]]) -> list[str]:
+    """Uses of another user mode that the mode does not compose."""
+    out: list[str] = []
+    for description, owner in uses:
+        owner_mode = _mode_name(owner)
+        if owner_mode is None or owner == home or owner_mode in composes:
+            continue
+        out.append(f"{model.rel(md.path)}: mode {md.name} {description}, which lives in mode {owner_mode}; add "
+                   f"composes: [{owner_mode}] to {md.name}'s mode.yaml, or ask forge.extend to move it to "
+                   f"components/base/")
+    return out
+
+
+def _composes_problems(kit: model.Kit, md: model.Doc, home: str, composes: list[str],
+                       uses: list[tuple[str, str | None]]) -> list[str]:
+    """A mode composes only other user modes, and only ones it uses."""
+    where = _where(md.path, _line_of(md.path, r"^\s+composes:"))
+    if composes and _mode_name(home) is None:
+        return [f"{where}: base mode {md.name} declares composes; only modes under components/modes/ compose"]
+    used_homes = {owner for _, owner in uses}
+    out: list[str] = []
+    for name in composes:
+        target = kit.get("Mode", name)
+        target_home = _home(target.path) if target else None
+        if target is None or target is md or _mode_name(target_home) is None:
+            out.append(f"{where}: mode {md.name} composes {name}, which is not another mode "
+                       f"under components/modes/")
+        elif target_home not in used_homes:
+            out.append(f"{where}: mode {md.name} composes {name} but uses nothing of it; remove it from composes")
+    return out
 
 
 def lint_composition(kit: model.Kit) -> list[str]:
@@ -992,33 +1064,12 @@ def lint_composition(kit: model.Kit) -> list[str]:
     types = contenttypes.scan(kit.root)[0]
     for md in kit.docs["Mode"].values():
         home = _home(md.path)
-        composes = _as_list(md.spec.get("composes"))
-        where = _where(md.path, _line_of(md.path, r"^\s+composes:"))
-        envs = {*model.mode_envs(md), *(e.name for e in kit.docs["Environment"].values() if _home(e.path) == home)}
-        uses = [(f"reads content type {k}", _home(types[k.split("/")[0]].dir))
-                for k in _as_list(md.spec.get("reads")) if k.split("/")[0] in types]
-        for name in sorted(envs & set(kit.docs["Environment"])):
-            spec = kit.docs["Environment"][name].spec
-            binds = [*(spec.get("bind") or {}).values(), *((spec.get("offline") or {}).get("bind") or {}).values()]
-            for conn in sorted({c for b in binds if not isinstance(b, dict) for c in _as_list(b)}):
-                if conn in kit.docs["Connector"]:
-                    uses.append((f"uses env {name}, which binds connector {conn}",
-                                 _home(kit.docs["Connector"][conn].path)))
-        for what, owner in uses:
-            if owner.startswith("modes/") and owner != home and owner[6:] not in composes:
-                out.append(f"{model.rel(md.path)}: mode {md.name} {what}, which lives in mode {owner[6:]}; add "
-                           f"composes: [{owner[6:]}] to {md.name}'s mode.yaml, or ask forge.extend to move it to "
-                           f"components/base/")
-        if composes and not home.startswith("modes/"):
-            out.append(f"{where}: base mode {md.name} declares composes; only modes under components/modes/ compose")
+        if home is None:
             continue
-        for name in composes:
-            target = kit.get("Mode", name)
-            if target is None or target is md or not _home(target.path).startswith("modes/"):
-                out.append(f"{where}: mode {md.name} composes {name}, which is not another mode "
-                           f"under components/modes/")
-            elif _home(target.path) not in {owner for _, owner in uses}:
-                out.append(f"{where}: mode {md.name} composes {name} but uses nothing of it; remove it from composes")
+        composes = _as_list(md.spec.get("composes"))
+        uses = _mode_uses(kit, md, home, types)
+        out += _undeclared_uses(md, home, composes, uses)
+        out += _composes_problems(kit, md, home, composes, uses)
     return out
 
 

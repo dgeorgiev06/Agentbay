@@ -41,7 +41,7 @@ def count(repo: Path) -> dict[str, int]:
     paths = [p for p in out.split("\0") if p and (repo / p).is_file()]
     py = [p for p in paths if p.endswith(".py")]
     kit = [p for p in py if p.split("/")[0] in ("components", "adapters") and "tests" not in p.split("/") and core(p)]
-    read = lambda p: (repo / p).read_text(encoding="utf-8")        # noqa: E731
+    read = lambda p: (repo / p).read_text(encoding="utf-8", newline="")        # noqa: E731
     bay = [p for p in py if p.startswith("bay/")]
     return {
         "bay_lines": sum(_lines(repo / p) for p in bay),

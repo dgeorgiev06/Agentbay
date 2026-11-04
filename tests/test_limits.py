@@ -6,8 +6,9 @@ from bay import limits
 
 FILES = {
     "bay/cli.py": "sub.add_parser('a')\nsub.add_parser('b')\n",
-    # 121 characters is long, 120 is not; a form feed is no line break, so the first line is one of 141 characters
-    "bay/util.py": f"{'a' * 70}\x0c{'b' * 70}\n{'#' * 121}\n{'#' * 120}\n",
+    # 121 characters is long, 120 is not; a form feed and a lone CR are no line break, so each of the first two
+    # lines is one of 141 characters
+    "bay/util.py": f"{'a' * 70}\x0c{'b' * 70}\n{'a' * 70}\r{'b' * 70}\n{'#' * 121}\n{'#' * 120}\n",
     "components/c/c.py": f"y = 1\nz = 2\n{'#' * 121}",                       # no final newline: still 3 lines
     "components/c/tests/test_c.py": f"def test_a():\n    pass\n\n\ndef test_b():\n    pass\n{'#' * 121}\n",
     "framework/roles/r.yaml": "x\n", "framework/rules/r.yaml": "x\n", "schemas/s.json": "{}\n",
@@ -15,8 +16,8 @@ FILES = {
     "framework/kernel.yaml": "owns: []\nprotected: { paths: [components/c], mode: [], env: {}, connector: [] }\n",
     "components/u/u.py": f"w = 1\n{'#' * 121}\n", "components/u/tests/test_u.py": "def test_u():\n    pass\n",
 }
-NOW = {"bay_lines": 5, "kit_python_lines": 3, "cli_commands": 2, "framework_folders": 2, "schemas": 2,
-       "top_level_folders": 4, "tests": 2, "long_lines": 3}
+NOW = {"bay_lines": 6, "kit_python_lines": 3, "cli_commands": 2, "framework_folders": 2, "schemas": 2,
+       "top_level_folders": 4, "tests": 2, "long_lines": 4}
 
 
 def _yaml(ceilings):

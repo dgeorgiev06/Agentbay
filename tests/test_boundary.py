@@ -186,11 +186,13 @@ def test_repo_root_files_pass_but_a_core_edit_does_not_and_the_kernel_owns_the_c
 
 
 def test_docs_check_names_instances_outside_fences_and_fails():
-    readme = "# kit\nUse the mail mode.\n```\nmodes/mail/ and local\n```\nSee git.read/v1 and mailbox.\n"
-    rep = _check({"README.md": readme}, touches=["README.md"], docs=True)
-    assert [(h["file"], h["line"], h["name"]) for h in rep.doc_hits] == [("README.md", 2, "mail")]
+    readme = "# kit\nUse the mail mode.\n```\nmodes/mail/ and local\n```\nSee git.read/v1 and mailbox.\nThe imap source.\n"
+    nested = "components/modes/mail/connectors/imap/connector.yaml"
+    rep = _check({"README.md": readme, nested: "x\n"}, touches=["README.md", nested], docs=True)
+    assert [(h["file"], h["line"], h["name"]) for h in rep.doc_hits] == [("README.md", 2, "mail"),
+                                                                         ("README.md", 7, "imap")]
     assert rep.exit_code == 1 and "README.md:2: names extension mode 'mail'" in rep.lines()[0]
-    assert "B-11 docs: 1 hits" in rep.summary() and not rep.failures
+    assert "B-11 docs: 2 hits" in rep.summary() and not rep.failures
     clean = _check({"README.md": "# kit\nUse a mode.\n```\nmail\n```\n"}, touches=["README.md"], docs=True)
     assert clean.doc_hits == [] and clean.exit_code == 0
     texts = {"docs/DESIGN.md": "a `components/modes/news/` b\n~~~\nnews\n~~~\n"}

@@ -449,8 +449,11 @@ def instance_names(paths: list[str], cmap: ComponentMap) -> dict[str, str]:
     names = {}
     for p in paths:
         rt = root(p)
-        if rt and p[len(rt[0]):] in MANIFEST_KINDS and cmap.owner(rt[0]) is None:
-            names.setdefault(rt[1], MANIFEST_KINDS[p[len(rt[0]):]])
+        file = posixpath.basename(p)
+        if rt is None or file not in MANIFEST_KINDS or cmap.owner(rt[0]):
+            continue
+        if p == rt[0] + file or p.startswith("components/modes/"):
+            names.setdefault(posixpath.basename(posixpath.dirname(p)), MANIFEST_KINDS[file])
     return names
 
 

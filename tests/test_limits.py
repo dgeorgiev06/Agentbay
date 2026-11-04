@@ -5,16 +5,17 @@ from helpers import tmpdir
 from bay import limits
 
 FILES = {
-    "bay/cli.py": "sub.add_parser('a')\nsub.add_parser('b')\n", "bay/util.py": "x = 1\n",
-    "components/c/c.py": "y = 1\nz = 2",                                     # no final newline: still 2 lines
-    "components/c/tests/test_c.py": "def test_a():\n    pass\n\n\ndef test_b():\n    pass\n",
+    "bay/cli.py": "sub.add_parser('a')\nsub.add_parser('b')\n",
+    "bay/util.py": f"x = 1\n{'#' * 121}\n{'#' * 120}\n",                       # 121 characters is long, 120 is not
+    "components/c/c.py": f"y = 1\nz = 2\n{'#' * 121}",                       # no final newline: still 3 lines
+    "components/c/tests/test_c.py": f"def test_a():\n    pass\n\n\ndef test_b():\n    pass\n{'#' * 121}\n",
     "framework/roles/r.yaml": "x\n", "framework/rules/r.yaml": "x\n", "schemas/s.json": "{}\n",
     "schemas/data/d.json": "{}\n",
     "framework/kernel.yaml": "owns: []\nprotected: { paths: [components/c], mode: [], env: {}, connector: [] }\n",
-    "components/u/u.py": "w = 1\n", "components/u/tests/test_u.py": "def test_u():\n    pass\n",
+    "components/u/u.py": f"w = 1\n{'#' * 121}\n", "components/u/tests/test_u.py": "def test_u():\n    pass\n",
 }
-NOW = {"bay_lines": 3, "kit_python_lines": 2, "cli_commands": 2, "framework_folders": 2, "schemas": 2,
-       "top_level_folders": 4, "tests": 2}
+NOW = {"bay_lines": 5, "kit_python_lines": 3, "cli_commands": 2, "framework_folders": 2, "schemas": 2,
+       "top_level_folders": 4, "tests": 2, "long_lines": 2}
 
 
 def _yaml(ceilings):

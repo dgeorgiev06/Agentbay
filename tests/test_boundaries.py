@@ -499,6 +499,7 @@ def test_se_more_git_flags_and_flag_values_are_path_checked():
     try:
         g = guard_for(p)
         for cmd in ("git diff --pathspec-from-file=list.txt", "git log -Oorder.txt", "git diff -O order",
+                    "git diff -pOorder.txt", "git diff -RO.claude/x", "git log -pOorder.txt", "git log -pO order.txt",
                     "git diff --open-files-in-pager=vi", "git log --format=x --since=.agentbay/x",
                     "git diff --src-prefix=.claude/x",
                     # git and argparse take any unambiguous prefix of a long option (0020 round 1)

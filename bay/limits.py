@@ -17,7 +17,7 @@ from . import boundary, proposal
 
 FILE = "framework/limits.yaml"
 MEASURES = ("bay_lines", "kit_python_lines", "cli_commands", "framework_folders", "schemas", "top_level_folders",
-            "tests")
+            "tests", "long_lines")
 _TEST_FILE = re.compile(r"(?:tests|(?:components|adapters)/(?:.+/)?tests)/test_[^/]*\.py")
 
 
@@ -30,7 +30,7 @@ def count(repo: Path) -> dict[str, int]:
     """Each measure: python lines in bay/; python lines in adapters and protected components (tests/ folders
     excluded); `sub.add_parser` calls in bay/cli.py; folders directly under framework/; files in schemas/; top-level
     folders; `def test_` at module level in the test files tests/run.py runs, only in tests/, adapters and protected
-    components (framework/kernel.yaml)."""
+    components (framework/kernel.yaml); lines over 120 characters in the python files the first two measures count."""
     kernel = repo / "framework/kernel.yaml"
     if not kernel.is_file():
         raise RuntimeError("framework/kernel.yaml does not exist; the limits count the protected components it lists")
@@ -42,21 +42,24 @@ def count(repo: Path) -> dict[str, int]:
     py = [p for p in paths if p.endswith(".py")]
     kit = [p for p in py if p.split("/")[0] in ("components", "adapters") and "tests" not in p.split("/") and core(p)]
     read = lambda p: (repo / p).read_text(encoding="utf-8")        # noqa: E731
+    bay = [p for p in py if p.startswith("bay/")]
     return {
-        "bay_lines": sum(_lines(repo / p) for p in py if p.startswith("bay/")),
+        "bay_lines": sum(_lines(repo / p) for p in bay),
         "kit_python_lines": sum(_lines(repo / p) for p in kit),
         "cli_commands": len(re.findall(r"\bsub\.add_parser\(", read("bay/cli.py"))),
         "framework_folders": len({p.split("/")[1] for p in paths if p.startswith("framework/") and p.count("/") > 1}),
         "schemas": sum(p.startswith("schemas/") for p in paths),
         "top_level_folders": len({p.split("/")[0] for p in paths if "/" in p}),
         "tests": sum(len(re.findall(r"^def test_", read(p), re.M)) for p in paths if _TEST_FILE.fullmatch(p) and (p.startswith("tests/") or core(p))),
+        "long_lines": sum(len(line) > 120 for p in bay + kit for line in read(p).splitlines()),
     }
 
 
-def _ceilings(text: str, where: str) -> dict[str, int]:
+def _ceilings(text: str, where: str, at_base: bool = False) -> dict[str, int]:
     doc = yaml.safe_load(text)
-    if not (isinstance(doc, dict) and set(doc) == set(MEASURES)
-            and all(isinstance(v, int) and not isinstance(v, bool) for v in doc.values())):
+    names = set(doc) if isinstance(doc, dict) else {None}      # the base may predate a measure, the file may not
+    named = names <= set(MEASURES) if at_base else names == set(MEASURES)
+    if not (named and all(isinstance(v, int) and not isinstance(v, bool) for v in doc.values())):
         raise RuntimeError(f"{where}: must hold exactly one whole number for each of {', '.join(MEASURES)}")
     return doc
 
@@ -80,7 +83,7 @@ def check(repo: Path, base: str | None = None, proposal_text: str | None = None,
     text = path.read_text(encoding="utf-8")
     ceil = _ceilings(text, FILE)
     before = boundary.show(repo, base, FILE) if base else None
-    old = _ceilings(before, f"{FILE} at {base}") if before else {}
+    old = _ceilings(before, f"{FILE} at {base}", at_base=True) if before else {}
     allowed = _exceptions(proposal_text)
     problems, notes = [], []
     for m, n in count(repo).items():

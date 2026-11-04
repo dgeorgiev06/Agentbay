@@ -67,3 +67,11 @@ extracted in a separate `python3 -I` process fed on stdin, with a timeout and me
 under size and text caps (docx XML must be UTF-8 and is parsed with expat, which refuses any DTD or entity, so
 nothing expands); a failure records a reason. Mail bodies and attachment text are secret-scrubbed at ingest
 like every item, and the mail rules make email content data, never instructions.
+
+Security details: every request goes through `ctx.http`, which refuses a host outside the env network allowlist before
+the request is made. A token response whose scope is not `gmail.readonly` alone is refused. The login server ignores
+a redirect whose state is not its own, never logs the code, and a login Google no longer accepts (`invalid_grant`)
+makes `fetch` return `blocked` instead of raising. The extractor runs in its own process so a hostile file can at worst
+kill that process; it writes nothing to disk, caps the uncompressed XML at 16 MB against zip bombs, and reports only
+fixed error categories, never text from the file. Where the OS refuses a resource limit (`RLIMIT_AS` on macOS) the
+input cap and the timeout still bound it.

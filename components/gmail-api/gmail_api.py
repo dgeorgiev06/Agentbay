@@ -1,49 +1,4 @@
-"""gmail-api: items.source/v1 (email/v1 items) over the official Gmail API v1, read-only.
-
-Endpoints called (all GET on https://gmail.googleapis.com/gmail/v1/users/me, through ctx.http, which refuses any
-host outside the env network allowlist before the request is made):
-  /profile                          the account address (me) and the current historyId
-  /labels                           label id -> name
-  /messages?q=...                   messages.list with the native query (first sync, or after history expired)
-  /messages/{id}?format=full        one message (headers, body parts, attachment metadata)
-  /messages/{id}/attachments/{aid}  one attachment's bytes, only for types whose text is extracted
-  /history?startHistoryId=...       changes since the stored cursor (messages added, labels added or removed,
-                                    messages deleted)
-plus POST https://oauth2.googleapis.com/token (refresh_token grant; the authorization_code grant in `login`, run
-by `bay auth gmail-api`). No other method or endpoint is used: nothing can send, label, move or delete mail.
-
-Auth: OAuth 2.0 installed app, scope gmail.readonly only. GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET are the
-user's own Google Cloud OAuth client; GMAIL_REFRESH_TOKEN comes from `bay auth gmail-api` (loopback redirect on
-127.0.0.1 with PKCE) and lives in the secrets provider (keychain). Access tokens stay in memory for this call.
-An app in Google's "Testing" status gets refresh tokens that expire after 7 days: an expired or revoked login
-(invalid_grant) makes fetch return `blocked` naming `bay auth gmail-api`; it never raises.
-
-Selector -> Gmail search: from from:, to to:, in label:/in:, since after:, has: attachment has:attachment. Only
-fields where Gmail returns at least what the local matcher keeps are native (connector.yaml): subject, text and
-not, and values with `*`, are matched locally by the store (bay/selector.py split) and never reach here.
-
-Sync (connector.yaml changeFeed: the store follows the cursor and backfills): without a cursor, messages.list
-with the native query and after:<since> (and before:<until> for a backfill, which skips the storedIds), newest
-first, up to maxItems, then messages.get for each; the cursor is the mailbox historyId read before listing.
-checkIds not listed are re-read: 404 -> deleted. With a cursor, history.list from it (_incremental: every
-change to a stored message is read again, any age, so its labels are current and the store, which replaces
-labels (exactLabels), re-matches it; label-only changes to other messages are mostly ignored), bounded by
-maxItems on a history record boundary; messages in TRASH, SPAM or DRAFT come back as `removed`, deleted ones as
-`deleted`. history.list 404 (Gmail keeps history about a week) returns `cursorExpired` without reading
-anything, and the store re-lists its window. The connector reads no mode settings: every bound comes from the
-store's request.
-
-Limits: `maxItems` caps messages.get calls (what `billed` counts; Gmail reads cost nothing; a message is read at
-most once per sync). HTTP 429, 5xx and
-rate-limit 403s are retried with exponential backoff (Retry-After when given); when retries run out the call
-returns what it read, truncated, with a warning.
-
-Attachments: metadata always. Text only for docx (stdlib zipfile + XML), txt, csv and md, at most
-attachmentMaxBytes (10 MB) per file and attachmentMaxChars (200k) of text, extracted by extract.py in a separate
-`python3 -I` process with a timeout and memory, CPU and file-size limits; the bytes go through a pipe and never
-touch the disk. PDFs and everything else are metadata only. A failure records textChars 0 and a reason; it never
-fails the sync. The store secret-scrubs bodies and attachment text before anything is stored.
-"""
+"""gmail-api: items.source/v1 (email/v1 items) over the official Gmail API v1, read-only."""
 from __future__ import annotations
 
 import base64
@@ -68,12 +23,12 @@ from bay.util import duration, iso
 
 API = "https://gmail.googleapis.com/gmail/v1/users/me"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
-AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"     # opened in the user's browser, never fetched here
+AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN = "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN"
-LIST_MAX = 500                        # messages.list / history.list maxResults ceiling
+LIST_MAX = 500
 OUT_OF_SCOPE = {"TRASH", "SPAM", "DRAFT"}
-IGNORED_REMOVALS = {"UNREAD", "IMPORTANT"}      # read state and Gmail's own ranking never change the scope
+IGNORED_REMOVALS = {"UNREAD", "IMPORTANT"}
 SYSTEM_IN = {"inbox", "sent", "starred", "important", "snoozed", "chats", "drafts", "spam", "trash", "anywhere",
              "scheduled"}
 EXTRACT = Path(__file__).with_name("extract.py")
@@ -96,12 +51,11 @@ class QuotaExhausted(ConnectorError):
     pass
 
 
-# ------------------------------------------------------------------ pure helpers
 def b64url(data: str) -> bytes:
     """Gmail's base64url (padding optional). Raises ValueError on anything else."""
     try:
         return base64.urlsafe_b64decode(str(data) + "=" * (-len(str(data)) % 4))
-    except (ValueError, TypeError) as e:          # binascii.Error is a ValueError
+    except (ValueError, TypeError) as e:
         raise ValueError("not base64url") from e
 
 
@@ -142,9 +96,7 @@ def _terms(field: str, v) -> list[str]:
 
 
 def native_query(query: dict | None, since: str | None = None, until: str | None = None) -> str:
-    """The native part of a selector (bay/selector.py split) as a Gmail search string. Values of one field are
-    ORed ({a b}), fields ANDed. `has: link` is left to the store's local match. `until` (inclusive, to the
-    second) becomes before:<epoch + 1>."""
+    """The native part of a selector as a Gmail search string; `until` (inclusive) becomes before:<epoch + 1>."""
     parts = []
     for field in ("from", "to", "in", "has"):
         t = _terms(field, (query or {}).get(field))
@@ -192,7 +144,7 @@ def html_to_text(html: str) -> str:
     try:
         p.feed(html)
         p.close()
-    except Exception:                                     # malformed markup: keep what was parsed
+    except Exception:
         pass
     text = "".join(p.out)
     lines = [re.sub(r"[ \t ]+", " ", ln).strip() for ln in text.splitlines()]
@@ -207,9 +159,7 @@ _OUTLOOK_NEXT = re.compile(r"^\s*(Sent|Date):\s", re.I)
 
 
 def trim_quoted(text: str) -> str:
-    """Drop the quoted reply chain: everything from the first "On ... wrote:" (also wrapped over two lines),
-    "-----Original Message-----", an Outlook "From: / Sent:" header block or a ____ rule, and every line that
-    starts with ">". Keeps the original when nothing would be left."""
+    """Drop the quoted reply chain (On ... wrote:, Original Message, Outlook headers, > lines) unless nothing is left."""
     lines = text.replace("\r\n", "\n").split("\n")
     cut = len(lines)
     for i, ln in enumerate(lines):
@@ -241,20 +191,25 @@ def text_kind(name: str, mime: str) -> tuple[str | None, str | None]:
 
 
 def _limits(mem_mb: int, cpu_s: int):
-    def apply():                                         # runs in the child before exec
+    def apply():
         try:
             import resource
-        except ImportError:                              # pragma: no cover - not POSIX
+        except ImportError:
             return
         mem = mem_mb * 1024 * 1024
         for lim, val in (("RLIMIT_AS", mem), ("RLIMIT_DATA", mem), ("RLIMIT_CPU", cpu_s), ("RLIMIT_FSIZE", 0),
                          ("RLIMIT_CORE", 0)):
-            if hasattr(resource, lim):
-                try:
-                    resource.setrlimit(getattr(resource, lim), (val, val))
-                except (ValueError, OSError):            # e.g. RLIMIT_AS on macOS: extract.py's input cap (no
-                    pass                                 # entity expansion) and the timeout still bound it
+            _set_limit_if_allowed(resource, lim, val)
     return apply
+
+
+def _set_limit_if_allowed(resource, name: str, value: int) -> None:
+    """Set one resource limit; an OS that refuses it (RLIMIT_AS on macOS) is still bound by extract.py's caps."""
+    if hasattr(resource, name):
+        try:
+            resource.setrlimit(getattr(resource, name), (value, value))
+        except (ValueError, OSError):
+            return
 
 
 EXTRACT_ERRORS = {"not-docx": "not a readable docx file", "dtd": "docx with a DTD refused",
@@ -264,8 +219,7 @@ EXTRACT_ERRORS = {"not-docx": "not a readable docx file", "dtd": "docx with a DT
 
 
 def extract_text(data: bytes, kind: str, *, max_chars: int, timeout_s: int = 20, mem_mb: int = 512) -> tuple[str, str | None]:
-    """Run extract.py on `data` in a separate `python3 -I` process with a timeout and resource limits.
-    Returns (text, None) or ("", reason); never raises for a bad file."""
+    """Run extract.py on `data` in a separate `python3 -I` process with a timeout and resource limits."""
     cmd = [sys.executable, "-I", str(EXTRACT), kind, str(max_chars)]
     try:
         r = subprocess.run(cmd, input=data, capture_output=True, timeout=timeout_s, env={}, cwd=str(EXTRACT.parent),
@@ -321,7 +275,6 @@ def _decode(raw: bytes, charset: str) -> str:
         return raw.decode("utf-8", errors="replace")
 
 
-# ------------------------------------------------------------------ connector
 class GmailApi:
     def __init__(self, ctx):
         self.ctx = ctx
@@ -335,12 +288,11 @@ class GmailApi:
         self._access: str | None = None
         self._profile: dict | None = None
         self._labels: dict | None = None
-        self._cache: dict[str, tuple[str, dict | None]] = {}    # one sync calls fetch once per native query
-        self._dates: dict[str, str] = {}          # createdAt of every message read, kept or not (coverage)
+        self._cache: dict[str, tuple[str, dict | None]] = {}
+        self._dates: dict[str, str] = {}
         self.billed = 0
-        self.warnings: list[str] = []          # per-message notes (a body part that did not decode), per fetch
+        self.warnings: list[str] = []
 
-    # ------------------------------------------------------------ auth
     def _secret(self, name: str) -> str:
         val = self.ctx.secrets.get(name, optional=True)
         if not val:
@@ -368,7 +320,7 @@ class GmailApi:
         if r.status != 200 or not body.get("access_token"):
             raise ConnectorError(f"gmail-api: token refresh failed (HTTP {r.status}); try again later or {FIX}")
         granted = set(str(body.get("scope") or "").split())
-        if granted != {SCOPE}:                 # Google states the scope on refresh: refuse anything else, or none
+        if granted != {SCOPE}:
             what = "states no scope" if not granted else "grants more than gmail.readonly" if SCOPE in granted \
                 else "does not grant gmail.readonly"
             raise LoginNeeded(f"gmail-api: the stored login {what}; remove agentbay's access at "
@@ -379,8 +331,7 @@ class GmailApi:
             self.ctx.secrets.store(REFRESH_TOKEN, body["refresh_token"])
 
     def _get(self, path: str, params: dict | None = None):
-        """GET one Gmail API path with backoff on quota and server errors. The only request method this
-        connector uses on Gmail."""
+        """GET one Gmail API path with backoff on quota and server errors; the only request method used on Gmail."""
         if self._access is None:
             self._refresh()
         refreshed = False
@@ -419,14 +370,13 @@ class GmailApi:
             self._labels = {x["id"]: x.get("name") or x["id"] for x in (r.json() or {}).get("labels") or []}
         return self._labels
 
-    # ------------------------------------------------------------ items.source/v1.fetch
     def fetch(self, query: dict | None = None, since: str | None = None, until: str | None = None,
               cursor: str | None = None, maxItems: int = 100, checkIds: list[str] | None = None,
               storedIds: list[str] | None = None, localIn: list[str] | None = None) -> dict:
         run = {"items": {}, "deleted": [], "removed": [], "checked": [], "warnings": [], "truncated": False}
         new_cursor = cursor
         stored = set(storedIds or [])
-        billed0, req0 = self.billed, self.ctx.http.requests      # this call's share (the instance is reused)
+        billed0, req0 = self.billed, self.ctx.http.requests
         try:
             if cursor:
                 new_cursor = self._incremental(run, cursor, query or {}, maxItems, checkIds or [], stored,
@@ -444,7 +394,7 @@ class GmailApi:
         except QuotaExhausted as e:
             run["truncated"] = True
             run["warnings"].append(str(e))
-            new_cursor = cursor                       # resume from the old position next time
+            new_cursor = cursor
         run["warnings"] += self.warnings
         self.warnings = []
         items = sorted(run["items"].values(), key=lambda x: (x["createdAt"], x["extId"]), reverse=True)
@@ -459,12 +409,8 @@ class GmailApi:
 
     def _full(self, run: dict, query: dict, since: str | None, until: str | None, budget: int, check: list[str],
               stored: set[str]) -> str | None:
-        """messages.list with the native query, newest first, at most `budget` messages read; the cursor is
-        the historyId from before the listing, so changes made while listing are replayed next time. A backfill
-        (`until`) never reads a message the store already holds: history keeps those current."""
+        """messages.list with the native query, newest first, within `budget`; the cursor predates the listing."""
         hid = str(self.profile().get("historyId") or "") or None
-        # drafts never enter the store, so excluding them natively (an exact system-label filter) never narrows
-        # the local match and never spends a read on one
         q = " ".join(x for x in (native_query(query, since, until), "-in:drafts") if x)
         skip = stored if until else set()
         ids: list[str] = []
@@ -482,7 +428,7 @@ class GmailApi:
             seen.update(fresh)
             ids += [m for m in fresh if m not in skip]
             token = body.get("nextPageToken")
-            if len(ids) >= budget or not token or not fresh:      # a page with no new ids: stop (no endless paging)
+            if len(ids) >= budget or not token or not fresh:
                 break
         if len(ids) > budget or (len(ids) >= budget and token):
             run["truncated"] = True
@@ -490,10 +436,10 @@ class GmailApi:
         for mid in ids:
             self._take(run, mid)
         dates = [self._dates[m] for m in ids if m in self._dates]
-        if dates:                             # every message the listing read, kept or not: coverage moves past it
+        if dates:
             run["oldest"] = min(dates)
         listed = set(ids)
-        for xid in check:                     # stored, not listed now: deleted, trashed, relabeled or older
+        for xid in check:
             if xid in listed or self._take(run, xid) != "skipped":
                 run["checked"].append(xid)
         return hid
@@ -513,8 +459,7 @@ class GmailApi:
                 if _label(name).casefold() in want or lid.casefold() in want}
 
     def _added_matches(self, labels: set[str], native_in: set[str], local_in: list[str]) -> bool:
-        """Whether a label added to a message the store does not hold can bring it into scope: one the query's
-        `in` names natively, or one a local (wildcard) `in` value matches with the shared matcher."""
+        """Whether a label added to a message the store does not hold can bring it into scope."""
         if labels & native_in:
             return True
         if not local_in:
@@ -525,15 +470,7 @@ class GmailApi:
 
     def _incremental(self, run: dict, cursor: str, query: dict, budget: int, check: list[str],
                      stored: set[str], local_in: list[str] | None = None) -> str:
-        """history.list from the cursor. Every change to a stored message is read again (its labels may have
-        taken it out of scope, at any age). For messages the store does not hold: new messages are read unless
-        they arrive in trash, spam or drafts; an added label is read only when the query's `in` names it or a local
-        `in` value (localIn) matches it, and any removed label except UNREAD and IMPORTANT is read (restored from
-        trash or spam, or a `not: {in: ...}` such as unstarring may now match); every other label-only change
-        (UNREAD, IMPORTANT, STARRED or CATEGORY_* added, ...) is ignored. Paging stops at the
-        budget on a history record boundary and returns the last record read as the cursor, so the next sync
-        continues there (a record is never split: the first one is read whole even if it alone is over the
-        budget, so a replay always makes progress). Deletion checks are not needed: history reports deletions."""
+        """history.list from the cursor; every change to a stored message is read again, whatever its age."""
         changed: dict[str, None] = {}
         deleted: set[str] = set()
         in_ids: set[str] | None = None
@@ -566,7 +503,7 @@ class GmailApi:
                                 in_ids = self._in_label_ids(query) if query.get("in") else set()
                             if self._added_matches(labels, in_ids, local_in or []):
                                 want.append(mid)
-                        elif labels - IGNORED_REMOVALS:    # any other removal may restore it or let a `not` match
+                        elif labels - IGNORED_REMOVALS:
                             want.append(mid)
                 for x in h.get("messagesDeleted") or []:
                     mid = (x.get("message") or {}).get("id")
@@ -574,7 +511,7 @@ class GmailApi:
                         gone.append(str(mid))
                 fresh = [m for m in dict.fromkeys(want) if m not in changed]
                 if changed and len(changed) + len(fresh) > budget:
-                    stop = True                    # the next sync starts at this record
+                    stop = True
                     break
                 for mid in fresh:
                     changed[mid] = None
@@ -590,7 +527,7 @@ class GmailApi:
         for mid in changed:
             self._take(run, mid)
         run["deleted"] += sorted(deleted)
-        for xid in check:                     # only when asked; history already reports deletions
+        for xid in check:
             if self._take(run, xid) != "skipped":
                 run["checked"].append(xid)
         return done if stop else latest
@@ -609,7 +546,6 @@ class GmailApi:
         elif item is not None:
             run["items"][item["id"]] = item
 
-    # ------------------------------------------------------------ messages
     def _message(self, mid: str) -> tuple[str, dict | None]:
         """("item", item) | ("deleted", None) | ("removed", None) | ("skipped", None); cached per instance."""
         if mid in self._cache:
@@ -717,8 +653,7 @@ class GmailApi:
 
 
 def _walk(part: dict, plain: list[str], html: list[str], atts: list[dict], skipped: list[str]) -> None:
-    """Depth-first over a message payload: parts with a filename are attachments; the first text/plain and
-    text/html bodies are kept. A body part that does not decode is skipped, with the reason in `skipped`."""
+    """Depth-first over a message payload: files are attachments and the first text/plain and text/html are kept."""
     if part.get("filename"):
         atts.append(part)
         return
@@ -738,7 +673,6 @@ def _walk(part: dict, plain: list[str], html: list[str], atts: list[dict], skipp
     (plain if mt == "text/plain" else html).append(_decode(raw, _charset(part)))
 
 
-# ------------------------------------------------------------------ login (bay auth gmail-api)
 def pkce() -> tuple[str, str]:
     """(code_verifier, S256 code_challenge), RFC 7636."""
     verifier = _rand.token_urlsafe(64)
@@ -754,8 +688,7 @@ def auth_url(client_id: str, redirect: str, challenge: str, state: str) -> str:
 
 
 def wait_for_code(server, state: str, timeout_s: float) -> str:
-    """Serve the loopback redirect until Google sends the code back (or an error), at most timeout_s. A request
-    whose state is not this login's is ignored (its code is never used) and waiting goes on."""
+    """Serve the loopback redirect until Google sends the code or an error; a request with another state is ignored."""
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         server.timeout = max(0.1, deadline - time.monotonic())
@@ -764,7 +697,7 @@ def wait_for_code(server, state: str, timeout_s: float) -> str:
         if got is None:
             continue
         if not _rand.compare_digest(str(got.get("state") or ""), state):
-            server.got = None                # not this login's redirect (a stale tab, another site): keep waiting
+            server.got = None
             continue
         if got.get("error"):
             raise ConnectorError(f"Google did not grant access ({got['error']})")
@@ -778,7 +711,7 @@ def loopback_server(port: int = 0):
     from http.server import BaseHTTPRequestHandler, HTTPServer
 
     class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):  # noqa: N802
+        def do_GET(self):
             q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(self.path).query))
             if "code" in q or "error" in q:
                 self.server.got = q
@@ -791,7 +724,7 @@ def loopback_server(port: int = 0):
             self.end_headers()
             self.wfile.write(msg)
 
-        def log_message(self, *a):            # never print the code
+        def log_message(self, *a):
             pass
 
     srv = HTTPServer(("127.0.0.1", port), Handler)
@@ -801,9 +734,7 @@ def loopback_server(port: int = 0):
 
 def login(http, client_id: str, client_secret: str, *, open_browser, timeout_s: float = 300, say=print,
           port: int = 0) -> dict:
-    """Installed-app OAuth flow: PKCE, loopback redirect on 127.0.0.1, scope gmail.readonly only. Exchanges the
-    code at the token endpoint (through `http`, an allowlisted connect.Http) and returns the token response.
-    Refuses a grant that is broader than gmail.readonly or has no refresh token."""
+    """Installed-app OAuth flow with PKCE and a loopback redirect; refuses a grant broader than gmail.readonly."""
     verifier, challenge = pkce()
     state = _rand.token_urlsafe(24)
     srv = loopback_server(port)
@@ -843,8 +774,7 @@ def account_of(http, access_token: str) -> str | None:
 
 
 def cli_login(ctx) -> None:
-    """The connector's declared `login` entry, run by `bay auth gmail-api` (interactive terminal only). ctx gives
-    this connector's declared secrets through the env's provider, an Http limited to its hosts, and the browser."""
+    """The connector's declared `login` entry, run by `bay auth gmail-api` in an interactive terminal only."""
     cid, csec = ctx.secret(CLIENT_ID), ctx.secret(CLIENT_SECRET)
     if not cid or not csec:
         raise ConnectorError(f"store your Google OAuth client first (a 'Desktop app' client in your Google Cloud "

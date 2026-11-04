@@ -2,36 +2,48 @@
 
 ## Summary
 
-The proposal as amended in 161a0ac on feat/standards (main 8c395b0, 3.1.0): a new **slice 0** that removes every
-`#` comment and cuts every docstring to one line, then items 1 to 4. This plan implements nothing.
+This revision follows the proposal's "Owner decisions on reuse (2026-11-04)" (9aa7e8f on feat/standards, main
+8c395b0, 3.1.0). Slice 0 and its measurements are unchanged. Items 1 to 4 are re-planned. This plan implements
+nothing.
 
-- **Slice 0 is measured.** I ran a tokenize/ast removal script (appendix) on a scratch export of 161a0ac. It
-  changed 105 of the 110 Python files and removed 1578 lines. The suite passed before and after (575 tests). Every
-  file's syntax tree was identical apart from its docstrings. No golden or snapshot test pins comment or docstring
-  text. The only behaviour that changes is `bay --help`, which prints the `bay/cli.py` docstring; it moves to a
-  `USAGE` constant.
-- **The counts after slice 0.** `bay_lines` 9760 → 9074, `kit_python_lines` 5165 → 4880, `long_lines` 182 → 156
-  (script alone). After the hand pass, expect about 9125, 4880 and at most 145. Items 1 to 4 then add about +57 and
-  +172. Both measures end well under today's ceilings, so the only exception is `tests` 463. The release writes the
-  lower ceilings, and `comment_lines` starts at 0.
-- **The coordinator's counts cover only the top-level `tests/` folder.** The component and adapter tests hold 440
-  more comments, 35 more multi-line docstrings and 18 more `noqa` markers: 43 markers in all, not 25.
-- **Hand work.** 272 of the 341 cut docstrings need a new first line, because the old one stops mid-sentence or is
-  over 120 characters. About 40 comments and docstrings in the five security files carry a reason. Each one goes
-  to a name, an error message, a README line, or a doc that already states it (list in slice 0). Each `noqa` has a
-  named fix.
-- **The biggest risk is merge conflicts.** Slice 0 touches nearly every Python file, so every open branch
-  conflicts. It lands first, in seven commits, right after the gate.
+- **The base is the call's start commit.** Today a call records no commit when it starts. The state dict is built
+  at `bay/dispatch.py:70`, and the only commit it records is `head`, at the review step (`:393`). Steps substitute
+  `with:` values through `workflows.substitute` (`bay/workflows.py:292`, called at `bay/dispatch.py:529`), which
+  knows `$in`, `$steps` and `$config`. The plan adds `state["base"]` at `:70` and a `$call` namespace to
+  `substitute`. A call that `replaces` another keeps the other's base (decision M).
+- **The dispatcher owns the comparison.** A new module `bay/standards.py` holds the export, the copy of the
+  working tree, the rename map, the multiset comparison, the tool runner (`python3 -I -m`, list arguments, no
+  shell, a timeout) and the version probe. The git helpers move there from improve-detect through
+  `bay/boundary.py` (old decision G, now required). A checker only runs its tools on one folder and parses them.
+- **The interface needs one more field.** `findings { root }` alone cannot keep the change's own config out: the
+  run on the working tree must read the base's config, and a mypy `.py` plugin resolves next to its config file.
+  So the endpoint is `findings { root, configRoot }`, and the dispatcher always passes the base export as
+  `configRoot`. This is an amendment (decision I).
+- **The `comments:` block comes back**, inside a new optional `spec.language` block of
+  `schemas/component.schema.json`. Its `spec` has `additionalProperties: false` (`:24`), so the schema must change.
+  The change is additive; the number of schema files stays 16.
+- **The lint rule** is `lint_standards_steps` in `bay/lint.py`, next to `lint_owner_only` (`:913`), called from
+  `run()` after it (`:727`). With the checkers bound and no steps yet, it flags `forge.create`, `forge.extend` and
+  `delivery.build`. The proposal's wiring alone still leaves two: `forge.create` has no standards step, and
+  `forge.extend`'s builder writes `bay/__init__.py` in `release`, after review. The wiring adds a step after
+  `fill` and a second one after `release` (decision H, an amendment).
+- **Project config** comes from the base export (`configRoot`), read by the checker. The security fixes hold
+  because the dispatcher, not the checker, decides where `configRoot` points.
+- **Costs.** From slice 0's counts (`bay_lines` about 9125, `kit_python_lines` about 4880, `tests` 463), items 1 to
+  4 add about +206 to `bay_lines` and +65 to `kit_python_lines`. That is about 9331 and 4945, both under today's
+  9760 and 5165. The proposal's "+45" understates `bay/` and overstates the kit (amendment 4). `tests` stays 463.
 
 Amendments the proposal still needs are under "Before the gate".
 
 ## What I checked
 
-All runs used `git archive` exports in the scratchpad. For slice 0 that was an export of 161a0ac, turned into a
-scratch git repo so `bay check --limits` could count it. For the replay, scratch worktrees of f3cb194 (since
-removed). The tools were `python3 -I -m ruff` 0.17.3 and `python3 -I -m mypy` 2.4.1, with a scratch config
-standing in for `components/python/`: ruff `line-length = 120`, `select = ["E", "F", "W", "B"]`; mypy
-`strict = True`, `exclude = (^|/)tests/`.
+This revision is a reading of feat/standards at 9aa7e8f, with the line numbers cited. I ran no tool for it. The
+measurements below are from the earlier plan run and still hold, because 9aa7e8f changes only the proposal. All
+runs used `git archive` exports in the scratchpad. For slice 0 that was an export of 161a0ac, turned into a scratch
+git repo so `bay check --limits` could count it. For the replay, scratch worktrees of f3cb194 (since removed). The
+tools were `python3 -I -m ruff` 0.17.3 and `python3 -I -m mypy` 2.4.1, with a scratch config standing in for
+`components/python/`: ruff `line-length = 120`, `select = ["E", "F", "W", "B"]`; mypy `strict = True`,
+`exclude = (^|/)tests/`.
 
 - **Slice 0 on a scratch copy.** The script ran over every Python file git lists under `bay/`, `adapters/`,
   `components/` and `tests/`.
@@ -46,10 +58,10 @@ standing in for `components/python/`: ruff `line-length = 120`, `select = ["E", 
 | component and adapter `tests/` | 23 | 440 | 35 | 18 | 179 |
 | **all** | 110 | 1377 | 341 | 43 | 1578 |
 
-  - Outside the tests this matches the coordinator's 505 comments and 257 docstrings. The coordinator's test
-    figures (432 and 49) are `tests/` alone.
+  - Outside the tests this matches the coordinator's 505 comments and 257 docstrings.
   - After: 0 comment tokens (shebangs kept) and 0 docstring lines past the first. The suite gave 575 passed,
-    0 failed, before and after. `bay check --limits` gave the counts in the summary.
+    0 failed, before and after. `bay check --limits` gave `bay_lines` 9074, `kit_python_lines` 4880 and
+    `long_lines` 156 (script alone).
   - ruff on the four folders went from 643 findings to 561. E501 fell by 109 (long comments gone). The removed
     markers surfaced 13 E402, 11 E731 and 3 F401, which slice 0 fixes (list below).
   - 23 cut docstring lines are over 120 characters (11 of them in `bay/` and the kit), and 272 docstrings end
@@ -59,18 +71,16 @@ standing in for `components/python/`: ruff `line-length = 120`, `select = ["E", 
   all `error`, none `note` (type-arg 243, no-untyped-def 201, no-untyped-call 100).
 - **The `ruff` and `mypy` on PATH are not the pinned ones.** `ruff --version` prints 0.16.9 and `mypy --version`
   prints 2.3.1 (uv tool installs in `/root/.local/bin`). `python3 -m ruff` is 0.17.3 and `python3 -m mypy` is 2.4.1.
-  The old draft's figures came from the PATH tools. This decides how agents call them (decision A).
+  This decides how agents call them (decision A).
 - **Planted config and plugins (the security question).** I planted `ruff.toml` and `pyproject.toml` (with
   `select = ["ALL"]`) at the root and in a changed folder, and a `mypy.ini` whose `plugins =` names a file that
   writes a marker when imported.
-  - ruff with `--config <file>` ignored every planted file. Without `--config` it picked them up (26 findings
-    instead of the expected set).
+  - ruff with `--config <file>` ignored every planted file. Without `--config` it picked them up.
   - mypy with `--config-file <file>` ignored both planted configs, and the plugin did not run. **Without
     `--config-file`, mypy loaded the planted `mypy.ini` and ran the plugin** (the marker file appeared).
   - `--ignore-noqa` also overrides a file-level `# ruff: noqa` and the range suppressions `# ruff: disable[...]` /
-    `# ruff: enable[...]`. The suppressed findings were reported.
-  - **An inline `# mypy: ignore-errors` in a new file hid its error** (`def f(a): return a` gave no
-    `no-untyped-def`). mypy has no flag that turns inline config off.
+    `# ruff: enable[...]`.
+  - **An inline `# mypy: ignore-errors` in a new file hid its error.** mypy has no flag that turns inline config off.
   - `python3 -m ruff` run from a folder holding a planted `ruff.py` printed the planted module's output: `-m` puts
     the current folder first on `sys.path`. `python3 -I -m ruff` ran the real ruff.
   - ruff's `--config` also takes an inline TOML pair. `--config "cache-dir='<any path>'"` made ruff 0.17.3 create
@@ -79,7 +89,9 @@ standing in for `components/python/`: ruff `line-length = 120`, `select = ["E", 
   project.
 - **Run times** (wall time on this container, one tree): `git archive` and extraction 0.06 to 0.32 s (1.2 s cold);
   ruff 0.07 to 0.12 s; mypy over `-p bay -p adapters -p components` 2.7 to 3.7 s cold, 1.9 s for the second tree on
-  a shared temporary cache. A whole `standards` step, two trees and both tools, takes about 7 s.
+  a shared temporary cache. A whole `standards` step, two trees and both tools, takes about 7 s. The copy of the
+  working tree that this revision adds is not measured; it copies what `git ls-files -co` lists, about the size of
+  the export.
 - **New findings per recent change.** I replayed the last eight merged PRs (#20 to #27) with a scratch checker: it
   exports both trees, runs both tools, keys findings by (file, rule, message), takes the multiset difference and
   follows renames with `git diff -M`.
@@ -96,10 +108,28 @@ standing in for `components/python/`: ruff `line-length = 120`, `select = ["E", 
 | #20 ledger truth | 14 | 17 | 6 | 1 |
 
   E501 is nearly all of ruff's new findings; without it, the most any PR added was 6. mypy's new findings are
-  mostly `no-untyped-def`, then `type-arg` and `no-untyped-call`. The last column led to the owner's decisions of
-  2026-11-04: under the absolute rule, each of the six PRs whose comment lines rose needs a fix round.
+  mostly `no-untyped-def`, then `type-arg` and `no-untyped-call`.
+
+**Read for this revision (9aa7e8f):**
+- Call start: `Dispatcher.call` (`bay/dispatch.py:56-72`) builds the state with `callId`, `target`, `input`,
+  `steps`, `cursor`, `status`, `checks`, `cost` and `t0`. No commit. `replaces` closes only an open call
+  (`close`, `:74-80`, refuses any other status).
+- Substitution: `_run_code` passes `step.with_`, `state["input"]`, `state["steps"]` and `mode.config` to
+  `workflows.substitute`, whose `val` maps the heads `in`, `steps` and `config` (`bay/workflows.py:313`). An unknown
+  head is dropped. `_check_dollars` (`:200`) runs only for project workflow stages, so a feature step may carry a
+  new head without a lint change.
+- Code step: `_code_step` (`bay/model.py:1309-1347`) demands exactly one connector (`:1337`) and stores it in
+  `Step.connector` (`:492`). `model.SOURCE_IFACE` (`:1275`) is the precedent for an interface name the code knows.
+- Component manifest: `schemas/component.schema.json` allows only `version` and `needs` under `spec`.
+- Lint: per-step checks over YAML live in `lint_owner_only` (`bay/lint.py:913-923`); `run()` calls the checks in
+  order (`:691-734`). Role access is `write` only for `builder` and `lead` (`framework/roles/*.yaml:10`).
+- Tests that pass a builder step and so reach the new step: `tests/test_dispatch.py:233`, `:251`, `:265`, `:471`;
+  `components/improve/tests/test_improve.py:229` (`forge.create`);
+  `components/improve/connectors/improve-detect/tests/test_deadcode_check.py:241`.
 
 ## Slice 0: remove the comments and cut the docstrings
+
+Unchanged by the reuse decisions.
 
 **Rule applied.** No `#` comment in any Python file git lists under `bay/`, `adapters/`, `components/` or any
 `tests/` folder; a shebang on line 1 is not a comment. A docstring is one line. Strings that hold Python as test data
@@ -249,8 +279,8 @@ goes to a name, a message or the component's README. Any other comment is delete
   `test_improve_detect.py:58`, `test_improve_detectors.py:77`. Fix: a nested `def`, which adds one line each.
 - **E402 in the three entry scripts**: `bay/cli.py:53`, `bay/hook.py:19`, `bay/use_shim.py:16`. No code fix
   exists: an entry script must set `sys.path` before it imports `bay`, and in use_shim that order is the security
-  measure. `components/python/ruff.toml` gets `per-file-ignores` for E402 on these three files. The glob anchoring
-  under `--config` is to be checked on 0.17.3; `**/bay/cli.py` works either way.
+  measure. `components/python/ruff.toml` gets `per-file-ignores` for E402 on these three files, spelled
+  `**/bay/cli.py` and so on, because ruff anchors the globs at the config file's folder.
 - **E402 in tests** (`tests/helpers.py:17-18`, and the `sys.path` inserts in 10 test files: content_types,
   corpus_store, sqlsandbox, todo_rules, x_api, gmail_api). Fix: delete the `sys.path` lines.
   - `tests/run.py` already puts `tests/` and the kit on the path. It also puts each test file's own folder there
@@ -293,41 +323,41 @@ set it. `ruff rule` on 0.17.3 confirms every code that fires today:
 
 **Recommendation:** keep `E,F,W,B` at line length 120. E501 at 120 is the owner's own line rule, so it stays even
 though it fires most. Leave no code out, except the E402 `per-file-ignores` for the three entry scripts (slice 0).
-Run ruff on everything git lists, tests included.
+Run ruff on everything in the tree, tests included.
 
 **8. mypy scope.** Passing the folders as paths fails: `mypy components` stops with exit 2, "No parent module --
 cannot perform relative import", in `improve-detect/pipeline.py`. Passing them as packages works:
 `-p bay -p adapters -p components` with `exclude = (^|/)tests/` checks all 155 non-test files and gives 1292 errors
-(bay 635, components 634, adapters 23) in 3.2 s. **Recommendation:** one `-p` per top-level folder that holds Python
-git lists, plus top-level `.py` files as paths, tests excluded in `mypy.ini`. A folder name with a dot cannot be a
-`-p` name; it is skipped with a warning. mypy stays `--strict` (owner decision 4).
+(bay 635, components 634, adapters 23) in 3.2 s. **Recommendation:** one `-p` per top-level folder of the tree that
+holds Python, plus top-level `.py` files as paths, tests excluded in `mypy.ini`. A folder name that is not a valid
+module name cannot be a `-p` name; it is skipped with a warning. A project config that sets `files` or `packages`
+gets no targets on the command line, so its own choice holds. mypy stays `--strict` (owner decision 4).
 
 **JSON output on the pinned versions.**
 - ruff 0.17.3: `--output-format json` gives one JSON array. Each item has `code`, `message`, `filename` (an
-  **absolute** path, so the checker makes it relative to the tree it ran in) and `location.row`. A syntax error is
-  an item with code `invalid-syntax`.
+  **absolute** path, so the checker makes it relative to `root`) and `location.row`. A syntax error is an item with
+  code `invalid-syntax`.
 - mypy 2.4.1: `--output json` gives JSON lines with `file` (relative to the working folder), `line`, `code` (null
   for some blocking errors), `message` and `severity`. Keep only `severity == "error"`.
 - Exit codes: ruff 0 clean, 1 findings, 2 error; mypy 0 clean, 1 errors, 2 blocking error.
-  `python3 -I -m <missing module>` also exits 1, so the checker runs `<tool> --version` first (decision D).
+  `python3 -I -m <missing module>` also exits 1, so the probe runs `<tool> --version` first.
 
-**Timeouts.** `RUFF_TIMEOUT = 60`, `MYPY_TIMEOUT = 120`, `--version` probes 30 s each, and the export keeps the
-120 s of `pipeline.py:181`. That is over 30 times the measured time.
+**Timeouts.** `RUFF_TIMEOUT = 60`, `MYPY_TIMEOUT = 120`, `PROBE_TIMEOUT = 30`, and the export keeps the 120 s of
+`pipeline.py:181`. That is over 30 times the measured time.
 
-**7. Tests: merge instead of +3** (taken by the owner: 463). Both merges are in
-`components/improve/connectors/improve-detect/tests/test_deadcode_check.py`:
-- The several-providers mechanism test goes into `test_a_new_finding_blocks_the_extend_call_before_review`
-  (`:231`). It stubs `Dispatcher._invoke` by connector name: `comments-check` returns one new finding and
-  `python-check` none. It asserts that both were called, that the call is `blocked` before review, and that the
-  reason names the finding.
-- `test_forge_extend_runs_deadcode_between_implement_and_review` (`:247`) is folded into the same test, renamed
-  `test_forge_extend_code_checks_sit_before_review_and_any_new_finding_blocks`.
+**7. Tests: merge instead of +3** (taken by the owner: 463). The reuse decisions move the comparison out of
+python-check, so the tests move with it:
+- The python-check test drives `bay.standards.check` with the real python-check connector and an injected tool
+  runner. It carries the comparison cases that were python-check's before.
+- The several-checkers test with stub checkers goes into the forge.extend test in `test_deadcode_check.py`, and
+  `test_forge_extend_runs_deadcode_between_implement_and_review` (`:247`) is folded into it.
+- The lint rule's cases extend `test_forge_extend_review_cannot_be_disabled_or_weakened` (`tests/test_lint.py:270`).
 
 So: tests 462 + 2 new (python-check, comments-check) - 1 merged = 463. Slice 0 adds no test.
 
 ## Decisions the plan adds (each with a recommendation)
 
-**A. Who may run the tools, and with what (guard).** Taken by the owner (decision 5).
+**A. Who may run the tools, and with what (guard).** Taken by the owner (decision 5). Unchanged by reuse.
 - The agent clis are `python3 -I -m ruff check` and `python3 -I -m mypy`: the same interpreter, version and module
   the step runs, and `-I` stops a planted `ruff.py` or `mypy.py`.
 - The guard requires `--config <kit>/components/python/ruff.toml` and
@@ -336,30 +366,36 @@ So: tests 462 + 2 new (python-check, comments-check) - 1 merged = 463. Slice 0 a
   `--show-error-codes`. No `--output-format`, no `-O`, no `--cache-dir`. Paths go through `_words` as today.
 - Without the required config the command is denied. That stops the planted-plugin run and the inline `cache-dir`
   write shown above.
+- Stated limit, new with project config: in a project that has its own config, an agent's own run uses the kit
+  default, so it can see findings the step does not. The step is the one that counts. Allowing the project's
+  config to agents would hand a writer its own mypy plugin, so I do not recommend it.
 
-**B. Which config the step uses.** Taken. The step reads both config files **from the merge-base export** when the
-export has them, and from the kit otherwise. An edited config takes effect once it has landed, after its own gate.
-Stated limit: the checker, the dispatcher and `bay/limits.py` are themselves in the tree under review in
-forge.extend; the boundary check, the gate and the review catch an edit of those.
+**B. Which config the step uses.** Replaced by owner decisions 2 and 5; see item 2. The base export is always the
+config source, for both runs.
 
-**C. The comments count (replaced by owner decision 3).** The count is `#` comment tokens (a shebang excepted) plus
-the docstring lines after the first. It is one function, `limits.comment_lines`, used by the measure and by
-comments-check, so the two never disagree.
-- comments-check keeps the per-file comparison with the merge-base: one finding per changed file whose count rose.
-  In the kit every base count is 0 after slice 0, so any comment or second docstring line is a finding: the
-  absolute rule. A delivery project with comments of its own is not made to clean files it only touched.
+**C. The comments count.** Updated for decision 3.
+- The count is one function per kind of syntax. Python's is `limits.comment_lines(text)`: `#` comment tokens (a
+  shebang excepted) plus the docstring lines after the first, with `tokenize` and `ast`. The measure and
+  comments-check both call it, so they never disagree on Python.
+- comments-check returns **one finding per comment line**: rule `comment`, message `a # comment` or `a docstring
+  line after the first` (never the text). The dispatcher's multiset comparison then gives exactly "this file has
+  more comment lines than at the base". In the kit every base count is 0 after slice 0, so any comment or second
+  docstring line is new: the absolute rule. A delivery project with comments of its own is not made to clean files
+  it only touched.
 - The `comment_lines` measure counts **every** Python file the rule covers: `bay/`, `adapters/`, all of
-  `components/` and every `tests/` folder, not only the files the other code measures count. Its ceiling 0 then
-  holds the whole rule in `bay check --limits`, tests included. The cost: an extension a user adds to their own
-  kit checkout fails `bay check --limits` while it has a comment. The alternative counts only what the other code
-  measures count (plus all tests) and leaves the other components to comments-check. I recommend the full scope,
-  because the owner's rule names all of `components/`.
+  `components/` and every `tests/` folder. Its ceiling 0 then holds the whole rule in `bay check --limits`, tests
+  included. The cost: an extension a user adds to their own kit checkout fails `bay check --limits` while it has a
+  comment. I recommend the full scope, because the owner's rule names all of `components/`.
 
-**D. Tool presence and version.** Taken.
-- The checker first runs `python3 -I -m ruff --version` and `python3 -I -m mypy --version`.
-- A missing module (exit 1 with "No module named" on stderr) stops the step with
-  `pip install -r requirements-dev.txt`.
+**D. Tool presence and version.** Moved into the dispatcher's step (decision 2).
+- A language component declares `tools: [{module, version}]` and `install` in its `language` block.
+- Before the two runs, `bay/standards.py` runs `[sys.executable, "-I", "-m", <module>, "--version"]` for each tool
+  of each bound checker's component.
+- A missing module (exit 1 with "No module named" on stderr) ends the step blocked with the component's `install`
+  text (`pip install -r requirements-dev.txt`).
 - A version other than the pin is a warning, not a stop: both trees run on the same version.
+- Stated limit: the probe knows only Python modules. A language whose tool is not a Python module adds a key to the
+  block in its own proposal.
 
 **E. mypy inline config and `# type: ignore`.** Taken. python-check reports each `# mypy:` line and each
 `type: ignore` comment as a finding of its own (rules `mypy-inline` and `type-ignore`). In the kit, comments-check
@@ -368,40 +404,86 @@ when the same change drops another comment.
 
 **F. `standards.check/v1` is `dispatcherOnly: true`,** like `improve.detect/v1`. Taken.
 
-**G. Share the git helpers (optional, recommended).** python-check needs the same merge-base, rename and export
-code as improve-detect: `_merge_base` (pipeline.py:197-209), `_renames` (:220-223) and `_export` (:175-189), about
-40 lines. B-7 forbids importing another connector's code. Either:
-- (a) copy them, which leaves the duplication DOD-8 names; or
-- (b) move them to `bay/boundary.py` (which already has `show`) and have all three connectors import them: about
-  +32 `bay_lines`, about −40 kit lines in improve-detect and −52 from the two new connectors. It adds one touch,
-  `components/improve/connectors/improve-detect/pipeline.py`.
+**G. Share the git helpers.** Now required, no longer optional. The dispatcher needs `_export`
+(`pipeline.py:175-189`), `_merge_base` (`:197-209`) and `_renames` (`:221-224`). They move to `bay/boundary.py`
+(which already has `git` and `show`), as `export(repo, rev, dest)`, `merge_base(repo, base)` and
+`renames(repo, sha)`. improve-detect's `pipeline.py` imports them. One copy of the `filter="data"` extraction.
 
-I recommend (b): fewer lines overall, and one copy of security-relevant code (the tar `filter="data"` extraction).
-With slice 0 there is room under both ceilings for either.
+**H. Two more standards steps (consequence of decision 4).** The lint rule asks for a standards step after the last
+step of every writing role. Two shipped features need more than the proposal's wiring:
+- `forge.create`: the builder's `fill` (env `local-authoring`, writes `components`) has no step after it. Add
+  `- { id: standards, run: standards.check/v1.findings, with: { base: "$call.base" } }` after `fill`, `needs`
+  is shared by the mode, and a DoD item in `components/forge/features/create/playbook.md`.
+- `forge.extend`: the builder's last step is `release`, after review, and it writes `bay/__init__.py`. Add a second
+  step `release-standards` after `release`. It costs about 7 s per call and blocks only a release that adds a
+  finding. The first `standards` step stays between `limits` and `review`, so the reviewer sees its result.
+
+The alternative is a rule that ignores steps after review. That is weaker than the owner's words, so I do not
+recommend it.
+
+**I. `findings { root, configRoot }` (an amendment to decision 2).** `root` is the folder to check. `configRoot`
+is the folder the checker reads every config from. The dispatcher passes the base export as `configRoot` on both
+runs. With `{ root }` alone the working-tree run would read the change's config, or the dispatcher would have to
+copy the base's config into the tree copy. The second still lets the change supply the plugin: mypy resolves a
+`.py` plugin next to the config file. A checker that has no config (comments-check) ignores `configRoot`.
+
+**J. How the dispatcher recognises the step.** `model.STANDARDS_IFACE = "standards.check/v1"`, next to
+`SOURCE_IFACE` (`bay/model.py:1275`). A code step that runs it may bind several connectors; any other code step
+keeps "exactly one connector". `_run_code` hands such a step to `standards.check` instead of `_invoke`. The
+alternative, an interface flag such as `comparesBase: true`, costs a schema key and docs words for one user; I do
+not recommend it now.
+
+**K. The no-comments setting.** In a project other than the kit, `connectors: { comments-check: { rule: off } }`
+in `agentbay.config.yaml` turns the rule off. comments-check reads it from `<configRoot>/agentbay.config.yaml`, so
+the base decides and the change cannot. The connector's own config schema declares `rule: on | off` (default on), so
+`bay check` validates the working-tree value through the existing `connectors.<name>` rule. In the kit the setting
+is ignored. No change to `schemas/config.schema.json`.
+
+**L. Where the comment syntax is read.** comments-check reads `spec.language` from every
+`<kit>/components/*/component.yaml` with `yaml.safe_load`. A language component that a project defines in its own
+`components/` is not read; a new language ships in the kit. In the kit, `components/python/component.yaml` is a
+protected path, so an edit of it is gated and reviewed like the checker itself.
+
+**M. A replacing call keeps the base.** `forge.extend` is restarted with `replaces`. Today `replaces` closes only an
+open call, and the new call would take the later HEAD as its base, so the first round's findings would look
+existing. Change: a call that `replaces` another takes that call's `base`, and `replaces` may also name a call that
+ended `blocked`, `failed` or `partial`; that call is left as it is, not closed. This is about +3 lines in
+`Dispatcher.call` and one assertion in the merged test. Without it the base protects only a single call.
 
 ## Before the gate (amendments to the proposal, R-12)
 
-1. **Counts in owner decision 2.** "432 comments and 49 multi-line docstrings in tests" and "25 `noqa`" cover only
-   the top-level `tests/` folder. With the component and adapter tests: 872 comments, 84 docstrings, and 43 `noqa`
-   markers (12 outside tests).
-2. **Touches.** Add `conftest.py` at the kit root (the `git mv` of `tests/conftest.py`; slice 0's E402 fix). It is
-   owned in `framework/kernel.yaml`, next to `requirements-dev.txt`. Everything else slice 0 edits sits under the
-   four folders already listed, and README.md is already touched. The alternative to the move is `per-file-ignores`
-   for E402 on every test file, which keeps about 30 `sys.path` lines the runner makes unneeded.
-3. **Stale text above the owner decisions.** The Summary still names three exceptions, item 3 still says "a one-line
-   comment only for a reason the code cannot express" and that the cleanup is not in this proposal, and the Cost
-   section still asks for `bay_lines` and `kit_python_lines` exceptions. The decisions section says it replaces
-   them, but a reader meets the old text first. I recommend editing those lines to match.
-4. **DOD-18 and DOD-6 wording.** Under the absolute rule these read: "No `#` comment and no docstring longer than
-   one line; a reason goes in a name, an error message or the README." The builder prompt carries the same
-   sentence. This is in touched files; listed so the owner sees the text.
+1. **The interface shape.** Owner decision 2 says `findings { root }`. This plan needs
+   `findings { root, configRoot }` (decision I). The owner should confirm.
+2. **Touches.**
+   - Add: `bay/standards.py` (new: the step), `bay/workflows.py` (the `$call` namespace), `bay/lint.py` (the rule),
+     `bay/boundary.py` (the git helpers), `components/improve/connectors/improve-detect/pipeline.py` (imports them),
+     `schemas/component.schema.json` (the `language` block), `schemas/mode.schema.json` (the `with` description
+     names `$call.base`), `components/forge/features/create/playbook.md` (decision H),
+     `components/improve/tests/test_improve.py` (the stub for `forge.create`), `tests/test_lint.py` and
+     `tests/helpers.py` (the shared stub).
+   - Reword: `standards.check.v1.yaml` (`findings`, not `change { base }`), `python_check.py` ("runs ruff and mypy
+     on one folder"), `comments_check.py` ("one finding per comment line"), `bay/model.py` (several connectors only
+     for the standards interface), `bay/dispatch.py` (the start commit, the hand-off to `bay/standards.py`).
+3. **Wiring (decision H).** `forge.create` gets a standards step after `fill`, and `forge.extend` a second one after
+   `release`. Without them the lint rule fails the shipped kit.
+4. **Cost.** The reuse paragraph says "+45 `bay_lines`" and that the python checker loses about the same. The plan
+   counts +206 in `bay/` and +65 in the kit for items 1 to 4 (the old plan: +57 and +172). Both end under today's
+   ceilings, so no exception changes.
+5. **Stale text above the reuse decisions.** Item 1 still describes `change { base }` and a merge in `_run_code`.
+   Item 3 and open decision 4 say there is no `comments:` block; decision 3 brings it back. Open decision 2 (delivery
+   base `HEAD`) is replaced by `$call.base`. "Out of scope" still lists "the cleanup of existing findings and
+   comments", which slice 0 now does. The decisions section says it replaces them, but a reader meets the old text
+   first.
+6. **Upgrading note.** After 3.2.0, a user's own mode with a writing role fails `bay check` until its feature has a
+   standards step, `needs: standards.check/v1`, and a code env that binds the checkers. The CHANGELOG must say so.
+7. **Project config limits.** mypy reads only `mypy.ini` from the project root; `.mypy.ini`, `setup.cfg` and
+   `[tool.mypy]` are not read. ruff reads `ruff.toml`, then `pyproject.toml` with a `[tool.ruff]` table. Both as the
+   owner's decision 5 names them; the README says so.
 
 Done in the build without an amendment (all inside touched files):
-- `python3 -I` and `cwd=<tree>` for every tool call, and the guard rules of A;
-- the config read from the base export (B), the version probe (D), the inline-config findings (E),
-  `dispatcherOnly` (F);
+- the guard rules of A, the inline-config findings (E), `dispatcherOnly` (F);
 - `requirements-dev.txt` in framework-dev's write list, and `components/python` and `components/comments` under
-  `owns:` (owner decision 5);
+  `owns:` (owner decision 5 of the earlier round);
 - `comment_lines: 0` written into `framework/limits.yaml` in the commit that adds the measure. `limits._ceilings`
   requires every name in `MEASURES` to be in the file, and the base has no such entry, so no exception is needed.
 
@@ -411,78 +493,116 @@ Each step is one commit. `python3 tests/run.py` and `./bay.sh check --limits` st
 
 1. **Slice 0, batches 0.1 to 0.7** (table in slice 0). They land first, right after the gate, so open branches
    rebase once onto a tree without comments.
-2. **Item 1, the mechanism.** `Step.connectors`, the resolver, `_run_code` and the merge. The test is the merged
-   forge.extend test, with stub providers.
-3. **G (if chosen).** Move the three git helpers to `bay/boundary.py`; improve-detect imports them.
-4. **Item 3's counter.** `limits.comment_lines`, the measure over all four places, `comment_lines: 0` in
-   `framework/limits.yaml`, and `test_limits` extended. It comes before the connectors because comments-check
-   imports it, and after slice 0 because the count must already be 0.
-5. **Item 2, the python component**, without the agent clis: `components/python/` (with the E402
-   `per-file-ignores`), `requirements-dev.txt`, python-check and its test.
-6. **Item 3's connector:** `components/comments/` and its test.
-7. **The guard, then the clis.** First the `guard.py` rule and its test rows (deny for every case), then
+2. **The start commit.** `state["base"]` in `Dispatcher.call`, the `$call` namespace in `workflows.substitute`, and
+   `replaces` keeping the base (M). Nothing reads `$call.base` yet.
+3. **The git helpers (G).** `export`, `merge_base` and `renames` move to `bay/boundary.py`; improve-detect imports
+   them. The deadcode tests stay green unchanged.
+4. **The step (item 1).** `standards.check.v1.yaml` with `findings`, `model.STANDARDS_IFACE`, `Step.connectors`,
+   the resolver, `bay/standards.py`, and the hand-off in `_run_code`. The test is the merged forge.extend test with
+   stub checkers; no mode runs the step yet.
+5. **The counter (item 3, part one).** `limits.comment_lines`, the measure over all four places,
+   `comment_lines: 0` in `framework/limits.yaml`, and `test_limits` extended. After slice 0, because the count must
+   already be 0; before the connectors, because comments-check imports it.
+6. **The `language` block and the python component (item 2).** `schemas/component.schema.json`,
+   `components/python/` (with the E402 `per-file-ignores`), `requirements-dev.txt`, python-check and its test. The
+   schema and the first `language` block go in the same commit, so lint never sees one without the other.
+7. **comments-check (item 3, part two):** `components/comments/` and its test.
+8. **The guard, then the clis.** First the `guard.py` rule and its test rows (deny for every case), then
    `READ_ONLY_CLIS` and the env clis, with the matrix deltas. The clis are never granted without the flag check, at
    any commit.
-8. **Item 4, the wiring:** bindings, `standards` steps, DoD items, the builder prompt, kernel.yaml (protected,
-   `owns:`, owned files) and the framework-dev write list.
-9. **Docs:** README, DESIGN and INTERFACES, with the cuts below.
-10. **Release:** 3.2.0, the CHANGELOG with the Upgrading note, and `./bay.sh check --limits --write ...` once, which
+9. **The wiring and the lint rule (item 4), one commit.** Bindings, the four standards steps, `needs`, DoD items,
+   the builder prompt, kernel.yaml (protected, `owns:`, owned files), the framework-dev write list,
+   `lint_standards_steps` and its test, and the stub in the tests that pass a builder step. The rule and the steps
+   land together: the rule alone fails the kit, and the steps alone are unguarded.
+10. **Docs:** README, DESIGN and INTERFACES, with the cuts below.
+11. **Release:** 3.2.0, the CHANGELOG with the Upgrading note, and `./bay.sh check --limits --write ...` once, which
     writes the lower `bay_lines`, `kit_python_lines` and `long_lines`.
 
-From step 2 on, the code these steps add has no comments and only one-line docstrings: from step 4 the limits step
+From step 2 on, the code these steps add has no comments and only one-line docstrings: from step 5 the limits step
 would block it anyway.
 
-## Item 1: a code step with several connectors
+## Item 1: the call's start commit and the dispatcher's standards step
 
-Files:
-- `bay/model.py`:
-  - `Step.connector: str | None` (`:492`) becomes `connectors: list[str]` (default empty list).
-  - `:1336-1341`: an empty list is the gap "binds no connector for {iface}". Otherwise `step.connectors = conns`, and
-    `check_connector` runs for each name.
-  - `when: stale` with more than one connector is a gap, because `_fresh` reads one status.
-- `bay/dispatch.py`:
-  - `_fresh` (`:438`) uses `step.connectors[0]`.
-  - `_run_code` (`:535`) calls a new `_invoke_all`, which runs each connector in order. When there are several, it
-    merges the outputs with `_merge`.
-  - The loop goes into a helper so `_run_code` keeps its decision count under the deadcode `complexity` limit.
-  - A connector that raises fails the step, and the message names the connector.
+**The start commit (decision 1).**
+- `bay/dispatch.py:70`: the state gains `"base"`, the output of `boundary.git(self.project, "rev-parse", "HEAD")`,
+  or `None` when the project is not a git repository or has no commit (the `suppress(RuntimeError, OSError)` that
+  `:392` uses for `head`). `head` stays as it is: it is the review-time commit, a different thing.
+- `:66-69` (`replaces`): the new call takes the replaced call's `base` (decision M).
+- `bay/workflows.py:292`: `substitute(template, inp, steps, settings, call=None)`; `val` maps the head `call` to
+  `call or {}`. `bay/dispatch.py:529` passes `call={"base": state.get("base")}`. The other callers are unchanged.
+- A step that names `$call.base` in a call whose base is `None` gets no `base`. The standards step then ends
+  blocked: "no base commit: the project was not a git repository with a commit when call <id> started". A call
+  saved before 3.2.0 has no `base` and gets the same message.
+
+**The step (decision 2).**
+- `bay/model.py`: `STANDARDS_IFACE`; `Step.connector` (`:492`) becomes `connectors: list[str]`. In `_code_step`
+  (`:1336-1341`) an empty list is the gap "binds no connector for {iface}"; more than one is a gap unless the
+  interface is `STANDARDS_IFACE`; `check_connector` runs for each name. A standards step's `with` may hold only
+  `base` (a gap otherwise).
+- `bay/dispatch.py`: `_fresh` (`:438`) uses `step.connectors[0]`. `_run_code` (`:535`) calls
+  `standards.check(...)` when `iface == model.STANDARDS_IFACE`, with an `invoke(name, args)` that wraps
+  `self._invoke`, so each checker's input and output are still validated (`:563`, `:572`). The returned
+  `{new, existing, stopped, warnings}` goes through the existing `stopped` handling (`:549-553`), so a new finding
+  ends the call blocked. `run_capability` keeps "exactly one connector".
+- `bay/standards.py` (new):
+  1. `check(project, base, checkers, invoke)`. It resolves `base` with `boundary.merge_base` (which refuses a value
+     that starts with `-`) and takes the renames with `boundary.renames`.
+  2. It probes the tools of each checker's component (D).
+  3. In one `tempfile.TemporaryDirectory(prefix="agentbay-standards-")`, removed on exit and on errors, it exports
+     the base with `boundary.export` (`git archive`, `filter="data"`) and copies the working tree.
+  4. It calls every checker twice: `{root: <base>, configRoot: <base>}` and `{root: <tree>, configRoot: <base>}`.
+  5. It compares the two lists as a multiset keyed by `(file, rule, message)`, base paths mapped through the
+     renames. A checker's own `stopped` (a timeout, a crash) is joined into the step's `stopped`, never read as a
+     pass.
+  - `copy_tree(project, dest)` copies the regular files `git ls-files -co --exclude-standard -z` lists; symlinks
+    and other special files are skipped and counted in a warning. Both trees then hold the same kind of content,
+    and no tool ever runs inside the project.
+  - `run_module(module, args, cwd, timeout)` is the one runner: `[sys.executable, "-I", "-m", module, *args]`, a
+    list, no shell, `capture_output`, the timeout. Checkers import it, so `-I` lives in one place.
 
 ```python
-def _merge(outs: list[dict]) -> dict:
-    """One result from several connectors of a code step: lists join, counts add, texts join with "; "."""
-    merged: dict = {}
-    for out in outs:
-        for key, value in out.items():
-            if key not in merged:
-                merged[key] = value
-            elif isinstance(value, list):
-                merged[key] = merged[key] + value
-            elif isinstance(value, str):
-                merged[key] = f"{merged[key]}; {value}"
-            elif isinstance(value, int) and not isinstance(value, bool):
-                merged[key] = merged[key] + value
-            else:
-                raise CallError(f"cannot merge {key!r} from several connectors")
-    return merged
+def compare(before: list[dict], now: list[dict], renames: dict[str, str]) -> tuple[list[dict], int]:
+    """The findings in `now` that `before` lacks, counted as a multiset by (file, rule, message)."""
+    seen = Counter((renames.get(row["file"], row["file"]), row["rule"], row["message"]) for row in before)
+    new = []
+    for row in now:
+        key = (row["file"], row["rule"], row["message"])
+        if seen[key] > 0:
+            seen[key] -= 1
+        else:
+            new.append(row)
+    return new, len(now) - len(new)
 ```
 
-The merge is generic: the dispatcher does not learn the shape of `standards.check/v1`, and each output has already
-been validated against the endpoint's `out` schema in `_invoke` (`:572`). `run_capability` (`:345-347`) keeps
-"exactly one connector": no CLI path runs standards.
+The key keeps E501's message, which carries the line length ("Line too long (133 > 120)"). A long line that is
+moved stays existing; a long line that is edited and is still long counts as new. A finding never carries source
+text.
 
 Tests:
-- The merged test in `test_deadcode_check.py` (decision 7).
+- The merged forge.extend test in `test_deadcode_check.py` (decision 7): two stub checkers, one returns a finding
+  only on the tree, the other none. Both are called twice, with the base export as `configRoot` both times; the
+  call is `blocked` before review and the reason names the finding; `$call.base` equals the HEAD at call start; a
+  call that `replaces` it keeps that base.
 - `tests/test_resolver.py:220` asserts `.connectors == ["corpus-store"]`.
-- `no_deadcode` (`tests/test_dispatch.py:208`) also returns `{"new": [], "existing": 0}` for `standards.check/v1`.
+- `no_deadcode` (`tests/test_dispatch.py:208`) becomes a shared `no_code_checks(d)` in `tests/helpers.py`. It stubs
+  `improve.detect/v1` as today and `standards.check` with no finding. The checkout copies in those tests are not git
+  repositories, so without it the standards step ends blocked. `test_improve.py:229` (`forge.create`) uses it too.
 
-## Item 2: the python component and the guard
+## Item 2: the python component, project config and the guard
 
 Files:
-- `components/python/component.yaml`, `README.md`, `ruff.toml` and `mypy.ini`:
+- `schemas/component.schema.json`: `spec.language`, optional:
+  - `files`: globs of the form `*.<ext>`, the files the language's checkers cover;
+  - `comments`: either `python` (the `tokenize` count) or `{ line: [...], block: [[open, close], ...] }`;
+  - `tools`: `[{ module, version }]`, and `install`: the text a missing tool names (D).
+- `components/python/component.yaml`: `files: ["*.py"]`, `comments: python`, the two tools at their pins, and
+  `install: pip install -r requirements-dev.txt`.
+- `components/python/README.md`, `ruff.toml` and `mypy.ini`:
   - `ruff.toml`: `line-length = 120`, `[lint] select = ["E", "F", "W", "B"]`, no `preview`, and
-    `per-file-ignores` E402 for `bay/cli.py`, `bay/hook.py` and `bay/use_shim.py`.
+    `per-file-ignores` E402 for `**/bay/cli.py`, `**/bay/hook.py` and `**/bay/use_shim.py`.
   - `mypy.ini`: `strict = True`, `exclude = (^|/)tests/`.
-- `connectors/python-check/connector.yaml` and `python_check.py`.
+- `connectors/python-check/connector.yaml` and `python_check.py`, about 45 lines: pick the configs, build two
+  argument lists, call `standards.run_module`, parse the JSON, add the E findings.
 - `requirements-dev.txt`: `ruff==0.17.3`, `mypy==2.4.1`, and `types-PyYAML` and `types-jsonschema` pinned when the
   file is written.
 
@@ -490,37 +610,41 @@ Files:
 With the stubs installed the base count changes but the comparison does not. `mypy.ini` should not set
 `ignore_missing_imports`; a machine without the stubs gets `import-untyped` on both trees, so it shows as existing.
 
-`python_check.change(base)`:
-1. Resolves the merge-base, refusing a base that starts with `-`.
-2. Probes both tools (D).
-3. Exports the merge-base into a `TemporaryDirectory`, and reads the configs from it (B).
-4. Runs ruff, then mypy, on the export and then on the project. Each run gets `cwd=<that tree>` and
-   `[sys.executable, "-I", "-m", ...]`. mypy gets a `--cache-dir` inside the same temporary folder, shared by both
-   runs.
-5. Adds the `mypy-inline` and `type-ignore` findings (E).
-6. Maps base paths through the renames, and returns `new`, `existing`, `warnings` and `stopped`.
+`python_check.findings(root, configRoot)`:
+1. Picks the configs (decision 5), only from `configRoot`:
+   - when the project is not the kit: `<configRoot>/ruff.toml`, else `<configRoot>/pyproject.toml` if it has a
+     `[tool.ruff]` table (read with `tomllib`); and `<configRoot>/mypy.ini`;
+   - otherwise, and for each tool without a project file: `<configRoot>/components/python/<file>` when the project
+     is the kit, else `<kit>/components/python/<file>`.
+2. Runs ruff, then mypy, with `cwd=root`, through `standards.run_module`. ruff gets `check --no-cache
+   --ignore-noqa --output-format json --config <file> .`, so a project's `exclude` holds. mypy gets
+   `--config-file <file> --cache-dir <a temp folder> --output json` and the targets of decision 8.
+3. Adds the `mypy-inline` and `type-ignore` findings (E).
+4. Returns `{findings, warnings}`, and `stopped` for a timeout, exit 2, or output that is not JSON.
 
-The temporary folder is removed when the `with` block ends, on errors too. `subprocess.run` kills a tool that times
-out. A finding is `{file, line, rule, message}`, never source text.
+**How the security fixes hold for a project's config.**
+- **Configs from the base.** Every config comes from `configRoot`, and only the dispatcher sets it, to the base
+  export. A config the change adds or edits is not read until it has landed. The checker never looks in `root` for
+  a config.
+- **A plugin is the base's or none.** The config is passed by absolute path inside the base export. mypy resolves
+  a `.py` plugin next to that file, so it loads the base's plugin file, never the change's. A plugin named as a
+  module is imported through `sys.path`, which under `-I` holds the standard library and site-packages only, never
+  a project folder. A planted plugin in the base is the project's own choice (owner decision 5). To verify on
+  2.4.1 in build step 6: a module plugin that exists only in the project is not importable (expect exit 2, which is
+  `stopped`).
+- **`python3 -I -m`** for every tool call, through the one runner. A planted `ruff.py` or `mypy.py` in either tree
+  is not imported.
+- **Nothing written in the project.** Both runs happen in the temporary folder, not in the project. `--no-cache`
+  overrides a project's `cache-dir`, and `--cache-dir` on the command line overrides mypy's `cache_dir`. A project
+  config that sets ruff's `output-file` would send the JSON to a file; the checker then reads no JSON array on
+  stdout and returns `stopped`, never an empty pass. mypy report options in a project's `mypy.ini` write under the
+  temporary tree and go with it.
+- **`filter="data"` and the temporary folder** belong to `bay/standards.py` and `boundary.export`, for every
+  checker and every project.
+- **What a project config can still do.** It can choose its rules, excludes and plugins at the base. It cannot
+  change them in the change under review, and it cannot point a plugin at a file the change supplies.
 
-```python
-    def _ruff(self, tree: Path, config: Path) -> Counter[tuple[str, str, str]]:
-        argv = [sys.executable, "-I", "-m", "ruff", "check", "--no-cache", "--ignore-noqa",
-                "--output-format", "json", "--config", str(config), *self._python_files(tree)]
-        done = self._tool("ruff", argv, tree, RUFF_TIMEOUT)
-        found: Counter[tuple[str, str, str]] = Counter()
-        for item in json.loads(done.stdout or "[]"):
-            path = Path(item["filename"]).relative_to(tree).as_posix()
-            found[(path, item["code"] or "invalid-syntax", item["message"])] += 1
-        return found
-```
-
-Two points in this sketch matter:
-- **The key keeps the E501 message, which carries the line length** ("Line too long (133 > 120)"). A long line that
-  is moved stays existing; a long line that is edited and is still long counts as new.
-- A mypy exit 2 is `stopped`, with the first error's file and message.
-
-Guard (`bay/guard.py`, decision A):
+Guard (`bay/guard.py`, decision A), unchanged by reuse:
 - `LINT_FLAGS`, plus a map from each tool to its required config flag and file.
 - `_lint_command`, called from `_prefixed_command` when the prefix is `python3 -I -m ruff check` or
   `python3 -I -m mypy`.
@@ -528,10 +652,17 @@ Guard (`bay/guard.py`, decision A):
   config path. It denies `--config=...` (the `=` form is not on the list).
 
 Tests:
-- New `test_python_check_reports_only_findings_new_against_the_base` (`components/python/tests/`), with the runner
-  injected as `pipeline.py:193` does. It covers the proposal's cases, a missing module (stops with the pip command),
-  a version mismatch (a warning), a new `# mypy: ignore-errors` (one finding), each recorded call (`-I`, `cwd`, a
-  timeout, no `shell`), and the config path (the export's).
+- New `test_python_findings_are_blocked_only_when_new_against_the_call_start`
+  (`components/python/tests/test_python_check.py`). It runs `bay.standards.check` on a temporary git repository
+  with the real python-check and `run_module` replaced by a recorder that returns canned ruff and mypy JSON.
+  - A tree that keeps the base's two findings and adds one of each gives `new` of two and `existing` of two.
+  - A finding that only moved lines is not new; a renamed file keeps its findings.
+  - A project `mypy.ini` in the base is used for both runs; one that only the working tree has is not.
+  - A missing module stops the step with the pip command; a version mismatch is a warning.
+  - Exit 2, a timeout, and empty stdout from ruff each give `stopped`.
+  - A new `# mypy: ignore-errors` is one finding.
+  - Every recorded call has `-I`, a timeout, no `shell` and a `cwd` inside the temporary folder, and the temporary
+    folder is gone afterwards.
 - `tests/test_guard_matrix.py`: named deltas for every unit that gains the clis, including the project matrix
   (`test_guard_matrix_for_a_project_with_the_kit_outside`).
   - Rows that become pass: `python3 -I -m ruff check --config <kit>/components/python/ruff.toml bay`, and the same
@@ -541,36 +672,54 @@ Tests:
 - `tests/test_boundaries.py:523` asserts the same refusals for a write-less unit.
 - `tests/test_roles.py:224` gets the new `READ_ONLY_CLIS` text.
 
-## Item 3: the comments rule, the counter, the checker
+## Item 3: one comments checker for every language
 
 Files:
-- `bay/limits.py`: `comment_lines(text) -> int` (decision C's count), `"comment_lines"` in `MEASURES`, and its entry
-  in `count()` over the four places.
+- `bay/limits.py`: `comment_rows(text) -> list[tuple[int, str]]` and `comment_lines(text) -> int`, its length
+  (decision C's Python count), `"comment_lines"` in `MEASURES`, and its entry in `count()` over the four places.
   - A file that does not parse raises `RuntimeError` naming the file, never a silent 0.
   - Imports: `ast`, `io`, `tokenize`.
-- `components/comments/component.yaml`, `README.md` (the rule, the one place it lives),
-  `connectors/comments-check/connector.yaml` and `comments_check.py`.
-  - The checker covers the changed files from `git diff -M --name-status -z <sha>`, plus new files from
-    `git ls-files -o --exclude-standard`.
-  - It reads the base text with `boundary.show` (no export) and counts both sides with `limits.comment_lines`.
-  - It returns one finding per file that rose: rule `comment-lines`, message `comment lines <a> -> <b>`.
+- `components/comments/component.yaml` (no `language` block: it covers every language), `README.md` (the rule, the
+  one place it lives), `connectors/comments-check/connector.yaml` (with the config schema `rule: on | off`) and
+  `comments_check.py`, about 60 lines:
+  - It reads the syntaxes as decision L says and covers every file under `root` that one of their `files` globs
+    matches.
+  - For `comments: python` it calls `limits.comment_rows(text)`, the `(line, kind)` list that
+    `limits.comment_lines` counts, and returns one finding per row.
+  - For `{ line, block }` it uses a small lexer: it skips `"`, `'` and backtick strings, takes a `line` token to the
+    end of the line, and takes a `block` pair as one finding per line it spans. No shipped language uses it yet; the
+    test covers it with a made-up language.
+  - In a project other than the kit, `rule: off` in `<configRoot>/agentbay.config.yaml` returns no findings and a
+    warning (decision K).
 - `framework/limits.yaml`: `comment_lines: 0` in the commit that adds the measure.
 
 The README states the rule: no `#` comments; a docstring is one line; a reason the code must keep goes in a name,
 an error message or the README. A shebang is not a comment; Python held in a string as test data is not code.
 
 Tests:
-- New `test_comments_check_blocks_a_file_whose_comment_lines_rise`: a new `#` line is one finding; a second
-  docstring line is one finding; a one-line docstring is free; a renamed file with the same count is none; a new
-  file with one comment is one finding.
+- New `test_comments_check_blocks_a_file_whose_comment_lines_rise`, through `bay.standards.check` on a temporary git
+  repository with only comments-check bound: a new `#` line is one finding; a second docstring line is one finding;
+  a one-line docstring is free; a renamed file with the same count is none; a new file with one comment is one
+  finding; a made-up `*.c` language with `//` and `/* */` counts its comments and not a `//` inside a string;
+  `rule: off` in the base config of a non-kit project gives none, and in the working tree only gives the finding.
 - `tests/test_limits.py:27`: `NOW` gains `comment_lines`. `FILES` holds `#`-only lines (`bay/util.py`,
   `components/c/c.py`, and the test file), so the count is non-zero there; a file that does not parse is asserted to
   stop the count.
 
-## Item 4: wiring
+## Item 4: wiring and the lint rule
 
 Files: as in the proposal's touches, plus the following.
-- `components/tools/interfaces/standards.check.v1.yaml` carries `dispatcherOnly: true` (F).
+- `components/tools/interfaces/standards.check.v1.yaml`: `dispatcherOnly: true` (F), one endpoint `findings`,
+  `in { root, configRoot }` (both strings, required), `out { findings: [{file, line, rule, message}], stopped?,
+  warnings? }`, effects `[read]`.
+- Steps, each `- { id: <id>, run: standards.check/v1.findings, with: { base: "$call.base" } }`:
+  - `forge.create`: `standards` after `fill`;
+  - `forge.extend`: `standards` between `limits` and `review`, and `release-standards` after `release`;
+  - `delivery.build`: `standards` after `implement`.
+  - `needs` of `forge` and `delivery` gains `standards.check/v1`.
+- DoD: DOD-17 and DOD-18 (forge.extend), DOD-5 and DOD-6 (delivery.build), and the next free pair in
+  `components/forge/features/create/playbook.md`. The wording: "The `standards` step reports no new finding" and
+  "No `#` comment and no docstring longer than one line; a reason goes in a name, an error message or the README."
 - `framework/kernel.yaml`: `components/python` and `components/comments` are under `protected.paths` **and**
   `owns:`. The connectors python-check and comments-check are protected. `requirements-dev.txt` and the root
   `conftest.py` are owned.
@@ -578,49 +727,92 @@ Files: as in the proposal's touches, plus the following.
   `requirements-dev.txt`, and the clis gain the two `python3 -I -m` prefixes.
 - `workspace` and `local-authoring` bind `standards.check/v1: [python-check, comments-check]` and gain the two
   prefixes as read clis.
-- `framework/roles/builder.yaml`: one sentence for the rule (amendment 4), and the check line names
-  `python3 -I -m ruff check` and `python3 -I -m mypy` with their config flags.
-- The forge and delivery steps, DOD-17 and DOD-18 (forge), DOD-5 and DOD-6 (delivery), and the base `HEAD` for
-  delivery are as the proposal says, with the wording of amendment 4.
+- `framework/roles/builder.yaml`: one sentence for the rule, and the check line names `python3 -I -m ruff check`
+  and `python3 -I -m mypy` with their config flags.
 
-Test: the merged forge.extend test (decision 7). The delivery order (`implement`, `standards`, `review`) is asserted
-inside an existing delivery mode test, so no test is added.
+**The lint rule (decision 4).** `lint_standards_steps(kit)` in `bay/lint.py`, after `lint_owner_only`
+(`:913-923`), called from `run()` right after it (`:727`). About 22 lines.
+- Covered files: the union of `language.files` of every component, when some env binds `standards.check/v1`;
+  otherwise nothing is covered and the rule is silent.
+- A role step writes covered files when its role's `access` is `write` (`kit.docs["Role"]`), and its env
+  (`model.role_env`, the same lookup as `lint_role_envs`) has an `fs.write` entry that is a folder (`.` included)
+  or a file whose name a covered glob matches.
+- For each such role, the feature needs a step that runs `standards.check/v1.findings` after that role's last
+  step. The message names the file and line of that step, the feature, the role, and the step line to add.
+- Steps that `approve.plans` adds are not in the YAML; each sits before the step it plans, so a standards step
+  after that step also follows the planner.
+
+What it flags:
+
+| When | Flagged |
+|---|---|
+| today (no env binds the interface) | nothing |
+| bindings, no step | `forge.create` (`fill`); `forge.extend` (`release`; lead `plan`); `delivery.build` (`implement`) |
+| after the proposal's wiring only | `forge.create`; `forge.extend` (builder, `release`) |
+| after this plan's wiring (H) | nothing |
+
+The other shipped features have no writing role: improve's analysts, the briefing analysts, delivery's researcher
+and every reviewer have `access: read`, and cos, store, todo, sync and prune have no role step.
+
+Tests:
+- The merged forge.extend test (decision 7) asserts the order `limits`, `standards`, `review`, `release`,
+  `release-standards`.
+- `test_forge_extend_review_cannot_be_disabled_or_weakened` (`tests/test_lint.py:270`) is extended and renamed
+  `test_forge_extend_review_and_standards_cannot_be_disabled_or_weakened`: removing `release-standards` from
+  forge.extend, removing `standards` from `delivery.build`, and moving `forge.create`'s step before `fill` each give
+  one problem that names the feature and the role.
+- `test_shipped_kit_is_lint_clean` (`:30`) holds the last row of the table.
+- The delivery order (`implement`, `standards`, `review`) is asserted inside an existing delivery mode test, so no
+  test is added.
 
 ## Risks
 
 - **Slice 0 conflicts with every open branch.** It touches 105 of 110 Python files. Mitigation: land it first, in
   its seven commits, right after the gate. Ask the owner to merge or park open branches before. A branch that
   rebases afterwards can run the same script on its own files.
-- **A reason lost in the cleanup.** The list in slice 0 covers the five security files and the two entry scripts. Other
-  files get the same test in the hand pass. The reviewer of batch 0.1 checks the list line by line against the
-  diff.
+- **A reason lost in the cleanup.** The list in slice 0 covers the five security files and the two entry scripts.
+  Other files get the same test in the hand pass. The reviewer of batch 0.1 checks the list line by line against
+  the diff.
 - **272 docstrings to reword.** This is the bulk of the human work, and a bad one-liner is worse than none. A
   docstring that adds nothing to its function's name may go entirely; that is allowed and also removes a line.
+- **The base moves when a call is restarted.** Without decision M, a second `forge.extend` call after a blocked one
+  starts at the later HEAD, and the first round's findings look existing. M closes it for `replaces`; a fresh call
+  without `replaces` still starts from its own HEAD, which the playbook states.
+- **A builder that rebases.** If the branch is rebased onto a newer main during the call, the start commit is no
+  longer an ancestor of HEAD. `merge_base` still finds their common ancestor, so findings that landed on main
+  between the two count as new. The `stopped` text names the merge-base, so the cause is visible.
+- **A user's own writing mode fails `bay check` after the upgrade** (amendment 6). Intended by the owner; the
+  CHANGELOG names the three edits.
 - **Builder friction (the expected cost).** By the replay, about half of the changes would have needed a fix round
   for mypy --strict (median 5.5 new errors), and every change that adds a comment needs one. The owner accepted
   both. If mypy proves too strong, dropping `disallow_untyped_calls` removes about 20% of its new findings.
+- **A second step after release.** `release-standards` can block a call after review passed. The only Python a
+  release writes is the version line, so this should never fire; if it does, the release added code it should not.
+- **Many comment findings in a project.** One finding per comment line can be thousands of rows in a project that
+  has comments. The step's output holds only the new ones; the comparison works on lists in memory, which is fine at
+  that size.
 - **No room for an outside API quirk.** With ceiling 0, a quirk must be explained in a name, a message or the README.
   The owner decided this.
 - **Findings caused by another file.** A changed signature in `bay/model.py` can add mypy errors in an untouched
   `bay/dispatch.py`. They are new, correctly; the `stopped` text names the file of each.
-- **`test_improve_golden`.** New files and longer `_run_code` or guard functions can move the audit golden of the
-  kit. Run it after each build step, and keep each new function under 30 decisions.
-- **The guard is not a sandbox.** mypy runs the plugins of the config it is given. The guard pins that config to
-  the protected file, but a builder that can run `python3 tests/run.py` already runs arbitrary code (the risk 0020
-  states). This change adds no new way out.
-- **Delivery base `HEAD`.** A builder told to commit leaves nothing for the check to see, as the proposal states.
-- **Two tool versions on one machine** (as here). The version probe makes the difference visible, and agents and
-  the step both go through `python3 -I -m`.
+- **`test_improve_golden`.** New files and longer `_run_code`, `lint` or guard functions can move the audit golden
+  of the kit. Run it after each build step, and keep each new function under 30 decisions.
+- **The guard is not a sandbox.** mypy runs the plugins of the config it is given. The guard pins agents to the
+  protected config, and the step reads only the base's, but a builder that can run `python3 tests/run.py` already
+  runs arbitrary code (the risk 0020 states). This change adds no new way out.
+- **Agents and the step can disagree in a project with its own config** (A, stated limit).
+- **Two tool versions on one machine** (as here). The probe makes the difference visible, and agents and the step
+  both go through `python3 -I -m`.
 
 ## Cost against the ceilings
 
-Measured after the script on a scratch copy; "after hand pass" adds what the hand pass is expected to add back.
-Every added line is at most 120 characters and is not packed.
+From slice 0's counts; "Items 1-4" are estimates until the code is written. Every added line is at most 120
+characters and is not packed.
 
 | Measure | Ceiling now | After slice 0 (script) | After hand pass | Items 1-4 | End | Exception |
 |---|---|---|---|---|---|---|
-| `bay_lines` | 9760 | 9074 | about 9125 | +57 (+89 with G) | about 9182 (9214) | none |
-| `kit_python_lines` | 5165 | 4880 | about 4880 | +172 (+80 with G) | about 5052 (4960) | none |
+| `bay_lines` | 9760 | 9074 | about 9125 | about +206 | about 9331 | none |
+| `kit_python_lines` | 5165 | 4880 | about 4880 | about +65 | about 4945 | none |
 | `long_lines` | 182 | 156 | at most 145 | 0 | at most 145 | none |
 | `tests` | 462 | 462 | 462 | +1 | 463 | **463** |
 | `comment_lines` | new | 0 | 0 | 0 | 0 | none (base lacks it) |
@@ -629,50 +821,72 @@ Every added line is at most 120 characters and is not packed.
 - **`bay_lines`.** The hand pass adds back `USAGE` in `bay/cli.py` (+38) and the five lambdas that become a `def`
   (+5). Names and messages that take over a reason add a few lines in guard and ledger (four small helpers, about
   +8) and remove others.
-  - Items 1 to 4 are +57: dispatch +16 (`_invoke_all`, `_merge`, the connector name in the error, `_run_code` −6),
-    guard +19 (two constants, `_lint_command` 13, the call site), limits +19 (imports, `comment_lines`, the parse
-    error, `MEASURES` and the count entry), model +3. G adds +32.
-  - The end is some 580 lines under today's ceiling.
-- **`kit_python_lines`.** python_check.py about 125 and comments_check.py about 47; with G about 90 and 30, while
-  improve-detect's pipeline.py loses about 40. The component tests do not count here (limits.py:41).
+  - Items 1 to 4, about +206: `standards.py` +95 (runner 12, probe 12, copy 14, compare 12, check 30, header and
+    constants 15); `boundary.py` +34 (the three git helpers, moved); `guard.py` +19 (two constants, `_lint_command`
+    13, the call site); `limits.py` +19 (imports, `comment_lines`, the parse error, `MEASURES` and the count entry);
+    `lint.py` +22; `dispatch.py` +9 (start commit 3, `replaces` keeping the base 3, the hand-off 3); `model.py` +6
+    (the constant, the list, the `with` check); `workflows.py` +2.
+  - The old plan's `_merge` (+18) is gone: the dispatcher no longer merges outputs of several connectors.
+  - The end is some 430 lines under today's ceiling.
+- **`kit_python_lines`.** python_check.py about 45 (was 125) and comments_check.py about 60 (was 47, now with the
+  lexer and the setting); improve-detect's pipeline.py loses about 40 to `bay/boundary.py`. The component tests do
+  not count here (limits.py:41).
+- **`tests`.** +2 new (python-check, comments-check), −1 merged (the deadcode step-order test). Every other test
+  this plan names is an existing one, extended.
 - **`long_lines`.** The 156 includes 11 cut docstring lines over 120 in `bay/` and the kit; the hand pass shortens
   them.
+- **`schemas`.** The `language` block is a key in an existing file; the count stays 16.
 - **The release** runs `./bay.sh check --limits --write` once. It writes the real, lower counts, and the ratchet
   keeps them.
 
 ## Docs: the word cuts (budget 3000, `len(text.split())`)
 
-Measured today: DESIGN.md 2997 and INTERFACES.md 2998. Each cut was checked to occur exactly once. Slice 0 adds no
-words to either: every security reason it removes is already stated there, or goes to a name, a message or a
-README.
+Measured on 161a0ac: DESIGN.md 2997 and INTERFACES.md 2998. Each cut below occurs exactly once at 9aa7e8f. Slice 0
+adds no words to either. The counts of the cuts are by hand; the builder re-counts both files with
+`len(text.split())` before the docs commit.
 
-**DESIGN.md**, which adds about 40 words (the `standards` step next to `deadcode` and `limits` at :153-166, and the
-rule in one sentence). Cut 50:
+**DESIGN.md** adds about 65 words: the step list of `forge.extend` gains `standards` and `release-standards`, and a
+**Standards.** bullet next to Dead code and Size (the step compares with the commit the call started from; kit
+Python has no `#` comment and one-line docstrings, a project setting elsewhere; a feature whose role writes checked
+files needs the step). Cut about 75:
 - the use-shim sentence in Dispatcher (:101-102, 21 words; B-9 and INTERFACES §7 state it);
+- "Secret values are scanned for and redacted from everything returned or logged." in Dispatcher (:101-102, 12
+  words; INTERFACES §9 and the Safety model state it);
 - "`bay status` lists unfinished work ... it closes nothing." in Run log (:108, 16 words; INTERFACES §8 states it);
 - ", named like the proposal," (5) and "It is skipped when the plan file exists." (8) in the Plan bullet (:155-157; the
-  playbook states both).
+  playbook states both);
+- "`bay auth` needs the browser on the machine running bay, not a terminal." in Secrets and logins (:135-136, 13
+  words; INTERFACES §4 gives the login its `open_browser(url)`, and the mail-briefing playbook says where the
+  browser opens).
 
-**INTERFACES.md**, which adds about 70 words (`standards.check/v1` in §10, several connectors for a code step in §3).
-Cut 76:
+**INTERFACES.md** adds about 120 words: `$call.base` in §1 (the step sentence), `standards.check/v1` and the
+`language` block in §4, and the standards step and the lint rule in §7. Cut about 127:
 - the `bay show reclaim` / `bay show close` parenthetical in §7 (:198-199, 27 words; the README command table
   has both);
 - "The loader in `bay/model.py` maps kind to manifest file name ..." in Components (:54-56, 16 words);
 - "and a leftover top-level `modes/` ... folder" (:63-64, 12 net; a 0010 migration remnant);
 - the `bay show <mode> --resolved` bullet in §1 (:82, 15 words; README :118 has it);
 - in §3 (:128), "beyond read-only version control, `./bay.sh check` and `python3 tests/run.py`" becomes "beyond
-  `READ_ONLY_CLIS` (`bay/model.py`)", which saves 6 words.
+  `READ_ONLY_CLIS` (`bay/model.py`)", which saves 6 words;
+- "`bay status --agents` groups runs ... to-do progress and inputs." in §9 (:227-228, 24 words; the README command
+  table has both commands);
+- "(usage goes to the step's event)" in §7 (:198, 5 words; §9 says any event may carry it);
+- "Read the endpoints and fields there." in §10 (:233, 6 words);
+- "`items.store/v2` has `add`, `update`, `delete` and `rows`." in §11 (:238, 8 words; the interface file lists
+  them);
+- "(lowercase letters, digits and hyphens, at most 64)" in §5 (:182, 8 words; lint states it).
 
-**README.md** gains the requirements clause from guard.py (about 10 words) and the checks a change passes (DOD-13).
-It has no word budget.
+**README.md** gains the requirements clause from guard.py (about 10 words), the checks a change passes (DOD-13) and
+the project config files the step reads. It has no word budget.
 
 ## Release 3.2.0
 
 As in the proposal:
 - `bay/__init__.py` goes to 3.2.0.
 - The CHANGELOG entry has an Upgrading note: `pip install -r requirements-dev.txt`, then `./bay.sh build`, because
-  the agent files list the new clis. It also says that 3.2.0 removed every comment in the kit, so open branches
-  should rebase.
+  the agent files list the new clis. It says that 3.2.0 removed every comment in the kit, so open branches should
+  rebase, and that a user mode with a writing role needs a standards step, `needs: standards.check/v1` and a code
+  env that binds the checkers (amendment 6).
 - `./bay.sh check --limits --write --base origin/main --proposal docs/proposals/0011-standards.md` runs once. The
   `comment_lines: 0` line already exists by then; `--write` lowers `bay_lines`, `kit_python_lines` and `long_lines`.
 - The tag, push and `gh release create` commands are printed for the owner.

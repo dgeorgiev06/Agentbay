@@ -549,7 +549,7 @@ does everything else (build, clean, secret, scaffolds). Subagents run no `{BAY}`
 - `{BAY} note task` -> prints a fresh taskId
 - `{BAY} status` / `{BAY} status --log -n 20` -> calls, steps and agent runs from the ledger; the raw events
 - `{BAY} note <runId|taskId|callId> "text"` -> record a decision; `note done <taskId>` when an agent dispatched outside a step reports back
-- `{BAY} note dispatch <taskId> --agent <subagent_type> ...` -> log a subagent dispatch (asks)
+- `{BAY} note dispatch <taskId> --agent <subagent_type> ... [--unguarded "<reason>"]` -> log a subagent dispatch (asks)
 - `{BAY} note review <taskId> '<review.verdict/v1 json>'` -> record a review run outside a framework step (asks)
 - `{BAY} show reclaim <runId>` / `show close <callId> --reason ...` -> mark a stuck run reclaimed; end an open call as abandoned (asks)
 - `{BAY} approve <callId|runId> --via chat --quote "<the user's exact message>"` -> relay a gate approval from

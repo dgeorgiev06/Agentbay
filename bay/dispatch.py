@@ -703,7 +703,7 @@ class Dispatcher:
             "rules": [r.as_dict() for r in feat.rules if r.for_reviewer() and r.applies(state["input"])],
             "checks": state["checks"],
             "output": self._endpoint_output(feat, state),
-            "verdictSchema": VERDICT,
+            "verdictSchema": model.data_schema(VERDICT),
             "recordedPlans": self._recorded_plans(state["callId"]),
         }
         for name in (feat.review or {}).get("rulesets", []):

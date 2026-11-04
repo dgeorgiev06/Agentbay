@@ -184,7 +184,8 @@ PLAN = {"outcome": "bay plan exists", "todo": [{"text": "write it", "serves": "s
 
 def _dispatch(p, tid=TID, agent="builder--forge--framework-dev", **kw):
     r = cli(p, "note", "dispatch", tid, "--agent", agent, "--model", "sonnet", "--tier", "balanced", "--role", "builder",
-            "--mode", "forge", "--call", "C-1", "--step", "implement", *kw.get("extra", []))
+            "--mode", "forge", "--call", "C-1", "--step", "implement", "--unguarded", "tests run without hooks",
+            *kw.get("extra", []))
     assert r.returncode == 0, r.stderr
 
 
@@ -281,9 +282,12 @@ def test_a_dispatched_agent_is_listed_by_status_without_the_spawn_hook():
                                     "type": kind, "runId": ticking, "taskId": ticking, "agent": "builder--forge--framework-dev",
                                     "source": "coordinator", "summary": "tick"}) + "\n")
         assert ticking not in cli(p, "status").stdout.split("STALE?")[1].split("RECENT AGENTS")[0]
-        assert "guard: no tool call was checked" in cli(p, "status").stdout
+        out = cli(p, "status").stdout
+        assert "guard: no tool call was checked" in out
+        assert f"unguarded dispatch {TID}: tests run without hooks" in out.split("guard: no tool call")[1].split("RECENT AGENTS")[0]
         subprocess.run([sys.executable, str(KIT / "bay/guard.py")], input=json.dumps({"tool_name": "Read", "cwd": str(p)}),
                        text=True, env={"CLAUDE_PROJECT_DIR": str(p), "PATH": "/usr/bin:/bin"})
-        assert "guard: no tool call was checked" not in cli(p, "status").stdout
+        out = cli(p, "status").stdout
+        assert "guard: no tool call was checked" not in out and f"unguarded dispatch {TID}" in out    # still listed
     finally:
         cleanup(p)

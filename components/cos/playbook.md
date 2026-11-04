@@ -26,7 +26,8 @@ write, spend and delete belongs to the endpoint you call.
      -> do it yourself following that mode's coordinator playbook.
      Before every Agent dispatch, log it: `.agentbay/bay note dispatch <taskId> --agent <subagent_type>
      --call <callId> --step <stepId> --model <m> --tier <t> --role <r> --mode <mode> --input <path or id>`
-     (repeat `--input` per input). `bay status` lists the run from this even with the spawn hook off, and a
+     (repeat `--input` per input). If it refuses because no guard hook has run lately, hooks are off: tell the user
+     why, and pass `--unguarded "<reason>"` only when the user knows hooks cannot load. `bay status` lists the run from this even with the spawn hook off, and a
      subagent can record a plan only for a taskId logged here. The subagent's first action is `bay plan`
      (outcome and to-do), then it ticks items with `--done <n>`; a role-step submit is refused without a plan.
      Then submit the JSON output with what the run cost, from the Agent tool result (total tokens,

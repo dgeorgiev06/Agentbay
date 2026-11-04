@@ -462,7 +462,20 @@ class Guard:
             return "deny", f"agentbay: git flag {bad[0]} is not allowed (it writes or reads files or runs programs)"
         if words[1:3] == ["worktree", "add"]:
             return self._worktree_add(entry, words[3:], cwd)
+        if words[1] in ("mv", "rm"):        # each path (flag-like ones after `--` too), judged as the file tools would
+            cut = words.index("--") if "--" in words else len(words)
+            args = [w for w in words[2:cut] if not w.startswith("-")] + words[cut + 1:]
+            why = next(((a, w) for a in args if (w := self._git_path_denied(entry, a, cwd))), None)
+            return ("deny", f"agentbay: git {words[1]} {why[0]}: {why[1]}") if why else None
         return None
+
+    def _git_path_denied(self, entry, a, cwd) -> str | None:
+        """Why the role may not write `a` or a never-written or protected path inside it (`git rm -r .`), or None."""
+        if a.startswith(":") or any(c in a for c in "*?[\\"):
+            return "git pathspec magic and globs are not allowed; name each path"
+        p, held = norm(a, cwd), (*NEVER_DIRS, *NEVER_FILES, *map("/".join, NEVER_SEQS), *self.policy.get("protected", []))
+        return next((w for x in [p, *(self.project / h for h in held)] if self.inside(x, p) and (
+            w := self.never_write(x) or self._write_denied(entry, x))), None)
 
     @staticmethod
     def _deny_unlisted(entry) -> tuple[str, str]:
@@ -524,13 +537,10 @@ class Guard:
                 continue
             if a.startswith("-"):
                 continue
-            p = norm(a, cwd)
-            if os.path.isabs(a) or not under(p, self.project):
+            if os.path.isabs(a) or not under(norm(a, cwd), self.project):
                 return "deny", "agentbay: git worktree add needs a relative path inside the project"
-            why = self.never_write(p) or self._write_denied(entry, p)
-            if why:
-                return "deny", f"agentbay: git worktree add {a}: {why}"
-            return None
+            why = self._git_path_denied(entry, a, cwd)
+            return ("deny", f"agentbay: git worktree add {a}: {why}") if why else None
         return None
 
     def _touches_control_plane(self, word: str, cwd: Path) -> bool:

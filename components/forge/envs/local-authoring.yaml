@@ -12,11 +12,10 @@ spec:
     session.events/v1: ledger
     review.verdicts/v1: ledger
     artifacts.read/v1: artifact-graph
-    workspace.read/v1: { tools: [Read, Glob, Grep] }
+    workspace.read/v1: { tools: [Read, Glob, Grep, Bash], clis: [./bay.sh check, python3 tests/run.py] }
     workspace.write/v1:
       tools: [Edit, Write, Bash]
-      # no test runner: an agent that can write code and run it escapes any hook; the user/coordinator runs tests
-      clis: [./bay.sh check]
+      clis: [git add, git commit, git mv, git rm]
     git.read/v1:
       tools: [Bash]
       clis: [git status, git diff, git log, git show]

@@ -103,7 +103,10 @@ def test_agentic_step_returns_plan_then_review_then_partial_on_failed_must():
     err(lambda: d.submit(r["callId"], "review", verdict), "missing ids: DOD-2", "R-1")
     bad = {"items": [dict(verdict["items"][0], cites={"todo": [0]})]}
     err(lambda: d.submit(r["callId"], "review", bad), "does not match review.verdict/v1")
-    verdict["items"] += [{"id": "DOD-2", "verdict": "fail", "evidence": "evil.example is not stored", "severity": "blocker"},
+    sch = rv["review"]["verdictSchema"]                                              # the brief carries the schema itself
+    assert isinstance(sch, dict) and sch["title"] == "review.verdict/v1" and sch["additionalProperties"] is False
+    verdict["items"] += [{"id": "C-3", "verdict": "pass", "evidence": "conformance rule judged"},   # C-n accepted as an extra item
+                         {"id": "DOD-2", "verdict": "fail", "evidence": "evil.example is not stored", "severity": "blocker"},
                          {"id": "R-1", "verdict": "fail", "evidence": "check R-1 failed", "severity": "blocker"}]
     r3 = d.submit(r["callId"], "review", verdict)
     assert r3["status"] == "partial" and set(r3["review"]["failed"]) == {"DOD-2", "R-1"}

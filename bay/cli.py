@@ -502,11 +502,18 @@ def _note_dispatch(args, task: str):
         _die("✗ note dispatch needs --agent <subagent_type>")
     if not ledger.TASK_ID.match(task):
         _die(f"✗ '{task}' is not a taskId (`bay note task` mints one)")
+    if not args.unguarded and _guard_silent(args.project, 900):     # 900: the hook touches the file before the user answers the prompt
+        _die('✗ no guard hook call in the last 15 minutes: hooks are not loaded. Start Claude Code inside the project, or pass --unguarded "<reason>"')
     ledger.append(args.project, "agent.dispatch", task, source="coordinator", taskId=task,
                   callId=args.call, step=args.step, agent=args.agent, summary=args.summary or "",
                   data={k: v for k, v in (("model", args.model), ("tier", args.tier), ("role", args.role),
-                                          ("mode", args.mode), ("inputs", args.input)) if v})
+                                          ("mode", args.mode), ("inputs", args.input), ("unguarded", args.unguarded)) if v})
     print("dispatch recorded")
+
+
+def _guard_silent(project: Path, secs: int = 120) -> bool:
+    """True when no hook call touched .agentbay/ledger/guard.seen in the last `secs` seconds: its hooks are not loaded."""
+    return time.time() - max((p.stat().st_mtime for p in [project / ".agentbay/ledger/guard.seen"] if p.exists()), default=0) > secs
 
 
 def _secs(ts: str) -> int:
@@ -532,6 +539,13 @@ def _print_stale(evs, stale_runs, stale_calls):
         print(f"  {c.call_id:<18} {c.mode + '.' + c.endpoint:<24} {c.state:<8} step={c.last_step:<10} {_ago(c.ts):>4}")
     for r in stale_runs:
         print(f"  {r.run_id[:14]:<14} {r.agent:<14} {r.task_id or '-':<16} {_ago(r.started):>4}  {r.summary[:60]}")
+
+
+def _print_guard(project: Path, evs: list) -> None:
+    if _guard_silent(project):
+        print("\nguard: no tool call was checked in the last 2 minutes. In a Claude Code session this means its hooks are not loaded: start it inside the project")
+    for e in (e for e in evs if (e.get("data") or {}).get("unguarded")):
+        print(f"  unguarded dispatch {e['taskId']}: {e['data']['unguarded'][:70]}")
 
 
 def cmd_status(args):
@@ -569,9 +583,7 @@ def cmd_status(args):
     for r in live:
         print(f"  {r.run_id[:14]:<14} {r.agent:<14} {r.task_id or '-':<16} {_ago(r.started):>4}  {r.summary[:60]}")
     _print_stale(evs, stale_runs, stale_calls)
-    seen = args.project / ".agentbay/ledger/guard.seen"
-    if not seen.exists() or time.time() - seen.stat().st_mtime > 120:
-        print("\nguard: no tool call was checked in the last 2 minutes. In a Claude Code session this means its hooks are not loaded: start it inside the project")
+    _print_guard(args.project, evs)
     print(f"\nRECENT AGENTS ({len(done)} of {len(runs) - len(live) - len(stale_runs)})")
     for r in done:
         print(f"  {r.run_id[:14]:<14} {r.agent:<14} {r.task_id or '-':<16} {r.state:<9} {r.summary[:70]}")
@@ -590,7 +602,7 @@ def _find_run(project, key) -> str:
 
 
 STALE_S = 86400
-DISPATCH_FLAGS = ("agent", "call", "step", "model", "tier", "role", "mode", "summary", "input")
+DISPATCH_FLAGS = ("agent", "call", "step", "model", "tier", "role", "mode", "summary", "input", "unguarded")
 
 
 def cmd_note(args):
@@ -599,14 +611,14 @@ def cmd_note(args):
     words = args.words
     verb = words[0]
     if verb not in ("task", "dispatch", "review") and any(getattr(args, f) for f in DISPATCH_FLAGS):
-        _die("✗ --agent, --call, --step, --model, --tier, --role, --mode, --summary and --input go with `note dispatch`")
+        _die("✗ --agent, --call, --step, --model, --tier, --role, --mode, --summary, --input and --unguarded go with `note dispatch`")
     if verb == "task":
         if len(words) != 1:
             _die("✗ `bay note task` takes no arguments")
         print(protocol.new_task_id())
     elif verb == "dispatch":
         if len(words) != 2:
-            _die("✗ usage: bay note dispatch <taskId> --agent <subagent_type> [--call --step --model --tier --role --mode --input]")
+            _die("✗ usage: bay note dispatch <taskId> --agent <subagent_type> [--call --step --model --tier --role --mode --input --unguarded <reason>]")
         _note_dispatch(args, words[1])
     elif verb == "review":
         if len(words) != 3:
@@ -821,7 +833,7 @@ def main(argv=None):
     no.add_argument("--kind", choices=ledger.NOTE_KINDS, default="note")
     no.add_argument("--instruction", action="store_true", help="the user changed the instructions mid-run "
                     "(same as --kind instruction-change)")
-    for f in ("agent", "call", "step", "model", "tier", "role", "mode", "summary"):
+    for f in ("agent", "call", "step", "model", "tier", "role", "mode", "summary", "unguarded"):
         no.add_argument(f"--{f}", help="note dispatch" + (" (required)" if f == "agent" else ""))
     no.add_argument("--input", action="append", help="note dispatch: an input ref (repeat)")
     no.set_defaults(fn=cmd_note)

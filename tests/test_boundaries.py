@@ -536,6 +536,40 @@ def test_n3_worktree_add_paths_and_no_writes_without_write_tools():
             assert decide(g, agent, "Bash", {"command": cmd}) == "deny", cmd
         assert decide(g, agent, "Bash", {"command": "git worktree add -b feat bay/wt-feat"}) == "pass"
         assert decide(g, "reviewer--delivery", "Write", {"file_path": "notes.md", "content": "x"}) == "deny"
+        # 0020 item 7: git mv / git rm paths are judged like the file tools would. Columns: local-authoring, delivery,
+        # framework-dev; d = deny, p = pass, None = not asserted.
+        units = ("builder--forge--local-authoring", "builder--delivery", agent)
+        for u in units:                                                   # as if the env granted them
+            g.policy["subagents"][u]["clis"] += [c for c in ("git mv", "git rm") if c not in g.policy["subagents"][u]["clis"]]
+        (k / "components" / "l").symlink_to("../bay")
+        rows = [("git rm bay/guard.py", "d", "d", "p"), ("git rm --cached bay/guard.py", "d", "d", "p"),
+                ("git mv components/a.py bay/b.py", "d", "d", "d"),       # the destination is judged too
+                ("git rm components/../bay/guard.py", "d", "d", "p"), (f"git rm {k}/bay/guard.py", "d", "d", "p"),
+                ("git rm 'bay/guard.py'", "d", "d", "p"), ('git rm b"ay"/guard.py', "d", "d", "p"),
+                ("git rm -- bay/guard.py", "d", "d", "p"), ("git rm -- -x", "d", "p", "d"),   # after `--` a dash word is a path
+                ("git rm docs/a.md bay/guard.py", "d", "d", "p"),         # the bad one second
+                ("git rm -r bay", "d", "d", "p"), ("git rm -r .", "d", "d", "d"), ("git rm -r components/..", "d", "d", "d"),
+                ("git rm -r components", "d", "d", "d"),                  # a folder holding protected paths
+                ("git rm -r .github", "d", "d", "d"), ("git rm .github/workflows/ci.yml", "d", "d", "d"),
+                ("git rm CLAUDE.md", "d", "d", "d"), ("git rm Makefile", "d", "d", "d"), ("git rm bay.sh", "d", "d", "d"),
+                ("git rm .agentbay/x", "d", "d", "d"),
+                ("git rm ':/bay/guard.py'", "d", "d", "d"), ("git rm ':(top)bay/guard.py'", "d", "d", "d"),
+                ("git rm '*guard.py'", "d", "d", "d"), ("git rm 'bay/*.py'", "d", "d", "d"), ("git rm 'bay/guard\\.py'", "d", "d", "d"),
+                ("git rm components/l", "d", None, None),                 # a symlink is judged by its target: fails closed
+                ("git -C bay rm guard.py", "d", "d", "d"),                # not under the `git rm` prefix
+                ("git rm components/briefing/mode.yaml", "p", None, None), ("git rm -r components/briefing", "p", None, None),
+                ("git rm tests/x.py", "d", "p", "p"), ("git mv docs/a.md docs/b.md", "d", "p", "p"), ("git rm -r docs", "d", "p", "p")]
+        ci = guard_for(k, ci=True)
+        ci.policy["subagents"] = g.policy["subagents"]
+        rows += [(c, "d", "d", None) for c in ("git rm BAY/guard.py", "git rm -r Bay", "git rm claude.MD", "git rm .GitHub/Workflows")]
+        for cmd, *want in rows:
+            for u, w in zip(units, want):
+                if w:
+                    got = decide(ci if cmd.split()[-1] in ("BAY/guard.py", "Bay", "claude.MD", ".GitHub/Workflows") else g, u, "Bash", {"command": cmd})
+                    assert got == {"d": "deny", "p": "pass"}[w], (u, cmd, got)
+        why = g.decide({"tool_name": "Bash", "tool_input": {"command": "git rm bay/guard.py"}, "agent_type": units[0],
+                        "agent_id": "a1", "cwd": str(k)})[1]
+        assert why.startswith("agentbay: git rm bay/guard.py: ")
     finally:
         cleanup(k)
 

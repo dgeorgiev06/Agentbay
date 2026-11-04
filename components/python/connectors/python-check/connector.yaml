@@ -1,0 +1,11 @@
+apiVersion: agentbay/v4
+kind: Connector
+metadata:
+  name: python-check
+  description: >-
+    standards.check/v1 for Python: runs ruff and mypy --strict on one folder with python3 -I -m, reads every config
+    from the base export, and reports the inline mypy configuration and type: ignore comments as findings of their own.
+  version: 0.1.0
+spec:
+  implements: standards.check/v1
+  entry: python_check.py

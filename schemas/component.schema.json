@@ -29,6 +29,57 @@
           "uniqueItems": true,
           "items": { "type": "string", "pattern": "^[a-z][a-z0-9.-]*/v[0-9]+$" },
           "description": "Interfaces (name/vN) the component needs."
+        },
+        "language": {
+          "type": "object",
+          "required": ["files", "comments"],
+          "additionalProperties": false,
+          "description": "A language the standards checkers cover (proposal 0011).",
+          "properties": {
+            "files": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "type": "string", "pattern": "^\\*\\.[A-Za-z0-9]+$" },
+              "description": "Globs of the form *.<ext>: the files the language's checkers cover."
+            },
+            "comments": {
+              "description": "The comment syntax: python (counted with tokenize) or the line and block markers.",
+              "oneOf": [
+                { "const": "python" },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "line": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+                    "block": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "minItems": 2,
+                        "maxItems": 2,
+                        "items": { "type": "string", "minLength": 1 }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "tools": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["module", "version"],
+                "additionalProperties": false,
+                "properties": {
+                  "module": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+                  "version": { "type": "string", "minLength": 1 }
+                }
+              },
+              "description": "Python modules the checkers run with python3 -I -m, at their pinned versions."
+            },
+            "install": { "type": "string", "description": "What a missing tool tells the user to run." }
+          }
         }
       }
     }

@@ -21,11 +21,12 @@ touches:
   - { path: tests/test_dispatch.py, reason: "item 5: the verdict test at line 105 also accepts a C-n id and checks the brief's schema" }
   - { path: docs/DESIGN.md, reason: "DOD-13: line 85 (read-only CLIs), lines 108-109 (the hooks sentence), the guard bullet at line 141 (git mv and rm paths); paid for in the same file" }
   - { path: docs/INTERFACES.md, reason: "DOD-13: line 102 (the brief carries the schema, C-n ids), line 128 (read-only CLIs), line 222 (--unguarded); paid for in the same file" }
-  - { path: framework/limits.yaml, reason: "release step: bay_lines is written down to the real count" }
+  - { path: framework/limits.yaml, reason: "release step: bay_lines is written down to the real count; review round 2: the new measure long_lines" }
+  - { path: bay/limits.py, reason: "review round 2: count long_lines (lines over 120 characters in the code the kernel measures count)" }
   - { path: bay/__init__.py, reason: "release step: version 3.1.0" }
   - { path: CHANGELOG.md, reason: "release step: entry, with an Upgrading note for the dispatch check" }
 exceptions:
-  - { measure: bay_lines, to: 9715, reason: "Raised from 9709 by the plan step, which measured 9710 against the real code (a status-listing helper the deadcode complexity check forces, and the item 7 edges: folders holding protected paths, pathspec magic, globs, words after --); payers: _worktree_add reuses the new check (-3), the inline heartbeat test in cmd_status (-2). The first estimate follows. 9688 is the ceiling and the exact count today (python lines of bay/*.py). Estimate +16: cli.py +11 (guard helper 4 lines plus 2 blank, status uses it -1, the refusal +2, the reason in the event +1, the status listing +3), guard.py +5 (the mv/rm branch of _git_command: the if, the loop over non-flag arguments, the denial test, the return), model.py and dispatch.py 0. The only payer that can be named in bay/ is the inline heartbeat test in cmd_status (-1, already counted); the rest is not paid for. 9709 is the estimate plus a margin of 5. If it must shrink, the status listing (+3) goes first and the reason stays in the ledger. The release lowers the ceiling to the real count." }
+  - { measure: bay_lines, to: 9730, reason: "Raised to 9730 by review round 2 (owner decision: readable code, no packed lines; the long_lines measure is added). Earlier: 9715. Raised from 9709 by the plan step, which measured 9710 against the real code (a status-listing helper the deadcode complexity check forces, and the item 7 edges: folders holding protected paths, pathspec magic, globs, words after --); payers: _worktree_add reuses the new check (-3), the inline heartbeat test in cmd_status (-2). The first estimate follows. 9688 is the ceiling and the exact count today (python lines of bay/*.py). Estimate +16: cli.py +11 (guard helper 4 lines plus 2 blank, status uses it -1, the refusal +2, the reason in the event +1, the status listing +3), guard.py +5 (the mv/rm branch of _git_command: the if, the loop over non-flag arguments, the denial test, the return), model.py and dispatch.py 0. The only payer that can be named in bay/ is the inline heartbeat test in cmd_status (-1, already counted); the rest is not paid for. 9709 is the estimate plus a margin of 5. If it must shrink, the status listing (+3) goes first and the reason stays in the ledger. The release lowers the ceiling to the real count." }
 ---
 
 # 0020: Agents can check their own work
@@ -115,6 +116,15 @@ The first review (call C-20261104-328613) found one security blocker and four sh
 3. **A failed must-level C-n halts the call.** The review halt logic reads the level of a conformance rule from its ruleset, as it does for DoD and rules.
 4. **The heartbeat read is strict.** The dispatch check reads `guard.seen` without following symlinks, requires a regular file, treats a modified time in the future as stale, and refuses a reason of only spaces.
 5. **Docs.** DESIGN says plainly that a role that may run the test runner can run code it wrote; the comment in `local-authoring.yaml` is restored; `bay status` puts the unguarded dispatches under one heading; the two joins in INTERFACES get their spaces back.
+
+## Review round 2 fixes
+
+The second review found no blocker and no security finding. It found that bay_lines was held at 9715 by writing the new security checks as the three longest lines in `bay/` (347, 222 and 204 characters; the longest before was 174), which games a measure that counts lines. The owner decided in chat on 2026-11-03 that code must be human readable and that long lines count as cheating. This round does these and nothing else:
+
+1. **Readable code.** `bay/guard.py:458`, `bay/guard.py:65` (with its `# noqa: E731`) and `bay/dispatch.py:628` are written as ordinary code, every line 120 characters or fewer. The bay_lines exception rises to the real count, at most 9730.
+2. **A hard limit on long lines.** `framework/limits.yaml` gains a measure `long_lines`: lines longer than 120 characters in the code the other kernel measures count (`bay/`, `adapters/` and the protected component paths). Its ceiling starts at today's count; like every measure it may not rise without an `exceptions:` entry, so packing code onto long lines fails `bay check --limits`.
+3. **Named trims.** The three DESIGN phrases cut in round 1 to stay within the word budget are named here: "The kit resolves it at load.", ", in project workflows too" and ", whose name says its kind".
+4. **Bundled -O.** `git diff -pO<file>`, `-RO<file>` and `git log -pO<file>` get past the `-O` ban (already on main; read-only). A short-option cluster that contains `O` is refused like `-O`.
 
 ## Release 3.1.0
 

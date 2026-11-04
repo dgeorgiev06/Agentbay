@@ -502,6 +502,7 @@ def _note_dispatch(args, task: str):
         _die("✗ note dispatch needs --agent <subagent_type>")
     if not ledger.TASK_ID.match(task):
         _die(f"✗ '{task}' is not a taskId (`bay note task` mints one)")
+    args.unguarded = (args.unguarded or "").strip()      # a reason of only spaces is no reason
     if not args.unguarded and _guard_silent(args.project, 900):     # 900: the hook touches the file before the user answers the prompt
         _die('✗ no guard hook call in the last 15 minutes: hooks are not loaded. Start Claude Code inside the project, or pass --unguarded "<reason>"')
     ledger.append(args.project, "agent.dispatch", task, source="coordinator", taskId=task,
@@ -513,7 +514,8 @@ def _note_dispatch(args, task: str):
 
 def _guard_silent(project: Path, secs: int = 120) -> bool:
     """True when no hook call touched .agentbay/ledger/guard.seen in the last `secs` seconds: its hooks are not loaded."""
-    return time.time() - max((p.stat().st_mtime for p in [project / ".agentbay/ledger/guard.seen"] if p.exists()), default=0) > secs
+    p = project / ".agentbay/ledger/guard.seen"      # not a symlink or a directory, and not dated in the future
+    return p.is_symlink() or not p.is_file() or not 0 <= time.time() - p.stat().st_mtime <= secs
 
 
 def _secs(ts: str) -> int:
@@ -544,8 +546,8 @@ def _print_stale(evs, stale_runs, stale_calls):
 def _print_guard(project: Path, evs: list) -> None:
     if _guard_silent(project):
         print("\nguard: no tool call was checked in the last 2 minutes. In a Claude Code session this means its hooks are not loaded: start it inside the project")
-    for e in (e for e in evs if (e.get("data") or {}).get("unguarded")):
-        print(f"  unguarded dispatch {e['taskId']}: {e['data']['unguarded'][:70]}")
+    for i, e in enumerate(e for e in evs if (e.get("data") or {}).get("unguarded")):
+        print(("\nunguarded dispatches:\n" if not i else "") + f"  {e['taskId']}: {e['data']['unguarded'][:70]}")
 
 
 def cmd_status(args):

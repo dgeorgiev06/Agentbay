@@ -20,13 +20,13 @@ A mode names capabilities, never a connector or tool. Adding a source is one com
 an env, and no mode, role or playbook changes. A role file outside the framework is an error. A mode customizes a
 role through its playbooks, skills and rules, and a new role is a `forge.extend` proposal.
 
-A mode may `extends:` one abstract mode that extends nothing, so inheritance is one level deep. The kit resolves it at load. A child's feature replaces its parent's feature of that name whole, never key by key, except that a feature with no `playbook` or `rules` inherits the parent's. Roles, constraints
+A mode may `extends:` one abstract mode that extends nothing, so inheritance is one level deep. A child's feature replaces its parent's feature of that name whole, never key by key, except that a feature with no `playbook` or `rules` inherits the parent's. Roles, constraints
 and config defaults merge entry by entry, `needs` are unioned, and inherited paths are rebased to the child's
 folder. `abstract: true` marks a base that is linted but never installed or called.
 
 ## Components
 
-A component is one folder in `components/` with one manifest, whose name says its kind.
+A component is one folder in `components/` with one manifest.
 
 | Manifest | Kind | For |
 |---|---|---|
@@ -56,7 +56,7 @@ neither; one that does needs a playbook. It is called as `<mode>.<feature>`. The
 - `gate: <text>` is an approval gate that only you pass, with `bay approve` in a terminal (or from chat, if `approve.from` allows it). `approves: $in.<f>` ties the gate to the exact content of a file, so a later call on the unchanged file skips it.
 - `{review: here}` marks where review goes (default last).
 
-`with:` substitutes `$in.x`, `$steps.<id>.x` and `$config.x`, with `a|b` fallbacks; a `*` path part maps the rest over a list (`$steps.get.items.*.id`), in project workflows too. `when:` skips a step
+`with:` substitutes `$in.x`, `$steps.<id>.x` and `$config.x`, with `a|b` fallbacks; a `*` path part maps the rest over a list (`$steps.get.items.*.id`). `when:` skips a step
 (`stale > 2h`, `$in.<field>` or `$steps.<id>.<field>`; `!` negates). A playbook has the sections Purpose, Inputs,
 Steps, Definition of Done (`- [DOD-n] (must|should|must_not) ...`), Outputs and Failure handling. Rules refer to
 Definition of Done ids and can name a deterministic `check` (`citations_resolve`, `no_secrets`, `lint_clean`).
@@ -116,7 +116,7 @@ check), your authority (the framework changes only through `forge.extend`, with 
 secrets. It defends against agent mistakes and overreach, prompt injection through data agents read, and extensions
 that overreach, not against you. The guard narrows what subagents can ask to do; these are guardrails, not a hard
 boundary, and hard isolation needs an OS sandbox. One bypass is known: code a builder or reviewer runs, such as a test, runs outside
-the guard. Around it stand the gate, plan approval, the whole-diff review, the boundary check, `deadcode` and `limits`.
+the guard, so a role that may run tests has no hard write limit. Around it stand the gate, plan approval, the whole-diff review, the boundary check, `deadcode` and `limits`.
 
 - **Nothing that runs code is auto-approved.** The guard allows without a prompt only a role's own read-only use
   shim (`python3 -E <kit>/bay/use_shim.py`; with the kit inside the project, even that prompts). Every other subagent

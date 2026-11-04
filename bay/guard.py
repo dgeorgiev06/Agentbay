@@ -61,6 +61,8 @@ NEVER_SEQS = ((".github", "workflows"),)
 GIT_BAD_FLAGS = ("--output", "--ext-diff", "--textconv", "--no-index", "--exec", "--upload-pack",
                  "--receive-pack", "--config", "--git-dir", "--work-tree", "--open-files-in-pager",
                  "--pathspec-from-file", "-O")
+GIT_PATH_FLAGS = ("-r", "-f", "-n", "-q", "-k", "-v", "--cached", "--dry-run", "--force", "--quiet")     # all that `git mv`/`git rm` may take
+abbrev = lambda w, flags: len(n := w.split("=", 1)[0]) > 2 and n.startswith("--") and any(f.startswith(n) for f in flags)   # noqa: E731  git and argparse accept `--pathspec-fr` for `--pathspec-from-file`
 INTERPRETERS = ("sh", "bash", "zsh", "dash", "ksh", "fish", "node", "perl", "ruby", "php", "deno", "bun")
 EVAL_FLAGS = ("-c", "-e", "--eval", "-E", "-r")
 PROBES = (".agentbay/guard.json", ".agentbay/bay", ".agentbay/roles/role/use", ".agentbay/data/feeds/feed-briefing/corpus.db",
@@ -453,11 +455,11 @@ class Guard:
             d = self._git_command(entry, words, cwd, len(pw))
             if d:
                 return d
-        return "pass", ""              # never auto-allowed: Claude Code's normal permission prompt applies
+        return ("deny", f"agentbay: check --write rewrites framework/limits.yaml: {why}") if (pw == ["./bay.sh", "check"] and any(abbrev(w, ("--write",)) for w in words[2:]) and (why := self._write_denied(entry, self.project / "framework/limits.yaml"))) else ("pass", "")   # else never auto-allowed: Claude Code's normal permission prompt applies
 
     def _git_command(self, entry, words, cwd, first) -> tuple[str, str] | None:
         """Denies for git flags that write or read files or run programs, and for an unsafe `worktree add`."""
-        bad = [w for w in words[first:] if w.startswith(GIT_BAD_FLAGS)]
+        bad = [w for w in words[first:] if w.startswith(GIT_BAD_FLAGS) or abbrev(w, GIT_BAD_FLAGS)]
         if bad:
             return "deny", f"agentbay: git flag {bad[0]} is not allowed (it writes or reads files or runs programs)"
         if words[1:3] == ["worktree", "add"]:
@@ -465,7 +467,8 @@ class Guard:
         if words[1] in ("mv", "rm"):        # each path (flag-like ones after `--` too), judged as the file tools would
             cut = words.index("--") if "--" in words else len(words)
             args = [w for w in words[2:cut] if not w.startswith("-")] + words[cut + 1:]
-            why = next(((a, w) for a in args if (w := self._git_path_denied(entry, a, cwd))), None)
+            why = next(((a, f"only {' '.join(GIT_PATH_FLAGS)} are allowed") for a in words[2:cut] if a.startswith("-") and a not in GIT_PATH_FLAGS), None) or \
+                next(((a, w) for a in args if (w := self._git_path_denied(entry, a, cwd))), None)
             return ("deny", f"agentbay: git {words[1]} {why[0]}: {why[1]}") if why else None
         return None
 

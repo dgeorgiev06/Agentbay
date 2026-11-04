@@ -284,10 +284,11 @@ def test_a_dispatched_agent_is_listed_by_status_without_the_spawn_hook():
         assert ticking not in cli(p, "status").stdout.split("STALE?")[1].split("RECENT AGENTS")[0]
         out = cli(p, "status").stdout
         assert "guard: no tool call was checked" in out
-        assert f"unguarded dispatch {TID}: tests run without hooks" in out.split("guard: no tool call")[1].split("RECENT AGENTS")[0]
+        assert f"unguarded dispatches:\n  {TID}: tests run without hooks" in out.split("guard: no tool call")[1].split("RECENT AGENTS")[0]
+        assert out.count("unguarded dispatches:") == 1                          # one heading, however many dispatches
         subprocess.run([sys.executable, str(KIT / "bay/guard.py")], input=json.dumps({"tool_name": "Read", "cwd": str(p)}),
                        text=True, env={"CLAUDE_PROJECT_DIR": str(p), "PATH": "/usr/bin:/bin"})
         out = cli(p, "status").stdout
-        assert "guard: no tool call was checked" not in out and f"unguarded dispatch {TID}" in out    # still listed
+        assert "guard: no tool call was checked" not in out and f"unguarded dispatches:\n  {TID}" in out    # still listed
     finally:
         cleanup(p)

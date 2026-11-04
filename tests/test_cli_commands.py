@@ -62,6 +62,7 @@ def test_note_task_mints_an_id_and_dispatch_and_review_take_the_task_first():
         r = cli(p, *dispatch)                                                        # no guard heartbeat: refused, no event
         assert r.returncode != 0 and "--unguarded" in r.stderr and not any(e["type"] == "agent.dispatch" for e in ledger.read(p))
         assert cli(p, *dispatch, "--unguarded", "").returncode != 0                  # an empty reason is no reason
+        assert cli(p, *dispatch, "--unguarded", "   ").returncode != 0               # nor is one of only spaces
         assert cli(p, *dispatch, "--unguarded", "x").returncode == 0
         assert [e["data"]["unguarded"] for e in ledger.read(p) if e["type"] == "agent.dispatch"] == ["x"]
         assert cli(p, "note", tid, "text", "--unguarded", "x").returncode != 0       # --unguarded goes with `dispatch`
@@ -72,6 +73,18 @@ def test_note_task_mints_an_id_and_dispatch_and_review_take_the_task_first():
         old = time.time() - 1000
         os.utime(seen, (old, old))
         assert cli(p, *dispatch).returncode != 0                                     # older than 900 s: refused again
+        future = time.time() + 86400 * 365
+        os.utime(seen, (future, future))
+        assert cli(p, *dispatch).returncode != 0                                     # dated in the future: stale
+        seen.unlink()
+        seen.mkdir()
+        assert cli(p, *dispatch).returncode != 0                                     # a directory is no heartbeat
+        seen.rmdir()
+        real = p / "real.seen"
+        real.touch()
+        seen.symlink_to(real)
+        assert cli(p, *dispatch).returncode != 0                                     # nor is a symlink, however fresh its target
+        seen.unlink()
         assert cli(p, "note", tid, "text", "--agent", "x").returncode != 0           # dispatch flags need `dispatch`
         assert sum(e["type"] == "agent.dispatch" and e["taskId"] == tid for e in ledger.read(p)) == 2
     finally:

@@ -288,7 +288,15 @@ def test_failed_review_halts_before_release():
         assert r["status"] == "partial" and r["review"]["failed"] == [b] and "next" not in r
         assert "recheck" not in to_review()["next"]["review"]  # a second re-check is not allowed: full review
         (k / path).write_text((k / path).read_text() + "edit\n")
-        assert "recheck" not in to_review()["next"]["review"]  # a changed proposal: the owner approved again, full review
+        r5 = to_review()
+        assert "recheck" not in r5["next"]["review"]  # a changed proposal: the owner approved again, full review
+        rules = r5["next"]["review"]["rulesets"]["conformance"]               # a failed must-level C-n halts like a DoD item, at any rating
+        must, should = (next(c["id"] for c in rules if c["level"] == lv) for lv in ("must", "should"))
+        r = d.submit(r5["callId"], "review", verdict(ids + [should], [should], "should-fix"))
+        assert r["status"] != "partial" and r["next"]["step"] == "release"     # a failed should does not
+        r6 = to_review()
+        r = d.submit(r6["callId"], "review", verdict(ids + [must], [must], "should-fix"))
+        assert r["status"] == "partial" and r["review"]["failed"] == [must] and "next" not in r
     finally:
         dispatch.boundary.git = real_git
         cleanup(k)

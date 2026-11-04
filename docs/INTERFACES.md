@@ -177,6 +177,7 @@ writes the registry via `bay.registry.write`. The catalog is the same for every 
 only its own `runtime` name, so a second runtime discovers the same modes, endpoints (with resolved input and
 output schemas), roles and project workflows. A runtime is a folder `adapters/<name>/` with `adapter.yaml` (name =
 folder, module inside the folder, class).
+
 The build names a component's skill `.claude/skills/<component>--<skill>/` and a role's skill `<role>--<skill>`
 (lowercase letters, digits and hyphens, at most 64), and rewrites the `name:` in the copied SKILL.md to match.
 Playbooks and role prompts keep the short name.
@@ -192,7 +193,8 @@ targets against the registry and each `with` against the endpoint's input schema
 
 ## 7. Dispatcher
 `bay call <mode>.<endpoint> '<json>'` -> `{callId, status, output | next, checks, review, cost}`.
-Status: `done | partial | blocked | failed | needs-agent | awaiting-approval | abandoned`.`bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic
+Status: `done | partial | blocked | failed | needs-agent | awaiting-approval | abandoned`.
+`bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic
 step (usage goes to the step's event); `bay show <callId>` prints the current state (`bay show reclaim <runId>`
 marks a stuck run reclaimed; `bay show close <callId> --reason <text>` ends an open call as abandoned, with the reason in the ledger).
 An input type that declares `replaces: <callId>` (`forge.extend` does) closes that open call as abandoned. Gates pass with `bay approve` ([safety model](DESIGN.md#safety-model)); a changed file returns the call to its passed gate at the next submit. `approve.plans` lists role steps (`<mode>.<endpoint>[.<step>]`) that get a plan step and a gate first; `approve.planner` sets their tier and effort. A role's generated shim

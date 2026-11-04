@@ -500,8 +500,15 @@ def test_se_more_git_flags_and_flag_values_are_path_checked():
         g = guard_for(p)
         for cmd in ("git diff --pathspec-from-file=list.txt", "git log -Oorder.txt", "git diff -O order",
                     "git diff --open-files-in-pager=vi", "git log --format=x --since=.agentbay/x",
-                    "git diff --src-prefix=.claude/x"):
+                    "git diff --src-prefix=.claude/x",
+                    # git and argparse take any unambiguous prefix of a long option (0020 round 1)
+                    "git diff --pathspec-from=list.txt", "git diff --pathspec-fr list.txt", "git diff --pathspec-from-f=list.txt",
+                    "git diff --pathspec", "git log --out=x", "git log --outp x", "git diff --ext-d", "git diff --text", "git log --no-in",
+                    "git log --upload-p=x", "git log --rec", "git log --git-d=x", "git log --work-t=x", "git log --conf=x",
+                    "git log --open-files-in", "git log --ex x"):
             assert decide(g, "reviewer--delivery", "Bash", {"command": cmd}) == "deny", cmd
+        for cmd in ("git log --oneline --graph --decorate", "git diff --stat --name-only --exit-code", "git log --format=x --no-merges"):
+            assert decide(g, "reviewer--delivery", "Bash", {"command": cmd}) == "pass", cmd      # no ordinary option is a prefix of a banned one
     finally:
         cleanup(p)
 
@@ -558,7 +565,23 @@ def test_n3_worktree_add_paths_and_no_writes_without_write_tools():
                 ("git rm components/l", "d", None, None),                 # a symlink is judged by its target: fails closed
                 ("git -C bay rm guard.py", "d", "d", "d"),                # not under the `git rm` prefix
                 ("git rm components/briefing/mode.yaml", "p", None, None), ("git rm -r components/briefing", "p", None, None),
-                ("git rm tests/x.py", "d", "p", "p"), ("git mv docs/a.md docs/b.md", "d", "p", "p"), ("git rm -r docs", "d", "p", "p")]
+                ("git rm tests/x.py", "d", "p", "p"), ("git mv docs/a.md docs/b.md", "d", "p", "p"), ("git rm -r docs", "d", "p", "p"),
+                # 0020 round 1: git takes any unambiguous prefix of a long option, so mv/rm take only the fixed flag list
+                # (a list file named by a shortened --pathspec-from-file would reach any path), whatever the path
+                ("git rm --pathspec-from=components/paths.txt", "d", "d", "d"), ("git rm --pathspec-fr components/paths.txt", "d", "d", "d"),
+                ("git rm --pathspec-from-f=components/paths.txt", "d", "d", "d"), ("git rm --pathspec-from-file components/paths.txt", "d", "d", "d"),
+                ("git rm --pathspec components/x.py", "d", "d", "d"), ("git rm --path=components/x.py", "d", "d", "d"),
+                ("git rm --pathspec-file-nul components/x.py", "d", "d", "d"), ("git rm --cach components/briefing/mode.yaml", "d", "d", "d"),
+                ("git rm --dry components/briefing/mode.yaml", "d", "d", "d"), ("git rm --ignore-unmatch components/briefing/mode.yaml", "d", "d", "d"),
+                ("git rm -rf components/briefing", "d", "d", "d"), ("git rm - docs/a.md", "d", "d", "d"),
+                ("git mv --verb docs/a.md docs/b.md", "d", "d", "d"), ("git mv --verbose docs/a.md docs/b.md", "d", "d", "d"),
+                ("git mv -fk docs/a.md docs/b.md", "d", "d", "d"), ("git mv --pathspec-fr x docs/b.md", "d", "d", "d"),
+                ("git rm --force components/briefing/mode.yaml", "p", None, None), ("git rm -r -f -n -q --cached --dry-run --force --quiet docs/a.md", "d", "p", "p"),
+                ("git mv -k -v -f -n docs/a.md docs/b.md", "d", "p", "p"), ("git rm -f bay/guard.py", "d", "d", "p"),
+                # `check --write` rewrites framework/limits.yaml: only a role that writes framework/ may pass it, in any spelling
+                ("./bay.sh check --limits", "p", "p", "p"), ("./bay.sh check --limits --write", "d", "d", "p"),
+                ("./bay.sh check --write --limits --base origin/main", "d", "d", "p"), ("./bay.sh check --limits --wr", "d", "d", "p"),
+                ("./bay.sh check --limits --w", "d", "d", "p"), ("./bay.sh check --limits --write=1", "d", "d", "p")]
         ci = guard_for(k, ci=True)
         ci.policy["subagents"] = g.policy["subagents"]
         rows += [(c, "d", "d", None) for c in ("git rm BAY/guard.py", "git rm -r Bay", "git rm claude.MD", "git rm .GitHub/Workflows")]
@@ -570,6 +593,11 @@ def test_n3_worktree_add_paths_and_no_writes_without_write_tools():
         why = g.decide({"tool_name": "Bash", "tool_input": {"command": "git rm bay/guard.py"}, "agent_type": units[0],
                         "agent_id": "a1", "cwd": str(k)})[1]
         assert why.startswith("agentbay: git rm bay/guard.py: ")
+        why = g.decide({"tool_name": "Bash", "tool_input": {"command": "git rm --cach components/briefing/mode.yaml"}, "agent_type": units[0],
+                        "agent_id": "a1", "cwd": str(k)})[1]
+        assert why.startswith("agentbay: git rm --cach: only -r -f ")
+        for cmd, want in (("./bay.sh check --limits --write", "deny"), ("./bay.sh check --limits", "pass")):     # a read-only reviewer
+            assert decide(g, "reviewer--forge", "Bash", {"command": cmd}) == want, cmd
     finally:
         cleanup(k)
 

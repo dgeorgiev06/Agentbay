@@ -4,6 +4,7 @@ from __future__ import annotations
 import posixpath
 import re
 import subprocess
+import tarfile
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
@@ -15,6 +16,9 @@ OTHER = ("tests/", "HANDOFF.md", "docs/proposals/", "docs/plans/", "docs/researc
 MANIFEST_KINDS = {"mode.yaml": "mode", "connector.yaml": "connector", "content-type.yaml": "contentType",
                   "component.yaml": "component"}
 _COMPONENT = re.compile(r"components/([^/]+)/")
+SHA = re.compile(r"^[0-9a-f]{7,40}$")
+GIT_TIMEOUT = 60
+ARCHIVE_TIMEOUT = 120
 
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 
@@ -219,6 +223,51 @@ def merge_base(repo: Path, base: str, head: str) -> str:
     if not out:
         raise RuntimeError(f"{base} and {head} have no common ancestor")
     return out
+
+
+def _try_git(repo: Path, args: tuple[str, ...], run) -> subprocess.CompletedProcess | None:
+    try:
+        return run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=GIT_TIMEOUT)
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def base_commit(repo: Path, base: str, run=subprocess.run) -> str:
+    """The commit the working tree branched from `base`, so a branch is judged against what it started from."""
+    r = _try_git(repo, ("rev-parse", "--verify", "--quiet", f"{base}^{{commit}}"), run)
+    if r is None or r.returncode != 0:
+        remote = base.split("/")[0] if "/" in base else "<remote>"
+        raise ValueError(f"base {base} does not resolve in this checkout; fetch {remote} (git fetch {remote}) "
+                         f"and run the check again")
+    r = _try_git(repo, ("merge-base", base, "HEAD"), run)
+    sha = (r.stdout or "").strip() if r is not None and r.returncode == 0 else ""
+    if not SHA.match(sha):
+        raise ValueError(f"base {base} has no common ancestor with HEAD; fetch the remote and rebase the change")
+    return sha
+
+
+def renames(repo: Path, sha: str, run=subprocess.run) -> dict:
+    """The files git sees as renamed between `sha` and the working tree: {old path: new path}."""
+    r = _try_git(repo, ("diff", "-M", "--diff-filter=R", "--name-status", "-z", sha), run)
+    names = (r.stdout or "").split("\0") if r is not None and r.returncode == 0 else []
+    return dict(zip(names[1::3], names[2::3]))
+
+
+def export(repo: Path, rev: str, dest: Path, run=subprocess.run) -> None:
+    """The tree of `repo` at `rev` as plain files in `dest` (git archive, filter="data"); nothing in it is ever run."""
+    tar = dest.parent / "base.tar"
+    try:
+        r = run(["git", "-C", str(repo), "archive", "--format=tar", "-o", str(tar), rev],
+                capture_output=True, text=True, timeout=ARCHIVE_TIMEOUT)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise ValueError(f"cannot export {rev}: {e}") from None
+    if r.returncode != 0:
+        raise ValueError(f"cannot export {rev} with git archive: {(r.stderr or '').strip()[:200]}")
+    try:
+        with tarfile.open(tar) as t:
+            t.extractall(dest, filter="data")
+    except (tarfile.TarError, OSError) as e:
+        raise ValueError(f"cannot extract {rev}: {type(e).__name__}: {str(e)[:200]}") from None
 
 
 def map_at(repo: Path, base: str, head: str, mb: str | None = None) -> tuple[ComponentMap, str]:

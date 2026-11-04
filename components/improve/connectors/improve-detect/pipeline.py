@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import re
 import subprocess
-import tarfile
 import tempfile
 from collections import Counter
 from datetime import datetime
@@ -11,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from bay import conformance, graph, model
+from bay import boundary, conformance, graph, model
 from bay.util import fingerprint, iso, short_hash
 from . import detect_artifacts, detect_sessions
 
@@ -23,7 +22,7 @@ VERDICT_KINDS = {"review-rounds", "rule-repeat", "lintable-blocker", "out-of-sco
 SCOPE_KEYS = ("mode", "feature", "step", "role", "env", "rule", "file", "files", "framework")
 CHANGE_KINDS = ("unused", "unused-constant", "compat-layer", "complexity")
 BASE_MAX_BYTES = 1_000_000
-SHA = re.compile(r"^[0-9a-f]{7,40}$")
+SHA = boundary.SHA
 
 
 def summary(e: dict) -> dict:
@@ -164,41 +163,6 @@ class Pipeline:
                           "conformanceRules": [c["rule"] for c in a.conformance],
                           "unreadable": len(a.unreadable), "unparsed": len(a.unparsed), "failed": len(a.failed)}}
 
-    def _export(self, base: str, dest: Path) -> None:
-        """The project's tree at `base` as plain files in `dest` (git archive); nothing in it is ever run."""
-        tar = dest.parent / "base.tar"
-        try:
-            r = self.run(["git", "-C", str(self.project), "archive", "--format=tar", "-o", str(tar), base],
-                         capture_output=True, text=True, timeout=120)
-        except (OSError, subprocess.SubprocessError) as e:
-            raise ValueError(f"cannot export {base}: {e}") from None
-        if r.returncode != 0:
-            raise ValueError(f"cannot export {base} with git archive: {(r.stderr or '').strip()[:200]}")
-        try:
-            with tarfile.open(tar) as t:
-                t.extractall(dest, filter="data")
-        except (tarfile.TarError, OSError) as e:
-            raise ValueError(f"cannot extract {base}: {type(e).__name__}: {str(e)[:200]}") from None
-
-    def _git(self, *args: str) -> subprocess.CompletedProcess | None:
-        try:
-            return self.run(["git", "-C", str(self.project), *args], capture_output=True, text=True, timeout=60)
-        except (OSError, subprocess.SubprocessError):
-            return None
-
-    def _merge_base(self, base: str) -> str:
-        """The commit the working tree branched from, so a branch is judged against what it started from."""
-        r = self._git("rev-parse", "--verify", "--quiet", f"{base}^{{commit}}")
-        if r is None or r.returncode != 0:
-            remote = base.split("/")[0] if "/" in base else "<remote>"
-            raise ValueError(f"base {base} does not resolve in this checkout; fetch {remote} (git fetch {remote}) "
-                             f"and run the check again")
-        r = self._git("merge-base", base, "HEAD")
-        sha = (r.stdout or "").strip() if r is not None and r.returncode == 0 else ""
-        if not SHA.match(sha):
-            raise ValueError(f"base {base} has no common ancestor with HEAD; fetch the remote and rebase the change")
-        return sha
-
     def _base_text(self, old: Path, unreadable: list[str]):
         """Reads the base tree the way artifact-graph reads the working tree: no .env* files, no large files."""
         def text(p):
@@ -209,24 +173,19 @@ class Pipeline:
             return f.read_text(encoding="utf-8", errors="replace")
         return text
 
-    def _renames(self, sha: str) -> dict:
-        r = self._git("diff", "-M", "--diff-filter=R", "--name-status", "-z", sha)
-        t = (r.stdout or "").split("\0") if r is not None and r.returncode == 0 else []
-        return dict(zip(t[1::3], t[2::3]))
-
     def change(self, base: str) -> dict:
         """Dead-code check: findings of the working tree that the tree at the merge-base of `base` and HEAD lacks."""
         if not isinstance(base, str) or not base or base.startswith("-"):
             raise ValueError(f"base must be a git revision, got {base!r}")
-        sha = self._merge_base(base)
+        sha = boundary.base_commit(self.project, base, self.run)
         cfg = {**self.settings, "thresholds": {**(self.settings.get("thresholds") or {}), "maxFindingsPerDetector": 10 ** 9}}
         ledger_eps = self.session_data(only_ledger=True)[0]["episodes"]
         now_arts = self.artifacts("project")
-        ren = self._renames(sha)
+        ren = boundary.renames(self.project, sha, self.run)
         with tempfile.TemporaryDirectory(prefix="agentbay-base-") as tmp:
             old = Path(tmp) / "tree"
             old.mkdir()
-            self._export(sha, old)
+            boundary.export(self.project, sha, old, self.run)
             unreadable: list[str] = []
             is_kit = self.project.resolve() == self.kit.resolve()
             try:

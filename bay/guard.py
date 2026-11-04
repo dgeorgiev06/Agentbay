@@ -436,6 +436,8 @@ class Guard:
             return "deny", f"agentbay: {tool} needs the kit's {name} in a protected path; it is not protected here"
         rest, given = words[first:], []
         for i, word in enumerate(rest):
+            if word.startswith("@"):
+                return "deny", f"agentbay: {tool} argument files (@file) are not allowed"
             if word == flag:
                 given.append(norm(rest[i + 1], cwd) if i + 1 < len(rest) else None)
             elif word.startswith("-") and word not in LINT_FLAGS and (i == 0 or rest[i - 1] != flag):

@@ -129,6 +129,22 @@ def stopped_tools_and_inline_comments() -> None:
     assert not any("ignore-errors" in r["message"] or "assignment" in r["message"] for r in rows)
 
 
+def stubs_decorators_and_symlinks_are_findings() -> None:
+    tree = tmpdir()
+    (tree / "s.py").write_text("x = 1\n")
+    (tree / "s.pyi").write_text("x: int\n")
+    (tree / "only.pyi").write_text("y: int\n")
+    (tree / "d.py").write_text("import typing\n\n\n@typing.no_type_check\ndef f(q):\n    return q\n")
+    (tree / "sub").mkdir()
+    (tree / "sub" / "link.py").symlink_to("../s.py")
+    use(FakeTools())
+    check = python_check.create(SimpleNamespace(kit=KIT, project=tree))
+    found = {(r["file"], r["rule"]) for r in check.findings(str(tree), str(tree))["findings"]}
+    assert ("s.pyi", "stub-shadow") in found and ("only.pyi", "stub-shadow") not in found, found
+    assert ("d.py", "no-type-check") in found, found
+    assert ("sub/link.py", "symlink") in found, found
+
+
 def top_level_files_sit_next_to_packages() -> None:
     tree = tmpdir()
     (tree / "conftest.py").write_text("x = 1\n")
@@ -156,10 +172,11 @@ def planted_config_plugin_and_module_are_ignored() -> None:
         (tree / name).write_text(text)
     (tree / "pkg").mkdir()
     (tree / "pkg" / "__init__.py").write_text("VALUE: int = 1\n")
-    check =python_check.create(SimpleNamespace(kit=KIT, project=tree))
+    (tree / "pkg" / "link.py").symlink_to("__init__.py")
+    check = python_check.create(SimpleNamespace(kit=KIT, project=tree))
     out = check.findings(str(tree), str(base))
     assert "stopped" not in out, out
-    assert [(r["file"], r["rule"]) for r in out["findings"]] == [("bad.py", "F401")], out
+    assert [(r["file"], r["rule"]) for r in out["findings"]] == [("bad.py", "F401"), ("pkg/link.py", "symlink")], out
     assert not (tree / "ran_ruff").exists() and not (tree / "ran_plugin").exists()
     subprocess.run([sys.executable, "-m", "ruff", "--version"], cwd=tree, capture_output=True)
     assert (tree / "ran_ruff").exists(), "without -I the planted ruff.py would run, so the check above proves -I"
@@ -173,6 +190,7 @@ def test_python_findings_are_blocked_only_when_new_against_the_call_start():
     try:
         compare_with_the_start_commit()
         stopped_tools_and_inline_comments()
+        stubs_decorators_and_symlinks_are_findings()
         top_level_files_sit_next_to_packages()
     finally:
         standards.run_module = REAL_RUN

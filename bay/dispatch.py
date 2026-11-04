@@ -19,6 +19,7 @@ GATE_APPROVERS = ("user@tty", "user@chat-via-cos")
 FAIL_LEVELS = ("must", "must_not")
 ENDED_UNFINISHED = ("blocked", "failed", "partial")
 NO_BASE = "no base commit: the project was not a git repository with a commit when call {} started"
+NO_BASE_REPLACED = "no base commit: the call that call {} replaces had none; start the call again without replaces"
 
 
 class CallError(Exception):
@@ -452,8 +453,8 @@ class Dispatcher:
         mode_name, _, ep = str(state.get("target", "")).partition(".")
         for e in ledger.read(self.project):
             d = e.get("data") or {}
-            if (e.get("type") != "step.completed" or e.get("source") != "dispatcher" or d.get("by") not in GATE_APPROVERS
-                    or e.get("mode") != mode_name or e.get("endpoint") != ep or e.get("step") != step.id
+            if (e.get("type") != "step.completed" or e.get("source") != "dispatcher"
+                    or d.get("by") not in GATE_APPROVERS or e.get("mode") != mode_name or e.get("endpoint") != ep or e.get("step") != step.id
                     or not isinstance(d.get("approves"), dict) or d["approves"].get("path") != subject["path"]
                     or (e.get("callId") != state["callId"] and (step.approves or "").startswith("$steps."))):
                 continue
@@ -532,7 +533,8 @@ class Dispatcher:
                    caps: dict[str, Any]) -> dict[str, Any]:
         """The standards step: every bound checker on the call's start commit and on the working tree."""
         if not args.get("base"):
-            return {"new": [], "existing": 0, "stopped": NO_BASE.format(state["callId"])}
+            why = NO_BASE_REPLACED if (state.get("input") or {}).get("replaces") else NO_BASE
+            return {"new": [], "existing": 0, "stopped": why.format(state["callId"])}
         settings = self._settings(mode)
         run_checker: Callable[..., dict[str, Any]] = self._invoke
 

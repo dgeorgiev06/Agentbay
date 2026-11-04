@@ -198,7 +198,7 @@ mypy configs included), and ends the call `blocked` on a finding the base lacks.
 `comment_lines` at 0, and lint requires the step after the last step of a role that may write a checked file. Agents
 may run `python3 -I -m ruff check` and `python3 -I -m mypy` only with the kit's config flag and a fixed list of other
 flags.
-An input type that declares `replaces: <callId>` (`forge.extend` does) closes that open call as abandoned. Gates pass with `bay approve` ([safety model](DESIGN.md#safety-model)); a changed file returns the call to its passed gate at the next submit. A role's generated shim
+An input type that declares `replaces: <callId>` (`forge.extend` does) closes that open call as abandoned, leaves a blocked, failed or partial one as is, and keeps its base commit. Gates pass with `bay approve` ([safety model](DESIGN.md#safety-model)); a changed file returns the call to its passed gate at the next submit. A role's generated shim
 `.agentbay/roles/<role>--<mode>/use <iface>/v<N>.<ep> '<json>'` is its only way to read connector data, and the
 guard hook stops subagents from running anything else.
 

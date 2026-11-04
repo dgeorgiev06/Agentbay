@@ -312,6 +312,8 @@ def test_forge_extend_runs_deadcode_and_several_standards_checkers_between_imple
         assert d._load(again)["base"] == start and d._load(first)["status"] == "blocked"
         assert git(repo, "rev-parse", "HEAD").strip() != start
         assert d._standards(None, None, {"callId": "C-1"}, {}, {})["stopped"].startswith("no base commit")
+        replaced = {"callId": "C-2", "input": {"replaces": "C-1"}}
+        assert "the call that call C-2 replaces had none" in d._standards(None, None, replaced, {}, {})["stopped"]
     finally:
         cleanup(repo)
         cleanup(k)

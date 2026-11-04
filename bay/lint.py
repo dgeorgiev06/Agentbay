@@ -904,6 +904,11 @@ def _last_checked_writers(kit: model.Kit, md: model.Doc, ep: dict[str, Any], ste
     return last
 
 
+def _is_standards_step(step: dict[str, Any]) -> bool:
+    """The step runs the standards capability with the call's own base commit."""
+    return step.get("run") == STANDARDS_RUN and (step.get("with") or {}).get("base") == "$call.base"
+
+
 def lint_standards_steps(kit: model.Kit) -> list[str]:
     """A role that may write checked files needs a standards step after its last step, once an env binds checkers."""
     globs = [g for c in kit.docs["Component"].values() for g in (c.spec.get("language") or {}).get("files", [])]
@@ -915,11 +920,11 @@ def lint_standards_steps(kit: model.Kit) -> list[str]:
         for ep_name, ep in (md.spec.get("features") or {}).items():
             steps = [st for st in ep.get("steps") or [] if isinstance(st, dict)]
             for role, i in _last_checked_writers(kit, md, ep, steps, globs).items():
-                if not any(st.get("run") == STANDARDS_RUN for st in steps[i + 1:]):
+                if not any(_is_standards_step(st) for st in steps[i + 1:]):
                     sid = steps[i].get("id")
                     out.append(f"{_where(*_step_where(md, ep_name, sid))}: {md.name}.{ep_name}: role {role} may write "
                                f"files a language component checks in its last step {sid}, and no step after it runs "
-                               f"{STANDARDS_RUN}; add `- {{ id: standards, run: {STANDARDS_RUN}, "
+                               f"{STANDARDS_RUN} with base $call.base; add `- {{ id: standards, run: {STANDARDS_RUN}, "
                                f"with: {{ base: \"$call.base\" }} }}` after it")
     return out
 

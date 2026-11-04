@@ -283,6 +283,15 @@ def test_forge_extend_review_and_standards_cannot_be_disabled_or_weakened():
         edit_yaml(k / f"components/{mode}/mode.yaml", move)
         found = [p for p in problems(k) if "standards.check/v1.findings" in p]
         assert len(found) == 1 and f"{mode}.{feature}: role builder" in found[0], found
+    for base in ("origin/main", "HEAD", None):
+        k = kit_copy()
+
+        def rebase(d, base=base):
+            step = next(s for s in d["spec"]["features"]["build"]["steps"] if s["id"] == "standards")
+            step["with"] = {"base": base} if base else {}
+        edit_yaml(k / "components/delivery/mode.yaml", rebase)
+        found = [p for p in problems(k) if "standards.check/v1.findings" in p]
+        assert len(found) == 1 and "with base $call.base" in found[0], (base, found)
 
 
 def test_kind_scoped_rules_are_linted():

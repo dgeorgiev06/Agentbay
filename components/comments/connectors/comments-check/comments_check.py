@@ -87,9 +87,10 @@ class CommentsCheck:
 
     def findings(self, root: str, configRoot: str) -> Row:
         tree, config_root = Path(root), Path(configRoot)
-        if self.ctx.project.resolve() != self.ctx.kit.resolve() and _rule_is_off(config_root):
+        is_kit = self.ctx.project.resolve() == self.ctx.kit.resolve()
+        if not is_kit and _rule_is_off(config_root):
             return {"findings": [], "warnings": [f"{CONNECTOR} is off: rule: off in {CONFIG} of the base"]}
-        languages = _languages(self.ctx.kit)
+        languages = _languages(config_root if is_kit else self.ctx.kit)
         found, warnings = [], []
         for path in sorted(tree.rglob("*")):
             rel = path.relative_to(tree)

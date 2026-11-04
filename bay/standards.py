@@ -16,6 +16,7 @@ from . import boundary
 PROBE_TIMEOUT = 30
 LISTED_FINDINGS = 5
 LEDGER_DIR = ".agentbay"
+PLACEHOLDER = "agentbay-symlink-placeholder"
 
 Row = dict[str, Any]
 Runner = boundary.Runner
@@ -68,7 +69,7 @@ def probe(checkers: list[Checker], cwd: Path, run: Runner = subprocess.run) -> t
 
 
 def copy_tree(project: Path, dest: Path, run: Runner = subprocess.run) -> list[str]:
-    """Copy the regular files git lists in the working tree to `dest`; not .agentbay, symlinks or special files."""
+    """Copy the regular files git lists to `dest`; a symlink becomes a link to an empty file; no .agentbay."""
     done = run(["git", "-C", str(project), "ls-files", "-co", "--exclude-standard", "-z"],
                capture_output=True, text=True, timeout=boundary.GIT_TIMEOUT)
     if done.returncode != 0:
@@ -79,6 +80,10 @@ def copy_tree(project: Path, dest: Path, run: Runner = subprocess.run) -> list[s
         src = project / rel
         if src.is_symlink() or (src.exists() and not src.is_file()):
             skipped += 1
+            if src.is_symlink():
+                (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+                (dest / PLACEHOLDER).write_text("")
+                (dest / rel).symlink_to(dest / PLACEHOLDER)
         elif src.exists():
             (dest / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src, dest / rel)

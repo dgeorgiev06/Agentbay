@@ -45,7 +45,8 @@ def test_a_file_of_a_protected_instance_routes_to_forge_extend_like_the_protecte
         assert route("components/gmail-api/gmail_api.py") == "mode-fix"
         assert route("components/cosmos/mode.yaml", "components/improve/connectors/ledger2/x.py",
                      "components/tools/envs/workspace.yaml.bak") == "mode-fix"
-        assert route("components/improve/connectors/ledger/ledger.py", "components/gmail-api/gmail_api.py") == "mode-fix"
+        assert route("components/improve/connectors/ledger/ledger.py",
+                     "components/gmail-api/gmail_api.py") == "mode-fix"
         assert S(d).route_for({"scope": {"file": "components/improve/connectors/ledger/ledger.py"}}) == "mode-fix"
         closed = st.Store(d, NOW, Protection.closed_set())
         assert closed.route_for({"scope": {"file": "app/x.py"}}) == "forge.extend"

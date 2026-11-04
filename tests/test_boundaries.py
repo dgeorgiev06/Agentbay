@@ -531,7 +531,10 @@ def lint_clis_are_denied_unless_the_config_is_protected_and_the_flags_are_listed
     g.policy["protected"].append("components/python")
     passes = (f"{ruff} bay", f"{mypy} bay", f"{ruff} --no-cache --ignore-noqa --statistics bay",
               f"{mypy} --strict --show-error-codes bay")
-    denies = ("python3 -I -m ruff check bay", "python3 -I -m mypy bay", "python3 -I -m ruff check --config ruff.toml bay",
+    denies = ("python3 -I -m ruff check bay", "python3 -I -m mypy bay",
+              "python3 -I -m ruff check --config ruff.toml bay",
+              f"{ruff} @.agentbay/guard.json", f"{mypy} @.agentbay/guard.json", f"{ruff} @fix.txt",
+              f"{mypy} @fix.txt", f"{ruff} bay -- @fix.txt", f"{mypy} bay -- @fix.txt", f"{mypy} bay @args.txt",
               f"python3 -I -m ruff check --config={g.kit}/components/python/ruff.toml bay",
               f"{ruff} --config \"cache-dir='x'\" bay", f"{ruff} {ruff[ruff.index('--config'):]} bay",
               f"{ruff} --fix bay", f"{ruff} --add-noqa bay", f"{ruff} -o x bay", f"{ruff} --output-format json bay",

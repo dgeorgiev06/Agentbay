@@ -46,6 +46,7 @@ def repo_with(files: dict) -> Path:
 
 def write(repo: Path, files: dict) -> None:
     for name, text in files.items():
+        (repo / name).parent.mkdir(parents=True, exist_ok=True)
         (repo / name).write_text(text)
 
 
@@ -85,3 +86,17 @@ def comments_check_blocks_a_file_whose_comment_lines_rise():
     assert out["new"] == [] and any("is off" in w for w in out["warnings"]), out
     out = new_in({"a.py": "x = 1\n"}, {"a.py": "x = 1\n# note\n", **off}, kit)
     assert [r["file"] for r in out["new"]] == ["a.py"], out
+    languages_come_from_the_base_when_the_project_is_the_kit()
+
+
+def languages_come_from_the_base_when_the_project_is_the_kit():
+    component = "components/python/component.yaml"
+    document = yaml.safe_load((KIT / component).read_text())
+    document["spec"]["language"]["files"] = []
+    repo = repo_with({component: (KIT / component).read_text(), "a.py": "x = 1\n"})
+    try:
+        write(repo, {component: yaml.safe_dump(document), "a.py": "x = 1\n# note\n"})
+        out = run(repo, repo)
+        assert [(r["file"], r["line"]) for r in out["new"]] == [("a.py", 2)], out
+    finally:
+        cleanup(repo)

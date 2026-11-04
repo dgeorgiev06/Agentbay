@@ -6,6 +6,6 @@
     "goal": { "type": "string", "minLength": 5 },
     "proposal": { "type": "string", "description": "Existing docs/proposals/<id>.md to implement" },
     "context": { "type": "string" },
-    "replaces": { "type": "string", "pattern": "^C-[0-9]{8}-[0-9a-f]{6}$", "description": "an open forge.extend call this one supersedes; starting this call closes it as abandoned" }
+    "replaces": { "type": "string", "pattern": "^C-[0-9]{8}-[0-9a-f]{6}$", "description": "a forge.extend call this one supersedes: an open call is closed as abandoned, a blocked, failed or partial call is left as is; this call keeps its base commit" }
   }
 }

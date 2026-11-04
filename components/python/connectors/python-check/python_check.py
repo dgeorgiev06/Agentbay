@@ -21,6 +21,9 @@ INLINE = (
     (re.compile(r"^#\s*mypy:"), "mypy-inline", "an inline mypy: configuration comment"),
     (re.compile(r"\btype:\s*ignore"), "type-ignore", "a type: ignore comment"),
 )
+NO_TYPE_CHECK = "a no_type_check decorator or import"
+STUB_SHADOW = "a .pyi stub next to a .py of the same name; mypy checks the stub in place of the code"
+SYMLINK = "a symlinked .py file; the tools do not check it"
 
 
 def _row(file: str, line: int, rule: str, message: str) -> Row:
@@ -113,21 +116,44 @@ def _mypy(root: Path, config: Path) -> tuple[list[Row], str | None]:
         return [], "mypy printed output that is not JSON"
 
 
-def _inline_rows(root: Path) -> list[Row]:
+def _token_rows(rel: str, tokens: list[tokenize.TokenInfo]) -> list[Row]:
     rows = []
-    for path in sorted(root.rglob("*.py")):
-        rel = path.relative_to(root)
-        if path.is_symlink() or any(part.startswith(".") for part in rel.parts):
+    for token in tokens:
+        if token.type == tokenize.NAME and token.string == "no_type_check":
+            rows.append(_row(rel, token.start[0], "no-type-check", NO_TYPE_CHECK))
+        elif token.type == tokenize.COMMENT:
+            rows += [_row(rel, token.start[0], rule, message) for pattern, rule, message in INLINE
+                     if pattern.search(token.string)]
+    return rows
+
+
+def _visible(root: Path, pattern: str) -> list[Path]:
+    paths = sorted(root.rglob(pattern))
+    return [p for p in paths if not any(part.startswith(".") for part in p.relative_to(root).parts)]
+
+
+def _layout_rows(root: Path) -> list[Row]:
+    rows = []
+    for stub in _visible(root, "*.pyi"):
+        if stub.with_suffix(".py").exists():
+            rows.append(_row(stub.relative_to(root).as_posix(), 0, "stub-shadow", STUB_SHADOW))
+    for path in _visible(root, "*.py"):
+        if path.is_symlink():
+            rows.append(_row(path.relative_to(root).as_posix(), 0, "symlink", SYMLINK))
+    return rows
+
+
+def _inline_rows(root: Path) -> list[Row]:
+    rows = _layout_rows(root)
+    for path in _visible(root, "*.py"):
+        if path.is_symlink():
             continue
         try:
             with tokenize.open(path) as f:
                 tokens = list(tokenize.generate_tokens(f.readline))
         except (OSError, SyntaxError, ValueError, tokenize.TokenError):
             continue
-        for token in tokens:
-            for pattern, rule, message in INLINE:
-                if token.type == tokenize.COMMENT and pattern.search(token.string):
-                    rows.append(_row(rel.as_posix(), token.start[0], rule, message))
+        rows += _token_rows(path.relative_to(root).as_posix(), tokens)
     return rows
 
 

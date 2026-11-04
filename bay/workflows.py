@@ -242,8 +242,8 @@ def _check_ref(wf: Workflow | None, st: Stage, ref: str, at: str, seen: dict) ->
 _MISSING = object()
 
 
-def substitute(template, inp: dict, steps: dict, settings: dict):
-    """Resolve $in, $steps and $config references in a template (`a|b`: first present); missing keys are dropped."""
+def substitute(template, inp: dict, steps: dict, settings: dict, call: dict | None = None):
+    """Resolve $in, $steps, $config and $call references in a template (`a|b`: first present); missing are dropped."""
     def dig(cur, parts):
         for n, part in enumerate(parts):
             if part == "*" and isinstance(cur, list):
@@ -262,7 +262,7 @@ def substitute(template, inp: dict, steps: dict, settings: dict):
             return _MISSING
         if isinstance(v, str) and v.startswith("$"):
             head, _, rest = v[1:].partition(".")
-            src = {"in": inp, "steps": steps, "config": settings}.get(head)
+            src = {"in": inp, "steps": steps, "config": settings, "call": call or {}}.get(head)
             if src is None:
                 return _MISSING
             return dig(src, rest.split("."))

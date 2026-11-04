@@ -14,6 +14,7 @@ from .util import PROPOSAL_PATH, parse_time, read_json, utcnow, write_json
 VERDICT = "review.verdict/v1"
 GATE_APPROVERS = ("user@tty", "user@chat-via-cos")
 FAIL_LEVELS = ("must", "must_not")
+ENDED_UNFINISHED = ("blocked", "failed", "partial")
 
 
 class CallError(Exception):
@@ -40,13 +41,24 @@ class Dispatcher:
         if errs:
             raise CallError(f"{target}: input does not match {feat.in_type or 'schema'}: " + "; ".join(errs))
         call_id = f"C-{self.clock():%Y%m%d}-{_rand.token_hex(3)}"
+        start = self._head()
         if inp.get("replaces"):
-            if (other := self._load(inp["replaces"])["target"]) != target:
-                raise CallError(f"replaces names a call of {other}, not {target}")
-            self.close(inp["replaces"], f"replaced by {call_id}")
+            other = self._load(inp["replaces"])
+            if other["target"] != target:
+                raise CallError(f"replaces names a call of {other['target']}, not {target}")
+            if other["status"] not in ENDED_UNFINISHED:
+                self.close(inp["replaces"], f"replaced by {call_id}")
+            start = other.get("base")
         state = {"callId": call_id, "target": target, "input": inp, "steps": {}, "cursor": 0,
-                 "status": "running", "checks": [], "cost": {"items": 0, "usd": 0.0}, "t0": time.time()}
+                 "status": "running", "checks": [], "cost": {"items": 0, "usd": 0.0}, "t0": time.time(),
+                 "base": start}
         return self._advance(mode, feat, state)
+
+    def _head(self) -> str | None:
+        """The project's HEAD commit, or None when it is not a git repository with a commit."""
+        with suppress(RuntimeError, OSError):
+            return boundary.git(self.project, "rev-parse", "HEAD").strip()
+        return None
 
     def close(self, call_id: str, reason: str) -> dict:
         state = self._load(call_id)
@@ -478,7 +490,7 @@ class Dispatcher:
         if bad:
             raise CallError(f"{feat.mode}.{feat.name} step {step.id}: effects {bad} not allowed "
                             f"(re-checked at run time)")
-        args = wfmod.substitute(step.with_, state["input"], state["steps"], mode.config)
+        args = wfmod.substitute(step.with_, state["input"], state["steps"], mode.config, {"base": state.get("base")})
         iface, ep = step.run.rsplit(".", 1)
         self._ledger("step.started", base, summary=step.run, data={"inputs": inputs_record(args, self.project)})
         t0 = time.monotonic()

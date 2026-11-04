@@ -136,7 +136,14 @@ def test_a_closed_call_is_abandoned_and_refuses_submit_and_approve():
         old = d.call("forge.extend", {"goal": "a change"})["callId"]
         new = d.call("forge.extend", {"goal": "a change", "replaces": old})["callId"]
         assert d.show(old)["reason"] == f"replaced by {new}"
-        files = sorted(p.name for p in (k / ".agentbay" / "calls").iterdir())
+        assert d._load(old)["base"] is None and d._load(new)["base"] is None
+        first = d.call("forge.extend", {"goal": "a change"})["callId"]
+        path = k / ".agentbay" / "calls" / f"{first}.json"
+        path.write_text(path.read_text().replace('"status": "needs-agent"', '"status": "blocked"').replace(
+            '"base": null', '"base": "abc123"'))
+        again = d.call("forge.extend", {"goal": "a change", "replaces": first})["callId"]
+        assert d._load(first)["status"] == "blocked" and d._load(again)["base"] == "abc123"
+        files =sorted(p.name for p in (k / ".agentbay" / "calls").iterdir())
         with pytest.raises(dispatch.CallError, match="only an open call can be closed"):
             d.call("forge.extend", {"goal": "a change", "replaces": cid})
         other = k / ".agentbay" / "calls" / "C-20261030-abcdef.json"

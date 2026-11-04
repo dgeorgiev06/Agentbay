@@ -288,6 +288,9 @@ def test_the_dispatcher_and_the_cursor_share_one_skip_rule_and_one_substitution(
     assert sub("$steps.p.items.*.id", {"p": {"items": []}}) == {"v": []}
     assert sub("$steps.p.items.*.id", {"p": {}}) == {}
     assert sub("$steps.p.d.*", {"p": {"d": {"*": 7}}}) == {"v": 7}
+    assert workflows.substitute({"v": "$call.base"}, {}, {}, {}, {"base": "abc"}) == {"v": "abc"}
+    assert workflows.substitute({"v": "$call.base"}, {}, {}, {}, {"base": None}) == {}
+    assert workflows.substitute({"v": "$call.base"}, {}, {}, {}) == {}
 
 
 def gate_config(when) -> dict:

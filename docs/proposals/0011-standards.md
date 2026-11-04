@@ -1,69 +1,187 @@
 ---
-# Approval is recorded in the ledger by `bay approve`; this file grants nothing. Design only. Split from 0010 by owner decision; it needs 0010's loader, the `tools` component and the `component.yaml` manifest, so it lands after 0010.
+# Approval is recorded in the ledger by `bay approve`; this file grants nothing. Design only: nothing is changed before the gate. Scope chosen by the owner in chat on 2026-11-04 ("Core only"): slices 1, 3, 5 and 6 of the old draft; slice 2 (improve-detect split) and slice 4 (unslop) are dropped. Every line cited was read on feat/standards at 3.1.0 (main 8c395b0). The ruff and mypy finding counts are NOT measured here (see Measured and not measured).
 id: "0011"
 status: draft
-depends: "0010"
 touches:
-  - { path: components/, reason: "NEW `python`, `unslop` and `comments` components; `standards.check/v1` in `components/tools/interfaces/`; the `deadcode` connector in forge and the split of improve-detect; the `standards` step in forge.extend and delivery.build; the provider lists in the `local-authoring` and `workspace` envs" }
-  - { path: framework/limits.yaml, reason: "new measure comment_lines" }
-  - { path: framework/roles/, reason: "builder states the comments rule and loads standards skills; reviewer checks it" }
-  - { path: schemas/, reason: "component.schema.json gains the `comments:` block" }
-  - { path: bay/limits.py, reason: "comment_lines, per file and in total" }
-  - { path: bay/dispatch.py, reason: "a code step runs every provider bound to a list interface; `standards:*` skill group" }
-  - { path: tests/, reason: "tests for the check mechanism and the three checkers" }
-  - { path: docs/INTERFACES.md, reason: "standards.check/v1" }
-  - { path: requirements-dev.txt, reason: "NEW. ruff, mypy and stub packages, pinned; dev only" }
+  - { path: components/tools/interfaces/standards.check.v1.yaml, reason: "NEW item 1: the interface, one endpoint `change { base }` returning new, existing, stopped, warnings (the shape of improve.detect/v1.change)" }
+  - { path: bay/model.py, reason: "item 1: a code step may bind several connectors (line 1337 demands exactly one) and Step.connector becomes a list; item 2: READ_ONLY_CLIS (line 62) gains `ruff check` and `mypy`" }
+  - { path: bay/dispatch.py, reason: "item 1: _run_code (line 524) runs every bound connector and merges the results; the status read (line 438) takes the first" }
+  - { path: bay/guard.py, reason: "item 2: a fixed flag list for `ruff check` and `mypy`, in the style of GIT_PATH_FLAGS (line 68), so neither can fix, write reports or run an interpreter" }
+  - { path: bay/limits.py, reason: "item 3: the measure comment_lines (MEASURES line 19; count line 46), counted by a function the comments connector also imports" }
+  - { path: components/python/component.yaml, reason: "NEW item 2: the component manifest" }
+  - { path: components/python/ruff.toml, reason: "NEW item 2: line length 120, the rule selection; passed with --config, so the repo root gets no tool config" }
+  - { path: components/python/mypy.ini, reason: "NEW item 2: mypy --strict settings; passed with --config-file" }
+  - { path: components/python/README.md, reason: "NEW item 2: what the component checks, how to run it by hand, the pinned versions" }
+  - { path: components/python/connectors/python-check/connector.yaml, reason: "NEW item 2: implements standards.check/v1" }
+  - { path: components/python/connectors/python-check/python_check.py, reason: "NEW item 2: runs ruff and mypy on the working tree and on the merge-base export; reports only what is new" }
+  - { path: components/python/tests/test_python_check.py, reason: "NEW item 2: the test that fails on main (new tests: 1)" }
+  - { path: components/comments/component.yaml, reason: "NEW item 3: the component manifest" }
+  - { path: components/comments/README.md, reason: "NEW item 3: the comments rule in full; the one place the text lives" }
+  - { path: components/comments/connectors/comments-check/connector.yaml, reason: "NEW item 3: implements standards.check/v1" }
+  - { path: components/comments/connectors/comments-check/comments_check.py, reason: "NEW item 3: reports each file whose comment and docstring lines rose above the merge-base" }
+  - { path: components/comments/tests/test_comments_check.py, reason: "NEW item 3: the test that fails on main (new tests: 1)" }
+  - { path: requirements-dev.txt, reason: "NEW item 2: ruff, mypy and two stub packages, pinned; dev only, runtime requirements.txt is unchanged" }
+  - { path: components/tools/envs/workspace.yaml, reason: "item 4: binds standards.check/v1 to [python-check, comments-check]; the read clis gain `ruff check` and `mypy` (line 10)" }
+  - { path: components/forge/envs/local-authoring.yaml, reason: "item 4: the same two bindings (lines 17 and 10-14); the coordinator env that runs forge.extend's code steps" }
+  - { path: components/forge/envs/framework-dev.yaml, reason: "item 4: the builder's clis gain `ruff check` and `mypy` (line 15); the write list (lines 24-33) gains components/python and components/comments, which lint keeps in step with kernel.yaml" }
+  - { path: components/forge/mode.yaml, reason: "item 4: needs gains standards.check/v1 (line 47); a `standards` step after `limits` (line 42), before review; deadcode and limits stay as they are" }
+  - { path: components/forge/features/extend/playbook.md, reason: "item 4: the step list and two DoD items, DOD-17 (no new standards finding) and DOD-18 (comments follow the rule); the old draft's numbers 16 and 17 are taken (lines 38-39)" }
+  - { path: components/delivery/mode.yaml, reason: "item 4: needs gains standards.check/v1 (line 31); a `standards` step after `implement` (line 29)" }
+  - { path: components/delivery/features/build/playbook.md, reason: "item 4: the step list (lines 9-12) and two DoD items, DOD-5 and DOD-6" }
+  - { path: framework/roles/builder.yaml, reason: "item 4: the prompt (lines 12-24) states the comments rule in one sentence and names ruff check and mypy among the checks; the reviewer role is not edited, it checks the DoD items" }
+  - { path: framework/kernel.yaml, reason: "item 4: components/python and components/comments are protected paths (line 5), python-check and comments-check protected connectors (line 24), requirements-dev.txt is owned (line 38); without this a local-authoring agent could edit the rules it is judged by" }
+  - { path: framework/limits.yaml, reason: "release step: the new measure comment_lines and the ceilings written down to the real counts" }
+  - { path: tests/test_dispatch.py, reason: "item 1: the new mechanism test; no_deadcode (line 208) also stubs standards.check/v1 for the two forge.extend tests (lines 219, 246)" }
+  - { path: tests/test_resolver.py, reason: "item 1: line 220 asserts `.connector == corpus-store`; it asserts the one-element list" }
+  - { path: components/improve/connectors/improve-detect/tests/test_deadcode_check.py, reason: "item 4: test_forge_extend_runs_deadcode_between_implement_and_review (line 247) expects limits directly before review (line 253); it expects standards between them" }
+  - { path: tests/test_limits.py, reason: "item 3: test_limits_count_the_ceiling_the_ratchet_and_the_exception also counts comment_lines" }
+  - { path: tests/test_guard_matrix.py, reason: "item 2: named deltas for the clis of the units that gain ruff check and mypy; the golden files are not edited" }
+  - { path: tests/test_boundaries.py, reason: "item 2: test_n3_worktree_add_paths_and_no_writes_without_write_tools (line 523) also asserts the ruff and mypy flag refusals" }
+  - { path: tests/test_roles.py, reason: "item 2: the lint message at line 224 spells READ_ONLY_CLIS and names the two new clis" }
+  - { path: README.md, reason: "DOD-13: the checks a change passes" }
+  - { path: docs/DESIGN.md, reason: "DOD-13: the standards step and the comments rule; paid for in the same file" }
+  - { path: docs/INTERFACES.md, reason: "DOD-13: standards.check/v1 and a code step with several connectors; paid for in the same file" }
+  - { path: bay/__init__.py, reason: "release step: version 3.2.0" }
+  - { path: CHANGELOG.md, reason: "release step: entry, with an Upgrading note (pip install -r requirements-dev.txt; run ./bay.sh build)" }
 exceptions:
-  - { measure: kit_python_lines, to: 6800, reason: "the python, unslop and comments checkers are new kit Python (about 400 lines); 0010's move adds none, and 0011 slice 2 and 0012 slice 3 remove about 190 between them" }
+  - { measure: bay_lines, to: 9815, reason: "9760 is the ceiling and the count. Estimate +48 in bay/: dispatch.py +16 (loop over the connectors, a merge helper), guard.py +14 (the flag list and its check), limits.py +14 (the comment counter, the measure, its entry in MEASURES), model.py +4 (several connectors, two names in READ_ONLY_CLIS). Payer: none can be named from today's code; the one-connector error branch at model.py:1337-1339 is replaced, not added (counted, -3). 9815 is the estimate plus a margin of 7. If it must shrink, the merge of `warnings` in the helper goes first. The release lowers the ceiling to the real count." }
+  - { measure: kit_python_lines, to: 5345, reason: "5165 is the ceiling and the count. Estimate +175: python_check.py about 130 (subprocess runner 25, ruff parser 20, mypy parser 25, base export and renames 25, the multiset difference 20, entry and errors 15), comments_check.py about 45. No payer: no kit Python is removed (slices 2 and 4, which would have paid, are dropped). 5345 is the estimate plus a margin of 5. The release lowers the ceiling to the real count." }
+  - { measure: tests, to: 465, reason: "462 is the ceiling and the count. Three tests are added (the several-connectors mechanism, the python checker, the comments checker) because each tests behaviour that no existing test reaches. No test is made obsolete by this change, so none is merged away; the plan step looks again and lowers the ceiling to 462 for every test it can merge. Six existing tests are extended instead of adding six more." }
 ---
 
-# 0011: Standards as components
+# 0011: Standards as components (core)
 
-## Decisions
+## Summary
 
-### 1. Standards as the first new components
+Today nothing checks the style of the Python an agent writes. `forge.extend` runs two code checks after the builder, `deadcode` and `limits` (`components/forge/mode.yaml:41-42`), and the only style rule is the size measure `long_lines` (`bay/limits.py:54`). This proposal adds one more code check, `standards`, that runs the Python style tools and a comments counter on the change and blocks only on findings that are new against the merge-base of `origin/main`, so the findings already in the tree block nothing and no repository-wide reformat is needed.
 
-No standards mode. A new interface `standards.check/v1` (owned by `tools`) has one operation, `change { base }`, with the same result shape as `improve.detect/v1.change`: `new`, `existing`, `stopped`. It compares findings in the working tree with the tree at the merge-base of `base`, keyed by file, rule and message, so the 2279 ruff findings, 638 mypy errors and 63 unformatted files in the current tree (lint baseline) are `existing` and block nothing. No repository-wide reformat is proposed (rejected: a diff of 63 files that breaks every open branch and 0009's review budget; a tolerated-findings file was rejected because it rots).
+It does four things, the owner's "Core only" scope of 2026-11-04. (1) A new interface `standards.check/v1` and a code step that may bind several providers and merges their results. (2) The `python` component: `ruff check` and `mypy --strict`, pinned in a new dev-only `requirements-dev.txt`, line length 120, run as subprocesses with list arguments and a timeout; builders get `ruff check` and `mypy` as commands so they can check before the step does, and reviewers can re-run them. (3) The `comments` component: the owner's comments rule, a checker that blocks a file whose comment and docstring lines rise above the merge-base, and a new size measure `comment_lines`. (4) The wiring: `standards` in `forge.extend` and `delivery.build`, the builder prompt states the comments rule, and the reviewer checks it through two new DoD items.
 
-A binding is a list, like `items.source`. A code step runs every bound provider and merges the results; one new finding blocks. Each provider filters by the file globs in its own config. Features choose skills by `skills: [standards:*]` (every skill of the components bound to `standards.check/v1` in the step's env), `[python:python]` (one), or none. Another language later is one folder (`components/go/`) plus its name in the binding lists. No checker is split across an interface, a connector and a mode: the interface is `tools`', and each checker with its config and skill is one folder.
+Out: the improve-detect split (old slice 2) and `unslop` (old slice 4). `deadcode` and `limits` stay exactly as they are; `standards` is added next to them and replaces nothing. I also left out the old draft's skill group `standards:*`: the comments rule is one sentence in the builder prompt and the full text sits in the comments README, which needs no loader change (decision 5 below).
 
-`components/python/` (`component.yaml`): `connectors/check/` (runs ruff and mypy as subprocesses, list arguments, no shell, with a timeout), `ruff.toml` and `mypy.ini` (line length 120, the brief's rule selection, `mypy --strict`; passed with `--config`, so the repo root gets no tool config), `skills/python/SKILL.md` (the brief's checkable rules, with the ones only a review can see). Tool versions are pinned in the new dev-only `requirements-dev.txt` (ruff 0.16.9, mypy 2.3.1, `types-PyYAML`, `types-jsonschema`); runtime dependencies are unchanged. If a tool is missing the step ends blocked and names the pip command. The brief marks many rules `[U]` (not re-read against their primary source); slice 3 confirms each rule code with `ruff rule`, and the two pinned versions, before anything is enabled.
+The release is 3.2.0: a new step that can block a call is new default behaviour. No contract breaks (`agentbay/v4` stays). The proposal touches 40 files, has three exceptions (`bay_lines` to 9815, `kit_python_lines` to 5345, `tests` to 465) and touches sensitive paths (`bay/dispatch.py`, `bay/guard.py`, `framework/kernel.yaml`), so forge.extend's plan step runs. Costs and open questions are in the last three sections; the owner decisions to read first are 1 to 3 under Open decisions.
 
-`components/unslop/` (`component.yaml`): `skills/unslop/SKILL.md` kept as published, `LICENSE` with the MIT notice and `Copyright (c) 2026 Lauren Tan`, and a README naming the source as the `pstack/skills/unslop` folder of the `cursor/plugins` repository on GitHub (no URL is written, so no company domain enters the repo). `connectors/check/` scans for the mechanical patterns of the skill: em dashes, curly quotes, decorative emojis, the listed AI vocabulary, "serves as"-type phrases. The skill's judgement rules stay with the reviewer. The skill file is third-party text: never executed, never edited.
+## Measured and not measured
 
-`components/comments/` (`component.yaml`), the owner's comments rule. It is language-neutral: it owns the rule and the measurement, and each language component declares only its comment syntax in a `comments:` block of its `component.yaml` (python: line `#`, docstrings; a future go: `//` and `/* */`). There is no per-language copy of the check.
+Re-measured on 3.1.0 with the commands I am allowed (`./bay.sh check --limits`, which passes with all 8 measures within their ceilings; reads of the files). The ceilings in `framework/limits.yaml:1-8` are also the counts, as 0020 left them.
 
-- **Rule.** No comments by default. A one-line comment only for a reason the code cannot express: a security or crash-safety invariant, or an outside API's quirk. No history, no finding ids, no cross-references. A docstring is one line per public function and a few lines per module; design text goes in the component README.
-- **Measurement.** `connectors/check/` counts comment and docstring lines per file. It reports a finding when a file's count rises above its count at the merge-base, and the total is held by the `comment_lines` ceiling (Limits below).
-- **Who states it.** The rule's full text is `skills/comments/SKILL.md`, loaded through `standards:*`. The builder role states it in one sentence, the python skill states the Python form (docstring length), and the reviewer role checks it as a DoD item (DOD-17), because whether a comment is a reason the code cannot express is a judgement the counter cannot make.
-- **Cleanup.** 0012 slice 6 removes the existing comments that break the rule.
+| Measure | Value now | Source |
+|---|---|---|
+| `bay_lines` | 9760 | ceiling = count (`framework/limits.yaml:1`, 0020) |
+| `kit_python_lines` | 5165 | same (`:2`) |
+| `tests` | 462 | same (`:7`) |
+| `long_lines` | 182 | same (`:8`), counted at `bay/limits.py:54` |
+| full-line `#` comments | at least 96 in `bay/`, 25 in `adapters/` | search, per file; docstring lines not counted |
+| `noqa` markers | 44 in 29 `.py` files | search |
 
-### 2. Limits
+**Not measured: the ruff and mypy finding counts.** The task asked for them with the installed ruff 0.17.3 and mypy 2.4.1, but running either is outside the Bash commands this builder may use (`./bay.sh check`, `python3 tests/run.py`, `git`, `bay plan`), so I did not run them and give no number. The old draft's figures (2279 ruff findings, 638 mypy errors, 63 unformatted files) were taken with ruff 0.16.9 and mypy 2.3.1 on an older tree and are withdrawn. Before approval, whoever has the shell runs, from the checkout, with the installed versions:
 
-- NEW `comment_lines`: comment and docstring lines, per file and in total, as counted by the `comments` component (decision 1). Its ceiling is set when the component lands, lowered to the real count by 0012 slice 6, and can only tighten.
-- `kit_python_lines` is counted as 0010 decision 6 says; the exception is in the front matter. The `tests` ceiling is the one 0010 sets; the tests this proposal adds (the mechanism and the three checkers) fall inside it, and 0012 lowers it.
+- `python3 -m ruff check --no-cache --ignore-noqa --config components/python/ruff.toml bay adapters components --statistics` (after the file exists; until then with the starting selection of item 2)
+- `python3 -m mypy --config-file components/python/mypy.ini bay adapters components`
 
-### 3. Slices
+and writes the totals into the table above. The pins in item 2 are the installed versions, taken from the task, not from a run. Two things the run must also settle, both flagged as risks: whether mypy can name the modules in folders with a hyphen (`components/mail-briefing`, `components/improve/connectors/improve-detect` are not valid package names), and how long each tool takes on the whole tree (the timeouts below are set before any measurement).
 
-Each ends with the tests green and `bay check` clean.
+## Item 1: a `standards` step, new findings only (slice 1)
 
-1. **Standards mechanism.** `standards.check/v1`, list-bound code step, `standards:*` skills, with a fixture provider in its test.
-2. **Split improve-detect.** `limits` to `forge.scaffold/v1`; `change` into forge's `deadcode` connector as a `standards.check/v1` provider (0010 decision 7). The old `deadcode` step stays until slice 6.
-3. **`python`.** Checker, config, skill, requirements-dev, the new-versus-base test, the version and rule-code confirmation.
-4. **`unslop`.** Skill, notice, prose checker, tests.
-5. **`comments`.** Component, skill, checker, the python syntax declaration, the `comment_lines` measure, tests.
-6. **Wire.** Bind the providers: `[python, unslop, comments, deadcode]` in `local-authoring` (forge) and `[python, unslop, comments]` in `workspace` (delivery). forge.extend gets one `standards` step after `limits` that replaces its `deadcode` step, with DoD items "the standards check reports no new finding" (DOD-16) and "comments follow the rule" (DOD-17); delivery.build gets the same step. The roles load the skills and the builder role states the comments rule.
+**Today.** A code step runs one endpoint of one interface through exactly one connector: `model.py:1337-1340` ends in a gap, "code steps need exactly one connector", and keeps `conns[0]` in `Step.connector` (`:492`); `dispatch.py:524-541` runs that one connector. The only check of the kind "new against the base" is the dead-code check, `improve.detect/v1.change` (`components/improve/interfaces/improve.detect.v1.yaml:51-75`, `components/improve/connectors/improve-detect/pipeline.py:226-276`): it audits the tree and the merge-base export, compares findings as a multiset of fingerprints, returns `new`, `existing`, `stopped`, and a non-empty `stopped` ends the code step blocked (`dispatch.py:549-553`). It knows dead code and nothing else.
 
-Slices 1 to 6 add behaviour.
+**Change.** A new interface `standards.check/v1` (in `components/tools/interfaces/`, protected already) with one endpoint, `change { base }`, effects `[read]`, and the same output as `improve.detect/v1.change`: `new` (array of findings `{file, line, rule, message}`), `existing` (integer), `stopped`, `warnings`. A finding never carries source text. A provider is a connector that implements it; an env binds a list: `standards.check/v1: [python-check, comments-check]`. `_code_step` accepts one or more connectors and stores them all; `_run_code` calls each in order and merges: `new` lists concatenate, `existing` adds, `warnings` concatenate, `stopped` messages join with "; ". One provider failing (an exception) fails the step with its name, as today; it is never read as "no findings". With one connector the merge is the identity, so no other step changes.
+
+Findings are compared as a multiset keyed by file, rule and message, never by line number, so adding a line above an old finding makes nothing new; a renamed file keeps its findings (`git diff -M`, as `_renames` does at `pipeline.py:221`). Rejected: a reformat of the whole tree (a diff of dozens of files that breaks every open branch); a file of tolerated findings (it rots).
+
+**Test that fails on main.** New `test_a_code_step_runs_every_bound_provider_and_merges` in `tests/test_dispatch.py`: two fixture connectors implement `standards.check/v1`, one returns one new finding, the other none; the step result has the finding, `stopped` is set, the call ends `blocked`; with both clean the call goes on. On main the resolver reports "code steps need exactly one connector". `tests/test_resolver.py:220` is edited for the list, and `no_deadcode` (`tests/test_dispatch.py:208`) also stubs `standards.check/v1`, because the checkout copy those tests use is not a git repo.
+
+## Item 2: the `python` component and the guard (slice 3)
+
+**Today.** `requirements.txt:1-2` holds the two runtime dependencies. There is no ruff or mypy configuration, no dev requirements and no gate; `# noqa` appears 44 times. The commands builders and reviewers may run are fixed per env: `./bay.sh check` and `python3 tests/run.py` under `workspace.read/v1` (`components/tools/envs/workspace.yaml:10`, `components/forge/envs/local-authoring.yaml:17`), the same two among the builder's write clis in `framework-dev` (`:15`). A read-only role keeps only `READ_ONLY_CLIS` (`bay/model.py:62`); the guard checks the arguments of an approved command only for the control plane and, for git, with the flag list `GIT_PATH_FLAGS` (`bay/guard.py:68`, `_git_mv_rm` at `:485-499`).
+
+**Change.** `components/python/` holds the connector `python-check`, `ruff.toml` (line length 120; starting rule selection `E`, `F`, `W`, `B`, confirmed with `ruff rule` on 0.17.3 before anything is enabled) and `mypy.ini` (`strict = True`). Both files are passed with `--config` and `--config-file`, so the repo root gets no tool config. `requirements-dev.txt` pins `ruff==0.17.3`, `mypy==2.4.1`, `types-PyYAML` and `types-jsonschema` (the stub versions are chosen when the file is written; runtime dependencies are unchanged). The connector, for `change { base }`:
+
+1. exports the merge-base tree to a temporary folder (`git archive`, never run), as `pipeline.py` does;
+2. runs both tools on the export and on the working tree: `[sys.executable, "-m", "ruff", "check", "--no-cache", "--ignore-noqa", "--output-format", "json", "--config", ...]` and `[sys.executable, "-m", "mypy", "--cache-dir", <temp>, "--config-file", ..., "--output", "json"]`. Every call is a list of arguments, never a shell, with a timeout (constants: 120 s for ruff, 300 s for mypy; unmeasured, see above), and nothing is written in the project. `--ignore-noqa` means a new `# noqa` cannot hide a finding; the 44 existing ones count on both sides and are `existing`. The JSON output flags are to be confirmed on the pinned versions in the plan step;
+3. keys findings by file, rule and message, counts the multiset difference and returns `new`, `existing` and `stopped`.
+
+A missing tool ends the step blocked and names `pip install -r requirements-dev.txt`. A timeout, a crash or an unexpected exit code (ruff exits 1 for findings and 2 for an error; mypy 1 for errors and 2 for a crash) is `stopped` with the tool and the reason, never a pass. The tools are not run on a base tree that fails to export.
+
+**How it fits the guard.** There are two separate paths. The check itself runs as a code step in the dispatcher, a subprocess of the connector, and needs no guard rule. The agents are different: a builder that cannot run the tools learns a finding only after the whole implement step, and 0020 closed that kind of gap for tests and `bay check`. So: builders (`framework-dev`, `local-authoring`, `workspace`) get `ruff check` and `mypy` as clis, and reviewers get them through `READ_ONLY_CLIS` so they can re-run the evidence (as 0020 item 2 did for the tests). Both tools can write, fix and run code through flags (`ruff check --fix`, `--add-noqa`, `--output-file`; `mypy --junit-xml`, `--html-report`, `--python-executable`, `--install-types`, and config `plugins` that execute code). The guard therefore takes a fixed list, exactly as `GIT_PATH_FLAGS` does for `git mv` and `git rm`: any word starting with `-` that is not on the list is denied. The list is `--config`, `--config-file`, `--no-cache`, `--ignore-noqa`, `--statistics`, `--output-format`, `--strict`, `--show-error-codes`, compared exactly, so an abbreviation of a long option (argparse accepts them for mypy) never passes. Paths go through the existing control-plane check. A reviewer who runs them writes only `.ruff_cache` and `.mypy_cache`, which the tools ignore in git themselves. Stated risk, the same as 0020's test runner: mypy executes the plugins of the config it is given, so a role that can write a config and run `mypy` runs code outside the guard; the allowed `--config-file` is therefore checked against the one in `components/python/`, which is protected (item 4) and outside `local-authoring`'s write paths.
+
+**Test that fails on main.** New `test_python_check_reports_only_findings_new_against_the_base` in `components/python/tests/test_python_check.py`, with the tool runner injected (the way `pipeline.py:193` takes `self.run`) so the test needs no installed tool and no network: a base with one ruff and one mypy finding and a working tree that keeps both and adds one of each returns `new` of exactly two, `existing` of two and a `stopped`; an unchanged tree returns no `stopped`; a finding that only moved lines is not new; exit code 2 and a timeout return `stopped`; every call it records is a list with a timeout and without `shell`. On main the connector does not exist. The guard half extends two existing tests: the matrix test (named deltas for the clis of the units, deny to pass for `ruff check --config components/python/ruff.toml bay`; deny stays for `ruff check --fix` and `mypy --junit-xml x`) and `test_n3_worktree_add_paths_and_no_writes_without_write_tools`. On main the first rows are deny and the second pass.
+
+## Item 3: the comments rule, its checker and `comment_lines` (slice 5)
+
+**Today.** The builder prompt says nothing about comments (`framework/roles/builder.yaml:12-24`). There are 8 measures (`bay/limits.py:19-20`) and none of them looks at comments; there are at least 96 full-line `#` comments in `bay/` and 25 in `adapters/`, plus docstrings that no search here counted.
+
+**Change.** `components/comments/` carries the owner's rule and the measurement. The rule: no comments by default. A one-line comment only for a reason the code cannot express: a security or crash-safety invariant, or the quirk of an outside API. No history, no finding ids, no cross-references. A docstring is one line per public function and a few lines per module; design text goes in the component README. The text lives in `components/comments/README.md`; the builder prompt carries it as one sentence.
+
+`comment_lines` is a new size measure in `bay/limits.py`: the comment lines (a `#` comment token) plus the docstring lines (the first string statement of a module, class or function) in the Python the other code measures count (`bay/`, `adapters/` and the protected components). The counter is one function in `bay/limits.py`; `comments_check.py` imports it (connectors already import `bay`, `improve_detect.py:2`), so there is one copy. The connector `comments-check` returns one finding per file whose count is above its count at the merge-base (a new file counts from zero; a renamed file from its old name); its message names both counts. The total is held by the ceiling, which starts at the real count when the release step writes it and can only fall. A base without the measure sets its own number (`limits.py:60-61` allows a base with fewer measures), so adding it needs no exception.
+
+The language-neutral `comments:` block in `component.yaml` of the old draft would need a schema change (`schemas/component.schema.json`) for one language. I do not propose it: the counter has a table of comment syntax with one entry, Python, and a second language adds a row (decision 4).
+
+The cleanup of existing comments that break the rule is not in this proposal (it was 0012 slice 6); the ceiling makes that cleanup measurable and keeps it from growing meanwhile.
+
+**Test that fails on main.** New `test_comments_check_blocks_a_file_whose_comment_lines_rise` in `components/comments/tests/test_comments_check.py`, on a temporary git repo: a file with 2 comment lines and one docstring line at the base and the same plus one `#` line now is one finding; a file with the same count after a rename is none; a docstring line counts like a comment line; a new file with one docstring line is one finding. `test_limits_count_the_ceiling_the_ratchet_and_the_exception` (`tests/test_limits.py`) also expects `comment_lines`. On main neither the connector nor the measure exists.
+
+## Item 4: wiring (slice 6)
+
+**Today.** `forge.extend` is propose, proposal, plan, approve, implement, deadcode, limits, review, release (`components/forge/mode.yaml:36-44`); its DoD ends with DOD-14 (deadcode), DOD-15 (limits) and DOD-16 (release) (`components/forge/features/extend/playbook.md:37-39`). `delivery.build` has one step, `implement`, and four DoD items (`components/delivery/mode.yaml:28-29`, `components/delivery/features/build/playbook.md:9-18`). A code step runs in the coordinator's env, or without a coordinator in the first role env that binds the interface (`bay/model.py:966-978`): `local-authoring` for forge, `workspace` for delivery.
+
+**Change.**
+- `forge.extend`: `- { id: standards, run: standards.check/v1.change, with: { base: "origin/main" } }` between `limits` and `review`; `needs` gains `standards.check/v1`. Two DoD items: DOD-17 (must) "The `standards` step reports no new finding" and DOD-18 (must) "Comments follow the comments rule: a comment only for a reason the code cannot express, no history, no ids." The reviewer already gives one verdict per DoD id, so the reviewer role is not edited; the second is the judgement the counter cannot make. A failed `standards` step ends the call blocked, like `deadcode`, and the fix is a new `implement` round with `proposal` set.
+- `delivery.build`: `- { id: standards, run: standards.check/v1.change, with: { base: "HEAD" } }` after `implement`, `needs` gains the interface, and DOD-5 and DOD-6 say the same two things. The base is `HEAD`, not `origin/main`: a delivery project need not have a remote, and the builder is told not to commit (`builder.yaml:29`). Stated gap: if a task tells the builder to commit, the check sees only what is still uncommitted.
+- Bindings: `workspace` and `local-authoring` bind `standards.check/v1: [python-check, comments-check]` and add `ruff check` and `mypy` to their read clis; `framework-dev` adds them to the builder's clis. `framework/kernel.yaml` protects `components/python`, `components/comments`, the two connector names, and owns `requirements-dev.txt`, so the rules agents are judged by are changed only through forge.extend; the two folders are also counted by the code measures, as they should be.
+- `framework/roles/builder.yaml`: one sentence for the comments rule, and the checks line names `ruff check` and `mypy` next to the tests.
+
+**Test that fails on main.** `test_forge_extend_runs_deadcode_between_implement_and_review` (`components/improve/connectors/improve-detect/tests/test_deadcode_check.py:247`) is extended: `limits` is followed by `standards`, which is followed by `review`, and the step runs `standards.check/v1.change` through both providers. On main the line `ids.index("limits") + 1 == ids.index("review")` holds and the step is absent. A delivery assertion goes into an existing delivery mode test, so no test is added.
+
+## Does `long_lines` stay?
+
+`long_lines` counts lines over 120 characters in `bay/` and the protected kit code (`bay/limits.py:54`, ceiling 182). Once `ruff` has the same limit (`E501`, line length 120), both would stop a new long line. **Recommendation: keep `long_lines`.** The ruff check blocks only a new finding keyed by file, rule and message; the message of `E501` carries the length, so an old long line that is edited and keeps a new length reads as new while one that is only moved reads as old. It runs only where the step runs and only when the tools are installed, and `--ignore-noqa` aside it depends on a third-party tool's definition of a line. `long_lines` is a ceiling in the kernel, counted the same way on every run of `bay check --limits`, and unlike the base comparison it ratchets: it can only fall from 182 toward zero, which the base comparison never asks for. It costs one line in `limits.py`. Retire it when its count is zero, when the two say the same thing and the second adds nothing.
+
+## Cost against the ceilings
+
+All measures are covered. Estimates are mine until the code is written.
+
+- **`bay_lines` (9760, count 9760): over, so the exception in the front matter**, +48 (dispatch +16, guard +14, limits +14, model +4). No payer in `bay/` can be named from today's code. Every new line is at most 120 characters and reads as ordinary code (the owner's rule, 0020 rounds 2 and 3).
+- **`kit_python_lines` (5165): over, so the exception**, +175 (`python_check.py` about 130, `comments_check.py` about 45). The component tests do not count here.
+- **`tests` (462): over by 3, so the exception.** Three tests are added, six existing ones are extended (the resolver line, the deadcode step order, the limits count, the matrix, the n3 guard test, the roles message). Payers: none; the plan step tries to merge before the build and the exception is an upper bound (decision 7).
+- **`long_lines` (182): unchanged**, every new line is at most 120 characters.
+- **`comment_lines`: new.** Starts at the real count written by the release step; the base has no such measure, so no exception.
+- **`cli_commands` (16), `schemas` (16), `framework_folders` (2), `top_level_folders` (7): unchanged.** No `add_parser`, no schema file, no folder under `framework/` or at the top; `requirements-dev.txt` is a file.
+- **Docs.** DESIGN and INTERFACES are at their word budget (3000 each) after 0020. This change adds about 40 words to DESIGN (the step, the rule) and 70 to INTERFACES (`standards.check/v1`, the several-connector code step). I could not count words with the commands I may use, so the cuts that pay for them are named by the plan step, in the same files.
+
+## Compatibility and safety impact
+
+- **Contracts.** A new interface and one more step; no existing shape changes. The change in `_code_step` is a relaxation (several connectors allowed) that no existing mode uses, so no manifest, schema or `agentbay/v4` change. 3.2.0 because the new step can block a `forge.extend` or `delivery.build` call that passed before. DOD-11 holds.
+- **After the upgrade** run `pip install -r requirements-dev.txt` and `./bay.sh build` (the generated agent files list `ruff check` and `mypy`). A machine without the tools gets a blocked step that names the command, not a silent pass. A user's own modes are not affected unless they bind the interface.
+- **Safety.** No secret is read or shown; a finding holds file, line, rule and message, never source text. The tools run as subprocesses of the connector with list arguments, no shell, a timeout, no network and no write in the project (`--no-cache`, a temporary mypy cache). They run on the user's own files and on a temporary export of the base, whose code is never imported or run; ruff does not execute project code. mypy executes the plugins named in the config it is given, and the config is the protected one. Agents get the commands only behind the flag list; the risk that a role able to write and run any Python can escape the guard is the one 0020 already states for the test runner and does not grow here.
+- **Extensibility (DOD-4).** Another language is one folder with one connector and its name in the two binding lists; no mode, role or playbook is edited. The dead-code check keeps its own interface until a later proposal moves it.
+- **Out of scope.** The improve-detect split, `unslop`, a skill group `standards:*`, the cleanup of existing findings and comments, a repository-wide reformat.
+
+## Owner decisions
+
+1. **Scope, 2026-11-04, chat: "Core only".** Slices 1 (the `standards.check/v1` step), 3 (the python component), 5 (the comments rule, checker and `comment_lines`) and 6 (the wiring in `forge.extend` and `delivery.build`). Slice 2 (improve-detect split) and slice 4 (unslop) are dropped. Taken from the step plan's goal; the old draft's other recommendations are not decided and are listed below.
+
+## Open decisions, with my recommendation
+
+1. **Builders and reviewers get `ruff check` and `mypy` as commands (item 2).** Cost: the flag list in `guard.py`, +14 `bay_lines`. The alternative is the code step only, where a builder learns a finding after the whole implement step. Recommended: give the commands; it is what 0020 did for tests, and the cost is in the exception.
+2. **The delivery base is `HEAD`, not `origin/main` (item 4).** Recommended: `HEAD`, so a project without a remote works. The alternative blocks `delivery.build` there with the fetch message.
+3. **Release number: 3.2.0.** Recommended. A patch release would understate a step that can block a call.
+4. **No `comments:` block in `component.yaml`.** One language does not justify a schema change. Recommended: the table of syntax inside the counter. The old draft's block is the alternative.
+5. **No skill group `standards:*`.** Recommended: the rule is one sentence in the builder prompt, two DoD items and the comments README. Skills for the python rules can come with a later proposal.
+6. **Starting rule selection `E`, `F`, `W`, `B`, line length 120, `mypy --strict`.** Unvalidated: the old draft's brief is not in the repo and the finding counts are not measured. Recommended: the plan step fixes the selection after the counts are measured and every code is checked with `ruff rule` on 0.17.3; a rule that produces more than a few new findings per ordinary change is left out.
+7. **Tests: exception to 465, or merge.** Recommended: the exception stands as the upper bound and the plan step tries to merge three tests the change makes redundant before it is used; otherwise the three behaviours go untested, which I would not accept.
+8. **mypy scope.** Hyphenated folders may not be nameable as modules. Recommended: whole project if the first real run is clean; otherwise `bay/` (a valid package) and the Python the run can name, with the rest listed in the README. This cannot be decided without the measurement above.
+9. **`long_lines` stays** (previous section). Recommended: keep.
 
 ## Prevention
 
-Same rule as 0010's Prevention: a check, never prose.
+A check, never prose: the style of Python and the growth of comments are blocked by the `standards` step (DOD-17), the growth of the total by `comment_lines` in `bay check --limits` (DOD-15), and the judgement of whether a comment is needed by the reviewer (DOD-18).
 
-| Root cause | Check that blocks it | Slice |
+| Root cause | Check that blocks it | Item |
 |---|---|---|
-| Python style, comments that restate code | `python` and `comments` providers in the `standards` step | 3, 5, 6 |
+| Python style and typing drift | `python-check` provider in `standards` | 1, 2, 4 |
+| Comments that restate code | `comments-check` provider and `comment_lines` | 3, 4 |
 
-## Safety impact
+## Release 3.2.0
 
-The new checkers run local tools on project files with list arguments and a timeout, and read nothing outside the project. The unslop skill is data, never run.
+`bay/__init__.py` to 3.2.0; a CHANGELOG entry with an Upgrading note; `./bay.sh check --limits --write --base origin/main --proposal docs/proposals/0011-standards.md` once, to write the real counts including the first `comment_lines`; the release step prints the tag, push and `gh release create` commands for the owner.

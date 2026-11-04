@@ -5,8 +5,10 @@ import posixpath
 import re
 import subprocess
 import tarfile
+from collections.abc import Callable
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -19,6 +21,7 @@ _COMPONENT = re.compile(r"components/([^/]+)/")
 SHA = re.compile(r"^[0-9a-f]{7,40}$")
 GIT_TIMEOUT = 60
 ARCHIVE_TIMEOUT = 120
+Runner = Callable[..., Any]
 
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 
@@ -225,14 +228,16 @@ def merge_base(repo: Path, base: str, head: str) -> str:
     return out
 
 
-def _try_git(repo: Path, args: tuple[str, ...], run) -> subprocess.CompletedProcess | None:
+def _try_git(repo: Path, args: tuple[str, ...], run: Runner) -> subprocess.CompletedProcess[str] | None:
     try:
-        return run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=GIT_TIMEOUT)
+        done: subprocess.CompletedProcess[str] = run(["git", "-C", str(repo), *args], capture_output=True,
+                                                     text=True, timeout=GIT_TIMEOUT)
     except (OSError, subprocess.SubprocessError):
         return None
+    return done
 
 
-def base_commit(repo: Path, base: str, run=subprocess.run) -> str:
+def base_commit(repo: Path, base: str, run: Runner = subprocess.run) -> str:
     """The commit the working tree branched from `base`, so a branch is judged against what it started from."""
     if not isinstance(base, str) or not base or base.startswith("-"):
         raise ValueError(f"base must be a git revision, got {base!r}")
@@ -248,14 +253,14 @@ def base_commit(repo: Path, base: str, run=subprocess.run) -> str:
     return sha
 
 
-def renames(repo: Path, sha: str, run=subprocess.run) -> dict:
+def renames(repo: Path, sha: str, run: Runner = subprocess.run) -> dict[str, str]:
     """The files git sees as renamed between `sha` and the working tree: {old path: new path}."""
     r = _try_git(repo, ("diff", "-M", "--diff-filter=R", "--name-status", "-z", sha), run)
     names = (r.stdout or "").split("\0") if r is not None and r.returncode == 0 else []
     return dict(zip(names[1::3], names[2::3]))
 
 
-def export(repo: Path, rev: str, dest: Path, run=subprocess.run) -> None:
+def export(repo: Path, rev: str, dest: Path, run: Runner = subprocess.run) -> None:
     """The tree of `repo` at `rev` as plain files in `dest` (git archive, filter="data"); nothing in it is ever run."""
     tar = dest.parent / "base.tar"
     try:
@@ -304,7 +309,7 @@ def changed(repo: Path, base: str, head: str = "HEAD") -> list[str]:
                "--no-ext-diff", "-z", f"{base}...{head}")
     parts = [p for p in out.split("\0")]
     paths = []
-    for status, path in zip(parts[0::2], parts[1::2]):
+    for status, path in zip(parts[0::2], parts[1::2], strict=False):
         if status and path:
             paths.append(path)
     return list(dict.fromkeys(paths))

@@ -129,6 +129,19 @@ def stopped_tools_and_inline_comments() -> None:
     assert not any("ignore-errors" in r["message"] or "assignment" in r["message"] for r in rows)
 
 
+def top_level_files_sit_next_to_packages() -> None:
+    tree = tmpdir()
+    (tree / "conftest.py").write_text("x = 1\n")
+    (tree / "pkg").mkdir()
+    (tree / "pkg" / "__init__.py").write_text("")
+    tools = FakeTools()
+    use(tools)
+    python_check.create(SimpleNamespace(kit=KIT, project=tree)).findings(str(tree), str(tree))
+    mypy_calls = [cmd for cmd, _ in tools.calls if cmd[3] == "mypy" and "--config-file" in cmd]
+    assert len(mypy_calls) == 1, mypy_calls
+    assert mypy_calls[0][mypy_calls[0].index("json") + 1:] == ["-m", "conftest", "-p", "pkg"], mypy_calls
+
+
 def planted_config_plugin_and_module_are_ignored() -> None:
     problems, _ = standards.probe([checker()], tmpdir())
     if problems:
@@ -141,7 +154,9 @@ def planted_config_plugin_and_module_are_ignored() -> None:
              "ruff.toml": '[lint]\nselect = ["ALL"]\n', "pyproject.toml": '[tool.ruff]\nselect = ["ALL"]\n'}
     for name, text in files.items():
         (tree / name).write_text(text)
-    check = python_check.create(SimpleNamespace(kit=KIT, project=tree))
+    (tree / "pkg").mkdir()
+    (tree / "pkg" / "__init__.py").write_text("VALUE: int = 1\n")
+    check =python_check.create(SimpleNamespace(kit=KIT, project=tree))
     out = check.findings(str(tree), str(base))
     assert "stopped" not in out, out
     assert [(r["file"], r["rule"]) for r in out["findings"]] == [("bad.py", "F401")], out
@@ -158,6 +173,7 @@ def test_python_findings_are_blocked_only_when_new_against_the_call_start():
     try:
         compare_with_the_start_commit()
         stopped_tools_and_inline_comments()
+        top_level_files_sit_next_to_packages()
     finally:
         standards.run_module = REAL_RUN
     planted_config_plugin_and_module_are_ignored()

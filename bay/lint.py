@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -889,14 +890,16 @@ def _writes_checked(env: model.Doc, globs: list[str]) -> bool:
     return any(Path(p).suffix == "" or any(fnmatch.fnmatch(Path(p).name, g) for g in globs) for p in paths)
 
 
-def _last_checked_writers(kit: model.Kit, md: model.Doc, ep: dict, steps: list[dict], globs: list[str]) -> dict:
+def _last_checked_writers(kit: model.Kit, md: model.Doc, ep: dict[str, Any], steps: list[dict[str, Any]],
+                          globs: list[str]) -> dict[str, int]:
     """{role: index of its last step} for each role of the feature that may write checked files."""
-    last = {}
+    last: dict[str, int] = {}
     for i, st in enumerate(steps):
         role = model.step_role(st, ep)
-        role_doc = kit.docs["Role"].get(role)
-        env = kit.docs["Environment"].get(model.role_env(md.spec, ep, st, role))
-        if role_doc and env and role_doc.spec.get("access") == "write" and _writes_checked(env, globs):
+        env_name = model.role_env(md.spec, ep, st, role) if role else None
+        role_doc = kit.docs["Role"].get(role) if role else None
+        env = kit.docs["Environment"].get(env_name) if env_name else None
+        if role and role_doc and env and role_doc.spec.get("access") == "write" and _writes_checked(env, globs):
             last[role] = i
     return last
 

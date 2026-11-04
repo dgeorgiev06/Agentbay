@@ -66,7 +66,7 @@ def generic_names(got: dict) -> None:
 
 
 def mail_deltas(want: dict, got: dict) -> None:
-    """The documented changes of mail-briefing's describe and the key of its `rows` read; the rest must match exactly."""
+    """The documented changes of mail-briefing's describe and the key of its `rows` read; the rest must match."""
     want, got = json.loads(json.dumps(want)), json.loads(json.dumps(got))
     assert want["sql"]["v_posts"]["rows"] == [[0]]
     assert "v_posts" in got["sql"]["v_posts"]["error"] and got["sql"]["v_posts"]["rows"] == []

@@ -5,8 +5,10 @@ import hashlib
 import json
 import secrets as _rand
 import time
+from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
+from typing import Any
 
 from . import (boundary, checks, config as cfgmod, connect, ledger, model, secretscan, standards, vault,
                workflows as wfmod)
@@ -526,22 +528,28 @@ class Dispatcher:
         self._ledger("step.completed", base, summary=summary, cost=cost, durationMs=_ms(t0),
                      costUsd=cost.get("usd") if cost else None)
 
-    def _standards(self, mode, step, state, args, caps) -> dict:
+    def _standards(self, mode: Any, step: Any, state: dict[str, Any], args: dict[str, Any],
+                   caps: dict[str, Any]) -> dict[str, Any]:
         """The standards step: every bound checker on the call's start commit and on the working tree."""
         if not args.get("base"):
             return {"new": [], "existing": 0, "stopped": NO_BASE.format(state["callId"])}
         settings = self._settings(mode)
+        run_checker: Callable[..., dict[str, Any]] = self._invoke
 
-        def invoke(name: str, checker_args: dict) -> dict:
-            return self._invoke(step.env, name, model.STANDARDS_IFACE, "findings", checker_args,
-                                settings=settings, caps=caps)
+        def invoke(name: str, checker_args: dict[str, str]) -> dict[str, Any]:
+            return run_checker(step.env, name, model.STANDARDS_IFACE, "findings", checker_args,
+                               settings=settings, caps=caps)
         return standards.check(self.project, args["base"], self._checkers(step), invoke)
 
-    def _checkers(self, step) -> list[standards.Checker]:
+    def _checkers(self, step: Any) -> list[standards.Checker]:
         """The step's checkers with the tools their component declares in `spec.language`."""
-        kit, out = self.sys.kit, []
+        kit = self.sys.kit
+        out: list[standards.Checker] = []
         for name in step.connectors:
-            component = kit.get("Component", kit.get("Connector", name).dir.parent.parent.name)
+            connector = kit.get("Connector", name)
+            if connector is None:
+                raise CallError(f"connector {name} is not in the kit")
+            component = kit.get("Component", connector.dir.parent.parent.name)
             language = (component.spec.get("language") if component else None) or {}
             out.append(standards.Checker(name, language.get("tools", []), language.get("install", "")))
         return out

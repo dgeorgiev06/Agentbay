@@ -6,8 +6,10 @@ import subprocess
 import sys
 import tempfile
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from . import boundary
 
@@ -15,20 +17,24 @@ PROBE_TIMEOUT = 30
 LISTED_FINDINGS = 5
 LEDGER_DIR = ".agentbay"
 
+Row = dict[str, Any]
+Runner = boundary.Runner
+Invoke = Callable[[str, dict[str, str]], dict[str, Any]]
+
 
 @dataclass
 class Checker:
     name: str
-    tools: list[dict] = field(default_factory=list)
+    tools: list[dict[str, str]] = field(default_factory=list)
     install: str = ""
 
 
-def run_module(module: str, args: list[str], cwd: Path, timeout: int, run=subprocess.run):
+def run_module(module: str, args: list[str], cwd: Path, timeout: int, run: Runner = subprocess.run) -> Any:
     """Run `python3 -I -m module` with a list of arguments, no shell and a timeout; -I keeps a planted module out."""
     return run([sys.executable, "-I", "-m", module, *args], cwd=cwd, capture_output=True, text=True, timeout=timeout)
 
 
-def compare(before: list[dict], now: list[dict], renames: dict[str, str]) -> tuple[list[dict], int]:
+def compare(before: list[Row], now: list[Row], renames: dict[str, str]) -> tuple[list[Row], int]:
     """The findings in `now` that `before` lacks, counted as a multiset by (file, rule, message)."""
     seen = Counter((renames.get(row["file"], row["file"]), row["rule"], row["message"]) for row in before)
     new = []
@@ -41,7 +47,7 @@ def compare(before: list[dict], now: list[dict], renames: dict[str, str]) -> tup
     return new, len(now) - len(new)
 
 
-def probe(checkers: list[Checker], cwd: Path, run=subprocess.run) -> tuple[list[str], list[str]]:
+def probe(checkers: list[Checker], cwd: Path, run: Runner = subprocess.run) -> tuple[list[str], list[str]]:
     """(problems, warnings): a tool that is not installed stops the step, a version other than the pin only warns."""
     problems, warnings = [], []
     for checker in checkers:
@@ -61,7 +67,7 @@ def probe(checkers: list[Checker], cwd: Path, run=subprocess.run) -> tuple[list[
     return problems, warnings
 
 
-def copy_tree(project: Path, dest: Path, run=subprocess.run) -> list[str]:
+def copy_tree(project: Path, dest: Path, run: Runner = subprocess.run) -> list[str]:
     """Copy the regular files git lists in the working tree to `dest`; not .agentbay, symlinks or special files."""
     done = run(["git", "-C", str(project), "ls-files", "-co", "--exclude-standard", "-z"],
                capture_output=True, text=True, timeout=boundary.GIT_TIMEOUT)
@@ -79,7 +85,7 @@ def copy_tree(project: Path, dest: Path, run=subprocess.run) -> list[str]:
     return [f"{skipped} symlink(s) or special file(s) not copied to the working-tree check"] if skipped else []
 
 
-def check(project: Path, base: str, checkers: list[Checker], invoke, run=subprocess.run) -> dict:
+def check(project: Path, base: str, checkers: list[Checker], invoke: Invoke, run: Runner = subprocess.run) -> Row:
     """{new, existing, stopped?, warnings}: the findings of `checkers` on the working tree that the base lacks."""
     sha = boundary.base_commit(project, base, run)
     renames = boundary.renames(project, sha, run)

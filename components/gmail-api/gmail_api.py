@@ -159,7 +159,7 @@ _OUTLOOK_NEXT = re.compile(r"^\s*(Sent|Date):\s", re.I)
 
 
 def trim_quoted(text: str) -> str:
-    """Drop the quoted reply chain (On ... wrote:, Original Message, Outlook headers, > lines) unless nothing is left."""
+    """Drop the quoted reply chain (On ... wrote:, Original Message, Outlook headers, > lines) unless all is quoted."""
     lines = text.replace("\r\n", "\n").split("\n")
     cut = len(lines)
     for i, ln in enumerate(lines):

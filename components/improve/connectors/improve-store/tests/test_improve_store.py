@@ -1,5 +1,4 @@
 """improve store: dedup, evidence merge, reopen, decisions, triage, backlog, handoff, verify and the secret scan."""
-import json
 from datetime import timedelta
 
 from helpers import NOW, cleanup, connector_pkg, model, tmpdir

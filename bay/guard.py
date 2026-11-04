@@ -426,7 +426,7 @@ class Guard:
             return "deny", f"agentbay: check --write rewrites framework/limits.yaml: {why}"
         return "pass", ""
 
-    def _lint_command(self, words, cwd, first, tool) -> tuple[str, str] | None:
+    def _lint_command(self, words: list[str], cwd: Path, first: int, tool: str) -> tuple[str, str] | None:
         """Denies ruff or mypy unless it names the kit's protected config once and uses only LINT_FLAGS."""
         flag, name = LINT_CONFIG[tool]
         config = self.kit / LINT_CONFIG_DIR / name if self.kit else None

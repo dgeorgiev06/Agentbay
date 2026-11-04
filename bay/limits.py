@@ -31,7 +31,8 @@ def comment_rows(text: str) -> list[tuple[int, str]]:
     for node in ast.walk(ast.parse(text)):
         first = node.body[0] if isinstance(node, DOCUMENTED) and node.body else None
         if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
-            rows += [(line, DOCSTRING_LINE) for line in range(first.lineno + 1, first.end_lineno + 1)]
+            last = first.end_lineno or first.lineno
+            rows += [(line, DOCSTRING_LINE) for line in range(first.lineno + 1, last + 1)]
     return sorted(rows)
 
 

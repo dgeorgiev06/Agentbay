@@ -645,7 +645,8 @@ def test_n4_agent_type_without_agent_id_is_the_main_thread():
         g = guard_for(p)
         assert decide(g, "some-agent", "Bash", {"command": ".agentbay/bay status"}, agent_id=None) == "pass"
         assert decide(g, "some-agent", "Bash", {"command": ".agentbay/bay status"}, agent_id="a7") == "deny"
-        assert decide(g, "analyst--feed-briefing", "Read", {"file_path": ".agentbay/guard.json"}, agent_id=None) == "deny"
+        guard_file = {"file_path": ".agentbay/guard.json"}
+        assert decide(g, "analyst--feed-briefing", "Read", guard_file, agent_id=None) == "deny"
     finally:
         cleanup(p)
 

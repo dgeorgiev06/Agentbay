@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from .util import duration
 
@@ -242,7 +243,7 @@ def _check_ref(wf: Workflow | None, st: Stage, ref: str, at: str, seen: dict) ->
 _MISSING = object()
 
 
-def substitute(template, inp: dict, steps: dict, settings: dict, call: dict | None = None):
+def substitute(template, inp: dict, steps: dict, settings: dict, call: dict[str, Any] | None = None):
     """Resolve $in, $steps, $config and $call references in a template (`a|b`: first present); missing are dropped."""
     def dig(cur, parts):
         for n, part in enumerate(parts):

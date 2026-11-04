@@ -2,10 +2,13 @@
 import fnmatch
 import tokenize
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 from bay import limits
+
+Row = dict[str, Any]
 
 CONFIG = "agentbay.config.yaml"
 CONNECTOR = "comments-check"
@@ -13,7 +16,7 @@ QUOTES = "\"'`"
 LINE_COMMENT = "a comment"
 
 
-def _languages(kit: Path) -> list[dict]:
+def _languages(kit: Path) -> list[Row]:
     found = []
     for path in sorted(kit.glob("components/*/component.yaml")):
         try:
@@ -46,7 +49,7 @@ def _skip_string(text: str, start: int) -> int:
     return i + 1
 
 
-def _lexed_rows(text: str, comments: dict) -> list[int]:
+def _lexed_rows(text: str, comments: Row) -> list[int]:
     marks, blocks = comments.get("line", []), comments.get("block", [])
     rows, i, row = [], 0, 1
     while i < len(text):
@@ -72,17 +75,17 @@ def _lexed_rows(text: str, comments: dict) -> list[int]:
     return rows
 
 
-def _rows(text: str, comments) -> list[tuple[int, str]]:
+def _rows(text: str, comments: Any) -> list[tuple[int, str]]:
     if comments == "python":
         return limits.comment_rows(text)
     return [(row, LINE_COMMENT) for row in _lexed_rows(text, comments)]
 
 
 class CommentsCheck:
-    def __init__(self, ctx):
+    def __init__(self, ctx: Any) -> None:
         self.ctx = ctx
 
-    def findings(self, root, configRoot) -> dict:
+    def findings(self, root: str, configRoot: str) -> Row:
         tree, config_root = Path(root), Path(configRoot)
         if self.ctx.project.resolve() != self.ctx.kit.resolve() and _rule_is_off(config_root):
             return {"findings": [], "warnings": [f"{CONNECTOR} is off: rule: off in {CONFIG} of the base"]}
@@ -105,5 +108,5 @@ class CommentsCheck:
         return {"findings": found, "warnings": warnings}
 
 
-def create(ctx):
+def create(ctx: Any) -> CommentsCheck:
     return CommentsCheck(ctx)

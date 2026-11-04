@@ -8,8 +8,11 @@ import tempfile
 import tokenize
 import tomllib
 from pathlib import Path
+from typing import Any
 
 from bay import standards
+
+Row = dict[str, Any]
 
 RUFF_TIMEOUT = 60
 MYPY_TIMEOUT = 120
@@ -20,7 +23,7 @@ INLINE = (
 )
 
 
-def _row(file: str, line: int, rule: str, message: str) -> dict:
+def _row(file: str, line: int, rule: str, message: str) -> Row:
     return {"file": file, "line": line, "rule": rule, "message": message}
 
 
@@ -59,7 +62,8 @@ def _targets(root: Path) -> list[str]:
     args = []
     for entry in sorted(root.iterdir()):
         if entry.is_file() and entry.suffix == ".py":
-            args.append(entry.name)
+            if entry.stem.isidentifier():
+                args += ["-m", entry.stem]
         elif entry.is_dir() and entry.name.isidentifier():
             outside_tests = [p for p in entry.rglob("*.py") if "tests" not in p.relative_to(root).parts]
             if outside_tests:
@@ -77,7 +81,7 @@ def _run(module: str, args: list[str], root: Path, timeout: int) -> tuple[str, s
     return done.stdout, None
 
 
-def _ruff(root: Path, config: Path) -> tuple[list[dict], str | None]:
+def _ruff(root: Path, config: Path) -> tuple[list[Row], str | None]:
     args = ["check", "--no-cache", "--ignore-noqa", "--output-format", "json", "--config", str(config), "."]
     out, problem = _run("ruff", args, root, RUFF_TIMEOUT)
     if problem:
@@ -91,7 +95,7 @@ def _ruff(root: Path, config: Path) -> tuple[list[dict], str | None]:
         return [], "ruff printed no JSON array on stdout"
 
 
-def _mypy(root: Path, config: Path) -> tuple[list[dict], str | None]:
+def _mypy(root: Path, config: Path) -> tuple[list[Row], str | None]:
     own_targets = _sets_own_targets(config)
     targets = [] if own_targets else _targets(root)
     if not targets and not own_targets:
@@ -109,7 +113,7 @@ def _mypy(root: Path, config: Path) -> tuple[list[dict], str | None]:
         return [], "mypy printed output that is not JSON"
 
 
-def _inline_rows(root: Path) -> list[dict]:
+def _inline_rows(root: Path) -> list[Row]:
     rows = []
     for path in sorted(root.rglob("*.py")):
         rel = path.relative_to(root)
@@ -128,21 +132,21 @@ def _inline_rows(root: Path) -> list[dict]:
 
 
 class PythonCheck:
-    def __init__(self, ctx):
+    def __init__(self, ctx: Any) -> None:
         self.ctx = ctx
 
-    def findings(self, root, configRoot) -> dict:
+    def findings(self, root: str, configRoot: str) -> Row:
         tree, config_root = Path(root), Path(configRoot)
         is_kit = self.ctx.project.resolve() == self.ctx.kit.resolve()
         defaults = (config_root if is_kit else self.ctx.kit) / CONFIG_DIR
         ruff_rows, ruff_problem = _ruff(tree, _ruff_config(config_root, defaults, is_kit))
         mypy_rows, mypy_problem = _mypy(tree, _mypy_config(config_root, defaults, is_kit))
-        out = {"findings": ruff_rows + mypy_rows + _inline_rows(tree)}
+        out: Row = {"findings": ruff_rows + mypy_rows + _inline_rows(tree)}
         stopped = [p for p in (ruff_problem, mypy_problem) if p]
         if stopped:
             out["stopped"] = "; ".join(stopped)
         return out
 
 
-def create(ctx):
+def create(ctx: Any) -> PythonCheck:
     return PythonCheck(ctx)

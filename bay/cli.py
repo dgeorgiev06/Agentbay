@@ -17,41 +17,41 @@ from bay import ledger, protocol, vault
 
 USAGE = """agentbay control plane.
 
-  check [--base <ref>]   lint + resolve every mode endpoint (fails with every gap); with --base, also check the
-                         change against framework/kernel.yaml and a proposal's touches: (--proposal, --docs);
-                         --limits checks the size ceilings in framework/limits.yaml
-  build | clean          compile modes/roles into a runtime (claude-code) / remove it; build writes a minimal
-                         agentbay.config.yaml when the project has none
-  config                 every agentbay.config.yaml setting, with type, default and description (from the schemas)
-  catalog [<name>]       the registry (.agentbay/catalog.json): endpoints with schemas, workflows;
-                         --roles lists the role units instead (no build needed)
-  describe <mode|role>   resolved definition as JSON
+check [--base <ref>]   lint + resolve every mode endpoint (fails with every gap); with --base, also check the
+                       change against framework/kernel.yaml and a proposal's touches: (--proposal, --docs);
+                       --limits checks the size ceilings in framework/limits.yaml
+build | clean          compile modes/roles into a runtime (claude-code) / remove it; build writes a minimal
+                       agentbay.config.yaml when the project has none
+config                 every agentbay.config.yaml setting, with type, default and description (from the schemas)
+catalog [<name>]       the registry (.agentbay/catalog.json): endpoints with schemas, workflows;
+                       --roles lists the role units instead (no build needed)
+describe <mode|role>   resolved definition as JSON
 
-  call <mode>.<endpoint> '<json>'      run an endpoint (the only way to invoke one)
-  submit <callId> <stepId> '<json>'    hand back an agentic step's output
-  show <callId>                        current state of a call (result or the step it waits on)
-  show <mode> --resolved               the mode's features after `extends`, each with the file it comes from
-  show reclaim <runId>                 mark a stuck run as reclaimed
-  show close <callId> --reason <text>  end an open call as abandoned
-  approve <callId|runId> [--reject]    pass an approval gate of a call, or of a workflow run (W-...)
-                                       (you, in a terminal; never an agent)
-          [--via chat --quote "<msg>"] from chat, relayed by the Chief of Staff, when approve.from lists chat
-  approve <F-id> [--defer|--wontfix]   decide an improve backlog item (where approve.from allows)
-  (agents read data only through .agentbay/roles/<role>--<mode>/use, generated per role unit by build)
+call <mode>.<endpoint> '<json>'      run an endpoint (the only way to invoke one)
+submit <callId> <stepId> '<json>'    hand back an agentic step's output
+show <callId>                        current state of a call (result or the step it waits on)
+show <mode> --resolved               the mode's features after `extends`, each with the file it comes from
+show reclaim <runId>                 mark a stuck run as reclaimed
+show close <callId> --reason <text>  end an open call as abandoned
+approve <callId|runId> [--reject]    pass an approval gate of a call, or of a workflow run (W-...)
+                                     (you, in a terminal; never an agent)
+        [--via chat --quote "<msg>"] from chat, relayed by the Chief of Staff, when approve.from lists chat
+approve <F-id> [--defer|--wontfix]   decide an improve backlog item (where approve.from allows)
+(agents read data only through .agentbay/roles/<role>--<mode>/use, generated per role unit by build)
 
-  new mode <name> | new feature <name> --mode <m>
-  new connector <name> --implements <iface> | new env <name>     scaffolds (forge templates)
-  secret set <NAME>      store a secret in the keychain (value read from stdin, never echoed)
-  auth <connector>       run a connector's declared login (e.g. a browser sign-in that stores its token);
-                         asks first; needs the browser on this machine
+new mode <name> | new feature <name> --mode <m>
+new connector <name> --implements <iface> | new env <name>     scaffolds (forge templates)
+secret set <NAME>      store a secret in the keychain (value read from stdin, never echoed)
+auth <connector>       run a connector's declared login (e.g. a browser sign-in that stores its token);
+                       asks first; needs the browser on this machine
 
-  status [--agents|--log]                      calls, steps and agent runs; the raw ledger
-  note <ref> "text" [--instruction]            record a note (--instruction: a mid-run instruction change)
-  note task                                    print a fresh taskId
-  note dispatch <taskId> --agent <name> ...    the coordinator's dispatch log
-  note done <taskId>                           a dispatched agent finished (no hook needed)
-  note review <taskId> '<review.verdict/v1>'   a review that ran outside a framework step
-  plan <taskId> '<json>' | --done <n>          a dispatched agent's outcome and to-do (the only command subagents run)
+status [--agents|--log]                      calls, steps and agent runs; the raw ledger
+note <ref> "text" [--instruction]            record a note (--instruction: a mid-run instruction change)
+note task                                    print a fresh taskId
+note dispatch <taskId> --agent <name> ...    the coordinator's dispatch log
+note done <taskId>                           a dispatched agent finished (no hook needed)
+note review <taskId> '<review.verdict/v1>'   a review that ran outside a framework step
+plan <taskId> '<json>' | --done <n>          a dispatched agent's outcome and to-do (the only command subagents run)
 """
 
 

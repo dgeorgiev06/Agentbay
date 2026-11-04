@@ -2,6 +2,36 @@
 
 Earlier versions: see docs/proposals/
 
+## 3.1.0 - 2026-11-04
+
+Proposal 0020: agents can check their own work, and a dispatch checks that the guard is on. The dispatch check changes default behaviour, so this is a minor version.
+
+### Upgrading
+
+1. A role dispatch is now refused when no guard hook ran in the last 15 minutes. In a session whose hooks cannot load (a cloud session), pass `--unguarded "<reason>"` to `bay note dispatch`. The reason is recorded in the ledger and listed by `bay status`.
+2. Run `bay build`, so the agent files list the new commands.
+
+### Added
+
+- Builders can run `python3 tests/run.py`, `./bay.sh check`, `git commit`, `git add` (stage), `git mv` and `git rm`. There is still no `git push`, no network and no shell `rm`.
+- Reviewers can run `python3 tests/run.py` and `./bay.sh check`, so they can repeat the evidence they judge. They still have no file-writing tool.
+- Review verdicts accept `C-n` ids (conformance rules), and the review brief carries the verdict schema itself, not only its name.
+- The `long_lines` measure in `framework/limits.yaml` counts lines over 120 characters in framework code. Like the other measures, it may not rise.
+- `bay status` lists every dispatch made with `--unguarded`, with its task id and reason.
+
+### Changed
+
+- `bay note dispatch` refuses when the guard heartbeat is older than 15 minutes. `bay status` keeps its 2-minute guard line.
+- The `bay_lines` ceiling is now the real count, 9760, under an owner-approved exception in the proposal.
+
+### Security
+
+- A role that may run the test runner can run code it wrote, so its write paths are not a hard limit. The guard confines the file tools, not what a command does. Every command still asks the user first, `bay check --base` still finds a change to a protected path, and the whole-diff review and git history remain.
+- `git mv` and `git rm` paths are checked against the role's write paths and the protected folders, for framework-dev too.
+- Shortened long options (such as `--pathspec-from=`) and bundled `-O` (such as `-pO<file>`) are refused.
+- `check --write` needs the `framework/` write path, so a reviewer cannot rewrite `framework/limits.yaml` through the check command.
+- `--unguarded` does not turn the guard on. A session without hooks has no Bash allow-list and no write-path check, and its subagents run on the prompt rules alone. The reason is typed by the coordinator and is not verified.
+
 ## 3.0.2 - 2026-11-03
 
 Proposal 0019: the kit tests no longer assume the shipped envs, agents and modes are the only ones.

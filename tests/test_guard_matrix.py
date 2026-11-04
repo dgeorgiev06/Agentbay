@@ -212,6 +212,16 @@ DEV, LOCAL = "builder--forge--framework-dev", "builder--forge--local-authoring"
 IMPROVE = "components/improve"
 DEV_CLIS = ["./bay.sh check", "python3 tests/run.py", "git status", "git diff", "git log", "git add", "git commit"]
 MV_RM = ["git mv", "git rm"]
+# 0020 items 1 and 2: three more units may run the check commands (and the builders `git commit`, `git mv`, `git rm`).
+# Each unit's clis now and in the golden; undo_move puts them back in the policy and in every "may only run" reason.
+CHECKS = ["./bay.sh check", "python3 tests/run.py"]
+READ = ["git status", "git diff", "git log"]
+CHECK_CLIS = {
+    "builder--delivery": ([*CHECKS, *READ, "git add", "git worktree", "git commit", *MV_RM, "git show"],
+                          [*READ, "git add", "git worktree", "git show"]),
+    LOCAL: ([*CHECKS, "git add", "git commit", *MV_RM, *READ, "git show"], ["./bay.sh check", *READ, "git show"]),
+    "reviewer--forge": ([*CHECKS, *READ, "git show"], [*READ, "git show"]),
+}
 CLAUSE = "{}/ of the agentbay checkout is writable only by forge.extend (env must name it)"
 
 
@@ -268,8 +278,14 @@ def undo_move(got: dict) -> dict:
     pol["units"][DEV]["clis"] = [*DEV_CLIS, "git show"]
     cli_now, cli_was = ", ".join([*DEV_CLIS, *MV_RM, "git show"]), ", ".join([*DEV_CLIS, "git show"])
     assert any(cli_now in r for r in (r for _, r in got["matrix"][DEV].values()))
+    for unit, (now, was) in CHECK_CLIS.items():       # (5) 0020: the same for three more units, each asserted present
+        assert pol["units"][unit]["clis"] == now, pol["units"][unit]["clis"]
+        pol["units"][unit]["clis"] = was
+        assert any(", ".join(now) in r for _, r in got["matrix"][unit].values()), unit
 
     def old(s: str, unit: str | None = None) -> str:
+        if unit in CHECK_CLIS:
+            s = s.replace(", ".join(CHECK_CLIS[unit][0]), ", ".join(CHECK_CLIS[unit][1]))
         if unit == LOCAL:
             s = s.replace(local_now, local_was)
         if unit == DEV:
@@ -314,7 +330,15 @@ IMPROVE_DELTAS: dict = {
 # README.md (0010 part 2a): framework-dev's fs.write names it because every framework change updates the README (DOD-13).
 # It is not protected, so the one row is deny -> pass; every other row of an unprotected path stays a deny (D9).
 README_DELTAS: dict = {(DEV, "Write README.md"): ("deny", "pass")}
-EXPECTED_DELTAS: dict = {**IMPROVE_DELTAS, **README_DELTAS}
+# 0020 items 1 and 2: ten rows, deny -> pass. The builders may run the checks and `git commit`; the reviewer the checks.
+RUN_TESTS = ["Bash python3 tests/run.py -q", "Bash python3 tests/run.py tests/test_improve.py"]
+CHECK_DELTAS: dict = {
+    **{("builder--delivery", r): ("deny", "pass")
+       for r in ["Bash ./bay.sh check", "Bash git commit -m 'about bay approve'", *RUN_TESTS]},
+    **{(LOCAL, r): ("deny", "pass") for r in ["Bash git commit -m 'about bay approve'", *RUN_TESTS]},
+    **{("reviewer--forge", r): ("deny", "pass") for r in ["Bash ./bay.sh check", *RUN_TESTS]},
+}
+EXPECTED_DELTAS: dict = {**IMPROVE_DELTAS, **README_DELTAS, **CHECK_DELTAS}
 NET_DELTAS = {k: v for k, v in EXPECTED_DELTAS.items() if v[0] != v[1]}
 
 
@@ -370,7 +394,11 @@ def undo_kit_path(got: dict) -> dict:
     of every reason are the golden's. Asserted present, so the put-back cannot hide a missing row."""
     text = json.dumps(got, sort_keys=True)
     assert text.count("<kit>/components/briefing/mode.yaml") == 2, text.count("<kit>/components/briefing/mode.yaml")
-    return json.loads(text.replace("<kit>/components/briefing/mode.yaml", "<kit>/modes/briefing/mode.yaml"))
+    # 0020: delivery's clis in its four deny reasons
+    now, was = (", ".join(c) for c in CHECK_CLIS["builder--delivery"])
+    assert text.count(now) == 4, text.count(now)
+    text = text.replace("<kit>/components/briefing/mode.yaml", "<kit>/modes/briefing/mode.yaml")
+    return json.loads(text.replace(now, was))
 
 
 def test_guard_matrix_for_a_project_with_the_kit_outside():

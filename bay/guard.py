@@ -58,9 +58,22 @@ NEVER_DIRS = (".agentbay", ".claude", ".git", ".vscode", ".idea")
 NEVER_FILES = ("CLAUDE.md", "CLAUDE.local.md", ".mcp.json", "agentbay.config.yaml", ".envrc", "Makefile", "bay.sh")
 NEVER_PREFIXES = (".env",)
 NEVER_SEQS = ((".github", "workflows"),)
+# A short-option cluster with O (`-pO<file>`) reads a file like -O. -S and -G take the rest of the word as their
+# value (`git log -SOrder` searches for "Order"), so a cluster ends at the first S or G.
+BUNDLE_O = re.compile(r"-[A-FH-RT-Za-z]*O")
 GIT_BAD_FLAGS = ("--output", "--ext-diff", "--textconv", "--no-index", "--exec", "--upload-pack",
                  "--receive-pack", "--config", "--git-dir", "--work-tree", "--open-files-in-pager",
                  "--pathspec-from-file", "-O")
+# all that `git mv` and `git rm` may take
+GIT_PATH_FLAGS = ("-r", "-f", "-n", "-q", "-k", "-v", "--cached", "--dry-run", "--force", "--quiet")
+
+
+def abbrev(word: str, flags: tuple[str, ...]) -> bool:
+    """True when `word` shortens a long option in `flags`: git and argparse accept `--pathspec-fr`."""
+    name = word.split("=", 1)[0]
+    return len(name) > 2 and name.startswith("--") and any(f.startswith(name) for f in flags)
+
+
 INTERPRETERS = ("sh", "bash", "zsh", "dash", "ksh", "fish", "node", "perl", "ruby", "php", "deno", "bun")
 EVAL_FLAGS = ("-c", "-e", "--eval", "-E", "-r")
 PROBES = (".agentbay/guard.json", ".agentbay/bay", ".agentbay/roles/role/use", ".agentbay/data/feeds/feed-briefing/corpus.db",
@@ -453,15 +466,49 @@ class Guard:
             d = self._git_command(entry, words, cwd, len(pw))
             if d:
                 return d
-        return "pass", ""              # never auto-allowed: Claude Code's normal permission prompt applies
+        writes = pw == ["./bay.sh", "check"] and any(abbrev(w, ("--write",)) for w in words[2:])
+        if writes and (why := self._write_denied(entry, self.project / "framework/limits.yaml")):
+            return "deny", f"agentbay: check --write rewrites framework/limits.yaml: {why}"
+        return "pass", ""      # never auto-allowed: Claude Code's normal permission prompt applies
 
     def _git_command(self, entry, words, cwd, first) -> tuple[str, str] | None:
         """Denies for git flags that write or read files or run programs, and for an unsafe `worktree add`."""
-        bad = [w for w in words[first:] if w.startswith(GIT_BAD_FLAGS)]
-        if bad:
-            return "deny", f"agentbay: git flag {bad[0]} is not allowed (it writes or reads files or runs programs)"
+        for word in words[first:]:
+            if word.startswith(GIT_BAD_FLAGS) or abbrev(word, GIT_BAD_FLAGS) or BUNDLE_O.match(word):
+                return "deny", f"agentbay: git flag {word} is not allowed (it writes or reads files or runs programs)"
         if words[1:3] == ["worktree", "add"]:
             return self._worktree_add(entry, words[3:], cwd)
+        if words[1] in ("mv", "rm"):
+            return self._git_mv_rm(entry, words, cwd)
+        return None
+
+    def _git_mv_rm(self, entry, words, cwd) -> tuple[str, str] | None:
+        """Denies a `git mv` or `git rm` with a flag outside GIT_PATH_FLAGS, or with a path the role may not write.
+        Every path counts, flag-like ones after `--` too, judged as the file tools would."""
+        verb = words[1]
+        cut = words.index("--") if "--" in words else len(words)
+        options = [w for w in words[2:cut] if w.startswith("-")]
+        paths = [w for w in words[2:cut] if not w.startswith("-")] + words[cut + 1:]
+        for option in options:
+            if option not in GIT_PATH_FLAGS:
+                return "deny", f"agentbay: git {verb} {option}: only {' '.join(GIT_PATH_FLAGS)} are allowed"
+        for path in paths:
+            reason = self._git_path_denied(entry, path, cwd)
+            if reason:
+                return "deny", f"agentbay: git {verb} {path}: {reason}"
+        return None
+
+    def _git_path_denied(self, entry, a, cwd) -> str | None:
+        """Why the role may not write `a` or a never-written or protected path inside it (`git rm -r .`), or None."""
+        if a.startswith(":") or any(c in a for c in "*?[\\"):
+            return "git pathspec magic and globs are not allowed; name each path"
+        target = norm(a, cwd)
+        held = (*NEVER_DIRS, *NEVER_FILES, *map("/".join, NEVER_SEQS), *self.policy.get("protected", []))
+        for path in [target, *(self.project / h for h in held)]:
+            if self.inside(path, target):
+                reason = self.never_write(path) or self._write_denied(entry, path)
+                if reason:
+                    return reason
         return None
 
     @staticmethod
@@ -524,13 +571,10 @@ class Guard:
                 continue
             if a.startswith("-"):
                 continue
-            p = norm(a, cwd)
-            if os.path.isabs(a) or not under(p, self.project):
+            if os.path.isabs(a) or not under(norm(a, cwd), self.project):
                 return "deny", "agentbay: git worktree add needs a relative path inside the project"
-            why = self.never_write(p) or self._write_denied(entry, p)
-            if why:
-                return "deny", f"agentbay: git worktree add {a}: {why}"
-            return None
+            why = self._git_path_denied(entry, a, cwd)
+            return ("deny", f"agentbay: git worktree add {a}: {why}") if why else None
         return None
 
     def _touches_control_plane(self, word: str, cwd: Path) -> bool:

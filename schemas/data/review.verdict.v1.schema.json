@@ -22,7 +22,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^(DOD|R)-[0-9]+$"
+            "pattern": "^(DOD|R|C)-[0-9]+$"
           },
           "verdict": {
             "enum": [

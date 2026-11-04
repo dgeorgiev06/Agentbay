@@ -98,10 +98,10 @@ Playbook H2 sections follow the order in [DESIGN.md](DESIGN.md#features); Steps 
 Rules: `{id: R-n, level, statement, appliesTo: executor|reviewer|both, check?, refs?, when?: {kind}}`.
 Endpoint `schedule` is declarative only (lint warns); run it from cron.
 Deterministic checks (`bay/checks.py`): `citations_resolve`, `citations_min:<n>`, `no_secrets`, `lint_clean`.
-The reviewer returns `review.verdict/v1`: per id `pass|fail|n/a`, evidence, severity, and optionally `cites`
+The reviewer returns `review.verdict/v1`: per id (`DOD-n`, `R-n`, `C-n`) `pass|fail|n/a`, evidence, severity, and optionally `cites`
 `{taskId, outcome, todo[]}` (the recorded outcome and to-do items the verdict rests on). The review brief
 carries `review.recordedPlans` (taskId -> step, outcome, to-do progress) of the agents it judges, and `recheck`
-when a halted review is run again. The rules for halting and for the re-check are in
+when a halted review is run again (the brief's `verdictSchema` is the schema itself). The rules for halting and for the re-check are in
 [DESIGN.md](DESIGN.md#features).
 
 ## 3. Role / Agent profile / Environment
@@ -125,7 +125,7 @@ bind:
 
 - Grants of a unit (role, mode, env) are described in DESIGN under Compile. An interface marked `dispatcherOnly`
   is never granted to an agent. `bay check` rejects a runtime binding that lists file-writing abilities or CLIs
-  beyond read-only version control under a capability without the `write` effect.
+  beyond read-only version control, `./bay.sh check` and `python3 tests/run.py` under a capability without the `write` effect.
 - Tier: step (a review: its review block) > feature > role default. The profile maps a tier to a model, and the
   env's `tiers` cap both step tiers and the role's default tier.
   Envs are the only place capabilities are bound. `agentbay.config.yaml` can switch every env's `offline:` block on
@@ -134,8 +134,6 @@ bind:
   `framework/kernel.yaml` opens to them (`protected:`, each env's `modes:`).
 - Code steps (`run:`) run in the coordinator's env for that feature; `bay check` warns when a store-reading
   mode puts a role in an env whose `items.store`/`items.source` bindings differ from it.
-
-`bay/model.py` resolves all of this and reports every gap at once (DESIGN, Compile).
 
 ## 4. Interface + Connector
 An interface lives in `interfaces/` of the component that owns it, which is the component whose mode needs it.
@@ -178,8 +176,7 @@ user-authored CLAUDE.md, `.claude/settings.json`, `.mcp.json`, never clobbers; `
 writes the registry via `bay.registry.write`. The catalog is the same for every runtime, and an adapter supplies
 only its own `runtime` name, so a second runtime discovers the same modes, endpoints (with resolved input and
 output schemas), roles and project workflows. A runtime is a folder `adapters/<name>/` with `adapter.yaml` (name =
-folder, module inside the folder, class). Lint finds it by folder and checks it, and reports a malformed entry
-without importing it.
+folder, module inside the folder, class).
 
 The build names a component's skill `.claude/skills/<component>--<skill>/` and a role's skill `<role>--<skill>`
 (lowercase letters, digits and hyphens, at most 64), and rewrites the `name:` in the copied SKILL.md to match.
@@ -196,7 +193,7 @@ targets against the registry and each `with` against the endpoint's input schema
 
 ## 7. Dispatcher
 `bay call <mode>.<endpoint> '<json>'` -> `{callId, status, output | next, checks, review, cost}`.
-Status: `done | partial | blocked | failed | needs-agent | awaiting-approval | abandoned`. `abandoned` means a person ended the call.
+Status: `done | partial | blocked | failed | needs-agent | awaiting-approval | abandoned`.
 `bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic
 step (usage goes to the step's event); `bay show <callId>` prints the current state (`bay show reclaim <runId>`
 marks a stuck run reclaimed; `bay show close <callId> --reason <text>` ends an open call as abandoned, with the reason in the ledger).
@@ -219,8 +216,8 @@ written. Any event may carry `durationMs`, `tokens {input, output, cacheRead, ca
   `instruction-change` or `decision`.
 - Guard: `permission.denied` (tool, agent, reason; never the command). Use shims: `data.read` (role, env,
   endpoint, item count).
-- `agent.dispatch`: `bay note dispatch <taskId> --agent <name> [--call --step --model --tier --role --mode --input ...]`,
-  run by the coordinator before every dispatch.
+- `agent.dispatch`: `bay note dispatch <taskId> --agent <name> [--call --step --model --tier --role --mode --input --unguarded <reason> ...]`,
+  run by the coordinator before every dispatch. With no guard hook call in 15 minutes it refuses unless `--unguarded` is given; `data.unguarded` keeps the reason and `bay status` lists it.
 - `agent.plan` and `agent.plan.done`: `bay plan <taskId> '{"outcome", "todo": [{"text", "serves"}]}'`, then
   `bay plan <taskId> --done <n>`. One plan per dispatched taskId, written only by the agent it was dispatched to. A
   role-step `bay submit` is refused when its taskId has no plan.

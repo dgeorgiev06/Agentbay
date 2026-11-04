@@ -625,7 +625,8 @@ class Dispatcher:
         missing = [i for i in need if i not in got]
         if missing:
             raise CallError(f"review verdict is missing ids: {', '.join(missing)} (report pass|fail|n/a for each)")
-        levels = {d.id: d.level for d in feat.dod} | {r.id: r.level for r in feat.rules}
+        ruleset = [c for n in (feat.review or {}).get("rulesets", []) for c in model.ruleset(self.sys.kit.root, n)]
+        levels = {x.id: x.level for x in [*feat.dod, *feat.rules]} | {c["id"]: c.get("level") for c in ruleset}
         failed = [i for i in got.values()
                   if (i["verdict"] == "fail" and levels.get(i["id"]) in FAIL_LEVELS) or i.get("severity") == "blocker"]
         state["steps"][step.id] = {**verdict, "items": list(got.values())}
@@ -703,7 +704,7 @@ class Dispatcher:
             "rules": [r.as_dict() for r in feat.rules if r.for_reviewer() and r.applies(state["input"])],
             "checks": state["checks"],
             "output": self._endpoint_output(feat, state),
-            "verdictSchema": VERDICT,
+            "verdictSchema": model.data_schema(VERDICT),
             "recordedPlans": self._recorded_plans(state["callId"]),
         }
         for name in (feat.review or {}).get("rulesets", []):

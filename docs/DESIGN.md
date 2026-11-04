@@ -20,13 +20,13 @@ A mode names capabilities, never a connector or tool. Adding a source is one com
 an env, and no mode, role or playbook changes. A role file outside the framework is an error. A mode customizes a
 role through its playbooks, skills and rules, and a new role is a `forge.extend` proposal.
 
-A mode may `extends:` one abstract mode that extends nothing, so inheritance is one level deep. The kit resolves it at load. A child's feature replaces its parent's feature of that name whole, never key by key, except that a feature with no `playbook` or `rules` inherits the parent's. Roles, constraints
+A mode may `extends:` one abstract mode that extends nothing, so inheritance is one level deep. A child's feature replaces its parent's feature of that name whole, never key by key, except that a feature with no `playbook` or `rules` inherits the parent's. Roles, constraints
 and config defaults merge entry by entry, `needs` are unioned, and inherited paths are rebased to the child's
 folder. `abstract: true` marks a base that is linted but never installed or called.
 
 ## Components
 
-A component is one folder in `components/` with one manifest, whose name says its kind.
+A component is one folder in `components/` with one manifest.
 
 | Manifest | Kind | For |
 |---|---|---|
@@ -56,7 +56,7 @@ neither; one that does needs a playbook. It is called as `<mode>.<feature>`. The
 - `gate: <text>` is an approval gate that only you pass, with `bay approve` in a terminal (or from chat, if `approve.from` allows it). `approves: $in.<f>` ties the gate to the exact content of a file, so a later call on the unchanged file skips it.
 - `{review: here}` marks where review goes (default last).
 
-`with:` substitutes `$in.x`, `$steps.<id>.x` and `$config.x`, with `a|b` fallbacks; a `*` path part maps the rest over a list (`$steps.get.items.*.id`), in project workflows too. `when:` skips a step
+`with:` substitutes `$in.x`, `$steps.<id>.x` and `$config.x`, with `a|b` fallbacks; a `*` path part maps the rest over a list (`$steps.get.items.*.id`). `when:` skips a step
 (`stale > 2h`, `$in.<field>` or `$steps.<id>.<field>`; `!` negates). A playbook has the sections Purpose, Inputs,
 Steps, Definition of Done (`- [DOD-n] (must|should|must_not) ...`), Outputs and Failure handling. Rules refer to
 Definition of Done ids and can name a deterministic `check` (`citations_resolve`, `no_secrets`, `lint_clean`).
@@ -82,7 +82,7 @@ when the mode runs that role in several envs. A unit is its own subagent, use sh
 access. Its grants come from the mode, not the role. They are the read-only connector endpoints of the mode's
 `needs` that the env binds, plus the capabilities that the env binds to the runtime itself (such as web research)
 when their effects are read or network. Only `access: write` roles get the file-editing abilities (Edit, Write,
-MultiEdit, NotebookEdit), CLIs beyond read-only version control, and the env's write paths. An env's `tiers` caps
+MultiEdit, NotebookEdit), CLIs beyond read-only version control and the two checks (`./bay.sh check`, `python3 tests/run.py`), and the env's write paths. An env's `tiers` caps
 both the tiers of steps and a role's default tier.
 
 The claude-code adapter writes `.claude/agents/<unit>.md` for worker units and runs mode coordinators as playbooks
@@ -106,7 +106,7 @@ redacted from everything returned or logged.
 The run log is the append-only file `events.jsonl` under `.agentbay/`, and `bay status` folds it into calls,
 steps, runs and cost. A subagent
 records its plan with `bay plan`, the only `bay` command it may run. `bay status` lists unfinished work with no event for 24 hours under `STALE?`; it closes nothing. With no hook events it says the
-hooks are not loaded; start Claude Code inside the project.
+hooks are not loaded; start Claude Code inside the project. `bay note dispatch` then refuses unless given `--unguarded "<reason>"`, which the ledger keeps and `bay status` lists.
 [INTERFACES.md section 9](INTERFACES.md#9-ledgerevent) lists the event types.
 
 ## Safety model
@@ -115,8 +115,8 @@ hooks are not loaded; start Claude Code inside the project.
 check), your authority (the framework changes only through `forge.extend`, with approval and review) and your
 secrets. It defends against agent mistakes and overreach, prompt injection through data agents read, and extensions
 that overreach, not against you. The guard narrows what subagents can ask to do; these are guardrails, not a hard
-boundary, and hard isolation needs an OS sandbox. One bypass is known: code a builder runs, such as a test, runs outside
-the guard. Around it stand the gate, plan approval, the whole-diff review, the boundary check, `deadcode` and `limits`.
+boundary, and hard isolation needs an OS sandbox. One bypass is known: code a builder or reviewer runs, such as a test, runs outside
+the guard, so a role that may run tests has no hard write limit. Around it stand the gate, plan approval, the whole-diff review, the boundary check, `deadcode` and `limits`.
 
 - **Nothing that runs code is auto-approved.** The guard allows without a prompt only a role's own read-only use
   shim (`python3 -E <kit>/bay/use_shim.py`; with the kit inside the project, even that prompts). Every other subagent
@@ -140,7 +140,7 @@ the guard. Around it stand the gate, plan approval, the whole-diff review, the b
   `bay check`.
 - **What subagents cannot touch.** The guard hook runs on Bash and on every file tool. It denies `.agentbay/`,
   `.claude/`, `.git`, `CLAUDE.md`, `.mcp.json`, `agentbay.config.yaml`, `.env*`, `.envrc`, `Makefile`, `bay.sh`,
-  editor folders, `.github/workflows/` and the kit. It also denies writes outside the env's `fs.write`, inline
+  editor folders, `.github/workflows/` and the kit. It also denies writes, `git mv` and `git rm` paths outside the env's `fs.write`, inline
   interpreter code and risky version-control flags. Paths are compared case-folded where the disk is
   case-insensitive, and by inode (hard links are not detected). The guard fails closed.
 
@@ -153,16 +153,16 @@ checkout. Its steps are: draft a proposal (unless one is named), a `plan` step, 
 `deadcode`, `limits`, review and release.
 
 - **Plan.** The `plan` step runs the `lead` role as a deep subagent and writes `docs/plans/<id>.md`, named like the
-  proposal, when the proposal is large (10 or more touches, any `exceptions:`, no readable `touches:`) or touches a
+  proposal, when the proposal is large or touches a
   security-sensitive path. It is skipped when the plan file exists.
 - **Gate.** The gate always runs. It approves the proposal and, when a plan exists, the plan too; a chat `--sha` is
-  then both prefixes joined by `+`, proposal first (one prefix, or the wrong order, is refused).
+  then both prefixes joined by `+`, proposal first.
 - **Dead code.** The `deadcode` step (`improve.detect/v1.change`) blocks the call when the change adds unused code,
   an unused constant, a compatibility layer or a complexity finding that the merge-base with `origin/main` did not
   have.
 - **Size.** The `limits` step (`improve.detect/v1.limits`) keeps the framework from growing: no measure in
-  `framework/limits.yaml` (code lines, CLI commands, folders, schemas, tests) may exceed its ceiling, or the base branch's if higher. Code and test counts cover framework code only: `adapters/` and the `kernel.yaml` protected paths. A raise needs an `exceptions:` entry in the proposal's front
-  matter, approved with it; a count up to it passes without editing `limits.yaml`. A lower count is a note. At release,
+  `framework/limits.yaml` may exceed its ceiling, or the base branch's if higher. Code and test counts cover framework code only: `adapters/` and the `kernel.yaml` protected paths. A raise needs an `exceptions:` entry in the proposal's front
+  matter, approved with it; a count up to it passes without editing `limits.yaml`. At release,
   `bay check --limits --write` records the count as the new ceiling, so ceilings only fall.
 
 The boundary checks keep the framework's parts independent. Code cites these ids, and `bay check` runs them.

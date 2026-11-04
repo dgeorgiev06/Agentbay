@@ -1,6 +1,8 @@
 """The CLI surface (proposal 0008, item 2): about 15 commands, and an old command name is an unknown command."""
+import os
 import subprocess
 import sys
+import time
 
 from helpers import KIT, cleanup, kit_copy, project
 
@@ -56,9 +58,36 @@ def test_note_task_mints_an_id_and_dispatch_and_review_take_the_task_first():
         assert r.returncode == 0 and ledger.TASK_ID.match(r.stdout.strip())
         tid = r.stdout.strip()
         assert cli(p, "note", "dispatch", tid).returncode != 0                       # --agent is required
-        assert cli(p, "note", "dispatch", tid, "--agent", "builder--delivery").returncode == 0
+        dispatch = ("note", "dispatch", tid, "--agent", "builder--delivery")
+        r = cli(p, *dispatch)                                                   # no guard heartbeat: refused, no event
+        dispatched = [e for e in ledger.read(p) if e["type"] == "agent.dispatch"]
+        assert r.returncode != 0 and "--unguarded" in r.stderr and not dispatched
+        assert cli(p, *dispatch, "--unguarded", "").returncode != 0                  # an empty reason is no reason
+        assert cli(p, *dispatch, "--unguarded", "   ").returncode != 0               # nor is one of only spaces
+        assert cli(p, *dispatch, "--unguarded", "x").returncode == 0
+        assert [e["data"]["unguarded"] for e in ledger.read(p) if e["type"] == "agent.dispatch"] == ["x"]
+        assert cli(p, "note", tid, "text", "--unguarded", "x").returncode != 0       # --unguarded goes with `dispatch`
+        seen = p / ".agentbay/ledger/guard.seen"                                     # one hook call touches it
+        seen.parent.mkdir(parents=True, exist_ok=True)
+        seen.touch()
+        assert cli(p, *dispatch).returncode == 0                                     # fresh: no flag needed
+        old = time.time() - 1000
+        os.utime(seen, (old, old))
+        assert cli(p, *dispatch).returncode != 0                                     # older than 900 s: refused again
+        future = time.time() + 86400 * 365
+        os.utime(seen, (future, future))
+        assert cli(p, *dispatch).returncode != 0                                     # dated in the future: stale
+        seen.unlink()
+        seen.mkdir()
+        assert cli(p, *dispatch).returncode != 0                                     # a directory is no heartbeat
+        seen.rmdir()
+        real = p / "real.seen"
+        real.touch()
+        seen.symlink_to(real)
+        assert cli(p, *dispatch).returncode != 0                                     # nor is a symlink
+        seen.unlink()
         assert cli(p, "note", tid, "text", "--agent", "x").returncode != 0           # dispatch flags need `dispatch`
-        assert any(e["type"] == "agent.dispatch" and e["taskId"] == tid for e in ledger.read(p))
+        assert sum(e["type"] == "agent.dispatch" and e["taskId"] == tid for e in ledger.read(p)) == 2
     finally:
         cleanup(p)
 
@@ -87,7 +116,7 @@ def test_a_write_verb_must_directly_follow_note_or_show_so_the_ask_rules_match()
         r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), *BYPASSES[0]], capture_output=True, text=True)
         assert r.returncode != 0 and "no option may come before the verb" in r.stderr
         # the canonical spellings still work
-        assert cli(p, "note", "dispatch", "T-20261030-abcd", "--agent", "x").returncode == 0
+        assert cli(p, "note", "dispatch", "T-20261030-abcd", "--agent", "x", "--unguarded", "test").returncode == 0
         assert cli(p, "show", "reclaim", "R-1", "--reason", "r").returncode == 0
     finally:
         cleanup(p)

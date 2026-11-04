@@ -103,7 +103,12 @@ def test_agentic_step_returns_plan_then_review_then_partial_on_failed_must():
     err(lambda: d.submit(r["callId"], "review", verdict), "missing ids: DOD-2", "R-1")
     bad = {"items": [dict(verdict["items"][0], cites={"todo": [0]})]}
     err(lambda: d.submit(r["callId"], "review", bad), "does not match review.verdict/v1")
-    verdict["items"] += [{"id": "DOD-2", "verdict": "fail", "evidence": "evil.example is not stored", "severity": "blocker"},
+    sch = rv["review"]["verdictSchema"]                                      # the brief carries the schema itself
+    assert isinstance(sch, dict) and sch["title"] == "review.verdict/v1" and sch["additionalProperties"] is False
+    # C-n is accepted as an extra item
+    verdict["items"] += [{"id": "C-3", "verdict": "pass", "evidence": "conformance rule judged"},
+                         {"id": "DOD-2", "verdict": "fail", "evidence": "evil.example is not stored",
+                          "severity": "blocker"},
                          {"id": "R-1", "verdict": "fail", "evidence": "check R-1 failed", "severity": "blocker"}]
     r3 = d.submit(r["callId"], "review", verdict)
     assert r3["status"] == "partial" and set(r3["review"]["failed"]) == {"DOD-2", "R-1"}
@@ -285,7 +290,17 @@ def test_failed_review_halts_before_release():
         assert r["status"] == "partial" and r["review"]["failed"] == [b] and "next" not in r
         assert "recheck" not in to_review()["next"]["review"]  # a second re-check is not allowed: full review
         (k / path).write_text((k / path).read_text() + "edit\n")
-        assert "recheck" not in to_review()["next"]["review"]  # a changed proposal: the owner approved again, full review
+        r5 = to_review()
+        assert "recheck" not in r5["next"]["review"]  # a changed proposal: the owner approved again, full review
+        # a failed must-level C-n halts like a DoD item, at any rating
+        rules = r5["next"]["review"]["rulesets"]["conformance"]
+        must = next(c["id"] for c in rules if c["level"] == "must")
+        should = next(c["id"] for c in rules if c["level"] == "should")
+        r = d.submit(r5["callId"], "review", verdict(ids + [should], [should], "should-fix"))
+        assert r["status"] != "partial" and r["next"]["step"] == "release"     # a failed should does not
+        r6 = to_review()
+        r = d.submit(r6["callId"], "review", verdict(ids + [must], [must], "should-fix"))
+        assert r["status"] == "partial" and r["review"]["failed"] == [must] and "next" not in r
     finally:
         dispatch.boundary.git = real_git
         cleanup(k)

@@ -741,6 +741,8 @@ class Dispatcher:
         for st in reversed(feat.steps):
             if st.kind in ("review", "gate"):
                 continue
+            if st.run and st.run.rsplit(".", 1)[0] == model.STANDARDS_IFACE:
+                continue
             if st.id in state["steps"] and state["steps"][st.id] is not None:
                 return state["steps"][st.id]
         return {}

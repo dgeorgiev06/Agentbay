@@ -225,6 +225,10 @@ def test_forge_reviewers_get_the_conformance_rules():
         rv = d.submit(r["callId"], "fill", {"status": "done", "summary": "filled the env"})
         conf = rv["next"]["review"]["rulesets"]["conformance"]
         assert [c["id"] for c in conf][:2] == ["C-1", "C-2"] and conf[0]["check"] == "playbook_matches_workflow"
+        graded = rv["next"]["review"]["definitionOfDone"] + rv["next"]["review"]["rules"]
+        passed = [{"id": x["id"], "verdict": "pass", "evidence": "e"} for x in graded]
+        end = d.submit(rv["callId"], "review", {"items": passed})
+        assert end["status"] == "done" and end["output"] == {"status": "done", "summary": "filled the env"}, end
     finally:
         cleanup(k)
 

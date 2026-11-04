@@ -51,7 +51,7 @@ def count(repo: Path) -> dict[str, int]:
         "schemas": sum(p.startswith("schemas/") for p in paths),
         "top_level_folders": len({p.split("/")[0] for p in paths if "/" in p}),
         "tests": sum(len(re.findall(r"^def test_", read(p), re.M)) for p in paths if _TEST_FILE.fullmatch(p) and (p.startswith("tests/") or core(p))),
-        "long_lines": sum(len(line) > 120 for p in bay + kit for line in read(p).splitlines()),
+        "long_lines": sum(len(line) > 120 for p in bay + kit for line in read(p).split("\n")),
     }
 
 

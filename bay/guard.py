@@ -58,11 +58,14 @@ NEVER_DIRS = (".agentbay", ".claude", ".git", ".vscode", ".idea")
 NEVER_FILES = ("CLAUDE.md", "CLAUDE.local.md", ".mcp.json", "agentbay.config.yaml", ".envrc", "Makefile", "bay.sh")
 NEVER_PREFIXES = (".env",)
 NEVER_SEQS = ((".github", "workflows"),)
-BUNDLE_O = re.compile(r"-[A-Za-z]*O")             # a short-option cluster with O (`-pO<file>`) reads a file like -O
+# A short-option cluster with O (`-pO<file>`) reads a file like -O. -S and -G take the rest of the word as their
+# value (`git log -SOrder` searches for "Order"), so a cluster ends at the first S or G.
+BUNDLE_O = re.compile(r"-[A-FH-RT-Za-z]*O")
 GIT_BAD_FLAGS = ("--output", "--ext-diff", "--textconv", "--no-index", "--exec", "--upload-pack",
                  "--receive-pack", "--config", "--git-dir", "--work-tree", "--open-files-in-pager",
                  "--pathspec-from-file", "-O")
-GIT_PATH_FLAGS = ("-r", "-f", "-n", "-q", "-k", "-v", "--cached", "--dry-run", "--force", "--quiet")     # all that `git mv`/`git rm` may take
+# all that `git mv` and `git rm` may take
+GIT_PATH_FLAGS = ("-r", "-f", "-n", "-q", "-k", "-v", "--cached", "--dry-run", "--force", "--quiet")
 
 
 def abbrev(word: str, flags: tuple[str, ...]) -> bool:

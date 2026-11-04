@@ -1,5 +1,7 @@
 """python-check: standards.check/v1 for Python, ruff and mypy --strict on one folder with the base's config."""
+import ast
 import configparser
+import io
 import json
 import os
 import re
@@ -8,7 +10,7 @@ import tempfile
 import tokenize
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from bay import standards
 
@@ -24,7 +26,17 @@ INLINE = (
 NO_TYPE_CHECK = "a no_type_check decorator or import"
 STUB_SHADOW = "a .pyi stub next to a .py of the same name; mypy checks the stub in place of the code"
 SYMLINK = "a symlinked .py file; the tools do not check it"
-NEGATED_TYPE_CHECKING = "a negated or compared TYPE_CHECKING; mypy skips the code under it as unreachable"
+TYPE_CHECKING_USE = (
+    "TYPE_CHECKING used other than as the whole test of an if with no else or elif; mypy skips the code it thinks "
+    "is unreachable, so write a plain `if TYPE_CHECKING:` block holding only imports"
+)
+PLATFORM_CHECK = (
+    "a sys.platform or sys.version_info check; mypy skips the branch it thinks is unreachable, "
+    "so do not branch on it in checked code"
+)
+UNNAMEABLE_FILE = "a top-level .py file whose name is not a valid module name; mypy skips it, so rename it"
+UNNAMEABLE_FOLDER = "a top-level folder with Python whose name is not a valid package name; mypy skips it, so rename it"
+SYS_PROBES = ("platform", "version_info")
 HIDDEN = "a .py file in a dot-folder; the tools do not check it, so move it out of the dot-folder"
 UNCHECKED_FOLDERS = (".git", ".agentbay")
 
@@ -64,17 +76,27 @@ def _sets_own_targets(config: Path) -> bool:
     return "files" in section or "packages" in section
 
 
-def _targets(root: Path) -> list[str]:
-    args = []
+def _holds_python(entry: Path, root: Path) -> bool:
+    return any("tests" not in p.relative_to(root).parts for p in entry.rglob("*.py"))
+
+
+def _targets(root: Path) -> tuple[list[str], list[Row]]:
+    args: list[str] = []
+    unnameable: list[Row] = []
     for entry in sorted(root.iterdir()):
+        if entry.name.startswith("."):
+            continue
         if entry.is_file() and entry.suffix == ".py":
             if entry.stem.isidentifier():
                 args += ["-m", entry.stem]
-        elif entry.is_dir() and entry.name.isidentifier():
-            outside_tests = [p for p in entry.rglob("*.py") if "tests" not in p.relative_to(root).parts]
-            if outside_tests:
+            else:
+                unnameable.append(_row(entry.name, 0, "unchecked", UNNAMEABLE_FILE))
+        elif entry.is_dir() and _holds_python(entry, root):
+            if entry.name.isidentifier():
                 args += ["-p", entry.name]
-    return args
+            else:
+                unnameable.append(_row(entry.name, 0, "unchecked", UNNAMEABLE_FOLDER))
+    return args, unnameable
 
 
 def _run(module: str, args: list[str], root: Path, timeout: int) -> tuple[str, str | None]:
@@ -113,9 +135,9 @@ def _ruff(root: Path, config: Path) -> tuple[list[Row], str | None]:
 
 def _mypy(root: Path, config: Path) -> tuple[list[Row], str | None]:
     own_targets = _sets_own_targets(config)
-    targets = [] if own_targets else _targets(root)
+    targets, unnameable = ([], []) if own_targets else _targets(root)
     if not targets and not own_targets:
-        return [], None
+        return unnameable, None
     with tempfile.TemporaryDirectory(prefix="agentbay-mypy-") as cache:
         args = ["--config-file", str(config), "--cache-dir", cache, "--output", "json", *targets]
         out, problem = _run("mypy", args, root, MYPY_TIMEOUT)
@@ -124,19 +146,82 @@ def _mypy(root: Path, config: Path) -> tuple[list[Row], str | None]:
     try:
         items = [json.loads(line) for line in out.splitlines() if line.strip()]
         return [_row(item["file"], item["line"], item.get("code") or "mypy", item["message"])
-                for item in items if item.get("severity") == "error"], None
+                for item in items if item.get("severity") == "error"] + unnameable, None
     except (ValueError, KeyError, TypeError):
         return [], "mypy printed output that is not JSON"
 
 
-def _is_negated_type_checking(tokens: list[tokenize.TokenInfo], index: int) -> bool:
-    before = tokens[index - 1].string if tokens[index - 1].string != "." else tokens[index - 3].string
-    return before == "not" or tokens[index + 1].string in ("==", "!=", "is")
+class Aliases(NamedTuple):
+    type_checking: set[str]
+    sys_modules: set[str]
+    sys_probes: set[str]
+
+
+def _aliases(tree: ast.AST) -> Aliases:
+    found = Aliases({"TYPE_CHECKING"}, {"sys"}, set())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module in ("typing", "typing_extensions"):
+            for alias in node.names:
+                if alias.name == "TYPE_CHECKING" and alias.asname:
+                    found.type_checking.add(alias.asname)
+        elif isinstance(node, ast.ImportFrom) and node.module == "sys":
+            for alias in node.names:
+                if alias.name in SYS_PROBES:
+                    found.sys_probes.add(alias.asname or alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "sys" and alias.asname:
+                    found.sys_modules.add(alias.asname)
+    return found
+
+
+def _is_type_checking(node: ast.AST, aliases: Aliases) -> bool:
+    if isinstance(node, ast.Name):
+        return node.id in aliases.type_checking
+    return isinstance(node, ast.Attribute) and node.attr == "TYPE_CHECKING"
+
+
+def _is_sys_probe(node: ast.AST, aliases: Aliases) -> bool:
+    if isinstance(node, ast.Name):
+        return node.id in aliases.sys_probes
+    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+        return node.attr in SYS_PROBES and node.value.id in aliases.sys_modules
+    return False
+
+
+def _reads_sys_probe(node: ast.AST, aliases: Aliases) -> bool:
+    return any(_is_sys_probe(inner, aliases) for inner in ast.walk(node))
+
+
+def _is_platform_check(node: ast.AST, aliases: Aliases) -> bool:
+    if isinstance(node, ast.Compare):
+        return _reads_sys_probe(node, aliases)
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+        return node.func.attr == "startswith" and _is_sys_probe(node.func.value, aliases)
+    return False
+
+
+def _reachability_rows(rel: str, source: str) -> list[Row]:
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return []
+    aliases = _aliases(tree)
+    plain_tests = {id(node.test) for node in ast.walk(tree)
+                   if isinstance(node, ast.If) and not node.orelse and _is_type_checking(node.test, aliases)}
+    rows = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.expr):
+            continue
+        if _is_type_checking(node, aliases) and id(node) not in plain_tests:
+            rows.append(_row(rel, node.lineno, "type-checking-use", TYPE_CHECKING_USE))
+        elif _is_platform_check(node, aliases):
+            rows.append(_row(rel, node.lineno, "platform-check", PLATFORM_CHECK))
+    return rows
 
 
 def _token_rows(rel: str, tokens: list[tokenize.TokenInfo]) -> list[Row]:
-    rows = [_row(rel, t.start[0], "type-checking-negated", NEGATED_TYPE_CHECKING) for index, t in enumerate(tokens)
-            if t.string == "TYPE_CHECKING" and _is_negated_type_checking(tokens, index)]
+    rows = []
     for token in tokens:
         if token.type == tokenize.NAME and token.string == "no_type_check":
             rows.append(_row(rel, token.start[0], "no-type-check", NO_TYPE_CHECK))
@@ -178,10 +263,14 @@ def _inline_rows(root: Path) -> list[Row]:
             continue
         try:
             with tokenize.open(path) as f:
-                tokens = list(tokenize.generate_tokens(f.readline))
+                source = f.read()
+            tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
         except (OSError, SyntaxError, ValueError, tokenize.TokenError):
             continue
-        rows += _token_rows(path.relative_to(root).as_posix(), tokens)
+        rel = path.relative_to(root).as_posix()
+        rows += _token_rows(rel, tokens)
+        if "tests" not in path.relative_to(root).parts:
+            rows += _reachability_rows(rel, source)
     return rows
 
 

@@ -2,6 +2,7 @@
 import json
 import subprocess
 import sys
+import textwrap
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -156,18 +157,58 @@ def stubs_decorators_and_symlinks_are_findings() -> None:
 
 def unreachable_code_and_unchecked_files_are_findings() -> None:
     tree = tmpdir()
-    (tree / "t.py").write_text("import typing\nfrom typing import TYPE_CHECKING\n\nif not TYPE_CHECKING:\n    x = 1\n"
-                               "if typing.TYPE_CHECKING == False:\n    y = 1\nif not typing.TYPE_CHECKING:\n    z = 1\n"
-                               "if TYPE_CHECKING:\n    w = 1\n")
+    (tree / "t.py").write_text(textwrap.dedent("""\
+        import sys
+        import typing
+        from typing import TYPE_CHECKING
+        from typing import TYPE_CHECKING as TC
+
+        if not (TYPE_CHECKING):
+            a = 1
+        if typing.TYPE_CHECKING == False:
+            b = 1
+        if not typing.TYPE_CHECKING:
+            c = 1
+        if TYPE_CHECKING:
+            d = 1
+        else:
+            e = 1
+        if not TC:
+            f = 1
+        if TYPE_CHECKING or sys.argv:
+            g = 1
+        h = 1 if TYPE_CHECKING else 2
+        if sys.platform == "win32":
+            i = 1
+        if sys.version_info < (3, 8):
+            j = 1
+        if TYPE_CHECKING:
+            k = 1
+        """))
+    (tree / "plain.py").write_text(textwrap.dedent("""\
+        from typing import TYPE_CHECKING
+
+        if TYPE_CHECKING:
+            import os
+        """))
     (tree / "lost.py").write_text("x = 1\n")
+    (tree / "my-mod.py").write_text("x = 1\n")
+    (tree / "my-pkg").mkdir()
+    (tree / "my-pkg" / "__init__.py").write_text("x = 1\n")
     tools = FakeTools(behaviour={"skipped": ("lost.py",)})
     use(tools)
     check = python_check.create(SimpleNamespace(kit=KIT, project=tree))
     found = {(r["file"], r["line"], r["rule"]) for r in check.findings(str(tree), str(tree))["findings"]}
-    negated = {line for file, line, rule in found if rule == "type-checking-negated"}
-    assert negated == {4, 6, 8}, found
+    reachability = {"type-checking-use", "platform-check"}
+    shapes = {(line, rule) for file, line, rule in found if file == "t.py" and rule in reachability}
+    use_lines = {6, 8, 10, 12, 16, 18, 20}
+    platform_rows = {(21, "platform-check"), (23, "platform-check")}
+    assert shapes == {(line, "type-checking-use") for line in use_lines} | platform_rows, found
+    assert not [row for row in found if row[0] == "plain.py" and row[2] in reachability], found
     unchecked = {file for file, _, rule in found if rule == "unchecked"}
-    assert unchecked == {"lost.py"}, found
+    assert {"lost.py", "my-mod.py", "my-pkg"} <= unchecked and "t.py" not in unchecked, found
+    mypy_calls = [cmd for cmd, _ in tools.calls if cmd[3] == "mypy" and "--config-file" in cmd]
+    assert mypy_calls and not any("my-mod" in cmd or "my-pkg" in cmd for cmd in mypy_calls), mypy_calls
     shown = [cmd for cmd, _ in tools.calls if "--show-files" in cmd]
     assert shown and all("--no-respect-gitignore" in cmd for cmd in shown), shown
     checked = [cmd for cmd, _ in tools.calls if cmd[3] == "ruff" and "--output-format" in cmd]

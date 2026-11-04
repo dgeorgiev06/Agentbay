@@ -24,6 +24,7 @@ INLINE = (
 NO_TYPE_CHECK = "a no_type_check decorator or import"
 STUB_SHADOW = "a .pyi stub next to a .py of the same name; mypy checks the stub in place of the code"
 SYMLINK = "a symlinked .py file; the tools do not check it"
+NEGATED_TYPE_CHECKING = "a negated or compared TYPE_CHECKING; mypy skips the code under it as unreachable"
 HIDDEN = "a .py file in a dot-folder; the tools do not check it, so move it out of the dot-folder"
 UNCHECKED_FOLDERS = (".git", ".agentbay")
 
@@ -86,16 +87,26 @@ def _run(module: str, args: list[str], root: Path, timeout: int) -> tuple[str, s
     return done.stdout, None
 
 
+def _unchecked_rows(root: Path, config: Path) -> list[Row]:
+    args = ["check", "--no-cache", "--no-respect-gitignore", "--show-files", "--config", str(config), "."]
+    out, _ = _run("ruff", args, root, RUFF_TIMEOUT)
+    listed = {os.path.realpath(line) for line in out.splitlines()}
+    return [_row(p.relative_to(root).as_posix(), 0, "unchecked", "a .py file that ruff did not check")
+            for p in _visible(root, "*.py") if not p.is_symlink() and os.path.realpath(p) not in listed]
+
+
 def _ruff(root: Path, config: Path) -> tuple[list[Row], str | None]:
-    args = ["check", "--no-cache", "--ignore-noqa", "--output-format", "json", "--config", str(config), "."]
+    args = ["check", "--no-cache", "--ignore-noqa", "--output-format", "json", "--config", str(config),
+            "--no-respect-gitignore", "."]
     out, problem = _run("ruff", args, root, RUFF_TIMEOUT)
     if problem:
         return [], problem
     try:
         items = json.loads(out)
-        return [_row(os.path.relpath(os.path.realpath(item["filename"]), os.path.realpath(root)),
-                     (item.get("location") or {}).get("row", 0),
-                     item.get("code") or "invalid-syntax", item["message"]) for item in items], None
+        found = [_row(os.path.relpath(os.path.realpath(item["filename"]), os.path.realpath(root)),
+                      (item.get("location") or {}).get("row", 0),
+                      item.get("code") or "invalid-syntax", item["message"]) for item in items]
+        return found + _unchecked_rows(root, config), None
     except (ValueError, KeyError, TypeError):
         return [], "ruff printed no JSON array on stdout"
 
@@ -118,8 +129,14 @@ def _mypy(root: Path, config: Path) -> tuple[list[Row], str | None]:
         return [], "mypy printed output that is not JSON"
 
 
+def _is_negated_type_checking(tokens: list[tokenize.TokenInfo], index: int) -> bool:
+    before = tokens[index - 1].string if tokens[index - 1].string != "." else tokens[index - 3].string
+    return before == "not" or tokens[index + 1].string in ("==", "!=", "is")
+
+
 def _token_rows(rel: str, tokens: list[tokenize.TokenInfo]) -> list[Row]:
-    rows = []
+    rows = [_row(rel, t.start[0], "type-checking-negated", NEGATED_TYPE_CHECKING) for index, t in enumerate(tokens)
+            if t.string == "TYPE_CHECKING" and _is_negated_type_checking(tokens, index)]
     for token in tokens:
         if token.type == tokenize.NAME and token.string == "no_type_check":
             rows.append(_row(rel, token.start[0], "no-type-check", NO_TYPE_CHECK))

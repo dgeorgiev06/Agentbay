@@ -140,6 +140,8 @@ def unsafe(cmd: str) -> str | None:
     while i < len(cmd):
         c = cmd[i]
         if c == "\\" and not single:
+            if cmd[i + 1:i + 2] in ("\n", "\r"):
+                return "backslash-newline line continuation is not allowed; write the command on one line"
             i += 2
             continue
         if c == "'" and not double:
@@ -356,9 +358,12 @@ class Guard:
         if why:
             return why, []
         try:
-            return why, shlex.split(command)
+            words = shlex.split(command)
         except ValueError as e:
             return f"cannot parse command ({e})", []
+        if any("\n" in w or "\r" in w for w in words):
+            return "a newline inside a word is not allowed; write the command on one line", []
+        return why, words
 
     def _owner_only(self, who, command, words, cwd) -> tuple[str, str] | None:
         """Denies for anyone, role or not: `bay approve` and the owner's config file are the owner's."""

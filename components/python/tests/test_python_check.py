@@ -45,6 +45,8 @@ class FakeTools:
         if how == "empty":
             return done(1)
         files = sorted(cwd.glob("*.py"))
+        if "--show-files" in cmd:
+            return done(0, "\n".join(str(p) for p in files if p.name not in self.behaviour.get("skipped", ())))
         return done(1, self.ruff_json(files) if module == "ruff" else self.mypy_json(files))
 
     @staticmethod
@@ -152,6 +154,26 @@ def stubs_decorators_and_symlinks_are_findings() -> None:
     assert not any(file.startswith(".agentbay") for file, _ in found), found
 
 
+def unreachable_code_and_unchecked_files_are_findings() -> None:
+    tree = tmpdir()
+    (tree / "t.py").write_text("import typing\nfrom typing import TYPE_CHECKING\n\nif not TYPE_CHECKING:\n    x = 1\n"
+                               "if typing.TYPE_CHECKING == False:\n    y = 1\nif not typing.TYPE_CHECKING:\n    z = 1\n"
+                               "if TYPE_CHECKING:\n    w = 1\n")
+    (tree / "lost.py").write_text("x = 1\n")
+    tools = FakeTools(behaviour={"skipped": ("lost.py",)})
+    use(tools)
+    check = python_check.create(SimpleNamespace(kit=KIT, project=tree))
+    found = {(r["file"], r["line"], r["rule"]) for r in check.findings(str(tree), str(tree))["findings"]}
+    negated = {line for file, line, rule in found if rule == "type-checking-negated"}
+    assert negated == {4, 6, 8}, found
+    unchecked = {file for file, _, rule in found if rule == "unchecked"}
+    assert unchecked == {"lost.py"}, found
+    shown = [cmd for cmd, _ in tools.calls if "--show-files" in cmd]
+    assert shown and all("--no-respect-gitignore" in cmd for cmd in shown), shown
+    checked = [cmd for cmd, _ in tools.calls if cmd[3] == "ruff" and "--output-format" in cmd]
+    assert checked and all("--no-respect-gitignore" in cmd for cmd in checked), checked
+
+
 def top_level_files_sit_next_to_packages() -> None:
     tree = tmpdir()
     (tree / "conftest.py").write_text("x = 1\n")
@@ -177,13 +199,20 @@ def planted_config_plugin_and_module_are_ignored() -> None:
              "ruff.toml": '[lint]\nselect = ["ALL"]\n', "pyproject.toml": '[tool.ruff]\nselect = ["ALL"]\n'}
     for name, text in files.items():
         (tree / name).write_text(text)
-    (tree / "pkg").mkdir()
+    (tree / ".ignore").write_text("planted.py\ndist/\n")
+    (tree / "planted.py").write_text("import sys\n")
+    for folder in ("dist", "venv", "pkg/node_modules"):
+        (tree / folder).mkdir(parents=True)
+        (tree / folder / "m.py").write_text("import json\n")
+    (tree / "pkg").mkdir(exist_ok=True)
     (tree / "pkg" / "__init__.py").write_text("VALUE: int = 1\n")
     (tree / "pkg" / "link.py").symlink_to("__init__.py")
     check = python_check.create(SimpleNamespace(kit=KIT, project=tree))
     out = check.findings(str(tree), str(base))
     assert "stopped" not in out, out
-    assert [(r["file"], r["rule"]) for r in out["findings"]] == [("bad.py", "F401"), ("pkg/link.py", "symlink")], out
+    expected = [("bad.py", "F401"), ("dist/m.py", "F401"), ("pkg/link.py", "symlink"),
+                ("pkg/node_modules/m.py", "F401"), ("planted.py", "F401"), ("venv/m.py", "F401")]
+    assert sorted((r["file"], r["rule"]) for r in out["findings"]) == expected, out
     assert not (tree / "ran_ruff").exists() and not (tree / "ran_plugin").exists()
     subprocess.run([sys.executable, "-m", "ruff", "--version"], cwd=tree, capture_output=True)
     assert (tree / "ran_ruff").exists(), "without -I the planted ruff.py would run, so the check above proves -I"
@@ -198,6 +227,7 @@ def test_python_findings_are_blocked_only_when_new_against_the_call_start():
         compare_with_the_start_commit()
         stopped_tools_and_inline_comments()
         stubs_decorators_and_symlinks_are_findings()
+        unreachable_code_and_unchecked_files_are_findings()
         top_level_files_sit_next_to_packages()
     finally:
         standards.run_module = REAL_RUN

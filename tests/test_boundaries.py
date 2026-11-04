@@ -547,7 +547,10 @@ def lint_clis_are_denied_unless_the_config_is_protected_and_the_flags_are_listed
               f"python3 -I -m mypy bay # --config-file {g.kit}/components/python/mypy.ini",
               f"python3 -I -m ruff check bay # --config {g.kit}/components/python/ruff.toml",
               f"{mypy} bay # x", f"{ruff} bay #", f"{mypy} bay ?a", f"{ruff} bay [@]a", f"{mypy} bay *a",
-              f"{ruff} bay a]")
+              f"{ruff} bay a]", f"{mypy} bay \\\n# --config-file {g.kit}/components/python/mypy.ini",
+              f"{ruff} bay \\\n# --config {g.kit}/components/python/ruff.toml",
+              f"{mypy} bay \\\n--config-file=/tmp/evil.ini", f"{mypy} bay \\\n--allow-untyped-defs",
+              f"{ruff} bay \\\r\n--select=E", f"{mypy} bay 'a\nb'", f"{mypy} bay \"a\\\nb\"")
     for cmd in passes:
         assert decide(g, agent, "Bash", {"command": cmd}) == "pass", cmd
     for cmd in denies:

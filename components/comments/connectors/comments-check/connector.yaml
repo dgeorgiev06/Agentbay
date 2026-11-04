@@ -15,4 +15,4 @@ spec:
     properties:
       rule:
         enum: ["on", "off", true, false]
-        description: "off turns the rule off in a project other than the kit; read from the base's agentbay.config.yaml. Default on."
+        description: "off turns the rule off in a project other than the kit (base's agentbay.config.yaml). Default on."

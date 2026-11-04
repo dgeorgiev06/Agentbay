@@ -210,7 +210,7 @@ def test_offline_switch_rebinds_the_source_and_closes_network_and_secrets():
         "Environment", "workspace").spec
     s = model.resolve(k)
     assert s.units()["analyst--feed-briefing"].env == "local-feeds"
-    assert s.modes["feed-briefing"].features["sync"].steps[0].connector == "corpus-store"
+    assert s.modes["feed-briefing"].features["sync"].steps[0].connectors == ["corpus-store"]
     from bay import config
     for bad, word in (({"offline": "yes"}, "offline"), ({"envs": {"local-feeds": "workspace"}}, "envs"),
                       ({"bindings": {"local-feeds": {"items.source/v1": ["fake"]}}}, "bindings"),

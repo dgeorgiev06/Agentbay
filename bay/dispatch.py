@@ -8,13 +8,15 @@ import time
 from contextlib import suppress
 from pathlib import Path
 
-from . import boundary, checks, config as cfgmod, connect, ledger, model, secretscan, vault, workflows as wfmod
+from . import (boundary, checks, config as cfgmod, connect, ledger, model, secretscan, standards, vault,
+               workflows as wfmod)
 from .util import PROPOSAL_PATH, parse_time, read_json, utcnow, write_json
 
 VERDICT = "review.verdict/v1"
 GATE_APPROVERS = ("user@tty", "user@chat-via-cos")
 FAIL_LEVELS = ("must", "must_not")
 ENDED_UNFINISHED = ("blocked", "failed", "partial")
+NO_BASE = "no base commit: the project was not a git repository with a commit when call {} started"
 
 
 class CallError(Exception):
@@ -405,7 +407,7 @@ class Dispatcher:
     def _fresh(self, step, mode, age) -> bool:
         """`stale > <age>` (via `workflows.advance`): the step's connector says whether the store is fresher than that."""
         iface = step.run.rsplit(".", 1)[0]
-        st = self._invoke(step.env, step.connector, iface, "status", {}, settings=self._settings(mode), caps={})
+        st = self._invoke(step.env, step.connectors[0], iface, "status", {}, settings=self._settings(mode), caps={})
         last = st.get("lastSync")
         if st.get("stale"):
             return False
@@ -496,7 +498,11 @@ class Dispatcher:
         t0 = time.monotonic()
         try:
             caps = cfgmod.caps(mode.constraints, env.spec.get("limits", {}), mode.config)
-            out = self._invoke(step.env, step.connector, iface, ep, args, settings=self._settings(mode), caps=caps)
+            if iface == model.STANDARDS_IFACE:
+                out = self._standards(mode, step, state, args, caps)
+            else:
+                out = self._invoke(step.env, step.connectors[0], iface, ep, args,
+                                   settings=self._settings(mode), caps=caps)
         except Exception as e:
             msg = vault.redact(str(e))
             self._ledger("step.failed", base, summary=msg, durationMs=_ms(t0))
@@ -519,6 +525,26 @@ class Dispatcher:
         summary = (out.get("stopped") or "ok") if isinstance(out, dict) else "ok"
         self._ledger("step.completed", base, summary=summary, cost=cost, durationMs=_ms(t0),
                      costUsd=cost.get("usd") if cost else None)
+
+    def _standards(self, mode, step, state, args, caps) -> dict:
+        """The standards step: every bound checker on the call's start commit and on the working tree."""
+        if not args.get("base"):
+            return {"new": [], "existing": 0, "stopped": NO_BASE.format(state["callId"])}
+        settings = self._settings(mode)
+
+        def invoke(name: str, checker_args: dict) -> dict:
+            return self._invoke(step.env, name, model.STANDARDS_IFACE, "findings", checker_args,
+                                settings=settings, caps=caps)
+        return standards.check(self.project, args["base"], self._checkers(step), invoke)
+
+    def _checkers(self, step) -> list[standards.Checker]:
+        """The step's checkers with the tools their component declares in `spec.language`."""
+        kit, out = self.sys.kit, []
+        for name in step.connectors:
+            component = kit.get("Component", kit.get("Connector", name).dir.parent.parent.name)
+            language = (component.spec.get("language") if component else None) or {}
+            out.append(standards.Checker(name, language.get("tools", []), language.get("install", "")))
+        return out
 
     def _invoke(self, env_name, conn_name, iface, ep, args, *, settings, caps):
         idoc = self.sys.interface(iface)

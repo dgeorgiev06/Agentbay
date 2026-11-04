@@ -234,6 +234,8 @@ def _try_git(repo: Path, args: tuple[str, ...], run) -> subprocess.CompletedProc
 
 def base_commit(repo: Path, base: str, run=subprocess.run) -> str:
     """The commit the working tree branched from `base`, so a branch is judged against what it started from."""
+    if not isinstance(base, str) or not base or base.startswith("-"):
+        raise ValueError(f"base must be a git revision, got {base!r}")
     r = _try_git(repo, ("rev-parse", "--verify", "--quiet", f"{base}^{{commit}}"), run)
     if r is None or r.returncode != 0:
         remote = base.split("/")[0] if "/" in base else "<remote>"

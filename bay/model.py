@@ -451,7 +451,7 @@ class Step:
     when: str | None = None
     task: str = ""
     out: str | None = None
-    connector: str | None = None
+    connectors: list[str] = field(default_factory=list)
     approves: str | None = None
     resolved: "ResolvedRole | None" = None
 
@@ -1219,6 +1219,7 @@ def _check_uses_and_skills(md: Doc, feat: Feature, where: str, gaps: list[str]) 
 
 SOURCE_IFACE = "items.source/v1"
 STORE_IFACE = "items.store/v2"
+STANDARDS_IFACE = "standards.check/v1"
 
 
 def _check_selectors(kit: Kit, md: Doc, mcfg: dict, gaps: list[str], warnings: list[str]) -> None:
@@ -1277,11 +1278,17 @@ def _code_step(kit, md, ep, st, sw, ep_eff, gaps, seen_conn) -> Step:
                     f"add `{iface}: <connector>` to its bind (unbound capability)")
         return step
     conns = connectors_of(b)
-    if len(conns) != 1:
-        gaps.append(f"{sw}: code steps need exactly one connector for {iface} in env {env.name} (found {conns or b})")
+    if not conns:
+        gaps.append(f"{sw}: env {env.name} binds no connector for {iface}")
         return step
-    step.connector = conns[0]
-    check_connector(kit, env, conns[0], iface, gaps, seen_conn)
+    if len(conns) != 1 and iface != STANDARDS_IFACE:
+        gaps.append(f"{sw}: code steps need exactly one connector for {iface} in env {env.name} (found {conns})")
+        return step
+    if iface == STANDARDS_IFACE and set(step.with_) - {"base"}:
+        gaps.append(f"{sw}: a {STANDARDS_IFACE} step takes only `base` in `with`")
+    step.connectors = conns
+    for name in conns:
+        check_connector(kit, env, name, iface, gaps, seen_conn)
     step.effects = endpoint_effects(kit, iface, ep_name)
     _check_effects(step.effects, ep_eff, env, sw, f"{iface}.{ep_name}", gaps)
     if st.get("when", "").startswith("stale"):

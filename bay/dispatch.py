@@ -322,7 +322,8 @@ class Dispatcher:
                 self._ledger("step.skipped", self._event_base(mode, feat, by_id[sid], state["callId"]),
                              summary=f"when: {by_id[sid].when}")
             if mv.kind in ("refused", "missing"):
-                raise CallError((mv.reason or f"{feat.name}: no step at position {mv.cursor}") + " (re-checked at run time)")
+                why = mv.reason or f"{feat.name}: no step at position {mv.cursor}"
+                raise CallError(f"{why} (re-checked at run time)")
             state["cursor"] = mv.cursor
             if mv.kind == "done":
                 break
@@ -475,7 +476,8 @@ class Dispatcher:
         env = self.sys.env(step.env)
         bad = [e for e in step.effects if e not in env.spec["effects"] or e not in feat.effects]
         if bad:
-            raise CallError(f"{feat.mode}.{feat.name} step {step.id}: effects {bad} not allowed (re-checked at run time)")
+            raise CallError(f"{feat.mode}.{feat.name} step {step.id}: effects {bad} not allowed "
+                            f"(re-checked at run time)")
         args = wfmod.substitute(step.with_, state["input"], state["steps"], mode.config)
         iface, ep = step.run.rsplit(".", 1)
         self._ledger("step.started", base, summary=step.run, data={"inputs": inputs_record(args, self.project)})
@@ -749,7 +751,7 @@ class Dispatcher:
 
 
 def inputs_record(args, project: Path) -> dict:
-    """What a step was given, for the ledger: a small value as is, a large one or a project file as sha256 and preview."""
+    """What a step was given, for the ledger: a small value as is, a large one or a file as sha256 and preview."""
     out = {}
     for k, v in (args if isinstance(args, dict) else {}).items():
         raw = v if isinstance(v, str) else json.dumps(v, sort_keys=True, ensure_ascii=False)

@@ -117,7 +117,7 @@ MAX_REVIEW_ITEMS, MAX_EVIDENCE = 80, 1000
 
 
 def record_review(project: Path, task_id: str, verdict: object) -> dict:
-    """Append a `review.recorded` event for work reviewed outside a framework step; data for improve, no gate reads it."""
+    """Append a `review.recorded` event for a review outside a framework step; improve reads it, no gate does."""
     if not isinstance(task_id, str) or not TASK_ID.match(task_id):
         raise PlanError(f"'{task_id}' is not a taskId (T-YYYYMMDD-xxxx)")
     items = verdict.get("items") if isinstance(verdict, dict) else None

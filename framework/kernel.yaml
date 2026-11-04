@@ -22,8 +22,8 @@ protected:
     plan-writer: { modes: ["*"] }
     workspace: { modes: ["*"] }
     research: { modes: ["*"] }
-  connector: [artifact-graph, claude-transcripts, corpus-store, git, improve-detect, improve-store, ledger, scaffold, workflow-runner,
-              python-check, comments-check]
+  connector: [artifact-graph, claude-transcripts, corpus-store, git, improve-detect, improve-store, ledger, scaffold,
+              workflow-runner, python-check, comments-check]
 owns:               # the kernel: loader, resolver, lint, registry, dispatcher, ledger, guard, CLI
   - bay/
   - bay/contenttypes.py              # the briefing files the kernel imports

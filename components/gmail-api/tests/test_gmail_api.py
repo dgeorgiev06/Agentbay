@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import json
+import platform
 import re
 import sys
 import threading
@@ -177,7 +178,7 @@ def test_extraction_runs_in_a_limited_subprocess_and_failures_never_raise():
         (d / "hog.py").write_text("x = bytearray(1024 * 1024 * 1024)\nprint('{\"text\": \"never\"}')\n")
         gm.EXTRACT = d / "hog.py"
         text, why = gm.extract_text(b"", "text", max_chars=10, mem_mb=128)
-        if sys.platform.startswith("linux"):
+        if platform.system() == "Linux":
             assert text == "" and "failed" in why
         (d / "writer.py").write_text("f = open('out.txt', 'w')\nf.write('x' * 10)\nf.close()\n")
         gm.EXTRACT = d / "writer.py"

@@ -137,7 +137,14 @@ def stubs_decorators_and_symlinks_are_findings() -> None:
     (tree / "s.py").write_text("x = 1\n")
     (tree / "s.pyi").write_text("x: int\n")
     (tree / "only.pyi").write_text("y: int\n")
-    (tree / "d.py").write_text("import typing\n\n\n@typing.no_type_check\ndef f(q):\n    return q\n")
+    (tree / "d.py").write_text(textwrap.dedent("""\
+        import typing
+
+
+        @typing.no_type_check
+        def f(q):
+            return q
+        """))
     (tree / "sub").mkdir()
     (tree / "sub" / "link.py").symlink_to("../s.py")
     (tree / ".lib").mkdir()
@@ -184,12 +191,37 @@ def unreachable_code_and_unchecked_files_are_findings() -> None:
             j = 1
         if TYPE_CHECKING:
             k = 1
+        MYPY = False
+        PY2 = False
+        PY3 = True
+        cfg = sys
+        if not MYPY:
+            l = 1
+        if not PY3:
+            m = 1
+        if not cfg.MYPY:
+            n = 1
+        if PY2:
+            o = 1
         """))
     (tree / "plain.py").write_text(textwrap.dedent("""\
         from typing import TYPE_CHECKING
 
         if TYPE_CHECKING:
             import os
+        """))
+    (tree / "pkg2" / "sub.dir").mkdir(parents=True)
+    (tree / "pkg2" / "tests").mkdir()
+    (tree / "pkg2" / "__init__.py").write_text("x = 1\n")
+    (tree / "pkg2" / "a.b.py").write_text("x = 1\n")
+    (tree / "pkg2" / "sub.dir" / "m.py").write_text("x = 1\n")
+    (tree / "pkg2" / "tests" / "helper.py").write_text(textwrap.dedent("""\
+        from typing import TYPE_CHECKING
+
+        if TYPE_CHECKING:
+            import os
+        if not TYPE_CHECKING:
+            bad = 1
         """))
     (tree / "lost.py").write_text("x = 1\n")
     (tree / "my-mod.py").write_text("x = 1\n")
@@ -201,12 +233,15 @@ def unreachable_code_and_unchecked_files_are_findings() -> None:
     found = {(r["file"], r["line"], r["rule"]) for r in check.findings(str(tree), str(tree))["findings"]}
     reachability = {"type-checking-use", "platform-check"}
     shapes = {(line, rule) for file, line, rule in found if file == "t.py" and rule in reachability}
-    use_lines = {6, 8, 10, 12, 16, 18, 20}
+    use_lines = {6, 8, 10, 12, 16, 18, 20, 31, 33, 35, 37}
     platform_rows = {(21, "platform-check"), (23, "platform-check")}
     assert shapes == {(line, "type-checking-use") for line in use_lines} | platform_rows, found
     assert not [row for row in found if row[0] == "plain.py" and row[2] in reachability], found
+    assert ("pkg2/tests/helper.py", 5, "type-checking-use") in found, found
+    assert not [row for row in found if row[0] == "pkg2/tests/helper.py" and row[1] == 3], found
     unchecked = {file for file, _, rule in found if rule == "unchecked"}
-    assert {"lost.py", "my-mod.py", "my-pkg"} <= unchecked and "t.py" not in unchecked, found
+    assert {"lost.py", "my-mod.py", "my-pkg", "pkg2/a.b.py", "pkg2/sub.dir"} <= unchecked, found
+    assert "t.py" not in unchecked, found
     mypy_calls = [cmd for cmd, _ in tools.calls if cmd[3] == "mypy" and "--config-file" in cmd]
     assert mypy_calls and not any("my-mod" in cmd or "my-pkg" in cmd for cmd in mypy_calls), mypy_calls
     shown = [cmd for cmd, _ in tools.calls if "--show-files" in cmd]

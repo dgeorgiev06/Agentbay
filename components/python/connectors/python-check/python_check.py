@@ -27,16 +27,17 @@ NO_TYPE_CHECK = "a no_type_check decorator or import"
 STUB_SHADOW = "a .pyi stub next to a .py of the same name; mypy checks the stub in place of the code"
 SYMLINK = "a symlinked .py file; the tools do not check it"
 TYPE_CHECKING_USE = (
-    "TYPE_CHECKING used other than as the whole test of an if with no else or elif; mypy skips the code it thinks "
-    "is unreachable, so write a plain `if TYPE_CHECKING:` block holding only imports"
+    "TYPE_CHECKING, MYPY, PY2 or PY3 used other than as the whole test of an if with no else or elif; mypy skips "
+    "the code it thinks is unreachable, so write a plain `if TYPE_CHECKING:` block holding only imports"
 )
 PLATFORM_CHECK = (
     "a sys.platform or sys.version_info check; mypy skips the branch it thinks is unreachable, "
     "so do not branch on it in checked code"
 )
-UNNAMEABLE_FILE = "a top-level .py file whose name is not a valid module name; mypy skips it, so rename it"
-UNNAMEABLE_FOLDER = "a top-level folder with Python whose name is not a valid package name; mypy skips it, so rename it"
+UNNAMEABLE_FILE = "a .py file whose name is not a valid module name; mypy skips it, so rename it"
+UNNAMEABLE_FOLDER = "a folder with Python whose name is not a valid package name; mypy skips it, so rename it"
 SYS_PROBES = ("platform", "version_info")
+MYPY_CONSTANTS = ("TYPE_CHECKING", "MYPY", "PY2", "PY3")
 HIDDEN = "a .py file in a dot-folder; the tools do not check it, so move it out of the dot-folder"
 UNCHECKED_FOLDERS = (".git", ".agentbay")
 
@@ -80,6 +81,23 @@ def _holds_python(entry: Path, root: Path) -> bool:
     return any("tests" not in p.relative_to(root).parts for p in entry.rglob("*.py"))
 
 
+def _nested_unnameable(package: Path, root: Path) -> list[Row]:
+    rows: dict[str, Row] = {}
+    for path in sorted(package.rglob("*.py")):
+        parts = path.relative_to(root).parts
+        if "tests" in parts or any(part.startswith(".") for part in parts):
+            continue
+        folders, stem = parts[1:-1], Path(parts[-1]).stem
+        bad_folder = next((i for i, folder in enumerate(folders) if not folder.isidentifier()), None)
+        if bad_folder is not None:
+            shown = "/".join(parts[:bad_folder + 2])
+            rows[shown] = _row(shown, 0, "unchecked", UNNAMEABLE_FOLDER)
+        elif not stem.isidentifier():
+            shown = "/".join(parts)
+            rows[shown] = _row(shown, 0, "unchecked", UNNAMEABLE_FILE)
+    return list(rows.values())
+
+
 def _targets(root: Path) -> tuple[list[str], list[Row]]:
     args: list[str] = []
     unnameable: list[Row] = []
@@ -94,6 +112,7 @@ def _targets(root: Path) -> tuple[list[str], list[Row]]:
         elif entry.is_dir() and _holds_python(entry, root):
             if entry.name.isidentifier():
                 args += ["-p", entry.name]
+                unnameable += _nested_unnameable(entry, root)
             else:
                 unnameable.append(_row(entry.name, 0, "unchecked", UNNAMEABLE_FOLDER))
     return args, unnameable
@@ -158,7 +177,7 @@ class Aliases(NamedTuple):
 
 
 def _aliases(tree: ast.AST) -> Aliases:
-    found = Aliases({"TYPE_CHECKING"}, {"sys"}, set())
+    found = Aliases(set(MYPY_CONSTANTS), {"sys"}, set())
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module in ("typing", "typing_extensions"):
             for alias in node.names:
@@ -177,8 +196,8 @@ def _aliases(tree: ast.AST) -> Aliases:
 
 def _is_type_checking(node: ast.AST, aliases: Aliases) -> bool:
     if isinstance(node, ast.Name):
-        return node.id in aliases.type_checking
-    return isinstance(node, ast.Attribute) and node.attr == "TYPE_CHECKING"
+        return isinstance(node.ctx, ast.Load) and node.id in aliases.type_checking
+    return isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load) and node.attr in MYPY_CONSTANTS
 
 
 def _is_sys_probe(node: ast.AST, aliases: Aliases) -> bool:
@@ -201,6 +220,10 @@ def _is_platform_check(node: ast.AST, aliases: Aliases) -> bool:
     return False
 
 
+def _is_py2(node: ast.AST) -> bool:
+    return (isinstance(node, ast.Name) and node.id == "PY2") or (isinstance(node, ast.Attribute) and node.attr == "PY2")
+
+
 def _reachability_rows(rel: str, source: str) -> list[Row]:
     try:
         tree = ast.parse(source)
@@ -208,7 +231,8 @@ def _reachability_rows(rel: str, source: str) -> list[Row]:
         return []
     aliases = _aliases(tree)
     plain_tests = {id(node.test) for node in ast.walk(tree)
-                   if isinstance(node, ast.If) and not node.orelse and _is_type_checking(node.test, aliases)}
+                   if isinstance(node, ast.If) and not node.orelse and _is_type_checking(node.test, aliases)
+                   and not _is_py2(node.test)}
     rows = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.expr):
@@ -268,9 +292,7 @@ def _inline_rows(root: Path) -> list[Row]:
         except (OSError, SyntaxError, ValueError, tokenize.TokenError):
             continue
         rel = path.relative_to(root).as_posix()
-        rows += _token_rows(rel, tokens)
-        if "tests" not in path.relative_to(root).parts:
-            rows += _reachability_rows(rel, source)
+        rows += _token_rows(rel, tokens) + _reachability_rows(rel, source)
     return rows
 
 

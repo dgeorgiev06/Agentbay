@@ -1,8 +1,11 @@
 """`bay check --limits`: the framework may not grow past framework/limits.yaml (proposal 0009)."""
 from __future__ import annotations
 
+import ast
+import io
 import re
 import subprocess
+import tokenize
 from pathlib import Path
 
 import yaml
@@ -11,8 +14,37 @@ from . import boundary, proposal
 
 FILE = "framework/limits.yaml"
 MEASURES = ("bay_lines", "kit_python_lines", "cli_commands", "framework_folders", "schemas", "top_level_folders",
-            "tests", "long_lines")
+            "tests", "long_lines", "comment_lines")
+COMMENT = "a # comment"
+DOCSTRING_LINE = "a docstring line after the first"
+COMMENT_PLACES = ("bay/", "adapters/", "components/", "tests/")
+DOCUMENTED = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
 _TEST_FILE = re.compile(r"(?:tests|(?:components|adapters)/(?:.+/)?tests)/test_[^/]*\.py")
+
+
+def comment_rows(text: str) -> list[tuple[int, str]]:
+    """(line, kind) of each `#` comment (a shebang is none) and of each docstring line after the first."""
+    rows = []
+    for token in tokenize.generate_tokens(io.StringIO(text).readline):
+        if token.type == tokenize.COMMENT and not (token.start[0] == 1 and token.string.startswith("#!")):
+            rows.append((token.start[0], COMMENT))
+    for node in ast.walk(ast.parse(text)):
+        first = node.body[0] if isinstance(node, DOCUMENTED) and node.body else None
+        if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
+            rows += [(line, DOCSTRING_LINE) for line in range(first.lineno + 1, first.end_lineno + 1)]
+    return sorted(rows)
+
+
+def comment_lines(text: str) -> int:
+    """How many comment lines `text` holds: the length of `comment_rows`."""
+    return len(comment_rows(text))
+
+
+def _comments_in(path: str, text: str) -> int:
+    try:
+        return comment_lines(text)
+    except (SyntaxError, tokenize.TokenError, ValueError) as e:
+        raise RuntimeError(f"{path}: cannot count its comment lines, the file does not parse: {e}") from None
 
 
 def _lines(path: Path) -> int:
@@ -49,6 +81,7 @@ def count(repo: Path) -> dict[str, int]:
         "top_level_folders": len({p.split("/")[0] for p in paths if "/" in p}),
         "tests": sum(len(re.findall(r"^def test_", read(p), re.M)) for p in paths if _TEST_FILE.fullmatch(p) and (p.startswith("tests/") or core(p))),
         "long_lines": sum(len(line) > 120 for p in bay + kit for line in read(p).split("\n")),
+        "comment_lines": sum(_comments_in(p, read(p)) for p in py if p.startswith(COMMENT_PLACES)),
     }
 
 

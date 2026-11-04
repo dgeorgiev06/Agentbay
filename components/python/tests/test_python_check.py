@@ -137,12 +137,19 @@ def stubs_decorators_and_symlinks_are_findings() -> None:
     (tree / "d.py").write_text("import typing\n\n\n@typing.no_type_check\ndef f(q):\n    return q\n")
     (tree / "sub").mkdir()
     (tree / "sub" / "link.py").symlink_to("../s.py")
+    (tree / ".lib").mkdir()
+    (tree / ".lib" / "m.py").write_text("def m(q):\n    return q\n")
+    (tree / "lib").symlink_to(".lib")
+    (tree / ".agentbay").mkdir()
+    (tree / ".agentbay" / "skip.py").write_text("x = 1\n")
     use(FakeTools())
     check = python_check.create(SimpleNamespace(kit=KIT, project=tree))
     found = {(r["file"], r["rule"]) for r in check.findings(str(tree), str(tree))["findings"]}
     assert ("s.pyi", "stub-shadow") in found and ("only.pyi", "stub-shadow") not in found, found
     assert ("d.py", "no-type-check") in found, found
     assert ("sub/link.py", "symlink") in found, found
+    assert (".lib/m.py", "hidden") in found, found
+    assert not any(file.startswith(".agentbay") for file, _ in found), found
 
 
 def top_level_files_sit_next_to_packages() -> None:

@@ -530,7 +530,7 @@ def lint_clis_are_denied_unless_the_config_is_protected_and_the_flags_are_listed
     assert "not protected" in reason
     g.policy["protected"].append("components/python")
     passes = (f"{ruff} bay", f"{mypy} bay", f"{ruff} --no-cache --ignore-noqa --statistics bay",
-              f"{mypy} --strict --show-error-codes bay")
+              f"{mypy} --strict --show-error-codes bay", f"{mypy} 'a #b' bay", f"{ruff} \"#x\" a#b")
     denies = ("python3 -I -m ruff check bay", "python3 -I -m mypy bay",
               "python3 -I -m ruff check --config ruff.toml bay",
               f"{ruff} @.agentbay/guard.json", f"{mypy} @.agentbay/guard.json", f"{ruff} @fix.txt",
@@ -543,7 +543,11 @@ def lint_clis_are_denied_unless_the_config_is_protected_and_the_flags_are_listed
               f"{mypy} --python-executable x bay", f"{mypy} --config-f x bay", f"{mypy} --plugins x bay",
               f"python3 -I -m mypy --config-file {g.kit}/components/python/ruff.toml bay",
               f"python3 -m ruff check --config {g.kit}/components/python/ruff.toml bay",
-              f"python3 -m mypy --config-file {g.kit}/components/python/mypy.ini bay")
+              f"python3 -m mypy --config-file {g.kit}/components/python/mypy.ini bay",
+              f"python3 -I -m mypy bay # --config-file {g.kit}/components/python/mypy.ini",
+              f"python3 -I -m ruff check bay # --config {g.kit}/components/python/ruff.toml",
+              f"{mypy} bay # x", f"{ruff} bay #", f"{mypy} bay ?a", f"{ruff} bay [@]a", f"{mypy} bay *a",
+              f"{ruff} bay a]")
     for cmd in passes:
         assert decide(g, agent, "Bash", {"command": cmd}) == "pass", cmd
     for cmd in denies:

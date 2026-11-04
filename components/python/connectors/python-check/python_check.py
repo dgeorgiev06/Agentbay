@@ -24,6 +24,8 @@ INLINE = (
 NO_TYPE_CHECK = "a no_type_check decorator or import"
 STUB_SHADOW = "a .pyi stub next to a .py of the same name; mypy checks the stub in place of the code"
 SYMLINK = "a symlinked .py file; the tools do not check it"
+HIDDEN = "a .py file in a dot-folder; the tools do not check it, so move it out of the dot-folder"
+UNCHECKED_FOLDERS = (".git", ".agentbay")
 
 
 def _row(file: str, line: int, rule: str, message: str) -> Row:
@@ -140,6 +142,15 @@ def _layout_rows(root: Path) -> list[Row]:
     for path in _visible(root, "*.py"):
         if path.is_symlink():
             rows.append(_row(path.relative_to(root).as_posix(), 0, "symlink", SYMLINK))
+    return rows + _hidden_rows(root)
+
+
+def _hidden_rows(root: Path) -> list[Row]:
+    rows = []
+    for path in sorted(root.rglob("*.py")):
+        parts = path.relative_to(root).parts
+        if any(part.startswith(".") and part not in UNCHECKED_FOLDERS for part in parts[:-1]):
+            rows.append(_row(path.relative_to(root).as_posix(), 0, "hidden", HIDDEN))
     return rows
 
 

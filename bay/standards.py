@@ -78,15 +78,21 @@ def copy_tree(project: Path, dest: Path, run: Runner = subprocess.run) -> list[s
     listed = dict.fromkeys(p for p in done.stdout.split("\0") if p)
     for rel in [p for p in listed if not p.startswith(f"{LEDGER_DIR}/")]:
         src = project / rel
-        if src.is_symlink() or (src.exists() and not src.is_file()):
-            skipped += 1
-            if src.is_symlink():
+        try:
+            if src.is_symlink() or (src.exists() and not src.is_file()):
+                skipped += 1
+                if src.is_symlink():
+                    (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+                    (dest / PLACEHOLDER).write_text("")
+                    (dest / rel).symlink_to(dest / PLACEHOLDER)
+            elif src.exists():
                 (dest / rel).parent.mkdir(parents=True, exist_ok=True)
-                (dest / PLACEHOLDER).write_text("")
-                (dest / rel).symlink_to(dest / PLACEHOLDER)
-        elif src.exists():
-            (dest / rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(src, dest / rel)
+                shutil.copyfile(src, dest / rel)
+        except OSError as e:
+            raise ValueError(
+                f"cannot copy {rel} to the working-tree check ({type(e).__name__}); "
+                f"rename it if it is called {PLACEHOLDER}, and replace a symlinked parent folder with a real folder"
+            ) from e
     return [f"{skipped} symlink(s) or special file(s) not copied to the working-tree check"] if skipped else []
 
 

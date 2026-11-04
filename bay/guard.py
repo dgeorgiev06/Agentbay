@@ -148,6 +148,8 @@ def unsafe(cmd: str) -> str | None:
             double = not double
         elif not single and c in "`$":
             return "shell expansion ($ or `) is not allowed"
+        elif c == "#" and not single and not double and (i == 0 or cmd[i - 1] in " \t"):
+            return "shell comment # is not allowed; run one command at a time"
         elif not single and not double and (c in ";&|<>\n\r(){}"):
             return f"shell operator {c!r} is not allowed; run one command at a time"
         i += 1
@@ -438,6 +440,8 @@ class Guard:
         for i, word in enumerate(rest):
             if word.startswith("@"):
                 return "deny", f"agentbay: {tool} argument files (@file) are not allowed"
+            if any(c in word for c in "?*[]"):
+                return "deny", f"agentbay: {tool} globs are not allowed; name each path"
             if word == flag:
                 given.append(norm(rest[i + 1], cwd) if i + 1 < len(rest) else None)
             elif word.startswith("-") and word not in LINT_FLAGS and (i == 0 or rest[i - 1] != flag):

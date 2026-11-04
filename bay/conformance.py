@@ -1,9 +1,4 @@
-"""framework/rules/conformance.yaml: load, validate and run its deterministic checks.
-
-Each check takes (kit, rule) and returns violations: {file, line, detail, text?, rewrite?}.
-Rules without a `check` are returned by `manual()` for the analyst (improve.audit) and reviewers
-(forge.create / forge.extend review plans).
-"""
+"""framework/rules/conformance.yaml: load, validate and run its deterministic checks."""
 from __future__ import annotations
 
 import ast
@@ -83,7 +78,6 @@ def run(kit: Path, only: list[str] | None = None) -> list[dict]:
     return out
 
 
-# ----------------------------------------------------------------------------- helpers
 def _kit(kit: Path) -> model.Kit:
     return model.Kit(kit)
 
@@ -106,7 +100,6 @@ def _vague(text: str) -> str | None:
     return next((w for w in VAGUE if re.search(rf"(?<![\w-]){re.escape(w)}(?![\w-])", low) and not ANCHOR.search(text)), None)
 
 
-# ----------------------------------------------------------------------------- checks
 def playbook_matches_workflow(kit: Path, rule: dict) -> list[dict]:
     out = []
     k = _kit(kit)
@@ -192,7 +185,7 @@ def names_no_tools(kit: Path, rule: dict) -> list[dict]:
                 continue
             for i, ln in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
                 for m in rx.finditer(ln):
-                    if m.group(1) in step_ids:          # a step id that happens to share a connector's name
+                    if m.group(1) in step_ids:
                         continue
                     out.append({"file": _rel(kit, f), "line": i, "text": clip(ln.strip(), 200),
                                 "detail": f"names concrete {'tool' if m.group(1) in TOOLS else 'connector'} "
@@ -263,6 +256,11 @@ def effects_match_code(kit: Path, rule: dict) -> list[dict]:
     return out
 
 
+def _risky_effects(eff: set[str], constraints: dict) -> set[str]:
+    """Effects needing review: delete, and spend unless the mode caps it in dollars (only dispatcher code spends)."""
+    return eff & {"delete"} | (eff & {"spend"} if "spendUsd" not in constraints else set())
+
+
 def review_on_side_effects(kit: Path, rule: dict) -> list[dict]:
     out = []
     for md, ep_name, ep in _features(_kit(kit)):
@@ -271,9 +269,7 @@ def review_on_side_effects(kit: Path, rule: dict) -> list[dict]:
         on = rv.get("when") == "always"
         line = next((i for i, ln in enumerate(md.path.read_text().splitlines(), 1)
                      if re.match(rf"^\s{{4}}{re.escape(ep_name)}:", ln)), 1)
-        # Spend is exempt when the mode caps it in dollars: only dispatcher code steps can spend (agents reach
-        # read-only endpoints only) and the dispatcher enforces constraints.spendUsd. Delete is never exempt.
-        risky = eff & {"delete"} | (eff & {"spend"} if "spendUsd" not in (md.spec.get("constraints") or {}) else set())
+        risky = _risky_effects(eff, md.spec.get("constraints") or {})
         if risky and not on:
             out.append({"file": _rel(kit, md.path), "line": line,
                         "detail": f"{md.name}.{ep_name} has effects {sorted(risky)} but review "

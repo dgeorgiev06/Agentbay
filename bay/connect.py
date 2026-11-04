@@ -1,13 +1,4 @@
-"""Connector runtime: load connector code and hand it a narrow Context.
-
-Only the dispatcher calls `instantiate`. A connector gets:
-  * its own config (agentbay.config.yaml connectors.<name>)
-  * a SecretAccessor limited to names allowed by BOTH the env and the connector
-  * an Http client that refuses any host outside the env network allowlist
-    BEFORE the request is made
-  * a data dir inside the env's fs.write paths
-  * instances of the connectors bound to capabilities it declares in needs
-"""
+"""Connector runtime: only the dispatcher loads connector code, and hands it a narrow Context."""
 from __future__ import annotations
 
 import fnmatch
@@ -47,7 +38,7 @@ class Response:
 Transport = Callable[[str, str, dict, bytes | None], Response]
 
 
-def urllib_transport(method: str, url: str, headers: dict, body: bytes | None) -> Response:  # pragma: no cover
+def urllib_transport(method: str, url: str, headers: dict, body: bytes | None) -> Response:
     req = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
@@ -92,16 +83,16 @@ class Context:
     secrets: vault.SecretAccessor
     http: Http
     data_dir: Path
-    caps: dict = field(default_factory=dict)          # budget caps for this call (strictest wins)
-    settings: dict = field(default_factory=dict)      # calling mode's settings (lookback, retention, ...)
-    sources: dict = field(default_factory=dict)       # connector name -> instance (needs.capabilities)
+    caps: dict = field(default_factory=dict)
+    settings: dict = field(default_factory=dict)
+    sources: dict = field(default_factory=dict)
     clock: Callable[[], datetime] = utcnow
-    window: str | None = None                         # how far back the source API reaches
+    window: str | None = None
     source_id: str | None = None
-    cost_per_item: float | None = None               # connector-declared price per item read (None: use caps)
-    exact_labels: bool = False                        # items.source: items carry their full label set (replace, not add)
-    change_feed: bool = False                         # items.source: the cursor replays every change (Gmail history)
-    selectors: dict = field(default_factory=dict)     # items.source: selector capability table (field -> native|local)
+    cost_per_item: float | None = None
+    exact_labels: bool = False
+    change_feed: bool = False
+    selectors: dict = field(default_factory=dict)
     kit: Path | None = None
     project: Path | None = None
     warnings: list[str] = field(default_factory=list)
@@ -111,9 +102,7 @@ class Context:
 
 
 def _load_module(c: model.Doc):
-    """The connector's entry module. The connector's folder is its package: siblings of the entry import as
-    `from . import sibling` (or `from .sibling import x`) and resolve inside that folder only. Modules left by an
-    earlier load of the same name (another kit, an edited file) are dropped first, siblings included."""
+    """The connector's entry module, loaded as a package of its folder after dropping modules of any earlier load."""
     path = c.dir / c.spec["entry"]
     mod_name = f"agentbay_connector_{c.name.replace('-', '_')}"
     for stale in [k for k in sys.modules if k == mod_name or k.startswith(f"{mod_name}.")]:
@@ -147,16 +136,13 @@ def _net(env: model.Doc, conn: model.Doc) -> list[str]:
 
 
 def _accessor(prov, env: model.Doc, conn: model.Doc) -> vault.SecretAccessor:
+    """A secret accessor limited to the names that both the env allows and the connector declares."""
     return vault.SecretAccessor(prov, env.spec.get("secrets", {}).get("allow", []),
                                 conn.spec.get("needs", {}).get("secrets", []), conn.name)
 
 
 class LoginContext:
-    """The API a connector's `login` entry gets from `bay auth <connector>`: the same secret access a sync gets
-    (names both in the env's `secrets.allow` and the connector's `needs.secrets`, read and store, through the
-    env's provider), an Http limited to its declared hosts that the env allows, the browser and the terminal.
-    The entry runs in-process, so this limits the API it is handed, not what the process can do: a connector's
-    code is trusted the same way during a login as during a sync."""
+    """The API a `login` entry gets from `bay auth`: a sync's secret access, allowed http and browser; trusted code."""
 
     def __init__(self, conn, env, prov, http, open_browser, say=print):
         self.connector, self.env, self.http, self.open_browser, self.say = conn.name, env.name, http, open_browser, say
@@ -183,7 +169,10 @@ class LoginContext:
 def login_env(system: model.System, conn: model.Doc, name: str | None) -> model.Doc:
     """The env to log in through: --env (which must bind the connector), else the one env that binds it."""
     envs = system.kit.docs["Environment"]
-    binds = lambda e: any(conn.name in model.connectors_of(v) for v in (e.spec.get("bind") or {}).values())  # noqa: E731
+
+    def binds(e: model.Doc) -> bool:
+        return any(conn.name in model.connectors_of(v) for v in (e.spec.get("bind") or {}).values())
+
     if name:
         if name not in envs:
             raise ConnectorError(f"unknown env '{name}'")

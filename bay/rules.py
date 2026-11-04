@@ -1,9 +1,4 @@
-"""Feature rules (components/<mode>/features/<feature>/rules.yaml).
-
-Rules stack with mode constraints, role rules and project extraRules.
-Strictest wins: when two rules share an id, the higher level is kept
-(must/must_not > should) and the statements are both kept.
-"""
+"""Feature rules (components/<mode>/features/<feature>/rules.yaml)."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -26,7 +21,7 @@ class Rule:
     applies_to: str
     check: str | None = None
     refs: list[str] = field(default_factory=list)
-    kinds: list[str] | None = None        # when: {kind: ...}
+    kinds: list[str] | None = None
     source: str = ""
     line: int = 0
 

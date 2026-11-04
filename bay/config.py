@@ -1,24 +1,4 @@
-"""agentbay.config.yaml: per-project user settings.
-
-    apiVersion: agentbay/v4
-    offline: true                               # the fake sources, no network, no secrets, $0
-    secrets: { provider: env }                  # override env provider (e.g. on Linux)
-    approve: { from: [terminal, chat] }         # where the owner decides (default [terminal])
-    modes:
-      feed-briefing:
-        lookback: 3d
-        maxItemsPerRun: 200
-        features:
-          digest: { extraRules: rules/digest-extra.yaml }
-    connectors:
-      my-source: { userId: "12345" }
-
-Capabilities are bound only in components/<mode>/envs/<env>.yaml (no override here). `bay build` writes a minimal file when a
-project has none; `bay config` prints every setting from the schemas.
-
-Settings can only tighten: a numeric cap is the minimum of the mode constraint and the config, and a config
-value above the env's `limits:` is refused (limits live in the env only).
-"""
+"""agentbay.config.yaml: per-project user settings."""
 from __future__ import annotations
 
 import json
@@ -28,8 +8,8 @@ import yaml
 
 NAME = "agentbay.config.yaml"
 CAPS = ("monthlyItems", "spendUsd", "maxItemsPerRun")
-COST_PER_ITEM_USD = 0.005      # default price per item read (pay-per-use APIs); config costPerItemUsd overrides
-FRAGMENT = "config.example.yaml"   # an extension's sample settings, checked against its config schema by lint
+COST_PER_ITEM_USD = 0.005
+FRAGMENT = "config.example.yaml"
 MINIMAL = """\
 # Settings for agentbay in this project. Every setting is optional; `bay config` lists them all.
 # `offline: true` runs the shipped envs on fake sources (no network, no secrets, $0).
@@ -67,8 +47,7 @@ def write_minimal(project: Path) -> bool:
 
 
 def approve_from(cfg: dict) -> list:
-    """`approve: { from: [terminal, chat] }`: where the owner may decide (`bay approve`, `--via chat` relayed by the
-    Chief of Staff). Default [terminal]."""
+    """`approve: { from: [terminal, chat] }`: where the owner may decide `bay approve`; the default is [terminal]."""
     return (cfg.get("approve") or {}).get("from") or ["terminal"]
 
 
@@ -101,8 +80,7 @@ def raised(env_limits: dict, settings: dict) -> list[tuple[str, float, float]]:
 
 
 def caps(constraints: dict, env_limits: dict, settings: dict) -> dict:
-    """Strictest of mode constraints (already merged with config) and env limits. A setting above the env's
-    limit is refused."""
+    """Strictest of mode constraints and env limits; settings only tighten, so one above an env limit is refused."""
     over = raised(env_limits, settings)
     if over:
         raise ConfigError("; ".join(f"{k} {v} raises the env limit {lim}: a setting can only lower a cap"
@@ -117,14 +95,11 @@ def caps(constraints: dict, env_limits: dict, settings: dict) -> dict:
 
 
 def takes_settings(kind: str, doc) -> bool:
-    """A mode takes settings when it has a config schema (own or inherited) and is installable (not abstract);
-    a connector when it declares `config:`."""
+    """A mode takes settings with a config schema and when not abstract; a connector takes them with `config:`."""
     if kind == "Mode":
         return bool(doc.spec.get("config")) and not doc.spec.get("abstract")
     return bool(doc.spec.get("config"))
 
-
-# --- `bay config`: every setting, read from the schemas ------------------------------------------------------
 
 def _type(sch: dict) -> str:
     if "enum" in sch:
@@ -147,8 +122,7 @@ def _lines(props: dict, indent: int, prefix: str = "") -> list[str]:
 
 
 def describe(kit) -> str:
-    """Every setting of agentbay.config.yaml with its type, default and description: the kernel's from
-    schemas/config.schema.json, then each installable mode's and each connector's from its own config schema."""
+    """Every setting of agentbay.config.yaml with its type, default and description, read from the config schemas."""
     from . import model
     sch = model.schema("config")
     out = [f"{NAME}: every setting is optional. {sch['description']}", ""]

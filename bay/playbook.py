@@ -1,11 +1,4 @@
-"""Feature playbooks: lintable markdown.
-
-Required H2 sections, in this order:
-  Purpose, Inputs, Steps, Definition of Done, Outputs, Failure handling
-
-`Steps` is a numbered list. `Definition of Done` is a checklist whose items each
-carry a stable id and level:  - [DOD-1] (must) Every theme cites ...
-"""
+"""Feature playbooks: lintable markdown."""
 from __future__ import annotations
 
 import re
@@ -17,7 +10,6 @@ H2 = re.compile(r"^##\s+(.+?)\s*#*\s*$")
 DOD = re.compile(r"^\s*[-*]\s+\[(DOD-[0-9]+)\]\s+\((must|should|must_not)\)\s+(\S.*)$")
 LIST_ITEM = re.compile(r"^\s*([-*]|[0-9]+[.)])\s+")
 NUMBERED = re.compile(r"^\s*([0-9]+)[.)]\s+\S")
-# review configuration belongs in mode.yaml only
 REVIEW_SETTING = re.compile(r"^\s*(?:[-*]\s*)?(?:review|reviewer|review[._-](?:role|when|model|effort))\s*:", re.I)
 REVIEW_HEADING = re.compile(r"^#{1,6}\s+review(?:er)?\b(?!\s+of\b)", re.I)
 
@@ -34,10 +26,10 @@ class DodItem:
 class Playbook:
     path: Path
     text: str
-    sections: dict[str, tuple[int, list[tuple[int, str]]]] = field(default_factory=dict)  # name -> (line, body lines)
+    sections: dict[str, tuple[int, list[tuple[int, str]]]] = field(default_factory=dict)
     order: list[tuple[str, int]] = field(default_factory=list)
     dod: list[DodItem] = field(default_factory=list)
-    problems: list[tuple[int, str]] = field(default_factory=list)  # (line, message)
+    problems: list[tuple[int, str]] = field(default_factory=list)
 
     @property
     def dod_ids(self) -> list[str]:

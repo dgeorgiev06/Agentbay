@@ -1,9 +1,4 @@
-"""TaskEnvelope/v1 and Result/v1: the coordinator <-> worker wire format.
-
-Both travel as fenced YAML blocks inside plain text, so they work over any
-runtime that can pass a prompt and return a message. Parsing is lenient:
-a worker that forgets the block still produces a usable 'unknown' result.
-"""
+"""TaskEnvelope/v1 and Result/v1: the coordinator <-> worker wire format."""
 from __future__ import annotations
 
 import re

@@ -1,17 +1,4 @@
-"""Proposal front matter (proposal 0006, Part A: "Proposals declare crossings").
-
-A proposal may start with a YAML block between `---` lines. Its `touches:` lists every core or
-existing-extension path the change edits, one reason each:
-
-    ---
-    touches:
-      - { path: bay/boundary.py, reason: the boundary check }
-      - { path: "modes/x/features/y/", reason: ..., slice: 3, planned: true }
-    ---
-
-`path` is a glob (see boundary.match). `slice` and `planned` are informational: every listed entry is
-an approved crossing. A pure extension has `touches: []`.
-"""
+"""Proposal front matter (proposal 0006, Part A: "Proposals declare crossings")."""
 from __future__ import annotations
 
 from pathlib import Path

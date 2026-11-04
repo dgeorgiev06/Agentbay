@@ -1,10 +1,4 @@
-"""Project/kit files and the reference graph (artifacts.read/v1).
-
-Nodes are agentbay concepts (modes, endpoints, roles, agents, envs, connectors, interfaces, data schemas,
-mode types, skills, mode config keys) and Python modules and definitions. A node's `refs` counts what
-references it: graph edges (mode -> role, mode -> env, mode -> agent profile, env -> connector, ...), Python name/attribute uses
-(AST) and mentions in code, config or playbooks. Docs (docs/, README) never count as references.
-"""
+"""Project/kit files and the reference graph (artifacts.read/v1)."""
 from __future__ import annotations
 
 import ast
@@ -41,7 +35,7 @@ def kind_of(rel: str) -> str:
     if name.endswith(".schema.json"):
         return "type" if "types" in parts else "schema"
     if name == "adapter.yaml":
-        return "agent"                       # the adapter file holds the agent profile
+        return "agent"
     for folder, k in (("roles", "role"), ("envs", "env"), ("interfaces", "interface")):
         if folder in parts and name.endswith(".yaml") and parts[-2] == folder:
             return k
@@ -87,10 +81,10 @@ def is_doc(rel: str) -> bool:
 @dataclass
 class Graph:
     root: Path
-    nodes: dict = field(default_factory=dict)        # id -> {id, kind, name, path, line?, refs}
-    edges: list = field(default_factory=list)        # (from, to, kind)
-    texts: dict = field(default_factory=dict)        # rel -> text (non-doc text files)
-    py: dict = field(default_factory=dict)           # rel -> ast.Module
+    nodes: dict = field(default_factory=dict)
+    edges: list = field(default_factory=list)
+    texts: dict = field(default_factory=dict)
+    py: dict = field(default_factory=dict)
 
     def node(self, nid: str, kind: str, name: str, path: str | None, line: int | None = None) -> None:
         self.nodes.setdefault(nid, {"id": nid, "kind": kind, "name": name, "path": path, "line": line, "refs": 0})
@@ -133,13 +127,15 @@ def build(root: Path, kit: Path | None = None) -> Graph:
     return g
 
 
-# ----------------------------------------------------------------------------- agentbay concepts
 def _concepts(g: Graph, kit: Path) -> None:
     from . import model
     k = model.Kit(kit)
-    rel = lambda p: Path(p).resolve().relative_to(kit.resolve()).as_posix()   # noqa: E731
+
+    def rel(p) -> str:
+        return Path(p).resolve().relative_to(kit.resolve()).as_posix()
+
     _concept_nodes(g, k, kit, rel)
-    profile = k.profile()[1]                  # the agent profile that runs every role
+    profile = k.profile()[1]
     for name, d in k.docs["Mode"].items():
         _mode(g, name, d, profile, rel)
     _binding_edges(g, k, model.connectors_of)
@@ -148,8 +144,7 @@ def _concepts(g: Graph, kit: Path) -> None:
 
 
 def _data_schemas(kit: Path):
-    """(node id, path) of each <name>.v<N>.schema.json in schemas/data/ and the components' data folders, and each content
-    type's fields schema."""
+    """(node id, path) of each data schema in schemas/data/ and the components' data folders, and each type's."""
     for p in sorted([*(kit / "schemas" / "data").glob("*.schema.json"), *kit.glob("components/*/data/*.schema.json")]):
         base, _, ver = p.name.removesuffix(".schema.json").rpartition(".")
         yield f"schema:{base}/{ver}", p
@@ -186,7 +181,7 @@ def _mode(g: Graph, name: str, d, profile: str, rel) -> None:
         g.node(f"type:{name}/{tn}", "type", tn, rel(t))
     cfg = d.spec.get("config")
     if cfg:
-        for cp in d.config_files:                      # the schema chain along extends; a child only adds keys
+        for cp in d.config_files:
             if cp.exists():
                 for key in (json.loads(cp.read_text()).get("properties") or {}):
                     g.node(f"config:{name}.{key}", "config-key", key, rel(cp))
@@ -207,7 +202,7 @@ def _mode(g: Graph, name: str, d, profile: str, rel) -> None:
 
 
 def _endpoint_edges(g: Graph, mode: str, eid: str, e: dict, steps: list, has_config: bool, d) -> None:
-    owner = lambda t: next((p.name for p in d.dirs if (p / "types" / f"{t}.schema.json").exists()), mode)   # a type may be inherited
+    owner = lambda t: next((p.name for p in d.dirs if (p / "types" / f"{t}.schema.json").exists()), mode)
     for t in (e.get("in"), e.get("out")):
         if t:
             g.edge(eid, f"type:{owner(t)}/{t}", "type")
@@ -267,10 +262,8 @@ def _mention_edges(g: Graph) -> None:
                 g.edges.append(("text:python", nid, "reads-config"))
 
 
-# ----------------------------------------------------------------------------- python
 def _names(tree: ast.Module) -> set[str]:
-    """Names this module references in code (AST only: names, attributes, imports). Strings, comments and
-    docstrings never count."""
+    """Names this module references in code (AST only: names, attributes, imports); strings never count."""
     out: set[str] = set()
     for n in ast.walk(tree):
         if isinstance(n, ast.Name):
@@ -305,8 +298,7 @@ def is_script(tree: ast.Module) -> bool:
 
 
 def connector_entries(g: Graph) -> dict[str, set[str]]:
-    """Connector entry modules (loaded by path from connector.yaml: roots) -> the endpoint names their
-    classes implement (called by the dispatcher via getattr: roots too), plus `create`."""
+    """Connector entry modules (roots, loaded by path) -> the endpoint names their classes implement (also roots)."""
     ifaces: dict[str, set[str]] = {}
     conns: list[tuple[str, dict]] = []
     for rel, t in g.texts.items():
@@ -335,8 +327,7 @@ def connector_entries(g: Graph) -> dict[str, set[str]]:
 
 
 def _python(g: Graph) -> None:
-    """Python definitions and modules count as referenced only through the AST of other code. Roots: tests,
-    scripts with a __main__ block, package/pytest files, connector entry modules with their endpoint methods."""
+    """Python definitions and modules count as referenced only through the AST of other code, apart from the roots."""
     names_by_file = {rel: _names(t) for rel, t in g.py.items()}
     entries = connector_entries(g)
     for rel, tree in g.py.items():

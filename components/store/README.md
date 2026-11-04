@@ -99,6 +99,11 @@ Agents query the store with `items.store/v2.sql`. The sandbox in `bay/sqlsandbox
 - A pre-pass prepares `EXPLAIN <sql>` first and refuses the FTS shadow tables. The query then runs, and FTS5's own internal reads are allowed.
 - An authorizer allows SELECT and reads of those views and of `items`, `item_selectors`, `items_fts`, the child tables of the types and their FTS5 tables. It also allows `json_each`, CTEs and a list of functions. It denies everything else. A read that names no column, such as `count(*)`, passes only for a stored table on that list.
 - A `WITH` clause may not take the name of a view or a store table.
+- Scope is structural: the store file holds only the mode's scope and no internal state (cursors, budget and selectors
+  live in `state.json`, which this connection never opens), and a store with an internal `state` table is refused.
+- Not in the function list on purpose: `load_extension`, `randomblob` and `zeroblob` (memory), `printf` and `format`
+  (width bombs) and `sqlite_*`. Each FTS5 table is connected before the authorizer is on, so its config read never
+  trips the pre-pass.
 - Limits: 2 seconds of run time, 1 MB for a value, a 256 MB heap cap (`temp_store=FILE`, so sorts go to disk), 200 rows by default and 1000 at most, 200 kB per result and 4,000 characters per cell.
 
 Errors come back as `error` and say what to change. The store scrubs every item string and `extId`, and the keys

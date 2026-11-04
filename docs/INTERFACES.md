@@ -51,17 +51,14 @@ unique across kinds.
 
 The folder name finds what a component provides; the manifest lists none of it. The folders are
 `interfaces/` (one `<name>.v<N>.yaml` per interface), `envs/` (one file per env), `skills/<skill>/SKILL.md`,
-`types/`, `data/`, `connectors/<name>/` (internal connectors), `features/` and `tests/`. The loader in
-`bay/model.py` maps kind to manifest file name and finds every instance with
-`components/*/<manifest>`. What a component needs stays in its manifest: `needs:` (interfaces), `reads:` (content
+`types/`, `data/`, `connectors/<name>/` (internal connectors), `features/` and `tests/`. What a component needs stays in its manifest: `needs:` (interfaces), `reads:` (content
 types) and `extends:` (a parent mode).
 
 The placement rule decides where a connector sits. A connector that declares `needs.network`, `needs.secrets` or an
 `fs` path under `~` or `/` is a source connector at `components/<name>/`. Any other connector sits at
 `components/<owner>/connectors/<name>/`, in the component that owns it.
 
-`bay check` refuses a connector in the wrong place, a component folder without a manifest, and a leftover top-level
-`modes/`, `envs/`, `connectors/`, `content-types/`, `coordinator/` or `interfaces/` folder.
+`bay check` refuses a connector in the wrong place and a component folder without a manifest.
 
 ## 1. Mode and features
 `mode.yaml` declares each feature (`spec.features.<name>`, called as `<mode>.<name>`): `in` and `out`
@@ -75,12 +72,12 @@ records that file's path and sha256) or `{review: here}` (where the injected rev
 `roles: {role: env}` lists the framework roles it uses and the env each works in. A step runs in the env it
 names, else the feature's, else the mode's. A mode `needs: [items.store/v2]`, and the read-only endpoints of its
 `needs` are what its roles may read. `configDefaults:` replaces config-schema defaults for this mode (a child never
-copies its parent's schema).
+copies its parent's schema). A `with:` value may read `$call.base`, the commit the call started (a `replaces`
+call keeps it); a step that needs a missing base ends blocked.
 
 **Inheritance.** `extends: <mode>` is resolved when the kit is loaded (`bay/model.py` `merge_mode`), so every
 reader sees a complete mode. DESIGN says what a child replaces and what it merges.
-- `bay show <mode> --resolved` prints the result with the mode.yaml each feature comes from. A child's
-  `coordinator` replaces its parent's.
+- A child's `coordinator` replaces its parent's.
 - **`uses:` and `skills:`** (per feature) scope what its role steps get. `uses` lists the read endpoints
   (`items.store/v2.sql`) they may call through the use shim, each granted to a role of the feature; it is required
   when a role is granted any (`[]` for none). While a call of the feature waits on a role unit, that unit's shim
@@ -95,11 +92,9 @@ reader sees a complete mode. DESIGN says what a child replaces and what it merge
 
 ## 2. Playbook + rules
 Playbook H2 sections follow the order in [DESIGN.md](DESIGN.md#features); Steps are numbered.
-Rules: `{id: R-n, level, statement, appliesTo: executor|reviewer|both, check?, refs?, when?: {kind}}`.
-Endpoint `schedule` is declarative only (lint warns); run it from cron.
-Deterministic checks (`bay/checks.py`): `citations_resolve`, `citations_min:<n>`, `no_secrets`, `lint_clean`.
-The reviewer returns `review.verdict/v1`: per id (`DOD-n`, `R-n`, `C-n`) `pass|fail|n/a`, evidence, severity, and optionally `cites`
-`{taskId, outcome, todo[]}` (the recorded outcome and to-do items the verdict rests on). The review brief
+Rules: `{id: R-n, level, statement, appliesTo: executor|reviewer|both, check?, refs?, when?: {kind}}`.Deterministic checks (`bay/checks.py`): `citations_resolve`, `citations_min:<n>`, `no_secrets`, `lint_clean`.
+The reviewer returns `review.verdict/v1`: per id (`DOD-n`, `R-n`, `C-n`) `pass|fail|n/a`, evidence, severity, and optionally `cites`,
+the recorded plans (taskId, outcome and to-do items) the verdict rests on. The review brief
 carries `review.recordedPlans` (taskId -> step, outcome, to-do progress) of the agents it judges, and `recheck`
 when a halted review is run again (the brief's `verdictSchema` is the schema itself). The rules for halting and for the re-check are in
 [DESIGN.md](DESIGN.md#features).
@@ -125,11 +120,10 @@ bind:
 
 - Grants of a unit (role, mode, env) are described in DESIGN under Compile. An interface marked `dispatcherOnly`
   is never granted to an agent. `bay check` rejects a runtime binding that lists file-writing abilities or CLIs
-  beyond read-only version control, `./bay.sh check` and `python3 tests/run.py` under a capability without the `write` effect.
+  beyond `READ_ONLY_CLIS` (`bay/model.py`) under a capability without the `write` effect.
 - Tier: step (a review: its review block) > feature > role default. The profile maps a tier to a model, and the
   env's `tiers` cap both step tiers and the role's default tier.
-  Envs are the only place capabilities are bound. `agentbay.config.yaml` can switch every env's `offline:` block on
-  and can lower a cap, never raise it.
+  Envs are the only place capabilities are bound.
 - User modes may put roles only in their own envs (`components/<name>/envs/`) and the protected envs that
   `framework/kernel.yaml` opens to them (`protected:`, each env's `modes:`).
 - Code steps (`run:`) run in the coordinator's env for that feature; `bay check` warns when a store-reading
@@ -146,6 +140,10 @@ binding: connector     # code the dispatcher runs; the other value, tools, binds
 
 `ownerOnly: true` on an endpoint: no step of any mode may run it (resolver and lint refuse it); only the owner's
 own command reaches it (`improve.findings/v1.decide`, via `bay approve <F-id>`).
+
+`standards.check/v1` is `dispatcherOnly`: `findings { root, configRoot }` returns `findings` (`file`, `line`, `rule`,
+`message`), `stopped` and `warnings`. A component's `spec.language` names the files it covers (`files`), its comment
+syntax, the modules it runs with pinned versions and the `install` text.
 
 `framework/kernel.yaml` has two keys. `owns:` lists the paths the boundary check treats as core (globs; a trailing
 `/` owns everything below). `protected:` lists what only `forge.extend` may change and has four required keys.
@@ -178,8 +176,7 @@ only its own `runtime` name, so a second runtime discovers the same modes, endpo
 output schemas), roles and project workflows. A runtime is a folder `adapters/<name>/` with `adapter.yaml` (name =
 folder, module inside the folder, class).
 
-The build names a component's skill `.claude/skills/<component>--<skill>/` and a role's skill `<role>--<skill>`
-(lowercase letters, digits and hyphens, at most 64), and rewrites the `name:` in the copied SKILL.md to match.
+The build names a component's skill `.claude/skills/<component>--<skill>/` and a role's skill `<role>--<skill>`, and rewrites the `name:` in the copied SKILL.md to match.
 Playbooks and role prompts keep the short name.
 
 ## 6. Project workflows and the root coordinator
@@ -189,15 +186,19 @@ The root mode (a framework mode; its README names its endpoints) supplies the pr
 `{id, call: <mode>.<endpoint>, with?, when?}` or `{id, gate: <text>}`, using the same `$in` and `$steps.<id>`
 substitution as a feature's steps. `bay check` checks structure (ids, `$steps` order, gate references), then
 targets against the registry and each `with` against the endpoint's input schema. Run state is in
-`.agentbay/data/workflows/`, written only by the connector bound to `workflow.run/v1`. A report the run cannot take fails `cos.run` or `cos.next`; `approve` returns it.
-
+`.agentbay/data/workflows/`, written only by the connector bound to `workflow.run/v1`.
 ## 7. Dispatcher
 `bay call <mode>.<endpoint> '<json>'` -> `{callId, status, output | next, checks, review, cost}`.
 Status: `done | partial | blocked | failed | needs-agent | awaiting-approval | abandoned`.
 `bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic
-step (usage goes to the step's event); `bay show <callId>` prints the current state (`bay show reclaim <runId>`
-marks a stuck run reclaimed; `bay show close <callId> --reason <text>` ends an open call as abandoned, with the reason in the ledger).
-An input type that declares `replaces: <callId>` (`forge.extend` does) closes that open call as abandoned. Gates pass with `bay approve` ([safety model](DESIGN.md#safety-model)); a changed file returns the call to its passed gate at the next submit. `approve.plans` lists role steps (`<mode>.<endpoint>[.<step>]`) that get a plan step and a gate first; `approve.planner` sets their tier and effort. A role's generated shim
+step; `bay show <callId>` prints the current state.
+The standards step is `run: standards.check/v1.findings` with `base: $call.base`. The dispatcher runs every bound
+checker on the base export and on a copy of the working tree, with configs from the base (a project's own ruff and
+mypy configs included), and ends the call `blocked` on a finding the base lacks. `bay check --limits` holds
+`comment_lines` at 0, and lint requires the step after the last step of a role that may write a checked file. Agents
+may run `python3 -I -m ruff check` and `python3 -I -m mypy` only with the kit's config flag and a fixed list of other
+flags.
+An input type that declares `replaces: <callId>` (`forge.extend` does) closes that open call as abandoned. Gates pass with `bay approve` ([safety model](DESIGN.md#safety-model)); a changed file returns the call to its passed gate at the next submit. A role's generated shim
 `.agentbay/roles/<role>--<mode>/use <iface>/v<N>.<ep> '<json>'` is its only way to read connector data, and the
 guard hook stops subagents from running anything else.
 
@@ -211,32 +212,29 @@ written. Any event may carry `durationMs`, `tokens {input, output, cacheRead, ca
   with `mode, endpoint, step, role, agent, env, cost`. `step.started` carries a step's inputs in `data.inputs` (the
   value, or its sha256 plus a scrubbed preview).
 - Agent runs, from hooks and the coordinator: `spawned`, `completed`, `failed`, `reclaimed` and `note`. `bay note done <taskId>`
-  appends `completed` for a dispatched agent when no hook records it. A reclaimed or completed run stays so, even
-  if known only from its `agent.dispatch`. A note attaches to a run by runId or taskId, or stands alone, and never creates a run. `data.kind` is `note`,
+  appends `completed` for a dispatched agent when no hook records it. A note attaches to a run by runId or taskId, or stands alone, and never creates a run. `data.kind` is `note`,
   `instruction-change` or `decision`.
 - Guard: `permission.denied` (tool, agent, reason; never the command). Use shims: `data.read` (role, env,
   endpoint, item count).
 - `agent.dispatch`: `bay note dispatch <taskId> --agent <name> [--call --step --model --tier --role --mode --input --unguarded <reason> ...]`,
   run by the coordinator before every dispatch. With no guard hook call in 15 minutes it refuses unless `--unguarded` is given; `data.unguarded` keeps the reason and `bay status` lists it.
-- `agent.plan` and `agent.plan.done`: `bay plan <taskId> '{"outcome", "todo": [{"text", "serves"}]}'`, then
+- `agent.plan` and `agent.plan.done`: `bay plan <taskId> '<json>'` with an `outcome` and to-do items that each have `text` and `serves`, then
   `bay plan <taskId> --done <n>`. One plan per dispatched taskId, written only by the agent it was dispatched to. A
   role-step `bay submit` is refused when its taskId has no plan.
 - `review.recorded`: `bay note review <taskId> '<review.verdict/v1>'`, for a review run outside a framework review
   step. It changes no call, gate or approval.
 
-`bay status --agents` groups runs by role, mode, model and tier from these events alone, and `bay show` prints
-outcome, to-do progress and inputs. `bay status` lists work with no event for 24 hours under `STALE?` (`--json`: a
+`bay status` lists work with no event for 24 hours under `STALE?` (`--json`: a
 `stale` list), and says when a hook is not loaded.
 
 ## 10. Session, artifact and finding interfaces
 These interfaces are files in `interfaces/` of the component that owns them, and the finding and episode schemas
-are in its `data/` folder. Read the endpoints and fields there. A finding's dedup key is its `fingerprint`, the
+are in its `data/` folder. A finding's dedup key is its `fingerprint`, the
 hash of its kind and its detector key.
 
 ## 11. Items, selectors and the corpus store
 The item envelope, content types, selectors, the store layout and the SQL sandbox are in the README of `components/store`.
-The endpoints are in `items.source.v1.yaml` and `items.store.v2.yaml`. `items.store/v2` has `add`, `update`, `delete` and `rows`.
-
+The endpoints are in `items.source.v1.yaml` and `items.store.v2.yaml`.
 ## 12. Conformance rules
 `framework/rules/conformance.yaml` (`schemas/rules.schema.json`, linted by `bay check`): rules with an id,
 level, statement and optional deterministic `check`. A feature's

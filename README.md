@@ -39,10 +39,13 @@ Design: [docs/DESIGN.md](docs/DESIGN.md). Contracts: [docs/INTERFACES.md](docs/I
 
 ## Install
 
-Python 3 and a Claude Code version that sends `agent_type`. From a clone:
+`python3` and a Claude Code version that sends `agent_type`. To run the standards checks (ruff and mypy at the pinned
+versions), also install `requirements-dev.txt`; a step that needs a missing tool stops and names that command. From a
+clone:
 
 ```bash
 pip install -r requirements.txt        # pyyaml, jsonschema
+pip install -r requirements-dev.txt    # ruff, mypy and two type stub packages, for the standards step
 ./bay.sh check                         # lint + resolve everything
 python3 tests/run.py                   # the test suite
 ```
@@ -68,6 +71,29 @@ Definition of Done item. A change to the framework also passes checks for new un
 size ceilings in `framework/limits.yaml`, and a large proposal gets a written plan before you approve it. The
 [safety model](docs/DESIGN.md#safety-model) describes each of these. `./bay.sh check --limits` runs the size check
 by hand.
+
+**Standards.** A feature whose builder can write code also runs a `standards` step, and the call is blocked on any
+finding that is new against the commit the call started from; findings already in the tree block nothing. A change to
+the framework passes these checks:
+
+- `ruff` (rules E, F, W and B, line length 120) and `mypy --strict`, with the kit's `ruff.toml` and `mypy.ini`.
+  In another project the step reads the project's own `ruff.toml` (else `pyproject.toml` with a `[tool.ruff]` table)
+  and `mypy.ini` from the starting commit, so a change cannot supply its own config. mypy does not read
+  `.mypy.ini`, `setup.cfg` or `[tool.mypy]`. A tool without a project file uses the kit's.
+- No `#` comment and no docstring longer than one line, in every language that declares its comment syntax in a
+  `language` block of a component. A reason goes in a name, an error message or the README. A project can turn this
+  rule off with `connectors: { comments-check: { rule: off } }` in its `agentbay.config.yaml`, read from the starting
+  commit. In the kit, `bay check --limits` also holds the count at zero as `comment_lines`.
+- The size ceilings and the unused-code check.
+
+Lint requires the step in every feature whose builder can write a checked file, so a mode you write with such a role
+needs a `standards` step, `needs: standards.check/v1` and an env that binds the checkers. Agents may run the two commands
+before the step does, each with the kit's config and a fixed list of flags:
+
+```bash
+python3 -I -m ruff check --config components/python/ruff.toml <path>
+python3 -I -m mypy --config-file components/python/mypy.ini <path>
+```
 
 **Going live:** sign in as the source connector's `README.md` says, remove `offline: true` from
 agentbay.config.yaml and rebuild. Budget caps stop a sync before it exceeds one.

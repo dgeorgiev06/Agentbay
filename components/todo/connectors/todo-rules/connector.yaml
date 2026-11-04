@@ -1,0 +1,11 @@
+apiVersion: agentbay/v4
+kind: Connector
+metadata:
+  name: todo-rules
+  description: >-
+    The rules of the todo mode as pure code: checks a to-do status change, computes the next occurrence of a
+    recurring to-do and builds the delegation call. It holds no data, reads no store and uses no network.
+  version: 0.1.0
+spec:
+  implements: todo.rules/v1
+  entry: todo_rules.py

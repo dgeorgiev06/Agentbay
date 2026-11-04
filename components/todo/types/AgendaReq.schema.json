@@ -1,0 +1,7 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "view": { "enum": ["agenda", "due"], "description": "agenda (default): by priority, then due date. due: by due date, then priority. Every row carries its bucket." }
+  }
+}

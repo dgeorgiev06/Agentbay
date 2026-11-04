@@ -356,8 +356,9 @@ def test_sandbox_reads_the_mail_views_and_refuses_shadow_tables_and_writes():
     d = st.describe()
     names = [v["name"] for v in d["views"]]
     # this store is made without a mode's `reads`, so it holds every type of the kit (type views by name, then
-    # the mode's views, v_fts and the types' full-text views)
-    assert names == ["v_items", "v_email", "v_attachments", "v_posts", "v_threads", "v_fts", "v_attachment_fts"]
+    # the mode's views, v_fts and the types' full-text views); a user type adds its own views among them
+    want = ["v_items", "v_email", "v_attachments", "v_posts", "v_threads", "v_fts", "v_attachment_fts"]
+    assert [n for n in names if n in want] == want
     assert {v["name"]: v["rows"] for v in d["views"]}["v_threads"] == 4
     assert d["fts"]["attachments"]["view"] == "v_attachment_fts" and set(sbx.COLUMNS) == set(sbx.VIEWS)
     assert "addr_key" not in d["functions"]

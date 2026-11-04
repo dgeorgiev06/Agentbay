@@ -1,0 +1,14 @@
+apiVersion: agentbay/v4
+kind: Environment
+metadata:
+  name: todo-local
+  description: >-
+    The local to-do store and the to-do rules, and nothing else: no source, no network, no secrets. Only the
+    dispatcher touches the connectors; agents read the store only through their role's use shim.
+spec:
+  bind:
+    items.store/v2: corpus-store
+    todo.rules/v1: todo-rules
+  fs: { read: ["."], write: [".agentbay/data/todo"] }
+  effects: [read, write, delete]
+  limits: { maxTurns: 40, maxMinutes: 20 }

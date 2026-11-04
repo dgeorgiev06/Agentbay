@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "required": ["ids"],
+  "additionalProperties": false,
+  "properties": {
+    "ids": { "type": "array", "items": { "type": "string" }, "minItems": 1, "maxItems": 1, "description": "The id of the to-do, in a list of one." },
+    "scope": { "enum": ["occurrence", "series"], "description": "occurrence (default) drops this one and a recurring to-do gets its next occurrence; series ends the series." }
+  }
+}

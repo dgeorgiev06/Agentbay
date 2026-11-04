@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/data/todoitem/v1",
+  "title": "todoitem/v1",
+  "description": "item/v1 kind extension for a to-do: kind `todoitem`. The envelope carries the to-do (`title`), its notes (`text`), tags (`labels`) and, for a recurring to-do, the series (`threadId`). This adds dates (ISO date or datetime), priority, status, recurrence, the occurrence before (`prevId`), delegation to a mode and the change history. No source produces it: the owner or an agent writes it, with source `local`.",
+  "allOf": [{ "$ref": "item/v1" }],
+  "required": ["title"],
+  "properties": {
+    "kind": { "const": "todoitem" },
+    "title": { "type": "string", "minLength": 1 },
+    "due": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?$", "description": "Due ISO date or datetime." },
+    "start": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?$", "description": "Not before this ISO date or datetime." },
+    "completedAt": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?$" },
+    "droppedAt": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?$" },
+    "priority": { "type": "integer", "minimum": 1, "maximum": 4, "default": 3, "description": "1 urgent, 2 high, 3 normal (default), 4 someday." },
+    "status": { "enum": ["open", "doing", "waiting", "done", "dropped"], "default": "open" },
+    "recur": {
+      "type": ["object", "null"],
+      "required": ["every", "unit"],
+      "additionalProperties": false,
+      "properties": {
+        "every": { "type": "integer", "minimum": 1 },
+        "unit": { "enum": ["day", "week", "month"] },
+        "on": { "type": "array", "items": { "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] }, "description": "Weekdays, for unit week." },
+        "day": { "type": "integer", "minimum": -1, "maximum": 31, "not": { "const": 0 }, "description": "Day of the month, for unit month; -1 is the last day." },
+        "from": { "enum": ["due", "done"], "description": "Count the next occurrence from the due date (default) or from the day it was done." }
+      }
+    },
+    "prevId": { "type": ["string", "null"], "description": "Id of the occurrence before this one." },
+    "delegation": {
+      "type": ["object", "null"],
+      "required": ["target"],
+      "additionalProperties": false,
+      "properties": {
+        "target": { "enum": ["build", "research"] },
+        "callId": { "type": ["string", "null"] },
+        "status": { "type": ["string", "null"] },
+        "summary": { "type": ["string", "null"] },
+        "artifacts": { "type": "array", "items": { "type": "string" } },
+        "at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["at", "field"],
+        "additionalProperties": false,
+        "properties": {
+          "at": { "type": "string" },
+          "field": { "type": "string" },
+          "from": { "type": ["string", "number", "boolean", "null"] },
+          "to": { "type": ["string", "number", "boolean", "null"] }
+        }
+      }
+    }
+  },
+  "unevaluatedProperties": false
+}

@@ -33,6 +33,7 @@ Proposal 0011: a standards step blocks new ruff, mypy --strict and comment findi
 - The export, merge-base and rename helpers moved from improve-detect to `bay/boundary.py`, shared with the standards step.
 - `components/python`, `components/comments`, `requirements-dev.txt` and the root `conftest.py` are protected or owned in `framework/kernel.yaml`, so they change only through forge.extend. `tests/conftest.py` moved to the root.
 - The builder prompt states the comments rule and names the two tool commands with their config flags. Two DoD items were added to each of forge.extend, delivery.build and forge.create.
+- A standards step is a check like review and gate, so it never becomes a call's output. `forge.create`, `forge.extend` and `delivery.build` end with their Result.
 
 ### Security
 

@@ -1,24 +1,4 @@
-"""Load and resolve the agentbay model.
-
-    Mode -> feature -> step -> Role, in the env the mode's `roles:` map names -> Connector
-    Agent profile: one per LLM product (runtime per kind of role, tier -> model), the `profile:` of a runtime
-    adapter (adapters/<name>/adapter.yaml), selected once in agentbay.config.yaml (`agent:`, default claude-code)
-
-Each distinct (role, mode, env) a mode uses compiles to its own unit (`<role>--<mode>`, plus `--<env>` when
-the mode runs that role in several envs): its own subagent, use shim, guard policy and store access.
-
-Everything but roles lives in a component folder, whoever wrote it (KINDS says which file makes what):
-
-    components/<name>/{mode,connector,content-type,component}.yaml   components/<name>/envs/<name>.yaml
-    components/<name>/connectors/<connector>/connector.yaml (a connector internal to the component)
-
-`framework/` holds roles, rules and the kernel map. Which instances only forge.extend may change is the map's
-`protected:` block (a protected instance's `Doc.root` is "framework", any other "user").
-
-`resolve(kit)` walks every feature and fails with ALL gaps at once, each one a
-human-readable sentence naming the concept and what to fix. The `System` it
-returns is the only thing adapters and the dispatcher consume.
-"""
+"""Load and resolve the agentbay model."""
 from __future__ import annotations
 
 import copy
@@ -35,7 +15,7 @@ import yaml
 
 try:
     import jsonschema
-except ImportError:  # pragma: no cover
+except ImportError:
     jsonschema = None
 
 from . import boundary
@@ -45,7 +25,7 @@ from . import workflows as wfmod
 
 KIT = Path(__file__).resolve().parent.parent
 SCHEMAS = KIT / "schemas"
-KINDS = {  # kind -> (kit-relative globs, schema)
+KINDS = {
     "Interface": (("components/*/interfaces/*.yaml",), "interface"),
     "Mode": (("components/*/mode.yaml",), "mode"),
     "Role": (("framework/roles/*.yaml",), "role"),
@@ -54,18 +34,17 @@ KINDS = {  # kind -> (kit-relative globs, schema)
     "Component": (("components/*/component.yaml",), "component"),
 }
 EFFECTS = ["read", "write", "network", "spend", "delete"]
-DEFAULT_AGENT = "claude-code"          # the agent profile when agentbay.config.yaml sets no `agent:`
-AGENT_SAFE_EFFECTS = {"read"}          # connector endpoints a role may call via its use shim
-READ_TOOL_EFFECTS = {"read", "network"}  # tools capabilities every role may get; others need `access: write`
-WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}   # file-writing tools: `access: write` roles only
-# the only CLIs a read-only capability may bind
+DEFAULT_AGENT = "claude-code"
+AGENT_SAFE_EFFECTS = {"read"}
+READ_TOOL_EFFECTS = {"read", "network"}
+WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 READ_ONLY_CLIS = ("git status", "git diff", "git log", "git show", "./bay.sh check", "python3 tests/run.py")
 LEVEL_RANK = {"should": 1, "must": 2, "must_not": 2}
-PROTECTION_KIND = {"Mode": "mode", "Environment": "env", "Connector": "connector"}   # kinds a name of which can be protected
+PROTECTION_KIND = {"Mode": "mode", "Environment": "env", "Connector": "connector"}
 FRAMEWORK_EXTENDER = "forge.extend"
 USER_ROLE = ("roles are framework-level; customize behaviour in your mode's playbooks/skills, or propose a new "
              "role via forge.extend")
-ROOT_COORDINATOR = "cos"      # the mode whose coordinator owns the main thread; its playbook is the preamble
+ROOT_COORDINATOR = "cos"
 
 
 class SpecError(Exception):
@@ -80,14 +59,12 @@ class ResolveError(Exception):
         super().__init__("resolution failed:\n  - " + "\n  - ".join(gaps))
 
 
-# ----------------------------------------------------------------- loading
 def schema(name: str) -> dict:
     return json.loads((SCHEMAS / f"{name}.schema.json").read_text())
 
 
 def data_schema(ref: str, root: Path = KIT) -> dict:
-    """'item/v1' -> schemas/data/item.v1.schema.json or components/<name>/data/item.v1.schema.json; a content type's
-    `<name>/v<N>` -> its fields.schema.json"""
+    """The schema of a data ref such as 'item/v1', from schemas/data or a component's data folder."""
     name, _, ver = ref.partition("/")
     p = root / "schemas" / "data" / f"{name}.{ver}.schema.json"
     p = next((q for q in (p, *sorted(root.glob(f"components/*/data/{p.name}"))) if q.exists()), p)
@@ -101,7 +78,7 @@ def data_schema(ref: str, root: Path = KIT) -> dict:
     return json.loads(p.read_text())
 
 
-VERSIONED = re.compile(r"^[a-z][a-z0-9.-]*/v[0-9]+$")   # `<name>/v<N>`: interfaces and item kinds (B-6)
+VERSIONED = re.compile(r"^[a-z][a-z0-9.-]*/v[0-9]+$")
 
 
 def item_kinds(kit: Path = KIT) -> dict[str, set[int]]:
@@ -152,32 +129,33 @@ def schema_errors(instance, sch: dict) -> list[str]:
             for e in sorted(v.iter_errors(instance), key=lambda e: list(map(str, e.absolute_path)))]
 
 
-_YAML: dict = {}      # (file identity, mtime, size) -> parsed; a file touched in the last 2 s is never kept, so a same-size edit shows
+_YAML: dict = {}
 
 
 def load_yaml(path: Path):
+    """Parse a YAML file, cached by identity, mtime and size; a file touched in the last 2 s is never cached."""
     st = path.stat()
-    key = (st.st_dev, st.st_ino, st.st_mtime_ns, st.st_size)       # a hard link of the file shares its entry
+    key = (st.st_dev, st.st_ino, st.st_mtime_ns, st.st_size)
     try:
         doc = _YAML.get(key) or yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as e:
         raise SpecError(f"{path}: invalid YAML: {e}") from e
     if st.st_mtime_ns < time.time_ns() - 2_000_000_000:
         _YAML[key] = doc
-    return copy.deepcopy(doc)             # callers mutate what they get (extends, offline); the cache keeps its own
+    return copy.deepcopy(doc)
 
 
 @dataclass
 class Doc:
     kind: str
     name: str
-    root: str            # "framework" | "user"
+    root: str
     path: Path
     meta: dict
     spec: dict
-    lineage: list = field(default_factory=list)   # Mode: own folder, then each ancestor's (extends), nearest first
-    parent: str | None = None                      # Mode: the mode it extends
-    config_files: list = field(default_factory=list)   # Mode: config schemas, root ancestor first (each extends the last)
+    lineage: list = field(default_factory=list)
+    parent: str | None = None
+    config_files: list = field(default_factory=list)
 
     @property
     def dir(self) -> Path:
@@ -193,12 +171,10 @@ class Doc:
 
 
 def load_protection(root: Path) -> tuple[boundary.Protection, str | None]:
-    """The one loader of the `protected:` block of <root>/framework/kernel.yaml (used by the kit, scaffold and the
-    improve store). Anything but a readable, well-formed block fails closed: (the closed set, the error) - the set
-    reserves every name, covers every path and lets no mode place a role."""
+    """The one loader of kernel.yaml's `protected:` block; an unreadable block fails closed: (closed set, the error)."""
     try:
         return boundary.ComponentMap.load(Path(root) / "framework" / "kernel.yaml").protected, None
-    except Exception as e:                      # noqa: BLE001 - whatever is wrong with the map, the answer is closed
+    except Exception as e:
         return boundary.Protection.closed_set(), (
             f"{e}; without a readable protected: block nothing is trusted (every name is reserved, "
             f"no role may write or be placed) - restore the block")
@@ -219,9 +195,9 @@ class Kit:
                     self._load(kind, "framework" if kind == "Role" else "user", f, sch)
                 except SpecError as e:
                     self.errors.append(str(e))
-        for f in sorted(kit.glob("roles/*.yaml")):      # roles are framework-level: a user file of that kind is an error
+        for f in sorted(kit.glob("roles/*.yaml")):
             self.errors.append(f"{rel(f)}: {USER_ROLE}")
-        for kind in PROTECTION_KIND:         # protected first, then the rest (each by name): the order every listing had
+        for kind in PROTECTION_KIND:
             self.docs[kind] = dict(sorted(self.docs[kind].items(), key=lambda kv: kv[1].root != "framework"))
         self._apply_extends()
         from . import config as cfgmod
@@ -237,9 +213,7 @@ class Kit:
 
     @cached_property
     def protected_paths(self) -> list[str]:
-        """The kit folders only forge.extend may write, as the policy lists them: the map's `paths`, then the folder (or
-        file) of each protected mode, env and connector that sits outside all of those (an instance inside one of
-        them is protected by it; one that moves to a folder of its own is listed from then on). Computed once."""
+        """The kit folders only forge.extend may write: the map's `paths`, then protected instances outside them."""
         out = list(self.protected.paths)
         for kind, label in PROTECTION_KIND.items():
             for name in self.protected.names.get(label, ()):
@@ -254,8 +228,7 @@ class Kit:
         return self.protected.closed or any(boundary.under(path, p) for p in self.protected_paths)
 
     def _apply_extends(self) -> None:
-        """Resolve `extends:` at load time, so the resolver, lint, conformance and improve always see a complete
-        mode. A mode whose parent is missing or whose chain loops is reported and dropped."""
+        """Resolve `extends:` at load time; a mode with a missing parent or a looping chain is reported and dropped."""
         modes = self.docs["Mode"]
         done: dict[str, bool] = {}
 
@@ -300,9 +273,7 @@ class Kit:
                 modes.pop(name, None)
 
     def _go_offline(self) -> None:
-        """agentbay.config.yaml `offline: true`: every env with an `offline:` block binds what the block lists
-        over its own bindings, and has no network and no secrets, whatever the block says (lint refuses a block
-        that lists any). Envs without the block are unchanged."""
+        """With `offline: true`, bind each env's `offline:` block over its bindings, with no network and no secrets."""
         for env in self.docs["Environment"].values():
             off = env.spec.get("offline")
             if not off:
@@ -319,7 +290,7 @@ class Kit:
             try:
                 meta = load_yaml(y)
             except (OSError, UnicodeDecodeError, SpecError):
-                continue                   # lint_adapters reports an unreadable adapter.yaml
+                continue
             if isinstance(meta, dict) and isinstance(meta.get("profile"), dict):
                 out[y.parent.name] = meta["profile"]
         return out
@@ -338,7 +309,6 @@ class Kit:
             raise SpecError(f"{where}: kind must be {kind} (found {doc.get('kind')!r})")
         sch_doc = schema(sch)
         if kind == "Mode" and isinstance(doc.get("spec"), dict) and doc["spec"].get("extends"):
-            # a child declares only what it overrides; the merged spec is checked in full after extends
             sch_doc = copy.deepcopy(sch_doc)
             sch_doc["properties"]["spec"]["properties"]["features"]["additionalProperties"].pop("required", None)
         errs = schema_errors(doc, sch_doc)
@@ -358,11 +328,10 @@ class Kit:
         if name in self.docs[kind]:
             raise SpecError(f"{kind} '{name}' is defined twice ({self.docs[kind][name].rel} and {where}); "
                             f"rename one - a name is one {kind.lower()}")
-        if kind in PROTECTION_KIND:      # one folder per kind: "framework" is a label for a protected name
+        if kind in PROTECTION_KIND:
             root_name = "framework" if self.protected.reserved(PROTECTION_KIND[kind], name) else "user"
         self.docs[kind][name] = Doc(kind, name, root_name, f, meta, spec, lineage=[f.parent] if kind == "Mode" else [])
 
-    # convenience
     def get(self, kind: str, name: str) -> Doc | None:
         return self.docs[kind].get(name)
 
@@ -376,13 +345,7 @@ def rel(p: Path) -> str:
 
 
 def merge_mode(parent: dict, child: dict, pdir: Path, cdir: Path) -> dict:
-    """A child mode spec over its parent's. A child's feature replaces the parent's feature of that name whole
-    (0006 Part E: never a key-by-key merge, except that it inherits the parent's `playbook` and `rules` when it names
-    none; a feature it does not declare is inherited unchanged);
-    `roles` (role -> env), constraints and configDefaults merge entry by entry; needs are unioned;
-    anything else the child sets replaces the parent's. Paths the child inherits
-    (playbook, rules, config) are rebased so they still resolve from the child's folder. `abstract` is not
-    inherited."""
+    """A child mode spec over its parent's: a child's feature replaces the parent's whole; other keys merge."""
     def rebase(p: str) -> str:
         return os.path.normpath(os.path.relpath(os.path.normpath(pdir / p), cdir))
 
@@ -421,7 +384,6 @@ def type_file(dirs, tname: str) -> Path:
     return dirs[0] / "types" / f"{tname}.schema.json"
 
 
-# ----------------------------------------------------------------- resolved model
 @dataclass
 class Inference:
     model: str
@@ -439,7 +401,7 @@ class RoleDef:
     prompt: str
     done_when: list[str]
     rules: list[str]
-    access: str                      # "read" | "write"
+    access: str
     tier: str
     effort: str
     skills: dict[str, Path]
@@ -451,35 +413,35 @@ class RoleDef:
 @dataclass
 class ResolvedRole:
     """One compiled unit: a role in one mode and one env. `unit` is its unique name (subagent, shim, guard)."""
-    name: str                        # the role
-    unit: str                        # <role>--<mode>[--<env>]
+    name: str
+    unit: str
     mode: str
     env: str
-    kind: str                        # "coordinator" | "worker"
+    kind: str
     runtime: str
-    agent: str                       # the agent profile
+    agent: str
     description: str
     root: str
     prompt: str
     done_when: list[str]
     rules: list[str]
-    uses: list[str]                  # what the mode's needs grant it in this env (capabilities and endpoints)
-    inference: Inference             # the role's default tier and effort on the profile
+    uses: list[str]
+    inference: Inference
     tools: list[str]
     clis: list[str]
-    bay_uses: list[str]              # "items.store/v2.sql": dispatcher-mediated reads
-    skills: dict[str, Path]          # skill name in the runtime (`<mode>--<skill>`, `<role>--<skill>`) -> folder
+    bay_uses: list[str]
+    skills: dict[str, Path]
     isolation: str
     budget: dict
-    access: str = "read"             # the role's access: only "write" gets file-writing tools and write paths
-    skill_names: dict[str, str] = field(default_factory=dict)   # short name (playbooks, prompts) -> runtime name
+    access: str = "read"
+    skill_names: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
 class Step:
     id: str
-    kind: str                         # "code" | "role" | "review" | "gate"
-    run: str | None = None            # "items.store/v2.sync"
+    kind: str
+    run: str | None = None
     role: str | None = None
     agent: str | None = None
     env: str | None = None
@@ -490,8 +452,8 @@ class Step:
     task: str = ""
     out: str | None = None
     connector: str | None = None
-    approves: str | None = None       # gate: "$in.<field>", the file whose exact content the gate approves
-    resolved: "ResolvedRole | None" = None    # the compiled unit this step runs (role, mode, env)
+    approves: str | None = None
+    resolved: "ResolvedRole | None" = None
 
     @property
     def subagent(self) -> str | None:
@@ -515,11 +477,11 @@ class Feature:
     playbook_text: str
     dod: list[pbk.DodItem]
     rules: list[rulesmod.Rule]
-    review: dict | None               # {role, when, tier?, effort?, rulesets?} or None
+    review: dict | None
     schedule: str | None = None
     description: str = ""
-    uses: list[str] | None = None     # the read endpoints its role steps may call (B-9); None: the role's grants
-    skills: list[str] | None = None   # the mode skills its role steps are handed (B-8); None: every mode skill
+    uses: list[str] | None = None
+    skills: list[str] | None = None
 
 
 @dataclass
@@ -530,15 +492,15 @@ class ResolvedMode:
     purpose: str
     path: Path
     coordinator: str | None
-    roles: dict                       # role -> env
+    roles: dict
     features: dict[str, Feature]
     constraints: dict
     needs: list[str]
     playbook: str
-    skills: dict[str, Path]           # runtime name `<mode>--<skill>` -> folder (own, then inherited via extends)
-    config: dict                      # effective agentbay.config.yaml modes.<name> (minus features)
-    reads: list = field(default_factory=list)  # item kinds its features read (`<kind>/v<N>`): the store holds these types
-    dirs: list = field(default_factory=list)   # mode folder, then ancestors' (extends): types are looked up here
+    skills: dict[str, Path]
+    config: dict
+    reads: list = field(default_factory=list)
+    dirs: list = field(default_factory=list)
     extends: str | None = None
     coordinator_unit: ResolvedRole | None = None
 
@@ -548,9 +510,9 @@ class System:
     kit: Kit
     modes: dict[str, ResolvedMode]
     roles: dict[str, RoleDef]
-    uninstalled: dict = field(default_factory=dict)   # "<mode>.<endpoint>" -> why it is not installed here
-    warnings: list = field(default_factory=list)      # non-fatal findings (bay check prints them)
-    agent: str = DEFAULT_AGENT                        # the agent profile
+    uninstalled: dict = field(default_factory=dict)
+    warnings: list = field(default_factory=list)
+    agent: str = DEFAULT_AGENT
 
     def env(self, name: str) -> Doc:
         return self.kit.docs["Environment"][name]
@@ -559,24 +521,22 @@ class System:
         return self.kit.docs["Interface"][name]
 
     def for_project(self, project: Path | None) -> "System":
-        """The system as installed into `project`. forge.extend (and the units only it uses, framework-dev) is
-        installed only when the project is the agentbay checkout; everywhere else it does not exist."""
+        """The system as installed into `project`; forge.extend exists only in the agentbay checkout."""
         if project is not None and Path(project).resolve() == self.kit.root.resolve():
             return self
         mode, _, ep = FRAMEWORK_EXTENDER.partition(".")
         if mode not in self.modes or ep not in self.modes[mode].features:
             return self
-        modes = copy.deepcopy(self.modes)              # unit names change below; the kit-wide system keeps its own
+        modes = copy.deepcopy(self.modes)
         modes[mode].features = {k: v for k, v in modes[mode].features.items() if k != ep}
-        name_units(modes)                              # e.g. builder--forge, not builder--forge--local-authoring
+        name_units(modes)
         why = (f"{FRAMEWORK_EXTENDER} is installed only when the project is the agentbay checkout "
                f"(./bay.sh build --project {self.kit.root})")
         return System(self.kit, modes, self.roles, {**self.uninstalled, FRAMEWORK_EXTENDER: why}, self.warnings,
                       self.agent)
 
     def units(self) -> dict[str, ResolvedRole]:
-        """Every compiled unit of the installed features, keyed by unit name: the mode coordinators and each
-        (role, mode, env) a step runs."""
+        """Every compiled unit of the installed features, keyed by unit name: coordinators and each role step's unit."""
         out: dict[str, ResolvedRole] = {}
         for m in self.modes.values():
             if m.coordinator_unit:
@@ -603,7 +563,6 @@ class System:
         return m, m.features[ep]
 
 
-# ----------------------------------------------------------------- resolution
 def _bound(env: Doc, iface: str):
     return env.spec.get("bind", {}).get(iface)
 
@@ -691,8 +650,7 @@ def _split_use(use: str) -> tuple[str, str | None]:
 
 
 def resolve_role_def(kit: Kit, name: str, gaps: list[str]) -> RoleDef | None:
-    """The role on its own: the job (prompt, doneWhen, rules, skills, tier, access). What it may read comes
-    from the mode it works in (`needs`), checked per (role, mode, env) unit."""
+    """The role on its own: its job (prompt, rules, skills, tier, access); what it may read comes from its mode."""
     r = kit.get("Role", name)
     s = r.spec
     skills: dict[str, Path] = {}
@@ -727,9 +685,7 @@ def step_role(st: dict, ep: dict) -> str | None:
 
 
 def role_env_problems(md: Doc) -> list[tuple[str | None, str | None, str]]:
-    """(feature, step id, message) for every problem with a mode's role -> env maps: a step's role the mode
-    does not list, a role with no env, two envs for one step, overrides of roles the mode does not list, and
-    `roles:` on code or gate steps. `bay check` reports them with file:line, resolve as gaps."""
+    """(feature, step id, message) for every problem in a mode's role -> env maps, for `bay check` and resolve."""
     s, name = md.spec, md.name
     roles = s.get("roles")
     if not roles:
@@ -782,8 +738,7 @@ def role_env_problems(md: Doc) -> list[tuple[str | None, str | None, str]]:
 
 
 class _Ctx:
-    """Shared state of one resolve(): the profile, role definitions and the compiled units (cached per
-    (role, mode, env), so every gap of a unit is reported once, at the first step that uses it)."""
+    """Shared state of one resolve(): the profile, role definitions and the units, cached per (role, mode, env)."""
 
     def __init__(self, kit: Kit, gaps: list[str]):
         self.kit, self.gaps, self.seen_conn = kit, gaps, set()
@@ -798,8 +753,8 @@ class _Ctx:
             if rd:
                 self.roles[name] = rd
         self.units: dict[tuple[str, str, str, str], ResolvedRole | None] = {}
-        self.planable: set[str] = set()       # every <mode>.<endpoint>.<step> approve.plans may list
-        self.listed: set[str] = set()         # the approve.plans entries that matched a feature or step
+        self.planable: set[str] = set()
+        self.listed: set[str] = set()
 
     def inference(self, tier: str, effort: str) -> Inference:
         p = self.profile or {}
@@ -812,10 +767,7 @@ class _Ctx:
         return self.units[key]
 
     def _unit(self, rd: RoleDef, md: Doc, env_name: str, kind: str, where: str) -> ResolvedRole | None:
-        """The role in this mode and env. Its grants come from the mode: every capability in the mode's
-        `needs` that the env binds (unless `dispatcherOnly`). Connector capabilities give the read-only
-        endpoints (through the use shim); tools capabilities give their tools when all their effects are read
-        or network, or to roles with `access: write`."""
+        """The role in this mode and env, with the grants the mode's `needs` give it in that env."""
         kit, gaps, mode = self.kit, self.gaps, md.name
         who = f"{where}: role {rd.name} in env {env_name}"
         env = kit.get("Environment", env_name)
@@ -841,7 +793,7 @@ class _Ctx:
             idoc = kit.get("Interface", iface)
             b = _bound(env, iface)
             if idoc is None or b is None or idoc.spec.get("dispatcherOnly"):
-                continue                   # another env of the mode binds it, or only code steps use it
+                continue
             if idoc.spec.get("binding", "connector") == "tools":
                 effs = set(endpoint_effects(kit, iface, None))
                 if not isinstance(b, dict):
@@ -851,11 +803,8 @@ class _Ctx:
                     continue
                 uses.append(iface)
                 b_tools, b_clis = b.get("tools", []), b.get("clis", [])
-                if rd.access != "write":       # whatever the binding lists, read-only roles never write
-                    b_tools = [x for x in b_tools if x not in WRITE_TOOLS]
-                    b_clis = [c for c in b_clis if c in READ_ONLY_CLIS]
-                    if not b_clis:             # Bash only for the CLIs that survive (or the use shim, below)
-                        b_tools = [x for x in b_tools if x != "Bash"]
+                if rd.access != "write":
+                    b_tools, b_clis = read_only_grants(b_tools, b_clis)
                 tools += [x for x in b_tools if x not in tools]
                 clis += [c for c in b_clis if c not in clis]
             else:
@@ -883,9 +832,17 @@ class _Ctx:
             isolation=rd.isolation, budget=budget, access=rd.access, skill_names=names)
 
 
+def read_only_grants(b_tools: list[str], b_clis: list[str]) -> tuple[list[str], list[str]]:
+    """What a read-only role keeps of a binding: no write tools, only READ_ONLY_CLIS, and Bash only with one left."""
+    tools = [x for x in b_tools if x not in WRITE_TOOLS]
+    clis = [c for c in b_clis if c in READ_ONLY_CLIS]
+    if not clis:
+        tools = [x for x in tools if x != "Bash"]
+    return tools, clis
+
+
 def name_units(modes: dict, gaps: list[str] | None = None) -> None:
-    """`<role>--<mode>`, plus `--<env>` when the mode runs that role in more than one env among its installed
-    features. Run by resolve and again by System.for_project."""
+    """Name each unit `<role>--<mode>`, plus `--<env>` when the mode runs that role in more than one env."""
     units: dict[int, ResolvedRole] = {}
     for m in modes.values():
         for u in [m.coordinator_unit, *(st.resolved for f in m.features.values() for st in f.steps)]:
@@ -896,7 +853,7 @@ def name_units(modes: dict, gaps: list[str] | None = None) -> None:
         envs.setdefault((u.name, u.mode), set()).add(u.env)
     seen: dict[str, tuple] = {}
     for u in units.values():
-        step = u.kind == "worker" and u.name == modes[u.mode].coordinator       # told apart from the coordinator's unit
+        step = u.kind == "worker" and u.name == modes[u.mode].coordinator
         u.unit = f"{u.name}--{u.mode}" + (f"--{u.env}" if len(envs[(u.name, u.mode)]) > 1 else "") + "--step" * step
         if gaps is not None and u.unit in seen and seen[u.unit] != (u.name, u.mode, u.env):
             gaps.append(f"two units are both named {u.unit} ({seen[u.unit]} and {(u.name, u.mode, u.env)}); rename "
@@ -905,9 +862,7 @@ def name_units(modes: dict, gaps: list[str] | None = None) -> None:
 
 
 def skill_front_matter(text: str) -> tuple[dict, str]:
-    """(front matter, body) of a SKILL.md, CRLF line ends normalised to LF. A file that does not open with a
-    `---` line has no front matter: ({}, text). Raises SpecError when the block never closes, is not YAML or is
-    not a mapping (F-15)."""
+    """(front matter, body) of a SKILL.md with LF line ends; raises SpecError on a block that is unclosed or no map."""
     text = text.replace("\r\n", "\n")
     lines = text.split("\n")
     if lines[0].rstrip() != "---":
@@ -929,12 +884,11 @@ def skill_front_matter(text: str) -> tuple[dict, str]:
     return meta, body
 
 
-SKILL_NAME_MAX = 64        # Claude Code: a skill name (its folder and SKILL.md `name:`) is [a-z0-9-], at most 64
+SKILL_NAME_MAX = 64
 
 
 def skill_id(owner: str, short: str) -> str:
-    """A skill's runtime name: `<mode>--<skill>` for a mode's skills (own and inherited, so each mode has its own
-    namespace and two modes' same-named skills never overwrite each other), `<role>--<skill>` for a role's."""
+    """A skill's runtime name: `<mode>--<skill>` for a mode's, `<role>--<skill>` for a role's, so none collide."""
     return f"{owner}--{short}"
 
 
@@ -964,8 +918,7 @@ def type_schema(mode_dir, tname: str | None, where: str, gaps: list[str]) -> dic
 
 
 def code_env(kit: Kit, mode: Doc, iface: str, ep: dict | None = None) -> tuple[Doc | None, str]:
-    """Env that runs a code step: the coordinator's env (for this feature), else the first role env of the mode
-    that binds the capability."""
+    """Env that runs a code step: the feature coordinator's env, else the mode's first role env that binds it."""
     s = mode.spec
     roles = s.get("roles") or {}
     coord = s.get("coordinator")
@@ -987,7 +940,7 @@ def resolve(kit: Kit) -> System:
     for mname in sorted(kit.docs["Mode"]):
         md = kit.docs["Mode"][mname]
         if md.spec.get("abstract"):
-            continue        # a base for `extends` only: linted, never installed or called
+            continue
         m = resolve_mode(kit, md, ctx, warnings)
         if m:
             modes[mname] = m
@@ -1048,14 +1001,11 @@ def _mode_roles(kit: Kit, md: Doc, ctx: _Ctx, roles: dict) -> ResolvedRole | Non
 
 
 CHILD_CONFIG_KEYS = ("type", "properties", "$defs", "title", "description", "$schema", "required",
-                     "additionalProperties")   # F-13: a child's config schema may use these top-level keywords only;
-                                               # N-5: `type`/`additionalProperties` only with the parent's value
+                     "additionalProperties")
 
 
 def config_schema(kit: Kit, md: Doc, gaps: list[str]) -> dict | None:
-    """The mode's config schema: its root ancestor's, extended by each descendant's along `extends` (a child's
-    `config:` adds properties; redefining an inherited key is an error - change a default through configDefaults).
-    None when the mode takes no settings."""
+    """The mode's config schema: its root ancestor's, extended by each descendant's along `extends`, or None."""
     out = None
     for cp in md.config_files:
         if not cp.exists():
@@ -1070,7 +1020,7 @@ def config_schema(kit: Kit, md: Doc, gaps: list[str]) -> dict | None:
             if k not in CHILD_CONFIG_KEYS:
                 gaps.append(f"mode {md.name}: config schema {rel} uses top-level keyword '{k}', which a child's config "
                             f"schema may not use (it only adds settings; allowed: {', '.join(CHILD_CONFIG_KEYS)})")
-        for k in ("type", "additionalProperties"):     # N-5: may restate the parent's value, never change it
+        for k in ("type", "additionalProperties"):
             if k in sch and (k not in out or sch[k] != out[k]):
                 gaps.append(f"mode {md.name}: config schema {rel} sets top-level '{k}' to {json.dumps(sch[k])}, but "
                             f"the parent's is {json.dumps(out[k]) if k in out else 'unset'}; a child may only "
@@ -1098,8 +1048,7 @@ def config_schema(kit: Kit, md: Doc, gaps: list[str]) -> dict | None:
 
 
 def _mode_config(kit: Kit, md: Doc, gaps: list[str]) -> tuple[dict, dict]:
-    """The mode's effective settings (agentbay.config.yaml over the config schema's defaults and the mode's
-    configDefaults) and its per-feature settings."""
+    """The mode's effective settings (config over schema defaults and configDefaults) and its per-feature settings."""
     from . import config as cfgmod
     s, name = md.spec, md.name
     mcfg, feat_cfg = cfgmod.mode_settings(kit.config, name)
@@ -1112,13 +1061,12 @@ def _mode_config(kit: Kit, md: Doc, gaps: list[str]) -> tuple[dict, dict]:
     if s.get("configDefaults") and not s.get("config"):
         gaps.append(f"mode {name}: configDefaults needs a config schema (`config:`, own or inherited)")
     if SOURCE_IFACE in s.get("needs", []) and not mcfg.get("selectors"):
-        mcfg["selectors"] = [{"id": "home"}]     # no selectors setting: keep each source's default stream
+        mcfg["selectors"] = [{"id": "home"}]
     return mcfg, feat_cfg
 
 
 def _config_defaults(kit: Kit, md: Doc, csch: dict, mcfg: dict, gaps: list[str]) -> dict:
-    """Check the settings against the config schema; return its `default`s, with the mode's configDefaults
-    (a child, usually, replacing some of them instead of copying the schema) applied."""
+    """Check the settings against the config schema and return its defaults with the mode's configDefaults applied."""
     name = md.name
     csch = inline_refs(csch)
     for e in schema_errors(mcfg, csch):
@@ -1190,7 +1138,6 @@ def _feature_steps(kit: Kit, md: Doc, ctx: _Ctx, ep: dict, wf: list, where: str)
         elif "run" in st:
             steps.append(_code_step(kit, md, ep, st, sw, ep_eff, ctx.gaps, ctx.seen_conn))
         elif "gate" in st:
-            # a gate passes only by a recorded approval (`bay approve`), never by a `when:` skip (check_stages says so)
             steps.append(Step(id=st["id"], kind="gate", task=st["gate"], approves=st.get("approves"), when=st.get("when")))
         else:
             pre = _plan_steps(ctx, md, ep, st, sw, where, ep_eff)
@@ -1253,9 +1200,7 @@ def _feature(kit: Kit, md: Doc, ctx: _Ctx, ep_name: str, ep: dict, feat_cfg: dic
 
 
 def _check_uses_and_skills(md: Doc, feat: Feature, where: str, gaps: list[str]) -> None:
-    """B-9 and B-8 for one feature: every `uses:` entry is a read endpoint granted to a role that has a step in
-    it, every `skills:` entry is a skill of the mode, and a feature whose role steps can read the store says
-    which endpoints (`uses: []` for none)."""
+    """B-9 and B-8 for one feature: `uses:` entries are granted read endpoints and `skills:` entries are mode skills."""
     units = {id(st.resolved): st.resolved for st in feat.steps if st.resolved is not None}.values()
     granted = {u for r in units for u in r.bay_uses}
     for u in feat.uses or []:
@@ -1277,8 +1222,7 @@ STORE_IFACE = "items.store/v2"
 
 
 def _check_selectors(kit: Kit, md: Doc, mcfg: dict, gaps: list[str], warnings: list[str]) -> None:
-    """Selectors in the mode's settings against every bound items.source/v1 connector's capability table:
-    a field a source cannot express is a gap; a local-only field on a paid source is a warning."""
+    """Check the mode's selectors against each bound source's capability table: gaps and warnings."""
     if SOURCE_IFACE not in md.spec.get("needs", []):
         return
     from . import config as cfgmod, selector as selmod
@@ -1299,8 +1243,7 @@ def _check_selectors(kit: Kit, md: Doc, mcfg: dict, gaps: list[str], warnings: l
 
 
 def owner_only(kit: Kit, run: str) -> bool:
-    """Is `run` (`<interface>.<endpoint>`, as a code step spells it) an endpoint its interface marks `ownerOnly`?
-    Such an endpoint is reached only by the owner's command (`Dispatcher.run_capability`), never by a step."""
+    """Is `run` an endpoint its interface marks `ownerOnly`, reached only by the owner's command and never by a step?"""
     iface, _, ep = run.rpartition(".")
     idoc = kit.get("Interface", iface)
     return bool(idoc is not None and (idoc.spec["endpoints"].get(ep) or {}).get("ownerOnly"))
@@ -1348,8 +1291,7 @@ def _code_step(kit, md, ep, st, sw, ep_eff, gaps, seen_conn) -> Step:
 
 
 def _role_step(ctx: _Ctx, md: Doc, ep: dict, st: dict, sw: str, ep_eff, review: dict | None = None) -> Step:
-    """A role step (or the injected review step, with its `review` block). Env: step > feature > mode
-    `roles:`. Tier and effort: step (the review block for review) > feature (role steps) > role default."""
+    """A role step or the injected review step; env comes from step, feature, mode; tier from step, feature, role."""
     kit, gaps = ctx.kit, ctx.gaps
     rn = st["role"]
     kind = "review" if review is not None else "role"
@@ -1364,8 +1306,8 @@ def _role_step(ctx: _Ctx, md: Doc, ep: dict, st: dict, sw: str, ep_eff, review: 
         return step
     env_name = role_env(md.spec, ep, st, rn)
     if env_name is None:
-        return step                       # no env: reported by role_env_problems (mode, feature, step)
-    u = ctx.unit(rn, md, env_name, "worker", sw)       # the coordinator's role as a step runs as a subagent, not the main thread
+        return step
+    u = ctx.unit(rn, md, env_name, "worker", sw)
     if u is None:
         return step
     env = kit.get("Environment", env_name)
@@ -1377,7 +1319,7 @@ def _role_step(ctx: _Ctx, md: Doc, ep: dict, st: dict, sw: str, ep_eff, review: 
                          if v), (rd.tier, ""))
     effort = src.get("effort") or feat.get("effort") or rd.effort
     step.inference = ctx.inference(tier, effort)
-    if rn == md.spec.get("coordinator"): u.inference = step.inference    # the generated file shows the model the step runs
+    if rn == md.spec.get("coordinator"): u.inference = step.inference
     allowed = env.spec.get("tiers")
     if allowed and tier not in allowed:
         gaps.append(f"{sw}: {label} {rn} in env {env.name} runs at tier '{tier}' (from {origin}), which env "
@@ -1395,8 +1337,7 @@ def _role_step(ctx: _Ctx, md: Doc, ep: dict, st: dict, sw: str, ep_eff, review: 
 
 
 def protected_writes(kit: Kit, env: Doc) -> list[str]:
-    """Write paths of env that name a protected kit path (the component map's `protected:`: its folders and the
-    folders of its protected instances), leaving out one that lies inside another path the env also names."""
+    """Write paths of env that name a protected kit path, leaving out one inside another path the env also names."""
     named = [w for w in env.spec.get("fs", {}).get("write", []) if kit.covers(w)]
     norm = {w: os.path.normpath(w).replace(os.sep, "/") for w in named}
     return [w for w in named if not any(norm[o] != norm[w] and boundary.under(norm[w], norm[o]) for o in named)]

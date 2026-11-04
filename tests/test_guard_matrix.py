@@ -235,7 +235,7 @@ def undo_move(got: dict) -> dict:
     assert pol["protected"] == FOUR + moved, pol["protected"]
     pol["protected"] = FOUR
     assert pol["units"][LOCAL]["write"] == ["components", "agentbay.config.yaml"], pol["units"][LOCAL]["write"]
-    window = ["requirements-dev.txt", "components", "docs", "tests", "README.md"]
+    window = ["requirements-dev.txt", "docs", "tests", "README.md"]
     assert pol["units"][DEV]["write"] == [*FOUR, *moved, *window], pol["units"][DEV]["write"]
     pol["units"][DEV]["write"] = [*FOUR, "docs", "tests"]
     assert got["protectedWrites"]["framework-dev"] == FOUR + moved
@@ -290,17 +290,8 @@ IMPROVE_ROWS = ["Edit mode:improve/mode.yaml", "MultiEdit mode:improve/mode.yaml
 IMPROVE_DELTAS: dict = {
     **{("builder--delivery", r): ("deny", "pass") for r in IMPROVE_ROWS},
     **{(LOCAL, r): ("deny", "pass") for r in IMPROVE_ROWS},
-    **{(DEV, r): ("pass", "pass") for r in IMPROVE_ROWS},
+    **{(DEV, r): ("pass", "deny") for r in IMPROVE_ROWS},
 }
-WINDOW_ROWS = [
-    "Edit connector:fake/connector.yaml", "MultiEdit connector:fake/connector.yaml",
-    "Edit mode:briefing/mode.yaml", "MultiEdit mode:briefing/mode.yaml",
-    "Write connector:brand-new/x.py", "Write connector:fake/connector.yaml", "Write connector:gmail-api/connector.yaml",
-    "Write env:brand-new", "Write env:local-feeds",
-    "Write mode:brand-new/mode.yaml", "Write mode:briefing/mode.yaml", "Write mode:delivery/mode.yaml",
-    "Write mode:feed-briefing/mode.yaml", "Write mode:mail-briefing/mode.yaml", "Write modes/x.yaml",
-]
-WINDOW_DELTAS: dict = {(DEV, r): ("deny", "pass") for r in WINDOW_ROWS}
 README_DELTAS: dict = {(DEV, "Write README.md"): ("deny", "pass")}
 RUN_TESTS = ["Bash python3 tests/run.py -q", "Bash python3 tests/run.py tests/test_improve.py"]
 CHECK_DELTAS: dict = {
@@ -309,7 +300,7 @@ CHECK_DELTAS: dict = {
     **{(LOCAL, r): ("deny", "pass") for r in ["Bash git commit -m 'about bay approve'", *RUN_TESTS]},
     **{("reviewer--forge", r): ("deny", "pass") for r in ["Bash ./bay.sh check", *RUN_TESTS]},
 }
-EXPECTED_DELTAS: dict = {**IMPROVE_DELTAS, **WINDOW_DELTAS, **README_DELTAS, **CHECK_DELTAS}
+EXPECTED_DELTAS: dict = {**IMPROVE_DELTAS, **README_DELTAS, **CHECK_DELTAS}
 NET_DELTAS = {k: v for k, v in EXPECTED_DELTAS.items() if v[0] != v[1]}
 
 

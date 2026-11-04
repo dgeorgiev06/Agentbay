@@ -579,9 +579,8 @@ def test_n3_worktree_add_paths_and_no_writes_without_write_tools():
             clis = g.policy["subagents"][u]["clis"]
             clis += [c for c in ("git mv", "git rm") if c not in clis]
         (k / "components" / "l").symlink_to("../bay")
-        dev_in_components_window = "p"
         rows = [("git rm bay/guard.py", "d", "d", "p"), ("git rm --cached bay/guard.py", "d", "d", "p"),
-                ("git mv components/a.py bay/b.py", "d", "d", dev_in_components_window),
+                ("git mv components/a.py bay/b.py", "d", "d", "d"),
                 ("git rm components/../bay/guard.py", "d", "d", "p"), (f"git rm {k}/bay/guard.py", "d", "d", "p"),
                 ("git rm 'bay/guard.py'", "d", "d", "p"), ('git rm b"ay"/guard.py', "d", "d", "p"),
                 ("git rm -- bay/guard.py", "d", "d", "p"),
@@ -589,7 +588,7 @@ def test_n3_worktree_add_paths_and_no_writes_without_write_tools():
                 ("git rm docs/a.md bay/guard.py", "d", "d", "p"),
                 ("git rm -r bay", "d", "d", "p"), ("git rm -r .", "d", "d", "d"),
                 ("git rm -r components/..", "d", "d", "d"),
-                ("git rm -r components", "d", "d", dev_in_components_window),
+                ("git rm -r components", "d", "d", "d"),
                 ("git rm -r .github", "d", "d", "d"), ("git rm .github/workflows/ci.yml", "d", "d", "d"),
                 ("git rm CLAUDE.md", "d", "d", "d"), ("git rm Makefile", "d", "d", "d"),
                 ("git rm bay.sh", "d", "d", "d"), ("git rm .agentbay/x", "d", "d", "d"),

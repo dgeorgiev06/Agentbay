@@ -33,7 +33,6 @@ spec:
             components/base/improve/interfaces, components/base/tools/interfaces,
             components/base/python, components/base/comments,
             components/base/tools/envs/plan-writer.yaml, requirements-dev.txt,
-            components,
             docs, tests, README.md]
   tiers: [balanced, deep]          # no fast tier for framework changes
   effects: [read, write]

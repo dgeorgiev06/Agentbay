@@ -454,10 +454,8 @@ def test_improve_files_are_writable_like_any_user_mode_and_its_env_and_connector
                 assert decide("Write", {"file_path": path, "content": "x"}, who) == "deny", (who, path)
         assert decide("Write", {"file_path": "components/base/improve/mode.yaml", "content": "x"},
                 "analyst--improve") == "deny"
-        dev_over_improve = "pass"
-        dev = "builder--forge--framework-dev"
         assert decide("Write", {"file_path": "components/base/improve/mode.yaml", "content": "x"},
-                dev) == dev_over_improve
+                "builder--forge--framework-dev") == "deny"
         assert decide("Write", {"file_path": "components/base/cos/mode.yaml", "content": "x"},
                 "builder--forge--framework-dev") == "pass"
     finally:

@@ -1,5 +1,4 @@
-"""Main-thread guard decisions (0008 stage 3, DOD-2): the writes that ask rules cover by prefix text also ask when the
-verb is quoted or escaped, because the hook judges the shell words."""
+"""Main-thread guard decisions: writes that ask rules cover by prefix also ask when the verb is quoted or escaped."""
 import io
 import json
 import os
@@ -35,7 +34,6 @@ ASKED = (
     "python3 bay/cli.py show 'reclaim' R-1",
     "echo hi; .agentbay/bay note 'dispatch' T-20261030-abcd --agent x",
     "true && .agentbay/bay show re\\claim R-1",
-    # expansions the shell may turn into an asked verb: the word cannot be known, so it asks
     ".agentbay/bay note {dispatch,} T-20261030-abcd --agent x",
     ".agentbay/bay note ${X:-dispatch} T-20261030-abcd --agent x",
     ".agentbay/bay note dispatc${X}h T-20261030-abcd --agent x",
@@ -64,7 +62,6 @@ NOT_ASKED = (
     "echo approve",
     "ls",
 )
-# plain words after note/show that merely contain braces or $ later in the line are not asked
 NOT_ASKED_LATER = (
     ".agentbay/bay note T-20261030-abcd \"cost is $5 {approx}\"",
     ".agentbay/bay show C-20261030-abcd --json",
@@ -135,7 +132,7 @@ def test_main_prints_the_ask_decision_for_the_main_thread_and_for_agent_sessions
     try:
         cmd = ".agentbay/bay note 'dispatch' T-20261030-abcd --agent x"
         base = {"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": str(p)}
-        for extra in ({}, {"agent_type": "an-unlisted-agent"}):      # main thread; `--agent` session (no agent_id)
+        for extra in ({}, {"agent_type": "an-unlisted-agent"}):
             code, out = _run_main({**base, **extra}, p)
             hook = json.loads(out)["hookSpecificOutput"]
             assert code == 0 and hook["permissionDecision"] == "ask", extra
@@ -153,6 +150,6 @@ def test_generated_hook_runs_the_guard_for_the_main_threads_bash_calls():
         guard = [h for e in s["hooks"]["PreToolUse"] for h in e["hooks"] if "guard.py" in h["command"]]
         entries = [e for e in s["hooks"]["PreToolUse"] if any("guard.py" in h["command"] for h in e["hooks"])]
         assert guard and entries and "Bash" in entries[0]["matcher"].split("|")
-        assert "agent_type" not in entries[0] and "agent" not in entries[0]       # no subagent-only filter
+        assert "agent_type" not in entries[0] and "agent" not in entries[0]
     finally:
         cleanup(p)

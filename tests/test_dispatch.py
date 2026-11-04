@@ -1,7 +1,8 @@
 """Dispatcher: schemas, grants, effects, budget, step plans, review, ledger, secrets."""
 import json
 
-from helpers import KIT, SECRETS, FakeHttp, MemProvider, cleanup, clock, edit_yaml, jresp, kit_copy, kit_for, model, project, system
+from helpers import (KIT, SECRETS, FakeHttp, MemProvider, cleanup, clock, edit_yaml, jresp, kit_copy, kit_for,
+                     load_module, model, project, system)
 
 from bay import dispatch, guard, ledger, vault
 from bay.adapter import get
@@ -33,7 +34,7 @@ def test_sync_runs_code_step_and_logs_events_with_cost():
     p = project()
     r = D(p).call("feed-briefing.sync", {"lookback": "3d"})
     assert r["status"] == "done" and r["output"]["added"] == 7
-    assert r["cost"] == {"items": 7, "usd": 0.0}   # offline source is free
+    assert r["cost"] == {"items": 7, "usd": 0.0}
     evs = ledger.read(p)
     types = [e["type"] for e in evs]
     assert types == ["step.started", "step.completed", "call.completed"]
@@ -50,7 +51,7 @@ def test_config_lookback_default_and_caps_strictest_wins():
     p = project({"modes": {"feed-briefing": {"lookback": "1d", "maxItemsPerRun": 2}}})
     r = D(p).call("feed-briefing.sync", {})
     assert r["status"] == "partial" and r["output"]["fetched"] == 2
-    assert r["output"]["budget"]["caps"]["maxItemsPerRun"] == 2        # config (2) < mode (500)
+    assert r["output"]["budget"]["caps"]["maxItemsPerRun"] == 2
     assert "maxItemsPerRun" in r["stopped"]
 
 
@@ -76,8 +77,8 @@ def test_agentic_step_returns_plan_then_review_then_partial_on_failed_must():
     assert nxt["role"] == "analyst" and nxt["runAs"] == "subagent_type=analyst--feed-briefing"
     assert (nxt["env"], nxt["agent"], nxt["tier"], nxt["model"]) == ("local-feeds", "claude-code", "balanced", "sonnet")
     assert "## Definition of Done" in nxt["playbookText"]
-    assert {x["id"] for x in nxt["rules"]} == {"R-1", "R-2", "R-3", "R-4", "R-5", "R-6", "R-7"}  # executor|both
-    assert nxt["skills"]["corpus-sql"] == "feed-briefing--corpus-sql"          # playbook's short name -> namespaced
+    assert {x["id"] for x in nxt["rules"]} == {"R-1", "R-2", "R-3", "R-4", "R-5", "R-6", "R-7"}
+    assert nxt["skills"]["corpus-sql"] == "feed-briefing--corpus-sql"
     posts = nxt["previous"]["gather"]["items"]
     assert len(posts) == 7 and all(p["matched"] == ["home"] for p in posts)
     assert any(t.endswith("items.store/v2.sql '<json>'") for t in nxt["tools"])
@@ -92,20 +93,19 @@ def test_agentic_step_returns_plan_then_review_then_partial_on_failed_must():
     assert r2["status"] == "needs-agent" and r2["next"]["kind"] == "review"
     rv = r2["next"]
     assert rv["model"] == "opus" and rv["effort"] == "high" and rv["role"] == "reviewer"
-    (rec,) = rv["review"]["recordedPlans"].values()                                  # the brief carries the recorded plan
+    (rec,) = rv["review"]["recordedPlans"].values()
     assert rec["step"] == "themes" and rec["outcome"] == "test run of themes" and rec["todo"][0]["n"] == 1
-    assert {x["id"] for x in rv["review"]["rules"]} == {"R-1", "R-2", "R-3", "R-4", "R-6"}    # reviewer|both
+    assert {x["id"] for x in rv["review"]["rules"]} == {"R-1", "R-2", "R-3", "R-4", "R-6"}
     chk = {c["rule"]: c for c in rv["review"]["checks"]}
     assert chk["R-1"]["ok"] is False and "not stored items" in chk["R-1"]["detail"]
     verdict = {"items": [{"id": i, "verdict": "pass", "evidence": "ok"}
                          for i in ["DOD-1", "DOD-3", "DOD-4", "DOD-5", "R-2", "R-3", "R-4", "R-6"]]}
-    verdict["items"][0]["cites"] = {"outcome": True, "todo": [1]}                    # optional citation of the recorded plan
+    verdict["items"][0]["cites"] = {"outcome": True, "todo": [1]}
     err(lambda: d.submit(r["callId"], "review", verdict), "missing ids: DOD-2", "R-1")
     bad = {"items": [dict(verdict["items"][0], cites={"todo": [0]})]}
     err(lambda: d.submit(r["callId"], "review", bad), "does not match review.verdict/v1")
-    sch = rv["review"]["verdictSchema"]                                      # the brief carries the schema itself
+    sch = rv["review"]["verdictSchema"]
     assert isinstance(sch, dict) and sch["title"] == "review.verdict/v1" and sch["additionalProperties"] is False
-    # C-n is accepted as an extra item
     verdict["items"] += [{"id": "C-3", "verdict": "pass", "evidence": "conformance rule judged"},
                          {"id": "DOD-2", "verdict": "fail", "evidence": "evil.example is not stored",
                           "severity": "blocker"},
@@ -121,7 +121,7 @@ def test_digest_done_when_review_passes():
     r = d.call("feed-briefing.digest", {})
     g = r["next"]["previous"]["gather"]
     urls = [x["url"] for x in g["items"]]
-    digest = {"period": {"from": "a", "to": "b"}, "coverage": g["coverage"],      # a url and an item id both resolve
+    digest = {"period": {"from": "a", "to": "b"}, "coverage": g["coverage"],
               "themes": [{"title": "Staking", "summary": "Staking keeps growing.",
                           "citations": [urls[0], g["items"][1]["id"]]}]}
     r = d.submit(r["callId"], "themes", digest)
@@ -154,7 +154,7 @@ def test_use_enforces_role_grants():
 def test_effects_rechecked_at_runtime():
     p = project()
     s = system(p)
-    s.kit.docs["Environment"]["local-feeds"].spec["effects"] = ["read"]   # changed after resolution
+    s.kit.docs["Environment"]["local-feeds"].spec["effects"] = ["read"]
     d = dispatch.Dispatcher(s, p, clock=clock)
     err(lambda: d.call("feed-briefing.prune", {}), "effects", "not allowed")
 
@@ -180,20 +180,17 @@ def test_secrets_never_in_ledger_output_or_store_on_success():
     p = project(source="x-api")
     p.joinpath("agentbay.config.yaml").write_text(
         p.joinpath("agentbay.config.yaml").read_text() + "connectors: {x-api: {userId: '42'}}\nsecrets: {provider: env}\n")
-    import sys
-    sys.path.insert(0, str(KIT / "components/x-api/tests"))
-    from test_x_api import pages, routes  # noqa: E402
-    r, _ = routes(pages(2, 2))
+    x_api_tests = load_module(KIT / "components/x-api/tests/test_x_api.py")
+    r, _ = x_api_tests.routes(x_api_tests.pages(2, 2))
     http = FakeHttp(r)
     res = D(p, transport=http, provider=MemProvider(SECRETS)).call("feed-briefing.sync", {})
     assert res["status"] == "done" and res["output"]["added"] == 4
     blob = json.dumps(res)
     for f in p.rglob("*"):
         if f.is_file():
-            blob += f.read_bytes().decode("latin-1")      # corpus.db is binary; secrets would still show
+            blob += f.read_bytes().decode("latin-1")
     for v in (*SECRETS.values(), "at-SECRET-1", "rt-ROTATED-SECRET-1"):
         assert v not in blob, v
-    # but the requests did carry them (the connector really used them)
     assert any("at-SECRET-1" in q["headers"].get("Authorization", "") for q in http.log)
 
 
@@ -206,15 +203,14 @@ def test_redact_is_a_last_line_of_defence():
 
 
 def no_deadcode(d):
-    """The checkout copy is not a git repo, so forge.extend's `deadcode` step (tested in test_deadcode_check)
-    reports no new finding here."""
+    """The checkout copy is not a git repo, so forge.extend's `deadcode` step reports no new finding here."""
     real = d._invoke
     d._invoke = lambda env, conn, iface, ep, args, **kw: \
         {"new": [], "existing": 0} if iface == "improve.detect/v1" else real(env, conn, iface, ep, args, **kw)
 
 
 def test_gate_stops_and_resumes_only_on_approval():
-    k = kit_copy()                          # forge.extend exists only in the agentbay checkout
+    k = kit_copy()
     d = dispatch.Dispatcher(system(k, k), k, clock=clock)
     no_deadcode(d)
     r = d.call("forge.extend", {"goal": "add a bluesky source"})
@@ -225,14 +221,13 @@ def test_gate_stops_and_resumes_only_on_approval():
     assert r["status"] == "awaiting-approval" and r["next"]["kind"] == "gate"
     cid = r["callId"]
     assert f".agentbay/bay approve {cid}" in r["next"]["approve"] and "own terminal" in r["next"]["approve"]
-    err(lambda: d.submit(cid, "approve", {"approved": True}), "approval gate", "bay approve")   # agents cannot
+    err(lambda: d.submit(cid, "approve", {"approved": True}), "approval gate", "bay approve")
     assert d.show(cid)["status"] == "awaiting-approval"
     r = d.approve(cid, True)
     assert r["next"]["step"] == "implement"
     assert d.show(cid)["next"]["step"] == "implement"
     r = d.submit(cid, "implement", {"status": "done", "summary": "implemented"})
     assert r["next"]["kind"] == "review" and r["next"]["model"] == "opus"
-    # rejection path
     r = d.call("forge.extend", {"goal": "another"})
     r = d.submit(r["callId"], "propose", res)
     r = d.approve(r["callId"], False, "not now")
@@ -241,7 +236,7 @@ def test_gate_stops_and_resumes_only_on_approval():
 
 
 def test_failed_review_halts_before_release():
-    k = kit_copy()                          # forge.extend exists only in the agentbay checkout
+    k = kit_copy()
     d = dispatch.Dispatcher(system(k, k), k, clock=clock)
     no_deadcode(d)
     r = d.call("forge.extend", {"goal": "x change"})
@@ -254,13 +249,12 @@ def test_failed_review_halts_before_release():
     items[0] = {"id": items[0]["id"], "verdict": "fail", "evidence": "vocabulary drift", "severity": "blocker"}
     r = d.submit(r["callId"], "review", {"items": items})
     assert r["status"] == "partial" and "next" not in r
-    # a re-run on the same approved proposal: a scoped re-check of the failed items (once), else a full review
     path = _proposal(k, "0096-recheck.md", "status: draft\n")
-    real_git, dispatch.boundary.git = dispatch.boundary.git, lambda *a: "abc123\n"      # the kit copy is no git checkout
+    real_git, dispatch.boundary.git = dispatch.boundary.git, lambda *a: "abc123\n"
 
     def to_review():
         r = d.call("forge.extend", {"goal": "recheck", "proposal": path})
-        if r["status"] == "awaiting-approval":              # first run, or the proposal changed: the owner decides
+        if r["status"] == "awaiting-approval":
             r = d.approve(r["callId"], True, by="user@tty")
         return d.submit(r["callId"], "implement", ok)
 
@@ -272,32 +266,31 @@ def test_failed_review_halts_before_release():
         ids = [x["id"] for x in r1["next"]["review"]["definitionOfDone"] + r1["next"]["review"]["rules"]]
         a, b = ids[:2]
         assert "recheck" not in r1["next"]["review"]
-        assert d.submit(r1["callId"], "review", verdict(ids, [a], "should-fix"))["review"]["failed"] == [a]    # a failed must halts at any rating
+        assert d.submit(r1["callId"], "review", verdict(ids, [a], "should-fix"))["review"]["failed"] == [a]
         r2 = to_review()
         skipped = [e["step"] for e in ledger.read(k) if e.get("callId") == r2["callId"] and e["type"] == "step.skipped"]
         rc = r2["next"]["review"]["recheck"]
         assert "approve" in skipped and (rc["priorCall"], rc["failed"], rc["commits"]) == (r1["callId"], [a], "abc123..HEAD")
         assert sorted(i["id"] for i in rc["carried"]) == sorted(set(ids) - {a})
-        err(lambda: d.submit(r2["callId"], "review", verdict([b])), "missing ids", a)          # every failed id is re-judged
+        err(lambda: d.submit(r2["callId"], "review", verdict([b])), "missing ids", a)
         r = d.submit(r2["callId"], "review", verdict([a]))
         assert r["next"]["step"] == "release" and len(d._load(r2["callId"])["steps"]["review"]["items"]) == len(ids)
-        r3 = to_review()                                    # the last review passed: a full review
+        r3 = to_review()
         assert "recheck" not in r3["next"]["review"]
         d.submit(r3["callId"], "review", verdict(ids, [a]))
         r4 = to_review()
         assert r4["next"]["review"]["recheck"]["priorCall"] == r3["callId"]
-        r = d.submit(r4["callId"], "review", verdict([a, b], [b]))                # a new verdict can fail a carried item
+        r = d.submit(r4["callId"], "review", verdict([a, b], [b]))
         assert r["status"] == "partial" and r["review"]["failed"] == [b] and "next" not in r
-        assert "recheck" not in to_review()["next"]["review"]  # a second re-check is not allowed: full review
+        assert "recheck" not in to_review()["next"]["review"]
         (k / path).write_text((k / path).read_text() + "edit\n")
         r5 = to_review()
-        assert "recheck" not in r5["next"]["review"]  # a changed proposal: the owner approved again, full review
-        # a failed must-level C-n halts like a DoD item, at any rating
+        assert "recheck" not in r5["next"]["review"]
         rules = r5["next"]["review"]["rulesets"]["conformance"]
         must = next(c["id"] for c in rules if c["level"] == "must")
         should = next(c["id"] for c in rules if c["level"] == "should")
         r = d.submit(r5["callId"], "review", verdict(ids + [should], [should], "should-fix"))
-        assert r["status"] != "partial" and r["next"]["step"] == "release"     # a failed should does not
+        assert r["status"] != "partial" and r["next"]["step"] == "release"
         r6 = to_review()
         r = d.submit(r6["callId"], "review", verdict(ids + [must], [must], "should-fix"))
         assert r["status"] == "partial" and r["review"]["failed"] == [must] and "next" not in r
@@ -315,7 +308,7 @@ def test_selector_change_forces_refresh_even_when_fresh():
     cfg["modes"] = {"feed-briefing": {"selectors": [{"id": "home", "text": "staking"}]}}
     cfgp.write_text(yaml.safe_dump(cfg))
     r = D(p).call("feed-briefing.digest", {})
-    assert r["next"]["previous"]["refresh"]["rematched"] == 2            # re-matched, not skipped as fresh
+    assert r["next"]["previous"]["refresh"]["rematched"] == 2
     assert {i["id"] for i in r["next"]["previous"]["gather"]["items"]} == \
         {"fake:1008", "fake:1007", "fake:1006", "fake:1005", "fake:1003"}
 
@@ -354,11 +347,10 @@ def test_front_matter_marker_grants_nothing():
         for fm in (APPROVED_FM, "status: draft\n", "status: approved\n", ""):
             p = _proposal(k, "0098-not-yet.md", fm)
             r = d.call("forge.extend", {"goal": "build the proposal", "proposal": p})
-            # an existing proposal has nothing to draft: propose is skipped, the gate runs (the marker passes nothing)
             assert r["status"] == "awaiting-approval" and r["next"]["step"] == "approve", fm
             assert [e["step"] for e in ledger.read(k) if e.get("callId") == r["callId"] and e["type"] == "step.skipped"] == ["propose", "plan"]
         r = _to_gate(d, p)
-        assert r["status"] == "awaiting-approval" and r["next"]["approves"] == {"path": p, "sha256": _sha(k / p)}   # no plan key
+        assert r["status"] == "awaiting-approval" and r["next"]["approves"] == {"path": p, "sha256": _sha(k / p)}
         assert "no recorded approval" in r["next"]["why"] and "informational" in r["next"]["why"]
         r = d.call("forge.extend", {"goal": "no proposal yet"})
         assert r["next"]["step"] == "propose"
@@ -371,13 +363,12 @@ def test_front_matter_marker_grants_nothing():
 
 
 def test_a_proposal_written_by_the_propose_step_is_bound_to_its_approval():
-    """The gate approves the file the propose step's artifacts name, by path and sha256; a later call naming that
-    file skips propose and the gate, one rule for both."""
+    """The gate approves the file the propose step names, by path and sha256; a later call naming it skips the gate."""
     k = kit_copy()
     try:
         d = dispatch.Dispatcher(system(k, k), k, clock=clock)
         r = d.call("forge.extend", {"goal": "design something new"})
-        path = _proposal(k, "0097-new.md", "status: draft\n")          # what the builder wrote
+        path = _proposal(k, "0097-new.md", "status: draft\n")
         r = d.submit(r["callId"], "propose", {"status": "done", "summary": "s", "artifacts": ["bay/x.py", path]})
         assert r["next"]["approves"] == {"path": path, "sha256": _sha(k / path)}, r
         assert d.approve(r["callId"], True, by="user@tty")["next"]["step"] == "implement"
@@ -386,10 +377,9 @@ def test_a_proposal_written_by_the_propose_step_is_bound_to_its_approval():
         r2 = d.call("forge.extend", {"goal": "design something new", "proposal": path})
         assert r2["next"]["step"] == "implement"
         assert [e["step"] for e in ledger.read(k) if e.get("callId") == r2["callId"] and e["type"] == "step.skipped"] \
-            == ["propose", "plan", "approve"]          # the small proposal needs no plan
-        (k / path).write_text((k / path).read_text() + "edit\n")          # any edit: both run again
+            == ["propose", "plan", "approve"]
+        (k / path).write_text((k / path).read_text() + "edit\n")
         assert d.call("forge.extend", {"goal": "build it again", "proposal": path})["next"]["step"] == "approve"
-        # artifacts outside docs/proposals/ bind nothing
         r3 = d.call("forge.extend", {"goal": "design something new"})
         r3 = d.submit(r3["callId"], "propose", {"status": "done", "summary": "s", "artifacts": ["README.md"]})
         assert "approves" not in r3["next"] and "approves no file" in r3["next"]["why"]
@@ -432,8 +422,7 @@ def test_gate_plan_and_show_name_the_chat_path_when_approve_from_lists_chat():
 
 
 def test_a_recorded_approval_of_the_unchanged_proposal_skips_the_gate():
-    """`bay approve` (terminal or chat) records the proposal's path and sha256; the next call naming the same,
-    unchanged file skips the gate, and the step plan and `bay show` say whose approval it was."""
+    """`bay approve` records the proposal's path and sha256, so the next call naming the same file skips the gate."""
     for by, quote in (("user@tty", ""), ("user@chat-via-cos", "yes, approve 0099")):
         k = kit_copy()
         try:
@@ -472,14 +461,13 @@ def test_an_edit_after_approval_makes_the_gate_run_again():
         assert r["status"] == "awaiting-approval" and "changed since user@tty approved it" in r["next"]["why"], r
         assert "implement came after the change and its result is kept; the call resumes at " in r["next"]["why"]
         r = d.approve(cid, True, by="user@tty")
-        assert r["status"] != "awaiting-approval" and r.get("next", {}).get("step") != "implement", r      # resumes after implement
+        assert r["status"] != "awaiting-approval" and r.get("next", {}).get("step") != "implement", r
         f.write_text(original + "\nOne more slice, added after approval.\n")
         r = _to_gate(d, path)
         assert r["status"] == "awaiting-approval" and r["next"]["step"] == "approve", r
         assert "changed since user@tty approved it" in r["next"]["why"], r["next"]["why"]
         assert r["next"]["approves"]["sha256"] == _sha(f)
         assert "changed since" in d.show(r["callId"])["gates"]["approve"]
-        # editing between the gate being shown and `bay approve` approves nothing: the owner re-reads first
         cid2 = r["callId"]
         f.write_text(original + "\nAnd another edit while the gate waits.\n")
         try:
@@ -488,10 +476,9 @@ def test_an_edit_after_approval_makes_the_gate_run_again():
         except dispatch.CallError as e:
             assert "changed since the gate was shown" in str(e)
         assert d.show(cid2)["status"] == "awaiting-approval"
-        assert d.show(cid2)["next"]["approves"]["sha256"] == _sha(f)            # the plan shows the new content
+        assert d.show(cid2)["next"]["approves"]["sha256"] == _sha(f)
         assert not [e for e in _gate_events(k, cid2, "step.completed")]
         assert d.approve(cid2, True, by="user@tty")["next"]["step"] == "implement"
-        # only the latest decision on the path counts: the first content was superseded by the later approval
         f.write_text(original)
         assert d.call("forge.extend", {"goal": "build the proposal", "proposal": path})["next"]["step"] == "approve"
         f.write_text(original + "\nA rejected variant.\n")
@@ -499,7 +486,6 @@ def test_an_edit_after_approval_makes_the_gate_run_again():
         d.approve(cid3, False, by="user@tty", reason="no")
         r = _to_gate(d, path)
         assert r["next"]["step"] == "approve" and "was rejected by user@tty" in r["next"]["why"]
-        # the plan binds with the proposal: both paths and shas are shown, a chat approval names both prefixes
         p2 = _proposal(k, "0097-plan.md", APPROVED_FM)
         plan = k / "docs/plans/0097-plan.md"
         plan.parent.mkdir(parents=True, exist_ok=True)
@@ -521,15 +507,14 @@ def test_an_edit_after_approval_makes_the_gate_run_again():
         ap = d.show(r["callId"])["next"]["approves"]
         both = f"{ap['sha256'][:8]}+{ap['plan']['sha256'][:8]}"
         assert d.approve(r["callId"], True, by="user@chat-via-cos", quote="yes", sha=both)["next"]["step"] == "implement"
-        assert d.call("forge.extend", {"goal": "build it", "proposal": p2})["next"]["step"] == "implement"   # unchanged: skipped
-        plan.write_text("# plan\nedited after approval\n")                      # a later call: the gate runs again
+        assert d.call("forge.extend", {"goal": "build it", "proposal": p2})["next"]["step"] == "implement"
+        plan.write_text("# plan\nedited after approval\n")
         r = _to_gate(d, p2)
         assert r["next"]["step"] == "approve" and "changed since" in r["next"]["why"], r["next"]
         assert r["next"]["approves"]["plan"]["sha256"] == _sha(plan)
         d.approve(r["callId"], True, by="user@tty")
-        plan.unlink()                                                           # deleting the plan re-opens the gate
+        plan.unlink()
         assert "plan" not in _to_gate(d, p2)["next"]["approves"]
-        # the plan step: large (10+ touches, exceptions, no touches, a sensitive touch), a large proposal
         def nxt(fm):
             (k / "agentbay.config.yaml").write_text("apiVersion: agentbay/v4\n")
             (k / "docs/proposals/0090-x.md").write_text(f"---\n{fm}---\n# x\n")
@@ -546,8 +531,7 @@ def test_an_edit_after_approval_makes_the_gate_run_again():
 
 
 def test_only_bay_approve_events_count_as_a_recorded_approval():
-    """A matching ledger line that `bay approve` did not write (another source, another `by`, a workflow gate)
-    does not pass the gate. Subagents cannot write the ledger at all (test_boundaries)."""
+    """A matching ledger line that `bay approve` did not write does not pass the gate."""
     k = kit_copy()
     try:
         d = dispatch.Dispatcher(system(k, k), k, clock=clock)
@@ -557,7 +541,7 @@ def test_only_bay_approve_events_count_as_a_recorded_approval():
                       data={"approved": True, "by": "user@tty", "approves": subj})
         ledger.append(k, "note", "C-y", source="dispatcher", data={"approved": True, "by": "user@tty", "approves": subj})
         cid = _to_gate(d, path)["callId"]
-        d.approve(cid, True)                                  # by="user": not a `bay approve` channel
+        d.approve(cid, True)
         r = _to_gate(d, path)
         assert r["next"]["step"] == "approve" and "no recorded approval" in r["next"]["why"]
     finally:
@@ -617,7 +601,6 @@ def test_a_listed_step_is_planned_approved_and_then_run_by_a_fresh_agent():
     for bad in ("bay/guard.py", "docs/proposals/x.md", "docs/x.md", "src/a.py", "agentbay.config.yaml", "docs/plans/../x.md"):
         assert verdict("Write", {"file_path": bad, "content": "x"}) == "deny", bad
     assert verdict("Bash", {"command": "git status"}) == "deny"
-    # a gate with no plan file never passes: the plan step listed a proposal, nothing, or a file that is not there
     (p / "docs/proposals").mkdir(parents=True)
     (p / "docs/proposals/x.md").write_text("---\ntouches: []\n---\n# x\n")
     (p / "README.md").write_text("readme\n")
@@ -631,11 +614,11 @@ def test_a_listed_step_is_planned_approved_and_then_run_by_a_fresh_agent():
         assert "artifacts" in e and d.show(cid)["next"]["step"] == "implement-plan"
     cid = d.call("delivery.build", task)["callId"]
     want = f"docs/plans/{cid}-implement.md"
-    err(lambda: d.submit(cid, "implement-plan", {"status": "done", "summary": "p", "artifacts": [want]}), want)     # not written yet
+    err(lambda: d.submit(cid, "implement-plan", {"status": "done", "summary": "p", "artifacts": [want]}), want)
     (p / want).write_text("# plan\n")
     r = d.submit(cid, "implement-plan", {"status": "done", "summary": "p", "artifacts": [want]})
     assert r["status"] == "awaiting-approval"
-    (p / want).unlink()                                                       # deleted after submit: the gate binds nothing
+    (p / want).unlink()
     err(lambda: d.approve(cid, True, by="user@tty"), "nothing approved", want)
     assert want in d.show(cid)["gates"]["implement-approve"] or d.show(cid)["status"] == "awaiting-approval"
     cid = d.call("delivery.build", task)["callId"]

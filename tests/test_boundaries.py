@@ -4,10 +4,12 @@ import subprocess
 import sys
 import types
 
-from helpers import KIT, cleanup, kit_for, project, system, tmpdir
+import yaml
+from helpers import KIT, cleanup, kit_copy, kit_for, project, system, tmpdir
 
-from bay import guard, model, vault
+from bay import dispatch as _dispatch, guard, ledger as _ledger, model, vault
 from bay.adapter import get, module
+from bay.guard import Guard
 
 COORDINATOR_CMDS = module("claude-code").COORDINATOR_CMDS
 
@@ -23,13 +25,13 @@ _cleanup = cleanup
 
 
 def shared():
-    """One built project for the tests that only read it (guard decisions, the generated files); cleanup() leaves it be."""
+    """One built project for the tests that only read it; cleanup() leaves it be."""
     if not _SHARED:
         _SHARED.append(built())
     return _SHARED[0]
 
 
-def cleanup(p):  # noqa: F811
+def cleanup(p):
     if not _SHARED or p != _SHARED[0]:
         _cleanup(p)
 
@@ -51,8 +53,8 @@ def test_role_shim_reads_only_its_grants_and_cannot_write_spend_or_delete():
     p = built()
     try:
         shim = p / ".agentbay/roles/analyst--feed-briefing/use"
-        assert shim.exists() and not (p / ".agentbay/roles/reviewer--delivery/use").exists()   # no grants -> no shim
-        sh(p, str(p / ".agentbay/bay"), "call", "feed-briefing.sync", '{"maxItems": 5}')   # a denied sync would add more
+        assert shim.exists() and not (p / ".agentbay/roles/reviewer--delivery/use").exists()
+        sh(p, str(p / ".agentbay/bay"), "call", "feed-briefing.sync", '{"maxItems": 5}')
         r = sh(p, str(shim), "items.store/v2.query", '{"author": "lido"}')
         assert r.returncode == 0 and {x["author"]["handle"] for x in json.loads(r.stdout)["items"]} == {"lido"}
         reads = [json.loads(x) for x in (p / ".agentbay/ledger/events.jsonl").read_text().splitlines()
@@ -62,11 +64,11 @@ def test_role_shim_reads_only_its_grants_and_cannot_write_spend_or_delete():
         def snapshot():
             return {str(f): f.read_bytes() for f in sorted(data.rglob("*")) if f.is_file()}
         before = snapshot()
-        for ep, arg in (("items.store/v2.sync", "{}"), ("items.store/v2.prune", '{"olderThan": "1m"}'),   # 1m empties the fixture
+        for ep, arg in (("items.store/v2.sync", "{}"), ("items.store/v2.prune", '{"olderThan": "1m"}'),
                         ("items.source/v1.fetch", "{}")):
             r = sh(p, str(shim), ep, arg)
             assert r.returncode != 0 and "not granted" in r.stderr, (ep, r.stderr)
-            assert snapshot() == before, ep   # a refusal that still ran the call would show here
+            assert snapshot() == before, ep
         r = sh(p, str(shim), "items.store/v2.query", '{"author": "lido"}')
         assert {x["author"]["handle"] for x in json.loads(r.stdout)["items"]} == {"lido"}
     finally:
@@ -96,8 +98,8 @@ def test_guard_scopes_bash_per_subagent():
               ("reviewer--delivery", "git diff HEAD~1"), ("builder--delivery", "git status")]
         for agent, cmd in ok:
             d, _ = tool(p, agent, "Bash", {"command": cmd})
-            assert d != "deny" and (d == "allow") == ("/use " in cmd), (agent, cmd, d)   # only the own shim is auto-allowed
-        r = hook(p, *ok[0])                                  # the hook contract, on the allowed shim call
+            assert d != "deny" and (d == "allow") == ("/use " in cmd), (agent, cmd, d)
+        r = hook(p, *ok[0])
         assert r.returncode == 0 and "deny" not in r.stdout and '"allow"' in r.stdout, r.stdout
         bad = [("analyst--feed-briefing", ".agentbay/bay call feed-briefing.prune '{}'"),
                ("analyst--feed-briefing", ".agentbay/roles/lead--feed-briefing/use items.store/v2.status '{}'"),
@@ -110,13 +112,12 @@ def test_guard_scopes_bash_per_subagent():
                ("reviewer--delivery", "git push origin main"), ("reviewer--delivery", "git diff && rm -rf ."),
                ("builder--delivery", ".agentbay/bay secret set X_REFRESH_TOKEN"),
                ("builder--delivery", ".agentbay/bay call feed-briefing.prune '{}'"),
-               ("Explore", ".agentbay/bay call feed-briefing.sync '{}'")]   # non-agentbay subagent
+               ("Explore", ".agentbay/bay call feed-briefing.sync '{}'")]
         for agent, cmd in bad:
             d, r = tool(p, agent, "Bash", {"command": cmd})
             assert d == "deny" and r.returncode == 2, (agent, cmd)
-        r = hook(p, *bad[0])                                 # the hook contract, on a denied call: exit 2 and JSON
+        r = hook(p, *bad[0])
         assert r.returncode == 2 and json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
-        # main thread: no decision, normal permissions apply
         r = subprocess.run([sys.executable, str(KIT / "bay/guard.py")], text=True, capture_output=True,
                            input=json.dumps({"tool_name": "Bash", "tool_input": {"command": ".agentbay/bay call x"}}),
                            env={"CLAUDE_PROJECT_DIR": str(p), "PATH": "/usr/bin:/bin"})
@@ -128,7 +129,7 @@ def test_guard_scopes_bash_per_subagent():
 def test_guard_fails_closed_for_subagents():
     p = tmpdir()
     try:
-        r = hook(p, "analyst--feed-briefing", "ls")           # no guard.json -> deny, not allow
+        r = hook(p, "analyst--feed-briefing", "ls")
         assert r.returncode == 2 and "guard error" in r.stderr
     finally:
         cleanup(p)
@@ -148,7 +149,6 @@ def test_settings_have_no_wildcards():
             assert "*" not in perm.split(":")[0] and perm not in ("Bash", "Bash(*)")
             assert perm.startswith("Bash(.agentbay/bay ") and perm.split()[1].rstrip(":*)") in \
                 COORDINATOR_CMDS, perm
-        # the invariant behind the list: every pre-approved command is read-only
         assert not ({"call", "submit", "approve", "build", "clean", "secret", "auth", "new", "check", "plan"}
                     & set(COORDINATOR_CMDS))
         assert not any("secret" in x or "build" in x or "roles/" in x or "approve" in x for x in st["permissions"]["allow"])
@@ -184,7 +184,6 @@ def test_keychain_set_never_puts_value_in_argv():
             assert bad not in str(e)
 
 
-# ---------------------------------------------------------------- N1: file tools, git flags, unknown callers
 def tool(p, agent, tool_name, tool_input, agent_id="a1"):
     payload = {"hook_event_name": "PreToolUse", "tool_name": tool_name, "tool_input": tool_input,
                "cwd": str(p)}
@@ -192,9 +191,6 @@ def tool(p, agent, tool_name, tool_input, agent_id="a1"):
         payload["agent_type"] = agent
     if agent_id:
         payload["agent_id"] = agent_id
-    # in-process, as bay/guard.py main() decides it; the hook contract (exit code, JSON, fail closed) runs through a
-    # subprocess in test_guard_scopes_bash_per_subagent, test_guard_fails_closed_for_subagents and
-    # test_builder_cannot_edit_guard_policy_or_shims_or_settings
     if agent or agent_id:
         decision, reason = guard.Guard(json.loads((p / ".agentbay/guard.json").read_text()), p).decide(payload)
     else:
@@ -218,10 +214,10 @@ def test_builder_cannot_edit_guard_policy_or_shims_or_settings():
         assert r.returncode == 2 and json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
         d, _ = tool(p, "builder--delivery", "NotebookEdit", {"notebook_path": ".agentbay/x.ipynb", "new_source": "x"})
         assert d == "deny"
-        d, _ = tool(p, "builder--delivery", "Write", {"file_path": "src/app.py", "content": "ok"})   # normal work still fine
+        d, _ = tool(p, "builder--delivery", "Write", {"file_path": "src/app.py", "content": "ok"})
         assert d == "pass"
         st = json.loads((p / ".claude/settings.json").read_text())
-        assert {"Edit(/.agentbay/**)", "Edit(/.claude/**)"} <= set(st["permissions"]["deny"])   # floor for all
+        assert {"Edit(/.agentbay/**)", "Edit(/.claude/**)"} <= set(st["permissions"]["deny"])
     finally:
         cleanup(p)
 
@@ -258,7 +254,6 @@ def test_path_normalization_and_symlinks():
 def test_writes_limited_to_env_fs_write_and_kit_is_off_limits():
     p = shared()
     try:
-        # analyst's env (local-feeds) writes only .agentbay/data/feeds, which is itself control plane
         assert tool(p, "analyst--feed-briefing", "Write", {"file_path": "notes.md", "content": "x"})[0] == "deny"
         assert tool(p, "builder--delivery", "Write", {"file_path": str(KIT / "bay/guard.py"), "content": "x"})[0] == "deny"
         assert tool(p, "builder--delivery", "Write", {"file_path": "/etc/x", "content": "x"})[0] == "deny"
@@ -274,7 +269,7 @@ def test_git_file_writing_and_exec_flags_are_refused():
                     "git log --exec-path=/tmp", "git diff -- .agentbay/guard.json", "git add .claude/settings.json"):
             d, r = tool(p, "reviewer--delivery", "Bash", {"command": cmd})
             assert d == "deny" and r.returncode == 2, cmd
-        assert tool(p, "reviewer--delivery", "Bash", {"command": "git diff HEAD~1 -- src"})[0] == "pass"   # prompts
+        assert tool(p, "reviewer--delivery", "Bash", {"command": "git diff HEAD~1 -- src"})[0] == "pass"
     finally:
         cleanup(p)
 
@@ -287,11 +282,8 @@ def test_missing_agent_type_is_treated_as_an_unknown_subagent():
                       ("Read", {"file_path": ".agentbay/data/feeds/feed-briefing/corpus.db"}),
                       ("Write", {"file_path": ".agentbay/guard.json", "content": "{}"})):
             assert tool(p, None, t, ti, agent_id="a9")[0] == "deny", (t, ti)
-        # an unknown subagent may still do unrelated work
         assert tool(p, None, "Bash", {"command": "ls src"}, agent_id="a9")[0] == "pass"
-        # exact paths, not substrings: a file merely named like it is fine
         assert tool(p, "Explore", "Bash", {"command": "cat docs/agentbay-notes.md"})[0] == "pass"
-        # main thread (no agent fields): no decision from the guard; settings.json applies
         assert tool(p, None, "Bash", {"command": ".agentbay/bay call feed-briefing.sync '{}'"}, agent_id=None)[0] == "pass"
     finally:
         cleanup(p)
@@ -314,7 +306,6 @@ def test_protected_kit_dirs_when_the_project_is_the_kit():
     try:
         get("claude-code").build(system(k, k), k, k)
         pol = json.loads((k / ".agentbay/guard.json").read_text())
-        # the policy lists exactly what the kit's protected list gives (test_protection pins that list)
         assert pol["protected"] == model.Kit(KIT).protected_paths
         assert tool(k, "builder--forge--local-authoring", "Write",
                     {"file_path": "components/cos/mode.yaml", "content": "x"})[0] == "deny"
@@ -329,7 +320,7 @@ def test_protected_kit_dirs_when_the_project_is_the_kit():
         assert tool(k, "builder--forge--local-authoring", "Write", {"file_path": "bay.sh", "content": "x"})[0] == "deny"
         assert tool(k, "builder--forge--framework-dev", "Write", {"file_path": "bay/x.py", "content": "x"})[0] == "pass"
         st = json.loads((k / ".claude/settings.json").read_text())
-        assert not any(d.startswith("Edit(//") for d in st["permissions"]["deny"])   # kit inside project
+        assert not any(d.startswith("Edit(//") for d in st["permissions"]["deny"])
         from bay import lint
         assert any("reaches framework/" in w for w in lint.warnings(model.Kit(k, k)))
     finally:
@@ -359,10 +350,6 @@ def test_approve_requires_a_terminal():
         cleanup(p)
 
 
-# ---------------------------------------------------------------- round 3 (option B)
-from bay.guard import Guard  # noqa: E402
-
-
 def guard_for(p, ci=None):
     return Guard(json.loads((p / ".agentbay/guard.json").read_text()), p, ci=ci)
 
@@ -379,14 +366,14 @@ def decide(g, agent, tool_name, ti, agent_id="a1"):
 def test_b1_case_variants_on_case_insensitive_filesystem():
     p = built()
     try:
-        g = guard_for(p, ci=True)                     # simulate macOS (APFS default)
+        g = guard_for(p, ci=True)
         for path in (".AGENTBAY/guard.json", ".Agentbay/roles/briefing-analyst/use", ".CLAUDE/settings.json",
                      ".Git/config", "src/.GIT/hooks/pre-commit", "claude.MD", ".MCP.json", ".ENV.local"):
             assert decide(g, "builder--delivery", "Write", {"file_path": path, "content": "x"}) == "deny", path
         assert decide(g, "analyst--feed-briefing", "Read", {"file_path": ".AgentBay/data/feeds/feed-briefing/corpus.db"}) == "deny"
         assert decide(g, "builder--delivery", "Glob", {"pattern": ".AGENT*/**"}) == "deny"
         assert decide(g, "builder--delivery", "Write", {"file_path": "src/app.py", "content": "x"}) == "pass"
-        g = guard_for(p, ci=False)                    # case-sensitive disk: a different, harmless directory
+        g = guard_for(p, ci=False)
         assert decide(g, "builder--delivery", "Write", {"file_path": ".AGENTBAY/x.txt", "content": "x"}) == "pass"
     finally:
         cleanup(p)
@@ -398,8 +385,8 @@ def test_b1_identity_check_catches_aliases_by_inode():
         (p / "alias").symlink_to(p / ".agentbay")
         g = guard_for(p, ci=False)
         from pathlib import Path as P
-        assert g.inside(P(p / "alias" / "guard.json"), g.agentbay)            # by (st_dev, st_ino), unresolved
-        assert g.inside(P(p / "alias" / "new-file"), g.agentbay)             # tail does not exist yet
+        assert g.inside(P(p / "alias" / "guard.json"), g.agentbay)
+        assert g.inside(P(p / "alias" / "new-file"), g.agentbay)
         assert not g.inside(P(p / "src" / "x"), g.agentbay)
     finally:
         cleanup(p)
@@ -440,7 +427,7 @@ def test_safety_rule_only_the_own_shim_is_auto_allowed():
         gk = guard_for(k)
         for agent, cmd in (("builder--forge--framework-dev", "python3 tests/run.py"),
                            ("builder--forge--framework-dev", "./bay.sh check"), ("builder--forge--local-authoring", "./bay.sh check")):
-            assert decide(gk, agent, "Bash", {"command": cmd}) == "pass", cmd     # code never auto-allowed
+            assert decide(gk, agent, "Bash", {"command": cmd}) == "pass", cmd
         st = json.loads((p / ".claude/settings.json").read_text())
         assert not any(c in a for a in st["permissions"]["allow"] for c in ("bay call", "bay submit"))
         cleanup(k)
@@ -455,9 +442,9 @@ def test_sa_grep_glob_patterns_against_control_plane_probes():
         for ti in ({"pattern": ".agent*/**"}, {"pattern": "**/.agentbay/**/*.jsonl"}, {"pattern": ".claude/*.json"},
                    {"pattern": "{.agentbay,src}/**"}):
             assert decide(g, "builder--delivery", "Glob", ti) == "deny", ti
-            assert decide(g, None, "Glob", ti) == "deny", ti                  # unknown subagents too
+            assert decide(g, None, "Glob", ti) == "deny", ti
         assert decide(g, "builder--delivery", "Grep", {"pattern": "x", "glob": ".agentbay/**"}) == "deny"
-        assert decide(g, "builder--delivery", "Glob", {"pattern": ".*"}) == "deny"       # dot-glob at the project root
+        assert decide(g, "builder--delivery", "Glob", {"pattern": ".*"}) == "deny"
         assert decide(g, "builder--delivery", "Glob", {"pattern": "../.agentbay/*", "path": "src"}) == "deny"
         for ti in ({"pattern": "**/*.md"}, {"pattern": "src/**/*.py"}):
             assert decide(g, "builder--delivery", "Glob", ti) == "pass", ti
@@ -502,15 +489,13 @@ def test_se_more_git_flags_and_flag_values_are_path_checked():
                     "git diff -pOorder.txt", "git diff -RO.claude/x", "git log -pOorder.txt", "git log -pO order.txt",
                     "git diff --open-files-in-pager=vi", "git log --format=x --since=.agentbay/x",
                     "git diff --src-prefix=.claude/x",
-                    # git and argparse take any unambiguous prefix of a long option (0020 round 1)
                     "git diff --pathspec-from=list.txt", "git diff --pathspec-fr list.txt",
                     "git diff --pathspec-from-f=list.txt", "git diff --pathspec", "git log --out=x",
                     "git log --outp x", "git diff --ext-d", "git diff --text", "git log --no-in",
                     "git log --upload-p=x", "git log --rec", "git log --git-d=x", "git log --work-t=x",
                     "git log --conf=x", "git log --open-files-in", "git log --ex x",
-                    "git log -S Order -pOorder.txt"):          # -pO is a cluster with O, even after a pickaxe option
+                    "git log -S Order -pOorder.txt"):
             assert decide(g, "reviewer--delivery", "Bash", {"command": cmd}) == "deny", cmd
-        # no ordinary option is a prefix of a banned one; -S and -G take the rest of the word as their value
         for cmd in ("git log --oneline --graph --decorate", "git diff --stat --name-only --exit-code",
                     "git log --format=x --no-merges", "git log -SOrder", "git log -GOK", "git log -SNOT_FOUND",
                     "git log -S Order"):
@@ -543,43 +528,39 @@ def test_n3_worktree_add_paths_and_no_writes_without_write_tools():
         assert pol["subagents"]["builder--delivery"]["write"] == ["."]
         g = guard_for(k)
         agent = "builder--forge--framework-dev"
-        g.policy["subagents"][agent]["clis"].append("git worktree")      # as if the env granted it
+        g.policy["subagents"][agent]["clis"].append("git worktree")
         for cmd in ("git worktree add /tmp/wt", "git worktree add ../outside", "git worktree add .agentbay/wt",
                     "git worktree add -b x .claude/wt"):
             assert decide(g, agent, "Bash", {"command": cmd}) == "deny", cmd
         assert decide(g, agent, "Bash", {"command": "git worktree add -b feat bay/wt-feat"}) == "pass"
         assert decide(g, "reviewer--delivery", "Write", {"file_path": "notes.md", "content": "x"}) == "deny"
-        # 0020 item 7: git mv / git rm paths are judged like the file tools would. Columns: local-authoring, delivery,
-        # framework-dev; d = deny, p = pass, None = not asserted.
         units = ("builder--forge--local-authoring", "builder--delivery", agent)
-        for u in units:                                                   # as if the env granted them
+        for u in units:
             clis = g.policy["subagents"][u]["clis"]
             clis += [c for c in ("git mv", "git rm") if c not in clis]
         (k / "components" / "l").symlink_to("../bay")
         rows = [("git rm bay/guard.py", "d", "d", "p"), ("git rm --cached bay/guard.py", "d", "d", "p"),
-                ("git mv components/a.py bay/b.py", "d", "d", "d"),       # the destination is judged too
+                ("git mv components/a.py bay/b.py", "d", "d", "d"),
                 ("git rm components/../bay/guard.py", "d", "d", "p"), (f"git rm {k}/bay/guard.py", "d", "d", "p"),
                 ("git rm 'bay/guard.py'", "d", "d", "p"), ('git rm b"ay"/guard.py', "d", "d", "p"),
                 ("git rm -- bay/guard.py", "d", "d", "p"),
-                ("git rm -- -x", "d", "p", "d"),                          # after `--` a dash word is a path
-                ("git rm docs/a.md bay/guard.py", "d", "d", "p"),         # the bad one second
+                ("git rm -- -x", "d", "p", "d"),
+                ("git rm docs/a.md bay/guard.py", "d", "d", "p"),
                 ("git rm -r bay", "d", "d", "p"), ("git rm -r .", "d", "d", "d"),
                 ("git rm -r components/..", "d", "d", "d"),
-                ("git rm -r components", "d", "d", "d"),                  # a folder holding protected paths
+                ("git rm -r components", "d", "d", "d"),
                 ("git rm -r .github", "d", "d", "d"), ("git rm .github/workflows/ci.yml", "d", "d", "d"),
                 ("git rm CLAUDE.md", "d", "d", "d"), ("git rm Makefile", "d", "d", "d"),
                 ("git rm bay.sh", "d", "d", "d"), ("git rm .agentbay/x", "d", "d", "d"),
                 ("git rm ':/bay/guard.py'", "d", "d", "d"), ("git rm ':(top)bay/guard.py'", "d", "d", "d"),
                 ("git rm '*guard.py'", "d", "d", "d"), ("git rm 'bay/*.py'", "d", "d", "d"),
                 ("git rm 'bay/guard\\.py'", "d", "d", "d"),
-                ("git rm components/l", "d", None, None),                 # a symlink is judged by its target
-                ("git -C bay rm guard.py", "d", "d", "d"),                # not under the `git rm` prefix
+                ("git rm components/l", "d", None, None),
+                ("git -C bay rm guard.py", "d", "d", "d"),
                 ("git rm components/briefing/mode.yaml", "p", None, None),
                 ("git rm -r components/briefing", "p", None, None),
                 ("git rm tests/x.py", "d", "p", "p"), ("git mv docs/a.md docs/b.md", "d", "p", "p"),
                 ("git rm -r docs", "d", "p", "p"),
-                # 0020 round 1: git takes any unambiguous prefix of a long option, so mv/rm take only the fixed
-                # flag list (a list file named by a shortened --pathspec-from-file would reach any path)
                 ("git rm --pathspec-from=components/paths.txt", "d", "d", "d"),
                 ("git rm --pathspec-fr components/paths.txt", "d", "d", "d"),
                 ("git rm --pathspec-from-f=components/paths.txt", "d", "d", "d"),
@@ -597,8 +578,6 @@ def test_n3_worktree_add_paths_and_no_writes_without_write_tools():
                 ("git rm --force components/briefing/mode.yaml", "p", None, None),
                 ("git rm -r -f -n -q --cached --dry-run --force --quiet docs/a.md", "d", "p", "p"),
                 ("git mv -k -v -f -n docs/a.md docs/b.md", "d", "p", "p"), ("git rm -f bay/guard.py", "d", "d", "p"),
-                # `check --write` rewrites framework/limits.yaml: only a role that writes framework/ may pass it,
-                # in any spelling
                 ("./bay.sh check --limits", "p", "p", "p"), ("./bay.sh check --limits --write", "d", "d", "p"),
                 ("./bay.sh check --write --limits --base origin/main", "d", "d", "p"),
                 ("./bay.sh check --limits --wr", "d", "d", "p"), ("./bay.sh check --limits --w", "d", "d", "p"),
@@ -622,7 +601,6 @@ def test_n3_worktree_add_paths_and_no_writes_without_write_tools():
 
         assert reason("git rm bay/guard.py").startswith("agentbay: git rm bay/guard.py: ")
         assert reason("git rm --cach components/briefing/mode.yaml").startswith("agentbay: git rm --cach: only -r -f ")
-        # a read-only reviewer
         for cmd, want in (("./bay.sh check --limits --write", "deny"), ("./bay.sh check --limits", "pass")):
             assert decide(g, "reviewer--forge", "Bash", {"command": cmd}) == want, cmd
     finally:
@@ -655,7 +633,6 @@ def test_n5_fake_fixture_must_stay_inside_the_project():
 
 
 
-# ---------------------------------------------------------------- confirmation review
 def test_use_shim_does_not_import_project_files():
     """The auto-allowed shim of every unit must not import modules an agent wrote in the project (e.g. yaml.py)."""
     p = built()
@@ -665,7 +642,7 @@ def test_use_shim_does_not_import_project_files():
         shims = sorted((p / ".agentbay/roles").glob("*/use"))
         assert len(shims) > 1
         for shim in shims:
-            r = sh(p, str(shim), "items.store/v2.query", "{}")      # a unit without that grant is refused: still no import
+            r = sh(p, str(shim), "items.store/v2.query", "{}")
             assert shim.parent.name != "analyst--feed-briefing" or r.returncode == 0, r.stderr
             assert not marker.exists(), f"{shim.parent.name}: shim imported a project-root module"
             assert "python3 -E" in shim.read_text() and "python3 -c" not in shim.read_text()
@@ -717,12 +694,6 @@ def test_policy_without_auto_allow_key_prompts():
         cleanup(p)
 
 
-# ---------------------------------------------------------------- 0006 Part G: approvals from chat
-import yaml  # noqa: E402
-
-from bay import dispatch as _dispatch, ledger as _ledger  # noqa: E402
-from helpers import kit_copy  # noqa: E402
-
 CHAT_WF = {"workflows": {"morning": {"steps": [
     {"id": "sync", "call": "feed-briefing.sync", "with": {"lookback": "$in.lookback"}},
     {"id": "ship", "gate": "send the digest?"}]}}}
@@ -754,13 +725,13 @@ def test_chat_approval_is_refused_while_the_setting_is_off():
             assert _run_status(d, rid) == "awaiting-approval"
         finally:
             cleanup(p)
-    d, p, rid = _gated_run(["chat"])                                 # terminal is off when `from` leaves it out
+    d, p, rid = _gated_run(["chat"])
     try:
         r = _cli(KIT, p, rid)
         assert r.returncode != 0 and "terminal are off" in r.stderr and _run_status(d, rid) == "awaiting-approval"
     finally:
         cleanup(p)
-    for bad in ({"approvals": {"chat": True}}, {"approve": {"from": ["chat", "fax"]}}):    # `approvals` is gone
+    for bad in ({"approvals": {"chat": True}}, {"approve": {"from": ["chat", "fax"]}}):
         p = project(bad)
         try:
             r = _cli(KIT, p, "W-x", "--via", "chat", "--quote", "ok")
@@ -772,7 +743,7 @@ def test_chat_approval_is_refused_while_the_setting_is_off():
 def test_chat_approval_passes_a_workflow_gate_and_the_ledger_says_chat_with_the_quote():
     d, p, rid = _gated_run(["terminal", "chat"])
     try:
-        r = _cli(KIT, p, rid, "--via", "chat")                       # the quote is mandatory
+        r = _cli(KIT, p, rid, "--via", "chat")
         assert r.returncode != 0 and "--quote" in r.stderr and _run_status(d, rid) == "awaiting-approval"
         quote = "Yes - approve the ship gate of the morning run."
         r = _cli(KIT, p, rid, "--via", "chat", "--quote", quote)
@@ -801,7 +772,6 @@ def test_chat_approval_passes_a_call_gate_and_rejects_with_a_reason():
         r = _cli(k, k, cid2, "--via", "chat", "--quote", "no, not this one", "--reject", "--reason", "too big")
         assert r.returncode != 0 or d.show(cid2)["status"] == "blocked"
         assert d.show(cid2)["status"] == "blocked"
-        # a terminal approval without a TTY is still refused, setting on or not, and --quote needs --via chat
         cid3 = d.submit(d.call("forge.extend", {"goal": "third change"})["callId"], "propose", ok)["callId"]
         r = _cli(k, k, cid3)
         assert r.returncode != 0 and "not a TTY" in r.stderr
@@ -836,11 +806,9 @@ def test_guard_denies_bay_approve_to_every_subagent_in_any_spelling():
             for c in cmds:
                 d, r = tool(p, agent, "Bash", {"command": c})
                 assert d == "deny", (agent, c)
-        # a commit message that mentions the command is not running it
         g = guard_for(p)
         assert g.decide({"tool_name": "Bash", "tool_input": {"command": 'git commit -m "docs: bay approve --via chat"'},
                          "agent_type": "some-other-agent", "agent_id": "a1", "cwd": str(p)})[0] == "pass"
-        # the main thread is not decided by the guard: settings.json makes Claude Code ask each time
         assert tool(p, None, "Bash", {"command": ".agentbay/bay approve C-1 --via chat --quote ok"}, agent_id=None)[0] == "pass"
     finally:
         cleanup(p)
@@ -860,7 +828,6 @@ def test_no_subagent_writes_agentbay_config_yaml():
                           ("Bash", {"command": "cp x agentbay.{config,other}.yaml"})):
                 d, _ = tool(p, agent, t, ti)
                 assert d == "deny", (agent, t, ti)
-        # a glob elsewhere that cannot reach the root file is not refused for that reason
         g = guard_for(p)
         assert g.decide({"tool_name": "Bash", "tool_input": {"command": "ls framework/*.yaml"},
                          "agent_type": "some-other-agent", "agent_id": "a1", "cwd": str(p)})[0] == "pass"
@@ -869,8 +836,7 @@ def test_no_subagent_writes_agentbay_config_yaml():
 
 
 def test_no_subagent_writes_the_ledger():
-    """A recorded `bay approve` in the ledger skips forge.extend's gate for unchanged content, so no subagent may
-    forge one: .agentbay/ledger/ is not writable (or readable) by any subagent, by file tool or by Bash."""
+    """A recorded `bay approve` in the ledger skips forge.extend's gate, so no subagent may forge one."""
     p = built()
     try:
         g = guard_for(p)
@@ -887,7 +853,6 @@ def test_no_subagent_writes_the_ledger():
             for cmd in (f"echo '{ev}' >> {led}", f"tee -a {led}", f"cp /tmp/x {led}", f"sed -i 's/a/b/' {led}",
                         "python3 -c 'open(\".agentbay/ledger/events.jsonl\",\"a\")'"):
                 assert decide(g, agent, "Bash", {"command": cmd}) == "deny", (agent, cmd)
-        # the front-matter marker grants nothing any more, so writing it is not refused for that reason
         (p / "docs/proposals").mkdir(parents=True)
         approved = "---\nstatus: approved\napprovedBy: user\ndate: 2026-10-29\n---\n# x\n"
         assert decide(g, "some-other-agent", "Write", {"file_path": "docs/proposals/0001-x.md",
@@ -905,11 +870,11 @@ def test_chat_approval_of_a_proposal_is_recorded_and_skips_the_next_gate_while_u
         f.write_text("---\nstatus: approved\napprovedBy: user\ndate: 2026-10-29\ntouches: []\n---\n# chat\n")
         d = _dispatch.Dispatcher(system(k, k), k)
         inp = {"goal": "build the chat-approved proposal", "proposal": "docs/proposals/0099-chat.md"}
-        first = d.call("forge.extend", inp)            # the marker grants nothing: nothing to draft, the gate runs
+        first = d.call("forge.extend", inp)
         assert first["next"]["step"] == "approve", first
         cid = first["callId"]
         import hashlib
-        r = _cli(k, k, cid, "--via", "chat", "--quote", "approve 0099 as written")       # no --sha: refused
+        r = _cli(k, k, cid, "--via", "chat", "--quote", "approve 0099 as written")
         assert r.returncode != 0 and "--sha" in r.stderr and d.show(cid)["status"] == "awaiting-approval"
         r = _cli(k, k, cid, "--via", "chat", "--quote", "approve 0099 as written", "--sha",
                  hashlib.sha256(f.read_bytes()).hexdigest()[:12])
@@ -921,7 +886,7 @@ def test_chat_approval_of_a_proposal_is_recorded_and_skips_the_next_gate_while_u
         assert "approved by user@chat-via-cos on " in why and "content unchanged" in why, why
         f.write_text(f.read_text() + "\nedited\n")
         again = d.call("forge.extend", inp)
-        assert again["next"]["step"] == "approve", again       # any edit: the gate runs again
+        assert again["next"]["step"] == "approve", again
         assert "changed since user@chat-via-cos approved it" in again["next"]["why"]
     finally:
         cleanup(k)
@@ -936,8 +901,8 @@ def test_bay_plan_is_the_only_bay_command_a_subagent_may_run():
         ok = (f".agentbay/bay plan {tid} '{{\"outcome\": \"o\", \"todo\": []}}'", f".agentbay/bay plan {tid} --done 1")
         for c in ok:
             assert tool(p, "builder--delivery", "Bash", {"command": c})[0] in ("allow", "pass"), c
-        denied = (f".agentbay/bay plan {other} --done 1",                            # another agent's task
-                  f".agentbay/bay plan T-20261030-0000 --done 1",                    # never dispatched
+        denied = (f".agentbay/bay plan {other} --done 1",
+                  f".agentbay/bay plan T-20261030-0000 --done 1",
                   f".agentbay/bay plan {tid}", f".agentbay/bay plan {tid} --done 1 2", f".agentbay/bay plan {tid} --x",
                   ".agentbay/bay status", ".agentbay/bay note T-1 hi", ".agentbay/bay status --log", ".agentbay/bay note dispatch "
                   f"{tid} --agent builder--delivery", ".agentbay/bay submit C-1 s '{}'", f".agentbay/bay plan {tid} --done 1; ls",

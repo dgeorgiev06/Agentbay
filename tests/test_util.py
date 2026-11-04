@@ -3,8 +3,6 @@ import hashlib
 import json
 from datetime import datetime, timezone
 
-from helpers import KIT  # noqa: F401  (puts the kit on sys.path)
-
 from bay import util
 
 T = datetime(2026, 10, 27, 12, 0, tzinfo=timezone.utc)
@@ -18,7 +16,7 @@ def test_short_hash_is_the_sha256_prefix_of_a_string_or_of_sorted_json():
 
 
 def test_in_window_bounds_missing_and_bad_timestamps():
-    assert util.in_window("2026-10-27T12:00:00Z", T, T)                     # both bounds are inclusive
+    assert util.in_window("2026-10-27T12:00:00Z", T, T)
     assert not util.in_window("2026-10-27T11:59:59Z", T, None)
     assert not util.in_window("2026-10-27T12:00:01Z", None, T)
     assert util.in_window("2026-10-27T12:00:01+00:00", T, None)

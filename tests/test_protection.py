@@ -1,7 +1,4 @@
-"""Protection is declared in the component map (proposal 0008, stage 5 part F): framework/kernel.yaml `protected:`.
-The guard policy, the resolver, lint and `bay check --base` read it, a protected name is reserved, a block that is
-missing or malformed fails closed, `improve.findings/v1.decide` is ownerOnly (D4), and framework-dev names every
-protected path it may write (D9)."""
+"""Protection is declared in the component map (proposal 0008, stage 5 part F): framework/kernel.yaml `protected:`."""
 import json
 import subprocess
 import sys
@@ -15,8 +12,6 @@ from bay.adapter import get
 from bay.guard import Guard
 
 MAP = "framework/kernel.yaml"
-# The protected instances, in the order the policy lists them after the four folders: written out here, so a change to
-# the protected set of framework/kernel.yaml shows in this test.
 EXPECTED_PROTECTED = [
     "components/cos", "components/forge",
     "components/improve/envs/improve-local.yaml", "components/tools/envs/workspace.yaml",
@@ -50,12 +45,10 @@ def _built(edit=None):
     return k
 
 
-# ----------------------------------------------------------------- the guard reads the map
 def test_the_shipped_map_declares_what_the_old_fixed_list_protected():
     kit = model.Kit(KIT)
     assert not hasattr(model, "PROTECTED") and not hasattr(model, "USER_FRAMEWORK_ENVS")
     assert kit.protected.paths == ("framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED[:-1]) and not kit.protected.closed
-    # the four folders in the old order and spelling, then each protected instance where it sits (stage 5 part G)
     assert kit.protected_paths == ["framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED]
     assert set(kit.protected.names["env"]) == {e for e, d in kit.docs["Environment"].items() if d.root == "framework"}
     assert set(kit.protected.names["connector"]) == {c for c, d in kit.docs["Connector"].items() if d.root == "framework"}
@@ -71,11 +64,9 @@ def test_a_role_without_forge_extend_cannot_write_a_path_the_map_lists():
         pol, decide = _guard(k)
         assert pol["protected"] == ["framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED[:-1], "vault", EXPECTED_PROTECTED[-1]]
         put ={"file_path": "vault/key.txt", "content": "x"}
-        # workspace writes "." and delivery's builder works there, yet the map says only forge.extend may write vault/
         assert decide("Write", put, "builder--delivery") == "deny"
         assert decide("Write", {"file_path": "src/app.py", "content": "x"}, "builder--delivery") == "pass"
         assert decide("Write", put, "builder--forge--local-authoring") == "deny"
-        # forge.extend's env does not name it, so the guard denies it there too: the lint says what to add (D9)
         assert decide("Write", put, "builder--forge--framework-dev") == "deny"
         errs = lint.lint_protection(model.Kit(k, k))
         assert any("env framework-dev writes protected paths but not vault" in e for e in errs), errs
@@ -112,20 +103,20 @@ def test_lint_keeps_framework_dev_in_step_with_the_map_both_ways():
     finally:
         cleanup(k)
     k = kit_copy()
-    try:                                  # a moved instance the env stops naming is reported, with its path
+    try:
         edit_yaml(k / "components/forge/envs/framework-dev.yaml", lambda d: d["spec"]["fs"]["write"].remove("components/cos"))
         errs = lint.lint_protection(model.Kit(k, k))
         assert any("framework-dev writes protected paths but not components/cos" in e for e in errs), errs
     finally:
         cleanup(k)
     k = kit_copy()
-    try:                                  # an instance path the map no longer lists is stale in fs.write
-        assert not [e for e in lint.lint_protection(model.Kit(k, k)) if "fs.write names" in e]   # listed: fine
+    try:
+        assert not [e for e in lint.lint_protection(model.Kit(k, k)) if "fs.write names" in e]
         edit_yaml(k / MAP, lambda d: d["protected"]["mode"].remove("cos"))
         errs = lint.lint_protection(model.Kit(k, k))
         assert any("fs.write names components/cos" in e for e in errs), errs
         edit_yaml(k / MAP, lambda d: d["protected"]["mode"].append("cos"))
-        edit_yaml(k / MAP, lambda d: d["protected"]["connector"].remove("ledger"))     # a nested connector, then a nested env
+        edit_yaml(k / MAP, lambda d: d["protected"]["connector"].remove("ledger"))
         edit_yaml(k / MAP, lambda d: d["protected"]["env"].pop("improve-local"))
         errs = lint.lint_protection(model.Kit(k, k))
         for nested in ("components/improve/connectors/ledger", "components/improve/envs/improve-local.yaml"):
@@ -161,14 +152,13 @@ def test_a_stale_guard_policy_is_reported_by_check():
         ws = [w for w in lint.warnings(model.Kit(k, k)) if "guard.json" in w]
         assert len(ws) == 1 and "rebuild it" in ws[0], ws
         pol = json.loads((k / ".agentbay/guard.json").read_text())
-        pol.pop("protected")                                  # a policy without the key: the guard fails open, check says so
+        pol.pop("protected")
         (k / ".agentbay/guard.json").write_text(json.dumps(pol))
         assert [w for w in lint.warnings(model.Kit(k, k)) if "guard.json" in w]
     finally:
         cleanup(k)
 
 
-# ----------------------------------------------------------------- fail closed
 def test_a_missing_or_malformed_protected_block_fails_closed():
     bad = {
         "missing": lambda d: d.pop("protected"),
@@ -193,10 +183,9 @@ def test_a_missing_or_malformed_protected_block_fails_closed():
             kit = model.Kit(k, k)
             assert kit.protected.closed, label
             assert any("protected" in e and MAP in e for e in kit.errors), (label, kit.errors)
-            # closed means closed: every name reserved, every path covered, nobody may be placed anywhere protected
             assert kit.protected.reserved("mode", "anything") and kit.covers("src/app.py")
             assert not kit.protected.may_place("delivery", "workspace")
-            assert gaps(k), label                                    # nothing resolves
+            assert gaps(k), label
             assert any(MAP in e and "protected" in e for e in lint.run(kit=kit)), label
             try:
                 get("claude-code").build(system(k, k), k, k)
@@ -236,17 +225,14 @@ def test_a_closed_set_leaves_no_adapter_path_open_either():
         cleanup(k)
 
 
-# ----------------------------------------------------------------- reserved names
 def test_a_name_is_protected_wherever_it_sits_and_is_defined_once():
-    """Stage 5 part G: one folder per kind, so there is no second place for a protected name. The map protects an
-    instance by name wherever it sits; naming an ordinary one puts its path in the policy and asks framework-dev to
-    name it (D9); `Kit` loads no name twice."""
+    """Stage 5 part G: one folder per kind, so there is no second place for a protected name."""
     put = {"file_path": "components/post/connectors/fake/fake.py", "content": "x"}
     k = _built()
     try:
         assert model.Kit(k, k).get("Connector", "fake").root == "user"
         _, decide = _guard(k)
-        assert decide("Write", put, "builder--forge--local-authoring") == "pass"          # an ordinary connector
+        assert decide("Write", put, "builder--forge--local-authoring") == "pass"
     finally:
         cleanup(k)
     k = _built(lambda d: d["protected"]["connector"].append("fake"))
@@ -256,13 +242,13 @@ def test_a_name_is_protected_wherever_it_sits_and_is_defined_once():
         pol, decide = _guard(k)
         assert pol["protected"][-1] == "components/post/connectors/fake"
         assert decide("Write", put, "builder--forge--local-authoring") == "deny"
-        assert decide("Write", put, "builder--forge--framework-dev") == "deny"            # until framework-dev names it
+        assert decide("Write", put, "builder--forge--framework-dev") == "deny"
         errs = lint.lint_protection(kit)
         assert any("env framework-dev writes protected paths but not components/post/connectors/fake" in e for e in errs), errs
     finally:
         cleanup(k)
     k = kit_copy()
-    try:                                  # a name defined twice (an interface in both places) is an error, not a pick
+    try:
         src = k / "components/store/interfaces/items.store.v2.yaml"
         (k / "components/improve/interfaces/items.store.v2.yaml").write_text(src.read_text())
         assert any("Interface 'items.store/v2' is defined twice" in e for e in model.Kit(k).errors)
@@ -285,7 +271,6 @@ def test_a_user_mode_may_place_roles_only_in_the_protected_envs_the_map_opens_to
         cleanup(k)
 
 
-# ----------------------------------------------------------------- bay check --base
 def _git(repo, *args):
     return subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", *args],
                           check=True, capture_output=True, text=True).stdout
@@ -310,7 +295,7 @@ BASE = {"bay/cli.py": "x\n", "components/cos/mode.yaml": "x\n", "components/cos/
         "components/mail/mode.yaml": "x\n", "components/cos/envs/cos-local.yaml": "x\n", "components/feed-briefing/envs/mine.yaml": "x\n",
         "components/improve/connectors/ledger/connector.yaml": "x\n", "components/gmail/connector.yaml": "x\n",
         "adapters/claude-code/adapter.yaml": "x\n",
-        "components/feed-briefing/mode.yaml": "x\n", "components/improve/component.yaml": "x\n"}   # every folder has its manifest
+        "components/feed-briefing/mode.yaml": "x\n", "components/improve/component.yaml": "x\n"}
 
 
 def _check(change, touches=(), base=BASE, mapdoc=BOUNDARY_MAP):
@@ -326,7 +311,6 @@ def test_an_edit_to_a_protected_component_without_touches_fails_check_base():
         assert not _check({path: "y\n"}, touches=[path]).failures, path
     rep = _check({"components/cos/features/run/playbook.md": "y\n"}, touches=["components/cos/"])
     assert not rep.failures
-    # an unprotected component of the same kinds is unchanged: edits still need touches (B-2), new ones do not
     assert [f.path for f in _check({"components/mail/mode.yaml": "y\n"}).failures] == ["components/mail/mode.yaml"]
     assert not _check({"components/news/mode.yaml": "y\n", "components/news/envs/new.yaml": "y\n", "components/rss/connector.yaml": "y\n"}).failures
 
@@ -334,7 +318,7 @@ def test_an_edit_to_a_protected_component_without_touches_fails_check_base():
 def test_a_new_folder_of_a_protected_name_or_in_a_protected_folder_is_not_a_new_extension():
     base = {k: v for k, v in BASE.items() if not k.startswith(("components/cos", "components/improve"))}
     for path in ("components/cos/mode.yaml", "components/cos/envs/cos-local.yaml", "components/improve/connectors/ledger/ledger.py", "adapters/other/adapter.yaml"):
-        rep = _check({path: "y\n"}, base=base)       # an adapter is kernel-owned (B-1): never new, listed or it fails
+        rep = _check({path: "y\n"}, base=base)
         assert [f.path for f in rep.failures] == [path] and rep.failures[0].rule == ("B-1" if path.startswith("adapters") else "protected"), path
         assert path.startswith("adapters") or "only forge.extend" in rep.lines()[0] and "even when the folder is new" in rep.lines()[0]
         assert not _check({path: "y\n"}, touches=[path], base=base).failures, path
@@ -350,7 +334,6 @@ def test_a_malformed_protected_block_makes_check_base_refuse_and_the_judging_map
             raise AssertionError(bad)
         except RuntimeError as e:
             assert "protected:" in str(e), e
-    # the change that deletes the block is judged by the base's block (N-2), and the map is core: it needs touches too
     no_block = {k: v for k, v in BOUNDARY_MAP.items() if k != "protected"}
     rep = _check({MAP: yaml.safe_dump(no_block), "adapters/claude-code/adapter.yaml": "y\n"})
     assert {f.path for f in rep.failures} == {"adapters/claude-code/adapter.yaml", MAP}
@@ -358,11 +341,8 @@ def test_a_malformed_protected_block_makes_check_base_refuse_and_the_judging_map
                       touches=[MAP, "adapters/claude-code/adapter.yaml"]).failures
 
 
-# ----------------------------------------------------------------- case variants of a protected name
 def test_a_user_mode_named_cos_or_forge_in_another_case_is_stopped_everywhere():
-    """A protected name is matched exactly, but a folder `components/Cos/` is the same folder as `components/cos/` on a
-    case-insensitive filesystem. Three things stop it: `bay new` (names are lowercase), the boundary check (a
-    case-only new folder is not a new extension, F-4) and the case-collision lint on the tracked paths (F-4)."""
+    """A folder `components/Cos/` is `components/cos/` on a case-insensitive filesystem, so three checks stop it."""
     from types import SimpleNamespace
 
     from bay import scaffold
@@ -390,7 +370,6 @@ def test_a_user_mode_named_cos_or_forge_in_another_case_is_stopped_everywhere():
     assert not lint.lint_case_and_manifests(SimpleNamespace(root=_repo(base, {}, BOUNDARY_MAP)))
 
 
-# ----------------------------------------------------------------- approvals still pass the gate
 def _cli_approve(k, cid, *args):
     return subprocess.run([sys.executable, str(k / "bay/cli.py"), "approve", cid, *args, "--project", str(k)],
                           capture_output=True, text=True, input="")
@@ -403,7 +382,7 @@ def test_approval_from_chat_and_from_the_terminal_both_pass_the_gate():
         get("claude-code").build(system(k, k), k, k)
         pol, decide = _guard(k)
         assert pol["protected"] == ["framework", "bay", "schemas", "adapters", *EXPECTED_PROTECTED]
-        assert decide("Bash", {"command": ".agentbay/bay approve C-1 --via chat --quote ok"}, None) != "deny"   # the main thread relays
+        assert decide("Bash", {"command": ".agentbay/bay approve C-1 --via chat --quote ok"}, None) != "deny"
         assert decide("Bash", {"command": ".agentbay/bay approve C-1"}, "builder--forge--framework-dev") == "deny"
         d = dispatch.Dispatcher(system(k, k), k)
         ok = {"status": "done", "summary": "s"}
@@ -413,12 +392,11 @@ def test_approval_from_chat_and_from_the_terminal_both_pass_the_gate():
         assert d.show(chat)["next"]["step"] == "implement"
         tty = d.submit(d.call("forge.extend", {"goal": "another change"})["callId"], "propose", ok)["callId"]
         assert d.approve(tty, True, by="user@tty")["next"]["step"] == "implement"
-        assert _cli_approve(k, tty).returncode != 0           # a plain CLI call without a TTY is still refused
+        assert _cli_approve(k, tty).returncode != 0
     finally:
         cleanup(k)
 
 
-# ----------------------------------------------------------------- improve is an ordinary mode (part H)
 WRITERS = ("builder--forge--local-authoring", "builder--delivery")
 
 
@@ -428,14 +406,13 @@ def test_improve_is_an_ordinary_mode_while_its_env_and_connectors_stay_protected
     assert not kit.protected.reserved("mode", "improve")
     s = model.resolve(kit)
     assert [s.modes[m].root for m in ("improve", "cos", "forge", "delivery")] == ["user", "framework", "framework", "user"]
-    # D3: the env and the nine connectors stay protected; only improve (and the protected modes) may use improve-local
     assert "improve-local" in kit.protected.names["env"] and kit.protected.may_place("improve", "improve-local")
     assert not kit.protected.may_place("delivery", "improve-local") and kit.protected.may_place("delivery", "workspace")
     for c in ("improve-detect", "improve-store", "claude-transcripts", "ledger", "git", "artifact-graph"):
         assert kit.protected.reserved("connector", c), c
     assert lint.lint_protection(kit) == []
     k = kit_copy()
-    try:                                      # a user mode cannot put a role in improve-local
+    try:
         edit_yaml(k / "components/delivery/mode.yaml", lambda d: d["spec"]["roles"].update({"builder": "improve-local"}))
         assert any("works in the framework env improve-local" in g for g in gaps(k)), gaps(k)
     finally:
@@ -453,8 +430,6 @@ def test_improve_files_are_writable_like_any_user_mode_and_its_env_and_connector
             for path in ("components/improve/envs/improve-local.yaml", "components/improve/connectors/improve-store/store.py", "components/improve/connectors/improve-detect/pipeline.py",
                          "components/claude-transcripts/parser.py", "components/cos/mode.yaml", "components/forge/mode.yaml"):
                 assert decide("Write", {"file_path": path, "content": "x"}, who) == "deny", (who, path)
-        # improve's own analyst writes nothing; forge.extend's builder writes protected paths only (D9), so a change to
-        # improve goes through a mode-fix task (forge.create's builder), not forge.extend
         assert decide("Write", {"file_path": "components/improve/mode.yaml", "content": "x"}, "analyst--improve") == "deny"
         assert decide("Write", {"file_path": "components/improve/mode.yaml", "content": "x"}, "builder--forge--framework-dev") == "deny"
         assert decide("Write", {"file_path": "components/cos/mode.yaml", "content": "x"}, "builder--forge--framework-dev") == "pass"
@@ -471,14 +446,14 @@ def test_bay_new_no_longer_calls_improve_a_protected_name():
             raise AssertionError("the existing mode was overwritten")
         except scaffold.ScaffoldError as e:
             assert "protected name" not in str(e) and "already exists" in str(e), str(e)
-        scaffold.create(k, "feature", "extra", target="improve")           # a feature may be added to an ordinary mode
+        scaffold.create(k, "feature", "extra", target="improve")
         assert (k / "components/improve/features/extra").is_dir()
     finally:
         cleanup(k)
 
 
 def test_check_base_treats_a_new_improve_folder_as_a_new_extension_but_not_its_connectors_or_cos():
-    shipped = yaml.safe_load((KIT / MAP).read_text())                   # the real map, as the base's map
+    shipped = yaml.safe_load((KIT / MAP).read_text())
     change = {"components/improve/mode.yaml": "y\n", "components/cos/mode.yaml": "y\n", "components/improve/connectors/improve-store/connector.yaml": "y\n",
               "components/mine/connector.yaml": "y\n"}
     rep = boundary.check(_repo({"bay/cli.py": "x\n"}, change, shipped), "HEAD~1", "HEAD", None, [])
@@ -487,7 +462,6 @@ def test_check_base_treats_a_new_improve_folder_as_a_new_extension_but_not_its_c
     assert {f.rule for f in rep.failures} == {"protected"}
 
 
-# ----------------------------------------------------------------- D4: improve.findings decide is ownerOnly
 DECIDE = "improve.findings/v1.decide"
 
 
@@ -504,18 +478,18 @@ def _calls_decide(mode_edit):
 def test_no_step_in_any_mode_may_call_improve_findings_decide():
     assert model.Kit(KIT).get("Interface", "improve.findings/v1").spec["endpoints"]["decide"]["ownerOnly"] is True
 
-    def user_mode(k):                       # a user mode, listing the capability and `by: user@tty` as the old file could
+    def user_mode(k):
         def add(d):
             d["spec"]["needs"].append("improve.findings/v1")
             d["spec"]["features"]["research"]["steps"].append(
                 {"id": "decide", "run": DECIDE, "with": {"id": "F-1", "decision": "approve", "by": "user@tty"}})
         edit_yaml(k / "components/delivery/mode.yaml", add)
 
-    def improve_mode(k):                    # the improve mode itself
+    def improve_mode(k):
         edit_yaml(k / "components/improve/mode.yaml", lambda d: d["spec"]["features"]["backlog"]["steps"].append(
             {"id": "decide", "run": DECIDE, "with": {"id": "F-1", "decision": "approve", "by": "user@tty"}}))
 
-    def not_in_needs(k):                    # refused for what it is, not for a missing `needs`
+    def not_in_needs(k):
         edit_yaml(k / "components/delivery/mode.yaml", lambda d: d["spec"]["features"]["research"]["steps"].append(
             {"id": "decide", "run": DECIDE}))
 
@@ -534,7 +508,7 @@ def test_bay_approve_of_a_backlog_item_from_a_terminal_still_works_and_the_owner
     try:
         scan(D(p))
         fid = findings(p)[0]["id"]
-        D(p).run_capability("improve", DECIDE, {"id": fid, "decision": "approve", "by": "user@tty"})   # the owner's command
+        D(p).run_capability("improve", DECIDE, {"id": fid, "decision": "approve", "by": "user@tty"})
         assert [f for f in findings(p) if f["id"] == fid][0]["status"] == "approved"
     finally:
         cleanup(p)

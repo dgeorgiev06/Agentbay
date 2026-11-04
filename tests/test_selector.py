@@ -1,6 +1,4 @@
-"""Selectors: one shared matcher (AND within, OR across, `not` excludes), the native/local split by a source's
-capability table, and validate: errors for fields a source cannot express, warnings for local-only fields
-on paid sources."""
+"""Selectors: one shared matcher (AND within, OR across, `not` excludes) and the native/local split by source."""
 import subprocess
 import sys
 
@@ -26,7 +24,7 @@ def test_fields_are_anded_values_ored_and_case_insensitive():
     assert m(POST, {"id": "a", "from": "@vitalik", "text": "STAKING"})
     assert not m(POST, {"id": "a", "from": "vitalik", "text": "solana"})
     assert m(POST, {"id": "a", "from": ["lido", "vitalik"]})
-    assert m(POST, {"id": "a"})                                       # no fields: everything
+    assert m(POST, {"id": "a"})
     assert m(POST, {"id": "a", "in": "list:9"}) and m(POST, {"id": "a", "in": ["HOME"]})
     assert not m(POST, {"id": "a", "in": "list:10"})
     assert m(POST, {"id": "a", "has": "link"}) and not m(POST, {"id": "a", "has": "attachment"})
@@ -37,12 +35,12 @@ def test_fields_are_anded_values_ored_and_case_insensitive():
 def test_email_fields_and_not():
     assert m(MAIL, {"id": "a", "from": "bank.example"}) and m(MAIL, {"id": "a", "from": "@bank.example"})
     assert m(MAIL, {"id": "a", "from": "alice@bank.example"}) and not m(MAIL, {"id": "a", "from": "bank"})
-    assert m(MAIL, {"id": "a", "to": "me.example"}) and m(MAIL, {"id": "a", "to": "ops@bank.example"})   # cc counts
+    assert m(MAIL, {"id": "a", "to": "me.example"}) and m(MAIL, {"id": "a", "to": "ops@bank.example"})
     assert m(MAIL, {"id": "a", "subject": "pilot", "in": "work", "has": "attachment"})
-    assert not m(MAIL, {"id": "a", "subject": "review"})              # subject is the title only
-    assert m(MAIL, {"id": "a", "text": "review"})                     # text covers title and body
+    assert not m(MAIL, {"id": "a", "subject": "review"})
+    assert m(MAIL, {"id": "a", "text": "review"})
     assert not m(MAIL, {"id": "a", "from": "bank.example", "not": {"subject": "pilot"}})
-    assert not m(MAIL, {"id": "a", "not": {"from": "nobody", "in": "INBOX"}})      # any `not` field excludes
+    assert not m(MAIL, {"id": "a", "not": {"from": "nobody", "in": "INBOX"}})
     assert m(MAIL, {"id": "a", "not": {"from": "nobody", "in": "Spam"}})
     assert sel.match_ids(MAIL, [{"id": "x", "in": "work"}, {"id": "y", "in": "spam"}, {"id": "z"}], NOW) == ["x", "z"]
 
@@ -52,7 +50,7 @@ def test_split_by_capability_table():
     native, local = sel.split({"id": "a", "from": "v", "in": "home", "text": "t", "since": "2d",
                                "not": {"from": "spam"}}, caps)
     assert native == {"from": "v", "in": "home", "since": "2d"} and local == {"text": "t", "not": {"from": "spam"}}
-    assert sel.native_key(native) == sel.native_key({"in": ["home"], "from": "v"})      # since is not part of the key
+    assert sel.native_key(native) == sel.native_key({"in": ["home"], "from": "v"})
     assert sel.native_key({}) == "{}"
 
 
@@ -86,12 +84,12 @@ def test_validate_reports_unexpressible_fields_and_paid_local_fields():
 
 def test_casefold_wildcards_only_in_from_to_and_has_enum():
     ger = dict(POST, author={"handle": "Straße"}, text="GROSSE Nachricht")
-    assert m(ger, {"id": "a", "from": "STRASSE"}) and m(ger, {"id": "a", "from": "straße"})   # ß casefolds to ss
-    assert m(ger, {"id": "a", "text": "große"})                        # casefold: ß == ss
+    assert m(ger, {"id": "a", "from": "STRASSE"}) and m(ger, {"id": "a", "from": "straße"})
+    assert m(ger, {"id": "a", "text": "große"})
     assert m(MAIL, {"id": "a", "from": "*@bank.example"}) and m(MAIL, {"id": "a", "from": "ali*"})
     assert m(MAIL, {"id": "a", "to": "*.example"}) and not m(MAIL, {"id": "a", "from": "*@other.example"})
-    assert not m(MAIL, {"id": "a", "from": "a.ice@bank.example"})      # `.` is literal, not a regex
-    assert not m(MAIL, {"id": "a", "subject": "q4*"})                  # no wildcards outside from/to
+    assert not m(MAIL, {"id": "a", "from": "a.ice@bank.example"})
+    assert not m(MAIL, {"id": "a", "subject": "q4*"})
     from helpers import model
     sch = model.inline_refs(model.data_schema("selector/v1"))
     assert model.schema_errors({"id": "a", "has": ["link", "attachment"]}, sch) == []
@@ -108,9 +106,9 @@ def test_glob_is_linear_with_many_stars_on_long_strings():
     assert sel.glob("*@bank.example", "alice@bank.example") and sel.glob("a*e", "ae") and sel.glob("*", "")
     assert sel.glob("a*b*c", "aXbYc") and not sel.glob("a*b*c", "aXcYb") and not sel.glob("ab*ba", "aba")
     assert sel.glob("**x**", "x") and sel.glob("news*", "news") and not sel.glob("news", "newsroom")
-    assert sel.glob("a.b", "a.b") and not sel.glob("a.b", "axb")                      # `.` is literal
+    assert sel.glob("a.b", "a.b") and not sel.glob("a.b", "axb")
     t0 = time.monotonic()
-    for pattern, text, want in (("*a" * 200 + "*b", "a" * 50_000, False),           # regex: catastrophic
+    for pattern, text, want in (("*a" * 200 + "*b", "a" * 50_000, False),
                                 ("*a" * 200 + "*", "a" * 50_000, True),
                                 ("a*" * 2_000 + "c", "ab" * 50_000, False),
                                 ("*" * 5_000 + "x", "y" * 100_000 + "x", True)):
@@ -123,16 +121,15 @@ def test_wildcard_values_are_matched_locally_never_sent_to_the_source():
     caps = {"from": "native", "in": "native", "since": "native", "text": "local"}
     assert sel.split({"id": "a", "from": "vit*", "in": "home"}, caps) == ({"in": "home"}, {"from": "vit*"})
     assert sel.split({"id": "a", "from": ["lido", "*@bank.example"]}, caps) == \
-        ({}, {"from": ["lido", "*@bank.example"]})                    # values are ORed: the whole field goes local
+        ({}, {"from": ["lido", "*@bank.example"]})
     assert sel.split({"id": "a", "from": "lido"}, caps)[0] == {"from": "lido"}
     errs, warns = sel.check([{"id": "a", "from": "vit*"}], caps, connector="x-api", paid=True, where="here")
     assert errs == [] and len(warns) == 1
     assert "field `from` has a `*` value, which x-api cannot search natively, so the native query is empty and " \
         "becomes x-api's default stream (the home timeline on X); `from` is matched locally" in warns[0]
     _, warns = sel.check([{"id": "a", "from": "vit*", "in": "home"}], caps, connector="x-api", paid=True, where="h")
-    assert "so it is matched locally" in warns[0] and "default stream" not in warns[0]   # `in` stays native
+    assert "so it is matched locally" in warns[0] and "default stream" not in warns[0]
     assert sel.check([{"id": "a", "from": "vit*"}], caps, connector="fake", paid=False, where="here") == ([], [])
-    # fake: `from: vit*` used to fetch nothing (the source got the pattern as a handle)
     from bay import connect
     p = project()
     st = connect.instantiate(system(p), "local-feeds", "corpus-store", "items.store/v2", p,
@@ -166,8 +163,7 @@ def test_wildcard_from_on_x_reads_the_home_timeline_and_validate_warns():
 
 
 def test_x_from_combined_with_in_on_a_paid_source_warns_in_validate():
-    """x-api fetches `from` natively (user timeline) only without `in`; together it reads the `in` stream and
-    matches `from` locally (capability `localWith: [in]`), so every post of that stream is billed."""
+    """x-api fetches `from` natively only without `in`; with both it reads the `in` stream, so every post is billed."""
     caps = {"from": {"mode": "native", "localWith": ["in"]}, "in": "native", "since": "native"}
     _, warns = sel.check([{"id": "a", "from": "vitalik", "in": "list:9"}], caps, connector="x-api", paid=True,
                          where="here")
@@ -175,7 +171,7 @@ def test_x_from_combined_with_in_on_a_paid_source_warns_in_validate():
     assert "Split it into two selectors" in warns[0]
     assert sel.check([{"id": "a", "from": "vitalik"}], caps, connector="x-api", paid=True, where="here") == ([], [])
     assert sel.check([{"id": "a", "from": "v", "in": "home"}], caps, connector="fake", paid=False,
-                     where="here") == ([], [])                                      # free source: no warning
+                     where="here") == ([], [])
     p = project({"modes": {"feed-briefing": {"selectors": [{"id": "s", "from": "vitalik", "in": "list:9"}]}}},
                 source="x-api")
     s = system(p)

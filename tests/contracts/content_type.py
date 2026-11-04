@@ -1,13 +1,4 @@
-"""The content type contract (the loader's ContentType kind): what every folder
-components/<name>/ holding a content-type.yaml must satisfy, run by tests/test_content_types.py against each type the kit finds.
-
-    check(root, name) -> list of problems (empty: the contract holds)
-
-A type loads (shape, fields schema, views.sql, derive.py with standard imports only), has a README, ships fixtures
-that validate against its fields schema, and its views build under the sandbox's read-only rules, document the
-columns they have and return one row per fixture item of the kind when they are item views. Over the fixtures its
-derive returns exactly the declared `derived` keys, each child table holds a row per list element without the
-fields it moves out, and the rows go with their item."""
+"""The content type contract: what every content-type folder must satisfy, checked by test_content_types."""
 from __future__ import annotations
 
 import importlib.util
@@ -24,7 +15,7 @@ STORE = Path(__file__).resolve().parents[2] / "components" / "store" / "connecto
 def _store_module():
     spec = importlib.util.spec_from_file_location("contract_corpus_store", STORE)
     mod = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = mod            # its dataclasses look their module up here
+    sys.modules[spec.name] = mod
     spec.loader.exec_module(mod)
     return mod
 

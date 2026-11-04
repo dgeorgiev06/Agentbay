@@ -19,7 +19,7 @@ def test_submit_is_refused_without_a_recorded_outcome_and_accepted_after_bay_pla
             d.submit_strict(cid, "propose", ok)
         tid = "T-20261030-aaaa"
         ledger.append(k, "agent.dispatch", tid, source="coordinator", taskId=tid, callId=cid, step="propose", agent="b")
-        with pytest.raises(dispatch.CallError, match="recorded no outcome"):      # dispatched, but no plan yet
+        with pytest.raises(dispatch.CallError, match="recorded no outcome"):
             d.submit_strict(cid, "propose", ok)
         ledger.record_plan(k, tid, {"outcome": "o", "todo": [{"text": "t", "serves": "s"}]})
         assert d.submit_strict(cid, "propose", ok)["next"]["step"] == "approve"
@@ -50,10 +50,8 @@ def test_a_plan_of_another_step_or_call_does_not_count():
         ledger.record_plan(k, tid, {"outcome": "o", "todo": [{"text": "t", "serves": "s"}]})
         with pytest.raises(dispatch.CallError, match="recorded no outcome"):
             d.submit_strict(cid, "propose", {"status": "done", "summary": "s"})
-        # naming that taskId in the result block does not borrow its plan: it was dispatched to another call
         with pytest.raises(dispatch.CallError, match="recorded no outcome"):
             d.submit_strict(cid, "propose", {"status": "done", "summary": "s", "taskId": tid})
-        # nor one dispatched to another step of this call
         t2 = "T-20261030-eeee"
         ledger.append(k, "agent.dispatch", t2, source="coordinator", taskId=t2, callId=cid, step="implement", agent="b")
         ledger.record_plan(k, t2, {"outcome": "o", "todo": [{"text": "t", "serves": "s"}]})
@@ -68,7 +66,7 @@ def test_a_later_spawn_record_does_not_override_the_coordinators_dispatch():
     try:
         tid = "T-20261030-abab"
         ledger.append(k, "agent.dispatch", tid, source="coordinator", taskId=tid, callId="C-other", step="propose", agent="b")
-        ledger.append(k, "spawned", tid, source="hook", taskId=tid, agent="b")      # no call: would pass if it won
+        ledger.append(k, "spawned", tid, source="hook", taskId=tid, agent="b")
         ledger.record_plan(k, tid, {"outcome": "o", "todo": [{"text": "t", "serves": "s"}]})
         assert ledger.dispatched_agent(ledger.read(k), tid)["callId"] == "C-other"
         with pytest.raises(dispatch.CallError, match="recorded no outcome"):
@@ -84,10 +82,10 @@ def test_a_steps_submit_closes_every_run_dispatched_to_that_call_and_step():
         for t, call in ((a, cid), (b, cid), (other, "C-other")):
             ledger.append(k, "agent.dispatch", t, source="coordinator", taskId=t, callId=call, step="propose", agent="b")
         ledger.record_plan(k, a, {"outcome": "o", "todo": [{"text": "t", "serves": "s"}]})
-        d.submit_strict(cid, "propose", {"status": "done", "summary": "s"})      # only `a` ran; `b` was a sibling
+        d.submit_strict(cid, "propose", {"status": "done", "summary": "s"})
         state = {r.task_id: r.state for r in ledger.fold(ledger.read(k)).values()}
         assert state[a] == "done" and state[b] == "done"
-        assert state[other] == "running"                                          # another call's run stays open
+        assert state[other] == "running"
     finally:
         cleanup(k)
 
@@ -96,7 +94,7 @@ def test_a_result_taskid_counts_when_its_dispatch_names_this_call_and_step_or_no
     k, d, cid = _at_propose()
     try:
         tid = "T-20261030-ffff"
-        ledger.append(k, "agent.dispatch", tid, source="coordinator", taskId=tid, agent="b")      # no callId logged
+        ledger.append(k, "agent.dispatch", tid, source="coordinator", taskId=tid, agent="b")
         ledger.record_plan(k, tid, {"outcome": "o", "todo": [{"text": "t", "serves": "s"}]})
         assert d.submit_strict(cid, "propose", {"status": "done", "summary": "s", "taskId": tid})["next"]["step"] == "approve"
     finally:
@@ -104,8 +102,7 @@ def test_a_result_taskid_counts_when_its_dispatch_names_this_call_and_step_or_no
 
 
 def test_plan_ownership_is_per_agent_type_not_per_run():
-    """`bay plan` takes any logged dispatch's taskId: the CLI has no caller identity, so there is no per-run check
-    (the guard limits a subagent to `bay plan`; the dispatch record ties the plan to its call and step)."""
+    """`bay plan` takes any logged dispatch's taskId because the CLI has no caller identity."""
     import inspect
     assert "agent" not in inspect.signature(ledger.record_plan).parameters
     assert "agent" not in inspect.signature(ledger.record_done).parameters
@@ -114,7 +111,7 @@ def test_plan_ownership_is_per_agent_type_not_per_run():
         a, b = "T-20261030-1111", "T-20261030-2222"
         for t in (a, b):
             ledger.append(k, "agent.dispatch", t, source="coordinator", taskId=t, callId=cid, step="propose", agent="same-type")
-        ledger.record_plan(k, b, {"outcome": "o", "todo": [{"text": "t", "serves": "s"}]})      # a sibling's plan
+        ledger.record_plan(k, b, {"outcome": "o", "todo": [{"text": "t", "serves": "s"}]})
         ledger.record_done(k, b, 1)
         with pytest.raises(ledger.PlanError, match="not dispatched"):
             ledger.record_plan(k, "T-20261030-9999", {"outcome": "o", "todo": [{"text": "t", "serves": "s"}]})

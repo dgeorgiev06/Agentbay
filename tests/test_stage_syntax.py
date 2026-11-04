@@ -1,11 +1,4 @@
-"""Golden baseline of the two stage syntaxes (proposal 0008, stage 5 part A): the `when` / `with` / `gate` forms of a
-mode feature's steps (schemas/mode.schema.json + model._feature_steps, run by Dispatcher._skip) and of a project
-workflow's stages (schemas/config.schema.json + workflows.structure_problems, run by workflow_runner._advance), each
-form with what the validator says today (accepted or the message) and, for `when`, what the runner does with it on
-given data. tests/golden/stages.json was generated from the code before stage 5 unified the syntax; part E changes
-only the rows its decisions D6 to D8 name. A failing compare means a behavior changed (see golden_util).
-
-Stage ids are `a` then `b` in both syntaxes, so one list of forms serves both."""
+"""Golden baseline of the two stage syntaxes: `when` / `with` / `gate` in feature steps and workflow stages."""
 from __future__ import annotations
 
 import json
@@ -59,7 +52,6 @@ ADVANCE_ROWS = [
 ]
 
 
-# ------------------------------------------------------------------------------------------------ project workflows
 def project_result(steps: list) -> dict:
     p = project({"workflows": {"w": {"steps": steps}}})
     try:
@@ -90,7 +82,6 @@ def project_tables() -> dict:
     return {"when": when, "gateWithWhen": gate, "with": with_, "undeclaredInput": undeclared}
 
 
-# ------------------------------------------------------------------------------------------------ mode features
 ROLE = {"role": "builder", "out": "Result", "task": "Do it and return a Result."}
 
 
@@ -121,7 +112,6 @@ def feature_tables() -> dict:
         cleanup(k)
 
 
-# ------------------------------------------------------------------------------------------------ what the runners do
 def dispatcher_skip() -> list:
     p = project()
     try:
@@ -130,7 +120,7 @@ def dispatcher_skip() -> list:
         for when, inp, steps in SKIP_ROWS:
             try:
                 got = workflows.skip(when, inp, steps)
-            except Exception as e:                                  # recorded: what an unparsed form does
+            except Exception as e:
                 got = f"{type(e).__name__}: {e}"
             out.append({"when": when, "input": inp, "steps": steps, "skipped": got})
         for when, status in STALE_ROWS:
@@ -166,11 +156,7 @@ def runner_advance() -> list:
     return out
 
 
-# ------------------------------------------------------------------------------------------------ the documented deltas
-# stage 5 part E (proposal 0008 D6 to D8) changed the syntax in two ways. tests/golden/stages.json stays as the
-# untouched code produced it: the rows named here are checked against their new value, put back to the golden's
-# value, and PATTERN_TEXT is undone in the messages that quote a schema pattern; everything else must equal the golden.
-OLD_PATTERNS = {                         # what a schema error quoted before part E -> the same pattern now
+OLD_PATTERNS = {
     r"^\$(in|steps)\.[A-Za-z][A-Za-z0-9-]*(\.[A-Za-z][A-Za-z0-9-]*)*$": workflows.WHEN_PATTERN,
     r"^(stale\s*>\s*[0-9]+[mhdw]|!?approved\s+\$in\.[A-Za-z][A-Za-z0-9]*|!?\$in\.[A-Za-z][A-Za-z0-9]*"
     r"|!?\$steps\.[a-z][a-z0-9-]*\.[A-Za-z][A-Za-z0-9]*)$": workflows.FEATURE_WHEN_PATTERN,
@@ -213,7 +199,7 @@ EXPECTED_DELTAS = {
     **{("feature", "when", f): {"was": True, "now": refused_when_row(f), "why": D9}
        for f in ("approved $in.f", "!approved $in.f")},
 }
-EXPECTED_RUNNER_DELTAS = {          # (when, input, output) -> (was, now): the project `when` the schema used to refuse
+EXPECTED_RUNNER_DELTAS = {
     ("!$in.x", '{"x": 0}', "{}"): ("rejected by the config schema", {"stage": "b", "status": "stage-ready"}),
     ("!$steps.a.x", "{}", '{"x": 0}'): ("rejected by the config schema", {"stage": "b", "status": "stage-ready"}),
 }
@@ -232,8 +218,8 @@ def undo_pattern_text(node):
     return node
 
 
-PATH_DELTA = ("<kit>/modes/delivery/mode.yaml", "<kit>/components/delivery/mode.yaml")   # 0010 part 1: modes/ became components/
-PATH_DELTA_ROWS = 17                  # messages that still quote the new path after the named deltas put back 6 golden rows (23 in all)
+PATH_DELTA = ("<kit>/modes/delivery/mode.yaml", "<kit>/components/delivery/mode.yaml")
+PATH_DELTA_ROWS = 17
 
 
 def undo_path_delta(got: dict) -> dict:
@@ -268,11 +254,10 @@ def test_stage_syntax_table():
     compare("stages", undo_expected_deltas(json.loads(json.dumps(got, sort_keys=True))))
 
 
-# ------------------------------------------------------------------------------------------------ one parser (D6, D8)
 def test_the_reference_grammar_is_spelled_once_and_the_schemas_equal_it():
     root = KIT / "bay"
-    shipped = [KIT / p for p in Kit(KIT).protected_paths if (KIT / p / "connector.yaml").exists()]    # scanned before the move
-    shipped.append(KIT / "components/store/connectors/corpus-store")        # inside the protected folder components/store
+    shipped = [KIT / p for p in Kit(KIT).protected_paths if (KIT / p / "connector.yaml").exists()]
+    shipped.append(KIT / "components/store/connectors/corpus-store")
     assert len(shipped) == 7, shipped
     files = [*root.glob("*.py"), *(f for d in shipped for f in d.glob("*.py")), *(KIT / "adapters").glob("*/*.py")]
     spelled = [str(f.relative_to(KIT)) for f in files if re.search(r"\\\$\(?(\?:)?(in|steps)", f.read_text())]
@@ -298,14 +283,13 @@ def test_the_dispatcher_and_the_cursor_share_one_skip_rule_and_one_substitution(
             mv = workflows.advance(stages, 1, inp, steps)
             skipped = workflows.skip(when, inp, steps)
             assert (mv.kind == "done") == skipped and (mv.skipped == ["b"]) == skipped, (when, inp, steps)
-    sub = lambda ref, steps: workflows.substitute({"v": ref}, {}, steps, {})   # `*` maps the rest of a path over a list
+    sub = lambda ref, steps: workflows.substitute({"v": ref}, {}, steps, {})
     assert sub("$steps.p.items.*.id", {"p": {"items": [{"id": "a"}, {"x": 1}, {"id": "b"}]}}) == {"v": ["a", "b"]}
     assert sub("$steps.p.items.*.id", {"p": {"items": []}}) == {"v": []}
     assert sub("$steps.p.items.*.id", {"p": {}}) == {}
     assert sub("$steps.p.d.*", {"p": {"d": {"*": 7}}}) == {"v": 7}
 
 
-# ------------------------------------------------------------------------------------------------ D7: a gate takes no when
 def gate_config(when) -> dict:
     return {"workflows": {"w": {"steps": [call("a"), {"id": "g", "gate": "ship it?", "when": when}, call("c")]}}}
 

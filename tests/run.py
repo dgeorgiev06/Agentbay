@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Stdlib test runner: python3 tests/run.py [FILE ...] [-k substring] [-q] [-j N]. Also runs under pytest.
-
-FILE names test files to run (a path or a name such as test_lint); none runs them all. -q prints only failures (with
-their traceback) and the summary. Files run in parallel, one worker per CPU (-j N sets the number, -j 1 runs them in
-order in this process); the tests of one file always run in order, and output comes out in file order."""
+"""Stdlib test runner: python3 tests/run.py [FILE ...] [-k substring] [-q] [-j N]. Also runs under pytest."""
 from __future__ import annotations
 
 import contextlib
@@ -39,12 +35,22 @@ def files() -> list[Path]:
         + sorted(KIT.glob("adapters/*/tests/test_*.py"))
 
 
+@contextlib.contextmanager
+def on_path(folder: Path):
+    """Put a folder first on sys.path while a test file runs, so it can import the modules beside it."""
+    sys.path.insert(0, str(folder))
+    try:
+        yield
+    finally:
+        sys.path.remove(str(folder))
+
+
 def run_file(f: Path, k: str, quiet: bool) -> tuple[str, int, int, int, list[tuple[float, str]]]:
     """Run one file's tests in order: (its output, passed, failed, skipped, [(seconds, name)])."""
     passed = failed = skipped = 0
     times: list[tuple[float, str]] = []
     buf = io.StringIO()
-    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf), on_path(f.parent):
         spec = importlib.util.spec_from_file_location(f"t_{f.parent.parent.name}_{f.stem}", f)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)

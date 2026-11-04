@@ -1,6 +1,4 @@
-"""Roles: five framework roles, placed per mode in an env by the mode's `roles:` map; access comes from the
-mode's `needs`; each (role, mode, env) compiles to its own subagent, use shim, guard entry and store; one agent
-profile maps tiers to models."""
+"""Roles: five framework roles placed per mode in an env, each compiled to its own subagent and guard entry."""
 import json
 import re
 import shutil
@@ -53,8 +51,8 @@ def test_shipped_roles_are_five_generic_framework_roles_without_data_access():
     kit = model.Kit(KIT)
     assert set(kit.docs["Role"]) == {"lead", "analyst", "researcher", "builder", "reviewer"}
     assert all(d.root == "framework" and "uses" not in d.spec for d in kit.docs["Role"].values())
-    assert model.resolve(kit).roles["builder"].isolation == "none"                      # works in the checkout itself
-    assert [d.name for d in kit.docs["Role"].values() if d.spec.get("access") == "write"] == ["builder", "lead"]   # lead: forge.extend's plan step
+    assert model.resolve(kit).roles["builder"].isolation == "none"
+    assert [d.name for d in kit.docs["Role"].values() if d.spec.get("access") == "write"] == ["builder", "lead"]
 
 
 def test_access_comes_from_the_mode_needs_through_the_env():
@@ -66,8 +64,8 @@ def test_access_comes_from_the_mode_needs_through_the_env():
     assert {x.rsplit(".", 1)[0] for x in imp.bay_uses} == {"improve.findings/v1", "session.events/v1",
                                                             "review.verdicts/v1", "artifacts.read/v1"}
     assert "improve.findings/v1.upsert" not in imp.bay_uses and "improve.findings/v1.verify" not in imp.bay_uses
-    assert not any(x.startswith("improve.detect/") for x in imp.bay_uses)           # dispatcherOnly
-    assert feed.tools == ["Bash"] and "Edit" not in imp.tools                          # read-only roles
+    assert not any(x.startswith("improve.detect/") for x in imp.bay_uses)
+    assert feed.tools == ["Bash"] and "Edit" not in imp.tools
     assert "Edit" in u["builder--delivery"].tools and "Edit" not in u["reviewer--delivery"].tools
     assert "WebSearch" in u["researcher--delivery"].tools and "WebSearch" not in u["builder--delivery"].tools
     p = project()
@@ -103,7 +101,6 @@ def test_one_reader_role_in_two_modes_and_envs_compiles_separately_with_separate
     pol = json.loads((p / ".agentbay/guard.json").read_text())["subagents"]
     assert pol["analyst--news-briefing"]["mode"] == "news-briefing" and pol["analyst--news-briefing"]["env"] == "local-news"
     assert pol["analyst--feed-briefing"]["shim"] != pol["analyst--news-briefing"]["shim"]
-    # each runs the other's shim only through Claude Code's normal deny (not its own shim, not a CLI prefix)
     from bay.guard import Guard
     g = Guard(json.loads((p / ".agentbay/guard.json").read_text()), p, ci=False)
     payload = {"agent_type": "analyst--feed-briefing", "agent_id": "a1", "tool_name": "Bash", "cwd": str(p),
@@ -111,7 +108,6 @@ def test_one_reader_role_in_two_modes_and_envs_compiles_separately_with_separate
     assert g.decide(payload)[0] == "deny"
     payload["tool_input"]["command"] = ".agentbay/roles/analyst--feed-briefing/use items.store/v2.query '{}'"
     assert g.decide(payload)[0] == "allow"
-    # separate stores: each mode syncs into its env's data folder and each shim reads only its own
     d = dispatch.Dispatcher(s, p, clock=clock)
     assert call(d, "feed-briefing.sync")["status"] == "done" and call(d, "news-briefing.sync")["status"] == "done"
     assert (p / ".agentbay/data/feeds/feed-briefing/corpus.db").exists()
@@ -129,7 +125,6 @@ def test_one_reader_role_in_two_modes_and_envs_compiles_separately_with_separate
     reads = [json.loads(x) for x in (p / ".agentbay/ledger/events.jsonl").read_text().splitlines() if '"data.read"' in x]
     assert {(e["role"], e["mode"], e["env"]) for e in reads} >= {("analyst", "feed-briefing", "local-feeds"),
                                                                  ("analyst", "news-briefing", "local-news")}
-    # a digest step plan runs the unit of its own mode
     plan = call(d, "news-briefing.digest")["next"]
     assert plan["runAs"] == "subagent_type=analyst--news-briefing" and plan["env"] == "local-news"
     assert all("/analyst--news-briefing/use " in t for t in plan["tools"])
@@ -153,8 +148,6 @@ def test_a_step_override_runs_one_role_in_two_envs_within_one_mode():
     assert (p / ".agentbay/roles/analyst--feed-briefing--local-news/use").exists()
     d = dispatch.Dispatcher(s, p, clock=clock)
     call(d, "feed-briefing.sync")
-    # each unit reads the store of its own env: nothing was synced in local-news, so that unit finds an empty
-    # store (and is told to sync), never the other env's items
     feed = d.use("analyst--feed-briefing--local-feeds", "items.store/v2.query", {})["items"]
     assert feed
     news = d.use("analyst--feed-briefing--local-news", "items.store/v2.query", {})
@@ -196,7 +189,6 @@ def test_swapping_the_agent_profile_changes_only_the_model_names():
     assert any("agent profile 'nope' not found" in g for g in gaps(k, project({"agent": "nope"})))
 
 
-# ------------------------------------------------------------------ grants, envs and tier caps
 NOTES_IFACE = """apiVersion: agentbay/v4
 kind: Interface
 metadata: { name: notes.edit, description: notes }
@@ -224,7 +216,6 @@ def test_a_read_capability_never_gives_read_roles_write_tools_or_paths():
                           f"status, git diff, git log, git show, ./bay.sh check, python3 tests/run.py "
                           f"belong under a capability with the write effect "
                           f"(e.g. workspace.write/v1)") for p in ps), ps
-    # even without lint (bay build does not lint), read-only roles get neither the tools nor write paths
     p = project(source="x-api")
     s = system(p, k)
     for unit in ("analyst--feed-briefing", "reviewer--feed-briefing"):
@@ -233,7 +224,7 @@ def test_a_read_capability_never_gives_read_roles_write_tools_or_paths():
     get("claude-code").build(s, p, k)
     pol = json.loads((p / ".agentbay/guard.json").read_text())["subagents"]
     assert pol["analyst--feed-briefing"]["write"] == [] and pol["reviewer--feed-briefing"]["write"] == []
-    assert pol["builder--delivery"]["write"] == ["."]                                # access: write keeps them
+    assert pol["builder--delivery"]["write"] == ["."]
     fm = (p / ".claude/agents/analyst--feed-briefing.md").read_text().split("---")[1]
     assert "Edit" not in fm and "Write" not in fm
 
@@ -254,11 +245,10 @@ def test_user_modes_may_not_put_roles_in_framework_envs_other_than_workspace_and
     assert_gap(k, "mode spy: role analyst works in the framework env improve-local (spy.look step a)",
                "user modes may put roles only in their own envs (components/<name>/envs/) or the framework envs plan-writer and workspace and research")
     assert_gap(k, "mode spy: role lead works in the framework env improve-local")
-    # workspace and research stay open to user modes (delivery uses both); framework modes are unaffected
     assert system(None).modes["delivery"].roles == {"researcher": "research", "builder": "workspace",
                                                     "reviewer": "workspace"}
     assert system(None).units()["analyst--improve"].env == "improve-local"
-    assert system(None).units()["lead--forge--framework-dev--step"].inference.model == "opus"    # the plan step's tier, not the role's
+    assert system(None).units()["lead--forge--framework-dev--step"].inference.model == "opus"
 
 
 def test_a_units_default_tier_is_checked_against_the_env_cap():
@@ -282,8 +272,8 @@ def test_lint_warns_when_a_partial_roles_override_splits_a_store_reading_mode():
     assert any(f"components/news-briefing/mode.yaml:{line}: mode news-briefing puts role reviewer in env local-feeds, whose "
                "items.store/items.source bindings differ from env local-news, where its code steps (sync, "
                "prune) run" in w for w in ws), ws
-    assert not any("mode feed-briefing puts role" in w for w in lint.warnings(model.Kit(KIT)))   # shipped: no split
-    assert lint.run(k) == []                                                                       # a warning only
+    assert not any("mode feed-briefing puts role" in w for w in lint.warnings(model.Kit(KIT)))
+    assert lint.run(k) == []
 
 
 def test_lint_reports_an_unknown_env_in_a_roles_map_with_file_and_line():

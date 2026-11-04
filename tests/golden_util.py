@@ -1,6 +1,4 @@
-"""Shared compare for the stage-5 baselines (proposal 0008): tests/golden/<name>.json holds what the untouched code
-produced. A failing compare means a behavior changed: there is no update switch, change the code back or explain the
-delta. A missing file is written once and the test fails, so a new golden is always a visible new file in git."""
+"""Shared compare for the golden baselines: a failing compare means a behavior changed."""
 from __future__ import annotations
 
 import difflib

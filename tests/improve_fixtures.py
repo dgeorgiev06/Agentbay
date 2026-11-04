@@ -1,9 +1,4 @@
-"""Fixtures for improve: Claude Code transcripts, a ledger with calls/verdicts, a git repo. All in temp dirs.
-
-Planted secrets (SECRETS) appear in user text, tool inputs, tool results, attachments, subagent meta,
-spilled tool output, ledger notes and review evidence. Tests assert none of their cores (CORES) ever
-reach the improve store, the ledger, call state, reports or outputs.
-"""
+"""Fixtures for improve: Claude Code transcripts, a ledger with calls/verdicts, a git repo. All in temp dirs."""
 from __future__ import annotations
 
 import json
@@ -64,14 +59,16 @@ def chain(sid: str, cwd: str, n: int, minute: int) -> dict:
 
 
 def session_records(sid: str, cwd: str, reviewer_spawns: int = 2) -> list:
-    c = lambda n, m: chain(sid, cwd, n, m)          # noqa: E731
+    def c(n, m):
+        return chain(sid, cwd, n, m)
+
     bash = {"command": f"curl -H 'Authorization: {SECRETS['bearer']}' https://api.example.com"}
     recs = [
         {**c(0, 0), "type": "user", "message": {"role": "user", "content": f"deploy it, the key is {SECRETS['api-key']}"}},
         {**c(1, 1), "type": "attachment", "attachment": {"type": "memory", "content": SECRETS["private-key"]}},
     ]
     n = 2
-    for i in range(3):                              # three identical Bash calls, one errors
+    for i in range(3):
         recs.append({**c(n, 2 + i), "type": "assistant", "requestId": f"r{i}",
                      "message": {"id": f"msg{i}", "model": "claude-opus-5-5", "role": "assistant",
                                  "content": [{"type": "tool_use", "id": f"tu{i}", "name": "Bash", "input": bash}],
@@ -116,8 +113,7 @@ def session_records(sid: str, cwd: str, reviewer_spawns: int = 2) -> list:
 
 
 def make_transcripts(root: Path, project: Path, sessions: int = 2) -> dict[str, Path]:
-    """`sessions` sessions in `project` (+1 in another project), each with a subagent and spill file, and a
-    half-written last line. Returns {session id: file}."""
+    """`sessions` sessions in `project` (+1 elsewhere), each with a subagent, a spill file and a half-written line."""
     out = {}
     for i in range(sessions):
         sid = f"0a1b2c3d-0000-4000-8000-00000000000{i}"
@@ -149,8 +145,7 @@ def ev(ts: str, type: str, run: str, **kw) -> dict:
 
 
 def make_ledger(project: Path) -> list[str]:
-    """Calls with slow steps, review rounds with repeated/lintable/scope failures, guard denials and
-    instruction-change notes. Returns the call ids."""
+    """Calls with slow steps, review rounds, guard denials and instruction-change notes; returns the call ids."""
     led = project / ".agentbay" / "ledger" / "events.jsonl"
     led.parent.mkdir(parents=True, exist_ok=True)
     calls = project / ".agentbay" / "calls"

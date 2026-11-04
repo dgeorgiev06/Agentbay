@@ -1,17 +1,13 @@
-"""Content types (proposal 0006, Part B; 0008 slice 5, part A): the loader, the contract every type meets, the
-views a type may define, and the store's record of the types it was made with."""
+"""Content types: the loader, the contract every type meets, their views and the store's record of them."""
 from __future__ import annotations
 
 import json
 import sqlite3
-import sys
 
+from contracts import content_type
 from helpers import KIT, clock, kit_copy, project, system
 
-sys.path.insert(0, str(KIT / "tests"))
-from contracts import content_type  # noqa: E402
-
-from bay import contenttypes, dispatch, lint, model  # noqa: E402
+from bay import contenttypes, dispatch, lint, model
 
 
 def sub(k, rel, old, new):
@@ -39,8 +35,7 @@ def test_the_loader_is_the_only_source_of_the_post_kind():
 
 
 def test_an_attachment_without_textchars_is_refused_not_guessed():
-    """The email schema requires `textChars` (0 when only metadata is stored), so a connector that sends attachment
-    text without it fails loudly at the store's validation instead of storing 0."""
+    """The email schema requires `textChars`, so attachment text without it fails validation instead of storing 0."""
     items = json.loads((KIT / "components/email/fixtures/items.json").read_text())
     sch = model.inline_refs(model.data_schema("email/v1"))
     assert model.schema_errors(items[0], sch) == []
@@ -58,7 +53,7 @@ def test_a_view_that_reads_anything_but_the_base_tables_and_its_own_views_is_ref
         (k / "components/post/views.sql").write_text(f"CREATE VIEW v_posts AS {bad};\n")
         ps = contenttypes.problems(k)
         assert any("view v_posts cannot be built" in p and needle in p for p in ps), (bad, ps)
-    assert any("view v_posts cannot be built" in p for p in lint.run(k))        # `bay check` reports it too
+    assert any("view v_posts cannot be built" in p for p in lint.run(k))
 
 
 def test_views_sql_holds_only_create_view_statements_that_match_the_documentation():
@@ -112,24 +107,24 @@ def test_the_child_table_and_the_derived_fields_come_from_the_type():
     db = p / ".agentbay/data/mail/mail-briefing/corpus.db"
     con = sqlite3.connect(db)
     meta = dict(con.execute("SELECT key, value FROM store_meta"))
-    assert sorted(meta) == ["derive:email", "mode-views", "type:email"]            # the mode's own views are recorded too
+    assert sorted(meta) == ["derive:email", "mode-views", "type:email"]
     assert meta["derive:email"] == "1" and meta["type:email"] == "1" and "CREATE TEMP VIEW v_threads" in meta["mode-views"]
     names = {r[0] for r in con.execute("SELECT name FROM sqlite_master")}
     assert {"attachments", "attachments_fts"} <= names
     kept = [a for (e,) in con.execute("SELECT ext FROM items") for a in json.loads(e).get("attachments", [])]
-    assert kept and all("text" not in a for a in kept)                  # moveOut: the text lives in the table only
+    assert kept and all("text" not in a for a in kept)
     con.close()
     q = "SELECT id, fromMe, toMe, bulk FROM v_email ORDER BY id"
     before = d.use("analyst--mail-briefing", "items.store/v2.sql", {"sql": q})["rows"]
     assert before and any(r[1] for r in before) and any(r[2] for r in before) and any(r[3] for r in before)
-    con = sqlite3.connect(db)                  # another deriveVersion on record: the writer recomputes, fetching nothing
+    con = sqlite3.connect(db)
     con.execute("UPDATE items SET derived = '{}'")
     con.execute("UPDATE store_meta SET value = '0' WHERE key = 'derive:email'")
     con.commit()
     con.close()
     assert {r[1] for r in d.use("analyst--mail-briefing", "items.store/v2.sql", {"sql": q})["rows"]} == {0}
     pruned = d.call("mail-briefing.prune", {})
-    assert pruned["next"]["review"]["output"]["removed"] == 0, pruned          # the code step ran; it deleted nothing
+    assert pruned["next"]["review"]["output"]["removed"] == 0, pruned
     after = d.use("analyst--mail-briefing", "items.store/v2.sql", {"sql": q})["rows"]
     assert after == before
     con = sqlite3.connect(db)
@@ -137,7 +132,7 @@ def test_the_child_table_and_the_derived_fields_come_from_the_type():
     con.close()
     assert d.call("feed-briefing.sync", {})["status"] == "done"
     err = d.use("analyst--feed-briefing", "items.store/v2.sql", {"sql": "SELECT count(*) FROM v_email"})["error"]
-    assert "v_email" in err                                        # the feed store holds only the types its mode reads
+    assert "v_email" in err
 
 
 def test_a_store_records_its_content_types_and_refuses_another_version():
@@ -155,5 +150,5 @@ def test_a_store_records_its_content_types_and_refuses_another_version():
     again = d.call("feed-briefing.sync", {})
     assert again["status"] == "failed" and "move the folder aside and sync again" in again["error"]
     con = sqlite3.connect(db)
-    assert con.execute("SELECT value FROM store_meta").fetchone() == ("2",)         # left as it was
+    assert con.execute("SELECT value FROM store_meta").fetchone() == ("2",)
     con.close()

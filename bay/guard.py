@@ -24,6 +24,9 @@ GIT_BAD_FLAGS = ("--output", "--ext-diff", "--textconv", "--no-index", "--exec",
                  "--receive-pack", "--config", "--git-dir", "--work-tree", "--open-files-in-pager",
                  "--pathspec-from-file", "-O")
 GIT_MV_RM_FLAGS = ("-r", "-f", "-n", "-q", "-k", "-v", "--cached", "--dry-run", "--force", "--quiet")
+LINT_CONFIG = {"ruff": ("--config", "ruff.toml"), "mypy": ("--config-file", "mypy.ini")}
+LINT_FLAGS = ("--no-cache", "--ignore-noqa", "--statistics", "--strict", "--show-error-codes")
+LINT_CONFIG_DIR = Path("components") / "python"
 
 
 def abbrev(word: str, flags: tuple[str, ...]) -> bool:
@@ -414,10 +417,32 @@ class Guard:
             d = self._git_command(entry, words, cwd, len(pw))
             if d:
                 return d
+        if pw[:3] == ["python3", "-I", "-m"] and pw[3] in LINT_CONFIG:
+            d = self._lint_command(words, cwd, len(pw), pw[3])
+            if d:
+                return d
         writes = pw == ["./bay.sh", "check"] and any(abbrev(w, ("--write",)) for w in words[2:])
         if writes and (why := self._write_denied(entry, self.project / "framework/limits.yaml")):
             return "deny", f"agentbay: check --write rewrites framework/limits.yaml: {why}"
         return "pass", ""
+
+    def _lint_command(self, words, cwd, first, tool) -> tuple[str, str] | None:
+        """Denies ruff or mypy unless it names the kit's protected config once and uses only LINT_FLAGS."""
+        flag, name = LINT_CONFIG[tool]
+        config = self.kit / LINT_CONFIG_DIR / name if self.kit else None
+        outside = config is not None and self.kit != self.project and not self.inside(config, self.project)
+        if config is None or not (outside or any(self.inside(config, self.project / d)
+                                                 for d in self.policy.get("protected", []))):
+            return "deny", f"agentbay: {tool} needs the kit's {name} in a protected path; it is not protected here"
+        rest, given = words[first:], []
+        for i, word in enumerate(rest):
+            if word == flag:
+                given.append(norm(rest[i + 1], cwd) if i + 1 < len(rest) else None)
+            elif word.startswith("-") and word not in LINT_FLAGS and (i == 0 or rest[i - 1] != flag):
+                return "deny", f"agentbay: {tool} flag {word} is not allowed (only {flag} and {' '.join(LINT_FLAGS)})"
+        if given != [config]:
+            return "deny", f"agentbay: {tool} needs exactly one `{flag} {config}`"
+        return None
 
     def _git_command(self, entry, words, cwd, first) -> tuple[str, str] | None:
         """Denies for git flags that write or read files or run programs, and for an unsafe `worktree add`."""

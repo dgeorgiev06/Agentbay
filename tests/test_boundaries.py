@@ -518,6 +518,34 @@ def test_n2_gate_plan_does_not_advertise_submit():
         cleanup(k)
 
 
+def lint_clis_are_denied_unless_the_config_is_protected_and_the_flags_are_listed(g, agent):
+    g.policy["subagents"][agent]["clis"] += ["python3 -I -m ruff check", "python3 -I -m mypy"]
+    ruff = f"python3 -I -m ruff check --config {g.kit}/components/python/ruff.toml"
+    mypy = f"python3 -I -m mypy --config-file {g.kit}/components/python/mypy.ini"
+    for cmd in (f"{ruff} bay", f"{mypy} bay"):
+        assert decide(g, agent, "Bash", {"command": cmd}) == "deny", cmd
+    reason = g.decide({"tool_name": "Bash", "tool_input": {"command": f"{ruff} bay"}, "agent_type": agent,
+                       "agent_id": "a1", "cwd": str(g.project)})[1]
+    assert "not protected" in reason
+    g.policy["protected"].append("components/python")
+    passes = (f"{ruff} bay", f"{mypy} bay", f"{ruff} --no-cache --ignore-noqa --statistics bay",
+              f"{mypy} --strict --show-error-codes bay")
+    denies = ("python3 -I -m ruff check bay", "python3 -I -m mypy bay", "python3 -I -m ruff check --config ruff.toml bay",
+              f"python3 -I -m ruff check --config={g.kit}/components/python/ruff.toml bay",
+              f"{ruff} --config \"cache-dir='x'\" bay", f"{ruff} {ruff[ruff.index('--config'):]} bay",
+              f"{ruff} --fix bay", f"{ruff} --add-noqa bay", f"{ruff} -o x bay", f"{ruff} --output-format json bay",
+              f"{ruff} --cache-dir x bay", f"{ruff} --conf x bay", f"{ruff} --",
+              "python3 -I -m mypy --config-file mypy.ini bay", f"{mypy} --junit-xml x bay",
+              f"{mypy} --python-executable x bay", f"{mypy} --config-f x bay", f"{mypy} --plugins x bay",
+              f"python3 -I -m mypy --config-file {g.kit}/components/python/ruff.toml bay",
+              f"python3 -m ruff check --config {g.kit}/components/python/ruff.toml bay",
+              f"python3 -m mypy --config-file {g.kit}/components/python/mypy.ini bay")
+    for cmd in passes:
+        assert decide(g, agent, "Bash", {"command": cmd}) == "pass", cmd
+    for cmd in denies:
+        assert decide(g, agent, "Bash", {"command": cmd}) == "deny", cmd
+
+
 def test_n3_worktree_add_paths_and_no_writes_without_write_tools():
     from helpers import kit_copy
     k = kit_copy()
@@ -603,6 +631,7 @@ def test_n3_worktree_add_paths_and_no_writes_without_write_tools():
         assert reason("git rm --cach components/briefing/mode.yaml").startswith("agentbay: git rm --cach: only -r -f ")
         for cmd, want in (("./bay.sh check --limits --write", "deny"), ("./bay.sh check --limits", "pass")):
             assert decide(g, "reviewer--forge", "Bash", {"command": cmd}) == want, cmd
+        lint_clis_are_denied_unless_the_config_is_protected_and_the_flags_are_listed(g, agent)
     finally:
         cleanup(k)
 

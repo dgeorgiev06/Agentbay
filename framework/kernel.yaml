@@ -31,6 +31,8 @@ owns:               # the kernel: loader, resolver, lint, registry, dispatcher, 
   - bay/selector.py
   - schemas/
   - components/store/
+  - components/python/
+  - components/comments/
   - adapters/
   - framework/roles/
   - framework/rules/

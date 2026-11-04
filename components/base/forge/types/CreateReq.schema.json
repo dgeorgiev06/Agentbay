@@ -3,14 +3,17 @@
   "required": ["kind", "name", "intent"],
   "additionalProperties": false,
   "properties": {
-    "kind": { "enum": ["mode", "feature", "connector", "env"] },
+    "kind": { "enum": ["mode", "feature", "connector", "env", "content-type"] },
     "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,40}$" },
     "intent": { "type": "string", "minLength": 5 },
-    "target": { "type": "string", "description": "kind=feature: existing user mode; kind=env: the mode whose folder it goes in" },
+    "target": { "type": "string", "description": "every kind but mode: the user mode it goes in" },
     "implements": { "type": "string", "description": "kind=connector: existing interface, e.g. items.source/v1" }
   },
   "allOf": [
-    { "if": { "properties": { "kind": { "enum": ["feature", "env"] } } }, "then": { "required": ["target"] } },
+    {
+      "if": { "properties": { "kind": { "enum": ["feature", "env", "connector", "content-type"] } } },
+      "then": { "required": ["target"] }
+    },
     { "if": { "properties": { "kind": { "const": "connector" } } }, "then": { "required": ["implements"] } }
   ]
 }

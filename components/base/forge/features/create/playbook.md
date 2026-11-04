@@ -1,15 +1,19 @@
 # forge.create
 
 ## Purpose
-Turn a plain-language intent into a working, lint-clean mode, feature, connector or env in user space (roles are framework-level: a new role goes through forge.extend).
+Turn a plain-language intent into a working, lint-clean mode, feature, connector, env or content type in user space
+(roles are framework-level: a new role goes through forge.extend).
 
 ## Inputs
-- `kind`: mode | feature | connector | env (selects the template and the kind-scoped rules).
-- `name`, `intent` (required); `target` (kind=feature: the user mode); `implements` (kind=connector: the interface).
+- `kind`: mode | feature | connector | env | content-type (selects the template and the kind-scoped rules).
+- `name`, `intent` (required); `implements` (kind=connector: the interface).
+- `target` (every kind but mode): the user mode under components/modes/ it goes in; base modes change through
+  forge.extend.
 
 ## Steps
 1. `scaffold`: the dispatcher renders the forge template for `kind` (same templates as `bay new <kind>`).
-2. `fill`: the builder (in env local-authoring, user space only) proposes the content from the intent and fills every TODO: purpose, features with in/out/effects, the roles map (which framework role works in which env), needed capabilities, constraints and review settings for a mode; endpoint + playbook + rules (and skills for mode-specific behaviour) for a feature; endpoints and a fake-HTTP test for a connector; bindings and limits for an env.
+2. `fill`: the builder (in env local-authoring, user space only) proposes the content from the intent and fills every TODO: purpose, features with in/out/effects, the roles map (which framework role works in which env), needed capabilities, constraints and review settings for a mode; endpoint + playbook + rules (and skills for mode-specific behaviour) for a feature; endpoints and a fake-HTTP test for a connector;
+   fields and views for a content type; bindings and limits for an env.
 3. The builder runs `./bay.sh check` and returns a Result listing every file. The coordinator (main thread, with the user) runs the tests: a subagent that writes code and runs it cannot be contained by the guard.
 4. `standards`: a code step after `fill`, `standards.check/v1.findings` with `base: $call.base`. It ends the call `blocked` when the filled files add a finding against the commit the call started from.
 5. `review`: the reviewer checks the Definition of Done and rules for this kind.

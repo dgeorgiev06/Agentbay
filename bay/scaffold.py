@@ -7,7 +7,8 @@ from pathlib import Path
 import yaml
 
 TEMPLATES = Path(__file__).resolve().parent / "templates"
-KINDS = ("mode", "feature", "connector", "env")
+KINDS = ("mode", "feature", "connector", "env", "content-type")
+MODES = "components/modes"
 NAME = re.compile(r"^[a-z][a-z0-9-]{1,40}$")
 REVIEW_EFFECTS = {"write", "spend", "delete"}
 
@@ -35,12 +36,17 @@ def _write(kit: Path, rel: str, text: str, files: list[str]) -> None:
     files.append(rel)
 
 
-def _mode_folder(kit: Path, name: str) -> str:
-    for tier in ("base", "modes"):
-        folder = f"components/{tier}/{name}"
-        if (kit / folder / "mode.yaml").exists():
-            return folder
-    return f"components/modes/{name}"
+def _mode_dir(kit: Path, kind: str, target: str | None) -> str:
+    if not target:
+        raise ScaffoldError(f"kind={kind} needs the mode it goes in (--mode <mode>)")
+    if _protected(kit, "mode", target):
+        raise ScaffoldError(f"mode '{target}' is protected (framework/kernel.yaml `protected:`): it is changed "
+                            f"via forge.extend")
+    if (kit / "components/base" / target / "mode.yaml").exists():
+        raise ScaffoldError(f"mode '{target}' lives in components/base/ and changes through forge.extend")
+    if not (kit / MODES / target / "mode.yaml").exists():
+        raise ScaffoldError(f"mode '{target}' not found under {MODES}/")
+    return f"{MODES}/{target}"
 
 
 def _q(s: str) -> str:
@@ -79,7 +85,9 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
     files: list[str] = []
     todo: list[str] = []
     if kind == "mode":
-        base = _mode_folder(kit, name)
+        if (kit / "components/base" / name / "mode.yaml").exists():
+            raise ScaffoldError(f"mode '{name}' already exists in components/base/")
+        base = f"{MODES}/{name}"
         _write(kit, f"{base}/mode.yaml", _render("mode/mode.yaml", name=name, intent=intent), files)
         _write(kit, f"{base}/playbook.md", _render("mode/playbook.md", name=name), files)
         _write(kit, f"{base}/README.md", _render("mode/README.md", name=name, intent=raw_intent), files)
@@ -91,15 +99,8 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
         todo = [f"fill the TODOs in {base}/features/run/playbook.md and rules.yaml",
                 f"rename or add features with `bay new feature <name> --mode {name}`", "run `./bay.sh check`"]
     elif kind == "feature":
-        if not target:
-            raise ScaffoldError("kind=feature needs a target mode (--mode <mode>)")
-        home = _mode_folder(kit, target)
+        home = _mode_dir(kit, kind, target)
         mfile = kit / home / "mode.yaml"
-        if _protected(kit, "mode", target):
-            raise ScaffoldError(f"mode '{target}' is protected (framework/kernel.yaml `protected:`): it is changed "
-                                f"via forge.extend")
-        if not mfile.exists():
-            raise ScaffoldError(f"mode '{target}' not found under components/")
         doc = yaml.safe_load(mfile.read_text())
         from . import model
         merged = model.Kit(kit).get("Mode", target)
@@ -126,19 +127,18 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
     elif kind == "connector":
         if not implements:
             raise ScaffoldError("kind=connector needs --implements <interface>/v<N> (e.g. items.source/v1)")
-        if not target:
-            raise ScaffoldError("kind=connector needs the mode that binds it (--mode <mode>)")
+        home = _mode_dir(kit, kind, target)
         iface = _find_interface(kit, implements)
         module = name.replace("-", "_")
         host = "api.example.com"
         methods = "\n".join(_method(ep, spec) for ep, spec in iface["spec"]["endpoints"].items())
-        base = f"{_mode_folder(kit, target)}/connectors/{name}"
+        base = f"{home}/connectors/{name}"
         src = ""
         if implements.startswith("items.source/"):
             from . import model
             kinds = model.item_kinds(kit)
-            kind = next((f"{k}/v{min(v)}" for k, v in sorted(kinds.items())), "<kind>/v1")
-            src = (f"  produces: [{kind}]    # TODO the item kind(s) its items carry: <kind>/v<N> (a content type, components/)\n"
+            item_kind = next((f"{k}/v{min(v)}" for k, v in sorted(kinds.items())), "<kind>/v1")
+            src = (f"  produces: [{item_kind}]    # TODO the item kind(s) its items carry: <kind>/v<N>\n"
                    f"  source: {name}       # value stamped on every item's `source`; item ids are <source>:<extId>\n"
                    f"  window: 7d             # how far back the API serves; older history comes from the store\n"
                    f"  selectors:             # TODO which selector fields the API handles natively; unlisted = unsupported\n"
@@ -154,13 +154,17 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
                                                                module=module, host=host), files)
         todo = [f"set the real API host in {base}/connector.yaml and {base}/{module}.py",
                 f"implement {', '.join(iface['spec']['endpoints'])}",
-                f"bind it in an env: `{implements}: [{name}]` and allow its host and secrets"]
+                f"bind it in an env: `{implements}: [{name}]` and allow its host and secrets",
+                f"if it carries a new item kind: `bay new content-type <kind> --mode {target}`"]
     elif kind == "env":
-        if not target:
-            raise ScaffoldError("kind=env needs the mode whose folder it goes in (--mode <mode>)")
-        base = f"{_mode_folder(kit, target)}/envs/{name}.yaml"
+        base = f"{_mode_dir(kit, kind, target)}/envs/{name}.yaml"
         _write(kit, base, _render("env/env.yaml", name=name, intent=intent), files)
         todo = [f"bind capabilities in {base}", f"put roles in it from a mode's `roles:` (<role>: {name})"]
+    elif kind == "content-type":
+        base = f"{_mode_dir(kit, kind, target)}/content-types/{name}"
+        for file in ("content-type.yaml", "fields.schema.json", "views.sql"):
+            _write(kit, f"{base}/{file}", _render(f"content-type/{file}", name=name, intent=intent), files)
+        todo = [f"fill the TODOs in {base}/", f"produce it from a connector: `produces: [{name}/v1]`"]
     return {"kind": kind, "name": name, "files": files, "todo": todo}
 
 

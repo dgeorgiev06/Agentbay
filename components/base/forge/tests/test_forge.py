@@ -22,7 +22,13 @@ def test_bay_new_mode_is_lint_clean_and_resolves():
                         "--intent", "Write release notes from merged PRs"], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert (k / "components/modes/release-notes/features/run/playbook.md").exists()
-    assert lint.run(k) == []
+    for argv in (("content-type", "notes"), ("connector", "notes-api", "--implements", "items.source/v1")):
+        r = subprocess.run([sys.executable, str(k / "bay/cli.py"), "new", *argv, "--mode", "release-notes"],
+                           capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+    assert (k / "components/modes/release-notes/content-types/notes/views.sql").exists()
+    assert (k / "components/modes/release-notes/connectors/notes-api/connector.yaml").exists()
+    assert lint.run(k) == [], lint.run(k)
     s = model.resolve(model.Kit(k))
     f = s.modes["release-notes"].features["run"]
     assert f.review["when"] == "always" and [st.kind for st in f.steps] == ["role", "code", "review"]
@@ -42,10 +48,12 @@ def test_feature_role_env_connector_scaffolds_are_lint_clean():
     assert wk.review is None and [st.role for st in wk.steps] == ["analyst"]
     text = (k / "components/modes/feed-briefing/mode.yaml").read_text()
     assert text.count("\n    weekly:\n") == 1 and "steps:" in text
-    scaffold.create(k, "feature", "export", target="delivery", role="builder", effects=["read", "write"],
-                    intent="Export a file")
+    try:
+        scaffold.create(k, "feature", "export", target="delivery", role="builder", intent="Export a file")
+        raise AssertionError("a feature was added to a base mode")
+    except scaffold.ScaffoldError as e:
+        assert "lives in components/base/" in str(e) and "forge.extend" in str(e), str(e)
     s = model.resolve(model.Kit(k))
-    assert s.modes["delivery"].features["export"].review["when"] == "always"
     test_file = f"{k}/components/modes/feed-briefing/connectors/bsky/tests/test_bsky.py"
     r = subprocess.run([sys.executable, "-c", f"import runpy; m = runpy.run_path('{test_file}'); "
                         "m['test_bsky_allowlist_is_enforced_before_any_request']()"], capture_output=True, text=True)
@@ -111,7 +119,11 @@ def test_forge_create_runs_scaffold_then_plans_author_builder():
     assert r["next"]["previous"]["scaffold"]["files"] == ["components/modes/feed-briefing/envs/digest-env.yaml"]
     assert (k / "components/modes/feed-briefing/envs/digest-env.yaml").exists()
     ids = {x["id"] for x in r["next"]["rules"]}
-    assert "R-8" in ids and "R-3" not in ids and "R-6" not in ids and "R-7" not in ids
+    assert "R-8" in ids and "R-3" not in ids and "R-6" not in ids and "R-7" not in ids and "R-10" not in ids
+    r = d.call("forge.create", {"kind": "content-type", "name": "memo", "target": "feed-briefing", "intent": "A memo"})
+    files = r["next"]["previous"]["scaffold"]["files"]
+    assert files[0].startswith("components/modes/feed-briefing/content-types/memo/")
+    assert "R-10" in {x["id"] for x in r["next"]["rules"]}
 
 
 def test_connector_scaffold_for_feed_source_declares_source_and_window():

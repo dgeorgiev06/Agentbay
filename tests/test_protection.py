@@ -473,8 +473,12 @@ def test_bay_new_no_longer_calls_improve_a_protected_name():
             raise AssertionError("the existing mode was overwritten")
         except scaffold.ScaffoldError as e:
             assert "protected name" not in str(e) and "already exists" in str(e), str(e)
-        scaffold.create(k, "feature", "extra", target="improve")
-        assert (k / "components/base/improve/features/extra").is_dir()
+        try:
+            scaffold.create(k, "feature", "extra", target="improve")
+            raise AssertionError("a feature was added to a base mode")
+        except scaffold.ScaffoldError as e:
+            assert "lives in components/base/" in str(e), str(e)
+        assert not (k / "components/base/improve/features/extra").exists()
     finally:
         cleanup(k)
 

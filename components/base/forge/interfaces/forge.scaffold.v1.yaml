@@ -3,8 +3,8 @@ kind: Interface
 metadata:
   name: forge.scaffold
   description: >-
-    Render a forge template (mode, feature, connector, env) into user space. Shared by `bay new <kind>` and
-    forge.create. Also reads a proposal's approval status for forge.extend.
+    Render a forge template (mode, feature, connector, env, content-type) into user space. Shared by
+    `bay new <kind>` and forge.create. Also reads a proposal's approval status for forge.extend.
 spec:
   version: 1
   binding: connector
@@ -16,9 +16,9 @@ spec:
         required: [kind, name]
         additionalProperties: false
         properties:
-          kind: { enum: [mode, feature, connector, env] }
+          kind: { enum: [mode, feature, connector, env, content-type] }
           name: { type: string, pattern: "^[a-z][a-z0-9-]{1,40}$" }
-          target: { type: string, description: "kind=feature: the mode to add it to" }
+          target: { type: string, description: "every kind but mode: the mode under components/modes/ it goes in" }
           implements: { type: string, description: "kind=connector: interface, e.g. items.source/v1" }
           intent: { type: string }
       out:

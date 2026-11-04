@@ -935,6 +935,14 @@ def lint_ownership(kit: model.Kit) -> list[str]:
             f"in framework/kernel.yaml" for f in boundary.stray(files, cmap)]
 
 
+TIERS = ("base", "modes")
+FOLDER_MANIFESTS = (
+    (r"components/base/[^/]+", ("mode.yaml", "component.yaml")),
+    (r"components/modes/[^/]+", ("mode.yaml",)),
+    (r"components/(?:base|modes)/[^/]+/connectors/[^/]+", ("connector.yaml",)),
+    (r"components/(?:base|modes)/[^/]+/content-types/[^/]+", ("content-type.yaml",)),
+    (r"adapters/[^/]+", ("adapter.yaml",)),
+)
 OLD_FOLDERS = ("modes/", "envs/", "connectors/", "content-types/", "coordinator/", "framework/interfaces/", "interfaces/")
 
 
@@ -954,15 +962,19 @@ def lint_case_and_manifests(kit: model.Kit) -> list[str]:
             if other != p:
                 out.append(f"{p}: differs only in case from {other}; rename one (paths must be unique ignoring case)")
                 seen[p.casefold()] = p
-    roots = {}
-    for f in files:
-        m = re.match(r"(?:components/(?:base|modes)|adapters)/[^/]+/", f)
-        if m:
-            roots.setdefault(m[0], set()).add(f[m.end():])
-    for folder, inside in sorted(roots.items()):
-        want = ("adapter.yaml",) if folder.startswith("adapters/") else tuple(boundary.MANIFEST_KINDS)
-        if not inside.intersection(want):
-            out.append(f"{folder}: extension folder without its manifest {' or '.join(want)}")
+    strays = {f.split("/")[1] for f in files if f.startswith("components/") and f.count("/") > 1}
+    for name in sorted(strays - set(TIERS)):
+        out.append(f"components/{name}/: components holds only {' and '.join(TIERS)}; "
+                   f"run git mv components/{name} components/modes/{name}")
+    for pattern, want in FOLDER_MANIFESTS:
+        roots: dict[str, set[str]] = {}
+        for f in files:
+            m = re.match(pattern + "/", f)
+            if m:
+                roots.setdefault(m[0], set()).add(f[m.end():])
+        for folder, inside in sorted(roots.items()):
+            if not inside.intersection(want):
+                out.append(f"{folder}: extension folder without its manifest {' or '.join(want)}")
     out += [f"{d}: the old layout is not read (agentbay/v4); move it to components/modes/<name>/"
             for d in OLD_FOLDERS if any(f.startswith(d) for f in files)]
     return list(dict.fromkeys(out))

@@ -151,6 +151,8 @@ def _one(d: Path) -> tuple[ContentType | None, list[str]]:
     out = []
     if meta["name"] != d.name:
         out.append(f"{where}: metadata.name '{meta['name']}' must match the folder name '{d.name}'")
+    if spec["kind"] != d.name:
+        out.append(f"{where}: spec.kind '{spec['kind']}' must match the folder name '{d.name}'")
     try:
         fields = json.loads((d / FIELDS).read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:

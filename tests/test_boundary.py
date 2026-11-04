@@ -99,16 +99,24 @@ def test_case_only_new_folder_is_not_a_new_extension():
 def test_lint_rejects_case_collisions_and_extension_folders_without_manifest():
     from types import SimpleNamespace
     repo = _repo({"components/modes/Mail/x.md": "y\n", "components/modes/rss/feed.py": "y\n",
+                  "components/rss/feed.py": "y\n", "components/modes/rss2/connector.yaml": "y\n",
+                  "components/modes/rss2/mode.yaml": "y\n", "components/modes/rss2/connectors/foo/foo.py": "y\n",
+                  "components/modes/rss2/content-types/bar/connector.yaml": "y\n",
                   "adapters/zed/zed.py": "y\n", "adapters/ok/adapter.yaml": "y\n"})
     errs = lint.lint_case_and_manifests(SimpleNamespace(root=repo))
     assert any(e.startswith("adapters/zed/: extension folder without its manifest adapter.yaml") for e in errs), errs
     assert not any("adapters/ok/" in e for e in errs)
     assert any("differs only in case" in e and "components/modes/Mail" in e and "components/modes/mail" in e
                for e in errs), errs
-    stray = ("components/modes/rss/: extension folder without its manifest "
-             "mode.yaml or connector.yaml or content-type.yaml or component.yaml")
-    assert any(e.startswith(stray) for e in errs)
-    assert not lint.lint_case_and_manifests(SimpleNamespace(root=_repo({})))
+    assert "components/modes/rss/: extension folder without its manifest mode.yaml" in errs
+    assert ("components/rss/: components holds only base and modes; "
+            "run git mv components/rss components/modes/rss") in errs
+    assert "components/modes/rss2/connectors/foo/: extension folder without its manifest connector.yaml" in errs
+    bar = "components/modes/rss2/content-types/bar/: extension folder without its manifest content-type.yaml"
+    assert bar in errs
+    assert not any(e.startswith("components/modes/rss2/:") for e in errs), errs
+    assert lint.lint_case_and_manifests(SimpleNamespace(root=_repo({}))) == [
+        "components/modes/gmail/: extension folder without its manifest mode.yaml"]
 
 
 def test_planned_touches_authorize_nothing_f10():

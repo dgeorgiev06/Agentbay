@@ -385,7 +385,8 @@ def test_a_user_mode_named_cos_or_forge_in_another_case_is_stopped_everywhere():
     errs = lint.lint_case_and_manifests(SimpleNamespace(root=repo))
     for want in ("components/base/Cos", "components/base/FORGE", "connectors/LEDGER", "envs/Cos-Local.yaml"):
         assert any(want in e and "differs only in case" in e for e in errs), (want, errs)
-    assert not lint.lint_case_and_manifests(SimpleNamespace(root=_repo(base, {}, BOUNDARY_MAP)))
+    assert lint.lint_case_and_manifests(SimpleNamespace(root=_repo(base, {}, BOUNDARY_MAP))) == [
+        "components/modes/gmail/: extension folder without its manifest mode.yaml"]
 
 
 def _cli_approve(k, cid, *args):

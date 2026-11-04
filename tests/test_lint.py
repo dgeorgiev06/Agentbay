@@ -135,13 +135,20 @@ def _add_policies(d):
     d["spec"]["constraints"]["policies"] = ["cite-sources"]
 
 
+def _kind_differs_from_folder(d):
+    d["spec"]["kind"] = "poster"
+
+
 MODE = "components/modes/feed-briefing/mode.yaml"
+POST = "components/modes/feed-briefing/content-types/post/content-type.yaml"
 T2_RULES = [
     ("agent text on a code-only feature", MODE, _give_sync_files,
      ["components/modes/feed-briefing/mode.yaml:17: feature feed-briefing.sync has no role step, so its `playbook` is never read",
       "components/modes/feed-briefing/mode.yaml:17: feature feed-briefing.sync has no role step, so its `rules` is never read"]),
     ("an unread manifest key", MODE, _add_policies,
      ["components/modes/feed-briefing/mode.yaml", "Additional properties are not allowed ('policies' was unexpected)"]),
+    ("a content type whose kind differs from its folder", POST, _kind_differs_from_folder,
+     [f"{POST}: spec.kind 'poster' must match the folder name 'post'"]),
 ]
 
 

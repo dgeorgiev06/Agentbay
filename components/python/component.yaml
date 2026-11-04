@@ -1,0 +1,14 @@
+apiVersion: agentbay/v4
+kind: Component
+metadata:
+  name: python
+  description: "The Python standards: ruff and mypy --strict with the kit's config, and the Python comment syntax."
+spec:
+  version: 1
+  language:
+    files: ["*.py"]
+    comments: python
+    tools:
+      - { module: ruff, version: "0.17.3" }
+      - { module: mypy, version: "2.4.1" }
+    install: pip install -r requirements-dev.txt

@@ -1,58 +1,22 @@
-"""Project workflows: user-configured stages that compose mode endpoints.
-
-A feature's `steps` (`mode.yaml spec.features.<name>.steps`) are a list of steps inside one mode, written by the
-mode's author. A *project* workflow is a list of stages across modes, written by the user in
-`agentbay.config.yaml`:
-
-    workflows:
-      morning:
-        description: refresh feeds, then digest
-        steps:
-          - id: sync
-            call: feed-briefing.sync
-            with: { lookback: 1d }
-          - id: digest
-            call: feed-briefing.digest
-            with: { since: "$steps.sync.until" }
-            when: $steps.sync.added
-          - id: ship
-            gate: "send the digest?"
-
-Stage kinds are `call` (one `<mode>.<endpoint>`) and `gate` (approval). `with:`, `when:`,
-`$in.<field>` and `$steps.<id>.<field>` mean what they mean in a feature's steps, so there is one
-stage syntax: this module holds its grammar, its validator (`check_stages`), the skip rule (`skip`),
-`substitute` and the cursor rule (`advance`). A mode feature's steps (`model._feature_steps`, run by
-`Dispatcher`) and a project workflow's stages (`workflow-runner`) both use them; the schemas'
-`when` and `approves` patterns equal the constants below (a test compares them).
-
-Composition stops here on purpose: a stage is not executed inside `bay call`. The dispatcher hands
-the stage back as work (`cos.run` / `cos.next`), the coordinator calls that endpoint the ordinary
-way, and each stage keeps its own grants, effects, budget, review and approval gates. Nothing
-recurses, so there are no cycles to detect and no effect unions to propagate. The two executors stay
-two (the dispatcher runs a feature's steps inside one call; the cursor hands back `nextCall`).
-
-A gate takes no `when:` in either: it passes only by an approval, never by a value (the value of a
-project stage's `when:` comes from the output the coordinator passes to `cos.next`).
-"""
+"""Project workflows: user-configured stages that compose mode endpoints."""
 from __future__ import annotations
 
 import copy
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from .util import duration
 
-# ---- the reference grammar, spelled once. Schemas hold the patterns built from it (config.schema.json `when`,
-# mode.schema.json `when` and `approves`); tests/test_stage_syntax.py compares them.
 FIELD = r"[A-Za-z][A-Za-z0-9-]*"
 PATH = rf"{FIELD}(?:\.{FIELD})*"
 REFERENCE = rf"\$(?:in|steps)\.{PATH}"
 STALE = r"stale\s*>\s*[0-9]+[mhdw]"
-WHEN_PATTERN = rf"^!?{REFERENCE}$"                                                    # a project stage
-FEATURE_WHEN_PATTERN = rf"^({STALE}|!?{REFERENCE})$"                                  # a mode feature's step
+WHEN_PATTERN = rf"^!?{REFERENCE}$"
+FEATURE_WHEN_PATTERN = rf"^({STALE}|!?{REFERENCE})$"
 APPROVES_PATTERN = rf"^\$in\.{PATH}(\|\$steps\.{PATH})?$"
 
-REF = re.compile(r"^\$(in|steps|config)\.")          # what `with:` substitutes (a `$config.` value too)
+REF = re.compile(r"^\$(in|steps|config)\.")
 DOLLAR = re.compile(r"^\$")
 STEPS_REF = re.compile(r"^\$steps\.([a-z][a-z0-9-]*)\.")
 
@@ -64,15 +28,14 @@ FEATURE_GATE_FIX = ("(it passes only by `bay approve`, or by a recorded approval
 
 @dataclass
 class Stage:
-    """One stage of a project workflow, or one step of a mode feature (`of_step`): the part of either that the
-    stage syntax covers."""
+    """One stage of a project workflow, or one step of a mode feature (`of_step`), as far as the syntax covers it."""
     id: str
     call: str | None = None
     gate: str | None = None
     with_: dict = field(default_factory=dict)
     when: str | None = None
-    approves: str | None = None      # a feature's gate: the project file whose content it approves
-    phase: str = ""                  # a mode step's kind ("code", "role", "review", "gate"); empty for a project stage
+    approves: str | None = None
+    phase: str = ""
 
     @property
     def kind(self) -> str:
@@ -109,7 +72,7 @@ def load(kit) -> dict[str, Workflow]:
 
 def effects(system, wf: Workflow) -> list[str]:
     """Union of the effects of every endpoint the workflow calls. What this workflow may do."""
-    from . import model            # model imports this module, so not at the top
+    from . import model
     eff: set[str] = set()
     for st in wf.stages:
         if not st.call:
@@ -133,9 +96,7 @@ def _literals(template):
 
 
 def _optional(schema: dict) -> dict:
-    """The endpoint's input schema with `required` dropped, recursively: the rest of the input
-    arrives from $in/$steps at run time, so a missing field is not a lint problem - but a misspelled
-    property or a wrong literal type still is."""
+    """The endpoint's input schema with `required` dropped, recursively; the rest of the input arrives at run time."""
     if not isinstance(schema, dict):
         return schema
     out = {k: v for k, v in schema.items() if k != "required"}
@@ -152,8 +113,7 @@ def _optional(schema: dict) -> dict:
 
 
 def structure_problems(kit) -> list[str]:
-    """Checks that need no resolution, so `bay check` can run them first: stage ids, reference order, a gate
-    with `when:`, and whether a workflow does anything at all."""
+    """Checks that need no resolution, so `bay check` runs them first: stage ids, reference order, gate `when:`."""
     out: list[str] = []
     for name, wf in load(kit).items():
         where = f"agentbay.config.yaml workflows.{name}"
@@ -170,10 +130,7 @@ def bare_when(when: str | None) -> str:
 
 
 def check_stages(stages: list[Stage], where: str, gate_fix: str, wf: Workflow | None = None) -> list[str]:
-    """The one validator of the stage syntax. `where` names the feature or workflow; `gate_fix` ends the message
-    for a gate with `when:`. Both kinds: a gate takes no `when:`, a `when:` that reads a step reads an earlier one,
-    `stale` is for code steps. A project workflow (`wf` given) also: duplicate ids, the same for `with:` references,
-    `$in` fields declared by the workflow, and a `$` value that is not a reference."""
+    """The one validator of the stage syntax; `where` names the feature or workflow, `gate_fix` ends a gate message."""
     out: list[str] = []
     seen: dict[str, Stage] = {}
     for st in stages:
@@ -198,8 +155,7 @@ def check_stages(stages: list[Stage], where: str, gate_fix: str, wf: Workflow | 
 
 
 def _check_dollars(st: Stage, at: str) -> list[str]:
-    """A string starting with `$` that is not `$in.`, `$steps.` or `$config.` is dropped silently by
-    substitution, so the endpoint would receive nothing for that key. Say so instead."""
+    """Problems for a `$` string that is no `$in.`, `$steps.` or `$config.` reference; substitution would drop it."""
     out = []
     for key, bad in _dollars(st.with_):
         out.append(f"{at}: `with` value {bad!r}" + (f" at {key}" if key else "") +
@@ -220,8 +176,7 @@ def _dollars(template, path: str = "") -> list[tuple[str, str]]:
     return []
 
 def target_problems(kit, system) -> list[str]:
-    """Checks that need the resolved system, so `bay check` runs them: every `call` target resolves
-    and every `with` matches that endpoint's input schema."""
+    """Checks that need the resolved system: every `call` target resolves and every `with` matches its input schema."""
     out: list[str] = []
     for name, wf in load(kit).items():
         for st in wf.stages:
@@ -258,8 +213,7 @@ def _refs(template) -> list[str]:
 
 
 def _check_ref(wf: Workflow | None, st: Stage, ref: str, at: str, seen: dict) -> list[str]:
-    """Problems of one reference. A feature's step (`wf` None) only reads earlier steps; a project stage also
-    gets the fuller messages, the gate and `$in` checks."""
+    """Problems of one reference; a feature's step only reads earlier steps, a project stage gets the fuller checks."""
     m = STEPS_REF.match(ref)
     if m and wf is None:
         return [] if m.group(1) in seen else [f"{at}: when: {st.when} names '{m.group(1)}', which is not an earlier step"]
@@ -289,10 +243,9 @@ def _check_ref(wf: Workflow | None, st: Stage, ref: str, at: str, seen: dict) ->
 _MISSING = object()
 
 
-def substitute(template, inp: dict, steps: dict, settings: dict):
-    """"$in.x", "$steps.id.x", "$config.x", "$in.x|$config.y" (first present) -> values.
-    Keys whose value is missing are dropped."""
-    def dig(cur, parts):              # a `*` part maps the rest of the path over a list: $steps.get.items.*.id
+def substitute(template, inp: dict, steps: dict, settings: dict, call: dict[str, Any] | None = None):
+    """Resolve $in, $steps, $config and $call references in a template (`a|b`: first present); missing are dropped."""
+    def dig(cur, parts):
         for n, part in enumerate(parts):
             if part == "*" and isinstance(cur, list):
                 return [x for x in (dig(c, parts[n + 1:]) for c in cur) if x is not _MISSING]
@@ -310,7 +263,7 @@ def substitute(template, inp: dict, steps: dict, settings: dict):
             return _MISSING
         if isinstance(v, str) and v.startswith("$"):
             head, _, rest = v[1:].partition(".")
-            src = {"in": inp, "steps": steps, "config": settings}.get(head)
+            src = {"in": inp, "steps": steps, "config": settings, "call": call or {}}.get(head)
             if src is None:
                 return _MISSING
             return dig(src, rest.split("."))
@@ -321,9 +274,7 @@ def substitute(template, inp: dict, steps: dict, settings: dict):
 
 
 def skip(when: str, inp: dict, steps: dict, fresh=None) -> bool:
-    """The one skip rule. `$in.<f>` / `$steps.<id>.<f>`: skip unless truthy; a leading `!` skips when truthy instead
-    (a skipped step's output counts as missing). `stale > <age>`: skip while `fresh(age)` says the store is fresher
-    (a code step of a feature; no `fresh` never skips). A gate is never skipped by a value: advance refuses it."""
+    """The one skip rule: skip unless the reference is truthy (`!` inverts), or while `stale > <age>` is fresh."""
     neg = when.startswith("!")
     ref = when[1:] if neg else when
     if ref.startswith(("$in.", "$steps.")):
@@ -335,8 +286,7 @@ def skip(when: str, inp: dict, steps: dict, fresh=None) -> bool:
 
 @dataclass
 class Move:
-    """Where a cursor over stages stands: `call` (run `stage` with `args`), `gate` (ask the user), `done`, `missing`
-    (the stage at `cursor` is gone) or `refused` (a gate with `when:`: the config must change)."""
+    """Where a cursor over stages stands: `call`, `gate`, `done`, `missing` or `refused` (a gate with `when:`)."""
     kind: str
     cursor: int
     skipped: list[str] = field(default_factory=list)
@@ -346,9 +296,7 @@ class Move:
 
 
 def advance(stages: list[Stage | None], cursor: int, inp: dict, results: dict, fresh=None) -> Move:
-    """The one advance rule of the cursor: from `cursor`, skip stages whose `when` says so, then stop at the first
-    call or gate. A gate with `when:` is refused, never evaluated, so no output passed to cos.next can skip it.
-    `fresh(stage, age)` answers `stale > <age>` (a feature's code step)."""
+    """The one advance rule: skip stages by `when`, stop at the first call or gate; a gate with `when:` is refused."""
     skipped: list[str] = []
     while cursor < len(stages):
         st = stages[cursor]

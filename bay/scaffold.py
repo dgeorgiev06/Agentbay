@@ -1,10 +1,4 @@
-"""Scaffolds for user content. Templates live in bay/templates/
-and are shared by `bay new <kind>` and the forge.create feature (via the
-scaffold connector), so code scaffolding and the agentic flow cannot drift.
-
-Scaffolds write new instances into components/<name>/ (an env into its mode's envs/), never overwrite an existing
-file and refuse a protected name (the map's `protected:` block reserves them).
-"""
+"""Scaffolds for user content: new files only, never overwriting a file or taking a protected name."""
 from __future__ import annotations
 
 import re
@@ -15,7 +9,7 @@ import yaml
 TEMPLATES = Path(__file__).resolve().parent / "templates"
 KINDS = ("mode", "feature", "connector", "env")
 NAME = re.compile(r"^[a-z][a-z0-9-]{1,40}$")
-REVIEW_EFFECTS = {"write", "spend", "delete"}   # features with these get review on by default
+REVIEW_EFFECTS = {"write", "spend", "delete"}
 
 
 class ScaffoldError(Exception):
@@ -99,11 +93,11 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
             raise ScaffoldError(f"mode '{target}' not found under components/")
         doc = yaml.safe_load(mfile.read_text())
         from . import model
-        merged = model.Kit(kit).get("Mode", target)          # a mode that extends another inherits its roles
+        merged = model.Kit(kit).get("Mode", target)
         spec = merged.spec if merged is not None else doc["spec"]
         if name in spec["features"]:
             raise ScaffoldError(f"mode {target} already has a feature named '{name}'")
-        if role is None:   # default: the mode's first role that is neither its coordinator nor a reviewer
+        if role is None:
             role = next((r for r in spec["roles"] if r != spec.get("coordinator") and "review" not in r), None)
             if role is None:
                 raise ScaffoldError(f"mode {target} has no worker role to run the feature; pass --role")
@@ -180,7 +174,6 @@ def _insert_under(text: str, header: str, block: str) -> str:
     try:
         i = next(n for n, ln in enumerate(lines) if ln.rstrip() == header)
     except StopIteration:
-        # an extending mode may inherit the whole section: start its own (entries merge with the parent's)
         if not any(ln.rstrip() == "spec:" for ln in lines):
             raise ScaffoldError(f"mode.yaml has no '{header.strip()}' section")
         return text.rstrip("\n") + "\n" + header + "\n" + block.rstrip("\n") + "\n"

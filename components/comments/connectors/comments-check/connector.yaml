@@ -1,0 +1,18 @@
+apiVersion: agentbay/v4
+kind: Connector
+metadata:
+  name: comments-check
+  description: >-
+    standards.check/v1 for comments: one finding per comment line in every file of every language a component
+    declares, so the dispatcher blocks a change that adds a comment line. Python is counted with bay/limits.py.
+  version: 0.1.0
+spec:
+  implements: standards.check/v1
+  entry: comments_check.py
+  config:
+    type: object
+    additionalProperties: false
+    properties:
+      rule:
+        enum: ["on", "off", true, false]
+        description: "off turns the rule off in a project other than the kit (base's agentbay.config.yaml). Default on."

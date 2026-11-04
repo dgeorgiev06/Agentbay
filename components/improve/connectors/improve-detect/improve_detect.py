@@ -26,9 +26,11 @@ class ImproveDetect:
             raise ConnectorError(str(e)) from None
 
     def limits(self, base, proposal=None) -> dict:
-        """bay/limits.py on the project; writes nothing (`bay check --limits --write` writes the ratchet, at release)."""
+        """bay/limits.py on the project; writes nothing, since only `bay check --limits --write` writes the ratchet."""
         root = self.p.project.resolve()
-        path = next(((root / x).resolve() for x in ([proposal] if isinstance(proposal, str) else proposal or []) if x and (isinstance(proposal, str) or util.PROPOSAL_PATH.match(x))), None)  # a list: the propose step's artifacts
+        candidates = [proposal] if isinstance(proposal, str) else proposal or []
+        wanted = (x for x in candidates if x and (isinstance(proposal, str) or util.PROPOSAL_PATH.match(x)))
+        path = next(((root / x).resolve() for x in wanted), None)
         try:
             if base.startswith("-") or path and not path.is_relative_to(root):
                 raise ValueError("base must be a git revision and proposal a path inside the project")

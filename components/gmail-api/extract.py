@@ -1,19 +1,4 @@
-"""Extract text from ONE untrusted attachment. Stdlib only; run only by gmail_api.extract_text as
-
-    python3 -I extract.py <kind> <maxChars>        (kind: docx | text; the file's bytes on stdin)
-
-in its own process with a timeout and memory/CPU/file-size limits, so a hostile file can at worst kill this
-process. It writes nothing to disk and prints one JSON object on stdout:
-    {"text": "..."}                   extracted text (at most maxChars + 1 characters, so the caller sees overflow)
-    {"error": "<category>"}           not-docx | encoding | dtd | too-large | parse | kind
-Error categories are fixed strings, never text from the file.
-
-docx: word/document.xml must be UTF-8 (a UTF-16/32 byte order mark or an XML declaration naming another
-encoding is refused, and the parser is told the input is UTF-8 whatever it declares) and at most MAX_XML bytes
-uncompressed. It is read with expat directly: a DOCTYPE, an entity declaration or an external entity
-reference raises inside the parser, and parameter entities are never parsed, so no entity of any kind is
-expanded and memory stays proportional to the input even where the OS memory limit does not apply.
-"""
+"""Extract text from one untrusted attachment; stdlib only, run in a limited process by gmail_api.extract_text."""
 from __future__ import annotations
 
 import io
@@ -23,10 +8,10 @@ import sys
 import zipfile
 from xml.parsers import expat
 
-MAX_XML = 16 * 1024 * 1024          # uncompressed word/document.xml (zip bomb guard; bounds parser memory)
+MAX_XML = 16 * 1024 * 1024
 CHUNK = 64 * 1024
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-BOMS = (b"\xff\xfe", b"\xfe\xff", b"\x00\x00\xfe\xff")      # UTF-16 LE/BE, UTF-32 (LE starts with FF FE too)
+BOMS = (b"\xff\xfe", b"\xfe\xff", b"\x00\x00\xfe\xff")
 XML_DECL = re.compile(rb"^\s*<\?xml[^>]*?\bencoding\s*=\s*[\"']([A-Za-z0-9._-]+)[\"']")
 
 
@@ -35,8 +20,7 @@ class Refused(Exception):
 
 
 def _utf8_only(raw: bytes) -> None:
-    """Refuse a part that is not UTF-8: a non-UTF-8 byte order mark, NUL bytes in the first characters (UTF-16
-    or UTF-32 without a BOM) or an XML declaration naming another encoding."""
+    """Refuse a part that is not UTF-8: another byte order mark, NUL bytes up front or another XML encoding."""
     if raw.startswith(BOMS) or b"\x00" in raw[:4]:
         raise Refused("encoding")
     m = XML_DECL.match(raw.removeprefix(b"\xef\xbb\xbf")[:512])
@@ -45,7 +29,7 @@ def _utf8_only(raw: bytes) -> None:
 
 
 def _refuse_dtd(*_args):
-    raise Refused("dtd")                   # no DTDs: no entity expansion of any kind
+    raise Refused("dtd")
 
 
 def docx_text(data: bytes, max_chars: int) -> str:
@@ -56,7 +40,7 @@ def docx_text(data: bytes, max_chars: int) -> str:
         raise Refused("not-docx") from None
     if info.file_size > MAX_XML:
         raise Refused("too-large")
-    raw = z.read(info)                     # ZipExtFile stops at the declared size and checks the CRC
+    raw = z.read(info)
     if len(raw) > MAX_XML:
         raise Refused("too-large")
     _utf8_only(raw)
@@ -119,7 +103,7 @@ def main(argv: list[str]) -> int:
     except Refused as e:
         print(json.dumps({"error": str(e)}))
         return 0
-    except Exception:                      # ParseError, BadZipFile, zlib.error, ...: never the file's text
+    except Exception:
         print(json.dumps({"error": "parse"}))
         return 0
     print(json.dumps({"text": text[: max_chars + 1]}, ensure_ascii=False))

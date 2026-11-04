@@ -1,30 +1,4 @@
-"""x-api: items.source/v1 (post/v1 items) over the official X API v2.
-
-Native selector fields (connector.yaml spec.selectors), one stream per value:
-  in: home        GET https://api.x.com/2/users/{id}/timelines/reverse_chronological
-                  max_results (<=100), since_id | start_time, exclude=retweets,replies,
-                  pagination_token, expansions=author_id, tweet.fields, user.fields
-  in: list:<id>   GET https://api.x.com/2/lists/{id}/tweets (needs scope list.read; no since_id/start_time,
-                  so paging stops at the cursor or the `since` boundary)
-  from: <handle>  GET https://api.x.com/2/users/by/username/{handle}, then GET /2/users/{uid}/tweets
-                  (since_id | start_time, exclude); used only when the query has no `in`
-  no in/from      the home timeline
-`text`, `has` and `not` are local: the store matches them after fetching (X bills every post it returns).
-  GET https://api.x.com/2/tweets?ids=...      deletion check: stored ids within the API window
-                                              that X no longer returns are reported as deleted
-  POST https://api.x.com/2/oauth2/token      (grant_type=refresh_token)
-  GET https://api.x.com/2/users/me            (only when config.userId is unset)
-
-OAuth 2.0 user context, scopes tweet.read users.read offline.access.
-Access tokens live in memory for this call only. X rotates refresh tokens;
-the new one is written back through the secrets accessor (keychain), never to
-disk, logs or output. All requests go through ctx.http, which enforces the
-env network allowlist before any request is made.
-
-Billing: X bills every post it returns, so `billed` counts every post in every
-response (timeline pages and deletion lookups), not only the posts kept. The
-call never requests more than its `maxItems` read budget.
-"""
+"""x-api: items.source/v1 (post/v1 items) over the official X API v2."""
 from __future__ import annotations
 
 import base64
@@ -36,10 +10,10 @@ from bay.util import iso
 
 API = "https://api.x.com/2"
 TOKEN_URL = f"{API}/oauth2/token"
-SCOPES = "tweet.read users.read offline.access"   # + list.read for `in: list:<id>`
+SCOPES = "tweet.read users.read offline.access"
 PAGE_MAX = 100
-PAGE_MIN = 5          # the timeline endpoint rejects max_results < 5
-LOOKUP_MAX = 100      # GET /2/tweets accepts up to 100 ids
+PAGE_MIN = 5
+LOOKUP_MAX = 100
 TWEET_FIELDS = "created_at,lang,public_metrics,author_id,conversation_id"
 USER_FIELDS = "username,name"
 EXCLUDE_OK = ("retweets", "replies")
@@ -53,14 +27,13 @@ class XApi:
         self.exclude = list(ctx.config.get("exclude", EXCLUDE_OK))
         self.billed = 0
 
-    # ------------------------------------------------------------ auth
     def _refresh(self) -> None:
         cid = self.ctx.secrets.get("X_CLIENT_ID")
         secret = self.ctx.secrets.get("X_CLIENT_SECRET", optional=True)
         rt = self.ctx.secrets.get("X_REFRESH_TOKEN")
         headers = {}
         data = {"grant_type": "refresh_token", "refresh_token": rt, "client_id": cid}
-        if secret:  # confidential client: HTTP Basic with client credentials
+        if secret:
             headers["Authorization"] = "Basic " + base64.b64encode(f"{cid}:{secret}".encode()).decode()
         r = self.ctx.http.request("POST", TOKEN_URL, headers=headers, data=data)
         if r.status != 200:
@@ -96,7 +69,6 @@ class XApi:
                                  f"set connectors.x-api.userId in agentbay.config.yaml")
         return str(r.json()["data"]["id"])
 
-    # ------------------------------------------------------------ requests
     def build_params(self, *, max_results: int, since_id: str | None = None, start_time: str | None = None,
                      exclude: list[str] | None = None, pagination_token: str | None = None) -> dict:
         bad = [e for e in (exclude or []) if e not in EXCLUDE_OK]
@@ -137,7 +109,6 @@ class XApi:
             item["metrics"] = {k: int(v) for k, v in m.items() if isinstance(v, int)}
         return item
 
-    # ------------------------------------------------------------ items.source/v1.fetch
     def fetch(self, query: dict | None = None, since: str | None = None, cursor: str | None = None,
               maxItems: int = 100, checkIds: list[str] | None = None) -> dict:
         warnings: list[str] = []
@@ -192,7 +163,6 @@ class XApi:
         while True:
             left = budget - self.billed
             if left < PAGE_MIN:
-                # cannot ask for fewer than PAGE_MIN without risking a bill above the budget
                 truncated = pages == 0 or token is not None
                 break
             if pages >= self.max_pages:
@@ -213,12 +183,12 @@ class XApi:
             body = r.json() or {}
             users = {u["id"]: u for u in (body.get("includes") or {}).get("users", [])}
             page = body.get("data") or []
-            self.billed += len(page)                     # X bills what it returns
+            self.billed += len(page)
             done = False
             for t in page:
                 it = self._to_item(t, users, fetched, container)
                 if not dated and ((cursor and int(t["id"]) <= int(cursor)) or (since and it["createdAt"] < since)):
-                    done = True                          # lists have no since_id/start_time: stop at the boundary
+                    done = True
                     break
                 items.append(it)
             token = (body.get("meta") or {}).get("next_token")
@@ -228,8 +198,7 @@ class XApi:
         return items, newest, truncated
 
     def _deleted(self, ids: list[str], warnings: list[str]) -> tuple[list[str], list[str]]:
-        """(checked, gone): stored ids X no longer returns from GET /2/tweets are gone (deleted or made
-        unavailable). Each id costs at most one read; the caller reserves that budget."""
+        """(checked, gone): stored ids that X no longer returns are gone; each id costs one read the caller reserves."""
         gone: list[str] = []
         checked: list[str] = []
         for i in range(0, len(ids), LOOKUP_MAX):
@@ -243,8 +212,6 @@ class XApi:
             body = r.json() or {}
             found = {str(x["id"]) for x in body.get("data") or []}
             self.billed += len(found)
-            # X answers missing ids with per-id errors (Not Found / Authorization); either way the
-            # post is no longer available to this account, so honor-deletions drops it.
             gone += [x for x in batch if x not in found]
             checked += batch
         return checked, gone

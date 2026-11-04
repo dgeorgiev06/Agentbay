@@ -1,11 +1,4 @@
-"""Secret providers. Only the dispatcher calls these, and only for connectors.
-
-Values never leave this process except to the connector that asked: they are
-not printed, logged, written to the ledger, or put in prompts. Every value that
-is resolved is registered with `redact()` so that any accidental echo (an
-exception message, a ledger line, CLI output) is scrubbed as a last line of
-defence.
-"""
+"""Secret providers. Only the dispatcher calls these, and only for connectors."""
 from __future__ import annotations
 
 import fnmatch
@@ -45,7 +38,7 @@ class EnvProvider:
         return self.environ.get(name) or None
 
     def set(self, name: str, value: str) -> bool:
-        return False  # cannot persist across runs
+        return False
 
 
 class KeychainProvider:
@@ -69,8 +62,7 @@ class KeychainProvider:
         return r.stdout.rstrip("\n") or None
 
     def set(self, name: str, value: str) -> bool:
-        """Store via `security -i` reading the command from stdin, so the value never appears in argv
-        (argv is visible to every local user through ps)."""
+        """Store via `security -i` on stdin, never argv: argv is visible to every local user."""
         self._check()
         if any(c in value for c in '"\\\n\r'):
             raise SecretError(f"{name}: value contains a quote, backslash or newline, which cannot be passed to "

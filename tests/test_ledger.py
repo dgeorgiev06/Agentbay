@@ -1,5 +1,4 @@
-"""Ledger: richer events (durations, tokens, cost, permission decisions, instruction changes); notes never
-create runs."""
+"""Ledger: richer events (durations, tokens, cost, permissions, instruction changes); notes never create runs."""
 import json
 from datetime import datetime, timedelta, timezone
 import subprocess
@@ -101,11 +100,11 @@ def test_guard_decisions_are_ledger_events_without_raw_commands():
             return subprocess.run([sys.executable, str(KIT / "bay/guard.py")], input=json.dumps(payload), text=True,
                                   capture_output=True, env={"CLAUDE_PROJECT_DIR": str(p), "PATH": "/usr/bin:/bin"})
         assert hook("analyst--feed-briefing", f"curl -H 'Authorization: Bearer {secret}' x").returncode == 2
-        assert hook("reviewer--delivery", "git status").returncode == 0                       # left to Claude Code's prompt: no event
+        assert hook("reviewer--delivery", "git status").returncode == 0
         assert hook("analyst--feed-briefing", ".agentbay/roles/analyst--feed-briefing/use items.store/v2.query '{}'").returncode == 0
         evs = ledger.read(p)
         kinds = [e["type"] for e in evs]
-        assert kinds == ["permission.denied"], kinds         # prompts come from transcripts, not the guard
+        assert kinds == ["permission.denied"], kinds
         assert evs[0]["tool"] == "Bash" and evs[0]["agent"] == "analyst--feed-briefing" and evs[0]["source"] == "guard"
         raw = (p / ".agentbay/ledger/events.jsonl").read_text()
         assert secret not in raw
@@ -143,14 +142,13 @@ def test_ledger_scrubs_secret_shaped_text_and_stays_valid_json():
 
 
 def test_secret_scan_catches_planted_secrets():
-    """The scan is strict on purpose (it may also redact code like `secret = self.ctx.secrets.get(...)`);
-    detectors that parse source read it unscrubbed on the dispatcher side, see the audit test below."""
+    """The secret scan is strict on purpose: it may also redact code like `secret = self.ctx.secrets.get(...)`."""
     from bay import secretscan
     from improve_fixtures import CORES, SECRETS
     for kind, value in SECRETS.items():
         assert not any(c in secretscan.scrub(f"x {value} y") for c in CORES), kind
     cut = "x" * 290 + " " + SECRETS["api-key"]
-    assert "sk-ant" not in secretscan.clip(cut, 300) and "sk-ant" in cut[:300]       # cutting first would leak
+    assert "sk-ant" not in secretscan.clip(cut, 300) and "sk-ant" in cut[:300]
 
 
 def test_secretscan_catches_bare_values_with_dots_and_digit_less_secrets():
@@ -162,8 +160,7 @@ def test_secretscan_catches_bare_values_with_dots_and_digit_less_secrets():
 
 
 def test_audit_parses_source_that_contains_secret_shaped_code():
-    """Detectors read source unscrubbed (dispatcher-side raw_text) so x_api.py still parses; the text
-    endpoint agents can reach returns the scrubbed version."""
+    """Detectors read source unscrubbed on the dispatcher side so x_api.py parses; agents get the scrubbed text."""
     import ast
     import importlib.util
     from types import SimpleNamespace
@@ -193,7 +190,7 @@ def test_bay_plan_records_scrubbed_size_limited_append_only_events():
     p = project()
     try:
         r = cli(p, "plan", TID, json.dumps(PLAN))
-        assert r.returncode != 0 and "was not dispatched" in r.stderr           # no dispatch, no plan
+        assert r.returncode != 0 and "was not dispatched" in r.stderr
         _dispatch(p)
         secret = "sk-ant-api03-" + "a" * 40
         bad = dict(PLAN, outcome=f"done when {secret} works")
@@ -201,7 +198,7 @@ def test_bay_plan_records_scrubbed_size_limited_append_only_events():
         raw = (p / ".agentbay/ledger/events.jsonl").read_text()
         assert secret not in raw and "agent.plan" in raw
         r = cli(p, "plan", TID, json.dumps(PLAN))
-        assert r.returncode != 0 and "already has a plan" in r.stderr           # recorded once
+        assert r.returncode != 0 and "already has a plan" in r.stderr
         q = project()
         _dispatch(q)
         for oversize in (dict(PLAN, outcome="x" * 1001), {"outcome": "o", "todo": [{"text": "t", "serves": "s"}] * 13},
@@ -210,9 +207,7 @@ def test_bay_plan_records_scrubbed_size_limited_append_only_events():
             r = cli(q, "plan", TID, json.dumps(oversize))
             assert r.returncode != 0 and ("limit" in r.stderr or "must" in r.stderr), r.stderr
         assert "agent.plan" not in (q / ".agentbay/ledger/events.jsonl").read_text()
-        # another agent's taskId is refused: it was never dispatched
         assert cli(q, "plan", OTHER, json.dumps(PLAN)).returncode != 0
-        # --done ticks items, only valid numbers, only after a plan
         assert cli(q, "plan", TID, "--done", "1").returncode != 0
         assert cli(q, "plan", TID, json.dumps(PLAN)).returncode == 0
         assert cli(q, "plan", TID, "--done", "2").returncode == 0 and cli(q, "plan", TID, "--done", "3").returncode != 0
@@ -234,7 +229,7 @@ def test_a_steps_usage_is_split_among_the_agents_dispatched_to_it_not_counted_pe
         gs = {g["tier"]: g for g in ledger.agent_groups(ledger.read(p))}
         assert (gs["balanced"]["tokens"], gs["balanced"]["costUsd"]) == (300, 0.1)
         assert (gs["deep"]["tokens"], gs["deep"]["costUsd"], gs["deep"]["runs"]) == (600, 0.2, 2)
-        assert sum(g["tokens"] for g in gs.values()) == 900            # the step reported 900, once
+        assert sum(g["tokens"] for g in gs.values()) == 900
     finally:
         cleanup(p)
 
@@ -286,11 +281,11 @@ def test_a_dispatched_agent_is_listed_by_status_without_the_spawn_hook():
         assert "guard: no tool call was checked" in out
         guard_part = out.split("guard: no tool call")[1].split("RECENT AGENTS")[0]
         assert f"unguarded dispatches:\n  {TID}: tests run without hooks" in guard_part
-        assert out.count("unguarded dispatches:") == 1                          # one heading, however many dispatches
+        assert out.count("unguarded dispatches:") == 1
         subprocess.run([sys.executable, str(KIT / "bay/guard.py")], input=json.dumps({"tool_name": "Read", "cwd": str(p)}),
                        text=True, env={"CLAUDE_PROJECT_DIR": str(p), "PATH": "/usr/bin:/bin"})
         out = cli(p, "status").stdout
         assert "guard: no tool call was checked" not in out
-        assert f"unguarded dispatches:\n  {TID}" in out                                # still listed
+        assert f"unguarded dispatches:\n  {TID}" in out
     finally:
         cleanup(p)

@@ -41,7 +41,7 @@ def test_check_takes_boundary_options_only_with_a_base_and_json_prints_only_the_
         for option in (["--docs"], ["--json"], ["--proposal", "docs/proposals/x.md"]):
             r = cli(p, "check", *option)
             assert r.returncode != 0 and "--base" in r.stderr, option
-        k = kit_copy()      # a throwaway repo: the base must hold the map, which the checkout's own HEAD may not yet
+        k = kit_copy()
         for g in (("init", "-q", "-b", "main"), ("add", "-A"), ("commit", "-q", "-m", "c")):
             subprocess.run(["git", "-C", str(k), "-c", "user.email=t@t", "-c", "user.name=t", *g], check=True)
         r = subprocess.run([sys.executable, str(k / "bay/cli.py"), "check", "--base", "HEAD", "--json"],
@@ -57,36 +57,36 @@ def test_note_task_mints_an_id_and_dispatch_and_review_take_the_task_first():
         r = cli(p, "note", "task")
         assert r.returncode == 0 and ledger.TASK_ID.match(r.stdout.strip())
         tid = r.stdout.strip()
-        assert cli(p, "note", "dispatch", tid).returncode != 0                       # --agent is required
+        assert cli(p, "note", "dispatch", tid).returncode != 0
         dispatch = ("note", "dispatch", tid, "--agent", "builder--delivery")
-        r = cli(p, *dispatch)                                                   # no guard heartbeat: refused, no event
+        r = cli(p, *dispatch)
         dispatched = [e for e in ledger.read(p) if e["type"] == "agent.dispatch"]
         assert r.returncode != 0 and "--unguarded" in r.stderr and not dispatched
-        assert cli(p, *dispatch, "--unguarded", "").returncode != 0                  # an empty reason is no reason
-        assert cli(p, *dispatch, "--unguarded", "   ").returncode != 0               # nor is one of only spaces
+        assert cli(p, *dispatch, "--unguarded", "").returncode != 0
+        assert cli(p, *dispatch, "--unguarded", "   ").returncode != 0
         assert cli(p, *dispatch, "--unguarded", "x").returncode == 0
         assert [e["data"]["unguarded"] for e in ledger.read(p) if e["type"] == "agent.dispatch"] == ["x"]
-        assert cli(p, "note", tid, "text", "--unguarded", "x").returncode != 0       # --unguarded goes with `dispatch`
-        seen = p / ".agentbay/ledger/guard.seen"                                     # one hook call touches it
+        assert cli(p, "note", tid, "text", "--unguarded", "x").returncode != 0
+        seen = p / ".agentbay/ledger/guard.seen"
         seen.parent.mkdir(parents=True, exist_ok=True)
         seen.touch()
-        assert cli(p, *dispatch).returncode == 0                                     # fresh: no flag needed
+        assert cli(p, *dispatch).returncode == 0
         old = time.time() - 1000
         os.utime(seen, (old, old))
-        assert cli(p, *dispatch).returncode != 0                                     # older than 900 s: refused again
+        assert cli(p, *dispatch).returncode != 0
         future = time.time() + 86400 * 365
         os.utime(seen, (future, future))
-        assert cli(p, *dispatch).returncode != 0                                     # dated in the future: stale
+        assert cli(p, *dispatch).returncode != 0
         seen.unlink()
         seen.mkdir()
-        assert cli(p, *dispatch).returncode != 0                                     # a directory is no heartbeat
+        assert cli(p, *dispatch).returncode != 0
         seen.rmdir()
         real = p / "real.seen"
         real.touch()
         seen.symlink_to(real)
-        assert cli(p, *dispatch).returncode != 0                                     # nor is a symlink
+        assert cli(p, *dispatch).returncode != 0
         seen.unlink()
-        assert cli(p, "note", tid, "text", "--agent", "x").returncode != 0           # dispatch flags need `dispatch`
+        assert cli(p, "note", tid, "text", "--agent", "x").returncode != 0
         assert sum(e["type"] == "agent.dispatch" and e["taskId"] == tid for e in ledger.read(p)) == 2
     finally:
         cleanup(p)
@@ -104,18 +104,15 @@ BYPASSES = (
 
 
 def test_a_write_verb_must_directly_follow_note_or_show_so_the_ask_rules_match():
-    """`note`/`show` are pre-approved by prefix; an option before the verb would skip the `note dispatch` /
-    `note review` / `show reclaim` ask rules."""
+    """`note`/`show` are pre-approved by prefix, so an option before the verb would skip the ask rules."""
     p = project()
     try:
         for argv in BYPASSES:
             r = cli(p, *argv)
             assert r.returncode != 0 and "no option may come before the verb" in r.stderr, argv
         assert not any(e["type"] in ("agent.dispatch", "reclaimed") for e in ledger.read(p))
-        # also with no leading --project (how the coordinator types it)
         r = subprocess.run([sys.executable, str(KIT / "bay/cli.py"), *BYPASSES[0]], capture_output=True, text=True)
         assert r.returncode != 0 and "no option may come before the verb" in r.stderr
-        # the canonical spellings still work
         assert cli(p, "note", "dispatch", "T-20261030-abcd", "--agent", "x", "--unguarded", "test").returncode == 0
         assert cli(p, "show", "reclaim", "R-1", "--reason", "r").returncode == 0
     finally:

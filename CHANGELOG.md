@@ -2,6 +2,48 @@
 
 Earlier versions: see docs/proposals/
 
+## 3.2.0 - 2026-11-04
+
+Proposal 0011: a standards step blocks new ruff, mypy --strict and comment findings in agent-written Python. A step that can block a call is new default behaviour, so this is a minor version. The contracts are additive and `agentbay/v4` stays.
+
+### Upgrading
+
+1. Run `pip install -r requirements-dev.txt` for the pinned ruff and mypy. A machine without them gets a blocked `standards` step that names this command.
+2. Run `./bay.sh build`, so the agent files list the new commands.
+3. Every `#` comment and every multi-line docstring in the kit is gone, so rebase open branches.
+4. A user mode whose writing role writes Python needs a `standards` step with `with: {base: $call.base}`, `needs: standards.check/v1`, and a code env that binds `python-check` and `comments-check`. `bay check` says so.
+
+### Added
+
+- The `standards` step runs the checkers bound to `standards.check/v1` on the commit the call started from and on the working tree, and blocks only on findings that are new. `forge.create`, `forge.extend` (also `release-standards` after `release`) and `delivery.build` have it.
+- `$call.base` is the commit a call started from. A call that `replaces` another keeps the other's base, and may replace a call that ended `blocked`, `failed` or `partial`.
+- `standards.check/v1`, a dispatcher-only interface with one endpoint, `findings { root, configRoot }`.
+- The `python` component: `python-check` runs ruff and `mypy --strict` with the kit's `ruff.toml` and `mypy.ini`. The `language` block in `component.schema.json` declares a language's files, comment syntax, tools and install text.
+- The `comments` component: `comments-check` reports one finding per comment line, in every declared language. The rule is no `#` comment and no docstring longer than one line.
+- The `comment_lines` measure in `framework/limits.yaml`, with ceiling 0, counts every Python file the rule covers.
+- `bay check` flags a feature whose writing role can write a checked file but has no `standards` step after that role's last step.
+- Builders and reviewers can run `python3 -I -m ruff check` and `python3 -I -m mypy` with the kit's config, to see a finding before the step does.
+
+### Changed
+
+- The `kit_python_lines` ceiling rises to 5276 and the `tests` ceiling to 463, under owner-approved exceptions in the
+  proposal (up to 5300 and 463). `bay_lines` and `long_lines` are written down to the real counts.
+- Ruff and mypy settings are in `components/python`: line length 120, rules E, F, W and B, E402 ignored in the three entry scripts, and `strict = True` with `warn_unreachable`.
+- The `bay --help` text is the constant `USAGE`. The reasons the removed comments held are now in names, error messages and READMEs.
+- The export, merge-base and rename helpers moved from improve-detect to `bay/boundary.py`, shared with the standards step.
+- `components/python`, `components/comments`, `requirements-dev.txt` and the root `conftest.py` are protected or owned in `framework/kernel.yaml`, so they change only through forge.extend. `tests/conftest.py` moved to the root.
+- The builder prompt states the comments rule and names the two tool commands with their config flags. Two DoD items were added to each of forge.extend, delivery.build and forge.create.
+- A standards step is a check like review and gate, so it never becomes a call's output. `forge.create`, `forge.extend` and `delivery.build` end with their Result.
+
+### Security
+
+- The guard allows `python3 -I -m ruff check` and `python3 -I -m mypy` only with the kit's protected config path given once, and only the flags `--no-cache`, `--ignore-noqa`, `--statistics`, `--strict` and `--show-error-codes`. There is no `--fix`, no output file and no cache directory. `-I` stops a planted `ruff.py` or `mypy.py`.
+- A word that starts with `@` is refused for ruff and mypy, since they read arguments from such a file. Glob characters are refused in lint commands, so each path is named.
+- For every command, an unquoted word that starts with `#` and a backslash-newline continuation are refused, and so is a newline inside a word.
+- The standards step reads ruff and mypy configuration from the base commit, never from the change, so a change cannot supply its own config or mypy plugin. It ignores `.ignore` and `.gitignore` files and `noqa` comments.
+- The step reports the Python files ruff could not check (including a `.py` under a dot-folder, a symlink, or a name that cannot be imported), a `.pyi` next to a `.py`, `# mypy:` and `type: ignore` comments, `no_type_check`, and code mypy treats as unreachable (`TYPE_CHECKING`, `MYPY`, `PY2`, `PY3`, platform and version checks).
+- A timeout, a crash or output that is not JSON from a checker stops the step. It is never read as a pass. The tools run with list arguments, no shell, a timeout, and only on a temporary export and copy that are removed afterwards.
+
 ## 3.1.0 - 2026-11-04
 
 Proposal 0020: agents can check their own work, and a dispatch checks that the guard is on. The dispatch check changes default behaviour, so this is a minor version.

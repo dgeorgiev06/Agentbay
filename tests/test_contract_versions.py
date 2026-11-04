@@ -25,7 +25,7 @@ def test_shipped_modes_and_connectors_declare_versioned_kinds():
     assert {k: kinds.get(k) for k in ("post", "email")} == {"post": {1}, "email": {1}}
     assert kit.docs["Mode"]["feed-briefing"].spec["reads"] == ["post/v1"]
     assert kit.docs["Mode"]["mail-briefing"].spec["reads"] == ["email/v1"]
-    assert "reads" not in kit.docs["Mode"]["store"].spec            # the abstract base declares none
+    assert "reads" not in kit.docs["Mode"]["store"].spec
     for c, kind in (("x-api", "post/v1"), ("fake", "post/v1"), ("gmail-api", "email/v1"), ("fake-mail", "email/v1")):
         assert kit.docs["Connector"][c].spec["produces"] == [kind]
     assert not [p for p in lint.lint_contract_versions(kit)]
@@ -64,20 +64,18 @@ def test_version_mismatch_and_missing_producer_are_refused():
     has(k, "mode mail-briefing needs items.source/v1 but declares no spec.reads")
 
 
-# ------------------------------------------------------------------ B-7: no extension names another
 def test_no_extension_names_another_b7():
     k = kit_copy()
-    assert not lint.lint_extension_names(model.Kit(KIT))                              # shipped kit: no hit
+    assert not lint.lint_extension_names(model.Kit(KIT))
     pb = "components/mail-briefing/features/digest/playbook.md"
     (k / pb).write_text((k / pb).read_text() + "\nThreads come from gmail-api; see also feed-briefing.\n")
     sub(k, "components/x-api/x_api.py", "\n", "\n# tuned for feed-briefing\nimport fake\n")
     (k / "components/mail-briefing/README.md").write_text((k / "components/mail-briefing/README.md").read_text()
-                                                     + "\nEnv local-mail binds gmail-api.\n")       # README: exempt
+                                                     + "\nEnv local-mail binds gmail-api.\n")
     (k / "components/x-api/tests/test_extra.py").write_text("import fake  # tests may pick a stand-in\n")
     sub(k, "components/forge/features/create/playbook.md", "stubbed HTTP layer", "fake HTTP layer")
     ps = lint.run(k)
     hits = [p for p in ps if "B-7" in p]
-    # 0008: prose that names a mode or a connector in a playbook or a comment is fine; an import is not
     assert not any(pb in p or "forge/features/create/playbook.md" in p for p in ps), ps
     assert any("x_api.py:3: connector x-api imports fake of connector fake" in p for p in hits), hits
     assert not any("x_api.py:2" in p for p in hits), hits
@@ -86,8 +84,7 @@ def test_no_extension_names_another_b7():
 
 
 def test_b7_catches_case_module_forms_nested_tests_and_referenced_files():
-    """F-6 repros: case, the module form, the kernel's sys.modules keys (also inside import_module strings),
-    a tests/ folder below the extension's top level, and a file the manifest references from outside."""
+    """F-6 repros: case, the module form, kernel sys.modules keys, nested tests/ folders and referenced files."""
     k = kit_copy()
     sub(k, "components/x-api/x_api.py", "\n", "\n# see Gmail-API\nimport gmail_api\n"
         "m = importlib.import_module('agentbay_connector_gmail_api')\nsys.modules['agentbay_adapter_fake_mail']\n")
@@ -103,7 +100,7 @@ def test_b7_catches_case_module_forms_nested_tests_and_referenced_files():
     assert any("x_api.py:5: connector x-api uses the module key of connector fake-mail" in p for p in hits), hits
     assert any("helper.py:2: connector x-api imports gmail_api of connector gmail-api" in p for p in hits), hits
     assert any("x_entry.py:2: connector fake imports gmail_api of connector gmail-api" in p for p in hits), hits
-    assert not any("x_api.py:2" in p or "helper.py:1" in p or "x_entry.py:1" in p for p in hits), hits      # prose
+    assert not any("x_api.py:2" in p or "helper.py:1" in p or "x_entry.py:1" in p for p in hits), hits
 
 
 def test_mixed_versions_of_a_read_kind_are_refused_f7():

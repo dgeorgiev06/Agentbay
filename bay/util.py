@@ -41,8 +41,7 @@ def parse_time(text: str, now: datetime) -> datetime:
 
 
 def in_window(ts: str | None, since: datetime | None, until: datetime | None) -> bool:
-    """Is the ISO timestamp `ts` within [since, until]? No bound on a side is open; a missing `ts` is in only when
-    there is no `since`; an unparsable one is out."""
+    """Is the ISO timestamp `ts` within [since, until]? A missing `ts` needs no `since`; an unparsable one is out."""
     if not ts:
         return since is None
     try:
@@ -59,8 +58,7 @@ def short_hash(obj, n: int = 12) -> str:
 
 
 def fingerprint(c: dict) -> str:
-    """The improve finding contract: the id of a candidate is its kind and detector key (improve-detect and
-    improve-store both use it; the tests of both assert one shared vector)."""
+    """The improve finding contract: the id of a candidate is the hash of its kind and detector key."""
     return short_hash(f"{c['kind']}|{c['detector']['key']}", 16)
 
 
@@ -73,7 +71,7 @@ def warn(warnings: list | None, msg: str) -> None:
         warnings.append(msg)
 
 
-PROPOSAL_PATH = re.compile(r"^docs/proposals/[A-Za-z0-9][A-Za-z0-9._-]*\.md$")     # where a forge.extend proposal lives
+PROPOSAL_PATH = re.compile(r"^docs/proposals/[A-Za-z0-9][A-Za-z0-9._-]*\.md$")
 
 
 def read_json(p: Path, default=None):

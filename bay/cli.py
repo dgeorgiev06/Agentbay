@@ -1,42 +1,5 @@
 #!/usr/bin/env python3
-"""agentbay control plane.
-
-  check [--base <ref>]   lint + resolve every mode endpoint (fails with every gap); with --base, also check the
-                         change against framework/kernel.yaml and a proposal's touches: (--proposal, --docs);
-                         --limits checks the size ceilings in framework/limits.yaml
-  build | clean          compile modes/roles into a runtime (claude-code) / remove it; build writes a minimal
-                         agentbay.config.yaml when the project has none
-  config                 every agentbay.config.yaml setting, with type, default and description (from the schemas)
-  catalog [<name>]       the registry (.agentbay/catalog.json): endpoints with schemas, workflows;
-                         --roles lists the role units instead (no build needed)
-  describe <mode|role>   resolved definition as JSON
-
-  call <mode>.<endpoint> '<json>'      run an endpoint (the only way to invoke one)
-  submit <callId> <stepId> '<json>'    hand back an agentic step's output
-  show <callId>                        current state of a call (result or the step it waits on)
-  show <mode> --resolved               the mode's features after `extends`, each with the file it comes from
-  show reclaim <runId>                 mark a stuck run as reclaimed
-  show close <callId> --reason <text>  end an open call as abandoned
-  approve <callId|runId> [--reject]    pass an approval gate of a call, or of a workflow run (W-...)
-                                       (you, in a terminal; never an agent)
-          [--via chat --quote "<msg>"] from chat, relayed by the Chief of Staff, when approve.from lists chat
-  approve <F-id> [--defer|--wontfix]   decide an improve backlog item (where approve.from allows)
-  (agents read data only through .agentbay/roles/<role>--<mode>/use, generated per role unit by build)
-
-  new mode <name> | new feature <name> --mode <m>
-  new connector <name> --implements <iface> | new env <name>     scaffolds (forge templates)
-  secret set <NAME>      store a secret in the keychain (value read from stdin, never echoed)
-  auth <connector>       run a connector's declared login (e.g. a browser sign-in that stores its token);
-                         asks first; needs the browser on this machine
-
-  status [--agents|--log]                      calls, steps and agent runs; the raw ledger
-  note <ref> "text" [--instruction]            record a note (--instruction: a mid-run instruction change)
-  note task                                    print a fresh taskId
-  note dispatch <taskId> --agent <name> ...    the coordinator's dispatch log
-  note done <taskId>                           a dispatched agent finished (no hook needed)
-  note review <taskId> '<review.verdict/v1>'   a review that ran outside a framework step
-  plan <taskId> '<json>' | --done <n>          a dispatched agent's outcome and to-do (the only command subagents run)
-"""
+"""agentbay control plane."""
 from __future__ import annotations
 
 import argparse
@@ -50,7 +13,46 @@ from pathlib import Path
 KIT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(KIT))
 
-from bay import ledger, protocol, vault  # noqa: E402
+from bay import ledger, protocol, vault
+
+USAGE = """agentbay control plane.
+
+check [--base <ref>]   lint + resolve every mode endpoint (fails with every gap); with --base, also check the
+                       change against framework/kernel.yaml and a proposal's touches: (--proposal, --docs);
+                       --limits checks the size ceilings in framework/limits.yaml
+build | clean          compile modes/roles into a runtime (claude-code) / remove it; build writes a minimal
+                       agentbay.config.yaml when the project has none
+config                 every agentbay.config.yaml setting, with type, default and description (from the schemas)
+catalog [<name>]       the registry (.agentbay/catalog.json): endpoints with schemas, workflows;
+                       --roles lists the role units instead (no build needed)
+describe <mode|role>   resolved definition as JSON
+
+call <mode>.<endpoint> '<json>'      run an endpoint (the only way to invoke one)
+submit <callId> <stepId> '<json>'    hand back an agentic step's output
+show <callId>                        current state of a call (result or the step it waits on)
+show <mode> --resolved               the mode's features after `extends`, each with the file it comes from
+show reclaim <runId>                 mark a stuck run as reclaimed
+show close <callId> --reason <text>  end an open call as abandoned
+approve <callId|runId> [--reject]    pass an approval gate of a call, or of a workflow run (W-...)
+                                     (you, in a terminal; never an agent)
+        [--via chat --quote "<msg>"] from chat, relayed by the Chief of Staff, when approve.from lists chat
+approve <F-id> [--defer|--wontfix]   decide an improve backlog item (where approve.from allows)
+(agents read data only through .agentbay/roles/<role>--<mode>/use, generated per role unit by build)
+
+new mode <name> | new feature <name> --mode <m>
+new connector <name> --implements <iface> | new env <name>     scaffolds (forge templates)
+secret set <NAME>      store a secret in the keychain (value read from stdin, never echoed)
+auth <connector>       run a connector's declared login (e.g. a browser sign-in that stores its token);
+                       asks first; needs the browser on this machine
+
+status [--agents|--log]                      calls, steps and agent runs; the raw ledger
+note <ref> "text" [--instruction]            record a note (--instruction: a mid-run instruction change)
+note task                                    print a fresh taskId
+note dispatch <taskId> --agent <name> ...    the coordinator's dispatch log
+note done <taskId>                           a dispatched agent finished (no hook needed)
+note review <taskId> '<review.verdict/v1>'   a review that ran outside a framework step
+plan <taskId> '<json>' | --done <n>          a dispatched agent's outcome and to-do (the only command subagents run)
+"""
 
 
 def _out(obj) -> None:
@@ -82,7 +84,6 @@ def _json_arg(text: str | None) -> dict:
         _die(f"input is not valid JSON: {e.msg} at char {e.pos}")
 
 
-# ------------------------------------------------------------------ model
 def cmd_lint(args) -> int:
     from bay import config, lint, model
     try:
@@ -107,7 +108,7 @@ def cmd_check(args):
     """`bay check`: lint, then resolve everything; with --base, also the change's boundary check."""
     if (args.proposal or args.docs or args.json) and not args.base:
         _die("✗ --proposal, --docs and --json belong to the boundary check: pass --base <ref> too")
-    with (contextlib.redirect_stdout(sys.stderr) if args.json else contextlib.nullcontext()):   # --json: stdout is the report only
+    with (contextlib.redirect_stdout(sys.stderr) if args.json else contextlib.nullcontext()):
         bad = _validate(args)
     if args.base:
         bad = cmd_boundary(args) or bad
@@ -174,8 +175,7 @@ def _print_units(s) -> None:
 
 
 def cmd_catalog(args):
-    """The registry, as the coordinator reads it: a pure read of .agentbay/catalog.json (pre-approved).
-    `--roles` also resolves the kit and lists the role units."""
+    """The registry, as the coordinator reads it: a pure read of .agentbay/catalog.json (pre-approved)."""
     from bay import registry
     if args.roles:
         if args.name or args.json:
@@ -251,7 +251,6 @@ def cmd_describe(args):
     _die(f"no mode or role '{args.name}' (modes: {', '.join(s.modes)}; roles: {', '.join(s.roles)})")
 
 
-# ------------------------------------------------------------------ runtime
 def _dispatcher(args):
     from bay import dispatch
     return dispatch.Dispatcher(_system(args), args.project)
@@ -277,9 +276,7 @@ CHAT_BY = "user@chat-via-cos"
 
 
 def _approval_channel(args) -> tuple[str, str]:
-    """(by, quote) for `bay approve`. The channel (`--via tty`, the default, or `--via chat`) must be listed in the
-    project's `approve.from`. A terminal approval needs a TTY. A chat approval needs the owner's message quoted
-    verbatim; the ledger labels it user@chat-via-cos, so it is never mistaken for a terminal one."""
+    """(by, quote) for `bay approve`; the channel (`--via tty` or `--via chat`) must be listed in `approve.from`."""
     from bay import config as cfgmod
     try:
         allowed = cfgmod.approve_from(cfgmod.load(args.project))
@@ -305,8 +302,9 @@ def _approval_channel(args) -> tuple[str, str]:
 
 
 def _confirm(by: str) -> None:
+    """Ask for a typed yes, except for a chat approval, whose quoted owner message is the confirmation."""
     if by == CHAT_BY:
-        return          # the owner's quoted message is the confirmation; Claude Code asks before this command runs
+        return
     if input("Type yes to confirm: ").strip().lower() != "yes":
         _die("not confirmed; nothing changed")
 
@@ -331,8 +329,8 @@ def cmd_approve(args):
     verb = "REJECT" if args.reject else "APPROVE"
     print(f"{verb} gate '{st['next']['step']}' of {st['target']}: {st['next']['gate']}")
     ap = st["next"].get("approves")
-    shown = [x for x in (ap, (ap or {}).get("plan")) if x]      # the exact content this approval covers (proposal, plan)
-    for x in shown:                                             # an edit after it makes the gate run again
+    shown = [x for x in (ap, (ap or {}).get("plan")) if x]
+    for x in shown:
         print(f"  {x['path']} at sha256 {x['sha256']}")
     sha = (args.sha or "").strip() if by == CHAT_BY else "+".join(str(x["sha256"]) for x in shown)
     if by == CHAT_BY and ap and not sha:
@@ -370,8 +368,7 @@ def cmd_submit(args):
 
 
 def role_use_main(unit: str, project: Path, argv: list[str]) -> None:
-    """Entry point of a generated role shim. The unit (role, mode, env) is fixed by the shim; flags are not
-    parsed."""
+    """Entry point of a generated role shim; the shim fixes the unit (role, mode, env) and no flags are parsed."""
     from bay import dispatch, model
     if not argv or argv[0].startswith("-"):
         _die(f"usage: .agentbay/roles/{unit}/use <capability>/v<N>.<endpoint> '<json>'  (role unit {unit} is fixed)")
@@ -387,8 +384,7 @@ def role_use_main(unit: str, project: Path, argv: list[str]) -> None:
 
 
 def _decide_finding(args):
-    """`bay approve <F-id>`: the owner's decision on an improve backlog item. Approving follows the same channel as a
-    gate (`approve.from`); `--defer` and `--wontfix` record the other two decisions."""
+    """`bay approve <F-id>`: the owner's decision on an improve backlog item, by a gate's channel or a flag."""
     if args.reject or args.sha:
         _die("✗ --reject and --sha are for gates; a backlog item is approved, or decided with --defer or --wontfix")
     if args.defer and args.wontfix:
@@ -406,7 +402,6 @@ def _decide_finding(args):
                   data={"kind": "decision", **({"quote": quote} if quote else {})})
 
 
-# ------------------------------------------------------------------ scaffolds & secrets
 def cmd_new(args):
     from bay import scaffold
     if args.kind == "feature" and not args.mode:
@@ -446,8 +441,7 @@ def cmd_secret(args):
 
 
 def cmd_auth(args):
-    """`bay auth <connector>`: runs the connector's declared `login` entry (e.g. an OAuth browser login that stores
-    a refresh token)."""
+    """`bay auth <connector>`: runs the connector's declared `login` entry, such as an OAuth browser login."""
     from bay import connect
     s = _system(args)
     try:
@@ -456,7 +450,6 @@ def cmd_auth(args):
         _die(f"✗ {e}")
 
 
-# ------------------------------------------------------------------ ledger
 def cmd_config(args):
     """`bay config`: every setting of agentbay.config.yaml, read from the schemas."""
     from bay import config as cfgmod, model
@@ -464,9 +457,7 @@ def cmd_config(args):
 
 
 def cmd_plan(args):
-    """A dispatched agent's outcome and to-do list: the only `bay` command a subagent may run. It appends its own
-    events and changes nothing else. It accepts a logged dispatch's taskId; plan ownership is enforced per agent type
-    by the guard (a role subagent may run only `bay plan`) plus the dispatch record, not per run."""
+    """A dispatched agent's outcome and to-do list: the only `bay` command a subagent may run; it only appends."""
     try:
         if args.done is not None:
             if args.plan_json:
@@ -481,8 +472,7 @@ def cmd_plan(args):
 
 
 def _note_review(args, task: str, verdict_json: str):
-    """`bay note review <taskId> '<review.verdict/v1>'`: the coordinator records a review that ran outside a framework
-    review step as a `review.recorded` ledger event that improve reads. It touches no call, gate or approval."""
+    """`bay note review <taskId> '<review.verdict/v1>'`: records a review outside a framework step."""
     from bay import model
     verdict = _json_arg(verdict_json)
     errs = model.schema_errors(verdict, model.data_schema("review.verdict/v1"))
@@ -496,15 +486,13 @@ def _note_review(args, task: str, verdict_json: str):
 
 
 def _note_dispatch(args, task: str):
-    """`bay note dispatch <taskId> --agent ...`: the coordinator records a subagent dispatch, so `bay status` lists
-    it even when the spawn hook is off."""
+    """`bay note dispatch <taskId> --agent ...`: the coordinator records a subagent dispatch for `bay status`."""
     if not args.agent:
         _die("✗ note dispatch needs --agent <subagent_type>")
     if not ledger.TASK_ID.match(task):
         _die(f"✗ '{task}' is not a taskId (`bay note task` mints one)")
-    args.unguarded = (args.unguarded or "").strip()      # a reason of only spaces is no reason
-    # 900 seconds: the hook touches the file before the user answers the prompt
-    if not args.unguarded and _guard_silent(args.project, 900):
+    args.unguarded = (args.unguarded or "").strip()
+    if not args.unguarded and _guard_silent(args.project, PROMPT_ANSWER_WINDOW_S):
         _die("✗ no guard hook call in the last 15 minutes: hooks are not loaded. "
              'Start Claude Code inside the project, or pass --unguarded "<reason>"')
     ledger.append(args.project, "agent.dispatch", task, source="coordinator", taskId=task,
@@ -517,7 +505,7 @@ def _note_dispatch(args, task: str):
 
 def _guard_silent(project: Path, secs: int = 120) -> bool:
     """True when no hook call touched .agentbay/ledger/guard.seen in the last `secs` seconds: hooks are not loaded."""
-    p = project / ".agentbay/ledger/guard.seen"      # not a symlink or a directory, and not dated in the future
+    p = project / ".agentbay/ledger/guard.seen"
     return p.is_symlink() or not p.is_file() or not 0 <= time.time() - p.stat().st_mtime <= secs
 
 
@@ -607,16 +595,16 @@ def _find_run(project, key) -> str:
     for r in ledger.fold(ledger.read(project)).values():
         if r.run_id.startswith(key) or r.task_id == key:
             return r.run_id
-    return key  # a task, call or anything else: the note stays standalone (it never creates a run)
+    return key
 
 
 STALE_S = 86400
+PROMPT_ANSWER_WINDOW_S = 900
 DISPATCH_FLAGS = ("agent", "call", "step", "model", "tier", "role", "mode", "summary", "input", "unguarded")
 
 
 def cmd_note(args):
-    """`bay note`: a note on a run, task or call; `note task` mints a taskId; `note dispatch` and `note review` are the
-    coordinator's records (taskId first, so a permission rule can match them by prefix)."""
+    """`bay note`: a note on a run, task or call; `task` mints a taskId."""
     words = args.words
     verb = words[0]
     if verb not in ("task", "dispatch", "review") and any(getattr(args, f) for f in DISPATCH_FLAGS):
@@ -655,8 +643,7 @@ def cmd_note(args):
 
 
 def cmd_show(args):
-    """`bay show <callId>`; `bay show reclaim <runId>` marks a stuck run as reclaimed and `bay show close <callId>
-    --reason ...` ends an open call (writes, so each is its own prefix for a permission rule)."""
+    """`bay show <callId>`, or `show reclaim <runId>` and `show close <callId>`, which write and are asked by prefix."""
     if args.ref[0] in ("reclaim", "close"):
         if len(args.ref) != 2 or (args.ref[0] == "close" and not args.reason):
             _die("✗ usage: bay show reclaim <runId> [--reason ...] | bay show close <callId> --reason ...")
@@ -676,15 +663,14 @@ def cmd_show(args):
 
 
 def cmd_show_resolved(args):
-    """`bay show <mode> --resolved`: the mode's features after `extends`, each with the mode.yaml it comes from. A
-    child's feature replaces its parent's whole, so a feature has exactly one origin (0006 Part E)."""
+    """`bay show <mode> --resolved`: the mode's features after `extends`, each with the mode.yaml it comes from."""
     from bay import model
     kit = _system(args).kit
     md = kit.get("Mode", args.ref[0])
     if md is None:
         _die(f"✗ no mode '{args.ref[0]}' (modes: {', '.join(sorted(kit.docs['Mode']))})")
     own = {}
-    for d in reversed(md.dirs):                     # the ancestor first; the nearest declaration wins
+    for d in reversed(md.dirs):
         for name in (model.load_yaml(d / "mode.yaml")["spec"].get("features") or {}):
             own[name] = d / "mode.yaml"
     feats = {name: {"origin": model.rel(own[name]), **block} for name, block in md.spec["features"].items()}
@@ -696,7 +682,7 @@ def cmd_boundary(args) -> int:
     from bay import boundary
     touches, prop = [], None
     try:
-        if args.proposal:                    # F-14: the proposal's touches as committed at --head
+        if args.proposal:
             pp = Path(args.proposal).resolve()
             if not pp.is_relative_to(KIT):
                 _die(f"✗ {args.proposal}: the proposal must be a file in this repository")
@@ -747,11 +733,9 @@ def _hoist_project(argv: list[str]) -> list[str]:
 
 
 def _verb_first(argv: list[str]) -> None:
-    """`note` and `show` are pre-approved by prefix in the generated permissions, and their writes (`note dispatch`,
-    `note review`, `show reclaim`, `show close`) are asked by a longer prefix. So nothing may stand between the command and its
-    verb: an option there (or `--project`, which is otherwise accepted anywhere) would run the write unasked."""
+    """Refuse an option before `note` or `show`: their writes are asked by prefix and would otherwise run unasked."""
     i = 0
-    while i < len(argv) and argv[i].startswith("-"):      # a global option before the command
+    while i < len(argv) and argv[i].startswith("-"):
         i += 2 if argv[i] == "--project" else 1
     if i < len(argv) and argv[i] in ("note", "show") and i + 1 < len(argv) and argv[i + 1].startswith("-") \
             and argv[i + 1] not in ("-h", "--help"):
@@ -764,7 +748,7 @@ def _verb_first(argv: list[str]) -> None:
 def main(argv=None):
     raw = sys.argv[1:] if argv is None else list(argv)
     _verb_first(raw)
-    ap = argparse.ArgumentParser(prog="bay", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(prog="bay", description=USAGE, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--project", type=Path, default=Path.cwd(), help="target project (default: cwd)")
     sub = ap.add_subparsers(dest="cmd", required=True, metavar="<command>")
 

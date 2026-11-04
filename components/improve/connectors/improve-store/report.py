@@ -1,5 +1,4 @@
-"""Text rendering for improve: the weekly backlog report and implement's handoff drafts. Pure functions;
-the store writes what they return (after a secret scan)."""
+"""Text rendering for improve: the weekly backlog report and implement's handoff drafts, as pure functions."""
 from __future__ import annotations
 
 

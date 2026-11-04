@@ -1,59 +1,38 @@
-"""`bay check --base <ref>`: a deterministic check that a change stays inside its boundaries (proposal 0006, Part F).
-
-It reads `git diff --name-status --no-renames <base>...<head>` and classifies each changed path (deletions
-and both sides of a move included) with
-framework/kernel.yaml and the proposal's `touches:`:
-
-- core (B-1): under the kernel's `owns:`; passes only if a `touches:` glob matches.
-- extension (B-2): a component folder `components/<name>/`; a new one passes (unless protected), listed or not.
-- feature (B-3): inside an existing component, `features/<f>/` passes when a `touches:` entry lists it.
-  Component-wide files (mode.yaml, playbook.md, ...) must be listed too.
-- docs: README.md, docs/DESIGN.md, docs/INTERFACES.md change only when listed.
-- other: tests/, the proposal, HANDOFF.md, proposal/research records and repo meta pass.
-- a file in the repo root that the kernel does not own (TODO.md, CLAUDE.md) passes: it is not framework code.
-- anything else is unowned and fails unless listed (CI config under `.github/` included).
-
-Inputs come from commits, never the working tree (F-14): the component map and the "is this extension new" tree
-as of the merge-base of `<base>` and `<head>` (N-2: the side `<base>...<head>` diffs against; a change that edits
-the map is judged by the map it edits), and the proposal's `touches:` as of `<head>`. Only a change that adds the
-map (status A) is judged by its own map at `<head>`; it then gets no new-extension pass, so every changed path
-outside other must be listed (N-1), and the report says so. Any other base without a map is an error.
-
-B-11 (`--docs`): the core docs must not name a component folder (its kind is its manifest file) outside a fenced
-block. A folder inside a core `owns:` path is core, not an extension, so naming it is allowed. Each hit fails the check.
-
-Glob syntax for `owns:` and `touches:`: `*` and `?` stay within one path segment, `**` crosses
-segments, and a trailing `/` means the folder and everything under it.
-"""
+"""`bay check --base <ref>`: a deterministic check that a change stays inside its boundaries (proposal 0006, Part F)."""
 from __future__ import annotations
 
 import posixpath
 import re
 import subprocess
+import tarfile
+from collections.abc import Callable
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 DOCS = ("README.md", "docs/DESIGN.md", "docs/INTERFACES.md")
 OTHER = ("tests/", "HANDOFF.md", "docs/proposals/", "docs/plans/", "docs/research/", ".gitignore",
          ".gitattributes", ".editorconfig", "LICENSE", "LICENSE.md")
-# the manifest file of a component folder -> its kind (B-11 forbids naming these folders in the core docs)
 MANIFEST_KINDS = {"mode.yaml": "mode", "connector.yaml": "connector", "content-type.yaml": "contentType",
                   "component.yaml": "component"}
 _COMPONENT = re.compile(r"components/([^/]+)/")
+SHA = re.compile(r"^[0-9a-f]{7,40}$")
+GIT_TIMEOUT = 60
+ARCHIVE_TIMEOUT = 120
+Runner = Callable[..., Any]
 
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 
 
-# ----------------------------------------------------------------- globs
 def _glob_re(glob: str) -> str:
     out, i = [], 0
     while i < len(glob):
         if glob.startswith("**", i):
             out.append(".*")
             i += 2
-            if glob.startswith("/", i):          # `a/**/b` also matches `a/b`
+            if glob.startswith("/", i):
                 out[-1] = "(?:.*/)?"
                 i += 1
         elif glob[i] == "*":
@@ -79,7 +58,6 @@ def literal_prefix(glob: str) -> str:
     return glob[:m.start()] if m else glob
 
 
-# ----------------------------------------------------------------- protection
 _NAME = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
@@ -110,13 +88,10 @@ def _folder(p) -> str:
 
 @dataclass(frozen=True)
 class Protection:
-    """What only `forge.extend` may change, as the component map declares it (`protected:`): folders (`paths`), and
-    by name the modes, envs and connectors that are protected wherever they sit. `place` says, for each protected
-    env, which unprotected modes may put roles there (`*` = every one). A set that could not be read is `closed`:
-    every name is reserved, every path covered, nothing may be placed - never open."""
+    """What only `forge.extend` may change, per the map's `protected:` block; a set that cannot be read is `closed`."""
     paths: tuple[str, ...] = ()
-    names: dict = field(default_factory=dict)       # kind -> protected instance names (env: the keys of `place`)
-    place: dict = field(default_factory=dict)       # env -> the unprotected modes that may use it
+    names: dict = field(default_factory=dict)
+    place: dict = field(default_factory=dict)
     closed: bool = False
 
     @classmethod
@@ -156,8 +131,7 @@ class Protection:
         return self.closed or any(under(path, p) for p in self.paths)
 
     def may_place(self, mode: str, env: str) -> bool:
-        """May `mode` put a role in `env`? Anything may use an unprotected env; a protected env belongs to the
-        protected modes and to the unprotected modes its entry names."""
+        """May `mode` put a role in `env`? An unprotected env is open; a protected env takes its listed modes."""
         if self.closed:
             return False
         if env not in self.place or mode in self.names.get("mode", ()):
@@ -169,10 +143,8 @@ class Protection:
         return [e for e, modes in self.place.items() if "*" in modes]
 
 
-# ----------------------------------------------------------------- the map
 def root(path: str) -> tuple[str, str] | None:
-    """The component folder `path` is inside: (`components/x/`, `x`), or None. Folders are found by this one
-    convention, as the loader finds them (`components/*/<manifest>`)."""
+    """The component folder `path` is inside: (`components/x/`, `x`), or None."""
     m = _COMPONENT.match(path)
     return (m.group(0), m.group(1)) if m else None
 
@@ -214,8 +186,7 @@ class ComponentMap:
         return "kernel" if any(match(g, path) for g in self.owns) else None
 
     def protected_by(self, path: str) -> str | None:
-        """Why `path` is protected (a folder of `protected.paths`, or a file of a protected mode wherever its
-        folder sits), else None."""
+        """Why `path` is protected (a folder of `protected.paths`, or a file of a protected mode), else None."""
         p = self.protected
         for d in p.paths:
             if under(path, d):
@@ -225,13 +196,11 @@ class ComponentMap:
 
 
 def stray(paths: list[str], cmap: ComponentMap) -> list[str]:
-    """B-4: the paths that are neither core docs, other, a repo-root file, under a core `owns:` path nor in a
-    component folder."""
+    """B-4: the paths that are neither core docs, other, a repo-root file, core-owned nor in a component folder."""
     return [p for p in paths if p not in DOCS and not any(match(g, p) for g in OTHER) and "/" in p
             and not cmap.owner(p) and not root(p)]
 
 
-# ----------------------------------------------------------------- git
 def git(repo: Path, *args: str) -> str:
     r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
     if r.returncode:
@@ -246,7 +215,7 @@ def show(repo: Path, rev: str, path: str) -> str | None:
     """The text of `path` as committed at `rev`, or None when `rev` has no such file."""
     r = subprocess.run(["git", "-C", str(repo), "cat-file", "-e", f"{rev}:{path}"], capture_output=True)
     if r.returncode:
-        git(repo, "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}")      # a bad rev is an error, not "absent"
+        git(repo, "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}")
         return None
     return git(repo, "show", f"{rev}:{path}")
 
@@ -259,11 +228,57 @@ def merge_base(repo: Path, base: str, head: str) -> str:
     return out
 
 
+def _try_git(repo: Path, args: tuple[str, ...], run: Runner) -> subprocess.CompletedProcess[str] | None:
+    try:
+        done: subprocess.CompletedProcess[str] = run(["git", "-C", str(repo), *args], capture_output=True,
+                                                     text=True, timeout=GIT_TIMEOUT)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return done
+
+
+def base_commit(repo: Path, base: str, run: Runner = subprocess.run) -> str:
+    """The commit the working tree branched from `base`, so a branch is judged against what it started from."""
+    if not isinstance(base, str) or not base or base.startswith("-"):
+        raise ValueError(f"base must be a git revision, got {base!r}")
+    r = _try_git(repo, ("rev-parse", "--verify", "--quiet", f"{base}^{{commit}}"), run)
+    if r is None or r.returncode != 0:
+        remote = base.split("/")[0] if "/" in base else "<remote>"
+        raise ValueError(f"base {base} does not resolve in this checkout; fetch {remote} (git fetch {remote}) "
+                         f"and run the check again")
+    r = _try_git(repo, ("merge-base", base, "HEAD"), run)
+    sha = (r.stdout or "").strip() if r is not None and r.returncode == 0 else ""
+    if not SHA.match(sha):
+        raise ValueError(f"base {base} has no common ancestor with HEAD; fetch the remote and rebase the change")
+    return sha
+
+
+def renames(repo: Path, sha: str, run: Runner = subprocess.run) -> dict[str, str]:
+    """The files git sees as renamed between `sha` and the working tree: {old path: new path}."""
+    r = _try_git(repo, ("diff", "-M", "--diff-filter=R", "--name-status", "-z", sha), run)
+    names = (r.stdout or "").split("\0") if r is not None and r.returncode == 0 else []
+    return dict(zip(names[1::3], names[2::3]))
+
+
+def export(repo: Path, rev: str, dest: Path, run: Runner = subprocess.run) -> None:
+    """The tree of `repo` at `rev` as plain files in `dest` (git archive, filter="data"); nothing in it is ever run."""
+    tar = dest.parent / "base.tar"
+    try:
+        r = run(["git", "-C", str(repo), "archive", "--format=tar", "-o", str(tar), rev],
+                capture_output=True, text=True, timeout=ARCHIVE_TIMEOUT)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise ValueError(f"cannot export {rev}: {e}") from None
+    if r.returncode != 0:
+        raise ValueError(f"cannot export {rev} with git archive: {(r.stderr or '').strip()[:200]}")
+    try:
+        with tarfile.open(tar) as t:
+            t.extractall(dest, filter="data")
+    except (tarfile.TarError, OSError) as e:
+        raise ValueError(f"cannot extract {rev}: {type(e).__name__}: {str(e)[:200]}") from None
+
+
 def map_at(repo: Path, base: str, head: str, mb: str | None = None) -> tuple[ComponentMap, str]:
-    """The component map a change is judged by, and the rev it was read at. Normally the merge-base's (N-2:
-    the side `base...head` diffs against). Only when the change itself adds the map (status A in base...head)
-    is head's map used; the caller then gives no new-extension pass (N-1). Any other base without a map is
-    an error."""
+    """The component map a change is judged by and its rev: the merge-base's, or head's when the change adds it."""
     mb = mb or merge_base(repo, base, head)
     text = show(repo, mb, MAP)
     if text is not None:
@@ -277,8 +292,7 @@ def map_at(repo: Path, base: str, head: str, mb: str | None = None) -> tuple[Com
 
 
 def proposal_touches(repo: Path, head: str, path: str) -> list[dict]:
-    """The `touches:` of the proposal at `path` (repo-relative) as committed at `head`; an edit not yet
-    committed does not count."""
+    """The `touches:` of the proposal at `path` as committed at `head`; an uncommitted edit does not count."""
     from . import proposal
     text = show(repo, head, path)
     if text is None:
@@ -290,27 +304,24 @@ def proposal_touches(repo: Path, head: str, path: str) -> list[dict]:
 
 
 def changed(repo: Path, base: str, head: str = "HEAD") -> list[str]:
-    """Every path the change adds, modifies or deletes. Renames are split into a deletion and an addition so both
-    sides of a move are classified; the flags pin everything the user's git config could change (rename
-    detection, relative paths, path quoting, external diff drivers)."""
+    """Every path the change adds, modifies or deletes; renames are split and the flags pin the user's git config."""
     out = git(repo, "-c", "core.quotePath=false", "diff", "--name-status", "--no-renames", "--no-relative",
                "--no-ext-diff", "-z", f"{base}...{head}")
     parts = [p for p in out.split("\0")]
     paths = []
-    for status, path in zip(parts[0::2], parts[1::2]):
+    for status, path in zip(parts[0::2], parts[1::2], strict=False):
         if status and path:
             paths.append(path)
     return list(dict.fromkeys(paths))
 
 
-# ----------------------------------------------------------------- the check
 @dataclass
 class Finding:
     path: str
-    cls: str                 # core | extension | feature | docs | other | unowned
-    owner: str               # component, or `<contract> <instance>`, or a label
+    cls: str
+    owner: str
     ok: bool
-    rule: str = ""           # B-1 | B-2 | B-3 | docs | unowned
+    rule: str = ""
     why: str = ""
 
 
@@ -322,7 +333,7 @@ class Report:
     findings: list[Finding] = field(default_factory=list)
     doc_hits: list[dict] = field(default_factory=list)
     docs_checked: bool = False
-    map_rev: str = ""        # the rev the component map was read at (base, or head when base has none)
+    map_rev: str = ""
 
     @property
     def failures(self) -> list[Finding]:
@@ -369,10 +380,7 @@ class Report:
 
 def classify(path: str, cmap: ComponentMap, touches: list[dict], is_new, proposal: str | None,
              introduced: bool = False) -> Finding:
-    """One changed path -> a Finding. `is_new(root)` says whether an extension root is absent at base.
-    `introduced`: the map is the one this change adds, so a new extension folder gets no pass (N-1).
-    A path the map protects (`protected:`) passes only when `touches:` lists it: the new-extension pass does
-    not reach a protected name, and a protected folder is never new."""
+    """One changed path -> a Finding; a protected path passes only when `touches:` lists it, new extension or not."""
     f = _classify(path, cmap, touches, is_new, proposal, introduced)
     why = cmap.protected_by(path)
     if why and f.ok and f.cls != "other" and not any(match(t["path"], path) for t in touches):
@@ -409,19 +417,18 @@ def _classify(path: str, cmap: ComponentMap, touches: list[dict], is_new, propos
                            "" if listed else f"feature folder of an existing component; list {m.group(0)} (B-3)")
         return Finding(path, "extension", label, listed, "B-3",
                        "" if listed else "component-wide file of an existing component; list it (B-3)")
-    if "/" not in path:                 # an ordinary repo-root file (TODO.md, .env.example): not framework code
+    if "/" not in path:
         return Finding(path, "other", "repo root", True)
     return Finding(path, "unowned", "unowned", listed, "unowned",
                    "" if listed else "not under any component or extension in framework/kernel.yaml")
 
 
 def doc_hits(texts: dict[str, str], names: dict[str, str]) -> list[dict]:
-    """B-11: each line of the core docs (outside fenced blocks) that names an extension instance.
-    `names` maps instance name -> contract name."""
+    """B-11: each line of the core docs (outside fenced blocks) that names an extension instance."""
     rxs = [(n, c, re.compile(rf"(?<![\w.-]){re.escape(n)}(?![\w-]|\.\w)", re.I)) for n, c in sorted(names.items())]
     out = []
     for fname, text in texts.items():
-        fence = ""            # the open fence (CommonMark: closed by the same character, at least as long)
+        fence = ""
         for i, line in enumerate(text.splitlines(), 1):
             m = _FENCE.match(line)
             if not fence:
@@ -442,7 +449,7 @@ def instance_names(paths: list[str], cmap: ComponentMap) -> dict[str, str]:
     names = {}
     for p in paths:
         rt = root(p)
-        if rt and p[len(rt[0]):] in MANIFEST_KINDS and cmap.owner(rt[0]) is None:   # core-owned: not an extension
+        if rt and p[len(rt[0]):] in MANIFEST_KINDS and cmap.owner(rt[0]) is None:
             names.setdefault(rt[1], MANIFEST_KINDS[p[len(rt[0]):]])
     return names
 
@@ -450,20 +457,19 @@ def instance_names(paths: list[str], cmap: ComponentMap) -> dict[str, str]:
 def check(repo: Path, base: str, head: str = "HEAD", proposal: str | None = None,
           touches: list[dict] | None = None, cmap: ComponentMap | None = None, docs: bool = False) -> Report:
     repo = Path(repo)
-    mb = merge_base(repo, base, head)                                # N-2: what base...head diffs against
+    mb = merge_base(repo, base, head)
     map_rev = base
     if cmap is None:
         cmap, map_rev = map_at(repo, base, head, mb)
     introduced = map_rev != base
-    touches = [t for t in touches or [] if not t.get("planned")]     # planned entries authorize nothing yet
+    touches = [t for t in touches or [] if not t.get("planned")]
     at_base: set[str] = set()
     for f in git(repo, "-c", "core.quotePath=false", "ls-tree", "-r", "--name-only", "-z", mb).split("\0"):
         parts = f.split("/")
         at_base.update("/".join(parts[:i]).casefold() for i in range(1, len(parts) + 1) if f)
 
     def is_new(root: str) -> bool:
-        """An extension root is new when no path at the merge-base matches it, ignoring case (F-4: `components/Mail/`
-        next to `components/mail/` is an edit of mail on a case-insensitive filesystem, not a new mode)."""
+        """An extension root is new when no path at the merge-base matches it, ignoring case (F-4)."""
         return root.rstrip("/").casefold() not in at_base
 
     rep = Report(base, head, proposal, map_rev=map_rev)

@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code hook -> ledger events. Wired by the claude_code adapter.
-
-  PreToolUse  (matcher Task|Agent) -> spawned
-  PostToolUse (matcher Task|Agent) -> completed / failed
-
-Never blocks the session: any error is logged and the hook exits 0.
-"""
+"""Claude Code hook to ledger events; never blocks: errors are logged and it exits 0."""
 from __future__ import annotations
 
 import hashlib
@@ -16,7 +10,7 @@ import traceback
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from bay import ledger, protocol  # noqa: E402
+from bay import ledger, protocol
 
 
 def _run_id(payload: dict) -> str:
@@ -81,7 +75,7 @@ def main() -> int:
         payload = json.load(sys.stdin)
         if payload.get("tool_name") in ("Task", "Agent"):
             handle(phase, payload)
-    except Exception:  # never break the session
+    except Exception:
         try:
             log = ledger.project_root() / ".agentbay" / "ledger" / "hook-errors.log"
             log.parent.mkdir(parents=True, exist_ok=True)

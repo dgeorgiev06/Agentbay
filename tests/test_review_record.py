@@ -1,5 +1,4 @@
-"""`bay note review`: a review that ran outside a framework review step becomes a ledger event improve reads,
-and it can pass no gate."""
+"""`bay note review`: a review outside a framework review step becomes a ledger event and passes no gate."""
 import json
 import subprocess
 import sys
@@ -41,7 +40,7 @@ def test_review_record_appends_a_scrubbed_event_improve_reads_and_refuses_bad_in
                     {"items": [{"id": "X-1", "verdict": "pass", "evidence": "x"}]},
                     {"items": [{"id": "DOD-1", "verdict": "pass", "evidence": "x" * 1001}]}, {"nope": 1}):
             assert cli(p, "note", "review", TID, json.dumps(bad)).returncode != 0, bad
-        assert cli(p, "note", "review", "T-1", json.dumps(VERDICT)).returncode != 0          # not a taskId
+        assert cli(p, "note", "review", "T-1", json.dumps(VERDICT)).returncode != 0
         assert len([e for e in ledger.read(p) if e["type"] == "review.recorded"]) == 1
     finally:
         cleanup(p)
@@ -62,6 +61,6 @@ def test_a_recorded_review_passes_no_gate_and_nothing_in_the_dispatcher_reads_it
         after = d.show(cid)
         assert {x: after[x] for x in ("status", "next")} == {x: before[x] for x in ("status", "next")}
         assert "review.recorded" in ledger.TYPES and "review.recorded" not in ledger.RUN_TYPES | ledger.STEP_TYPES
-        assert ledger.fold(ledger.read(k)) == {}                                  # it creates no run
+        assert ledger.fold(ledger.read(k)) == {}
     finally:
         cleanup(k)

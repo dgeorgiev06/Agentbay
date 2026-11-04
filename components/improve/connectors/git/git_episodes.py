@@ -14,8 +14,7 @@ MAX_SUBJECT = 200
 
 def git_episodes(project: Path, since: datetime | None = None, until: datetime | None = None,
                  run=subprocess.run) -> tuple[list[dict], dict]:
-    """Commits in the window: sha, scrubbed subject line, date, revert flag/target, files touched and churn. Bodies are
-    read only to detect reverts and are never returned."""
+    """Commits in the window with scrubbed subject, revert flag, files and churn; bodies are never returned."""
     args = ["git", "-C", str(project), "log", "--no-color", "--no-merges", "--numstat",
             "--format=%x1e%H%x1f%aI%x1f%s%x1f%b%x1f"]
     args += [f"--{k}={v.isoformat()}" for k, v in (("since", since), ("until", until)) if v]

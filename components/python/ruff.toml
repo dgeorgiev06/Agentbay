@@ -1,0 +1,11 @@
+line-length = 120
+exclude = []
+extend-exclude = [".git", ".agentbay"]
+
+[lint]
+select = ["E", "F", "W", "B"]
+
+[lint.per-file-ignores]
+"**/bay/cli.py" = ["E402"]
+"**/bay/hook.py" = ["E402"]
+"**/bay/use_shim.py" = ["E402"]

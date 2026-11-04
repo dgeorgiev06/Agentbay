@@ -1,16 +1,15 @@
-"""improve mode end to end (offline): fixture transcripts + ledger -> scan -> triage (reviewed) -> backlog report;
-implement only for approved items behind a gate, writing only its own store; containment; planted secrets."""
+"""improve mode end to end (offline): scan, triage, backlog, gated implement and containment of planted secrets."""
 import json
 import subprocess
 import sys
 
-from helpers import KIT, clock, cleanup, connector_pkg, kit_copy, kit_for, project, system, tmpdir
-from improve_fixtures import CORES, D, findings, make_ledger, make_transcripts, proj, scan  # noqa: F401
+from helpers import KIT, clock, cleanup, connector_pkg, kit_copy, kit_for, no_code_checks, project, system, tmpdir
+from improve_fixtures import CORES, D, findings, proj, scan
 
 from bay import dispatch, ledger
 from bay.adapter import get
 
-FIXTURE_EVENTS = 18                                   # lines make_ledger writes
+FIXTURE_EVENTS = 18
 
 
 def snapshot(root):
@@ -20,8 +19,7 @@ def snapshot(root):
 
 
 def no_secrets_anywhere(p, *outputs):
-    """The store, reports, caches, call state and ledger lines written by agentbay (the fixture's own ledger
-    lines and call files are inputs and do contain the planted secrets) and every call output."""
+    """Nothing agentbay wrote (store, reports, caches, call state, ledger lines) or any call output holds a secret."""
     fixture_calls = {f"C-20261025-00000{i}.json" for i in range(3)}
     files = [x for x in (p / ".agentbay").rglob("*") if x.is_file() and x.name not in fixture_calls
              and x.name != "events.jsonl"]
@@ -54,13 +52,13 @@ def test_mode_and_env_containment():
         get("claude-code").build(s, p, kit_for(p))
         pol = json.loads((p / ".agentbay/guard.json").read_text())["subagents"]
         role = "analyst--improve"
-        assert pol[role]["read"] == ["."] and pol[role]["write"] == [], pol[role]   # no ~/.claude for roles
+        assert pol[role]["read"] == ["."] and pol[role]["write"] == [], pol[role]
         r = subprocess.run([str(p / ".agentbay/roles/analyst--improve/use"), "improve.findings/v1.scan", "{}"],
-                           cwd=p, capture_output=True, text=True)                   # the shim refuses what is not granted
+                           cwd=p, capture_output=True, text=True)
         assert r.returncode != 0 and "not granted" in r.stderr
         d = D(p)
         for role, target in (("analyst--improve", "improve.findings/v1.upsert"),
-                             ("analyst--improve", "improve.detect/v1.sessions"),       # dispatcherOnly
+                             ("analyst--improve", "improve.detect/v1.sessions"),
                              ("analyst--improve", "improve.findings/v1.decide"),
                              ("analyst--improve", "improve.findings/v1.handoff"),
                              ("reviewer--improve", "improve.findings/v1.query")):
@@ -70,14 +68,14 @@ def test_mode_and_env_containment():
             except dispatch.CallError as e:
                 assert "not granted" in str(e)
         assert "findings" in d.use("analyst--improve", "improve.findings/v1.query", {})
-        merged = d.use("analyst--improve", "session.events/v1.episodes", {"since": "7d"})       # 3 connectors merged
+        merged = d.use("analyst--improve", "session.events/v1.episodes", {"since": "7d"})
         assert {e["source"] for e in merged["episodes"]} == {"ledger"}
         assert set(merged["stats"]) == {"ledger", "claude-transcripts", "git"}
         payload = {"tool_name": "Read", "tool_input": {"file_path": str(p.parent / "cc" / "x.jsonl")},
                    "agent_type": "analyst--improve", "agent_id": "a1", "cwd": str(p)}
         r = subprocess.run([sys.executable, str(KIT / "bay/guard.py")], input=json.dumps(payload), text=True,
                            capture_output=True, env={"CLAUDE_PROJECT_DIR": str(p), "PATH": "/usr/bin:/bin"})
-        assert r.returncode == 2 and "may only read inside" in r.stdout          # transcripts unreachable for roles
+        assert r.returncode == 2 and "may only read inside" in r.stdout
     finally:
         cleanup(p)
 
@@ -96,7 +94,7 @@ def test_scan_triage_backlog_on_fixture_transcripts_and_ledger():
              "evidence": [{"kind": "episode", "ref": "ab:C-20261025-000000"}]}])
         detect = r["next"]["previous"]["detect"]
         assert detect["stats"]["claude-transcripts"]["unknownRecordTypes"] == {"weird-new-type": 2}
-        sess = [e for e in detect["episodes"] if e["kind"] == "session"]           # the analyst sees episodes
+        sess = [e for e in detect["episodes"] if e["kind"] == "session"]
         assert len(sess) == 2 and sess[0]["statusQuestions"] == 2 and sess[0]["envGaps"] == {"command-not-found": 1}
         assert r["next"]["previous"]["store"]["summary"] and "--usage" in r["next"]["submit"]
         assert done["status"] == "done", done
@@ -108,7 +106,6 @@ def test_scan_triage_backlog_on_fixture_transcripts_and_ledger():
         for f in findings(p):
             eps = {e["ref"] for e in f["evidence"] if e["kind"] == "episode"}
             assert len(eps) >= 2 or f["severity"] == "severe", f
-        # triage: links + priority, analyst annotations, review, then apply
         t = d.call("improve.triage", {"top": 3})
         assert t["status"] == "needs-agent" and t["next"]["step"] == "analyze"
         top = t["next"]["previous"]["rank"]["top"]
@@ -120,7 +117,6 @@ def test_scan_triage_backlog_on_fixture_transcripts_and_ledger():
         assert rv["next"]["kind"] == "review" and rv["next"]["review"]["output"]["annotations"] == ann
         fin = d.submit(t["callId"], "review", verdict_for(rv["next"]))
         assert fin["status"] == "done" and sorted(fin["output"]["annotated"]) == sorted(a["id"] for a in ann)
-        # backlog report
         b = d.call("improve.backlog", {})
         assert b["status"] == "done" and b["output"]["report"] == ".agentbay/data/improve/reports/2026-W44.md"
         text = (p / b["output"]["report"]).read_text()
@@ -179,10 +175,9 @@ def test_implement_only_for_approved_items_behind_a_gate_and_edits_nothing():
         assert nxt["call"] == "forge.extend" and "## Problem" in nxt["input"]["context"]
         assert (p / ".agentbay/data/improve/handoffs" / out["output"]["draft"]).exists()
         assert [f for f in findings(p) if f["id"] == fid][0]["status"] == "in-progress"
-        assert snapshot(p) == before                                  # nothing outside improve's store changed
+        assert snapshot(p) == before
         v = d.call("improve.verify", {"id": fid})
-        assert v["status"] == "done" and v["output"]["result"] == "inconclusive"      # no episodes since the fix
-        # a new forge.extend review after the fix still cites failing tests -> reopened
+        assert v["status"] == "done" and v["output"]["result"] == "inconclusive"
         cid = "C-20261028-000009"
         (p / f".agentbay/calls/{cid}.json").write_text(json.dumps({
             "callId": cid, "target": "forge.extend", "input": {"proposal": "docs/proposals/0003.md"},
@@ -209,7 +204,7 @@ def test_approving_a_backlog_item_needs_a_terminal():
                                   capture_output=True, text=True, input="yes\n")
         r = cli("approve", fid)
         assert r.returncode != 0 and "interactive terminal" in r.stderr
-        r = cli("approve", fid, "--via", "chat", "--quote", "yes approve it")     # chat is off
+        r = cli("approve", fid, "--via", "chat", "--quote", "yes approve it")
         assert r.returncode != 0 and "approvals from chat are off" in r.stderr
         assert [f for f in findings(p) if f["id"] == fid][0]["status"] == "open"
         r = cli("approve", fid, "--defer", "--reason", "next quarter")
@@ -225,10 +220,15 @@ def test_forge_reviewers_get_the_conformance_rules():
     k = kit_copy()
     try:
         d = dispatch.Dispatcher(system(k, k), k, clock=clock)
+        no_code_checks(d)
         r = d.call("forge.create", {"kind": "env", "name": "summaries", "target": "feed-briefing", "intent": "Where summaries are written"})
         rv = d.submit(r["callId"], "fill", {"status": "done", "summary": "filled the env"})
         conf = rv["next"]["review"]["rulesets"]["conformance"]
         assert [c["id"] for c in conf][:2] == ["C-1", "C-2"] and conf[0]["check"] == "playbook_matches_workflow"
+        graded = rv["next"]["review"]["definitionOfDone"] + rv["next"]["review"]["rules"]
+        passed = [{"id": x["id"], "verdict": "pass", "evidence": "e"} for x in graded]
+        end = d.submit(rv["callId"], "review", {"items": passed})
+        assert end["status"] == "done" and end["output"] == {"status": "done", "summary": "filled the env"}, end
     finally:
         cleanup(k)
 
@@ -248,7 +248,6 @@ def test_audit_on_the_kit_itself():
             {"lens": "artifacts", "title": "Bad ref", "pattern": "x", "evidence": [{"kind": "file", "ref": "nope.py:3"}]}]})
         assert out["status"] == "done" and len(out["output"]["new"]) == 1 and out["output"]["rejected"][0]["index"] == 1
         fs = findings(k)
-        # feed-briefing: prune (delete) is reviewed, sync/ask spend is capped by constraints.spendUsd
         assert not [f for f in fs if f["kind"] == "conformance" and f["scope"]["rule"] == "C-6"]
         assert all(f["lens"] == "artifacts" and f["evidence"] for f in fs)
     finally:

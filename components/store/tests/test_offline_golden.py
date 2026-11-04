@@ -1,9 +1,4 @@
-"""Golden baseline of feed-briefing and mail-briefing on the offline sources (proposal 0008, slice 5): the sync
-output, `describe` and `status` of the store, and a fixed set of reads, all under the fixed clock. The reference
-is components/store/tests/golden/<mode>.json, generated from the code as it was before content types moved out of the core, then changed once for the generic names of decision (e)
-(column descriptions, the `items` cost key). A
-failing compare means a behavior changed: there is no update switch, change the code back or explain the delta.
-A missing file is written once and the test fails, so a new golden is always a visible new file in git."""
+"""Golden baseline of feed-briefing and mail-briefing on the offline sources, under the fixed clock."""
 from __future__ import annotations
 
 import json
@@ -39,7 +34,6 @@ def collect(mode: str, unit: str, cfg: dict, reads: dict) -> dict:
     out["sql"] = {name: sql(d, unit, q) for name, q in reads["sql"].items()}
     for name, (endpoint, args) in reads.get("use", {}).items():
         out[name] = d.use(unit, endpoint, args)
-    # nothing machine-specific in the reference: the project folder is replaced
     return json.loads(json.dumps(out, sort_keys=True).replace(str(p), "<project>"))
 
 
@@ -60,8 +54,7 @@ def compare(mode: str, got: dict, deltas=None) -> None:
 
 
 def generic_names(got: dict) -> None:
-    """Decision (e) of proposal 0008, item 3: the two changes both modes show. The golden files carry them (they were
-    updated once, for exactly these); the asserts here name them so a reader sees what changed."""
+    """Decision (e) of proposal 0008, item 3: the two changes both modes show; the golden files carry them."""
     cols = {c["name"]: c["description"] for v in got["describe"]["views"] if v["name"] == "v_items"
             for c in v["columns"]}
     assert cols["source"] == "name of the source that produced it"
@@ -73,24 +66,19 @@ def generic_names(got: dict) -> None:
 
 
 def mail_deltas(want: dict, got: dict) -> None:
-    """The three documented changes of mail-briefing's describe (proposal 0008, item 3, decision (a)) and the key of
-    its `rows` read (proposal 0016); the golden file stays as it was and everything else must match it exactly."""
+    """The documented changes of mail-briefing's describe and the key of its `rows` read; the rest must match."""
     want, got = json.loads(json.dumps(want)), json.loads(json.dumps(got))
-    # 1. no v_posts: the store holds the content types the mode reads, and v_posts had no rows here
     assert want["sql"]["v_posts"]["rows"] == [[0]]
     assert "v_posts" in got["sql"]["v_posts"]["error"] and got["sql"]["v_posts"]["rows"] == []
     del want["sql"]["v_posts"], got["sql"]["v_posts"]
     by = {v["name"]: v for v in want["describe"]["views"]}
     del by["v_posts"]
-    # 3. views ordered: base view, the type's views, full-text views (compare the views as a name-keyed map)
     assert [v["name"] for v in got["describe"]["views"]] == [
         "v_items", "v_email", "v_attachments", "v_threads", "v_fts", "v_attachment_fts"]
     assert {v["name"]: v for v in got["describe"]["views"]} == by
     del want["describe"]["views"], got["describe"]["views"]
-    # 2. no addr_key function: fromMe, toMe and bulk are stored
     assert "addr_key" in want["describe"]["functions"]
     want["describe"]["functions"].remove("addr_key")
-    # 4. the list of the `threads` read is called `rows`
     assert want["threads"]["threads"] == got["threads"]["rows"]
     del want["threads"]["threads"], got["threads"]["rows"]
     assert got == want

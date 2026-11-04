@@ -1,5 +1,4 @@
-"""improve-detect: read-only detection over the bound sources; evidence resolution (episodes, files, commits,
-measurement-only refused); re-checks; secrets cut at an evidence boundary never leave a prefix."""
+"""improve-detect: detection and evidence resolution; secrets cut at an evidence boundary never leave a prefix."""
 import json
 import shutil
 
@@ -8,8 +7,7 @@ from improve_fixtures import CORES, SECRETS, git, make_git_repo, make_ledger, ma
 
 from bay import connect
 
-# The finding contract: `fingerprint` lives in bay/util.py; improve-store's test asserts this same vector.
-FINGERPRINT_VECTOR = ({"kind": "unused", "detector": {"key": "fn:app/core.py:never_called"}}, "62f5b3fa536c7238")   # components/improve/tests/golden/improve.json
+FINGERPRINT_VECTOR = ({"kind": "unused", "detector": {"key": "fn:app/core.py:never_called"}}, "62f5b3fa536c7238")
 
 
 def test_fingerprint_matches_the_shared_vector():
@@ -55,17 +53,20 @@ def test_resolve_checks_every_evidence_kind():
             head = git(p, "rev-parse", "HEAD")[:12]
         d = inst(p)
         ep = ["cc:0a1b2c3d-0000-4000-8000-000000000000", "cc:0a1b2c3d-0000-4000-8000-000000000001"]
-        f = lambda ev, lens="artifacts", **kw: {"lens": lens, "title": "t", "pattern": "p", "evidence": ev, **kw}  # noqa
+
+        def f(ev, lens="artifacts", **kw):
+            return {"lens": lens, "title": "t", "pattern": "p", "evidence": ev, **kw}
+
         res = d.resolve([
-            f([{"kind": "file", "ref": "app.py:2"}]),                                              # 0 ok
-            f([{"kind": "file", "ref": "app.py:9"}]),                                              # 1 past the end
-            f([{"kind": "file", "ref": "../../etc/passwd"}]),                                      # 2 outside
-            f([{"kind": "measurement", "ref": "tokens", "value": 9000}]),                          # 3 measurement only
-            f([{"kind": "episode", "ref": e} for e in ep], lens="sessions"),                       # 4 ok
-            f([{"kind": "episode", "ref": ep[0]}], lens="sessions"),                               # 5 one episode
-            f([{"kind": "commit", "ref": "deadbeefdeadbeef"}]),                                    # 6 not in git
-            f([{"kind": "rule", "ref": "C-4"}, {"kind": "file", "ref": "app.py:1"}], rule="C-4"),  # 7 ok
-            *([f([{"kind": "commit", "ref": f"git:{head}"}])] if head else []),                    # 8 ok
+            f([{"kind": "file", "ref": "app.py:2"}]),
+            f([{"kind": "file", "ref": "app.py:9"}]),
+            f([{"kind": "file", "ref": "../../etc/passwd"}]),
+            f([{"kind": "measurement", "ref": "tokens", "value": 9000}]),
+            f([{"kind": "episode", "ref": e} for e in ep], lens="sessions"),
+            f([{"kind": "episode", "ref": ep[0]}], lens="sessions"),
+            f([{"kind": "commit", "ref": "deadbeefdeadbeef"}]),
+            f([{"kind": "rule", "ref": "C-4"}, {"kind": "file", "ref": "app.py:1"}], rule="C-4"),
+            *([f([{"kind": "commit", "ref": f"git:{head}"}])] if head else []),
         ])
         assert [r["index"] for r in res["rejected"]] == [1, 2, 3, 5, 6], res["rejected"]
         assert "measurement-only" in res["rejected"][2]["reasons"][-1]

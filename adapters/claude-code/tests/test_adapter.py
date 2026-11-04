@@ -30,53 +30,53 @@ def test_adapter_round_trip():
     ad.build(s, proj, KIT)
     first = {str(p.relative_to(proj)): p.read_text() for p in proj.rglob("*") if p.is_file()
              and "catalog" not in p.name and "manifest" not in p.name}
-    ad.build(s, proj, KIT)  # idempotent
+    ad.build(s, proj, KIT)
     second = {str(p.relative_to(proj)): p.read_text() for p in proj.rglob("*") if p.is_file()
               and "catalog" not in p.name and "manifest" not in p.name}
     assert first == second
     st = json.loads((proj / ".claude/settings.json").read_text())
     assert st["model"] == "opus" and "Bash(ls:*)" in st["permissions"]["allow"]
     assert [h["matcher"] for h in st["hooks"]["PreToolUse"]] == \
-        ["Bash|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep", "Task|Agent"]               # guard first
+        ["Bash|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep", "Task|Agent"]
     assert_no_wildcards(st)
     ours = [p for p in st["permissions"]["allow"] if p != "Bash(ls:*)"]
     assert sorted(ours) == sorted(f"Bash(.agentbay/bay {c}:*)" for c in COORDINATOR_CMDS)
     assert st["hooks"]["PreToolUse"][0]["hooks"][0]["onFailure"] == "block"
     assert {"Edit(/.agentbay/**)", "Edit(/.claude/**)", "Read(/.agentbay/data/**)"} <= set(st["permissions"]["deny"])
-    assert any(d.startswith("Edit(//") and d.endswith("/**)") for d in st["permissions"]["deny"])   # kit outside
+    assert any(d.startswith("Edit(//") and d.endswith("/**)") for d in st["permissions"]["deny"])
     agents = {p.stem for p in (proj / ".claude/agents").glob("*.md")}
     missing = {"researcher--delivery", "builder--delivery", "reviewer--delivery", "analyst--feed-briefing",
                "reviewer--feed-briefing", "analyst--mail-briefing", "reviewer--mail-briefing",
                "builder--forge", "reviewer--forge",
-               "analyst--improve", "reviewer--improve"} - agents       # no framework-dev here, so no --<env> suffix
+               "analyst--improve", "reviewer--improve"} - agents
     assert not missing, f"agents not built: {sorted(missing)}"
-    assert not any(a.startswith("lead--") for a in agents)                      # coordinators run in main thread
+    assert not any(a.startswith("lead--") for a in agents)
     fa = (proj / ".claude/agents/analyst--feed-briefing.md").read_text()
     assert "tools: Bash\n" in fa and ".agentbay/roles/analyst--feed-briefing/use items.store/v2.query" in fa
     assert "Result/v1" in fa and "--role" not in fa and "mode `feed-briefing`, env `local-feeds`" in fa
-    assert "corpus-sql" in fa                                                   # the mode's skills
+    assert "corpus-sql" in fa
     rv = (proj / ".claude/agents/reviewer--delivery.md").read_text()
     assert "model: opus" in rv and "Edit" not in rv.split("---")[1]
     claude = (proj / "CLAUDE.md").read_text()
     assert claude.startswith("<!-- agentbay:begin") and "@.agentbay/COORDINATOR.md" in claude and "# mine" in claude
     coord = (proj / ".agentbay/COORDINATOR.md").read_text()
     assert "Chief of Staff" in coord and "`feed-briefing.digest`" in coord and "coordinator role `lead`" in coord
-    assert coord.count("# You are the Chief of Staff") == 1          # preamble only, not also a mode section
+    assert coord.count("# You are the Chief of Staff") == 1
     assert "### Mode `cos`" not in coord
-    assert "`cos.run`" in coord                                      # but its endpoints are in the table
+    assert "`cos.run`" in coord
     sk_dir = proj / ".claude/skills"
     built = {d.name for d in sk_dir.iterdir()}
     assert {"feed-briefing--corpus-sql", "feed-briefing--digest", "feed-briefing--grounded-qa",
             "mail-briefing--corpus-sql", "mail-briefing--digest", "mail-briefing--grounded-qa",
             "researcher--research-brief", "improve--pattern-analysis"} <= built
-    assert all("--" in n for n in built)                                    # no bare (global) skill folders
-    def body(p):                                                            # SKILL.md minus its `name:` line
+    assert all("--" in n for n in built)
+    def body(p):
         return [ln for ln in p.read_text().splitlines() if not ln.startswith("name:")]
-    for n in built:                                                         # name: is the namespaced folder name
+    for n in built:
         assert f"\nname: {n}\n" in (sk_dir / n / "SKILL.md").read_text()
-    for sk, home in (("digest", "feed-briefing"), ("corpus-sql", "store"), ("grounded-qa", "store")):   # same short name in two modes: no clobbering
+    for sk, home in (("digest", "feed-briefing"), ("corpus-sql", "store"), ("grounded-qa", "store")):
         assert body(sk_dir / f"feed-briefing--{sk}/SKILL.md") == body(KIT / f"components/{home}/skills/{sk}/SKILL.md")
-    for sk in ("digest", "corpus-sql"):                 # mail-briefing overrides these, for itself only
+    for sk in ("digest", "corpus-sql"):
         assert body(sk_dir / f"mail-briefing--{sk}/SKILL.md") == body(KIT / f"components/mail-briefing/skills/{sk}/SKILL.md")
         home = "feed-briefing" if sk == "digest" else "store"
         assert body(KIT / f"components/mail-briefing/skills/{sk}/SKILL.md") != body(KIT / f"components/{home}/skills/{sk}/SKILL.md")
@@ -90,16 +90,15 @@ def test_adapter_round_trip():
     cat = json.loads((proj / ".agentbay/catalog.json").read_text())
     missing = {"cos", "delivery", "feed-briefing", "forge", "improve", "mail-briefing"} - {m["name"] for m in cat["modes"]}
     assert not missing, f"modes not in the catalog: {sorted(missing)}"
-    #  ^ store is abstract; cos is the root coordinator's own mode
     assert next(m for m in cat["modes"] if m["name"] == "feed-briefing")["extends"] == "store"
     dg = next(e for m in cat["modes"] for e in m["endpoints"] if e["name"] == "feed-briefing.digest")
     assert dg["review"]["role"] == "reviewer" and [s["kind"] for s in dg["steps"]][-1] == "review"
     assert {r["subagent"] for r in cat["roles"]} == agents
     skills_before = {str(f.relative_to(sk_dir)): f.read_text() for f in sk_dir.rglob("*") if f.is_file()}
-    ad.build(s, proj, KIT)                                                  # idempotent: same skills, nothing extra
+    ad.build(s, proj, KIT)
     assert {str(f.relative_to(sk_dir)): f.read_text() for f in sk_dir.rglob("*") if f.is_file()} == skills_before
     ad.clean(proj)
-    assert not (proj / ".claude/skills").exists()                           # namespaced folders removed
+    assert not (proj / ".claude/skills").exists()
     for p, txt in before.items():
         if p.endswith(".json"):
             assert json.loads((proj / p).read_text()) == json.loads(txt), p
@@ -114,8 +113,8 @@ def test_adapter_round_trip():
 def assert_no_wildcards(settings: dict) -> None:
     for p in settings["permissions"]["allow"]:
         assert p not in ("Bash", "Bash(*)", "Bash(*:*)"), p
-        assert not p.startswith("Bash(.agentbay/bay:"), p             # no blanket control plane
-        assert not p.startswith("Bash(.agentbay/roles"), p            # role shims are per role, via the guard
+        assert not p.startswith("Bash(.agentbay/bay:"), p
+        assert not p.startswith("Bash(.agentbay/roles"), p
         assert "*" not in p.split(":")[0], p
 
 
@@ -130,7 +129,7 @@ def test_clean_removes_files_agentbay_created_and_keeps_formatting():
         assert (proj / "CLAUDE.md").exists()
         ad.clean(proj)
         assert not (proj / "CLAUDE.md").exists() and not (proj / ".mcp.json").exists()
-        assert (proj / ".claude/settings.json").read_text() == odd     # byte-identical
+        assert (proj / ".claude/settings.json").read_text() == odd
         assert sorted(str(p.relative_to(proj)) for p in proj.rglob("*") if p.is_file()) == [".claude/settings.json"]
     finally:
         shutil.rmtree(proj)
@@ -273,14 +272,14 @@ def test_a_bad_adapter_entry_is_reported_and_never_imported_f12():
     boom = f"open({str(marker)!r}, 'w').write('x')\nraise RuntimeError('imported')\n"
     _adapter(root, "echo", "name: echo\nmodule: mod.py\nclass: Echo\n", ECHO)
     _adapter(root, "broken", "name: broken\nmodule: mod.py\nclass: Echo\nextra: 1\n", boom)
-    _adapter(root, "other", "name: other\nmodule: mod.py\nclass: Echo\n", boom)   # well-formed, not selected
+    _adapter(root, "other", "name: other\nmodule: mod.py\nclass: Echo\n", boom)
     _adapter(root, "garbled", ": : [\n")
     problems = []
     assert sorted(adapter.discover(root, problems)) == ["echo", "other"]
     assert any("broken/adapter.yaml" in p for p in problems) and any("garbled/adapter.yaml" in p for p in problems)
     ad = adapter.get("echo", root)
     assert ad.build(None, root, root).runtime == "echo" and ad.clean(root).runtime == "echo"
-    assert not marker.exists()                       # neither the bad entry nor the unselected one was imported
+    assert not marker.exists()
     try:
         adapter.get("broken", root)
         raise AssertionError("bad adapter loaded")
@@ -337,7 +336,7 @@ def test_rename_skill_parses_front_matter_as_yaml_and_normalises_crlf_f15():
         raise AssertionError("unclosed front matter accepted")
     except SpecError as e:
         assert "skill m--s: SKILL.md: front matter opens with '---' on line 1 but has no closing '---' line" in str(e)
-    assert not d.exists()                                    # no malformed skill left behind
+    assert not d.exists()
 
 
 def test_lint_reports_a_skill_md_whose_front_matter_never_closes_f15():
@@ -351,7 +350,7 @@ def test_lint_reports_a_skill_md_whose_front_matter_never_closes_f15():
         g.write_text("---\n- not\n- a mapping\n---\n# x\n")
         errs = lint.run(k)
         want = "components/feed-briefing/skills/digest/SKILL.md:1: front matter opens with '---' on line 1 but has no closing"
-        assert sum(want in e for e in errs) == 1                  # once, though two modes inherit the skill
+        assert sum(want in e for e in errs) == 1
         assert any("components/store/skills/grounded-qa/SKILL.md:1: front matter must be a YAML mapping" in e
                    for e in errs)
     finally:
@@ -359,8 +358,7 @@ def test_lint_reports_a_skill_md_whose_front_matter_never_closes_f15():
 
 
 def test_building_the_kit_into_itself_leaves_git_status_clean():
-    """The kit ignores its own build output (/.claude/, /CLAUDE.md, .agentbay/), so `bay build` and `bay clean`
-    into the kit checkout never show up as changes to commit."""
+    """The kit ignores its own build output, so `bay build` and `bay clean` leave git status clean."""
     from helpers import cleanup, kit_copy
     k = kit_copy()
     try:

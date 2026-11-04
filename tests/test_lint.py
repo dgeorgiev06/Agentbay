@@ -44,7 +44,7 @@ def test_sections_out_of_order():
     purpose = t[t.index("## Purpose"):t.index("## Inputs")]
     f.write_text(t.replace(purpose, "") + "\n" + purpose)
     x = has(k, PB, "sections out of order")
-    assert ":" in x.split(" ")[0]          # file:line
+    assert ":" in x.split(" ")[0]
 
 
 def test_steps_must_be_numbered():
@@ -86,7 +86,6 @@ def test_rules_schema_and_unique_ids_and_refs():
 def test_a_file_a_feature_names_must_exist():
     k = kit_copy()
     (k / "components/store/features/ask/rules.yaml").unlink()
-    # the parent's mode.yaml line, normalized path; the children that inherit the file report it at their own line
     has(k, f"components/store/mode.yaml:{line_of(k / 'components/store/mode.yaml', '    ask:')}: feature store.ask "
            "rules file components/store/features/ask/rules.yaml does not exist")
     has(k, "components/mail-briefing/mode.yaml", "mail-briefing.ask rules file components/store/features/ask/rules.yaml")
@@ -117,7 +116,6 @@ def test_a_feature_that_runs_an_agent_needs_a_playbook_and_a_code_only_one_needs
     edit_yaml(k / "components/feed-briefing/mode.yaml", lambda d: d["spec"]["features"]["digest"].pop("playbook"))
     has(k, "feature feed-briefing.digest runs an agent but has no `playbook`")
     assert len([x for x in problems(k) if "digest runs an agent but has no `playbook`" in x]) == 1
-    # sync has code steps only: no playbook, no rules, no folder, and lint stays clean
     assert problems(KIT) == []
     s = model.resolve(model.Kit(KIT))
     sync = s.modes["feed-briefing"].features["sync"]
@@ -175,7 +173,7 @@ def test_review_settings_only_in_mode_yaml():
     has(k, RULES, "review settings found in rules file")
     k = kit_copy()
     edit_yaml(k / "framework/roles/analyst.yaml", lambda d: d["spec"].update({"review": {"when": "always"}}))
-    has(k, "framework/roles/analyst.yaml")   # schema rejects it (additionalProperties) - reported at load
+    has(k, "framework/roles/analyst.yaml")
 
 
 def test_review_role_must_exist_and_be_in_the_mode():
@@ -183,7 +181,6 @@ def test_review_role_must_exist_and_be_in_the_mode():
     edit_yaml(k / "components/feed-briefing/mode.yaml",
               lambda d: d["spec"]["features"]["digest"]["review"].update({"role": "ghost"}))
     has(k, "feed-briefing.digest review role 'ghost' does not exist")
-    # once for the base and its children that inherit the feature (mail-briefing declares its own digest)
     assert len([x for x in problems(k) if "review role 'ghost' does not exist" in x
                 and "components/feed-briefing/mode.yaml" in x]) == 1
     k = kit_copy()
@@ -198,24 +195,19 @@ def line_of(path, needle):
 
 def test_role_env_errors_name_mode_feature_and_step():
     base = "components/feed-briefing/mode.yaml"
-    # a step naming a role that is not in the mode
     k = kit_copy()
     sub(k, base, "{ id: answer, role: analyst,", "{ id: answer, role: researcher,")
     has(k, f"{base}:{line_of(k / base, '{ id: answer, role: researcher,')}: feed-briefing.ask step answer: role "
            "researcher is not in mode feed-briefing `roles:` (lead, analyst, reviewer); add `researcher: <env>` there")
-    # reported once, for the abstract base that declares it, not again for each child (same file:line)
     assert len([x for x in problems(k) if "step answer: role researcher is not in mode" in x]) == 1
-    # a role with no env
     k = kit_copy()
     sub(k, base, "analyst: local-feeds,", "analyst: ,")
     has(k, f"{base}:{line_of(k / base, 'role: analyst, out: Digest')}: feed-briefing.digest step themes: role analyst "
            "has no env; give it one in mode feed-briefing `roles:` (`analyst: <env>`)")
-    # two envs for one step
     k = kit_copy()
     sub(k, base, "{ id: answer, role: analyst,", "{ id: answer, role: analyst, roles: { analyst: local-feeds, reviewer: workspace },")
     has(k, "feed-briefing.ask step answer: two envs for one step (analyst: local-feeds, reviewer: workspace)",
         "keep only `analyst: <env>`")
-    # a step override naming another role, `roles:` on a code step, a feature override of a role not in the mode
     k = kit_copy()
     sub(k, base, "{ id: answer, role: analyst,", "{ id: answer, role: analyst, roles: { reviewer: workspace },")
     sub(k, base, "{ id: prune, run: items.store/v2.prune,", "{ id: prune, roles: { lead: workspace }, run: items.store/v2.prune,")
@@ -223,12 +215,10 @@ def test_role_env_errors_name_mode_feature_and_step():
     has(k, "feed-briefing.ask step answer: `roles:` names reviewer, but this step runs role analyst")
     has(k, "feed-briefing.prune step prune: `roles:` applies to role and review steps only")
     has(k, "feed-briefing.ask: `roles:` gives role builder an env, but mode feed-briefing does not list builder")
-    # an unknown (or user-defined) role
     k = kit_copy()
     edit_yaml(k / base, lambda d: d["spec"]["roles"].update({"briefing-writer": "local-feeds"}))
     has(k, "mode feed-briefing: `roles:` names unknown role 'briefing-writer' (framework roles: analyst, builder, lead, "
            "researcher, reviewer)", "roles are framework-level")
-    # the same problems are resolve gaps (bay build does not lint)
     from helpers import assert_gap
     k = kit_copy()
     sub(k, base, "analyst: local-feeds,", "analyst: ,")
@@ -267,7 +257,7 @@ def test_a_config_that_raises_an_env_limit_is_refused_and_one_that_lowers_it_pas
     assert not lint.lint_config_limits(model.Kit(KIT, project()))
 
 
-def test_forge_extend_review_cannot_be_disabled_or_weakened():
+def test_forge_extend_review_and_standards_cannot_be_disabled_or_weakened():
     for change in ({"when": "never"}, {"tier": "balanced"}, {"effort": "medium"}, None):
         k = kit_copy()
 
@@ -279,6 +269,29 @@ def test_forge_extend_review_cannot_be_disabled_or_weakened():
                 ep["review"].update(change)
         edit_yaml(k / "components/forge/mode.yaml", f)
         has(k, "components/forge/mode.yaml", "forge.extend must declare review", "cannot be disabled")
+    for mode, feature, step_id, before in (("forge", "extend", "release-standards", None),
+                                           ("delivery", "build", "standards", None),
+                                           ("forge", "create", "standards", "fill")):
+        k = kit_copy()
+
+        def move(d, feature=feature, step_id=step_id, before=before):
+            steps = d["spec"]["features"][feature]["steps"]
+            step = next(s for s in steps if s["id"] == step_id)
+            steps.remove(step)
+            if before:
+                steps.insert([s["id"] for s in steps].index(before), step)
+        edit_yaml(k / f"components/{mode}/mode.yaml", move)
+        found = [p for p in problems(k) if "standards.check/v1.findings" in p]
+        assert len(found) == 1 and f"{mode}.{feature}: role builder" in found[0], found
+    for base in ("origin/main", "HEAD", None):
+        k = kit_copy()
+
+        def rebase(d, base=base):
+            step = next(s for s in d["spec"]["features"]["build"]["steps"] if s["id"] == "standards")
+            step["with"] = {"base": base} if base else {}
+        edit_yaml(k / "components/delivery/mode.yaml", rebase)
+        found = [p for p in problems(k) if "standards.check/v1.findings" in p]
+        assert len(found) == 1 and "with base $call.base" in found[0], (base, found)
 
 
 def test_kind_scoped_rules_are_linted():
@@ -292,9 +305,7 @@ def test_kind_scoped_rules_are_linted():
 
 
 def test_a_protected_name_is_reserved_and_defined_once():
-    """With one folder per kind a name is defined once; what keeps a protected name from being taken is the map
-    (stage 5 part G): `bay new` refuses it, a feature cannot be added to a protected mode, and the map may not name
-    an instance that is missing."""
+    """With one folder per kind a name is defined once; the map is what keeps a protected name from being taken."""
     from bay import model, scaffold
     k = kit_copy()
     try:
@@ -310,7 +321,6 @@ def test_a_protected_name_is_reserved_and_defined_once():
         except scaffold.ScaffoldError as e:
             assert "mode 'cos' is protected" in str(e), str(e)
         assert not (k / "components/cos/features/extra").exists()
-        # a second definition under another folder name is a name mismatch, never a second mode 'cos'
         (k / "components/cos2").mkdir()
         (k / "components/cos2/mode.yaml").write_text((k / "components/cos/mode.yaml").read_text())
         errs = model.Kit(k).errors
@@ -392,7 +402,6 @@ def test_schedule_is_a_warning_not_an_error():
     ws = lint.warnings(kit)
     assert any("feed-briefing.prune declares schedule 'daily' but no runtime acts on it" in w and "cron" in w for w in ws)
     assert problems(KIT) == []
-    # improve.backlog runs after the agent steps: the advisory points at the README recipe, not at a bare cron call
     w = next(w for w in ws if "improve.backlog declares schedule" in w)
     assert "components/improve/README.md" in w and "call improve.backlog" not in w
 
@@ -404,7 +413,7 @@ def test_run_steps_use_versioned_capability_spelling():
 
 
 def test_same_skill_name_in_two_modes_is_fine_b8():
-    k = kit_copy()        # briefing and mail-briefing both ship corpus-sql and digest: namespaced, no clash
+    k = kit_copy()
     assert (k / "components/mail-briefing/skills/digest/SKILL.md").exists() and (k / "components/feed-briefing/skills/digest").exists()
     assert not [p for p in problems(k) if "skill" in p]
 
@@ -427,13 +436,13 @@ def test_skill_name_over_64_characters_fails_lint_b8():
     (d / "SKILL.md").write_text(f"---\nname: {long}\ndescription: too long once namespaced\n---\n# Long\n")
     x = has(k, f"skill name 'mail-briefing--{long}'", "65 characters", "shorten the skill folder name")
     assert "by 1" in x
-    assert not [p for p in problems(k) if f"feed-briefing--{long}" in p]     # only mail-briefing has it
+    assert not [p for p in problems(k) if f"feed-briefing--{long}" in p]
 
 
 def test_skill_references_match_any_case_and_the_skill_x_f8():
     k = kit_copy()
     sub(k, "components/store/features/ask/playbook.md", "the corpus-sql skill", "The pattern-analysis Skill")
-    has(k, "store/features/ask/playbook.md:14", "names skill 'pattern-analysis'")   # built elsewhere
+    has(k, "store/features/ask/playbook.md:14", "names skill 'pattern-analysis'")
     k = kit_copy()
     sub(k, "components/store/features/ask/playbook.md", "the corpus-sql skill", "the skill `mail-sql`")
     has(k, "store/features/ask/playbook.md:14", "names skill 'mail-sql'")
@@ -448,7 +457,7 @@ def test_skill_references_count_only_backticked_or_known_names_n4():
     assert lint._skill_refs(prose, known) == []
     assert lint._skill_refs("the skill `mail-sql`; the `mail-sql` skill; the digest skill; (corpus-sql skill)",
                             known) == [(1, "mail-sql"), (1, "mail-sql"), (1, "digest"), (1, "corpus-sql")]
-    k = kit_copy()                                         # prose next to a reference is not flagged by lint
+    k = kit_copy()
     sub(k, "components/store/features/ask/playbook.md", "the corpus-sql skill",
         "the corpus-sql skill (the right skill, the same skill; the skill whatever)")
     assert not [p for p in problems(k) if "names skill" in p]

@@ -1,9 +1,4 @@
-"""Golden baseline of the improve mode (proposal 0008, stage 5 part A): what `improve.scan`, `improve.audit`, the
-store's routing, the reports and the dead-code check produce on data the tests build themselves (fixed clock), so
-moving improve's code out of its old folder (now removed) cannot change the reference. components/improve/tests/golden/improve.json was generated from
-the code before the move. A failing compare means a behavior changed (see golden_util).
-
-Every import of improve's own modules is in `mods()`: the move changes that function and nothing else."""
+"""Golden baseline of the improve mode: improve.scan, improve.audit, routing, reports and the dead-code check."""
 from __future__ import annotations
 
 import json
@@ -40,7 +35,6 @@ def candidate_view(c: dict, fingerprint) -> dict:
             "evidence": [e["ref"] for e in c["evidence"]], "key": c["detector"]["key"], "fingerprint": fingerprint(c)}
 
 
-# ------------------------------------------------------------------------------------------------ (a) scan
 def golden_scan() -> dict:
     store = mods()[4]
     root = tmpdir() / "cc"
@@ -64,7 +58,6 @@ def golden_scan() -> dict:
         cleanup(p)
 
 
-# ------------------------------------------------------------------------------------------------ (b) audit
 def write(root: Path, files: dict) -> None:
     for rel, text in files.items():
         f = root / rel
@@ -119,7 +112,6 @@ def golden_audit() -> dict:
         cleanup(p)
 
 
-# ------------------------------------------------------------------------------------------------ (c) audit of the kit
 def golden_kit_audit() -> dict:
     p = project()
     try:
@@ -129,7 +121,7 @@ def golden_kit_audit() -> dict:
         detect = r["next"]["previous"]["detect"]
         counts: dict[str, int] = {}
         for c in detect["candidates"]:
-            if c["scope"].get("file") != "HANDOFF.md":      # the working plan changes every slice: not part of the reference
+            if c["scope"].get("file") != "HANDOFF.md":
                 counts[c["kind"]] = counts.get(c["kind"], 0) + 1
         assert not counts.get("conformance"), [c["title"] for c in detect["candidates"] if c["kind"] == "conformance"]
         return {"countsPerKind": counts, "conformanceFindings": counts.get("conformance", 0),
@@ -138,7 +130,6 @@ def golden_kit_audit() -> dict:
         cleanup(p)
 
 
-# ------------------------------------------------------------------------------------------------ (d) routing
 ROUTE_SCOPES = {
     "framework file": {"file": "framework/roles/builder.yaml"},
     "bay file": {"file": "bay/guard.py"},
@@ -165,7 +156,6 @@ def golden_routes() -> dict:
     return out
 
 
-# ------------------------------------------------------------------------------------------------ (e) reports
 def fixed_candidates() -> list:
     def c(kind, key, lens, sev, file, occ=1):
         return {"lens": lens, "kind": kind, "title": f"{kind} in {file}", "pattern": f"{kind} pattern for {key}",
@@ -209,7 +199,6 @@ def golden_reports() -> dict:
                    "handoffs": handoffs, "rows": rows}, {str(tmp): "<store>"})
 
 
-# ------------------------------------------------------------------------------------------------ (f) dead-code check
 GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
 BASE = {
     "pkg/core.py": "def used():\n    return 1\n\ndef old_dead():\n    return 2\n",
@@ -250,17 +239,13 @@ def golden_change() -> dict:
         cleanup(repo)
 
 
-# Only the protected instances: connectors/, modes/ and envs/ also hold user extensions (connectors/gmail-api has
-# findings of its own and never moved). A protected mode or connector is a folder (trailing /), an env one file.
 MOVING = ("bay/graph.py", "bay/conformance.py", "bay/util.py",
           *(p if p.endswith(".yaml") else p + "/" for p in model.Kit(KIT).protected_paths if p.startswith("components/")))
 DEADCODE_KINDS = ("unused", "unused-constant", "compat-layer", "complexity")
 
 
 def test_moving_files_have_no_deadcode_findings():
-    """The dead-code step compares fingerprints, and a fingerprint holds the file path: a finding in a file that moves
-    is new at its new path and would block the step. So the files stage 5 moves (improve's code, the shipped connectors
-    and modes) must have none now; a finding found here is fixed before the move, not after."""
+    """A fingerprint holds the file path, so files that move must have no dead-code findings before the move."""
     detect_artifacts, graph, pipeline, _, _ = mods()
     pl = pipeline.Pipeline({"artifact-graph": FakeGraph(KIT)}, KIT, KIT, {}, datetime(2026, 10, 30, tzinfo=timezone.utc))
     arts = pl.artifacts("project")
@@ -273,7 +258,6 @@ def test_moving_files_have_no_deadcode_findings():
     assert not found, found
 
 
-# Named, reasoned changes to the golden since it was taken from untouched code (the rest of the file must not move).
 EXPECTED_DELTAS = {
     ("kitAudit", "countsPerKind", "inefficient-store-read"): {
         "was": 3, "now": 5,
@@ -298,9 +282,6 @@ EXPECTED_DELTAS = {
 }
 
 
-# Stage 5 part H (D4): improve is an ordinary mode, so a finding about the improve mode routes to a mode-fix task, and cos,
-# a protected mode, routes to forge.extend (the store's default set was {forge, improve}; the map's is {cos, forge}).
-# components/improve/tests/golden/improve.json is NOT edited: each row is asserted at its new value, then put back to the golden's.
 ROUTE_DELTAS = {
     ("routes", "default", "mode cos"): {"was": "mode-fix", "now": "forge.extend"},
     ("routes", "default", "mode improve"): {"was": "forge.extend", "now": "mode-fix"},
@@ -322,8 +303,8 @@ def test_improve_golden():
         node, old = got, want
         for key in path[:-1]:
             node, old = node[key], old[key]
-        now = node.get(path[-1], 0)                     # a kind with no finding has no count
+        now = node.get(path[-1], 0)
         assert now == delta["now"] != delta["was"], \
             f"{'/'.join(path)}: expected {delta['was']} -> {delta['now']} ({delta['why']}), got {now}"
-        node[path[-1]] = old[path[-1]]                  # the golden is not edited: put back its value
+        node[path[-1]] = old[path[-1]]
     compare("improve", got, GOLDEN)

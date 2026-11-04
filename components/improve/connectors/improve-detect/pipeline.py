@@ -1,14 +1,8 @@
-"""improve's read-only analysis (improve.detect/v1): gather data from the bound sources, run the deterministic
-detectors, resolve analyst evidence, re-check a finding. Nothing here writes; the store does.
-
-`sources` are connector instances bound in the same env: session.events/v1 (ledger, claude-transcripts, git),
-review.verdicts/v1 (ledger), artifacts.read/v1 (artifact-graph).
-"""
+"""improve's read-only analysis (improve.detect/v1): gathers data, runs detectors and re-checks; nothing here writes."""
 from __future__ import annotations
 
 import re
 import subprocess
-import tarfile
 import tempfile
 from collections import Counter
 from datetime import datetime
@@ -16,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from bay import conformance, graph, model
+from bay import boundary, conformance, graph, model
 from bay.util import fingerprint, iso, short_hash
 from . import detect_artifacts, detect_sessions
 
@@ -26,9 +20,9 @@ EPISODE_SUMMARY_FIELDS = ("id", "source", "kind", "target", "status", "agent", "
 MAX_SUMMARIES = 300
 VERDICT_KINDS = {"review-rounds", "rule-repeat", "lintable-blocker", "out-of-scope"}
 SCOPE_KEYS = ("mode", "feature", "step", "role", "env", "rule", "file", "files", "framework")
-CHANGE_KINDS = ("unused", "unused-constant", "compat-layer", "complexity")     # the dead-code check
-BASE_MAX_BYTES = 1_000_000      # as artifact-graph's MAX_BYTES for the working tree
-SHA = re.compile(r"^[0-9a-f]{7,40}$")
+CHANGE_KINDS = ("unused", "unused-constant", "compat-layer", "complexity")
+BASE_MAX_BYTES = 1_000_000
+SHA = boundary.SHA
 
 
 def summary(e: dict) -> dict:
@@ -57,7 +51,6 @@ class Pipeline:
         self.settings, self.now, self.run = settings or {}, now, run
         self.warnings: list[str] = []
 
-    # ------------------------------------------------------------------ data
     def _with(self, method: str) -> list:
         return [s for _, s in sorted(self.sources.items()) if callable(getattr(s, method, None))]
 
@@ -97,9 +90,9 @@ class Pipeline:
 
         def text(p):
             try:
-                raw = getattr(art, "raw_text", None)     # dispatcher-side only; outputs are scrubbed
+                raw = getattr(art, "raw_text", None)
                 return raw(path=p, root=root) if raw else art.text(path=p, root=root)["text"]
-            except Exception as e:           # refused or unreadable: counted, named in warnings
+            except Exception as e:
                 unreadable.append(f"{p}: {type(e).__name__}")
                 return None
         base = self.kit if root == "kit" else self.project
@@ -142,8 +135,7 @@ class Pipeline:
         return out
 
     def read_endpoints(self) -> set[str]:
-        """Read-only endpoints of store interfaces (interfaces that also write): where re-reading the whole store
-        per call is waste. Plain readers (artifacts.read, review.verdicts) are excluded."""
+        """Read-only endpoints of store interfaces, where re-reading the whole store per call is waste."""
         out = set()
         for d in model.Kit(self.kit).docs["Interface"].values():
             eps = d.spec["endpoints"]
@@ -151,7 +143,6 @@ class Pipeline:
                 out |= {ep for ep, s in eps.items() if set(s["effects"]) <= {"read"}}
         return out
 
-    # ------------------------------------------------------------------ endpoints
     def sessions(self, since=None, until=None) -> dict:
         data, meta = self.session_data(since, until)
         cands = detect_sessions.run(data, self.settings)
@@ -172,42 +163,6 @@ class Pipeline:
                           "conformanceRules": [c["rule"] for c in a.conformance],
                           "unreadable": len(a.unreadable), "unparsed": len(a.unparsed), "failed": len(a.failed)}}
 
-    def _export(self, base: str, dest: Path) -> None:
-        """The project's tree at `base` as plain files in `dest` (git archive); nothing in it is ever run."""
-        tar = dest.parent / "base.tar"
-        try:
-            r = self.run(["git", "-C", str(self.project), "archive", "--format=tar", "-o", str(tar), base],
-                         capture_output=True, text=True, timeout=120)
-        except (OSError, subprocess.SubprocessError) as e:
-            raise ValueError(f"cannot export {base}: {e}") from None
-        if r.returncode != 0:
-            raise ValueError(f"cannot export {base} with git archive: {(r.stderr or '').strip()[:200]}")
-        try:
-            with tarfile.open(tar) as t:
-                t.extractall(dest, filter="data")
-        except (tarfile.TarError, OSError) as e:
-            raise ValueError(f"cannot extract {base}: {type(e).__name__}: {str(e)[:200]}") from None
-
-    def _git(self, *args: str) -> subprocess.CompletedProcess | None:
-        try:
-            return self.run(["git", "-C", str(self.project), *args], capture_output=True, text=True, timeout=60)
-        except (OSError, subprocess.SubprocessError):
-            return None
-
-    def _merge_base(self, base: str) -> str:
-        """The commit the working tree branched from: a branch behind a moved `base` is judged against what it
-        started from, not against what others landed since."""
-        r = self._git("rev-parse", "--verify", "--quiet", f"{base}^{{commit}}")
-        if r is None or r.returncode != 0:
-            remote = base.split("/")[0] if "/" in base else "<remote>"
-            raise ValueError(f"base {base} does not resolve in this checkout; fetch {remote} (git fetch {remote}) "
-                             f"and run the check again")
-        r = self._git("merge-base", base, "HEAD")
-        sha = (r.stdout or "").strip() if r is not None and r.returncode == 0 else ""
-        if not SHA.match(sha):
-            raise ValueError(f"base {base} has no common ancestor with HEAD; fetch the remote and rebase the change")
-        return sha
-
     def _base_text(self, old: Path, unreadable: list[str]):
         """Reads the base tree the way artifact-graph reads the working tree: no .env* files, no large files."""
         def text(p):
@@ -218,29 +173,20 @@ class Pipeline:
             return f.read_text(encoding="utf-8", errors="replace")
         return text
 
-    def _renames(self, sha: str) -> dict:
-        r = self._git("diff", "-M", "--diff-filter=R", "--name-status", "-z", sha)
-        t = (r.stdout or "").split("\0") if r is not None and r.returncode == 0 else []
-        return dict(zip(t[1::3], t[2::3]))
-
     def change(self, base: str) -> dict:
-        """Dead-code check: the unused, unused-constant, compat-layer and complexity findings of the working tree
-        that the tree at the merge-base of `base` and HEAD does not have (compared as a multiset of fingerprints).
-        `stopped` names them when there are any."""
+        """Dead-code check: findings of the working tree that the tree at the merge-base of `base` and HEAD lacks."""
         if not isinstance(base, str) or not base or base.startswith("-"):
             raise ValueError(f"base must be a git revision, got {base!r}")
-        sha = self._merge_base(base)
-        # the per-detector cap would truncate each side differently: compare everything, cap nothing
+        sha = boundary.base_commit(self.project, base, self.run)
         cfg = {**self.settings, "thresholds": {**(self.settings.get("thresholds") or {}), "maxFindingsPerDetector": 10 ** 9}}
         ledger_eps = self.session_data(only_ledger=True)[0]["episodes"]
         now_arts = self.artifacts("project")
-        ren = self._renames(sha)
+        ren = boundary.renames(self.project, sha, self.run)
         with tempfile.TemporaryDirectory(prefix="agentbay-base-") as tmp:
             old = Path(tmp) / "tree"
             old.mkdir()
-            self._export(sha, old)
+            boundary.export(self.project, sha, old, self.run)
             unreadable: list[str] = []
-            # same graph as the working tree's: when the project is the kit, the old tree's concepts too
             is_kit = self.project.resolve() == self.kit.resolve()
             try:
                 old_graph = graph.build(old, old if is_kit else self.kit).as_dict()
@@ -259,7 +205,7 @@ class Pipeline:
         for k in CHANGE_KINDS:
             found += detect_artifacts.run(now_arts, cfg, only=k)
         new = []
-        for c in found:                          # a second finding with the same fingerprint is new
+        for c in found:
             fp = fingerprint(c)
             if seen[fp] > 0:
                 seen[fp] -= 1

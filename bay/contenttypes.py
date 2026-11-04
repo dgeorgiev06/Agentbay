@@ -1,14 +1,4 @@
-"""Content types (proposal 0006, Part B): the loader.
-
-A content type is a folder components/<name>/ in the kit: content-type.yaml (shape: schemas/content-type.schema.json),
-fields.schema.json (what the kind adds to item/v1), views.sql (only `CREATE VIEW v_<name> AS ...` statements) and,
-for a type with derived fields, derive.py. The type may also declare child tables (one row per element of a list
-field, with an optional FTS5 index) and the fields derive.py computes when the store writes an item.
-The briefing core reads a type only through this module: `scan` finds the folders and reports every problem,
-`load` returns the types or raises, and `check_views` proves that a type's views read nothing but the base
-tables, the base view and the type's own tables and views (the same allowlist the agents' sandbox enforces), and
-that the columns `describe` documents are the columns the views have.
-"""
+"""Content types (proposal 0006, Part B): the loader."""
 from __future__ import annotations
 
 import ast
@@ -26,7 +16,7 @@ YAML, FIELDS, VIEWS, DERIVE = "content-type.yaml", "fields.schema.json", "views.
 _CREATE = re.compile(r"(?is)^\s*CREATE\s+VIEW\s+(v_[A-Za-z0-9_]+)\s+AS\s")
 _cache: dict = {}
 _modules: dict = {}
-RESERVED_TABLES = ("items", "item_selectors", "store_meta")      # the store's own; a type's table may not take them
+RESERVED_TABLES = ("items", "item_selectors", "store_meta")
 
 
 @dataclass(frozen=True)
@@ -36,10 +26,10 @@ class ContentType:
     version: int
     dir: Path
     fields: dict
-    docs: dict        # view name -> {item, includes, fullText, columns} as in content-type.yaml, in file order
-    views: tuple      # (view name, CREATE TEMP VIEW statement) in file order
-    tables: dict = None           # child table name -> its content-type.yaml entry
-    derived: tuple = ()           # the keys derive.py returns
+    docs: dict
+    views: tuple
+    tables: dict = None
+    derived: tuple = ()
     derive_version: int | None = None
 
     @property
@@ -62,7 +52,6 @@ class ContentType:
         out = [(f"(all {d['includes']['view']} columns)", "", d["includes"]["note"])] if d.get("includes") else []
         return out + [(c["name"], c["type"], c["description"]) for c in d["columns"]]
 
-    # ---- child tables
     def table_names(self, fts: bool = True) -> list[str]:
         """The tables a store made for this type has: each child table and, with FTS5, its `<table>_fts`."""
         return [n for t, s in (self.tables or {}).items() for n in (t, *([f"{t}_fts"] if fts and s.get("fullText") else []))]
@@ -111,7 +100,6 @@ class ContentType:
                                   for el in ext[s["from"]]]
         return ext
 
-    # ---- derived fields
     def derive_module(self):
         """derive.py as a module (loaded once per file state)."""
         f = self.dir / DERIVE
@@ -282,8 +270,7 @@ def _derive_problems(f: Path) -> list[str]:
 
 
 def scan(root: Path = model.KIT) -> tuple[dict[str, ContentType], list[str]]:
-    """Every content type of the kit at `root` and every problem found, by file. Cached while the files stay
-    as they are."""
+    """Every content type of the kit at `root` and every problem by file, cached while the files stay unchanged."""
     root = Path(root)
     dirs = sorted(y.parent for y in (root / "components").glob(f"*/{YAML}"))
     files = sorted(p for d in dirs for p in d.glob("*") if p.is_file())
@@ -338,11 +325,8 @@ def fields_schema(ref: str, root: Path = model.KIT) -> dict | None:
     return ct.fields if ct and ver == str(ct.version) else None
 
 
-# ----------------------------------------------------------------- views
 def check_views(ct: ContentType) -> list[str]:
-    """Build the type's views over an empty store (base tables, the type's own tables and v_items only) under the
-    read-only authorizer. Problems: a view that reads anything else (another table, a view of another type), uses
-    a function the sandbox does not allow, or has other columns than it documents."""
+    """Build the type's views under the read-only authorizer; reading beyond its own tables and v_items is a problem."""
     from . import sqlsandbox as sbx
     con = sqlite3.connect(":memory:")
     fts = sbx.fts5_available()
@@ -378,7 +362,7 @@ def check_views(ct: ContentType) -> list[str]:
         have = {"v_items": [d[0] for d in con.execute("SELECT * FROM v_items LIMIT 0").description]}
         for t in ct.table_names(fts):
             if t.endswith("_fts"):
-                con.execute(f"SELECT 1 FROM main.{t} LIMIT 0").fetchall()     # FTS5 connects on first use
+                con.execute(f"SELECT 1 FROM main.{t} LIMIT 0").fetchall()
         con.set_authorizer(auth)
         for v in ct.view_names():
             if v in ct.fulltext_views() and not fts:
@@ -413,7 +397,6 @@ def problems(root: Path = model.KIT) -> list[str]:
     return out
 
 
-# ----------------------------------------------------------------- views a mode owns
 YAML_MODE = "views.yaml"
 DETAIL_SHAPES = ("values", "value", "rows")
 _PARAM = re.compile(r":([A-Za-z_]\w*)")
@@ -421,11 +404,10 @@ _PARAM = re.compile(r":([A-Za-z_]\w*)")
 
 @dataclass(frozen=True)
 class ModeViews:
-    """The views a mode defines over the content types it reads: views.sql (only `CREATE VIEW v_<name> AS ...`)
-    and views.yaml (`views`: the documented columns of each; `rows`: name -> how items.store/v2.rows reads one)."""
+    """The views a mode defines over the content types it reads: views.sql, with columns documented in views.yaml."""
     dir: Path
-    docs: dict        # view name -> {columns}
-    views: tuple      # (view name, CREATE TEMP VIEW statement) in file order
+    docs: dict
+    views: tuple
     rows: dict | None = None
 
     def view_names(self) -> list[str]:
@@ -500,8 +482,7 @@ def _row_problems(name: str, th, docs: dict, yml: Path) -> list[str]:
 
 
 def mode_views(dirs) -> ModeViews | None:
-    """The views of the mode whose folders are `dirs` (own folder, then each ancestor's; the nearest folder that has
-    a views.sql wins), or None. Raises SpecError for a folder whose files are wrong."""
+    """The views of the mode whose folders are `dirs` (the nearest views.sql wins), or None; SpecError if wrong."""
     for d in map(Path, dirs):
         if (d / VIEWS).exists() or (d / YAML_MODE).exists():
             mv, errs = _mode_one(d)
@@ -511,8 +492,7 @@ def mode_views(dirs) -> ModeViews | None:
 
 
 def mode_problems(dirs, reads, root: Path = model.KIT) -> list[str]:
-    """Everything wrong with the views of the mode whose folders are `dirs` and which `reads` the item kinds
-    `reads` (`<kind>/v<N>`): the files, the types the views may read, the documented columns and the rows rules."""
+    """Everything wrong with the views of a mode that reads the item kinds `reads`: files, types, columns and rows."""
     for d in map(Path, dirs):
         if (d / VIEWS).exists() or (d / YAML_MODE).exists():
             mv, errs = _mode_one(d)
@@ -521,9 +501,7 @@ def mode_problems(dirs, reads, root: Path = model.KIT) -> list[str]:
 
 
 def check_mode_views(mv: ModeViews, reads, root: Path = model.KIT) -> list[str]:
-    """Build the mode's views over an empty store of the types it reads under the read-only authorizer. A mode view
-    may read only the base views and the views of those types (and the mode's own earlier views): not a table, not
-    a view of a type the mode does not read."""
+    """Build the mode's views under the read-only authorizer; they may read only base views and their types' views."""
     from . import sqlsandbox as sbx
     have = scan(root)[0]
     kinds = {r.partition("/v")[0] for r in reads}
@@ -549,8 +527,7 @@ def check_mode_views(mv: ModeViews, reads, root: Path = model.KIT) -> list[str]:
 
 
 def _build_empty_store(con, mv: ModeViews, types, fts: bool) -> set[str]:
-    """Create the store's tables and views, the types' tables and the mode's views in `con`; the lower-cased names
-    of everything stored."""
+    """Create the store's tables and views, the types' tables and the mode's views in `con`; return the stored names."""
     from . import sqlsandbox as sbx
     for stmt in (*sbx.BASE_DDL, *(s for ct in types for s in ct.table_ddl(fts))):
         con.execute(stmt)
@@ -576,12 +553,12 @@ def _mode_view_authorizer(stored: set[str], own: set[str], readable: set[str], r
             t = (a1 or "").lower()
             if (db is None and t not in stored) or t in sbx.TABLE_FUNCS:
                 return sqlite3.SQLITE_OK
-            if via is None or via.lower() in own:      # read by a mode view (or by the checked query itself)
+            if via is None or via.lower() in own:
                 if t in readable:
                     return sqlite3.SQLITE_OK
                 reads_seen.append(a1)
                 return sqlite3.SQLITE_DENY
-            return sqlite3.SQLITE_OK                   # inside a view of the store or of a content type
+            return sqlite3.SQLITE_OK
         if action == sqlite3.SQLITE_FUNCTION:
             if (a2 or "").lower() in sbx.FUNCTIONS:
                 return sqlite3.SQLITE_OK
@@ -593,8 +570,7 @@ def _mode_view_authorizer(stored: set[str], own: set[str], readable: set[str], r
 
 def _view_column_problems(con, mv: ModeViews, kinds: set[str], reads_seen: list[str],
                           problems: list[str]) -> dict[str, list[str]]:
-    """Build each mode view; the columns of those that build, with a problem for each that does not or whose columns
-    differ from the documented ones."""
+    """Build each mode view and return the columns of those that build; a view that fails or differs is a problem."""
     cols_of: dict[str, list[str]] = {}
     for v in mv.view_names():
         reads_seen.clear()

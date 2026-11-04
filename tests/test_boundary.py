@@ -9,8 +9,8 @@ import yaml
 from helpers import KIT, tmpdir
 from bay import boundary, lint, model, proposal
 
-PROT = {"paths": ["locked"], "mode": [], "env": {}, "connector": []}      # a block every map needs; protects nothing here
-MAP = {"owns": ["bay/", "bay/selector.py", "schemas/", "adapters/"], "protected": PROT}      # flat, as the shipped map
+PROT = {"paths": ["locked"], "mode": [], "env": {}, "connector": []}
+MAP = {"owns": ["bay/", "bay/selector.py", "schemas/", "adapters/"], "protected": PROT}
 
 BASE_FILES = {
     "framework/kernel.yaml": yaml.safe_dump(MAP),
@@ -59,7 +59,7 @@ def _failing(rep) -> list[str]:
 def test_core_edit_fails_without_touches_and_passes_with():
     rep = _check({"bay/cli.py": "y\n", "bay/selector.py": "y\n"})
     assert _failing(rep) == ["bay/cli.py", "bay/selector.py"] and rep.exit_code == 1
-    assert {f.owner for f in rep.failures} == {"kernel"}                   # one owner: the kernel
+    assert {f.owner for f in rep.failures} == {"kernel"}
     line = rep.lines()[0]
     assert line.startswith("bay/cli.py: kernel - core path owned by kernel (B-1) - add it to touches: in")
     rep = _check({"bay/cli.py": "y\n", "bay/selector.py": "y\n"}, touches=["bay/*.py"])
@@ -137,7 +137,6 @@ def test_a_whole_mode_entry_covers_its_feature_folders():
     assert _failing(rep) == []
     rep = _check(change, touches=["components/mail/mode.yaml", "components/mail/features/digest/"])
     assert _failing(rep) == []
-    # another feature stays unlisted
     rep = _check({"components/mail/features/ask/playbook.md": "y\n"}, touches=["components/mail/features/digest/"])
     assert _failing(rep) == ["components/mail/features/ask/playbook.md"]
 
@@ -182,12 +181,11 @@ def test_docs_check_names_instances_outside_fences_and_fails():
 
 
 def test_docs_check_fences_follow_commonmark_and_names_ignore_case():
-    """F-5: a ``` line inside a ~~~ block does not close it (nor does a shorter fence), so text after the real
-    close is checked; names match in any case."""
+    """F-5: a ``` line inside a ~~~ block does not close it, so text after the real close is checked."""
     names = {"news": "mode"}
-    t = "~~~\n```\n~~~\nnews here\n"                       # ``` inside ~~~ must not toggle
+    t = "~~~\n```\n~~~\nnews here\n"
     assert [h["line"] for h in boundary.doc_hits({"d": t}, names)] == [4]
-    t = "````\nnews\n```\nstill fenced news\n````\nnews after\n"   # shorter fence does not close
+    t = "````\nnews\n```\nstill fenced news\n````\nnews after\n"
     assert [h["line"] for h in boundary.doc_hits({"d": t}, names)] == [6]
     t = "```\nnews\n``` not a close\n```\nNEWS\n"
     assert [h["line"] for h in boundary.doc_hits({"d": t}, names)] == [5]
@@ -210,7 +208,7 @@ def test_front_matter_parser():
     assert [e["path"] for e in t] == ["bay/", "x/"] and t[1]["planned"] is True
     assert proposal.touches("# no front matter\n") == []
     assert proposal.touches("---\ntouches: []\n---\n") == []
-    f = tmpdir() / "0001-x.md"                                       # from a file: the error names the file
+    f = tmpdir() / "0001-x.md"
     f.write_text(text)
     assert [e["path"] for e in proposal.load_touches(f)] == ["bay/", "x/"]
     f.write_text("---\ntouches: bay/\n---\n")
@@ -230,20 +228,20 @@ def test_front_matter_parser():
 def test_shipped_component_map_is_valid_and_lint_checks_it():
     doc = model.load_yaml(KIT / "framework/kernel.yaml")
     assert model.schema_errors(doc, model.schema("components")) == []
-    assert set(doc) == {"owns", "protected"}                                   # nothing else: no contracts, no wrapper
+    assert set(doc) == {"owns", "protected"}
     cmap = boundary.ComponentMap.load(KIT / "framework/kernel.yaml")
     assert all(cmap.owner(p) == "kernel" for p in ("bay/selector.py", "bay/cli.py", "adapters/claude-code/adapter.yaml"))
-    assert cmap.owner("components/briefing/mode.yaml") is None                 # a component owns itself by being a folder
+    assert cmap.owner("components/briefing/mode.yaml") is None
     assert boundary.root("components/forge/mode.yaml") == ("components/forge/", "forge")
-    assert boundary.root("framework/components/forge/mode.yaml") is None       # no second place for a component
-    for kind, (globs, _) in model.KINDS.items():                               # the helper finds what the loader finds
+    assert boundary.root("framework/components/forge/mode.yaml") is None
+    for kind, (globs, _) in model.KINDS.items():
         for f in (p for g in globs if kind != "Role" for p in KIT.glob(g)):
             assert boundary.root(f.relative_to(KIT).as_posix()), f
     kit = model.Kit(KIT)
     assert lint.lint_components(kit) == []
     bad = tmpdir()
     (bad / "framework").mkdir()
-    (bad / "framework/kernel.yaml").write_text(yaml.safe_dump(         # the old wrapper and contracts are refused
+    (bad / "framework/kernel.yaml").write_text(yaml.safe_dump(
         {"components": {"kernel": {"owns": ["nowhere/"], "contracts": {"mode": {"at": ["components/"]}}}}}))
     kit.root = bad
     errs = lint.lint_components(kit)
@@ -256,19 +254,19 @@ def test_shipped_component_map_is_valid_and_lint_checks_it():
 def test_ownership_lint_names_stray_tracked_files_b4():
     repo = _repo({"TODO.md": "x\n", "notes.txt": "x\n", "tools/x.sh": "x\n", "framework/stray.yaml": "x\n",
                   "docs/DESIGN.md": "x\n", "adapters/claude-code/adapter.yaml": "x\n"})
-    (repo / "untracked.txt").write_text("x\n")                 # only tracked files count
+    (repo / "untracked.txt").write_text("x\n")
     assert boundary.stray(["bay/cli.py", "components/mail/mode.yaml", "tests/test_x.py", "README.md", "notes.txt",
                            "TODO.md", "tools/x.sh"],
                           boundary.ComponentMap.load(repo / "framework/kernel.yaml")) == ["tools/x.sh"]
     kit = model.Kit(KIT)
     kit.root = repo
     errs = lint.lint_ownership(kit)
-    assert [e.split(":", 1)[0] for e in errs] == ["framework/kernel.yaml", "framework/stray.yaml", "tools/x.sh"]   # MAP owns neither
+    assert [e.split(":", 1)[0] for e in errs] == ["framework/kernel.yaml", "framework/stray.yaml", "tools/x.sh"]
     assert "(B-4)" in errs[0] and "framework/kernel.yaml" in errs[0]
-    kit.root = tmpdir()                                            # not a git checkout: nothing to check
+    kit.root = tmpdir()
     assert lint.lint_ownership(kit) == []
     kit.root = KIT
-    assert lint.lint_ownership(kit) == []                          # the shipped kit has no stray file
+    assert lint.lint_ownership(kit) == []
 
 
 def test_a_change_to_the_component_map_is_judged_by_the_base_map_f14():
@@ -276,7 +274,7 @@ def test_a_change_to_the_component_map_is_judged_by_the_base_map_f14():
     change = {"framework/kernel.yaml": yaml.safe_dump(new_map), "plugins/p/x.py": "x\n",
               ".github/workflows/ci.yml": "on: push\n"}
     rep = _check(change, touches=["framework/kernel.yaml"])
-    assert _failing(rep) == [".github/workflows/ci.yml", "plugins/p/x.py"]      # head's map would call plugins/p core
+    assert _failing(rep) == [".github/workflows/ci.yml", "plugins/p/x.py"]
     assert {f.cls for f in rep.failures} == {"unowned"} and rep.map_rev == "HEAD~1"
     assert not any(ln.startswith("component map:") for ln in rep.lines())
     rep = _check(change, touches=["framework/kernel.yaml", "plugins/p/", ".github/"])
@@ -313,8 +311,6 @@ def _commit(repo: Path, files: dict[str, str | None]) -> None:
 
 
 def test_a_map_introduced_by_the_change_gives_no_new_extension_pass_n1():
-    # the reviewer's backdoor: base has no map; the change adds one that owns almost nothing (a map can no longer
-    # declare an extension folder, so it cannot make bay/<name> one)
     evil = {"owns": ["bay/cli.py"], "protected": PROT}
     repo = tmpdir()
     _git(repo, "init", "-q", "-b", "main")
@@ -325,7 +321,7 @@ def test_a_map_introduced_by_the_change_gives_no_new_extension_pass_n1():
     rep = boundary.check(repo, "HEAD~1", "HEAD", None, [])
     assert rep.map_rev == "HEAD" and rep.exit_code == 1
     assert _failing(rep) == ["bay/backdoor.py", "components/mail/features/digest/playbook.md",
-                             "components/new/mode.yaml", MAP_PATH]                       # no new-extension pass; tests/ is other
+                             "components/new/mode.yaml", MAP_PATH]
     assert "no new-extension pass" in next(f.why for f in rep.failures if f.path == "components/new/mode.yaml")
     ok = [{"path": t} for t in (MAP_PATH, "bay/backdoor.py", "components/mail/features/digest/", "components/new/")]
     assert not _failing(boundary.check(repo, "HEAD~1", "HEAD", None, ok))
@@ -341,7 +337,6 @@ def test_a_base_without_a_map_fails_unless_the_change_adds_it_n1():
         raise AssertionError("judged without a component map")
     except RuntimeError as e:
         assert "does not exist at HEAD~1" in str(e) and "this change does not add it" in str(e)
-    # a map that only exists on base's side after the fork is not the change adding it
     _git(repo, "checkout", "-q", "-b", "pr", "HEAD")
     _git(repo, "checkout", "-q", "main")
     _commit(repo, {MAP_PATH: yaml.safe_dump(MAP)})
@@ -366,7 +361,6 @@ def test_a_base_map_without_protected_is_an_error():
 
 
 def test_new_and_the_map_are_decided_at_the_merge_base_n2():
-    # the reviewer's stale fork: main deletes a mode (and drops bay/ from kernel owns) after pr forked; pr edits it
     repo = _repo({})
     _git(repo, "checkout", "-q", "-b", "pr")
     _git(repo, "checkout", "-q", "main")
@@ -375,7 +369,7 @@ def test_new_and_the_map_are_decided_at_the_merge_base_n2():
     _git(repo, "checkout", "-q", "pr")
     _commit(repo, {"components/mail/mode.yaml": "y\n", "bay/cli.py": "y\n"})
     rep = boundary.check(repo, "main", "pr", None, [])
-    assert _failing(rep) == ["bay/cli.py", "components/mail/mode.yaml"]     # existing at the fork, core in its map
+    assert _failing(rep) == ["bay/cli.py", "components/mail/mode.yaml"]
     assert {f.rule for f in rep.failures} == {"B-1", "B-3"} and rep.map_rev == "main"
 
 
@@ -400,7 +394,7 @@ def test_a_malformed_component_map_is_a_one_line_error_n3():
 def test_only_committed_touches_count_f14():
     prop = "docs/proposals/0099-x.md"
     repo = _repo({"bay/cli.py": "y\n", prop: "---\ntouches: []\n---\n# x\n"})
-    (repo / prop).write_text("---\ntouches:\n  - { path: bay/cli.py, reason: r }\n---\n# x\n")   # not committed
+    (repo / prop).write_text("---\ntouches:\n  - { path: bay/cli.py, reason: r }\n---\n# x\n")
     t = boundary.proposal_touches(repo, "HEAD", prop)
     assert t == [] and _failing(boundary.check(repo, "HEAD~1", "HEAD", prop, t)) == ["bay/cli.py"]
     _git(repo, "commit", "-q", "-am", "c")

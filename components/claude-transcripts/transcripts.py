@@ -1,7 +1,4 @@
-"""claude-transcripts: session.events/v1 over Claude Code transcripts (parser.py in this folder). Read-only.
-
-Runs only on the dispatcher side; agents never read transcript files (improve-local gives roles no path to them,
-and the guard denies reads outside the project)."""
+"""claude-transcripts: session.events/v1 over Claude Code transcripts (parser.py in this folder). Read-only."""
 from pathlib import Path
 
 from bay.util import in_window, parse_time

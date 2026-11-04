@@ -1,11 +1,4 @@
-"""todo-rules: todo.rules/v1 as pure functions. No store, no network, no files written.
-
-plan   a status change of a todoitem -> its id, the fields to set and the next occurrence (or None)
-brief  the delegation call (delivery.build or delivery.research) for a todoitem, and the delegation to record
-track  the delegation of a todoitem after a new status of the call, merged with what is recorded
-Each takes `items`, the list items.store/v2.get returns, and uses its one to-do (and `missing` for the error).
-next_due (internal) computes the due date of the next occurrence for plan.
-"""
+"""todo-rules: todo.rules/v1 as pure functions. No store, no network, no files written."""
 import calendar
 import json
 from datetime import date, datetime, timedelta, timezone
@@ -13,9 +6,9 @@ from pathlib import Path
 
 WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 STATUSES = ["open", "doing", "waiting", "done", "dropped"]
-FREE = {"open", "doing", "waiting"}          # these move freely among themselves
+FREE = {"open", "doing", "waiting"}
 ENDED = {"done", "dropped"}
-KIT = Path(__file__).resolve().parents[4]      # components/todo/connectors/todo-rules/todo_rules.py
+KIT = Path(__file__).resolve().parents[4]
 TASK_SCHEMA = KIT / "components" / "delivery" / "types" / "Task.schema.json"
 TITLE_MAX, NOTES_MAX = 300, 3000
 TARGETS = {"build": "delivery.build", "research": "delivery.research"}
@@ -40,8 +33,6 @@ CONSTRAINTS = {
 class TodoRulesError(ValueError):
     """A refused change or an invalid input; the message names the fix."""
 
-
-# recurrence
 
 def _day(text: str) -> date:
     try:
@@ -87,7 +78,7 @@ def _advance(recur: dict, base: date) -> date:
             return base + timedelta(weeks=every)
         wanted = sorted({WEEKDAYS.index(d) for d in recur["on"]})
         later = [w for w in wanted if w > base.weekday()]
-        if later:                                    # a later day in the same week
+        if later:
             return base + timedelta(days=later[0] - base.weekday())
         monday = base - timedelta(days=base.weekday())
         return monday + timedelta(weeks=every, days=wanted[0])
@@ -102,15 +93,13 @@ def next_due(recur: dict, due, done_at: str) -> str:
     _check_recur(recur)
     counts_from_done = recur.get("from", "due") == "done" or not due
     base = _day(done_at if counts_from_done else due)
-    suffix = str(due)[10:] if due else ""              # the time part of a datetime due is kept
+    suffix = str(due)[10:] if due else ""
     try:
         return _advance(recur, base).isoformat() + suffix
     except (OverflowError, ValueError):
         raise TodoRulesError(f"the next due date after {base.isoformat()} is out of range "
                              f"(recur.every {recur['every']}); use a smaller recur.every")
 
-
-# plan
 
 def _now(ctx) -> str:
     n = ctx.now()
@@ -144,11 +133,11 @@ def _allowed(cur: str, new: str) -> bool:
 
 def _next_item(item: dict, due: str, at: str) -> dict:
     series = item.get("threadId") or item["id"]
-    recur = dict(item["recur"])                        # a copy: the next to-do never shares the dict
+    recur = dict(item["recur"])
     if recur.get("unit") == "month" and not recur.get("day"):
-        recur["day"] = _day(item.get("due") or at).day     # pin the day, so Jan 31 -> Feb 28 -> Mar 31
+        recur["day"] = _day(item.get("due") or at).day
     nxt = {"kind": "todoitem", "title": item["title"], "status": "open", "due": due,
-           "threadId": series, "prevId": item["id"], "recur": recur, "text": item.get("text") or ""}   # item/v1 requires text
+           "threadId": series, "prevId": item["id"], "recur": recur, "text": item.get("text") or ""}
     for key in ("labels", "priority"):
         if item.get(key) not in (None, "", []):
             nxt[key] = item[key]
@@ -198,12 +187,10 @@ def plan_change(item: dict, action: str, status, scope, at: str) -> dict:
             raise TodoRulesError("a recurring to-do needs its id to start the next occurrence")
         nxt = _next_item(item, next_due(recur, item.get("due"), at), at)
         if not item.get("threadId"):
-            fields["threadId"] = nxt["threadId"]       # the finished to-do joins the series
+            fields["threadId"] = nxt["threadId"]
     fields["history"] = [*(item.get("history") or []), {"at": at, "field": "status", "from": cur, "to": new}]
     return {"id": _id(item), "set": fields, "next": nxt}
 
-
-# brief
 
 def _quote(text, limit: int) -> str:
     text = str(text)
@@ -259,8 +246,6 @@ def make_brief(item: dict, to: str, deliverable, at: str) -> dict:
             "delegation": {"target": to, "status": "handed-off", "at": at}}
 
 
-# track
-
 def track_delegation(item: dict, call_id: str, status: str, summary) -> dict:
     old = item.get("delegation")
     if not isinstance(old, dict) or not old.get("target"):
@@ -268,12 +253,10 @@ def track_delegation(item: dict, call_id: str, status: str, summary) -> dict:
     new = {**old, "callId": call_id, "status": status}
     if summary is not None:
         new["summary"] = summary
-    return {"id": _id(item), "set": {"delegation": new}}      # status and history of the to-do stay as they are
+    return {"id": _id(item), "set": {"delegation": new}}
 
 
-# fields
-
-GUARDED = {      # a field only the rules write -> the feature that changes it
+GUARDED = {
     "status": "todo.complete / todo.reopen / todo.drop / todo.status",
     "completedAt": "todo.complete / todo.reopen",
     "droppedAt": "todo.drop / todo.reopen",
@@ -298,7 +281,7 @@ class TodoRules:
     def __init__(self, ctx):
         self.ctx = ctx
 
-    def fields(self, set) -> dict:    # noqa: A002
+    def fields(self, set) -> dict:
         return check_fields(set)
 
     def plan(self, items, action, status=None, scope=None, at=None, missing=None) -> dict:

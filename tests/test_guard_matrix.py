@@ -1,13 +1,4 @@
-"""Golden baseline of every guard decision (proposal 0008, stage 5 part A): the kit built as its own project, then for
-each subagent unit, the unknown subagent and the main thread the decision (and its reason) of the real `Guard` for
-logical paths (resolved by `physical` through the loader, so the rows survive the move of the extension folders), for Bash command
-spellings (every bay launcher, approve, config, secrets, interpreters, git flags, `bay plan`, the role shim) and for
-the file tools. Also recorded: the policy's `protected` list and per-unit scopes, `protected_writes(env)` for every
-env, the resolver gaps of test_resolver.py:165-185 and the lint warnings about protected reach.
-
-The golden is generated from the code before stage 5. Later parts compare against it and may change only the rows
-their decisions name (D3, D4, D7). A failing compare means a decision changed (see golden_util). Part G moved the
-shipped extensions: `undo_move` below names the path-only differences that follow, and the golden stays as taken."""
+"""Golden baseline of every guard decision, per subagent unit, Bash command spelling and file tool."""
 from __future__ import annotations
 
 import copy
@@ -21,15 +12,12 @@ from bay import lint, model
 from bay.adapter import get
 from bay.guard import Guard
 
-# Two paths that are not extensions: the map was renamed, and a user file sat in the old modes folder.
 RENAMED = {"framework/components.yaml": "framework/kernel.yaml", "modes/x.yaml": "components/x.yaml"}
 _KIT: list = []
 
 
 def physical(logical: str) -> str:
-    """The kit path of a logical row path (`mode:<name>/<rest>`, `env:<name>`, `connector:<name>/<rest>`), from the loader.
-    A name the kit does not have (`brand-new`) sits where a new user extension would: a mode or connector at the top of
-    components/, an env in an ordinary mode's folder (briefing)."""
+    """The kit path of a logical row path (`mode:<name>/<rest>`, `env:<name>`, `connector:<name>/<rest>`)."""
     kind, sep, rest = logical.partition(":")
     if not sep:
         return RENAMED.get(logical, logical)
@@ -48,11 +36,9 @@ ENVS = ("cos-local", "framework-dev", "improve-local", "local-authoring", "resea
         "local-mail")
 
 WRITE_PATHS = [
-    # the protected folders and the files in them
     "bay/guard.py", "bay/brand_new.py", "bay/improve/pipeline.py", "framework/roles/x.yaml", "framework/rules/x.yaml",
     "framework/interfaces/x.yaml", "framework/components.yaml", "schemas/x.json", "adapters/claude-code/x.py",
     "adapters/x.yaml",
-    # shipped extensions, by what they are
     "mode:cos/mode.yaml", "mode:forge/mode.yaml", "mode:forge/features/create/playbook.md",
     "mode:improve/mode.yaml", "mode:improve/README.md", "mode:improve/features/scan/playbook.md",
     "mode:briefing/mode.yaml", "mode:delivery/mode.yaml", "mode:feed-briefing/mode.yaml", "mode:mail-briefing/mode.yaml",
@@ -64,7 +50,6 @@ WRITE_PATHS = [
     "connector:git/git_history.py", "connector:artifact-graph/artifact_graph.py", "connector:claude-transcripts/connector.yaml",
     "connector:corpus-store/connector.yaml", "connector:fake/connector.yaml", "connector:gmail-api/connector.yaml",
     "connector:brand-new/x.py",
-    # user space, the project's own files and the never-writable ones
     "src/app.py", "docs/DESIGN.md", "README.md", "tests/test_x.py", "content-types/x/y.py", "HANDOFF.md", "modes/x.yaml",
     "roles/x.yaml", "bay.sh", "BAY.SH", "agentbay.config.yaml", "CLAUDE.md", ".env", ".env.local", "Makefile",
     ".github/workflows/ci.yml", ".git/config", ".agentbay/guard.json", ".claude/settings.json", ".vscode/x.json",
@@ -164,7 +149,7 @@ def matrix(k) -> dict:
     assert set(UNITS) <= set(pol["subagents"]), sorted(pol["subagents"])
     g = Guard(pol, k, ci=False)
     out = {"main thread": rows(g, k, None, with_id=False), UNKNOWN: rows(g, k, UNKNOWN)}
-    for u in UNITS:                             # the `plan TASK` rows name the task this unit was dispatched with
+    for u in UNITS:
         out[u] = rows(g, k, u)
     return out
 
@@ -202,38 +187,30 @@ def resolver_gaps() -> dict:
     return out
 
 
-# ------------------------------------------------------------------------------------------------ the move (part G)
-# tests/golden/guard-matrix.json was taken before the shipped modes, envs and connectors left framework/ and is NOT
-# edited. Row keys are logical paths, so they did not change; what changed is where the rows' paths point, and so the
-# text of a reason. `undo_move` puts each named, path-only difference back, asserting it is there first, and the
-# result must equal the golden: every decision and every other word of every reason is the same as before the move.
-FOUR = ["framework", "bay", "schemas", "adapters"]       # the protected folders of the policy before the move
+FOUR = ["framework", "bay", "schemas", "adapters"]
 DEV, LOCAL = "builder--forge--framework-dev", "builder--forge--local-authoring"
 IMPROVE = "components/improve"
 DEV_CLIS = ["./bay.sh check", "python3 tests/run.py", "git status", "git diff", "git log", "git add", "git commit"]
 MV_RM = ["git mv", "git rm"]
-# 0020 items 1 and 2: three more units may run the check commands (and the builders `git commit`, `git mv`, `git rm`).
-# Each unit's clis now and in the golden; undo_move puts them back in the policy and in every "may only run" reason.
 CHECKS = ["./bay.sh check", "python3 tests/run.py"]
+LINT = ["python3 -I -m ruff check", "python3 -I -m mypy"]
 READ = ["git status", "git diff", "git log"]
 CHECK_CLIS = {
-    "builder--delivery": ([*CHECKS, *READ, "git add", "git worktree", "git commit", *MV_RM, "git show"],
+    "builder--delivery": ([*CHECKS, *LINT, *READ, "git add", "git worktree", "git commit", *MV_RM, "git show"],
                           [*READ, "git add", "git worktree", "git show"]),
-    LOCAL: ([*CHECKS, "git add", "git commit", *MV_RM, *READ, "git show"], ["./bay.sh check", *READ, "git show"]),
-    "reviewer--forge": ([*CHECKS, *READ, "git show"], [*READ, "git show"]),
+    LOCAL: ([*CHECKS, *LINT, "git add", "git commit", *MV_RM, *READ, "git show"],
+            ["./bay.sh check", *READ, "git show"]),
+    "reviewer--forge": ([*CHECKS, *LINT, *READ, "git show"], [*READ, "git show"]),
 }
 CLAUSE = "{}/ of the agentbay checkout is writable only by forge.extend (env must name it)"
 
 
-# 0010 part 1: every extension is a component folder, so the new physical path of a row differs from the one the golden
-# quotes in a reason. PATH_DELTAS names each: the new path -> the golden's (the shipped extensions under framework/, the
-# others in modes/, envs/ and connectors/). Row keys are logical and did not change; only path strings in reasons do.
 GOLDEN_FRAMEWORK = {"mode": {"cos", "forge", "improve"},
                     "env": {"cos-local", "framework-dev", "improve-local", "local-authoring", "workspace", "research"},
                     "connector": {"artifact-graph", "claude-transcripts", "corpus-store", "git", "improve-detect",
                                   "improve-store", "ledger", "scaffold", "workflow-runner"}}
 GOLDEN_FOLDER = {"mode": "modes", "env": "envs", "connector": "connectors"}
-GOLDEN_LOCAL_WRITE = ["modes", "envs", "connectors", "agentbay.config.yaml"]       # local-authoring's fs.write then
+GOLDEN_LOCAL_WRITE = ["modes", "envs", "connectors", "agentbay.config.yaml"]
 
 
 def golden_physical(logical: str) -> str:
@@ -248,22 +225,17 @@ def path_deltas() -> dict:
     out = {physical(lp): golden_physical(lp) for lp in logical}
     out.update({new: old for old, new in RENAMED.items()})
     assert len(set(out)) == len(out) and all(a != b for a, b in out.items()), out
-    return dict(sorted(out.items(), key=lambda kv: -len(kv[0])))                   # longest first
+    return dict(sorted(out.items(), key=lambda kv: -len(kv[0])))
 
 
 def undo_move(got: dict) -> dict:
-    """The matrix as it would read with the shipped extensions still under framework/, from the matrix of the new
-    layout. Named differences, and nothing else: (1) the policy lists each protected instance after the four folders,
-    and framework-dev's fs.write names them (D9); (2) a reason names the new path, and the protected entry that denied
-    the write (`modes/cos/` where `framework/` was); (3) local-authoring writes modes/, envs/ and connectors/, so a
-    protected instance in them is now denied by the protected entry, where it used to be outside its writable paths
-    (a deny both times); (4) framework-dev's clis and its "may only run" reasons also name `git mv` and `git rm`."""
+    """The matrix as it would read with the shipped extensions still under framework/, with named differences only."""
     got = copy.deepcopy(got)
     pol, moved = got["policy"], model.Kit(KIT).protected_paths[len(FOUR):]
     assert pol["protected"] == FOUR + moved, pol["protected"]
     pol["protected"] = FOUR
     assert pol["units"][LOCAL]["write"] == ["components", "agentbay.config.yaml"], pol["units"][LOCAL]["write"]
-    window = ["docs", "tests", "README.md"]       # README.md is the one named delta (README_DELTAS)
+    window = ["requirements-dev.txt", "docs", "tests", "README.md"]
     assert pol["units"][DEV]["write"] == [*FOUR, *moved, *window], pol["units"][DEV]["write"]
     pol["units"][DEV]["write"] = [*FOUR, "docs", "tests"]
     assert got["protectedWrites"]["framework-dev"] == FOUR + moved
@@ -272,13 +244,13 @@ def undo_move(got: dict) -> dict:
     pol["units"][LOCAL]["write"] = GOLDEN_LOCAL_WRITE
     deltas = path_deltas()
     local_writes = local_was
-    dev_now, dev_was = str([*FOUR, *moved, *window]),str([*FOUR, "docs", "tests"])    # a reason quotes the list
-    # (4) framework-dev may also run `git mv` and `git rm` (Part 3a): in its clis and in its "may only run" reasons
-    assert pol["units"][DEV]["clis"] == [*DEV_CLIS, *MV_RM, "git show"], pol["units"][DEV]["clis"]
+    dev_now, dev_was = str([*FOUR, *moved, *window]),str([*FOUR, "docs", "tests"])
+    dev_clis = [*CHECKS, *LINT, *READ, "git add", "git commit", *MV_RM, "git show"]
+    assert pol["units"][DEV]["clis"] == dev_clis, pol["units"][DEV]["clis"]
     pol["units"][DEV]["clis"] = [*DEV_CLIS, "git show"]
-    cli_now, cli_was = ", ".join([*DEV_CLIS, *MV_RM, "git show"]), ", ".join([*DEV_CLIS, "git show"])
+    cli_now, cli_was = ", ".join(dev_clis), ", ".join([*DEV_CLIS, "git show"])
     assert any(cli_now in r for r in (r for _, r in got["matrix"][DEV].values()))
-    for unit, (now, was) in CHECK_CLIS.items():       # (5) 0020: the same for three more units, each asserted present
+    for unit, (now, was) in CHECK_CLIS.items():
         assert pol["units"][unit]["clis"] == now, pol["units"][unit]["clis"]
         pol["units"][unit]["clis"] = was
         assert any(", ".join(now) in r for _, r in got["matrix"][unit].values()), unit
@@ -290,7 +262,7 @@ def undo_move(got: dict) -> dict:
             s = s.replace(local_now, local_was)
         if unit == DEV:
             s = s.replace(dev_now, dev_was).replace(cli_now, cli_was)
-        for p in [*moved, IMPROVE]:          # improve moved too; it is no longer protected (part H)
+        for p in [*moved, IMPROVE]:
             was = f"outside the role's writable paths {local_writes}" if unit == LOCAL else CLAUSE.format("framework")
             s = s.replace(CLAUSE.format(p), was)
         for new, was_path in deltas.items():
@@ -310,13 +282,6 @@ def undo_move(got: dict) -> dict:
     return got
 
 
-# Part H (D3, D4): improve is an ordinary mode, so the rows of its files (and only those) change. Every row is named with
-# its decision in the golden (was) and now. Reasons:
-#   - local-authoring and the workspace writer (builder--delivery) may write user extensions, and improve's mode folder is one
-#     now (D3), so deny -> pass. The protected parts of improve (improve-local, its nine connectors) are not rows here.
-#   - framework-dev (forge.extend's builder) named modes/improve only because it was protected (D9: lint keeps its
-#     fs.write in step with the map). It writes protected paths, not user extensions, so pass -> deny. Findings about
-#     improve itself route to a mode-fix task, not forge.extend (D4).
 USER_MODE_GAP = ("mode improve: role analyst works in the framework env framework-dev (improve.scan step patterns); "
                  "user modes may put roles only in their own envs (components/<name>/envs/) or the framework envs plan-writer and workspace and research")
 IMPROVE_ROWS = ["Edit mode:improve/mode.yaml", "MultiEdit mode:improve/mode.yaml", "NotebookEdit mode:improve/n.ipynb",
@@ -327,10 +292,7 @@ IMPROVE_DELTAS: dict = {
     **{(LOCAL, r): ("deny", "pass") for r in IMPROVE_ROWS},
     **{(DEV, r): ("pass", "deny") for r in IMPROVE_ROWS},
 }
-# README.md (0010 part 2a): framework-dev's fs.write names it because every framework change updates the README (DOD-13).
-# It is not protected, so the one row is deny -> pass; every other row of an unprotected path stays a deny (D9).
 README_DELTAS: dict = {(DEV, "Write README.md"): ("deny", "pass")}
-# 0020 items 1 and 2: ten rows, deny -> pass. The builders may run the checks and `git commit`; the reviewer the checks.
 RUN_TESTS = ["Bash python3 tests/run.py -q", "Bash python3 tests/run.py tests/test_improve.py"]
 CHECK_DELTAS: dict = {
     **{("builder--delivery", r): ("deny", "pass")
@@ -348,14 +310,12 @@ def put_back(got: dict, want: dict) -> dict:
     for (unit, row), (was, now) in EXPECTED_DELTAS.items():
         assert got["matrix"][unit][row][0] == now and want["matrix"][unit][row][0] == was, (unit, row)
         got["matrix"][unit][row] = want["matrix"][unit][row]
-    # the resolver gap for an improve role in a framework-writing env: improve is a user mode now, so the resolver gives
-    # the user-mode message (once, as for any user mode) instead of one "only forge.extend" line per step
     name = "improve in a framework-writing env"
     now, was = got["resolverGaps"][name], want["resolverGaps"][name]
     assert now[0] == USER_MODE_GAP and not any("only forge.extend" in g for g in now), now
     assert [g for g in was if "only forge.extend" in g] and [g for g in now if g not in was] == [USER_MODE_GAP]
     got["resolverGaps"][name] = was
-    name = "user mode in a framework-writing env"             # plan-writer is a third open env
+    name = "user mode in a framework-writing env"
     got["resolverGaps"][name] = [g.replace("plan-writer and ", "") for g in got["resolverGaps"][name]]
     return got
 
@@ -382,7 +342,7 @@ def test_guard_decision_matrix():
         want = json.loads((GOLDEN / "guard-matrix.json").read_text())
         diff = changed(got, want)
         assert diff == NET_DELTAS, "a guard decision changed:\n" + "\n".join(f"{key}: {v}" for key, v in diff.items())
-        kit = model.Kit(k, k)       # no changed decision is on a protected path: those equal the golden
+        kit = model.Kit(k, k)
         assert not [r for _, r in NET_DELTAS if kit.covers(physical(r.split(" ", 1)[1]))], NET_DELTAS
         compare("guard-matrix", undo_move(put_back(got, want)))
     finally:
@@ -390,11 +350,9 @@ def test_guard_decision_matrix():
 
 
 def undo_kit_path(got: dict) -> dict:
-    """The one path the kit-outside probe names moved (modes/briefing/ -> components/briefing/); the decision and the rest
-    of every reason are the golden's. Asserted present, so the put-back cannot hide a missing row."""
+    """The one path the kit-outside probe names moved; the decision and the rest of every reason are the golden's."""
     text = json.dumps(got, sort_keys=True)
     assert text.count("<kit>/components/briefing/mode.yaml") == 2, text.count("<kit>/components/briefing/mode.yaml")
-    # 0020: delivery's clis in its four deny reasons
     now, was = (", ".join(c) for c in CHECK_CLIS["builder--delivery"])
     assert text.count(now) == 4, text.count(now)
     text = text.replace("<kit>/components/briefing/mode.yaml", "<kit>/modes/briefing/mode.yaml")

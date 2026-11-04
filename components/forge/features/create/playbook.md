@@ -11,7 +11,8 @@ Turn a plain-language intent into a working, lint-clean mode, feature, connector
 1. `scaffold`: the dispatcher renders the forge template for `kind` (same templates as `bay new <kind>`).
 2. `fill`: the builder (in env local-authoring, user space only) proposes the content from the intent and fills every TODO: purpose, features with in/out/effects, the roles map (which framework role works in which env), needed capabilities, constraints and review settings for a mode; endpoint + playbook + rules (and skills for mode-specific behaviour) for a feature; endpoints and a fake-HTTP test for a connector; bindings and limits for an env.
 3. The builder runs `./bay.sh check` and returns a Result listing every file. The coordinator (main thread, with the user) runs the tests: a subagent that writes code and runs it cannot be contained by the guard.
-4. `review`: the reviewer checks the Definition of Done and rules for this kind.
+4. `standards`: a code step after `fill`, `standards.check/v1.findings` with `base: $call.base`. It ends the call `blocked` when the filled files add a finding against the commit the call started from.
+5. `review`: the reviewer checks the Definition of Done and rules for this kind.
 
 ## Definition of Done
 - [DOD-1] (must) `./bay.sh check` passes with the new content.
@@ -22,6 +23,8 @@ Turn a plain-language intent into a working, lint-clean mode, feature, connector
 - [DOD-6] (must) Features with write, spend, delete or external-write effects have `review: { when: always }`.
 - [DOD-7] (must) A connector implements an existing interface and ships an offline test with a stubbed HTTP layer.
 - [DOD-8] (should) The result needs no edits outside the new files, except one binding line in an env for a connector.
+- [DOD-9] (must) The `standards` step reports no new finding.
+- [DOD-10] (must) No `#` comment and no docstring longer than one line; a reason goes in a name, an error message or the README.
 
 ## Outputs
 A `Result` with `artifacts` = every file created or changed.

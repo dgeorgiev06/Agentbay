@@ -54,11 +54,8 @@ def test_f7_adapter_asks_before_bay_approve_variants_and_denies_edits_of_the_own
         asks = " ".join(perms.get("ask", []))
         for needle in ("bay approve", "bay.sh approve", "bay.cli approve", "bay/cli.py approve"):
             assert needle in asks, (needle, perms.get("ask"))
-        # the writes that share a prefix with a pre-approved command keep their prompt (ask is checked before allow)
         for verb in ("auth", "show reclaim", "show close", "note dispatch", "note review"):
             assert f"Bash(.agentbay/bay {verb}:*)" in perms["ask"], (verb, perms.get("ask"))
-        # every canonical write form is matched by an ask rule (a prefix), and every pre-approved prefix is only
-        # reachable for a read: a write verb under an allow prefix must start with its ask prefix
         asked = [x[len("Bash("):-len(":*)")] for x in perms["ask"]]
         for form in (".agentbay/bay note dispatch T-1 --agent x", ".agentbay/bay note review T-1 {}",
                      ".agentbay/bay show reclaim R-1 --reason r", ".agentbay/bay show close C-1 --reason r",

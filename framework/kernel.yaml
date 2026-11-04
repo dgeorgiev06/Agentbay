@@ -10,7 +10,8 @@ protected:
           components/improve/connectors/artifact-graph, components/improve/connectors/git,
           components/improve/connectors/improve-detect, components/improve/connectors/improve-store,
           components/improve/connectors/ledger,
-          components/improve/interfaces, components/tools/interfaces]
+          components/improve/interfaces, components/tools/interfaces,
+          components/python, components/comments]
   mode: [cos, forge, store]
   env:
     cos-local: {}
@@ -21,7 +22,8 @@ protected:
     plan-writer: { modes: ["*"] }
     workspace: { modes: ["*"] }
     research: { modes: ["*"] }
-  connector: [artifact-graph, claude-transcripts, corpus-store, git, improve-detect, improve-store, ledger, scaffold, workflow-runner]
+  connector: [artifact-graph, claude-transcripts, corpus-store, git, improve-detect, improve-store, ledger, scaffold,
+              workflow-runner, python-check, comments-check]
 owns:               # the kernel: loader, resolver, lint, registry, dispatcher, ledger, guard, CLI
   - bay/
   - bay/contenttypes.py              # the briefing files the kernel imports
@@ -29,6 +31,8 @@ owns:               # the kernel: loader, resolver, lint, registry, dispatcher, 
   - bay/selector.py
   - schemas/
   - components/store/
+  - components/python/
+  - components/comments/
   - adapters/
   - framework/roles/
   - framework/rules/
@@ -36,4 +40,5 @@ owns:               # the kernel: loader, resolver, lint, registry, dispatcher, 
   - framework/limits.yaml
   - bay.sh
   - requirements.txt
+  - requirements-dev.txt
   - CHANGELOG.md                     # release metadata: written by forge.extend's release step

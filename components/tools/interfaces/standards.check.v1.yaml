@@ -1,0 +1,43 @@
+apiVersion: agentbay/v4
+kind: Interface
+metadata:
+  name: standards.check
+  description: >-
+    A checker for the owner's standards, run by the dispatcher on one folder. The dispatcher exports the call's start
+    commit, copies the working tree, runs every bound checker on both and blocks on a finding the base lacks.
+spec:
+  version: 1
+  binding: connector
+  dispatcherOnly: true
+  endpoints:
+    findings:
+      description: >-
+        Run the checker's tools on the folder `root` and return what they report. Every config is read from
+        `configRoot`, the base export, never from `root`. A finding carries no source text. `stopped` names a tool that
+        timed out, crashed or printed output that could not be read, so the dispatcher never reads it as a pass.
+      in:
+        type: object
+        required: [root, configRoot]
+        additionalProperties: false
+        properties:
+          root: { type: string, minLength: 1, description: "the folder to check" }
+          configRoot: { type: string, minLength: 1, description: "the folder every config is read from" }
+      out:
+        type: object
+        required: [findings]
+        additionalProperties: false
+        properties:
+          findings:
+            type: array
+            items:
+              type: object
+              required: [file, line, rule, message]
+              additionalProperties: false
+              properties:
+                file: { type: string, description: "path relative to root" }
+                line: { type: integer, minimum: 0 }
+                rule: { type: string }
+                message: { type: string }
+          stopped: { type: string }
+          warnings: { type: array, items: { type: string } }
+      effects: [read]

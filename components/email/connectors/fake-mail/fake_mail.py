@@ -1,10 +1,4 @@
-"""fake-mail: offline items.source/v1 (email/v1 items). No network, no secrets.
-
-Messages come from connectors.fake-mail.fixture (a JSON list) or SAMPLE. `ageHours` is relative to the call's
-clock so demos and tests are deterministic. The native query is applied with the shared matcher
-(bay/selector.py), which is what a real search would narrow to; the store re-applies the full selectors anyway.
-The cursor is the newest createdAt served (ISO-8601 strings sort in time order).
-"""
+"""fake-mail: offline items.source/v1 (email/v1 items). No network, no secrets."""
 from __future__ import annotations
 
 import json

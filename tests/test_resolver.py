@@ -15,9 +15,9 @@ def test_shipped_kit_resolves():
     units = s.units()
     assert units["analyst--feed-briefing"].bay_uses == [f"items.store/v2.{e}" for e in (
         "describe", "sql", "get", "thread", "rows", "facets", "search", "query", "status")]
-    assert "store" not in s.modes and s.modes["feed-briefing"].extends == "store"    # abstract base
+    assert "store" not in s.modes and s.modes["feed-briefing"].extends == "store"
     assert "Edit" not in units["reviewer--feed-briefing"].tools
-    assert s.agent == "claude-code" and set(model.Kit(KIT).profiles()) == {"claude-code"}   # one profile
+    assert s.agent == "claude-code" and set(model.Kit(KIT).profiles()) == {"claude-code"}
 
 
 def step(s, target, sid):
@@ -29,10 +29,9 @@ def test_tier_resolution_step_over_feature_over_role_mapped_by_the_profile():
     k = kit_copy()
     s = model.resolve(model.Kit(k))
     ans = step(s, "feed-briefing.ask", "answer")
-    assert (ans.inference.tier, ans.inference.model, ans.inference.effort) == ("balanced", "sonnet", "medium")  # role
+    assert (ans.inference.tier, ans.inference.model, ans.inference.effort) == ("balanced", "sonnet", "medium")
     rv = step(s, "feed-briefing.digest", "review")
-    assert (rv.inference.tier, rv.inference.model, rv.inference.effort) == ("deep", "opus", "high")    # review block
-    # a feature's tier beats the role's; a step's beats the feature's; review steps keep their review block's
+    assert (rv.inference.tier, rv.inference.model, rv.inference.effort) == ("deep", "opus", "high")
     edit_yaml(k / "components/feed-briefing/mode.yaml", lambda d: (
         d["spec"]["features"]["ask"].update({"tier": "fast", "effort": "low"}),
         d["spec"]["features"]["digest"].update({"tier": "fast"}),
@@ -43,26 +42,23 @@ def test_tier_resolution_step_over_feature_over_role_mapped_by_the_profile():
     th = step(s, "feed-briefing.digest", "themes")
     assert (th.inference.tier, th.inference.model, th.inference.effort) == ("deep", "opus", "high")
     assert step(s, "feed-briefing.digest", "review").inference.tier == "deep"
-    # the role's default tier, when nothing else sets one
     edit_yaml(k / "framework/roles/analyst.yaml", lambda d: d["spec"].update({"tier": "deep"}))
     s = model.resolve(model.Kit(k))
-    assert step(s, "feed-briefing.prune", "review").inference.model == "sonnet"            # review block: balanced
-    assert s.units()["analyst--feed-briefing"].inference.model == "opus"          # role default
-    # the profile maps tiers: another model name for `deep` changes only the model
+    assert step(s, "feed-briefing.prune", "review").inference.model == "sonnet"
+    assert s.units()["analyst--feed-briefing"].inference.model == "opus"
     edit_yaml(k / "adapters/claude-code/adapter.yaml", lambda d: d["profile"]["tiers"].update({"deep": "opus-next"}))
     s = model.resolve(model.Kit(k))
     assert step(s, "feed-briefing.digest", "themes").inference.model == "opus-next"
-    # the YAML cache never serves a changed file: rewrite it in place (same inode, same size) after it was kept
     f, t = k / "adapters/claude-code/adapter.yaml", time.time() - 100
-    unshare(f)                                                               # the r+ write below must not reach the real kit
+    unshare(f)
     for a, b in (("opus-next", "opus-nxet"), ("opus-nxet", "opus-next")):
         os.utime(f, (t, t))
-        assert model.load_yaml(f)["profile"]["tiers"]["deep"] == a          # old file: parsed and kept
+        assert model.load_yaml(f)["profile"]["tiers"]["deep"] == a
         with f.open("r+") as fh:
             text = fh.read()
             fh.seek(0)
             fh.write(text.replace(a, b))
-        assert model.load_yaml(f)["profile"]["tiers"]["deep"] == b          # touched just now: read again
+        assert model.load_yaml(f)["profile"]["tiers"]["deep"] == b
         t -= 10
 
 
@@ -86,7 +82,6 @@ def test_unbound_capability():
     edit_yaml(k / "components/feed-briefing/envs/local-feeds.yaml", lambda d: d["spec"]["bind"].pop("items.store/v2"))
     g = assert_gap(k, "feed-briefing.sync step fetch", "items.store/v2 is not bound in env local-feeds", "unbound capability")
     assert "add `items.store/v2: <connector>`" in g
-    # (the analyst then simply has no store grant in that env: test_roles)
     k = kit_copy()
     edit_yaml(k / "components/store/connectors/corpus-store/connector.yaml",
               lambda d: d["spec"]["needs"].update({"capabilities": [], "optional": ["items.source/v1"]}))
@@ -172,7 +167,7 @@ def test_forge_create_cannot_be_placed_in_framework_writing_env():
               lambda d: d["spec"]["features"]["create"].update({"roles": {"builder": "framework-dev"}}))
     assert_gap(k, "forge.create step fill", "env framework-dev, which can write framework, bay, schemas",
                "only forge.extend may change the framework")
-    s = model.resolve(model.Kit(KIT))  # shipped: create uses the mode's env, extend overrides it
+    s = model.resolve(model.Kit(KIT))
     fill = next(st for st in s.modes["forge"].features["create"].steps if st.id == "fill")
     assert (fill.agent, fill.env, fill.subagent) == ("claude-code", "local-authoring", "builder--forge--local-authoring")
     ext = next(st for st in s.modes["forge"].features["extend"].steps if st.id == "implement")
@@ -184,8 +179,6 @@ def test_user_mode_cannot_write_framework():
     edit_yaml(k / "components/delivery/mode.yaml", lambda d: d["spec"]["roles"].update({"builder": "framework-dev"}))
     assert_gap(k, "mode delivery: role builder works in the framework env framework-dev",
                "delivery.build step implement", "user modes may put roles only in their own envs")
-    # improve is an ordinary mode since stage 5 part H: it gets the user-mode message (forge.create above is the
-    # framework-mode case)
     edit_yaml(k / "components/improve/mode.yaml", lambda d: d["spec"]["roles"].update({"analyst": "framework-dev"}))
     assert_gap(k, "mode improve: role analyst works in the framework env framework-dev",
                "improve.scan step patterns", "user modes may put roles only in their own envs")
@@ -214,16 +207,16 @@ def test_offline_switch_rebinds_the_source_and_closes_network_and_secrets():
     assert off["network"] == {"allow": []} and off["secrets"]["allow"] == []
     assert k.get("Environment", "local-mail").spec["bind"]["items.source/v1"] == ["fake-mail"]
     assert k.get("Environment", "workspace").spec == model.Kit(KIT, project(source="x-api")).get(
-        "Environment", "workspace").spec                      # an env without an `offline:` block is unchanged
+        "Environment", "workspace").spec
     s = model.resolve(k)
-    assert s.units()["analyst--feed-briefing"].env == "local-feeds"      # the env keeps its name
-    assert s.modes["feed-briefing"].features["sync"].steps[0].connector == "corpus-store"
+    assert s.units()["analyst--feed-briefing"].env == "local-feeds"
+    assert s.modes["feed-briefing"].features["sync"].steps[0].connectors == ["corpus-store"]
     from bay import config
     for bad, word in (({"offline": "yes"}, "offline"), ({"envs": {"local-feeds": "workspace"}}, "envs"),
                       ({"bindings": {"local-feeds": {"items.source/v1": ["fake"]}}}, "bindings"),
-                      ({"approve": {"from": ["fax"]}}, "approve"),                 # approve.from: terminal | chat
+                      ({"approve": {"from": ["fax"]}}, "approve"),
                       ({"apiVersion": "agentbay/v2"}, "this kit reads agentbay/v4, not 'agentbay/v2'; change the line to apiVersion: agentbay/v4")):
-        try:                                                  # not a boolean; the `envs:` and `bindings:` maps are gone
+        try:
             model.Kit(KIT, project(bad))
             raise AssertionError("expected ConfigError")
         except config.ConfigError as e:
@@ -231,7 +224,7 @@ def test_offline_switch_rebinds_the_source_and_closes_network_and_secrets():
     for entry, word in (("delivery.nope", "matches no endpoint or step (have: delivery.build.implement"),
                         ("forge.extend.plan", "step plan has a `when:`; a gate cannot be skipped")):
         assert_gap(KIT, f"approve.plans: {entry}", word, project=project({"approve": {"plans": [entry]}}))
-    for rel in ("components/feed-briefing/mode.yaml", "components/tools/envs/workspace.yaml"):         # a v2 or v3 mode and env are refused too
+    for rel in ("components/feed-briefing/mode.yaml", "components/tools/envs/workspace.yaml"):
         for old in ("agentbay/v2", "agentbay/v3"):
             k = kit_copy()
             edit_yaml(k / rel, lambda d: d.update(apiVersion=old))

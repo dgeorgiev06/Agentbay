@@ -1,8 +1,4 @@
-"""Deterministic checks named by rules (`check: <name>[:<arg>]`).
-
-Each check takes (output, ctx) and returns {"ok": bool, "detail": str}. They run
-in code before review; results go to the reviewer and into the call result.
-"""
+"""Deterministic checks named by rules (`check: <name>[:<arg>]`)."""
 from __future__ import annotations
 
 import json
@@ -16,9 +12,9 @@ URL = re.compile(r"https://[^\s\"'<>)\]]+")
 
 @dataclass
 class CheckContext:
-    store_urls: Callable[[], set[str]] | None = None   # urls and ids (<source>:<extId>) of stored items
+    store_urls: Callable[[], set[str]] | None = None
     kit: Path | None = None
-    secrets: Callable[[str], str] | None = None          # redact function
+    secrets: Callable[[str], str] | None = None
 
 
 def _cited(output) -> list[str]:

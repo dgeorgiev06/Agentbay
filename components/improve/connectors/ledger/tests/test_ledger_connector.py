@@ -23,7 +23,7 @@ def test_episodes_from_calls_runs_and_instruction_notes():
         impl = [s for s in c0["steps"] if s["id"] == "implement"][0]
         assert impl["name"] == "forge.extend.implement" and impl["durationMs"] == 2_400_000 and impl["env"] == "framework-dev"
         assert eps["ab:run:agent-1"]["denials"] == [{"tool": "Bash"}, {"tool": "Bash"}]
-        assert out["stats"]["instructionNotes"] == 2 and not any("free" in i for i in eps)   # plain notes: no episode
+        assert out["stats"]["instructionNotes"] == 2 and not any("free" in i for i in eps)
         assert all(c not in json.dumps(out) for c in CORES)
         if model.jsonschema:
             for e in out["episodes"]:
@@ -42,7 +42,7 @@ def test_verdicts_have_rounds_subjects_texts_and_no_secrets():
         assert [v["round"] for v in vs] == [1, 2, 3] and {v["subject"] for v in vs} == {"docs/proposals/0002.md"}
         it = {i["id"]: i for i in vs[0]["items"]}
         assert it["DOD-5"]["severity"] == "blocker" and "tests/run.py" in it["DOD-5"]["evidence"]
-        assert it["DOD-7"]["text"].startswith("Scope")             # DoD text resolved from the kit's forge.extend
+        assert it["DOD-7"]["text"].startswith("Scope")
         assert "[REDACTED:password]" in it["DOD-5"]["evidence"]
         assert all(c not in json.dumps(out) for c in CORES)
     finally:

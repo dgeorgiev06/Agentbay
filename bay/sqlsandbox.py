@@ -1,27 +1,4 @@
-"""Read-only SQL over a corpus store (items.store/v2.sql), sandboxed for agents.
-
-Scope is structural, not filtered here: the store file holds exactly the mode's scope (items of the sources
-bound to the mode's env that match at least one current selector; corpus-store deletes everything else on
-every sync and prune) and no internal state (cursors, budget, coverage, deletions and selectors live in a
-separate state.json this connection never opens). So there is nothing out of scope for a query to reach;
-this module only keeps queries read-only and bounded:
-  1. the connection is opened `mode=ro` and `PRAGMA query_only` is on;
-  2. sqlite3's authorizer allows SELECT, reads of the views (v_items, v_fts and the views of the store's content
-     types) and the store tables (items, item_selectors, items_fts and the child tables of the store's content
-     types with their FTS5 tables), json_each/json_tree, CTEs and an allowlist of functions. It denies writes,
-     DDL, ATTACH, PRAGMA, load_extension, sqlite_schema and the FTS shadow tables;
-  2b. each query is first prepared as `EXPLAIN <sql>` under that authorizer, and only then runs with FTS5's own
-     internal reads of its shadow tables allowed (FTS5 prepares those while the query runs, unattributed);
-     a query can therefore never name a shadow table itself;
-  2c. a WITH clause may not take the name of any view or table in the store (`shadowing()`), so a name
-     always means the stored object, and a read of no column (count(*), which the authorizer reports
-     without a database) of a stored table meets the same allowlist as any other read;
-  3. resource limits: a progress handler stops a query after `time_ms`; SQLITE_LIMIT_LENGTH caps any one
-     value; PRAGMA hard_heap_limit (HEAP_BYTES, process-wide, only ever lowered) caps memory and
-     temp_store=FILE sends sorts to disk; rows, bytes and cell length returned are capped.
-Results go through vault.redact and secretscan before they leave this module. Errors are SqlError with a
-message that says what to change.
-"""
+"""Read-only SQL over a corpus store (items.store/v2.sql), sandboxed for agents."""
 from __future__ import annotations
 
 import json
@@ -32,13 +9,11 @@ from pathlib import Path
 
 from . import contenttypes, secretscan, vault
 
-SCHEMA_VERSION = 3          # PRAGMA user_version of a corpus store; any other version is refused
-# the views the store itself creates; a content type adds its own (contenttypes.py)
+SCHEMA_VERSION = 3
 VIEWS = ("v_items", "v_fts")
 FTS = "items_fts"
 FTS_VIEW = "v_fts"
-ITEM_VIEWS = ("v_items",)                                # one row per item (describe samples these)
-# the base store tables: every row in them (and in a content type's child tables) is in the mode's scope
+ITEM_VIEWS = ("v_items",)
 BASE_TABLES = ("items", "item_selectors")
 TABLE_FUNCS = ("json_each", "json_tree")
 SCHEMA_TABLES = {"sqlite_master", "sqlite_schema", "sqlite_temp_master", "sqlite_temp_schema"}
@@ -49,7 +24,6 @@ julianday length like likelihood lower ltrim match max min nullif round rtrim sn
 sum time total trim typeof unicode unixepoch upper replace -> ->> row_number rank dense_rank percent_rank
 cume_dist ntile lag lead first_value last_value nth_value
 """.split())
-# deliberately absent: load_extension, randomblob/zeroblob (memory), printf/format (width bombs), sqlite_*.
 
 ACTIONS = {1: "CREATE INDEX", 2: "CREATE TABLE", 3: "CREATE TEMP INDEX", 4: "CREATE TEMP TABLE",
            5: "CREATE TEMP TRIGGER", 6: "CREATE TEMP VIEW", 7: "CREATE TRIGGER", 8: "CREATE VIEW", 9: "DELETE",
@@ -78,7 +52,7 @@ ITEM_COLUMNS = [
     ("matched", "JSON", "array of selector ids the item matches; filter with json_each(matched)"),
     ("rid", "INTEGER", "row id (= items_fts.rowid)"),
 ]
-COLUMNS = {   # what describe tells agents, for the views above; a content type documents its own views
+COLUMNS = {
     "v_items": ITEM_COLUMNS,
     "v_fts": [
         ("(all v_items columns)", "", "same scope as v_items"),
@@ -114,7 +88,7 @@ def _item_select() -> str:
             i.pk AS rid"""
 
 
-BASE_DDL = (   # the item tables every store has; the store adds its triggers and the full-text tables
+BASE_DDL = (
     """CREATE TABLE items (
          pk INTEGER PRIMARY KEY, source TEXT NOT NULL, ext_id TEXT NOT NULL, kind TEXT NOT NULL,
          author TEXT, author_name TEXT, title TEXT, body TEXT NOT NULL DEFAULT '', url TEXT,
@@ -132,8 +106,7 @@ ITEMS_VIEW = f"CREATE TEMP VIEW v_items AS {_item_select()} FROM main.items i"
 
 
 def store_types(con: sqlite3.Connection) -> list[contenttypes.ContentType]:
-    """The content types a store was made with (store_meta), as the kit has them now. A store whose type is gone
-    or has another version is refused: stores are never converted."""
+    """The content types a store was made with, as the kit has them; a store with a gone or changed type is refused."""
     held = dict(con.execute("SELECT substr(key, 6), value FROM main.store_meta WHERE key LIKE 'type:%' ORDER BY key"))
     try:
         have = contenttypes.load()
@@ -161,10 +134,7 @@ def store_mode_views(con: sqlite3.Connection) -> list[tuple[str, str]]:
 
 
 def view_sql(fts: bool, types: list[contenttypes.ContentType], mode=()) -> list[tuple[str, str]]:
-    """(name, CREATE statement) of the views over the store (which holds only the mode's scope), in the order
-    describe lists them: v_items, the content types' views, the mode's own views (`mode`, pairs as in
-    store_mode_views), v_fts (FTS5 only: items_fts joined to v_items, the simplest documented way to search, with
-    rank and snippet as columns), then the types' full-text views."""
+    """(name, CREATE statement) of the views over the store, which holds only the mode's scope, in describe order."""
     full = {v for ct in types for v in ct.fulltext_views()}
     own = [(v, sql) for ct in types for v, sql in ct.views if v not in full]
     return [("v_items", ITEMS_VIEW), *own, *mode, *([(FTS_VIEW, FTS_VIEW_SQL)] if fts else []),
@@ -185,7 +155,6 @@ def connect_ro(path: Path) -> sqlite3.Connection:
         ver = con.execute("PRAGMA main.user_version").fetchone()[0]
         if ver != SCHEMA_VERSION:
             raise SqlError(version_error(path, ver))
-        # kept on purpose: refusing a pre-release store fails closed for the scope invariant
         if con.execute("SELECT 1 FROM main.sqlite_master WHERE name = 'state'").fetchone():
             raise SqlError(f"{path}: written by a pre-release build (internal state inside corpus.db); move the "
                            f"folder aside and sync again")
@@ -194,8 +163,6 @@ def connect_ro(path: Path) -> sqlite3.Connection:
         for _, stmt in view_sql(fts, types, store_mode_views(con)):
             con.execute(stmt)
         for t in fts_tables(fts, types):
-            # FTS5 reads its config table when the table first connects, which happens while a statement is
-            # prepared: connect it now, so a query naming an FTS table never trips the strict pre-pass
             con.execute(f"SELECT 1 FROM main.{t} LIMIT 0").fetchall()
         con.execute("PRAGMA query_only = ON")
     except SqlError:
@@ -216,8 +183,7 @@ def version_error(path, ver: int) -> str:
 
 
 def has_fts(con: sqlite3.Connection) -> bool:
-    """Whether the store was created with FTS5 (items_fts and the types' FTS5 tables); without it the full-text
-    views are missing and search falls back to LIKE."""
+    """Whether the store was created with FTS5; without it the full-text views are missing and search uses LIKE."""
     return con.execute("SELECT 1 FROM main.sqlite_master WHERE name = ?", (FTS,)).fetchone() is not None
 
 
@@ -227,8 +193,7 @@ def views_of(fts: bool, types: list[contenttypes.ContentType], mode=()) -> list[
 
 
 def tables_of(fts: bool, types: list[contenttypes.ContentType]) -> list[str]:
-    """The tables a read-only connection may read: the base tables, the types' child tables, then the FTS5
-    tables (items_fts and the types')."""
+    """The tables a read-only connection may read: the base tables, the types' child tables and the FTS5 tables."""
     plain = [t for ct in types for t in ct.table_names(False)]
     return [*BASE_TABLES, *plain, *fts_tables(fts, types)]
 
@@ -250,9 +215,6 @@ class Sandbox:
         self.shadow = {f"{t}_{x}" for t in fts_tables(self.fts, types)
                        for x in ("data", "idx", "content", "docsize", "config")}
         self.time_ms, self.max_bytes = time_ms, max_bytes
-        # every name the file and the temp views define, read before the authorizer is on. A read of no column
-        # reports db None both for a stored table and for a CTE; a CTE may not take a stored name (shadowing),
-        # so a db-None read naming one of these is the stored object and goes through the allowlist
         self.stored = {n.lower() for (n,) in self.con.execute(
             "SELECT name FROM main.sqlite_master UNION SELECT name FROM temp.sqlite_master")} | SCHEMA_TABLES
         self.denied: list[str] = []
@@ -274,12 +236,13 @@ class Sandbox:
         return ", ".join([*self.views, *self.tables])
 
     def _authorize(self, action, a1, a2, db, _trigger) -> int:
-        if action == sqlite3.SQLITE_SELECT or action == 33:          # SELECT, WITH RECURSIVE (time-limited)
+        """Allow SELECT and reads of the listed views, tables and functions; deny and record everything else."""
+        if action == sqlite3.SQLITE_SELECT or action == 33:
             return sqlite3.SQLITE_OK
         if action == sqlite3.SQLITE_READ:
             table = (a1 or "").lower()
             if db is None and table not in self.stored:
-                return sqlite3.SQLITE_OK      # a CTE (recursive or materialized) read without columns
+                return sqlite3.SQLITE_OK
             if table in self.views and db in ("temp", None):
                 return sqlite3.SQLITE_OK
             if table in self.tables and db in ("main", None):
@@ -287,7 +250,7 @@ class Sandbox:
             if table in TABLE_FUNCS:
                 return sqlite3.SQLITE_OK
             if table in self.shadow and db == "main" and not self.strict:
-                return sqlite3.SQLITE_OK      # FTS5's own statements while the (already vetted) query runs
+                return sqlite3.SQLITE_OK
             return self._deny(f"reading `{a1}` is not allowed; query only {self._only()}")
         if action == sqlite3.SQLITE_FUNCTION:
             name = (a2 or "").lower()
@@ -295,7 +258,7 @@ class Sandbox:
                 return sqlite3.SQLITE_OK
             return self._deny(f"function `{a2}` is not allowed (allowed: {', '.join(sorted(FUNCTIONS))})")
         if action == sqlite3.SQLITE_PRAGMA and (a1 or "").lower() == "data_version" and a2 is None:
-            return sqlite3.SQLITE_OK                                   # FTS5 issues this internally
+            return sqlite3.SQLITE_OK
         return self._deny(f"{ACTIONS.get(action, f'action {action}')} is not allowed: this is a read-only "
                           f"SELECT over {self._only()}")
 
@@ -311,7 +274,7 @@ class Sandbox:
         rows, size, truncated = [], 0, None
         try:
             self.strict = True
-            self.con.execute("EXPLAIN " + sql).fetchall()       # vet the statement's own references, run nothing
+            self.con.execute("EXPLAIN " + sql).fetchall()
             self.strict = False
             cur = self.con.execute(sql)
             cols = [d[0] for d in cur.description or []]
@@ -370,8 +333,7 @@ class Sandbox:
 
 
 def _bare(sql: str) -> str:
-    """The SQL with string literals and comments removed and quoted identifiers unquoted (SQLite's lexical
-    rules: '..' strings with '' escapes, "..", [..] and `..` identifiers, -- and /* */ comments)."""
+    """The SQL with string literals and comments removed and quoted identifiers unquoted, by SQLite's lexical rules."""
     out, i, n = [], 0, len(sql)
     while i < n:
         c = sql[i]
@@ -405,8 +367,7 @@ _WITH = re.compile(r"(?i)\bWITH\b")
 
 
 def shadowing(sql: str, names) -> str | None:
-    """Which of `names` (the store's views and tables) a WITH clause in `sql` defines, or None (no WITH, no
-    check)."""
+    """Which of `names` (the store's views and tables) a WITH clause in `sql` defines, else None."""
     bare = _bare(sql)
     w = _WITH.search(bare)
     if not w:

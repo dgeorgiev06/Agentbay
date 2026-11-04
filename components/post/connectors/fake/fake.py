@@ -1,10 +1,4 @@
-"""fake: offline items.source/v1 (post/v1 items). No network, no secrets.
-
-Posts come from connectors.fake.fixture (JSON list) or SAMPLE. `ageHours` is
-relative to the call's clock so demos and tests are deterministic. Every post is
-in the `home` container; an optional fixture `list` field also puts it in
-`list:<id>`. Native query fields: `from` (handles) and `in` (home, list:<id>).
-"""
+"""fake: offline items.source/v1 (post/v1 items). No network, no secrets."""
 from __future__ import annotations
 
 import json

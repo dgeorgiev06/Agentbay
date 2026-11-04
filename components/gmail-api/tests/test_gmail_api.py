@@ -1,9 +1,8 @@
-"""gmail-api against a fake Gmail API (gmail_fake.py over fixtures/mailbox.json): query mapping, full and
-incremental sync, history expiry, body and attachment handling, expired login, backoff, read-only guarantee,
-login flow, and the store/views end to end. The live Gmail API is not reachable from tests."""
+"""gmail-api against a fake Gmail API: query mapping, sync, history expiry, bodies, attachments, login, views."""
 import base64
 import hashlib
 import json
+import platform
 import re
 import sys
 import threading
@@ -11,23 +10,20 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+import yaml
+from gmail_fake import SCOPE, FakeGmail, jr
+from helpers import KIT, NOW, MemProvider, clock, system, tmpdir
+
+from bay import connect, contenttypes, dispatch, model, selector as selmod, vault
+
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parents[2] / "tests"))
-sys.path.insert(0, str(HERE))
-
-import yaml  # noqa: E402
-from gmail_fake import SCOPE, FakeGmail, jr  # noqa: E402
-from helpers import KIT, NOW, MemProvider, clock, system, tmpdir  # noqa: E402
-
-from bay import connect, contenttypes, dispatch, model, selector as selmod, vault  # noqa: E402
-
 CONN = HERE.parent / "gmail_api.py"
 SECRETS = {"GMAIL_CLIENT_ID": "cid-1234.apps.googleusercontent.com",
            "GMAIL_CLIENT_SECRET": "GOCSPX-client-secret-NEVER-LEAK", "GMAIL_REFRESH_TOKEN": "1//rt-NEVER-LEAK-0001"}
-SINCE = "2026-09-27T12:00:00Z"        # NOW - 30d
+SINCE = "2026-09-27T12:00:00Z"
 WORK = [{"id": "work", "in": "label:Work"}]
 INBOX = [{"id": "inbox", "in": "inbox"}, {"id": "sent", "in": "sent"}]
-MODE_DIRS = [str(KIT / "components" / "mail-briefing"), str(KIT / "components" / "store")]   # where the mode's views.sql is
+MODE_DIRS = [str(KIT / "components" / "mail-briefing"), str(KIT / "components" / "store")]
 
 
 def project(cfg: dict | None = None):
@@ -61,7 +57,6 @@ def by_id(out):
     return {i["extId"]: i for i in out["items"]}
 
 
-# ------------------------------------------------------------------ query mapping
 def _gm():
     from importlib import util
     spec = util.spec_from_file_location("gm", CONN)
@@ -78,16 +73,16 @@ def test_selector_fields_map_to_gmail_search():
     assert gm.native_query({"in": "label:Work"}) == "label:Work"
     assert gm.native_query({"in": "Client Updates/Q4"}) == "label:Client-Updates-Q4"
     assert gm.native_query({"in": ["inbox", "in:Sent"]}) == "{in:inbox in:sent}"
-    assert gm.native_query({"has": ["attachment", "link"]}) == "has:attachment"     # link stays local
+    assert gm.native_query({"has": ["attachment", "link"]}) == "has:attachment"
     assert gm.native_query({}, since="2026-10-20T00:00:00Z") == "after:1792454400"
     assert gm.native_query({}, since="2026-10-20T00:00:00Z", until="2026-10-21T00:00:00Z") == \
-        "after:1792454400 before:1792540801"                                       # until is inclusive
+        "after:1792454400 before:1792540801"
 
 
 def test_selector_split_with_the_gmail_capability_table():
     caps = model.Kit(KIT).get("Connector", "gmail-api").spec["selectors"]
     native, local = selmod.split({"id": "p", "from": "*@partner.example", "subject": "staking"}, caps)
-    assert native == {} and local == {"from": "*@partner.example", "subject": "staking"}     # wildcards, subject: local
+    assert native == {} and local == {"from": "*@partner.example", "subject": "staking"}
     native, local = selmod.split({"id": "n", "in": "Newsletters", "text": "pil", "not": {"from": "a@b.example"}}, caps)
     assert native == {"in": "Newsletters"} and local == {"text": "pil", "not": {"from": "a@b.example"}}
     native, _ = selmod.split({"id": "a", "from": "a@x.example", "to": "me@x.example", "in": "inbox",
@@ -100,8 +95,7 @@ def test_selector_split_with_the_gmail_capability_table():
 
 
 def test_the_gmail_query_is_never_narrower_than_the_local_match():
-    """Review cases: Gmail's -from: also matches display names, negated and free terms and subject: match whole
-    words. Whatever the store keeps locally must be among what the generated Gmail query returns."""
+    """Review cases: whatever the store keeps locally must be among what the generated Gmail query returns."""
     gm = _gm()
     caps = model.Kit(KIT).get("Connector", "gmail-api").spec["selectors"]
     fake = FakeGmail(NOW)
@@ -119,25 +113,24 @@ def test_the_gmail_query_is_never_narrower_than_the_local_match():
     for sel in sels:
         local = selmod.matches(item, sel, NOW)
         q = gm.native_query(selmod.split(sel, caps)[0])
-        assert not local or fake.matches(q, msg), (sel, q)                     # never less than the local match
+        assert not local or fake.matches(q, msg), (sel, q)
         kept += local
-    assert kept == 7                                                           # every case but g (not labelled Newsletters)
+    assert kept == 7
     old = {"a": "in:inbox -from:ruiz", "b": "in:inbox -partner", "c": "pil", "d": "subject:pil"}
-    assert not any(fake.matches(q, msg) for q in old.values())                 # what the old table sent: too narrow
+    assert not any(fake.matches(q, msg) for q in old.values())
 
 
-# ------------------------------------------------------------------ full sync, bodies, attachments
 def test_full_sync_maps_messages_to_email_items():
     fake = FakeGmail(NOW)
     out = make(fake).fetch(since=SINCE, maxItems=50)
     items = by_id(out)
-    assert set(items) == {"18a0001", "18a0002", "18a0003", "18a0004"}       # trash and the 900h-old one excluded
+    assert set(items) == {"18a0001", "18a0002", "18a0003", "18a0004"}
     assert out["cursor"] == "5000" and out["truncated"] is False and out["billed"] == 4
     a = items["18a0001"]
     assert a["author"] == {"email": "dana@partner.example", "name": "Dana Ruiz"} and a["from"] == "dana@partner.example"
     assert a["to"] == ["me@example.com"] and a["cc"] == ["legal@partner.example", "ops@partner.example"]
     assert a["labels"] == ["INBOX", "Work"] and a["threadId"] == "th01" and a["account"] == "me@example.com"
-    assert a["text"].startswith("Hi,\nplease send") and "<b>" not in a["text"]        # text/plain preferred
+    assert a["text"].startswith("Hi,\nplease send") and "<b>" not in a["text"]
     assert a["createdAt"] == "2026-10-25T10:00:00Z" and a["url"].startswith("https://mail.google.com/")
     assert a["messageId"] == "<p1@partner.example>" and items["18a0002"]["inReplyTo"] == "<p1@partner.example>"
     sch = model.inline_refs(model.data_schema("email/v1"))
@@ -150,9 +143,9 @@ def test_full_sync_maps_messages_to_email_items():
 def test_html_only_quoted_replies_and_charsets():
     items = by_id(make(FakeGmail(NOW)).fetch(since=SINCE, maxItems=50))
     news = items["18a0003"]["text"]
-    assert news.startswith("Café news: restaking caps rise.")                 # iso-8859-1 decoded, &nbsp; folded
+    assert news.startswith("Café news: restaking caps rise.")
     assert "color:red" not in news and "alert(1)" not in news and "<" not in news
-    assert items["18a0002"]["text"] == "Will do today."                        # "On ... wrote:" chain trimmed
+    assert items["18a0002"]["text"] == "Will do today."
     assert "Original Message" not in items["18a0004"]["text"] and "old text" not in items["18a0004"]["text"]
 
 
@@ -167,7 +160,7 @@ def test_attachments_text_only_for_docx_txt_csv_md_and_metadata_otherwise():
                       ("broken.docx", "not a readable docx")):
         assert a[name]["textChars"] == 0 and "text" not in a[name] and why in a[name]["reason"], name
     fetched = {q["path"].rsplit("/", 1)[-1] for q in fake.log if "/attachments/" in q["path"]}
-    assert fetched == {"ATT18a0001x2", "ATT18a0004x2", "ATT18a0004x4"}         # never the pdf, jpg or oversized file
+    assert fetched == {"ATT18a0001x2", "ATT18a0004x2", "ATT18a0004x4"}
     assert items["18a0004"]["hasAttachments"] is True and items["18a0002"]["attachments"] == []
 
 
@@ -185,17 +178,17 @@ def test_extraction_runs_in_a_limited_subprocess_and_failures_never_raise():
         (d / "hog.py").write_text("x = bytearray(1024 * 1024 * 1024)\nprint('{\"text\": \"never\"}')\n")
         gm.EXTRACT = d / "hog.py"
         text, why = gm.extract_text(b"", "text", max_chars=10, mem_mb=128)
-        if sys.platform.startswith("linux"):                    # RLIMIT_AS is enforced on Linux, not on macOS
+        if platform.system() == "Linux":
             assert text == "" and "failed" in why
         (d / "writer.py").write_text("f = open('out.txt', 'w')\nf.write('x' * 10)\nf.close()\n")
-        gm.EXTRACT = d / "writer.py"                                    # runs with cwd = the script's folder
+        gm.EXTRACT = d / "writer.py"
         assert gm.extract_text(b"", "text", max_chars=10)[0] == ""
         out = d / "out.txt"
-        assert not out.exists() or out.stat().st_size == 0               # RLIMIT_FSIZE 0: no file content
+        assert not out.exists() or out.stat().st_size == 0
     finally:
         gm.EXTRACT = real
     src = (CONN.parent / "extract.py").read_text()
-    assert "-I" in (CONN.read_text()) and "open(" not in src and "tempfile" not in src   # no files: stdin only
+    assert "-I" in (CONN.read_text()) and "open(" not in src and "tempfile" not in src
 
 
 def test_docx_with_a_dtd_or_zip_bomb_is_refused():
@@ -241,8 +234,6 @@ def test_docx_entities_are_refused_by_the_parser_in_any_encoding():
                                 ("UTF-8", "utf-16-le", "not UTF-8 refused"), ("ISO-8859-1", "latin-1", "not UTF-8")):
             text, reason = gm.extract_text(_docx(doc.format(enc=enc).encode(codec)), "docx", max_chars=200_000)
             assert text == "" and why in reason, (enc, codec, reason)
-    # quad.py: a 2 MB entity referenced 200 times (400M characters if expanded), refused before any expansion,
-    # quickly and within a 64 MB memory limit (the limit is not enforced on macOS; the parser refusal is)
     big = "A" * 2_000_000
     for enc, codec in (("UTF-16", "utf-16"), ("UTF-8", "utf-8")):
         xml = ('<?xml version="1.0" encoding="%s"?><!DOCTYPE d [<!ENTITY e "%s">]><w:document %s><w:body><w:p>'
@@ -266,7 +257,6 @@ def test_messages_per_run_cap_truncates_newest_first():
     assert out["billed"] == 2 and out["truncated"] is True
 
 
-# ------------------------------------------------------------------ incremental sync, history expiry, pruning
 def new_msg(mid, labels=("INBOX", "Label_1"), hours=1, frm="Dana Ruiz <dana@partner.example>"):
     return {"id": mid, "threadId": "th01", "ageHours": hours, "labelIds": list(labels),
             "headers": {"From": frm, "To": "me@example.com", "Subject": "Re: Staking pilot: keys and timeline"},
@@ -279,9 +269,9 @@ def test_incremental_sync_via_history_adds_relabels_trashes_and_deletes():
     first = st.sync()
     assert first["added"] == 4 and first["sources"]["gmail-api"]["queries"][0]["mode"] == "since"
     fake.add(new_msg("18a0010"))
-    fake.relabel("18a0001", remove=["Label_1", "INBOX"])         # left both selectors
-    fake.relabel("18a0003", add=["TRASH"])                       # trashed
-    fake.delete("18a0004")                                       # deleted for good
+    fake.relabel("18a0001", remove=["Label_1", "INBOX"])
+    fake.relabel("18a0003", add=["TRASH"])
+    fake.delete("18a0004")
     st2, _ = store(fake, WORK + [{"id": "inbox", "in": "inbox"}], p=p)
     out = st2.sync()
     hist = [q for q in fake.log if q["path"].endswith("/history")]
@@ -290,11 +280,11 @@ def test_incremental_sync_via_history_adds_relabels_trashes_and_deletes():
     ids = {r["id"] for r in st2.query()["items"]}
     assert ids == {"gmail:18a0002", "gmail:18a0010"}
     state = json.loads((p / ".agentbay/data/mail/mail-briefing/state.json").read_text())
-    assert "gmail:18a0004" in state["deleted"] and "gmail:18a0003" not in state["deleted"]   # trash may come back
+    assert "gmail:18a0004" in state["deleted"] and "gmail:18a0003" not in state["deleted"]
     assert all(c["cursor"] == str(fake.history_id) for c in state["cursors"].values())
     gets = [q for q in fake.log if re.search(r"/messages/18a00\d\d$", q["path"])]
-    assert len([q for q in gets if q["path"].endswith("18a0010")]) == 1   # read once although two queries saw it
-    fake.relabel("18a0003", remove=["TRASH"])                    # restored from trash: stored again
+    assert len([q for q in gets if q["path"].endswith("18a0010")]) == 1
+    fake.relabel("18a0003", remove=["TRASH"])
     st3, _ = store(fake, WORK + [{"id": "inbox", "in": "inbox"}], p=p)
     st3.sync()
     assert "gmail:18a0003" in {r["id"] for r in st3.query()["items"]}
@@ -310,8 +300,8 @@ def test_expired_history_falls_back_to_a_full_listing_bounded_by_lookback():
     out = st2.sync()
     assert any("no longer has the history" in w for w in out.get("warnings", []))
     lists = [q for q in fake.log if q["path"].endswith("/messages")]
-    assert len(lists) >= 3 and "after:1790510400" in lists[-1]["params"]["q"]       # NOW - 30d
-    assert "gmail:18a0004" not in {r["id"] for r in st2.query()["items"]}          # re-read: 404 -> deleted
+    assert len(lists) >= 3 and "after:1790510400" in lists[-1]["params"]["q"]
+    assert "gmail:18a0004" not in {r["id"] for r in st2.query()["items"]}
     assert out["deleted"] == 1
 
 
@@ -336,8 +326,7 @@ def store_with(fake, p, *, lookback="30d", cap=500, sels=None):
 
 
 def test_a_stored_message_older_than_the_lookback_is_still_rechecked_when_it_changes():
-    """Review repro lb.py: a 20-day-old stored message archived, then a sync with lookback 7d. The change must
-    be read and the message leave the store; an old message the store does not hold is read but not stored."""
+    """Review repro lb.py: a 20-day-old stored message archived, then a sync with lookback 7d must read the change."""
     fake = FakeGmail(NOW)
     m = new_msg("19c0001", hours=24 * 20)
     m["threadId"] = "told"
@@ -347,26 +336,25 @@ def test_a_stored_message_older_than_the_lookback_is_still_rechecked_when_it_cha
     p = project()
     store_with(fake, p).sync()
     assert "gmail:19c0001" in {i["id"] for i in store_with(fake, p).query()["items"]}
-    fake.relabel("19c0001", remove=["INBOX"])                       # archived
-    fake.relabel("19c0002", add=["INBOX"])                          # an old message moved to the inbox
+    fake.relabel("19c0001", remove=["INBOX"])
+    fake.relabel("19c0002", add=["INBOX"])
     fake.log.clear()
     out = store_with(fake, p, lookback="7d").sync()
     assert [q["mode"] for q in out["sources"]["gmail-api"]["queries"]] == ["cursor"]
     ids = {i["id"] for i in store_with(fake, p, lookback="7d").query()["items"]}
-    assert "gmail:19c0001" not in ids                               # re-read and out of scope at any age
-    assert "gmail:19c0002" not in ids and gets(fake) == {"19c0001": 1, "19c0002": 1}   # older than the window
+    assert "gmail:19c0001" not in ids
+    assert "gmail:19c0002" not in ids and gets(fake) == {"19c0001": 1, "19c0002": 1}
     state = json.loads((p / ".agentbay/data/mail/mail-briefing/state.json").read_text())
-    assert not [k for k, v in state["checked"].items() if v == "2026-10-27T12:00:00Z"]  # nothing claimed as checked
+    assert not [k for k, v in state["checked"].items() if v == "2026-10-27T12:00:00Z"]
 
 
 def test_a_capped_first_sync_backfills_with_history_after_it_and_reads_each_message_once():
-    """Review repro trunc.py: 30 messages in the window, 10 per run. Every later sync replays history and
-    backfills older mail below what is stored, never re-reading a stored message, until coverage is complete."""
+    """Review repro trunc.py: 30 messages, 10 per run; later syncs backfill without re-reading a stored message."""
     fake = FakeGmail(NOW)
     for k in range(30):
         m = new_msg(f"19b{k:04d}", hours=2 + k * 10)
         m["threadId"] = f"tx{k}"
-        fake.messages[m["id"]] = m                                  # not via history
+        fake.messages[m["id"]] = m
     in_window = {mid for mid, m in fake.messages.items() if m["ageHours"] <= 720
                  and not {"TRASH", "SPAM"} & set(m["labelIds"]) and "INBOX" in m["labelIds"]}
     p = project()
@@ -379,15 +367,15 @@ def test_a_capped_first_sync_backfills_with_history_after_it_and_reads_each_mess
     assert modes[0] == ["since"] and all(m == ["cursor", "older"] for m in modes[1:]), modes
     assert len(outs) == 4 and outs[-1]["coverage"]["complete"] and outs[-1]["stopped"] is None
     assert [o["coverage"]["from"] for o in outs[:-1]] == sorted((o["coverage"]["from"] for o in outs[:-1]),
-                                                                  reverse=True)   # coverage only grows back
+                                                                  reverse=True)
     hist = [q for q in fake.log if q["path"].endswith("/history")]
-    assert len(hist) == 3                                           # every sync after the first
+    assert len(hist) == 3
     reads = gets(fake)
-    assert set(reads) == in_window and set(reads.values()) == {1}   # each message read once
-    assert sum(o["billed"] for o in outs) == len(in_window)        # and billed once
+    assert set(reads) == in_window and set(reads.values()) == {1}
+    assert sum(o["billed"] for o in outs) == len(in_window)
     ids = {i["extId"] for i in store_with(fake, p, cap=10).query(limit=100)["items"]}
     assert ids == in_window
-    again = store_with(fake, p, cap=10).sync()                      # complete: history only, nothing read
+    again = store_with(fake, p, cap=10).sync()
     assert [q["mode"] for q in again["sources"]["gmail-api"]["queries"]] == ["cursor"] and again["billed"] == 0
 
 
@@ -395,22 +383,22 @@ def test_history_reads_only_changes_that_can_matter_and_pages_within_the_budget(
     fake = FakeGmail(NOW)
     p = project()
     sels = [{"id": "work", "in": "label:Work"}]
-    store_with(fake, p, sels=sels).sync()                           # 18a0001, 18a0002 (Work) stored
+    store_with(fake, p, sels=sels).sync()
     other = new_msg("19e0001", labels=("INBOX",), hours=5)
-    fake.messages[other["id"]] = other                              # in the mailbox, not in scope
+    fake.messages[other["id"]] = other
     fake.log.clear()
     fake.relabel("19e0001", add=["UNREAD"])
     fake.relabel("19e0001", add=["STARRED", "CATEGORY_PROMOTIONS"])
-    fake.relabel("19e0001", remove=["UNREAD", "IMPORTANT"])         # read state and ranking: never read
-    fake.relabel("18a0002", add=["STARRED"])                        # stored: always re-read
+    fake.relabel("19e0001", remove=["UNREAD", "IMPORTANT"])
+    fake.relabel("18a0002", add=["STARRED"])
     out = store_with(fake, p, sels=sels).sync()
     assert gets(fake) == {"18a0002": 1} and out["billed"] == 1
-    fake.relabel("19e0001", add=["Label_1"])                        # added to Work: now in scope
+    fake.relabel("19e0001", add=["Label_1"])
     fake.log.clear()
     store_with(fake, p, sels=sels).sync()
     assert gets(fake) == {"19e0001": 1}
     assert "gmail:19e0001" in {i["id"] for i in store_with(fake, p, sels=sels).query()["items"]}
-    for k in range(5):                                              # 5 new Work messages, 2 reads per run
+    for k in range(5):
         fake.add(new_msg(f"19f{k:04d}", labels=("Label_1",), hours=1))
     fake.log.clear()
     runs = []
@@ -420,7 +408,7 @@ def test_history_reads_only_changes_that_can_matter_and_pages_within_the_budget(
             break
     assert [o["billed"] for o in runs] == [2, 2, 1] and set(gets(fake).values()) == {1}
     starts = [q["params"]["startHistoryId"] for q in fake.log if q["path"].endswith("/history")]
-    assert len(set(starts)) == 3                                    # each run continues where the last stopped
+    assert len(set(starts)) == 3
     state = json.loads((p / ".agentbay/data/mail/mail-briefing/state.json").read_text())
     assert all(c["cursor"] == str(fake.history_id) for c in state["cursors"].values())
 
@@ -433,7 +421,6 @@ def test_with_a_cursor_check_ids_are_only_claimed_when_read():
     assert out["checked"] == ["18a0001"] and out["billed"] == 1
 
 
-# ------------------------------------------------------------------ expired login, backoff
 def test_invalid_grant_blocks_with_the_one_command_and_never_crashes():
     fake = FakeGmail(NOW)
     st, p = store(fake, INBOX)
@@ -445,10 +432,10 @@ def test_invalid_grant_blocks_with_the_one_command_and_never_crashes():
     stt = st2.status()
     assert stt["stale"] is True and "bay auth gmail" in stt["blocked"]["gmail-api"]["reason"]
     assert stt["coverage"]["complete"] is False and "bay auth gmail" in stt["coverage"]["note"]
-    assert len(st2.query()["items"]) == 4                                           # stored mail stays readable
+    assert len(st2.query()["items"]) == 4
     state = json.loads((p / ".agentbay/data/mail/mail-briefing/state.json").read_text())
-    assert all(c.get("cursor") == "5000" for c in state["cursors"].values())         # cursors kept
-    fake.token_error = None                                                          # after `bay auth gmail-api`
+    assert all(c.get("cursor") == "5000" for c in state["cursors"].values())
+    fake.token_error = None
     st3, _ = store(fake, INBOX, p=p)
     assert st3.sync()["stopped"] is None and "blocked" not in st3.status() and st3.status()["stale"] is False
 
@@ -482,8 +469,8 @@ def test_quota_errors_back_off_exponentially_then_give_up_gracefully():
     g.sleep = slept.append
     out = g.fetch(since=SINCE, maxItems=50)
     assert slept == [1.0, 2.0, 4.0, 8.0, 16.0] and out["truncated"] is True
-    assert any("after 5 retries" in w for w in out["warnings"]) and out["cursor"] is None   # nothing claimed
-    assert {i["extId"] for i in out["items"]} == {"18a0004"}                                 # kept what was read
+    assert any("after 5 retries" in w for w in out["warnings"]) and out["cursor"] is None
+    assert {i["extId"] for i in out["items"]} == {"18a0004"}
 
 
 def test_tokens_never_leave_the_connector():
@@ -495,23 +482,22 @@ def test_tokens_never_leave_the_connector():
     assert "ya29.ACCESS" not in out and vault.redact("ya29.ACCESS-1") == "***"
 
 
-# ------------------------------------------------------------------ read-only guarantee
 def test_the_connector_source_has_no_mailbox_write_path():
     src = CONN.read_text()
     calls = re.findall(r"\.request\(\s*\"([A-Z]+)\"\s*,\s*([^,]+),", src)
     assert calls, "no requests found"
     for method, url in calls:
         assert method == "GET" or (method == "POST" and url.strip() == "TOKEN_URL"), (method, url)
-    assert sum(1 for m, _ in calls if m == "POST") == 2                    # refresh grant + login code exchange
+    assert sum(1 for m, _ in calls if m == "POST") == 2
     assert re.search(r'TOKEN_URL = "https://oauth2\.googleapis\.com/token"', src)
-    code = re.sub(r'"""[\s\S]*?"""', "", src)                                 # docstrings may name what is not done
+    code = re.sub(r'"""[\s\S]*?"""', "", src)
     for verb in ("PUT", "PATCH", "DELETE"):
         assert f'"{verb}"' not in code
     for path in ("/send", "/modify", "/trash", "/untrash", "batchModify", "batchDelete", "/drafts", "/import",
                  "/insert", "/watch", "/settings", "/stop"):
         assert path not in code, path
     assert re.search(r'SCOPE = "https://www\.googleapis\.com/auth/gmail\.readonly"', src)
-    assert src.count("googleapis.com/auth/") == 1                            # no other scope is ever named
+    assert src.count("googleapis.com/auth/") == 1
 
 
 def test_every_request_in_a_sync_is_a_read_or_the_token_exchange():
@@ -554,7 +540,6 @@ def test_a_broader_grant_is_refused():
     assert out["items"] == [] and "more than gmail.readonly" in out["blocked"]
 
 
-# ------------------------------------------------------------------ login (bay auth gmail-api)
 def test_login_uses_pkce_a_loopback_redirect_and_only_the_readonly_scope():
     gm = sys.modules[type(make(FakeGmail(NOW))).__module__]
     seen = {}
@@ -638,7 +623,7 @@ def test_login_ignores_a_redirect_with_another_state_and_keeps_waiting():
 
     def token(method, url, headers, body):
         form = dict(urllib.parse.parse_qsl(body.decode()))
-        assert form["code"] == "4/GOOD"                                 # the stray request's code is never used
+        assert form["code"] == "4/GOOD"
         return jr({"access_token": "ya29.L", "refresh_token": "1//R2", "scope": SCOPE})
 
     def browser(url):
@@ -690,15 +675,14 @@ def test_a_bad_base64_part_is_skipped_with_a_reason_and_listing_stops_on_a_repea
     reasons = [a.get("reason") or "" for a in item["attachments"]]
     assert any("not valid base64url" in r for r in reasons)
     assert any("18a0004" in w and "base64url" in w for w in out.get("warnings", []))
-    assert set(by_id(out)) == {"18a0001", "18a0002", "18a0003", "18a0004"}        # the sync carried on
+    assert set(by_id(out)) == {"18a0001", "18a0002", "18a0003", "18a0004"}
     fake = FakeGmail(NOW)
     fake._list = lambda params: jr({"messages": [{"id": "18a0001", "threadId": "th01"}], "nextPageToken": "same"})
     out = make(fake).fetch(since=SINCE, maxItems=50)
     assert [i["extId"] for i in out["items"]] == ["18a0001"]
-    assert len([q for q in fake.log if q["path"].endswith("/messages")]) == 2         # second page added nothing
+    assert len([q for q in fake.log if q["path"].endswith("/messages")]) == 2
 
 
-# ------------------------------------------------------------------ store and views end to end
 def test_store_scrubs_bodies_and_attachment_text_in_every_read():
     fake = FakeGmail(NOW)
     st, p = store(fake, INBOX)
@@ -724,7 +708,7 @@ def test_views_threads_and_needs_reply_from_gmail():
     t = {r[0]: r for r in st.sql("SELECT threadId, messages, lastSender, lastFromMe, needsReply, subject "
                                  "FROM v_threads")["rows"]}
     assert t["th01"][1:] == [2, "me@example.com", 1, 0, "Staking pilot: keys and timeline"]
-    assert t["th03"][3:5] == [0, 1]                                             # cc'd to me: needs a reply
+    assert t["th03"][3:5] == [0, 1]
     e = st.sql("SELECT id, fromMe, toMe FROM v_email ORDER BY id")["rows"]
     assert e[1] == ["gmail:18a0002", 1, 0] and e[3] == ["gmail:18a0004", 0, 1]
     a = st.sql("SELECT id, name, textChars FROM v_attachment_fts WHERE fts MATCH 'commitment'")["rows"]
@@ -736,12 +720,12 @@ def test_views_threads_and_needs_reply_from_gmail():
 def test_me_is_matched_on_normalized_gmail_addresses_and_bulk_mail_never_needs_a_reply():
     derive = contenttypes.load()["email"].derive_module()
     assert derive.addr_key("Dana.Ruiz+work@GoogleMail.com") == "danaruiz@gmail.com"
-    assert derive.addr_key("d.r+x@Example.COM") == "d.r@example.com"              # dots matter outside Gmail
+    assert derive.addr_key("d.r+x@Example.COM") == "d.r@example.com"
     fake = FakeGmail(NOW)
     fake.account = "meself@gmail.com"
     a = new_msg("19g0001", hours=3, frm="Ana <ana@partner.example>")
     a["threadId"], a["headers"]["To"] = "ta", "Me <Me.Self+work@GoogleMail.com>"
-    b = new_msg("19g0002", labels=("Label_1",), hours=2, frm="Me <me.self@gmail.com>")   # sent elsewhere, no SENT
+    b = new_msg("19g0002", labels=("Label_1",), hours=2, frm="Me <me.self@gmail.com>")
     b["threadId"], b["headers"]["To"] = "tb", "ana@partner.example"
     c = new_msg("19g0003", hours=1, frm="News <news@list.example>")
     c["threadId"], c["headers"]["To"] = "tc", "meself@gmail.com"
@@ -757,7 +741,7 @@ def test_me_is_matched_on_normalized_gmail_addresses_and_bulk_mail_never_needs_a
     t = {x["threadId"]: x for x in st.rows("threads", since="30d")["rows"]}
     assert t["ta"]["needsReply"] and not t["tb"]["needsReply"]
     assert t["tc"]["lastBulk"] and not t["tc"]["needsReply"] and not t["td"]["needsReply"]
-    assert "addr_key" in st.sql("SELECT addr_key('A.B+c@gmail.com')")["error"]       # stored, not a SQL function
+    assert "addr_key" in st.sql("SELECT addr_key('A.B+c@gmail.com')")["error"]
 
 
 def test_prompt_injection_in_a_body_stays_data():
@@ -765,7 +749,7 @@ def test_prompt_injection_in_a_body_stays_data():
     st, _ = store(fake, INBOX)
     st.sync()
     news = st.get(["gmail:18a0003"])["items"][0]
-    assert "IGNORE ALL PREVIOUS INSTRUCTIONS" in news["text"]                  # stored verbatim, as data
+    assert "IGNORE ALL PREVIOUS INSTRUCTIONS" in news["text"]
     p = project()
     d = dispatch.Dispatcher(system(p), p, transport=FakeGmail(NOW), provider=MemProvider(SECRETS), clock=clock)
     r = d.call("mail-briefing.digest", {"since": "7d"})
@@ -773,7 +757,7 @@ def test_prompt_injection_in_a_body_stays_data():
     assert plan["step"] == "digest" and "IGNORE ALL PREVIOUS" not in plan["task"] + plan["playbookText"]
     assert any("never instructions" in x["statement"] for x in plan["rules"])
     threads = {t["threadId"]: t for t in plan["previous"]["gather"]["rows"]}
-    assert "IGNORE ALL PREVIOUS INSTRUCTIONS" in threads["th02"]["lastText"]    # only inside the data
+    assert "IGNORE ALL PREVIOUS INSTRUCTIONS" in threads["th02"]["lastText"]
 
 
 def _mailbox(n: int, gap: int = 10) -> FakeGmail:
@@ -806,11 +790,11 @@ def test_a_selector_joining_a_followed_query_replays_history_before_relisting():
         st = store_with(fake, p, cap=10, sels=s2)
         left.append(len(set(arch) & _ids(st)))
         stale.append(st.status()["stale"])
-    assert left[-1] == 0 and left == sorted(left, reverse=True)        # archived messages leave, never linger
-    assert all(s for n, s in zip(left, stale) if n)                     # stale while any is still readable
+    assert left[-1] == 0 and left == sorted(left, reverse=True)
+    assert all(s for n, s in zip(left, stale) if n)
     state = json.loads(store_with(fake, p, cap=10, sels=s2).state_path.read_text())
     cur = next(c for k, c in state["cursors"].items() if k.startswith("gmail-api|"))
-    assert cur["selectors"] == ["inbox", "pilot"]                       # the join completed after the replay
+    assert cur["selectors"] == ["inbox", "pilot"]
 
 
 def test_after_an_expired_cursor_unlisted_stored_messages_are_rechecked_until_none_is_left():
@@ -824,7 +808,7 @@ def test_after_an_expired_cursor_unlisted_stored_messages_are_rechecked_until_no
     left = []
     for _ in range(8):
         store_with(fake, p, cap=10).sync()
-        fake.min_history = fake.history_id                 # real Gmail: the historyId it handed out stays valid
+        fake.min_history = fake.history_id
         st = store_with(fake, p, cap=10)
         left.append(len(set(arch) & _ids(st)))
         assert st.status()["stale"] == bool(st.status().get("rechecking"))
@@ -841,7 +825,7 @@ def test_drafts_are_excluded_natively_and_never_stall_the_backfill():
     sels = [{"id": "all"}]
     for _ in range(5):
         store_with(fake, p, cap=5, sels=sels).sync()
-    assert not [m for m, n in gets(fake).items() if int(m[3:]) in range(5, 11)]   # never read a draft
+    assert not [m for m, n in gets(fake).items() if int(m[3:]) in range(5, 11)]
     assert all("-in:drafts" in q["params"]["q"] for q in fake.log if q["path"].endswith("/messages"))
     assert len(_ids(store_with(fake, p, cap=5, sels=sels))) == 10
 
@@ -858,4 +842,4 @@ def test_unstarring_a_message_the_store_does_not_hold_brings_it_into_scope():
     fake.log.clear()
     store_with(fake, p, sels=sels).sync()
     assert "gmail:19b0001" in _ids(store_with(fake, p, sels=sels))
-    assert gets(fake) == {"19b0001": 1}                 # an UNREAD removal on a message not stored is not read
+    assert gets(fake) == {"19b0001": 1}

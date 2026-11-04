@@ -1,29 +1,4 @@
-"""Selectors: the shared vocabulary that says which items a briefing mode keeps.
-
-    selectors:                       # agentbay.config.yaml modes.<mode>.selectors (schema: selector/v1)
-      - { id: home, in: home }
-      - { id: staking, from: [vitalik, lido], text: staking, not: { text: giveaway } }
-
-Fields: from, to, subject, text, in, has, since, not. A field takes one value or a list (any value matches).
-Fields of one selector are ANDed, selectors are ORed, and `not` excludes: an item is excluded when ANY
-field of its `not` block matches. Matching is case-insensitive (casefold).
-  from / to   a handle, a full address or a domain (`example.com`, `@example.com`). `*` is the only wildcard,
-              and only here: `*@bank.example`, `news*` (any run of characters). A field with a `*` value is
-              matched locally, never sent to the source's search
-  subject     substring of the title;  text: substring of title or body (no wildcards)
-  in          a container or label, exactly (home, list:<id>, INBOX); a `label:` or `in:` prefix (Gmail search
-              style, `label:Work`, `in:inbox`) is ignored when matching
-  has         link | attachment
-  since       relative (7d) or ISO-8601
-
-Each source connector declares which fields its native search handles (connector.yaml spec.selectors:
-`native` or `local`; a field it does not list cannot be expressed). `split()` turns a selector into a
-native query (narrows the fetch) and a local filter. A source may return more than its native query asks
-for, never less, so a field is native only where the source's search matches at least what `matches()`
-does: `not` is always local (a source's negation can exclude more, e.g. Gmail's `-from:` also matches display
-names), and so are wildcard values. The store always re-applies the FULL selector with `matches()`, so
-behaviour is the same on every source no matter what the native query did.
-"""
+"""Selectors: the shared vocabulary that says which items a briefing mode keeps."""
 from __future__ import annotations
 
 import json
@@ -44,8 +19,7 @@ def _norm(s: str) -> str:
 
 
 def _addr_match(value: str, addrs: list[str]) -> bool:
-    """`value` is a handle, a full address, or a domain (`example.com` or `@example.com`); `*` matches any run
-    of characters (the only wildcard)."""
+    """Whether `value` (a handle, an address or a domain) matches any of `addrs`; `*` is the only wildcard."""
     v = _norm(value)
     for a in addrs:
         a = _norm(a)
@@ -61,8 +35,7 @@ def _addr_match(value: str, addrs: list[str]) -> bool:
 
 
 def addr_matches(patterns, addr: str) -> bool:
-    """Whether an address or handle matches any of `patterns` (the `from`/`to` rules: handle, address, domain,
-    `*` wildcard). Used for sender lists such as a mode's `important` setting."""
+    """Whether an address or handle matches any of `patterns`, by the `from`/`to` rules."""
     return any(_addr_match(p, [addr or ""]) for p in vals(patterns))
 
 
@@ -75,9 +48,7 @@ def _container(v: str) -> str:
 
 
 def glob(pattern: str, text: str) -> bool:
-    """`*` matches any run of characters; everything else is literal. No regex and no backtracking: the
-    literal parts between stars are found left to right (for `*`-only patterns the leftmost occurrence is
-    always a safe choice), so the cost is a few str.find calls over `text`, whatever the number of stars."""
+    """`*` matches any run of characters, the rest is literal; no regex or backtracking, so cost stays a few finds."""
     head, *mid = pattern.split("*")
     if not mid:
         return pattern == text
@@ -143,7 +114,6 @@ def match_ids(item: dict, selectors: list[dict], now: datetime) -> list[str]:
     return [s["id"] for s in selectors if matches(item, s, now)]
 
 
-# ------------------------------------------------------------------ capabilities
 def local_with(caps: dict, field: str, sel: dict) -> list[str]:
     """Fields of `sel` that make a native `field` local on this source (capability `localWith`)."""
     c = caps.get(field)
@@ -159,14 +129,12 @@ def mode_of(caps: dict, field: str) -> str | None:
 
 
 def wildcard(v) -> bool:
-    """Whether a field value (one or a list) has a `*` value. Source APIs search exact handles and addresses,
-    so such a field is matched locally only (all its values: they are ORed)."""
+    """Whether a field value (one or a list) has a `*` value; such a field is matched locally, never at the source."""
     return any("*" in x for x in vals(v))
 
 
 def split(sel: dict, caps: dict) -> tuple[dict, dict]:
-    """(native query, local filter). `not` and wildcard values are always local; the store re-applies the
-    whole selector anyway."""
+    """(native query, local filter); `not` and wildcards are always local, and the store re-applies it all."""
     native, local = {}, {}
     for f in FIELDS:
         if f == "id" or f not in sel:
@@ -186,9 +154,7 @@ def canonical(selectors: list[dict]) -> str:
 
 
 def check(selectors: list[dict], caps: dict, *, connector: str, paid: bool, where: str) -> tuple[list[str], list[str]]:
-    """(errors, warnings) for one bound source. Errors: duplicate ids, fields the source cannot express.
-    Warnings: local-only fields on a paid source (you pay for items that are then dropped), including a native
-    field the source matches locally when combined with another (`localWith`, e.g. X `from` with `in`)."""
+    """(errors, warnings) for one bound source. Errors: duplicate ids, fields the source cannot express."""
     errors, warnings = [], []
     seen: set[str] = set()
     for s in selectors or []:

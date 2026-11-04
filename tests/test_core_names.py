@@ -1,24 +1,4 @@
-"""No core file names a content type or a connector (proposal 0006 B-1/B-7 and 0008 slice 5).
-
-Core = the kit's protected paths (bay/, framework/, schemas/, adapters/ and the protected components, envs, connectors
-and interfaces, which own no content type) (python, json and yaml files; folders named tests
-and fixtures are skipped). The names are found, not listed: the folders of content-types/ (and each type's `kind` and
-view names), the view names of modes/*/views.yaml, and the connectors that implement items.source/v1 (the control-plane
-connectors, git and ledger among them, are core and name themselves everywhere).
-
-What counts as naming (identifiers and string literals only, never prose):
-  * an identifier (variable, attribute, function, class, keyword, parameter, dict key) one of whose snake_case or
-    camelCase segments is a content type name (`post_rows`, `emailView`), or that is a connector name;
-  * a string without whitespace that has a content type name as a segment or a connector name as a token
-    (`"post"`, `"email/v1"`, `"x-api"`, `"fake:7"`);
-  * in any string, even a sentence: a ref `<type>/v<N>`, a view name of a type or of a mode (`v_posts`,
-    `v_threads`), or a type or connector name in quotes or backticks (`'email'`, "`post`").
-A sentence that merely uses the English word (`steps post interim results`, `the email address`) is not a hit.
-
-Exceptions are ALLOWED below: the exact (file, name, place) with the reason it is not a content-type reference.
-The place is the identifier, the Python expression that holds the string (`au.get('email')`) or the key path in a
-data file, so a new `kind == "email"` in an allowlisted file is still a hit.
-An entry that no longer matches fails the test, so the list only shrinks."""
+"""No core file names a content type or a connector (proposal 0006 B-1/B-7 and 0008 slice 5)."""
 from __future__ import annotations
 
 import ast
@@ -96,8 +76,7 @@ def in_identifier(kinds, conns, ident: str) -> list[str]:
 
 
 def python_hits(src: str, kinds, views, conns):
-    """(name, what) pairs; `what` is the identifier, or for a string the expression that holds it (its parent
-    node, e.g. `au.get('email')`), so an ALLOWED entry covers that expression and not the literal everywhere."""
+    """(name, what) pairs; `what` is the identifier, or the expression that holds the string (its parent node)."""
     tree = ast.parse(src)
     parent = {c: n for n in ast.walk(tree) for c in ast.iter_child_nodes(n)}
     for node in ast.walk(tree):
@@ -123,8 +102,7 @@ def python_hits(src: str, kinds, views, conns):
 
 
 def data_hits(doc, kinds, views, conns, path=""):
-    """(name, what) pairs; `what` is the key path to the string plus the string, so an ALLOWED entry covers
-    that place in the file and not the word everywhere."""
+    """(name, what) pairs; `what` is the key path plus the string, so an ALLOWED entry covers that place only."""
     if isinstance(doc, dict):
         for k, v in doc.items():
             yield from data_hits(k, kinds, views, conns, path)
@@ -140,7 +118,7 @@ def data_hits(doc, kinds, views, conns, path=""):
 def core_files(root=KIT):
     for top in CORE:
         base = root / top
-        for f in sorted(base.rglob("*")) if base.is_dir() else [base]:      # a protected env is one file
+        for f in sorted(base.rglob("*")) if base.is_dir() else [base]:
             if f.is_file() and f.suffix in SUFFIXES and not SKIP & set(f.relative_to(root).parts):
                 yield f
 
@@ -156,7 +134,7 @@ def scan(root=KIT) -> set[tuple[str, str, str]]:
         else:
             try:
                 doc = json.loads(text) if f.suffix == ".json" else yaml.safe_load(text)
-            except yaml.YAMLError:                  # a template with {{placeholders}}: read it line by line
+            except yaml.YAMLError:
                 doc = text.splitlines()
             hits = data_hits(doc, kinds, views, conns)
         out |= {(rel, n, lit) for n, lit in hits}
@@ -180,7 +158,10 @@ def test_no_core_file_names_a_content_type_or_a_connector():
 
 def test_the_rule_counts_identifiers_and_literals_but_not_prose():
     kinds, views, conns = {"post", "email"}, {"v_posts"}, {"x-api", "fake"}
-    hit = lambda s: in_literal(kinds, views, conns, s)          # noqa: E731
+
+    def hit(s):
+        return in_literal(kinds, views, conns, s)
+
     for s in ("post", "email/v1", "x-api", "fake:7", "v_posts", "SELECT 1 FROM v_posts", "kind = 'email'", "see `post`"):
         assert hit(s), s
     for s in ("steps post interim results", "the email address of the sender", "a fake name here", "postmaster"):

@@ -1,9 +1,4 @@
-"""A fake Gmail API + Google token endpoint for tests: a transport for connect.Http built from fixture JSON.
-
-Messages are compact specs (headers, text/HTML parts, attachments given as text, docx paragraphs, raw bytes or a
-bare size); render() turns them into users.messages.get format=full payloads. Mutations (add, relabel, trash,
-delete) append history records like Gmail's history.list. Every request is logged.
-"""
+"""A fake Gmail API + Google token endpoint for tests: a transport for connect.Http built from fixture JSON."""
 from __future__ import annotations
 
 import base64
@@ -72,9 +67,8 @@ class FakeGmail:
         self.token_error: str | None = None
         self.scope = SCOPE
         self.tokens = 0
-        self.queue: list[tuple[str, int, dict]] = []      # (path regex, status, headers): served first, once each
+        self.queue: list[tuple[str, int, dict]] = []
 
-    # ------------------------------------------------------------ mutations (each one is a history record)
     def _record(self, **kw) -> None:
         self.history_id += 1
         self.history.append({"id": str(self.history_id), **kw})
@@ -102,7 +96,6 @@ class FakeGmail:
     def expire_history(self) -> None:
         self.min_history = self.history_id + 1
 
-    # ------------------------------------------------------------ rendering
     def _created_ms(self, m: dict) -> int:
         return int((self.now - timedelta(hours=float(m["ageHours"]))).timestamp() * 1000)
 
@@ -144,7 +137,6 @@ class FakeGmail:
                 "snippet": "", "historyId": str(self.history_id), "internalDate": str(self._created_ms(m)),
                 "payload": payload, "sizeEstimate": 1000}
 
-    # ------------------------------------------------------------ transport
     def __call__(self, method, url, headers, body):
         u = urlsplit(url)
         params = dict(parse_qsl(u.query))
@@ -190,9 +182,7 @@ class FakeGmail:
                    "token_type": "Bearer"})
 
     def matches(self, q: str, m: dict) -> bool:
-        """Gmail search semantics, on the narrow side: from:/to: match the address, its domain or whole words of
-        the header (display name included), subject: and free terms match whole words, - negates, {a b} ORs,
-        label:/in: match label names (spaces and slashes as dashes), after:/before: are epoch seconds."""
+        """Gmail search semantics on the narrow side: whole words, - negates, {a b} ORs, label:/in:, epoch dates."""
         return all(self._term(t, m) for t in _tokens(q))
 
     def _term(self, t: str, m: dict) -> bool:

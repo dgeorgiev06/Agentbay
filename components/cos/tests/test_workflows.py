@@ -1,9 +1,4 @@
-"""Project workflows: config -> lint -> the cos stage loop, and the boundaries it must keep.
-
-The loop under test is the one the coordinator runs: cos.run hands back a `<mode>.<endpoint>` call,
-the coordinator drives that call itself, and cos.next records it and returns the next stage. Nothing
-recurses into the dispatcher, so a stage's own grants, review and gates stay its own.
-"""
+"""Project workflows: config -> lint -> the cos stage loop, and the boundaries it must keep."""
 import json
 
 from helpers import KIT, clock, cleanup, project, system, tmpdir
@@ -32,7 +27,6 @@ def _d(cfg=None):
     return dispatch.Dispatcher(system(p), p, clock=clock), p
 
 
-# --------------------------------------------------------------------- loading and lint
 def test_loads_stages_and_kinds():
     p = project(MORNING)
     wfs = wfmod.load(Kit(KIT, p))
@@ -46,7 +40,7 @@ def test_effects_are_the_union_of_the_endpoints_called():
     p = project(MORNING)
     s = system(p)
     eff = wfmod.effects(s, wfmod.load(s.kit)["morning"])
-    assert eff == ["read", "write", "network", "spend", "delete"]     # sync + prune, declared order
+    assert eff == ["read", "write", "network", "spend", "delete"]
     cleanup(p)
 
 
@@ -122,15 +116,13 @@ def test_bay_lint_runs_the_structural_checks():
     cleanup(p)
 
 
-# --------------------------------------------------------------------- the stage loop
 def test_run_hands_back_a_call_and_does_not_execute_it():
     d, p = _d()
     out = d.call("cos.run", {"workflow": "morning", "input": {"lookback": "1d"}})
-    assert out["status"] == "done"                      # cos.run itself is one code step
+    assert out["status"] == "done"
     stage = out["output"]
     assert stage["status"] == "stage-ready" and stage["stage"] == "sync"
     assert stage["nextCall"] == {"target": "feed-briefing.sync", "input": {"lookback": "1d"}}
-    # the stage endpoint never ran: no call for it exists
     assert not list((p / ".agentbay/calls").glob("*")) or \
         all(json.loads(f.read_text())["target"].startswith("cos.") for f in (p / ".agentbay/calls").glob("*.json"))
     cleanup(p)
@@ -140,14 +132,11 @@ def test_next_records_output_and_later_stages_read_it():
     d, p = _d()
     run = d.call("cos.run", {"workflow": "morning", "input": {"lookback": "1d"}})["output"]
     rid = run["runId"]
-    # stage 'sync' finished; the gate comes next
     gate = d.call("cos.next", {"runId": rid, "callId": "C-x", "status": "done",
                                "output": {"added": 3}})["output"]
     assert gate["status"] == "awaiting-approval" and gate["gate"] == "send the digest?"
-    # a gate is not passable through cos.next
     st = d.call("cos.next", {"runId": rid})
     assert st["status"] == "failed" and "bay approve" in st["error"]
-    # the user passes it; `prune` then runs because $steps.sync.added was truthy
     after = d.run_capability("cos", "workflow.run/v1.approve", {"runId": rid, "approved": True, "by": "user@tty"})
     assert after["status"] == "stage-ready" and after["nextCall"]["target"] == "feed-briefing.prune"
     cleanup(p)
@@ -222,7 +211,6 @@ def test_editing_the_workflow_under_a_live_run_fails_loudly():
     cleanup(p)
 
 
-# --------------------------------------------------------------------- registry
 def test_registry_publishes_resolved_schemas_and_workflows():
     p = project(MORNING)
     s = system(p)
@@ -230,7 +218,7 @@ def test_registry_publishes_resolved_schemas_and_workflows():
     cat = registry.load(p)
     ep = next(e for m in cat["modes"] for e in m["endpoints"] if e["name"] == "feed-briefing.sync")
     assert ep["inSchema"]["type"] == "object" and "lookback" in ep["inSchema"]["properties"]
-    assert "$ref" not in json.dumps(ep["inSchema"])                 # refs are inlined for the reader
+    assert "$ref" not in json.dumps(ep["inSchema"])
     assert ep["needs"] and "constraints" in ep
     wf = cat["workflows"]["morning"]
     assert wf["effects"] == ["read", "write", "network", "spend", "delete"]
@@ -240,10 +228,8 @@ def test_registry_publishes_resolved_schemas_and_workflows():
     cleanup(p)
 
 
-# --------------------------------------------------------------------- the gate is the user's
 def test_bay_approve_on_a_workflow_run_needs_a_terminal():
-    """`bay approve W-...` routes to the workflow runner, and refuses without a TTY exactly as a call's
-    gate does: no agent and no permission mode can pass a gate."""
+    """`bay approve W-...` routes to the workflow runner and refuses without a TTY exactly as a call's gate does."""
     import subprocess
     import sys as _sys
     d, p = _d()
@@ -252,14 +238,12 @@ def test_bay_approve_on_a_workflow_run_needs_a_terminal():
     r = subprocess.run([_sys.executable, str(KIT / "bay/cli.py"), "approve", rid, "--project", str(p)],
                        capture_output=True, text=True, input="yes\n")
     assert r.returncode != 0 and "interactive terminal" in r.stderr
-    # the run is untouched
     assert d.call("cos.status", {"runId": rid})["output"]["runs"][0]["status"] == "awaiting-approval"
     cleanup(p)
 
 
 def test_lint_catches_a_dollar_value_that_is_not_a_reference():
-    """substitute() drops any `$...` it does not recognise, so the endpoint would silently receive
-    nothing for that key. Lint says so rather than letting the stage run short an argument."""
+    """substitute() drops any `$...` it does not recognise, so lint must say so rather than run a stage short."""
     p = project({"workflows": {"w": {"steps": [
         {"id": "a", "call": "feed-briefing.sync", "with": {"lookback": "$5.00"}}]}}})
     probs = wfmod.structure_problems(Kit(KIT, p))

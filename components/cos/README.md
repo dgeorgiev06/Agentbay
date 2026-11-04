@@ -12,3 +12,7 @@ Its endpoints run over `workflow.run/v1` (bound to `workflow-runner`):
 
 The coordinator makes each `nextCall` the ordinary way, so every stage keeps its own grants, effects, budget,
 review and gates, and nothing recurses. A workflow gate passes only with `bay approve <W-runId>`.
+
+The `workflow-runner` connector only keeps the cursor: it cannot call an endpoint, spawn an agent or read connector
+data. A workflow edited under a live run, or one that holds a gate with `when:`, fails `start` and `next`; `approve`
+returns the report instead, so the owner's decision is still ledgered.

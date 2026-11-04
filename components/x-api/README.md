@@ -12,7 +12,13 @@ X Lists (`in: list:<id>`) and user timelines (`from: <handle>`). OAuth 2.0 user 
 3. Set `connectors.x-api.userId` (else it is looked up through `/2/users/me`) and rebuild.
 
 The caps `maxItemsPerRun`, `monthlyItems` and `spendUsd` of the mode stop a sync before it exceeds one; each
-post read costs `costPerItemUsd` (X pay-per-use).
+post read costs `costPerItemUsd` (X pay-per-use). X bills every post it returns, so `billed` counts every post of
+every response, timeline pages and deletion lookups included, and a call never requests more than its `maxItems`
+budget: the endpoint rejects pages under 5 posts, so no page is requested when less than 5 of the budget is left.
+
+Access tokens live in memory for the call only. X rotates refresh tokens: the new one is written back through the
+secrets accessor, never to disk, logs or output. Every request goes through `ctx.http`, which enforces the env
+network allowlist before the request is made.
 
 **Settings** (`connectors.x-api`): `userId`, `maxPages`, `exclude` (`retweets`, `replies`); see
 `config.example.yaml`. Tests with an offline transport: `tests/`.

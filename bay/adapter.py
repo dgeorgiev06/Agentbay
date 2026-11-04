@@ -1,16 +1,4 @@
-"""The Adapter contract: a resolved System in, runtime config out. Adapters are discovered by folder.
-
-Each runtime is a folder adapters/<name>/ holding adapter.yaml (name, module, class) and its module.
-There is no registry to edit: a new runtime is a new folder.
-
-An adapter must:
-  * be idempotent (build twice == build once)
-  * only touch files it owns, tracked in .agentbay/manifest.json
-  * preserve anything the user wrote by hand (merge, never clobber)
-  * write the registry (bay.registry.write) so coordinators can discover modes, endpoints,
-    roles and project workflows. The catalog's content is runtime-neutral system truth; an
-    adapter supplies only its own `runtime` name, it does not decide what goes in.
-"""
+"""The Adapter contract: a resolved System in, runtime config out. Adapters are discovered by folder."""
 from __future__ import annotations
 
 import importlib.util
@@ -37,6 +25,8 @@ class BuildReport:
 
 @runtime_checkable
 class Adapter(Protocol):
+    """A runtime adapter: idempotent, touches only files in .agentbay/manifest.json, never clobbers user files."""
+
     name: str
 
     def build(self, system: System, project: Path, kit: Path) -> BuildReport: ...
@@ -45,8 +35,7 @@ class Adapter(Protocol):
 
 
 def check(folder: Path) -> tuple[dict, list[str]]:
-    """Read and check adapters/<folder>/adapter.yaml without importing anything: (manifest, problems).
-    Checks the schema, that `name` equals the folder and that `module` is a file inside the folder."""
+    """Read and check adapters/<folder>/adapter.yaml without importing anything: (manifest, problems)."""
     y = folder / "adapter.yaml"
     try:
         meta = yaml.safe_load(y.read_text(encoding="utf-8"))
@@ -72,8 +61,7 @@ def check(folder: Path) -> tuple[dict, list[str]]:
 
 
 def scan(root: Path = ADAPTERS) -> tuple[dict[str, tuple[Path, dict]], dict[str, list[str]]]:
-    """Every adapters/<folder>/adapter.yaml, checked: (folder -> (path, manifest) for good entries,
-    folder -> problems for bad ones). Imports nothing."""
+    """Every adapters/<folder>/adapter.yaml, checked: good entries by folder, problems by folder. Imports nothing."""
     good: dict[str, tuple[Path, dict]] = {}
     bad: dict[str, list[str]] = {}
     for y in sorted(root.glob("*/adapter.yaml")):
@@ -86,8 +74,7 @@ def scan(root: Path = ADAPTERS) -> tuple[dict[str, tuple[Path, dict]], dict[str,
 
 
 def discover(root: Path = ADAPTERS, problems: list[str] | None = None) -> dict[str, Path]:
-    """name -> adapter folder, for every well-formed adapters/<name>/adapter.yaml. A bad entry is left out and
-    its problems appended to `problems` (when given), so one broken runtime cannot stop another's build or clean."""
+    """name -> folder of each well-formed adapter; a bad one is left out, so it cannot stop another's build."""
     good, bad = scan(root)
     if problems is not None:
         problems += [e for errs in bad.values() for e in errs]
@@ -95,8 +82,7 @@ def discover(root: Path = ADAPTERS, problems: list[str] | None = None) -> dict[s
 
 
 def module_key(folder: str) -> str:
-    """The sys.modules key of the adapter in adapters/<folder>/. Injective in the folder name (every character
-    other than a letter or digit is escaped, `_` included), so claude-code and claude_code never share a key."""
+    """The sys.modules key of an adapter; injective in the folder name, so claude-code and claude_code differ."""
     return "agentbay_adapter_" + "".join(c if c.isascii() and c.isalnum() else f"_{ord(c):02x}" for c in folder)
 
 

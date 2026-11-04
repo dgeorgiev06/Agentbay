@@ -1,6 +1,4 @@
-"""Mode inheritance: `extends` is resolved at load time, so resolver, lint, conformance and adapters see a
-complete mode; children override features, steps, playbooks, rules, review and roles; cycles and missing
-parents are errors; abstract bases are linted but never resolved or installed."""
+"""Mode inheritance: `extends` is resolved at load time, so resolver, lint, conformance and adapters see a mode."""
 import json
 
 from helpers import KIT, assert_gap, edit_yaml, kit_copy, model, self_describe, unshare, whole_feature
@@ -30,8 +28,7 @@ def note_type(k):
 
 
 def child(k, name="news-briefing", spec=None):
-    """A second mode extending store, next to feed-briefing (each (role, mode, env) compiles on its own), in an env
-    of its own: a user mode may not put roles in store-local."""
+    """A second mode extending store, in an env of its own because a user mode may not put roles in store-local."""
     if not (k / "components/note").exists():
         note_type(k)
     d = k / "components" / name
@@ -43,7 +40,7 @@ def child(k, name="news-briefing", spec=None):
     spec = {**(spec or {}), "roles": {**dict.fromkeys(("lead", "analyst", "reviewer"), f"{name}-local"),
                                        **(spec or {}).get("roles", {})}}
     doc = {"apiVersion": "agentbay/v4", "kind": "Mode", "metadata": {"name": name, "version": "0.1.0"},
-           "spec": {"extends": "store", "reads": ["note/v1"], **spec}}   # a child says what it reads (B-6)
+           "spec": {"extends": "store", "reads": ["note/v1"], **spec}}
     (d / "mode.yaml").write_text(json.dumps(doc))
     self_describe(d)
     return d
@@ -69,7 +66,7 @@ def test_a_store_mode_with_no_source_resolves_adds_and_reads():
     rows = d.use("analyst--notes", "items.store/v2.sql", {"sql": "SELECT id FROM v_items"})["rows"]
     assert rows == [[iid]]
     assert d.call("notes.ask", {"question": "what is there?"})["next"]["previous"]["context"]["count"] == 1
-    r = d.call("notes.add", {"item": {"kind": "post", "text": "x"}})        # a kind a source produces: sourceKinds got through
+    r = d.call("notes.add", {"item": {"kind": "post", "text": "x"}})
     assert r["status"] != "done" and "produced by a source" in json.dumps(r), r
 
 
@@ -89,13 +86,11 @@ def test_child_overrides_review_steps_roles_and_inherits_the_rest():
     assert set(fb.features) == {"add", "update", "delete", "query", "get", "ask", "sync", "digest", "prune"}
     assert "question" in ask.in_schema["properties"] and fb.features["sync"].in_schema["properties"].keys() == {"lookback", "maxItems"}
     assert {"feed-briefing--digest", "feed-briefing--grounded-qa", "feed-briefing--corpus-sql"} <= set(fb.skills)
-    # a second child of the same base keeps the base behaviour
     d = child(k, spec={"purpose": "Mail.", "roles": {"analyst": "local-news", "researcher": "research"}})
     (d / "envs/local-news.yaml").write_text((d / "envs/news-briefing-local.yaml").read_text().replace("news-briefing-local", "local-news"))
     s = model.resolve(model.Kit(k))
     mail = s.modes["news-briefing"]
     assert mail.features["ask"].review is None and mail.extends == "store"
-    # the roles map is inherited and overridden entry by entry
     assert mail.roles == {"lead": "news-briefing-local", "analyst": "local-news", "reviewer": "news-briefing-local",
                           "researcher": "research"}
     assert s.modes["feed-briefing"].roles["analyst"] == "local-feeds"
@@ -107,7 +102,7 @@ def test_a_child_feature_is_never_merged_key_by_key_with_its_parents():
     edit_yaml(k / "components/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("features", {}).update(
         {"ask": {"review": {"role": "reviewer", "when": "always", "tier": "balanced"}}}))
     gs = __import__("helpers").gaps(k)
-    assert any("spec/features/ask: 'steps' is a required property" in g for g in gs), gs     # the rest is not inherited
+    assert any("spec/features/ask: 'steps' is a required property" in g for g in gs), gs
     k = kit_copy()
     edit_yaml(k / "components/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("features", {}).update(
         {"ask": {k2: v for k2, v in whole_feature(k, "ask").items() if k2 not in ("playbook", "rules")}}))
@@ -171,8 +166,8 @@ def test_abstract_base_is_linted_not_installed():
     assert "store" not in s.modes
     (k / "components/feed-briefing/features/digest/playbook.md").write_text("# nothing\n")
     ps = problems(k)
-    assert any("components/feed-briefing/features/digest/playbook.md" in p for p in ps)        # still linted
-    assert not any(": store.prune declares schedule" in w for w in lint.warnings(model.Kit(k)))   # children only
+    assert any("components/feed-briefing/features/digest/playbook.md" in p for p in ps)
+    assert not any(": store.prune declares schedule" in w for w in lint.warnings(model.Kit(k)))
 
 
 def test_lint_lines_of_inherited_parts_point_at_the_parent_mode_yaml():
@@ -183,14 +178,12 @@ def test_lint_lines_of_inherited_parts_point_at_the_parent_mode_yaml():
     want = f"components/feed-briefing/mode.yaml:{line_of(base, '      schedule: daily')}: feed-briefing.prune declares schedule"
     assert any(w.startswith(want) for w in ws), ws
     assert not any("components/feed-briefing/mode.yaml:1:" in w for w in ws)
-    # a child that sets the schedule itself is reported at its own line
     k = kit_copy()
     edit_yaml(k / "components/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("features", {}).update(
         {"prune": whole_feature(k, "prune", schedule="weekly")}))
     own = line_of(k / "components/feed-briefing/mode.yaml", "      schedule: weekly")
     ws = lint.warnings(model.Kit(k))
     assert any(f"components/feed-briefing/mode.yaml:{own}: feed-briefing.prune declares" in w for w in ws), ws
-    # steps a child sets itself are reported at the step in the child's own mode.yaml
     k = kit_copy()
     edit_yaml(k / "components/feed-briefing/mode.yaml", lambda d: d["spec"].setdefault("features", {}).update(
         {"prune": whole_feature(k, "prune", steps=[{"id": "trim", "roles": {"lead": "workspace"},
@@ -202,8 +195,7 @@ def test_lint_lines_of_inherited_parts_point_at_the_parent_mode_yaml():
 
 
 def shared_config(k):
-    """The settings every child shares, held by the base as the child-schema rules need: store carries feed-briefing's
-    schema, feed-briefing none, and mail-briefing only its own key."""
+    """The settings every child shares are held by the base, as the child-schema rules need."""
     base = k / "components/feed-briefing/config.schema.json"
     (k / "components/store/config.schema.json").write_text(base.read_text())
     base.unlink()
@@ -223,11 +215,9 @@ def test_child_sets_config_defaults_instead_of_copying_the_config_schema():
     md = k.get("Mode", "feed-briefing")
     assert md.spec["configDefaults"] == {"selectors": [{"id": "home"}]}
     m = model.resolve(k).modes["feed-briefing"]
-    assert m.config["selectors"] == [{"id": "home"}] and m.config["lookback"] == "3d"   # child + parent defaults
-    # the user's settings still win over configDefaults
+    assert m.config["selectors"] == [{"id": "home"}] and m.config["lookback"] == "3d"
     p = project({"modes": {"feed-briefing": {"selectors": [{"id": "staking", "text": "staking"}]}}})
     assert model.resolve(model.Kit(KIT, p)).modes["feed-briefing"].config["selectors"][0]["id"] == "staking"
-    # a key the config schema does not declare, or a value it rejects, is a gap naming the mode
     kc = kit_copy()
     edit_yaml(kc / "components/feed-briefing/mode.yaml", lambda d: d["spec"]["configDefaults"].update(
         {"lookback": "forever", "colour": "blue"}))
@@ -242,20 +232,20 @@ def test_child_config_schema_extends_its_parents():
     shared_config(kc)
     k = model.Kit(kc)
     own = json.loads((kc / "components/mail-briefing/config.schema.json").read_text())
-    assert list(own["properties"]) == ["important"]                                   # only its own key
+    assert list(own["properties"]) == ["important"]
     md = k.get("Mode", "mail-briefing")
     assert [p.relative_to(kc).as_posix() for p in md.config_files] == [
         "components/store/config.schema.json", "components/mail-briefing/config.schema.json"]
     gaps = []
     merged = model.config_schema(k, md, gaps)
     assert not gaps and {"lookback", "retention", "selectors", "important"} <= set(merged["properties"])
-    assert merged.get("additionalProperties") is False                                 # the parent's rule holds
+    assert merged.get("additionalProperties") is False
     m = model.resolve(k).modes["mail-briefing"]
     assert m.config["important"] == [] and m.config["lookback"] == "30d" and m.config["retention"] == "30d"
     p = project({"modes": {"mail-briefing": {"important": ["dana@partner.example"], "retention": "60d"}}})
     c = model.resolve(model.Kit(kc, p)).modes["mail-briefing"].config
     assert c["important"] == ["dana@partner.example"] and c["retention"] == "60d"
-    p = project({"modes": {"mail-briefing": {"colour": "blue"}}})                    # still closed to unknown keys
+    p = project({"modes": {"mail-briefing": {"colour": "blue"}}})
     assert_gap(kc, "modes.mail-briefing", "colour", project=p)
 
 
@@ -269,7 +259,7 @@ def test_redefining_a_parent_config_key_is_a_lint_error():
     want = ("mode mail-briefing: config schema components/mail-briefing/config.schema.json redefines inherited "
             "setting 'lookback'")
     assert_gap(k, want, "configDefaults")
-    assert any(want in e for e in problems(k))                                       # `bay check` reports it too
+    assert any(want in e for e in problems(k))
 
 
 def test_child_config_schema_defs_collision_and_other_keywords_are_errors_f13():
@@ -296,7 +286,7 @@ def test_child_config_schema_defs_collision_and_other_keywords_are_errors_f13():
         assert any(w in e for e in problems(k))
     gaps = []
     merged = model.config_schema(model.Kit(k, None), model.Kit(k, None).get("Mode", "mail-briefing"), gaps)
-    assert merged["$defs"][clash] == parent["$defs"][clash] and "mailOnly" in merged["$defs"]   # parent's kept
+    assert merged["$defs"][clash] == parent["$defs"][clash] and "mailOnly" in merged["$defs"]
 
 
 def test_child_config_schema_type_and_additional_properties_must_equal_the_parents_n5():
@@ -304,7 +294,7 @@ def test_child_config_schema_type_and_additional_properties_must_equal_the_paren
     shared_config(k)
     sch = k / "components/mail-briefing/config.schema.json"
     doc = json.loads(sch.read_text())
-    doc["additionalProperties"] = False                    # restates the parent's value: allowed
+    doc["additionalProperties"] = False
     sch.write_text(json.dumps(doc))
     gaps = []
     model.config_schema(model.Kit(k, None), model.Kit(k, None).get("Mode", "mail-briefing"), gaps)

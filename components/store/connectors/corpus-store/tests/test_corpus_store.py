@@ -1,19 +1,15 @@
-"""corpus-store via the fake source: dedup, lookback/coverage, budget caps, deletions, selectors
-(native/local split, matched tags, re-match without refetch, backfill, prune), read endpoints."""
+"""corpus-store via the fake source: dedup, lookback, coverage, budget caps, deletions, selectors and reads."""
 import json
 import sqlite3
-import sys
 from datetime import timedelta
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[5] / "tests"))
+from helpers import NOW, clock, project, system
 
-from helpers import NOW, clock, project, system  # noqa: E402
-
-from bay import connect  # noqa: E402
+from bay import connect
 
 HOME = [{"id": "home", "in": "home"}]
-LOCAL = {"reads": ["post/v1", "item/v1"], "sourceKinds": ["email/v1", "post/v1"]}   # what the dispatcher passes
+LOCAL = {"reads": ["post/v1", "item/v1"], "sourceKinds": ["email/v1", "post/v1"]}
 
 
 def refused(fn, *args, **kw) -> str:
@@ -31,8 +27,7 @@ class Tripwire(dict):
 
 
 def store(p, caps=None, settings=None, now=clock, fixture=None, online=False):
-    """The store of project p, offline (the fake source) unless online: the same project with `offline` unset,
-    so the env binds x-api."""
+    """The store of project p, offline (the fake source) unless online: the same project with `offline` unset."""
     if fixture is not None:
         (p / "fx.json").write_text(json.dumps(fixture))
         cfgp = p / "agentbay.config.yaml"
@@ -82,14 +77,14 @@ def test_schema_wal_user_version_fts_and_owner_only_file():
     names = {r[0] for r in con.execute("SELECT name FROM sqlite_master")}
     assert {"items", "item_selectors", "items_fts", "items_ai", "items_ad", "items_au"} <= names
     assert {"attachments", "attachments_fts", "attachments_ai", "attachments_ad", "items_ad_attachments"} <= names
-    assert "state" not in names                                    # internal state lives in state.json
+    assert "state" not in names
     assert con.execute("SELECT count(*) FROM items_fts WHERE items_fts MATCH 'firedancer'").fetchone()[0] == 1
-    con.execute("UPDATE items SET body = 'renamed to frankendancer' WHERE ext_id = '1008'")   # trigger keeps FTS in step
+    con.execute("UPDATE items SET body = 'renamed to frankendancer' WHERE ext_id = '1008'")
     assert con.execute("SELECT count(*) FROM items_fts WHERE items_fts MATCH 'firedancer'").fetchone()[0] == 0
     con.close()
     assert db(p).stat().st_mode & 0o777 == 0o600
     assert (db(p).parent / "state.json").stat().st_mode & 0o777 == 0o600
-    con = sqlite3.connect(db(p))                    # a writer brings up -wal and -shm: same mode as the file
+    con = sqlite3.connect(db(p))
     con.execute("BEGIN IMMEDIATE")
     con.execute("UPDATE items SET title = 'x' WHERE ext_id = '1009'")
     side = [Path(str(db(p)) + x) for x in ("-wal", "-shm")]
@@ -163,7 +158,7 @@ def test_budget_caps_stop_and_report():
     assert out["coverage"]["complete"] is False
     p = project()
 
-    def priced(**kw):                      # the fake source is free; price it like a paid API for this test
+    def priced(**kw):
         st = store(p, **kw)
         st.ctx.sources["fake"].ctx.cost_per_item = None
         return st
@@ -185,7 +180,7 @@ def test_gap_after_capped_run_refetches_window():
     store(p, caps={"maxItemsPerRun": 2}).sync(lookback="3d")
     st = store(p)
     out = st.sync(lookback="3d")
-    assert st.ctx.sources["fake"].calls[0]["since"] is not None      # coverage gap -> refetch by time
+    assert st.ctx.sources["fake"].calls[0]["since"] is not None
     assert out["coverage"]["complete"] is True and len(ids(p)) == 7
 
 
@@ -197,25 +192,25 @@ def test_prune_retention_and_deletions():
     assert "fake:1009" not in ids(p) and "fake:1004" not in ids(p)
     st = state(p)
     assert "fake:1009" in st["deleted"] and st["coverage"]["from"] == "2026-10-25T12:00:00Z"
-    store(p).sync(lookback="1d")   # a deleted item is never re-stored
+    store(p).sync(lookback="1d")
     assert "fake:1009" not in ids(p)
-    assert rows(p, "SELECT count(*) AS n FROM item_selectors")[0]["n"] == 4      # tags follow deletes
+    assert rows(p, "SELECT count(*) AS n FROM item_selectors")[0]["n"] == 4
     victim = sorted(ids(p))[0]
     mine = store(p, settings=LOCAL).add({"kind": "item", "text": "mine"})["item"]["id"]
     st = store(p, settings=LOCAL)
-    assert [i["id"] for i in store(p, settings=LOCAL).get([victim, victim])["items"]] == [victim]   # a repeated id is shown once
+    assert [i["id"] for i in store(p, settings=LOCAL).get([victim, victim])["items"]] == [victim]
     fake = st.ctx.sources["fake"]
     calls = list(fake.calls)
-    st.ctx.sources = Tripwire()                                # delete never reaches a source
-    assert st.delete([], missing=["fake:gone", "fake:gone"]) == {                    # nothing found: nothing removed
+    st.ctx.sources = Tripwire()
+    assert st.delete([], missing=["fake:gone", "fake:gone"]) == {
         "deleted": [], "missing": ["fake:gone"], "remembered": []} and victim in ids(p)
     assert st.delete([victim, victim, "fake:nope"], missing=["fake:gone"]) == {
         "deleted": [victim], "missing": ["fake:gone", "fake:nope"], "remembered": [victim]}
     assert victim not in ids(p) and victim in state(p)["deleted"] and fake.calls == calls
-    store(p, settings=LOCAL).prune(olderThan="30d", deletedIds=[mine])               # prune cannot be used to delete a local item
+    store(p, settings=LOCAL).prune(olderThan="30d", deletedIds=[mine])
     assert mine in ids(p) and mine not in state(p)["deleted"]
     assert st.delete([mine])["remembered"] == [] and mine not in ids(p)
-    store(p, settings=LOCAL).sync(lookback="7d")               # the record is honoured by a later sync
+    store(p, settings=LOCAL).sync(lookback="7d")
     assert victim not in ids(p)
 
 
@@ -266,7 +261,7 @@ def test_connector_without_source_or_with_foreign_ids_is_rejected():
     except Exception as e:
         assert "declares no `source`" in str(e)
     st = store(p)
-    st.ctx.sources["fake"].ctx.source_id = "local"                # the reserved source of add: refused, naming the connector
+    st.ctx.sources["fake"].ctx.source_id = "local"
     assert "connector fake declares source `local`" in refused(st.sync, lookback="1d") and ids(p) == set()
     st = store(p)
     real = st.ctx.sources["fake"].fetch
@@ -280,7 +275,7 @@ def test_connector_without_source_or_with_foreign_ids_is_rejected():
         raise AssertionError("expected StoreError")
     except Exception as e:
         assert "ids must be 'fake:<extId>'" in str(e)
-    assert ids(p) == set()                            # one transaction: nothing half-written
+    assert ids(p) == set()
     add_and_update_refuse_what_a_source_produces_and_fail_closed()
 
 
@@ -294,7 +289,7 @@ def add_and_update_refuse_what_a_source_produces_and_fail_closed():
     assert "not one this mode reads" in refused(st.add, {"kind": "todo", "text": "x"})
     assert "fills `source`" in refused(st.add, {"kind": "item", "text": "x", "source": "fake"})
     assert "fills `source`" in refused(st.add, {"kind": "item", "text": "x", "id": "fake:1"})
-    for kw in ({"sourceKinds": None}, {"reads": None}):          # no list: fail closed, whatever the kind
+    for kw in ({"sourceKinds": None}, {"reads": None}):
         bare = store(p, settings={**LOCAL, **kw})
         bare.ctx.settings.pop(next(iter(kw)))
         assert refused(bare.add, {"kind": "item", "text": "x"})
@@ -306,7 +301,7 @@ def add_and_update_refuse_what_a_source_produces_and_fail_closed():
     for field in ("id", "source", "extId", "kind", "createdAt"):
         assert "cannot set" in refused(st.update, first, {field: "z"})
     assert "unknown id" in refused(st.update, "local:nope", {"text": "z"})
-    plant(p, [("local", "evil", "planted email", None)])        # a local row of a produced kind is still not editable
+    plant(p, [("local", "evil", "planted email", None)])
     con = sqlite3.connect(db(p))
     con.execute("UPDATE items SET kind = 'email' WHERE ext_id = 'evil'")
     con.commit()
@@ -316,7 +311,7 @@ def add_and_update_refuse_what_a_source_produces_and_fail_closed():
     gone.ctx.settings.pop("sourceKinds")
     assert refused(gone.update, first, {"text": "z"})
     kept = [r for r in rows(p, "SELECT * FROM items ORDER BY pk") if r["source"] == "fake"]
-    assert kept == [r for r in before if r["source"] == "fake"]    # no synced row changed
+    assert kept == [r for r in before if r["source"] == "fake"]
 
 
 def test_store_writes_only_inside_env_write_path():
@@ -369,7 +364,6 @@ def test_a_state_json_from_before_the_items_rename_gets_an_actionable_error():
         assert "old key `posts`" in str(e) and "move the folder aside" in str(e), str(e)
 
 
-# ------------------------------------------------------------------ selectors
 FX = [{"id": "11", "handle": "vitalik", "text": "PeerDAS on mainnet soon", "ageHours": 2},
       {"id": "12", "handle": "lido", "text": "Staking module update", "ageHours": 3, "list": "9"},
       {"id": "13", "handle": "spam", "text": "Staking giveaway, click", "ageHours": 4},
@@ -383,10 +377,10 @@ def test_native_query_and_local_filter_with_matched_tags():
     st = store(p, settings={"selectors": sels}, fixture=FX)
     out = st.sync(lookback="3d")
     calls = st.ctx.sources["fake"].calls
-    assert [c["query"] for c in calls] == [{"in": "home"}, {"from": "vitalik"}]   # text/not stay local
+    assert [c["query"] for c in calls] == [{"in": "home"}, {"from": "vitalik"}]
     tags = {r["id"]: r for r in st.query()["items"]}
     assert tags["fake:12"]["matched"] == ["staking"] and tags["fake:14"]["matched"] == ["staking", "vitalik"]
-    assert tags["fake:11"]["matched"] == ["vitalik"] and "fake:13" not in tags          # `not` excluded it
+    assert tags["fake:11"]["matched"] == ["vitalik"] and "fake:13" not in tags
     assert out["fetched"] == 6 and out["kept"] == 5
     assert ids(p) == {"fake:11", "fake:12", "fake:14"}
     assert [x["id"] for x in st.query(selector="vitalik")["items"]] == ["fake:11", "fake:14"]
@@ -396,15 +390,13 @@ def test_selector_change_rematches_without_refetch_and_new_selector_backfills():
     p = project()
     store(p, fixture=FX).sync(lookback="3d")
     assert ids(p) == {"fake:11", "fake:12", "fake:13", "fake:14"}
-    # narrow: same native query (in: home), local text filter -> re-match only, cursor kept
     sels = [{"id": "home", "in": "home", "text": "staking"}]
     st = store(p, settings={"selectors": sels})
     assert st.status()["stale"] is True
     out = st.sync(lookback="3d")
     assert out["rematched"] == 1 and out["fetched"] == 0
-    assert st.ctx.sources["fake"].calls[0]["cursor"] == "14"           # nothing refetched
+    assert st.ctx.sources["fake"].calls[0]["cursor"] == "14"
     assert [x["id"] for x in st.query()["items"]] == ["fake:12", "fake:13", "fake:14"]
-    # a new selector with its own native query backfills the lookback window
     sels2 = sels + [{"id": "lists", "in": "list:9"}]
     st = store(p, settings={"selectors": sels2})
     st.sync(lookback="3d")
@@ -412,7 +404,6 @@ def test_selector_change_rematches_without_refetch_and_new_selector_backfills():
     assert lst["cursor"] is None and lst["since"] == "2026-10-24T12:00:00Z"
     item = st.query(ids=["fake:12"])["items"][0]
     assert item["matched"] == ["home", "lists"] and item["labels"] == ["home", "list:9"]
-    # joining an existing native query also backfills (its cursor would skip older items)
     sels3 = sels2 + [{"id": "everything", "in": "home"}]
     st = store(p, settings={"selectors": sels3})
     out = st.sync(lookback="3d")
@@ -430,12 +421,11 @@ def test_removed_selector_items_leave_the_store_at_once_without_refetch():
     assert len(ids(p)) == 4
     st = store(p, settings={"selectors": keep})
     out = st.sync(lookback="3d")
-    assert out["outOfScope"] == 3 and out["fetched"] == 0 and ids(p) == {"fake:11"}       # gone, not hidden
-    assert st.ctx.sources["fake"].calls[0]["cursor"] == "14"                               # kept item: no refetch
+    assert out["outOfScope"] == 3 and out["fetched"] == 0 and ids(p) == {"fake:11"}
+    assert st.ctx.sources["fake"].calls[0]["cursor"] == "14"
     con = sqlite3.connect(db(p))
-    assert con.execute("SELECT count(*) FROM items_fts").fetchone()[0] == 1                # FTS follows
+    assert con.execute("SELECT count(*) FROM items_fts").fetchone()[0] == 1
     con.close()
-    # prune alone applies a selector change too
     p = project()
     store(p, settings={"selectors": sels}, fixture=FX).sync(lookback="3d")
     out = store(p, settings={"selectors": keep}).prune(olderThan="30d")
@@ -462,9 +452,9 @@ def test_out_of_scope_rows_are_deleted_by_sync_and_prune():
         p = project()
         store(p, settings=LOCAL).sync(lookback="3d")
         mine = store(p, settings=LOCAL).add({"kind": "item", "text": "keepme", "createdAt": "2026-01-01T00:00:00Z"})["item"]["id"]
-        plant(p, [("x", "900", "acquisition zebra unbound source", "home"),       # source not bound offline
-                  ("fake", "901", "acquisition zebra no tag", None),             # matches no selector
-                  ("fake", "902", "acquisition zebra removed selector", "gone")])  # tagged by a removed selector
+        plant(p, [("x", "900", "acquisition zebra unbound source", "home"),
+                  ("fake", "901", "acquisition zebra no tag", None),
+                  ("fake", "902", "acquisition zebra removed selector", "gone")])
         st = store(p, settings=LOCAL)
         out = st.sync(lookback="3d") if run == "sync" else st.prune(olderThan="30d")
         if run == "prune":
@@ -479,13 +469,13 @@ def test_out_of_scope_rows_are_deleted_by_sync_and_prune():
             assert con.execute("SELECT count(*) FROM item_selectors WHERE selector != 'home'").fetchone()[0] == 0
         finally:
             con.close()
-    store(p, settings=LOCAL).prune(olderThan="1m")             # the age cut removes every synced item, not mine
+    store(p, settings=LOCAL).prune(olderThan="1m")
     assert ids(p) == {mine}
     q = project()
     store(q, settings=LOCAL).sync(lookback="3d")
     kept = store(q, settings=LOCAL).add({"kind": "item", "text": "keepme"})["item"]["id"]
     store(q, settings={**LOCAL, "selectors": [{"id": "none", "in": "nowhere"}]}).sync(lookback="3d")
-    assert ids(q) == {kept}                                    # a selector change removes the synced items, not mine
+    assert ids(q) == {kept}
     no_source_store_neither_crashes_nor_wipes_its_items()
     assert store(p, settings=LOCAL).update(mine, {"text": "changed"})["item"]["text"] == "changed"
     assert rows(p, "SELECT body FROM items")[0]["body"] == "changed"
@@ -495,7 +485,7 @@ def no_source_store_neither_crashes_nor_wipes_its_items():
     p = project()
     synced = store(p, settings=LOCAL)
     synced.sync(lookback="3d")
-    bare = store(p, settings={**LOCAL, "selectors": [], "sources": []})     # the two traps: _selectors() and _enforce_scope
+    bare = store(p, settings={**LOCAL, "selectors": [], "sources": []})
     bare.ctx.sources = Tripwire()
     new = bare.add({"kind": "item", "text": "first"})["item"]["id"]
     bare.update(new, {"text": "second"})
@@ -512,14 +502,13 @@ def test_unbinding_a_source_removes_its_items_and_cursors():
     p = project()
     store(p).sync(lookback="3d")
     assert len(ids(p)) == 7 and any(k.startswith("fake|") for k in state(p)["cursors"])
-    online = store(p, online=True)                            # x-api bound instead of the fake source
-    assert online.status()["stale"] is True                   # the next sync changes the scope
+    online = store(p, online=True)
+    assert online.status()["stale"] is True
     out = online.prune(olderThan="30d")
     assert out["unbound"] == 7 and ids(p) == set() and not any(k.startswith("fake|") for k in state(p)["cursors"])
     assert state(p)["sources"] == ["x"]
 
 
-# ------------------------------------------------------------------ read endpoints
 def test_get_thread_facets_search_describe():
     p = project()
     store(p).sync(lookback="7d")
@@ -533,7 +522,7 @@ def test_get_thread_facets_search_describe():
     con.close()
     th = st.thread("fake:1009")
     assert th["threadId"] == "t1" and [i["id"] for i in th["items"]] == ["fake:1006", "fake:1009"]
-    assert st.facets("author")["values"][0] == {"value": "custody_news", "count": 2}   # ties by name
+    assert st.facets("author")["values"][0] == {"value": "custody_news", "count": 2}
     assert st.facets("selector")["values"] == [{"value": "home", "count": 8}]
     assert len(st.facets("day", since="1d")["values"]) == 2
     s = st.search("staking yields")
@@ -599,8 +588,7 @@ def test_every_stored_column_is_scrubbed_at_ingest():
 
 
 def test_dict_keys_and_identity_fields_are_scrubbed_at_ingest():
-    """A secret in a kind field's key (metrics) or in the source's own id (extId, so also id) never reaches
-    corpus.db; the stored id stays <source>:<extId>, and a deletion reported for that raw id still applies."""
+    """A secret in a kind field's key or an extId never reaches corpus.db; a deletion for the raw id still applies."""
     p = project()
     st = store(p)
     real = st.ctx.sources["fake"].fetch
@@ -622,10 +610,10 @@ def test_dict_keys_and_identity_fields_are_scrubbed_at_ingest():
     assert len(leaky) == 1 and "[REDACTED:password]" in leaky[0]["id"]
     assert any('"api_key=[REDACTED:api-key]": 1' in r["ext"] and '"like_count": 2' in r["ext"] for r in rows_)
     got = store(p).query(ids=[leaky[0]["id"]])["items"]
-    assert got and got[0]["id"] == f"fake:{got[0]['extId']}"                     # id rebuilt from the scrubbed parts
+    assert got and got[0]["id"] == f"fake:{got[0]['extId']}"
     for sec in SECRETS[:2]:
         assert sec not in json.dumps(store(p).sql("SELECT hex(id), hex(extId) FROM v_items"))
-    st = store(p)                                                              # the source deletes the leaky item
+    st = store(p)
     real = st.ctx.sources["fake"].fetch
     st.ctx.sources["fake"].fetch = lambda **kw: {**real(**kw), "deleted": [leaky_id]}
     st.sync(lookback="3d")
@@ -642,7 +630,7 @@ def test_two_modes_on_one_env_keep_separate_stores():
     base = p / ".agentbay/data/feeds"
     assert (base / "feed-briefing/corpus.db").exists() and (base / "news-briefing/corpus.db").exists()
     assert a.status()["selectors"] == {"home": 7} and b.status()["selectors"] == {"staking": 5}
-    assert a.status()["stale"] is False and b.status()["stale"] is False     # neither re-tags the other
+    assert a.status()["stale"] is False and b.status()["stale"] is False
     try:
         store(p, settings={"mode": None})
         raise AssertionError("expected StoreError")
@@ -650,7 +638,6 @@ def test_two_modes_on_one_env_keep_separate_stores():
         assert "one store per mode" in str(e)
 
 
-# ------------------------------------------------------------------ stale scope, concurrency, crash safety
 def refused_reads(st) -> list[str]:
     """Every read endpoint, as an agent would call it; returns the refusal messages (empty: all served)."""
     out = []
@@ -671,13 +658,12 @@ def test_reads_refuse_a_stale_scope_until_sync_rescopes():
     sels = [{"id": "home", "in": "home", "not": {"text": "staking"}}, {"id": "staking", "in": "home", "text": "staking"}]
     p = project()
     store(p, settings={"selectors": sels}, fixture=FX).sync(lookback="3d")
-    st = store(p, settings={"selectors": sels[:1]})                      # a selector is removed
+    st = store(p, settings={"selectors": sels[:1]})
     errs = refused_reads(st)
     assert len(errs) == 8 and all("the selectors changed" in e and "feed-briefing.sync" in e for e in errs), errs
-    assert st.status()["stale"] is True                                  # status still answers
+    assert st.status()["stale"] is True
     st.sync(lookback="3d")
     assert refused_reads(st) == [] and [i["id"] for i in st.query()["items"]] == ["fake:11"]
-    # unbinding the source (the env now binds x-api instead): refused until a prune re-scopes it
     online = store(p, online=True, settings={"selectors": sels[:1]})
     errs = refused_reads(online)
     assert len(errs) == 8 and all("bound sources are now x (was fake)" in e for e in errs), errs
@@ -699,7 +685,7 @@ def test_a_failing_source_still_rescopes_first():
         raise AssertionError("expected the fetch to fail")
     except RuntimeError:
         pass
-    assert ids(p) == {"fake:11"} and state(p)["selectors"] == sels[:1]   # re-scoped although nothing was fetched
+    assert ids(p) == {"fake:11"} and state(p)["selectors"] == sels[:1]
     con = sqlite3.connect(db(p))
     assert con.execute("SELECT count(*) FROM items_fts").fetchone()[0] == 1
     con.close()
@@ -714,7 +700,7 @@ def test_swapping_offline_for_real_refuses_role_reads_until_a_rescope():
     dispatch.Dispatcher(system(p), p, clock=clock).call("feed-briefing.sync", {})
     D = dispatch.Dispatcher(system(p), p, clock=clock)
     assert len(D.use("analyst--feed-briefing", "items.store/v2.query", {})["items"]) == 7
-    cfgp = p / "agentbay.config.yaml"                    # swap to the real env (x-api)
+    cfgp = p / "agentbay.config.yaml"
     cfg = yaml.safe_load(cfgp.read_text())
     cfg.pop("offline")
     cfg.update({"connectors": {"x-api": {"userId": "42"}}, "secrets": {"provider": "env"}})
@@ -730,7 +716,6 @@ def test_swapping_offline_for_real_refuses_role_reads_until_a_rescope():
             assert "bound sources are now x (was fake)" in str(e), e
     assert "bound sources are now x" in D.use("analyst--feed-briefing", "items.store/v2.sql",
                                                {"sql": "SELECT count(*) FROM v_items"})["error"]
-    # the real source is down (token refused): the sync fails, but the offline items are gone and reads work
     http = FakeHttp({("POST", "/2/oauth2/token"): lambda *a: jresp({"error": "invalid_grant"}, 400)})
     r = dispatch.Dispatcher(system(p), p, transport=http, provider=MemProvider(SECRETS), clock=clock).call(
         "feed-briefing.sync", {})
@@ -740,8 +725,7 @@ def test_swapping_offline_for_real_refuses_role_reads_until_a_rescope():
 
 
 def test_concurrent_sync_and_prune_keep_every_billed_item():
-    """The reviewer's probe: a slow sync and a prune at the same time used to leave budget.items at the first
-    run's 7 (each read state.json before any lock and saved it whole)."""
+    """The reviewer's probe: a slow sync and a concurrent prune must not leave budget.items at the first run's 7."""
     import threading
     import time as _t
     p = project()
@@ -775,14 +759,13 @@ def test_a_crash_around_the_commit_never_loses_spend():
     store(p).sync(lookback="3d")
     before = state(p)
     spent0 = before["budget"]["2026-10"]["items"]
-    # (a) dies after the items commit, before the final state save: spend kept, cursors not advanced past it
     st = store(p, fixture=FX + [{"id": "2001", "handle": "lido", "text": "new staking post", "ageHours": 1}])
     mod = _sys.modules[type(st).__module__]
     real_save, calls = mod.save_state, []
 
     def dying_save(path, data):
         calls.append(1)
-        if len(calls) == 2:                     # 1: before the commit (spend), 2: after it (everything else)
+        if len(calls) == 2:
             raise Crash()
         real_save(path, data)
     mod.save_state = dying_save
@@ -795,11 +778,10 @@ def test_a_crash_around_the_commit_never_loses_spend():
         mod.save_state = real_save
     after = state(p)
     billed = after["budget"]["2026-10"]["items"] - spent0
-    assert billed > 0 and "fake:2001" in ids(p)                           # committed and billed
-    assert after["cursors"] == before["cursors"]                          # not advanced: next sync refetches
+    assert billed > 0 and "fake:2001" in ids(p)
+    assert after["cursors"] == before["cursors"]
     out = store(p).sync(lookback="3d")
-    assert state(p)["budget"]["2026-10"]["items"] == spent0 + billed + out["billed"]   # over-counts, never loses
-    # (b) dies between the spend save and the commit: nothing committed, spend still kept
+    assert state(p)["budget"]["2026-10"]["items"] == spent0 + billed + out["billed"]
     spent1 = state(p)["budget"]["2026-10"]["items"]
     st = store(p, fixture=FX + [{"id": "2002", "handle": "lido", "text": "another post", "ageHours": 1}])
     real_rw = st._rw

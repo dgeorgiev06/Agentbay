@@ -1,8 +1,4 @@
-"""`bay check`, first half: structure checks for modes, features, playbooks and rules.
-
-Every problem is one line, `file:line: message`, naming the concept and the fix.
-`bay check` runs lint and then full resolution (model.resolve).
-"""
+"""`bay check`, first half: structure checks for modes, features, playbooks and rules."""
 from __future__ import annotations
 
 import fnmatch
@@ -11,13 +7,14 @@ import os
 import re
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 from . import boundary, checks, config as cfgmod, contenttypes, model, playbook as pbk, rules as rulesmod, workflows as wfmod
 
-# Features whose review can never be turned off, with the settings they must use.
 MANDATORY_REVIEW = {"forge.extend": {"when": "always", "tier": "deep", "effort": "high"}}
+STANDARDS_RUN = f"{model.STANDARDS_IFACE}.findings"
 TOOL_NAMES = {"Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch", "Task", "Agent"}
 
 
@@ -52,8 +49,7 @@ def _entry_line(path: Path, section: str, name: str) -> int | None:
 
 
 def _ep_where(md: model.Doc, ep_name: str) -> tuple[Path, int]:
-    """The mode.yaml (own, else the nearest ancestor's) whose features declare `ep_name`, and that line:
-    inherited parts are reported where they are written."""
+    """The mode.yaml (own, else the nearest ancestor's) whose features declare `ep_name`, and that line."""
     for d in md.dirs:
         i = _entry_line(d / "mode.yaml", "features", ep_name)
         if i is not None:
@@ -62,9 +58,8 @@ def _ep_where(md: model.Doc, ep_name: str) -> tuple[Path, int]:
 
 
 def _ep_key_where(md: model.Doc, ep_name: str, key: str) -> tuple[Path, int]:
-    """The mode.yaml (own, else the nearest ancestor's) whose feature `ep_name` sets `key`, and that line;
-    falls back to where the feature is declared."""
-    rx_key = re.compile(rf"^ {{6}}{re.escape(key)}:")        # a key of the feature itself, not of a step
+    """The mode.yaml (own, else the nearest ancestor's) whose feature `ep_name` sets `key`, and that line."""
+    rx_key = re.compile(rf"^ {{6}}{re.escape(key)}:")
     for d in md.dirs:
         start = _entry_line(d / "mode.yaml", "features", ep_name)
         if start is None:
@@ -73,7 +68,7 @@ def _ep_key_where(md: model.Doc, ep_name: str, key: str) -> tuple[Path, int]:
         for i in range(start, len(lines)):
             ln = lines[i]
             if i > start and ln.strip() and len(ln) - len(ln.lstrip()) <= 4:
-                break                                    # the next feature (or section) starts
+                break
             if rx_key.search(ln):
                 return d / "mode.yaml", i + 1
     return _ep_where(md, ep_name)
@@ -113,7 +108,6 @@ def lint_feature(md: model.Doc, ep_name: str, ep: dict, kit: model.Kit) -> list[
     if ep.get("rules") and (md.dir / ep["rules"]).exists():
         out += lint_rules(md.dir / ep["rules"], dod_ids, ep, md)
 
-    # review: only in mode.yaml, and its role must exist, be in the mode and resolve
     rv = ep.get("review")
     must = MANDATORY_REVIEW.get(target)
     if must:
@@ -148,8 +142,7 @@ def _step_where(md: model.Doc, ep_name: str, sid: str | None) -> tuple[Path, int
 
 
 def lint_role_envs(md: model.Doc, kit: model.Kit) -> list[str]:
-    """Each role of the mode is a framework role; each step's role is in the mode and has exactly one env
-    (step > feature > mode `roles:`)."""
+    """Each role of the mode is a framework role; each step's role is in the mode and has exactly one env."""
     out = []
     roles = md.spec.get("roles") or {}
     problems = [(None, None, f"mode {md.name}: `roles:` names unknown role '{rn}' (framework roles: "
@@ -181,8 +174,7 @@ def lint_role_envs(md: model.Doc, kit: model.Kit) -> list[str]:
 
 
 def lint_env_bindings(kit: model.Kit) -> list[str]:
-    """A tools binding under a capability without the `write` effect may not list file-writing tools or any CLI
-    beyond the read-only ones (git status/diff/log/show): roles of every access level get read capabilities."""
+    """A tools binding under a capability without `write` may not list file-writing tools or non-read-only CLIs."""
     out = []
     for env in kit.docs["Environment"].values():
         for iface, b in (env.spec.get("bind") or {}).items():
@@ -201,8 +193,7 @@ def lint_env_bindings(kit: model.Kit) -> list[str]:
 
 
 def lint_offline(kit: model.Kit) -> list[str]:
-    """An env's `offline:` block rebinds capabilities the env already binds, to connectors, and nothing else: while
-    offline the env has no network and no secrets, so a block that lists a host or a secret is refused."""
+    """An env's `offline:` block only rebinds capabilities the env binds, to connectors, and lists no host or secret."""
     out = []
     for env in sorted(kit.docs["Environment"].values(), key=lambda e: e.name):
         off = env.spec.get("offline")
@@ -223,8 +214,7 @@ def lint_offline(kit: model.Kit) -> list[str]:
 
 
 def lint_config_limits(kit: model.Kit) -> list[str]:
-    """Limits live in the env; agentbay.config.yaml may only lower a cap. A mode setting above the limit of the env
-    where the mode's code steps run is refused."""
+    """Limits live in the env; a mode setting above the limit of the env where its code steps run is refused."""
     out = []
     for name in sorted((kit.config.get("modes") or {})):
         md = kit.docs["Mode"].get(name)
@@ -241,8 +231,7 @@ def lint_config_limits(kit: model.Kit) -> list[str]:
 
 
 def lint_adapters(kit: model.Kit) -> list[str]:
-    """F-12: every adapters/<name>/adapter.yaml matches schemas/adapter.schema.json, its `name` is its folder and
-    its `module` a file inside the folder. Checked without importing any adapter code."""
+    """F-12: every adapter.yaml matches its schema, its `name` is its folder and its `module` a file inside it."""
     from . import adapter
     _, bad = adapter.scan(kit.root / "adapters")
     root = str(kit.root.resolve()) + "/"
@@ -307,25 +296,21 @@ def lint_mode(md: model.Doc, kit: model.Kit) -> list[str]:
     for ep_name, ep in s["features"].items():
         out += lint_feature(md, ep_name, ep, kit)
     out += lint_role_envs(md, kit)
-    # modes name capabilities, never concrete tools or connectors
     text = md.path.read_text(encoding="utf-8")
     for i, ln in enumerate(text.splitlines(), 1):
-        # structured values only: drop comments, quoted prose and step ids
         code = re.sub(r"\bid:\s*[\w-]+", "", re.sub(r"\"[^\"]*\"", "", ln.split("#", 1)[0]))
         for c in kit.docs["Connector"]:
-            if re.search(rf"(?<![\w.-]){re.escape(c)}(?![\w-]|\.[a-z][\w.-]*/v[0-9])", code):     # not a capability name
+            if re.search(rf"(?<![\w.-]){re.escape(c)}(?![\w-]|\.[a-z][\w.-]*/v[0-9])", code):
                 out.append(f"{_where(md.path, i)}: mode names connector '{c}'; modes name capabilities only "
                            f"(bind connectors in an env)")
         for t in TOOL_NAMES:
             if re.search(rf"\b(tools|uses)\s*:.*\b{t}\b", code):
                 out.append(f"{_where(md.path, i)}: mode names tool '{t}'; modes name capabilities only")
-    # stray review settings in mode-level playbook
     pb = md.dir / "playbook.md"
     if pb.exists():
         for i, ln in enumerate(pb.read_text(encoding="utf-8").splitlines(), 1):
             if pbk.REVIEW_SETTING.match(ln):
                 out.append(f"{_where(pb, i)}: review settings found in playbook; configure review only in mode.yaml")
-    # features folder must not contain orphans
     fdir = md.dir / "features"
     if fdir.is_dir():
         declared = {Path(ep[k]).parent.name for ep in s["features"].values() for k in ("playbook", "rules") if ep.get(k)}
@@ -368,7 +353,7 @@ def lint_connectors(kit: model.Kit) -> list[str]:
         nd = c.spec.get("needs", {})
         outside = bool(nd.get("network") or nd.get("secrets") or any(
             str(p).startswith(("~", "/")) for ops in (nd.get("fs") or {}).values() for p in ops))
-        if outside != (c.dir.parent.name == "components"):     # decision 7: a source connector is a component of its own
+        if outside != (c.dir.parent.name == "components"):
             out.append(f"{_where(c.path, _line_of(c.path, r'^spec:'))}: connector {c.name} " + (
                 "reaches outside the project (needs.network, needs.secrets or an fs path under ~ or /), so it must be "
                 "a top-level component: components/<name>/" if outside else
@@ -377,7 +362,7 @@ def lint_connectors(kit: model.Kit) -> list[str]:
         impl = c.spec["implements"]
         impl = [impl] if isinstance(impl, str) else impl
         for iface in impl:
-            if iface == model.SOURCE_IFACE:           # the store keys items and deletions on these fields
+            if iface == model.SOURCE_IFACE:
                 for key, why in (("source", "the value stamped on every item's `source`; the store keys items "
                                             "and deletions on it"),
                                  ("window", "how far back the source API serves (e.g. 7d); older history "
@@ -400,11 +385,7 @@ def _as_list(v) -> list:
 
 
 def lint_contract_versions(kit: model.Kit) -> list[str]:
-    """B-6 (proposal 0006, Part F): contracts are versioned and agree. `needs:`, `implements:`, `reads:` and
-    `produces:` name `<name>/v<N>`; `reads:`/`produces:` name a known item kind; an items.source connector says
-    what it produces and a mode that needs items.source says what it reads; and every kind a mode reads is
-    produced, at that version, by the items.source connectors bound in each env its roles use (and in each env
-    that can stand in for one)."""
+    """B-6 (proposal 0006, Part F): contracts are versioned and agree, and every kind a mode reads is produced."""
     out, kinds = [], model.item_kinds(kit.root)
     known = ", ".join(f"{k}/v{v}" for k in sorted(kinds) for v in sorted(kinds[k])) or "none"
 
@@ -452,11 +433,11 @@ def lint_contract_versions(kit: model.Kit) -> list[str]:
                        f"but declares no spec.reads (the item kinds its features read, e.g. `reads: [<kind>/v1]`; "
                        f"known: {known})")
             continue
-        variants: list[tuple[str, list[str]]] = []          # (env label, its source connectors), real then offline
+        variants: list[tuple[str, list[str]]] = []
         for en in dict.fromkeys(model.mode_envs(md)):
             env = envs.get(en)
             if env is None:
-                continue                                    # unknown envs are lint_role_envs' problem
+                continue
             variants.append((en, model.connectors_of(model._bound(env, model.SOURCE_IFACE))))
             off = (env.spec.get("offline") or {}).get("bind", {}).get(model.SOURCE_IFACE)
             if off is not None:
@@ -491,16 +472,13 @@ def lint_contract_versions(kit: model.Kit) -> list[str]:
     return out
 
 
-# B-7: a connector's code must not load another connector. Only code is scanned (imports and the kernel's module
-# keys), never prose; tests/ (fixtures pick concrete stand-ins on purpose) and READMEs are exempt.
 CONNECTOR_FILES = ("**/*.py", "**/*.yaml", "**/*.yml")
 _IMPORT = re.compile(r"^\s*(?:from\s+([\w.]+)\s+import|import\s+([\w.]+(?:\s*,\s*[\w.]+)*))")
 _IMPORT_CALL = re.compile(r"""import_module\(\s*['"]([\w.]+)""")
 
 
 def _extension_files(doc: model.Doc, pats) -> list[Path]:
-    """The files B-7 scans: the patterns inside the folder (README.md and the folder's top-level tests/ exempt)
-    plus every file the manifest references (entry, config schema), wherever it lives."""
+    """The files B-7 scans: the folder's pattern matches (README.md and tests/ exempt) and files its manifest names."""
     out = {doc.path}
     for pat in pats:
         out |= {f for f in doc.dir.glob(pat) if f.is_file() and "__pycache__" not in f.parts
@@ -521,13 +499,7 @@ def _component_map(path: Path) -> boundary.ComponentMap | None:
 
 
 def lint_extension_names(kit: model.Kit) -> list[str]:
-    """B-7 (proposal 0006, Part F; conformance C-4, C-8; simplified by 0008): no connector loads another. A
-    connector's files never import another connector's module nor use its kernel module key
-    (`agentbay_connector_*`/`agentbay_adapter_*`). Prose and names in comments are not scanned. Modes name
-    connectors nowhere in `mode.yaml` (checked with the mode's own lint). Core instances (under a core `owns:`
-    path) are not extensions and are not scanned; framework instances may load each other (they ship and change
-    together, only through forge.extend), never a user extension. A static scan cannot be complete (a name can be
-    computed at run time); it catches the spelled-out forms."""
+    """B-7: no connector loads another, judged by a static scan of spelled-out forms; core instances are not scanned."""
     cpath = kit.root / "framework" / "kernel.yaml"
     cmap = _component_map(cpath) if cpath.exists() else None
 
@@ -547,7 +519,7 @@ def lint_extension_names(kit: model.Kit) -> list[str]:
             continue
         for f in _extension_files(d, CONNECTOR_FILES):
             if f.parent != d.dir and cmap and not f.is_relative_to(d.dir) and cmap.owner(relk(f)):
-                continue                          # a referenced core file: core, not scanned
+                continue
             try:
                 lines = f.read_text().splitlines()
             except (UnicodeDecodeError, OSError):
@@ -576,7 +548,7 @@ def warnings(kit: model.Kit) -> list[str]:
     out = []
     for md in kit.docs["Mode"].values():
         if md.spec.get("abstract"):
-            continue                    # never installed: its children carry the schedule
+            continue
         for ep_name, ep in md.spec["features"].items():
             if ep.get("schedule"):
                 target = f"{md.name}.{ep_name}"
@@ -596,7 +568,7 @@ def warnings(kit: model.Kit) -> list[str]:
                        f"FTS5 (python.org and Homebrew builds have it) for ranked full-text search")
     if kit.project is not None and kit.project.resolve() == kit.root.resolve():
         out += stale_policy(kit, kit.protected_paths)
-        roots = [p for p in kit.protected.paths if "/" not in p]   # the folders; components/ reaching components/cos is by design
+        roots = [p for p in kit.protected.paths if "/" not in p]
         for env in kit.docs["Environment"].values():
             for w in env.spec.get("fs", {}).get("write", []):
                 hits = [d for d in roots if w in (".", "", "./") or Path(d).is_relative_to(Path(w))]
@@ -610,9 +582,7 @@ def warnings(kit: model.Kit) -> list[str]:
 
 
 def split_store_warnings(kit: model.Kit) -> list[str]:
-    """Code steps (sync, prune) run in the env of the mode's coordinator. A role of a store-reading mode put in an
-    env whose items.store/items.source bindings differ reads a store that the mode's sync never fills: a partial
-    `roles:` override silently splits the mode."""
+    """Warn when a role of a store-reading mode sits in an env whose store bindings differ from the coordinator's."""
     out = []
     keys = (model.STORE_IFACE, model.SOURCE_IFACE)
     for md in kit.docs["Mode"].values():
@@ -656,8 +626,7 @@ def lint_config_schemas(kit: model.Kit) -> list[str]:
 
 
 def lint_self_description(kit: model.Kit) -> list[str]:
-    """Each extension describes itself (0006 Part A): user modes and connectors have a README.md; every
-    extension that takes settings has a config.example.yaml whose settings its config schema accepts."""
+    """Each extension describes itself (0006 Part A): a README.md, and a config.example.yaml its schema accepts."""
     out: list[str] = []
     for kind in ("Mode", "Connector"):
         for d in sorted(kit.docs[kind].values(), key=lambda d: d.name):
@@ -692,8 +661,6 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     kit = kit or model.Kit(kit_root or model.KIT, project)
     out = list(kit.errors)
     seen: set[str] = set()
-    # parents first; a child's problem that is its parent's problem (same file:line, the same message with the
-    # child's mode name) is reported once, as the parent's
     for md in sorted(kit.docs["Mode"].values(), key=lambda d: (len(d.dirs), d.name)):
         ancestors, cur = [], md
         while cur.parent and cur.parent not in ancestors:
@@ -725,12 +692,13 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     out += lint_components(kit)
     out += lint_protection(kit)
     out += lint_owner_only(kit)
+    out += lint_standards_steps(kit)
     out += lint_ownership(kit)
     out += lint_case_and_manifests(kit)
     out += lint_config_schemas(kit)
     out += lint_self_description(kit)
     out += lint_skill_names(kit)
-    out += wfmod.structure_problems(kit)        # project workflows; targets are checked by `bay check`
+    out += wfmod.structure_problems(kit)
     return list(dict.fromkeys(out))
 
 
@@ -740,9 +708,7 @@ SKILL_SHORT = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 def _skill_refs(text: str, known: set[str]) -> list[tuple[int, str]]:
-    """Skills a playbook or prompt names by short name ("the `corpus-sql` skill", "(research-brief skill)").
-    A phrase counts only when the name is in backticks or is a skill the kit builds somewhere (`known`), so
-    prose ("the right skill", "the skill is") is not a reference (N-4)."""
+    """Skills a playbook or prompt names by short name ("the `corpus-sql` skill", "(research-brief skill)")."""
     out = []
     for i, ln in enumerate(text.splitlines(), 1):
         for m in SKILL_REF.finditer(ln):
@@ -753,9 +719,7 @@ def _skill_refs(text: str, known: set[str]) -> list[tuple[int, str]]:
 
 
 def lint_skill_names(kit: model.Kit) -> list[str]:
-    """B-8. The build writes a mode's skills as `<mode>--<skill>` and a role's as `<role>--<skill>`, so each name
-    must stay a valid runtime name (a-z, 0-9, '-', at most 64), two sources never share one, and every skill a
-    playbook or role prompt names by short name is in that mode's chain (or the roles it maps)."""
+    """B-8: skill names are valid and unique, and each skill a playbook or prompt names is in the mode's chain."""
     out: list[str] = []
     ids: dict[str, Path] = {}
     parsed: set[Path] = set()
@@ -803,7 +767,7 @@ def lint_skill_names(kit: model.Kit) -> list[str]:
                     out.append(f"{_where(f, i)}: names skill '{sk}', which is not in mode {md.name}'s chain "
                                f"({', '.join(sorted(known)) or 'none'}); add skills/{sk}/SKILL.md to the mode or "
                                f"fix the name")
-        for ep_name, ep in (md.spec.get("features") or {}).items():       # a feature's `skills:` covers its playbook
+        for ep_name, ep in (md.spec.get("features") or {}).items():
             f = next((d / ep["playbook"] for d in md.dirs if ep.get("playbook") and (d / ep["playbook"]).exists()), None)
             for i, sk in (_skill_refs(f.read_text(encoding="utf-8"), built) if f and ep.get("skills") is not None else []):
                 if sk in chain and sk not in ep["skills"]:
@@ -844,8 +808,7 @@ def lint_components(kit: model.Kit) -> list[str]:
 
 
 def stale_policy(kit: model.Kit, every: list[str]) -> list[str]:
-    """The guard enforces `.agentbay/guard.json`, which the build writes from the map's `protected:` block. A policy
-    built before the block changed protects a different set; say so (the guard itself keeps reading its policy)."""
+    """Say so when `.agentbay/guard.json` was built before the map's `protected:` block changed; the guard keeps it."""
     path = kit.project / ".agentbay" / "guard.json"
     if not path.is_file():
         return []
@@ -861,11 +824,7 @@ def stale_policy(kit: model.Kit, every: list[str]) -> list[str]:
 
 
 def lint_protection(kit: model.Kit) -> list[str]:
-    """The map's `protected:` block (proposal 0008, stage 5): every protected name exists as that kind, the set is
-    closed (the envs a protected mode maps and the connectors a protected env binds are protected too), and every env
-    that names a protected path names all of them (D9: the guard lets an env write a protected path only if the env
-    names that path, so framework-dev lists each one) and none that the map no longer protects. A block that cannot
-    be read is already an error of the kit load."""
+    """The map's `protected:` block (proposal 0008): names exist, the set is closed, each env names all its paths."""
     prot = kit.protected
     if prot.closed:
         return []
@@ -893,6 +852,7 @@ def _protected_paths_in_sync(kit: model.Kit) -> list[str]:
     if cmap is None:
         return []
     every, out = kit.protected_paths, []
+    doc_of = {label: doc for doc, label in model.PROTECTION_KIND.items()}
     for env in sorted(kit.docs["Environment"].values(), key=lambda d: d.name):
         writes = [os.path.normpath(w).replace(os.sep, "/") for w in env.spec.get("fs", {}).get("write", [])]
         if any(kit.covers(w) for w in writes):
@@ -900,10 +860,11 @@ def _protected_paths_in_sync(kit: model.Kit) -> list[str]:
             if missing:
                 out.append(f"{env.rel}: env {env.name} writes protected paths but not {', '.join(missing)}; the guard "
                            f"lets an env write a protected path only if the env names it - add them to fs.write")
-        for w in writes:       # a component folder, one of its envs or one of its internal connectors
+        for w in writes:
             m = re.fullmatch(r"components/([^/]+)(?:/envs/([^/]+)\.yaml|/connectors/([^/]+))?", w)
             kinds = [("env", m[2])] if m and m[2] else [("connector", m[3])] if m and m[3] else \
                     [("mode", m[1]), ("connector", m[1])] if m else []
+            kinds = [(k, n) for k, n in kinds if kit.get(doc_of[k], n)]
             if kinds and not any(kit.protected.reserved(k, n) for k, n in kinds):
                 out.append(f"{env.rel}: env {env.name} fs.write names {w}, which the protected: block of "
                            f"framework/kernel.yaml does not list; remove it or protect the {kinds[0][0]}")
@@ -923,9 +884,53 @@ def lint_owner_only(kit: model.Kit) -> list[str]:
     return out
 
 
+def _writes_checked(env: model.Doc, globs: list[str]) -> bool:
+    """The env may write a folder or a file one of the language globs matches."""
+    paths = (env.spec.get("fs") or {}).get("write") or []
+    return any(Path(p).suffix == "" or any(fnmatch.fnmatch(Path(p).name, g) for g in globs) for p in paths)
+
+
+def _last_checked_writers(kit: model.Kit, md: model.Doc, ep: dict[str, Any], steps: list[dict[str, Any]],
+                          globs: list[str]) -> dict[str, int]:
+    """{role: index of its last step} for each role of the feature that may write checked files."""
+    last: dict[str, int] = {}
+    for i, st in enumerate(steps):
+        role = model.step_role(st, ep)
+        env_name = model.role_env(md.spec, ep, st, role) if role else None
+        role_doc = kit.docs["Role"].get(role) if role else None
+        env = kit.docs["Environment"].get(env_name) if env_name else None
+        if role and role_doc and env and role_doc.spec.get("access") == "write" and _writes_checked(env, globs):
+            last[role] = i
+    return last
+
+
+def _is_standards_step(step: dict[str, Any]) -> bool:
+    """The step runs the standards capability with the call's own base commit."""
+    return step.get("run") == STANDARDS_RUN and (step.get("with") or {}).get("base") == "$call.base"
+
+
+def lint_standards_steps(kit: model.Kit) -> list[str]:
+    """A role that may write checked files needs a standards step after its last step, once an env binds checkers."""
+    globs = [g for c in kit.docs["Component"].values() for g in (c.spec.get("language") or {}).get("files", [])]
+    bound = any(model.STANDARDS_IFACE in (e.spec.get("bind") or {}) for e in kit.docs["Environment"].values())
+    if not globs or not bound:
+        return []
+    out = []
+    for md in sorted(kit.docs["Mode"].values(), key=lambda d: d.name):
+        for ep_name, ep in (md.spec.get("features") or {}).items():
+            steps = [st for st in ep.get("steps") or [] if isinstance(st, dict)]
+            for role, i in _last_checked_writers(kit, md, ep, steps, globs).items():
+                if not any(_is_standards_step(st) for st in steps[i + 1:]):
+                    sid = steps[i].get("id")
+                    out.append(f"{_where(*_step_where(md, ep_name, sid))}: {md.name}.{ep_name}: role {role} may write "
+                               f"files a language component checks in its last step {sid}, and no step after it runs "
+                               f"{STANDARDS_RUN} with base $call.base; add `- {{ id: standards, run: {STANDARDS_RUN}, "
+                               f"with: {{ base: \"$call.base\" }} }}` after it")
+    return out
+
+
 def lint_ownership(kit: model.Kit) -> list[str]:
-    """B-4 (proposal 0006, Part F): every tracked file of the kit is under a core `owns:` path, an extension
-    folder (`at:`) or the boundary's other set. Runs only when the kit is a git checkout."""
+    """B-4 (proposal 0006, Part F): every tracked file is under a core `owns:` path, an extension folder or other."""
     path = kit.root / "framework" / "kernel.yaml"
     r = subprocess.run(["git", "-C", str(kit.root), "ls-files", "-z"], capture_output=True)
     if not path.exists() or r.returncode:
@@ -943,8 +948,7 @@ OLD_FOLDERS = ("modes/", "envs/", "connectors/", "content-types/", "coordinator/
 
 
 def lint_case_and_manifests(kit: model.Kit) -> list[str]:
-    """F-4: no two tracked paths differ only in case (one checkout of them would clobber the other on macOS or
-    Windows, and `bay check --base` treats them as one), and every extension folder carries its manifest."""
+    """F-4: no two tracked paths differ only in case, and every extension folder carries its manifest."""
     path = kit.root / "framework" / "kernel.yaml"
     r = subprocess.run(["git", "-C", str(kit.root), "ls-files", "-z"], capture_output=True)
     if not path.exists() or r.returncode:
@@ -960,7 +964,7 @@ def lint_case_and_manifests(kit: model.Kit) -> list[str]:
                 out.append(f"{p}: differs only in case from {other}; rename one (paths must be unique ignoring case)")
                 seen[p.casefold()] = p
     roots = {}
-    for f in files:                      # a component folder carries a manifest of the loader's table, an adapter its own
+    for f in files:
         m = re.match(r"(?:components|adapters)/[^/]+/", f)
         if m:
             roots.setdefault(m[0], set()).add(f[m.end():])

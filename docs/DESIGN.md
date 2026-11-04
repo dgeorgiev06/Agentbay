@@ -97,15 +97,13 @@ the types, runs code steps with the connector runtime, and enforces budget caps.
 the env's provider and checks every HTTP request against the env allowlist. An agentic step comes back as a step
 plan with the status `needs-agent`: the role unit, tier, model, task, playbook, rules and inputs. The coordinator
 runs the plan and returns the output with `bay submit`. The call continues until it is `done`, `partial`,
-`blocked` or `failed`, or stops at a gate. Agents read connector data only through their
-unit's use shim, which fixes the role, mode and env and serves read-only endpoints. Secret values are scanned for and
-redacted from everything returned or logged.
+`blocked` or `failed`, or stops at a gate.
 
 ## Run log
 
 The run log is the append-only file `events.jsonl` under `.agentbay/`, and `bay status` folds it into calls,
 steps, runs and cost. A subagent
-records its plan with `bay plan`, the only `bay` command it may run. `bay status` lists unfinished work with no event for 24 hours under `STALE?`; it closes nothing. With no hook events it says the
+records its plan with `bay plan`, the only `bay` command it may run. With no hook events it says the
 hooks are not loaded; start Claude Code inside the project. `bay note dispatch` then refuses unless given `--unguarded "<reason>"`, which the ledger keeps and `bay status` lists.
 [INTERFACES.md section 9](INTERFACES.md#9-ledgerevent) lists the event types.
 
@@ -132,8 +130,7 @@ the guard, so a role that may run tests has no hard write limit. Around it stand
   its `W-...` run id). If the file changes after the gate passed, the next submit returns the call to the gate. The
   result submitted with the unseen edit is kept; once re-approved the call resumes after it (reject discards). `bay
   show` says who approved.
-- **Secrets and logins.** `bay secret set` needs an interactive stdin whatever `from` says. `bay auth` needs the
-  browser on the machine running bay, not a terminal.
+- **Secrets and logins.** `bay secret set` needs an interactive stdin whatever `from` says.
 - **Plan approval.** `approve.plans` lists role steps (`<mode>.<endpoint>` or `<mode>.<endpoint>.<step>`). Each
   runs a planner first (env `plan-writer`: it writes only under `docs/plans/` and runs only `bay plan`), then a gate on that file (`docs/plans/<callId>-<step>.md`), then the step as a fresh agent given the plan. A
   step with `when:` cannot be listed by name (the endpoint form skips it), and an unmatched entry fails
@@ -150,11 +147,10 @@ guard keeps agents out of these paths, and `bay check --base` rejects a change t
 
 **`forge.extend`** changes the framework and runs its tests. It is installed only when the project is the agentbay
 checkout. Its steps are: draft a proposal (unless one is named), a `plan` step, the approval gate, implement,
-`deadcode`, `limits`, review and release.
+`deadcode`, `limits`, `standards`, review, release and `release-standards`.
 
-- **Plan.** The `plan` step runs the `lead` role as a deep subagent and writes `docs/plans/<id>.md`, named like the
-  proposal, when the proposal is large or touches a
-  security-sensitive path. It is skipped when the plan file exists.
+- **Plan.** The `plan` step runs the `lead` role as a deep subagent and writes `docs/plans/<id>.md` when the
+  proposal is large or touches a security-sensitive path.
 - **Gate.** The gate always runs. It approves the proposal and, when a plan exists, the plan too; a chat `--sha` is
   then both prefixes joined by `+`, proposal first.
 - **Dead code.** The `deadcode` step (`improve.detect/v1.change`) blocks the call when the change adds unused code,
@@ -164,6 +160,10 @@ checkout. Its steps are: draft a proposal (unless one is named), a `plan` step, 
   `framework/limits.yaml` may exceed its ceiling, or the base branch's if higher. Code and test counts cover framework code only: `adapters/` and the `kernel.yaml` protected paths. A raise needs an `exceptions:` entry in the proposal's front
   matter, approved with it; a count up to it passes without editing `limits.yaml`. At release,
   `bay check --limits --write` records the count as the new ceiling, so ceilings only fall.
+- **Standards.** The `standards` step runs every bound checker on the commit the call started from (`$call.base`)
+  and on the working tree, and the dispatcher blocks the call on a finding the base lacks. Configs come from the base.
+  Kit code has no `#` comment and only one-line docstrings; a project may set the
+  comment rule off. A feature whose writing role can write checked files needs the step, and lint requires it.
 
 The boundary checks keep the framework's parts independent. Code cites these ids, and `bay check` runs them.
 

@@ -1,5 +1,4 @@
-"""agentbay.config.yaml: no committed example (`bay build` writes a minimal one, `bay config` prints every setting
-from the schemas), the offline switch lives in the env, and a setting can lower a cap but never raise the env's limit."""
+"""agentbay.config.yaml: no committed example; a setting can lower a cap but never raise the env's limit."""
 import subprocess
 import sys
 
@@ -14,7 +13,7 @@ def test_config_prints_every_setting_from_the_schemas():
     text = config.describe(model.Kit(KIT, None))
     assert "offline: boolean (default false)" in text and "agent: string" in text and "secrets: object" in text
     assert "modes.feed-briefing:\n  lookback: string (default \"3d\")" in text and "  spendUsd: number" in text
-    assert "modes.mail-briefing:" in text and "  important: array" in text and "modes.briefing:" not in text  # abstract
+    assert "modes.mail-briefing:" in text and "  important: array" in text and "modes.briefing:" not in text
     assert "connectors.x-api:\n  userId: string" in text and "connectors.fake:" in text
     assert "envs:" not in text
     r = subprocess.run([sys.executable, "-m", "bay.cli", "config"], cwd=KIT, text=True, capture_output=True)
@@ -42,12 +41,12 @@ def test_build_writes_a_minimal_config_and_keeps_an_existing_one():
 def test_caps_take_the_strictest_and_refuse_a_setting_above_the_env_limit():
     limits = {"spendUsd": 5, "monthlyItems": 3000, "maxItemsPerRun": 500}
     settings = {"spendUsd": 1, "maxItemsPerRun": 200}
-    merged = config.effective_constraints({"maxItemsPerRun": 300, "spendUsd": 5}, settings)   # the mode's constraints
+    merged = config.effective_constraints({"maxItemsPerRun": 300, "spendUsd": 5}, settings)
     got = config.caps(merged, limits, settings)
     assert (got["spendUsd"], got["maxItemsPerRun"], got["monthlyItems"]) == (1, 200, 3000)
-    assert config.caps({}, {}, {"spendUsd": 99})["costPerItemUsd"] == config.COST_PER_ITEM_USD   # no env limit: no ceiling
+    assert config.caps({}, {}, {"spendUsd": 99})["costPerItemUsd"] == config.COST_PER_ITEM_USD
     from helpers import gaps
-    gs = gaps(KIT, project({"modes": {"feed-briefing": {"lookback": "90d"}}}))                  # the mode's own limit
+    gs = gaps(KIT, project({"modes": {"feed-briefing": {"lookback": "90d"}}}))
     assert any("lookback 90d exceeds mode lookbackMax 30d" in g for g in gs), gs
     try:
         config.caps({}, limits, {"spendUsd": 6})

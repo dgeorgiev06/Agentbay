@@ -1,7 +1,4 @@
-"""Adversarial tests for items.store/v2.sql (bay/sqlsandbox.py): nothing an agent sends can write, read
-internal tables, run away, load code or leak a secret stored in an item; every refusal says what to change.
-Scope is structural (the store holds only the mode's scope), so every full-text and count form that once
-leaked out-of-scope rows now finds nothing out of scope."""
+"""Adversarial tests for items.store/v2.sql (bay/sqlsandbox.py): nothing an agent sends can write, read or leak."""
 import json
 import sqlite3
 import subprocess
@@ -9,11 +6,9 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[5] / "tests"))
+from helpers import clock, project, system
 
-from helpers import clock, project, system  # noqa: E402
-
-from bay import connect, sqlsandbox  # noqa: E402
+from bay import connect, sqlsandbox
 
 SECRET_TEXT = ("rotate soon: sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345 and password=hunter2hunter2 "
                "token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c")
@@ -70,7 +65,7 @@ def test_approved_reads_work():
     out = st.sql("SELECT id, snippet FROM v_fts WHERE fts MATCH '\"proof of stake\"' ORDER BY rank")
     assert out["rows"] == [["fake:23", "[Proof of stake] research"]]
     out = st.sql("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 5) SELECT sum(i) FROM n")
-    assert out["rows"] == [[15]]                          # bounded recursion is fine
+    assert out["rows"] == [[15]]
 
 
 def test_writes_and_ddl_are_refused():
@@ -104,8 +99,7 @@ def test_attach_pragma_and_load_extension_are_refused():
 
 
 def plant_internal_table(p):
-    """A table the sandbox does not know, as an internal table would be (internal state lives in state.json,
-    outside corpus.db; this proves the authorizer is an allowlist, not a list of known names)."""
+    """A table the sandbox does not know, as an internal table would be: the authorizer is an allowlist."""
     con = sqlite3.connect(dbfile(p))
     try:
         con.execute("CREATE TABLE cursors (key TEXT, value TEXT)")
@@ -117,7 +111,7 @@ def plant_internal_table(p):
 
 def test_internal_state_is_not_in_the_store_and_unknown_tables_are_unreadable():
     p, st = setup()
-    assert (dbfile(p).parent / "state.json").exists()                  # cursors, budget, ... live here
+    assert (dbfile(p).parent / "state.json").exists()
     for t in ("state", "budget", "cursors", "coverage", "deleted"):
         for sql in (f"SELECT count(*) FROM {t}", f"SELECT (SELECT count(*) FROM main.{t}) FROM v_items LIMIT 1",
                     f"SELECT count(*) FROM v_items WHERE EXISTS (SELECT 1 FROM {t})"):
@@ -131,7 +125,6 @@ def test_internal_state_is_not_in_the_store_and_unknown_tables_are_unreadable():
                       ("SELECT count(*) FROM sqlite_temp_master", "sqlite_temp_master")):
         err = refused(st, sql, "not allowed")
         assert name.lower() in err.lower() and "describe" in err
-    # reads of no column (count(*), EXISTS) reach the authorizer without a database: same allowlist
     for t in ("items_fts_data", "items_fts_idx", "items_fts_config", "items_fts_docsize", "items_fts_content",
               "sqlite_master", "cursors"):
         refused(st, f"SELECT count(*) FROM {t}", "not allowed")
@@ -139,8 +132,8 @@ def test_internal_state_is_not_in_the_store_and_unknown_tables_are_unreadable():
         refused(st, f"SELECT count(*) FROM (SELECT 1 FROM {t})", "not allowed")
     refused(st, "WITH cursors AS (SELECT 1) SELECT count(*) FROM cursors", "WITH clause may not be named")
     assert st.sql("WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 4) "
-                  "SELECT count(*) FROM r")["rows"] == [[4]]                       # a CTE counted is fine
-    refused(st, "SELECT * FROM main.v_items", "no such table")      # views are temp, built by this code
+                  "SELECT count(*) FROM r")["rows"] == [[4]]
+    refused(st, "SELECT * FROM main.v_items", "no such table")
     for sql in ("WITH v_items AS (SELECT * FROM cursors) SELECT * FROM v_items",
                 "WITH items AS (SELECT 1) SELECT * FROM items",
                 "WITH items_fts AS (SELECT 1) SELECT * FROM items_fts",
@@ -149,8 +142,8 @@ def test_internal_state_is_not_in_the_store_and_unknown_tables_are_unreadable():
                 "WITH `v_items`\n--c\nAS (SELECT * FROM items) SELECT * FROM v_items"):
         refused(st, sql, "WITH clause may not be named")
     assert st.sql("WITH mine AS (SELECT id FROM v_items) SELECT count(*) FROM mine")["rows"] == [[3]]
-    assert st.sql("SELECT count(*) FROM v_items WHERE text != 'v_items AS (x'")["rows"] == [[3]]   # strings are data
-    assert st.sql("SELECT count(*) FROM items")["rows"] == [[3]]     # store tables hold only the scope
+    assert st.sql("SELECT count(*) FROM v_items WHERE text != 'v_items AS (x'")["rows"] == [[3]]
+    assert st.sql("SELECT count(*) FROM items")["rows"] == [[3]]
 
 
 def test_runaway_queries_hit_the_time_limit():
@@ -168,14 +161,13 @@ def test_runaway_queries_hit_the_time_limit():
             except sqlsandbox.SqlError as e:
                 assert "time limit" in str(e) and "LIMIT" in str(e)
             assert time.monotonic() - t0 < 3
-        # a value that doubles every step stops at the length cap (or the clock), never at memory exhaustion
         try:
             box.run("WITH RECURSIVE r(s) AS (SELECT 'x' UNION ALL SELECT s || s FROM r) SELECT length(s) FROM r "
                     "ORDER BY 1 DESC LIMIT 1")
             raise AssertionError("expected SqlError")
         except sqlsandbox.SqlError as e:
             assert "time limit" in str(e) or "exceeded" in str(e)
-        assert box.run("SELECT count(*) FROM v_items")["rows"] == [[3]]     # the connection is still usable
+        assert box.run("SELECT count(*) FROM v_items")["rows"] == [[3]]
     finally:
         box.close()
 
@@ -185,12 +177,12 @@ def test_row_and_byte_caps():
     p, st = setup(extra)
     out = st.sql("SELECT id FROM v_items", limit=10)
     assert out["rowCount"] == 10 and "row cap 10" in out["truncated"]
-    out = st.sql("SELECT id FROM v_items", limit=5000)                  # clamped to MAX_ROWS
+    out = st.sql("SELECT id FROM v_items", limit=5000)
     assert out["rowCount"] == 153 and out["truncated"] is None
     out = st.sql("SELECT text FROM v_items", limit=1000)
     assert "byte cap" in out["truncated"] and len(json.dumps(out["rows"])) <= sqlsandbox.MAX_BYTES
     out = st.sql("SELECT text || text FROM v_items WHERE author = 'bulk' LIMIT 1")
-    assert out["rows"][0][0].endswith("chars; use substr()]")        # long cells are cut, not dropped
+    assert out["rows"][0][0].endswith("chars; use substr()]")
 
 
 def test_planted_secrets_never_leave_any_read():
@@ -205,7 +197,7 @@ def test_planted_secrets_never_leave_any_read():
     for sql in ("SELECT hex(text) FROM v_items WHERE author = 'ops'", "SELECT replace(text, 'sk-', 's k-') FROM v_items",
                 "SELECT group_concat(substr(text, 1, 10), '|') FROM v_items"):
         assert "hunter2" not in json.dumps(st.sql(sql)) and "4142434445" not in json.dumps(st.sql(sql))
-    con = sqlite3.connect(dbfile(p))                      # scrubbed at ingest, so no transform can rebuild it
+    con = sqlite3.connect(dbfile(p))
     try:
         body = con.execute("SELECT body FROM items WHERE ext_id = '21'").fetchone()[0]
         fts = con.execute("SELECT count(*) FROM items_fts WHERE items_fts MATCH 'hunter2hunter2'").fetchone()[0]
@@ -222,7 +214,7 @@ def test_comment_and_quoting_tricks():
     refused(st, "/* SELECT */ DELETE FROM items", "not allowed")
     refused(st, "SELECT 1 --\n; DELETE FROM items", "exactly one SELECT")
     out = st.sql("SELECT count(*) FROM v_items WHERE text = ''';DROP TABLE items;--'")
-    assert out["rows"] == [[0]]                                       # a quoted string is just a string
+    assert out["rows"] == [[0]]
     out = st.sql("SELECT 'a; DELETE FROM items' AS s -- trailing comment")
     assert out["rows"] == [["a; DELETE FROM items"]]
     refused(st, "SELECT * FROM v_items WHERE id = 'x' UNION SELECT name, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 FROM sqlite_master",
@@ -244,12 +236,11 @@ def test_missing_store_is_explained():
     st = connect.instantiate(system(p), "local-feeds", "corpus-store", "items.store/v2", p,
                              settings={"selectors": [{"id": "home"}], "mode": "feed-briefing"}, clock=clock)
     assert "run the mode's sync endpoint first" in st.sql("SELECT 1")["error"]
-    assert not dbfile(p).exists()                                     # reads never create the store
+    assert not dbfile(p).exists()
 
 
 def plant_out_of_scope(p):
-    """Rows the reviewer's oracle found, written straight into the store (the FTS triggers index them): one
-    from a source not bound offline (x), one fake item no selector matches."""
+    """Rows the reviewer's oracle found, written straight into the store so the FTS triggers index them."""
     con = sqlite3.connect(dbfile(p))
     try:
         for src, xid, body in (("x", "900", "acquisition zebra from an unbound source"),
@@ -264,7 +255,7 @@ def plant_out_of_scope(p):
 
 
 ZEBRA = [{"id": "home", "in": "home", "not": {"text": "zebra"}}, {"id": "zebra", "text": "zebra"}]
-ORACLES = (   # every form that once counted or matched out-of-scope rows, with what it must return now
+ORACLES = (
     ("SELECT (SELECT count(*) FROM v_fts), (SELECT count(*) FROM main.items_fts('acquisition AND zebra*'))", [[3, 0]]),
     ("SELECT count(*) FROM items_fts('zebra')", [[0]]),
     ("SELECT * FROM items_fts('acquisition')", []),
@@ -289,14 +280,13 @@ ORACLES = (   # every form that once counted or matched out-of-scope rows, with 
 def test_out_of_scope_rows_are_gone_so_no_oracle_form_finds_them():
     extra = [{"id": "24", "handle": "lido", "text": "acquisition zebra talks", "ageHours": 2}]
     p, st = setup(extra, selectors=ZEBRA)
-    assert st.sql("SELECT count(*) FROM v_fts WHERE fts MATCH 'zebra'")["rows"] == [[1]]    # in scope via `zebra`
+    assert st.sql("SELECT count(*) FROM v_fts WHERE fts MATCH 'zebra'")["rows"] == [[1]]
     plant_out_of_scope(p)
-    # the `zebra` selector is removed; sync deletes its item and the planted rows from items and items_fts
     st = connect.instantiate(system(p), "local-feeds", "corpus-store", "items.store/v2", p,
                              settings={"lookbackMax": "30d", "selectors": ZEBRA[:1], "mode": "feed-briefing"},
                              clock=clock)
     out = st.sync(lookback="3d")
-    assert out["outOfScope"] == 3 and out["fetched"] == 0                   # the kept items were not refetched
+    assert out["outOfScope"] == 3 and out["fetched"] == 0
     for sql, want in ORACLES:
         res = st.sql(sql)
         assert res.get("error") is None and res["rows"] == want, (sql, res)
@@ -307,7 +297,7 @@ def test_out_of_scope_rows_are_gone_so_no_oracle_form_finds_them():
         refused(st, f"SELECT * FROM {t}", "not allowed")
     refused(st, "SELECT f.c0 FROM v_items v JOIN items_fts_content f ON f.id = v.rid", "not allowed")
     refused(st, "WITH v_fts AS (SELECT * FROM items_fts) SELECT * FROM v_fts", "WITH clause")
-    err = refused(st, "SELECT * FROM v_items AS items (SELECT 1)", "SQL error")     # no WITH: plain syntax error
+    err = refused(st, "SELECT * FROM v_items AS items (SELECT 1)", "SQL error")
     assert "WITH clause" not in err
 
 
@@ -324,7 +314,7 @@ def test_full_text_on_the_store_table_and_the_view_agree():
 def test_every_view_accepts_narrow_projections():
     p, st = setup()
     assert st.sql("SELECT id, url FROM v_posts WHERE text LIKE '%stake%'")["rows"] == \
-        [["fake:23", "https://example.com/vitalik/status/23"]]                    # an example query
+        [["fake:23", "https://example.com/vitalik/status/23"]]
     for sql, want in (("SELECT url FROM v_items WHERE author = 'lido'", [["https://example.com/lido/status/22"]]),
                       ("SELECT likes FROM v_posts WHERE id = 'fake:22'", [[None]]),
                       ("SELECT count(*) FROM v_posts", [[3]]),
@@ -350,7 +340,6 @@ def test_big_sort_fails_cleanly():
             assert "time limit" in str(e) or "MB of memory" in str(e)
     finally:
         box.close()
-    # the memory cap itself, in a child process (hard_heap_limit is process-wide and can only be lowered)
     code = (f"import sys; sys.path.insert(0, {str(Path(sqlsandbox.__file__).parents[1])!r})\n"
             "from bay import sqlsandbox as s\n"
             "s.HEAP_BYTES = 6 * 1024 * 1024\n"

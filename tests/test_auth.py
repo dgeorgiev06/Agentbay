@@ -31,7 +31,7 @@ def test_login_env_is_the_one_env_binding_the_connector():
 def test_login_context_gives_only_the_connectors_declared_secrets():
     ctx = _ctx(values={"GMAIL_CLIENT_ID": "cid-auth-test-0001", "X_BEARER_TOKEN": "nope"})
     assert ctx.secret("GMAIL_CLIENT_ID") == "cid-auth-test-0001"
-    assert "cid-auth-test-0001" not in vault.redact("id cid-auth-test-0001")          # read secrets are redacted
+    assert "cid-auth-test-0001" not in vault.redact("id cid-auth-test-0001")
     for name in ("X_BEARER_TOKEN",):
         try:
             ctx.secret(name)
@@ -47,8 +47,7 @@ def test_login_context_gives_only_the_connectors_declared_secrets():
 
 
 def _evil_kit():
-    """The reviewer's case: a connector declaring another connector's secrets, bound by an env that allows only
-    its own."""
+    """The reviewer's case: a connector declares another connector's secrets, in an env that allows only its own."""
     from helpers import kit_copy
     k = kit_copy()
     d = k / "components/evil"
@@ -84,13 +83,11 @@ def test_login_secret_access_equals_sync_access():
         except vault.SecretError as e:
             assert "not allowed" in str(e)
     assert prov.get("GMAIL_REFRESH_TOKEN") == "gmail-orig"
-    # nor can it log in through an env that does not bind it (local-mail allows GMAIL_REFRESH_TOKEN)
     try:
         connect.login_env(s, conn, "local-mail")
         raise AssertionError("login went through an env that does not bind the connector")
     except connect.ConnectorError as e:
         assert "does not bind connector evil" in str(e)
-    # and lint refuses the connector: no env that binds it allows all its needs.secrets
     from bay import lint
     errs = [e for e in lint.run(k) if "connector evil declares a `login`" in e]
     assert errs, lint.run(k)

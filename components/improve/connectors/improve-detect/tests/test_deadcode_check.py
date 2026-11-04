@@ -1,14 +1,14 @@
-"""The dead-code check (0008 item 1): improve.detect/v1.change audits the working tree and the tree at a base
-revision and returns only the unused / unused-constant / compat-layer / complexity findings that are new; forge.extend
-runs it as the `deadcode` step between implement and review."""
+"""The dead-code check: improve.detect/v1.change returns only the findings new against the base revision."""
 import subprocess
 import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
 
-from helpers import KIT, cleanup, clock, connector_pkg, kit_copy, project, system, tmpdir
+from types import SimpleNamespace
 
-from bay import dispatch, graph
+from helpers import KIT, cleanup, clock, connector_pkg, edit_yaml, kit_copy, project, system, tmpdir
+
+from bay import dispatch, graph, standards
 
 pipeline = connector_pkg("improve-detect", "pipeline")
 detect_artifacts = pipeline.detect_artifacts
@@ -77,7 +77,7 @@ def test_an_unused_function_and_a_compat_alias_are_two_new_findings():
         out = change(repo)
         found = sorted((c["kind"], c["detector"]["key"]) for c in out["new"])
         assert found == [("compat-layer", "pkg/main.py"), ("unused", "fn:pkg/core.py:brand_new_helper")], found
-        assert out["existing"] == 1                                     # old_dead was already there
+        assert out["existing"] == 1
         assert "2 new dead-code finding(s)" in out["stopped"]
     finally:
         cleanup(repo)
@@ -88,7 +88,6 @@ def test_a_finding_that_existed_at_base_does_not_count():
     try:
         out = change(repo)
         assert out["new"] == [] and out["existing"] == 1 and "stopped" not in out
-        # a different change that leaves old_dead alone still reports nothing
         write(repo, {"pkg/main.py": BASE["pkg/main.py"] + "\ndef extra():\n    return used()\n\nextra()\n"})
         assert change(repo)["new"] == []
     finally:
@@ -139,7 +138,7 @@ def test_an_unused_concept_that_existed_at_base_is_not_new_when_the_project_is_t
         pl = Pipeline({"artifact-graph": FakeGraph(k, k)}, k, k, {}, datetime(2026, 10, 30, tzinfo=timezone.utc))
         now = detect_artifacts.run(pl.artifacts("project"), {}, only="unused")
         keys = [c["detector"]["key"] for c in now]
-        assert any(x.startswith("interface:orphan.thing") for x in keys), keys    # the concept is reported as unused
+        assert any(x.startswith("interface:orphan.thing") for x in keys), keys
         out = pl.change("HEAD")
         assert out["new"] == [] and out["existing"] >= 1 and "stopped" not in out, out["new"]
     finally:
@@ -150,9 +149,9 @@ def test_the_base_is_the_merge_base_not_the_moved_ref():
     repo = repo_at_base()
     try:
         git(repo, "branch", "feature")
-        write(repo, {"pkg/core.py": "def used():\n    return 1\n"})          # main removes old_dead
+        write(repo, {"pkg/core.py": "def used():\n    return 1\n"})
         git(repo, "commit", "-q", "-am", "main removes dead code")
-        git(repo, "checkout", "-q", "feature")                                 # the feature still has it
+        git(repo, "checkout", "-q", "feature")
         out = change(repo, "main")
         assert out["new"] == [] and out["existing"] == 1, out
         assert any("merge-base" in w for w in out["warnings"]), out["warnings"]
@@ -182,7 +181,7 @@ def test_a_second_finding_with_the_same_fingerprint_is_new():
     def fake(a, cfg=None, only=None, **kw):
         if only != "unused":
             return []
-        calls.append(cfg["thresholds"]["maxFindingsPerDetector"])            # compared before any cap
+        calls.append(cfg["thresholds"]["maxFindingsPerDetector"])
         return [c] if a.root != repo else [c, dict(c)]
     try:
         pipeline.detect_artifacts.run = fake
@@ -244,17 +243,117 @@ def test_a_new_finding_blocks_the_extend_call_before_review():
         cleanup(k)
 
 
-def test_forge_extend_runs_deadcode_between_implement_and_review():
+STUB_CHECKER = ("apiVersion: agentbay/v4\nkind: Connector\nmetadata:\n  name: {name}\n  description: A stub checker.\n"
+                "spec:\n  implements: standards.check/v1\n  entry: stub.py\n")
+
+
+def bind_stub_checkers(k: Path, names: list[str]) -> None:
+    for name in names:
+        folder = k / "components" / "forge" / "connectors" / name
+        folder.mkdir(parents=True)
+        (folder / "connector.yaml").write_text(STUB_CHECKER.format(name=name))
+        (folder / "stub.py").write_text("def create(ctx):\n    return None\n")
+    edit_yaml(k / "components" / "forge" / "envs" / "local-authoring.yaml",
+              lambda doc: doc["spec"]["bind"].update({"standards.check/v1": names}))
+
+
+def test_forge_extend_runs_deadcode_and_several_standards_checkers_between_implement_and_review():
     p = project()
     try:
         feat = system(p).modes["forge"].features["extend"]
         ids = [s.id for s in feat.steps]
         assert ids.index("implement") + 1 == ids.index("deadcode") and ids.index("deadcode") + 1 == ids.index("limits")
-        assert ids.index("limits") + 1 == ids.index("review")
+        assert ids[ids.index("limits"):] == ["limits", "standards", "review", "release", "release-standards"]
         assert feat.steps[ids.index("deadcode")].run == "improve.detect/v1.change"
         assert feat.steps[ids.index("limits")].run == "improve.detect/v1.limits"
         assert feat.steps[ids.index("limits")].with_["proposal"] == "$in.proposal|$steps.propose.artifacts"
     finally:
         cleanup(p)
+    repo = k = kit_copy()
+    calls, seen = [], []
+    try:
+        git(repo, "init", "-q", "-b", "main")
+        write(repo, {"base.py": "a = 1\n"})
+        git(repo, "add", "base.py")
+        git(repo, "commit", "-q", "-m", "base")
+        bind_stub_checkers(k, ["stub-a", "stub-b"])
+        d = dispatch.Dispatcher(system(k, k), k, clock=clock)
+        steps = system(k, k).modes["forge"].features["extend"].steps
+        assert steps[ids.index("standards")].connectors == ["stub-a", "stub-b"]
+        assert steps[ids.index("release-standards")].connectors == ["stub-a", "stub-b"]
+        real = d._invoke
+
+        def fake(env, conn, iface, ep, args, **kw):
+            if iface.startswith("forge."):
+                return real(env, conn, iface, ep, args, **kw)
+            if iface != "standards.check/v1":
+                return {"new": [], "existing": 0} if ep == "change" else {"problems": [], "notes": []}
+            root = Path(args["root"])
+            calls.append((conn, args["root"], args["configRoot"]))
+            seen.append((root / ".agentbay").exists())
+            row = {"file": "new.py", "line": 1, "rule": "X1", "message": "m"}
+            return {"findings": [row] if conn == "stub-a" and (root / "new.py").exists() else []}
+        d._invoke = fake
+        ok = {"status": "done", "summary": "s"}
+        first = d.call("forge.extend", {"goal": "x change"})["callId"]
+        start = git(repo, "rev-parse", "HEAD").strip()
+        assert d._load(first)["base"] == start
+        write(repo, {"new.py": "x = 1\n", "later.py": "y = 2\n"})
+        git(repo, "add", "later.py")
+        git(repo, "commit", "-q", "-m", "later")
+        r = d.approve(d.submit(first, "propose", ok)["callId"], True)
+        r = d.submit(r["callId"], "implement", ok)
+        assert r["status"] == "blocked" and "new.py:1 X1" in r["reason"] and "next" not in r, r
+        assert [(c, root == config) for c, root, config in calls] == [
+            ("stub-a", True), ("stub-a", False), ("stub-b", True), ("stub-b", False)]
+        assert len({config for _, _, config in calls}) == 1 and not any(seen)
+        assert not any(Path(root).exists() for _, root, _ in calls)
+        again = d.call("forge.extend", {"goal": "x change", "replaces": first})["callId"]
+        assert d._load(again)["base"] == start and d._load(first)["status"] == "blocked"
+        assert git(repo, "rev-parse", "HEAD").strip() != start
+        assert d._standards(None, None, {"callId": "C-1"}, {}, {})["stopped"].startswith("no base commit")
+        replaced = {"callId": "C-2", "input": {"replaces": "C-1"}}
+        assert "the call that call C-2 replaces had none" in d._standards(None, None, replaced, {}, {})["stopped"]
+    finally:
+        cleanup(repo)
+        cleanup(k)
+    standards_comparison_probe_and_stopped_checkers()
+
+
+def standards_comparison_probe_and_stopped_checkers():
+    rows = [{"file": "a.py", "rule": "r", "message": "m"}, {"file": "a.py", "rule": "r", "message": "m"}]
+    assert standards.compare(rows, [{**rows[0], "file": "b.py"}], {"a.py": "b.py"}) == ([], 1)
+    assert standards.compare(rows[:1], [rows[0]] * 2, {}) == ([rows[0]], 1)
+    answer = {"code": SimpleNamespace(returncode=0, stdout="tool 1.0\n", stderr=""),
+              "old": SimpleNamespace(returncode=0, stdout="tool 0.9\n", stderr=""),
+              "none": SimpleNamespace(returncode=1, stdout="", stderr="No module named tool")}
+    ran = []
+
+    def run(cmd, **kw):
+        ran.append((cmd, kw))
+        return answer[cmd[-2]]
+    tool = [{"module": "old", "version": "1.0"}, {"module": "code", "version": "1.0"}]
+    problems, warnings = standards.probe([standards.Checker("c", tool)], Path("."), run)
+    assert problems == [] and warnings == ["old is tool 0.9, the pin is 1.0"]
+    tool = [{"module": "none", "version": "1.0"}]
+    problems, _ = standards.probe([standards.Checker("c", tool, "pip install tool")], Path("."), run)
+    assert problems == ["c: none is not installed; pip install tool"]
+    assert all(cmd[1:3] == ["-I", "-m"] and kw["timeout"] and not kw.get("shell") for cmd, kw in ran)
+    repo = repo_at_base()
+    try:
+        out = standards.check(repo, "HEAD", [standards.Checker("c")], lambda name, args: {
+            "findings": [], "stopped": "timed out", "warnings": ["w"]})
+        assert out["stopped"] == "c on the base: timed out; c on the tree: timed out" and out["warnings"] == ["w", "w"]
+        try:
+            standards.check(repo, "--output=x", [], None)
+        except ValueError as e:
+            assert "git revision" in str(e)
+        else:
+            raise AssertionError("a base that looks like an option was accepted")
+        (repo / "link.py").symlink_to("pkg/core.py")
+        out = standards.check(repo, "HEAD", [standards.Checker("c")], lambda name, args: {"findings": []})
+        assert out["warnings"] == ["1 symlink(s) or special file(s) not copied to the working-tree check"]
+    finally:
+        cleanup(repo)
 
 

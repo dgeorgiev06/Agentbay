@@ -1,0 +1,7 @@
+apiVersion: agentbay/v4
+kind: Component
+metadata:
+  name: comments
+  description: "The comment rule: no # comments and one-line docstrings in the kit, checked for every language."
+spec:
+  version: 1

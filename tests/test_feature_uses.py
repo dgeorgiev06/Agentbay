@@ -1,6 +1,4 @@
-"""Part E of proposal 0006 (0008 slice 5): a feature's `uses:` and `skills:`, a child's whole-feature override and
-`bay show <mode> --resolved`. The role-level grant with no open call is unchanged (decision (c)); the unchanged
-security tests (test_boundaries, test_dispatch) cover that path."""
+"""A feature's `uses:` and `skills:`, a child's whole-feature override and `bay show <mode> --resolved`."""
 import json
 import subprocess
 import sys
@@ -39,19 +37,19 @@ def test_a_role_step_reaches_only_its_features_uses_while_its_call_is_open():
     p = project()
     d = D(p)
     assert d.call("feed-briefing.sync", {})["status"] == "done"
-    d.use(ANALYST, "items.store/v2.status", {})                      # no open call: the role-level grant
+    d.use(ANALYST, "items.store/v2.status", {})
     r = d.call("feed-briefing.digest", {"since": "3d"})
     assert r["status"] == "needs-agent" and r["next"]["role"] == "analyst"
-    assert d.use(ANALYST, "items.store/v2.sql", {"sql": "SELECT count(*) FROM v_items"})["rows"] == [[7]]   # in uses
+    assert d.use(ANALYST, "items.store/v2.sql", {"sql": "SELECT count(*) FROM v_items"})["rows"] == [[7]]
     refused(lambda: d.use(ANALYST, "items.store/v2.status", {}), "not granted items.store/v2.status by the feature",
-            "items.store/v2.sql")                                                      # granted to the role, not to digest
+            "items.store/v2.sql")
     refused(lambda: d.use(ANALYST, "items.store/v2.facets", {}), "by the feature")
-    d.use(REVIEWER, "items.store/v2.status", {})                     # another unit, no step of its own waiting
+    d.use(REVIEWER, "items.store/v2.status", {})
     ask = d.call("feed-briefing.ask", {"question": "what is new?"})
-    assert ask["status"] == "needs-agent"                            # two open calls for one unit: only what both declare
-    d.use(ANALYST, "items.store/v2.sql", {"sql": "SELECT 1"})                        # in both
-    refused(lambda: d.use(ANALYST, "items.store/v2.status", {}), "by the feature")   # ask declares it, digest does not
-    refused(lambda: d.use(ANALYST, "items.store/v2.facets", {}), "by the feature")   # ask declares it, digest does not
+    assert ask["status"] == "needs-agent"
+    d.use(ANALYST, "items.store/v2.sql", {"sql": "SELECT 1"})
+    refused(lambda: d.use(ANALYST, "items.store/v2.status", {}), "by the feature")
+    refused(lambda: d.use(ANALYST, "items.store/v2.facets", {}), "by the feature")
 
 
 def test_two_open_calls_of_different_features_share_only_what_both_declare():
@@ -59,14 +57,14 @@ def test_two_open_calls_of_different_features_share_only_what_both_declare():
     d = D(p)
     assert d.call("feed-briefing.sync", {})["status"] == "done"
     assert d.call("feed-briefing.ask", {"question": "what is new?"})["status"] == "needs-agent"
-    d.use(ANALYST, "items.store/v2.status", {})                      # ask alone declares status
+    d.use(ANALYST, "items.store/v2.status", {})
     assert d.call("feed-briefing.digest", {"since": "3d"})["status"] == "needs-agent"
     refused(lambda: d.use(ANALYST, "items.store/v2.status", {}), "not granted items.store/v2.status by the feature")
-    refused(lambda: d.use(ANALYST, "items.store/v2.search", {}), "by the feature")   # ask only
+    refused(lambda: d.use(ANALYST, "items.store/v2.search", {}), "by the feature")
     digest = next(c for c in d._open_calls(d.sys.units()[ANALYST]) if c[1] == "feed-briefing.digest")[0]
     refused(lambda: d.use(ANALYST, "items.store/v2.status", {}), f"{digest} (feed-briefing.digest)",
             "Finish those calls first", "bay show <callId>",
-            "Allowed now: items.store/v2.")                                                # names the blocking call and the fix
+            "Allowed now: items.store/v2.")
     assert d.use(ANALYST, "items.store/v2.sql", {"sql": "SELECT count(*) FROM v_items"})["rows"] == [[7]]
 
 
@@ -88,8 +86,8 @@ def test_a_childs_feature_replaces_its_parents_whole_and_the_rest_is_inherited()
         "b": {"effects": ["read"], "playbook": "features/b/playbook.md", "steps": [{"id": "y", "run": "items.store/v2.sync"}]}}}
     child = {"features": {"a": {"effects": ["write"], "steps": [{"id": "z", "run": "items.store/v2.prune"}]}}}
     out = model.merge_mode(parent, child, Path("/m/parent"), Path("/m/child"))
-    assert out["features"]["a"] == {**child["features"]["a"], "playbook": "../parent/features/a/playbook.md"}   # no uses, skills or review left over; only the playbook (and rules) fall back, rebased
-    assert out["features"]["b"]["playbook"] == "../parent/features/b/playbook.md"        # inherited, rebased
+    assert out["features"]["a"] == {**child["features"]["a"], "playbook": "../parent/features/a/playbook.md"}
+    assert out["features"]["b"]["playbook"] == "../parent/features/b/playbook.md"
 
 
 def test_show_resolved_names_the_file_each_feature_comes_from():

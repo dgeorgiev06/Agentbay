@@ -1,17 +1,4 @@
-"""Claude Code session transcripts -> redacted session.episode/v1 (read-only).
-
-The on-disk format is NOT a stable API (docs/research/claude-code-transcripts.md), so:
-  * stream line by line; any line that fails to parse or to fold (bad JSON, too deep, too long, an unexpected
-    shape) is counted as a bad line and skipped - one record never fails a scan, and no line is ever echoed
-  * dispatch on top-level `type` against an allowlist; unknown types are counted (by name only if the name
-    looks like a record type, else as "other")
-  * read only the fields needed, with defaults; never validate against a closed schema
-  * structure and metadata only, always: counts, tool names, input hashes, durations, error flags, tokens,
-    model. No free text is kept, ever. Text is read in memory only to classify it (interrupt, status question,
-    environment gap) and then dropped.
-  * symlinks are never followed: symlinked files and folders are skipped and every path must stay under the root
-  * no cache: files whose mtime is older than the window start are skipped without being opened
-"""
+"""Claude Code session transcripts -> redacted session.episode/v1 (read-only)."""
 from __future__ import annotations
 
 import json
@@ -29,13 +16,11 @@ KNOWN = {"user", "assistant", "attachment", "system", "queue-operation", "last-p
 TYPE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,40}$")
 INTERRUPT = re.compile(r"^\s*\[request interrupted by user", re.I)
 COMPACTED = "this session is being continued from a previous conversation that ran out of context"
-# a short user turn that only asks where things stand
 STATUS_Q = re.compile(r"^\s*(status|progress|update|eta)\??\s*$|^\s*(any )?(status|progress|update)s?\b.{0,30}\?\s*$|"
                       r"^\s*(how('?s| is) it going|where are (we|you)( at)?|are you (done|finished|still working)|"
                       r"(is it|are you) done( yet)?|what'?s the status|how far along|still (working|there))\b.{0,30}\??\s*$",
                       re.I)
 STATUS_MAX_CHARS = 80
-# tool errors that point at the environment, not the task
 ENV_GAPS = [
     ("command-not-found", re.compile(r"command not found|: not found\b|No such file or directory: '?[\w./-]+'? *\(?(exec|spawn)|"
                                      r"is not recognized as an internal or external command", re.I)),
@@ -49,7 +34,7 @@ ENV_GAPS = [
 SAFE_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,63}$")
 SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,80}$")
 SUBAGENT_TOOLS = ("Agent", "Task")
-MAX_LINE_BYTES = 4_000_000          # longer lines are skipped and counted (huge pastes, corruption)
+MAX_LINE_BYTES = 4_000_000
 
 
 def _name(v, default: str = "?") -> str:
@@ -108,10 +93,10 @@ class _Acc:
     version: str | None = None
     entrypoint: str | None = None
     models: dict = field(default_factory=dict)
-    usage: dict = field(default_factory=dict)          # message.id -> last usage
-    calls: dict = field(default_factory=dict)          # tool_use id -> call
+    usage: dict = field(default_factory=dict)
+    calls: dict = field(default_factory=dict)
     order: list = field(default_factory=list)
-    subagents: dict = field(default_factory=dict)      # tool_use id -> {type, finished}
+    subagents: dict = field(default_factory=dict)
     turns: int = 0
     interrupts: int = 0
     status_questions: int = 0
@@ -209,7 +194,7 @@ def _record_assistant(acc: _Acc, rec: dict) -> None:
         m = _name(msg["model"])
         acc.models[m] = acc.models.get(m, 0) + 1
     if isinstance(msg.get("usage"), dict):
-        acc.usage[mid] = msg["usage"]                 # one response is split across records: last usage wins
+        acc.usage[mid] = msg["usage"]
     content = msg.get("content")
     for b in content if isinstance(content, list) else []:
         if isinstance(b, dict) and b.get("type") == "tool_use" and isinstance(b.get("id"), str):
@@ -224,7 +209,7 @@ def _record_assistant(acc: _Acc, rec: dict) -> None:
 
 
 def _record_queue(acc: _Acc, rec: dict) -> None:
-    if rec.get("operation") == "enqueue":           # the user typed while the agent was working
+    if rec.get("operation") == "enqueue":
         acc.queued += 1
 
 
@@ -242,7 +227,7 @@ def _record_system(acc: _Acc, rec: dict) -> None:
 
 
 def _record_cost(acc: _Acc, rec: dict) -> None:
-    acc.cost = rec                                     # running snapshot: the last one wins
+    acc.cost = rec
 
 
 _RECORDS = {"user": _record_user, "assistant": _record_assistant, "queue-operation": _record_queue,
@@ -318,7 +303,7 @@ def parse_stream(lines) -> _Acc:
         try:
             rec = json.loads(raw)
         except (ValueError, RecursionError, MemoryError):
-            acc.bad_lines += 1                 # half-written last line of a live session, too deep, corrupt
+            acc.bad_lines += 1
             continue
         if not isinstance(rec, dict):
             acc.bad_lines += 1
@@ -332,7 +317,7 @@ def parse_stream(lines) -> _Acc:
         try:
             _record(acc, rec)
             acc.records += 1
-        except Exception:                      # a known type with a shape we did not expect: count it, keep going
+        except Exception:
             acc.bad_lines += 1
     return acc
 
@@ -344,9 +329,9 @@ def _lines(path: Path):
             if not raw:
                 return
             if len(raw) > MAX_LINE_BYTES and not raw.endswith(b"\n"):
-                while raw and not raw.endswith(b"\n"):     # drain the rest of the oversized line
+                while raw and not raw.endswith(b"\n"):
                     raw = f.readline(MAX_LINE_BYTES + 1)
-                yield b"x" * (MAX_LINE_BYTES + 1)          # counted as oversized, content never kept
+                yield b"x" * (MAX_LINE_BYTES + 1)
                 continue
             yield raw
 
@@ -373,8 +358,7 @@ def safe_file(path: Path, root: Path) -> bool:
 
 
 def parse_session(path: Path, root: Path, project: Path | None = None) -> tuple[list[dict], dict]:
-    """One session file (+ its subagents) -> (episodes, stats). Episodes are empty when `project` is given
-    and the session's cwd is outside it."""
+    """One session file and its subagents -> (episodes, stats); no episodes when the cwd is outside `project`."""
     sid = _id(path.stem)
     acc = parse_stream(_lines(path))
     stats = {"badLines": acc.bad_lines, "unknownRecordTypes": dict(acc.unknown), "spillFiles": 0, "spillBytes": 0,
@@ -413,7 +397,7 @@ def parse_session(path: Path, root: Path, project: Path | None = None) -> tuple[
                     ep["agentType"] = ep.get("agentType") or s["type"]
             eps.append(ep)
     tr = sdir / "tool-results"
-    if tr.is_dir() and not tr.is_symlink() and not sdir.is_symlink():   # spilled outputs: count and size only
+    if tr.is_dir() and not tr.is_symlink() and not sdir.is_symlink():
         for f in tr.glob("*.txt"):
             if safe_file(f, root):
                 stats["spillFiles"] += 1
@@ -436,8 +420,7 @@ class TranscriptSource:
         self.root, self.project = Path(root), project
 
     def sessions(self) -> tuple[list[Path], int]:
-        """Session files under <root>/<project-folder>/, or directly under <root> when root is itself one project's
-        folder (~/.claude/projects/-home-claude); symlinks are skipped and counted."""
+        """Session files under <root>/<project-folder>/, or directly under <root> when it is one project's folder."""
         if not self.root.is_dir() or self.root.is_symlink():
             return [], 0
         out, skipped = [], 0
@@ -472,10 +455,10 @@ class TranscriptSource:
                 if sub.is_dir() and not sub.is_symlink():
                     newest = max([newest] + [f.stat().st_mtime for f in sub.glob("agent-*.jsonl") if not f.is_symlink()])
                 if cutoff is not None and newest < cutoff:
-                    stats["skippedOld"] += 1          # mtime prefilter: nothing in it can be in the window
+                    stats["skippedOld"] += 1
                     continue
                 eps, st = parse_session(path, self.root, self.project)
-            except Exception as e:                 # any failure is one file's problem, never the scan's
+            except Exception as e:
                 stats["errors"].append({"file": f"{_id(path.stem)}.jsonl", "error": type(e).__name__})
                 continue
             if st.get("otherProject"):

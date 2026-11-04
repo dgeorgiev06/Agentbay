@@ -1,6 +1,7 @@
 """Shared test helpers: temp kit copies, fake HTTP, fixed clock, in-memory secrets."""
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
@@ -11,20 +12,15 @@ from pathlib import Path
 
 import yaml
 
+from bay import model, vault
+from bay.connect import Response
+
 KIT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(KIT))
-
-from bay import model, vault  # noqa: E402
-from bay.connect import Response  # noqa: E402
-
 NOW = datetime(2026, 10, 27, 12, 0, 0, tzinfo=timezone.utc)
 
 
 def _install_plan_recorder() -> None:
-    """A role step's result is accepted only when its run recorded an outcome (`bay plan`). Tests that play the
-    agent get that for free: when a submit is refused for the missing outcome, the coordinator's dispatch and the
-    agent's plan are recorded and the submit is retried. `dispatch.Dispatcher.submit_strict` is the real one
-    (tests of the refusal use it)."""
+    """Record the plan a role step needs when a test plays the agent, then retry the refused submit."""
     from bay import dispatch, ledger, protocol
     if hasattr(dispatch.Dispatcher, "submit_strict"):
         return
@@ -54,7 +50,6 @@ def clock():
     return NOW
 
 
-# one root per test run, removed at exit; on the kit's filesystem when /tmp is another one, so kit copies can hard-link
 _TMP = tempfile.TemporaryDirectory(prefix="agentbay-test-",
                                    dir=None if os.stat(tempfile.gettempdir()).st_dev == os.stat(KIT).st_dev else KIT.parent)
 
@@ -69,8 +64,7 @@ def cleanup(p: Path) -> None:
 
 
 def _link_or_copy(src, dst) -> None:
-    """Files in the kit's folders are hard links (a build or a test writes the top-level and dot files, so those are
-    copies); KitPath and the edit helpers break the link before a write (below), so the kit is never changed."""
+    """Hard-link a file of a kit copy; top-level and dot files are copied because builds and tests write them."""
     if os.sep in os.path.relpath(src, KIT) and not os.path.relpath(src, KIT).startswith("."):
         try:
             return os.link(src, dst)
@@ -88,8 +82,7 @@ def unshare(path) -> None:
 
 
 class KitPath(type(Path())):
-    """A path inside a kit copy: a write (write_text, write_bytes, open for writing) first breaks the hard link, so the
-    real kit is never changed. Only paths made from kit_copy() are KitPaths; nothing global is patched."""
+    """A path inside a kit copy: a write first breaks the hard link, so the real kit is never changed."""
 
     def write_text(self, *a, **kw):
         unshare(self)
@@ -106,7 +99,7 @@ class KitPath(type(Path())):
 
 
 def kit_copy() -> Path:
-    """A full copy of the kit to mutate: hard links, so only the files a test writes are copies. The owner's config is left out."""
+    """A full copy of the kit to mutate: hard links, so only the files a test writes are copies; no owner config."""
     d = tmpdir() / "kit"
     shutil.copytree(KIT, d, copy_function=_link_or_copy,
                     ignore=shutil.ignore_patterns(".git", "__pycache__", ".agentbay", "agentbay.config.yaml"))
@@ -121,8 +114,7 @@ def edit_yaml(path: Path, fn) -> None:
 
 
 def whole_feature(kit: Path, name: str, **over) -> dict:
-    """feed-briefing's feature `name` as a mode that sets it must write it to change it: the whole block (a child's
-    feature replaces its parent's, never merges key by key), with `over` set."""
+    """feed-briefing's feature `name` as a mode that sets it must write it: the whole block, with `over` set."""
     block = yaml.safe_load((kit / "components/feed-briefing/mode.yaml").read_text())["spec"]["features"][name]
     return {**block, **over}
 
@@ -157,16 +149,35 @@ def project(config: dict | None = None, source: str = "fake") -> Path:
     return p
 
 
+def load_module(path: Path):
+    """Import a module from its file path, without changing sys.path."""
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def connector_pkg(name: str, module: str | None = None):
-    """A shipped connector's package (its folder, loaded as the runtime loads it); `module` names a sibling of the
-    entry, for instance connector_pkg("improve-detect", "pipeline")."""
+    """A shipped connector's package, loaded as the runtime loads it; `module` names a sibling of the entry."""
     import importlib
     from bay import connect
     c = model.Kit(KIT).get("Connector", name)
     pkg = sys.modules.get(f"agentbay_connector_{name.replace('-', '_')}")
-    if pkg is None or list(getattr(pkg, "__path__", [])) != [str(c.dir)]:     # one load per folder: siblings stay one set
+    if pkg is None or list(getattr(pkg, "__path__", [])) != [str(c.dir)]:
         pkg = connect._load_module(c)
     return importlib.import_module(f"{pkg.__name__}.{module}") if module else pkg
+
+
+def no_code_checks(d) -> None:
+    """The checkout copy is not a git repo, so the `deadcode` and `standards` steps report no new finding here."""
+    real = d._invoke
+
+    def invoke(env, conn, iface, ep, args, **kw):
+        if iface == "improve.detect/v1":
+            return {"new": [], "existing": 0}
+        return real(env, conn, iface, ep, args, **kw)
+    d._invoke = invoke
+    d._standards = lambda *args: {"new": [], "existing": 0}
 
 
 def kit_for(project_dir: Path | None) -> Path:

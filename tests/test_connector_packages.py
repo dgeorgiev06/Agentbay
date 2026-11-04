@@ -1,6 +1,4 @@
-"""A connector may be several modules (proposal 0008, stage 5 part B, D2): its folder is its package, so siblings of
-the entry import as `from . import x`; a later load never sees an earlier load's siblings; and the B-7 rule that no
-connector loads another still holds for sibling modules."""
+"""A connector may be several modules: its folder is its package, so siblings import as `from . import x`."""
 from helpers import cleanup, kit_copy
 
 from bay import connect, lint, model
@@ -36,7 +34,7 @@ def test_a_later_load_does_not_see_the_siblings_of_an_earlier_one():
         add_siblings(first, 7)
         add_siblings(second, 8)
         assert load(first).TWICE == 14
-        assert load(second).TWICE == 16                      # not the cached helper of the first kit
+        assert load(second).TWICE == 16
         assert load(first).TWICE == 14
     finally:
         cleanup(first)
@@ -48,12 +46,12 @@ def test_a_sibling_named_like_another_connectors_entry_is_still_caught_by_b7():
     try:
         assert not [p for p in lint.lint_extension_names(model.Kit(k)) if "B-7" in p]
         folder = k / "components/x-api"
-        (folder / "fake.py").write_text("Y = 1\n")                     # `fake` is the entry module of connector fake
+        (folder / "fake.py").write_text("Y = 1\n")
         entry = folder / "x_api.py"
         entry.write_text(entry.read_text() + "\nfrom .fake import Y\n")
         hits = [p for p in lint.lint_extension_names(model.Kit(k)) if "B-7" in p]
         assert any("connector x-api imports .fake of connector fake" in p for p in hits), hits
-        entry.write_text(entry.read_text() + "\nimport gmail_api\n")   # and a plain cross-connector import still fails
+        entry.write_text(entry.read_text() + "\nimport gmail_api\n")
         hits = [p for p in lint.lint_extension_names(model.Kit(k)) if "B-7" in p]
         assert any("connector x-api imports gmail_api of connector gmail-api" in p for p in hits), hits
     finally:

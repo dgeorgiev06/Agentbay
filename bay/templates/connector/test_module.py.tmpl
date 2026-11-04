@@ -1,11 +1,5 @@
 """Offline test for {{name}}: a fake HTTP layer is injected, no network."""
-import sys
-from pathlib import Path
-
-KIT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(KIT))
-
-from bay.connect import Http, NetworkDenied, Response  # noqa: E402
+from bay.connect import Http, NetworkDenied, Response
 
 
 def test_{{module}}_allowlist_is_enforced_before_any_request():

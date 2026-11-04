@@ -1,42 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse guard for agentbay. Wired by the claude_code adapter with matcher
-Bash|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep.
-
-Why a hook: Claude Code permission rules are session-wide (they apply to
-subagents too) and a subagent's `tools` field takes bare tool names, so
-per-role scope cannot be expressed in settings.json. settings.json adds the
-session-wide floor (Edit deny on .agentbay/**, .claude/** and the kit); this
-hook adds the per-role part.
-
-Who is calling. Hook input carries `agent_type` (and `agent_id`) when the call
-comes from a subagent; the main thread sends neither.
-  * agentbay subagent (agent_type in .agentbay/guard.json): scoped as below.
-  * other subagent (agent_type unknown, or agent_id without agent_type): may not
-    touch .agentbay/ or the kit CLI in any way; everything else falls through
-    to normal permissions.
-  * main thread (no agent fields): no decision, except "ask" for `note dispatch`, `note review`, `show reclaim`,
-    `show close` in any quoting or launcher spelling (the ask rules match only the plain text; `approve` needs no
-    hook: no allow rule covers it); settings.json applies (explicit `bay show|status|note|catalog` allows with
-    those writes and `approve` asking; Edit deny rules; `bay call` and `bay submit` always prompt).
-    Claude Code versions that do not send agent fields therefore look like the
-    main thread; agentbay requires a version that does (documented).
-
-agentbay subagents:
-  * nothing under .agentbay/ via any tool, except running their own use shim
-  * file writes only inside the env's fs.write, never under .agentbay/, .claude/
-    or .git/, never into the kit when the kit is outside the project, and never
-    into framework/, bay/ or schemas/ of the kit checkout unless the env names
-    them explicitly
-  * reads only inside the env's fs.read
-  * Bash: one simple command (no ; && | > < ` $( or newlines) that is the role's
-    own shim or one of its env's command prefixes; git file-writing/exec flags
-    (--output, --ext-diff, --textconv, --no-index, ...) are refused, and no
-    argument may resolve under .agentbay/ or .claude/. Only the role's own shim
-    gets an explicit "allow" (and not in the agentbay checkout); everything else
-    that passes the guard still gets Claude Code's normal permission prompt.
-All paths are normalized (.., symlinks) before checking. Errors fail closed for
-subagents.
-"""
+"""PreToolUse guard: per-role scope for agentbay subagents; stdlib only, runs as a hook."""
 from __future__ import annotations
 
 import contextlib
@@ -51,21 +14,19 @@ from pathlib import Path
 POLICY = Path(".agentbay") / "guard.json"
 FILE_TOOLS = {"Read", "Edit", "Write", "MultiEdit", "NotebookEdit", "Glob", "Grep"}
 WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
-CONTROL = (".agentbay", ".claude")                 # never read/searched by subagents via patterns
-# never written by any subagent (S-D): directory segments at any depth, file names at any depth,
-# file-name prefixes, and multi-segment paths
+NEVER_SEARCHED = (".agentbay", ".claude")
 NEVER_DIRS = (".agentbay", ".claude", ".git", ".vscode", ".idea")
 NEVER_FILES = ("CLAUDE.md", "CLAUDE.local.md", ".mcp.json", "agentbay.config.yaml", ".envrc", "Makefile", "bay.sh")
 NEVER_PREFIXES = (".env",)
 NEVER_SEQS = ((".github", "workflows"),)
-# A short-option cluster with O (`-pO<file>`) reads a file like -O. -S and -G take the rest of the word as their
-# value (`git log -SOrder` searches for "Order"), so a cluster ends at the first S or G.
-BUNDLE_O = re.compile(r"-[A-FH-RT-Za-z]*O")
+GIT_O_CLUSTER = re.compile(r"-[A-FH-RT-Za-z]*O")
 GIT_BAD_FLAGS = ("--output", "--ext-diff", "--textconv", "--no-index", "--exec", "--upload-pack",
                  "--receive-pack", "--config", "--git-dir", "--work-tree", "--open-files-in-pager",
                  "--pathspec-from-file", "-O")
-# all that `git mv` and `git rm` may take
-GIT_PATH_FLAGS = ("-r", "-f", "-n", "-q", "-k", "-v", "--cached", "--dry-run", "--force", "--quiet")
+GIT_MV_RM_FLAGS = ("-r", "-f", "-n", "-q", "-k", "-v", "--cached", "--dry-run", "--force", "--quiet")
+LINT_CONFIG = {"ruff": ("--config", "ruff.toml"), "mypy": ("--config-file", "mypy.ini")}
+LINT_FLAGS = ("--no-cache", "--ignore-noqa", "--statistics", "--strict", "--show-error-codes")
+LINT_CONFIG_DIR = Path("components") / "python"
 
 
 def abbrev(word: str, flags: tuple[str, ...]) -> bool:
@@ -76,39 +37,32 @@ def abbrev(word: str, flags: tuple[str, ...]) -> bool:
 
 INTERPRETERS = ("sh", "bash", "zsh", "dash", "ksh", "fish", "node", "perl", "ruby", "php", "deno", "bun")
 EVAL_FLAGS = ("-c", "-e", "--eval", "-E", "-r")
-PROBES = (".agentbay/guard.json", ".agentbay/bay", ".agentbay/roles/role/use", ".agentbay/data/feeds/feed-briefing/corpus.db",
-          ".agentbay/data/feeds/feed-briefing/corpus.db-wal", ".agentbay/calls/C-0.json", ".agentbay/ledger/events.jsonl",
+PROBES = (".agentbay/guard.json", ".agentbay/bay", ".agentbay/roles/role/use",
+          ".agentbay/data/feeds/feed-briefing/corpus.db", ".agentbay/data/feeds/feed-briefing/corpus.db-wal",
+          ".agentbay/calls/C-0.json", ".agentbay/ledger/events.jsonl",
           ".claude/settings.json", ".claude/settings.local.json", ".claude/agents/agent.md")
 
 
-# the owner's settings file: it sets `approve.from`, which opens approvals from chat, so no subagent may name it in
-# a Bash command (a write by redirect, cp, mv, sed -i, tee, ...); file tools are refused by NEVER_FILES
-CONFIG_FILE = "agentbay.config.yaml"
-# the kit CLI in any spelling: bay, bay.sh, .agentbay/bay, bay/cli.py, `python -m bay.cli`
-_CLI_RE = re.compile(r"(?:^|[\s;&|()`$'\"])(?:\S*/)?(?:bay|bay\.sh|cli\.py|bay\.cli)(?=[\s;&|()`'\"]|$)")
+APPROVE_FROM_FILE = "agentbay.config.yaml"
+_KIT_CLI_RE = re.compile(r"(?:^|[\s;&|()`$'\"])(?:\S*/)?(?:bay|bay\.sh|cli\.py|bay\.cli)(?=[\s;&|()`'\"]|$)")
 _APPROVE_RE = re.compile(r"(?:^|[\s;&|()`$'\"])approve(?=[\s;&|()`'\"]|$)")
 
 
 def runs_approve(cmd: str, words: list[str]) -> bool:
-    """True when `cmd` runs the kit CLI's `approve` (a gate is the owner's, never a subagent's). Parsed words are
-    checked when the command parses (so a commit message that mentions `bay approve` is fine); otherwise the raw
-    text."""
+    """True when `cmd` runs the kit CLI's `approve`, which is the owner's gate and never a subagent's."""
     if words:
         cli = [i for i, w in enumerate(words)
                if os.path.basename(w) in ("bay", "bay.sh", "cli.py") or w == "bay.cli"]
         return bool(cli) and "approve" in words[cli[0] + 1:]
-    return bool(_CLI_RE.search(cmd) and _APPROVE_RE.search(cmd))
+    return bool(_KIT_CLI_RE.search(cmd) and _APPROVE_RE.search(cmd))
 
 
-# `approve` is not here: no allow rule covers it, so any spelling of it already gets Claude Code's prompt
 ASK_VERBS = {"note": ("dispatch", "review"), "show": ("reclaim", "close")}
-# a word with one of these may expand to an asked verb (`{dispatch,}`, `${X:-dispatch}`, a backslash-newline join)
-EXPANSION_CHARS = "{$`\n"
+ASK_VERB_EXPANSIONS = "{$`\n"
 
 
 def _launcher_end(words: list[str], i: int) -> int | None:
-    """If a kit CLI launcher starts at words[i] (`.agentbay/bay`, `./bay.sh`, `bay.sh`, `python3 -m bay.cli`,
-    `python3 bay/cli.py`), the index just after it; else None."""
+    """The index after the kit CLI launcher that starts at words[i] (`./bay.sh`, `python3 -m bay.cli`), else None."""
     base = os.path.basename(words[i])
     if base in ("bay", "bay.sh", "cli.py"):
         return i + 1
@@ -117,22 +71,25 @@ def _launcher_end(words: list[str], i: int) -> int | None:
     return None
 
 
+def split_on_operators(raw: list[str]) -> list[str]:
+    """Split shell words at their operators, which glue to words (`x;.agentbay/bay`)."""
+    return [t for w in raw for t in re.split(r"[;&|<>(){}`$\n\r]+", w) if t]
+
+
 def asked_bay_write(cmd: str) -> str | None:
-    """For the main thread: the name of the kit command (`note dispatch`, `note review`, `show reclaim`, `show close`)
-    that `cmd` runs, judged on the shell words so quoting, escaping and spacing do not hide it; else None.
-    Claude Code's ask rules match the command text, which `note 'dispatch'` or `show re\\claim` does not match."""
+    """The asked kit command (`note dispatch`, `show close`, ...) that `cmd` runs, judged on shell words, else None."""
     try:
         raw = shlex.split(cmd)
     except ValueError:
         raw = dequote(cmd).split()
     words = raw
-    if unsafe(cmd):                          # operators glue to words (`x;.agentbay/bay`): split them off
-        words = [t for w in raw for t in re.split(r"[;&|<>(){}`$\n\r]+", w) if t]
+    if unsafe(cmd):
+        words = split_on_operators(raw)
     for verb, sub in _launcher_calls(words):
         if sub in ASK_VERBS.get(verb, ()):
             return f"{verb} {sub}"
-    for verb, sub in _launcher_calls(raw):   # the shell may expand this word into the asked verb: fail toward ask
-        if verb in ASK_VERBS and any(c in sub for c in EXPANSION_CHARS):
+    for verb, sub in _launcher_calls(raw):
+        if verb in ASK_VERBS and any(c in sub for c in ASK_VERB_EXPANSIONS):
             return f"{verb} <word with an expansion>"
     return None
 
@@ -143,7 +100,7 @@ def _launcher_calls(words: list[str]):
         j = _launcher_end(words, i)
         if j is None:
             continue
-        while j < len(words) and words[j].startswith("-"):      # global options; --project (or an abbreviation) takes a value
+        while j < len(words) and words[j].startswith("-"):
             w = words[j]
             j += 2 if len(w) >= 3 and "=" not in w and "--project".startswith(w) else 1
         if j < len(words) and words[j] in ASK_VERBS:
@@ -165,16 +122,14 @@ def dequote(cmd: str) -> str:
 
 
 def names_config(cmd: str, words: list[str], at_root) -> bool:
-    """True when `cmd` names agentbay.config.yaml, directly or by a glob in the project root (`at_root(dir)`)
-    that matches it. Quotes and backslashes are removed first (`agentbay.conf''ig.yaml` is the same file), and a
-    command that does not parse is judged on that text alone: anything containing `agentbay.conf` is denied."""
-    if CONFIG_FILE.casefold()[:len("agentbay.conf")] in dequote(cmd).casefold():
+    """True when `cmd` names the owner's config file, directly or by a glob in the project root that matches it."""
+    if APPROVE_FROM_FILE.casefold()[:len("agentbay.conf")] in dequote(cmd).casefold():
         return True
-    if any(os.path.basename(w).casefold() == CONFIG_FILE.casefold() for w in words):
+    if any(os.path.basename(w).casefold() == APPROVE_FROM_FILE.casefold() for w in words):
         return True
     toks = words or re.split(r"[\s;&|<>()`'\"]+", cmd)
     return any(any(c in w for c in "*?[{") and at_root(os.path.dirname(w)) and any(
-        fnmatch.fnmatch(CONFIG_FILE, x.casefold()) for x in _expand_braces(os.path.basename(w).casefold()))
+        fnmatch.fnmatch(APPROVE_FROM_FILE, x.casefold()) for x in _expand_braces(os.path.basename(w).casefold()))
         for w in toks if w)
 
 
@@ -185,6 +140,8 @@ def unsafe(cmd: str) -> str | None:
     while i < len(cmd):
         c = cmd[i]
         if c == "\\" and not single:
+            if cmd[i + 1:i + 2] in ("\n", "\r"):
+                return "backslash-newline line continuation is not allowed; write the command on one line"
             i += 2
             continue
         if c == "'" and not double:
@@ -193,6 +150,8 @@ def unsafe(cmd: str) -> str | None:
             double = not double
         elif not single and c in "`$":
             return "shell expansion ($ or `) is not allowed"
+        elif c == "#" and not single and not double and (i == 0 or cmd[i - 1] in " \t"):
+            return "shell comment # is not allowed; run one command at a time"
         elif not single and not double and (c in ";&|<>\n\r(){}"):
             return f"shell operator {c!r} is not allowed; run one command at a time"
         i += 1
@@ -256,7 +215,6 @@ def glob_hits(pattern: str, probes: list[str], fold: bool) -> list[str]:
             pat = pat.casefold()
         for pr in probes:
             segs = (pr.casefold() if fold else pr).split("/")
-            # the pattern may name the file or any directory above it (`ls .claude/`, `Glob .agentbay`)
             if any(_seg_match(pat.split("/"), segs[:n]) for n in range(1, len(segs) + 1)):
                 hits.append(pr)
     return hits
@@ -270,13 +228,11 @@ class Guard:
         self.agentbay = self.project / ".agentbay"
         self.ci = case_insensitive(self.agentbay) if ci is None else ci
 
-    # ---------------------------------------------------------------- identity-based path checks (B1)
     def _fold(self, p: Path) -> str:
         return str(p).casefold() if self.ci else str(p)
 
     def inside(self, p: Path, root: Path) -> bool:
-        """p is root or below it: by path (case-folded on case-insensitive filesystems) or by identity
-        (os.stat st_dev/st_ino of p or any existing ancestor equals root's)."""
+        """True when p is root or below it, by path (case-folded where needed) or by device and inode identity."""
         if under(p, root) or (self.ci and (self._fold(p) + os.sep).startswith(self._fold(root) + os.sep)):
             return True
         try:
@@ -310,16 +266,15 @@ class Guard:
             if any(segs[i:i + len(fs)] == fs for i in range(len(segs))):
                 return f"{'/'.join(seq)}/ is never writable by agents"
         if self.kit and self.kit != self.project and self.inside(p, self.kit):
-            return "the agentbay kit is not writable by agents"   # outside or nested inside the project
+            return "the agentbay kit is not writable by agents"
         return None
 
-    # ---------------------------------------------------------------- decisions
     def decide(self, payload: dict) -> tuple[str, str]:
         """('allow'|'deny'|'pass', reason)"""
         agent = payload.get("agent_type")
         entry = self.policy.get("subagents", {}).get(agent) if agent else None
         if entry is None and not payload.get("agent_id"):
-            return main_thread_decision(payload)   # main thread (also `--agent` sessions: agent_type without agent_id)
+            return main_thread_decision(payload)
         tool = payload.get("tool_name")
         ti = payload.get("tool_input") or {}
         cwd = Path(payload.get("cwd") or self.project)
@@ -335,7 +290,7 @@ class Guard:
         if not pattern:
             return None
         root = norm(ti.get("path") or ".", cwd)
-        if under(self.project, root):          # search root at or above the project: probe the control plane
+        if under(self.project, root):
             prefix = Path(os.path.relpath(self.project, root))
             probes = [str(prefix / pr) if str(prefix) != "." else pr for pr in PROBES]
             hits = glob_hits(pattern, probes, self.ci)
@@ -403,9 +358,12 @@ class Guard:
         if why:
             return why, []
         try:
-            return why, shlex.split(command)
+            words = shlex.split(command)
         except ValueError as e:
             return f"cannot parse command ({e})", []
+        if any("\n" in w or "\r" in w for w in words):
+            return "a newline inside a word is not allowed; write the command on one line", []
+        return why, words
 
     def _owner_only(self, who, command, words, cwd) -> tuple[str, str] | None:
         """Denies for anyone, role or not: `bay approve` and the owner's config file are the owner's."""
@@ -413,14 +371,14 @@ class Guard:
             return "deny", (f"agentbay: {who} may not run `bay approve`: approval gates are the owner's (a terminal, "
                             f"or a chat approval the main thread relays)")
         if names_config(command, words, lambda d: norm(d or ".", cwd) == self.project):
-            return "deny", f"agentbay: {who} may not name {CONFIG_FILE} in a command (the owner's settings)"
+            return "deny", f"agentbay: {who} may not name {APPROVE_FROM_FILE} in a command (the owner's settings)"
         return None
 
     def _bash_outside_role(self, who, command, why, words, cwd) -> tuple[str, str]:
         """Not an agentbay role: off the control plane by path, glob and interpreter -c (S-B)."""
         if why:
             return ("deny", f"agentbay: {who}: {why} (in a command that mentions .agentbay/.claude)") \
-                if any(c in dequote(command).casefold() for c in CONTROL) else ("pass", "")
+                if any(c in dequote(command).casefold() for c in NEVER_SEARCHED) else ("pass", "")
         d = self._words(who, words, cwd)
         return d or ("pass", "")
 
@@ -446,9 +404,9 @@ class Guard:
         flag = next((w for w in words[1:] if w.startswith("-")), None)
         if flag is not None:
             return "deny", f"agentbay: the use shim takes no flags (got {flag})"
-        if self.policy.get("autoAllowShim", False):    # old or missing policy: prompt (fail closed)
-            return "allow", ""         # the ONLY auto-allow: the role's own read-only data shim
-        return "pass", ""              # kit inside the project: roles might edit code the shim runs; prompt
+        if self.policy.get("autoAllowShim", False):
+            return "allow", ""
+        return "pass", ""
 
     def _cli_command(self, entry, who, words, cwd) -> tuple[str, str] | None:
         """The decision for a command under one of the role's approved CLI prefixes; None when under none."""
@@ -466,15 +424,41 @@ class Guard:
             d = self._git_command(entry, words, cwd, len(pw))
             if d:
                 return d
+        if pw[:3] == ["python3", "-I", "-m"] and pw[3] in LINT_CONFIG:
+            d = self._lint_command(words, cwd, len(pw), pw[3])
+            if d:
+                return d
         writes = pw == ["./bay.sh", "check"] and any(abbrev(w, ("--write",)) for w in words[2:])
         if writes and (why := self._write_denied(entry, self.project / "framework/limits.yaml")):
             return "deny", f"agentbay: check --write rewrites framework/limits.yaml: {why}"
-        return "pass", ""      # never auto-allowed: Claude Code's normal permission prompt applies
+        return "pass", ""
+
+    def _lint_command(self, words: list[str], cwd: Path, first: int, tool: str) -> tuple[str, str] | None:
+        """Denies ruff or mypy unless it names the kit's protected config once and uses only LINT_FLAGS."""
+        flag, name = LINT_CONFIG[tool]
+        config = self.kit / LINT_CONFIG_DIR / name if self.kit else None
+        outside = config is not None and self.kit != self.project and not self.inside(config, self.project)
+        if config is None or not (outside or any(self.inside(config, self.project / d)
+                                                 for d in self.policy.get("protected", []))):
+            return "deny", f"agentbay: {tool} needs the kit's {name} in a protected path; it is not protected here"
+        rest, given = words[first:], []
+        for i, word in enumerate(rest):
+            if word.startswith("@"):
+                return "deny", f"agentbay: {tool} argument files (@file) are not allowed"
+            if any(c in word for c in "?*[]"):
+                return "deny", f"agentbay: {tool} globs are not allowed; name each path"
+            if word == flag:
+                given.append(norm(rest[i + 1], cwd) if i + 1 < len(rest) else None)
+            elif word.startswith("-") and word not in LINT_FLAGS and (i == 0 or rest[i - 1] != flag):
+                return "deny", f"agentbay: {tool} flag {word} is not allowed (only {flag} and {' '.join(LINT_FLAGS)})"
+        if given != [config]:
+            return "deny", f"agentbay: {tool} needs exactly one `{flag} {config}`"
+        return None
 
     def _git_command(self, entry, words, cwd, first) -> tuple[str, str] | None:
         """Denies for git flags that write or read files or run programs, and for an unsafe `worktree add`."""
         for word in words[first:]:
-            if word.startswith(GIT_BAD_FLAGS) or abbrev(word, GIT_BAD_FLAGS) or BUNDLE_O.match(word):
+            if word.startswith(GIT_BAD_FLAGS) or abbrev(word, GIT_BAD_FLAGS) or GIT_O_CLUSTER.match(word):
                 return "deny", f"agentbay: git flag {word} is not allowed (it writes or reads files or runs programs)"
         if words[1:3] == ["worktree", "add"]:
             return self._worktree_add(entry, words[3:], cwd)
@@ -483,15 +467,14 @@ class Guard:
         return None
 
     def _git_mv_rm(self, entry, words, cwd) -> tuple[str, str] | None:
-        """Denies a `git mv` or `git rm` with a flag outside GIT_PATH_FLAGS, or with a path the role may not write.
-        Every path counts, flag-like ones after `--` too, judged as the file tools would."""
+        """Denies a `git mv` or `git rm` with a flag outside GIT_MV_RM_FLAGS, or a path the role may not write."""
         verb = words[1]
         cut = words.index("--") if "--" in words else len(words)
         options = [w for w in words[2:cut] if w.startswith("-")]
         paths = [w for w in words[2:cut] if not w.startswith("-")] + words[cut + 1:]
         for option in options:
-            if option not in GIT_PATH_FLAGS:
-                return "deny", f"agentbay: git {verb} {option}: only {' '.join(GIT_PATH_FLAGS)} are allowed"
+            if option not in GIT_MV_RM_FLAGS:
+                return "deny", f"agentbay: git {verb} {option}: only {' '.join(GIT_MV_RM_FLAGS)} are allowed"
         for path in paths:
             reason = self._git_path_denied(entry, path, cwd)
             if reason:
@@ -519,20 +502,20 @@ class Guard:
                         + (f". Use `{shim} <capability>/v<N>.<endpoint> '<json>'` for data." if shim else "."))
 
     def _plan_command(self, who, words, agent) -> tuple[str, str]:
-        """`bay plan <taskId> '<json>'` or `bay plan <taskId> --done <n>`: the one `bay` command an agentbay subagent
-        may run. It only appends to the ledger, and only for the taskId the ledger shows was dispatched to this
-        agent; any other shape of the command is denied."""
+        """The one `bay` command a subagent may run: `bay plan <taskId> '<json>'` or `--done <n>`, for its task."""
         shape = len(words) == 4 or (len(words) == 5 and words[3] == "--done")
-        if not shape or (len(words) == 4 and words[3].startswith("-")) or not re.match(r"^T-[0-9]{8}-[0-9a-z]{4}$", words[2]):
+        task_id_ok = re.match(r"^T-[0-9]{8}-[0-9a-z]{4}$", words[2])
+        if not shape or (len(words) == 4 and words[3].startswith("-")) or not task_id_ok:
             return "deny", (f"agentbay: {who}: `bay plan` takes exactly `<taskId> '<json>'` or `<taskId> --done <n>`")
-        disp = None                     # stdlib only (this runs as a standalone hook): the ledger's latest record
+        disp = None
         try:
             for line in (self.agentbay / "ledger" / "events.jsonl").read_text(encoding="utf-8").split("\n"):
                 try:
                     e = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                if isinstance(e, dict) and e.get("taskId") == words[2] and e.get("type") in ("agent.dispatch", "spawned"):
+                dispatched = e.get("type") in ("agent.dispatch", "spawned") if isinstance(e, dict) else False
+                if dispatched and e.get("taskId") == words[2]:
                     disp = e
         except OSError:
             pass
@@ -541,8 +524,7 @@ class Guard:
         return ("allow", "") if self.policy.get("autoAllowShim", False) else ("pass", "")
 
     def _words(self, who, words, cwd, first: int = 0) -> tuple[str, str] | None:
-        """Checks every word for inline interpreter code; words from `first` on (the arguments after an
-        approved command prefix) for paths and globs reaching the control plane."""
+        """Denies inline interpreter code in any word, and control-plane paths or globs in the words from `first` on."""
         for i, w in enumerate(words):
             base = os.path.basename(w)
             if (base in INTERPRETERS or base.startswith("python")) and any(
@@ -583,22 +565,35 @@ class Guard:
         p = norm(word, cwd)
         if self.inside(p, self.agentbay) or self.inside(p, self.project / ".claude"):
             return True
-        if self.kit and p in (self.kit / "bay.sh", self.kit / "bay" / "cli.py"):     # the kit control-plane CLI
+        if self.kit and p in (self.kit / "bay.sh", self.kit / "bay" / "cli.py"):
             return True
         return False
 
 
+def _ledger_reason(reason: str) -> str:
+    """Scrub the reason of secrets, then cut it to 300 characters, in that order."""
+    from bay import secretscan
+    return secretscan.scrub(reason or "denied")[:300]
+
+
+def _touch_seen(project: Path) -> None:
+    """Mark the hook as seen; never raises, never follows a symlink."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK
+    with contextlib.suppress(OSError):
+        with os.fdopen(os.open(project / ".agentbay/ledger/guard.seen", flags, 0o644), "w") as seen:
+            os.utime(seen.fileno())
+
+
 def record_denial(project: Path, payload: dict, reason: str) -> None:
-    """permission.denied ledger event (tool, agent, reason; never the command). Never raises: the decision
-    stands regardless; a failure is appended to .agentbay/ledger/hook-errors.log."""
+    """Ledger a denial; never raises, so no decision depends on the ledger."""
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-        from bay import ledger, secretscan
-        reason = secretscan.scrub(reason or "denied")[:300]      # scrub first, then cut
+        from bay import ledger
+        reason = _ledger_reason(reason)
         ledger.append(project, "permission.denied", payload.get("agent_id") or payload.get("session_id") or "guard",
                       source="guard", agent=payload.get("agent_type"), sessionId=payload.get("session_id"),
                       tool=payload.get("tool_name"), reason=reason)
-    except Exception as e:  # the guard's decision must not depend on the ledger
+    except Exception as e:
         try:
             with open(project / ".agentbay" / "ledger" / "hook-errors.log", "a") as f:
                 f.write(f"guard: permission.denied not recorded ({type(e).__name__})\n")
@@ -619,9 +614,7 @@ def main() -> int:
         payload = json.load(sys.stdin)
         subagent = bool(payload.get("agent_id") or payload.get("agent_type"))
         project = Path(os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd())
-        with contextlib.suppress(OSError):      # a failed write must never deny
-            with os.fdopen(os.open(project / ".agentbay/ledger/guard.seen", os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o644), "w") as hb:
-                os.utime(hb.fileno())      # not through a symlink
+        _touch_seen(project)
         if not subagent:
             decision, reason = main_thread_decision(payload)
             if decision == "ask":
@@ -634,10 +627,10 @@ def main() -> int:
             print(reason, file=sys.stderr)
             _emit("deny", reason)
             return 2
-        if decision in ("allow", "ask"):      # "ask": a `--agent` session (agent_type, no agent_id) in the main thread
+        if decision in ("allow", "ask"):
             _emit(decision, reason if decision == "ask" else "")
         return 0
-    except Exception as e:  # fail closed for subagents (the main thread: no decision)
+    except Exception as e:
         if subagent:
             msg = f"agentbay guard error ({type(e).__name__}); denied for subagent. Rebuild with ./bay.sh build"
             print(msg, file=sys.stderr)

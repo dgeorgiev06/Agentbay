@@ -3,6 +3,11 @@
 id: "0011"
 status: draft
 touches:
+  - { path: bay/, reason: "slice 0: every # comment removed and every docstring cut to one line (owner decision 2026-11-04)" }
+  - { path: adapters/, reason: "slice 0: the same" }
+  - { path: components/, reason: "slice 0: the same, in every component and its tests; items 2 to 4 add components/python and components/comments" }
+  - { path: tests/, reason: "slice 0: the same" }
+  - { path: requirements-dev.txt, reason: "item 2: pinned ruff and mypy, dev only" }
   - { path: components/tools/interfaces/standards.check.v1.yaml, reason: "NEW item 1: the interface, one endpoint `change { base }` returning new, existing, stopped, warnings (the shape of improve.detect/v1.change)" }
   - { path: bay/model.py, reason: "item 1: a code step may bind several connectors (line 1337 demands exactly one) and Step.connector becomes a list; item 2: READ_ONLY_CLIS (line 62) gains `ruff check` and `mypy`" }
   - { path: bay/dispatch.py, reason: "item 1: _run_code (line 524) runs every bound connector and merges the results; the status read (line 438) takes the first" }
@@ -44,9 +49,7 @@ touches:
   - { path: bay/__init__.py, reason: "release step: version 3.2.0" }
   - { path: CHANGELOG.md, reason: "release step: entry, with an Upgrading note (pip install -r requirements-dev.txt; run ./bay.sh build)" }
 exceptions:
-  - { measure: bay_lines, to: 9815, reason: "9760 is the ceiling and the count. Estimate +48 in bay/: dispatch.py +16 (loop over the connectors, a merge helper), guard.py +14 (the flag list and its check), limits.py +14 (the comment counter, the measure, its entry in MEASURES), model.py +4 (several connectors, two names in READ_ONLY_CLIS). Payer: none can be named from today's code; the one-connector error branch at model.py:1337-1339 is replaced, not added (counted, -3). 9815 is the estimate plus a margin of 7. If it must shrink, the merge of `warnings` in the helper goes first. The release lowers the ceiling to the real count." }
-  - { measure: kit_python_lines, to: 5345, reason: "5165 is the ceiling and the count. Estimate +175: python_check.py about 130 (subprocess runner 25, ruff parser 20, mypy parser 25, base export and renames 25, the multiset difference 20, entry and errors 15), comments_check.py about 45. No payer: no kit Python is removed (slices 2 and 4, which would have paid, are dropped). 5345 is the estimate plus a margin of 5. The release lowers the ceiling to the real count." }
-  - { measure: tests, to: 465, reason: "462 is the ceiling and the count. Three tests are added (the several-connectors mechanism, the python checker, the comments checker) because each tests behaviour that no existing test reaches. No test is made obsolete by this change, so none is merged away; the plan step looks again and lowers the ceiling to 462 for every test it can merge. Six existing tests are extended instead of adding six more." }
+  - { measure: tests, to: 463, reason: "462 is the ceiling and the count. Two tests are added (the python checker, the comments checker) and the several-connectors test is merged into an existing forge.extend test (plan step), so +1. bay_lines and kit_python_lines need no exception: slice 0 removes more lines than items 1 to 4 add (owner decisions after the plan step)." }
 ---
 
 # 0011: Standards as components (core)
@@ -161,6 +164,17 @@ All measures are covered. Estimates are mine until the code is written.
 ## Owner decisions
 
 1. **Scope, 2026-11-04, chat: "Core only".** Slices 1 (the `standards.check/v1` step), 3 (the python component), 5 (the comments rule, checker and `comment_lines`) and 6 (the wiring in `forge.extend` and `delivery.build`). Slice 2 (improve-detect split) and slice 4 (unslop) are dropped. Taken from the step plan's goal; the old draft's other recommendations are not decided and are listed below.
+
+## Owner decisions after the plan step (2026-11-04; these replace anything above that disagrees)
+
+The plan step replayed PRs #20 to #27 and found the per-file comment counter would have blocked 6 of 8. The owner then decided, in chat:
+
+1. **No comments.** No `#` comment in Python anywhere the checker looks (a shebang line is not a comment). A docstring is at most one line. This holds in `bay/`, `adapters/`, `components/` and every `tests/` folder alike.
+2. **The existing comments go in this proposal**, as a new first slice, **slice 0 (cleanup)**: delete every `#` comment and shorten every multi-line docstring to one line, in all four places. Measured on 3.1.0: 505 `#` comments and 257 multi-line docstrings (about 900 extra lines) outside tests, 432 comments and 49 multi-line docstrings in tests. 25 of the comments are `# noqa` markers: each is removed by fixing what it hides (or, where ruff's rule does not apply, by leaving that rule out of the selection), never by keeping the marker. Where a comment held a security or crash-safety reason, the reason moves into a name, an error message or the component README. The slice is mechanical and goes in batches, with the full suite run after each.
+3. **The checker is absolute after slice 0.** `comment_lines` (`#` comments plus docstring lines after the first) has ceiling 0, and any new comment or multi-line docstring is a finding. The rule a reviewer judged ("a reason the code cannot express") no longer exists; the builder role states the rule in one sentence and the reviewer's DoD item checks it.
+4. **mypy stays `--strict`** (the plan step measured a median of 5.5 new errors per change; the owner accepts the cost).
+5. **The plan step's amendments are taken:** `requirements-dev.txt` in framework-dev's write list; `components/python` and `components/comments` under `owns:` in `framework/kernel.yaml`; the plan's security fixes (configs read from the merge-base export, `python3 -I -m` for every tool call, the guard requiring the protected config paths, `# mypy:` and `type: ignore` reported as findings, `standards.check/v1` dispatcherOnly).
+6. **Exceptions:** slice 0 removes roughly 870 lines from `bay/` and several hundred from the kit, more than items 1 to 4 add, so the `bay_lines` and `kit_python_lines` exceptions are no longer needed; the release writes the lower ceilings. `tests` takes the plan's merge: 463.
 
 ## Open decisions, with my recommendation
 

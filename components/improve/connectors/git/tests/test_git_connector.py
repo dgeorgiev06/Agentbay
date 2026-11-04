@@ -1,4 +1,4 @@
-"""git connector: commits as episodes with revert detection and churn; subjects are scrubbed, bodies are never returned."""
+"""git connector: commits as episodes with revert detection and churn; subjects scrubbed, bodies never returned."""
 import json
 import shutil
 import unittest
@@ -26,9 +26,9 @@ def test_commits_reverts_and_churn_without_messages():
         assert sum(1 for e in eps if "hot.py" in e["commit"]["files"]) == 5
         blob = json.dumps(out)
         subjects = sorted(e["commit"]["subject"] for e in eps)
-        assert "tweak 0" in subjects and any(s.startswith("add bad (") for s in subjects)   # subjects are carried ...
-        assert all(c not in blob for c in CORES)                                              # ... scrubbed
-        assert "This reverts commit" not in blob                                              # bodies never are
+        assert "tweak 0" in subjects and any(s.startswith("add bad (") for s in subjects)
+        assert all(c not in blob for c in CORES)
+        assert "This reverts commit" not in blob
     finally:
         cleanup(p)
 

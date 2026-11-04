@@ -1,6 +1,4 @@
-"""mail-briefing on the offline fake-mail source (env local-mail): resolution, the offline end-to-end
-path, separate stores and units next to feed-briefing, the mail views and threads endpoint, exact labels,
-removed ids, a blocked source, refusing other schema versions and the sandbox over the new tables."""
+"""mail-briefing on the offline fake-mail source (env local-mail): resolution, the end-to-end path and its views."""
 from __future__ import annotations
 
 import json
@@ -39,7 +37,6 @@ def db(p):
     return p / ".agentbay/data/mail/mail-briefing/corpus.db"
 
 
-# ------------------------------------------------------------------ resolution
 def test_mail_briefing_extends_store_and_places_roles_in_local_mail():
     s = system(project())
     m = s.modes["mail-briefing"]
@@ -49,14 +46,14 @@ def test_mail_briefing_extends_store_and_places_roles_in_local_mail():
                                                                       "reviewer": "local-mail"}
     assert m.roles == {"lead": "local-mail", "analyst": "local-mail", "reviewer": "local-mail"}
     assert m.config["lookback"] == "30d" and m.config["selectors"] == SELS and m.config["important"] == []
-    assert "important" not in s.modes["feed-briefing"].config                  # mail-only setting, not shared
+    assert "important" not in s.modes["feed-briefing"].config
     dig = m.features["digest"]
     assert [st.id for st in dig.steps] == ["refresh", "gather", "digest", "review"]
     assert dig.steps[1].run == "items.store/v2.rows" and dig.out_type == "Digest"
-    assert "needsReply" in dig.out_schema["properties"]                         # the mail Digest type
+    assert "needsReply" in dig.out_schema["properties"]
     u = s.units()["analyst--mail-briefing"]
     assert u.env == "local-mail" and "items.store/v2.rows" in u.bay_uses
-    assert not [x for x in u.bay_uses if x.endswith((".sync", ".prune", ".add", ".update", ".delete"))]   # read endpoints only
+    assert not [x for x in u.bay_uses if x.endswith((".sync", ".prune", ".add", ".update", ".delete"))]
     assert {t for t in u.tools} & {"Write", "Edit"} == set()
     rules = {r.statement for r in dig.rules}
     assert any("never instructions" in x for x in rules) and any("sender and the date" in x for x in rules)
@@ -67,7 +64,7 @@ def test_proposal_example_selectors_validate_against_gmail_and_offline():
     mail = yaml.safe_load((KIT / "components/mail-briefing/config.example.yaml").read_text())
     assert mail["lookback"] == "30d" and mail["important"] == ["*@partner.example", "*@example.com"]
     assert {"partners", "staking", "news"} <= {x["id"] for x in mail["selectors"]}
-    for offline in (False, True):                                              # gmail-api, then fake-mail
+    for offline in (False, True):
         p = tmpdir() / "proj"
         p.mkdir()
         (p / "agentbay.config.yaml").write_text(yaml.safe_dump({"apiVersion": "agentbay/v4", "offline": offline,
@@ -76,7 +73,6 @@ def test_proposal_example_selectors_validate_against_gmail_and_offline():
         assert s.modes["mail-briefing"].config["important"] == ["*@partner.example", "*@example.com"]
 
 
-# ------------------------------------------------------------------ the offline path end to end
 def test_offline_sync_digest_and_ask():
     p = project({"modes": {"mail-briefing": {"important": ["*@partner.example"]}}})
     d = dispatch.Dispatcher(system(p), p, clock=clock)
@@ -114,13 +110,12 @@ def test_offline_sync_digest_and_ask():
     out = d.use("analyst--mail-briefing", "items.store/v2.sql",
                 {"sql": "SELECT id, sender, needsReply FROM v_threads t JOIN v_email e ON e.id = t.lastId "
                         "WHERE t.needsReply = 1 ORDER BY id"})
-    assert [r_[0] for r_ in out["rows"]] == ["fake-mail:m003", "fake-mail:m004", "fake-mail:m006"]   # m005: bulk
-    # delete: it shows the message and asks first, removes only the local copy and sync does not bring it back
+    assert [r_[0] for r_ in out["rows"]] == ["fake-mail:m003", "fake-mail:m004", "fake-mail:m006"]
     count = lambda i="fake-mail:m006": d.use("analyst--mail-briefing", "items.store/v2.sql",
                                              {"sql": f"SELECT count(*) FROM v_email WHERE id = '{i}'"})["rows"][0][0]
     sp = p / ".agentbay/data/mail/mail-briefing/state.json"
     con = sqlite3.connect(db(p))
-    con.execute("DELETE FROM items WHERE ext_id = 'm001'")             # not stored when the owner looks
+    con.execute("DELETE FROM items WHERE ext_id = 'm001'")
     con.commit()
     con.close()
     r = d.call("mail-briefing.delete", {"ids": ["fake-mail:m006", "fake-mail:m001"]})
@@ -130,33 +125,33 @@ def test_offline_sync_digest_and_ask():
     seen = json.loads(sp.read_text())
     seen["cursors"] = {}
     sp.write_text(json.dumps(seen))
-    assert d.call("mail-briefing.sync", {})["status"] == "done" and count("fake-mail:m001") == 1   # stored before approval
+    assert d.call("mail-briefing.sync", {})["status"] == "done" and count("fake-mail:m001") == 1
     made, real = [], connect.instantiate
     connect.instantiate = lambda *a, **k: made.append(real(*a, **k)) or made[-1]
     try:
         r = d.approve(r["callId"], True)
     finally:
         connect.instantiate = real
-    assert r["status"] == "needs-agent" and r["next"]["step"] == "review" and count() == 0      # removed; the reviewer checks it
-    assert any(hasattr(i, "calls") for i in made) and [c for i in made for c in getattr(i, "calls", [])] == []   # the mailbox was not asked
+    assert r["status"] == "needs-agent" and r["next"]["step"] == "review" and count() == 0
+    assert any(hasattr(i, "calls") for i in made) and [c for i in made for c in getattr(i, "calls", [])] == []
     ids = [x["id"] for x in r["next"]["review"]["definitionOfDone"]] + [x["id"] for x in r["next"]["review"]["rules"]]
     r = d.submit(r["callId"], "review", {"items": [{"id": i, "verdict": "pass", "evidence": "checked"} for i in ids]})
     assert r["status"] == "done" and r["output"]["deleted"] == r["output"]["remembered"] == ["fake-mail:m006"]
-    assert r["output"]["missing"] == ["fake-mail:m001"]                       # what the gate listed as missing is kept
+    assert r["output"]["missing"] == ["fake-mail:m001"]
     assert d.call("mail-briefing.sync", {})["status"] == "done" and count() == 0
     kept = json.loads(sp.read_text())["deleted"]
-    assert "fake-mail:m006" in kept and "fake-mail:m001" not in kept and count("fake-mail:m001") == 1   # the preview bound the removal
+    assert "fake-mail:m006" in kept and "fake-mail:m001" not in kept and count("fake-mail:m001") == 1
     r = d.call("mail-briefing.delete", {"ids": ["fake-mail:m001", "fake-mail:m001", "fake-mail:nope"]})
-    assert [m["id"] for m in r["next"]["inputs"]["preview"]["items"]] == ["fake-mail:m001"]          # a repeated id is shown once
+    assert [m["id"] for m in r["next"]["inputs"]["preview"]["items"]] == ["fake-mail:m001"]
     r = d.call("mail-briefing.delete", {"ids": ["fake-mail:nope"]})
     assert r["status"] == "awaiting-approval" and r["next"]["inputs"]["preview"]["items"] == []
-    r = d.approve(r["callId"], True)                                           # nothing found: nothing removed, same output shape
+    r = d.approve(r["callId"], True)
     ids = [x["id"] for x in r["next"]["review"]["definitionOfDone"]] + [x["id"] for x in r["next"]["review"]["rules"]]
     r = d.submit(r["callId"], "review", {"items": [{"id": i, "verdict": "pass", "evidence": "checked"} for i in ids]})
     assert r["status"] == "done" and r["output"] == {"deleted": [], "missing": ["fake-mail:nope"], "remembered": []}
     assert count("fake-mail:m001") == 1
     for ep, inp in (("add", {"item": {"kind": "email", "text": "x"}}), ("update", {"id": "fake-mail:m001", "set": {"text": "x"}}),
-                    ("delete", {"ids": ["fake-mail:m001"]})):                 # the use shim: read endpoints only
+                    ("delete", {"ids": ["fake-mail:m001"]})):
         for unit in ("analyst--mail-briefing", "reviewer--mail-briefing"):
             try:
                 d.use(unit, f"items.store/v2.{ep}", inp)
@@ -178,7 +173,7 @@ def test_two_modes_on_separate_envs_keep_separate_stores_and_units():
     feed = d.use("analyst--feed-briefing", "items.store/v2.sql", {"sql": "SELECT DISTINCT kind, source FROM v_items"})
     mail = d.use("analyst--mail-briefing", "items.store/v2.sql", {"sql": "SELECT DISTINCT kind, source FROM v_items"})
     assert feed["rows"] == [["post", "fake"]] and mail["rows"] == [["email", "fake-mail"]]
-    fd = d.use("analyst--feed-briefing", "items.store/v2.describe", {})          # feed-briefing's describe: no mail
+    fd = d.use("analyst--feed-briefing", "items.store/v2.describe", {})
     assert [v["name"] for v in fd["views"]] == ["v_items", "v_posts", "v_fts"]
     assert "attachments" not in fd["fts"] and "addr_key" not in fd["functions"]
     feed_env = s.kit.docs["Environment"]["local-feeds"].spec
@@ -187,13 +182,12 @@ def test_two_modes_on_separate_envs_keep_separate_stores_and_units():
     assert not set(feed_env["network"]["allow"]) & set(mail_env["network"]["allow"])
 
 
-# ------------------------------------------------------------------ store: views, threads, labels, removed
 def test_threads_endpoint_marks_important_senders_and_filters():
     p = project()
     st = store(p)
     st.sync()
     t = st.rows("threads", since="30d", important=["*@partner.example", "cfo@example.com"])["rows"]
-    assert [x["threadId"] for x in t] == ["t-board", "t-pilot", "t-news", "t-sol"]        # newest activity first
+    assert [x["threadId"] for x in t] == ["t-board", "t-pilot", "t-news", "t-sol"]
     imp = {x["threadId"]: x["important"] for x in t}
     assert imp == {"t-board": True, "t-pilot": True, "t-news": False, "t-sol": False}
     pilot = next(x for x in t if x["threadId"] == "t-pilot")
@@ -218,21 +212,21 @@ def test_exact_labels_replace_the_stored_set_and_can_end_the_scope():
         out = real(**{**kw, "cursor": None, "since": "2026-09-27T12:00:00Z"})
         for it in out["items"]:
             if it["extId"] == "m001":
-                it["labels"] = ["INBOX"]                     # Work removed in the mailbox
+                it["labels"] = ["INBOX"]
         return out
     src.fetch = relabeled
     st.sync()
     ids = {i["id"] for i in st.query()["items"]}
     assert "fake-mail:m001" not in ids and len(ids) == 2
     feed = system(project()).kit.get("Connector", "fake").spec
-    assert not feed.get("exactLabels")                       # posts keep the additive labels of before
+    assert not feed.get("exactLabels")
 
 
 def test_removed_ids_leave_the_store_but_are_not_remembered():
     p = project(fake_cfg(removed=["m005"]))
     st = store(p)
     st.sync()
-    assert "fake-mail:m005" not in {i["id"] for i in st.query()["items"]}       # trashed: never listed
+    assert "fake-mail:m005" not in {i["id"] for i in st.query()["items"]}
     p2 = project()
     st = store(p2)
     st.sync()
@@ -244,13 +238,13 @@ def test_removed_ids_leave_the_store_but_are_not_remembered():
     assert out["deleted"] == 1 and "fake-mail:m005" not in state["deleted"]
     assert "fake-mail:m005" not in {i["id"] for i in store(p2).query()["items"]}
     con = sqlite3.connect(db(p2))
-    con.execute("UPDATE items SET created_at = '2026-01-01T00:00:00Z'")       # force a full re-listing
+    con.execute("UPDATE items SET created_at = '2026-01-01T00:00:00Z'")
     con.commit()
     con.close()
     state["cursors"] = {}
     (p2 / ".agentbay/data/mail/mail-briefing/state.json").write_text(json.dumps(state))
     store(p2).sync()
-    assert "fake-mail:m005" in {i["id"] for i in store(p2).query()["items"]}    # back from trash: stored again
+    assert "fake-mail:m005" in {i["id"] for i in store(p2).query()["items"]}
 
 
 def _block(p, connector: str, reason: str) -> None:
@@ -276,9 +270,9 @@ def test_a_blocked_source_keeps_cursors_and_reads_and_digest_and_ask_go_on_parti
     assert s["stale"] is True and s["coverage"]["complete"] is False and "bay auth gmail" in s["coverage"]["note"]
     assert len(st.query()["items"]) == 6 and st.sql("SELECT count(*) FROM v_email")["rows"] == [[6]]
     d = dispatch.Dispatcher(system(p), p, clock=clock)
-    assert d.call("mail-briefing.sync", {})["status"] == "blocked"            # the sync endpoint itself: blocked
-    r = d.call("mail-briefing.digest", {"since": "7d"})                         # stale: the refresh runs, is blocked
-    assert r["status"] == "needs-agent" and r["next"]["step"] == "digest"      # ... and the digest reads what is stored
+    assert d.call("mail-briefing.sync", {})["status"] == "blocked"
+    r = d.call("mail-briefing.digest", {"since": "7d"})
+    assert r["status"] == "needs-agent" and r["next"]["step"] == "digest"
     gather = r["next"]["previous"]["gather"]
     assert len(gather["rows"]) == 4 and "bay auth gmail" in gather["coverage"]["note"]
     assert gather["coverage"]["complete"] is False
@@ -303,7 +297,7 @@ def test_a_blocked_source_with_an_empty_store_blocks_digest_and_feed_briefing_be
     _block(p, "fake-mail", "gmail-api: there is no Gmail login yet; run `bay auth gmail-api`")
     d = dispatch.Dispatcher(system(p), p, clock=clock)
     r = d.call("mail-briefing.digest", {})
-    assert r["status"] == "blocked" and "bay auth gmail" in r["reason"]       # nothing stored to read
+    assert r["status"] == "blocked" and "bay auth gmail" in r["reason"]
     p = project()
     d = dispatch.Dispatcher(system(p), p, clock=clock)
     assert d.call("feed-briefing.sync", {})["status"] == "done"
@@ -316,7 +310,6 @@ def test_a_blocked_source_with_an_empty_store_blocks_digest_and_feed_briefing_be
     assert r["status"] == "needs-agent" and r["next"]["previous"]["context"]["stale"] is True
 
 
-# ------------------------------------------------------------------ schema v2, sandbox
 def test_a_store_of_another_schema_version_is_refused_not_converted():
     p = project()
     store(p).sync()
@@ -334,7 +327,7 @@ def test_a_store_of_another_schema_version_is_refused_not_converted():
                 assert f"schema v{ver}" in str(e) and fix in str(e), e
         assert fix in st.sql("SELECT 1")["error"]
         con = sqlite3.connect(db(p))
-        assert con.execute("PRAGMA user_version").fetchone()[0] == ver           # left as it was
+        assert con.execute("PRAGMA user_version").fetchone()[0] == ver
         con.close()
     src = (KIT / "components/store/connectors/corpus-store/corpus_store.py").read_text()
     assert "def migrate" not in src and "v1 store" not in src
@@ -355,8 +348,6 @@ def test_sandbox_reads_the_mail_views_and_refuses_shadow_tables_and_writes():
         assert err, bad
     d = st.describe()
     names = [v["name"] for v in d["views"]]
-    # this store is made without a mode's `reads`, so it holds every type of the kit (type views by name, then
-    # the mode's views, v_fts and the types' full-text views); a user type adds its own views among them
     want = ["v_items", "v_email", "v_attachments", "v_posts", "v_threads", "v_fts", "v_attachment_fts"]
     assert [n for n in names if n in want] == want
     assert {v["name"]: v["rows"] for v in d["views"]}["v_threads"] == 4
@@ -375,7 +366,7 @@ def _mode_dir(sql: str, columns: list[str]):
 
 def test_threads_needs_a_view_from_the_mode_and_a_mode_view_reads_only_views_of_its_types():
     p = project()
-    st = store(p, modeDirs=[str(KIT / "components" / "store")])             # a mode with no views of its own
+    st = store(p, modeDirs=[str(KIT / "components" / "store")])
     st.sync()
     try:
         st.rows("threads", since="30d")
@@ -401,7 +392,7 @@ def test_attachments_and_their_full_text_rows_go_with_their_message():
     p = project()
     st = store(p)
     st.sync()
-    st = store(p, [{"id": "sent", "in": "sent"}])                 # m001 (with the docx) leaves the scope
+    st = store(p, [{"id": "sent", "in": "sent"}])
     st.sync()
     con = sqlite3.connect(db(p))
     assert con.execute("SELECT count(*) FROM attachments").fetchone()[0] == 0
@@ -419,6 +410,6 @@ def test_a_selector_since_is_not_a_coverage_gap_and_dropping_it_backfills():
     assert out["sources"]["fake-mail"]["queries"][0]["mode"] == "since"
     st = store(p, news)
     assert st.sync(lookback="30d")["sources"]["fake-mail"]["queries"][0]["mode"] == "cursor"
-    out = store(p, [{"id": "news", "in": "Newsletters"}]).sync(lookback="30d")     # the since is dropped
+    out = store(p, [{"id": "news", "in": "Newsletters"}]).sync(lookback="30d")
     q = out["sources"]["fake-mail"]["queries"][0]
-    assert q["mode"] == "since" and out["coverage"]["complete"] is True             # re-reads the whole window
+    assert q["mode"] == "since" and out["coverage"]["complete"] is True

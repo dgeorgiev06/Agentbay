@@ -11,7 +11,7 @@ from bay import dispatch, lint, scaffold
 def digest_tree(root):
     h = hashlib.sha1()
     for p in sorted(root.rglob("*")):
-        if p.is_file() and not {".git", "__pycache__", ".agentbay"} & set(p.parts):   # content, not runtime state
+        if p.is_file() and not {".git", "__pycache__", ".agentbay"} & set(p.parts):
             h.update(str(p.relative_to(root)).encode() + p.read_bytes())
     return h.hexdigest()
 
@@ -38,15 +38,13 @@ def test_feature_role_env_connector_scaffolds_are_lint_clean():
     assert lint.run(k) == [], lint.run(k)
     s = model.resolve(model.Kit(k))
     wk = s.modes["feed-briefing"].features["weekly"]
-    assert wk.review is None and [st.role for st in wk.steps] == ["analyst"]   # read-only: review off by default
-    text = (k / "components/feed-briefing/mode.yaml").read_text()                   # one block per feature
+    assert wk.review is None and [st.role for st in wk.steps] == ["analyst"]
+    text = (k / "components/feed-briefing/mode.yaml").read_text()
     assert text.count("\n    weekly:\n") == 1 and "steps:" in text
-    # write effects -> review on by default
     scaffold.create(k, "feature", "export", target="delivery", role="builder", effects=["read", "write"],
                     intent="Export a file")
     s = model.resolve(model.Kit(k))
     assert s.modes["delivery"].features["export"].review["when"] == "always"
-    # generated connector test runs offline
     r = subprocess.run([sys.executable, "-c", f"import runpy; m = runpy.run_path('{k}/components/bsky/tests/test_bsky.py'); "
                         "m['test_bsky_allowlist_is_enforced_before_any_request']()"], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
@@ -72,7 +70,7 @@ def test_scaffold_refuses_framework_names_and_overwrites():
         except scaffold.ScaffoldError as e:
             assert "protected name" in str(e) and "forge.extend" in str(e)
     try:
-        scaffold.create(k, "role", "summarizer")                 # roles are framework-level
+        scaffold.create(k, "role", "summarizer")
         raise AssertionError("expected ScaffoldError")
     except scaffold.ScaffoldError as e:
         assert "roles are framework-level" in str(e) and "forge.extend" in str(e)
@@ -91,23 +89,23 @@ def test_scaffold_refuses_framework_names_and_overwrites():
 
 def test_forge_create_runs_scaffold_then_plans_author_builder():
     k = kit_copy()
-    other = project()                       # forge refuses a project that is not the agentbay checkout
+    other = project()
     r = dispatch.Dispatcher(system(other, k), other).call("forge.create", {"kind": "env", "name": "x1", "target": "feed-briefing", "intent": "xxxxx"})
     assert r["status"] == "failed" and "forge writes the agentbay checkout" in r["error"]
     assert not (k / "components/feed-briefing/envs/x1.yaml").exists() and not (other / "components").exists()
-    d = dispatch.Dispatcher(system(k, k), k)   # the checkout is the project: paths resolve inside the kit
+    d = dispatch.Dispatcher(system(k, k), k)
     err = None
     try:
         d.call("forge.create", {"kind": "role", "name": "digest-writer", "intent": "Writes digests"})
     except dispatch.CallError as e:
         err = str(e)
-    assert err and "kind" in err                                            # roles are framework-level: no kind
+    assert err and "kind" in err
     r = d.call("forge.create", {"kind": "env", "name": "digest-env", "target": "feed-briefing", "intent": "Where digests are written"})
     assert r["status"] == "needs-agent" and r["next"]["runAs"] == "subagent_type=builder--forge--local-authoring"
     assert r["next"]["previous"]["scaffold"]["files"] == ["components/feed-briefing/envs/digest-env.yaml"]
     assert (k / "components/feed-briefing/envs/digest-env.yaml").exists()
     ids = {x["id"] for x in r["next"]["rules"]}
-    assert "R-8" in ids and "R-3" not in ids and "R-6" not in ids and "R-7" not in ids     # kind-scoped rules
+    assert "R-8" in ids and "R-3" not in ids and "R-6" not in ids and "R-7" not in ids
 
 
 def test_connector_scaffold_for_feed_source_declares_source_and_window():

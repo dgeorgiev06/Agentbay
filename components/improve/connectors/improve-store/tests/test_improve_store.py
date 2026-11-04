@@ -1,5 +1,4 @@
-"""improve store: fingerprint dedup, evidence merge, reopen, decisions, triage links and priority, backlog
-report, claim/handoff, verify, retention; and the secret scan on every write."""
+"""improve store: dedup, evidence merge, reopen, decisions, triage, backlog, handoff, verify and the secret scan."""
 import json
 from datetime import timedelta
 
@@ -10,8 +9,7 @@ from bay.boundary import Protection
 
 st = connector_pkg("improve-store", "store")
 
-# The finding contract: `fingerprint` lives in bay/util.py; improve-detect's test asserts this same vector.
-FINGERPRINT_VECTOR = ({"kind": "unused", "detector": {"key": "fn:app/core.py:never_called"}}, "62f5b3fa536c7238")   # components/improve/tests/golden/improve.json
+FINGERPRINT_VECTOR = ({"kind": "unused", "detector": {"key": "fn:app/core.py:never_called"}}, "62f5b3fa536c7238")
 
 
 def test_fingerprint_matches_the_shared_vector():
@@ -32,27 +30,27 @@ def S(d, now=NOW):
 
 
 def test_a_file_of_a_protected_instance_routes_to_forge_extend_like_the_protected_folders():
-    """The protected modes, envs and connectors sit under components/ among user ones: the route follows the component
-    map's paths and names, not the folder."""
+    """The protected modes, envs and connectors sit under components/ among user ones; the route follows the map."""
     d = tmpdir()
     try:
         names = {"mode": ("cos",), "env": ("workspace",), "connector": ("ledger",)}
         paths = ("components/cos", "components/tools/envs/workspace.yaml", "components/improve/connectors/ledger")
         s = st.Store(d, NOW, Protection(paths=paths, names=names))
-        route = lambda *files: s.route_for({"scope": {"files": list(files)}})      # noqa: E731
+
+        def route(*files):
+            return s.route_for({"scope": {"files": list(files)}})
+
         assert route("framework/roles/builder.yaml") == "forge.extend"
         assert route("components/improve/connectors/ledger/ledger.py", "components/cos/mode.yaml",
                      "components/tools/envs/workspace.yaml") == "forge.extend"
-        assert route("components/gmail-api/gmail_api.py") == "mode-fix"                       # an ordinary connector
+        assert route("components/gmail-api/gmail_api.py") == "mode-fix"
         assert route("components/cosmos/mode.yaml", "components/improve/connectors/ledger2/x.py",
                      "components/tools/envs/workspace.yaml.bak") == "mode-fix"
-        assert route("components/improve/connectors/ledger/ledger.py", "components/gmail-api/gmail_api.py") == "mode-fix"   # all must be
-        assert S(d).route_for({"scope": {"file": "components/improve/connectors/ledger/ledger.py"}}) == "mode-fix"    # no protected names
-        # a map that could not be read routes everything to forge.extend
+        assert route("components/improve/connectors/ledger/ledger.py", "components/gmail-api/gmail_api.py") == "mode-fix"
+        assert S(d).route_for({"scope": {"file": "components/improve/connectors/ledger/ledger.py"}}) == "mode-fix"
         closed = st.Store(d, NOW, Protection.closed_set())
         assert closed.route_for({"scope": {"file": "app/x.py"}}) == "forge.extend"
         assert closed.route_for({"scope": {"mode": "anything"}}) == "forge.extend"
-        # improve is an ordinary mode (stage 5 part H): a finding about it, or its files, is a mode-fix task
         s = st.Store(d, NOW, Protection(names={**names, "mode": ("cos", "forge")}))
         assert s.route_for({"scope": {"mode": "improve"}}) == "mode-fix"
         assert route("components/improve/mode.yaml", "components/improve/features/scan/playbook.md") == "mode-fix"
@@ -111,7 +109,7 @@ def test_decide_approve_is_human_only_and_backlog_lists_top_items():
         s.decide(ids[0], "approve", st.HUMANS[0])
         s.decide(ids[2], "wontfix", "cli")
         rep = s.backlog(top=5, week="2026-W44")
-        assert rep["week"] == "2026-W44" and rep["items"] == [ids[1], ids[0]]       # wontfix excluded; by priority
+        assert rep["week"] == "2026-W44" and rep["items"] == [ids[1], ids[0]]
         text = open(rep["report"]).read()
         assert text.startswith("# improve backlog 2026-W44") and "bay approve" in text
         assert f"`{ids[1]}`" in text and "**Evidence:**" in text and "status **approved**" in text
@@ -121,8 +119,7 @@ def test_decide_approve_is_human_only_and_backlog_lists_top_items():
 
 
 def test_a_candidate_cannot_set_the_fields_the_store_owns():
-    """D4: a backlog item is approved only by `bay approve <id>`. A candidate that arrives with status approved, a forged
-    user@tty history, or another id/fingerprint/source is stored as the store writes it; claim and handoff refuse it."""
+    """D4: a backlog item is approved only by `bay approve <id>`, never by a candidate that claims it."""
     d = tmpdir()
     try:
         s = S(d)
@@ -138,9 +135,8 @@ def test_a_candidate_cannot_set_the_fields_the_store_owns():
         stopped = s.claim(fid)
         assert "stopped" in stopped and "bay approve" in stopped["stopped"]
         assert "stopped" in s.handoff(fid, {}, "T-20261030-aaaa") and s.load()[fid]["status"] == "open"
-        s.decide(fid, "approve", st.HUMANS[0])                     # the user's own approval still works
+        s.decide(fid, "approve", st.HUMANS[0])
         assert "stopped" not in s.claim(fid)
-        # route, effort and impact pass one check on a new candidate and on an annotation: bad values are dropped
         [bad, bool_, ok] = s.upsert([cand(key="b1", route="x", effort=0, impact=9), cand(key="b2", effort=True),
                                      cand(key="b3", route="config", effort=2, impact=4)], "improve.scan")["new"]
         got = s.load()
@@ -161,13 +157,13 @@ def test_merge_annotate_and_verify_cannot_approve_or_rewrite_history():
         s = S(d)
         [fid] = s.upsert([cand()], "improve.scan")["new"]
         s.upsert([cand(refs=("ab:C-9",), status="approved", history=[{"status": "approved", "by": st.HUMANS[0]}])],
-                 "improve.scan")                              # same fingerprint: merged
+                 "improve.scan")
         s.annotate([{"id": fid, "status": "approved", "history": [{"status": "approved", "by": st.HUMANS[0]}],
                      "rootCause": "r", "proposedFix": "f"}], "analyst")
         f = s.load()[fid]
         assert f["status"] == "open" and not [h for h in f["history"] if h["status"] == "approved"]
         assert "stopped" in s.claim(fid)
-        assert s.verify(fid, True, 3)["result"] == "skipped"          # verify does not touch an open item
+        assert s.verify(fid, True, 3)["result"] == "skipped"
         assert s.load()[fid]["status"] == "open"
     finally:
         cleanup(d)
@@ -198,7 +194,7 @@ def test_priority_is_impact_times_frequency_over_effort():
     try:
         s = S(d)
         [a] = s.upsert([cand(severity="high", refs=tuple(f"ab:C-{i}" for i in range(4)))], "scan")["new"]
-        assert s.load()[a]["priority"] == 4.0                     # 3 x 4 / 3 (forge.extend)
+        assert s.load()[a]["priority"] == 4.0
         s.annotate([{"id": a, "effort": 1, "impact": 5, "route": "mode-fix", "rootCause": "r", "proposedFix": "f"}], "x")
         assert s.load()[a]["priority"] == 20.0
     finally:
@@ -221,7 +217,7 @@ def test_triage_links_only_same_file_across_lenses():
         res = s.triage()
         assert [(l["a"], l["b"]) for l in res["links"]] == [tuple(sorted(ids[:2]))]
         assert res["links"][0]["why"] == "same file modes/feed-briefing/mode.yaml"
-        assert s.load()[ids[2]]["links"] == []                                   # no slow-step <-> code heuristics
+        assert s.load()[ids[2]]["links"] == []
     finally:
         cleanup(d)
 
@@ -252,7 +248,7 @@ def test_claim_and_handoff_only_for_human_approved_items():
         assert out["route"] == "forge.extend" and out["next"]["call"] == "forge.extend"
         assert "## Problem" in out["next"]["input"]["context"] and (d / "handoffs" / out["draft"]).exists()
         assert s.load()[fid]["status"] == "in-progress"
-        assert "stopped" in s.handoff(fid, draft, "T-x")                      # no second handoff
+        assert "stopped" in s.handoff(fid, draft, "T-x")
         [g] = s.upsert([cand(key="other")], "scan")["new"]
         s.decide(g, "approve", st.HUMANS[0])
         env = s.handoff(g, {"route": "mode-fix", "title": "Tighten digest", "problem": "p" * 12, "change": "c" * 12},
@@ -267,7 +263,7 @@ def test_verify_closes_or_reopens_and_needs_new_data():
     try:
         s = S(d)
         [fid] = s.upsert([cand()], "scan")["new"]
-        assert s.verify(fid, False, 3)["result"] == "skipped"                 # still open: nothing shipped
+        assert s.verify(fid, False, 3)["result"] == "skipped"
         s.set_status(fid, "in-progress", "x")
         assert s.verify(fid, False, 0)["result"] == "inconclusive"
         assert s.verify(fid, True, 2)["result"] == "reopened" and s.load()[fid]["status"] == "open"
@@ -297,6 +293,5 @@ def test_corrupt_store_line_names_file_and_line():
             raise AssertionError
         except st.StoreError as e:
             assert "findings.jsonl:2" in str(e)
-        assert json  # noqa
     finally:
         cleanup(d)

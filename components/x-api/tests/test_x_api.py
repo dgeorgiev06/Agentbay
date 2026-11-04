@@ -1,14 +1,10 @@
 """x-api against a fake HTTP layer: request building, pagination, token refresh, allowlist, secrets."""
 import json
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tests"))
+from helpers import NOW, SECRETS, FakeHttp, MemProvider, clock, jresp, project, system
 
-from helpers import NOW, SECRETS, FakeHttp, MemProvider, clock, jresp, project, system  # noqa: E402
-
-from bay import connect, vault  # noqa: E402
-from bay.connect import NetworkDenied, Response  # noqa: E402
+from bay import connect, vault
+from bay.connect import NetworkDenied, Response
 
 TIMELINE = "/2/users/42/timelines/reverse_chronological"
 
@@ -71,8 +67,8 @@ def test_request_building():
     x = make(FakeHttp({}))
     p = x.build_params(max_results=250, since_id="99", start_time="2026-10-20T00:00:00Z",
                        exclude=["retweets", "replies"], pagination_token="abc")
-    assert p["max_results"] == 100            # capped at the API maximum
-    assert p["since_id"] == "99" and "start_time" not in p   # since_id wins
+    assert p["max_results"] == 100
+    assert p["since_id"] == "99" and "start_time" not in p
     assert p["exclude"] == "retweets,replies" and p["pagination_token"] == "abc"
     assert p["expansions"] == "author_id" and "created_at" in p["tweet.fields"]
     p = x.build_params(max_results=10, start_time="2026-10-20T00:00:00Z")
@@ -108,7 +104,7 @@ def test_pagination_and_mapping():
 def test_read_budget_is_never_exceeded_and_cursor_matches_kept():
     served = iter(range(300, 0, -1))
 
-    def honest(params, headers, form):        # like X: returns at most max_results, always more pages
+    def honest(params, headers, form):
         n = int(params["max_results"])
         data = [tweet(next(served), hours=1) for _ in range(n)]
         return jresp({"data": data, "meta": {"result_count": n, "next_token": "more"}, "includes": {"users": []}})
@@ -120,7 +116,7 @@ def test_read_budget_is_never_exceeded_and_cursor_matches_kept():
     assert sizes == [100, 7] and http.log[1]["params"]["since_id"] == "50"
     assert out["billed"] == 107 == len(out["items"]) and out["truncated"] is True
     assert out["cursor"] == "300"
-    out = make(FakeHttp(r)).fetch(maxItems=3)          # below the API minimum page size: no request at all
+    out = make(FakeHttp(r)).fetch(maxItems=3)
     assert out["billed"] == 0 and out["items"] == [] and out["truncated"] is True
 
 
@@ -153,9 +149,8 @@ def test_deletion_check_uses_official_lookup_in_batches_and_is_billed():
     assert [len(q["params"]["ids"].split(",")) for q in looks] == [100, 50]
     assert all(q["host"] == "api.x.com" for q in looks)
     assert sorted(out["deleted"]) == ["120", "7"]
-    assert out["billed"] == 1 + 148                   # 1 timeline post + 148 found posts
-    assert out["checked"] == stored                   # every requested id was verified
-    # rate limited half way: only the first batch counts as checked
+    assert out["billed"] == 1 + 148
+    assert out["checked"] == stored
     n = {"i": 0}
 
     def limited(params, headers, form):
@@ -179,7 +174,7 @@ def test_token_refresh_on_401_and_rotation_is_persisted_not_leaked():
     prov = MemProvider(SECRETS)
     x = make(FakeHttp(r), provider=prov)
     out = x.fetch(maxItems=10)
-    assert len(out["items"]) == 2 and st["tokens"] == 2       # initial + refresh after 401
+    assert len(out["items"]) == 2 and st["tokens"] == 2
     assert prov.environ["X_REFRESH_TOKEN"] == "rt-ROTATED-SECRET-2"
     blob = json.dumps(out)
     for v in (*SECRETS.values(), "at-SECRET-1", "at-SECRET-2", "rt-ROTATED-SECRET-2"):
@@ -285,11 +280,11 @@ def test_list_selector_pages_until_cursor_or_since_without_time_params():
         return jresp({"data": data, "meta": {"result_count": 4, "next_token": "more"}, "includes": {"users": []}})
     r[("GET", "/2/lists/777/tweets")] = lst
     out = make(FakeHttp(r)).fetch(query={"in": "list:777"}, cursor="50", maxItems=100)
-    assert [i["extId"] for i in out["items"]] == ["60", "55"] and len(seen) == 1     # stopped at the cursor
+    assert [i["extId"] for i in out["items"]] == ["60", "55"] and len(seen) == 1
     assert "since_id" not in seen[0] and "start_time" not in seen[0] and "exclude" not in seen[0]
     assert out["items"][0]["container"] == "list:777" and out["cursor"] == "60"
     out = make(FakeHttp(r)).fetch(query={"in": ["list:777"]}, since="2026-10-20T00:00:00Z", maxItems=100)
-    assert [i["extId"] for i in out["items"]] == ["60", "55", "50"]                 # 40 is older than since
+    assert [i["extId"] for i in out["items"]] == ["60", "55", "50"]
 
 
 def test_from_selector_uses_user_timeline_and_in_wins_over_from():
@@ -303,7 +298,7 @@ def test_from_selector_uses_user_timeline_and_in_wins_over_from():
     assert {i["container"] for i in out["items"]} == {"user:vitalik"}
     http = FakeHttp(r)
     make(http).fetch(query={"from": "vitalik", "in": "home"}, maxItems=50)
-    assert {q["path"] for q in http.log if q["method"] == "GET"} == {TIMELINE}     # from is matched locally
+    assert {q["path"] for q in http.log if q["method"] == "GET"} == {TIMELINE}
     try:
         make(FakeHttp(r)).fetch(query={"in": "favorites"}, maxItems=50)
         raise AssertionError("expected ConnectorError")

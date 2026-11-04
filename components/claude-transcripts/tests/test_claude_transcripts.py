@@ -1,6 +1,4 @@
-"""claude-transcripts: defensive parsing, structure-only redaction, malformed/oversized lines, symlinks, mtime
-prefilter, status questions and environment gaps. Fixture transcripts only; the real ~/.claude/projects is never
-read."""
+"""claude-transcripts: defensive parsing, structure-only redaction, malformed lines, symlinks, environment gaps."""
 import json
 import os
 from datetime import datetime, timedelta, timezone
@@ -31,17 +29,17 @@ def test_parses_structure_counts_and_links_subagents():
         s = sessions[0]
         assert s["id"].startswith("cc:0a1b2c3d") and s["model"] == "claude-opus-5-5"
         assert [t["name"] for t in s["toolCalls"]].count("Bash") == 3
-        assert len({t["inputHash"] for t in s["toolCalls"] if t["name"] == "Bash"}) == 1     # identical calls
-        assert s["errors"] == 2 and s["denials"] == [{"tool": "Edit"}]                       # Bash error + denial
+        assert len({t["inputHash"] for t in s["toolCalls"] if t["name"] == "Bash"}) == 1
+        assert s["errors"] == 2 and s["denials"] == [{"tool": "Edit"}]
         assert s["interrupts"] == 1 and s["instructionChanges"] == 1 and s["permissionPrompts"] == 3
         assert s["turns"] == 3 and s["statusQuestions"] == 2 and s["envGaps"] == {"command-not-found": 1}
         assert s["compaction"] == "not-detected" and s["costUsd"] == 2.5 and s["durationMs"] == 900000
-        assert s["tokens"]["input"] == 300 and s["tokens"]["cacheRead"] == 3000              # last usage per message.id
+        assert s["tokens"]["input"] == 300 and s["tokens"]["cacheRead"] == 3000
         assert [x["type"] for x in s["subagents"]] == ["reviewer", "reviewer"]
         assert s["subagents"][0]["id"] == "a0" and s["subagents"][0]["finished"] is True
         assert subs[0]["parent"] == s["id"] and subs[0]["agentType"] == "reviewer"
-        assert stats["unknownRecordTypes"] == {"weird-new-type": 2}                          # counted, never fatal
-        assert stats["badLines"] == 2 and stats["spillFiles"] == 2                           # half-written last lines
+        assert stats["unknownRecordTypes"] == {"weird-new-type": 2}
+        assert stats["badLines"] == 2 and stats["spillFiles"] == 2
         assert s["meta"]["entrypoint"] == "cli" and s["meta"]["version"] == "2.1.300"
         if model.jsonschema:
             for e in eps:
@@ -59,24 +57,23 @@ def test_structure_only_no_text_no_paths_no_secrets_and_nothing_written():
             assert core not in blob, core
         for text in ("deploy it", "curl", "status?", "command not found", str(proj), "secret-branch", "github.com"):
             assert text not in blob, text
-        assert not (proj / ".agentbay").exists()                                   # read-only: no cache, no files
+        assert not (proj / ".agentbay").exists()
     finally:
         cleanup(base)
 
 
 def test_malformed_deep_typed_and_oversized_lines_never_fail_a_scan():
-    deep = "[" * 100_000 + "]" * 100_000                                           # RecursionError in json.loads
+    deep = "[" * 100_000 + "]" * 100_000
     lines = [deep, '{"type": ["user"]}', '{"type": {"a": 1}}', '{"type": "user", "message": 5}',
              '{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": ["x"]}]}}',
              '{"type": "assistant", "message": {"content": "x", "usage": {"input_tokens": "lots"}}}',
              '{"type": "Weird Type!"}', '{"type": "brand-new"}', "not json " + ALL, "[1,2]",
              b"x" * (transcripts.MAX_LINE_BYTES + 1)]
     acc = transcripts.parse_stream(lines)
-    assert acc.bad_lines == 4                       # deep JSON, not JSON, a list, oversized
-    assert acc.unknown == {"other": 3, "brand-new": 1}                     # list/dict/odd names -> "other"
+    assert acc.bad_lines == 4
+    assert acc.unknown == {"other": 3, "brand-new": 1}
     ep = transcripts._episode(acc, "cc:x", "session", None)
     assert all(c not in json.dumps(ep) for c in CORES)
-    # a file with an oversized line and a deep line is scanned; its other sessions still count
     base, proj, root, files, src = setup()
     try:
         f = next(iter(files.values()))
@@ -116,11 +113,11 @@ def test_symlinks_are_never_followed():
         (outside / "secret.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
         (outside / "proj-folder" / "eeeeeeee-0000-4000-8000-000000000002.jsonl").write_text(
             (outside / "secret.jsonl").read_text())
-        os.symlink(outside / "secret.jsonl", root / "-encoded-project" / "linked.jsonl")      # symlinked file
-        os.symlink(outside / "proj-folder", root / "-linked-folder")                          # symlinked folder
+        os.symlink(outside / "secret.jsonl", root / "-encoded-project" / "linked.jsonl")
+        os.symlink(outside / "proj-folder", root / "-linked-folder")
         sid = next(iter(files))
         sub = root / "-encoded-project" / sid / "subagents"
-        os.symlink(outside / "secret.jsonl", sub / "agent-zz.jsonl")                          # symlinked subagent
+        os.symlink(outside / "secret.jsonl", sub / "agent-zz.jsonl")
         eps, stats = src.episodes()
         ids = {e["id"] for e in eps}
         assert not any("eeeeeeee" in i or "linked" in i or "agent-zz" in i for i in ids), ids
@@ -168,15 +165,14 @@ def test_connector_window_and_config_root():
         inst = connect.instantiate(s, "improve-local", "claude-transcripts", "session.events/v1", p, clock=clock)
         out = inst.episodes(since="7d")
         assert len([e for e in out["episodes"] if e["kind"] == "session"]) == 2
-        assert inst.episodes(since="1d")["episodes"] == []                    # fixture sessions are 2 days old
+        assert inst.episodes(since="1d")["episodes"] == []
         assert not (p / ".agentbay").exists()
     finally:
         cleanup(base)
 
 
 def test_real_layout_root_is_the_project_folder_as_the_dogfood_project_configures_it():
-    """Real layout: ~/.claude/projects/-home-claude/<session>.jsonl + <session>/subagents/agent-*.jsonl, with `root`
-    set to that folder: it produced 0 episodes, because only <root>/<folder>/*.jsonl was looked at."""
+    """Real layout: <session>.jsonl + <session>/subagents/agent-*.jsonl, with `root` set to that project folder."""
     from helpers import clock, project, system
     from bay import connect
     base = tmpdir()
@@ -218,7 +214,7 @@ def test_infinite_and_non_finite_numbers_never_fail_a_scan():
     acc = transcripts.parse_stream(lines)
     ep = transcripts._episode(acc, "cc:x", "session", None)
     assert ep["tokens"]["total"] == 0 and "costUsd" not in ep
-    json.dumps(ep, allow_nan=False)                                    # nothing non-finite leaks out
+    json.dumps(ep, allow_nan=False)
     base, proj, root, files, src = setup()
     try:
         with open(next(iter(files.values())), "a") as fh:

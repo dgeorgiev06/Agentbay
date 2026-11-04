@@ -358,7 +358,7 @@ def test_lint_reports_a_skill_md_whose_front_matter_never_closes_f15():
 
 
 def test_building_the_kit_into_itself_leaves_git_status_clean():
-    """The kit ignores its own build output (/.claude/, /CLAUDE.md, .agentbay/), so `bay build` and `bay clean`"""
+    """The kit ignores its own build output, so `bay build` and `bay clean` leave git status clean."""
     from helpers import cleanup, kit_copy
     k = kit_copy()
     try:

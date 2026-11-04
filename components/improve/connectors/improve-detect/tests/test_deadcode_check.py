@@ -1,6 +1,4 @@
-"""The dead-code check (0008 item 1): improve.detect/v1.change audits the working tree and the tree at a base
-revision and returns only the unused / unused-constant / compat-layer / complexity findings that are new; forge.extend
-runs it as the `deadcode` step between implement and review."""
+"""The dead-code check: improve.detect/v1.change returns only the findings new against the base revision."""
 import subprocess
 import textwrap
 from datetime import datetime, timezone
@@ -77,7 +75,7 @@ def test_an_unused_function_and_a_compat_alias_are_two_new_findings():
         out = change(repo)
         found = sorted((c["kind"], c["detector"]["key"]) for c in out["new"])
         assert found == [("compat-layer", "pkg/main.py"), ("unused", "fn:pkg/core.py:brand_new_helper")], found
-        assert out["existing"] == 1                                     # old_dead was already there
+        assert out["existing"] == 1
         assert "2 new dead-code finding(s)" in out["stopped"]
     finally:
         cleanup(repo)
@@ -88,7 +86,6 @@ def test_a_finding_that_existed_at_base_does_not_count():
     try:
         out = change(repo)
         assert out["new"] == [] and out["existing"] == 1 and "stopped" not in out
-        # a different change that leaves old_dead alone still reports nothing
         write(repo, {"pkg/main.py": BASE["pkg/main.py"] + "\ndef extra():\n    return used()\n\nextra()\n"})
         assert change(repo)["new"] == []
     finally:
@@ -139,7 +136,7 @@ def test_an_unused_concept_that_existed_at_base_is_not_new_when_the_project_is_t
         pl = Pipeline({"artifact-graph": FakeGraph(k, k)}, k, k, {}, datetime(2026, 10, 30, tzinfo=timezone.utc))
         now = detect_artifacts.run(pl.artifacts("project"), {}, only="unused")
         keys = [c["detector"]["key"] for c in now]
-        assert any(x.startswith("interface:orphan.thing") for x in keys), keys    # the concept is reported as unused
+        assert any(x.startswith("interface:orphan.thing") for x in keys), keys
         out = pl.change("HEAD")
         assert out["new"] == [] and out["existing"] >= 1 and "stopped" not in out, out["new"]
     finally:
@@ -150,9 +147,9 @@ def test_the_base_is_the_merge_base_not_the_moved_ref():
     repo = repo_at_base()
     try:
         git(repo, "branch", "feature")
-        write(repo, {"pkg/core.py": "def used():\n    return 1\n"})          # main removes old_dead
+        write(repo, {"pkg/core.py": "def used():\n    return 1\n"})
         git(repo, "commit", "-q", "-am", "main removes dead code")
-        git(repo, "checkout", "-q", "feature")                                 # the feature still has it
+        git(repo, "checkout", "-q", "feature")
         out = change(repo, "main")
         assert out["new"] == [] and out["existing"] == 1, out
         assert any("merge-base" in w for w in out["warnings"]), out["warnings"]
@@ -182,7 +179,7 @@ def test_a_second_finding_with_the_same_fingerprint_is_new():
     def fake(a, cfg=None, only=None, **kw):
         if only != "unused":
             return []
-        calls.append(cfg["thresholds"]["maxFindingsPerDetector"])            # compared before any cap
+        calls.append(cfg["thresholds"]["maxFindingsPerDetector"])
         return [c] if a.root != repo else [c, dict(c)]
     try:
         pipeline.detect_artifacts.run = fake

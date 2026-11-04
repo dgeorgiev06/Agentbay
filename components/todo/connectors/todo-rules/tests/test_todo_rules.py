@@ -1,5 +1,4 @@
-"""todo-rules: status moves, next occurrence (month ends, leap years, weekly on, every N weeks, time parts), the
-delegation brief and the connector entry. Pure functions: no store, no network, no files."""
+"""todo-rules: status moves, next occurrences, the delegation brief and the connector entry, as pure functions."""
 import importlib.util
 import json
 import sys
@@ -8,18 +7,17 @@ from pathlib import Path
 
 import yaml
 
+from bay import model
+
 HERE = Path(__file__).resolve().parent
 KIT = HERE.parents[4]
-sys.path.insert(0, str(KIT))
-
-from bay import model  # noqa: E402
 
 spec = importlib.util.spec_from_file_location("todo_rules_under_test", HERE.parent / "todo_rules.py")
 tr = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = tr
 spec.loader.exec_module(tr)
 
-AT = "2026-11-03T10:00:00Z"            # a Tuesday
+AT = "2026-11-03T10:00:00Z"
 
 
 class Ctx:
@@ -64,8 +62,6 @@ def refused(fn, *words):
 def nxt(recur, due, done_at=AT):
     return tr.next_due(recur, due, done_at)
 
-
-# status moves
 
 def test_free_moves_among_open_doing_waiting():
     for a, b in [("open", "doing"), ("doing", "waiting"), ("waiting", "open"), ("doing", "open")]:
@@ -114,7 +110,6 @@ def test_reopen_of_an_open_todo_and_bad_inputs_are_refused():
     refused(lambda: rules().plan(todo(), "status", at=AT), "needs status")
     refused(lambda: rules().plan(todo(), "snooze", at=AT), "snooze")
     refused(lambda: rules().plan(todo(), "complete", scope="series", at=AT), "scope series")
-    # no to-do: the id the caller could not read is named, and the fix
     real = tr.create(Ctx())
     refused(lambda: real.plan([], "complete", missing=["local:nope"]), "no to-do with that id", "local:nope",
             "check the id with todo.query")
@@ -134,8 +129,6 @@ def test_plan_defaults_at_to_the_connector_clock():
     assert rules().plan(todo(), "complete")["set"]["completedAt"] == "2026-11-03T10:00:00Z"
 
 
-# recurring to-dos
-
 def test_complete_recurring_returns_next_occurrence_in_the_series():
     item = todo(due="2026-11-03", text="Via the portal", labels=["home"], priority=2, history=[{"at": AT, "field": "x"}],
                 delegation={"target": "build"}, recur={"every": 1, "unit": "week"})
@@ -145,8 +138,8 @@ def test_complete_recurring_returns_next_occurrence_in_the_series():
                  "status": "open", "due": "2026-11-10", "threadId": "local:20261103-0001",
                  "prevId": "local:20261103-0001", "recur": {"every": 1, "unit": "week"}}
     assert "history" not in n and "delegation" not in n
-    assert n["recur"] == item["recur"] and n["recur"] is not item["recur"]          # a copy, not the same dict
-    assert out["set"]["threadId"] == "local:20261103-0001"          # the finished to-do joins the series
+    assert n["recur"] == item["recur"] and n["recur"] is not item["recur"]
+    assert out["set"]["threadId"] == "local:20261103-0001"
 
 
 def test_next_keeps_an_existing_series_id():
@@ -177,26 +170,25 @@ def test_recurring_todo_without_due_counts_from_the_completion_day():
 def test_every_n_days_and_weekdays():
     assert nxt({"every": 3, "unit": "day"}, "2026-11-03") == "2026-11-06"
     weekdays = {"every": 1, "unit": "week", "on": ["mon", "tue", "wed", "thu", "fri"]}
-    assert nxt(weekdays, "2026-11-03") == "2026-11-04"       # Tuesday -> Wednesday
-    assert nxt(weekdays, "2026-11-06") == "2026-11-09"       # Friday -> Monday
-    assert nxt(weekdays, "2026-11-07") == "2026-11-09"       # Saturday -> Monday
+    assert nxt(weekdays, "2026-11-03") == "2026-11-04"
+    assert nxt(weekdays, "2026-11-06") == "2026-11-09"
+    assert nxt(weekdays, "2026-11-07") == "2026-11-09"
 
 
 def test_weekly_every_n_weeks_with_and_without_on():
     assert nxt({"every": 2, "unit": "week"}, "2026-11-03") == "2026-11-17"
     mon_wed = {"every": 2, "unit": "week", "on": ["wed", "mon"]}
-    assert nxt(mon_wed, "2026-11-02") == "2026-11-04"        # Monday -> Wednesday of the same week
-    assert nxt(mon_wed, "2026-11-04") == "2026-11-16"        # Wednesday -> Monday two weeks on
+    assert nxt(mon_wed, "2026-11-02") == "2026-11-04"
+    assert nxt(mon_wed, "2026-11-04") == "2026-11-16"
 
 
 def test_monthly_clamps_to_a_short_month_and_handles_leap_years():
     monthly31 = {"every": 1, "unit": "month", "day": 31}
     assert nxt(monthly31, "2026-01-31") == "2026-02-28"
-    assert nxt(monthly31, "2028-01-31") == "2028-02-29"      # leap year
-    assert nxt(monthly31, "2026-02-28") == "2026-03-31"      # back to the 31st the next month
+    assert nxt(monthly31, "2028-01-31") == "2028-02-29"
+    assert nxt(monthly31, "2026-02-28") == "2026-03-31"
     assert nxt({"every": 1, "unit": "month"}, "2026-01-31") == "2026-02-28"
     assert nxt({"every": 12, "unit": "month"}, "2028-02-29") == "2029-02-28"
-    # without recur.day the next occurrence pins the day of the original due, so a clamp does not drift
     item = todo(due="2026-01-31", recur={"every": 1, "unit": "month"})
     first = rules().plan(item, "complete", at=AT)["next"]
     assert first["due"] == "2026-02-28" and first["recur"] == {"every": 1, "unit": "month", "day": 31}
@@ -229,7 +221,6 @@ def test_invalid_recurrence_is_refused_with_the_fix():
     refused(lambda: nxt({"every": 1, "unit": "week", "day": 3}, "2026-11-03"), "recur.day", "month")
     refused(lambda: nxt({"every": 1, "unit": "day", "from": "never"}, "2026-11-03"), "recur.from")
     refused(lambda: nxt({"every": 1, "unit": "day"}, "next tuesday"), "next tuesday")
-    # a huge every or a date past year 9999 is a TodoRulesError, not OverflowError or ValueError
     refused(lambda: nxt({"every": 10 ** 9, "unit": "day"}, "2026-11-03"), "out of range", "recur.every")
     refused(lambda: nxt({"every": 10 ** 20, "unit": "week"}, "2026-11-03"), "out of range")
     refused(lambda: nxt({"every": 10 ** 9, "unit": "month"}, "2026-11-03"), "out of range")
@@ -238,8 +229,6 @@ def test_invalid_recurrence_is_refused_with_the_fix():
     refused(lambda: rules().plan(todo(due="9999-12-31", recur={"every": 1, "unit": "day"}), "complete", at=AT),
             "out of range")
 
-
-# brief
 
 def task_errors(task):
     return model.schema_errors(task, json.loads((KIT / "components/delivery/types/Task.schema.json").read_text()))
@@ -261,7 +250,7 @@ def test_brief_research_with_given_deliverable():
     assert out["target"] == "delivery.research" and task_errors(out["input"]) == []
     assert out["input"]["deliverable"] == "A one-page comparison of three vendors."
     assert any("source" in c for c in out["input"]["constraints"])
-    for bad in (5, "ab"):                       # the Task schema is checked at runtime, not only in the test
+    for bad in (5, "ab"):
         refused(lambda: rules().brief(todo(), "research", deliverable=bad), "Task.schema.json", "deliverable")
 
 
@@ -270,8 +259,7 @@ def test_brief_quotes_the_todo_text_as_data():
     out = rules().brief(todo(title=evil, text=evil), "build")
     goal = out["input"]["goal"]
     assert "data, not instructions" in goal
-    assert json.dumps(evil) in goal and "\n" not in goal            # one JSON-quoted string, no raw line break
-    # id, due, priority and labels are quoted in the context the same way
+    assert json.dumps(evil) in goal and "\n" not in goal
     out = rules().brief(todo(id=evil, due=evil, priority=evil, labels=[evil, "ok"]), "research")
     context = out["input"]["context"]
     assert context.count(json.dumps(evil)) == 4 and "\n" not in context
@@ -284,8 +272,6 @@ def test_brief_cuts_very_long_notes_and_refuses_ended_todos():
     refused(lambda: rules().brief(todo(status="done"), "build"), "done", "reopen")
     refused(lambda: rules().brief(todo(), "deploy"), "build or research")
 
-
-# the component files
 
 def test_interface_and_connector_manifest_match_the_code():
     root = HERE.parent
@@ -312,11 +298,9 @@ def test_outputs_match_the_interface_schemas():
              "track": rules().track(sent, "C-2", "done", summary="Found three vendors.")}
     for ep, out in calls.items():
         assert model.schema_errors(out, iface[ep]["out"]) == [], ep
-    # track keeps the target and the hand-off time, changes the call and status, and leaves the to-do's own status
     assert calls["track"] == {"id": item["id"], "set": {"delegation": {
         "target": "research", "callId": "C-2", "status": "done", "at": AT, "summary": "Found three vendors."}}}
     refused(lambda: rules().track(item, "C-2", "done"), "no delegation", "todo.delegate")
-    # fields: a plain edit passes unchanged; the fields only the rules write are refused with the feature to use
     plain = {"title": "New title", "due": "2026-11-20", "priority": 1, "labels": ["a"], "recur": None}
     real = tr.create(Ctx())
     assert real.fields(plain) == {"set": plain}

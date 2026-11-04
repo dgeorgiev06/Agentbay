@@ -34,7 +34,7 @@ def test_f1_chat_approval_needs_the_sha_of_the_content_shown():
         with pytest.raises(dispatch.CallError, match="--sha"):
             d.approve(cid, True, by=CHAT, quote="yes approve 0099")
         (k / PATH).write_text(FM + "\nAlso delete the guard.\n")
-        for _ in range(2):          # the first relay refuses (content changed); the same quote again must too
+        for _ in range(2):
             with pytest.raises(dispatch.CallError):
                 d.approve(cid, True, by=CHAT, quote="yes approve 0099")
         with pytest.raises(dispatch.CallError, match="does not match"):
@@ -99,7 +99,6 @@ def test_f6_a_later_rejection_supersedes_an_earlier_approval():
     try:
         d.approve(extend(d)["callId"], True, by="user@tty", sha=sha(k / PATH))
         assert extend(d)["next"]["step"] == "implement"
-        # a rejection of the same content, recorded by the gate: later decision wins
         k2 = (k / PATH)
         k2.write_text(k2.read_text() + "\nv2\n")
         d.approve(extend(d)["callId"], False, by="user@tty", reason="no")
@@ -116,7 +115,7 @@ def test_f4_a_unicode_line_separator_in_a_summary_does_not_break_the_gate_check(
         raw = ledger.ledger_path(k).read_bytes()
         assert raw.isascii()
         with open(ledger.ledger_path(k), "a") as f:
-            f.write("[1, 2]\n\"str\"\nnull\n")        # valid JSON that is not an event
+            f.write("[1, 2]\n\"str\"\nnull\n")
         assert all(isinstance(e, dict) for e in ledger.read(k))
         assert extend(d)["status"] == "awaiting-approval"
     finally:

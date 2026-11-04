@@ -1,5 +1,4 @@
-"""Deterministic improve detectors: each fires on its pattern with evidence, and stays quiet below threshold
-or on a single non-severe episode."""
+"""Deterministic improve detectors: each fires on its pattern with evidence and stays quiet below threshold."""
 import shutil
 import textwrap
 from pathlib import Path
@@ -39,7 +38,6 @@ def test_review_rounds_above_one():
     assert kinds(c) == ["review-rounds"] and c[0]["measure"]["maxRounds"] == 2
     assert {e["ref"] for e in c[0]["evidence"]} == {"ab:C-1", "ab:C-2"}
     assert ds.review_rounds(data(verdicts=vs[2:]), TH) == []
-    # Claude Code sessions with several reviewer subagents, in >= 2 sessions
     s = [ep(i, id=f"cc:s{i}", kind="session", source="claude-transcripts",
             subagents=[{"type": "reviewer"}, {"type": "code-reviewer"}]) for i in range(2)]
     assert kinds(ds.review_rounds(data(s), TH)) == ["review-rounds"]
@@ -55,7 +53,7 @@ def test_same_rule_failing_repeatedly():
 def test_blocker_a_check_could_catch():
     b = [{"id": "DOD-5", "verdict": "fail", "severity": "blocker", "evidence": "python3 tests/run.py: 2 failed"}]
     c = ds.lintable_blocker(data(verdicts=[verdict(1, "a", b)]), TH)
-    assert kinds(c) == ["lintable-blocker"] and c[0]["severity"] == "severe"         # severe: one episode suffices
+    assert kinds(c) == ["lintable-blocker"] and c[0]["severity"] == "severe"
     soft = [{"id": "DOD-5", "verdict": "fail", "severity": "blocker", "evidence": "the summary is vague"}]
     assert ds.lintable_blocker(data(verdicts=[verdict(1, "a", soft)]), TH) == []
 
@@ -63,7 +61,7 @@ def test_blocker_a_check_could_catch():
 def test_out_of_scope_from_verdicts():
     s = [{"id": "DOD-7", "verdict": "fail", "evidence": "adds bay/x.py, outside the approved proposal"}]
     assert kinds(ds.out_of_scope(data(verdicts=[verdict(1, "a", s), verdict(2, "b", s)]), TH)) == ["out-of-scope"]
-    assert ds.out_of_scope(data(verdicts=[verdict(1, "a", s)]), TH) == []             # one run is not recurring
+    assert ds.out_of_scope(data(verdicts=[verdict(1, "a", s)]), TH) == []
 
 
 def test_mid_run_instruction_changes():
@@ -74,12 +72,14 @@ def test_mid_run_instruction_changes():
 
 
 def test_long_or_costly_steps_with_config_thresholds():
-    st = lambda ms, usd: [{"id": "build", "name": "delivery.build.build", "durationMs": ms, "costUsd": usd}]  # noqa
+
+    def st(ms, usd):
+        return [{"id": "build", "name": "delivery.build.build", "durationMs": ms, "costUsd": usd}]
+
     c = ds.slow_steps(data([ep(1, steps=st(2000, 2.0)), ep(2, steps=st(1500, 0.1))]), TH)
     assert sorted(kinds(c)) == ["costly-step", "slow-step"] or kinds(c) == ["slow-step"]
     slow = [x for x in c if x["kind"] == "slow-step"][0]
     assert slow["scope"] == {"mode": "delivery", "feature": "build", "step": "build"} and slow["measure"]["max"] == 2000
-    # one run over the threshold is noise, unless it is severe (>= severeFactor x threshold)
     assert ds.slow_steps(data([ep(1, steps=st(1500, 0))]), TH) == []
     assert kinds(ds.slow_steps(data([ep(1, steps=st(5000, 0))]), TH)) == ["slow-step"]
 
@@ -111,7 +111,7 @@ def test_repeated_status_questions():
     e = [ep(1, id="cc:a", statusQuestions=2), ep(2, id="cc:b", statusQuestions=1)]
     c = ds.status_questions(data(e), TH)
     assert kinds(c) == ["status-questions"] and c[0]["measure"] == {"questions": 3, "episodes": 2}
-    assert ds.status_questions(data(e[:1]), TH) == []                               # one session is not recurring
+    assert ds.status_questions(data(e[:1]), TH) == []
 
 
 def test_environment_gaps():
@@ -138,7 +138,6 @@ def test_run_filters_by_detector_name_for_verify():
     assert ds.run(data(e), {}, only="retry-loop") == []
 
 
-# ----------------------------------------------------------------------------- artifacts
 def tree(files: dict) -> Path:
     root = tmpdir() / "repo"
     for rel, text in files.items():
@@ -216,7 +215,6 @@ def test_unused_needs_no_references_and_no_ledger_uses():
     try:
         c = da.unused(arts(root), da.thresholds({}))
         ids = sorted(x["detector"]["key"] for x in c)
-        # a string, a comment or a YAML mention is not a reference; scripts and connector entry points are roots
         assert ids == ["fn:connectors/c/c.py:C.stale", "fn:pkg/core.py:dead_helper", "fn:pkg/core.py:only_in_comments",
                        "py:pkg/orphan_mod.py"], ids
         assert c[0]["evidence"][1] == {"kind": "measurement", "ref": "ledger", "detail": "0 uses", "value": 0}
@@ -225,7 +223,7 @@ def test_unused_needs_no_references_and_no_ledger_uses():
 
 
 def test_unused_role_is_kept_when_the_ledger_used_it():
-    name = "-".join(["zz", "orphan", "role"])          # never spelled out: this file is part of the kit copy
+    name = "-".join(["zz", "orphan", "role"])
     k = kit_copy()
     try:
         import yaml
@@ -278,14 +276,12 @@ def test_complexity_over_branch_and_length_thresholds():
         th = da.thresholds({"thresholds": {"maxComplexity": 10, "maxFunctionLines": 20}})
         c = da.complexity(arts(root), th)
         got = {x["detector"]["key"]: x["measure"] for x in c}
-        # 12 ifs -> 13; a nested function is measured on its own, for both complexity and length (K.m keeps
-        # complexity 2 and 2 own lines, so it is not flagged); tests are not audited
         assert got == {"pkg/a.py:branchy": {"complexity": 13, "lines": 26}, "pkg/a.py:long_one": {"complexity": 1, "lines": 32},
                        "pkg/a.py:K.m.inner": {"complexity": 13, "lines": 25}}, got
         e = [x for x in c if x["detector"]["key"] == "pkg/a.py:branchy"][0]["evidence"]
         assert e[0]["ref"] == "pkg/a.py:1" and e[1] == {"kind": "measurement", "ref": "complexity",
                                                        "detail": "cyclomatic complexity 13, 26 lines", "value": 13}
-        assert da.complexity(arts(root), da.thresholds({})) == []               # defaults: 30 decisions, 150 lines
+        assert da.complexity(arts(root), da.thresholds({})) == []
     finally:
         cleanup(root.parent)
 
@@ -299,8 +295,6 @@ def test_unused_constants_count_reads_from_any_python_file():
         "tests/test_consts.py": "from pkg import consts\n\ndef test_x():\n    assert consts.READ_BY_TEST\n"})
     try:
         c = da.unused_constants(arts(root), da.thresholds({}))
-        # any load of the name anywhere counts as a read (deliberately conservative): DEAD is only a local in
-        # pkg/main.py, yet that load keeps the module constant from being reported
         assert sorted(x["detector"]["key"] for x in c) == ["pkg/consts.py:TABLE"], c
         assert c[0]["evidence"][0]["ref"] == "pkg/consts.py:7"
     finally:
@@ -328,7 +322,6 @@ def test_doc_size_and_stale_references():
         assert stale[0]["evidence"][-1] == {"kind": "measurement", "ref": "staleRefs", "detail": "3 references",
                                             "value": 3}
         assert stale[0]["evidence"][0]["ref"] == "docs/guide.md:3"
-        # history docs are skipped by default and can be configured
         assert [x["scope"]["file"] for x in da.doc_size(arts(root), da.thresholds(
             {"thresholds": {"docWords": 100}, "historyDocs": []}))] == ["CHANGELOG.md", "docs/api.md", "docs/proposals/0001-old.md"]
     finally:
@@ -349,12 +342,9 @@ def test_doc_stale_checks_links_on_disk_and_skips_code():
     try:
         stale = da.doc_stale(arts(root), da.thresholds({}))
         refs = [(e["ref"], e["detail"]) for e in stale[0]["evidence"] if e["kind"] == "file"]
-        # SKIP_DIRS targets, a repo-root link and code (fenced or inline) are not reported; a missing target
-        # is, and so is one that resolves outside the root
         assert refs == [("docs/guide.md:10", "../missing.md: link target does not exist"),
                         ("docs/guide.md:10", "/no/such.md: link target does not exist"),
                         ("docs/guide.md:11", "../../outside.md: link target does not exist")], refs
-        # without a root on disk, targets under folders the file list never walks are not reported either
         a = arts(root)
         a.root = None
         refs = [e["detail"] for e in da.doc_stale(a, da.thresholds({}))[0]["evidence"] if e["kind"] == "file"]
@@ -380,7 +370,7 @@ def test_run_contains_a_failing_detector():
 
 
 def test_compat_layers_with_their_age_in_releases():
-    marker = "deprec" + "ated"                         # spelled in pieces: this file is part of the audited kit
+    marker = "deprec" + "ated"
     root = tree({
         "bay/__init__.py": "__version__ = '0.6.1'\n",
         "pkg/old.py": f'"""Old names, {marker} since 0.4 and kept for one release."""\n\n'
@@ -395,7 +385,6 @@ def test_compat_layers_with_their_age_in_releases():
         assert old["measure"] == {"markers": 2, "releasesOld": 2} and old["severity"] == "medium"
         assert [e["ref"] for e in old["evidence"]] == ["pkg/old.py:1", "pkg/old.py:4", "markers"]
         assert old["evidence"][-1] == {"kind": "measurement", "ref": "markers", "detail": "2 markers", "value": 2}
-        # YAML: only comments count (a '#' inside a value is not one)
         assert [e["ref"] for e in c["modes/m/mode.yaml"]["evidence"]] == ["modes/m/mode.yaml:2", "markers"]
         assert c["schemas/thing.schema.json"]["evidence"][0]["ref"] == "schemas/thing.schema.json:3"
         assert c["schemas/thing.schema.json"]["severity"] == "low"
@@ -418,26 +407,22 @@ def test_conformance_checks_on_a_kit_copy():
     try:
         assert conformance.lint(k) == []
         base = {r["rule"]: len(r["violations"]) for r in conformance.run(k)}
-        # C-1: a workflow step the playbook never mentions
         pb = k / "components/feed-briefing/features/prune/playbook.md"
         pb.write_text(pb.read_text().replace("`prune`: the dispatcher runs `items.store/v2.prune` (code step, no agent).",
                                              "The store trims."))
-        # C-4: a backticked tool in a playbook; C-7: retired vocabulary
         pb2 = k / "components/store/features/ask/playbook.md"
         pb2.write_text(pb2.read_text().replace("## Outputs", "Use `Bash` and a sub-agent.\n\n## Outputs"))
-        # C-5: a read-only endpoint that writes
         st = k / "components/store/connectors/corpus-store/corpus_store.py"
         st.write_text(st.read_text().replace("    def status(self", "    def status(self, *a, **kw):\n"
                                              "        self.path.write_text('')\n        return self._status()\n\n"
                                              "    def _status(self", 1))
-        # C-6: without a dollar cap, spend needs review (sync and ask); without review, delete is flagged (prune)
         mode = k / "components/feed-briefing/mode.yaml"
         mode.write_text(mode.read_text().replace("    spendUsd: 5\n", ""))
         base_mode = k / "components/feed-briefing/mode.yaml"
         base_mode.write_text(base_mode.read_text().replace("    spendUsd: 5          # dollar cap enforced by the dispatcher (C-6 spend exemption for sync)\n", "")
                              .replace("      review: { role: reviewer, when: always, tier: balanced, effort: medium }\n      schedule: daily", "      schedule: daily"))
         res = {r["rule"]: r for r in conformance.run(k)}
-        assert len(res["C-1"]["violations"]) == base["C-1"] + 1 and "prune" in res["C-1"]["violations"][-1]["detail"]   # feed-briefing's own prune playbook
+        assert len(res["C-1"]["violations"]) == base["C-1"] + 1 and "prune" in res["C-1"]["violations"][-1]["detail"]
         assert any("'Bash'" in v["detail"] for v in res["C-4"]["violations"])
         assert any("sub-agent" in v["detail"] and v["rewrite"].endswith("subagent.") for v in res["C-7"]["violations"])
         assert any("status" in v["detail"] and "write_text" in v["detail"] for v in res["C-5"]["violations"])

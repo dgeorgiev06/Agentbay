@@ -1,9 +1,4 @@
-"""improve's read-only analysis (improve.detect/v1): gather data from the bound sources, run the deterministic
-detectors, resolve analyst evidence, re-check a finding. Nothing here writes; the store does.
-
-`sources` are connector instances bound in the same env: session.events/v1 (ledger, claude-transcripts, git),
-review.verdicts/v1 (ledger), artifacts.read/v1 (artifact-graph).
-"""
+"""improve's read-only analysis (improve.detect/v1): gathers data, runs detectors and re-checks; nothing here writes."""
 from __future__ import annotations
 
 import re
@@ -26,8 +21,8 @@ EPISODE_SUMMARY_FIELDS = ("id", "source", "kind", "target", "status", "agent", "
 MAX_SUMMARIES = 300
 VERDICT_KINDS = {"review-rounds", "rule-repeat", "lintable-blocker", "out-of-scope"}
 SCOPE_KEYS = ("mode", "feature", "step", "role", "env", "rule", "file", "files", "framework")
-CHANGE_KINDS = ("unused", "unused-constant", "compat-layer", "complexity")     # the dead-code check
-BASE_MAX_BYTES = 1_000_000      # as artifact-graph's MAX_BYTES for the working tree
+CHANGE_KINDS = ("unused", "unused-constant", "compat-layer", "complexity")
+BASE_MAX_BYTES = 1_000_000
 SHA = re.compile(r"^[0-9a-f]{7,40}$")
 
 
@@ -57,7 +52,6 @@ class Pipeline:
         self.settings, self.now, self.run = settings or {}, now, run
         self.warnings: list[str] = []
 
-    # ------------------------------------------------------------------ data
     def _with(self, method: str) -> list:
         return [s for _, s in sorted(self.sources.items()) if callable(getattr(s, method, None))]
 
@@ -97,9 +91,9 @@ class Pipeline:
 
         def text(p):
             try:
-                raw = getattr(art, "raw_text", None)     # dispatcher-side only; outputs are scrubbed
+                raw = getattr(art, "raw_text", None)
                 return raw(path=p, root=root) if raw else art.text(path=p, root=root)["text"]
-            except Exception as e:           # refused or unreadable: counted, named in warnings
+            except Exception as e:
                 unreadable.append(f"{p}: {type(e).__name__}")
                 return None
         base = self.kit if root == "kit" else self.project
@@ -142,8 +136,7 @@ class Pipeline:
         return out
 
     def read_endpoints(self) -> set[str]:
-        """Read-only endpoints of store interfaces (interfaces that also write): where re-reading the whole store
-        per call is waste. Plain readers (artifacts.read, review.verdicts) are excluded."""
+        """Read-only endpoints of store interfaces, where re-reading the whole store per call is waste."""
         out = set()
         for d in model.Kit(self.kit).docs["Interface"].values():
             eps = d.spec["endpoints"]
@@ -151,7 +144,6 @@ class Pipeline:
                 out |= {ep for ep, s in eps.items() if set(s["effects"]) <= {"read"}}
         return out
 
-    # ------------------------------------------------------------------ endpoints
     def sessions(self, since=None, until=None) -> dict:
         data, meta = self.session_data(since, until)
         cands = detect_sessions.run(data, self.settings)
@@ -195,8 +187,7 @@ class Pipeline:
             return None
 
     def _merge_base(self, base: str) -> str:
-        """The commit the working tree branched from: a branch behind a moved `base` is judged against what it
-        started from, not against what others landed since."""
+        """The commit the working tree branched from, so a branch is judged against what it started from."""
         r = self._git("rev-parse", "--verify", "--quiet", f"{base}^{{commit}}")
         if r is None or r.returncode != 0:
             remote = base.split("/")[0] if "/" in base else "<remote>"
@@ -224,13 +215,10 @@ class Pipeline:
         return dict(zip(t[1::3], t[2::3]))
 
     def change(self, base: str) -> dict:
-        """Dead-code check: the unused, unused-constant, compat-layer and complexity findings of the working tree
-        that the tree at the merge-base of `base` and HEAD does not have (compared as a multiset of fingerprints).
-        `stopped` names them when there are any."""
+        """Dead-code check: findings of the working tree that the tree at the merge-base of `base` and HEAD lacks."""
         if not isinstance(base, str) or not base or base.startswith("-"):
             raise ValueError(f"base must be a git revision, got {base!r}")
         sha = self._merge_base(base)
-        # the per-detector cap would truncate each side differently: compare everything, cap nothing
         cfg = {**self.settings, "thresholds": {**(self.settings.get("thresholds") or {}), "maxFindingsPerDetector": 10 ** 9}}
         ledger_eps = self.session_data(only_ledger=True)[0]["episodes"]
         now_arts = self.artifacts("project")
@@ -240,7 +228,6 @@ class Pipeline:
             old.mkdir()
             self._export(sha, old)
             unreadable: list[str] = []
-            # same graph as the working tree's: when the project is the kit, the old tree's concepts too
             is_kit = self.project.resolve() == self.kit.resolve()
             try:
                 old_graph = graph.build(old, old if is_kit else self.kit).as_dict()
@@ -259,7 +246,7 @@ class Pipeline:
         for k in CHANGE_KINDS:
             found += detect_artifacts.run(now_arts, cfg, only=k)
         new = []
-        for c in found:                          # a second finding with the same fingerprint is new
+        for c in found:
             fp = fingerprint(c)
             if seen[fp] > 0:
                 seen[fp] -= 1

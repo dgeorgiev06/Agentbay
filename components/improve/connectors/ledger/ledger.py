@@ -1,4 +1,4 @@
-"""ledger: session.events/v1 + review.verdicts/v1 over .agentbay/ledger and .agentbay/calls (ledger_sources.py in this folder)."""
+"""ledger: session.events/v1 and review.verdicts/v1 over .agentbay/ledger and .agentbay/calls."""
 from bay.util import parse_time
 
 from . import ledger_sources as sources

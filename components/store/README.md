@@ -88,6 +88,10 @@ The internal state is in `<mode>/state.json` (mode 0600, never opened by agents)
 sources last applied. In a cursor, `from` is what was fetched and `covers` is what coverage reports. `covers` is
 the window start when every selector of the query has its own `since`.
 
+Sync and prune hold an exclusive lock (`corpus.lock`) from reading `state.json` until they have saved it. Spend,
+deletions and check times are saved before the items commit, and again if it fails, and the rest of the state after
+it. A crash can then only over-count spend and never lose it, and a cursor never claims uncommitted items.
+
 ## Read-only SQL
 
 Agents query the store with `items.store/v2.sql`. The sandbox in `bay/sqlsandbox.py` works as follows.

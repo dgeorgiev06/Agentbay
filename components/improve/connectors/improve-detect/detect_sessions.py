@@ -1,10 +1,4 @@
-"""Deterministic session detectors (improve.scan).
-
-Input: session.episode/v1 episodes (ledger, claude-transcripts, git) and review verdicts.
-Output: candidate improve.finding/v1 dicts (no id/status yet; the store assigns those).
-A recurring pattern needs evidence from >= 2 episodes unless it is marked severe (rules R-2 of scan).
-Every detector is a pure function of (data, thresholds) so `verify` can re-run it on new data.
-"""
+"""Deterministic session detectors (improve.scan)."""
 from __future__ import annotations
 
 import re
@@ -42,7 +36,6 @@ def _scope_of_target(target: str) -> dict:
     return {"mode": mode, "feature": feat} if feat else {"mode": mode}
 
 
-# ----------------------------------------------------------------------------- review verdicts
 def review_rounds(data: dict, th: dict) -> list[dict]:
     out = []
     by_target: dict[str, list] = defaultdict(list)
@@ -63,7 +56,6 @@ def review_rounds(data: dict, th: dict) -> list[dict]:
                              {"maxRounds": worst, "subjects": len(heavy)},
                              "Find the DoD/rule ids that fail in round 1 and turn them into checks or clearer "
                              "playbook steps."))
-    # Claude Code sessions that spawned a reviewer subagent more than once
     ev = []
     for e in data["episodes"]:
         n = sum(1 for s in e.get("subagents", []) if REVIEWER.search(s.get("type", "")))
@@ -140,7 +132,6 @@ def out_of_scope(data: dict, th: dict) -> list[dict]:
     return out
 
 
-# ----------------------------------------------------------------------------- episodes
 def instruction_changes(data: dict, th: dict) -> list[dict]:
     groups: dict[str, list] = defaultdict(list)
     for e in data["episodes"]:

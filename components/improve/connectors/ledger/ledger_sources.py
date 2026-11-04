@@ -1,8 +1,4 @@
-"""agentbay's own records -> session.episode/v1 and review verdicts.
-
-Ledger:  .agentbay/ledger/events.jsonl (dispatcher steps, agent runs, guard decisions, notes)
-Calls:   .agentbay/calls/<callId>.json (review verdicts submitted to review steps)
-"""
+"""agentbay's own records -> session.episode/v1 and review verdicts."""
 from __future__ import annotations
 
 import json
@@ -92,8 +88,7 @@ class _LedgerFold:
                 ep["errors"] += 1
 
     def attach_notes(self) -> None:
-        """An instruction change counts on the call, run or task it names; a note naming none of them becomes
-        its own task episode."""
+        """An instruction change counts on the call, run or task it names, or becomes its own task episode."""
         for n in self.notes:
             targets = []
             if n.get("callId") and n["callId"] in self.calls:
@@ -129,8 +124,7 @@ class _LedgerFold:
 
 
 def ledger_episodes(project: Path, since: datetime | None = None, until: datetime | None = None) -> tuple[list[dict], dict]:
-    """Calls (one episode per callId, with steps), agent runs (spawned/completed + guard decisions) and
-    instruction-change notes."""
+    """Episodes for calls (with steps), agent runs (spawned, completed, guard decisions) and instruction notes."""
     warnings: list[str] = []
     evs = [e for e in ledger.read(project, warnings) if in_window(e.get("ts"), since, until)]
     fold = _LedgerFold()
@@ -170,7 +164,7 @@ def _texts(kit: Path | None, target: str, cache: dict, warnings: list) -> dict:
             if e and e.get("rules") and (md.dir / e["rules"]).exists():
                 from bay import rules
                 out.update({r.id: r.statement for r in rules.load(md.dir / e["rules"])})
-        except Exception as e:     # verdicts stay usable without the DoD text; say which feature failed
+        except Exception as e:
             warn(warnings, f"{target}: DoD/rule texts not loaded ({type(e).__name__}: {str(e)[:120]})")
     cache[target] = out
     return out
@@ -231,15 +225,20 @@ def _is_review_step(val) -> bool:
             and all(isinstance(i, dict) and "verdict" in i for i in val["items"]))
 
 
+def _scrubbed_then_cut(text: str) -> str:
+    """Scrub secrets first and cut after, so no prefix of a secret survives the cut."""
+    return secretscan.scrub(text)[:EVIDENCE_CHARS]
+
+
 def _review_item(i: dict, tx: dict) -> dict:
     """One verdict item as the detectors see it: bounded and scrubbed."""
     it = {"id": str(i.get("id", "?"))[:40], "verdict": i["verdict"]}
     if i.get("severity") in ("blocker", "should-fix", "nit"):
         it["severity"] = i["severity"]
-    if isinstance(i.get("evidence"), str):         # scrub first, then cut: no secret prefix survives
-        it["evidence"] = secretscan.scrub(i["evidence"])[:EVIDENCE_CHARS]
+    if isinstance(i.get("evidence"), str):
+        it["evidence"] = _scrubbed_then_cut(i["evidence"])
     if it["id"] in tx:
-        it["text"] = secretscan.scrub(tx[it["id"]])[:EVIDENCE_CHARS]
+        it["text"] = _scrubbed_then_cut(tx[it["id"]])
     return it
 
 

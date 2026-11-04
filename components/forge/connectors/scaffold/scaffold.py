@@ -6,7 +6,7 @@ from bay.util import PROPOSAL_PATH
 
 SENSITIVE = ("bay/dispatch.py", "bay/guard.py", "bay/cli.py", "bay/vault.py", "bay/secretscan.py", "bay/connect.py",
              "bay/ledger.py", "bay/boundary.py", "adapters/", "framework/kernel.yaml", "framework/rules/",
-             "schemas/config.schema.json", "schemas/event.schema.json")      # a touch at, under or above these needs a plan
+             "schemas/config.schema.json", "schemas/event.schema.json")
 
 
 def kit_project(ctx):
@@ -18,7 +18,7 @@ def kit_project(ctx):
 
 
 def plan_reason(fm, hits) -> str:
-    """Why the plan step runs for this proposal, or "" when no rule asks for one (`hits`: touched path prefixes, None if unreadable)."""
+    """Why the plan step runs for this proposal, or "" when no rule asks for one."""
     sensitive = any(boundary.under(s, t) or boundary.under(t, s) for s in SENSITIVE for t in hits or ())
     reasons = (("touches: is missing or unreadable", hits is None), ("touches: lists 10 or more paths", len(hits or ()) >= 10),
                ("the front matter has exceptions:", "exceptions" in fm), ("touches: includes a security-sensitive path", sensitive))
@@ -33,15 +33,14 @@ class Scaffold:
         return scaffold.create(kit_project(self.ctx), kind, name, target=target, implements=implements, intent=intent)
 
     def proposal(self, path=None) -> dict:
-        """A proposal's front matter status, approvedBy and date (informational; only `bay approve` passes the gate),
-        and `plan`: whether the plan step runs (a large or sensitive proposal; no docs/plans/<id>.md yet)."""
+        """A proposal's status, approvedBy, date and plan flag; informational, only `bay approve` passes the gate."""
         root, named = kit_project(self.ctx), isinstance(path, str)
         found = next((x for x in ([path] if named else path or []) if PROPOSAL_PATH.match(x)), "")
         p = (root / found).resolve()
         if not p.is_relative_to((root / "docs" / "proposals").resolve()) or not p.is_file():
             if named:
                 raise ConnectorError(f"no proposal at {path} (docs/proposals/<id>.md)")
-            return {"path": "", "plan": False, "why": ""}          # the propose step named no proposal file
+            return {"path": "", "plan": False, "why": ""}
         try:
             fm = front_matter(p.read_text(encoding="utf-8"))
         except ProposalError as e:

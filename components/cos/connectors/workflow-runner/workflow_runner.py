@@ -1,13 +1,4 @@
-"""workflow-runner: workflow.run/v1. The stage cursor for project workflows.
-
-What it does: reads the workflow from agentbay.config.yaml, keeps one JSON file per run under
-ctx.data_dir, and answers each call with the next stage to run.
-
-What it deliberately does not do: run the stage. `start`, `next` and `approve` return the
-`<mode>.<endpoint>` call the coordinator is to make. The coordinator drives that call through the
-ordinary dispatcher loop, so the stage keeps its own grants, effects, budget, review and gates, and
-nothing recurses. This connector cannot call an endpoint, spawn an agent or read connector data.
-"""
+"""workflow-runner: workflow.run/v1. The stage cursor for project workflows."""
 from __future__ import annotations
 
 import json
@@ -27,7 +18,6 @@ class WorkflowRunner:
         self.dir = Path(ctx.data_dir)
         self.defs = wfmod.load(_kit(ctx))
 
-    # ------------------------------------------------------------ endpoints
     def start(self, workflow: str, input: dict | None = None) -> dict:
         wf = self.defs.get(workflow)
         if wf is None:
@@ -89,7 +79,6 @@ class WorkflowRunner:
             runs = [r for r in runs if r["status"] in OPEN]
         return {"runs": [_public(r) for r in sorted(runs, key=lambda r: r["startedAt"], reverse=True)]}
 
-    # ------------------------------------------------------------ engine
     def _advance(self, run: dict, wf, strict: bool = True) -> dict:
         """Walk stages until one needs the coordinator (a call), needs the user (a gate), or the run ends."""
         mv = wfmod.advance([wf.stage(r["id"]) for r in run["stages"]], run["cursor"], run["input"], run["results"])
@@ -98,10 +87,10 @@ class WorkflowRunner:
                 rec["state"] = "skipped"
         run["cursor"] = mv.cursor
         extra = {"skipped": mv.skipped} if mv.skipped else {}
-        if mv.kind in ("missing", "refused"):   # the workflow was edited under a live run, or holds a gate with `when:`
+        if mv.kind in ("missing", "refused"):
             run.update(status="failed", reason=mv.reason or f"stage '{run['stages'][mv.cursor]['id']}' is no longer in workflows.{run['workflow']}; the workflow changed after this run started. Start a new run.")
             out = self._finish(run)
-            if strict:   # start and next cannot take the report, so the call fails; approve returns, so the owner's decision is ledgered
+            if strict:
                 raise ConnectorError(f"{run['reason']} (run {run['runId']} is failed)")
             return out
         if mv.kind == "done":

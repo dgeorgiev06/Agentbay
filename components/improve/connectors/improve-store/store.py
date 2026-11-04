@@ -1,18 +1,4 @@
-"""The improve store: .agentbay/data/improve/findings.jsonl (one improve.finding/v1 per line). Storage only:
-detectors live in the improve-detect connector and run behind improve.detect/v1; report and handoff text is
-rendered by report.py in this folder.
-
-  upsert    candidates (detectors or resolved analyst findings); dedup by fingerprint, merge evidence,
-            reopen a fixed/verified finding whose pattern comes back
-  annotate  root cause, fix, route, effort, impact from the analyst (_classify as upsert does); open findings only
-  triage    "same file" links across lenses and priority = impact x frequency / effort
-  decide    human decisions (approve | defer | wontfix); approve only via `bay approve <id>` in a terminal
-  backlog   write reports/<isoweek>.md
-  claim / handoff   implement: only approved items; writes a draft proposal or a task envelope, never code
-  verify    close as verified, or reopen
-
-Every write is secret-scanned (secretscan.scrub_obj) before it reaches disk.
-"""
+"""The improve store: findings.jsonl, one improve.finding/v1 per line; storage only, every write secret-scanned."""
 from __future__ import annotations
 
 import json
@@ -55,16 +41,13 @@ def isoweek(dt: datetime) -> str:
 
 class Store:
     def __init__(self, data_dir: Path, now: datetime, protection: Protection):
-        """`protection`: the component map's `protected:` set (model.load_protection); a closed one routes everything
-        to forge.extend."""
+        """`protection`: the component map's `protected:` set; a closed one routes everything to forge.extend."""
         self.dir = Path(data_dir)
         self.path = self.dir / "findings.jsonl"
         self.now = now
         self.protection = protection
-        # protected components, envs and connectors (the map's paths under components/): changed through forge.extend
         self.protected_paths = tuple(p for p in protection.paths if p.startswith("components/"))
 
-    # ------------------------------------------------------------------ io
     def load(self) -> dict[str, dict]:
         out: dict[str, dict] = {}
         if self.path.exists():
@@ -85,7 +68,6 @@ class Store:
                                for f in findings.values()), encoding="utf-8")
         tmp.replace(self.path)
 
-    # ------------------------------------------------------------------ helpers
     def _framework_file(self, x: str) -> bool:
         return self.protection.closed or x.startswith(FRAMEWORK_DIRS) or any(x == p or x.startswith(p + "/") for p in self.protected_paths)
 
@@ -105,7 +87,6 @@ class Store:
         f.setdefault("history", []).append({"ts": iso(self.now), "status": status, "by": by,
                                             **({"note": note[:300]} if note else {})})
 
-    # ------------------------------------------------------------------ writes
     def upsert(self, candidates: list[dict], by: str) -> dict:
         fs = self.load()
         res = {"new": [], "merged": [], "reopened": []}
@@ -114,8 +95,6 @@ class Store:
             fid = f"F-{fp[:8]}"
             cur = fs.get(fid)
             if cur is None:
-                # the store owns these fields: whatever a candidate carries under them is dropped, so a candidate
-                # cannot arrive approved, with a forged history, or under another id
                 f = {**{k: v for k, v in c.items() if k not in (*STORE_OWNED, "route", "effort", "impact")},
                      "id": fid, "fingerprint": fp, "status": "open", "firstSeen": iso(self.now), "source": by,
                      "links": [], "history": []}
@@ -202,7 +181,6 @@ class Store:
         self.save(fs)
         return f
 
-    # ------------------------------------------------------------------ reads
     def query(self, status=None, lens=None, kind=None, ids=None, limit=None) -> list[dict]:
         out = [f for f in self.load().values()
                if (not status or f["status"] in ([status] if isinstance(status, str) else status))
@@ -211,7 +189,6 @@ class Store:
         out.sort(key=lambda f: (-f.get("priority", 0), f["id"]))
         return out[:limit] if limit else out
 
-    # ------------------------------------------------------------------ triage
     def triage(self) -> dict:
         """Links findings of different lenses that point at the same file, and re-scores priority."""
         fs = self.load()
@@ -240,9 +217,8 @@ class Store:
                 "ranked": [{"id": f["id"], "priority": f["priority"], "kind": f["kind"], "title": f["title"]}
                            for f in ranked]}
 
-    # ------------------------------------------------------------------ backlog
     def backlog(self, top: int = 10, week: str | None = None, agents: dict | None = None) -> dict:
-        """`agents` = {"groups": ledger.agent_groups(...), "plans": ledger.plans(...)}: the run records the report cites."""
+        """`agents` holds the run records the report cites: the agent groups and the plans."""
         week = week or isoweek(self.now)
         items = self.query(status=["open", "approved"])[:top]
         counts = {st: 0 for st in STATUSES}
@@ -255,7 +231,6 @@ class Store:
         return {"report": str(p), "week": week, "items": [f["id"] for f in items],
                 "counts": {k: v for k, v in counts.items() if v}}
 
-    # ------------------------------------------------------------------ implement
     def claim(self, fid: str) -> dict:
         f = self.load().get(fid)
         if f is None:

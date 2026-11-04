@@ -15,7 +15,7 @@ class ImproveStore:
         self.ctx = ctx
         if not ctx.kit:
             raise ConnectorError("improve-store needs the kit (framework/kernel.yaml `protected:`) to route findings")
-        prot, _ = model.load_protection(Path(ctx.kit))      # a map that cannot be read protects everything
+        prot, _ = model.load_protection(Path(ctx.kit))
         self.store = st.Store(ctx.data_dir, ctx.now(), prot)
         self.settings = ctx.settings or {}
 
@@ -61,7 +61,7 @@ class ImproveStore:
 
     def backlog(self, top=None, week=None) -> dict:
         evs = ledger.read(Path(self.ctx.project)) if self.ctx.project else []
-        agents = {"groups": ledger.agent_groups(evs), "plans": ledger.plans(evs)}   # run records, as `status --agents`
+        agents = {"groups": ledger.agent_groups(evs), "plans": ledger.plans(evs)}
         res = self._do(self.store.backlog, top or self.settings.get("backlogTop") or 10, week, agents)
         try:
             res["report"] = Path(res["report"]).relative_to(self.ctx.project).as_posix()

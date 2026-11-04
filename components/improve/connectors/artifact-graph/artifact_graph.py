@@ -34,8 +34,7 @@ class Artifacts:
         return {"path": path, "text": secretscan.scrub(t), "lines": t.count("\n") + 1}
 
     def raw_text(self, path, root="project") -> str:
-        """Not an interface endpoint: dispatcher-side detectors parse unmodified source (scrubbing
-        first could make code unparseable). Every finding they emit is scrubbed before it is stored."""
+        """Not an endpoint: dispatcher-side detectors parse unmodified source, since scrubbing could break the code."""
         base = self._root(root).resolve()
         p = (base / path).resolve()
         if Path(path).is_absolute() or not p.is_relative_to(base):

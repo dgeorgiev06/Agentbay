@@ -1,35 +1,4 @@
-"""Claude Code (interactive) runtime adapter, v2.
-
-Mapping (a unit is one role in one mode and one env: <role>--<mode>, plus --<env> when the mode runs that
-role in several envs):
-  worker role unit         -> .claude/agents/<unit>.md (model from the agent profile's tier map)
-  Chief of Staff + mode
-  coordinator playbooks    -> .agentbay/COORDINATOR.md, imported from CLAUDE.md (your main session)
-  mode skills -> .claude/skills/<mode>--<skill>/, role skills -> .claude/skills/<role>--<skill>/ (a mode's
-  skills include those it inherits via extends; SKILL.md `name:` is rewritten to the folder name)
-  role data access         -> .agentbay/roles/<unit>/use  (unit fixed inside; read-only endpoints only; its
-                              mode's data in its env only)
-  coordinator commands     -> .claude/settings.json permissions.allow, explicit prefixes only
-                              (Bash(.agentbay/bay call:*), ... status, log, note, submit, task,
-                              catalog) - no wildcard
-  per-unit Bash scope      -> .agentbay/guard.json + PreToolUse(Bash) hook bay/guard.py: a subagent may run
-                              only its own use shim and its env's narrow command prefixes
-  ledger hooks             -> .claude/settings.json hooks (Pre/PostToolUse on Task|Agent)
-  catalog                  -> .agentbay/catalog.json, built by bay.registry (runtime-neutral:
-                              modes, endpoints with resolved schemas, roles, project workflows)
-
-Guarantees: idempotent; only touches files recorded in
-.agentbay/manifest.json; merges with user CLAUDE.md, .claude/settings.json and
-.mcp.json, never clobbers; clean restores the originals.
-
-Known limits of this runtime:
-  * permissions.allow is session-wide in Claude Code and subagent `tools`
-    takes bare tool names, so per-role Bash scope is enforced by the guard
-    hook (keyed on the hook input's agent_type), and connector access by the
-    dispatcher behind each role's use shim
-  * subagents cannot spawn subagents, so mode coordinators run as playbooks in
-    the main thread
-"""
+"""Claude Code (interactive) runtime adapter, v2."""
 from __future__ import annotations
 
 import json
@@ -51,12 +20,7 @@ MARK_END = "<!-- agentbay:end -->"
 HOOK_TAG = "bay/hook.py"
 GUARD_TAG = "bay/guard.py"
 BAY = ".agentbay/bay"
-# The only control-plane commands the main thread is pre-approved for. Everything else
-# (build, clean, secret, mode new, ...) prompts. Subagents get none of these (guard).
-# Safety rule: nothing that runs code is pre-approved. call/submit run connector code, so they prompt.
 COORDINATOR_CMDS = ("show", "status", "note", "catalog")
-# Writes that sit under a pre-approved command: each is its own prefix (`show reclaim`, `show close`, `note dispatch`, `note review`)
-# so one `ask` rule keeps the prompt they always had. `ask` is checked before `allow`.
 ASKED_UNDER_COORDINATOR_CMDS = ("show reclaim", "show close", "note dispatch", "note review")
 WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 GUARD_MATCHER = "Bash|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep"
@@ -117,22 +81,18 @@ def _claim(target: list, want: list, previously_owned: list) -> list[str]:
 
 
 def _want_deny(kit: Path, project: Path) -> list[str]:
-    """Session-wide floor (main thread and subagents): no file tool edits the control plane, Claude Code config
-    or the kit; store and call state are not read by file tools.
-    `Edit(...)` covers every editing tool (Write/MultiEdit/NotebookEdit path rules never match)."""
+    """Session-wide floor (main thread and subagents): no file tool edits the control plane, Claude Code config"""
     want = ["Edit(/.agentbay/**)", "Edit(/.claude/**)", "Read(/.agentbay/data/**)", "Read(/.agentbay/calls/**)"]
     if not _within(kit, project):
         want.append(f"Edit(/{kit.resolve()}/**)")
-    elif kit.resolve() != project.resolve():              # kit nested inside the project
+    elif kit.resolve() != project.resolve():
         want.append(f"Edit(/{kit.resolve().relative_to(project.resolve()).as_posix()}/**)")
-    want.append("Edit(/agentbay.config.yaml)")           # the owner's settings (approve.from among them)
+    want.append("Edit(/agentbay.config.yaml)")
     return want
 
 
 def _want_ask() -> list[str]:
-    """`bay approve` and `bay auth` in any spelling always ask the user first (the main thread relays chat approvals
-    only through this prompt); a subagent is refused by the guard hook either way. So do the writes that share a
-    prefix with a pre-approved command (`show reclaim`, `show close`, `note dispatch`, `note review`)."""
+    """`bay approve` and `bay auth` in any spelling always ask the user first (the main thread relays chat approvals"""
     spellings = (BAY, "./bay.sh", "bay", "bay.sh", "python3 -m bay.cli", "python3 bay/cli.py", "python3 */bay/cli.py")
     return [f"Bash({s} {verb}:*)" for verb in ("approve", "auth", *ASKED_UNDER_COORDINATOR_CMDS) for s in spellings]
 
@@ -142,7 +102,6 @@ def _install_hooks(hooks: dict, kit: Path) -> None:
     guard = f'python3 "{kit / "bay" / "guard.py"}"'
     hooks.setdefault("PreToolUse", []).insert(
         0, {"matcher": GUARD_MATCHER,
-            # a failing/crashing/timed-out guard blocks the call (Claude Code >= 2.1.295)
             "hooks": [{"type": "command", "command": guard, "timeout": 10, "onFailure": "block"}]})
     hook = f'python3 "{kit / "bay" / "hook.py"}"'
     for event, phase in (("PreToolUse", "pre"), ("PostToolUse", "post")):
@@ -196,9 +155,7 @@ def _empty(p: Path) -> bool:
 
 
 def _rename_skill(p: Path, name: str) -> None:
-    """Set the copied SKILL.md's front-matter `name:` to its namespaced folder name (Claude Code wants them equal).
-    The front matter is parsed as YAML (CRLF normalised) and written back with `name` first; a malformed block
-    (`bay check` reports it) removes the copied skill and stops the build rather than writing a broken file."""
+    """Set the copied SKILL.md's front-matter `name:` to its namespaced folder name (Claude Code wants them equal)."""
     if not p.exists():
         return
     try:
@@ -214,12 +171,9 @@ def _rename_skill(p: Path, name: str) -> None:
 class ClaudeCodeAdapter:
     name = "claude-code"
 
-    # ---------- public contract ----------
     def build(self, system: System, project: Path, kit: Path) -> BuildReport:
         rep = BuildReport(self.name)
         old = self._manifest(project)
-        # files that existed before agentbay first touched the project are merged and restored, never deleted
-        # (recorded on the first build; an empty list is a real answer, not "unknown")
         if "preexisting" in old:
             preexisting = old["preexisting"]
         else:
@@ -228,8 +182,8 @@ class ClaudeCodeAdapter:
         man = {"runtime": self.name, "builtAt": now(), "kit": str(kit), "preexisting": preexisting,
                "originals": originals, "files": [], "mcpServers": [], "permissions": [], "denies": []}
 
-        system = system.for_project(project)            # forge.extend only into the agentbay checkout
-        units = system.subagents()                 # unit name -> worker unit
+        system = system.for_project(project)
+        units = system.subagents()
         for sub, role in sorted(units.items()):
             man["files"].append(self._write_agent(sub, role, system, project, rep))
         for sk, src in sorted(self._skills(system, units).items()):
@@ -265,7 +219,7 @@ class ClaudeCodeAdapter:
         runtime = [d for d in ("ledger", "data", "calls") if (project / ".agentbay" / d).exists()]
         for f in old.get("files", []):
             if f == ".agentbay/.gitignore" and runtime:
-                continue                    # keeps your ledger/data/calls out of git while they exist
+                continue
             self._rm(project / f, rep)
         self._mcp(None, project, old, rep)
         self._settings({}, project, Path(old.get("kit", ".")), old, rep, remove_only=True)
@@ -274,11 +228,11 @@ class ClaudeCodeAdapter:
         for f, text in (old.get("originals") or {}).items():
             p = project / f
             if p.exists() and _same(p.read_text(), text):
-                p.write_text(text)                     # restore exact original formatting
+                p.write_text(text)
         for f in ("CLAUDE.md", ".claude/settings.json", ".mcp.json"):
             p = project / f
             if f not in pre and p.exists() and _empty(p):
-                self._rm(p, rep)                       # we created it and nothing of yours is in it
+                self._rm(p, rep)
         roles_dir = project / ".agentbay" / "roles"
         for d in sorted(roles_dir.glob("*"), reverse=True) if roles_dir.is_dir() else []:
             if d.is_dir() and not any(d.iterdir()):
@@ -290,10 +244,9 @@ class ClaudeCodeAdapter:
         (project / ".agentbay" / "manifest.json").unlink(missing_ok=True)
         ab = project / ".agentbay"
         if ab.is_dir() and not any(ab.iterdir()):
-            ab.rmdir()                      # runtime data (ledger/, data/, calls/) is yours and is kept
+            ab.rmdir()
         return rep
 
-    # ---------- pieces ----------
     def _manifest(self, project: Path) -> dict:
         return _read_json(project / ".agentbay" / "manifest.json", {})
 
@@ -311,7 +264,7 @@ class ClaudeCodeAdapter:
         if not r.tools:
             rep.warnings.append(f"{sub}: no tools resolved; defaulting to Read only (empty would inherit ALL tools)")
         prof, _ = system.kit.profile()
-        names = (prof.get("tools") or {}) if prof else {}          # the profile's tool-name mapping
+        names = (prof.get("tools") or {}) if prof else {}
         fm = ["---", f"name: {sub}", f"description: {json.dumps(r.description)}",
               f"tools: {', '.join(names.get(x, x) for x in tools)}", f"model: {r.inference.model}", "---"]
         extras = [f"## Where you work\nRole `{r.name}` in mode `{r.mode}`, env `{r.env}`. "
@@ -428,17 +381,13 @@ class ClaudeCodeAdapter:
             fs = system.env(r.env).spec.get("fs", {})
             subs[sub] = {"role": r.name, "mode": r.mode, "env": r.env, "shim": use_shim(sub) if r.bay_uses else None,
                          "clis": list(r.clis),
-                         # `~/...` or absolute read paths are for the env's connectors (e.g. transcripts), never roles
                          "read": [x for x in fs.get("read", ["."]) if not x.startswith(("~", "/"))],
-                         # only `access: write` roles with file-writing tools get writable paths
                          "write": list(fs.get("write", [])) if r.access == "write" and WRITE_TOOLS & set(r.tools)
                          else []}
         is_kit = project.resolve() == kit.resolve()
-        if system.kit.protected.closed:                # the map's `protected:` block was unreadable: no policy is safe
+        if system.kit.protected.closed:
             raise SpecError("framework/kernel.yaml has no readable protected: block; the guard policy is built "
                             "from it, so nothing is built")
-        # The shim is auto-allowed only when the kit is outside the project. If the kit is the project
-        # or sits inside it, roles may be able to edit code the shim runs, so it prompts instead.
         pol = {"project": str(project.resolve()), "kit": str(kit.resolve()),
                "protected": system.kit.protected_paths if is_kit else [], "autoAllowShim": not _within(kit, project),
                "subagents": subs}
@@ -465,9 +414,6 @@ class ClaudeCodeAdapter:
         if not remove_only:
             owned_deny = (_claim(deny, _want_deny(kit, project), old.get("denies", []))
                           + _claim(ask, list(dict.fromkeys(_want_ask())), old.get("denies", [])))
-            # main-thread control plane: explicit subcommands only, never a wildcard over .agentbay/bay.
-            # Subagent command prefixes are NOT added here (allow rules are session-wide); the guard
-            # hook scopes them per role instead.
             want = [f"Bash({BAY} {c}:*)" for c in COORDINATOR_CMDS]
             owned = _claim(allow, list(dict.fromkeys(want)), old.get("permissions", []))
             _install_hooks(hooks, kit)
@@ -477,8 +423,6 @@ class ClaudeCodeAdapter:
         return owned, owned_deny
 
     def _coordinator(self, system: System, units, project: Path, kit: Path, rep: BuildReport) -> list[str]:
-        # The root coordinator is a mode like any other; its playbook is this document's preamble, so it is
-        # excluded from the per-mode sections below (otherwise its prose would be emitted twice).
         root = system.modes.get(ROOT_COORDINATOR)
         if root is None or not root.playbook:
             raise ValueError(f"no `{ROOT_COORDINATOR}` mode with a playbook: the main thread has no coordinator "
@@ -499,7 +443,7 @@ class ClaudeCodeAdapter:
                              + _without(m.playbook, system.uninstalled).strip().replace("# ", "#### ", 1))
         for sub, r in sorted(units.items()):
             role_rows.append(f"| `{sub}` | {r.inference.model} | {r.mode} | {r.env} | {r.description} |")
-        skills: dict[str, tuple[str, str]] = {}      # runtime name -> (owner, the playbooks' short name)
+        skills: dict[str, tuple[str, str]] = {}
         for m in system.modes.values():
             for sid in m.skills:
                 skills[sid] = (f"mode {m.name}", sid[len(m.name) + 2:])

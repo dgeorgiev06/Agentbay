@@ -1,10 +1,4 @@
-"""Deterministic artifact detectors (improve.audit): slop, unused, inefficient, complexity, docs, compatibility
-layers, conformance.
-
-Input (`Artifacts`): file list, text reader and reference graph from artifacts.read/v1, plus ledger episodes
-(for "zero uses in the window") and conformance results. Output: candidate improve.finding/v1 dicts.
-Evidence is exact: file:line, the text, and a tightened rewrite or a measurement.
-"""
+"""Deterministic artifact detectors for improve.audit, each a pure function of the artifacts and thresholds."""
 from __future__ import annotations
 
 import ast
@@ -23,7 +17,7 @@ from bay.secretscan import clip
 
 DEFAULTS = {"nearDuplicate": 0.7, "contextTokens": 6000, "maxFindingsPerDetector": 50,
             "maxComplexity": 30, "maxFunctionLines": 150, "docWords": 3000}
-HISTORY_DOCS = ("docs/proposals/", "docs/plans/", "CHANGELOG.md")    # records of past decisions: never sized or checked for staleness
+HISTORY_DOCS = ("docs/proposals/", "docs/plans/", "CHANGELOG.md")
 FILLER = {
     "in order to": "to", "it is important to note that": "", "it's important to note that": "",
     "please note that": "", "it should be noted that": "", "make sure to": "", "be sure to": "",
@@ -52,10 +46,10 @@ class Artifacts:
     ledger: list[dict] = field(default_factory=list)
     conformance: list[dict] = field(default_factory=list)
     is_kit: bool = False
-    unreadable: list[str] = field(default_factory=list)   # files the text reader refused or could not read
-    unparsed: list[str] = field(default_factory=list)     # Python files with syntax errors (skipped by AST checks)
-    failed: list[str] = field(default_factory=list)       # detectors that raised (their findings are missing)
-    root: Path | None = None    # the scanned tree on disk; doc_stale checks link targets against it when set
+    unreadable: list[str] = field(default_factory=list)
+    unparsed: list[str] = field(default_factory=list)
+    failed: list[str] = field(default_factory=list)
+    root: Path | None = None
 
 
 def candidate(kind: str, key: str, title: str, pattern: str, evidence: list[dict], scope: dict,
@@ -87,7 +81,6 @@ def _py(a: Artifacts):
             yield f["path"], t, tree
 
 
-# ----------------------------------------------------------------------------- slop
 def slop_filler(a: Artifacts, th: dict) -> list[dict]:
     out = []
     for f in a.files:
@@ -196,7 +189,7 @@ def slop_comments(a: Artifacts, th: dict) -> list[dict]:
             if not 2 <= len(words) <= 6:
                 continue
             code = lines[row - 1][:tok.start[1]]
-            if not code.strip():                             # standalone comment: the next code line
+            if not code.strip():
                 nxt = next((ln for ln in lines[row:] if ln.strip() and not ln.strip().startswith("#")), "")
                 code = nxt
             ids = _idwords(code)
@@ -233,14 +226,13 @@ def slop_messages(a: Artifacts, th: dict) -> list[dict]:
     return out
 
 
-# ----------------------------------------------------------------------------- unused
 def _ledger_uses(a: Artifacts) -> dict[tuple, int]:
     uses: dict[tuple, int] = defaultdict(int)
     for e in a.ledger:
         if e.get("target"):
             uses[("endpoint", e["target"])] += 1
         if e.get("agent"):
-            uses[("role", e["agent"].split("--")[0])] += 1      # agentbay subagents: <role>--<mode>[--<env>]
+            uses[("role", e["agent"].split("--")[0])] += 1
             uses[("agent", e["agent"])] += 1
         for st in e.get("steps", []):
             for k in ("role", "agent", "env"):
@@ -277,7 +269,6 @@ def unused(a: Artifacts, th: dict) -> list[dict]:
     return out
 
 
-# ----------------------------------------------------------------------------- inefficient
 def _closure(cls: ast.ClassDef, funcs: dict, start: str) -> tuple[set, set]:
     methods = {m.name: m for m in cls.body if isinstance(m, ast.FunctionDef)}
     seen, todo, calls = set(), [start], set()
@@ -359,8 +350,7 @@ def _fixed_iterations(it: ast.AST) -> bool:
 
 
 def oversized_context(a: Artifacts, th: dict, roles: list[dict] | None = None) -> list[dict]:
-    """roles: [{name, path, chars, parts}] estimated by the store from the kit (prompt + doneWhen + rules +
-    skills + the largest feature playbook/rules the role runs)."""
+    """Roles whose estimated prompt, doneWhen, rules and skills together exceed the context budget."""
     out = []
     for r in roles or []:
         tokens = r["chars"] // 4
@@ -377,15 +367,13 @@ def oversized_context(a: Artifacts, th: dict, roles: list[dict] | None = None) -
     return out
 
 
-# ----------------------------------------------------------------------------- complexity
 DECISIONS = tuple(x for x in (ast.If, ast.For, ast.AsyncFor, ast.While, ast.IfExp, ast.ExceptHandler, ast.Assert,
-                              getattr(ast, "match_case", None)) if x is not None)    # match_case: Python 3.10+
+                              getattr(ast, "match_case", None)) if x is not None)
 NESTED = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 
 
 def _branches(fn: ast.AST) -> int:
-    """Cyclomatic complexity of one function: 1 + decision points, not counting nested functions or classes
-    (they are measured on their own)."""
+    """Cyclomatic complexity of one function: 1 + decision points, not counting nested functions or classes."""
     n = 1
     todo = list(ast.iter_child_nodes(fn))
     while todo:
@@ -429,8 +417,7 @@ def _own_lines(fn: ast.AST) -> int:
 
 
 def complexity(a: Artifacts, th: dict) -> list[dict]:
-    """Functions with more decision points than `maxComplexity` or more own lines than `maxFunctionLines`
-    (nested functions and classes are measured on their own, for both)."""
+    """Functions with more decision points than `maxComplexity` or more own lines than `maxFunctionLines`."""
     out = []
     for path, _, tree in _py(a):
         for qual, fn in _functions(tree):
@@ -451,10 +438,8 @@ def complexity(a: Artifacts, th: dict) -> list[dict]:
     return out
 
 
-# ----------------------------------------------------------------------------- unused constants
 def _referenced(a: Artifacts) -> set[str]:
-    """Every name Python code in the tree loads (names, attributes, imports, getattr-style strings); tests
-    included, since a constant only a test reads is still read."""
+    """Every name Python code in the tree loads, tests included, since a constant only a test reads is still read."""
     out: set[str] = set()
     for f in a.files:
         if not f["path"].endswith(".py"):
@@ -486,8 +471,7 @@ def _exported(tree: ast.Module) -> set[str]:
 
 
 def unused_constants(a: Artifacts, th: dict) -> list[dict]:
-    """Module-level names (constants, tables, patterns) that no Python code anywhere loads. Functions, classes
-    and modules are covered by `unused` through the reference graph."""
+    """Module-level names that no Python code anywhere loads; functions, classes and modules go through `unused`."""
     used = _referenced(a)
     out = []
     for path, _, tree in _py(a):
@@ -507,7 +491,6 @@ def unused_constants(a: Artifacts, th: dict) -> list[dict]:
     return out
 
 
-# ----------------------------------------------------------------------------- docs
 def _docs(a: Artifacts, th: dict):
     history = tuple(th.get("historyDocs", HISTORY_DOCS))
     for f in a.files:
@@ -572,11 +555,7 @@ def _prose_lines(text: str):
 
 
 def doc_stale(a: Artifacts, th: dict) -> list[dict]:
-    """Docs that point at files or Python symbols that do not exist: relative markdown links (a leading `/`
-    is the repo root), backticked kit paths (whose first folder exists, so placeholders and generated
-    `.agentbay/` paths are skipped) and `file.py` `symbol` pairs. Fenced code blocks and links inside inline
-    code are skipped. With `a.root` set, link targets are checked on disk (inside the root only); without it,
-    against the file list, and targets under folders the list never walks (SKIP_DIRS) are not reported."""
+    """Docs that point at files or Python symbols that do not exist: links, kit paths and `file.py` `symbol` pairs."""
     files = {f["path"] for f in a.files}
     dirs = {str(Path(p).parents[i]) for p in files for i in range(len(Path(p).parents) - 1)}
     tops = {p.split("/", 1)[0] for p in files}
@@ -622,7 +601,6 @@ def doc_stale(a: Artifacts, th: dict) -> list[dict]:
     return out
 
 
-# ----------------------------------------------------------------------------- compatibility layers
 COMPAT_RX = re.compile(r"\b(deprecat\w*|legacy|backwards?[- ]compat\w*|for (?:one|a) release|kept working"
                        r"|old names?|alias(?:es|ed)? (?:for|of|to))\b", re.I)
 VERSION_RX = re.compile(r"\bv?(\d+)\.(\d+)(?:\.\d+)?\b")
@@ -672,8 +650,7 @@ def _yaml_marks(text: str) -> list[tuple[int, str]]:
 
 
 def compat_layers(a: Artifacts, th: dict) -> list[dict]:
-    """Code, YAML comments and schemas marked as a compatibility layer, with its age in releases when it names
-    the version it dates from: each one is a removal someone promised."""
+    """Code, YAML comments and schemas marked as a compatibility layer, with their age in releases when named."""
     now = _kit_version(a)
     marked: list[tuple[str, list[tuple[int, str]]]] = []
     for path, text, tree in _py(a):
@@ -708,7 +685,6 @@ def compat_layers(a: Artifacts, th: dict) -> list[dict]:
     return out
 
 
-# ----------------------------------------------------------------------------- conformance
 def conformance(a: Artifacts, th: dict) -> list[dict]:
     out = []
     for res in a.conformance:
@@ -753,7 +729,7 @@ def run(a: Artifacts, cfg: dict | None = None, only: str | None = None, roles: l
                 res = fn(a, th, read_endpoints)
             else:
                 res = fn(a, th)
-        except Exception as e:      # one broken detector must not sink the audit: named in a.failed
+        except Exception as e:
             a.failed.append(clip(f"{fn.__name__}: {type(e).__name__}: {e}", 300))
             continue
         res = [c for c in res if not only or c["kind"] == only]

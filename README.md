@@ -39,7 +39,7 @@ Design: [docs/DESIGN.md](docs/DESIGN.md). Contracts: [docs/INTERFACES.md](docs/I
 
 ## Install
 
-Python 3 and Claude Code. From a clone:
+Python 3 and a Claude Code version that sends `agent_type`. From a clone:
 
 ```bash
 pip install -r requirements.txt        # pyyaml, jsonschema

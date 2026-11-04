@@ -1,21 +1,4 @@
-"""`bay call <mode>.<endpoint> '<json>'`: the only way to invoke an endpoint.
-
-A call walks the feature's steps:
-  code step   -> run the bound connector here (connectors never reach agents)
-  role step   -> stop and return a step plan; the coordinator runs the role and
-                 resumes with `bay submit <callId> <stepId> '<json>'`
-  gate step   -> stop with status awaiting-approval; only `bay approve <callId>` (interactive
-                 terminal, or `--via chat` when approve.from lists chat; never pre-approved) passes or
-                 rejects it. A gate with `approves: $in.<f>` approves that file's exact content: the
-                 ledger records its path and sha256, and a later call naming the same unchanged file
-                 skips the gate (any edit makes it run again). Nothing else skips a gate.
-  review step -> injected from mode.yaml `review`; gets DoD, reviewer rules and
-                 deterministic check results; verdicts decide done vs partial
-
-Every step writes step.started / step.completed (or failed/skipped/planned) to
-the ledger with mode, endpoint, step, role, agent (the profile), env and cost. Secret values
-are redacted from everything this module returns or logs.
-"""
+"""`bay call <mode>.<endpoint> '<json>'`: the only way to invoke an endpoint."""
 from __future__ import annotations
 
 import hashlib
@@ -29,9 +12,7 @@ from . import boundary, checks, config as cfgmod, connect, ledger, model, secret
 from .util import PROPOSAL_PATH, parse_time, read_json, utcnow, write_json
 
 VERDICT = "review.verdict/v1"
-# who `bay approve` records: a terminal approval, or one relayed from chat (bay/cli.py CHAT_BY); only these pass a
-# gate for a later call
-APPROVERS = ("user@tty", "user@chat-via-cos")
+GATE_APPROVERS = ("user@tty", "user@chat-via-cos")
 FAIL_LEVELS = ("must", "must_not")
 
 
@@ -40,10 +21,7 @@ class CallError(Exception):
 
 
 def _reads_stored(step, out: dict) -> bool:
-    """A refresh step (a sync run only when the store is stale: `when: stale > ...`) that could not read a
-    source because it is blocked (an expired login) does not stop the call when the store already holds items:
-    the later steps work on what is stored, the call ends `partial`, and the store's coverage names the gap and
-    its fix. A sync endpoint's own step, or a store that was never filled, still ends the call `blocked`."""
+    """True when a blocked refresh step may be passed over because the store holds items (the call ends `partial`)."""
     return bool(step.when and str(step.when).startswith("stale") and out.get("blocked")
                 and (out.get("coverage") or {}).get("from"))
 
@@ -52,7 +30,6 @@ class Dispatcher:
         self.sys, self.project = system.for_project(project), project
         self.transport, self.provider, self.clock = transport, provider, clock or utcnow
 
-    # ------------------------------------------------------------ public
     def call(self, target: str, inp: dict | None = None) -> dict:
         try:
             mode, feat = self.sys.feature(target)
@@ -119,8 +96,7 @@ class Dispatcher:
             raise CallError(f"step {step.id}: write the plan to {_plan_path(state['callId'], gate.approves)} and list it in artifacts")
 
     def _close_runs(self, call_id: str, step, output) -> None:
-        """A step's submit ends every run still open that was dispatched to this call and step (and the run whose
-        taskId the result names, when it was dispatched), so `bay status` stops listing them as running."""
+        """A step's submit ends every run still open that was dispatched to this call and step."""
         evs = ledger.read(self.project)
         named = output.get("taskId") if isinstance(output, dict) else None
         tids = [e["taskId"] for e in evs if e.get("type") == "agent.dispatch" and e.get("taskId")
@@ -135,9 +111,7 @@ class Dispatcher:
                               agent=step.subagent, summary=summary, data={"status": status})
 
     def _require_plan(self, call_id: str, step, output) -> None:
-        """A subagent's result is accepted only when its run recorded an outcome (`bay plan`). The run is found by
-        the coordinator's dispatch record for this call and step, or by the taskId in the result block when that
-        taskId's dispatch names this call and step (or names no call)."""
+        """A subagent's result is accepted only when its run recorded an outcome with `bay plan`."""
         evs = ledger.read(self.project)
         tids = {e.get("taskId") for e in evs if e.get("type") in ("agent.dispatch", "spawned")
                 and e.get("callId") == call_id and e.get("step") == step.id}
@@ -153,9 +127,7 @@ class Dispatcher:
 
     def approve(self, call_id: str, approved: bool, reason: str = "", by: str = "user", quote: str = "",
                 sha: str = "") -> dict:
-        """Pass or reject the approval gate a call is waiting on. Called only from `bay approve`, which needs an
-        interactive terminal, or `--via chat` when the project's approve.from lists chat; never pre-approved for Claude
-        Code. `quote` is the owner's message a chat approval relays; the ledger keeps it next to `by`."""
+        """Pass or reject the approval gate a call is waiting on; called only from `bay approve`."""
         state = self._load(call_id)
         mode, feat = self.sys.feature(state["target"])
         if state["status"] != "awaiting-approval":
@@ -169,7 +141,6 @@ class Dispatcher:
             raise CallError(f"call {call_id}: {step.id} approves the file the plan step lists in docs/plans/, and there "
                             f"is none (expected {_plan_path(call_id, step.approves)}); nothing approved")
         if approved and subject != shown:
-            # the owner approves the content the gate showed; an edit since then needs a fresh look
             gate = self._gate_check(step, state, subject)
             state.setdefault("gates", {})[step.id] = gate
             state["plan"] = self._plan(mode, feat, step, state)
@@ -178,8 +149,6 @@ class Dispatcher:
                             f"gate was shown (sha256 {_short(shown)} -> {_short(subject)}); nothing approved. Read "
                             f"it again (`bay show {call_id}`) and re-run `bay approve {call_id}`")
         if approved and subject:
-            # the approval names the content it covers: a chat approval must carry the sha256 (prefix) of the
-            # content shown to the owner, the terminal path passes the one it printed
             if not sha and by == "user@chat-via-cos":
                 raise CallError(f"call {call_id}: a chat approval needs --sha <prefix> of the content shown "
                                 f"({subject['path']} at sha256 {_short(subject)})")
@@ -208,8 +177,7 @@ class Dispatcher:
         return self._advance(mode, feat, state)
 
     def approve_run(self, run_id: str, approved: bool, by: str, reason: str = "", quote: str = "") -> dict:
-        """Pass or reject the gate a project workflow run waits on (`bay approve W-...`), and record who did,
-        with the quoted message of a chat approval, in the ledger."""
+        """Pass or reject the gate a project workflow run waits on, and record who did in the ledger."""
         out = self.run_capability("cos", "workflow.run/v1.approve", {
             "runId": run_id, "approved": approved, "by": by,
             **({"reason": reason} if reason else {}), **({"quote": quote} if quote else {})})
@@ -235,7 +203,7 @@ class Dispatcher:
             pl = plans.get(e["taskId"])
             out.append({"taskId": e["taskId"], "step": e.get("step"), "agent": e.get("agent"),
                         "model": (e.get("data") or {}).get("model"),
-                        "inputs": (e.get("data") or {}).get("inputs")      # what the coordinator gave the agent
+                        "inputs": (e.get("data") or {}).get("inputs")
                         or ((started[-1].get("data") or {}).get("inputs") if started else None),
                         "outcome": pl["outcome"] if pl else None,
                         "progress": f"{pl['done']}/{len(pl['todo'])}" if pl else None,
@@ -243,15 +211,12 @@ class Dispatcher:
         return {"agents": out} if out else {}
 
     def _recorded_plans(self, call_id: str) -> dict:
-        """taskId -> {step, outcome, todo} of the agents dispatched for a call: what the reviewer judges the run against;
-        a verdict item may cite them (`cites`)."""
+        """taskId -> {step, outcome, todo} of the agents dispatched for a call, which the reviewer judges against."""
         return {a["taskId"]: {"step": a["step"], "outcome": a["outcome"], "todo": a["todo"]}
                 for a in self._agents(call_id).get("agents", []) if a["progress"]}
 
     def use(self, unit: str, target: str, inp: dict | None = None) -> dict:
-        """Read-only connector access for one compiled unit (a role in one mode and one env). Reached only
-        through the unit's own use shim (.agentbay/roles/<unit>/use), which fixes `unit`; there is no CLI flag
-        to choose it. The read runs in the unit's env and reaches only its mode's data."""
+        """Read-only access for one compiled unit; only its own use shim calls this, and the shim fixes `unit`."""
         r = self.sys.units().get(unit)
         if r is None:
             raise CallError(f"unknown role unit '{unit}' (have: {', '.join(sorted(self.sys.units()))})")
@@ -261,11 +226,11 @@ class Dispatcher:
                             f"{', '.join(r.bay_uses) or 'none'}); a role may call only the read-only endpoints of the "
                             f"capabilities its mode needs that its env ({r.env}) binds")
         scoped = self._open_uses(r)
-        if scoped is not None and target not in scoped:       # B-9: while a feature's step waits for this unit
+        if scoped is not None and target not in scoped:
             raise CallError(self._use_refusal(r, target, scoped))
         iface, ep = target.rsplit(".", 1)
         effects = model.endpoint_effects(self.sys.kit, iface, ep)
-        if set(effects) - model.AGENT_SAFE_EFFECTS:      # re-checked at runtime
+        if set(effects) - model.AGENT_SAFE_EFFECTS:
             raise CallError(f"{target} has effects {effects}; agents may only call read-only endpoints")
         env = self.sys.env(r.env)
         conns = model.connectors_of(env.spec["bind"].get(iface))
@@ -281,11 +246,7 @@ class Dispatcher:
         return secretscan.scrub_obj(json.loads(vault.redact(json.dumps(out, ensure_ascii=False))))
 
     def _open_uses(self, unit) -> set[str] | None:
-        """The endpoints every feature whose open call waits for `unit` (status needs-agent, cursor on a role or
-        review step of this unit) declares in `uses:`: the INTERSECTION, because the use shim does not say which
-        call is asking, so with several open calls a feature never reaches what another did not declare (B-9,
-        fail closed). None when no such call is open or none of its features declares `uses:`, so the role-level
-        grant applies (decision (c) of proposal 0008)."""
+        """What every open call waiting on `unit` declares in `uses:`: the intersection (B-9)."""
         found: set[str] | None = None
         for _, _, uses in self._open_calls(unit):
             found = set(uses) if found is None else found & set(uses)
@@ -322,9 +283,7 @@ class Dispatcher:
                 f"Finish those calls first: `bay show <callId>` continues one; run its step and submit.")
 
     def _use_settings(self, unit, iface: str) -> dict:
-        """The unit's mode settings when its mode needs `iface` (per-mode stores such as corpus-store key on the
-        mode), plus the source ids bound in the unit's env: the store in that env holds what syncs there fetched,
-        and refuses reads when its applied scope differs."""
+        """The unit's mode settings when its mode needs `iface`, plus the source ids bound in the unit's env."""
         m = self.sys.modes.get(unit.mode)
         if m is None or iface not in m.needs:
             return {}
@@ -333,8 +292,7 @@ class Dispatcher:
         return {**self._settings(m), "sources": sorted({d.spec["source"] for d in docs if d and d.spec.get("source")})}
 
     def run_capability(self, mode_name: str, run: str, args: dict) -> dict:
-        """Run one connector endpoint of a mode's capability outside any feature, in the env its code steps use.
-        CLI only (e.g. `bay approve <F-id>`); there is no agent path to it."""
+        """Run one connector endpoint outside any feature for the CLI only; no agent path reaches it."""
         if mode_name not in self.sys.modes:
             raise CallError(f"unknown mode '{mode_name}'")
         m = self.sys.modes[mode_name]
@@ -350,7 +308,6 @@ class Dispatcher:
             raise CallError(f"{run}: effects {bad} are not allowed by env {env.name}")
         return self._invoke(env.name, conns[0], iface, ep, args, settings=self._settings(m), caps={})
 
-    # ------------------------------------------------------------ engine
     def _advance(self, mode, feat, state) -> dict:
         stages = [wfmod.Stage.of_step(s) for s in feat.steps]
         by_id = {s.id: s for s in feat.steps}
@@ -364,8 +321,8 @@ class Dispatcher:
                 state["steps"][sid] = None
                 self._ledger("step.skipped", self._event_base(mode, feat, by_id[sid], state["callId"]),
                              summary=f"when: {by_id[sid].when}")
-            if mv.kind in ("refused", "missing"):          # fail closed; resolve already refuses both
-                raise CallError(mv.reason or f"{feat.name}: no step at position {mv.cursor}")
+            if mv.kind in ("refused", "missing"):
+                raise CallError((mv.reason or f"{feat.name}: no step at position {mv.cursor}") + " (re-checked at run time)")
             state["cursor"] = mv.cursor
             if mv.kind == "done":
                 break
@@ -389,7 +346,7 @@ class Dispatcher:
                 continue
             if step.kind == "review" and "checks_done" not in state:
                 self._run_checks(feat, state)
-                with suppress(RuntimeError, OSError):          # outside git a later re-check names no commit range
+                with suppress(RuntimeError, OSError):
                     state["head"] = boundary.git(self.project, "rev-parse", "HEAD").strip()
             state["status"] = "awaiting-approval" if step.kind == "gate" else "needs-agent"
             plan = self._plan(mode, feat, step, state)
@@ -437,24 +394,21 @@ class Dispatcher:
         iface = step.run.rsplit(".", 1)[0]
         st = self._invoke(step.env, step.connector, iface, "status", {}, settings=self._settings(mode), caps={})
         last = st.get("lastSync")
-        if st.get("stale"):           # selectors or bound sources changed: sync re-scopes the store first
+        if st.get("stale"):
             return False
         return bool(last) and (self.clock() - parse_time(last, self.clock())) <= age
 
     def _gate_subject(self, step, state) -> dict | None:
-        """{path, sha256} of the project file a gate's `approves: $in.<f>` names, or None (no field, no such file
-        inside the project). The dispatcher hashes the file itself; no connector output decides a gate."""
+        """{path, sha256} of the file a gate's `approves` names, hashed here so no connector output decides a gate."""
         if step.kind != "gate" or not step.approves:
             return None
         sub = self._file_subject(step.approves, state)
-        pp = sub and PROPOSAL_PATH.match(sub['path']) and f"docs/plans/{Path(sub['path']).stem}.md"       # the plan the lead wrote for this proposal
+        pp = sub and PROPOSAL_PATH.match(sub['path']) and f"docs/plans/{Path(sub['path']).stem}.md"
         plan = pp and (self._file_subject(pp, state) or ({"path": pp, "sha256": None} if state["steps"].get("plan") else None))
         return {**sub, "plan": plan} if plan else sub
 
     def _file_subject(self, expr: str, state) -> dict | None:
-        """{path, sha256} of the project file `expr` names. A list (a step's `artifacts`) names the proposal that
-        step wrote: its first docs/proposals/<id>.md. A plan step's output (list or string) must name this call's
-        docs/plans/<callId>-<step>.md, nothing else."""
+        """{path, sha256} of the project file `expr` names: a step's proposal, or this call's plan for a plan step."""
         path = wfmod.substitute({"v": expr}, state["input"], state["steps"], {}).get("v")
         if expr.startswith("$steps."):
             want = _plan_path(state["callId"], expr)
@@ -470,8 +424,7 @@ class Dispatcher:
         return {"path": path, "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
 
     def _gate_check(self, step, state, subject: dict | None = ...) -> dict:
-        """Whether a gate runs: skipped only when the ledger's latest owner decision (`bay approve`, terminal or
-        chat) on this exact path and content is an approval. {skipped, why, approves, prior}."""
+        """Skip a gate only when the latest owner decision on this path approved this content."""
         if subject is ...:
             subject = self._gate_subject(step, state)
         if subject is None:
@@ -482,13 +435,11 @@ class Dispatcher:
         mode_name, _, ep = str(state.get("target", "")).partition(".")
         for e in ledger.read(self.project):
             d = e.get("data") or {}
-            if (e.get("type") != "step.completed" or e.get("source") != "dispatcher" or d.get("by") not in APPROVERS
+            if (e.get("type") != "step.completed" or e.get("source") != "dispatcher" or d.get("by") not in GATE_APPROVERS
                     or e.get("mode") != mode_name or e.get("endpoint") != ep or e.get("step") != step.id
                     or not isinstance(d.get("approves"), dict) or d["approves"].get("path") != subject["path"]
-                    or (e.get("callId") != state["callId"] and (step.approves or "").startswith("$steps."))):   # defence in depth: the path already carries this callId
+                    or (e.get("callId") != state["callId"] and (step.approves or "").startswith("$steps."))):
                 continue
-            # only the latest decision on the path counts: a later approval or rejection of other content
-            # supersedes an earlier one, so reverting a file to old content does not revive its approval
             same_path = e
             last = e if d["approves"] == subject and self._state_holds(e, step, subject) else None
         out = {"approves": subject, "prior": None, "skipped": False}
@@ -510,8 +461,7 @@ class Dispatcher:
         return out
 
     def _state_holds(self, e: dict, step, subject: dict) -> bool:
-        """A ledger decision counts only when the call's own state file holds the same decision: the gate approved
-        (or rejected) with the same content hash. A line written into the ledger alone passes nothing."""
+        """A ledger decision counts only when the call's state file holds it too; a ledger line alone passes nothing."""
         try:
             prior = self._load(str(e.get("callId")))
         except CallError:
@@ -524,8 +474,8 @@ class Dispatcher:
     def _run_code(self, mode, feat, step, state, base) -> None:
         env = self.sys.env(step.env)
         bad = [e for e in step.effects if e not in env.spec["effects"] or e not in feat.effects]
-        if bad:  # resolver guarantees this; re-checked at runtime in case files changed underneath
-            raise CallError(f"{feat.mode}.{feat.name} step {step.id}: effects {bad} not allowed")
+        if bad:
+            raise CallError(f"{feat.mode}.{feat.name} step {step.id}: effects {bad} not allowed (re-checked at run time)")
         args = wfmod.substitute(step.with_, state["input"], state["steps"], mode.config)
         iface, ep = step.run.rsplit(".", 1)
         self._ledger("step.started", base, summary=step.run, data={"inputs": inputs_record(args, self.project)})
@@ -533,7 +483,7 @@ class Dispatcher:
         try:
             caps = cfgmod.caps(mode.constraints, env.spec.get("limits", {}), mode.config)
             out = self._invoke(step.env, step.connector, iface, ep, args, settings=self._settings(mode), caps=caps)
-        except Exception as e:  # report, never leak
+        except Exception as e:
             msg = vault.redact(str(e))
             self._ledger("step.failed", base, summary=msg, durationMs=_ms(t0))
             state["status"] = "failed"
@@ -579,17 +529,16 @@ class Dispatcher:
 
     def _settings(self, mode) -> dict:
         s = dict(mode.config)
-        s["mode"] = mode.name                     # connectors that keep per-mode data (corpus-store) key on it
-        s["reads"] = list(mode.reads)             # ... and make it for the content types the mode reads
-        s["modeDirs"] = [str(d) for d in mode.dirs]   # ... and with the views the mode defines (views.sql there)
-        s["sourceKinds"] = sorted({k for c in self.sys.kit.docs["Connector"].values()   # the kind guard of add and update
+        s["mode"] = mode.name
+        s["reads"] = list(mode.reads)
+        s["modeDirs"] = [str(d) for d in mode.dirs]
+        s["sourceKinds"] = sorted({k for c in self.sys.kit.docs["Connector"].values()
                                    if model.SOURCE_IFACE in ([c.spec["implements"]] if isinstance(c.spec["implements"], str)
                                                              else c.spec["implements"]) for k in c.spec.get("produces", [])})
         if "lookbackMax" in mode.constraints:
             s["lookbackMax"] = mode.constraints["lookbackMax"]
         return s
 
-    # ------------------------------------------------------------ checks & review
     def _check_ctx(self) -> checks.CheckContext:
         def store_refs():
             """Urls and ids (<source>:<extId>) of every stored item in this project's corpus stores."""
@@ -620,7 +569,7 @@ class Dispatcher:
         if errs:
             raise CallError(f"review verdict does not match {VERDICT}: " + "; ".join(errs[:5]))
         need = [d.id for d in feat.dod] + [r.id for r in feat.rules if r.for_reviewer() and r.applies(state["input"])]
-        rc = state.get("recheck") or {"carried": []}        # a re-check: the carried items stand unless the verdict gives one
+        rc = state.get("recheck") or {"carried": []}
         got = {i["id"]: i for i in rc["carried"]} | {i["id"]: i for i in verdict["items"]}
         missing = [i for i in need if i not in got]
         if missing:
@@ -633,17 +582,16 @@ class Dispatcher:
         state["review"] = {"failed": [i["id"] for i in failed], "items": len(got)}
         if failed:
             state["status"] = "partial"
-            state["halt"] = True   # a failed must/blocker stops the feature (e.g. no release after a failed review)
+            state["halt"] = True
         self._ledger("step.completed", base, summary=f"review: {len(failed)} failed must/blocker",
                      data={"failed": [i["id"] for i in failed]})
 
-    # ------------------------------------------------------------ plans & output
     def _plan(self, mode, feat, step, state) -> dict:
-        role = step.resolved   # the compiled unit: this role in this mode and env
+        role = step.resolved
         submit = (f".agentbay/bay submit {state['callId']} {step.id} '<json>' "
                   f"--usage '{{\"tokens\": <total tokens>, \"costUsd\": <usd>, \"durationMs\": <ms>}}'")
         plan = {"step": step.id, "kind": step.kind}
-        if step.kind != "gate":                     # gates are never submitted, only approved by the user
+        if step.kind != "gate":
             plan["submit"] = submit
         if step.kind == "gate":
             plan.update(self._gate_plan(step, state))
@@ -651,7 +599,7 @@ class Dispatcher:
         run_as = "main-thread playbook" if role.runtime == "claude-code-main" else f"subagent_type={step.subagent}"
         plan.update({"role": role.name, "agent": step.agent, "env": step.env, "runAs": run_as,
                      "tier": step.inference.tier, "model": step.inference.model, "effort": step.inference.effort})
-        if role.skills:                             # the playbook's short skill names -> the namespaced skills
+        if role.skills:
             plan["skills"] = self._plan_skills(mode, feat, role)
         if step.kind == "review":
             plan["review"] = self._review_brief(feat, state, step)
@@ -672,17 +620,17 @@ class Dispatcher:
 
     @staticmethod
     def _plan_skills(mode, feat, role) -> dict:
-        """The playbook's short skill names -> the namespaced skills; a mode's skills are narrowed to the feature's
-        `skills:`."""
+        """The playbook's short skill names -> the namespaced skills, narrowed to the feature's own `skills:`."""
         mine = model.skill_id(mode.name, "")
         return {sk: sid for sk, sid in sorted(role.skill_names.items()) if sid in role.skills
                 and (feat.skills is None or not sid.startswith(mine) or sk in feat.skills)}
 
     def _prior_review(self, state, step) -> dict | None:
-        """The re-check brief {priorCall, failed, commits, carried}: the newest other call of this feature that reviewed
-        the same approved files (path and sha256 at every gate) failed its full review, its state and ledger agree. After
-        a re-check, a pass or any changed file the review is full. No gate, check or step is touched here."""
-        subj = lambda s: {k: g.get("approves") for k, g in (s.get("gates") or {}).items()}      # noqa: E731
+        """The re-check brief {priorCall, failed, commits, carried} from the newest failed review of the same files."""
+
+        def subj(s):
+            return {k: g.get("approves") for k, g in (s.get("gates") or {}).items()}
+
         for e in reversed(ledger.read(self.project)):
             d = e.get("data") or {}
             if (e.get("type") == "step.completed" and e.get("source") == "dispatcher" and e.get("step") == step.id
@@ -708,9 +656,8 @@ class Dispatcher:
             "recordedPlans": self._recorded_plans(state["callId"]),
         }
         for name in (feat.review or {}).get("rulesets", []):
-            # framework rule sets (e.g. conformance): judged with the DoD; cite their ids in evidence
             brief.setdefault("rulesets", {})[name] = model.ruleset(self.sys.kit.root, name)
-        if rc := self._prior_review(state, step):          # judge the failed items again; the others stand
+        if rc := self._prior_review(state, step):
             state["recheck"] = brief["recheck"] = rc
         return brief
 
@@ -760,7 +707,7 @@ class Dispatcher:
 
     def _public(self, state) -> dict:
         out = {"callId": state["callId"], "target": state["target"], "status": state["status"]}
-        if state.get("gates"):        # why each gate ran or was skipped
+        if state.get("gates"):
             out["gates"] = {k: g["why"] for k, g in state["gates"].items()}
         if state["status"] in ("needs-agent", "awaiting-approval"):
             out["next"] = state["plan"]
@@ -778,7 +725,6 @@ class Dispatcher:
             out["cost"] = state["cost"]
         return secretscan.scrub_obj(json.loads(vault.redact(json.dumps(out, ensure_ascii=False))))
 
-    # ------------------------------------------------------------ persistence & ledger
     def _calls_dir(self) -> Path:
         return self.project / ".agentbay" / "calls"
 
@@ -803,8 +749,7 @@ class Dispatcher:
 
 
 def inputs_record(args, project: Path) -> dict:
-    """What a step was given, for the ledger: a small value as is; for a large value or a file in the project, its
-    sha256 and a short preview (the ledger scrubs secret-shaped text)."""
+    """What a step was given, for the ledger: a small value as is, a large one or a project file as sha256 and preview."""
     out = {}
     for k, v in (args if isinstance(args, dict) else {}).items():
         raw = v if isinstance(v, str) else json.dumps(v, sort_keys=True, ensure_ascii=False)
@@ -854,8 +799,7 @@ def _usage_fields(usage: dict | None, planned_at: float | None) -> dict:
 
 
 def merge_outputs(outs: dict[str, dict]) -> dict:
-    """Several connectors behind one read endpoint (e.g. session.events/v1 from ledger, transcripts and git):
-    list fields are concatenated; every other field is kept per connector."""
+    """Merge several connectors behind one read endpoint: list fields are concatenated, others kept per connector."""
     merged: dict = {}
     for name, out in outs.items():
         for k, v in (out or {}).items():

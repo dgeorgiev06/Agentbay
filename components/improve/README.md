@@ -23,6 +23,8 @@ its roles read through use shims.
 | `improve.detect/v1` | `sessions`, `artifacts`, `resolve`, `recheck` | `improve-detect` |
 | `improve.findings/v1` | `upsert` ... `verify` (storage) | `improve-store` |
 
+`artifact-graph` reads source unscrubbed on the dispatcher side and scrubs what it emits; the password rule is strict.
+
 - **scan** turns the ledger, git history and Claude Code transcripts into redacted `session.episode/v1`
   (structure and metadata only, never conversation text) and runs session detectors: review rounds, repeated
   rule failures, lintable blockers, out-of-scope work, instruction changes, slow or costly steps, retries,

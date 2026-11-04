@@ -1,7 +1,4 @@
-"""Append-only event ledger. System state = fold(events).
-
-Stdlib only, so hooks can import it with any python3.
-"""
+"""Append-only event ledger; stdlib only, so hooks can import it."""
 from __future__ import annotations
 
 import json
@@ -15,22 +12,19 @@ from .util import warn
 
 RUN_TYPES = {"spawned", "completed", "failed", "reclaimed", "note"}
 STEP_TYPES = {"step.started", "step.completed", "step.failed", "step.skipped", "step.planned", "call.completed"}
-DATA_TYPES = {"data.read"}             # a role read connector data through its use shim
-# the guard hook denied a subagent tool call (prompts are read from Claude Code transcripts instead)
+DATA_TYPES = {"data.read"}
 PERMISSION_TYPES = {"permission.denied"}
-# an agent run's recorded outcome and to-do list (`bay plan`), and the coordinator's record of a dispatch
-# (`bay note dispatch`), which lists a running agent even when the spawn hook is off
 PLAN_TYPES = {"agent.plan", "agent.plan.done", "agent.dispatch"}
-# a review that ran outside a framework review step, recorded by the coordinator (`bay note review`). improve reads
-# it; nothing in the dispatcher, the gates or the approval fold does, so it can pass no gate.
 REVIEW_TYPES = {"review.recorded"}
 TYPES = RUN_TYPES | STEP_TYPES | DATA_TYPES | PERMISSION_TYPES | PLAN_TYPES | REVIEW_TYPES
 TASK_ID = re.compile(r"^T-[0-9]{8}-[0-9a-z]{4}$")
 MAX_OUTCOME, MAX_ITEMS, MAX_ITEM_TEXT, MAX_SERVES = 1000, 12, 240, 60
 NOTE_KINDS = ("note", "instruction-change", "decision")
+RUN_STATUSES = ("running", "done", "partial", "blocked", "failed", "reclaimed")
+CALL_STATUSES = ("running", "waiting", "done", "partial", "blocked", "failed", "abandoned")
 
 
-LEDGER_FILE = ".agentbay/ledger/events.jsonl"      # project-relative
+LEDGER_FILE = ".agentbay/ledger/events.jsonl"
 
 
 def ledger_path(project: Path) -> Path:
@@ -48,13 +42,17 @@ def append(project: Path, type: str, run_id: str, **fields) -> dict:
         raise ValueError(f"unknown event type {type!r}")
     ev = {"v": 1, "ts": now(), "type": type, "runId": run_id}
     ev.update({k: v for k, v in fields.items() if v not in (None, "", {}, [])})
-    from .secretscan import scrub_obj  # secret-shaped text agentbay never resolved (pasted keys, tokens)
-    from .vault import redact  # last line of defence: no secret value ever reaches the ledger
+    from .secretscan import scrub_obj
+    from .vault import redact
     line = redact(json.dumps(scrub_obj(ev), ensure_ascii=True))
-    # O_APPEND writes of a single short line are atomic enough for parallel hooks.
-    with open(ledger_path(project), "a", encoding="utf-8") as f:
-        f.write(line + "\n")
+    _append_line(ledger_path(project), line)
     return ev
+
+
+def _append_line(path: Path, line: str) -> None:
+    """Append one short line in one O_APPEND write, which is atomic enough for parallel hooks."""
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(line + "\n")
 
 
 class PlanError(ValueError):
@@ -70,8 +68,7 @@ def _text(v, what: str, limit: int) -> str:
 
 
 def dispatched_agent(events: list[dict], task_id: str) -> dict | None:
-    """The coordinator's latest `agent.dispatch` record of a taskId; only when there is none, the hook's latest
-    `spawned` record. A spawn record never overrides a dispatch: the dispatch names the call and step the run is for."""
+    """The coordinator's latest `agent.dispatch` record of a taskId, else the hook's latest `spawned` record."""
     found = None
     for e in reversed(events):
         if e.get("taskId") != task_id:
@@ -84,9 +81,7 @@ def dispatched_agent(events: list[dict], task_id: str) -> dict | None:
 
 
 def record_plan(project: Path, task_id: str, plan: object) -> dict:
-    """Append the outcome and to-do list of a dispatched agent: {outcome, todo: [{text, serves}]}. Once per task.
-    Checks size and shape, and that the taskId was dispatched; text is scrubbed by `append`. This is all `bay plan`
-    can write."""
+    """Append the outcome and to-do list of a dispatched agent: {outcome, todo: [{text, serves}]}. Once per task."""
     evs = read(project)
     disp = _dispatched_check(evs, task_id)
     if any(e["type"] == "agent.plan" and e.get("taskId") == task_id for e in evs):
@@ -122,9 +117,7 @@ MAX_REVIEW_ITEMS, MAX_EVIDENCE = 80, 1000
 
 
 def record_review(project: Path, task_id: str, verdict: object) -> dict:
-    """Append a review.verdict/v1 of work reviewed outside a framework review step, as a `review.recorded` event on the
-    taskId of the work. Shape and size are checked here (the CLI also checks the schema); text is scrubbed by `append`.
-    The event is data for improve only: no gate, approval or step reads it."""
+    """Append a `review.recorded` event for work reviewed outside a framework step; data for improve, no gate reads it."""
     if not isinstance(task_id, str) or not TASK_ID.match(task_id):
         raise PlanError(f"'{task_id}' is not a taskId (T-YYYYMMDD-xxxx)")
     items = verdict.get("items") if isinstance(verdict, dict) else None
@@ -144,9 +137,7 @@ def record_review(project: Path, task_id: str, verdict: object) -> dict:
 
 
 def _dispatched_check(evs: list[dict], task_id: str) -> dict:
-    """The taskId must be a logged dispatch. Plan ownership is per agent type, not per run: the guard lets a role
-    subagent run only its own `bay plan` command, and the dispatch record (callId, step) ties the plan to the call
-    that submits it (`Dispatcher._require_plan`). The CLI cannot tell two siblings of one type apart."""
+    """The dispatch record of a logged taskId; plan ownership is per agent type, not per run."""
     if not isinstance(task_id, str) or not TASK_ID.match(task_id):
         raise PlanError(f"'{task_id}' is not a taskId (T-YYYYMMDD-xxxx)")
     disp = dispatched_agent(evs, task_id)
@@ -172,10 +163,7 @@ def plans(events: list[dict]) -> dict[str, dict]:
 
 
 def agent_groups(events: list[dict]) -> list[dict]:
-    """Agent runs grouped by role, mode, model and tier, from the ledger alone: runs, outcomes, to-do progress, tokens
-    and cost. Read by `bay status --agents` and by improve's weekly backlog. A step's submitted usage is one figure
-    for the step, not per agent: when several agents were dispatched to the same call and step, it is split evenly
-    among them, so a total over the groups never exceeds what the steps reported."""
+    """Agent runs grouped by role, mode, model and tier, from the ledger alone."""
     plan_of = plans(events)
     groups: dict[tuple, dict] = {}
     runs = fold(events)
@@ -206,14 +194,17 @@ def agent_groups(events: list[dict]) -> list[dict]:
     return list(groups.values())
 
 
+def _jsonl_lines(text: str) -> list[str]:
+    """Split on newlines only: `splitlines` also splits on U+2028 inside a summary."""
+    return text.split("\n")
+
+
 def read(project: Path, warnings: list | None = None) -> list[dict]:
-    """The ledger's events (dicts with string type, ts and runId), read-only (it creates no folder); a line that is not
-    one is skipped and named (file:line) in `warnings`. The one reader of the dispatcher and of the connectors."""
+    """The ledger's events, read-only; a line that is not an event is skipped and named in `warnings`."""
     p = Path(project) / LEDGER_FILE
     out: list[dict] = []
     if p.exists():
-        # one event per "\n" line: str.splitlines would also split on U+2028 and friends inside a summary
-        for n, line in enumerate(p.read_text(encoding="utf-8", errors="replace").split("\n"), 1):
+        for n, line in enumerate(_jsonl_lines(p.read_text(encoding="utf-8", errors="replace")), 1):
             try:
                 ev = json.loads(line)
             except (ValueError, RecursionError):
@@ -230,7 +221,7 @@ class Run:
     run_id: str
     agent: str = "?"
     task_id: str = ""
-    state: str = "running"          # running | done | partial | blocked | failed | reclaimed
+    state: str = RUN_STATUSES[0]
     started: str = ""
     ended: str = ""
     summary: str = ""
@@ -239,8 +230,7 @@ class Run:
 
 
 def fold(events: list[dict]) -> dict[str, Run]:
-    """Agent runs. Only spawned/completed/failed/reclaimed create a run; a note attaches to the run it names
-    (by runId, or by taskId) or stays standalone (see `standalone_notes`). It never creates a run."""
+    """Agent runs; only spawned, completed, failed and reclaimed events create one, and a note only attaches."""
     runs: dict[str, Run] = {}
     notes: list[dict] = []
     for e in events:
@@ -299,7 +289,7 @@ class Call:
     mode: str = ""
     endpoint: str = ""
     last_step: str = ""
-    state: str = "running"         # running | waiting | done | partial | blocked | failed | abandoned
+    state: str = CALL_STATUSES[0]
     ts: str = ""
     cost: dict = field(default_factory=dict)
     duration_ms: int | None = None

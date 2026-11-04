@@ -1,15 +1,9 @@
-"""Pattern-based secret scan. Stdlib only, so hooks and connectors can import it.
-
-`vault.redact` scrubs secret values agentbay itself resolved; this module scrubs
-secret-shaped text agentbay never saw (pasted keys in transcripts, tokens in
-review evidence). Both run before anything reaches the ledger or the improve store.
-"""
+"""Pattern-based secret scan. Stdlib only, so hooks and connectors can import it."""
 from __future__ import annotations
 
 import re
 
-# (kind, pattern). Ordered: specific before generic, so the reported kind is the most precise.
-PATTERNS: list[tuple[str, re.Pattern]] = [
+PATTERNS_MOST_SPECIFIC_FIRST: list[tuple[str, re.Pattern]] = [
     ("private-key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)", re.S)),
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")),
     ("bearer", re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{16,}")),
@@ -17,8 +11,6 @@ PATTERNS: list[tuple[str, re.Pattern]] = [
                            r"gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|xox[abprs]-[A-Za-z0-9-]{10,}|"
                            r"AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20,})")),
     ("connection-string", re.compile(r"\b[a-z][a-z0-9+.-]{1,20}://[^\s:/@'\"]+:[^\s@/'\"]+@[^\s'\"]+", re.I)),
-    # Strict on purpose: false positives only cost readability. Detectors that parse source code read it
-    # unscrubbed on the dispatcher side (artifact-graph raw_text) and scrub what they emit.
     ("password", re.compile(r"(?i)\b(?:password|passwd|pwd)\s*[=:]\s*(?:\"[^\"]*\"|'[^']*'|\S+)")),
     ("secret-assignment", re.compile(r"(?i)\b(?:api[_-]?key|secret|access[_-]?token|refresh[_-]?token|client[_-]?secret|"
                                      r"aws_secret_access_key)\s*[=:]\s*[\"']?[A-Za-z0-9/+_.=-]{12,}")),
@@ -29,14 +21,14 @@ def find(text: str) -> list[str]:
     """Kinds of secrets present in text (deduplicated, in pattern order)."""
     if not text:
         return []
-    return [kind for kind, rx in PATTERNS if rx.search(text)]
+    return [kind for kind, rx in PATTERNS_MOST_SPECIFIC_FIRST if rx.search(text)]
 
 
 def scrub(text: str) -> str:
     """Replace every secret-shaped span with [REDACTED:<kind>]."""
     if not text:
         return text
-    for kind, rx in PATTERNS:
+    for kind, rx in PATTERNS_MOST_SPECIFIC_FIRST:
         text = rx.sub(f"[REDACTED:{kind}]", text)
     return text
 

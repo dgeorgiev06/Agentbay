@@ -678,6 +678,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     for md in kit.docs["Mode"].values():
         out += contenttypes.mode_problems(md.dirs, _as_list(md.spec.get("reads")), kit.root)
     out += lint_extension_names(kit)
+    out += lint_composition(kit)
     out += lint_references(kit)
     out += lint_rulesets(kit)
     out += lint_components(kit)
@@ -978,6 +979,47 @@ def lint_case_and_manifests(kit: model.Kit) -> list[str]:
     out += [f"{d}: the old layout is not read (agentbay/v4); move it to components/modes/<name>/"
             for d in OLD_FOLDERS if any(f.startswith(d) for f in files)]
     return list(dict.fromkeys(out))
+
+
+def _home(path: Path) -> str:
+    """The `<tier>/<name>` folder under components/ that holds `path`."""
+    return re.search(r"components/((?:base|modes)/[^/]+)", path.as_posix()).group(1)
+
+
+def lint_composition(kit: model.Kit) -> list[str]:
+    """A mode binds connectors and reads content types only from itself, from base or from a mode it composes."""
+    out: list[str] = []
+    types = contenttypes.scan(kit.root)[0]
+    for md in kit.docs["Mode"].values():
+        home = _home(md.path)
+        composes = _as_list(md.spec.get("composes"))
+        where = _where(md.path, _line_of(md.path, r"^\s+composes:"))
+        envs = {*model.mode_envs(md), *(e.name for e in kit.docs["Environment"].values() if _home(e.path) == home)}
+        uses = [(f"reads content type {k}", _home(types[k.split("/")[0]].dir))
+                for k in _as_list(md.spec.get("reads")) if k.split("/")[0] in types]
+        for name in sorted(envs & set(kit.docs["Environment"])):
+            spec = kit.docs["Environment"][name].spec
+            binds = [*(spec.get("bind") or {}).values(), *((spec.get("offline") or {}).get("bind") or {}).values()]
+            for conn in sorted({c for b in binds if not isinstance(b, dict) for c in _as_list(b)}):
+                if conn in kit.docs["Connector"]:
+                    uses.append((f"uses env {name}, which binds connector {conn}",
+                                 _home(kit.docs["Connector"][conn].path)))
+        for what, owner in uses:
+            if owner.startswith("modes/") and owner != home and owner[6:] not in composes:
+                out.append(f"{model.rel(md.path)}: mode {md.name} {what}, which lives in mode {owner[6:]}; add "
+                           f"composes: [{owner[6:]}] to {md.name}'s mode.yaml, or ask forge.extend to move it to "
+                           f"components/base/")
+        if composes and not home.startswith("modes/"):
+            out.append(f"{where}: base mode {md.name} declares composes; only modes under components/modes/ compose")
+            continue
+        for name in composes:
+            target = kit.get("Mode", name)
+            if target is None or target is md or not _home(target.path).startswith("modes/"):
+                out.append(f"{where}: mode {md.name} composes {name}, which is not another mode "
+                           f"under components/modes/")
+            elif _home(target.path) not in {owner for _, owner in uses}:
+                out.append(f"{where}: mode {md.name} composes {name} but uses nothing of it; remove it from composes")
+    return out
 
 
 BAY_IMPORT = re.compile(r"^\s*(?:from bay import ([^#\n]+)|(?:from|import) bay\.(\w+))", re.M)

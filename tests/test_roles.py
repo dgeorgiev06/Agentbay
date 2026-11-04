@@ -270,6 +270,7 @@ def test_lint_warns_when_a_partial_roles_override_splits_a_store_reading_mode():
     from bay import lint
     k = kit_copy()
     d = news_mode(k, {"lead": "local-news", "analyst": "local-news", "reviewer": "local-feeds"})
+    edit_yaml(d / "mode.yaml", lambda doc: doc["spec"].update({"composes": ["feed-briefing"]}))
     line = next(i for i, ln in enumerate((d / "mode.yaml").read_text().splitlines(), 1) if ln.startswith("  roles:"))
     ws = lint.warnings(model.Kit(k))
     assert any(f"components/modes/news-briefing/mode.yaml:{line}: mode news-briefing puts role reviewer in env local-feeds, whose "

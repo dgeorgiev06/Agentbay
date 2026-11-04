@@ -139,7 +139,30 @@ def _kind_differs_from_folder(d):
     d["spec"]["kind"] = "poster"
 
 
+def _bind_gmail_api(d):
+    d["spec"]["bind"]["items.source/v1"] = ["x-api", "gmail-api"]
+
+
+def _place_analyst_in_mail_env(d):
+    d["spec"]["roles"]["analyst"] = "local-mail"
+
+
+def _place_analyst_in_mail_env_and_compose(d):
+    _place_analyst_in_mail_env(d)
+    d["spec"]["composes"] = ["mail-briefing"]
+
+
+def _compose_unused(d):
+    d["spec"]["composes"] = ["todo"]
+
+
+def _read_email(d):
+    d["spec"]["reads"] = ["post/v1", "email/v1"]
+
+
 MODE = "components/modes/feed-briefing/mode.yaml"
+FEEDS_ENV = "components/modes/feed-briefing/envs/local-feeds.yaml"
+STORE = "components/base/store/mode.yaml"
 POST = "components/modes/feed-briefing/content-types/post/content-type.yaml"
 T2_RULES = [
     ("agent text on a code-only feature", MODE, _give_sync_files,
@@ -149,6 +172,20 @@ T2_RULES = [
      ["components/modes/feed-briefing/mode.yaml", "Additional properties are not allowed ('policies' was unexpected)"]),
     ("a content type whose kind differs from its folder", POST, _kind_differs_from_folder,
      [f"{POST}: spec.kind 'poster' must match the folder name 'post'"]),
+    ("a binding across modes without composes", FEEDS_ENV, _bind_gmail_api,
+     [f"{MODE}: mode feed-briefing uses env local-feeds, which binds connector gmail-api, which lives in mode "
+      "mail-briefing; add composes: [mail-briefing] to feed-briefing's mode.yaml, or ask forge.extend to move "
+      "it to components/base/"]),
+    ("a role placed in another user mode's env", MODE, _place_analyst_in_mail_env,
+     [f"{MODE}: mode feed-briefing uses env local-mail, which binds connector gmail-api, which lives in mode "
+      "mail-briefing"]),
+    ("a read of another mode's content type", MODE, _read_email,
+     [f"{MODE}: mode feed-briefing reads content type email/v1, which lives in mode mail-briefing; add composes: "
+      "[mail-briefing]"]),
+    ("a composes nothing uses", MODE, _compose_unused,
+     [": mode feed-briefing composes todo but uses nothing of it; remove it from composes"]),
+    ("composes in a base mode", STORE, _compose_unused,
+     [f"{STORE}:", "base mode store declares composes; only modes under components/modes/ compose"]),
 ]
 
 
@@ -161,6 +198,9 @@ def test_agent_text_nothing_reads_and_unread_manifest_keys_are_refused():
                 has(k, needle)
         except AssertionError as e:
             raise AssertionError(f"{group}: {e}") from None
+    k = kit_copy()
+    edit_yaml(k / MODE, _place_analyst_in_mail_env_and_compose)
+    assert not [x for x in problems(k) if "composes" in x or "which lives in mode" in x], problems(k)
 
 
 def test_review_settings_only_in_mode_yaml():

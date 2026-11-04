@@ -40,7 +40,7 @@ def child(k, name="news-briefing", spec=None):
     spec = {**(spec or {}), "roles": {**dict.fromkeys(("lead", "analyst", "reviewer"), f"{name}-local"),
                                        **(spec or {}).get("roles", {})}}
     doc = {"apiVersion": "agentbay/v4", "kind": "Mode", "metadata": {"name": name, "version": "0.1.0"},
-           "spec": {"extends": "store", "reads": ["note/v1"], **spec}}
+           "spec": {"extends": "store", "composes": ["feed-briefing"], "reads": ["note/v1"], **spec}}
     (d / "mode.yaml").write_text(json.dumps(doc))
     self_describe(d)
     return d

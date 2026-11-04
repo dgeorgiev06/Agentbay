@@ -282,7 +282,7 @@ def review_on_side_effects(kit: Path, rule: dict) -> list[dict]:
     return out
 
 
-def vocabulary(kit: Path, rule: dict[str, Any]) -> list[dict]:
+def vocabulary(kit: Path, rule: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
     k = _kit(kit)
     terms = rule.get("terms") or {}

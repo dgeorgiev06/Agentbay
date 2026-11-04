@@ -454,7 +454,8 @@ class Dispatcher:
         for e in ledger.read(self.project):
             d = e.get("data") or {}
             if (e.get("type") != "step.completed" or e.get("source") != "dispatcher"
-                    or d.get("by") not in GATE_APPROVERS or e.get("mode") != mode_name or e.get("endpoint") != ep or e.get("step") != step.id
+                    or d.get("by") not in GATE_APPROVERS
+                    or e.get("mode") != mode_name or e.get("endpoint") != ep or e.get("step") != step.id
                     or not isinstance(d.get("approves"), dict) or d["approves"].get("path") != subject["path"]
                     or (e.get("callId") != state["callId"] and (step.approves or "").startswith("$steps."))):
                 continue

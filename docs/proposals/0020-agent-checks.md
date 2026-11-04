@@ -26,7 +26,7 @@ touches:
   - { path: bay/__init__.py, reason: "release step: version 3.1.0" }
   - { path: CHANGELOG.md, reason: "release step: entry, with an Upgrading note for the dispatch check" }
 exceptions:
-  - { measure: bay_lines, to: 9730, reason: "Raised to 9730 by review round 2 (owner decision: readable code, no packed lines; the long_lines measure is added). Earlier: 9715. Raised from 9709 by the plan step, which measured 9710 against the real code (a status-listing helper the deadcode complexity check forces, and the item 7 edges: folders holding protected paths, pathspec magic, globs, words after --); payers: _worktree_add reuses the new check (-3), the inline heartbeat test in cmd_status (-2). The first estimate follows. 9688 is the ceiling and the exact count today (python lines of bay/*.py). Estimate +16: cli.py +11 (guard helper 4 lines plus 2 blank, status uses it -1, the refusal +2, the reason in the event +1, the status listing +3), guard.py +5 (the mv/rm branch of _git_command: the if, the loop over non-flag arguments, the denial test, the return), model.py and dispatch.py 0. The only payer that can be named in bay/ is the inline heartbeat test in cmd_status (-1, already counted); the rest is not paid for. 9709 is the estimate plus a margin of 5. If it must shrink, the status listing (+3) goes first and the reason stays in the ledger. The release lowers the ceiling to the real count." }
+  - { measure: bay_lines, to: 9750, reason: "Raised to 9750 by review round 3 (every line 0020 adds is readable, at most 120 characters). Earlier: 9730, by review round 2 (owner decision: readable code, no packed lines; the long_lines measure is added). Earlier: 9715. Raised from 9709 by the plan step, which measured 9710 against the real code (a status-listing helper the deadcode complexity check forces, and the item 7 edges: folders holding protected paths, pathspec magic, globs, words after --); payers: _worktree_add reuses the new check (-3), the inline heartbeat test in cmd_status (-2). The first estimate follows. 9688 is the ceiling and the exact count today (python lines of bay/*.py). Estimate +16: cli.py +11 (guard helper 4 lines plus 2 blank, status uses it -1, the refusal +2, the reason in the event +1, the status listing +3), guard.py +5 (the mv/rm branch of _git_command: the if, the loop over non-flag arguments, the denial test, the return), model.py and dispatch.py 0. The only payer that can be named in bay/ is the inline heartbeat test in cmd_status (-1, already counted); the rest is not paid for. 9709 is the estimate plus a margin of 5. If it must shrink, the status listing (+3) goes first and the reason stays in the ledger. The release lowers the ceiling to the real count." }
 ---
 
 # 0020: Agents can check their own work
@@ -125,6 +125,16 @@ The second review found no blocker and no security finding. It found that bay_li
 2. **A hard limit on long lines.** `framework/limits.yaml` gains a measure `long_lines`: lines longer than 120 characters in the code the other kernel measures count (`bay/`, `adapters/` and the protected component paths). Its ceiling starts at today's count; like every measure it may not rise without an `exceptions:` entry, so packing code onto long lines fails `bay check --limits`.
 3. **Named trims.** The three DESIGN phrases cut in round 1 to stay within the word budget are named here: "The kit resolves it at load.", ", in project workflows too" and ", whose name says its kind".
 4. **Bundled -O.** `git diff -pO<file>`, `-RO<file>` and `git log -pO<file>` get past the `-O` ban (already on main; read-only). A short-option cluster that contains `O` is refused like `-O`.
+
+## Review round 3 fixes
+
+The third review found that the 120-character rule was applied only to the lines round 2 touched: 11 lines over 120 characters that earlier rounds of this change wrote are still in `bay/` (seven in `bay/cli.py`, `bay/guard.py:65`, `:481` and `:490`, `bay/model.py:61`), including the packed `git rm`/`git mv` check, and the `long_lines` ceiling of 193 includes them (main has 185). The owner's rule covers every line this change writes. This round does these and nothing else:
+
+1. **Every line 0020 adds is 120 characters or fewer and reads as ordinary code**, in `bay/`, the tests and the env comments. The `git rm`/`git mv` check is written as plain statements (no nested `next(...)`, no backslash continuation, no reused walrus name).
+2. **`long_lines` starts at main's count or lower**: its ceiling is the real count after item 1, at most 185.
+3. **`long_lines` splits on `\n` only**, as `bay_lines` does, so a control character cannot hide a long line.
+4. **`-S` and `-G` values are not read as option clusters**, so `git log -SOrder` is not refused (git reads no file there).
+5. The bay_lines exception rises to the real count after item 1, at most 9750.
 
 ## Release 3.1.0
 

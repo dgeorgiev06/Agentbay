@@ -172,7 +172,8 @@ def test_all_gaps_reported_at_once():
 def test_wrong_kind_is_rejected():
     k = kit_copy()
     (k / "components/modes/old").mkdir()
-    (k / "components/modes/old/mode.yaml").write_text("apiVersion: agentbay/v1\nkind: Layer\nmetadata: {name: old}\nspec: {}\n")
+    (k / "components/modes/old/mode.yaml").write_text(
+        "apiVersion: agentbay/v1\nkind: Layer\nmetadata: {name: old}\nspec: {}\n")
     assert_gap(k, "components/modes/old/mode.yaml", "kind must be Mode")
 
 
@@ -245,4 +246,5 @@ def test_offline_switch_rebinds_the_source_and_closes_network_and_secrets():
         for old in ("agentbay/v2", "agentbay/v3"):
             k = kit_copy()
             edit_yaml(k / rel, lambda d: d.update(apiVersion=old))
-            assert_gap(k, f"apiVersion: this kit reads agentbay/v4, not '{old}'; change the line to apiVersion: agentbay/v4 and move it under components/modes/<name>/ (see CHANGELOG)")
+            assert_gap(k, f"apiVersion: this kit reads agentbay/v4, not '{old}'; change the line to "
+                          f"apiVersion: agentbay/v4 and move it under components/modes/<name>/ (see CHANGELOG)")

@@ -166,8 +166,10 @@ STORE = "components/base/store/mode.yaml"
 POST = "components/modes/feed-briefing/content-types/post/content-type.yaml"
 T2_RULES = [
     ("agent text on a code-only feature", MODE, _give_sync_files,
-     ["components/modes/feed-briefing/mode.yaml:17: feature feed-briefing.sync has no role step, so its `playbook` is never read",
-      "components/modes/feed-briefing/mode.yaml:17: feature feed-briefing.sync has no role step, so its `rules` is never read"]),
+     ["components/modes/feed-briefing/mode.yaml:17: feature feed-briefing.sync has no role step, "
+      "so its `playbook` is never read",
+      "components/modes/feed-briefing/mode.yaml:17: feature feed-briefing.sync has no role step, "
+      "so its `rules` is never read"]),
     ("an unread manifest key", MODE, _add_policies,
      ["components/modes/feed-briefing/mode.yaml", "Additional properties are not allowed ('policies' was unexpected)"]),
     ("a content type whose kind differs from its folder", POST, _kind_differs_from_folder,
@@ -249,7 +251,8 @@ def test_role_env_errors_name_mode_feature_and_step():
         "keep only `analyst: <env>`")
     k = kit_copy()
     sub(k, base, "{ id: answer, role: analyst,", "{ id: answer, role: analyst, roles: { reviewer: workspace },")
-    sub(k, base, "{ id: prune, run: items.store/v2.prune,", "{ id: prune, roles: { lead: workspace }, run: items.store/v2.prune,")
+    sub(k, base, "{ id: prune, run: items.store/v2.prune,",
+        "{ id: prune, roles: { lead: workspace }, run: items.store/v2.prune,")
     edit_yaml(k / "components/modes/feed-briefing/mode.yaml",
             lambda d: d["spec"]["features"]["ask"].update({"roles": {"builder": "workspace"}}))
     has(k, "feed-briefing.ask step answer: `roles:` names reviewer, but this step runs role analyst")
@@ -279,7 +282,9 @@ def test_an_offline_env_with_a_network_host_or_a_secret_is_refused():
     edit_yaml(k / "components/modes/feed-briefing/envs/local-feeds.yaml",
             lambda d: d["spec"]["offline"].update({"network": {"allow": ["api.x.com"]}}))
     errs = lint.lint_offline(model.Kit(k))
-    assert len(errs) == 1 and "components/modes/feed-briefing/envs/local-feeds.yaml:" in errs[0] and "offline with network host api.x.com" in errs[0]
+    assert len(errs) == 1
+    assert "components/modes/feed-briefing/envs/local-feeds.yaml:" in errs[0]
+    assert "offline with network host api.x.com" in errs[0]
     assert errs[0] in lint.run(k)
     edit_yaml(k / "components/modes/feed-briefing/envs/local-feeds.yaml", lambda d: d["spec"]["offline"].pop("network"))
     edit_yaml(k / "components/modes/feed-briefing/envs/local-feeds.yaml",

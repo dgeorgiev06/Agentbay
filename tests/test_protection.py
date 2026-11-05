@@ -244,13 +244,15 @@ def test_a_name_is_protected_wherever_it_sits_and_is_defined_once():
     k = _built(lambda d: d["protected"]["connector"].append("fake"))
     try:
         kit = model.Kit(k, k)
-        assert kit.get("Connector", "fake").root == "framework" and kit.protected_paths[-1] == "components/modes/feed-briefing/connectors/fake"
+        fake_connector = "components/modes/feed-briefing/connectors/fake"
+        assert kit.get("Connector", "fake").root == "framework" and kit.protected_paths[-1] == fake_connector
         pol, decide = _guard(k)
         assert pol["protected"][-1] == "components/modes/feed-briefing/connectors/fake"
         assert decide("Write", put, "builder--forge--local-authoring") == "deny"
         assert decide("Write", put, "builder--forge--framework-dev") == "deny"
         errs = lint.lint_protection(kit)
-        assert any("env framework-dev writes protected paths but not components/modes/feed-briefing/connectors/fake" in e for e in errs), errs
+        unwritable = "env framework-dev writes protected paths but not components/modes/feed-briefing/connectors/fake"
+        assert any(unwritable in e for e in errs), errs
     finally:
         cleanup(k)
     k = kit_copy()
@@ -316,7 +318,8 @@ def _check(change, touches=(), base=BASE, mapdoc=BOUNDARY_MAP):
 
 
 def test_an_edit_to_a_protected_component_without_touches_fails_check_base():
-    for path in ("components/base/cos/mode.yaml", "components/base/cos/envs/cos-local.yaml", "components/base/improve/connectors/ledger/connector.yaml",
+    for path in ("components/base/cos/mode.yaml", "components/base/cos/envs/cos-local.yaml",
+                 "components/base/improve/connectors/ledger/connector.yaml",
                  "adapters/claude-code/adapter.yaml"):
         rep = _check({path: "y\n"})
         assert [f.path for f in rep.failures] == [path] and rep.exit_code == 1, path
@@ -449,8 +452,11 @@ def test_improve_files_are_writable_like_any_user_mode_and_its_env_and_connector
                     "components/base/improve/features/scan/playbook.md"):
                 assert decide("Write", {"file_path": path, "content": "x"}, who) == "pass", (who, path)
                 assert decide("Edit", {"file_path": path, "old_string": "a", "new_string": "b"}, who) == "pass", (who, path)
-            for path in ("components/base/improve/envs/improve-local.yaml", "components/base/improve/connectors/improve-store/store.py", "components/base/improve/connectors/improve-detect/pipeline.py",
-                         "components/base/improve/connectors/claude-transcripts/parser.py", "components/base/cos/mode.yaml", "components/base/forge/mode.yaml"):
+            for path in ("components/base/improve/envs/improve-local.yaml",
+                         "components/base/improve/connectors/improve-store/store.py",
+                         "components/base/improve/connectors/improve-detect/pipeline.py",
+                         "components/base/improve/connectors/claude-transcripts/parser.py",
+                         "components/base/cos/mode.yaml", "components/base/forge/mode.yaml"):
                 assert decide("Write", {"file_path": path, "content": "x"}, who) == "deny", (who, path)
         assert decide("Write", {"file_path": "components/base/improve/mode.yaml", "content": "x"},
                 "analyst--improve") == "deny"
@@ -483,11 +489,14 @@ def test_bay_new_no_longer_calls_improve_a_protected_name():
 
 def test_check_base_treats_a_new_improve_folder_as_a_new_extension_but_not_its_connectors_or_cos():
     shipped = yaml.safe_load((KIT / MAP).read_text())
-    change = {"components/base/improve/mode.yaml": "y\n", "components/base/cos/mode.yaml": "y\n", "components/base/improve/connectors/improve-store/connector.yaml": "y\n",
+    change = {"components/base/improve/mode.yaml": "y\n", "components/base/cos/mode.yaml": "y\n",
+              "components/base/improve/connectors/improve-store/connector.yaml": "y\n",
               "components/modes/mine/connector.yaml": "y\n"}
     rep = boundary.check(_repo({"bay/cli.py": "x\n"}, change, shipped), "HEAD~1", "HEAD", None, [])
-    assert sorted(f.path for f in rep.failures) == ["components/base/cos/mode.yaml", "components/base/improve/connectors/improve-store/connector.yaml"], \
-        [(f.path, f.rule) for f in rep.failures]
+    assert sorted(f.path for f in rep.failures) == [
+        "components/base/cos/mode.yaml",
+        "components/base/improve/connectors/improve-store/connector.yaml",
+    ], [(f.path, f.rule) for f in rep.failures]
     assert {f.rule for f in rep.failures} == {"protected"}
 
 

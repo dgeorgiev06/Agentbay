@@ -36,9 +36,14 @@ def _write(kit: Path, rel: str, text: str, files: list[str]) -> None:
     files.append(rel)
 
 
-def _mode_dir(kit: Path, kind: str, target: str | None) -> str:
+def _require_mode(kind: str, target: str | None) -> str:
     if not target:
         raise ScaffoldError(f"kind={kind} needs the mode it goes in (--mode <mode>)")
+    return target
+
+
+def _mode_dir(kit: Path, kind: str, target: str | None) -> str:
+    target = _require_mode(kind, target)
     if _protected(kit, "mode", target):
         raise ScaffoldError(f"mode '{target}' is protected (framework/kernel.yaml `protected:`): it is changed "
                             f"via forge.extend")
@@ -99,6 +104,7 @@ def create(kit: Path, kind: str, name: str, *, target: str | None = None, implem
         todo = [f"fill the TODOs in {base}/features/run/playbook.md and rules.yaml",
                 f"rename or add features with `bay new feature <name> --mode {name}`", "run `./bay.sh check`"]
     elif kind == "feature":
+        target = _require_mode(kind, target)
         home = _mode_dir(kit, kind, target)
         mfile = kit / home / "mode.yaml"
         doc = yaml.safe_load(mfile.read_text())

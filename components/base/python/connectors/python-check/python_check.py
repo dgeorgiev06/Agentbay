@@ -34,8 +34,8 @@ PLATFORM_CHECK = (
     "a sys.platform or sys.version_info check; mypy skips the branch it thinks is unreachable, "
     "so do not branch on it in checked code"
 )
-UNNAMEABLE_FILE = "a .py file whose name is not a valid module name; mypy skips it, so rename it"
-UNNAMEABLE_FOLDER = "a folder with Python whose name is not a valid package name; mypy skips it, so rename it"
+UNNAMEABLE = "a .py file or folder with Python that mypy does not check because of its name; rename it"
+SKIPPED_FOLDERS = ("node_modules", "__pycache__", "site-packages")
 SYS_PROBES = ("platform", "version_info")
 MYPY_CONSTANTS = ("TYPE_CHECKING", "MYPY", "PY2", "PY3")
 HIDDEN = "a .py file in a dot-folder; the tools do not check it, so move it out of the dot-folder"
@@ -88,13 +88,13 @@ def _nested_unnameable(package: Path, root: Path) -> list[Row]:
         if "tests" in parts or any(part.startswith(".") for part in parts):
             continue
         folders, stem = parts[1:-1], Path(parts[-1]).stem
-        bad_folder = next((i for i, folder in enumerate(folders) if not folder.isidentifier()), None)
+        bad_folder = next((i for i, folder in enumerate(folders) if "." in folder or folder in SKIPPED_FOLDERS), None)
         if bad_folder is not None:
             shown = "/".join(parts[:bad_folder + 2])
-            rows[shown] = _row(shown, 0, "unchecked", UNNAMEABLE_FOLDER)
-        elif not stem.isidentifier():
+            rows[shown] = _row(shown, 0, "unchecked", UNNAMEABLE)
+        elif "." in stem:
             shown = "/".join(parts)
-            rows[shown] = _row(shown, 0, "unchecked", UNNAMEABLE_FILE)
+            rows[shown] = _row(shown, 0, "unchecked", UNNAMEABLE)
     return list(rows.values())
 
 
@@ -108,13 +108,13 @@ def _targets(root: Path) -> tuple[list[str], list[Row]]:
             if entry.stem.isidentifier():
                 args += ["-m", entry.stem]
             else:
-                unnameable.append(_row(entry.name, 0, "unchecked", UNNAMEABLE_FILE))
+                unnameable.append(_row(entry.name, 0, "unchecked", UNNAMEABLE))
         elif entry.is_dir() and _holds_python(entry, root):
             if entry.name.isidentifier():
                 args += ["-p", entry.name]
                 unnameable += _nested_unnameable(entry, root)
             else:
-                unnameable.append(_row(entry.name, 0, "unchecked", UNNAMEABLE_FOLDER))
+                unnameable.append(_row(entry.name, 0, "unchecked", UNNAMEABLE))
     return args, unnameable
 
 

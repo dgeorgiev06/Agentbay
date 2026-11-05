@@ -77,10 +77,12 @@ def test_adapter_round_trip():
     for sk, home in (("digest", "modes/feed-briefing"), ("corpus-sql", "base/store"), ("grounded-qa", "base/store")):
         assert body(sk_dir / f"feed-briefing--{sk}/SKILL.md") == body(KIT / f"components/{home}/skills/{sk}/SKILL.md")
     for sk in ("digest", "corpus-sql"):
-        assert body(sk_dir / f"mail-briefing--{sk}/SKILL.md") == body(KIT / f"components/modes/mail-briefing/skills/{sk}/SKILL.md")
+        mail_skill = body(KIT / f"components/modes/mail-briefing/skills/{sk}/SKILL.md")
+        assert body(sk_dir / f"mail-briefing--{sk}/SKILL.md") == mail_skill
         home = "modes/feed-briefing" if sk == "digest" else "base/store"
-        assert body(KIT / f"components/modes/mail-briefing/skills/{sk}/SKILL.md") != body(KIT / f"components/{home}/skills/{sk}/SKILL.md")
-    assert body(sk_dir / "mail-briefing--grounded-qa/SKILL.md") == body(KIT / "components/base/store/skills/grounded-qa/SKILL.md")
+        assert mail_skill != body(KIT / f"components/{home}/skills/{sk}/SKILL.md")
+    grounded_qa = body(KIT / "components/base/store/skills/grounded-qa/SKILL.md")
+    assert body(sk_dir / "mail-briefing--grounded-qa/SKILL.md") == grounded_qa
     ma = (proj / ".claude/agents/analyst--mail-briefing.md").read_text()
     assert "`feed-briefing--corpus-sql` (corpus-sql)" in fa and "mail-briefing--" not in fa
     assert "`mail-briefing--corpus-sql` (corpus-sql)" in ma and "feed-briefing--" not in ma
@@ -168,7 +170,8 @@ def test_hook_records_spawn_and_result():
     proj = tmpdir()
     pre = {"tool_name": "Agent", "tool_use_id": "tu1", "session_id": "s",
            "tool_input": {"subagent_type": "briefing-analyst", "prompt": "```task\ntaskId: T-20261027-ab12\n```"}}
-    post = dict(pre, tool_response="done\n```result\nprotocol: Result/v1\ntaskId: T-20261027-ab12\nstatus: done\nsummary: ok\n```")
+    result_block = "```result\nprotocol: Result/v1\ntaskId: T-20261027-ab12\nstatus: done\nsummary: ok\n```"
+    post = dict(pre, tool_response=f"done\n{result_block}")
     for phase, payload in (("pre", pre), ("post", post)):
         subprocess.run([sys.executable, str(KIT / "bay/hook.py"), phase], input=json.dumps(payload), text=True,
                        env={"CLAUDE_PROJECT_DIR": str(proj), "PATH": "/usr/bin:/bin"}, check=True)

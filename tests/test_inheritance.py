@@ -123,7 +123,8 @@ def test_child_can_add_its_own_feature_and_type():
             "news-briefing.triage")
     (d / "features/triage/playbook.md").write_text(pb.replace("`prune`: the dispatcher runs `items.store/v2.prune`",
                                                               "`look`: the dispatcher runs `items.store/v2.query`"))
-    (d / "features/triage/rules.yaml").write_text((k / "components/modes/feed-briefing/features/prune/rules.yaml").read_text())
+    prune_rules = k / "components/modes/feed-briefing/features/prune/rules.yaml"
+    (d / "features/triage/rules.yaml").write_text(prune_rules.read_text())
     s = model.resolve(model.Kit(k))
     assert set(s.modes["news-briefing"].features) == {"add", "update", "delete", "query", "get", "ask", "triage"}
     assert problems(k) == []
@@ -194,8 +195,8 @@ def test_lint_lines_of_inherited_parts_point_at_the_parent_mode_yaml():
                                                     "run": "items.store/v2.prune"}])}))
     step = line_of(k / "components/modes/feed-briefing/mode.yaml", "      - id: trim")
     ps = problems(k)
-    assert any(f"components/modes/feed-briefing/mode.yaml:{step}: feed-briefing.prune step trim: `roles:` applies to role and "
-               f"review steps only" in p for p in ps), ps
+    assert any(f"components/modes/feed-briefing/mode.yaml:{step}: feed-briefing.prune step trim: "
+               f"`roles:` applies to role and review steps only" in p for p in ps), ps
 
 
 def shared_config(k):

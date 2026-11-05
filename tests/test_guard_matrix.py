@@ -283,7 +283,8 @@ def undo_move(got: dict) -> dict:
 
 
 USER_MODE_GAP = ("mode improve: role analyst works in the framework env framework-dev (improve.scan step patterns); "
-                 "user modes may put roles only in their own envs (components/modes/<name>/envs/) or the framework envs plan-writer and workspace and research")
+                 "user modes may put roles only in their own envs (components/modes/<name>/envs/) "
+                 "or the framework envs plan-writer and workspace and research")
 IMPROVE_ROWS = ["Edit mode:improve/mode.yaml", "MultiEdit mode:improve/mode.yaml", "NotebookEdit mode:improve/n.ipynb",
                 "Write mode:improve/README.md", "Write mode:improve/features/scan/playbook.md",
                 "Write mode:improve/mode.yaml"]

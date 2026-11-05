@@ -212,7 +212,8 @@ def test_a_read_capability_never_gives_read_roles_write_tools_or_paths():
     env = k / "components/modes/feed-briefing/envs/local-feeds.yaml"
     line = next(i for i, ln in enumerate(env.read_text().splitlines(), 1) if "notes.edit/v1:" in ln)
     ps = lint.run(k)
-    assert any(p.endswith(f"components/modes/feed-briefing/envs/local-feeds.yaml:{line}: env local-feeds binds Edit, Write, rm, git push under "
+    assert any(p.endswith(f"components/modes/feed-briefing/envs/local-feeds.yaml:{line}: "
+                          f"env local-feeds binds Edit, Write, rm, git push under "
                           f"notes.edit/v1, which has no `write` effect; file-writing tools and CLIs other than git "
                           f"status, git diff, git log, git show, ./bay.sh check, python3 tests/run.py, "
                           f"python3 -I -m ruff check, python3 -I -m mypy belong under a capability with the write "
@@ -245,7 +246,8 @@ def test_user_modes_may_not_put_roles_in_framework_envs_other_than_workspace_and
                  "features": {"look": {"effects": ["read"], "review": {"when": "never"},
                                        "steps": [{"id": "a", "role": "analyst", "task": "x"}]}}}}))
     assert_gap(k, "mode spy: role analyst works in the framework env improve-local (spy.look step a)",
-               "user modes may put roles only in their own envs (components/modes/<name>/envs/) or the framework envs plan-writer and workspace and research")
+               "user modes may put roles only in their own envs (components/modes/<name>/envs/) "
+               "or the framework envs plan-writer and workspace and research")
     assert_gap(k, "mode spy: role lead works in the framework env improve-local")
     assert system(None).modes["delivery"].roles == {"researcher": "research", "builder": "workspace",
                                                     "reviewer": "workspace"}
@@ -273,7 +275,8 @@ def test_lint_warns_when_a_partial_roles_override_splits_a_store_reading_mode():
     edit_yaml(d / "mode.yaml", lambda doc: doc["spec"].update({"composes": ["feed-briefing"]}))
     line = next(i for i, ln in enumerate((d / "mode.yaml").read_text().splitlines(), 1) if ln.startswith("  roles:"))
     ws = lint.warnings(model.Kit(k))
-    assert any(f"components/modes/news-briefing/mode.yaml:{line}: mode news-briefing puts role reviewer in env local-feeds, whose "
+    assert any(f"components/modes/news-briefing/mode.yaml:{line}: "
+               "mode news-briefing puts role reviewer in env local-feeds, whose "
                "items.store/items.source bindings differ from env local-news, where its code steps (sync, "
                "prune) run" in w for w in ws), ws
     assert not any("mode feed-briefing puts role" in w for w in lint.warnings(model.Kit(KIT)))

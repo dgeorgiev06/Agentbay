@@ -210,11 +210,14 @@ def unreachable_code_and_unchecked_files_are_findings() -> None:
         if TYPE_CHECKING:
             import os
         """))
-    (tree / "pkg2" / "sub.dir").mkdir(parents=True)
+    skipped_folders = ("sub.dir", "node_modules", "__pycache__", "site-packages", "sub-dir")
+    for folder in skipped_folders:
+        (tree / "pkg2" / folder).mkdir(parents=True)
+        (tree / "pkg2" / folder / "m.py").write_text("x = 1\n")
     (tree / "pkg2" / "tests").mkdir()
+    (tree / "pkg2" / "my-file.py").write_text("x = 1\n")
     (tree / "pkg2" / "__init__.py").write_text("x = 1\n")
     (tree / "pkg2" / "a.b.py").write_text("x = 1\n")
-    (tree / "pkg2" / "sub.dir" / "m.py").write_text("x = 1\n")
     (tree / "pkg2" / "tests" / "helper.py").write_text(textwrap.dedent("""\
         from typing import TYPE_CHECKING
 
@@ -230,7 +233,8 @@ def unreachable_code_and_unchecked_files_are_findings() -> None:
     tools = FakeTools(behaviour={"skipped": ("lost.py",)})
     use(tools)
     check = python_check.create(SimpleNamespace(kit=KIT, project=tree))
-    found = {(r["file"], r["line"], r["rule"]) for r in check.findings(str(tree), str(tree))["findings"]}
+    rows = check.findings(str(tree), str(tree))["findings"]
+    found = {(r["file"], r["line"], r["rule"]) for r in rows}
     reachability = {"type-checking-use", "platform-check"}
     shapes = {(line, rule) for file, line, rule in found if file == "t.py" and rule in reachability}
     use_lines = {6, 8, 10, 12, 16, 18, 20, 31, 33, 35, 37}
@@ -241,6 +245,9 @@ def unreachable_code_and_unchecked_files_are_findings() -> None:
     assert not [row for row in found if row[0] == "pkg2/tests/helper.py" and row[1] == 3], found
     unchecked = {file for file, _, rule in found if rule == "unchecked"}
     assert {"lost.py", "my-mod.py", "my-pkg", "pkg2/a.b.py", "pkg2/sub.dir"} <= unchecked, found
+    mypy_skipped = {r["file"] for r in rows if r["rule"] == "unchecked" and "mypy" in r["message"]}
+    assert {"pkg2/node_modules", "pkg2/__pycache__", "pkg2/site-packages"} <= mypy_skipped, rows
+    assert not {"pkg2/my-file.py", "pkg2/sub-dir"} & mypy_skipped, rows
     assert "t.py" not in unchecked, found
     mypy_calls = [cmd for cmd, _ in tools.calls if cmd[3] == "mypy" and "--config-file" in cmd]
     assert mypy_calls and not any("my-mod" in cmd or "my-pkg" in cmd for cmd in mypy_calls), mypy_calls
@@ -287,7 +294,8 @@ def planted_config_plugin_and_module_are_ignored() -> None:
     out = check.findings(str(tree), str(base))
     assert "stopped" not in out, out
     expected = [("bad.py", "F401"), ("dist/m.py", "F401"), ("pkg/link.py", "symlink"),
-                ("pkg/node_modules/m.py", "F401"), ("planted.py", "F401"), ("venv/m.py", "F401")]
+                ("pkg/node_modules", "unchecked"), ("pkg/node_modules/m.py", "F401"),
+                ("planted.py", "F401"), ("venv/m.py", "F401")]
     assert sorted((r["file"], r["rule"]) for r in out["findings"]) == expected, out
     assert not (tree / "ran_ruff").exists() and not (tree / "ran_plugin").exists()
     subprocess.run([sys.executable, "-m", "ruff", "--version"], cwd=tree, capture_output=True)

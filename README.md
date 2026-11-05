@@ -21,8 +21,10 @@ needs one new adapter, not new modes.
   storing items. Agents never see a connector or a secret; they call it through an interface.
 - **Capability interface**: a versioned contract, such as `items.source/v1`, between a mode and the
   connectors that serve it. A mode names interfaces, never connectors, so a source can be swapped.
-- **Component**: one folder under `components/` with one manifest. It holds a mode, a source connector, a
-  content type or shared parts, together with its envs, internal connectors, interfaces and tests.
+- **Component**: one folder with one manifest, under `components/base/` (shipped with the framework) or
+  `components/modes/` (yours). It holds one mode with its envs, interfaces, tests, source connectors
+  (`connectors/`) and content types (`content-types/`), or one shared set. A mode that uses another mode's
+  connectors or content types lists it in `composes:` in its `mode.yaml`.
 - **Kernel**: the framework itself (`bay/`, `schemas/`, `framework/`, `adapters/`). Only the framework's
   change process may edit it.
 
@@ -91,8 +93,8 @@ needs a `standards` step, `needs: standards.check/v1` and an env that binds the 
 before the step does, each with the kit's config and a fixed list of flags:
 
 ```bash
-python3 -I -m ruff check --config components/python/ruff.toml <path>
-python3 -I -m mypy --config-file components/python/mypy.ini <path>
+python3 -I -m ruff check --config components/base/python/ruff.toml <path>
+python3 -I -m mypy --config-file components/base/python/mypy.ini <path>
 ```
 
 **Going live:** sign in as the source connector's `README.md` says, remove `offline: true` from
@@ -103,7 +105,8 @@ agentbay.config.yaml and rebuild. Budget caps stop a sync before it exceeds one.
 `bay config` prints every setting, with its type, default and description, from the schemas. `bay build`
 writes a minimal `agentbay.config.yaml` when the project has none. Settings can only lower a cap: a value above
 the env's `limits:` is refused by lint and at run time. Capabilities stay bound only in an env manifest
-(`components/<name>/envs/<env>.yaml`). An env's `offline:` block names the stand-in sources that `offline: true`
+(`components/modes/<name>/envs/<env>.yaml`, or under `components/base/` for a shipped mode). An env's `offline:`
+block names the stand-in sources that `offline: true`
 binds in their place.
 A mode endpoint with a `schedule:` (daily, weekly) runs from cron: `bay check` prints the command to schedule.
 For example, a weekly report on Mondays at 07:00:
@@ -118,7 +121,8 @@ Each component is a folder with its own `README.md` and, if it takes settings, i
 An env is one file inside the folder of the component it belongs to.
 
 ```
-components/      one folder for each mode, source connector, content type or shared set (yours and the shipped ones)
+components/      base/ is the framework's shipped modes and shared sets; modes/ is yours, one folder per mode
+                 with its connectors/ and content-types/ inside
 adapters/        agent runtimes that bay build compiles for, each with its agent profile and slash commands
 framework/       shipped with the kit, never edited by users:
   roles/           the five roles
@@ -148,7 +152,7 @@ tests/           python3 tests/run.py (the tests of a component live in its own 
 | `bay approve <F-id> [--defer\|--wontfix]` | decide a backlog item from the analysis mode (follows `approve.from`, like a gate) |
 | `bay status [--agents\|--log]`, `bay note <ref> "text"` | calls, steps, cost, agent runs (grouped by role, mode, model, tier); the raw run log; a note |
 | `bay note task`, `bay note dispatch <taskId> --agent <name> --input <x> [--unguarded <reason>]`, `bay note done <taskId>`, `bay note review <taskId> '<json>'`, `bay plan <taskId> [--done <n>]` | agent run records: a fresh taskId; the Chief of Staff logs each dispatch, its finish and outside review; a subagent first records its outcome and to-do (`bay plan` is its only `bay` command) |
-| `bay new mode <name>`, `bay new feature <name> --mode <mode>`, `bay new connector <name> --implements <interface>`, `bay new env <name> --mode <mode>` | create a component, a feature, a source connector or an env from a template |
+| `bay new mode <name>`, `bay new feature <name> --mode <mode>`, `bay new connector <name> --implements <interface> --mode <mode>`, `bay new content-type <name> --mode <mode>`, `bay new env <name> --mode <mode>` | create a mode, or a feature, a source connector, a content type or an env inside a mode in `components/modes/`, from a template |
 | `bay secret set <NAME>` | store a secret (read from your terminal, never echoed) |
 | `bay auth <connector>` | a connector's browser login (Claude Code asks first; needs the browser on this machine) |
 | `bay config` | print every agentbay.config.yaml setting, from the schemas |
@@ -158,9 +162,10 @@ lists any commands it adds.
 
 ## Adding things
 
-A source is one component plus one binding line in the mode's env. A feature is `bay new feature`. A framework
+A source is one connector plus one binding line in the mode's env. A feature is `bay new feature`. A framework
 change starts from a proposal that lists every core path it touches. For example, a new source starts with
-`bay new connector <name> --implements items.source/v1`, which creates the folder `components/<name>/`. Recipes:
+`bay new connector <name> --implements items.source/v1 --mode <mode>`, which creates the folder
+`components/modes/<mode>/connectors/<name>/`. Recipes:
 [docs/INTERFACES.md#extension-recipes](docs/INTERFACES.md#extension-recipes).
 
 **Chain modes.** A project workflow in `agentbay.config.yaml` runs one mode's endpoint, then an approval gate, then

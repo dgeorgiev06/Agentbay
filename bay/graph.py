@@ -146,7 +146,8 @@ def _concepts(g: Graph, kit: Path) -> None:
 
 def _data_schemas(kit: Path):
     """(node id, path) of each data schema in schemas/data/ and the components' data folders, and each type's."""
-    for p in sorted([*(kit / "schemas" / "data").glob("*.schema.json"), *kit.glob("components/*/data/*.schema.json")]):
+    shipped = (kit / "schemas" / "data").glob("*.schema.json")
+    for p in sorted([*shipped, *kit.glob("components/*/*/data/*.schema.json")]):
         base, _, ver = p.name.removesuffix(".schema.json").rpartition(".")
         yield f"schema:{base}/{ver}", p
     from . import contenttypes

@@ -20,8 +20,8 @@ spec:
     deliverable. While you work, run only the tests for what you changed
     (`python3 tests/run.py <test file>`); run the full suite once before you
     commit, and it must pass for the commit. Check the Python you wrote with
-    `python3 -I -m ruff check --config components/python/ruff.toml <path>`
-    and `python3 -I -m mypy --config-file components/python/mypy.ini <path>`.
+    `python3 -I -m ruff check --config components/base/python/ruff.toml <path>`
+    and `python3 -I -m mypy --config-file components/base/python/mypy.ini <path>`.
     Write no `#` comment and no
     docstring longer than one line: a reason goes in a name, an error message
     or the README. If you cannot run a check, report

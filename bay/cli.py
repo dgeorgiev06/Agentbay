@@ -39,8 +39,8 @@ approve <callId|runId> [--reject]    pass an approval gate of a call, or of a wo
 approve <F-id> [--defer|--wontfix]   decide an improve backlog item (where approve.from allows)
 (agents read data only through .agentbay/roles/<role>--<mode>/use, generated per role unit by build)
 
-new mode <name> | new feature <name> --mode <m>
-new connector <name> --implements <iface> | new env <name>     scaffolds (forge templates)
+new mode <name> | new feature|env|content-type <name> --mode <m>
+new connector <name> --implements <iface> --mode <m>           scaffolds (forge templates), into modes/<m>/
 secret set <NAME>      store a secret in the keychain (value read from stdin, never echoed)
 auth <connector>       run a connector's declared login (e.g. a browser sign-in that stores its token);
                        asks first; needs the browser on this machine
@@ -404,8 +404,8 @@ def _decide_finding(args):
 
 def cmd_new(args):
     from bay import scaffold
-    if args.kind == "feature" and not args.mode:
-        _die("✗ new feature needs --mode <mode>")
+    if args.kind != "mode" and not args.mode:
+        _die(f"✗ new {args.kind} needs --mode <mode>")
     if args.kind == "connector" and not args.implements:
         _die("✗ new connector needs --implements <interface>")
     try:
@@ -797,10 +797,10 @@ def main(argv=None):
     ap_.add_argument("--wontfix", action="store_true", help="F-id: close the backlog item as wontfix")
     ap_.set_defaults(fn=cmd_approve)
 
-    nw = sub.add_parser("new", help="scaffold a mode, feature, connector or env")
-    nw.add_argument("kind", choices=["mode", "feature", "connector", "env"]); nw.add_argument("name")
+    nw = sub.add_parser("new", help="scaffold a mode, or a feature, connector, env or content type in a mode")
+    nw.add_argument("kind", choices=["mode", "feature", "connector", "env", "content-type"]); nw.add_argument("name")
     nw.add_argument("--intent")
-    nw.add_argument("--mode", help="feature: the mode it joins")
+    nw.add_argument("--mode", help="every kind but mode: the user mode it goes in")
     nw.add_argument("--role", help="feature: default is the mode's first non-coordinator, non-reviewer role")
     nw.add_argument("--effects", help="feature: comma-separated, default read,write")
     nw.add_argument("--implements", help="connector: the interface it implements")

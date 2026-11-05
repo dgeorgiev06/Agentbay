@@ -95,8 +95,8 @@ def test_show_resolved_names_the_file_each_feature_comes_from():
                          capture_output=True, text=True, check=True).stdout
     feats = json.loads(out)["features"]
     assert {n: f["origin"] for n, f in feats.items()} == {
-        **dict.fromkeys(("sync", "prune", "digest", "ask"), "components/mail-briefing/mode.yaml"),
-        **dict.fromkeys(("add", "update", "delete", "query", "get"), "components/store/mode.yaml")}
+        **dict.fromkeys(("sync", "prune", "digest", "ask"), "components/modes/mail-briefing/mode.yaml"),
+        **dict.fromkeys(("add", "update", "delete", "query", "get"), "components/base/store/mode.yaml")}
     assert feats["digest"]["uses"] == ["items.store/v2.describe", "items.store/v2.sql", "items.store/v2.get",
                                        "items.store/v2.thread"]
     bad = subprocess.run([sys.executable, "-m", "bay.cli", "show", "mail-briefing", "--resolved", "--reason", "x"],
@@ -106,22 +106,22 @@ def test_show_resolved_names_the_file_each_feature_comes_from():
 
 def test_check_refuses_a_uses_no_role_is_granted_a_missing_uses_and_an_unknown_skill():
     k = kit_copy()
-    sub(k, "components/feed-briefing/mode.yaml", "uses: [items.store/v2.status, items.store/v2.sql]",
+    sub(k, "components/modes/feed-briefing/mode.yaml", "uses: [items.store/v2.status, items.store/v2.sql]",
         "uses: [items.store/v2.status, items.store/v2.nope]")
     assert any("prune: `uses:` names items.store/v2.nope" in g for g in gaps(k, project()))
     k = kit_copy()
-    sub(k, "components/feed-briefing/mode.yaml",
+    sub(k, "components/modes/feed-briefing/mode.yaml",
         "      uses: [items.store/v2.describe, items.store/v2.sql, items.store/v2.query, items.store/v2.get, "
         "items.store/v2.thread]   # B-9\n", "")
     assert any("feed-briefing.digest: its role steps can read the store" in g and "declare `uses:`" in g
                for g in gaps(k, project()))
     k = kit_copy()
-    sub(k, "components/feed-briefing/mode.yaml", "skills: [digest, corpus-sql]   ", "skills: [digest, nope]   ")
+    sub(k, "components/modes/feed-briefing/mode.yaml", "skills: [digest, corpus-sql]   ", "skills: [digest, nope]   ")
     assert any("`skills:` names 'nope', which is not a skill of mode feed-briefing" in g for g in gaps(k, project()))
 
 
 def test_lint_refuses_a_playbook_that_names_a_skill_its_feature_does_not_list():
     k = kit_copy()
-    sub(k, "components/feed-briefing/mode.yaml", "skills: [digest, corpus-sql]   ", "skills: [digest]   ")
+    sub(k, "components/modes/feed-briefing/mode.yaml", "skills: [digest, corpus-sql]   ", "skills: [digest]   ")
     assert any("names skill 'corpus-sql', which feed-briefing.digest does not list in its `skills:`"
                in e for e in lint.run(k))

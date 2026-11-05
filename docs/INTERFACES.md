@@ -39,8 +39,7 @@ the line to change; there is no reader or migration for it.
 
 ## Components
 
-A component is a folder `components/<name>/` with one manifest. The manifest decides its kind; names are
-unique across kinds.
+A component is a folder with one manifest, in `components/base/` (shipped) or `components/modes/` (yours). The manifest decides its kind; names are unique across kinds.
 
 | Manifest | Kind | Schema |
 |---|---|---|
@@ -49,16 +48,16 @@ unique across kinds.
 | `content-type.yaml` | ContentType | `schemas/content-type.schema.json` |
 | `component.yaml` | Component | `schemas/component.schema.json` |
 
-The folder name finds what a component provides; the manifest lists none of it. The folders are
+Folder names find what a component provides; the manifest lists none. The folders are
 `interfaces/` (one `<name>.v<N>.yaml` per interface), `envs/` (one file per env), `skills/<skill>/SKILL.md`,
-`types/`, `data/`, `connectors/<name>/` (internal connectors), `features/` and `tests/`. What a component needs stays in its manifest: `needs:` (interfaces), `reads:` (content
+`types/`, `data/`, `connectors/<name>/` (its source connectors), `content-types/<kind>/` (the folder is the kind), `features/` and `tests/`. Its manifest holds what it needs: `needs:` (interfaces), `reads:` (content
 types) and `extends:` (a parent mode).
 
-The placement rule decides where a connector sits. A connector that declares `needs.network`, `needs.secrets` or an
-`fs` path under `~` or `/` is a source connector at `components/<name>/`. Any other connector sits at
-`components/<owner>/connectors/<name>/`, in the component that owns it.
+A mode may bind a connector or read a content type of its own folder or of `base/`. For another mode's it lists that
+mode in `spec.composes` (not in a base mode, not transitive).
 
-`bay check` refuses a connector in the wrong place and a component folder without a manifest.
+`bay check` refuses a use without `composes`, an unused `composes`, a folder without its manifest, a manifest no loader
+reads and a component outside `base/` and `modes/`.
 
 ## 1. Mode and features
 `mode.yaml` declares each feature (`spec.features.<name>`, called as `<mode>.<name>`): `in` and `out`
@@ -124,7 +123,7 @@ bind:
 - Tier: step (a review: its review block) > feature > role default. The profile maps a tier to a model, and the
   env's `tiers` cap both step tiers and the role's default tier.
   Envs are the only place capabilities are bound.
-- User modes may put roles only in their own envs (`components/<name>/envs/`) and the protected envs that
+- User modes may put roles only in their own envs (`components/modes/<name>/envs/`) and the protected envs that
   `framework/kernel.yaml` opens to them (`protected:`, each env's `modes:`).
 - Code steps (`run:`) run in the coordinator's env for that feature; `bay check` warns when a store-reading
   mode puts a role in an env whose `items.store`/`items.source` bindings differ from it.
@@ -236,7 +235,7 @@ are in its `data/` folder. A finding's dedup key is its `fingerprint`, the
 hash of its kind and its detector key.
 
 ## 11. Items, selectors and the corpus store
-The item envelope, content types, selectors, the store layout and the SQL sandbox are in the README of `components/store`.
+The item envelope, content types, selectors, the store layout and the SQL sandbox are in the README of `components/base/store`.
 The endpoints are in `items.source.v1.yaml` and `items.store.v2.yaml`.
 ## 12. Conformance rules
 `framework/rules/conformance.yaml` (`schemas/rules.schema.json`, linted by `bay check`): rules with an id,
@@ -245,11 +244,12 @@ level, statement and optional deterministic `check`. A feature's
 that has a check and hands the rest to the analyst.
 
 ## Extension recipes
-- **New source** -> `bay new connector bsky --implements items.source/v1` creates the folder `components/<name>/`
-  with a template that sets `source`, `window` and a `selectors` table (lint requires them). Implement `fetch`. Then
+- **New source** -> `bay new connector bsky --implements items.source/v1 --mode <mode>` creates the folder
+  `components/modes/<mode>/connectors/bsky/` with a template that sets `source`, `window` and a `selectors` table
+  (lint requires them). Implement `fetch`. Then
   in the env of the mode that uses the source, add `bsky` to the `items.source/v1` binding and its host and secret
   names to `network.allow` and `secrets.allow`. Modes, roles and playbooks are untouched. A source that produces a
-  new kind of item also needs a content type component.
+  new kind of item also needs `bay new content-type`.
 - **New kind of digest** -> a mode component that extends `store`, with its own purpose, constraints,
   `configDefaults` and env. Its analyst compiles to its own unit (`analyst--<mode>`) with its own store.
 

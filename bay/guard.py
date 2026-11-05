@@ -26,7 +26,7 @@ GIT_BAD_FLAGS = ("--output", "--ext-diff", "--textconv", "--no-index", "--exec",
 GIT_MV_RM_FLAGS = ("-r", "-f", "-n", "-q", "-k", "-v", "--cached", "--dry-run", "--force", "--quiet")
 LINT_CONFIG = {"ruff": ("--config", "ruff.toml"), "mypy": ("--config-file", "mypy.ini")}
 LINT_FLAGS = ("--no-cache", "--ignore-noqa", "--statistics", "--strict", "--show-error-codes")
-LINT_CONFIG_DIR = Path("components") / "python"
+LINT_CONFIG_DIR = Path("components") / "base" / "python"
 
 
 def abbrev(word: str, flags: tuple[str, ...]) -> bool:

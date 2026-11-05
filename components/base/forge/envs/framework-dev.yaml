@@ -1,0 +1,39 @@
+apiVersion: agentbay/v4
+kind: Environment
+metadata:
+  name: framework-dev
+  description: >-
+    Change the agentbay framework itself; paths are relative to the agentbay checkout (the project for
+    forge). Only forge.extend may place roles here.
+spec:
+  bind:
+    workspace.read/v1: { tools: [Read, Glob, Grep] }
+    workspace.write/v1:
+      tools: [Edit, Write, Bash]
+      # runs tests on code it writes, i.e. arbitrary code: trusted by design (forge.extend only, user approval
+      # gate, mandatory opus review); real containment needs an OS sandbox
+      clis: [./bay.sh check, python3 tests/run.py, python3 -I -m ruff check, python3 -I -m mypy,
+             git status, git diff, git log, git add, git commit, git mv, git rm]
+    git.read/v1:
+      tools: [Bash]
+      clis: [git status, git diff, git log, git show]
+  fs:
+    read: ["."]
+    # the four protected folders, then each protected component, env, connector and interfaces folder (lint keeps
+    # this in step with the protected: block of framework/kernel.yaml), then docs, tests and README.md (every framework
+    # change updates it, DOD-13)
+    write: [framework, bay, schemas, adapters,
+            components/base/cos, components/base/forge,
+            components/base/improve/envs/improve-local.yaml, components/base/tools/envs/workspace.yaml,
+            components/base/tools/envs/research.yaml,
+            components/base/improve/connectors/claude-transcripts, components/base/store,
+            components/base/improve/connectors/artifact-graph, components/base/improve/connectors/git,
+            components/base/improve/connectors/improve-detect, components/base/improve/connectors/improve-store,
+            components/base/improve/connectors/ledger,
+            components/base/improve/interfaces, components/base/tools/interfaces,
+            components/base/python, components/base/comments,
+            components/base/tools/envs/plan-writer.yaml, requirements-dev.txt,
+            docs, tests, README.md]
+  tiers: [balanced, deep]          # no fast tier for framework changes
+  effects: [read, write]
+  limits: { maxTurns: 120, maxMinutes: 60 }

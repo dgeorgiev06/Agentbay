@@ -1,4 +1,4 @@
-"""Feature rules (components/<mode>/features/<feature>/rules.yaml)."""
+"""Feature rules (components/<tier>/<mode>/features/<feature>/rules.yaml)."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field

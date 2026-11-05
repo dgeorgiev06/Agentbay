@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentbay/data/{{name}}/v1",
+  "title": "{{name}}/v1",
+  "description": "{{intent}}",
+  "allOf": [{ "$ref": "item/v1" }],
+  "properties": {
+    "kind": { "const": "{{name}}" },
+    "example": { "type": "string" }
+  },
+  "unevaluatedProperties": false
+}

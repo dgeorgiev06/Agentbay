@@ -427,7 +427,7 @@ class ClaudeCodeAdapter:
         if root is None or not root.playbook:
             raise ValueError(f"no `{ROOT_COORDINATOR}` mode with a playbook: the main thread has no coordinator "
                              f"prose to build .agentbay/COORDINATOR.md from (expected "
-                             f"components/{ROOT_COORDINATOR}/playbook.md)")
+                             f"components/base/{ROOT_COORDINATOR}/playbook.md)")
         cos = _without(root.playbook, system.uninstalled).strip()
         ep_rows, role_rows, books = [], [], []
         for m in system.modes.values():

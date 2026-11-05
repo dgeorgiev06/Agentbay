@@ -74,13 +74,15 @@ def test_adapter_round_trip():
         return [ln for ln in p.read_text().splitlines() if not ln.startswith("name:")]
     for n in built:
         assert f"\nname: {n}\n" in (sk_dir / n / "SKILL.md").read_text()
-    for sk, home in (("digest", "feed-briefing"), ("corpus-sql", "store"), ("grounded-qa", "store")):
+    for sk, home in (("digest", "modes/feed-briefing"), ("corpus-sql", "base/store"), ("grounded-qa", "base/store")):
         assert body(sk_dir / f"feed-briefing--{sk}/SKILL.md") == body(KIT / f"components/{home}/skills/{sk}/SKILL.md")
     for sk in ("digest", "corpus-sql"):
-        assert body(sk_dir / f"mail-briefing--{sk}/SKILL.md") == body(KIT / f"components/mail-briefing/skills/{sk}/SKILL.md")
-        home = "feed-briefing" if sk == "digest" else "store"
-        assert body(KIT / f"components/mail-briefing/skills/{sk}/SKILL.md") != body(KIT / f"components/{home}/skills/{sk}/SKILL.md")
-    assert body(sk_dir / "mail-briefing--grounded-qa/SKILL.md") == body(KIT / "components/store/skills/grounded-qa/SKILL.md")
+        mail_skill = body(KIT / f"components/modes/mail-briefing/skills/{sk}/SKILL.md")
+        assert body(sk_dir / f"mail-briefing--{sk}/SKILL.md") == mail_skill
+        home = "modes/feed-briefing" if sk == "digest" else "base/store"
+        assert mail_skill != body(KIT / f"components/{home}/skills/{sk}/SKILL.md")
+    grounded_qa = body(KIT / "components/base/store/skills/grounded-qa/SKILL.md")
+    assert body(sk_dir / "mail-briefing--grounded-qa/SKILL.md") == grounded_qa
     ma = (proj / ".claude/agents/analyst--mail-briefing.md").read_text()
     assert "`feed-briefing--corpus-sql` (corpus-sql)" in fa and "mail-briefing--" not in fa
     assert "`mail-briefing--corpus-sql` (corpus-sql)" in ma and "feed-briefing--" not in ma
@@ -168,7 +170,8 @@ def test_hook_records_spawn_and_result():
     proj = tmpdir()
     pre = {"tool_name": "Agent", "tool_use_id": "tu1", "session_id": "s",
            "tool_input": {"subagent_type": "briefing-analyst", "prompt": "```task\ntaskId: T-20261027-ab12\n```"}}
-    post = dict(pre, tool_response="done\n```result\nprotocol: Result/v1\ntaskId: T-20261027-ab12\nstatus: done\nsummary: ok\n```")
+    result_block = "```result\nprotocol: Result/v1\ntaskId: T-20261027-ab12\nstatus: done\nsummary: ok\n```"
+    post = dict(pre, tool_response=f"done\n{result_block}")
     for phase, payload in (("pre", pre), ("post", post)):
         subprocess.run([sys.executable, str(KIT / "bay/hook.py"), phase], input=json.dumps(payload), text=True,
                        env={"CLAUDE_PROJECT_DIR": str(proj), "PATH": "/usr/bin:/bin"}, check=True)
@@ -344,14 +347,15 @@ def test_lint_reports_a_skill_md_whose_front_matter_never_closes_f15():
     from helpers import cleanup, kit_copy
     k = kit_copy()
     try:
-        f = k / "components/feed-briefing/skills/digest/SKILL.md"
+        f = k / "components/modes/feed-briefing/skills/digest/SKILL.md"
         f.write_text(f.read_text().replace("\n---\n", "\n\n", 1))
-        g = k / "components/store/skills/grounded-qa/SKILL.md"
+        g = k / "components/base/store/skills/grounded-qa/SKILL.md"
         g.write_text("---\n- not\n- a mapping\n---\n# x\n")
         errs = lint.run(k)
-        want = "components/feed-briefing/skills/digest/SKILL.md:1: front matter opens with '---' on line 1 but has no closing"
+        want = ("components/modes/feed-briefing/skills/digest/SKILL.md:1: "
+                "front matter opens with '---' on line 1 but has no closing")
         assert sum(want in e for e in errs) == 1
-        assert any("components/store/skills/grounded-qa/SKILL.md:1: front matter must be a YAML mapping" in e
+        assert any("components/base/store/skills/grounded-qa/SKILL.md:1: front matter must be a YAML mapping" in e
                    for e in errs)
     finally:
         cleanup(k)

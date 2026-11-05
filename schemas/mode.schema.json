@@ -51,6 +51,14 @@
           "type": "boolean",
           "description": "A base for `extends` only: linted, never resolved, installed or called. Not inherited."
         },
+        "composes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,40}$"
+          },
+          "description": "Modes whose connectors it binds or types it reads; each must be used. Not in a base mode."
+        },
         "purpose": {
           "type": "string"
         },
@@ -82,7 +90,7 @@
               },
               "in": {
                 "type": "string",
-                "description": "Type name: components/<mode>/types/<Name>.schema.json"
+                "description": "Type name: components/<tier>/<mode>/types/<Name>.schema.json"
               },
               "out": {
                 "type": "string"

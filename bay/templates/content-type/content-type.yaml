@@ -1,0 +1,14 @@
+apiVersion: agentbay/v4
+kind: ContentType
+metadata:
+  name: {{name}}
+  description: "{{intent}}"
+spec:
+  version: 1
+  kind: {{name}}
+  views:
+    v_{{name}}:
+      item: true
+      includes: { view: v_items, note: "kind = '{{name}}' only" }
+      columns:
+        - { name: example, type: TEXT, description: "TODO a field this kind adds to item/v1" }

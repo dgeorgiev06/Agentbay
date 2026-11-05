@@ -16,8 +16,8 @@ def has(k, *needles, p=None):
     raise AssertionError(f"no lint problem with {needles}; got:\n  " + "\n  ".join(ps))
 
 
-PB = "components/feed-briefing/features/digest/playbook.md"
-RULES = "components/feed-briefing/features/digest/rules.yaml"
+PB = "components/modes/feed-briefing/features/digest/playbook.md"
+RULES = "components/modes/feed-briefing/features/digest/rules.yaml"
 
 
 def sub(k, rel, old, new):
@@ -85,19 +85,23 @@ def test_rules_schema_and_unique_ids_and_refs():
 
 def test_a_file_a_feature_names_must_exist():
     k = kit_copy()
-    (k / "components/store/features/ask/rules.yaml").unlink()
-    has(k, f"components/store/mode.yaml:{line_of(k / 'components/store/mode.yaml', '    ask:')}: feature store.ask "
-           "rules file components/store/features/ask/rules.yaml does not exist")
-    has(k, "components/mail-briefing/mode.yaml", "mail-briefing.ask rules file components/store/features/ask/rules.yaml")
+    (k / "components/base/store/features/ask/rules.yaml").unlink()
+    store_mode = k / "components/base/store/mode.yaml"
+    has(k, f"components/base/store/mode.yaml:{line_of(store_mode, '    ask:')}: feature store.ask "
+           "rules file components/base/store/features/ask/rules.yaml does not exist")
+    has(k, "components/modes/mail-briefing/mode.yaml",
+            "mail-briefing.ask rules file components/base/store/features/ask/rules.yaml")
 
 
 DELETED_TARGETS = [
     ("adapter script", "bay/hook.py", "module bay/hook.py does not exist"),
     ("bay module a connector imports", "bay/graph.py", "module bay/graph.py does not exist"),
-    ("coordinator playbook", "components/improve/playbook.md", "mode improve has a coordinator but no playbook.md"),
-    ("data schema named by $ref", "components/improve/data/session.episode.v1.schema.json", "$ref session.episode/v1"),
-    ("feature type", "components/cos/types/StageOut.schema.json",
-     "feature cos.run type StageOut components/cos/types/StageOut.schema.json does not exist"),
+    ("coordinator playbook", "components/base/improve/playbook.md",
+            "mode improve has a coordinator but no playbook.md"),
+    ("data schema named by $ref", "components/base/improve/data/session.episode.v1.schema.json",
+            "$ref session.episode/v1"),
+    ("feature type", "components/base/cos/types/StageOut.schema.json",
+     "feature cos.run type StageOut components/base/cos/types/StageOut.schema.json does not exist"),
 ]
 
 
@@ -113,7 +117,7 @@ def test_a_reference_to_a_deleted_file_is_refused_in_every_group():
 
 def test_a_feature_that_runs_an_agent_needs_a_playbook_and_a_code_only_one_needs_no_files():
     k = kit_copy()
-    edit_yaml(k / "components/feed-briefing/mode.yaml", lambda d: d["spec"]["features"]["digest"].pop("playbook"))
+    edit_yaml(k / "components/modes/feed-briefing/mode.yaml", lambda d: d["spec"]["features"]["digest"].pop("playbook"))
     has(k, "feature feed-briefing.digest runs an agent but has no `playbook`")
     assert len([x for x in problems(k) if "digest runs an agent but has no `playbook`" in x]) == 1
     assert problems(KIT) == []
@@ -131,25 +135,59 @@ def _add_policies(d):
     d["spec"]["constraints"]["policies"] = ["cite-sources"]
 
 
-def _reach_out(d):
-    d["spec"]["needs"]["fs"] = {"read": ["~/.ledger"]}
+def _kind_differs_from_folder(d):
+    d["spec"]["kind"] = "poster"
 
 
-def _reach_nothing(d):
-    d["spec"]["needs"].pop("secrets"), d["spec"]["needs"].pop("network")
+def _bind_gmail_api(d):
+    d["spec"]["bind"]["items.source/v1"] = ["x-api", "gmail-api"]
 
 
-MODE = "components/feed-briefing/mode.yaml"
+def _place_analyst_in_mail_env(d):
+    d["spec"]["roles"]["analyst"] = "local-mail"
+
+
+def _place_analyst_in_mail_env_and_compose(d):
+    _place_analyst_in_mail_env(d)
+    d["spec"]["composes"] = ["mail-briefing"]
+
+
+def _compose_unused(d):
+    d["spec"]["composes"] = ["todo"]
+
+
+def _read_email(d):
+    d["spec"]["reads"] = ["post/v1", "email/v1"]
+
+
+MODE = "components/modes/feed-briefing/mode.yaml"
+FEEDS_ENV = "components/modes/feed-briefing/envs/local-feeds.yaml"
+STORE = "components/base/store/mode.yaml"
+POST = "components/modes/feed-briefing/content-types/post/content-type.yaml"
 T2_RULES = [
     ("agent text on a code-only feature", MODE, _give_sync_files,
-     ["components/feed-briefing/mode.yaml:17: feature feed-briefing.sync has no role step, so its `playbook` is never read",
-      "components/feed-briefing/mode.yaml:17: feature feed-briefing.sync has no role step, so its `rules` is never read"]),
+     ["components/modes/feed-briefing/mode.yaml:17: feature feed-briefing.sync has no role step, "
+      "so its `playbook` is never read",
+      "components/modes/feed-briefing/mode.yaml:17: feature feed-briefing.sync has no role step, "
+      "so its `rules` is never read"]),
     ("an unread manifest key", MODE, _add_policies,
-     ["components/feed-briefing/mode.yaml", "Additional properties are not allowed ('policies' was unexpected)"]),
-    ("an internal connector that reaches outside the project", "components/improve/connectors/ledger/connector.yaml",
-     _reach_out, ["connector ledger reaches outside the project", "must be a top-level component"]),
-    ("a source connector that reaches nothing outside", "components/gmail-api/connector.yaml", _reach_nothing,
-     ["connector gmail-api reaches nothing outside the project", "components/<owner>/connectors/<name>/"]),
+     ["components/modes/feed-briefing/mode.yaml", "Additional properties are not allowed ('policies' was unexpected)"]),
+    ("a content type whose kind differs from its folder", POST, _kind_differs_from_folder,
+     [f"{POST}: spec.kind 'poster' must match the folder name 'post'"]),
+    ("a binding across modes without composes", FEEDS_ENV, _bind_gmail_api,
+     [f"{MODE}: mode feed-briefing uses env local-feeds, which binds connector gmail-api, which lives in mode "
+      "mail-briefing; add composes: [mail-briefing] to feed-briefing's mode.yaml, or ask forge.extend to move "
+      "it to components/base/"]),
+    ("a role placed in another user mode's env", MODE, _place_analyst_in_mail_env,
+     [f"{MODE}: mode feed-briefing uses env local-mail, which binds connector gmail-api, which lives in mode "
+      "mail-briefing"]),
+    ("a read of another mode's content type", MODE, _read_email,
+     [f"{MODE}: mode feed-briefing reads content type email/v1, which lives in mode mail-briefing; add composes: "
+      "[mail-briefing]"]),
+    ("a composes nothing uses", MODE, _compose_unused,
+     [": mode feed-briefing composes todo but uses nothing of it; remove it from composes"]),
+    ("composes in a base mode", STORE, _compose_unused,
+     [f"{STORE}:", "base mode store declares composes; only modes under components/modes/ compose"]),
 ]
 
 
@@ -162,6 +200,9 @@ def test_agent_text_nothing_reads_and_unread_manifest_keys_are_refused():
                 has(k, needle)
         except AssertionError as e:
             raise AssertionError(f"{group}: {e}") from None
+    k = kit_copy()
+    edit_yaml(k / MODE, _place_analyst_in_mail_env_and_compose)
+    assert not [x for x in problems(k) if "composes" in x or "which lives in mode" in x], problems(k)
 
 
 def test_review_settings_only_in_mode_yaml():
@@ -178,13 +219,13 @@ def test_review_settings_only_in_mode_yaml():
 
 def test_review_role_must_exist_and_be_in_the_mode():
     k = kit_copy()
-    edit_yaml(k / "components/feed-briefing/mode.yaml",
+    edit_yaml(k / "components/modes/feed-briefing/mode.yaml",
               lambda d: d["spec"]["features"]["digest"]["review"].update({"role": "ghost"}))
     has(k, "feed-briefing.digest review role 'ghost' does not exist")
     assert len([x for x in problems(k) if "review role 'ghost' does not exist" in x
-                and "components/feed-briefing/mode.yaml" in x]) == 1
+                and "components/modes/feed-briefing/mode.yaml" in x]) == 1
     k = kit_copy()
-    edit_yaml(k / "components/feed-briefing/mode.yaml",
+    edit_yaml(k / "components/modes/feed-briefing/mode.yaml",
               lambda d: d["spec"]["features"]["digest"]["review"].update({"role": "researcher"}))
     has(k, "feed-briefing.digest review: role researcher is not in mode feed-briefing `roles:`", "add `researcher: <env>`")
 
@@ -194,7 +235,7 @@ def line_of(path, needle):
 
 
 def test_role_env_errors_name_mode_feature_and_step():
-    base = "components/feed-briefing/mode.yaml"
+    base = "components/modes/feed-briefing/mode.yaml"
     k = kit_copy()
     sub(k, base, "{ id: answer, role: analyst,", "{ id: answer, role: researcher,")
     has(k, f"{base}:{line_of(k / base, '{ id: answer, role: researcher,')}: feed-briefing.ask step answer: role "
@@ -210,8 +251,10 @@ def test_role_env_errors_name_mode_feature_and_step():
         "keep only `analyst: <env>`")
     k = kit_copy()
     sub(k, base, "{ id: answer, role: analyst,", "{ id: answer, role: analyst, roles: { reviewer: workspace },")
-    sub(k, base, "{ id: prune, run: items.store/v2.prune,", "{ id: prune, roles: { lead: workspace }, run: items.store/v2.prune,")
-    edit_yaml(k / "components/feed-briefing/mode.yaml", lambda d: d["spec"]["features"]["ask"].update({"roles": {"builder": "workspace"}}))
+    sub(k, base, "{ id: prune, run: items.store/v2.prune,",
+        "{ id: prune, roles: { lead: workspace }, run: items.store/v2.prune,")
+    edit_yaml(k / "components/modes/feed-briefing/mode.yaml",
+            lambda d: d["spec"]["features"]["ask"].update({"roles": {"builder": "workspace"}}))
     has(k, "feed-briefing.ask step answer: `roles:` names reviewer, but this step runs role analyst")
     has(k, "feed-briefing.prune step prune: `roles:` applies to role and review steps only")
     has(k, "feed-briefing.ask: `roles:` gives role builder an env, but mode feed-briefing does not list builder")
@@ -236,15 +279,20 @@ def test_a_user_space_role_is_an_error():
 def test_an_offline_env_with_a_network_host_or_a_secret_is_refused():
     k = kit_copy()
     assert not [p for p in lint.lint_offline(model.Kit(k))]
-    edit_yaml(k / "components/feed-briefing/envs/local-feeds.yaml", lambda d: d["spec"]["offline"].update({"network": {"allow": ["api.x.com"]}}))
+    edit_yaml(k / "components/modes/feed-briefing/envs/local-feeds.yaml",
+            lambda d: d["spec"]["offline"].update({"network": {"allow": ["api.x.com"]}}))
     errs = lint.lint_offline(model.Kit(k))
-    assert len(errs) == 1 and "components/feed-briefing/envs/local-feeds.yaml:" in errs[0] and "offline with network host api.x.com" in errs[0]
+    assert len(errs) == 1
+    assert "components/modes/feed-briefing/envs/local-feeds.yaml:" in errs[0]
+    assert "offline with network host api.x.com" in errs[0]
     assert errs[0] in lint.run(k)
-    edit_yaml(k / "components/feed-briefing/envs/local-feeds.yaml", lambda d: d["spec"]["offline"].pop("network"))
-    edit_yaml(k / "components/feed-briefing/envs/local-feeds.yaml", lambda d: d["spec"]["offline"].update({"secrets": {"allow": ["X_CLIENT_ID"]}}))
+    edit_yaml(k / "components/modes/feed-briefing/envs/local-feeds.yaml", lambda d: d["spec"]["offline"].pop("network"))
+    edit_yaml(k / "components/modes/feed-briefing/envs/local-feeds.yaml",
+            lambda d: d["spec"]["offline"].update({"secrets": {"allow": ["X_CLIENT_ID"]}}))
     assert any("offline with secret X_CLIENT_ID" in p for p in lint.lint_offline(model.Kit(k)))
-    edit_yaml(k / "components/feed-briefing/envs/local-feeds.yaml", lambda d: d["spec"]["offline"].pop("secrets"))
-    edit_yaml(k / "components/feed-briefing/envs/local-feeds.yaml", lambda d: d["spec"]["offline"]["bind"].update({"git.read/v1": "fake"}))
+    edit_yaml(k / "components/modes/feed-briefing/envs/local-feeds.yaml", lambda d: d["spec"]["offline"].pop("secrets"))
+    edit_yaml(k / "components/modes/feed-briefing/envs/local-feeds.yaml",
+            lambda d: d["spec"]["offline"]["bind"].update({"git.read/v1": "fake"}))
     assert any("offline binds git.read/v1, which the env does not bind" in p for p in lint.lint_offline(model.Kit(k)))
 
 
@@ -267,8 +315,8 @@ def test_forge_extend_review_and_standards_cannot_be_disabled_or_weakened():
                 ep.pop("review")
             else:
                 ep["review"].update(change)
-        edit_yaml(k / "components/forge/mode.yaml", f)
-        has(k, "components/forge/mode.yaml", "forge.extend must declare review", "cannot be disabled")
+        edit_yaml(k / "components/base/forge/mode.yaml", f)
+        has(k, "components/base/forge/mode.yaml", "forge.extend must declare review", "cannot be disabled")
     for mode, feature, step_id, before in (("forge", "extend", "release-standards", None),
                                            ("delivery", "build", "standards", None),
                                            ("forge", "create", "standards", "fill")):
@@ -280,7 +328,7 @@ def test_forge_extend_review_and_standards_cannot_be_disabled_or_weakened():
             steps.remove(step)
             if before:
                 steps.insert([s["id"] for s in steps].index(before), step)
-        edit_yaml(k / f"components/{mode}/mode.yaml", move)
+        edit_yaml(k / f"components/base/{mode}/mode.yaml", move)
         found = [p for p in problems(k) if "standards.check/v1.findings" in p]
         assert len(found) == 1 and f"{mode}.{feature}: role builder" in found[0], found
     for base in ("origin/main", "HEAD", None):
@@ -289,14 +337,14 @@ def test_forge_extend_review_and_standards_cannot_be_disabled_or_weakened():
         def rebase(d, base=base):
             step = next(s for s in d["spec"]["features"]["build"]["steps"] if s["id"] == "standards")
             step["with"] = {"base": base} if base else {}
-        edit_yaml(k / "components/delivery/mode.yaml", rebase)
+        edit_yaml(k / "components/base/delivery/mode.yaml", rebase)
         found = [p for p in problems(k) if "standards.check/v1.findings" in p]
         assert len(found) == 1 and "with base $call.base" in found[0], (base, found)
 
 
 def test_kind_scoped_rules_are_linted():
     k = kit_copy()
-    sub(k, "components/forge/features/create/rules.yaml", "when: { kind: env }", "when: { kind: plugin }")
+    sub(k, "components/base/forge/features/create/rules.yaml", "when: { kind: env }", "when: { kind: plugin }")
     has(k, "rule R-8 when.kind 'plugin' is not one of")
     k = kit_copy()
     (k / RULES).write_text((k / RULES).read_text().rstrip() + "\n  - { id: R-9, level: must, statement: \"x y z\", "
@@ -320,11 +368,11 @@ def test_a_protected_name_is_reserved_and_defined_once():
             raise AssertionError("a feature was added to a protected mode")
         except scaffold.ScaffoldError as e:
             assert "mode 'cos' is protected" in str(e), str(e)
-        assert not (k / "components/cos/features/extra").exists()
-        (k / "components/cos2").mkdir()
-        (k / "components/cos2/mode.yaml").write_text((k / "components/cos/mode.yaml").read_text())
+        assert not (k / "components/base/cos/features/extra").exists()
+        (k / "components/modes/cos2").mkdir()
+        (k / "components/modes/cos2/mode.yaml").write_text((k / "components/base/cos/mode.yaml").read_text())
         errs = model.Kit(k).errors
-        assert any("components/cos2/mode.yaml" in e and "must match 'cos2'" in e for e in errs), errs
+        assert any("components/modes/cos2/mode.yaml" in e and "must match 'cos2'" in e for e in errs), errs
     finally:
         cleanup(k)
     k = kit_copy()
@@ -337,17 +385,17 @@ def test_a_protected_name_is_reserved_and_defined_once():
 
 def test_modes_must_not_name_connectors_or_tools():
     k = kit_copy()
-    sub(k, "components/feed-briefing/mode.yaml", "needs: [items.source/v1]",
+    sub(k, "components/modes/feed-briefing/mode.yaml", "needs: [items.source/v1]",
         "needs: [items.source/v1]   # ok comment mentions x-api\n  # x-api in comment is fine")
     assert problems(k) == []
     k = kit_copy()
-    sub(k, "components/feed-briefing/mode.yaml", "with: { olderThan:", "with: { source: x-api, olderThan:")
+    sub(k, "components/modes/feed-briefing/mode.yaml", "with: { olderThan:", "with: { source: x-api, olderThan:")
     has(k, "mode names connector 'x-api'")
 
 
 def test_orphan_feature_folder():
     k = kit_copy()
-    (k / "components/feed-briefing/features/stray").mkdir()
+    (k / "components/modes/feed-briefing/features/stray").mkdir()
     has(k, "features/stray: feature folder is not referenced by any feature")
 
 
@@ -386,13 +434,15 @@ def test_extra_rules_stack_strictest_wins():
 
 def test_feed_source_connectors_must_declare_source_and_window():
     k = kit_copy()
-    edit_yaml(k / "components/x-api/connector.yaml", lambda d: d["spec"].pop("source"))
-    has(k, "components/x-api/connector.yaml:", "connector x-api implements items.source/v1 but declares no spec.source")
+    edit_yaml(k / "components/modes/feed-briefing/connectors/x-api/connector.yaml", lambda d: d["spec"].pop("source"))
+    has(k, "components/modes/feed-briefing/connectors/x-api/connector.yaml:",
+            "connector x-api implements items.source/v1 but declares no spec.source")
     k = kit_copy()
-    edit_yaml(k / "components/post/connectors/fake/connector.yaml", lambda d: d["spec"].pop("window"))
+    edit_yaml(k / "components/modes/feed-briefing/connectors/fake/connector.yaml", lambda d: d["spec"].pop("window"))
     has(k, "connector fake implements items.source/v1 but declares no spec.window")
     k = kit_copy()
-    edit_yaml(k / "components/post/connectors/fake/connector.yaml", lambda d: d["spec"].update({"source": "local"}))
+    edit_yaml(k / "components/modes/feed-briefing/connectors/fake/connector.yaml",
+            lambda d: d["spec"].update({"source": "local"}))
     has(k, "`local` is the source of items written with add; choose another spec.source")
 
 
@@ -403,24 +453,25 @@ def test_schedule_is_a_warning_not_an_error():
     assert any("feed-briefing.prune declares schedule 'daily' but no runtime acts on it" in w and "cron" in w for w in ws)
     assert problems(KIT) == []
     w = next(w for w in ws if "improve.backlog declares schedule" in w)
-    assert "components/improve/README.md" in w and "call improve.backlog" not in w
+    assert "components/base/improve/README.md" in w and "call improve.backlog" not in w
 
 
 def test_run_steps_use_versioned_capability_spelling():
     k = kit_copy()
-    sub(k, "components/feed-briefing/mode.yaml", "run: items.store/v2.prune", "run: feed.store.prune")
-    has(k, "components/feed-briefing/mode.yaml", "does not match")
+    sub(k, "components/modes/feed-briefing/mode.yaml", "run: items.store/v2.prune", "run: feed.store.prune")
+    has(k, "components/modes/feed-briefing/mode.yaml", "does not match")
 
 
 def test_same_skill_name_in_two_modes_is_fine_b8():
     k = kit_copy()
-    assert (k / "components/mail-briefing/skills/digest/SKILL.md").exists() and (k / "components/feed-briefing/skills/digest").exists()
+    assert (k / "components/modes/mail-briefing/skills/digest/SKILL.md").exists()
+    assert (k / "components/modes/feed-briefing/skills/digest").exists()
     assert not [p for p in problems(k) if "skill" in p]
 
 
 def test_unknown_skill_reference_fails_lint_b8():
     k = kit_copy()
-    sub(k, "components/store/features/ask/playbook.md", "the corpus-sql skill", "the `mail-sql` skill")
+    sub(k, "components/base/store/features/ask/playbook.md", "the corpus-sql skill", "the `mail-sql` skill")
     x = has(k, "store/features/ask/playbook.md:14", "names skill 'mail-sql'",
             "not in mode store's chain", "corpus-sql")
     assert "skills/mail-sql/SKILL.md" in x
@@ -431,7 +482,7 @@ def test_unknown_skill_reference_fails_lint_b8():
 def test_skill_name_over_64_characters_fails_lint_b8():
     k = kit_copy()
     long = "a" * (64 - len("mail-briefing--") + 1)
-    d = k / "components/mail-briefing/skills" / long
+    d = k / "components/modes/mail-briefing/skills" / long
     d.mkdir()
     (d / "SKILL.md").write_text(f"---\nname: {long}\ndescription: too long once namespaced\n---\n# Long\n")
     x = has(k, f"skill name 'mail-briefing--{long}'", "65 characters", "shorten the skill folder name")
@@ -441,10 +492,10 @@ def test_skill_name_over_64_characters_fails_lint_b8():
 
 def test_skill_references_match_any_case_and_the_skill_x_f8():
     k = kit_copy()
-    sub(k, "components/store/features/ask/playbook.md", "the corpus-sql skill", "The pattern-analysis Skill")
+    sub(k, "components/base/store/features/ask/playbook.md", "the corpus-sql skill", "The pattern-analysis Skill")
     has(k, "store/features/ask/playbook.md:14", "names skill 'pattern-analysis'")
     k = kit_copy()
-    sub(k, "components/store/features/ask/playbook.md", "the corpus-sql skill", "the skill `mail-sql`")
+    sub(k, "components/base/store/features/ask/playbook.md", "the corpus-sql skill", "the skill `mail-sql`")
     has(k, "store/features/ask/playbook.md:14", "names skill 'mail-sql'")
     from bay import lint
     assert lint._skill_refs("Use the skill to answer; the skill corpus-sql helps.", {"corpus-sql"}) == [(1, "corpus-sql")]
@@ -458,8 +509,8 @@ def test_skill_references_count_only_backticked_or_known_names_n4():
     assert lint._skill_refs("the skill `mail-sql`; the `mail-sql` skill; the digest skill; (corpus-sql skill)",
                             known) == [(1, "mail-sql"), (1, "mail-sql"), (1, "digest"), (1, "corpus-sql")]
     k = kit_copy()
-    sub(k, "components/store/features/ask/playbook.md", "the corpus-sql skill",
+    sub(k, "components/base/store/features/ask/playbook.md", "the corpus-sql skill",
         "the corpus-sql skill (the right skill, the same skill; the skill whatever)")
     assert not [p for p in problems(k) if "names skill" in p]
-    sub(k, "components/store/features/ask/playbook.md", "the right skill", "the `mail-sql` skill")
+    sub(k, "components/base/store/features/ask/playbook.md", "the right skill", "the `mail-sql` skill")
     has(k, "store/features/ask/playbook.md:14", "names skill 'mail-sql'")

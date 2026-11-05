@@ -138,6 +138,8 @@ def test_new_checks_the_options_its_kind_needs():
     p = project()
     try:
         assert "--mode" in cli(p, "new", "feature", "x").stderr
-        assert "--implements" in cli(p, "new", "connector", "x").stderr
+        assert "--implements" in cli(p, "new", "connector", "x", "--mode", "todo").stderr
+        for kind in ("connector", "content-type"):
+            assert "--mode" in cli(p, "new", kind, "x", "--implements", "items.source/v1").stderr
     finally:
         cleanup(p)

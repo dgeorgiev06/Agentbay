@@ -308,11 +308,11 @@ def test_protected_kit_dirs_when_the_project_is_the_kit():
         pol = json.loads((k / ".agentbay/guard.json").read_text())
         assert pol["protected"] == model.Kit(KIT).protected_paths
         assert tool(k, "builder--forge--local-authoring", "Write",
-                    {"file_path": "components/cos/mode.yaml", "content": "x"})[0] == "deny"
+                    {"file_path": "components/base/cos/mode.yaml", "content": "x"})[0] == "deny"
         assert tool(k, "builder--forge--local-authoring", "Write",
-                    {"file_path": "components/improve/connectors/ledger/ledger.py", "content": "x"})[0] == "deny"
+                    {"file_path": "components/base/improve/connectors/ledger/ledger.py", "content": "x"})[0] == "deny"
         assert tool(k, "builder--forge--framework-dev", "Write",
-                    {"file_path": "components/cos/mode.yaml", "content": "x"})[0] == "pass"
+                    {"file_path": "components/base/cos/mode.yaml", "content": "x"})[0] == "pass"
         assert tool(k, "builder--delivery", "Write", {"file_path": "bay/guard.py", "content": "x"})[0] == "deny"
         assert tool(k, "builder--delivery", "Write", {"file_path": "framework/roles/x.yaml", "content": "x"})[0] == "deny"
         assert tool(k, "builder--forge--local-authoring", "Write", {"file_path": "components/x.yaml", "content": "x"})[0] == "pass"
@@ -520,35 +520,35 @@ def test_n2_gate_plan_does_not_advertise_submit():
 
 def lint_clis_are_denied_unless_the_config_is_protected_and_the_flags_are_listed(g, agent):
     protected = list(g.policy["protected"])
-    g.policy["protected"] = [p for p in protected if p != "components/python"]
-    ruff = f"python3 -I -m ruff check --config {g.kit}/components/python/ruff.toml"
-    mypy = f"python3 -I -m mypy --config-file {g.kit}/components/python/mypy.ini"
+    g.policy["protected"] = [p for p in protected if p != "components/base/python"]
+    ruff = f"python3 -I -m ruff check --config {g.kit}/components/base/python/ruff.toml"
+    mypy = f"python3 -I -m mypy --config-file {g.kit}/components/base/python/mypy.ini"
     for cmd in (f"{ruff} bay", f"{mypy} bay"):
         assert decide(g, agent, "Bash", {"command": cmd}) == "deny", cmd
     reason = g.decide({"tool_name": "Bash", "tool_input": {"command": f"{ruff} bay"}, "agent_type": agent,
                        "agent_id": "a1", "cwd": str(g.project)})[1]
     assert "not protected" in reason
-    g.policy["protected"].append("components/python")
+    g.policy["protected"].append("components/base/python")
     passes = (f"{ruff} bay", f"{mypy} bay", f"{ruff} --no-cache --ignore-noqa --statistics bay",
               f"{mypy} --strict --show-error-codes bay", f"{mypy} 'a #b' bay", f"{ruff} \"#x\" a#b")
     denies = ("python3 -I -m ruff check bay", "python3 -I -m mypy bay",
               "python3 -I -m ruff check --config ruff.toml bay",
               f"{ruff} @.agentbay/guard.json", f"{mypy} @.agentbay/guard.json", f"{ruff} @fix.txt",
               f"{mypy} @fix.txt", f"{ruff} bay -- @fix.txt", f"{mypy} bay -- @fix.txt", f"{mypy} bay @args.txt",
-              f"python3 -I -m ruff check --config={g.kit}/components/python/ruff.toml bay",
+              f"python3 -I -m ruff check --config={g.kit}/components/base/python/ruff.toml bay",
               f"{ruff} --config \"cache-dir='x'\" bay", f"{ruff} {ruff[ruff.index('--config'):]} bay",
               f"{ruff} --fix bay", f"{ruff} --add-noqa bay", f"{ruff} -o x bay", f"{ruff} --output-format json bay",
               f"{ruff} --cache-dir x bay", f"{ruff} --conf x bay", f"{ruff} --",
               "python3 -I -m mypy --config-file mypy.ini bay", f"{mypy} --junit-xml x bay",
               f"{mypy} --python-executable x bay", f"{mypy} --config-f x bay", f"{mypy} --plugins x bay",
-              f"python3 -I -m mypy --config-file {g.kit}/components/python/ruff.toml bay",
-              f"python3 -m ruff check --config {g.kit}/components/python/ruff.toml bay",
-              f"python3 -m mypy --config-file {g.kit}/components/python/mypy.ini bay",
-              f"python3 -I -m mypy bay # --config-file {g.kit}/components/python/mypy.ini",
-              f"python3 -I -m ruff check bay # --config {g.kit}/components/python/ruff.toml",
+              f"python3 -I -m mypy --config-file {g.kit}/components/base/python/ruff.toml bay",
+              f"python3 -m ruff check --config {g.kit}/components/base/python/ruff.toml bay",
+              f"python3 -m mypy --config-file {g.kit}/components/base/python/mypy.ini bay",
+              f"python3 -I -m mypy bay # --config-file {g.kit}/components/base/python/mypy.ini",
+              f"python3 -I -m ruff check bay # --config {g.kit}/components/base/python/ruff.toml",
               f"{mypy} bay # x", f"{ruff} bay #", f"{mypy} bay ?a", f"{ruff} bay [@]a", f"{mypy} bay *a",
-              f"{ruff} bay a]", f"{mypy} bay \\\n# --config-file {g.kit}/components/python/mypy.ini",
-              f"{ruff} bay \\\n# --config {g.kit}/components/python/ruff.toml",
+              f"{ruff} bay a]", f"{mypy} bay \\\n# --config-file {g.kit}/components/base/python/mypy.ini",
+              f"{ruff} bay \\\n# --config {g.kit}/components/base/python/ruff.toml",
               f"{mypy} bay \\\n--config-file=/tmp/evil.ini", f"{mypy} bay \\\n--allow-untyped-defs",
               f"{ruff} bay \\\r\n--select=E", f"{mypy} bay 'a\nb'", f"{mypy} bay \"a\\\nb\"")
     for cmd in passes:

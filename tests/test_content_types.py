@@ -36,7 +36,7 @@ def test_the_loader_is_the_only_source_of_the_post_kind():
 
 def test_an_attachment_without_textchars_is_refused_not_guessed():
     """The email schema requires `textChars`, so attachment text without it fails validation instead of storing 0."""
-    items = json.loads((KIT / "components/email/fixtures/items.json").read_text())
+    items = json.loads((KIT / "components/modes/mail-briefing/content-types/email/fixtures/items.json").read_text())
     sch = model.inline_refs(model.data_schema("email/v1"))
     assert model.schema_errors(items[0], sch) == []
     del items[0]["attachments"][0]["textChars"]
@@ -50,7 +50,8 @@ def test_a_view_that_reads_anything_but_the_base_tables_and_its_own_views_is_ref
                         ("SELECT v.*, randomblob(100) AS lang, 0 AS metrics, 0 AS likes, 0 AS reposts, 0 AS replies "
                          "FROM temp.v_items v", "randomblob")):
         k = kit_copy()
-        (k / "components/post/views.sql").write_text(f"CREATE VIEW v_posts AS {bad};\n")
+        views = k / "components/modes/feed-briefing/content-types/post/views.sql"
+        views.write_text(f"CREATE VIEW v_posts AS {bad};\n")
         ps = contenttypes.problems(k)
         assert any("view v_posts cannot be built" in p and needle in p for p in ps), (bad, ps)
     assert any("view v_posts cannot be built" in p for p in lint.run(k))
@@ -58,45 +59,51 @@ def test_a_view_that_reads_anything_but_the_base_tables_and_its_own_views_is_ref
 
 def test_views_sql_holds_only_create_view_statements_that_match_the_documentation():
     k = kit_copy()
-    (k / "components/post/views.sql").write_text("DROP TABLE items;\n")
+    (k / "components/modes/feed-briefing/content-types/post/views.sql").write_text("DROP TABLE items;\n")
     assert any("only `CREATE VIEW v_<name> AS SELECT ...` statements" in p for p in contenttypes.problems(k))
     k = kit_copy()
-    sub(k, "components/post/views.sql", "AS replies", "AS replies2")
+    sub(k, "components/modes/feed-briefing/content-types/post/views.sql", "AS replies", "AS replies2")
     assert any("documents columns" in p and "replies2" in p for p in contenttypes.problems(k))
     k = kit_copy()
-    sub(k, "components/post/views.sql", "CREATE VIEW v_posts", "CREATE VIEW v_other")
+    sub(k, "components/modes/feed-briefing/content-types/post/views.sql", "CREATE VIEW v_posts", "CREATE VIEW v_other")
     ps = contenttypes.problems(k)
     assert any("views.v_other is missing" in p for p in ps) and any("views.v_posts is documented" in p for p in ps)
     k = kit_copy()
-    sub(k, "components/post/views.sql", "CREATE VIEW v_posts", "CREATE VIEW v_items")
-    sub(k, "components/post/content-type.yaml", "v_posts:", "v_items:")
+    sub(k, "components/modes/feed-briefing/content-types/post/views.sql", "CREATE VIEW v_posts", "CREATE VIEW v_items")
+    sub(k, "components/modes/feed-briefing/content-types/post/content-type.yaml", "v_posts:", "v_items:")
     assert any("v_items is already taken (by the store)" in p for p in contenttypes.problems(k))
     k = kit_copy()
-    sub(k, "components/post/fields.schema.json", '"title": "post/v1"', '"title": "post/v2"')
+    sub(k, "components/modes/feed-briefing/content-types/post/fields.schema.json", '"title": "post/v1"',
+            '"title": "post/v2"')
     assert any("title must be 'post/v1'" in p for p in contenttypes.problems(k))
 
 
 def test_derive_py_may_import_only_the_standard_library_and_must_match_derived():
     k = kit_copy()
-    sub(k, "components/email/derive.py", "from __future__ import annotations", "import requests")
+    sub(k, "components/modes/mail-briefing/content-types/email/derive.py", "from __future__ import annotations",
+            "import requests")
     assert any("derive.py:" in p and "imports `requests`" in p for p in contenttypes.problems(k))
     k = kit_copy()
-    sub(k, "components/email/derive.py", "from __future__ import annotations", "from . import x")
+    sub(k, "components/modes/mail-briefing/content-types/email/derive.py", "from __future__ import annotations",
+            "from . import x")
     assert any("imports `.`" in p for p in contenttypes.problems(k))
     k = kit_copy()
-    (k / "components/email/derive.py").unlink()
+    (k / "components/modes/mail-briefing/content-types/email/derive.py").unlink()
     assert any("derive.py is missing" in p for p in contenttypes.problems(k))
     k = kit_copy()
-    sub(k, "components/email/content-type.yaml", "  deriveVersion: 1\n", "")
+    sub(k, "components/modes/mail-briefing/content-types/email/content-type.yaml", "  deriveVersion: 1\n", "")
     assert any("derived needs deriveVersion" in p for p in contenttypes.problems(k))
     k = kit_copy()
-    sub(k, "components/email/derive.py", '"bulk": int(bool(item.get("bulk")))', '"other": 1')
+    sub(k, "components/modes/mail-briefing/content-types/email/derive.py", '"bulk": int(bool(item.get("bulk")))',
+            '"other": 1')
     assert any("derive returned" in p for p in content_type.check(k, "email"))
     k = kit_copy()
-    sub(k, "components/email/content-type.yaml", "fullText: [name, text]", "fullText: [name, body]")
+    sub(k, "components/modes/mail-briefing/content-types/email/content-type.yaml", "fullText: [name, text]",
+            "fullText: [name, body]")
     assert any("fullText names body" in p for p in contenttypes.problems(k))
     k = kit_copy()
-    sub(k, "components/email/content-type.yaml", "    attachments:\n      from:", "    items:\n      from:")
+    sub(k, "components/modes/mail-briefing/content-types/email/content-type.yaml", "    attachments:\n      from:",
+            "    items:\n      from:")
     assert any("tables.items" in p and "taken by the store" in p for p in contenttypes.problems(k))
 
 

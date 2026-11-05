@@ -350,15 +350,6 @@ def lint_connectors(kit: model.Kit) -> list[str]:
                 out.append(f"{_where(c.path, _line_of(c.path, r'^\s+login:'))}: connector {c.name} declares a "
                            f"`login` but no env that binds it allows all of its needs.secrets ({', '.join(needs)}); "
                            f"`bay auth` gives a login only the secrets a sync through that env would get")
-        nd = c.spec.get("needs", {})
-        outside = bool(nd.get("network") or nd.get("secrets") or any(
-            str(p).startswith(("~", "/")) for ops in (nd.get("fs") or {}).values() for p in ops))
-        if outside != (c.dir.parent.name == "components"):
-            out.append(f"{_where(c.path, _line_of(c.path, r'^spec:'))}: connector {c.name} " + (
-                "reaches outside the project (needs.network, needs.secrets or an fs path under ~ or /), so it must be "
-                "a top-level component: components/<name>/" if outside else
-                "reaches nothing outside the project, so move it into the component that owns it: "
-                "components/<owner>/connectors/<name>/"))
         impl = c.spec["implements"]
         impl = [impl] if isinstance(impl, str) else impl
         for iface in impl:
@@ -398,7 +389,7 @@ def lint_contract_versions(kit: model.Kit) -> list[str]:
             k, _, v = n.partition("/v")
             if k not in kinds:
                 out.append(f"{where}: {owner} {key}: unknown item kind '{n}' (known: {known}); add a "
-                           f"content type for the kind (components/<name>/) or fix the name")
+                           f"content type for the kind (components/modes/<mode>/content-types/) or fix the name")
             elif int(v) not in kinds[k]:
                 out.append(f"{where}: {owner} {key}: item kind {k} has no version {v} (known: {known})")
 
@@ -687,6 +678,7 @@ def run(kit_root: Path | None = None, project: Path | None = None, kit: model.Ki
     for md in kit.docs["Mode"].values():
         out += contenttypes.mode_problems(md.dirs, _as_list(md.spec.get("reads")), kit.root)
     out += lint_extension_names(kit)
+    out += lint_composition(kit)
     out += lint_references(kit)
     out += lint_rulesets(kit)
     out += lint_components(kit)
@@ -861,7 +853,7 @@ def _protected_paths_in_sync(kit: model.Kit) -> list[str]:
                 out.append(f"{env.rel}: env {env.name} writes protected paths but not {', '.join(missing)}; the guard "
                            f"lets an env write a protected path only if the env names it - add them to fs.write")
         for w in writes:
-            m = re.fullmatch(r"components/([^/]+)(?:/envs/([^/]+)\.yaml|/connectors/([^/]+))?", w)
+            m = re.fullmatch(r"components/(?:base|modes)/([^/]+)(?:/envs/([^/]+)\.yaml|/connectors/([^/]+))?", w)
             kinds = [("env", m[2])] if m and m[2] else [("connector", m[3])] if m and m[3] else \
                     [("mode", m[1]), ("connector", m[1])] if m else []
             kinds = [(k, n) for k, n in kinds if kit.get(doc_of[k], n)]
@@ -944,6 +936,14 @@ def lint_ownership(kit: model.Kit) -> list[str]:
             f"in framework/kernel.yaml" for f in boundary.stray(files, cmap)]
 
 
+TIERS = ("base", "modes")
+FOLDER_MANIFESTS = (
+    (r"components/base/[^/]+", ("mode.yaml", "component.yaml")),
+    (r"components/modes/[^/]+", ("mode.yaml",)),
+    (r"components/(?:base|modes)/[^/]+/connectors/[^/]+", ("connector.yaml",)),
+    (r"components/(?:base|modes)/[^/]+/content-types/[^/]+", ("content-type.yaml",)),
+    (r"adapters/[^/]+", ("adapter.yaml",)),
+)
 OLD_FOLDERS = ("modes/", "envs/", "connectors/", "content-types/", "coordinator/", "framework/interfaces/", "interfaces/")
 
 
@@ -963,18 +963,143 @@ def lint_case_and_manifests(kit: model.Kit) -> list[str]:
             if other != p:
                 out.append(f"{p}: differs only in case from {other}; rename one (paths must be unique ignoring case)")
                 seen[p.casefold()] = p
-    roots = {}
-    for f in files:
-        m = re.match(r"(?:components|adapters)/[^/]+/", f)
-        if m:
-            roots.setdefault(m[0], set()).add(f[m.end():])
-    for folder, inside in sorted(roots.items()):
-        want = ("adapter.yaml",) if folder.startswith("adapters/") else tuple(boundary.MANIFEST_KINDS)
-        if not inside.intersection(want):
-            out.append(f"{folder}: extension folder without its manifest {' or '.join(want)}")
-    out += [f"{d}: the old layout is not read (agentbay/v4); move it to components/<name>/"
+    strays = {f.split("/")[1] for f in files if f.startswith("components/") and f.count("/") > 1}
+    for name in sorted(strays - set(TIERS)):
+        out.append(f"components/{name}/: components holds only {' and '.join(TIERS)}; "
+                   f"run git mv components/{name} components/modes/{name}")
+    for pattern, want in FOLDER_MANIFESTS:
+        roots: dict[str, set[str]] = {}
+        for f in files:
+            m = re.match(pattern + "/", f)
+            if m:
+                roots.setdefault(m[0], set()).add(f[m.end():])
+        for folder, inside in sorted(roots.items()):
+            if not inside.intersection(want):
+                out.append(f"{folder}: extension folder without its manifest {' or '.join(want)}")
+    out += _unread_manifests(files)
+    out += [f"{d}: the old layout is not read (agentbay/v4); move it to components/modes/<name>/"
             for d in OLD_FOLDERS if any(f.startswith(d) for f in files)]
     return list(dict.fromkeys(out))
+
+
+MANIFEST_HOMES = {
+    "connector.yaml": "{home}/connectors/<name>/",
+    "mode.yaml": "components/<tier>/<mode>/",
+    "content-type.yaml": "{home}/content-types/<name>/",
+    "component.yaml": "components/base/<name>/",
+}
+
+
+def _unread_manifests(files: list[str]) -> list[str]:
+    """A manifest file at a path no loader reads is silently ignored; name the folder to git mv it to."""
+    globs = [g for patterns, _ in model.KINDS.values() for g in patterns] + [contenttypes.GLOB]
+    loaded = [re.compile(re.escape(g).replace(r"\*", "[^/]+")) for g in globs]
+    out = []
+    for f in files:
+        parts = f.split("/")
+        if len(parts) < 4 or parts[0] != "components" or parts[1] not in TIERS or parts[3] == "tests":
+            continue
+        name = parts[-1].casefold()
+        if name.endswith(".yml"):
+            name = name[:-4] + ".yaml"
+        if name not in MANIFEST_HOMES or any(rx.fullmatch(f) for rx in loaded):
+            continue
+        home = "/".join(parts[:3])
+        out.append(f"{f}: no loader reads a {parts[-1]} here; run git mv {f} "
+                   f"{MANIFEST_HOMES[name].format(home=home)}{name}")
+    return out
+
+
+def _home(root: Path, path: Path) -> str | None:
+    """The `<tier>/<name>` folder under `root`/components/ that holds `path`, or None for a path outside it."""
+    found = re.match(r"components/((?:base|modes)/[^/]+)", path.relative_to(root).as_posix())
+    return found.group(1) if found else None
+
+
+def _mode_name(home: str | None) -> str | None:
+    """The mode name of a `modes/<name>` home, or None for a base home or no home."""
+    if home is None:
+        return None
+    tier, _, name = home.partition("/")
+    return name if tier == "modes" else None
+
+
+def _env_connectors(env: model.Doc) -> list[str]:
+    """The connectors an env binds, online and offline."""
+    bound = list((env.spec.get("bind") or {}).values())
+    bound += list(((env.spec.get("offline") or {}).get("bind") or {}).values())
+    names: set[str] = set()
+    for binding in bound:
+        if not isinstance(binding, dict):
+            names.update(_as_list(binding))
+    return sorted(names)
+
+
+def _mode_uses(kit: model.Kit, md: model.Doc, home: str, types: dict[str, Any]) -> list[tuple[str, str | None]]:
+    """What a mode uses, as (description, home folder): content types it reads and connectors its envs bind."""
+    uses: list[tuple[str, str | None]] = []
+    for kind in _as_list(md.spec.get("reads")):
+        type_name = kind.partition("/")[0]
+        if type_name in types:
+            uses.append((f"reads content type {kind}", _home(kit.root, types[type_name].dir)))
+    envs = kit.docs["Environment"]
+    env_names = set(model.mode_envs(md))
+    for env in envs.values():
+        if _home(kit.root, env.path) == home:
+            env_names.add(env.name)
+    for env_name in sorted(env_names & set(envs)):
+        for conn in _env_connectors(envs[env_name]):
+            if conn in kit.docs["Connector"]:
+                description = f"uses env {env_name}, which binds connector {conn}"
+                uses.append((description, _home(kit.root, kit.docs["Connector"][conn].path)))
+    return uses
+
+
+def _undeclared_uses(md: model.Doc, home: str, composes: list[str], uses: list[tuple[str, str | None]]) -> list[str]:
+    """Uses of another user mode that the mode does not compose."""
+    out: list[str] = []
+    for description, owner in uses:
+        owner_mode = _mode_name(owner)
+        if owner_mode is None or owner == home or owner_mode in composes:
+            continue
+        out.append(f"{model.rel(md.path)}: mode {md.name} {description}, which lives in mode {owner_mode}; add "
+                   f"composes: [{owner_mode}] to {md.name}'s mode.yaml, or ask forge.extend to move it to "
+                   f"components/base/")
+    return out
+
+
+def _composes_problems(kit: model.Kit, md: model.Doc, home: str, composes: list[str],
+                       uses: list[tuple[str, str | None]]) -> list[str]:
+    """A mode composes only other user modes, and only ones it uses."""
+    where = _where(md.path, _line_of(md.path, r"^\s+composes:"))
+    if composes and _mode_name(home) is None:
+        return [f"{where}: base mode {md.name} declares composes; only modes under components/modes/ compose"]
+    used_homes = {owner for _, owner in uses}
+    out: list[str] = []
+    for name in composes:
+        target = kit.get("Mode", name)
+        target_home = _home(kit.root, target.path) if target else None
+        if target is None or target is md or _mode_name(target_home) is None:
+            out.append(f"{where}: mode {md.name} composes {name}, which is not another mode "
+                       f"under components/modes/")
+        elif target_home not in used_homes:
+            out.append(f"{where}: mode {md.name} composes {name} but uses nothing of it; remove it from composes")
+    return out
+
+
+def lint_composition(kit: model.Kit) -> list[str]:
+    """A mode binds connectors and reads content types only from itself, from base or from a mode it composes."""
+    out: list[str] = []
+    types = contenttypes.scan(kit.root)[0]
+    for md in kit.docs["Mode"].values():
+        home = _home(kit.root, md.path)
+        if home is None:
+            continue
+        composes = _as_list(md.spec.get("composes"))
+        uses = _mode_uses(kit, md, home, types)
+        out += _undeclared_uses(md, home, composes, uses)
+        out += _composes_problems(kit, md, home, composes, uses)
+    return out
 
 
 BAY_IMPORT = re.compile(r"^\s*(?:from bay import ([^#\n]+)|(?:from|import) bay\.(\w+))", re.M)

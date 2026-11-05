@@ -2,6 +2,65 @@
 
 Earlier versions: see docs/proposals/
 
+## 4.0.0 - 2026-11-05
+
+Proposal 0021: each mode is one folder, holding its own connectors and content types. Components no longer sit side by side in `components/`, and a folder at the old depth is not loaded, so this is a major version. Manifests, names, bindings, settings, data and the ledger do not change, so `agentbay/v4` stays.
+
+### Upgrading
+
+1. Update, then run `./bay.sh check`. Every folder at the old depth is reported with the `git mv` that fixes it.
+2. For each of your modes, run `git mv components/<mode> components/modes/<mode>`. `components/modes/<x>/` must hold a `mode.yaml`.
+3. For each of your source connectors, run `git mv components/<connector> components/modes/<mode>/connectors/<connector>`, where `<mode>` is the mode that binds it. A connector that sat inside a content type (`components/<type>/connectors/<c>`) moves the same way.
+4. For each of your content types, run `git mv components/<type> components/modes/<mode>/content-types/<type>`, where `<mode>` is the mode whose source produces it. The folder name must equal the kind.
+5. If two of your modes use one connector or content type, keep it in the mode that owns it and add `composes: [<owner>]` to the other mode's `mode.yaml`. If the framework should own it, propose it with forge.extend. `composes` is not allowed in a base mode.
+6. If an env of yours lists `fs.write: [components/<x>, ...]`, give it the new path. `fs.write: [components]` needs nothing.
+7. Check what now behaves differently:
+   - `bay new connector` and `bay new content-type` need `--mode <mode>`.
+   - `bay new` no longer targets a base mode. `bay new feature x --mode delivery` worked before, because delivery is unprotected; it now says the mode lives in `components/base/` and changes through forge.extend.
+   - Copying a mode folder copies the connectors and content types inside it. Their names are global, so the copy fails with "defined twice" until you rename them or leave them out.
+   - Code that derives the kit root from its own file's folder depth (`parents[4]` and similar) shifts by one level, so derive it again.
+   - Relative links between components gain a `../` for each level the target moved.
+8. `agentbay.config.yaml` needs no change: its `modes:` and `connectors:` keys are names, not paths.
+9. Run `./bay.sh build`, so the agent files carry the new lint command paths.
+10. Every component path moved, so rebase open branches. Git follows renames, so most conflicts resolve; expect one on each moved file.
+
+### Added
+
+- `composes` in `mode.yaml`: an optional list of mode names. A mode under `components/modes/` may bind the connectors and read the content types of the modes it lists. It is not transitive and not allowed in a base mode.
+- `bay check` refuses a use of another mode's connector or content type without `composes` (including through an env the mode uses), a `composes` that names no user mode, and a `composes` that nothing uses.
+- `bay new content-type <name> --mode <mode>` scaffolds `content-type.yaml`, `fields.schema.json` and `views.sql` into `<mode>/content-types/<name>/`. `forge.scaffold/v1` and `forge.create` accept the kind `content-type`, and a `target` is required for every kind but `mode`. The contract stays v1: the `target` check is enforced in code, and the schema keeps it optional.
+- A content type's `spec.kind` must equal its folder name.
+- Lint rule for folder manifests: `components/base/<x>/` holds a `mode.yaml` or `component.yaml`, `components/modes/<x>/` holds a `mode.yaml`, `connectors/<x>/` holds a `connector.yaml` and `content-types/<x>/` holds a `content-type.yaml`.
+- Lint rule for stray folders: a folder in `components/` other than `base` and `modes` is reported with the `git mv` into `components/modes/`.
+- Lint rule for unread manifests: a manifest file at a depth no loader reads is reported with the `git mv` to its place. It also catches odd casing (`Connector.yaml`) and `.yml`, and skips a mode's `tests/`, where fixtures live.
+
+### Changed
+
+- The layout, one folder per mode:
+
+  | Before | After |
+  |---|---|
+  | `components/<base mode>` and the shared sets | `components/base/<name>` |
+  | `components/<user mode>` | `components/modes/<mode>` |
+  | `components/<connector>` | `components/modes/<mode>/connectors/<connector>` |
+  | `components/<content type>` | `components/modes/<mode>/content-types/<type>` |
+  | `components/claude-transcripts` | `components/base/improve/connectors/claude-transcripts` |
+
+  Shipped: `feed-briefing` holds `x-api`, `fake` and `post`; `mail-briefing` holds `gmail-api`, `fake-mail` and `email`; `todo` holds `todo-rules` and `todoitem`. No shipped mode declares `composes`.
+- The loader reads each kind one level deeper, and `bay/boundary.py` names a component by `components/(base|modes)/<name>/`. The old lint rule that placed a connector by what it reaches (network, secrets) is gone: a connector always lives in a mode.
+- `base/` is placement, not protection. Protection stays entry by entry in `framework/kernel.yaml`.
+- The `bay_lines` ceiling rises from 9549 to 9703, under the owner-approved exception in the proposal (up to 9720), so the composition check and the unread-manifest check are written plainly. `long_lines` is written down from 135 to 134. The other measures are unchanged.
+- B-11 (no instance names in the core docs) now also names every connector and content type inside `components/modes/`, nested ones included. Base connectors stay out of it.
+- Conformance rule C-7 states the folder rule in place of the old placement rule.
+- README, `docs/DESIGN.md` and `docs/INTERFACES.md` describe `base/` and `modes/`, `composes` and the folder rule.
+
+### Security
+
+- `framework/kernel.yaml` protects the same things at the new depth: every protected path and `owns:` entry moved under `components/base/` by prefix, and `claude-transcripts` stays protected at `components/base/improve/connectors/claude-transcripts`. Nothing is added or dropped, and the guard-matrix golden is unchanged.
+- The guard still allows `ruff` and `mypy` only with the kit's protected config path, now `components/base/python`.
+- The framework-dev builder's write window over `components/`, opened to move the unprotected components, was opened and closed within this change. framework-dev's `fs.write` is back to the protected list plus `plan-writer.yaml`, `requirements-dev.txt`, `docs`, `tests` and `README.md`.
+- `bay new` scaffolds only under `components/modes/` and refuses a protected mode, so a scaffold cannot write into a base mode.
+
 ## 3.2.0 - 2026-11-04
 
 Proposal 0011: a standards step blocks new ruff, mypy --strict and comment findings in agent-written Python. A step that can block a call is new default behaviour, so this is a minor version. The contracts are additive and `agentbay/v4` stays.

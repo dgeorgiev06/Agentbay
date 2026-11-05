@@ -17,7 +17,7 @@ OTHER = ("tests/", "HANDOFF.md", "docs/proposals/", "docs/plans/", "docs/researc
          ".gitattributes", ".editorconfig", "LICENSE", "LICENSE.md")
 MANIFEST_KINDS = {"mode.yaml": "mode", "connector.yaml": "connector", "content-type.yaml": "contentType",
                   "component.yaml": "component"}
-_COMPONENT = re.compile(r"components/([^/]+)/")
+_COMPONENT = re.compile(r"components/(?:base|modes)/([^/]+)/")
 SHA = re.compile(r"^[0-9a-f]{7,40}$")
 GIT_TIMEOUT = 60
 ARCHIVE_TIMEOUT = 120
@@ -144,7 +144,7 @@ class Protection:
 
 
 def root(path: str) -> tuple[str, str] | None:
-    """The component folder `path` is inside: (`components/x/`, `x`), or None."""
+    """The component folder `path` is inside: (`components/base/x/` or `components/modes/x/`, `x`), or None."""
     m = _COMPONENT.match(path)
     return (m.group(0), m.group(1)) if m else None
 
@@ -449,8 +449,11 @@ def instance_names(paths: list[str], cmap: ComponentMap) -> dict[str, str]:
     names = {}
     for p in paths:
         rt = root(p)
-        if rt and p[len(rt[0]):] in MANIFEST_KINDS and cmap.owner(rt[0]) is None:
-            names.setdefault(rt[1], MANIFEST_KINDS[p[len(rt[0]):]])
+        file = posixpath.basename(p)
+        if rt is None or file not in MANIFEST_KINDS or cmap.owner(rt[0]):
+            continue
+        if p == rt[0] + file or p.startswith("components/modes/"):
+            names.setdefault(posixpath.basename(posixpath.dirname(p)), MANIFEST_KINDS[file])
     return names
 
 

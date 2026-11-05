@@ -1,0 +1,91 @@
+apiVersion: agentbay/v4
+kind: Mode
+metadata:
+  name: todo
+  version: 0.1.0
+  description: The owner's to-do list on the local store - agenda, recurring to-dos, status changes and hand-offs to an agent, all by the owner's word.
+spec:
+  # Everything not set here comes from components/base/store (features add, update, delete, query, get and ask, with the
+  # playbooks, rules and types they use). A feature declared here is new.
+  extends: store
+  reads: [todoitem/v1]        # the item kind its features read and write (B-6); no source produces it
+  purpose: >-
+    Keep my to-dos: what is on my plate today, overdue, waiting or handed to an agent; add, finish, reopen, drop and
+    move them when I ask; repeat the ones that recur; and hand one to an agent only after I have seen the exact call.
+  roles: { lead: todo-local, analyst: todo-local, reviewer: todo-local }   # role -> env
+  features:
+    update:
+      description: Change the plain fields of a to-do (title, notes, labels, dates, priority, recurrence). Status, history and delegation change only through complete, reopen, drop, status, delegate and track.
+      in: UpdateReq
+      effects: [read, write]
+      review: { role: reviewer, when: never }
+      steps:
+        - { id: check, run: todo.rules/v1.fields, with: { set: "$in.set" } }
+        - { id: update, run: items.store/v2.update, with: { id: "$in.id", set: "$steps.check.set" } }
+    agenda:
+      description: What is on my plate - the open, doing and waiting to-dos with their bucket (delegated, waiting, overdue, today, someday, upcoming), by priority or by due date.
+      in: AgendaReq
+      effects: [read]
+      review: { role: reviewer, when: never }
+      steps:
+        - { id: agenda, run: items.store/v2.rows, with: { name: "$in.view|agenda" } }
+    complete:
+      description: Mark a to-do done; a recurring to-do gets its next occurrence in the same series.
+      in: TodoRef
+      effects: [read, write]
+      review: { role: reviewer, when: never }
+      steps:
+        - { id: get, run: items.store/v2.get, with: { ids: "$in.ids" } }
+        - { id: plan, run: todo.rules/v1.plan, with: { items: "$steps.get.items", missing: "$steps.get.missing", action: complete } }
+        - { id: update, run: items.store/v2.update, with: { id: "$steps.plan.id", set: "$steps.plan.set" } }
+        - { id: next, run: items.store/v2.add, when: "$steps.plan.next", with: { item: "$steps.plan.next" } }
+    reopen:
+      description: Put a done or dropped to-do back to open.
+      in: TodoRef
+      effects: [read, write]
+      review: { role: reviewer, when: never }
+      steps:
+        - { id: get, run: items.store/v2.get, with: { ids: "$in.ids" } }
+        - { id: plan, run: todo.rules/v1.plan, with: { items: "$steps.get.items", missing: "$steps.get.missing", action: reopen } }
+        - { id: update, run: items.store/v2.update, with: { id: "$steps.plan.id", set: "$steps.plan.set" } }
+    drop:
+      description: Drop a to-do and keep its history; scope series ends a recurring to-do, occurrence (default) gives it its next one.
+      in: DropReq
+      effects: [read, write]
+      review: { role: reviewer, when: never }
+      steps:
+        - { id: get, run: items.store/v2.get, with: { ids: "$in.ids" } }
+        - { id: plan, run: todo.rules/v1.plan, with: { items: "$steps.get.items", missing: "$steps.get.missing", action: drop, scope: "$in.scope" } }
+        - { id: update, run: items.store/v2.update, with: { id: "$steps.plan.id", set: "$steps.plan.set" } }
+        - { id: next, run: items.store/v2.add, when: "$steps.plan.next", with: { item: "$steps.plan.next" } }
+    status:
+      description: Move a to-do to a status (open, doing, waiting, done or dropped); a move the rules do not allow is refused.
+      in: StatusReq
+      effects: [read, write]
+      review: { role: reviewer, when: never }
+      steps:
+        - { id: get, run: items.store/v2.get, with: { ids: "$in.ids" } }
+        - { id: plan, run: todo.rules/v1.plan, with: { items: "$steps.get.items", missing: "$steps.get.missing", action: status, status: "$in.status" } }
+        - { id: update, run: items.store/v2.update, with: { id: "$steps.plan.id", set: "$steps.plan.set" } }
+        - { id: next, run: items.store/v2.add, when: "$steps.plan.next", with: { item: "$steps.plan.next" } }
+    delegate:
+      description: Hand a to-do to an agent (build or research) - shows the exact call at a gate, records the hand-off after you approve and returns the call to run.
+      in: DelegateReq
+      effects: [read, write]
+      review: { role: reviewer, when: never }
+      steps:
+        - { id: get, run: items.store/v2.get, with: { ids: "$in.ids" } }
+        - { id: brief, run: todo.rules/v1.brief, with: { items: "$steps.get.items", missing: "$steps.get.missing", to: "$in.to", deliverable: "$in.deliverable" } }
+        - { id: confirm, gate: "Hand this to-do to an agent? The call to run is under inputs.brief (target and input); it runs exactly as shown and only after you approve. The to-do then records the hand-off. Nothing runs before." }
+        - { id: record, run: items.store/v2.update, with: { id: "$steps.brief.id", set: { delegation: "$steps.brief.delegation" } } }
+        - { id: handoff, run: todo.rules/v1.brief, with: { items: "$steps.get.items", missing: "$steps.get.missing", to: "$in.to", deliverable: "$in.deliverable" } }   # the same call again, so the output is the call to run
+    track:
+      description: Record how a delegated call stands (its call id, status and summary). A finished delegation never completes the to-do.
+      in: TrackReq
+      effects: [read, write]
+      review: { role: reviewer, when: never }
+      steps:
+        - { id: get, run: items.store/v2.get, with: { ids: "$in.ids" } }
+        - { id: track, run: todo.rules/v1.track, with: { items: "$steps.get.items", missing: "$steps.get.missing", callId: "$in.callId", status: "$in.status", summary: "$in.summary" } }
+        - { id: update, run: items.store/v2.update, with: { id: "$steps.track.id", set: "$steps.track.set" } }
+  needs: [todo.rules/v1]

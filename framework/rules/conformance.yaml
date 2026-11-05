@@ -1,6 +1,6 @@
 # Semantic conformance: what "fits the framework" means beyond `bay check`.
 # Single source, read by the reviewers of forge.create and forge.extend (their review plans carry these
-# rules; see `review.rulesets` in components/forge/mode.yaml) and by improve.audit, which runs every
+# rules; see `review.rulesets` in components/base/forge/mode.yaml) and by improve.audit, which runs every
 # `check` here deterministically and leaves rules without a check to the analyst in improve.audit.
 # `bay check` validates this file (schemas/rules.schema.json, unique ids, known checks).
 apiVersion: agentbay/v4
@@ -41,7 +41,7 @@ rules:
     check: review_on_side_effects
   - id: C-7
     level: should
-    statement: Content uses the fixed vocabulary (Chief of Staff, Mode, Feature, Role, Agent, Environment, Component, Connector, capability interface, content type, item, subagent). A component is a folder in `components/` that holds one mode, source connector, content type or shared set. A connector is code behind a capability interface; a source connector reaches outside the project and is a component of its own, and an internal connector sits inside the component that owns it. A content type is the versioned kind of an item (`<kind>/v<N>`), and an item is the unit a source produces and the store keeps. Retired or synonym terms are replaced.
+    statement: Content uses the fixed vocabulary (Chief of Staff, Mode, Feature, Role, Agent, Environment, Component, Connector, capability interface, content type, item, subagent). A component is a folder under `components/base/` or `components/modes/` that holds one mode, with its connectors and content types, or one shared set. A connector is code behind a capability interface and lives in the mode that binds it. A content type is the versioned kind of an item (`<kind>/v<N>`), and an item is the unit a source produces and the store keeps. Retired or synonym terms are replaced.
     appliesTo: [mode, feature, role, connector, env]
     check: vocabulary
     terms:

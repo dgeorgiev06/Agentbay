@@ -13,6 +13,7 @@ from pathlib import Path
 from . import model
 
 YAML, FIELDS, VIEWS, DERIVE = "content-type.yaml", "fields.schema.json", "views.sql", "derive.py"
+GLOB = f"components/*/*/content-types/*/{YAML}"
 _CREATE = re.compile(r"(?is)^\s*CREATE\s+VIEW\s+(v_[A-Za-z0-9_]+)\s+AS\s")
 _cache: dict = {}
 _modules: dict = {}
@@ -151,6 +152,8 @@ def _one(d: Path) -> tuple[ContentType | None, list[str]]:
     out = []
     if meta["name"] != d.name:
         out.append(f"{where}: metadata.name '{meta['name']}' must match the folder name '{d.name}'")
+    if spec["kind"] != d.name:
+        out.append(f"{where}: spec.kind '{spec['kind']}' must match the folder name '{d.name}'")
     try:
         fields = json.loads((d / FIELDS).read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
@@ -272,7 +275,7 @@ def _derive_problems(f: Path) -> list[str]:
 def scan(root: Path = model.KIT) -> tuple[dict[str, ContentType], list[str]]:
     """Every content type of the kit at `root` and every problem by file, cached while the files stay unchanged."""
     root = Path(root)
-    dirs = sorted(y.parent for y in (root / "components").glob(f"*/{YAML}"))
+    dirs = sorted(y.parent for y in root.glob(GLOB))
     files = sorted(p for d in dirs for p in d.glob("*") if p.is_file())
     key = (str(root), tuple((str(p), p.stat().st_mtime_ns, p.stat().st_size) for p in files))
     if key in _cache:

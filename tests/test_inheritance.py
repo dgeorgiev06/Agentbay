@@ -146,8 +146,8 @@ def test_missing_parent_and_cycles_are_errors_naming_the_fix():
     assert any("extends 'feed-briefing', which is not an abstract base" in p for p in problems(k))
     k = kit_copy()
     edit_yaml(k / "components/modes/feed-briefing/mode.yaml", lambda d: d["spec"].update({"extends": "mail-briefing"}))
-    assert any("components/modes/feed-briefing/mode.yaml" in p and "extends 'mail-briefing', which is not an abstract base" in p
-               for p in problems(k))
+    not_abstract = "extends 'mail-briefing', which is not an abstract base"
+    assert any("components/modes/feed-briefing/mode.yaml" in p and not_abstract in p for p in problems(k))
 
 
 def test_raw_child_may_be_partial_but_the_merged_mode_must_be_complete():

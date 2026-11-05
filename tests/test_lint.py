@@ -464,7 +464,8 @@ def test_run_steps_use_versioned_capability_spelling():
 
 def test_same_skill_name_in_two_modes_is_fine_b8():
     k = kit_copy()
-    assert (k / "components/modes/mail-briefing/skills/digest/SKILL.md").exists() and (k / "components/modes/feed-briefing/skills/digest").exists()
+    assert (k / "components/modes/mail-briefing/skills/digest/SKILL.md").exists()
+    assert (k / "components/modes/feed-briefing/skills/digest").exists()
     assert not [p for p in problems(k) if "skill" in p]
 
 

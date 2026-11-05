@@ -352,7 +352,8 @@ def test_lint_reports_a_skill_md_whose_front_matter_never_closes_f15():
         g = k / "components/base/store/skills/grounded-qa/SKILL.md"
         g.write_text("---\n- not\n- a mapping\n---\n# x\n")
         errs = lint.run(k)
-        want = "components/modes/feed-briefing/skills/digest/SKILL.md:1: front matter opens with '---' on line 1 but has no closing"
+        want = ("components/modes/feed-briefing/skills/digest/SKILL.md:1: "
+                "front matter opens with '---' on line 1 but has no closing")
         assert sum(want in e for e in errs) == 1
         assert any("components/base/store/skills/grounded-qa/SKILL.md:1: front matter must be a YAML mapping" in e
                    for e in errs)

@@ -102,6 +102,12 @@ def test_lint_rejects_case_collisions_and_extension_folders_without_manifest():
                   "components/rss/feed.py": "y\n", "components/modes/rss2/connector.yaml": "y\n",
                   "components/modes/rss2/mode.yaml": "y\n", "components/modes/rss2/connectors/foo/foo.py": "y\n",
                   "components/modes/rss2/content-types/bar/connector.yaml": "y\n",
+                  "components/modes/rss2/content-types/baz/content-type.yaml": "y\n",
+                  "components/modes/rss2/content-types/baz/connectors/evil/connector.yaml": "y\n",
+                  "components/modes/rss2/connectors/ok/connector.yaml": "y\n",
+                  "components/modes/rss2/connectors/ok/sub/connector.yaml": "y\n",
+                  "components/modes/rss2/content-types/qux/content-type.yaml": "y\n",
+                  "components/modes/rss2/content-types/qux/connector.yaml": "y\n",
                   "adapters/zed/zed.py": "y\n", "adapters/ok/adapter.yaml": "y\n"})
     errs = lint.lint_case_and_manifests(SimpleNamespace(root=repo))
     assert any(e.startswith("adapters/zed/: extension folder without its manifest adapter.yaml") for e in errs), errs
@@ -115,8 +121,14 @@ def test_lint_rejects_case_collisions_and_extension_folders_without_manifest():
     bar = "components/modes/rss2/content-types/bar/: extension folder without its manifest content-type.yaml"
     assert bar in errs
     assert not any(e.startswith("components/modes/rss2/:") for e in errs), errs
+    for stray in ("content-types/baz/connectors/evil", "connectors/ok/sub", "content-types/qux"):
+        message = next((e for e in errs if e.startswith(f"components/modes/rss2/{stray}/connector.yaml:")), "")
+        assert "git mv" in message and "components/modes/rss2/connectors/" in message, (stray, errs)
+    assert not any(e.startswith("components/modes/rss2/connectors/ok/connector.yaml:") for e in errs), errs
     assert lint.lint_case_and_manifests(SimpleNamespace(root=_repo({}))) == [
-        "components/modes/gmail/: extension folder without its manifest mode.yaml"]
+        "components/modes/gmail/: extension folder without its manifest mode.yaml",
+        "components/modes/gmail/connector.yaml: no loader reads a connector.yaml here; run git mv "
+        "components/modes/gmail/connector.yaml components/modes/gmail/connectors/<name>/connector.yaml"]
 
 
 def test_planned_touches_authorize_nothing_f10():

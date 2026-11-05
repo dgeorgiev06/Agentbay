@@ -45,7 +45,7 @@ touches:
   - { path: bay/__init__.py, reason: "release step: version 4.0.0" }
   - { path: CHANGELOG.md, reason: "release step: entry, with an Upgrading section" }
 exceptions:
-  - { measure: bay_lines, to: 9680, reason: "9549 is the ceiling and the count. The scratch copy measured 9605 (+56). Building it measured 9612 after step 5 with a composition check packed to fit 9620 (a dropped helper, nested comprehensions, magic slices); the owner decided on 2026-11-04 that packing to meet a limit is cheating, so the check is rewritten readably, and step 6 (the scaffold) and the docs follow. 9680 covers both." }
+  - { measure: bay_lines, to: 9720, reason: "9549 is the ceiling and the count. The scratch copy measured 9605 (+56). Building it measured 9673 with readable code (the owner decided on 2026-11-04 that packing to meet a limit is cheating, so the composition check was rewritten readably). The full review then asked for a lint error for manifests at a depth no loader reads (about 22 readable lines), measured at 9698; 9720 covers it and its test fixes (owner decision 2026-11-05)." }
 ---
 
 # 0021: One folder per mode
@@ -71,7 +71,7 @@ What the build needs from you:
 - **The framework-dev write window.** The framework-dev builder may not edit or move the unprotected components (`feed-briefing`, `mail-briefing`, `todo`, `gmail-api`, `x-api`, `post`, `email`, `todoitem`, `delivery`); the guard blocks it, and the golden guard matrix confirms it. 0010 hit the same problem and opened a move window. This work does the same: the plan's first commit adds `components` to framework-dev's `fs.write`, and a later commit takes it out again before release. You read the diff of the first commit, then run `./bay.sh build`. You run `./bay.sh build` again after the move (step 2) and after the window is closed (step 8). Nine commits in all (see section 6).
 - **Four decisions at the gate** (see Choices for you), each with a recommendation: `base/` as placement only; no `agentbay/v5`; keep the content-type scaffold; both halves of "folder name = kind".
 
-What it costs: `bay_lines` rises from 9549 to a measured 9605 and needs an exception, now 9680 (raised from 9620 during the build so the composition check stays readable). Every other limit (`tests` 463, `kit_python_lines` 5276, `long_lines` 135 and the rest) is unchanged. DESIGN goes 2998 -> 2997 words and INTERFACES 2987 -> 2988, both inside the 3000 budget.
+What it costs: `bay_lines` rises from 9549 to a measured 9605 and needs an exception, now 9720 (raised from 9620 during the build so the composition check stays readable, and again for the stray-manifest check the review asked for). Every other limit (`tests` 463, `kit_python_lines` 5276, `long_lines` 135 and the rest) is unchanged. DESIGN goes 2998 -> 2997 words and INTERFACES 2987 -> 2988, both inside the 3000 budget.
 
 What checking the plan against the code changed in this proposal: five places silently stop working at the new depth (the `fs.write` sync regex, B-11's instance names, the kit root that `todo_rules.py` derives from its own file, one relative README link, and the check that a nested folder holds its own manifest). The folder rule is a real new check, not existing behaviour. And the boundary report of the move passes only because the touches list `components/`.
 
@@ -300,7 +300,7 @@ The nine measures, against the ceilings in `framework/limits.yaml` (all nine are
 
 | Measure | Ceiling = count | After (measured) | Verdict |
 |---|---|---|---|
-| `bay_lines` | 9549 | 9605 | over: exception, to 9680 |
+| `bay_lines` | 9549 | 9605 | over: exception, to 9720 |
 | `kit_python_lines` | 5276 | 5276 | `python_check.py` changes one line in place; same files, same protected set |
 | `tests` | 463 | 463 | no function added |
 | `long_lines` | 135 | 135 | the `graph.py:149` line is wrapped; the content-type message is kept under 121 characters; `scaffold.py`'s `produces:` line was already over 120 and stays one line |

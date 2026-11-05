@@ -996,11 +996,16 @@ def _unread_manifests(files: list[str]) -> list[str]:
     loaded = [re.compile(re.escape(g).replace(r"\*", "[^/]+")) for g in globs]
     out = []
     for f in files:
-        name = f.rsplit("/", 1)[-1]
-        if name not in MANIFEST_HOMES or not f.startswith("components/") or any(rx.fullmatch(f) for rx in loaded):
+        parts = f.split("/")
+        if len(parts) < 4 or parts[0] != "components" or parts[1] not in TIERS or parts[3] == "tests":
             continue
-        home = "/".join(f.split("/")[:3])
-        out.append(f"{f}: no loader reads a {name} here; run git mv {f} "
+        name = parts[-1].casefold()
+        if name.endswith(".yml"):
+            name = name[:-4] + ".yaml"
+        if name not in MANIFEST_HOMES or any(rx.fullmatch(f) for rx in loaded):
+            continue
+        home = "/".join(parts[:3])
+        out.append(f"{f}: no loader reads a {parts[-1]} here; run git mv {f} "
                    f"{MANIFEST_HOMES[name].format(home=home)}{name}")
     return out
 

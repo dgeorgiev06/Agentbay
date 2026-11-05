@@ -108,6 +108,10 @@ def test_lint_rejects_case_collisions_and_extension_folders_without_manifest():
                   "components/modes/rss2/connectors/ok/sub/connector.yaml": "y\n",
                   "components/modes/rss2/content-types/qux/content-type.yaml": "y\n",
                   "components/modes/rss2/content-types/qux/connector.yaml": "y\n",
+                  "components/modes/rss2/connectors/ok/odd/Connector.yaml": "y\n",
+                  "components/modes/rss2/connectors/ok/deep/connector.yml": "y\n",
+                  "components/modes/rss2/tests/fixtures/connector.yaml": "y\n",
+                  "components/rss/connector.yaml": "y\n",
                   "adapters/zed/zed.py": "y\n", "adapters/ok/adapter.yaml": "y\n"})
     errs = lint.lint_case_and_manifests(SimpleNamespace(root=repo))
     assert any(e.startswith("adapters/zed/: extension folder without its manifest adapter.yaml") for e in errs), errs
@@ -125,6 +129,12 @@ def test_lint_rejects_case_collisions_and_extension_folders_without_manifest():
         message = next((e for e in errs if e.startswith(f"components/modes/rss2/{stray}/connector.yaml:")), "")
         assert "git mv" in message and "components/modes/rss2/connectors/" in message, (stray, errs)
     assert not any(e.startswith("components/modes/rss2/connectors/ok/connector.yaml:") for e in errs), errs
+    for odd in ("connectors/ok/odd/Connector.yaml", "connectors/ok/deep/connector.yml"):
+        message = next((e for e in errs if e.startswith(f"components/modes/rss2/{odd}:")), "")
+        assert f"git mv components/modes/rss2/{odd} components/modes/rss2/connectors/<name>/connector.yaml" in message
+    assert not any("rss2/tests/" in e for e in errs), errs
+    assert [e for e in errs if "components/rss/" in e] == [
+        "components/rss/: components holds only base and modes; run git mv components/rss components/modes/rss"]
     assert lint.lint_case_and_manifests(SimpleNamespace(root=_repo({}))) == [
         "components/modes/gmail/: extension folder without its manifest mode.yaml",
         "components/modes/gmail/connector.yaml: no loader reads a connector.yaml here; run git mv "

@@ -48,16 +48,16 @@ A component is a folder with one manifest, in `components/base/` (shipped) or `c
 | `content-type.yaml` | ContentType | `schemas/content-type.schema.json` |
 | `component.yaml` | Component | `schemas/component.schema.json` |
 
-The folder name finds what a component provides; the manifest lists none of it. The folders are
+Folder names find what a component provides; the manifest lists none. The folders are
 `interfaces/` (one `<name>.v<N>.yaml` per interface), `envs/` (one file per env), `skills/<skill>/SKILL.md`,
-`types/`, `data/`, `connectors/<name>/` (its source connectors), `content-types/<kind>/` (the folder is the kind), `features/` and `tests/`. What a component needs stays in its manifest: `needs:` (interfaces), `reads:` (content
+`types/`, `data/`, `connectors/<name>/` (its source connectors), `content-types/<kind>/` (the folder is the kind), `features/` and `tests/`. Its manifest holds what it needs: `needs:` (interfaces), `reads:` (content
 types) and `extends:` (a parent mode).
 
 A mode may bind a connector or read a content type of its own folder or of `base/`. For another mode's it lists that
 mode in `spec.composes` (not in a base mode, not transitive).
 
-`bay check` refuses a use without `composes`, an unused `composes`, a folder without its manifest and a component
-outside `base/` and `modes/`.
+`bay check` refuses a use without `composes`, an unused `composes`, a folder without its manifest, a manifest no loader
+reads and a component outside `base/` and `modes/`.
 
 ## 1. Mode and features
 `mode.yaml` declares each feature (`spec.features.<name>`, called as `<mode>.<name>`): `in` and `out`

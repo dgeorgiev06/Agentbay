@@ -1,18 +1,18 @@
 ---
-# Approval is recorded in the ledger by `bay approve`; this file grants nothing. Design only: nothing is changed before the gate. Decisions 1 to 7 were taken by the owner in chat on 2026-11-04, the answers to the three open questions and decisions 8 to 10 on 2026-11-05; all are followed here as given. Every line cited was read on feat/prevention at 4.0.0 (main a7a425d, branch head ca75d96). Counts marked measured were run on that commit; line costs are estimates, written as readable code plus a stated buffer, and the plan step replaces them with measured ones (see Measured and estimated).
+# Approval is recorded in the ledger by `bay approve`; this file grants nothing. Design only: nothing is changed before the gate. Decisions 1 to 7 were taken by the owner in chat on 2026-11-04, the answers to the three open questions and decisions 8 to 12 on 2026-11-05; all are followed here as given. Every line cited was read on feat/prevention at 4.0.0 (main a7a425d, branch head ca75d96; the lines cited in decisions 11 and 12 were read at branch head ebc1427). Counts marked measured were run on that commit; line costs are estimates, written as readable code plus a stated buffer, and the plan step replaces them with measured ones (see Measured and estimated).
 id: "0022"
 status: draft
 touches:
-  - { path: bay/dispatch.py, reason: "sensitive. The executor brief (:715-728) gains `envelope` built from the plan step; submit (:76-108) refuses a result whose selfCheck misses an acceptance id or an applicable DoD id; _require_plan (:130-143) also refuses a plan that lacks an acceptance id as done or skipped (decision 10); _accept_review (:629-636) no longer counts a nit as a failure (decision 8); _review_brief (:698-713) gains `earlier`; _prior_review (:679-696) is split so both use one reader of earlier reviews; _require_plan_file (:110-113) validates the plan's steps, blastRadius included (about +95 lines)" }
+  - { path: bay/dispatch.py, reason: "sensitive. The executor brief (:715-728) gains `envelope` built from the plan step; submit (:76-108) refuses a result whose selfCheck misses an acceptance id or an applicable DoD id; _require_plan (:130-143) also refuses a plan that lacks an acceptance id as done or skipped (decision 10); _accept_review (:629-636) no longer counts a nit as a failure (decision 8); _review_brief (:698-713) gains `earlier`; _prior_review (:679-696) is split so both use one reader of earlier reviews; _require_plan_file (:110-113) validates the plan's steps, blastRadius included; the envelope's `stop` always ends with the two standing stop conditions of decision 12, and `fix` is copied from the failed item with its `reproduce` and `rootCause` (decision 11) (about +99 lines)" }
   - { path: bay/proposal.py, reason: "plan_steps(text) reads and checks the plan's front matter next to front_matter (:13) and touches (:30), including blastRadius and the limits on acceptance text and count (about +29 lines)" }
   - { path: bay/cli.py, reason: "sensitive. `bay check --standards`: the standards step run by hand, read-only, so a plan can dry-run it; `bay plan <taskId> --skip <n> '<reason>'` beside `--done` in cmd_plan (:459-469) and its parser (:821-823). No new command, cli_commands stays 16 (about +31 lines)" }
   - { path: bay/ledger.py, reason: "record_plan (:83-103) accepts an optional `id` on a to-do item; a new record_skip beside record_done (:106-113); plans() (:150-162) folds the skip reason (about +14 lines)" }
   - { path: bay/guard.py, reason: "sensitive. _plan_command (:504-523) also allows `bay plan <taskId> --skip <n> '<reason>'` and nothing else new (about +5 lines)" }
   - { path: schemas/task.schema.json, reason: "TaskEnvelope (:6-24) gains optional scope, acceptance, dod, fix, limits, stop, blastRadius; Result (:26-40) gains selfCheck, checked, planStep. Additive; stays v1" }
-  - { path: schemas/data/review.verdict.v1.schema.json, reason: "a failed item must carry weakness, places and ways (decision 7); additive for passes" }
+  - { path: schemas/data/review.verdict.v1.schema.json, reason: "a failed item must carry weakness, places and ways (decision 7), and reproduce and rootCause (decision 11); additive for passes" }
   - { path: components/base/forge/types/Result.schema.json, reason: "the forge step output type gains selfCheck, checked, planStep, the same three keys as task.schema.json" }
-  - { path: framework/roles/builder.yaml, reason: "prompt (:12-29): the limits rule (decision 3), the selfCheck and checked report (decision 2), the to-do that starts from the acceptance list verbatim (decision 10)" }
-  - { path: framework/roles/reviewer.yaml, reason: "prompt (:13-36): do not stop at a few findings; for every failure search the same weakness across the change and report the class as one item; read `earlier` (decision 7); a nit is only a style or wording point with no effect on behaviour or a contract (decision 8)" }
+  - { path: framework/roles/builder.yaml, reason: "prompt (:12-29): the limits rule (decision 3), the selfCheck and checked report (decision 2), the to-do that starts from the acceptance list verbatim (decision 10), reproduce the failure first and name the root cause, never silence it (decision 11), and the plain statement that pushing back is expected, with the stop-and-report rule (decision 12). Text only" }
+  - { path: framework/roles/reviewer.yaml, reason: "prompt (:13-36): do not stop at a few findings; for every failure search the same weakness across the change and report the class as one item; read `earlier` (decision 7); a nit is only a style or wording point with no effect on behaviour or a contract (decision 8); fail a fix that silences instead of fixes (decision 11); an honest fail is expected, agreement is not the default (decision 12). Text only" }
   - { path: components/base/forge/mode.yaml, reason: "the plan task (:39) asks for the plan format and the dry-run; implement (:41) is split into implement and implement-deep chosen by `when:` on the proposal step (decision 6); the release task (:46) lists the review's nits in followups (decision 8)" }
   - { path: components/base/forge/features/extend/rules.yaml, reason: "R-8 (:8) says a nit never makes the result partial, even on a must item (decision 8)" }
   - { path: components/base/cos/playbook.md, reason: "the source of the Chief of Staff text in the generated .agentbay/COORDINATOR.md (built by adapters/claude-code/claude_code.py:425-431). Loop step 3 (:22-26) gains the diff-against-acceptance read and the one-line result (decision 9) and the fresh-dispatch rule (decision 10); the task block (:49-58) gains the new fields. .agentbay/COORDINATOR.md is regenerated by the build, not edited by hand" }
@@ -21,12 +21,12 @@ touches:
   - { path: components/base/forge/features/extend/playbook.md, reason: "step 3 (plan), step 5 (implement) and step 10 (release) text; DOD-19 to DOD-21 (the next free ids after DOD-18)" }
   - { path: components/base/python/connectors/python-check/python_check.py, reason: "two new row kinds beside _reachability_rows (:227-244) and _token_rows (:247-255): a comprehension with more than one `for` or inside another comprehension, and a one-line string literal of two or more Python statements in a test file (about +35 lines of protected kit code)" }
   - { path: components/base/python/connectors/python-check/README.md, reason: "the two new rules and how to write the code instead" }
-  - { path: tests/test_dispatch.py, reason: "cases added to existing tests: the envelope and blastRadius, the selfCheck refusal, the `earlier` verdicts, the nit that does not make a call partial, the tier of implement, the plan-format refusal (no test function added)" }
+  - { path: tests/test_dispatch.py, reason: "cases added to existing tests: the envelope and blastRadius, the selfCheck refusal, the `earlier` verdicts, the nit that does not make a call partial, the tier of implement, the plan-format refusal, the failed item without reproduce and rootCause, the standing stop lines (no test function added)" }
   - { path: tests/test_submit_needs_plan.py, reason: "cases in the submit-refusal test (:14): a result without selfCheck for every acceptance id and DoD id; a plan that lacks an acceptance id as done or skipped" }
   - { path: tests/test_ledger.py, reason: "cases in test_bay_plan_records_scrubbed_size_limited_append_only_events (:189): an item with an id, a skip with its reason" }
   - { path: tests/test_boundaries.py, reason: "cases in test_bay_plan_is_the_only_bay_command_a_subagent_may_run (:938): `--skip` is allowed for the agent's own task and nothing else is" }
   - { path: adapters/claude-code/tests/test_adapter.py, reason: "a case in test_adapter_round_trip (:24): the generated COORDINATOR.md holds the diff rule and the fresh-dispatch rule" }
-  - { path: tests/test_roles.py, reason: "a case in test_shipped_roles_are_five_generic_framework_roles_without_data_access (:51): the builder and reviewer prompts carry the new rules" }
+  - { path: tests/test_roles.py, reason: "a case in test_shipped_roles_are_five_generic_framework_roles_without_data_access (:51): the builder and reviewer prompts carry the new rules, including the root-cause rule and the pushback sentences (decisions 11 and 12)" }
   - { path: tests/test_cli_commands.py, reason: "a case: `bay check --standards` takes no boundary options and writes nothing" }
   - { path: components/base/python/tests/test_python_check.py, reason: "cases in the one test (:309), written one source line per line" }
   - { path: README.md, reason: "DOD-13: the brief format, selfCheck, `check --standards`, `plan --skip`" }
@@ -36,7 +36,7 @@ touches:
   - { path: bay/__init__.py, reason: "release step: version 4.1.0" }
   - { path: CHANGELOG.md, reason: "release step: entry, with an Upgrading note" }
 exceptions:
-  - { measure: bay_lines, to: 9912, reason: "9703 is the ceiling and the count. Estimate: readable cost +174 (dispatch.py 95, cli.py 31, proposal.py 29, ledger.py 14, guard.py 5), plus a stated buffer of 35 (20%), written before any code exists. Both numbers are estimates. The plan replaces the estimate with a measured one from a scratch copy; the exception is then the measured readable cost plus the same buffer." }
+  - { measure: bay_lines, to: 9917, reason: "9703 is the ceiling and the count. Estimate: readable cost +178 (dispatch.py 99, cli.py 31, proposal.py 29, ledger.py 14, guard.py 5), plus a stated buffer of 36 (20%), written before any code exists. Decisions 11 and 12 add 4 of the 178; their prompt and schema changes are not counted by bay_lines. Both numbers are estimates. The plan replaces the estimate with a measured one from a scratch copy; the exception is then the measured readable cost plus the same buffer." }
   - { measure: kit_python_lines, to: 5326, reason: "5276 is the ceiling and the count. Estimate: readable cost +38 (python_check.py 35, scaffold.py 3), plus a stated buffer of 12, both estimates. Test fixtures for the new rules are written one source line per line, as the owner decided on 2026-11-04." }
 ---
 
@@ -53,9 +53,9 @@ Two framework changes took many rounds to land. 0011 (standards) needed seven fi
 - A review stopped after a few findings.
 - Each of these was found late, in review.
 
-This proposal moves the checking earlier and makes it mechanical. The ideas come from Lauren Tan's pstack skill stack (cursor/plugins pstack): its blast-radius skill, poteto-mode's verbatim playbook steps and "you own every subagent's work", and its bugbot triage. The ten decisions, in plain words:
+This proposal moves the checking earlier and makes it mechanical. The ideas come from Lauren Tan's pstack skill stack (cursor/plugins pstack): its blast-radius skill, poteto-mode's verbatim playbook steps and "you own every subagent's work", its bugbot triage, and its rules to find the root cause and to say no. The twelve decisions, in plain words:
 
-1. **One brief format.** Every builder brief has the same fields: outcome, context, scope, numbered acceptance criteria with the evidence each needs, the Definition-of-Done ids that apply, limits in numbers, stop conditions, what else the step can break, and the report format. For a fix round it also lists the weakness, every place it can happen and every way to trigger it. The plan step writes these for each step in a small YAML front matter, you approve them with the plan, and bay builds each brief from it, so no criterion is dropped on the way.
+1. **One brief format.** Every builder brief has the same fields: outcome, context, scope, numbered acceptance criteria with the evidence each needs, the Definition-of-Done ids that apply, limits in numbers, stop conditions, what else the step can break, and the report format. For a fix round it also lists the weakness, every place it can happen, every way to trigger it, how to reproduce the failure and its root cause (decision 11). The stop conditions always include the two standing ones of decision 12. The plan step writes these for each step in a small YAML front matter, you approve them with the plan, and bay builds each brief from it, so no criterion is dropped on the way.
 2. **A self-review in every result.** The builder reports one line of evidence per acceptance id and per applicable DoD id. In a fix round it reports what it did at every listed place and way. bay refuses a result that leaves one out.
 3. **A limit is your question, not a target.** If readable code goes over a ceiling, the builder stops, reports the measured value and what it pays for, and never compresses code.
 4. **Plans prove their steps.** A plan runs the real suite, the limits check and the standards step (by hand, with `./bay.sh check --standards`) on a scratch copy for every step it calls green. A limit exception is the readable estimate plus a stated buffer.
@@ -65,12 +65,14 @@ This proposal moves the checking earlier and makes it mechanical. The ideas come
 8. **Nits never block.** A review item with severity `nit` never ends a call `partial`, even on a must item. Nits go into the release Result's followups, and you can still ask for them to be fixed now.
 9. **Blast radius and diff ownership.** Each plan step, and so each brief, says what else the step can break, and the plan's dry-run confirms it. Before it submits a step, the coordinator reads the diff against the brief's acceptance list and writes its own one-line result: the coordinator owns every agent's work.
 10. **Verbatim steps and fresh agents.** An agent's to-do starts from the brief's acceptance list, word for word, one item per acceptance id; a dropped item stays in the list as `skip: <reason>`, and bay refuses a submit whose plan lacks an acceptance id that is neither done nor skipped. When a task changes, the coordinator dispatches a fresh agent with the full brief and never resumes one with new directives.
+11. **Root causes, no silencing.** A fix brief must say how to reproduce the failure and name its root cause, and the builder reproduces the failure before it changes anything. A fix that only hides the symptom is refused: a `None` check, a `try`/`except`, a guard or a `# type: ignore` that covers the bug instead of fixing why it happens. The reviewer fails such a fix.
+12. **Say no.** The builder and reviewer prompts say in plain words that pushing back is expected. A builder that finds the brief wrong, or in conflict with the proposal, stops and reports instead of coding around it. A reviewer gives an honest fail, not agreement by default.
 
 What stays the same: the steps of forge.extend, the approval gate, the one review round, the Result and verdict contracts (all additions are optional keys, so `agentbay/v4` stays), every limit except the two exceptions below, and the rule that you alone pass the gate. There is no compatibility code. A plan written in the old free-form way is refused at the plan step with a message that names the missing field.
 
-What it costs: `bay_lines` 9703 to an estimated 9912 and `kit_python_lines` 5276 to 5326, both as exceptions sized from readable code plus a buffer, and both estimates. `tests` stays 463: the new checks are cases inside existing tests. The proposal touches `bay/dispatch.py`, `bay/cli.py` and `bay/guard.py`, so under its own decision 6 the implementation runs on Opus.
+What it costs: `bay_lines` 9703 to an estimated 9917 and `kit_python_lines` 5276 to 5326, both as exceptions sized from readable code plus a buffer, and both estimates. `tests` stays 463: the new checks are cases inside existing tests. The proposal touches `bay/dispatch.py`, `bay/cli.py` and `bay/guard.py`, so under its own decision 6 the implementation runs on Opus.
 
-What you decided on 2026-11-05, and where it is written: the plan gets YAML front matter, validated at the plan step (decision 1); the dry-run command is `./bay.sh check --standards` (decision 4); selfCheck covers acceptance ids and DoD ids (decision 2); decisions 8, 9 and 10 are sections below. A two-model review panel was considered and not chosen (Out of scope). No open question remains.
+What you decided on 2026-11-05, and where it is written: the plan gets YAML front matter, validated at the plan step (decision 1); the dry-run command is `./bay.sh check --standards` (decision 4); selfCheck covers acceptance ids and DoD ids (decision 2); decisions 8 to 12 are sections below. Decisions 11 and 12 are mostly prompt and template text: they add 4 estimated lines of `bay/` code and no new test function. A two-model review panel was considered and not chosen (Out of scope). No open question remains.
 
 ## The design
 
@@ -98,14 +100,14 @@ steps:
     acceptance:
       - { id: A1, text: <checkable statement>, evidence: <what to show: command and output, file:line, test name>, dod: [DOD-n] }
     limits: { lines: <budget, readable code>, tests: <rule>, style: [<rules>] }
-    stop: [<conditions that mean: stop and report, do not improvise>]
+    stop: [<conditions that mean: stop and report, do not improvise; bay adds the standing ones of decision 12>]
     blastRadius: <what else this step can break: the other code, tests, guard decisions or generated files that depend on what it changes>
     dryRun: { suite: <command and result>, limits: <command and result>, standards: <command and result>, blastRadius: <the command or read that confirms the blastRadius text, and its result> }
 ```
 
 `dod` on the envelope is the union of the steps' acceptance `dod` lists. Acceptance ids are `A1..An` within a step. The acceptance `text` of a step is at most 240 characters and a step has at most 8 acceptance entries, so each fits verbatim in a to-do item (decision 10; the ledger allows 240 characters and 12 items, `bay/ledger.py:21`).
 
-**The complete template** (the envelope that bay builds for one plan step; `fix` appears only in a fix round, see decision 2 and 7):
+**The complete template** (the envelope that bay builds for one plan step; `fix` appears only in a fix round, see decisions 2, 7 and 11; the last `stop` line appears only with `fix`, see decision 12):
 
 ```task
 protocol: TaskEnvelope/v1
@@ -125,11 +127,16 @@ fix:                                    # fix rounds only, copied from the faile
     weakness: <the underlying problem, not one instance>
     places: [<every place it can happen>]
     ways: [<every way to trigger it>]
+    reproduce: <a command or test that shows the failure before any change, and its output>
+    rootCause: <why it happens, in one or two sentences; not the symptom>
 limits:
   lines: <readable-code budget>
   tests: <test-count rule>
   style: [<style rules>]
-stop: [<conditions to stop and report>]
+stop:                                   # the plan's conditions, then the two standing ones bay adds (decision 12)
+  - <condition from the plan: stop and report, do not improvise>
+  - the brief or the plan is wrong, or conflicts with the proposal
+  - the failure cannot be reproduced, or its root cause is not found   # fix rounds only
 blastRadius: <what else this step can break>
 deliverable: Result/v1 with selfCheck (one line per A-id and per applicable DoD id); in a fix round also `checked` (one line per place and per way)
 ```
@@ -157,12 +164,30 @@ limits:
   lines: "bay_lines +10 readable (table +6, stray line +4) before the buffer; stop and report above +14"
   tests: "no test function added; cases go into existing tests"
   style: ["no # comment, no docstring over one line", "no packed lines or comprehensions with two for"]
-stop: ["the table needs more than 14 lines", "a case passes on the parent commit"]
+stop: ["the table needs more than 14 lines", "a case passes on the parent commit", "the brief or the plan is wrong, or conflicts with the proposal"]
 blastRadius: "every manifest under components/ is now checked by bay check, so a kit file at a wrong depth that passes today is reported; the dry-run lints the shipped kit and runs tests/test_boundary.py and tests/test_contenttypes.py"
 deliverable: Result/v1 with selfCheck for A1-A4 and DOD-7, DOD-12, DOD-14, DOD-15, DOD-18; artifacts lists every changed file. Your bay plan to-do starts with the four acceptance items A1-A4, verbatim, one each; a dropped one stays as skip: <reason>.
 ```
 
 The same step as it stands in the plan has the outcome, files and tests, and no evidence per criterion, which is why its review needed rounds.
+
+**The same step in a fix round.** The `fix` and `stop` parts of a brief after a failed review, invented to show the lines (the review, its places and its message are not from 0021's history):
+
+```task
+fix:
+  - id: DOD-12
+    weakness: "a stray folder is reported only when it sits directly under components/"
+    places: [bay/lint.py (FOLDER_MANIFESTS walk)]
+    ways: ["components/modes/rss/extra/ with a manifest inside"]
+    reproduce: "add that folder to the case table in test_lint.py; python3 tests/run.py tests/test_lint.py fails with: no finding for components/modes/rss/extra"
+    rootCause: "the walk stops at depth 2, so a folder one level deeper is never visited; a depth check at the report would not change that"
+stop:
+  - the table needs more than 14 lines
+  - the brief or the plan is wrong, or conflicts with the proposal
+  - the failure cannot be reproduced, or its root cause is not found
+```
+
+Here a fix that tests for `None` where the walk returns nothing, or wraps the walk in a `try`/`except`, hides the missing report and is refused (decision 11). The fix is to walk to the depth the table needs.
 
 **Why in the dispatcher and not a template in the coordinator's playbook.** A playbook sentence is what failed: "the brief states the goal, the inputs and the limits" (`components/base/cos/playbook.md:24`, generated into `.agentbay/COORDINATOR.md`, loop step 3) left the criteria to whoever wrote the brief. Building from data means a criterion in the plan is in the envelope.
 
@@ -176,7 +201,7 @@ The same step as it stands in the plan has the outcome, files and tests, and no 
 
 - `Result` gains `selfCheck` (an object: id to one line of evidence), `checked` (an object: id to one line) and `planStep` (the plan step number the result answers). Both Result schemas get the same three optional keys.
 - `submit` (`bay/dispatch.py:76-108`), for a step whose brief carried an `envelope`, compares the result with it after the schema check and before `state["steps"][step.id]` is written. It refuses with the missing ids: every acceptance id and every applicable DoD id of the envelope must be a key of `selfCheck` (**decided by the owner on 2026-11-05, the owner's question 3, answered:** the dispatcher refuses a result missing either kind; one loop covers both), and in a fix round every place and way id of `fix` must be a key of `checked`. The message names the ids and says what a line should hold. Steps with no envelope (forge.create, delivery.build) are not checked, because they have no acceptance ids.
-- `checked` keys are `<failed id>.P<n>` for the n-th place and `<failed id>.W<n>` for the n-th way, numbered by bay when it builds `fix`. A value starts with `fixed`, `already safe` or `not fixable` and then gives the reason.
+- `checked` keys are `<failed id>.P<n>` for the n-th place and `<failed id>.W<n>` for the n-th way, numbered by bay when it builds `fix`. A value starts with `fixed`, `already safe` or `not fixable` and then gives the reason; a `fixed` value also names the root cause and the test that failed before the change (decision 11).
 - Because the plan has one entry per plan step, the implement step stays open until every plan step has an accepted result. The dispatcher holds a counter in the call state (`state["planStep"]`) and returns the next envelope in `next`. A fix round re-runs extend with `proposal` set, as the playbook says today (`components/base/forge/features/extend/playbook.md`, Failure handling), and builds `fix` from the failed review.
 - `framework/roles/builder.yaml` (:12-29) says in its prompt: before you submit, check your work against each acceptance id and each applicable DoD id and report one line of evidence for each in `selfCheck`; in a fix round also `checked`.
 
@@ -242,10 +267,10 @@ I considered one step with a tier expression and rejected it: the resolver, the 
 
 **The change.**
 
-- The verdict schema requires `weakness` (the underlying problem), `places` (every place it can happen) and `ways` (every way to trigger it), all as strings or lists of strings, on an item whose verdict is `fail` (a JSON Schema `if`/`then`). `_accept_review` (`bay/dispatch.py:617-638`) validates against that schema already (:618-621), so no dispatcher line is needed for this.
+- The verdict schema requires `weakness` (the underlying problem), `places` (every place it can happen) and `ways` (every way to trigger it), all as strings or lists of strings, on an item whose verdict is `fail`; decision 11 adds `reproduce` and `rootCause` to the same requirement (a JSON Schema `if`/`then`). `_accept_review` (`bay/dispatch.py:617-638`) validates against that schema already (:618-621), so no dispatcher line is needed for this.
 - `framework/roles/reviewer.yaml` (:13-36) says: check every id even after the first failure; for each failure, search the change for the same weakness and report the whole class as that one item, listing each place and way; read `earlier` and do not pass an id an earlier review failed without evidence that it is fixed.
 - `_review_brief` (:698-713) gains `earlier`: for every earlier call of the same target with the same gated proposal, its failed items (id, evidence, weakness, places, ways) and the ids it passed. `_prior_review` already walks the ledger and the calls folder to find the newest failed review of the same files (:679-696). It is split into one reader of earlier reviews that returns all of them, and `recheck` is built from the newest, as now. About +20 lines.
-- A failed item is also the source of the next fix brief: bay copies `id`, `weakness`, `places` and `ways` into the `fix` section of decision 1, so a fix round sees what the reviewer saw. The coordinator does not retype findings.
+- A failed item is also the source of the next fix brief: bay copies `id`, `weakness`, `places`, `ways`, `reproduce` and `rootCause` (the last two are decision 11) into the `fix` section of decision 1, so a fix round sees what the reviewer saw. The coordinator does not retype findings.
 
 The item stays one item per failure class, so the number of verdict ids and the rule that a failed `must` or blocker makes the call `partial` (`_accept_review` :628-631) do not change.
 
@@ -292,20 +317,51 @@ The item stays one item per failure class, so the number of verdict ids and the 
 
 **Test that fails on main:** `tests/test_submit_needs_plan.py::test_submit_is_refused_without_a_recorded_outcome_and_accepted_after_bay_plan` (:14) gets a case: a plan that lacks an acceptance id, or has it with other words, is refused naming the id; the same plan with the item skipped is accepted. Main accepts both. `tests/test_ledger.py::test_bay_plan_records_scrubbed_size_limited_append_only_events` (:189) gets an item with an `id` and a `--skip` with a reason: main rejects the key. `tests/test_boundaries.py::test_bay_plan_is_the_only_bay_command_a_subagent_may_run` (:938) gets the `--skip` form for the agent's own task allowed and for another taskId denied. `adapters/claude-code/tests/test_adapter.py::test_adapter_round_trip` (:24): the generated text holds the fresh-dispatch rule.
 
+### 11. Root causes, no silencing
+
+**Where it is today.** A fix round starts from a failed review item. The reviewer gives an `evidence` line and a `suggestion` per item (`framework/roles/reviewer.yaml:24-31`), and decision 7 adds `weakness`, `places` and `ways`. Nothing asks anyone to show the failure before the fix or to say why it happens. The builder prompt (`framework/roles/builder.yaml:12-29`) says to make the smallest change that meets the deliverable, which a one-line guard also meets. The reviewer prompt has no rule about a fix that hides the problem. So a `None` check, a `try`/`except`, a guard or a `# type: ignore` can turn a review item green while the bug stays.
+
+**The change.**
+
+- **The brief.** The `fix` entry of decision 1 gains two lines next to `weakness`, `places` and `ways`: `reproduce` (a command or test that shows the failure before any change, with its output) and `rootCause` (why it happens, not what it looks like). The reviewer writes both on every failed item, because the verdict schema now requires them (decision 7's `if`/`then`, two more keys). bay copies them into `fix` with the other four; the coordinator does not retype them. A failed item with no reproduce line is refused at the review step, which is the point: a finding nobody can reproduce is not yet a finding.
+- **The builder.** `framework/roles/builder.yaml` (:12-29) says, in plain words: in a fix round, first run `reproduce` and see it fail; then change the code that causes the failure, not the code that reports it. A fix that only silences the symptom is refused. A `None` check, a `try`/`except`, a guard or a `# type: ignore` that hides the bug instead of fixing why it happens is a silence. If the failure does not reproduce, or you cannot find the root cause, stop and report (decision 12). The `checked` line of a `fixed` place names the root cause and the test that failed before the change (decision 2).
+- **The reviewer.** `framework/roles/reviewer.yaml` (:13-36) says: when you review a fix, fail it if it silences instead of fixes, and say which line hides the failure. Check that the test from `reproduce` fails on the parent commit and passes on the fix. A guard or an exception handler is acceptable when it is the correct behaviour, and the evidence line says why; it is not acceptable when its only job is to stop the failure from showing.
+- **Standing stop line.** For a fix round bay adds `the failure cannot be reproduced, or its root cause is not found` to `stop` (decision 12).
+
+**What this does not fix.** bay cannot tell a guard that fixes from a guard that hides: both are a few lines and both make the test pass. The checks that are mechanical are the schema (a failed item carries `reproduce` and `rootCause`) and the standing stop line. Whether a fix addresses the cause stays a reviewer judgment, backed by the failing test from `reproduce` and by your reading of the evidence line. I considered a lint on `# type: ignore` and bare `except`, and did not take it: legitimate uses exist, and a guard on a `None` has no marker to find.
+
+**Test that fails on main:** `tests/test_dispatch.py::test_failed_review_halts_before_release` (:231), in the case of decision 7: a failed item without `reproduce` or without `rootCause` is refused (main accepts it), and the next fix brief's `fix` entry holds both (main builds no `fix`). The prompt rules are text and are checked in `tests/test_roles.py::test_shipped_roles_are_five_generic_framework_roles_without_data_access` (:51), which gains a case: the builder prompt holds the sentences "root cause" and "silences", and the reviewer prompt holds "silences instead of fixes"; main's prompts (`builder.yaml:12-29`, `reviewer.yaml:13-36`) have neither. Whether a real fix silences is not tested; it is the reviewer's call.
+
+### 12. Say no
+
+**Where it is today.** The prompts tell the builder and reviewer what to do and nothing about disagreeing. The builder prompt says to report `partial` if a check cannot run (`builder.yaml:27-28`) but not what to do with a brief that is wrong; the stop conditions of a brief are whatever the plan author wrote (decision 1). The reviewer prompt says "never pass an item without evidence" (`reviewer.yaml:42`), which does not say that a fail is welcome. An agent that finds the brief wrong has an incentive to work around it and hand back something that looks done.
+
+**The change.**
+
+- **Builder prompt** (`framework/roles/builder.yaml:12-29`), in plain words: pushing back is expected. If the brief is wrong, or conflicts with the proposal, stop and report. Do not code around it, and do not build something close to what was asked. Say what is wrong, quote the lines that conflict, and return status `blocked`.
+- **Reviewer prompt** (`framework/roles/reviewer.yaml:13-36`), in plain words: an honest fail is expected. Do not agree because the author or the coordinator sounds sure, or because the work looks like what was asked. If an item does not meet its criterion, fail it with the evidence.
+- **The brief's "Stop when" field.** `stop` in the template of decision 1 always ends with `the brief or the plan is wrong, or conflicts with the proposal`, added by bay to the plan's own conditions, so a plan author cannot leave it out and a builder always has that permission written in its brief. For a fix round it also ends with the reproduce line of decision 11. Both are constants in the dispatcher, about +4 lines.
+- **A stop must be submittable.** A stopped builder has plan items it did not finish, and decisions 2 and 10 refuse a submit that leaves an acceptance id out. The rule: the builder marks each open item `--skip <n> 'stopped: <reason>'`, gives each affected `selfCheck` id the line `not met: stopped, see blockers`, and returns status `blocked` with the reason in `blockers`. So a stop needs no exception in `submit`. I considered exempting `blocked` results from the checks and did not: it would be a second path through the checks and a way to avoid them.
+- **The coordinator.** A `blocked` result from a stop is not retried with the same brief. The coordinator reports it to you; if the brief is wrong, the plan step is where it is fixed, and a fresh agent gets the corrected brief (decision 10).
+
+**What this does not fix.** A prompt cannot make an agent disagree. It removes the reason not to: a stop is allowed, it is submittable and it is written in the brief. A reviewer who agrees by default will still pass things; the defences are the evidence requirement and your reading of the review at the gate.
+
+**Test that fails on main:** `tests/test_roles.py::test_shipped_roles_are_five_generic_framework_roles_without_data_access` (:51) gains a case: the builder prompt holds the sentences "pushing back is expected" and "stop and report", and the reviewer prompt holds "an honest fail is expected". This is how a text-only change is checked: an existing role-prompt test asserts that the sentence is present. Main's prompts have none of them. `tests/test_dispatch.py::test_a_recorded_approval_of_the_unchanged_proposal_skips_the_gate` (:417), in the case of decision 1: the `stop` of the built envelope ends with the standing line; main builds no `envelope`. `tests/test_submit_needs_plan.py::test_submit_is_refused_without_a_recorded_outcome_and_accepted_after_bay_plan` (:14): a `blocked` result whose open items are skipped and whose `selfCheck` lines say `not met` is accepted; the same result with an item neither done nor skipped is refused naming it.
+
 ## Details
 
 ### Compatibility and safety
 
 - **Contracts.** Every schema change adds optional keys (TaskEnvelope including `blastRadius`, Result in both places) or conditional requirements on a verdict item that fails. The forge.scaffold `proposal` endpoint gains an output key. No existing document becomes invalid, so `agentbay/v4` and the v1 data contracts stay (DOD-11). If you read DOD-11 strictly for the verdict `if/then`, which tightens what a reviewer may submit, the alternative is a `review.verdict/v2`; I do not recommend it for a field only the reviewer role writes and only this dispatcher reads.
-- **What breaks, with no alias (B-12).** A plan without the front matter is refused at the plan step. A builder result for an implement step without `selfCheck` is refused. A failed verdict item without `weakness`, `places` and `ways` is refused. A plan step without `blastRadius`, a submit whose plan lacks an acceptance id as done or skipped, and a `nit` that used to halt a call are new behaviour with no switch. Plans and calls already approved are unaffected: the gate holds the plan's exact content, and an open call that already passed the plan step has no envelope to check against (the envelope is built from the plan on the step's turn, and the check applies only when one was built).
+- **What breaks, with no alias (B-12).** A plan without the front matter is refused at the plan step. A builder result for an implement step without `selfCheck` is refused. A failed verdict item without `weakness`, `places`, `ways`, `reproduce` and `rootCause` is refused. A plan step without `blastRadius`, a submit whose plan lacks an acceptance id as done or skipped, and a `nit` that used to halt a call are new behaviour with no switch. Plans and calls already approved are unaffected: the gate holds the plan's exact content, and an open call that already passed the plan step has no envelope to check against (the envelope is built from the plan on the step's turn, and the check applies only when one was built).
 - **No backward-compatibility code.** There is no reader for the free-form plan and no shim for results without `selfCheck` on envelope steps. Steps without an envelope (forge.create, delivery.build, the release step) are not weakened: they never had acceptance ids.
 - **Safety.** No secret is read, written or shown. The new `check --standards` writes only under a temporary directory, as `standards.check` does (`bay/standards.py:103`). The guard gains one allowed form, `bay plan <taskId> --skip <n> '<reason>'`, with the same taskId and agent check as `--done`; it can write only to the agent's own plan, as `--done` does. The implement-deep tier only raises the model. `bay/dispatch.py`, `bay/cli.py` and `bay/guard.py` are on the sensitive list, so this proposal gets a plan and runs its own implement step on the deep tier: it is the first proposal to be implemented under decision 6.
 - **Extensibility (DOD-4).** A new source is still one connector and one binding line.
-- **Risks.** (a) The plan becomes longer because it carries the acceptance and the dry-run; its review is the owner's, at the gate. (b) A step plan with many criteria makes the builder's selfCheck long; the line is one per id and the dispatcher counts ids, not words. (c) A reviewer can mislabel a real defect as a nit (decision 8); the defence is the prompt definition and the evidence line you read. (d) The coordinator rules of decisions 9 and 10 are prose; bay checks the plan and the result, not that a diff was read or that no agent was resumed. (e) The packed-code rule cannot tell intent: a two-`for` comprehension that reads clearly is still a finding for a new one. That is your decision 5; the way out is a nested `for` loop.
+- **Risks.** (a) The plan becomes longer because it carries the acceptance and the dry-run; its review is the owner's, at the gate. (b) A step plan with many criteria makes the builder's selfCheck long; the line is one per id and the dispatcher counts ids, not words. (c) A reviewer can mislabel a real defect as a nit (decision 8); the defence is the prompt definition and the evidence line you read. (d) The coordinator rules of decisions 9 and 10 are prose; bay checks the plan and the result, not that a diff was read or that no agent was resumed. (e) The packed-code rule cannot tell intent: a two-`for` comprehension that reads clearly is still a finding for a new one. That is your decision 5; the way out is a nested `for` loop. (f) Whether a fix addresses the root cause or hides the symptom is a judgment only the reviewer makes (decision 11); the reproduce test makes it easier to see, not automatic. (g) Pushback is a prompt and a brief line (decision 12): it removes the reason to code around a bad brief, and cannot force an agent to disagree.
 
 ### Tests and limits
 
-**Tests.** `tests` stays 463. All new checks, decisions 8 to 10 included, are cases inside existing tests; no function is added and none is removed. The tests named under each decision fail on main:
+**Tests.** `tests` stays 463. All new checks, decisions 8 to 12 included, are cases inside existing tests; no function is added and none is removed. The tests named under each decision fail on main. Decisions 11 and 12 are mostly prompt and template text, so the table also says how each part is checked: a role-prompt test asserts that the sentence is present, a dispatcher test asserts the built envelope and the verdict schema, and what only a reviewer can judge is named as such:
 
 | Decision | Test (existing function, new case) | Why it fails on main |
 |---|---|---|
@@ -318,6 +374,8 @@ The item stays one item per failure class, so the number of verdict ids and the 
 | 7 | `tests/test_dispatch.py::test_failed_review_halts_before_release` (:231) | `weakness` is not required; no `earlier` |
 | 8 | `tests/test_dispatch.py::test_agentic_step_returns_plan_then_review_then_partial_on_failed_must` (:71) | a failed must item with severity `nit` ends `partial` (`dispatch.py:630-636`) |
 | 9 | `tests/test_dispatch.py::test_a_recorded_approval_of_the_unchanged_proposal_skips_the_gate` (:417); `adapters/claude-code/tests/test_adapter.py::test_adapter_round_trip` (:24) | no `blastRadius` in the envelope or the plan check; the coordinator text has no diff rule |
+| 11 | `tests/test_dispatch.py::test_failed_review_halts_before_release` (:231); `tests/test_roles.py::test_shipped_roles_are_five_generic_framework_roles_without_data_access` (:51) | a failed item without `reproduce` and `rootCause` is accepted and no `fix` is built; neither prompt has the root-cause or silencing sentences. Prompt text is checked by presence of the sentence; whether a given fix silences is the reviewer's call and has no test |
+| 12 | `tests/test_roles.py::test_shipped_roles_are_five_generic_framework_roles_without_data_access` (:51); `tests/test_dispatch.py::test_a_recorded_approval_of_the_unchanged_proposal_skips_the_gate` (:417); `tests/test_submit_needs_plan.py::test_submit_is_refused_without_a_recorded_outcome_and_accepted_after_bay_plan` (:14) | neither prompt says pushing back or an honest fail is expected; the built `stop` has no standing line (there is no envelope); there is no rule for a stopped builder's submit. The prompt sentences are checked by presence |
 | 10 | `tests/test_submit_needs_plan.py::test_submit_is_refused_without_a_recorded_outcome_and_accepted_after_bay_plan` (:14); `tests/test_ledger.py::test_bay_plan_records_scrubbed_size_limited_append_only_events` (:189); `tests/test_boundaries.py::test_bay_plan_is_the_only_bay_command_a_subagent_may_run` (:938); `adapters/claude-code/tests/test_adapter.py::test_adapter_round_trip` (:24) | `_require_plan` (:130-143) checks no acceptance id; the plan item has no `id`; no `--skip` form; no fresh-dispatch rule |
 
 The plan step confirms each test fits its case, or names a better existing one. Fixtures added are written one source line per line.
@@ -326,13 +384,13 @@ The plan step confirms each test fits its case, or names a better existing one. 
 
 | Measure | Ceiling | After (estimated) | Verdict |
 |---|---|---|---|
-| `bay_lines` | 9703 | 9877 readable (+174), exception to 9912 with a buffer of 35 | over: exception |
+| `bay_lines` | 9703 | 9881 readable (+178), exception to 9917 with a buffer of 36 | over: exception |
 | `kit_python_lines` | 5276 | 5314 readable (+38), exception to 5326 with a buffer of 12 | over: exception |
 | `tests` | 463 | 463 | cases only |
 | `long_lines` | 134 | 134 | none written; each new line stays under 120 characters |
 | `cli_commands` 16, `schemas` 16, `framework_folders` 2, `top_level_folders` 7, `comment_lines` 0 | | unchanged | `--standards` is a flag of `check`; no schema file; nothing at the root; no comment |
 
-By file, all estimates: `dispatch.py` +95 (envelope from plan step 25, selfCheck coverage 12, plan-step counter 10, earlier reviews 20, plan validation 10, acceptance ids in the plan 14, nit filter 1, blastRadius 3), `proposal.py` +29 (`plan_steps` and its checks, 4 of them for decisions 9 and 10), `cli.py` +31 (`check --standards` 25, `plan --skip` 6), `ledger.py` +14 (item `id`, `record_skip`, the fold), `guard.py` +5 (the `--skip` form), `python_check.py` +35 (two row kinds), `scaffold.py` +3. The Python test files are not counted by `bay_lines` or `kit_python_lines` (`bay/limits.py:51-70`). If an exception must be lower, the first cut is `check --standards` (-25 `bay_lines`), with decision 4 then resting on a manual dry-run described in the plan; the second is `earlier` in the review brief (-20); the third is `plan --skip`, with a skip then written into the plan JSON at record time (-16 across cli.py, ledger.py and guard.py, and the guard stays unchanged).
+By file, all estimates: `dispatch.py` +99 (envelope from plan step 25, selfCheck coverage 12, plan-step counter 10, earlier reviews 20, plan validation 10, acceptance ids in the plan 14, nit filter 1, blastRadius 3, standing stop lines 4; copying `reproduce` and `rootCause` into `fix` adds no line, as the six keys sit in one tuple that the copy already loops over), `proposal.py` +29 (`plan_steps` and its checks, 4 of them for decisions 9 and 10), `cli.py` +31 (`check --standards` 25, `plan --skip` 6), `ledger.py` +14 (item `id`, `record_skip`, the fold), `guard.py` +5 (the `--skip` form), `python_check.py` +35 (two row kinds), `scaffold.py` +3. Decisions 11 and 12 otherwise need no line budget: the role prompts are YAML, the verdict schema is JSON, and the brief template is proposal text, none of which `bay_lines` or `kit_python_lines` counts (the 4 lines above are the only counted part). The Python test files are not counted by `bay_lines` or `kit_python_lines` (`bay/limits.py:51-70`). If an exception must be lower, the first cut is `check --standards` (-25 `bay_lines`), with decision 4 then resting on a manual dry-run described in the plan; the second is `earlier` in the review brief (-20); the third is `plan --skip`, with a skip then written into the plan JSON at record time (-16 across cli.py, ledger.py and guard.py, and the guard stays unchanged).
 
 **Docs.** DESIGN.md and INTERFACES.md are at 3000 words each (`len(text.split())`). The additions (a paragraph in DESIGN; the envelope fields, plan front matter, selfCheck and verdict fields in INTERFACES) are estimated at +60 and +90 words, paid for by cuts in the same files; the plan measures it by applying draft text to copies, as 0021 did.
 
@@ -342,6 +400,8 @@ By file, all estimates: `dispatch.py` +95 (envelope from plan step 25, selfCheck
 - Briefs for forge.create, delivery.build and the other modes: they have no plan, so the schema describes the fields but bay builds nothing.
 - Any change to the review budget (`reviewer.yaml:12`), to the number of review rounds (R-1) or to what blocks a call.
 - A check for density beyond the two shapes in decision 5.
+- A lint that finds silencing fixes (`# type: ignore`, bare `except`, a `None` guard): decision 11 is a brief field, a prompt rule and a reviewer judgment.
+- An exception in `submit` for `blocked` results (decision 12): a stopped builder skips its open items and says `not met` instead.
 - A two-model review panel: considered and not chosen by the owner on 2026-11-05. The review stays one reviewer, one round (R-1).
 - Dispatcher enforcement of the coordinator's rules in decisions 9 and 10 (that a diff was read, that no agent was resumed): bay cannot see either, so they are playbook text.
 - A `review.verdict/v2` and an `agentbay/v5`.
@@ -350,6 +410,6 @@ By file, all estimates: `dispatch.py` +95 (envelope from plan step 25, selfCheck
 
 ### Measured and estimated
 
-Measured on main a7a425d: the nine limit counts above; the 70, 40 and 45 baseline counts of decision 5 (an `ast` walk over `git ls-files '*.py'`; the scripts are in the scratchpad, not committed); the word counts of the two docs; every line cited in this proposal, which I read on this commit.
+Measured on main a7a425d: the nine limit counts above; the 70, 40 and 45 baseline counts of decision 5 (an `ast` walk over `git ls-files '*.py'`; the scripts are in the scratchpad, not committed); the word counts of the two docs; every line cited in this proposal, which I read on this commit (the lines cited in decisions 11 and 12, in `builder.yaml` and `reviewer.yaml`, on ebc1427).
 
 Estimated, and replaced by measured numbers in the plan: every line cost in the limits table, the DESIGN and INTERFACES word additions, and the count of cases per test. Not measured: the run time of a plan's dry-run (the suite alone takes about two and a half minutes in this environment; 0021's measured 153 seconds, `docs/plans/0021-component-layout.md`), and the length of a plan that carries acceptance and dry-run for each step.

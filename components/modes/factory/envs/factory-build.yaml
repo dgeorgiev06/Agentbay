@@ -1,0 +1,28 @@
+apiVersion: agentbay/v4
+kind: Environment
+metadata:
+  name: factory-build
+  description: >-
+    Where a slice is implemented: the whole project is readable, and the only writable path is .factory/trees/, the
+    slice worktrees. A builder works in the one tree its brief names, so two slices of a wave never write the same
+    file. The brief is the output of the code step before it, so no factory connector is bound here. The standards checkers are bound here. No network, no secrets.
+spec:
+  bind:
+    standards.check/v1: [python-check, comments-check]
+    workspace.read/v1:
+      tools: [Read, Glob, Grep, Bash]
+      clis: [python3 -I -m ruff check, python3 -I -m mypy]
+    workspace.write/v1:
+      tools: [Edit, Write, Bash]
+      # the test and build commands of the language profiles this component ships, so a builder can iterate
+      clis: [git status, git diff, git log, git add, git commit, git mv, git rm,
+             python3 -m pytest, python3 -m unittest, npm test, npm run, npx tsc, go test, go build, go vet]
+    git.read/v1:
+      tools: [Bash]
+      clis: [git status, git diff, git log, git show]
+  network: { allow: [] }
+  fs:
+    read: ["."]
+    write: [.factory/trees]
+  effects: [read, write]
+  limits: { maxTurns: 80, maxMinutes: 45 }

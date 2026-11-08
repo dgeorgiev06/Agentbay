@@ -1,0 +1,17 @@
+name: typescript
+description: TypeScript with the project's npm scripts. The commands run inside a slice's worktree.
+files: ["*.ts", "*.tsx"]
+commands:
+  typecheck: ["npx", "tsc", "--noEmit"]
+  lint: ["npm", "run", "lint", "--if-present"]
+  test: ["npm", "test", "--", "--run"]
+practices:
+  - { id: P-1, level: must, statement: "One module owns one job, and a slice imports another slice only through the interface the brief names." }
+  - { id: P-2, level: must, statement: "No `any` at a slice's edge: the published type is explicit and the typecheck command proves it." }
+  - { id: P-3, level: must, statement: "Every acceptance criterion that can be tested has a test that fails without the change." }
+  - { id: P-4, level: must, statement: "Errors are typed results or thrown with context; a rejected promise is never left unhandled." }
+  - { id: P-5, level: should, statement: "Pure functions for logic, effects at the edges, so tests need no DOM and no network." }
+  - { id: P-6, level: must_not, statement: "No `console.log` left behind, no non-null assertion to silence the typechecker, no dependency added inside a slice." }
+slicing:
+  interfaceHint: "Give the exported type or function signature from the publishing module's path, so the consumer compiles against it before the implementation lands."
+  stubHint: "A consumer blocked on a publisher uses a local module that satisfies the published type, removed when the publisher integrates."

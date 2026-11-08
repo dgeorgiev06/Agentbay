@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunState",
+  "description": "Where a run stands and what to call now. `calls` may be run in parallel; every entry is one `bay call`.",
+  "type": "object",
+  "required": ["runId", "status", "stage"],
+  "properties": {
+    "runId": { "type": "string" },
+    "status": { "type": "string", "enum": ["stage-ready", "waiting", "done", "blocked"] },
+    "stage": { "type": "string" },
+    "calls": { "type": "array", "items": { "type": "object" } },
+    "waiting": { "type": "array", "items": { "type": "string" } }
+  }
+}

@@ -1,0 +1,160 @@
+apiVersion: agentbay/v4
+kind: Interface
+metadata:
+  name: factory.slices
+  description: >-
+    The tasks of a run: vertical slices, each with the outcome it delivers, its acceptance criteria, the interfaces
+    it publishes or consumes, the paths it may touch and the slices it depends on. `propose` is the deterministic
+    gate on a slicing: it refuses a slice that breaks a constraint and returns the reason, so the analyst fixes the
+    slicing rather than the reviewer finding it later. `brief` is what a builder or a reviewer is given, and
+    `findings` records one lens's verdicts.
+spec:
+  version: 1
+  binding: connector
+  endpoints:
+    propose:
+      description: >-
+        Validate a slicing against the run's constraints and store it. Returns the accepted slices, the rejected
+        ones with their problems, and the dependency waves (slices in one wave have no dependency on each other
+        and may be built in parallel). A rejected slice stops the stage, so nothing is built from a slicing the
+        constraints refuse.
+      in:
+        type: object
+        required: [runId, slices]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          slices:
+            type: array
+            items:
+              type: object
+              required: [id, outcome, acceptance, paths]
+              additionalProperties: false
+              properties:
+                id: { type: string, description: "S-<n>, stable for the life of the run" }
+                title: { type: string }
+                outcome: { type: string, description: "the user-visible outcome this slice delivers on its own" }
+                acceptance:
+                  type: array
+                  minItems: 1
+                  description: "what has to be true for the slice to be done; the builder's target and the reviewer's checklist"
+                  items:
+                    type: object
+                    required: [id, level, statement]
+                    additionalProperties: false
+                    properties:
+                      id: { type: string, description: "A-<n>, unique within the slice" }
+                      level: { type: string, enum: [must, should, must_not] }
+                      statement: { type: string }
+                      check: { type: string, description: "the command or test that shows it, when one exists" }
+                paths: { type: array, items: { type: string }, description: "the paths this slice may touch; its boundary" }
+                interfaces:
+                  type: array
+                  description: "the contracts at this slice's edges, so two slices can be built against each other without being built together"
+                  items:
+                    type: object
+                    required: [name, role]
+                    additionalProperties: false
+                    properties:
+                      name: { type: string }
+                      role: { type: string, enum: [publishes, consumes] }
+                      shape: { type: string, description: "the signature, schema or payload, exactly enough to build against" }
+                      stub: { type: string, description: "what stands in while the publisher is unfinished" }
+                deps: { type: array, items: { type: string }, description: "ids of the slices this one needs" }
+                notes: { type: string }
+      out:
+        type: object
+        required: [accepted, rejected, waves]
+        additionalProperties: false
+        properties:
+          accepted: { type: array, items: { type: string } }
+          rejected:
+            type: array
+            items:
+              type: object
+              required: [id, problems]
+              additionalProperties: false
+              properties:
+                id: { type: string }
+                problems: { type: array, items: { type: string } }
+          waves: { type: array, items: { type: array, items: { type: string } } }
+          constraints: { type: object }
+          stopped: { type: string, description: "set when a slice was rejected: the call ends blocked with this reason" }
+      effects: [read, write]
+    brief:
+      description: >-
+        What one worker is given for one slice: the slice itself, its acceptance criteria, the interfaces at its
+        edges, the paths it may touch, the practices of the run's language profile, the commands that check it, and
+        the findings still open against it. With `lens`, also that review lens's checklist.
+      in:
+        type: object
+        required: [runId, sliceId]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          sliceId: { type: string }
+          lens: { type: string, description: "a review lens id: the brief is then a review brief" }
+          kind: { type: string, enum: [build, fix, audit], description: "default: audit with a lens, build without one" }
+      out:
+        type: object
+        required: [runId, slice, acceptance, practices]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          slice: { type: object }
+          acceptance: { type: array, items: { type: object } }
+          interfaces: { type: array, items: { type: object } }
+          paths: { type: array, items: { type: string } }
+          language: { type: string, description: "the run's language profile, to pass to factory.tree/v1.checks" }
+          practices: { type: array, items: { type: object }, description: "the language profile's practices, each with its id" }
+          commands: { type: object, description: "the checks of the language profile: test, lint, typecheck, build" }
+          constraints: { type: object }
+          lens: { type: object, description: "the review lens: its focus, what it ignores and whether a fail blocks" }
+          kind: { type: string }
+          findings: { type: array, items: { type: object }, description: "findings still open against this slice" }
+          rounds: { type: integer, description: "fix rounds already spent on this slice" }
+      effects: [read]
+    get:
+      description: The slices of a run with their state, findings and the worktree each was built in. Read-only.
+      in:
+        type: object
+        required: [runId]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          sliceId: { type: string }
+      out:
+        type: object
+        required: [slices]
+        additionalProperties: false
+        properties:
+          slices: { type: array, items: { type: object } }
+          waves: { type: array, items: { type: array, items: { type: string } } }
+      effects: [read]
+    findings:
+      description: >-
+        Record one lens's verdicts on one slice (review.verdict/v1 items). Every fail becomes a finding against the
+        slice, open until a fix round clears it; a fail on a must or must_not criterion, or any item rated blocker,
+        is blocking and keeps the slice out of integration.
+      in:
+        type: object
+        required: [runId, sliceId, lens, items]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          sliceId: { type: string }
+          lens: { type: string }
+          items: { type: array, items: { type: object }, description: "the verdict items of review.verdict/v1" }
+      out:
+        type: object
+        required: [runId, sliceId, lens, open, blocking]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          sliceId: { type: string }
+          lens: { type: string }
+          open: { type: array, items: { type: object } }
+          blocking: { type: integer }
+          recorded: { type: integer }
+          stopped: { type: string, description: "set when the verdicts miss an id: nothing is recorded and the step ends blocked" }
+      effects: [read, write]

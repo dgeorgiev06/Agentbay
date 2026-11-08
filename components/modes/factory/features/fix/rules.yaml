@@ -1,0 +1,8 @@
+apiVersion: agentbay/v4
+kind: Rules
+rules:
+  - { id: R-1, level: must, statement: "Change only what a finding in the brief asks for.", appliesTo: both, refs: [DOD-3] }
+  - { id: R-2, level: must, statement: "Write only inside the slice's worktree and its declared paths.", appliesTo: both, refs: [DOD-6] }
+  - { id: R-3, level: must_not, statement: "Disable, skip or weaken a test, or lower a check, to clear a finding.", appliesTo: both, refs: [DOD-5] }
+  - { id: R-4, level: must_not, statement: "Push, or commit on any branch but the slice's own.", appliesTo: both, refs: [DOD-4] }
+  - { id: R-5, level: must_not, statement: "Include secrets in code, tests, output or logs.", appliesTo: both, check: no_secrets }

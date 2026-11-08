@@ -1,0 +1,18 @@
+name: python
+description: CPython with pytest, ruff and mypy. The commands run inside a slice's worktree.
+files: ["*.py"]
+commands:
+  lint: ["python3", "-I", "-m", "ruff", "check", "."]
+  typecheck: ["python3", "-I", "-m", "mypy", "."]
+  test: ["python3", "-m", "pytest", "-q"]
+practices:
+  - { id: P-1, level: must, statement: "One module owns one job; a module that imports another slice's internals is a boundary break, not a shortcut." }
+  - { id: P-2, level: must, statement: "Public functions are typed, and the types are checked by the typecheck command." }
+  - { id: P-3, level: must, statement: "Every acceptance criterion that can be tested has a test that fails without the change." }
+  - { id: P-4, level: must, statement: "Errors are raised with the context the caller needs, never swallowed and never bare `except:`." }
+  - { id: P-5, level: should, statement: "Standard library first; a new dependency is a decision for the plan, not for a slice." }
+  - { id: P-6, level: should, statement: "Pure functions where the work is a calculation; I/O at the edges, so the core is testable without fixtures." }
+  - { id: P-7, level: must_not, statement: "No mutable default argument, no module-level state a test has to reset, no `print` where a return value or a logger belongs." }
+slicing:
+  interfaceHint: "Name the module path and the exact signature or dataclass at the edge (`pkg.mod.fn(a: int) -> Row`), so the consumer can be built against it before the publisher exists."
+  stubHint: "A consumer blocked on an unfinished publisher uses a typed stub in its own paths, deleted by the publishing slice's integration."

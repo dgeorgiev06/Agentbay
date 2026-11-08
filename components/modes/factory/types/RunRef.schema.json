@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunRef",
+  "description": "One factory run.",
+  "type": "object",
+  "required": ["runId"],
+  "additionalProperties": false,
+  "properties": { "runId": { "type": "string" } }
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "StartReq",
+  "description": "Start a factory run: what it is for, the requirements document it builds from, and the language profile to build in.",
+  "type": "object",
+  "required": ["goal"],
+  "additionalProperties": false,
+  "properties": {
+    "goal": { "type": "string", "minLength": 3, "description": "what this run is for, in one line" },
+    "requirements": { "type": "string", "description": "path of the requirements document, relative to the project" },
+    "language": { "type": "string", "description": "a language profile: python, typescript, go (default: the mode's `language` setting)" }
+  }
+}

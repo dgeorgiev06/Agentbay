@@ -1,0 +1,7 @@
+apiVersion: agentbay/v4
+kind: Rules
+rules:
+  - { id: R-1, level: must, statement: "Only the approved plan is sliced; a slice that is not in the plan needs the plan changed first.", appliesTo: both, refs: [DOD-6] }
+  - { id: R-2, level: must, statement: "Write only under docs/factory/; slicing touches no code.", appliesTo: both }
+  - { id: R-3, level: must, statement: "Name the contract on both sides of every dependency.", appliesTo: both, refs: [DOD-4] }
+  - { id: R-4, level: must_not, statement: "Split one outcome across two slices to make them smaller; that is a horizontal cut.", appliesTo: both, refs: [DOD-1] }

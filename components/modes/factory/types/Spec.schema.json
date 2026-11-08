@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Spec",
+  "description": "The written spec of a run: the outcomes it commits to, each with acceptance criteria, plus the constraints and the questions the owner has to answer.",
+  "type": "object",
+  "required": ["status", "summary", "artifacts", "outcomes"],
+  "additionalProperties": false,
+  "properties": {
+    "status": { "type": "string", "enum": ["done", "partial", "blocked", "failed"] },
+    "summary": { "type": "string", "minLength": 3 },
+    "artifacts": { "type": "array", "items": { "type": "string" }, "minItems": 1, "description": "the spec file, relative to the project" },
+    "outcomes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "statement", "acceptance"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "statement": { "type": "string" },
+          "acceptance": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "source": { "type": "string", "description": "where in the requirements document this outcome comes from" }
+        }
+      }
+    },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "outOfScope": { "type": "array", "items": { "type": "string" } },
+    "questions": { "type": "array", "items": { "type": "string" }, "description": "what the owner has to decide; an assumption stands in until then and is listed here" },
+    "taskId": { "type": "string" }
+  }
+}

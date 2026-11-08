@@ -1,0 +1,143 @@
+apiVersion: agentbay/v4
+kind: Mode
+metadata:
+  name: factory
+  version: 0.1.0
+  description: "Software factory: a requirements document becomes a technical plan, vertical slices, parallel implementations in their own subtrees, reviews by several lenses, fixes and an integrated branch."
+spec:
+  purpose: >-
+    Turn a requirements document into reviewed, integrated code for one language, in stages the project configures:
+    a written spec, a technical plan the owner approves, a slicing into vertical slices with acceptance criteria and
+    interfaces at their edges, an implementation of each slice in its own worktree (slices of one wave run in
+    parallel), a review of each slice by every configured lens, fix rounds until no finding blocks, and a merge into
+    the run's integration branch. Every stage is one endpoint, so the order and the fan-out are configuration, not code.
+  coordinator: lead
+  roles: { lead: factory-local, analyst: factory-design, builder: factory-build, reviewer: factory-review }
+  needs: [factory.runs/v1, factory.slices/v1, factory.tree/v1, workspace.read/v1, workspace.write/v1, git.read/v1,
+          standards.check/v1]
+  config: config.schema.json
+  features:
+    start:
+      description: "Start a run from a requirements document; returns the run id, the configured pipeline and the first stage's calls."
+      in: StartReq
+      out: RunState
+      effects: [read, write]
+      review: { when: never }    # writes only the factory's own run state
+      steps:
+        - { id: open, run: factory.runs/v1.open, with: { goal: "$in.goal", requirements: "$in.requirements", language: "$in.language" } }
+    next:
+      description: "What to run now: the calls of the stage the run stands at, several when the stage fans out. Read-only."
+      in: RunRef
+      out: RunState
+      effects: [read]
+      review: { when: never }
+      steps:
+        - { id: stages, run: factory.runs/v1.stages, with: { runId: "$in.runId" } }
+    spec:
+      description: "Requirements document -> a written spec: the outcomes, the acceptance criteria, the constraints and the open questions."
+      in: RunRef
+      effects: [read, write]
+      playbook: features/spec/playbook.md
+      rules: features/spec/rules.yaml
+      review: { when: never }    # the plan stage's gate is the owner's review of the spec and the plan together
+      uses: []    # everything these steps need is the output of the code step before them
+      skills: [vertical-slicing]
+      steps:
+        - { id: run, run: factory.runs/v1.stages, with: { runId: "$in.runId" } }
+        - { id: draft, role: analyst, out: Spec, task: "Read the requirements document named in run.stages and write the spec for this run, with one acceptance criterion per outcome and every open question listed." }
+        - { id: record, run: factory.runs/v1.record, with: { runId: "$in.runId", stage: spec, status: "$steps.draft.status", summary: "$steps.draft.summary", artifacts: "$steps.draft.artifacts" } }
+    plan:
+      description: "Spec -> the technical plan: the design, the components and their interfaces, the risks and the order of work."
+      in: RunRef
+      effects: [read, write]
+      playbook: features/plan/playbook.md
+      rules: features/plan/rules.yaml
+      review: { when: never }
+      uses: []    # everything these steps need is the output of the code step before them
+      skills: [vertical-slicing]
+      tier: deep
+      effort: high
+      steps:
+        - { id: run, run: factory.runs/v1.stages, with: { runId: "$in.runId" } }
+        - { id: draft, role: analyst, out: Plan, task: "Write the technical plan for the spec of this run: the design, every component and the interface between them, the risks and the order of work." }
+        - { id: record, run: factory.runs/v1.record, with: { runId: "$in.runId", stage: plan, status: "$steps.draft.status", summary: "$steps.draft.summary", artifacts: "$steps.draft.artifacts" } }
+    approve:
+      description: "The owner approves the technical plan before anything is built. The gate is bound to the plan file's exact content."
+      in: ApproveReq
+      effects: [read, write]
+      review: { when: never }
+      steps:
+        - { id: gate, gate: "Build from this technical plan? Read the plan file named in `approves` first; nothing is sliced or implemented before you pass this gate.", approves: "$in.plan" }
+        - { id: record, run: factory.runs/v1.record, with: { runId: "$in.runId", stage: approve, status: done, approved: true, artifact: "$in.plan" } }
+    slice:
+      description: "Approved plan -> vertical slices: each with its outcome, acceptance criteria, interfaces, boundary and dependencies. The constraints are checked by code."
+      in: RunRef
+      effects: [read, write]
+      playbook: features/slice/playbook.md
+      rules: features/slice/rules.yaml
+      review: { when: never }    # `propose` refuses a slicing that breaks a constraint, with the reason
+      uses: []    # everything these steps need is the output of the code step before them
+      skills: [vertical-slicing]
+      steps:
+        - { id: run, run: factory.runs/v1.stages, with: { runId: "$in.runId" } }
+        - { id: propose, role: analyst, out: Slices, task: "Cut the approved plan into vertical slices that satisfy the run's constraints: one user-visible outcome each, acceptance criteria, the interfaces at the edges, the paths it may touch and its dependencies." }
+        - { id: validate, run: factory.slices/v1.propose, with: { runId: "$in.runId", slices: "$steps.propose.slices" } }
+        - { id: record, run: factory.runs/v1.record, with: { runId: "$in.runId", stage: slice, status: "$steps.propose.status", summary: "$steps.propose.summary" } }
+    build:
+      description: "Implement one slice in its own worktree, then run the standards checks and the language profile's checks inside that tree."
+      in: SliceRef
+      effects: [read, write]
+      playbook: features/build/playbook.md
+      rules: features/build/rules.yaml
+      review: { when: never }    # review is the audit stage: one call per lens, recorded even when it fails
+      uses: []    # the brief step hands the worker the slice, its criteria and its contracts
+      steps:
+        - { id: tree, run: factory.tree/v1.open, with: { runId: "$in.runId", sliceId: "$in.sliceId" } }
+        - { id: brief, run: factory.slices/v1.brief, with: { runId: "$in.runId", sliceId: "$in.sliceId", kind: build } }
+        - { id: implement, role: builder, out: Result, task: "Implement the slice in the worktree named in tree.path, to its acceptance criteria and against the interfaces in the brief. Write nothing outside that path." }
+        - { id: standards, run: standards.check/v1.findings, with: { base: "$call.base" } }
+        - { id: checks, run: factory.tree/v1.checks, with: { runId: "$in.runId", sliceId: "$in.sliceId", language: "$steps.brief.language" } }
+        - { id: record, run: factory.runs/v1.record, with: { runId: "$in.runId", stage: build, sliceId: "$in.sliceId", status: "$steps.implement.status", summary: "$steps.implement.summary", artifacts: "$steps.implement.artifacts" } }
+    audit:
+      description: "Review one slice through one lens (quality, structure, performance, and whatever else the project configures) and record a verdict for every criterion."
+      in: AuditRef
+      effects: [read, write]
+      playbook: features/audit/playbook.md
+      rules: features/audit/rules.yaml
+      review: { when: never }    # the reviewer IS this feature's worker; its verdicts are recorded, pass or fail
+      uses: []    # the brief step hands the worker the slice, its criteria and its contracts
+      steps:
+        - { id: brief, run: factory.slices/v1.brief, with: { runId: "$in.runId", sliceId: "$in.sliceId", lens: "$in.lens", kind: audit } }
+        - { id: judge, role: reviewer, out: Verdicts, task: "Review the slice in the worktree named in the brief through the lens in the brief, and return one verdict with evidence for every acceptance criterion and every lens check." }
+        - { id: findings, run: factory.slices/v1.findings, with: { runId: "$in.runId", sliceId: "$in.sliceId", lens: "$in.lens", items: "$steps.judge.items" } }
+        - { id: record, run: factory.runs/v1.record, with: { runId: "$in.runId", stage: audit, sliceId: "$in.sliceId", lens: "$in.lens", status: "$steps.judge.status", summary: "$steps.judge.summary" } }
+    fix:
+      description: "Clear the findings open against one slice, in its own worktree, and check it again. A fix round that leaves a blocking finding ends the call partial."
+      in: SliceRef
+      effects: [read, write]
+      playbook: features/fix/playbook.md
+      rules: features/fix/rules.yaml
+      review: { when: never }    # the audit stage re-runs over the fixed slice and records the new verdicts
+      uses: []    # the brief step hands the worker the slice, its criteria and its contracts
+      steps:
+        - { id: tree, run: factory.tree/v1.open, with: { runId: "$in.runId", sliceId: "$in.sliceId" } }
+        - { id: brief, run: factory.slices/v1.brief, with: { runId: "$in.runId", sliceId: "$in.sliceId", kind: fix } }
+        - { id: fix, role: builder, out: Result, task: "Clear every finding in the brief, in the worktree named in tree.path, without changing anything the findings do not ask for." }
+        - { id: standards, run: standards.check/v1.findings, with: { base: "$call.base" } }
+        - { id: checks, run: factory.tree/v1.checks, with: { runId: "$in.runId", sliceId: "$in.sliceId", language: "$steps.brief.language" } }
+        - { id: record, run: factory.runs/v1.record, with: { runId: "$in.runId", stage: fix, sliceId: "$in.sliceId", status: "$steps.fix.status", summary: "$steps.fix.summary", artifacts: "$steps.fix.artifacts" } }
+    integrate:
+      description: "Merge one reviewed slice into the run's integration branch and run the checks there. A conflict or a failing check leaves the branch as it was."
+      in: SliceRef
+      effects: [read, write]
+      review: { when: never }
+      steps:
+        - { id: merge, run: factory.tree/v1.integrate, with: { runId: "$in.runId", sliceId: "$in.sliceId" } }
+        - { id: record, run: factory.runs/v1.record, with: { runId: "$in.runId", stage: integrate, sliceId: "$in.sliceId", status: done, summary: "$steps.merge.summary" } }
+    status:
+      description: "Where the factory's runs stand: stage by stage, slice by slice, with the findings still open. Read-only."
+      in: StatusReq
+      effects: [read]
+      review: { when: never }
+      steps:
+        - { id: show, run: factory.runs/v1.status, with: { runId: "$in.runId", open: "$in.open" } }

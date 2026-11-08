@@ -1,0 +1,15 @@
+apiVersion: agentbay/v4
+kind: Connector
+metadata:
+  name: factory-tree
+  description: >-
+    The subtrees a factory run builds in: one git worktree and branch per slice under .factory/trees/, cut from the
+    run's integration branch, plus the integration worktree where slices are merged. It runs the language profile's
+    commands inside a tree and reports what each said. It takes no command from a call's input, never touches a
+    branch outside the run's prefix, never pushes, and never removes a worktree.
+  version: 0.1.0
+spec:
+  implements: [factory.tree/v1]
+  entry: factory_tree.py
+  needs:
+    fs: { write: [.factory] }

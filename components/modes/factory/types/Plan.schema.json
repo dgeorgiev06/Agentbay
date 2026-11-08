@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Plan",
+  "description": "The technical plan of a run: the components, the interface between them, the risks and the order of work.",
+  "type": "object",
+  "required": ["status", "summary", "artifacts", "components"],
+  "additionalProperties": false,
+  "properties": {
+    "status": { "type": "string", "enum": ["done", "partial", "blocked", "failed"] },
+    "summary": { "type": "string", "minLength": 3 },
+    "artifacts": { "type": "array", "items": { "type": "string" }, "minItems": 1, "description": "the plan file, relative to the project" },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "responsibility"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "responsibility": { "type": "string" },
+          "publishes": { "type": "array", "items": { "type": "string" }, "description": "the contracts other components build against" },
+          "consumes": { "type": "array", "items": { "type": "string" } },
+          "paths": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "decisions": { "type": "array", "items": { "type": "string" }, "description": "the choices made, each with why and what was rejected" },
+    "risks": { "type": "array", "items": { "type": "string" } },
+    "order": { "type": "array", "items": { "type": "string" }, "description": "the order the components are built in, and what can run at the same time" },
+    "taskId": { "type": "string" }
+  }
+}

@@ -1,0 +1,22 @@
+apiVersion: agentbay/v4
+kind: Environment
+metadata:
+  name: factory-design
+  description: >-
+    Where the spec, the plan and the slicing are written: the whole project is readable, and the only writable path
+    is docs/factory/, so a design step can never touch code. No network, no secrets.
+spec:
+  bind:
+    workspace.read/v1:
+      tools: [Read, Glob, Grep]
+    workspace.write/v1:
+      tools: [Edit, Write]
+    git.read/v1:
+      tools: [Bash]
+      clis: [git status, git diff, git log, git show]
+  network: { allow: [] }
+  fs:
+    read: ["."]
+    write: [docs/factory]
+  effects: [read, write]
+  limits: { maxTurns: 60, maxMinutes: 30 }

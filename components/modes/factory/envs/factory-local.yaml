@@ -1,0 +1,26 @@
+apiVersion: agentbay/v4
+kind: Environment
+metadata:
+  name: factory-local
+  description: >-
+    The factory's wiring, and the env every code step of the mode runs in (it is the coordinator's). Its connectors
+    keep the run state under .agentbay/data/factory/, and cut, check and merge the slice worktrees under .factory/.
+    No network, no secrets, no spend. The coordinator itself only routes: it reads run state through its read-only
+    use shim.
+spec:
+  bind:
+    factory.runs/v1: factory-store
+    factory.slices/v1: factory-store
+    factory.tree/v1: factory-tree
+    standards.check/v1: [python-check, comments-check]
+    workspace.read/v1:
+      tools: [Read, Glob, Grep]
+    git.read/v1:
+      tools: [Bash]
+      clis: [git status, git diff, git log, git show]
+  network: { allow: [] }
+  fs:
+    read: ["."]
+    write: [.agentbay/data/factory, .factory]
+  effects: [read, write]
+  limits: { maxTurns: 40, maxMinutes: 20 }

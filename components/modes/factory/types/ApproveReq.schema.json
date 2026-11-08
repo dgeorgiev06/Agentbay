@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ApproveReq",
+  "description": "The plan the owner approves: the run and the exact file the gate is bound to.",
+  "type": "object",
+  "required": ["runId", "plan"],
+  "additionalProperties": false,
+  "properties": {
+    "runId": { "type": "string" },
+    "plan": { "type": "string", "description": "path of the technical plan, relative to the project" }
+  }
+}

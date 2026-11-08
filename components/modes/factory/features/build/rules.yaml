@@ -1,0 +1,9 @@
+apiVersion: agentbay/v4
+kind: Rules
+rules:
+  - { id: R-1, level: must, statement: "Write only inside the worktree the tree step names, and only in the slice's declared paths.", appliesTo: both, refs: [DOD-3] }
+  - { id: R-2, level: must_not, statement: "Push, or commit on any branch but the slice's own.", appliesTo: both, refs: [DOD-6] }
+  - { id: R-3, level: must_not, statement: "Disable, skip or weaken a test, or lower a check, to make a criterion pass.", appliesTo: both, refs: [DOD-8] }
+  - { id: R-4, level: must_not, statement: "Include secrets in code, tests, output or logs.", appliesTo: both, check: no_secrets }
+  - { id: R-5, level: must, statement: "Report the commands that were run and what they said, verbatim enough to check.", appliesTo: both, refs: [DOD-5] }
+  - { id: R-6, level: should, statement: "Keep the change to the slice's criteria.", appliesTo: reviewer, refs: [DOD-9] }

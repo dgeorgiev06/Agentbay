@@ -1,0 +1,17 @@
+name: go
+description: Go with the toolchain's own commands. The commands run inside a slice's worktree.
+files: ["*.go"]
+commands:
+  build: ["go", "build", "./..."]
+  vet: ["go", "vet", "./..."]
+  test: ["go", "test", "./..."]
+practices:
+  - { id: P-1, level: must, statement: "One package owns one job, and a slice depends on another only through the exported interface the brief names." }
+  - { id: P-2, level: must, statement: "Every error is handled or returned with context; `_ =` on an error needs a reason in the result." }
+  - { id: P-3, level: must, statement: "Every acceptance criterion that can be tested has a test that fails without the change." }
+  - { id: P-4, level: should, statement: "Accept interfaces, return structs; keep the exported surface as small as the criteria need." }
+  - { id: P-5, level: should, statement: "Table-driven tests, and no sleep where a channel or a context deadline belongs." }
+  - { id: P-6, level: must_not, statement: "No package-level mutable state a test has to reset, and no goroutine without a way to stop it." }
+slicing:
+  interfaceHint: "Give the package path and the exported interface or function signature at the edge, so the consumer builds against it first."
+  stubHint: "A consumer blocked on a publisher defines the interface it needs in its own package, satisfied by the publisher when it integrates."

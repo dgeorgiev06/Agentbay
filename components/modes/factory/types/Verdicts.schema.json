@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Verdicts",
+  "description": "One lens's review of one slice: a verdict with evidence for every acceptance criterion and every check of the lens. `factory.slices/v1.findings` refuses a set that misses an id.",
+  "type": "object",
+  "required": ["status", "summary", "items"],
+  "additionalProperties": false,
+  "properties": {
+    "status": { "type": "string", "enum": ["done", "partial", "blocked", "failed"] },
+    "summary": { "type": "string", "minLength": 3 },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "verdict", "evidence"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "description": "an acceptance criterion id (A-n) or a lens check id (L-n)" },
+          "verdict": { "type": "string", "enum": ["pass", "fail", "n/a"] },
+          "evidence": { "type": "string", "minLength": 3, "description": "file:line, the command and its output, or the quoted text" },
+          "severity": { "type": "string", "enum": ["blocker", "should-fix", "nit"] },
+          "suggestion": { "type": "string", "description": "the concrete change a fix round should make" },
+          "reason": { "type": "string", "description": "why an item is n/a" }
+        }
+      }
+    },
+    "taskId": { "type": "string" }
+  }
+}

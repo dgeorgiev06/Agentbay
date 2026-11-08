@@ -1,0 +1,21 @@
+# The factory's settings, as they go under modes.factory in agentbay.config.yaml.
+# Everything here has a default: `bay config` prints them. Set only what you want to change.
+language: python
+
+# The workflow. Drop a stage to skip it, reorder them to reorder the run, raise `parallel` to widen the fan-out.
+pipeline:
+  - { stage: spec }
+  - { stage: plan }
+  - { stage: approve }
+  - { stage: slice }
+  - { stage: build, parallel: 3 }
+  - { stage: audit, parallel: 5, lenses: [correctness, structure, quality, performance] }
+  - { stage: fix, parallel: 3, maxRounds: 2 }
+  - { stage: integrate, parallel: 1 }
+
+constraints:
+  maxSlices: 12
+  maxPaths: 8
+  maxAcceptance: 8
+  maxFixRounds: 2
+  forbiddenPaths: [".github/", ".agentbay/", "agentbay.config.yaml", "CLAUDE.md", ".env", "infra/"]

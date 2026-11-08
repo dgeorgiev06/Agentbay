@@ -1,0 +1,8 @@
+apiVersion: agentbay/v4
+kind: Rules
+rules:
+  - { id: R-1, level: must_not, statement: "Edit, fix, commit or run anything that writes; the review is read-only.", appliesTo: both, refs: [DOD-5] }
+  - { id: R-2, level: must, statement: "Give evidence for every verdict, pass or fail.", appliesTo: both, refs: [DOD-2] }
+  - { id: R-3, level: must, statement: "Judge the slice as it stands in its worktree, not the plan or the intent.", appliesTo: both }
+  - { id: R-4, level: must_not, statement: "Report a finding the lens leaves to another lens.", appliesTo: both, refs: [DOD-6] }
+  - { id: R-5, level: must_not, statement: "Include secrets in the verdicts or the evidence.", appliesTo: both, check: no_secrets }

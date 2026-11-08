@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SliceRef",
+  "description": "One slice of one run.",
+  "type": "object",
+  "required": ["runId", "sliceId"],
+  "additionalProperties": false,
+  "properties": { "runId": { "type": "string" }, "sliceId": { "type": "string" } }
+}

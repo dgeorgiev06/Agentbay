@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Slices",
+  "description": "The slicing of a plan into vertical slices. `factory.slices/v1.propose` validates it against the run's constraints before anything is built.",
+  "type": "object",
+  "required": ["status", "summary", "slices"],
+  "additionalProperties": false,
+  "properties": {
+    "status": { "type": "string", "enum": ["done", "partial", "blocked", "failed"] },
+    "summary": { "type": "string", "minLength": 3 },
+    "slices": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "outcome", "acceptance", "paths"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^S-[0-9]+$" },
+          "title": { "type": "string" },
+          "outcome": { "type": "string", "description": "the user-visible outcome this slice delivers on its own" },
+          "acceptance": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["id", "level", "statement"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "pattern": "^A-[0-9]+$" },
+                "level": { "type": "string", "enum": ["must", "should", "must_not"] },
+                "statement": { "type": "string" },
+                "check": { "type": "string" }
+              }
+            }
+          },
+          "paths": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "interfaces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "role"],
+              "additionalProperties": false,
+              "properties": {
+                "name": { "type": "string" },
+                "role": { "type": "string", "enum": ["publishes", "consumes"] },
+                "shape": { "type": "string" },
+                "stub": { "type": "string" }
+              }
+            }
+          },
+          "deps": { "type": "array", "items": { "type": "string" } },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "artifacts": { "type": "array", "items": { "type": "string" } },
+    "taskId": { "type": "string" }
+  }
+}

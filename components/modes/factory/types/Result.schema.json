@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Result",
+  "description": "What a worker returns: how it ended, what it did, every file it wrote and what is left.",
+  "type": "object",
+  "required": ["status", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "status": { "type": "string", "enum": ["done", "partial", "blocked", "failed"] },
+    "summary": { "type": "string", "minLength": 3 },
+    "artifacts": { "type": "array", "items": { "type": "string" }, "description": "every file written, relative to the project" },
+    "met": { "type": "array", "items": { "type": "string" }, "description": "ids of the acceptance criteria this worker claims are met" },
+    "unmet": { "type": "array", "items": { "type": "string" } },
+    "checks": { "type": "array", "items": { "type": "string" }, "description": "the commands run and what each said" },
+    "followups": { "type": "array", "items": { "type": "string" } },
+    "blockers": { "type": "array", "items": { "type": "string" } },
+    "taskId": { "type": "string" }
+  }
+}

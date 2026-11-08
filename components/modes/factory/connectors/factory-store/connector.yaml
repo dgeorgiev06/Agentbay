@@ -1,0 +1,15 @@
+apiVersion: agentbay/v4
+kind: Connector
+metadata:
+  name: factory-store
+  description: >-
+    The factory's record: one file per run under .agentbay/data/factory/ with its goal, its language profile, its
+    configured pipeline, its slices and every stage record. It computes what to call next from what the run has
+    recorded, validates a slicing against the run's constraints and records a lens's verdicts as findings. It never
+    calls an endpoint, never spawns an agent, never touches git and never reaches the network.
+  version: 0.1.0
+spec:
+  implements: [factory.runs/v1, factory.slices/v1]
+  entry: factory_store.py
+  needs:
+    fs: { write: [.agentbay/data/factory] }

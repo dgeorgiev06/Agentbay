@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "factory settings",
+  "description": "agentbay.config.yaml modes.factory. The pipeline, the review lenses, the slice constraints and the language profile are settings, so a project changes the factory's workflow without touching the mode. A list setting is replaced whole, never merged entry by entry.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "language": {
+      "type": "string",
+      "default": "python",
+      "description": "The language profile the run builds in: a file languages/<name>.yaml of the factory component (python, typescript, go). It names the file globs, the check commands and the practices every builder is held to."
+    },
+    "pipeline": {
+      "type": "array",
+      "minItems": 1,
+      "default": [
+        { "stage": "spec" },
+        { "stage": "plan" },
+        { "stage": "approve" },
+        { "stage": "slice" },
+        { "stage": "build", "parallel": 3 },
+        { "stage": "audit", "parallel": 5 },
+        { "stage": "fix", "parallel": 3, "maxRounds": 2 },
+        { "stage": "integrate", "parallel": 1 }
+      ],
+      "description": "The stages of a run, in order. Each is one endpoint of this mode; dropping an entry drops that stage, and reordering them reorders the run.",
+      "items": {
+        "type": "object",
+        "required": ["stage"],
+        "additionalProperties": false,
+        "properties": {
+          "stage": {
+            "enum": ["spec", "plan", "approve", "slice", "build", "audit", "fix", "integrate"],
+            "description": "the endpoint this stage calls (factory.<stage>)"
+          },
+          "enabled": { "type": "boolean", "default": true },
+          "parallel": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "how many of this stage's calls may be out at once; the stage fans out to at most this many slices (build, fix, integrate) or slice-lens pairs (audit)"
+          },
+          "lenses": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "audit only: the lens ids to run (default: every lens in `reviewers`)"
+          },
+          "maxRounds": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 2,
+            "description": "fix only: how many fix rounds one slice may have before the run reports it blocked for the owner"
+          }
+        }
+      }
+    },
+    "reviewers": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The review lenses. Every lens reviews every slice, in its own call, so the lenses run in parallel and one lens's verdict never hides another's. A lens's checks are ids the reviewer must return a verdict for, next to the slice's own acceptance criteria.",
+      "default": [
+        {
+          "id": "correctness",
+          "title": "Correctness",
+          "tier": "deep",
+          "blocking": true,
+          "focus": ["the acceptance criteria, each against the code and the tests that show it", "edge cases and error paths", "what the tests do not cover"],
+          "checks": [
+            { "id": "L-1", "level": "must", "statement": "Every acceptance criterion is met by the code, and the evidence names the file and line or the command and its output." },
+            { "id": "L-2", "level": "must", "statement": "The slice has a test for each criterion that can be tested, and the tests fail without the change." },
+            { "id": "L-3", "level": "must", "statement": "Error paths and edge cases the criteria imply are handled, not left to crash." }
+          ]
+        },
+        {
+          "id": "structure",
+          "title": "Structure and boundaries",
+          "tier": "deep",
+          "blocking": true,
+          "focus": ["the slice's boundary: only its own paths changed", "the interfaces at its edges, exactly as the brief states them", "cohesion, coupling and layering"],
+          "checks": [
+            { "id": "L-1", "level": "must", "statement": "Nothing outside the slice's declared paths was changed." },
+            { "id": "L-2", "level": "must", "statement": "Every interface the slice publishes matches the shape in the brief, and every one it consumes is used as stated." },
+            { "id": "L-3", "level": "must_not", "statement": "No module reaches around a published interface into another slice's internals." },
+            { "id": "L-4", "level": "should", "statement": "Names, layering and file placement follow the conventions already in the codebase." }
+          ]
+        },
+        {
+          "id": "quality",
+          "title": "Quality and readability",
+          "tier": "balanced",
+          "blocking": false,
+          "focus": ["duplication the change introduces", "naming, dead code and leftovers", "the practices of the language profile"],
+          "checks": [
+            { "id": "L-1", "level": "must_not", "statement": "No commented-out code, debug output, placeholder or TODO stands in for work the criteria require." },
+            { "id": "L-2", "level": "should", "statement": "The change adds no duplication an existing helper already covers." },
+            { "id": "L-3", "level": "should", "statement": "Every practice of the language profile in the brief is followed, or the departure is explained in the result." }
+          ]
+        },
+        {
+          "id": "performance",
+          "title": "Performance and resources",
+          "tier": "balanced",
+          "blocking": false,
+          "focus": ["work per call and per item", "queries, allocations and I/O in loops", "what grows with the input"],
+          "checks": [
+            { "id": "L-1", "level": "must_not", "statement": "No query, request or file read sits inside a loop that could do it once." },
+            { "id": "L-2", "level": "should", "statement": "The cost of the hot path is stated in terms of the input size, and nothing in it is worse than the plan assumed." },
+            { "id": "L-3", "level": "should", "statement": "Nothing holds the whole input in memory where a stream or a batch would do." }
+          ]
+        },
+        {
+          "id": "security",
+          "title": "Security and data handling",
+          "tier": "deep",
+          "blocking": true,
+          "focus": ["untrusted input at the slice's edges", "secrets, credentials and personal data", "what the slice logs or returns"],
+          "checks": [
+            { "id": "L-1", "level": "must_not", "statement": "No secret, token or credential is in the code, the tests, the output or the logs." },
+            { "id": "L-2", "level": "must", "statement": "Input that crosses the slice's edge is validated or escaped before it reaches a query, a command, a path or a template." },
+            { "id": "L-3", "level": "should", "statement": "Errors and logs say what failed without repeating personal data or request bodies." }
+          ]
+        }
+      ],
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "checks"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "title": { "type": "string" },
+          "tier": { "enum": ["fast", "balanced", "deep"], "default": "deep", "description": "reported in the brief; the step's own tier is set in mode.yaml" },
+          "blocking": { "type": "boolean", "default": true, "description": "false: this lens's fails are recorded and fixed, but never hold a slice out of integration" },
+          "focus": { "type": "array", "items": { "type": "string" } },
+          "ignores": { "type": "array", "items": { "type": "string" }, "description": "what this lens leaves to another lens, so two reviewers do not report the same finding" },
+          "checks": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["id", "level", "statement"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "pattern": "^L-[0-9]+$" },
+                "level": { "enum": ["must", "should", "must_not"] },
+                "statement": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What a slicing must satisfy. `factory.slices/v1.propose` refuses a slicing that breaks one of these and names the slice and the rule, so the slicing is fixed before anything is built.",
+      "default": {},
+      "properties": {
+        "maxSlices": { "type": "integer", "minimum": 1, "default": 20 },
+        "maxPaths": { "type": "integer", "minimum": 1, "default": 12, "description": "paths one slice may declare" },
+        "maxAcceptance": { "type": "integer", "minimum": 1, "default": 10, "description": "acceptance criteria one slice may declare; more than this means the slice is too big" },
+        "maxDeps": { "type": "integer", "minimum": 0, "default": 3 },
+        "requireInterfaces": { "type": "boolean", "default": true, "description": "a slice with a dependency, or one another slice depends on, must declare the interface at that edge" },
+        "disjointPaths": { "type": "boolean", "default": true, "description": "two slices of the same wave may not declare the same path, so parallel builders never write the same file" },
+        "forbiddenPaths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [".github/", ".agentbay/", "agentbay.config.yaml", "CLAUDE.md", ".env"],
+          "description": "path prefixes no slice may declare, whatever the plan says"
+        },
+        "maxFixRounds": { "type": "integer", "minimum": 0, "default": 2, "description": "fix rounds one slice may have before the run reports it blocked" }
+      }
+    },
+    "worktreeRoot": {
+      "type": "string",
+      "default": ".factory/trees",
+      "description": "Where the slice worktrees are cut, relative to the project. It must stay inside the path the build env may write."
+    },
+    "branchPrefix": {
+      "type": "string",
+      "default": "factory/",
+      "description": "The run's integration branch is <prefix><runId>, and a slice's branch is <prefix><runId>/<sliceId>. The factory never commits to a branch outside this prefix."
+    }
+  }
+}

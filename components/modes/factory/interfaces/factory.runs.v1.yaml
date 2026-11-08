@@ -1,0 +1,102 @@
+apiVersion: agentbay/v4
+kind: Interface
+metadata:
+  name: factory.runs
+  description: >-
+    One factory run: the requirements it started from, the language profile it builds in, the stage list from the
+    project's configuration, and what each stage recorded. `stages` is the only place the pipeline order lives at
+    run time; it never executes anything, it returns the `<mode>.<endpoint>` calls the coordinator is to make now,
+    several at once when the stage fans out, so each call keeps its own grants, effects, budget, review and gates.
+    State lives in .agentbay/data/factory/.
+spec:
+  version: 1
+  binding: connector
+  endpoints:
+    open:
+      description: Start a run from a requirements document. Returns its id, its stage list and its language profile.
+      in:
+        type: object
+        required: [goal]
+        additionalProperties: false
+        properties:
+          goal: { type: string, description: "what the run is for, in one line" }
+          requirements: { type: string, description: "path of the requirements document, relative to the project" }
+          language: { type: string, description: "language profile (languages/<name>.yaml); default: the mode's `language` setting" }
+      out: &runstate
+        type: object
+        required: [runId, status, stage, language]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          status:
+            type: string
+            enum: [stage-ready, waiting, done, blocked]
+            description: >-
+              stage-ready: run every call in `calls`, then ask again. waiting: calls are out and their results are
+              not recorded yet. done/blocked: the run is over.
+          stage: { type: string, description: "the stage the run stands at" }
+          stages: { type: array, items: { type: object }, description: "the configured pipeline, stage by stage, with its state" }
+          language: { type: object, description: "the language profile: files, commands and practices" }
+          lenses: { type: array, items: { type: object }, description: "the review lenses configured for this run" }
+          constraints: { type: object, description: "the slice constraints this run is held to" }
+          calls:
+            type: array
+            description: "what to run now; every entry is one `bay call`, and entries may run in parallel"
+            items:
+              type: object
+              required: [target, input]
+              additionalProperties: false
+              properties:
+                target: { type: string, description: "<mode>.<endpoint>, as `bay call` spells it" }
+                input: { type: object }
+                label: { type: string, description: "what this call covers, for the coordinator's report" }
+          waiting: { type: array, items: { type: string }, description: "labels of the calls this run is waiting on" }
+          blockers: { type: array, items: { type: string } }
+          reason: { type: string }
+      effects: [read, write]
+    stages:
+      description: >-
+        What to run now, computed from what the run has recorded; read-only and idempotent, so asking twice gives
+        the same answer and a lost result never skips a stage.
+      in:
+        type: object
+        required: [runId]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+      out: *runstate
+      effects: [read]
+    record:
+      description: Record how one stage call ended. A stage is complete when every call it fanned out has a record.
+      in:
+        type: object
+        required: [runId, stage, status]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          stage: { type: string }
+          sliceId: { type: string, description: "the slice this record is about, for a stage that fans out per slice" }
+          lens: { type: string, description: "the review lens, for the audit stage" }
+          status: { type: string, enum: [done, partial, blocked, failed] }
+          summary: { type: string }
+          artifacts: { type: array, items: { type: string } }
+          artifact: { type: string, description: "one artifact path, for a stage whose output names a single file" }
+          approved: { type: boolean, description: "an approval gate's outcome" }
+          by: { type: string }
+      out: *runstate
+      effects: [read, write]
+    status:
+      description: Where runs stand, stage by stage. Read-only.
+      in:
+        type: object
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          open: { type: boolean, description: "only runs that have not ended" }
+      out:
+        type: object
+        required: [runs]
+        additionalProperties: false
+        properties:
+          runs: { type: array, items: { type: object } }
+      effects: [read]

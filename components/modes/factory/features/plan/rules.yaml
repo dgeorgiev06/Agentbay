@@ -1,0 +1,8 @@
+apiVersion: agentbay/v4
+kind: Rules
+rules:
+  - { id: R-1, level: must, statement: "Write only under docs/factory/; the plan stage never touches code.", appliesTo: both, refs: [DOD-5] }
+  - { id: R-2, level: must, statement: "Read the code the plan touches before planning it, and name the files.", appliesTo: both, refs: [DOD-3] }
+  - { id: R-3, level: must, statement: "Follow the practices of the run's language profile; a departure is a decision with a reason.", appliesTo: both, refs: [DOD-4] }
+  - { id: R-4, level: must_not, statement: "Add a dependency without naming it as a decision with its alternative.", appliesTo: both, refs: [DOD-4] }
+  - { id: R-5, level: must_not, statement: "Include secrets in the plan.", appliesTo: both, check: no_secrets }

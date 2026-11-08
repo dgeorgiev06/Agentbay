@@ -260,9 +260,11 @@ def test_moving_files_have_no_deadcode_findings():
 
 EXPECTED_DELTAS = {
     ("kitAudit", "countsPerKind", "inefficient-store-read"): {
-        "was": 3, "now": 5,
-        "why": "stage 5 part C moved improve's store.py into connectors/improve-store/; the detector scans only files "
-               "under /connectors/, so Store.query and Store.claim (each re-reads the findings file per call) now count. "
+        "was": 5, "now": 10,
+        "why": "the five from improve's own store (stage 5 part C moved store.py into connectors/improve-store/, and the "
+               "detector scans only files under /connectors/), plus five in the factory mode: FactoryStore.stages, "
+               ".status, .brief and .get and FactoryTree.list read the run's file on every call, which is deliberate - "
+               "parallel stage calls record into one run and the next batch has to see what a sibling just recorded. "
                "Fixture-data results (scan, audit, routes, reports, change) are unchanged."},
     ("kitAudit", "countsPerKind", "doc-size"): {
         "was": 2, "now": 0,

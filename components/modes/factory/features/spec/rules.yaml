@@ -1,0 +1,7 @@
+apiVersion: agentbay/v4
+kind: Rules
+rules:
+  - { id: R-1, level: must, statement: "Write only under docs/factory/; the spec stage never touches code.", appliesTo: both, refs: [DOD-3] }
+  - { id: R-2, level: must_not, statement: "State a requirement the document does not support; an inference goes in questions with its assumption.", appliesTo: both, refs: [DOD-1, DOD-5] }
+  - { id: R-3, level: must, statement: "Every acceptance criterion names how it is observed.", appliesTo: both, refs: [DOD-2] }
+  - { id: R-4, level: must_not, statement: "Include secrets or personal data read from the requirements in the spec.", appliesTo: both, check: no_secrets }

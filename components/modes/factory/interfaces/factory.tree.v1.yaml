@@ -1,0 +1,121 @@
+apiVersion: agentbay/v4
+kind: Interface
+metadata:
+  name: factory.tree
+  description: >-
+    The subtree each slice is built in: one git worktree per slice on its own branch, cut from the run's
+    integration branch, under .factory/trees/<runId>/. Two slices of one wave therefore never write the same files,
+    and a slice that fails review is held outside the project's working tree. `checks` runs the commands of the
+    run's language profile inside one tree, and `integrate` merges a slice's branch into the integration branch
+    and checks the result there. Nothing here removes a tree: `git worktree remove` is the owner's.
+spec:
+  version: 1
+  binding: connector
+  endpoints:
+    open:
+      description: >-
+        The worktree and branch of one slice, created on first use from the run's integration branch (which is cut
+        from HEAD when the run's first tree opens). Asking twice returns the same tree.
+      in:
+        type: object
+        required: [runId, sliceId]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          sliceId: { type: string }
+      out:
+        type: object
+        required: [runId, sliceId, path, branch, base]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          sliceId: { type: string }
+          path: { type: string, description: "the worktree, relative to the project: everything this slice writes goes here" }
+          branch: { type: string }
+          base: { type: string, description: "the integration branch this slice was cut from" }
+          head: { type: string }
+          created: { type: boolean }
+          integration: { type: string, description: "the run's integration worktree" }
+          stopped: { type: string }
+      effects: [read, write]
+    checks:
+      description: >-
+        Run the language profile's commands inside one slice's worktree and return what each said. The commands
+        come from the profile in the factory component, never from a call's input, so a worker cannot choose what
+        checks it is held to. A failing command sets `stopped`, which ends the step blocked.
+      in:
+        type: object
+        required: [runId, sliceId]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          sliceId: { type: string }
+          language: { type: string, description: "the run's language profile, as the slice brief reports it (default: the mode's `language` setting)" }
+          only: { type: array, items: { type: string }, description: "names of the profile's commands to run (default: all of them)" }
+      out:
+        type: object
+        required: [runId, sliceId, ran]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          sliceId: { type: string }
+          ran:
+            type: array
+            items:
+              type: object
+              required: [name, ok]
+              additionalProperties: false
+              properties:
+                name: { type: string }
+                command: { type: string }
+                ok: { type: boolean }
+                exitCode: { type: integer }
+                tail: { type: string, description: "the last lines of its output" }
+          failed: { type: array, items: { type: string } }
+          changedFiles: { type: array, items: { type: string }, description: "what the slice changed against its base" }
+          summary: { type: string }
+          stopped: { type: string }
+      effects: [read, write]
+    integrate:
+      description: >-
+        Merge one slice's branch into the run's integration branch, inside the integration worktree, and run the
+        profile's commands there. A conflict or a failing command leaves the integration branch as it was and sets
+        `stopped`. The owner's own branches are never touched.
+      in:
+        type: object
+        required: [runId, sliceId]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          sliceId: { type: string }
+      out:
+        type: object
+        required: [runId, sliceId, merged]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+          sliceId: { type: string }
+          merged: { type: boolean }
+          branch: { type: string }
+          commit: { type: string }
+          conflicts: { type: array, items: { type: string } }
+          checks: { type: object }
+          summary: { type: string }
+          stopped: { type: string }
+      effects: [read, write]
+    trees:
+      description: The worktrees of a run. Read-only.
+      in:
+        type: object
+        required: [runId]
+        additionalProperties: false
+        properties:
+          runId: { type: string }
+      out:
+        type: object
+        required: [trees]
+        additionalProperties: false
+        properties:
+          trees: { type: array, items: { type: object } }
+          integration: { type: object }
+      effects: [read]

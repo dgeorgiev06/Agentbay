@@ -1,0 +1,21 @@
+apiVersion: agentbay/v4
+kind: Environment
+metadata:
+  name: factory-review
+  description: >-
+    Where a slice is reviewed: read-only. Every path is readable, including the slice worktrees; nothing is
+    writable, so a reviewer cannot fix what it finds. The slice, its criteria and the lens come from the code step
+    before it, so no factory connector is bound here. No network, no secrets.
+spec:
+  bind:
+    workspace.read/v1:
+      tools: [Read, Glob, Grep, Bash]
+      clis: [python3 -I -m ruff check, python3 -I -m mypy]
+    git.read/v1:
+      tools: [Bash]
+      clis: [git status, git diff, git log, git show]
+  network: { allow: [] }
+  fs:
+    read: ["."]
+  effects: [read]
+  limits: { maxTurns: 60, maxMinutes: 30 }

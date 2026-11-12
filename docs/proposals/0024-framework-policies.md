@@ -16,7 +16,7 @@ touches:
   - { path: adapters/claude-code/claude_code.py, reason: "each generated agent file and COORDINATOR.md gets a Policies section, rendered from the resolved list" }
   - { path: adapters/claude-code/tests/, reason: "the agent file test expects the section" }
   - { path: framework/roles/, reason: "sentences and rules that every role repeats move to policies; role-specific rules stay" }
-  - { path: components/, reason: "the `data is data` rule and done item in the store ask and the two digest features, and the same sentence in four skills, are removed in favour of the policy" }
+  - { path: components/, reason: "the `data is data` rule and done item in the store ask and the two digest features, the same sentence in four skills, and the no-secrets rule in seven rules files are removed in favour of the policies" }
   - { path: components/base/cos/playbook.md, reason: "the three rules in `## Rules` that hold for every agent move to policies; the coordinator's own stay" }
   - { path: tests/, reason: "one test of the resolve rules (add, off, raise, locked) and one of the brief; they replace tests the moved rules made redundant" }
   - { path: README.md, reason: "Settings: the policies key, in one paragraph" }
@@ -41,7 +41,7 @@ This proposal adds one file of framework policies. Each policy is data with an i
 2. **Every role repeats the same opening.** All 5 role files tell the agent to record its plan with `bay plan <taskId>` and tick items, each in its own words.
 3. **A mode author must remember them.** A new mode gets the injection rule only if its author copies it into the rules file. `bay new` does not write it and `bay check` does not ask for it.
 4. **The owner can configure one thing.** `modes.<mode>.features.<feature>.extraRules` adds rules to one feature (`bay/model.py:1165`). There is no way to say something once for the whole project, such as "write in British English" or "never draft a reply to a legal address".
-5. **Deterministic checks are opt-in per feature.** `no_secrets` runs only where a rules file names it (`forge.extend` R-5). Nothing runs it on the output of every role step.
+5. **Deterministic checks are opt-in per feature.** `no_secrets` runs only where a rules file names it. Seven features do, each with its own wording of the same rule; the other features with a role step have no such check.
 
 ## Change
 
@@ -122,7 +122,7 @@ policies:
 - The injection sentence leaves the analyst prompt, the two rules files, the two done lists and the four skills. It is P-1, for every role.
 - The plan-recording sentences leave the five role prompts. Each prompt keeps what is specific to the role.
 - Three of the Chief of Staff's rules that hold for every agent become policies.
-- `forge.extend` R-5 (no secrets) is removed; P-2 covers it with the same check.
+- The no-secrets rule is removed from the seven rules files that carry it; P-2 covers every feature with the same check.
 
 Role-specific rules stay in the role file. The wire protocol text (`WORKER_CONTRACT`, `bay/protocol.py:11`) stays: it is a format, not a policy.
 
@@ -141,7 +141,7 @@ A policy is prompt text and a review item, with a deterministic check where one 
 ## Compatibility and safety impact
 
 - **Contracts.** Additive: a new file kind, a new config key, a wider id pattern in `review.verdict/v1`. No apiVersion bump. Default behaviour changes (every agent gets the policies, every review covers them, P-2's check can block a call), so this is a minor version.
-- **Safety, stronger.** P-1 reaches the three roles that lack it today, and a mode gets it without its author writing it. `no_secrets` runs on every role step, not on one feature.
+- **Safety, stronger.** P-1 reaches the three roles that lack it today, and a mode gets it without its author writing it. `no_secrets` runs on every role step, not only in the seven features that name it.
 - **Safety, to watch.** `off` and a project policy file are owner settings in `agentbay.config.yaml`, which the guard already keeps agents from writing. The resolved policies are read from the commit a call started from, so a change cannot switch off the policy that would judge it. Locked policies cannot be turned off at all.
 - **Risk: review cost.** Each review gains one verdict per applicable policy. The starting set is kept short for this reason, and a policy with a passing `check` needs no judgement.
 - **Risk: a false block.** `no_secrets` on every step's output can block a call that quotes something secret-shaped. It already redacts and names the match; the plan step runs it over the golden outputs to measure this before the gate.

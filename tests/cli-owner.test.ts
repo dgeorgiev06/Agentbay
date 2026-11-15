@@ -56,6 +56,40 @@ test("approve from a terminal needs an interactive stdin and a typed yes", async
   });
 });
 
+const reviewThenCompose = [
+  "name: review",
+  "trigger:",
+  "  manual: true",
+  "steps:",
+  "  - id: fetch",
+  "    action: greeting-source.fetch",
+  "  - id: keep",
+  "    approval: Keep this greeting?",
+  "    show: $steps.fetch.output",
+  "  - id: compose",
+  "    action: compose",
+  "    input:",
+  "      name: Cy",
+  "",
+].join("\n");
+
+test("approve prints the next skill step's task with its token, for the owner's coordinator", async () => {
+  const project = await makeProject();
+  try {
+    await project.write("components/modes/writer/workflows/review.yaml", reviewThenCompose);
+    const approval = await waitingApproval(project);
+    const argv = ["approve", approval.runId, "keep", "--hash", approval.hash, "--project", project.root, "--json"];
+    const approved = await bay(argv, { terminal: fakeTerminal({ interactive: true, answer: "yes" }) });
+    assert.equal(approved.exitCode, 0, approved.output);
+    const run = fieldOf(toJson(approved.json), "run") ?? null;
+    assert.equal(textField(fieldOf(run, "task") ?? null, "stepKey"), "compose/1#1");
+    assert.match(textField(fieldOf(run, "task") ?? null, "token") ?? "", /^[A-Za-z0-9_-]{43}$/);
+    assert.equal(textField(run, "notice"), "A task token was issued with this task; it is shown only now.");
+  } finally {
+    await project.remove();
+  }
+});
+
 test("approve --via chat is refused while approvals.from lacks chat, whatever the terminal", async () => {
   await withApproval({}, async (project, approval) => {
     const argv = ["approve", approval.runId, "keep", "--hash", approval.hash, "--project", project.root];

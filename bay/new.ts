@@ -163,8 +163,9 @@ function tierRefusals(workspace: Workspace, name: string, tier: ModeTier): reado
 
 async function existingModeProblems(workspace: Workspace, name: string): Promise<readonly Problem[]> {
   const { layout } = workspace;
-  const homes = isProjectTheKit(layout) ? [] : [pathIn(layout, "project", join(tierFolders.modes, name))];
-  const folders = [...Object.values(tierFolders).map((tier) => pathIn(layout, "kit", join(tier, name))), ...homes];
+  const inKit = Object.values(tierFolders).map((tier) => pathIn(layout, "kit", join(tier, name)));
+  const inProject = isProjectTheKit(layout) ? [] : [pathIn(layout, "project", join(tierFolders.modes, name))];
+  const folders = [...inKit, ...inProject];
   const problems: Problem[] = [];
   for (const folder of folders) {
     if (await workspace.files.exists(folder)) {

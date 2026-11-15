@@ -13,6 +13,11 @@ type ProtectedArea = {
 
 type Direction = "read" | "write";
 
+type NamedFolder = {
+  readonly path: string;
+  readonly name: string;
+};
+
 type PolicyContext = {
   readonly system: System;
   readonly layout: Layout;
@@ -32,12 +37,12 @@ const ownCode = "and only the base mode forge may write a mode's own code";
 
 const kitRule = "which a mode may name only when the project is the kit itself";
 
-const stateFolders: readonly { readonly path: string; readonly name: string }[] = [
+const stateFolders: readonly NamedFolder[] = [
   { path: ".agentbay", name: "the kernel's state folder .agentbay/" },
   { path: ".git", name: "the git folder .git/" },
 ];
 
-const kernelFolders: readonly { readonly path: string; readonly name: string }[] = [
+const kernelFolders: readonly NamedFolder[] = [
   { path: "bay", name: "the kernel folder bay/" },
   { path: "schemas", name: "the schemas folder schemas/" },
   { path: "adapters", name: "the adapters folder adapters/" },

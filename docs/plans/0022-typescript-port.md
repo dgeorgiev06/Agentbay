@@ -137,7 +137,7 @@ A failed must item or a blocker goes back to the same builder once. A second fai
 ## Release
 
 - 5.0.0 at C1. Upgrading is in the proposal.
-- 5.1: always-on in the cloud (a daemon with schedules and events, a headless agent adapter, a chat channel, one container per run). It gets its own proposal, starting with where it is hosted.
+- 5.1: always-on in the cloud (a daemon with schedules and events, a headless agent adapter, a chat channel, one container per run). It gets its own proposal, starting with where it is hosted. Owner requirements of 2026-11-14 for that proposal: reached over Telegram; shared with anyone the owner invites; guests may only ask questions (actions with the `read` effect only, on modes the owner marks as shared, never approvals); each guest has a budget. Inviting guests broadly is the proposal's "public" audience, so its Safety gates apply before the first guest outside the owner's trusted circle.
 - 5.2: the Codex adapter, starting with research on what Codex can enforce.
 - `bay import-v4` is removed in 5.1.
 - After the existing modes: a real estate mode (free state parcel and sales data, listings parsed from alert emails through the Gmail mode). Research: the owner has the report of 2026-11-14.

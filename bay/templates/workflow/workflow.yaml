@@ -1,0 +1,5 @@
+name: {{name}}
+trigger: { manual: true }
+steps:
+  - id: confirm
+    approval: Replace this text with what the owner is asked to approve.

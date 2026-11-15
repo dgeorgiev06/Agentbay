@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "{{title}}",
+  "description": "Replace this line with what the {{direction}} of action {{name}} holds.",
+  "type": "object"
+}

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { access, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { Clock, FileSystem } from "./ports.ts";
+import type { Clock, FileSystem, Folders } from "./ports.ts";
 
 function isMissingFile(error: unknown): boolean {
   return error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR");
@@ -56,3 +56,9 @@ async function writeAtomic(path: string, text: string): Promise<void> {
 export const nodeFileSystem: FileSystem = { readText, list, exists, writeAtomic };
 
 export const systemClock: Clock = { now: () => new Date() };
+
+export const nodeFolders: Folders = {
+  ensureFolder: async (path) => {
+    await mkdir(path, { recursive: true });
+  },
+};

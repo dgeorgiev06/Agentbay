@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -303,6 +303,7 @@ function openStore(kind: StoreKind): { readonly store: RunStore; readonly close:
     return { store: new MemoryRunStore(), close: () => undefined };
   }
   const folder = mkdtempSync(join(tmpdir(), "agentbay-engine-"));
+  mkdirSync(join(folder, ".agentbay"));
   const store = new SqliteRunStore(join(folder, ".agentbay", "kernel.db"));
   return {
     store,

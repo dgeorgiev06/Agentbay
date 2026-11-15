@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -175,6 +175,7 @@ test("a second writer is refused while another engine advances the run", async (
 test("two engines on two SQLite connections to one kernel.db: the second writer is refused", async () => {
   const folder = mkdtempSync(join(tmpdir(), "agentbay-writers-"));
   const file = join(folder, ".agentbay", "kernel.db");
+  mkdirSync(join(folder, ".agentbay"));
   const firstStore = new SqliteRunStore(file);
   const secondStore = new SqliteRunStore(file);
   const reached = deferred();

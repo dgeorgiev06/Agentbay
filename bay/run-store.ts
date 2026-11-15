@@ -1,10 +1,10 @@
-import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
 import { budgetFromJson, spendFromJson } from "./budget.ts";
 import type { EventSink, Json, RunEvent, Spend } from "./contracts.ts";
 import type { Budget } from "./generated/mode.ts";
 import { parseJson } from "./json.ts";
+import type { Folders } from "./ports.ts";
 
 export const kernelDatabaseFile = ".agentbay/kernel.db";
 
@@ -316,10 +316,12 @@ function isStale(heartbeatAt: string, now: Date): boolean {
 export class SqliteRunStore implements RunStore {
   readonly #database: DatabaseSync;
 
+  static async open(folders: Folders, file: string): Promise<SqliteRunStore> {
+    await folders.ensureFolder(dirname(file));
+    return new SqliteRunStore(file);
+  }
+
   constructor(file: string) {
-    if (file !== ":memory:") {
-      mkdirSync(dirname(file), { recursive: true });
-    }
     this.#database = new DatabaseSync(file, { timeout: 5000 });
     this.#database.exec("pragma journal_mode = wal; pragma foreign_keys = on;");
     this.#migrate();

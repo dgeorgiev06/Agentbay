@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
@@ -13,6 +13,8 @@ import {
   type StoredState,
   type Writer,
 } from "../bay/run-store.ts";
+import { nodeFolders } from "../bay/node-ports.ts";
+import { fakeFolders } from "./fakes.ts";
 import { MemoryRunStore } from "./memory-run-store.ts";
 
 type Opened = {
@@ -265,6 +267,7 @@ function runStoreContract(name: string, open: () => Opened): void {
 
 function temporaryFile(): { readonly file: string; readonly remove: () => void } {
   const folder = mkdtempSync(join(tmpdir(), "agentbay-run-store-"));
+  mkdirSync(join(folder, ".agentbay"));
   return {
     file: join(folder, ".agentbay", "kernel.db"),
     remove: () => {
@@ -328,4 +331,17 @@ test("two SQLite stores on the same file see one lock: the second writer is refu
   first.close();
   second.close();
   remove();
+});
+
+test("opening a SQLite store makes its folder through the Folders port first", async () => {
+  const folder = mkdtempSync(join(tmpdir(), "agentbay-open-"));
+  const file = join(folder, "project", ".agentbay", "kernel.db");
+  const recorded = fakeFolders();
+  await assert.rejects(SqliteRunStore.open(recorded, file));
+  assert.deepEqual(recorded.created, [join(folder, "project", ".agentbay")]);
+  const store = await SqliteRunStore.open(nodeFolders, file);
+  await created(store);
+  assert.equal((await store.readRun("run-1"))?.id, "run-1");
+  store.close();
+  rmSync(folder, { recursive: true, force: true });
 });

@@ -7,22 +7,36 @@ import type { Outcome, Problem } from "./spec.ts";
 type ProtectedArea = {
   readonly path: string;
   readonly name: string;
+  readonly rule: string;
 };
 
+type Direction = "read" | "write";
+
 type DeclaredPath = {
-  readonly direction: "read" | "write";
+  readonly direction: Direction;
   readonly index: number;
   readonly path: string;
 };
 
-const kernelAreas: readonly ProtectedArea[] = [
-  { path: ".agentbay", name: "the kernel's state folder .agentbay/" },
-  { path: ".git", name: "the git folder .git/" },
-  { path: "bay", name: "the kernel folder bay/" },
-  { path: "schemas", name: "the schemas folder schemas/" },
-  { path: "adapters", name: "the adapters folder adapters/" },
-  { path: "framework", name: "the framework folder framework/" },
+const noMode = "which no mode may name";
+
+const onlyForge = "which only the base mode forge may name";
+
+const ownCode = "and only the base mode forge may write a mode's own code";
+
+const stateAreas: readonly ProtectedArea[] = [
+  { path: ".agentbay", name: "the kernel's state folder .agentbay/", rule: noMode },
+  { path: ".git", name: "the git folder .git/", rule: noMode },
 ];
+
+const kernelAreas: readonly ProtectedArea[] = [
+  { path: "bay", name: "the kernel folder bay/", rule: onlyForge },
+  { path: "schemas", name: "the schemas folder schemas/", rule: onlyForge },
+  { path: "adapters", name: "the adapters folder adapters/", rule: onlyForge },
+  { path: "framework", name: "the framework folder framework/", rule: onlyForge },
+];
+
+const forgeFolder = "components/base/forge";
 
 export const secretNamePattern = /^[A-Z][A-Z0-9_]*$/;
 
@@ -36,11 +50,32 @@ function isInsideOrEqual(path: string, folder: string): boolean {
   return path === folder || path.startsWith(`${folder}/`);
 }
 
-function protectedAreas(system: System, own: LoadedMode): readonly ProtectedArea[] {
+function isForge(mode: LoadedMode): boolean {
+  return mode.manifest.name === "forge" && normalized(mode.folder) === forgeFolder;
+}
+
+function ownCodeAreas(own: LoadedMode): readonly ProtectedArea[] {
+  const folder = normalized(own.folder);
+  return [
+    { path: `${folder}/mode.yaml`, name: "the mode's own mode.yaml", rule: ownCode },
+    { path: `${folder}/scripts`, name: "the mode's own scripts/ folder", rule: ownCode },
+    { path: `${folder}/skills`, name: "the mode's own skills/ folder", rule: ownCode },
+  ];
+}
+
+function protectedAreas(system: System, own: LoadedMode, direction: Direction): readonly ProtectedArea[] {
+  if (isForge(own)) {
+    return stateAreas;
+  }
   const otherModes = [...system.modes.values()]
     .filter((mode) => mode !== own)
-    .map((mode) => ({ path: normalize(mode.folder), name: `the folder of the mode ${mode.manifest.name}` }));
-  return [...kernelAreas, ...otherModes];
+    .map((mode) => ({
+      path: normalized(mode.folder),
+      name: `the folder of the mode ${mode.manifest.name}`,
+      rule: onlyForge,
+    }));
+  const code = direction === "write" ? ownCodeAreas(own) : [];
+  return [...stateAreas, ...kernelAreas, ...otherModes, ...code];
 }
 
 type DeclaredResources = {
@@ -85,19 +120,18 @@ function pathWording(declared: DeclaredPath, areas: readonly ProtectedArea[]): s
   for (const area of areas) {
     const areaFolded = area.path.toLowerCase();
     if (isInsideOrEqual(folded, areaFolded)) {
-      return `The path ${declared.path} points into ${area.name}, which no mode may name.`;
+      return `The path ${declared.path} points into ${area.name}, ${area.rule}.`;
     }
     if (folded === "." || areaFolded.startsWith(`${folded}/`)) {
-      return `The path ${declared.path} contains ${area.name}, which no mode may name.`;
+      return `The path ${declared.path} contains ${area.name}, ${area.rule}.`;
     }
   }
   return undefined;
 }
 
 function pathProblems(system: System, mode: LoadedMode): readonly Problem[] {
-  const areas = protectedAreas(system, mode);
   return declaredPaths(mode.manifest).flatMap((declared) => {
-    const message = pathWording(declared, areas);
+    const message = pathWording(declared, protectedAreas(system, mode, declared.direction));
     if (message === undefined) {
       return [];
     }
@@ -106,7 +140,7 @@ function pathProblems(system: System, mode: LoadedMode): readonly Problem[] {
         file: manifestFile(mode),
         path: `/resources/files/${declared.direction}/${String(declared.index)}`,
         message,
-        fix: "Name a folder of the project outside the kernel, state and other modes' folders.",
+        fix: "Name a folder outside the kernel, state and other modes' folders, and outside the mode's own code.",
       },
     ];
   });

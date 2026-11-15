@@ -149,3 +149,89 @@ test("the policy of a system gives every mode's permissions, or every problem of
   const broken = problemsOf(policyFor(withFiles({ read: ["bay/"], write: [".git/hooks"] }), layout));
   assert.equal(broken.length, 2);
 });
+
+function forgeSystem(folder: string, files: DeclaredFiles): ReturnType<typeof systemOf> {
+  return systemOf([
+    { folder, manifest: modeNamed("forge", { files }) },
+    { folder: "components/modes/briefing", manifest: briefing },
+  ]);
+}
+
+test("the base mode forge may write the kernel, schemas, adapters, framework and other modes' folders", () => {
+  const write = [
+    "bay/",
+    "schemas/mode.schema.json",
+    "adapters",
+    "framework/",
+    "components/modes/briefing",
+    "components/",
+  ];
+  const permissions = accepted(permissionsFor(forgeSystem("components/base/forge", { write }), "forge", layout));
+  assert.ok(permissions.writePaths.includes("/project/bay"));
+  assert.ok(permissions.writePaths.includes("/project/components/modes/briefing"));
+  assert.ok(permissions.writePaths.includes("/project/components"));
+});
+
+test("forge may still not name the state or git folders", () => {
+  const problems = problemsOf(
+    permissionsFor(
+      forgeSystem("components/base/forge", { write: [".agentbay/data", ".git/hooks", "."] }),
+      "forge",
+      layout,
+    ),
+  );
+  assert.equal(problems.length, 3);
+  for (const problem of problems) {
+    assert.match(problem.message, /which no mode may name/);
+  }
+});
+
+test("a mode named forge outside components/base/forge gets no forge rights", () => {
+  const problems = problemsOf(
+    permissionsFor(
+      forgeSystem("components/modes/forge", { write: ["bay/", "components/modes/briefing"] }),
+      "forge",
+      layout,
+    ),
+  );
+  assert.equal(problems.length, 2);
+  for (const problem of problems) {
+    assert.match(problem.message, /which only the base mode forge may name/);
+  }
+});
+
+test("a mode other than forge may not declare a write path holding its own manifest, scripts or skills", () => {
+  const problems = pathProblems({
+    write: [
+      "components/modes/briefing",
+      "components/modes/briefing/",
+      "components/modes/briefing/mode.yaml",
+      "components/modes/briefing/scripts",
+      "components/modes/briefing/scripts/generated",
+      "components/modes/briefing/skills/digest",
+      "Components/Modes/Briefing/Scripts",
+    ],
+  });
+  assert.equal(problems.length, 7);
+  for (const problem of problems) {
+    assert.match(problem, /^\/resources\/files\/write\/\d .*only the base mode forge may write a mode's own code/);
+  }
+});
+
+test("a mode may still write other folders of its own and read its own code", () => {
+  const permissions = accepted(
+    permissionsFor(
+      withFiles({ read: ["components/modes/briefing/scripts"], write: ["components/modes/briefing/out"] }),
+      "briefing",
+      layout,
+    ),
+  );
+  assert.deepEqual(permissions.writePaths, ["/project/components/modes/briefing/out"]);
+});
+
+test("forge may write its own code", () => {
+  const permissions = accepted(
+    permissionsFor(forgeSystem("components/base/forge", { write: ["components/base/forge/scripts"] }), "forge", layout),
+  );
+  assert.deepEqual(permissions.writePaths, ["/project/components/base/forge/scripts"]);
+});

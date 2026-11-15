@@ -73,18 +73,3 @@ export async function checkTaskToken(stores: TokenStores, token: string): Promis
   }
   return succeededWith(place);
 }
-
-export async function checkTaskTokenFor(
-  stores: TokenStores,
-  token: string,
-  expected: Omit<TaskPlace, "round">,
-): Promise<Outcome<TaskPlace>> {
-  const checked = await checkTaskToken(stores, token);
-  if (!checked.ok || (checked.value.runId === expected.runId && checked.value.stepKey === expected.stepKey)) {
-    return checked;
-  }
-  return refusedToken(
-    `The token belongs to step ${checked.value.stepKey} of run ${checked.value.runId}, ` +
-      `not to step ${expected.stepKey} of run ${expected.runId}.`,
-  );
-}

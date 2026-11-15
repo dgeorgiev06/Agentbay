@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GetResponse",
+  "description": "The items found and the ids that were not.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "items",
+    "missing"
+  ],
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/item"
+      },
+      "maxItems": 100,
+      "description": "The items found, in the order their ids were asked for."
+    },
+    "missing": {
+      "type": "array",
+      "description": "Ids the store does not hold.",
+      "items": {
+        "type": "string",
+        "description": "An item id, <source>:<external id>."
+      }
+    }
+  },
+  "$defs": {
+    "item": {
+      "type": "object",
+      "description": "One item in the envelope every source produces and the store keeps.",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "source",
+        "at",
+        "title",
+        "text",
+        "url",
+        "author",
+        "labels",
+        "data"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*:\\S",
+          "maxLength": 300,
+          "description": "<source>:<external id>: unique in the store, the same on every sync, and what digests and answers cite."
+        },
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+          "maxLength": 64,
+          "description": "What the item is, such as post or email; data holds what only this kind has, and the store refuses a kind the item's source does not produce."
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+          "maxLength": 64,
+          "description": "The source that produced the item, the same as the prefix of its id; local for items the owner wrote."
+        },
+        "at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]{1,3})?)?(Z|[+-][0-9]{2}:[0-9]{2})$",
+          "description": "When the item was created at its source, an ISO 8601 time with a zone; since, until, lookback windows and prune compare it."
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1000,
+          "description": "A subject or heading, or null when the kind has none, as a post has none."
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 100000,
+          "description": "The body as plain text; full-text search and the selector's text terms look here."
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^https?://",
+          "maxLength": 2000,
+          "description": "Where the owner can open the item, or null when there is no such page."
+        },
+        "author": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 300,
+          "description": "Who wrote the item as its source names them, a handle or an address, or null; the selector's authors match it."
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "One label, list, folder or channel name."
+          },
+          "maxItems": 50,
+          "uniqueItems": true,
+          "description": "The lists, labels, folders or channels the item is in; the selector's labels match them."
+        },
+        "data": {
+          "type": "object",
+          "description": "Fields only this kind has, such as the counts of likes on a post; stored as JSON and never matched by the selector."
+        }
+      }
+    }
+  }
+}

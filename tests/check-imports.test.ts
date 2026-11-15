@@ -20,6 +20,16 @@ test("mode code may import bay/sdk.ts, node: built-ins and files of its own mode
   withoutFinding(report, "imports");
 });
 
+test("a test of a kit mode may import the kit's tests/mode-harness.ts, and nothing else outside its mode", async () => {
+  const test = "components/modes/notes/tests/tidy.test.ts";
+  const harness = 'import { openModeProject } from "../../../../tests/mode-harness.ts";\n';
+  const allowed = await check({ ...cleanFiles(), [test]: harness });
+  withoutFinding(allowed, "imports");
+  const fixture = 'import { kit } from "../../../../tests/project-fixture.ts";\n';
+  findFinding(await check({ ...cleanFiles(), [test]: fixture }), test, "which resolves to tests/project-fixture.ts");
+  findFinding(await checkScript(harness), script, "which resolves to tests/mode-harness.ts");
+});
+
 test("mode code importing another mode's file is reported with the resolved path", async () => {
   const report = await checkScript('import { put } from "../../../base/store/scripts/put.ts";\n');
   const finding = findFinding(

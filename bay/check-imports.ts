@@ -44,6 +44,8 @@ const anyDynamicImportPattern = /(?<![\w$.])import\s*\(/g;
 
 const sdkFile = "bay/sdk.ts";
 
+const modeHarnessFile = "tests/mode-harness.ts";
+
 const entryPoints = ["bay/cli.ts", "bay/mcp.ts"] as const;
 
 function literalSpecifiers(text: string, pattern: RegExp): readonly Specifier[] {
@@ -139,7 +141,15 @@ function modeImportProblem(found: ModeImport): Problem | undefined {
   }
   const target = resolved(entry.file, entry.text);
   const isKitSdk = mode.home === "kit" && target === sdkFileOf(layout);
-  return isKitSdk || isInsideOrEqual(target, mode.folder) ? undefined : outsideImportProblem(found, target);
+  return isKitSdk || isInsideOrEqual(target, mode.folder) || isKitHarness(found, target)
+    ? undefined
+    : outsideImportProblem(found, target);
+}
+
+function isKitHarness(found: ModeImport, target: string): boolean {
+  const { layout, mode, entry } = found;
+  const inTests = isInsideOrEqual(entry.file, join(mode.folder, "tests"));
+  return mode.home === "kit" && inTests && target === pathIn(layout, "kit", modeHarnessFile);
 }
 
 function computedImportProblems(layout: Layout, source: SourceFile): readonly Problem[] {

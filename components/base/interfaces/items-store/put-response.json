@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PutResponse",
+  "description": "What happened to each item of a put.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "added",
+    "updated",
+    "skipped"
+  ],
+  "properties": {
+    "added": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Items that were not in the store before."
+    },
+    "updated": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Items that replaced a stored item with the same id."
+    },
+    "skipped": {
+      "type": "array",
+      "description": "Items not stored, each with the reason, such as an id deleted earlier, which is never stored again.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "reason"
+        ],
+        "description": "One item that was not stored.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The item's id."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why it was not stored, as a sentence."
+          }
+        }
+      }
+    }
+  }
+}

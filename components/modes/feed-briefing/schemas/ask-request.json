@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AskRequest",
+  "description": "A question about the stored items.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "question"
+  ],
+  "properties": {
+    "question": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "description": "The question, in plain words."
+    }
+  }
+}

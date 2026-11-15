@@ -1,0 +1,17 @@
+{
+  "input": {
+    "sql": "select author, count(*) as posts from items_view group by author order by posts desc"
+  },
+  "output": {
+    "columns": [
+      "author",
+      "posts"
+    ],
+    "rows": [
+      [
+        "custody_news",
+        1
+      ]
+    ]
+  }
+}

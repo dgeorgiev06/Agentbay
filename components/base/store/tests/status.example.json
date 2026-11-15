@@ -1,0 +1,31 @@
+{
+  "input": {},
+  "output": {
+    "items": 1,
+    "deletions": 0,
+    "sources": [
+      {
+        "source": "fake",
+        "kinds": [
+          "post"
+        ],
+        "items": 1,
+        "cursor": "2026-11-10T08:00:00.000Z|1001",
+        "lastSync": "2026-11-15T07:00:00.000Z",
+        "selector": {
+          "authors": [
+            "custody_news"
+          ],
+          "since": "2026-11-01T00:00:00Z"
+        },
+        "spent": [
+          {
+            "month": "2026-11",
+            "items": 1,
+            "usd": 0.005
+          }
+        ]
+      }
+    ]
+  }
+}

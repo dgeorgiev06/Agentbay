@@ -1,0 +1,35 @@
+{
+  "input": {
+    "until": "2026-11-15T12:00:00Z",
+    "focus": "custody"
+  },
+  "output": {
+    "period": {
+      "since": "2026-11-08T12:00:00.000Z",
+      "until": "2026-11-15T12:00:00.000Z"
+    },
+    "selectorChanged": false,
+    "themes": [
+      {
+        "title": "Custodians make staking routine for institutions",
+        "summary": "A large custodian added same-day ETH unstaking, and research reports three banks moving staking from pilots to production.",
+        "sources": [
+          {
+            "id": "fake:1024",
+            "author": "custody_news",
+            "at": "2026-11-13T14:00:00.000Z",
+            "url": "https://fake.example/custody_news/status/1024"
+          },
+          {
+            "id": "fake:1021",
+            "author": "galaxy_research",
+            "at": "2026-11-12T08:00:00.000Z",
+            "url": "https://fake.example/galaxy_research/status/1021"
+          }
+        ]
+      }
+    ],
+    "notes": null,
+    "cited": 2
+  }
+}

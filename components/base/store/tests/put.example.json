@@ -1,0 +1,42 @@
+{
+  "input": {
+    "source": "fake",
+    "kinds": [
+      "post"
+    ],
+    "items": [
+      {
+        "id": "fake:1001",
+        "kind": "post",
+        "source": "fake",
+        "at": "2026-11-10T08:00:00Z",
+        "title": null,
+        "text": "Two EU banks start institutional ETH staking pilots.",
+        "url": "https://fake.example/custody_news/1001",
+        "author": "custody_news",
+        "labels": [
+          "staking"
+        ],
+        "data": {
+          "likes": 12
+        }
+      }
+    ],
+    "cursor": "2026-11-10T08:00:00.000Z|1001",
+    "cost": {
+      "items": 1,
+      "usd": 0.005
+    },
+    "selector": {
+      "authors": [
+        "custody_news"
+      ],
+      "since": "2026-11-01T00:00:00Z"
+    }
+  },
+  "output": {
+    "added": 1,
+    "updated": 0,
+    "skipped": []
+  }
+}

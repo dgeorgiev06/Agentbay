@@ -5,7 +5,8 @@ import type { ExecuteResult, Row } from "./database.ts";
 import { isJson, isJsonRecord } from "./protocol-json.ts";
 import type { HttpResponse } from "./ports.ts";
 import { type ChildMessage, type ParentMessage, parentMessageOf, type ResourceRequest } from "./script-protocol.ts";
-import type { DefinedScript, ScriptContext, ScriptError } from "./sdk.ts";
+import type { AgentQueryResult } from "./agent-query.ts";
+import type { DatabasePartition, DefinedScript, ScriptContext, ScriptError } from "./sdk.ts";
 
 type Start = Extract<ParentMessage, { readonly type: "start" }>;
 
@@ -92,12 +93,30 @@ const isResponse = (value: Json): value is HttpResponse =>
 
 const isAnything = (value: Json): value is Json => isJson(value);
 
-function contextFor(settings: Readonly<Record<string, Json>>): ScriptContext {
+const isCells = (value: Json): value is readonly Json[] => Array.isArray(value);
+
+const isAgentQueryResult = (value: Json): value is AgentQueryResult & Json =>
+  isJsonRecord(value) && isTexts(value.columns ?? null) && Array.isArray(value.rows) && value.rows.every(isCells);
+
+function partitionOf(partition: string): DatabasePartition {
+  return {
+    migrate: async () => narrowed(await ask({ resource: "db.migrate", partition }), isTexts),
+    execute: async (sql, parameters = []) =>
+      narrowed(await ask({ resource: "db.execute", sql, parameters, partition }), isExecuteResult),
+    query: async (sql, parameters = []) =>
+      narrowed(await ask({ resource: "db.query", sql, parameters, partition }), isRows),
+    agentQuery: async (sql) => narrowed(await ask({ resource: "db.agentQuery", sql, partition }), isAgentQueryResult),
+  };
+}
+
+function contextFor(order: Start): ScriptContext {
+  const settings = order.settings;
   return {
     db: {
       execute: async (sql, parameters = []) =>
         narrowed(await ask({ resource: "db.execute", sql, parameters }), isExecuteResult),
       query: async (sql, parameters = []) => narrowed(await ask({ resource: "db.query", sql, parameters }), isRows),
+      partition: partitionOf,
     },
     files: {
       read: async (path) => narrowed(await ask({ resource: "files.read", path }), isText),
@@ -112,6 +131,8 @@ function contextFor(settings: Readonly<Record<string, Json>>): ScriptContext {
     call: async (reference, input) => narrowed(await ask({ resource: "call", reference, input }), isAnything),
     settings,
     spend: async (spending) => narrowed(await ask({ resource: "spend", spending: { ...spending } }), isNothing),
+    caller: order.caller,
+    skillInput: order.skillInput,
   };
 }
 
@@ -158,7 +179,7 @@ async function runScript(file: string): Promise<ChildMessage> {
     return { type: "crashed", reason: script };
   }
   try {
-    const output: unknown = await script.handler(order.input, contextFor(order.settings));
+    const output: unknown = await script.handler(order.input, contextFor(order));
     return isJson(output)
       ? { type: "done", output }
       : { type: "crashed", reason: "The script returned no JSON value." };

@@ -1,0 +1,15 @@
+{
+  "input": {},
+  "output": {
+    "source": "fake",
+    "kinds": [
+      "post"
+    ],
+    "nativeFields": [
+      "authors",
+      "since",
+      "until",
+      "limit"
+    ]
+  }
+}

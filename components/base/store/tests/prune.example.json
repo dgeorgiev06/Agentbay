@@ -1,0 +1,9 @@
+{
+  "input": {
+    "before": "2026-10-01T00:00:00Z"
+  },
+  "output": {
+    "removed": 0,
+    "remaining": 1
+  }
+}

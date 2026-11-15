@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SqlRequest",
+  "description": "One read-only select over the store's tables and views.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sql"
+  ],
+  "properties": {
+    "sql": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20000,
+      "description": "One select statement; items_view has one row per item with plain columns, items_search is the full-text index. A second statement, a write or attach is refused."
+    }
+  }
+}

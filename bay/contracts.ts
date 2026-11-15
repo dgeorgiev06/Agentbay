@@ -45,6 +45,8 @@ export type ScriptRequest = {
   readonly remaining: Budget;
   readonly timeLimitMilliseconds: number;
   readonly call: ActionCaller;
+  readonly caller?: string;
+  readonly skillInput?: Json;
 };
 
 export type StepOutcome =

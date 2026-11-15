@@ -52,6 +52,7 @@ export type WorkflowReference = {
 
 export type StartOptions = {
   readonly id?: string;
+  readonly caller?: string;
 };
 
 export type ResumeOptions = {
@@ -243,7 +244,7 @@ function mainProgress(walk: Walk, run: RunWithSteps, budget: BudgetFrame): Promi
       if (typeof target === "string") {
         return Promise.resolve(failed(target));
       }
-      return runActionFrame(walk, { ...target, key: "", budget }, run.input);
+      return runActionFrame(walk, { ...target, key: "", budget, caller: run.target.caller }, run.input);
     }
     case "workflow": {
       const mode = system.modes.get(run.target.mode);
@@ -303,7 +304,8 @@ export class Engine {
     if (problems.length > 0) {
       return { ok: false, problems };
     }
-    const runTarget: RunTarget = { kind: "action", mode: target.mode.manifest.name, name: target.name };
+    const caller = options.caller === undefined ? {} : { caller: options.caller };
+    const runTarget: RunTarget = { kind: "action", mode: target.mode.manifest.name, name: target.name, ...caller };
     const limit = smallestBudget([target.action.budget, system.config.budget]);
     return this.#start({ target: runTarget, input, limit }, options);
   }

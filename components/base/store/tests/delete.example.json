@@ -1,0 +1,16 @@
+{
+  "input": {
+    "ids": [
+      "fake:1001"
+    ]
+  },
+  "output": {
+    "deleted": [
+      "fake:1001"
+    ],
+    "missing": [],
+    "remembered": [
+      "fake:1001"
+    ]
+  }
+}

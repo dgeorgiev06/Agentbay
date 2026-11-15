@@ -1,4 +1,4 @@
-import { basename, resolve } from "node:path/posix";
+import { basename, dirname, join, resolve } from "node:path/posix";
 import { type AgentQueryResult, runAgentQuery } from "./agent-query.ts";
 import { type Answer, failed, granted, listed, manifestOf, refused } from "./answers.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, Http, HttpRequest, HttpResponse } from "./ports.ts";
@@ -50,6 +50,10 @@ const defaultBrokerLimits: BrokerLimits = {
 
 const migrationName = /^\d{4}-[^/]+\.sql$/;
 
+const partitionName = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+
+const longestPartitionName = 64;
+
 const brokerKinds: readonly string[] = ["refused", "http", "redacted"];
 
 const isRows = (value: Json): value is readonly Row[] =>
@@ -66,24 +70,49 @@ type Expected<T> = {
   readonly fits: (value: Json) => value is Json & T;
 };
 
+function redactedParameters(parameters: SqlParameters, redact: (text: string) => string): SqlParameters {
+  const redacted = (value: Json): Json => (typeof value === "string" ? redact(value) : value);
+  if (Array.isArray(parameters)) {
+    return parameters.map(redacted);
+  }
+  return Object.fromEntries(Object.entries(parameters).map(([name, value]) => [name, redacted(value)]));
+}
+
 export class Broker {
   readonly #options: BrokerOptions;
   readonly #permissions: Permissions;
   readonly #limits: BrokerLimits;
-  readonly #database: DatabaseProcess;
+  readonly #databases = new Map<string, DatabaseProcess>();
 
   constructor(options: BrokerOptions) {
     this.#options = options;
     this.#permissions = options.permissions;
     this.#limits = { ...defaultBrokerLimits, ...options.limits };
-    this.#database = new DatabaseProcess({
-      childProcesses: options.childProcesses,
-      databaseFile: options.permissions.databaseFile,
-      lifetimeMilliseconds: this.#limits.databaseMilliseconds,
-    });
   }
 
-  async migrate(): Promise<Answer<readonly string[]>> {
+  #partitionFile(partition: string | undefined): Answer<string> {
+    const databaseFile = this.#permissions.databaseFile;
+    if (partition === undefined) {
+      return granted(databaseFile);
+    }
+    if (partition.length > longestPartitionName || !partitionName.test(partition)) {
+      return refused({
+        resource: "db",
+        asked: `${this.#asking} for the database partition ${JSON.stringify(partition)}`,
+        declared:
+          `a partition name is kebab-case, at most ${String(longestPartitionName)} characters, ` +
+          "with no dots or path separators",
+        change: "Name the partition with lowercase letters, digits and single dashes, such as feed-briefing.",
+      });
+    }
+    return granted(join(dirname(databaseFile), `${this.#permissions.mode}--${partition}.db`));
+  }
+
+  async migrate(partition?: string): Promise<Answer<readonly string[]>> {
+    const file = this.#partitionFile(partition);
+    if (!file.ok) {
+      return this.#settle(file);
+    }
     const migrations = resolve(this.#permissions.modeFolder, this.#permissions.migrationsFolder);
     if (!isInsideOrEqual(migrations, this.#permissions.modeFolder)) {
       return this.#settle(
@@ -105,31 +134,45 @@ export class Broker {
       ordered.push({ name, sql: (await this.#options.files.readText(`${migrations}/${name}`)) ?? "" });
     }
     const appliedAt = this.#options.clock.now().toISOString();
-    const result = await this.#database.request({ method: "migrate", migrations: ordered, appliedAt });
+    const order = { method: "migrate" as const, migrations: ordered, appliedAt };
+    const result = await this.#databaseOf(file.value).request(order);
     return this.#settle(this.#databaseAnswer(result, { keyword: "migrate", fits: isNames }));
   }
 
-  async execute(sql: string, parameters: SqlParameters = []): Promise<Answer<ExecuteResult>> {
+  async execute(sql: string, parameters: SqlParameters = [], partition?: string): Promise<Answer<ExecuteResult>> {
+    const file = this.#partitionFile(partition);
+    if (!file.ok) {
+      return this.#settle(file);
+    }
     const keyword = leadingKeyword(sql);
     if (![...readKeywords, ...writeKeywords].includes(keyword)) {
       return this.#settle(this.#statementRefusal(keyword, [...readKeywords, ...writeKeywords]));
     }
     const writable = this.#permissions.effects.includes("write");
-    const result = await this.#database.request({ method: "execute", sql, parameters, writable });
+    const stored = await this.#storedParameters(parameters);
+    const result = await this.#databaseOf(file.value).request({ method: "execute", sql, parameters: stored, writable });
     return this.#settle(this.#databaseAnswer(result, { keyword, fits: isExecuteResult }));
   }
 
-  async query(sql: string, parameters: SqlParameters = []): Promise<Answer<readonly Row[]>> {
+  async query(sql: string, parameters: SqlParameters = [], partition?: string): Promise<Answer<readonly Row[]>> {
+    const file = this.#partitionFile(partition);
+    if (!file.ok) {
+      return this.#settle(file);
+    }
     const keyword = leadingKeyword(sql);
     if (!readKeywords.includes(keyword)) {
       return this.#settle(this.#statementRefusal(keyword, readKeywords));
     }
-    const result = await this.#database.request({ method: "query", sql, parameters });
+    const result = await this.#databaseOf(file.value).request({ method: "query", sql, parameters });
     return this.#settle(this.#databaseAnswer(result, { keyword, fits: isRows }));
   }
 
-  async agentQuery(sql: string): Promise<Answer<AgentQueryResult>> {
-    const databaseFile = this.#permissions.databaseFile;
+  async agentQuery(sql: string, partition?: string): Promise<Answer<AgentQueryResult>> {
+    const file = this.#partitionFile(partition);
+    if (!file.ok) {
+      return this.#settle(file);
+    }
+    const databaseFile = file.value;
     if (!(await this.#options.files.exists(databaseFile))) {
       return this.#settle(failed(`The mode ${this.#permissions.mode} has no database yet; run its migrations first.`));
     }
@@ -269,7 +312,35 @@ export class Broker {
   }
 
   close(): void {
-    this.#database.close();
+    for (const database of this.#databases.values()) {
+      database.close();
+    }
+    this.#databases.clear();
+  }
+
+  #databaseOf(file: string): DatabaseProcess {
+    const known = this.#databases.get(file);
+    if (known !== undefined) {
+      return known;
+    }
+    const database = new DatabaseProcess({
+      childProcesses: this.#options.childProcesses,
+      databaseFile: file,
+      lifetimeMilliseconds: this.#limits.databaseMilliseconds,
+    });
+    this.#databases.set(file, database);
+    return database;
+  }
+
+  async #storedParameters(parameters: SqlParameters): Promise<SqlParameters> {
+    const stored = redactedParameters(parameters, (text) => this.#options.secrets.redact(text));
+    if (JSON.stringify(stored) !== JSON.stringify(parameters)) {
+      await this.#append("redacted", {
+        step: this.#options.place.stepKey,
+        message: "Text that looks like a secret was removed from the values of a statement before it was stored.",
+      });
+    }
+    return stored;
   }
 
   async #append(kind: string, detail: Json): Promise<void> {

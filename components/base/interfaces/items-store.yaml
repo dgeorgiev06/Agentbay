@@ -1,0 +1,35 @@
+name: items-store
+version: 1
+actions:
+  put:
+    input: items-store/put-request.json
+    output: items-store/put-response.json
+    effects: [read, write]
+  update:
+    input: items-store/update-request.json
+    output: items-store/update-response.json
+    effects: [read, write]
+  delete:
+    input: items-store/delete-request.json
+    output: items-store/delete-response.json
+    effects: [read, write, delete]
+  get:
+    input: items-store/get-request.json
+    output: items-store/get-response.json
+    effects: [read]
+  query:
+    input: items-store/query-request.json
+    output: items-store/query-response.json
+    effects: [read]
+  sql:
+    input: items-store/sql-request.json
+    output: items-store/sql-response.json
+    effects: [read]
+  prune:
+    input: items-store/prune-request.json
+    output: items-store/prune-response.json
+    effects: [read, write, delete]
+  status:
+    input: items-store/status-request.json
+    output: items-store/status-response.json
+    effects: [read]

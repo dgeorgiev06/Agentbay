@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FeedBriefingSettings",
+  "description": "Settings of the feed briefing, given under settings.feed-briefing in agentbay.config.yaml.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {
+    "selector": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/selector"
+        }
+      ],
+      "description": "Which items to sync and brief on; without it, everything the bound source serves."
+    },
+    "lookback": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*[hdw]$",
+      "description": "How far back a digest looks, and where a sync starts when it is given no since: hours, days or weeks, such as 36h or 7d; 7d when not given."
+    },
+    "maxItems": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500,
+      "description": "The most items one sync stores and one digest reads; 100 when not given."
+    }
+  },
+  "$defs": {
+    "selector": {
+      "type": "object",
+      "description": "Which items a source fetches and the store keeps or returns. Every field given must match; within a list one value is enough. An empty selector matches every item.",
+      "additionalProperties": false,
+      "properties": {
+        "authors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "An author's handle or address, or a pattern with *."
+          },
+          "maxItems": 100,
+          "uniqueItems": true,
+          "description": "Items whose author is one of these, ignoring case and a leading @; * matches any run of characters, so *@example.com matches every address at that domain."
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "A label, list, folder or channel name."
+          },
+          "maxItems": 100,
+          "uniqueItems": true,
+          "description": "Items that carry at least one of these labels, ignoring case: lists on X, labels and folders in Gmail."
+        },
+        "text": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "A word or phrase to look for."
+          },
+          "maxItems": 100,
+          "uniqueItems": true,
+          "description": "Items whose title or text contains at least one of these terms, ignoring case."
+        },
+        "kinds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+            "maxLength": 64,
+            "description": "A kind, such as post."
+          },
+          "maxItems": 20,
+          "uniqueItems": true,
+          "description": "Items of these kinds only."
+        },
+        "since": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]{1,3})?)?(Z|[+-][0-9]{2}:[0-9]{2})$",
+          "description": "Items created at or after this time."
+        },
+        "until": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]{1,3})?)?(Z|[+-][0-9]{2}:[0-9]{2})$",
+          "description": "Items created before this time."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "The most items one sync fetches over all its pages, or one query returns."
+        },
+        "native": {
+          "type": "object",
+          "description": "Fields only the bound source understands, such as a Gmail search string; the source applies them and the store's matcher ignores them."
+        }
+      }
+    }
+  }
+}

@@ -161,7 +161,8 @@ async function callAction(call: ToolCall): Promise<ToolResult> {
     );
   }
   const reference = `${target.mode.manifest.name}.${target.name}`;
-  const result = await call.kernel.engine.startAction(reference, fieldOf(call.input, "input") ?? {});
+  const caller = action.includes(".") ? { caller: call.step.target.mode.manifest.name } : {};
+  const result = await call.kernel.engine.startAction(reference, fieldOf(call.input, "input") ?? {}, caller);
   await recordAskedBy(call, result);
   return calledResult(result, action);
 }

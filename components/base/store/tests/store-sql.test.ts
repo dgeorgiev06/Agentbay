@@ -1,0 +1,109 @@
+import assert from "node:assert/strict";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
+import { after, before, test } from "node:test";
+import type { Json } from "../../../../bay/sdk.ts";
+import { openModeProject, type ModeProject } from "../../../../tests/mode-harness.ts";
+import { fieldsOf, listOf } from "../scripts/lib/json.ts";
+
+let project: ModeProject;
+
+function postsOf(source: string, count: number): Json {
+  const items = Array.from({ length: count }, (_, index) => ({
+    id: `${source}:${String(index + 1)}`,
+    kind: "post",
+    source,
+    at: `2026-11-01T10:${String(index % 60).padStart(2, "0")}:00Z`,
+    title: null,
+    text: `Post ${String(index + 1)} from ${source}.`,
+    url: null,
+    author: `${source}-author`,
+    labels: [],
+    data: {},
+  }));
+  return { source, kinds: ["post"], items };
+}
+
+before(async () => {
+  project = await openModeProject({ bindings: {}, adapter: "claude-code", modes: ["store"] });
+  await project.output("store.put", postsOf("fake", 3), { caller: "mail-briefing" });
+  await project.output("store.put", postsOf("other", 250), { caller: "todo" });
+});
+
+after(async () => {
+  await project.close();
+});
+
+async function sql(text: string, caller = "mail-briefing"): Promise<Json> {
+  return project.output("store.sql", { sql: text }, { caller });
+}
+
+test("sql runs one select over the caller's views and returns columns and rows", async () => {
+  assert.deepEqual(await sql("select author, count(*) as posts from items_view group by author"), {
+    columns: ["author", "posts"],
+    rows: [["fake-author", 3]],
+  });
+  const searched = await sql(
+    "select items.id from items_search join items on items.rowid = items_search.rowid " +
+      "where items_search match 'post' order by items.id limit 2",
+  );
+  assert.deepEqual(fieldsOf(searched).rows, [["fake:1"], ["fake:2"]]);
+});
+
+test("sql refuses a second statement, a write and attach, and the items stay", async () => {
+  const refused = [
+    "select 1; select 2",
+    "delete from items",
+    "insert into deletions (id, deleted_at) values ('fake:1', 'now')",
+    "attach database 'x.db' as other",
+    "pragma query_only = off",
+  ];
+  for (const text of refused) {
+    const reason = await project.failure("store.sql", { sql: text }, { caller: "mail-briefing" });
+    assert.match(reason, /^An agent.s query was refused/, text);
+  }
+  assert.deepEqual(fieldsOf(await sql("select count(*) from items")).rows, [[3]]);
+});
+
+test("sql refuses more rows than its limit and stops a runaway query", async () => {
+  const many = await project.failure("store.sql", { sql: "select id from items" }, { caller: "todo" });
+  assert.match(many, /more than 200 rows/);
+  const endless = "with recursive r(n) as (select 1 union all select n + 1 from r) select count(*) from r";
+  const started = Date.now();
+  const stopped = await project.failure("store.sql", { sql: endless }, { caller: "todo" });
+  assert.match(stopped, /still running and was killed/);
+  assert.ok(Date.now() - started < 15_000);
+  assert.deepEqual(fieldsOf(await sql("select count(*) from items", "todo")).rows, [[250]]);
+});
+
+test("one caller cannot see another caller's items through query, get or sql", async () => {
+  const queried = await project.output("store.query", { selector: { limit: 1000 } }, { caller: "mail-briefing" });
+  assert.equal(listOf(fieldsOf(queried).items).length, 3);
+  const got = await project.output("store.get", { ids: ["other:1"] }, { caller: "mail-briefing" });
+  assert.deepEqual(fieldsOf(got).missing, ["other:1"]);
+  assert.deepEqual(fieldsOf(await sql("select count(*) from items where source = 'other'")).rows, [[0]]);
+  const otherFile = join(project.root, ".agentbay", "data", "store--todo.db");
+  const attach = await project.failure(
+    "store.sql",
+    { sql: `attach '${otherFile}' as todo` },
+    { caller: "mail-briefing" },
+  );
+  assert.match(attach, /refused/);
+  const listed = await sql("select file from pragma_database_list");
+  assert.equal(JSON.stringify(listed).includes("store--todo.db"), false);
+});
+
+test("a direct call with no caller uses the owner's own partition", async () => {
+  await project.output("store.put", postsOf("fake", 1), {});
+  assert.deepEqual(fieldsOf(await project.output("store.status", {}, {})).items, 1);
+  const mail = await project.output("store.status", {}, { caller: "mail-briefing" });
+  assert.equal(fieldsOf(mail).items, 3);
+  const files = await project.partition("store", "owner").query("select count(*) as n from items");
+  assert.ok(files.ok);
+  assert.deepEqual(files.value, [{ n: 1 }]);
+});
+
+test("the store writes only database files: one partition per caller, and the kernel's own", () => {
+  const files = readdirSync(join(project.root, ".agentbay", "data")).filter((name) => !/-(wal|shm)$/.test(name));
+  assert.deepEqual(files.sort(), ["store--mail-briefing.db", "store--owner.db", "store--todo.db", "store.db"]);
+});

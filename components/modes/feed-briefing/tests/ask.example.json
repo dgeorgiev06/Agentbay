@@ -1,0 +1,11 @@
+{
+  "input": {
+    "question": "Which custodians changed how unstaking works?"
+  },
+  "output": {
+    "answer": "A large custodian added same-day unstaking for ETH, ending a week-long wait (fake:1024).",
+    "cites": [
+      "fake:1024"
+    ]
+  }
+}

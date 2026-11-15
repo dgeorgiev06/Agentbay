@@ -13,7 +13,6 @@ import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } fr
 import { createScriptRunner } from "../bay/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import type { ChildProcesses } from "../bay/ports.ts";
-import { issueTaskToken } from "../bay/runs/task-tokens.ts";
 import { callKernelTool } from "../bay/tools.ts";
 import {
   noProcesses,
@@ -28,7 +27,7 @@ import {
 } from "./broker-fixture.ts";
 import { bay } from "./cli-fixture.ts";
 import { harness, finished, problemsOf, runOf } from "./engine-fixture.ts";
-import { openProject, testEnvironment } from "./kernel-fixture.ts";
+import { openProject, startedTask, testEnvironment } from "./kernel-fixture.ts";
 import { kit, makeProject, type Project } from "./project-fixture.ts";
 import { problemText } from "../bay/outcome.ts";
 
@@ -138,10 +137,7 @@ test("files_write onto a folder is a refusal, not a rejected tool call", async (
   const opened = await openProject();
   try {
     const { kernel, project } = opened;
-    const result = await kernel.runs.agentTools.engine.startAction("writer.compose", { name: "Ada" });
-    assert.ok(result.ok && result.value.state.status === "waiting", JSON.stringify(result));
-    const place = { runId: result.value.id, stepKey: result.value.state.waiting.stepKey, round: 1 };
-    const token = await issueTaskToken(kernel.runs.agentTools.store, place, new Date());
+    const { token } = await startedTask(kernel, "writer.compose", { name: "Ada" });
     await mkdir(join(project.root, "out", "notes", "taken"), { recursive: true });
     const written = await callKernelTool(kernel, "files_write", { token, path: "out/notes/taken", text: "x" });
     assert.ok(!written.ok);
@@ -156,10 +152,7 @@ test("a migration that cannot be read makes db_query a refusal, not a rejected t
   try {
     const { kernel, project } = opened;
     await mkdir(join(project.root, "components", "modes", "writer", "migrations", "0002-folder.sql"));
-    const result = await kernel.runs.agentTools.engine.startAction("writer.compose", { name: "Ada" });
-    assert.ok(result.ok && result.value.state.status === "waiting", JSON.stringify(result));
-    const place = { runId: result.value.id, stepKey: result.value.state.waiting.stepKey, round: 1 };
-    const token = await issueTaskToken(kernel.runs.agentTools.store, place, new Date());
+    const { token } = await startedTask(kernel, "writer.compose", { name: "Ada" });
     const queried = await callKernelTool(kernel, "db_query", { token, sql: "select 1" });
     assert.ok(!queried.ok);
     assert.match(problemText(queried.problems), /could not read the migrations/);
@@ -255,10 +248,7 @@ test("a kernel tool whose skill file cannot be read answers with a refusal, not 
   const opened = await openProject();
   try {
     const { kernel, project } = opened;
-    const result = await kernel.runs.agentTools.engine.startAction("writer.compose", { name: "Ada" });
-    assert.ok(result.ok && result.value.state.status === "waiting", JSON.stringify(result));
-    const place = { runId: result.value.id, stepKey: result.value.state.waiting.stepKey, round: 1 };
-    const token = await issueTaskToken(kernel.runs.agentTools.store, place, new Date());
+    const { token } = await startedTask(kernel, "writer.compose", { name: "Ada" });
     const skillFile = join(project.root, "components", "modes", "writer", "skills", "draft", "SKILL.md");
     await rm(skillFile);
     await mkdir(skillFile);

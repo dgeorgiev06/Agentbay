@@ -126,7 +126,6 @@ export type Runs = {
   readonly callAction: (token: string, action: string, input: Json) => Promise<Outcome<Called>>;
   readonly events: EventSink;
   readonly close: () => void;
-  readonly agentTools: { readonly engine: Engine; readonly store: SqliteRunStore };
 };
 
 type Opened = {
@@ -473,7 +472,6 @@ function runsOf(opened: Opened): Runs {
     close: () => {
       store.close();
     },
-    agentTools: { engine, store },
   };
 }
 

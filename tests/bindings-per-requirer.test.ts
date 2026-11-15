@@ -4,12 +4,11 @@ import { stringify } from "yaml";
 import type { Json } from "../bay/contracts.ts";
 import { fieldOf, textField } from "../bay/json.ts";
 import type { Kernel } from "../bay/kernel.ts";
-import type { RunView } from "../bay/runs/run-state.ts";
-import { issueTaskToken } from "../bay/runs/task-tokens.ts";
+import type { Run } from "../bay/runs/runs.ts";
 import { callKernelTool } from "../bay/tools.ts";
-import { openKernel } from "./kernel-fixture.ts";
+import { openKernel, startedTask } from "./kernel-fixture.ts";
 import { makeProject, skillText, type Project } from "./project-fixture.ts";
-import { problemText } from "../bay/outcome.ts";
+import { problemText, type Outcome } from "../bay/outcome.ts";
 
 const nameSchema = { type: "object", additionalProperties: false, required: ["name"], properties: { name: {} } };
 
@@ -115,7 +114,7 @@ async function twoRequirers(bindings: Bindings, body: (kernel: Kernel) => Promis
   }
 }
 
-function doneOutput(result: Awaited<ReturnType<Kernel["runs"]["agentTools"]["engine"]["startAction"]>>): Json {
+function doneOutput(result: Outcome<Run>): Json {
   assert.ok(result.ok, JSON.stringify(result));
   const state = result.value.state;
   if (state.status !== "done") {
@@ -124,17 +123,13 @@ function doneOutput(result: Awaited<ReturnType<Kernel["runs"]["agentTools"]["eng
   return state.output;
 }
 
-function calledMode(run: RunView, key: string): Json {
+function calledMode(run: Run, key: string): Json {
   const record = run.steps.find((step) => step.key === key);
   return fieldOf(record?.detail ?? null, "mode") ?? null;
 }
 
 async function greetingByTool(kernel: Kernel, requirer: string): Promise<string | undefined> {
-  const result = await kernel.runs.agentTools.engine.startAction(`${requirer}.ask`, { name: "Ada" });
-  assert.ok(result.ok && result.value.state.status === "waiting", JSON.stringify(result));
-  const waiting = result.value.state.waiting;
-  const place = { runId: result.value.id, stepKey: waiting.stepKey, round: 1 };
-  const token = await issueTaskToken(kernel.runs.agentTools.store, place, new Date());
+  const { token } = await startedTask(kernel, `${requirer}.ask`, { name: "Ada" });
   const called = await callKernelTool(kernel, "call_action", {
     token,
     action: "greeting-source.fetch",
@@ -148,11 +143,15 @@ const split = { "greeting-source": { alpha: "greeter", beta: "echoer", default: 
 
 test("two requirers bound to two servers each reach their own through a call step and a script call", async () => {
   await twoRequirers(split, async (kernel) => {
-    const engine = kernel.runs.agentTools.engine;
-    assert.deepEqual(doneOutput(await engine.startAction("alpha.direct", { name: "Ada" })), { greeting: "Hello, Ada" });
-    assert.deepEqual(doneOutput(await engine.startAction("beta.direct", { name: "Ada" })), { greeting: "Echo, Ada" });
-    const alphaScript = await engine.startAction("alpha.scripted", { name: "Bo" });
-    const betaScript = await engine.startAction("beta.scripted", { name: "Bo" });
+    const runs = kernel.runs;
+    assert.deepEqual(doneOutput(await runs.start({ action: "alpha.direct" }, { name: "Ada" })), {
+      greeting: "Hello, Ada",
+    });
+    assert.deepEqual(doneOutput(await runs.start({ action: "beta.direct" }, { name: "Ada" })), {
+      greeting: "Echo, Ada",
+    });
+    const alphaScript = await runs.start({ action: "alpha.scripted" }, { name: "Bo" });
+    const betaScript = await runs.start({ action: "beta.scripted" }, { name: "Bo" });
     assert.deepEqual(doneOutput(alphaScript), { greeting: "Hello, Bo" });
     assert.deepEqual(doneOutput(betaScript), { greeting: "Echo, Bo" });
     assert.ok(betaScript.ok);
@@ -162,9 +161,9 @@ test("two requirers bound to two servers each reach their own through a call ste
 
 test("two requirers bound to two servers each reach their own through a workflow step", async () => {
   await twoRequirers(split, async (kernel) => {
-    const engine = kernel.runs.agentTools.engine;
-    const alpha = await engine.startWorkflow({ mode: "alpha", path: "workflows/flow.yaml" }, {});
-    const beta = await engine.startWorkflow({ mode: "beta", path: "workflows/flow.yaml" }, {});
+    const runs = kernel.runs;
+    const alpha = await runs.start({ workflow: { mode: "alpha", path: "workflows/flow.yaml" } }, {});
+    const beta = await runs.start({ workflow: { mode: "beta", path: "workflows/flow.yaml" } }, {});
     assert.deepEqual(doneOutput(alpha), { greeting: "Hello, Ada" });
     assert.deepEqual(doneOutput(beta), { greeting: "Echo, Ada" });
   });
@@ -179,15 +178,19 @@ test("two requirers bound to two servers each reach their own through the call_a
 
 test("a requirer without an entry is served by default, and the plain string form serves every requirer", async () => {
   await twoRequirers({ "greeting-source": { beta: "echoer", default: "greeter" } }, async (kernel) => {
-    const alpha = await kernel.runs.agentTools.engine.startAction("alpha.scripted", { name: "Cy" });
+    const alpha = await kernel.runs.start({ action: "alpha.scripted" }, { name: "Cy" });
     assert.deepEqual(doneOutput(alpha), { greeting: "Hello, Cy" });
     assert.equal(await greetingByTool(kernel, "beta"), "Echo, Ada");
   });
   await twoRequirers({ "greeting-source": "echoer" }, async (kernel) => {
-    const engine = kernel.runs.agentTools.engine;
-    assert.deepEqual(doneOutput(await engine.startAction("alpha.direct", { name: "Di" })), { greeting: "Echo, Di" });
-    assert.deepEqual(doneOutput(await engine.startAction("beta.scripted", { name: "Di" })), { greeting: "Echo, Di" });
-    const flow = await engine.startWorkflow({ mode: "alpha", path: "workflows/flow.yaml" }, {});
+    const runs = kernel.runs;
+    assert.deepEqual(doneOutput(await runs.start({ action: "alpha.direct" }, { name: "Di" })), {
+      greeting: "Echo, Di",
+    });
+    assert.deepEqual(doneOutput(await runs.start({ action: "beta.scripted" }, { name: "Di" })), {
+      greeting: "Echo, Di",
+    });
+    const flow = await runs.start({ workflow: { mode: "alpha", path: "workflows/flow.yaml" } }, {});
     assert.deepEqual(doneOutput(flow), { greeting: "Echo, Ada" });
     assert.equal(await greetingByTool(kernel, "alpha"), "Echo, Ada");
   });

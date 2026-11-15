@@ -128,18 +128,3 @@ breaks:
   - from: bay/tools.ts
     to: bay/kernel.ts
     rule: may-not-import
-  - from: bay/tools.ts
-    to: bay/runs/run-state.ts
-    rule: private-file
-  - from: bay/tools.ts
-    to: bay/runs/run-store.ts
-    rule: private-file
-  - from: bay/tools.ts
-    to: bay/runs/task-tokens.ts
-    rule: private-file
-  - from: bay/tools.ts
-    to: bay/runs/waiting.ts
-    rule: private-file
-  - from: bay/tools.ts
-    to: bay/targets.ts
-    rule: private-file

@@ -103,7 +103,7 @@ test("a direct call with no caller uses the owner's own partition", async () => 
   assert.deepEqual(files.value, [{ n: 1 }]);
 });
 
-test("the store writes only database files under .agentbay/data: one partition per caller, and the kernel's own", () => {
+test("the store writes only database files: one partition per caller, and the kernel's own", () => {
   const files = readdirSync(join(project.root, ".agentbay", "data")).filter((name) => !/-(wal|shm)$/.test(name));
   assert.deepEqual(files.sort(), ["store--mail-briefing.db", "store--owner.db", "store--todo.db", "store.db"]);
 });

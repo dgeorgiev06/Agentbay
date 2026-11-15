@@ -112,7 +112,7 @@ test("a deleted id is remembered and refused by every later put; a local id is n
   assert.equal(field(local, "added"), 1);
 });
 
-test("put keeps only the items the selector they were fetched with matches, and says why it skipped the rest", async () => {
+test("put keeps only the items their selector matches, and says why it skipped the rest", async () => {
   const caller = "matched";
   const selector = { authors: ["alice"], text: ["staking"] };
   const items = [post(1), post(2, { author: "bob" }), post(3, { text: "Nothing relevant." })];

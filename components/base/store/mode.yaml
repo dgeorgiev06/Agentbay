@@ -1,6 +1,6 @@
 name: store
 version: 1.0.0
-description: Keeps the items of each mode that composes it in a database of that mode's own, with search and bounded SQL.
+description: Keeps the items of each composing mode in a database of its own, with search and bounded SQL.
 
 implements: [items-store@1]
 

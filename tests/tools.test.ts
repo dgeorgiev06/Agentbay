@@ -215,7 +215,7 @@ test("a skill step round gets a bounded number of tool calls; then only submit w
   await project.remove();
 });
 
-test("call_action starts the interface action for the skill's mode, so the callee sees that mode as its caller", async () => {
+test("call_action starts an interface action for the skill's mode, which the callee sees as its caller", async () => {
   await withWaiting(async ({ kernel }, waiting) => {
     const fetched = await callKernelTool(kernel, "call_action", {
       token: waiting.token,

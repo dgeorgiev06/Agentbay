@@ -82,7 +82,7 @@ test("a run started for a caller keeps it in the store, and its later steps and 
   close();
 });
 
-test("a script whose call waits for budget makes its step wait, and on resume its finished calls are replayed", async () => {
+test("a script whose call waits for budget waits too, and on resume its finished calls are replayed", async () => {
   const scripts = {
     "notes:scripts/log.ts": async (request: ScriptRequest) => {
       const first = await request.call("items-store.put", { id: "one" });

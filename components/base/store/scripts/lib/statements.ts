@@ -7,7 +7,8 @@ export const selectKindsOfOtherSources = "select source, kinds from sync_state w
 export const recordSpend = `insert or ignore into spend (page, source, month, items, usd, recorded_at)
   values (:page, :source, :month, :items, :usd, :recorded_at)`;
 
-export const upsertItem = `insert into items (id, kind, source, at, at_ms, title, text, url, author, labels, data, stored_at)
+export const upsertItem = `insert into items
+    (id, kind, source, at, at_ms, title, text, url, author, labels, data, stored_at)
   values (:id, :kind, :source, :at, :at_ms, :title, :text, :url, :author, :labels, :data, :stored_at)
   on conflict (id) do update set
     kind = excluded.kind,

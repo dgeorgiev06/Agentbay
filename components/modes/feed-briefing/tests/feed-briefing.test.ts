@@ -207,7 +207,7 @@ test("a digest citing an id it was not given fails the check, with feedback nami
   });
 });
 
-test("the check also refuses an empty citation list, long summaries, copied text and changed copied fields", async () => {
+test("the check refuses no citations, long summaries, copied text and changed copied fields", async () => {
   await withBriefing({}, async (project) => {
     await project.output("feed-briefing.sync", { since });
     const waiting = waitingSkillOf(await project.run("feed-briefing.digest", { until: baseDate }));
@@ -289,7 +289,7 @@ test("ask answers from the store and its check refuses an id the store does not 
   });
 });
 
-test("the daily workflow syncs, waits for the digest skill, then waits for approval of the finished digest", async () => {
+test("the daily workflow syncs, waits for the digest skill, then for approval of the digest", async () => {
   await withBriefing({}, async (project) => {
     const engine = project.kernel.engine;
     const started = runOf(await engine.startWorkflow({ mode: "feed-briefing", path: "workflows/daily.yaml" }, {}));

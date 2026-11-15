@@ -53,14 +53,16 @@ function putOf(input: Json): Put {
 
 function foreignItemReason(put: Put, item: Item): string | undefined {
   if (item.source !== put.source) {
-    return `The item ${item.id} has the source ${item.source}, but this put is for ${put.source}; put each source on its own.`;
+    const given = `The item ${item.id} has the source ${item.source}`;
+    return `${given}, but this put is for ${put.source}; put each source on its own.`;
   }
   if (!item.id.startsWith(`${put.source}:`)) {
     return `The item id ${item.id} does not start with ${put.source}:; an item id is <source>:<external id>.`;
   }
   if (!put.kinds.includes(item.kind)) {
     const produced = put.kinds.join(", ");
-    return `The item ${item.id} is a ${item.kind}, which the source ${put.source} does not produce (it produces: ${produced}).`;
+    const given = `The item ${item.id} is a ${item.kind}`;
+    return `${given}, which the source ${put.source} does not produce (it produces: ${produced}).`;
   }
   return undefined;
 }

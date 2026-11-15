@@ -82,6 +82,7 @@ export const briefingMode: Mode = {
   version: "1.0.0",
   description: "Writes a daily briefing as a note.",
   requires: { interfaces: ["notes@1"] },
+  settings: "schemas/settings.json",
   actions: {
     digest: {
       input: "schemas/digest-input.json",
@@ -92,12 +93,27 @@ export const briefingMode: Mode = {
   },
 };
 
-export const config: Config = { bindings: { "items-store": "store", notes: "notes" }, adapter: "local" };
+export const config: Config = {
+  bindings: { "items-store": "store", notes: "notes" },
+  adapter: "local",
+  settings: { briefing: { lookback: "3d" } },
+};
+
+export const briefingSettingsSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["lookback"],
+  properties: { lookback: { type: "string", pattern: "^[1-9][0-9]*d$" } },
+};
 
 const dailyWorkflow: Workflow = {
   name: "daily",
   trigger: { schedule: "0 7 * * *" },
-  steps: [{ action: "add" }, { approval: "Keep this note?" }],
+  steps: [
+    { id: "write", action: "add" },
+    { id: "check", action: "items-store.get" },
+    { id: "keep", approval: "Keep this note?" },
+  ],
 };
 
 const writeNoteSkill = [
@@ -140,6 +156,7 @@ export function validFiles(): Record<string, string> {
     [paths.briefing]: yamlText(briefingMode),
     ...schemaFiles("components/modes/briefing/schemas", ["digest-input", "digest-output"]),
     "components/modes/briefing/scripts/select.ts": "",
+    "components/modes/briefing/schemas/settings.json": JSON.stringify(briefingSettingsSchema),
     [paths.config]: yamlText(config),
   };
 }

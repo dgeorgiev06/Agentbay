@@ -3,9 +3,10 @@ import { isDeepStrictEqual } from "node:util";
 import type { Config } from "./generated/config.ts";
 import type { Interface, Signature } from "./generated/interface.ts";
 import type { Action, Mode, Step } from "./generated/mode.ts";
-import type { Workflow } from "./generated/workflow.ts";
+import type { Workflow, Step as WorkflowStep } from "./generated/workflow.ts";
 import type { FileSystem } from "./ports.ts";
 import {
+  checkValue,
   loadSpec,
   problemAt,
   type Loaded,
@@ -19,6 +20,7 @@ export type LoadedMode = {
   readonly folder: string;
   readonly manifest: Mode;
   readonly workflows: ReadonlyMap<string, Workflow>;
+  readonly settings: Readonly<Record<string, unknown>>;
 };
 
 export type LoadedInterface = {
@@ -45,6 +47,10 @@ type Collected<T> = {
   readonly problems: readonly Problem[];
 };
 
+type LoadedModes = Collected<ModeSource> & {
+  readonly unloaded: ReadonlySet<string>;
+};
+
 type Indexed<T> = {
   readonly index: ReadonlyMap<string, T>;
   readonly problems: readonly Problem[];
@@ -55,6 +61,7 @@ type Context = {
   readonly modes: ReadonlyMap<string, ModeSource>;
   readonly interfaces: ReadonlyMap<string, Loaded<Interface>>;
   readonly config: Loaded<Config> | undefined;
+  readonly unloadedModes: ReadonlySet<string>;
 };
 
 type ActionPlace = {
@@ -93,9 +100,14 @@ type SchemaFile =
   | { readonly state: "valid"; readonly schema: unknown };
 
 type ModeWorkflow = {
-  readonly mode: string;
+  readonly mode: ModeSource;
   readonly path: string;
-  readonly workflow: Workflow;
+  readonly loaded: Loaded<Workflow>;
+};
+
+type WorkflowStepPlace = {
+  readonly step: WorkflowStep;
+  readonly path: PathSegments;
 };
 
 const modeTiers = ["components/base", "components/modes"] as const;
@@ -139,6 +151,10 @@ function implementersOf(context: Context, reference: string): readonly string[] 
     .map((mode) => mode.value.name);
 }
 
+function settingsOf(config: Config, modeName: string): Readonly<Record<string, unknown>> {
+  return config.settings?.[modeName] ?? {};
+}
+
 function boundModeOf(context: Context, reference: string): string | undefined {
   const boundMode = context.config?.value.bindings[interfaceName(reference)];
   return boundMode !== undefined && context.modes.has(boundMode) ? boundMode : undefined;
@@ -165,8 +181,9 @@ async function modeFolders(files: FileSystem): Promise<readonly string[]> {
   const folders: string[] = [];
   for (const tier of modeTiers) {
     for (const name of await files.list(tier)) {
-      if (await files.exists(join(tier, name, "mode.yaml"))) {
-        folders.push(join(tier, name));
+      const folder = join(tier, name);
+      if (folder !== interfacesFolder && (await files.exists(join(folder, "mode.yaml")))) {
+        folders.push(folder);
       }
     }
   }
@@ -175,14 +192,34 @@ async function modeFolders(files: FileSystem): Promise<readonly string[]> {
 
 async function interfaceFiles(files: FileSystem): Promise<readonly string[]> {
   const names = await files.list(interfacesFolder);
-  return names.filter((name) => name.endsWith(".yaml")).map((name) => join(interfacesFolder, name));
+  return names
+    .filter((name) => name.endsWith(".yaml") && name !== "mode.yaml")
+    .map((name) => join(interfacesFolder, name));
 }
 
-async function loadModes(files: FileSystem): Promise<Collected<ModeSource>> {
-  return loadEach(await modeFolders(files), async (folder) => {
+async function modeInInterfacesProblems(files: FileSystem): Promise<readonly Problem[]> {
+  const file = join(interfacesFolder, "mode.yaml");
+  if (!(await files.exists(file))) {
+    return [];
+  }
+  const problem = {
+    file,
+    path: "",
+    message: `${interfacesFolder} holds interface files only, but it has a mode.yaml.`,
+    fix: "Move the mode to a folder of its own, such as components/base/<mode>/mode.yaml.",
+  };
+  return [problem];
+}
+
+async function loadModes(files: FileSystem): Promise<LoadedModes> {
+  const folders = await modeFolders(files);
+  const collected = await loadEach(folders, async (folder) => {
     const outcome = await loadSpec(files, join(folder, "mode.yaml"), "mode");
     return outcome.ok ? { ok: true, value: { ...outcome.value, folder } } : outcome;
   });
+  const loadedFolders = new Set(collected.values.map((mode) => mode.folder));
+  const unloaded = folders.filter((folder) => !loadedFolders.has(folder)).map((folder) => basename(folder));
+  return { ...collected, unloaded: new Set(unloaded) };
 }
 
 async function loadInterfaces(files: FileSystem): Promise<Collected<Loaded<Interface>>> {
@@ -213,7 +250,7 @@ async function loadWorkflows(context: Context): Promise<Collected<ModeWorkflow>>
       }
       const outcome = await loadSpec(context.files, file, "workflow");
       if (outcome.ok) {
-        values.push({ mode: mode.value.name, path, workflow: outcome.value.value });
+        values.push({ mode, path, loaded: outcome.value });
       } else {
         problems.push(...outcome.problems);
       }
@@ -298,6 +335,9 @@ function bindingProblem(context: Context, mode: ModeSource, reference: string): 
       message: `Mode ${mode.value.name} requires ${reference}, but bindings names no mode for ${name}.`,
       fix: `Add ${name}: <mode> under bindings; modes that implement ${reference}: ${candidates}.`,
     });
+  }
+  if (context.unloadedModes.has(boundMode)) {
+    return undefined;
   }
   if (!context.modes.has(boundMode)) {
     return problemAt(context.config, ["bindings", name], {
@@ -465,15 +505,37 @@ function callProblems(context: Context, place: ActionPlace, step: CallStep): rea
 
 function undoProblems(place: ActionPlace): readonly Problem[] {
   const undo = place.action.undo;
-  if (undo === undefined || Object.hasOwn(place.mode.value.actions, undo)) {
+  if (undo === undefined) {
     return [];
   }
-  return [
-    problemAt(place.mode, ["actions", place.name, "undo"], {
-      message: `${actionLabel(place)} names undo: ${undo}, but mode ${place.mode.value.name} has no action ${undo}.`,
-      fix: `Name an action of ${place.mode.value.name}, or add the action ${undo}.`,
-    }),
-  ];
+  const path = ["actions", place.name, "undo"];
+  const modeName = place.mode.value.name;
+  if (undo === place.name) {
+    return [
+      problemAt(place.mode, path, {
+        message: `${actionLabel(place)} names itself as its undo.`,
+        fix: `Name another action of ${modeName} that reverses ${place.name}, or remove undo.`,
+      }),
+    ];
+  }
+  const target = place.mode.value.actions[undo];
+  if (target === undefined) {
+    return [
+      problemAt(place.mode, path, {
+        message: `${actionLabel(place)} names undo: ${undo}, but mode ${modeName} has no action ${undo}.`,
+        fix: `Name an action of ${modeName}, or add the action ${undo}.`,
+      }),
+    ];
+  }
+  if (target.undo === place.name && place.name < undo) {
+    return [
+      problemAt(place.mode, path, {
+        message: `Actions ${place.name} and ${undo} of mode ${modeName} each name the other as undo.`,
+        fix: `Remove undo from one of them; an undo action is not itself undone.`,
+      }),
+    ];
+  }
+  return [];
 }
 
 function actionProblems(context: Context, place: ActionPlace): readonly Problem[] {
@@ -526,7 +588,20 @@ function modeReferences(mode: ModeSource): readonly FileReference[] {
     file: join(mode.folder, workflow),
     subject: `Mode ${mode.value.name} lists the workflow ${workflow}`,
   }));
-  return [...actionsOf(mode).flatMap(actionReferences), ...workflows];
+  const settings = mode.value.settings;
+  const settingsReference: readonly FileReference[] =
+    settings === undefined
+      ? []
+      : [
+          {
+            kind: "schema",
+            owner: mode,
+            path: ["settings"],
+            file: join(mode.folder, settings),
+            subject: `Mode ${mode.value.name} names the settings schema ${settings}`,
+          },
+        ];
+  return [...actionsOf(mode).flatMap(actionReferences), ...workflows, ...settingsReference];
 }
 
 function interfaceReferences(loaded: Loaded<Interface>): readonly FileReference[] {
@@ -624,13 +699,148 @@ function cycleProblems(context: Context): readonly Problem[] {
   );
 }
 
+function workflowStepPlaces(steps: readonly WorkflowStep[], prefix: PathSegments): readonly WorkflowStepPlace[] {
+  return steps.flatMap((step, index) => {
+    const path = [...prefix, "steps", index];
+    const nested = "foreach" in step ? workflowStepPlaces(step.steps, path) : [];
+    return [{ step, path }, ...nested];
+  });
+}
+
+function stepLabel(entry: ModeWorkflow, step: WorkflowStep): string {
+  return `Step ${step.id} of workflow ${entry.path} of mode ${entry.mode.value.name}`;
+}
+
+function duplicateStepIdProblems(entry: ModeWorkflow): readonly Problem[] {
+  const seen = new Set<string>();
+  const problems: Problem[] = [];
+  for (const place of workflowStepPlaces(entry.loaded.value.steps, [])) {
+    if (seen.has(place.step.id)) {
+      problems.push(
+        problemAt(entry.loaded, [...place.path, "id"], {
+          message:
+            `Workflow ${entry.path} of mode ${entry.mode.value.name} ` +
+            `has more than one step with the id ${place.step.id}.`,
+          fix: "Give every step its own id; ids are unique in the whole file, inside foreach steps too.",
+        }),
+      );
+    }
+    seen.add(place.step.id);
+  }
+  return problems;
+}
+
+function callableActions(context: Context, mode: ModeSource): readonly string[] {
+  const own = Object.keys(mode.value.actions);
+  const throughInterfaces = requiredReferences(mode.value).flatMap((reference) => {
+    const definition = context.interfaces.get(reference);
+    const actions = definition === undefined ? [] : Object.keys(definition.value.actions);
+    return actions.map((action) => `${interfaceName(reference)}.${action}`);
+  });
+  return [...own, ...throughInterfaces];
+}
+
+function workflowActionProblem(context: Context, entry: ModeWorkflow, place: WorkflowStepPlace): Problem | undefined {
+  const step = place.step;
+  if (!("action" in step)) {
+    return undefined;
+  }
+  const callable = callableActions(context, entry.mode);
+  if (callable.includes(step.action)) {
+    return undefined;
+  }
+  const path = [...place.path, "action"];
+  const modeName = entry.mode.value.name;
+  const separator = step.action.indexOf(".");
+  const name = step.action.slice(0, separator);
+  const required = requiredReferences(entry.mode.value).some((reference) => interfaceName(reference) === name);
+  if (separator >= 0 && !required) {
+    return problemAt(entry.loaded, path, {
+      message: `${stepLabel(entry, step)} names ${step.action}, but mode ${modeName} does not require ${name}.`,
+      fix: `Add ${name}@<major> to requires.interfaces of ${modeName}, or name one of: ${callable.join(", ")}.`,
+    });
+  }
+  return problemAt(entry.loaded, path, {
+    message:
+      `${stepLabel(entry, step)} names the action ${step.action}, which is neither an action of mode ${modeName} ` +
+      `nor an action of an interface it requires. Valid names: ${callable.join(", ")}.`,
+    fix: "Name one of the valid actions.",
+  });
+}
+
+function workflowProblems(context: Context, workflows: readonly ModeWorkflow[]): readonly Problem[] {
+  return workflows.flatMap((entry) => {
+    const actionProblems = workflowStepPlaces(entry.loaded.value.steps, []).flatMap(
+      (place) => workflowActionProblem(context, entry, place) ?? [],
+    );
+    return [...duplicateStepIdProblems(entry), ...actionProblems];
+  });
+}
+
+async function modeSettingsProblems(context: Context, mode: ModeSource): Promise<readonly Problem[]> {
+  const config = context.config;
+  const settingsPath = mode.value.settings;
+  if (config === undefined || settingsPath === undefined) {
+    return [];
+  }
+  const schemaFile = await readSchemaFile(context.files, join(mode.folder, settingsPath));
+  if (schemaFile.state !== "valid") {
+    return [];
+  }
+  const given = settingsOf(config.value, mode.value.name);
+  const check = checkValue(schemaFile.schema, given, { loaded: config, path: ["settings", mode.value.name] });
+  if (check.kind === "checked") {
+    return check.problems;
+  }
+  return [
+    problemAt(mode, ["settings"], {
+      message:
+        `Mode ${mode.value.name} names the settings schema ${settingsPath}, ` +
+        `which is not a usable JSON Schema: ${check.reason}.`,
+      fix: `Correct ${join(mode.folder, settingsPath)}.`,
+    }),
+  ];
+}
+
+function straySettingsProblems(context: Context): readonly Problem[] {
+  const config = context.config;
+  if (config === undefined) {
+    return [];
+  }
+  return Object.keys(config.value.settings ?? {}).flatMap((modeName) => {
+    const mode = context.modes.get(modeName);
+    if (context.unloadedModes.has(modeName)) {
+      return [];
+    }
+    if (mode === undefined) {
+      return [
+        problemAt(config, ["settings", modeName], {
+          message: `settings gives settings for ${modeName}, which is not a mode.`,
+          fix: `Remove settings.${modeName}, or correct the mode name.`,
+        }),
+      ];
+    }
+    if (mode.value.settings === undefined) {
+      return [
+        problemAt(config, ["settings", modeName], {
+          message: `settings gives settings for mode ${modeName}, which declares no settings schema.`,
+          fix: `Remove settings.${modeName}, or add settings: <schema file> to the manifest of ${modeName}.`,
+        }),
+      ];
+    }
+    return [];
+  });
+}
+
 async function consistencyProblems(context: Context): Promise<readonly Problem[]> {
   const problems: Problem[] = [];
   for (const mode of context.modes.values()) {
     problems.push(...requiresProblems(context, mode));
     problems.push(...(await implementsProblems(context, mode)));
     problems.push(...actionsOf(mode).flatMap((place) => actionProblems(context, place)));
+    problems.push(...(await modeSettingsProblems(context, mode)));
   }
+  problems.push(...straySettingsProblems(context));
   problems.push(...(await referenceProblems(context)));
   problems.push(...cycleProblems(context));
   return problems;
@@ -640,8 +850,15 @@ function buildSystem(context: Context, config: Config, workflows: readonly ModeW
   const modes = new Map<string, LoadedMode>();
   const bindings = new Map<string, string>();
   for (const [name, mode] of context.modes) {
-    const own = workflows.filter((entry) => entry.mode === name).map((entry) => [entry.path, entry.workflow] as const);
-    modes.set(name, { folder: mode.folder, manifest: mode.value, workflows: new Map(own) });
+    const own = workflows
+      .filter((entry) => entry.mode.value.name === name)
+      .map((entry) => [entry.path, entry.loaded.value] as const);
+    modes.set(name, {
+      folder: mode.folder,
+      manifest: mode.value,
+      workflows: new Map(own),
+      settings: settingsOf(config, name),
+    });
     for (const reference of requiredReferences(mode.value)) {
       const boundMode = boundModeOf(context, reference);
       if (boundMode !== undefined) {
@@ -668,9 +885,11 @@ export async function loadSystem(files: FileSystem, layout: SystemLayout): Promi
     modes: modeIndex.index,
     interfaces: interfaceIndex.index,
     config: config.ok ? config.value : undefined,
+    unloadedModes: modes.unloaded,
   };
   const workflows = await loadWorkflows(context);
   const problems = [
+    ...(await modeInInterfacesProblems(rooted)),
     ...modes.problems,
     ...interfaces.problems,
     ...(config.ok ? [] : config.problems),
@@ -679,6 +898,7 @@ export async function loadSystem(files: FileSystem, layout: SystemLayout): Promi
     ...interfaceIndex.problems,
     ...(await consistencyProblems(context)),
     ...workflows.problems,
+    ...workflowProblems(context, workflows.values),
   ];
   if (problems.length > 0 || !config.ok) {
     return { ok: false, problems };

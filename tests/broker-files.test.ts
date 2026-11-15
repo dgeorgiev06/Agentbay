@@ -125,3 +125,28 @@ test("reading a missing file fails plainly", async () => {
     assert.match(failureOf(await broker.readFile("notes-in/missing.md")).message, /does not exist/);
   });
 });
+
+test("a granted path that is itself a link to another folder of the project is refused", async () => {
+  await withProject(async (root) => {
+    await writeProjectFile(root, ".agentbay/data/store.db", "made-up database bytes");
+    await symlink(join(root, ".agentbay/data"), join(root, "notes-in"));
+    const broker = new Broker({
+      root,
+      permissions: permissionsIn(root),
+      place,
+      files: nodeFileSystem,
+      inspector: nodeFileInspector,
+      http: scriptedHttp(() => ({ status: 500, headers: {}, body: "" })),
+      secrets: new SecretStore({ environment: {}, processes: noProcesses, platform: "linux" }),
+      events: recordingSink(),
+      clock: systemClock,
+      childProcesses: nodeChildProcesses,
+    });
+    try {
+      assert.match(refusalOf(await broker.readFile("notes-in/store.db")), /link/);
+      refusalOf(await broker.listFiles("notes-in"));
+    } finally {
+      broker.close();
+    }
+  });
+});

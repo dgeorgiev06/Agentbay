@@ -1,6 +1,14 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["{tests,components/**/tests,adapters/**/tests}/**/*.test.ts"],
+  "entry": [
+    "{tests,components/**/tests,adapters/**/tests}/**/*.test.ts",
+    "bay/sdk.ts",
+    "bay/script-host.ts",
+    "bay/script-preload.ts",
+    "bay/query-child.ts",
+    "bay/database-child.ts",
+    "tests/script-runner-driver.ts"
+  ],
   "project": ["{bay,adapters,components,tests}/**/*.ts"],
   "ignoreExportsUsedInFile": {
     "type": true

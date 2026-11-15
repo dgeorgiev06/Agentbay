@@ -12,7 +12,7 @@ function skipBlockComment(sql: string, start: number): number {
   return end < 0 ? sql.length : end + 2;
 }
 
-export function skipSpaceAndComments(sql: string, start: number): number {
+function skipSpaceAndComments(sql: string, start: number): number {
   let position = start;
   while (position < sql.length) {
     if (/\s/.test(sql.charAt(position))) {

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { Json } from "../../../../bay/sdk.ts";
 import { openModeProject, type ModeProject } from "../../../../tests/mode-harness.ts";
 import { fieldsOf } from "../scripts/lib/json.ts";
+import { stopsBeforePage } from "../scripts/lib/monthly-cap.ts";
 
 const baseDate = "2026-11-15T12:00:00.000Z";
 
@@ -121,4 +122,20 @@ test("a cap of 0 fetches nothing", async () => {
     assert.deepEqual(output.monthlyCap, { month: "2026-11", capUsd: 0, spentUsd: 0, remainingUsd: 0 });
     assert.equal(await storedCount(project), 0);
   });
+});
+
+test("a cap that leaves exactly one page's cost lets that page through, then stops at nothing left", async () => {
+  await withCaps({ fake: 0.02 }, async (project) => {
+    const output = await synced(project);
+    assert.deepEqual([output.pages, output.fetched, output.stopped], [2, 20, "monthly cap"]);
+    assert.deepEqual(output.monthlyCap, { month: "2026-11", capUsd: 0.02, spentUsd: 0.02, remainingUsd: 0 });
+  });
+});
+
+test("the rule: stop when less than one page's cost is left, or, when a page's cost is unknown, when nothing is", () => {
+  assert.equal(stopsBeforePage(0.01, 0.01), false);
+  assert.equal(stopsBeforePage(0.009, 0.01), true);
+  assert.equal(stopsBeforePage(0.001, undefined), false);
+  assert.equal(stopsBeforePage(0, undefined), true);
+  assert.equal(stopsBeforePage(-0.5, undefined), true);
 });

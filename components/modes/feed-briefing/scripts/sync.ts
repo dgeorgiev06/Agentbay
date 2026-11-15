@@ -1,6 +1,7 @@
 import { canonicalJson, defineScript, type Json, type ScriptContext } from "../../../../bay/sdk.ts";
 import { called } from "./lib/calls.ts";
 import { fieldsOf, listOf, numberOf, textOf, type Fields } from "./lib/json.ts";
+import { stopsBeforePage } from "./lib/monthly-cap.ts";
 import { settingsOf, timeOf, type Settings } from "./lib/settings.ts";
 
 type Totals = {
@@ -48,10 +49,6 @@ async function startOf(context: ScriptContext, settings: Settings, input: Fields
   const since = laterTime(textOf(input.since) ?? lookbackStart, settings.selector.since);
   const cursor = selectorChanged ? null : (last?.cursor ?? null);
   return { source, pageCostUsd, cursor, since, selectorChanged };
-}
-
-function stopsBeforePage(remainingUsd: number, pageCostUsd: number | undefined): boolean {
-  return pageCostUsd === undefined ? remainingUsd <= 0 : remainingUsd < pageCostUsd;
 }
 
 async function capReached(context: ScriptContext, start: Start): Promise<MonthlyCap | undefined> {

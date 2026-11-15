@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { access, lstat, mkdir, readdir, readFile, realpath, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import type { FileListing } from "./check.ts";
 import type {
   Child,
   ChildEnd,
@@ -316,6 +317,44 @@ export function createNodeHttp(options: NodeHttpOptions): Http {
       });
       const body = await cappedBody(response, options.maximumResponseBytes);
       return { status: response.status, headers: Object.fromEntries(response.headers.entries()), body };
+    },
+  };
+}
+
+const listingMilliseconds = 30_000;
+
+const unlistedFolders: readonly string[] = ["node_modules", ".git", ".agentbay"];
+
+async function walkedFiles(inspector: FileInspector, root: string, folder = ""): Promise<readonly string[]> {
+  const found: string[] = [];
+  for (const entry of await inspector.entries(folder === "" ? root : `${root}/${folder}`)) {
+    const path = folder === "" ? entry.name : `${folder}/${entry.name}`;
+    if (entry.kind !== "directory") {
+      found.push(path);
+    } else if (!unlistedFolders.includes(entry.name)) {
+      found.push(...(await walkedFiles(inspector, root, path)));
+    }
+  }
+  return found;
+}
+
+export function createProjectFileListing(
+  environment: Readonly<Record<string, string>>,
+  inspector: FileInspector,
+): FileListing {
+  return {
+    projectFiles: async (root) => {
+      const result = await runProcess({
+        command: "git",
+        arguments: ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        directory: root,
+        environment,
+        timeoutMilliseconds: listingMilliseconds,
+      });
+      if (result.exitCode !== 0) {
+        return [...(await walkedFiles(inspector, root))].sort();
+      }
+      return [...new Set(result.stdout.split("\0").filter((path) => path !== ""))].sort();
     },
   };
 }

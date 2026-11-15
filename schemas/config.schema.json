@@ -25,6 +25,19 @@
     "budget": {
       "description": "The default limits for a run that sets none of its own.",
       "$ref": "#/$defs/budget"
+    },
+    "approvals": {
+      "description": "Where the owner may decide approvals.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "description": "The channels approve accepts; without this setting only terminal.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "description": "A channel the owner approves from.", "enum": ["terminal", "chat"] }
+        }
+      }
     }
   },
   "$defs": {

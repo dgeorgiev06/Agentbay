@@ -1,2 +1,2 @@
 #!/bin/sh
-exec node "$(dirname "$0")/bay/cli.ts" "$@"
+exec node --disable-warning=ExperimentalWarning "$(dirname "$0")/bay/cli.ts" "$@"

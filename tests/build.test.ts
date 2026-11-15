@@ -1,0 +1,105 @@
+import assert from "node:assert/strict";
+import { PassThrough } from "node:stream";
+import { test } from "node:test";
+import { parse, stringify } from "yaml";
+import { planAgents } from "../bay/build.ts";
+import { skillNameOf, skillToolsOfText } from "../bay/skill-tools.ts";
+import { isRecord } from "../bay/spec.ts";
+import { streamTerminal } from "../bay/terminal.ts";
+import { openKernel } from "./kernel-fixture.ts";
+import { makeProject } from "./project-fixture.ts";
+
+test("planAgents gives one agent per mode and skill, at the highest tier asked, with the union of effects", async () => {
+  const project = await makeProject();
+  const manifestFile = "components/modes/writer/mode.yaml";
+  const manifest: unknown = parse(await project.read(manifestFile));
+  assert.ok(isRecord(manifest) && isRecord(manifest.actions));
+  const redraft = {
+    input: "schemas/compose-input.json",
+    output: "schemas/draft-output.json",
+    effects: ["read", "spend"],
+    run: [{ skill: "skills/draft/", tier: "deep" }],
+  };
+  const actions = { ...manifest.actions, redraft };
+  await project.write(manifestFile, stringify({ ...manifest, actions }));
+  const kernel = await openKernel(project);
+  const planned = await planAgents({
+    system: kernel.system,
+    policyOf: kernel.policyOf,
+    files: kernel.ports.files,
+    root: kernel.root,
+  });
+  assert.ok(planned.ok, planned.ok ? "" : JSON.stringify(planned.problems));
+  assert.equal(planned.value.length, 1);
+  const [agent] = planned.value;
+  assert.ok(agent);
+  assert.equal(agent.agent, "agentbay-writer-draft");
+  assert.equal(agent.skill, "draft");
+  assert.equal(agent.tier, "deep");
+  assert.equal(agent.description, "Writes a short note that greets the person named in the input.");
+  assert.deepEqual([...agent.permissions.effects].sort(), ["read", "spend", "write"]);
+  assert.deepEqual(agent.permissions.writePaths, [`${project.root}/out/notes`]);
+  kernel.close();
+  await project.remove();
+});
+
+test("planAgents reports a skill whose front matter cannot be read", async () => {
+  const project = await makeProject();
+  await project.write("components/modes/writer/skills/draft/SKILL.md", "no front matter\n");
+  const kernel = await openKernel(project);
+  const planned = await planAgents({
+    system: kernel.system,
+    policyOf: kernel.policyOf,
+    files: kernel.ports.files,
+    root: kernel.root,
+  });
+  assert.ok(!planned.ok);
+  assert.match(planned.problems[0]?.message ?? "", /has no front matter/);
+  kernel.close();
+  await project.remove();
+});
+
+test("a skill's Tools section maps to kernel tools; secrets, http and events give none", () => {
+  const text = [
+    "## Instructions",
+    "- db",
+    "## Tools",
+    "",
+    "1. `files`: to read the drafts",
+    "- secrets",
+    "- http,",
+    "```",
+    "- db",
+    "```",
+    "## Resources",
+    "- db",
+  ].join("\n");
+  assert.deepEqual(skillToolsOfText(text), {
+    kernelTools: ["files_read", "files_list", "files_write", "submit"],
+    actions: [],
+  });
+  assert.deepEqual(skillToolsOfText("## Tools\n- items-store.get\n- db\n"), {
+    kernelTools: ["db_query", "call_action", "submit"],
+    actions: ["items-store.get"],
+  });
+  assert.deepEqual(skillToolsOfText(""), { kernelTools: ["submit"], actions: [] });
+  assert.equal(skillNameOf("skills/draft/"), "draft");
+});
+
+test("the terminal reads a line and all of stdin", async () => {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  let shown = "";
+  output.on("data", (chunk: Buffer) => {
+    shown += chunk.toString();
+  });
+  const terminal = streamTerminal({ input, output });
+  assert.equal(terminal.isInteractive(), false);
+  const answer = terminal.ask("Type yes: ");
+  input.write("yes\n");
+  assert.equal(await answer, "yes");
+  assert.equal(shown, "Type yes: ");
+  const all = terminal.readAll();
+  input.end('{"text":"x"}');
+  assert.equal(await all, '{"text":"x"}');
+});

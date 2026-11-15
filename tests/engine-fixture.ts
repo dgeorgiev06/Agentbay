@@ -19,7 +19,7 @@ import type { Action, Mode } from "../bay/generated/mode.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
 import { numberField, textField } from "../bay/json.ts";
 import { layoutOf } from "../bay/layout.ts";
-import { loadSystem, type System } from "../bay/registry.ts";
+import { loadSystemReport, type System } from "../bay/registry.ts";
 import type { RunStore } from "../bay/run-store.ts";
 import { SqliteRunStore } from "../bay/sqlite-run-store.ts";
 import type { RunView, Waiting } from "../bay/run-state.ts";
@@ -122,7 +122,7 @@ function fakeRunner(overrides: Readonly<Record<string, Script>> = {}): FakeRunne
   };
 }
 
-export const fakeScrubber: Scrubber = {
+const fakeScrubber: Scrubber = {
   redact: (text) => text.replaceAll(/SECRET-[A-Z0-9]+/g, "[redacted]"),
 };
 
@@ -301,7 +301,7 @@ function fixtureFiles(changes: Changes): Record<string, string> {
 
 export async function fixtureSystem(changes: Changes = {}): Promise<{ system: System; files: FakeFileSystem }> {
   const files = fakeFileSystem(fixtureFiles(changes));
-  const outcome = await loadSystem(files, layoutOf({ kit: root, project: root }));
+  const outcome = (await loadSystemReport(files, layoutOf({ kit: root, project: root }))).outcome;
   assert.ok(outcome.ok, outcome.ok ? "" : JSON.stringify(outcome.problems, null, 2));
   return { system: outcome.value, files };
 }

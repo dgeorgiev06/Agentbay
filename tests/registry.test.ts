@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Action, Mode } from "../bay/generated/mode.ts";
-import { bindingUses, loadSystem, servingMode, type System } from "../bay/registry.ts";
+import { bindingUses, loadSystemReport, servingMode, type System } from "../bay/registry.ts";
 import type { Problem } from "../bay/outcome.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import {
@@ -20,13 +20,13 @@ import {
 } from "./system-fixture.ts";
 
 async function systemOf(files: Readonly<Record<string, string>>): Promise<System> {
-  const outcome = await loadSystem(fakeFileSystem(rooted(files)), layout);
+  const outcome = (await loadSystemReport(fakeFileSystem(rooted(files)), layout)).outcome;
   assert.ok(outcome.ok, outcome.ok ? "" : JSON.stringify(outcome.problems, null, 2));
   return outcome.value;
 }
 
 async function problemsOf(files: Readonly<Record<string, string>>): Promise<readonly Problem[]> {
-  const outcome = await loadSystem(fakeFileSystem(rooted(files)), layout);
+  const outcome = (await loadSystemReport(fakeFileSystem(rooted(files)), layout)).outcome;
   assert.ok(!outcome.ok, "expected the system to be refused");
   return outcome.problems;
 }

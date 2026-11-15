@@ -73,10 +73,6 @@ export function filesUnder(paths: readonly string[], folder: string): readonly s
   return paths.filter((path) => path.startsWith(prefix)).map((path) => path.slice(prefix.length));
 }
 
-export function lineOfIndex(text: string, index: number): number {
-  return text.slice(0, index).split("\n").length;
-}
-
 function listingsOf(sources: CheckSources): (home: Home) => Promise<readonly string[]> {
   const listings = new Map<Home, Promise<readonly string[]>>();
   return (home) => {

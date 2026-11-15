@@ -361,3 +361,21 @@ The two may be the same folder: that is how agentbay itself is developed.
 **Found only by running it as a user would:** the kit and the project had to become two folders (slice K7).
 
 **Open for the owner:** the kernel's size; monthly spend caps (reported, no longer enforced); database files are not created owner-only; the old scope rule is kept only in part (a changed selector is flagged, reads are not refused).
+
+## Slice K8: bindings per requiring mode, the monthly cap, owner-only databases (reviewer, 2026-11-15)
+
+Owner decisions at the stage 4 checkpoint: continue to stage 5; accept the kernel's size and review it after 5.0.0; restore the monthly spend cap.
+
+Found while preparing stage 5: the project config binds each interface to ONE mode. The mail briefing and the feed briefing both require `items-source@1` and need different sources (Gmail and X). K8 runs before stage 5.
+
+1. **Bindings.** A binding's value is either a mode name, which serves every mode that requires the interface, or a map from requiring mode to serving mode, with an optional `default`:
+
+   ```yaml
+   bindings:
+     items-store: store
+     items-source: { mail-briefing: gmail, feed-briefing: x }
+   ```
+
+   Every place that resolves an interface resolves it FOR the mode that asks: the registry (problems, cycles, the active set), the engine (`call` steps, workflow steps, script calls), the `call_action` tool (the skill's mode), `bay check`, `bay build` and `bay config`. A requirer with no entry and no default is the existing "not bound" problem, naming the requirer.
+2. **Monthly cap.** `items-store@1` gains `allowance` (effects read): given a source, it answers how much may still be spent on it this calendar month, from the store's setting `monthlyUsd` (a map from source to dollars; a source without an entry has no cap) and the spend the store has recorded. A briefing's `sync` asks before every fetch and stops, with a reason in its output, when the next page could exceed what is left. `feed-briefing` does this now; `mail-briefing` will in stage 5.
+3. **Owner-only databases.** Every database file the kernel creates (`kernel.db`, each mode's database and partitions, their `-wal` and `-shm` files where the platform allows) is created readable and writable by the owner only, and the `.agentbay/` folder likewise.

@@ -1,9 +1,6 @@
-bay_lines: 9703
-kit_python_lines: 5276
-cli_commands: 16
-framework_folders: 2
-schemas: 16
+kernel_lines: 4000
+adapter_lines: 800
+concepts: 5
+cli_commands: 12
 top_level_folders: 7
-tests: 463
-long_lines: 134
 comment_lines: 0

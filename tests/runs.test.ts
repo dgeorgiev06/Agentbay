@@ -377,6 +377,8 @@ test("callAction runs a read-only action for the skill, records who asked, and r
   assert.deepEqual(own.ok ? own.value.output : null, { count: 5 });
   const writing = await runs.callAction(token, "items-store.put", { id: "a" });
   assert.match(messagesOf(writing), /has the effects write; a skill may call only actions whose effects are read/);
+  const saving = await runs.callAction(token, "save", { count: 1 });
+  assert.match(messagesOf(saving), /has the effects read, write; a skill may call only actions/);
   assert.match(messagesOf(await runs.callAction("made-up", "copy", {})), /The token is not valid/);
   close();
 });
@@ -393,4 +395,16 @@ test("events appends to the run, and close leaves the runs for the next openRuns
   assert.equal(waitingTask(shown).stepKey, "0#1");
   again.close();
   remove();
+});
+
+test("a run that fails after a step with effects is undone, and the run says what was undone", async () => {
+  const { runs, close } = await opened();
+  const run = runOf(await runs.start({ action: "notes.store-then-fail" }, { id: "x" }));
+  assert.deepEqual(run.state, {
+    status: "undone",
+    reason: "the script gave up",
+    undo: { undone: [{ stepKey: "0", action: "store.put" }], failed: [], noUndo: [], deleteNotUndone: [] },
+  });
+  assert.deepEqual(runOf(await runs.show(run.id)).state, run.state);
+  close();
 });

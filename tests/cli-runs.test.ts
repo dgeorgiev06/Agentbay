@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { Json } from "../bay/contracts.ts";
+import type { ChildProcesses } from "../bay/ports.ts";
 import { fieldOf, numberField, textField, toJson, isRecord } from "../bay/json.ts";
 import { bay, fakeTerminal, listOf } from "./cli-fixture.ts";
 import { makeProject, type Project } from "./project-fixture.ts";
@@ -350,5 +351,28 @@ test("resume --extend refuses unknown measures, negative or missing amounts, and
       assert.equal(ran.exitCode, 2, argv.join(" "));
       assert.match(ran.output, message);
     }
+  });
+});
+
+test("resume --rerun runs again a step with effects that an unexpected error left unfinished", async () => {
+  await withProject(async (project) => {
+    const root = ["--project", project.root];
+    const childProcesses: ChildProcesses = {
+      start: () => {
+        throw new Error("no process could start");
+      },
+    };
+    const crashed = await bay(["call", "writer.compose", '{"name":"Ada"}', ...root], { ports: { childProcesses } });
+    assert.equal(crashed.exitCode, 1);
+    assert.match(crashed.output, /no process could start/);
+    const runId = textField(
+      listOf(fieldOf(toJson((await bay(["runs", ...root, "--json"])).json), "runs"))[0] ?? null,
+      "id",
+    );
+    const asked = runOf((await bay(["resume", runId ?? "", ...root, "--json"])).json);
+    assert.equal(textField(asked, "waitingFor"), "owner");
+    const rerun = await bay(["resume", runId ?? "", "--rerun", ...root, "--json"]);
+    assert.equal(rerun.exitCode, 0, rerun.output);
+    assert.equal(textField(runOf(rerun.json), "waitingFor"), "skill");
   });
 });

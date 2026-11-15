@@ -5,7 +5,7 @@ import { createInterface } from "node:readline";
 import { test } from "node:test";
 import type { Json } from "../bay/contracts.ts";
 import { fieldOf, parseJson, textField } from "../bay/json.ts";
-import { replyTo, serverName, type ToolServer } from "../bay/mcp-server.ts";
+import { replyTo, type ToolServer } from "../bay/mcp-server.ts";
 import { issueTaskToken } from "../bay/task-tokens.ts";
 import { toolDefinitions } from "../bay/tool-definitions.ts";
 import { openKernel, testEnvironment } from "./kernel-fixture.ts";
@@ -169,7 +169,7 @@ test("replyTo answers an unknown protocol version with its newest and needs a to
   const initialize = { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "1999-01-01" } };
   const reply = parseJson((await replyTo(server, JSON.stringify(initialize))) ?? "");
   assert.equal(fieldOf(fieldOf(reply, "result") ?? {}, "protocolVersion"), "2025-06-18");
-  assert.equal(serverName, "agentbay");
+  assert.equal(textField(fieldOf(fieldOf(reply, "result") ?? {}, "serverInfo") ?? {}, "name"), "agentbay");
   const nameless = parseJson((await replyTo(server, '{"jsonrpc":"2.0","id":2,"method":"tools/call"}')) ?? "");
   assert.equal(fieldOf(fieldOf(nameless, "error") ?? {}, "code"), -32602);
   const called = parseJson(

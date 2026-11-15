@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { helpText, runCommandLine, type Command } from "../bay/command-line.ts";
+import { runCommandLine, type Command } from "../bay/command-line.ts";
 import { commands } from "../bay/commands.ts";
 import { bay, contextFor } from "./cli-fixture.ts";
 
@@ -33,7 +33,6 @@ test("the command table holds the twelve commands, and --help lists exactly them
     .filter((line) => /^ {2}\S/.test(line))
     .map((line) => line.trim().split(/\s+/)[0]);
   assert.deepEqual(listed, twelve);
-  assert.equal(help.output, helpText(commands));
 });
 
 test("an old or unknown command name is a wrong command line, exit 2", async () => {

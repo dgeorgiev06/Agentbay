@@ -65,7 +65,7 @@ const validators: { readonly [Kind in keyof Kinds]: ValidateFunction<Kinds[Kind]
   skill: ajv.compile<SkillFrontMatter>(skillSchema),
 };
 
-export function pointer(path: PathSegments): string {
+function pointer(path: PathSegments): string {
   return path.map((segment) => `/${String(segment).replaceAll("~", "~0").replaceAll("/", "~1")}`).join("");
 }
 

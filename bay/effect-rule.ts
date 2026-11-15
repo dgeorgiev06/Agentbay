@@ -50,7 +50,7 @@ const spends: Need = { effect: "spend", because: "Spending more than nothing nee
 
 const reportsDollars: Need = { effect: "spend", because: "Reporting dollars an agent spent needs the spend effect" };
 
-export function deletes(sql: string): boolean {
+function deletes(sql: string): boolean {
   return statementWords(sql).some((word) => deletingWords.includes(word));
 }
 

@@ -7,7 +7,7 @@ import { stringify } from "yaml";
 import type { Json } from "../bay/contracts.ts";
 import { DatabaseProcess } from "../bay/database-process.ts";
 import { fieldOf, parseJson, textField } from "../bay/json.ts";
-import { lastResortHandler, lastResortWording } from "../bay/last-resort.ts";
+import { lastResortHandler } from "../bay/last-resort.ts";
 import { replyTo } from "../bay/mcp-server.ts";
 import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
 import { createScriptRunner } from "../bay/script-runner.ts";
@@ -86,7 +86,7 @@ test("a script that reads a folder as a file gets a failed answer; bay call prin
     ]);
     const called = spawnedBay(project, ["call", "prober.probe", "{}"]);
     assert.equal(called.status, 1, called.stderr);
-    assert.doesNotMatch(called.stderr, new RegExp(lastResortWording));
+    assert.doesNotMatch(called.stderr, /an error escaped every handler/);
     const run = fieldOf(called.json, "run") ?? null;
     assert.equal(textField(run, "status"), "failed");
     assert.match(textField(run, "reason") ?? "", /could not read data\/inner/);
@@ -248,7 +248,7 @@ test("the last-resort handler prints one line and exits non-zero", () => {
   handler(new Error("first line\nsecond line with token=abcdefghijklmnopqrstuvwxyz"));
   assert.deepEqual(exits, [70]);
   assert.equal(written.length, 1);
-  assert.equal(written[0], `bay: ${lastResortWording}: first line\n`);
+  assert.equal(written[0], "bay: an error escaped every handler and agentbay stopped: first line\n");
 });
 
 test("a kernel tool whose skill file cannot be read answers with a refusal, not a rejection", async () => {

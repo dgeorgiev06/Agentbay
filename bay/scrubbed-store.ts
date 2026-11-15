@@ -3,7 +3,7 @@ import { toJson, isRecord } from "./json.ts";
 import type { RunPatch, RunStore, StepEnd, StoredState } from "./run-store.ts";
 import { decodedStepDetail, stepDetailJson, type StepDetail } from "./step-detail.ts";
 
-export function redactJson(value: Json, scrubber: Scrubber): Json {
+function redactJson(value: Json, scrubber: Scrubber): Json {
   if (typeof value === "string") {
     return scrubber.redact(value);
   }

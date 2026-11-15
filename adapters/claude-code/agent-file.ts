@@ -2,7 +2,7 @@ import { isAbsolute, join, relative } from "node:path";
 import { agentCommands, agentWritableFolders, type SkillAgent } from "../../bay/adapter.ts";
 import type { Tier } from "./adapter-types.ts";
 
-export const modelForTier: Readonly<Record<Tier, string>> = {
+const modelForTier: Readonly<Record<Tier, string>> = {
   fast: "haiku",
   balanced: "sonnet",
   deep: "opus",
@@ -26,7 +26,7 @@ export function toolsFor(agent: SkillAgent): readonly string[] {
   ];
 }
 
-export function projectPath(project: string, path: string): string {
+function projectPath(project: string, path: string): string {
   const absolute = isAbsolute(path) ? path : join(project, path);
   const below = relative(project, absolute);
   return below === "" || below.startsWith("..") || isAbsolute(below) ? absolute : below;

@@ -5,7 +5,7 @@ export type LastResortEffects = {
   readonly exit: (code: number) => void;
 };
 
-export const lastResortWording = "an error escaped every handler and agentbay stopped";
+const lastResortWording = "an error escaped every handler and agentbay stopped";
 
 const internalErrorCode = 70;
 

@@ -3,13 +3,17 @@ import { test } from "node:test";
 import { failed, granted, listed, manifestOf, refused } from "../bay/answers.ts";
 import { checkPath } from "../bay/file-access.ts";
 import { isInsideOrEqual, layoutOf } from "../bay/layout.ts";
-import { checkUrl, hostAllowed, loggedHeaders, nextRequest, redirectTarget } from "../bay/http-access.ts";
+import { checkUrl, loggedHeaders, nextRequest, redirectTarget } from "../bay/http-access.ts";
 import { isJson, isJsonRecord, parsedLine } from "../bay/protocol-json.ts";
 import { childMessageOf, parentMessageOf } from "../bay/script-protocol.ts";
 import { scrubSecretPatterns } from "../bay/secret-patterns.ts";
 import { isOneStatement, leadingKeyword } from "../bay/sql-statements.ts";
 import type { FileInspector } from "../bay/ports.ts";
 import { grantsIn } from "./broker-fixture.ts";
+
+function reaches(host: string, declared: readonly string[]): boolean {
+  return checkUrl(`https://${host}/x`, declared).status === "allowed";
+}
 
 test("a refusal says what was asked, what was declared and what to change, in one sentence", () => {
   const refusal = refused({ resource: "http", asked: "A asked", declared: "B declared", change: "Do C." });
@@ -31,11 +35,11 @@ test("the leading keyword skips blanks and comments, and one statement may end i
 });
 
 test("a host matches exactly, or under a leading *. entry, in any letter case", () => {
-  assert.equal(hostAllowed("API.example.com", ["api.example.com"]), true);
-  assert.equal(hostAllowed("a.example.com", ["*.example.com"]), true);
-  assert.equal(hostAllowed("example.com", ["*.example.com"]), false);
-  assert.equal(hostAllowed("badexample.com", ["*.example.com"]), false);
-  assert.equal(hostAllowed("anything", []), false);
+  assert.equal(reaches("API.example.com", ["api.example.com"]), true);
+  assert.equal(reaches("a.example.com", ["*.example.com"]), true);
+  assert.equal(reaches("example.com", ["*.example.com"]), false);
+  assert.equal(reaches("badexample.com", ["*.example.com"]), false);
+  assert.equal(reaches("anything", []), false);
 });
 
 test("a URL is checked for scheme, credentials, host and port", () => {
@@ -156,17 +160,17 @@ test("a path check resolves links on the deepest existing ancestor", async () =>
 
 test("an exact host entry matches only that host, never a host that merely ends with it", () => {
   for (const host of ["evil-api.example.com", "notapi.example.com", "api.example.com.evil.test", "xapi.example.com"]) {
-    assert.equal(hostAllowed(host, ["api.example.com"]), false, host);
+    assert.equal(reaches(host, ["api.example.com"]), false, host);
   }
-  assert.equal(hostAllowed("api.example.com", ["api.example.com"]), true);
+  assert.equal(reaches("api.example.com", ["api.example.com"]), true);
 });
 
 test("a wildcard entry matches subdomains at any depth, but not the bare domain or look-alikes", () => {
   const declared = ["*.example.com"];
-  assert.equal(hostAllowed("a.example.com", declared), true);
-  assert.equal(hostAllowed("a.b.example.com", declared), true);
+  assert.equal(reaches("a.example.com", declared), true);
+  assert.equal(reaches("a.b.example.com", declared), true);
   for (const host of ["example.com", "evilexample.com", "example.com.evil.test"]) {
-    assert.equal(hostAllowed(host, declared), false, host);
+    assert.equal(reaches(host, declared), false, host);
   }
 });
 
@@ -178,7 +182,7 @@ test("a URL is decided on the host the request would really reach", () => {
   const userinfo = checkUrl("https://api.example.com@evil.test/", hosts);
   assert.notEqual(userinfo.status, "allowed");
   assert.equal(userinfo.status === "not-a-url" ? "" : userinfo.url.hostname, "evil.test");
-  assert.equal(hostAllowed("evil.test", hosts), false);
+  assert.equal(reaches("evil.test", hosts), false);
   assert.equal(checkUrl("https://93.184.216.34/x", hosts).status, "undeclared-host");
   assert.equal(checkUrl("https://93.184.216.34/x", ["*.184.216.34"]).status, "undeclared-host");
   assert.equal(checkUrl("https://[::1]/x", hosts).status, "undeclared-host");

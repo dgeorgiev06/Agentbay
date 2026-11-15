@@ -2,7 +2,7 @@ import { basename, normalize } from "node:path/posix";
 import { entriesOf, splitSections } from "./check-skills.ts";
 import type { FileSystem } from "./ports.ts";
 
-export const toolNames = ["db_query", "files_read", "files_list", "files_write", "call_action", "submit"] as const;
+const toolNames = ["db_query", "files_read", "files_list", "files_write", "call_action", "submit"] as const;
 
 export type ToolName = (typeof toolNames)[number];
 
@@ -22,7 +22,7 @@ export function isToolName(name: string): name is ToolName {
   return toolNames.some((tool) => tool === name);
 }
 
-export function skillToolsOfText(text: string): SkillTools {
+function skillToolsOfText(text: string): SkillTools {
   const entries = entriesOf(splitSections(text), "Tools").map((item) => item.entry);
   const actions = entries.filter((entry) => !brokerResources.includes(entry));
   const fromResources = entries.flatMap((entry) => toolsOfResource.get(entry) ?? []);

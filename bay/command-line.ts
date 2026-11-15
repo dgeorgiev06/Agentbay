@@ -46,7 +46,7 @@ const globalOptions: readonly OptionSpec[] = [
 
 const globalUsage = "[--project <folder>] [--json]";
 
-export function helpText(commands: readonly Command[]): string {
+function helpText(commands: readonly Command[]): string {
   const width = Math.max(...commands.map((command) => command.name.length));
   const lines = commands.map((command) => `  ${command.name.padEnd(width)}  ${command.summary}`);
   return [

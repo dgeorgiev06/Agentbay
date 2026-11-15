@@ -5,7 +5,7 @@ import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
 import { Broker } from "../bay/broker.ts";
 import type { Effect } from "../bay/contracts.ts";
-import { deletes, effectRefusal, type BrokerOperation } from "../bay/effect-rule.ts";
+import { effectRefusal, type BrokerOperation } from "../bay/effect-rule.ts";
 import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
 import type { ChildProcesses, FileInspector, FileSystem, Http } from "../bay/ports.ts";
 import { scriptCommand } from "../bay/script-runner.ts";
@@ -298,6 +298,7 @@ test("the rule names the first missing effect for each kind of operation", () =>
 });
 
 test("a statement deletes when a word outside quotes and comments is delete, drop or truncate", () => {
+  const at = { stepKey: "0", action: "tidy", manifest: "/m/mode.yaml" };
   const cases: readonly (readonly [string, boolean])[] = [
     ["delete from items where id = 1", true],
     ["DROP TABLE items", true],
@@ -316,7 +317,8 @@ test("a statement deletes when a word outside quotes and comments is delete, dro
     ["insert or replace into items values (1)", false],
   ];
   for (const [sql, expected] of cases) {
-    assert.equal(deletes(sql), expected, sql);
+    const refusal = effectRefusal({ kind: "db.execute", sql }, ["read", "write"], at);
+    assert.equal(refusal !== undefined, expected, sql);
   }
 });
 

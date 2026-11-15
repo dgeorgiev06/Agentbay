@@ -5,10 +5,12 @@ import { fieldOf, textField } from "../bay/json.ts";
 import type { Kernel } from "../bay/kernel.ts";
 import type { StoredRun } from "../bay/run-store.ts";
 import { issueTaskToken } from "../bay/task-tokens.ts";
-import { callKernelTool, toolResultBytes } from "../bay/tools.ts";
+import { callKernelTool } from "../bay/tools.ts";
 import { problemText, type Outcome } from "../bay/outcome.ts";
 import { openKernel, openProject, type Opened } from "./kernel-fixture.ts";
 import { makeProject, skillText } from "./project-fixture.ts";
+
+const toolResultBytes = 256 * 1024;
 
 type Waiting = {
   readonly runId: string;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checkValue, loadSpec, parseSkill, pointer, problemAt, type Loaded } from "../bay/spec.ts";
+import { checkValue, loadSpec, parseSkill, problemAt, type Loaded } from "../bay/spec.ts";
 import { isRecord } from "../bay/json.ts";
 import type { Problem } from "../bay/outcome.ts";
 import { fakeFileSystem } from "./fakes.ts";
@@ -122,9 +122,11 @@ test("every schema problem in a file is reported at once", async () => {
   assert.ok(messages(problems).some((message) => message.startsWith("version is not in the expected form.")));
 });
 
-test("pointer escapes segments as JSON pointers do", () => {
-  assert.equal(pointer([]), "");
-  assert.equal(pointer(["actions", "a/b", 0, "x~y"]), "/actions/a~1b/0/x~0y");
+test("a problem's path escapes segments as JSON pointers do", () => {
+  const loaded: Loaded<null> = { file: "f.yaml", value: null, lineOf: () => undefined };
+  const wording = { message: "Bad.", fix: "Fix it." };
+  assert.equal(problemAt(loaded, [], wording).path, "");
+  assert.equal(problemAt(loaded, ["actions", "a/b", 0, "x~y"], wording).path, "/actions/a~1b/0/x~0y");
 });
 
 test("problemAt places a problem at a path with its line when the line is known", () => {

@@ -23,7 +23,7 @@ type ProtocolFailure = {
 
 type MethodHandler = (server: ToolServer, request: Request) => Promise<Json | ProtocolFailure>;
 
-export const serverName = "agentbay";
+const serverName = "agentbay";
 
 const protocolVersions: readonly string[] = ["2025-06-18", "2025-03-26", "2024-11-05"];
 

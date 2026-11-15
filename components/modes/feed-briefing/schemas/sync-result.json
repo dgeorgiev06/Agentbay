@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SyncResult",
+  "description": "What a sync fetched, stored and spent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source",
+    "pages",
+    "fetched",
+    "added",
+    "updated",
+    "skipped",
+    "cost",
+    "cursor",
+    "more",
+    "selectorChanged"
+  ],
+  "properties": {
+    "source": {
+      "type": "string",
+      "description": "The name of the bound source."
+    },
+    "pages": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Pages fetched."
+    },
+    "fetched": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Items the source returned."
+    },
+    "added": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Items that were new to the store."
+    },
+    "updated": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Items that replaced a stored one."
+    },
+    "skipped": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Items the store did not keep, such as ids deleted earlier."
+    },
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "usd"
+      ],
+      "description": "What the fetches of this sync cost.",
+      "properties": {
+        "items": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Items the source billed for."
+        },
+        "usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "US dollars."
+        }
+      }
+    },
+    "cursor": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Where the next sync continues."
+    },
+    "more": {
+      "type": "boolean",
+      "description": "Whether the source had more ready when maxItems stopped the sync."
+    },
+    "selectorChanged": {
+      "type": "boolean",
+      "description": "Whether the configured selector differed from the last sync's, in which case this sync started again from the beginning of its window."
+    }
+  }
+}

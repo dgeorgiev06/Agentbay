@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Answer",
+  "description": "An answer drawn from the stored items only, with the ids it rests on.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "answer",
+    "cites"
+  ],
+  "properties": {
+    "answer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "description": "The answer, at most 150 words; when no stored item answers the question, it says so."
+    },
+    "cites": {
+      "type": "array",
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*:\\S",
+        "description": "The id of a stored item, exactly as the store gave it."
+      },
+      "description": "The ids of the stored items the answer rests on; empty only when the answer says nothing was found."
+    }
+  }
+}

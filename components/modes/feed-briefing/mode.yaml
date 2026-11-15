@@ -1,0 +1,37 @@
+name: feed-briefing
+version: 1.0.0
+description: Syncs posts from a source into the store, writes a digest of themes that cites them, and answers questions.
+
+requires:
+  interfaces: [items-source@1, items-store@1]
+
+settings: schemas/settings.json
+
+actions:
+  sync:
+    input: schemas/sync-request.json
+    output: schemas/sync-result.json
+    effects: [read, write, network, spend]
+    run:
+      - script: scripts/sync.ts
+  digest:
+    input: schemas/digest-request.json
+    output: schemas/digest.json
+    effects: [read]
+    run:
+      - script: scripts/select.ts
+      - skill: skills/digest
+        tier: balanced
+        checks: [scripts/check-citations.ts]
+      - script: scripts/format.ts
+  ask:
+    input: schemas/ask-request.json
+    output: schemas/answer.json
+    effects: [read]
+    run:
+      - skill: skills/ask
+        tier: balanced
+        checks: [scripts/check-answer.ts]
+
+workflows:
+  - workflows/daily.yaml

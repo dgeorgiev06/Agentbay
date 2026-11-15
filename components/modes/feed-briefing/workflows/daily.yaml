@@ -1,0 +1,12 @@
+name: daily
+trigger: { manual: true }
+steps:
+  - id: sync
+    action: sync
+    input: {}
+  - id: digest
+    action: digest
+    input: {}
+  - id: approve
+    approval: Is this today's briefing? Approving it makes it the output of the run.
+    show: $steps.digest.output

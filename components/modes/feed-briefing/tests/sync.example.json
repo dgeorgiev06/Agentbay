@@ -1,0 +1,20 @@
+{
+  "input": {
+    "since": "2026-11-01T00:00:00Z"
+  },
+  "output": {
+    "source": "fake",
+    "pages": 3,
+    "fetched": 30,
+    "added": 30,
+    "updated": 0,
+    "skipped": 0,
+    "cost": {
+      "items": 30,
+      "usd": 0.03
+    },
+    "cursor": "2026-11-15T10:00:00.000Z|fake:1030",
+    "more": false,
+    "selectorChanged": false
+  }
+}

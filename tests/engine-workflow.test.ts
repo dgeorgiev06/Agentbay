@@ -3,9 +3,13 @@ import { describe, test } from "node:test";
 import type { ScriptRequest } from "../bay/contracts.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
 import { hashOf, textField } from "../bay/json.ts";
+import type { System } from "../bay/registry.ts";
+import type { Waiting } from "../bay/run-state.ts";
+import { storedWaiting } from "../bay/waiting.ts";
 import {
   eventKinds,
   failure,
+  fakePolicy,
   finished,
   fixtureSystem,
   harness,
@@ -193,6 +197,24 @@ for (const storeKind of storeKinds) {
         await later.approve("run-1", "keep", { hash: hashOf("goodbye"), decision: "approve", by: "me" }),
       );
       assert.deepEqual(run.state, { status: "done", output: "goodbye" });
+      close();
+    });
+
+    test("after the shown content changes, the stored approval shows the new content under its new hash", async () => {
+      const changes = withFlow([{ id: "keep", approval: "Send this greeting?", show: "$settings.greeting" }]);
+      const { engine, store, freshEngine, close } = await harness({ storeKind, changes });
+      const first = waitingOf(await engine.startWorkflow(notesFlow, null));
+      assert.ok(first.reason === "approval");
+      const stored = async (system: System): Promise<Waiting | undefined> => {
+        const run = await store.readRun("run-1");
+        assert.ok(run);
+        return storedWaiting({ system, policyOf: fakePolicy }, run);
+      };
+      assert.deepEqual(await stored((await fixtureSystem(changes)).system), first);
+      const edited = await fixtureSystem({ ...changes, config: { settings: { notes: { greeting: "goodbye" } } } });
+      const back = waitingOf(await freshEngine({ system: edited.system }).resume("run-1"));
+      assert.equal(back.reason === "approval" ? back.content : undefined, "goodbye");
+      assert.deepEqual(await stored(edited.system), back);
       close();
     });
 

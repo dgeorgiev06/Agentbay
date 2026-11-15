@@ -226,3 +226,15 @@ test("call_action starts an interface action for the skill's mode, which the cal
     assert.deepEqual(childRun?.target, { kind: "action", mode: "greeter", name: "fetch", caller: "writer" });
   });
 });
+
+test("a tool's refusal is redacted by the tool layer itself, even when nothing else redacted it", async () => {
+  await withWaiting(async ({ kernel }, waiting) => {
+    const secret = "s3cr3t-note-value-42";
+    const handedOut = await kernel.secrets.get("NOTE_KEY", { ...kernel.policyOf("writer"), secrets: ["NOTE_KEY"] });
+    assert.ok(handedOut.ok);
+    const refused = await callKernelTool(kernel, "call_action", { token: waiting.token, action: secret });
+    const refusal = refusalOf(refused);
+    assert.doesNotMatch(refusal, new RegExp(secret));
+    assert.match(refusal, /The skill does not list \[redacted:NOTE_KEY\] under Tools/);
+  });
+});

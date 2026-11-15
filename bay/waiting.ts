@@ -1,7 +1,7 @@
 import { join } from "node:path/posix";
 import type { PolicyOf, SkillTask } from "./contracts.ts";
 import type { Step as WorkflowStep } from "./generated/workflow.ts";
-import { hashOf, numberField, textField, textsField } from "./json.ts";
+import { fieldOf, hashOf, numberField, textField, textsField } from "./json.ts";
 import type { System } from "./registry.ts";
 import type { RunWithSteps, StepRecord } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
@@ -111,7 +111,8 @@ function approvalWaiting(context: WaitingContext, run: RunWithSteps, stepKey: st
     return undefined;
   }
   const previousHash = textField(record.detail, "previousHash");
-  const content = hashOf(record.input) === hash ? record.input : null;
+  const shown = fieldOf(record.detail, "shown") ?? record.input;
+  const content = hashOf(shown) === hash ? shown : null;
   return {
     reason: "approval",
     stepKey,

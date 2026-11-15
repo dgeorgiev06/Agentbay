@@ -100,6 +100,7 @@ export const buildAgent = skillAgent({
   kernelTools: [],
   read: [`${kit}/components/modes/forge`, `${project}/work`],
   write: [`${project}/work`],
+  effects: ["read", "write", "network", "spend", "delete"],
   commands: ["node --test", "git status"],
 });
 

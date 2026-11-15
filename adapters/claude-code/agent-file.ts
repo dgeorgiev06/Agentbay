@@ -1,5 +1,5 @@
 import { isAbsolute, join, relative } from "node:path";
-import { agentWritableFolders, type SkillAgent } from "../../bay/adapter.ts";
+import { agentCommands, agentWritableFolders, type SkillAgent } from "../../bay/adapter.ts";
 import type { Tier } from "./adapter-types.ts";
 
 export const modelForTier: Readonly<Record<Tier, string>> = {
@@ -13,7 +13,8 @@ function kernelToolName(tool: string): string {
 }
 
 export function toolsFor(agent: SkillAgent): readonly string[] {
-  const { readPaths, commands } = agent.grants;
+  const readPaths = agent.grants.readPaths;
+  const commands = agentCommands(agent);
   const writePaths = agentWritableFolders(agent);
   const kernelTools = [...new Set(agent.kernelTools)].filter((tool) => tool !== "submit").map(kernelToolName);
   return [
@@ -43,7 +44,7 @@ function writeRule(agent: SkillAgent, project: string): string {
 }
 
 function commandRule(agent: SkillAgent): string {
-  const commands = agent.grants.commands.map((command) => `\`${command}\``);
+  const commands = agentCommands(agent).map((command) => `\`${command}\``);
   return commands.length === 0
     ? "- Never try to run shell commands: this step has none."
     : `- Run only commands that start with ${commands.join(", ")}, with plain arguments.`;

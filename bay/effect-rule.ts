@@ -35,6 +35,8 @@ type Need = {
 
 const deletingWords: readonly string[] = ["delete", "drop", "truncate"];
 
+const everyEffect: readonly Effect[] = ["read", "write", "network", "spend", "delete"];
+
 const changesData: Need = { effect: "write", because: "A statement that changes data needs the write effect" };
 
 const deletesData: Need = { effect: "delete", because: "A statement that deletes needs the delete effect" };
@@ -151,6 +153,11 @@ export function effectRefusal(
 
 export function writableFolders(permissions: Permissions): readonly string[] {
   return permissions.actionEffects.includes(writesFiles.effect) ? permissions.grants.writePaths : [];
+}
+
+export function grantedCommands(permissions: Permissions): readonly string[] {
+  const declaresEvery = everyEffect.every((effect) => permissions.actionEffects.includes(effect));
+  return declaresEvery ? permissions.grants.commands : [];
 }
 
 export function mayRemoveFiles(permissions: Permissions): boolean {

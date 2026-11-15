@@ -1,5 +1,5 @@
 import { isAbsolute, join, normalize } from "node:path";
-import { agentWritableFolders, type Layout, type SkillAgent } from "../../bay/adapter.ts";
+import { agentCommands, agentWritableFolders, type Layout, type SkillAgent } from "../../bay/adapter.ts";
 import { toolsFor } from "./agent-file.ts";
 import type { StepRules, StepsFile } from "./guard-input.ts";
 
@@ -14,7 +14,7 @@ function rulesOf(agent: SkillAgent, project: string): StepRules {
     tools: toolsFor(agent),
     read: absolutePaths(project, agent.grants.readPaths),
     write: absolutePaths(project, agentWritableFolders(agent)),
-    commands: agent.grants.commands,
+    commands: agentCommands(agent),
   };
 }
 

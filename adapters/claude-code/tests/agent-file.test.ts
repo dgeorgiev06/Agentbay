@@ -7,6 +7,8 @@ import { guardEntry } from "../settings.ts";
 import { stepsFileText } from "../steps-file.ts";
 import { buildAgent, digestAgent, kit, layout, project, scanAgent, skillAgent } from "./build-fixture.ts";
 
+const everyEffect = ["read", "write", "network", "spend", "delete"] as const;
+
 const neverGiven = ["Agent", "Task", "WebFetch", "WebSearch", "Monitor", "PowerShell", "NotebookEdit", "MultiEdit"];
 
 function frontMatter(text: string): Readonly<Record<string, string>> {
@@ -57,21 +59,36 @@ test("only a step with commands gets Bash", () => {
   assert.ok(!toolsFor(digestAgent).includes("Bash") && !toolsFor(scanAgent).includes("Bash"));
 });
 
+test("a step whose actions do not declare every effect gets no Bash, no commands and the no-commands rule", () => {
+  for (const missing of everyEffect) {
+    const narrower = { ...buildAgent, effects: everyEffect.filter((effect) => effect !== missing) };
+    assert.ok(!toolsFor(narrower).includes("Bash"), missing);
+    assert.match(agentFileText(narrower, project), /Never try to run shell commands: this step has none/, missing);
+    const steps: unknown = JSON.parse(stepsFileText(layout, [narrower]));
+    assert.ok(typeof steps === "object" && steps !== null && "agents" in steps);
+    assert.ok(JSON.stringify(steps.agents).includes('"commands":[]'), missing);
+  }
+  const steps: unknown = JSON.parse(stepsFileText(layout, [buildAgent]));
+  assert.ok(typeof steps === "object" && steps !== null && "agents" in steps);
+  assert.ok(JSON.stringify(steps.agents).includes('"commands":["node --test","git status"]'));
+});
+
 test("no combination of paths and commands gives a step an agent-starting, web or unlisted tool", () => {
   for (const read of [[], ["/proj/a"]]) {
     for (const write of [[], ["/proj/b"]]) {
       for (const commands of [[], ["node --test"]]) {
-        const tools = toolsFor(
-          skillAgent({ mode: "m", skill: "s", tier: "fast", kernelTools: [], read, write, commands }),
-        );
-        assert.deepEqual(
-          tools.filter((tool) => neverGiven.includes(tool)),
-          [],
-        );
-        assert.ok(tools.includes("mcp__agentbay__submit"));
-        assert.equal(tools.includes("Read"), read.length > 0);
-        assert.equal(tools.includes("Write"), write.length > 0);
-        assert.equal(tools.includes("Bash"), commands.length > 0);
+        for (const effects of [["read", "write"], everyEffect] as const) {
+          const shape = { mode: "m", skill: "s", tier: "fast", kernelTools: [], read, write, commands, effects };
+          const tools = toolsFor(skillAgent({ ...shape, tier: "fast" }));
+          assert.deepEqual(
+            tools.filter((tool) => neverGiven.includes(tool)),
+            [],
+          );
+          assert.ok(tools.includes("mcp__agentbay__submit"));
+          assert.equal(tools.includes("Read"), read.length > 0);
+          assert.equal(tools.includes("Write"), write.length > 0);
+          assert.equal(tools.includes("Bash"), commands.length > 0 && effects === everyEffect);
+        }
       }
     }
   }

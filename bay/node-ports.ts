@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { access, lstat, mkdir, readdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import type { FileListing } from "./check.ts";
 import type {
   Child,
   ChildEnd,
@@ -298,6 +299,26 @@ export function createNodeHttp(options: NodeHttpOptions): Http {
       });
       const body = await cappedBody(response, options.maximumResponseBytes);
       return { status: response.status, headers: Object.fromEntries(response.headers.entries()), body };
+    },
+  };
+}
+
+const listingMilliseconds = 30_000;
+
+export function createGitFileListing(environment: Readonly<Record<string, string>>): FileListing {
+  return {
+    projectFiles: async (root) => {
+      const result = await runProcess({
+        command: "git",
+        arguments: ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        directory: root,
+        environment,
+        timeoutMilliseconds: listingMilliseconds,
+      });
+      if (result.exitCode !== 0) {
+        throw new Error(`git ls-files could not list the files of ${root}: ${result.stderr.trim()}`);
+      }
+      return [...new Set(result.stdout.split("\0").filter((path) => path !== ""))].sort();
     },
   };
 }

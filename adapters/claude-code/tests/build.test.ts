@@ -71,6 +71,7 @@ test("a build into an empty project writes every file and clean leaves the proje
   });
   const claude = files.snapshot()[`${project}/CLAUDE.md`] ?? "";
   assert.ok(claude.startsWith(`${blockStart}\n`) && claude.endsWith(`${blockEnd}\n`));
+  assert.match(claude, /A task\s+shown this way has no token\. Run `[^`]* runs <runId> --new-token --json`/);
   const cleanReport = await cleaned(files);
   assert.deepEqual(files.snapshot(), {});
   assert.ok(cleanReport.includes(".claude/settings.json: deleted; it held only what agentbay added"));

@@ -17,6 +17,7 @@ export type Permissions = {
   readonly mode: string;
   readonly modeFolder: string;
   readonly databaseFile: string;
+  readonly migrationsFolder: string;
   readonly readPaths: readonly string[];
   readonly writePaths: readonly string[];
   readonly secrets: readonly string[];
@@ -30,6 +31,7 @@ export type StepPlace = {
   readonly mode: string;
   readonly action: string;
   readonly stepIndex: number;
+  readonly stepKey: string;
 };
 
 export type ActionCaller = (reference: string, input: Json) => Promise<StepOutcome>;
@@ -41,6 +43,7 @@ export type ScriptRequest = {
   readonly permissions: Permissions;
   readonly settings: Readonly<Record<string, unknown>>;
   readonly remaining: Budget;
+  readonly timeLimitMilliseconds: number;
   readonly call: ActionCaller;
 };
 
@@ -61,6 +64,15 @@ export type SkillTask = {
   readonly permissions: Permissions;
   readonly round: number;
   readonly feedback: readonly string[];
+};
+
+export type Submission = {
+  readonly output: Json;
+  readonly spent: Spend;
+};
+
+export type Scrubber = {
+  readonly redact: (text: string) => string;
 };
 
 export type RunEvent = {

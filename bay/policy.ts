@@ -15,11 +15,6 @@ type DeclaredPath = {
   readonly path: string;
 };
 
-type ModePlace = {
-  readonly mode: string;
-  readonly action: string;
-};
-
 const kernelAreas: readonly ProtectedArea[] = [
   { path: ".agentbay", name: "the kernel's state folder .agentbay/" },
   { path: ".git", name: "the git folder .git/" },
@@ -54,6 +49,7 @@ type DeclaredResources = {
   readonly secrets: readonly string[];
   readonly hosts: readonly string[];
   readonly commands: readonly string[];
+  readonly migrations: string;
 };
 
 function declaredResources(manifest: Mode): DeclaredResources {
@@ -65,6 +61,7 @@ function declaredResources(manifest: Mode): DeclaredResources {
     secrets: resources.secrets ?? [],
     hosts: resources.network ?? [],
     commands: resources.commands ?? [],
+    migrations: resources.db?.migrations ?? "migrations",
   };
 }
 
@@ -176,6 +173,7 @@ function permissionsOfMode(mode: LoadedMode, layout: SystemLayout): Permissions 
     mode: mode.manifest.name,
     modeFolder,
     databaseFile: join(layout.root, ".agentbay", "data", `${mode.manifest.name}.db`),
+    migrationsFolder: join(modeFolder, normalized(declared.migrations)),
     readPaths: [modeFolder, ...rootedPaths(layout.root, declared.read), ...writePaths],
     writePaths,
     secrets: [...declared.secrets],
@@ -195,29 +193,6 @@ export function permissionsFor(system: System, modeName: string, layout: SystemL
     return { ok: false, problems };
   }
   return { ok: true, value: permissionsOfMode(mode, layout) };
-}
-
-export function permissionsForAction(system: System, place: ModePlace, layout: SystemLayout): Outcome<Permissions> {
-  const outcome = permissionsFor(system, place.mode, layout);
-  if (!outcome.ok) {
-    return outcome;
-  }
-  const mode = system.modes.get(place.mode);
-  const action = mode?.manifest.actions[place.action];
-  if (mode === undefined || action === undefined) {
-    return {
-      ok: false,
-      problems: [
-        {
-          file: mode === undefined ? "" : manifestFile(mode),
-          path: "/actions",
-          message: `The mode ${place.mode} has no action ${place.action}.`,
-          fix: "Name an action the mode declares.",
-        },
-      ],
-    };
-  }
-  return { ok: true, value: { ...outcome.value, effects: [...action.effects] } };
 }
 
 export function policyFor(system: System, layout: SystemLayout): Outcome<PolicyOf> {

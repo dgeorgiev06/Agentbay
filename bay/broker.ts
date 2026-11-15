@@ -1,15 +1,14 @@
 import { basename, relative, resolve } from "node:path/posix";
 import { type AgentQueryResult, runAgentQuery } from "./agent-query.ts";
 import { type Answer, failed, granted, listed, manifestOf, refused } from "./answers.ts";
-import type { ChildProcesses, FileInspector } from "./broker-ports.ts";
+import type { ChildProcesses, Clock, FileInspector, FileSystem, Http, HttpRequest, HttpResponse } from "./ports.ts";
 import type { EventSink, Json, Permissions, StepPlace } from "./contracts.ts";
 import type { DatabaseResult, ExecuteResult, Migration, Row, SqlParameters } from "./database.ts";
 import { DatabaseProcess } from "./database-process.ts";
 import { checkPath, isInsideOrEqual, type PathCheck, type Purpose } from "./file-access.ts";
 import { checkUrl, type Hop, loggedHeaders, nextRequest, redirectTarget, type UrlCheck } from "./http-access.ts";
-import type { Clock, FileSystem, Http, HttpRequest, HttpResponse } from "./ports.ts";
 import type { SecretStore } from "./secrets.ts";
-import { isJsonRecord } from "./json.ts";
+import { isJsonRecord } from "./protocol-json.ts";
 import { leadingKeyword, readKeywords, writeKeywords } from "./sql-statements.ts";
 
 export type BrokerLimits = {
@@ -52,8 +51,6 @@ const migrationName = /^\d{4}-[^/]+\.sql$/;
 
 const brokerKinds: readonly string[] = ["refused", "http"];
 
-const asking = "The step asked";
-
 const isRows = (value: Json): value is readonly Row[] =>
   Array.isArray(value) && value.every((row: Json) => isJsonRecord(row));
 
@@ -85,13 +82,13 @@ export class Broker {
     });
   }
 
-  async migrate(folder: string): Promise<Answer<readonly string[]>> {
-    const migrations = resolve(this.#permissions.modeFolder, folder);
+  async migrate(): Promise<Answer<readonly string[]>> {
+    const migrations = resolve(this.#permissions.modeFolder, this.#permissions.migrationsFolder);
     if (!isInsideOrEqual(migrations, this.#permissions.modeFolder)) {
       return this.#settle(
         refused({
           resource: "db",
-          asked: `${asking} to run the migrations in ${migrations}`,
+          asked: `${this.#asking} to run the migrations in ${migrations}`,
           declared: `migrations must lie inside the mode's folder ${this.#permissions.modeFolder}`,
           change: `Point resources.db.migrations in ${manifestOf(this.#permissions)} at a folder of the mode.`,
         }),
@@ -211,7 +208,7 @@ export class Broker {
       return this.#settle(
         refused({
           resource: "http",
-          asked: `${asking} to send a request body of ${String(size)} bytes`,
+          asked: `${this.#asking} to send a request body of ${String(size)} bytes`,
           declared: `the broker sends at most ${String(this.#limits.httpRequestBytes)} bytes`,
           change: "Send a smaller body; no manifest line raises this cap.",
         }),
@@ -242,7 +239,7 @@ export class Broker {
       return this.#settle(
         refused({
           resource: "events",
-          asked: `${asking} to emit an event of the kind ${kind}`,
+          asked: `${this.#asking} to emit an event of the kind ${kind}`,
           declared: `the kinds ${brokerKinds.join(" and ")} are written only by the broker`,
           change: "Choose another kind for the event.",
         }),
@@ -254,6 +251,10 @@ export class Broker {
 
   report<T>(answer: Answer<T>): Promise<Answer<T>> {
     return this.#settle(answer);
+  }
+
+  get #asking(): string {
+    return `The step ${this.#options.place.stepKey} asked`;
   }
 
   close(): void {
@@ -278,7 +279,7 @@ export class Broker {
     if (answer.kind === "failed") {
       return failed(message);
     }
-    await this.#append("refused", { resource: answer.resource, message });
+    await this.#append("refused", { resource: answer.resource, step: this.#options.place.stepKey, message });
     const asked = secrets.redact(answer.asked);
     return {
       ...answer,
@@ -306,7 +307,7 @@ export class Broker {
   #statementRefusal<T>(keyword: string, allowed: readonly string[]): Answer<T> {
     return refused({
       resource: "db",
-      asked: `${asking} to run a statement that starts with "${keyword}"`,
+      asked: `${this.#asking} to run a statement that starts with "${keyword}"`,
       declared: `this call runs only ${allowed.join(", ")} statements on the mode's own database`,
       change: "No manifest line allows attach, detach, vacuum, pragma or transaction statements; use plain SQL.",
     });
@@ -325,14 +326,14 @@ export class Broker {
       case "writes-on-read-only":
         return refused({
           resource: "db",
-          asked: `${asking} in action ${place.action} to run a statement that writes (it starts with "${keyword}")`,
+          asked: `${this.#asking} in action ${place.action} to run a statement that writes (it starts with "${keyword}")`,
           declared: `the action ${place.action} declares the effects: ${listed(this.#permissions.effects, "none")}`,
           change: `To allow it, add write to actions.${place.action}.effects in ${manifestOf(this.#permissions)}.`,
         });
       case "several-statements":
         return refused({
           resource: "db",
-          asked: `${asking} to run more than one statement in one call`,
+          asked: `${this.#asking} to run more than one statement in one call`,
           declared: "the broker runs exactly one statement per call",
           change: "Send each statement in its own call.",
         });
@@ -351,7 +352,7 @@ export class Broker {
     const root = this.#options.root;
     const permitted = purpose === "read" ? this.#permissions.readPaths : this.#permissions.writePaths;
     const shown = permitted.map((path) => relative(root, path) || ".");
-    const asked = `${asking} to ${purpose} ${check.path}`;
+    const asked = `${this.#asking} to ${purpose} ${check.path}`;
     const manifestLine = `resources.files.${purpose} in ${manifestOf(this.#permissions)}`;
     switch (check.status) {
       case "outside":
@@ -381,7 +382,7 @@ export class Broker {
   #urlRefusal(check: Exclude<UrlCheck, { readonly status: "allowed" }>, redirected: boolean): Answer<never> {
     const hosts = this.#permissions.hosts;
     const target = check.status === "not-a-url" ? "something that is not a URL" : check.url.href;
-    const asked = redirected ? `A request was redirected to ${target}` : `${asking} for ${target}`;
+    const asked = redirected ? `A request was redirected to ${target}` : `${this.#asking} for ${target}`;
     const declaredHosts = `the mode ${this.#permissions.mode} declares the hosts: ${listed(hosts, "none")}`;
     return refused({ resource: "http", asked, ...this.#urlRule(check, declaredHosts) });
   }
@@ -421,6 +422,7 @@ export class Broker {
       return failed(`The request to ${request.url} failed: ${error instanceof Error ? error.message : String(error)}`);
     }
     await this.#append("http", {
+      step: this.#options.place.stepKey,
       method: request.method,
       url: request.url,
       headers: loggedHeaders(request.headers),

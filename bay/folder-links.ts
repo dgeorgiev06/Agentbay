@@ -1,5 +1,5 @@
 import { join, relative } from "node:path/posix";
-import type { FileInspector } from "./broker-ports.ts";
+import type { FileInspector } from "./ports.ts";
 import { isInsideOrEqual } from "./file-access.ts";
 
 export type EscapingLink = {

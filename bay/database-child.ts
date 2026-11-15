@@ -1,6 +1,6 @@
 import type { Json } from "./contracts.ts";
 import { type DatabaseResult, type Migration, ModeDatabase, type SqlParameters } from "./database.ts";
-import { isJsonRecord, parsedLine } from "./json.ts";
+import { isJsonRecord, parsedLine } from "./protocol-json.ts";
 
 type Order =
   | { readonly id: number; readonly method: "query"; readonly sql: string; readonly parameters: SqlParameters }

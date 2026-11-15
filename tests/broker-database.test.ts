@@ -67,21 +67,27 @@ test("migrations run in order inside a transaction and are recorded once", async
   await withBroker(["read", "write"], async ({ root, broker }) => {
     await writeProjectFile(root, "components/modes/notes/migrations/0002-add-index.sql", "create index t_x on t (x);");
     await writeProjectFile(root, "components/modes/notes/migrations/0001-create.sql", "create table t (x text);");
-    assert.deepEqual(valueOf(await broker.migrate("migrations")), ["0001-create.sql", "0002-add-index.sql"]);
-    assert.deepEqual(valueOf(await broker.migrate("migrations")), []);
+    assert.deepEqual(valueOf(await broker.migrate()), ["0001-create.sql", "0002-add-index.sql"]);
+    assert.deepEqual(valueOf(await broker.migrate()), []);
     const recorded = valueOf(await broker.query("select name from _migrations order by name"));
     assert.deepEqual(recorded, [{ name: "0001-create.sql" }, { name: "0002-add-index.sql" }]);
     await writeProjectFile(root, "components/modes/notes/migrations/0003-good.sql", "create table u (y text);");
     await writeProjectFile(root, "components/modes/notes/migrations/0004-broken.sql", "create tabel v;");
-    assert.match(failureOf(await broker.migrate("migrations")).message, /0004-broken\.sql/);
+    assert.match(failureOf(await broker.migrate()).message, /0004-broken\.sql/);
     const tables = valueOf(await broker.query("select name from sqlite_schema where name = 'u'"));
     assert.deepEqual(tables, [], "the failed batch left nothing behind");
   });
 });
 
 test("a migrations folder outside the mode's folder is refused", async () => {
-  await withBroker(["read", "write"], async ({ broker }) => {
-    refusalOf(await broker.migrate("../store/migrations"));
+  await withProject(async (root) => {
+    const outside = join(root, "components/base/store/migrations");
+    const { broker } = brokerFor(root, ["read", "write"], { migrationsFolder: outside });
+    try {
+      refusalOf(await broker.migrate());
+    } finally {
+      broker.close();
+    }
   });
 });
 

@@ -77,7 +77,7 @@ export const noProcesses: Processes = {
   run: () => Promise.reject(new Error("no process may be started in this test")),
 };
 
-export const place: StepPlace = { runId: "run-1", mode: "notes", action: "look", stepIndex: 0 };
+export const place: StepPlace = { runId: "run-1", mode: "notes", action: "look", stepIndex: 0, stepKey: "look.0" };
 
 export function permissionsIn(root: string, overrides: Partial<Permissions> = {}): Permissions {
   const modeFolder = join(root, "components", "modes", "notes");
@@ -85,6 +85,7 @@ export function permissionsIn(root: string, overrides: Partial<Permissions> = {}
     mode: "notes",
     modeFolder,
     databaseFile: join(root, ".agentbay", "data", "notes.db"),
+    migrationsFolder: join(modeFolder, "migrations"),
     readPaths: [modeFolder, join(root, "notes-in"), join(root, "notes-out")],
     writePaths: [join(root, "notes-out")],
     secrets: [],

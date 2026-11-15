@@ -2,7 +2,7 @@ import { pathToFileURL } from "node:url";
 import type { Answer } from "./answers.ts";
 import type { Json } from "./contracts.ts";
 import type { ExecuteResult, Row } from "./database.ts";
-import { isJson, isJsonRecord } from "./json.ts";
+import { isJson, isJsonRecord } from "./protocol-json.ts";
 import type { HttpResponse } from "./ports.ts";
 import { type ChildMessage, type ParentMessage, parentMessageOf, type ResourceRequest } from "./script-protocol.ts";
 import type { DefinedScript, ScriptContext, ScriptError } from "./sdk.ts";

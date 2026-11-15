@@ -3,11 +3,11 @@ import { test } from "node:test";
 import { failed, granted, listed, manifestOf, refused } from "../bay/answers.ts";
 import { checkPath, isInsideOrEqual } from "../bay/file-access.ts";
 import { checkUrl, hostAllowed, loggedHeaders, nextRequest, redirectTarget } from "../bay/http-access.ts";
-import { isJson, isJsonRecord, parsedLine } from "../bay/json.ts";
+import { isJson, isJsonRecord, parsedLine } from "../bay/protocol-json.ts";
 import { childMessageOf, parentMessageOf } from "../bay/script-protocol.ts";
 import { scrubSecretPatterns } from "../bay/secret-patterns.ts";
 import { isOneStatement, leadingKeyword } from "../bay/sql-statements.ts";
-import type { FileInspector } from "../bay/broker-ports.ts";
+import type { FileInspector } from "../bay/ports.ts";
 import { permissionsIn } from "./broker-fixture.ts";
 
 test("a refusal says what was asked, what was declared and what to change, in one sentence", () => {

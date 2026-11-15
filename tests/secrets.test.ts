@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { Scrubber } from "../bay/contracts.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import { failureOf, noProcesses, permissionsIn, recordingProcesses, refusalOf } from "./broker-fixture.ts";
 
@@ -121,4 +122,11 @@ test("a declared name that is not upper case with underscores is refused before 
   const store = storeWith({ "AGENTBAY_SECRET_mail-token": madeUpToken });
   const answer = await store.get("mail-token", permissionsIn("/project", { secrets: ["mail-token"] }));
   assert.match(refusalOf(answer).message, /upper-case letters, digits and underscores/);
+});
+
+test("the secret store is the engine's scrubber", async () => {
+  const store = storeWith({ AGENTBAY_SECRET_MAIL_TOKEN: madeUpToken });
+  const scrubber: Scrubber = store;
+  await store.get("MAIL_TOKEN", permissions);
+  assert.equal(scrubber.redact(`reason: ${madeUpToken}`), "reason: [redacted:MAIL_TOKEN]");
 });

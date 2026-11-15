@@ -1,7 +1,7 @@
 import type { Answer, Resource } from "./answers.ts";
 import type { Json } from "./contracts.ts";
 import type { SqlParameters } from "./database.ts";
-import { isJsonRecord, parsedLine } from "./json.ts";
+import { isJsonRecord, parsedLine } from "./protocol-json.ts";
 import type { HttpRequest } from "./ports.ts";
 
 export type ResourceRequest =

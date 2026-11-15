@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Mode } from "../bay/generated/mode.ts";
-import { permissionsFor, permissionsForAction, policyFor } from "../bay/policy.ts";
+import { permissionsFor, policyFor } from "../bay/policy.ts";
 import { accepted, modeNamed, problemsOf, systemOf } from "./broker-fixture.ts";
 
 type DeclaredFiles = NonNullable<NonNullable<Mode["resources"]>["files"]>;
@@ -43,7 +43,7 @@ function pathProblems(files: DeclaredFiles): readonly string[] {
   );
 }
 
-test("a mode's permissions hold its folder, database, paths, secrets, hosts, commands and the union of effects", () => {
+test("a mode's permissions hold its folder, database, migrations, paths, secrets, hosts, commands and all effects", () => {
   const outcome = permissionsFor(system, "briefing", layout);
   assert.deepEqual(outcome, {
     ok: true,
@@ -51,6 +51,7 @@ test("a mode's permissions hold its folder, database, paths, secrets, hosts, com
       mode: "briefing",
       modeFolder: "/project/components/modes/briefing",
       databaseFile: "/project/.agentbay/data/briefing.db",
+      migrationsFolder: "/project/components/modes/briefing/migrations",
       readPaths: [
         "/project/components/modes/briefing",
         "/project/notes/in",
@@ -72,15 +73,6 @@ test("a mode that declares no resources may read only its own folder", () => {
   assert.deepEqual(permissions.writePaths, []);
   assert.deepEqual(permissions.secrets, []);
   assert.deepEqual(permissions.effects, ["read"]);
-});
-
-test("the permissions of one action carry only that action's effects", () => {
-  const digest = accepted(permissionsForAction(system, { mode: "briefing", action: "digest" }, layout));
-  assert.deepEqual(digest.effects, ["read"]);
-  const sync = accepted(permissionsForAction(system, { mode: "briefing", action: "sync" }, layout));
-  assert.deepEqual(sync.effects, ["read", "write", "network"]);
-  const missing = problemsOf(permissionsForAction(system, { mode: "briefing", action: "nothing" }, layout));
-  assert.match(missing[0]?.message ?? "", /has no action nothing/);
 });
 
 test("a declared path that leaves the project root is refused", () => {

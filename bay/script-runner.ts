@@ -2,18 +2,16 @@ import { relative, resolve } from "node:path/posix";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { type Answer, failed, granted, manifestOf, refused } from "./answers.ts";
 import { Broker, type BrokerLimits } from "./broker.ts";
-import type { ChildEnd, ChildProcesses, ChildRequest, FileInspector } from "./broker-ports.ts";
+import type { ChildEnd, ChildProcesses, ChildRequest, Clock, FileInspector, FileSystem, Http } from "./ports.ts";
 import type { EventSink, Json, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "./contracts.ts";
 import { isInsideOrEqual } from "./file-access.ts";
 import { escapingLinks } from "./folder-links.ts";
-import { isJsonRecord } from "./json.ts";
-import type { Clock, FileSystem, Http } from "./ports.ts";
+import { isJsonRecord } from "./protocol-json.ts";
 import { type ChildMessage, childMessageOf, type ResourceRequest } from "./script-protocol.ts";
 import type { SecretStore } from "./secrets.ts";
 
 export type ScriptRunnerLimits = {
   readonly outputBytes: number;
-  readonly defaultMinutes: number;
 };
 
 export type ScriptRunnerOptions = {
@@ -46,7 +44,7 @@ type Started = {
   readonly state: RunState;
 };
 
-const defaultScriptRunnerLimits: ScriptRunnerLimits = { outputBytes: 4 * 1024 * 1024, defaultMinutes: 5 };
+const defaultScriptRunnerLimits: ScriptRunnerLimits = { outputBytes: 4 * 1024 * 1024 };
 
 const bayFolder = fileURLToPath(new URL(".", import.meta.url));
 
@@ -58,7 +56,7 @@ const filesTheHostReads: readonly string[] = [
   hostFile,
   preloadFile,
   `${bayFolder}script-protocol.ts`,
-  `${bayFolder}json.ts`,
+  `${bayFolder}protocol-json.ts`,
   `${bayFolder}sdk.ts`,
 ];
 
@@ -257,9 +255,9 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
   }
 
   async function run(request: ScriptRequest): Promise<StepOutcome> {
-    const minutes = request.remaining.minutes ?? limits.defaultMinutes;
-    if (minutes <= 0) {
-      return failure("The run has no minutes left in its budget, so the script was not started.");
+    const milliseconds = request.timeLimitMilliseconds;
+    if (milliseconds <= 0) {
+      return failure("The step has no time left, so the script was not started.");
     }
     const broker = new Broker({
       root: options.root,
@@ -272,7 +270,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
       events: options.events,
       clock: options.clock,
       childProcesses: options.childProcesses,
-      limits: { databaseMilliseconds: minutes * 60_000, ...options.brokerLimits },
+      limits: { databaseMilliseconds: milliseconds, ...options.brokerLimits },
     });
     try {
       const refusal = await refusedBeforeStart(request, broker);
@@ -285,7 +283,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
         spent: { items: 0, usd: 0, tokens: 0 },
         inFlight: [],
       };
-      return await runChild({ broker, request, state }, minutes * 60_000);
+      return await runChild({ broker, request, state }, milliseconds);
     } finally {
       broker.close();
     }

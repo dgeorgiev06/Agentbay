@@ -5,7 +5,6 @@ import { createServer, type Server } from "node:net";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { ActionCaller, Json, Permissions, ScriptRequest, StepOutcome } from "../bay/contracts.ts";
-import type { Budget } from "../bay/generated/mode.ts";
 import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
 import { createScriptRunner, scriptCommand } from "../bay/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
@@ -32,7 +31,7 @@ type Run = {
 type RunOptions = {
   readonly input?: Json;
   readonly permissions?: Partial<Permissions>;
-  readonly remaining?: Budget;
+  readonly timeLimit?: number;
   readonly call?: ActionCaller;
   readonly outputBytes?: number;
   readonly script?: string;
@@ -84,7 +83,8 @@ async function runScript(root: string, options: RunOptions): Promise<Run> {
     input: options.input ?? null,
     permissions: permissionsIn(root, { secrets: ["API_TOKEN"], hosts: ["api.example.com"], ...options.permissions }),
     settings: { lookback: "3d" },
-    remaining: options.remaining ?? { minutes: 0.5 },
+    remaining: {},
+    timeLimitMilliseconds: options.timeLimit ?? 30_000,
     call:
       options.call ??
       ((reference, input) => {
@@ -267,6 +267,7 @@ test("the runner starts node with the permission model, the grants and the prelo
     }),
     settings: {},
     remaining: {},
+    timeLimitMilliseconds: 1000,
     call: () => Promise.resolve({ status: "failed", reason: "no", spent: noSpend }),
   };
   const bay = join(kitFolder, "bay");
@@ -275,7 +276,7 @@ test("the runner starts node with the permission model, the grants and the prelo
     `--allow-fs-read=${bay}/script-host.ts`,
     `--allow-fs-read=${bay}/script-preload.ts`,
     `--allow-fs-read=${bay}/script-protocol.ts`,
-    `--allow-fs-read=${bay}/json.ts`,
+    `--allow-fs-read=${bay}/protocol-json.ts`,
     `--allow-fs-read=${bay}/sdk.ts`,
     "--allow-fs-read=/project/components/modes/notes",
     "--allow-fs-read=/project/components/modes/notes/*",
@@ -601,7 +602,7 @@ test("a script that never returns is killed at the time limit", async () => {
   await withScriptProject(async (root) => {
     const started = Date.now();
     const run = await attempt(root, "await new Promise(() => setInterval(() => {}, 1000));", {
-      remaining: { minutes: 0.02 },
+      timeLimit: 1200,
     });
     assert.match(reasonOf(run), /time limit of 1\.2 seconds/);
     assert.ok(Date.now() - started < 8000);
@@ -619,7 +620,7 @@ test("a script whose database query never ends is still killed at the time limit
         "  'with recursive r(n) as (select 1 union all select n + 1 from r) select count(*) from r',",
         ");",
       ].join("\n"),
-      { remaining: { minutes: 0.03 }, permissions: { effects: ["read", "write"] } },
+      { timeLimit: 1800, permissions: { effects: ["read", "write"] } },
     );
     assert.match(reasonOf(run), /time limit of 1\.8 seconds/);
     assert.ok(Date.now() - started < 8000, `took ${String(Date.now() - started)} ms`);
@@ -628,15 +629,15 @@ test("a script whose database query never ends is still killed at the time limit
 
 test("a busy loop is killed at the time limit too", async () => {
   await withScriptProject(async (root) => {
-    const run = await attempt(root, "for (;;) {}", { remaining: { minutes: 0.02 } });
+    const run = await attempt(root, "for (;;) {}", { timeLimit: 1200 });
     assert.match(reasonOf(run), /time limit/);
   });
 });
 
 test("a run with no minutes left does not start", async () => {
   await withScriptProject(async (root) => {
-    const run = await attempt(root, "return 'ran';", { remaining: { minutes: 0 } });
-    assert.match(reasonOf(run), /no minutes left/);
+    const run = await attempt(root, "return 'ran';", { timeLimit: 0 });
+    assert.match(reasonOf(run), /no time left/);
   });
 });
 

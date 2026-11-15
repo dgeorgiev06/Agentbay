@@ -209,7 +209,10 @@ test("a script may not emit an event that looks like a refusal", async () => {
   const { broker, events } = setup(() => ok);
   refusalOf(await broker.emit("refused", { forged: true }));
   assert.equal(events.events.filter((event) => event.kind === "refused").length, 1);
-  assert.match(JSON.stringify(events.events[0]?.detail), /^\{"resource":"events","message":"The step asked/);
+  assert.match(
+    JSON.stringify(events.events[0]?.detail),
+    /^\{"resource":"events","step":"look.0","message":"The step look.0 asked/,
+  );
   assert.doesNotMatch(JSON.stringify(events.events), /forged/);
 });
 

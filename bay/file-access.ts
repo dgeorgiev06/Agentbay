@@ -1,5 +1,5 @@
 import { basename, dirname, join, relative, resolve } from "node:path/posix";
-import type { FileInspector } from "./broker-ports.ts";
+import type { FileInspector } from "./ports.ts";
 
 export type Purpose = "read" | "write";
 

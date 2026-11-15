@@ -3,7 +3,7 @@ import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { ChildEnd } from "../bay/broker-ports.ts";
+import type { ChildEnd } from "../bay/ports.ts";
 import { createNodeHttp, nodeChildProcesses, nodeFileInspector, nodeProcesses } from "../bay/node-ports.ts";
 import { withProject } from "./broker-fixture.ts";
 

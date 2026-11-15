@@ -21,7 +21,8 @@ async function main(root: string): Promise<void> {
     input: null,
     permissions: permissionsIn(root),
     settings: {},
-    remaining: { minutes: 0.5 },
+    remaining: {},
+    timeLimitMilliseconds: 30_000,
     call: () =>
       Promise.resolve({ status: "failed", reason: "no calls", spent: { items: 0, usd: 0, tokens: 0, minutes: 0 } }),
   });

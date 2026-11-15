@@ -59,10 +59,21 @@ function topLevelFolderCount(context: CheckContext): Promise<number> {
   return Promise.resolve(new Set(folders).size);
 }
 
+const commandTableFile = "bay/commands.ts";
+
+const commandTablePattern = /export const commands: readonly Command\[\] = \[([^\]]*)\];/;
+
+async function commandCount(context: CheckContext): Promise<number> {
+  const text = (await context.files.readText(commandTableFile)) ?? "";
+  const entries = commandTablePattern.exec(text)?.[1] ?? "";
+  return entries.split(",").filter((entry) => entry.trim() !== "").length;
+}
+
 const counters: { readonly [Name in Measure]?: Counter } = {
   kernel_lines: kernelLines,
   adapter_lines: largestAdapterLines,
   concepts: conceptCount,
+  cli_commands: commandCount,
   top_level_folders: topLevelFolderCount,
 };
 

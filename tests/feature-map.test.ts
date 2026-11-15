@@ -148,7 +148,7 @@ function outsideImportRule(map: FeatureMap, from: string, to: string): Rule | un
 
 function insideFeatureOf(file: string): string | undefined {
   const [first, second, feature, ...rest] = file.split("/");
-  return first === "tests" && second === "inside" && rest.length > 0 ? feature : undefined;
+  return first === testFolder && second === "inside" && rest.length > 0 ? feature : undefined;
 }
 
 function testImportRule(map: FeatureMap, from: string, to: string): Rule | undefined {

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { ScriptRequest } from "../bay/contracts.ts";
 import {
   answer,
+  crashingOnce,
   failure,
   finished,
   messagesOf,
@@ -10,22 +11,10 @@ import {
   runOf,
   tokenOf,
   waitingOf,
-  type Script,
 } from "./runs-fixture.ts";
 
 function callersOf(requests: readonly ScriptRequest[]): readonly (string | undefined)[] {
   return requests.map((request) => request.caller);
-}
-
-function crashingOnce(answered: Script): Script {
-  let calls = 0;
-  return (request) => {
-    calls += 1;
-    if (calls === 1) {
-      throw new Error("the process died");
-    }
-    return answered(request);
-  };
 }
 
 test("an action reached by a call step sees the calling mode as its caller", async () => {
@@ -152,7 +141,16 @@ test("a script that ignores the failed answer of a waiting call still waits, its
   const started = await runs.start({ action: "notes.log" }, {});
   assert.equal(waitingOf(started).reason, "budget");
   const stopped = runOf(await runs.stop(runOf(started).id));
-  assert.equal(stopped.state.status, "undone");
+  assert.deepEqual(stopped.state, {
+    status: "undone",
+    reason: "The owner stopped the run.",
+    undo: {
+      undone: [{ stepKey: "0.call0", action: "store.put" }],
+      failed: [],
+      noUndo: [],
+      deleteNotUndone: [],
+    },
+  });
   assert.equal(runner.runsOf("notes:scripts/log.ts").length, 1);
   close();
 });

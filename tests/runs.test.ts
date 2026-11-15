@@ -4,6 +4,7 @@ import type { EventSink, Json } from "../bay/contracts.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
 import {
   answer,
+  crashingOnce,
   finished,
   messagesOf,
   notesFlow,
@@ -20,17 +21,6 @@ import {
 const flow = { workflow: notesFlow };
 
 const good = answer({ text: "long enough to pass" });
-
-const failingOnce = (): Script => {
-  let calls = 0;
-  return (request) => {
-    calls += 1;
-    if (calls === 1) {
-      throw new Error("the process died");
-    }
-    return finished(request.input);
-  };
-};
 
 test("openRuns opens kernel.db owner-only before it builds the runner, whose events reach the run scrubbed", async () => {
   const said: EventSink[] = [];
@@ -145,7 +135,7 @@ test("resume that brings a run into a skill wait it was not in issues a token", 
     effects: ["read" as const],
     run: [{ script: "scripts/slow.ts" }, { skill: "skills/draft", tier: "fast" as const }],
   };
-  const scripts = { "notes:scripts/slow.ts": failingOnce() };
+  const scripts = { "notes:scripts/slow.ts": crashingOnce((request) => finished(request.input)) };
   const { runs, close } = await openedRuns({ scripts, changes: { notesActions: { prepared } } });
   assert.match(messagesOf(await runs.start({ action: "notes.prepared" }, {})), /the process died/);
   const id = (await runs.list())[0]?.id ?? "";
@@ -157,7 +147,9 @@ test("resume that brings a run into a skill wait it was not in issues a token", 
 });
 
 test("resume with rerun runs again a step with effects that did not finish", async () => {
-  const { runs, close } = await openedRuns({ scripts: { "notes:scripts/log.ts": failingOnce() } });
+  const { runs, close } = await openedRuns({
+    scripts: { "notes:scripts/log.ts": crashingOnce((request) => finished(request.input)) },
+  });
   assert.match(messagesOf(await runs.start({ action: "notes.log" }, { note: 1 })), /the process died/);
   const id = (await runs.list())[0]?.id ?? "";
   const asked = runOf(await runs.resume(id));

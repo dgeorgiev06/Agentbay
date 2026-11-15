@@ -122,6 +122,17 @@ const defaultScripts: Readonly<Record<string, Script>> = {
   "store:scripts/remove.ts": (request) => finished(request.input),
 };
 
+export function crashingOnce(answered: Script): Script {
+  let calls = 0;
+  return (request) => {
+    calls += 1;
+    if (calls === 1) {
+      throw new Error("the process died");
+    }
+    return answered(request);
+  };
+}
+
 export function fakeRunner(overrides: Readonly<Record<string, Script>> = {}): FakeRunner {
   const scripts = { ...defaultScripts, ...overrides };
   const calls: ScriptRequest[] = [];

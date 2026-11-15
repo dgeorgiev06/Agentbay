@@ -496,3 +496,37 @@ test("a call or workflow action whose binding vanished before resume fails the s
   assert.deepEqual(runOf(await unbound.approve(runOf(started).id, decision)).state, { status: "failed", reason });
   close();
 });
+
+test("an undo runs to its end even when its own budget is spent", async () => {
+  const keep = {
+    input: "schemas/anything.json",
+    output: "schemas/anything.json",
+    effects: ["write" as const],
+    run: [{ script: "scripts/log.ts" }],
+    undo: "unkeep",
+  };
+  const unkeep = {
+    input: "schemas/anything.json",
+    output: "schemas/anything.json",
+    effects: ["write" as const, "spend" as const],
+    run: [{ script: "scripts/spend.ts" }, { script: "scripts/spend.ts" }],
+    budget: { items: 0 },
+  };
+  const steps = [
+    { id: "kept", action: "keep", input: { measure: "items" } },
+    { id: "decide", approval: "Keep it?" },
+  ];
+  const { runs, runner, close } = await openedRuns({ changes: { ...withFlow(steps), notesActions: { keep, unkeep } } });
+  const started = await runs.start(flow, null);
+  const waiting = waitingOf(started);
+  assert.ok(waiting.reason === "approval");
+  const decision = { stepKey: "decide", hash: waiting.hash, verdict: "reject", by: "me" } as const;
+  const run = runOf(await runs.approve(runOf(started).id, decision));
+  assert.deepEqual(run.state, {
+    status: "undone",
+    reason: "me rejected step decide: Keep it?",
+    undo: { undone: [{ stepKey: "kept", action: "notes.keep" }], failed: [], noUndo: [], deleteNotUndone: [] },
+  });
+  assert.equal(runner.runsOf("notes:scripts/spend.ts").length, 2);
+  close();
+});

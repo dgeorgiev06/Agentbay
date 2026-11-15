@@ -77,6 +77,13 @@ describe("secrets are scrubbed before they are stored", () => {
     const id = runOf(started).id;
     const waiting = waitingOf(started);
     assert.ok(waiting.reason === "approval");
+    assert.deepEqual(waitingOf(await (await reopen()).show(id)), {
+      reason: "approval",
+      stepKey: "keep",
+      question: "Send?",
+      hash: waiting.hash,
+      content: null,
+    });
     const decision = { stepKey: "keep", hash: waiting.hash, verdict: "approve", by: `owner ${secretValue}` } as const;
     runOf(await runs.approve(id, decision));
     const stored = runOf(await (await reopen()).show(id));

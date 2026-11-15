@@ -216,6 +216,20 @@ describe("actions", () => {
     close();
   });
 
+  test("an extension also raises the own budget of an action the run calls", async () => {
+    const scripts = { "store:scripts/put.ts": (request: ScriptRequest) => finished(request.input, { items: 11 }) };
+    const { runs, close } = await openedRuns({ scripts });
+    const started = await runs.start({ action: "notes.store-one" }, { id: "a" });
+    assert.deepEqual(waitingOf(started), {
+      reason: "budget",
+      stepKey: "0/end",
+      overrun: { measure: "items", limit: 10, spent: 11 },
+    });
+    const extended = runOf(await runs.extend(runOf(started).id, { items: 5 }));
+    assert.deepEqual(extended.state, { status: "done", output: { id: "a" } });
+    close();
+  });
+
   test("a skill step waits with its task, and the submitted output continues the run", async () => {
     const { runs, close } = await openedRuns();
     const started = runOf(await runs.start({ action: "notes.draft-and-store" }, { topic: "staking" }));
@@ -336,15 +350,20 @@ describe("actions", () => {
     close();
   });
 
-  test("a check that does not answer passed or feedback fails the run instead of looping", async () => {
-    const scripts = { "notes:scripts/long-enough.ts": () => finished({ verdict: "fine" }) };
-    const { runs, close } = await openedRuns({ scripts });
-    const started = runOf(await runs.start(draftAction, {}));
-    const run = runOf(await runs.submit(tokenOf(started), answer({ text: "anything at all" })));
-    assert.ok(run.state.status === "failed");
-    assert.match(run.state.reason, /returned neither/);
-    close();
-  });
+  for (const verdict of [{ verdict: "fine" }, { passed: false }]) {
+    test(`a check that answers ${JSON.stringify(verdict)} fails the run instead of looping`, async () => {
+      const scripts = { "notes:scripts/long-enough.ts": () => finished(verdict) };
+      const { runs, close } = await openedRuns({ scripts });
+      const started = runOf(await runs.start(draftAction, {}));
+      const run = runOf(await runs.submit(tokenOf(started), answer({ text: "anything at all" })));
+      assert.ok(run.state.status === "failed");
+      assert.equal(
+        run.state.reason,
+        'The check scripts/long-enough.ts returned neither { "passed": true } nor { "passed": false, "feedback": "..." }.',
+      );
+      close();
+    });
+  }
 
   test("a failed script step fails the run with its reason", async () => {
     const scripts = { "notes:scripts/double.ts": () => failure("cannot double") };

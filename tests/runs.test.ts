@@ -410,6 +410,21 @@ test("callAction runs a read-only action for the skill, records who asked, and r
   close();
 });
 
+test("callAction runs the action as the skill's mode, held to what the calling run has left, and charges it", async () => {
+  const scripts: Record<string, Script> = {
+    "store:scripts/get.ts": (request) => finished({ caller: request.caller ?? null }, { items: 2 }),
+  };
+  const { runs, close } = await opened({ scripts, changes: { config: { budget: { items: 3 } } } });
+  const started = runOf(await runs.start({ action: "notes.draft" }, {}));
+  const token = tokenOf(started);
+  const first = await runs.callAction(token, "items-store.get", {});
+  assert.deepEqual(first.ok ? first.value.output : null, { caller: "notes" });
+  assert.equal(runOf(await runs.show(started.id)).spent.items, 2);
+  const second = await runs.callAction(token, "items-store.get", {});
+  assert.match(messagesOf(second), /The action items-store.get stopped to wait for budget/);
+  close();
+});
+
 test("events appends to the run, and close leaves the runs for the next openRuns on the project", async () => {
   const { runs, reopen, remove } = await opened();
   const started = runOf(await runs.start({ action: "notes.draft" }, {}));

@@ -109,7 +109,6 @@ export function buildRequest(files: FilesWithRemoval, agents: readonly SkillAgen
     modes: new Map(),
     active: new Set<string>(),
     interfaces: new Map(),
-    bindings: new Map<string, string>(),
     config: { bindings: {}, adapter: "claude-code" },
   };
   return { system, layout, agents, files, removal: files.removal };

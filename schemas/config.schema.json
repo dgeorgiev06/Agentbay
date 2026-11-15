@@ -7,10 +7,10 @@
   "required": ["bindings", "adapter"],
   "properties": {
     "bindings": {
-      "description": "Which mode serves each interface, as interface name: mode name; one major per project in 5.0.0.",
+      "description": "Which mode serves each interface, as interface name: binding; one major per project in 5.0.0.",
       "type": "object",
       "propertyNames": { "$ref": "#/$defs/name" },
-      "additionalProperties": { "$ref": "#/$defs/name" }
+      "additionalProperties": { "$ref": "#/$defs/binding" }
     },
     "adapter": {
       "description": "The adapter that runs skill steps.",
@@ -47,6 +47,17 @@
     }
   },
   "$defs": {
+    "binding": {
+      "description": "A mode name, which serves every mode that requires the interface, or a map from requiring mode to serving mode with an optional default for the requiring modes it does not name.",
+      "oneOf": [{ "$ref": "#/$defs/name" }, { "$ref": "#/$defs/bindingMap" }]
+    },
+    "bindingMap": {
+      "description": "Requiring mode name: serving mode name; the key default serves every requiring mode not named.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/name" },
+      "additionalProperties": { "$ref": "#/$defs/name" }
+    },
     "name": {
       "description": "Kebab-case, starting with a letter; not constructor, a name every JavaScript object has.",
       "type": "string",

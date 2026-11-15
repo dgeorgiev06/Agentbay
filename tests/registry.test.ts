@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Action, Mode } from "../bay/generated/mode.ts";
-import { loadSystem, type System } from "../bay/registry.ts";
+import { bindingUses, loadSystem, servingMode, type System } from "../bay/registry.ts";
 import type { Problem } from "../bay/spec.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import {
@@ -49,13 +49,12 @@ test("a valid three-mode system resolves with every required interface bound", a
   const system = await systemOf(validFiles());
   assert.deepEqual([...system.modes.keys()].sort(), ["briefing", "notes", "store"]);
   assert.deepEqual([...system.interfaces.keys()].sort(), ["items-store@1", "notes@1"]);
-  assert.deepEqual(
-    new Map([...system.bindings].sort()),
-    new Map([
-      ["items-store@1", "store"],
-      ["notes@1", "notes"],
-    ]),
-  );
+  assert.deepEqual(bindingUses(system), [
+    { interfaceName: "items-store", requirers: ["notes"], servedBy: "store" },
+    { interfaceName: "notes", requirers: ["briefing"], servedBy: "notes" },
+  ]);
+  assert.equal(servingMode(system, "notes", "items-store@1"), "store");
+  assert.equal(servingMode(system, "briefing", "notes@1"), "notes");
   assert.equal(system.config.adapter, "local");
   const notes = system.modes.get("notes");
   assert.ok(notes);

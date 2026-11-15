@@ -1,5 +1,5 @@
 import type { Action } from "./generated/mode.ts";
-import type { LoadedMode, System } from "./registry.ts";
+import { servingMode, type LoadedMode, type System } from "./registry.ts";
 
 export type ActionTarget = {
   readonly mode: LoadedMode;
@@ -52,9 +52,9 @@ export function resolveCall(system: System, caller: LoadedMode, call: string): A
   if (required === undefined) {
     return `Mode ${caller.manifest.name} calls ${call}, but it does not require the interface ${interfaceName}.`;
   }
-  const boundMode = system.bindings.get(required);
+  const boundMode = servingMode(system, caller.manifest.name, required);
   if (boundMode === undefined) {
-    return `Mode ${caller.manifest.name} calls ${call}, but no mode is bound to ${required}.`;
+    return `Mode ${caller.manifest.name} calls ${call}, but no mode is bound to ${required} for it.`;
   }
   return resolveOwnAction(system, boundMode, actionName);
 }

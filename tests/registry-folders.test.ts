@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { Config } from "../bay/generated/config.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import { layoutOf } from "../bay/layout.ts";
-import { loadSystemReport, type SystemReport } from "../bay/registry.ts";
+import { loadSystemReport, servingMode, type SystemReport } from "../bay/registry.ts";
 import type { Problem } from "../bay/spec.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import { briefingMode, config, paths, schemaText, validFiles, yamlText } from "./system-fixture.ts";
@@ -70,7 +70,7 @@ test("a kit mode and a project mode are loaded together, each knowing its home a
     ["notes", "kit", "/kit/components/modes/notes"],
     ["store", "kit", "/kit/components/base/store"],
   ]);
-  assert.equal(system.bindings.get("notes@1"), "notes");
+  assert.equal(servingMode(system, "briefing", "notes@1"), "notes");
   assert.equal(system.interfaces.get("notes@1")?.file, "/kit/components/base/interfaces/notes.yaml");
 });
 

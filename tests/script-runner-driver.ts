@@ -2,11 +2,11 @@ import { join } from "node:path";
 import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
 import { createScriptRunner } from "../bay/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
-import { noProcesses, permissionsIn, place, recordingSink, scriptedHttp } from "./broker-fixture.ts";
+import { noProcesses, permissionsIn, place, projectLayout, recordingSink, scriptedHttp } from "./broker-fixture.ts";
 
 async function main(root: string): Promise<void> {
   const runner = createScriptRunner({
-    root,
+    layout: projectLayout(root),
     files: nodeFileSystem,
     inspector: nodeFileInspector,
     http: scriptedHttp(() => ({ status: 500, headers: {}, body: "" })),

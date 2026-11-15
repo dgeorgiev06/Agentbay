@@ -24,7 +24,7 @@ export type StepRules = {
 
 export type StepsFile = {
   readonly version: 1;
-  readonly root: string;
+  readonly project: string;
   readonly kit: string;
   readonly agents: Readonly<Record<string, StepRules>>;
 };
@@ -94,7 +94,7 @@ function unusable(reason: string): PolicyReading {
   return { kind: "unusable", reason };
 }
 
-export function readPolicy(text: string | undefined, root: string): PolicyReading {
+export function readPolicy(text: string | undefined, project: string): PolicyReading {
   if (text === undefined) {
     return unusable("the step policy .agentbay/steps.json is missing; run the agentbay build");
   }
@@ -102,8 +102,8 @@ export function readPolicy(text: string | undefined, root: string): PolicyReadin
   if (parsed === undefined || !isRecord(parsed.value)) {
     return unusable("the step policy .agentbay/steps.json is not a JSON object");
   }
-  if (parsed.value["version"] !== 1 || parsed.value["root"] !== root) {
-    return unusable(`the step policy .agentbay/steps.json is not version 1 for the project ${root}`);
+  if (parsed.value["version"] !== 1 || parsed.value["project"] !== project) {
+    return unusable(`the step policy .agentbay/steps.json is not version 1 for the project ${project}`);
   }
   const agents = agentsOf(parsed.value["agents"]);
   if (agents === undefined) {

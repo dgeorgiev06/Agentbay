@@ -1,7 +1,8 @@
 import { join } from "node:path/posix";
 import type { Answer } from "./answers.ts";
 import { Broker } from "./broker.ts";
-import type { FileListing } from "./check.ts";
+import type { FileListing } from "./check-context.ts";
+import type { Layout } from "./layout.ts";
 import type { Permissions, PolicyOf, ScriptRunner, StepPlace } from "./contracts.ts";
 import { Engine } from "./engine.ts";
 import {
@@ -17,7 +18,7 @@ import {
 } from "./node-ports.ts";
 import { policyFor } from "./policy.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, Folders, Http, Processes, Removal } from "./ports.ts";
-import { loadSystem, type System, type SystemLayout } from "./registry.ts";
+import { loadSystem, type System } from "./registry.ts";
 import { kernelDatabaseFile, SqliteRunStore } from "./run-store.ts";
 import { createScriptRunner } from "./script-runner.ts";
 import { SecretStore } from "./secrets.ts";
@@ -45,8 +46,7 @@ const maximumToolCallsPerRound = 200;
 
 export type KernelOptions = {
   readonly limits?: Partial<KernelLimits>;
-  readonly project: string;
-  readonly kit: string;
+  readonly layout: Layout;
   readonly ports: KernelPorts;
   readonly environment: Environment;
   readonly platform: string;
@@ -54,9 +54,7 @@ export type KernelOptions = {
 
 export type Kernel = {
   readonly limits: KernelLimits;
-  readonly root: string;
-  readonly kit: string;
-  readonly layout: SystemLayout;
+  readonly layout: Layout;
   readonly ports: KernelPorts;
   readonly system: System;
   readonly policyOf: PolicyOf;
@@ -68,8 +66,6 @@ export type Kernel = {
   readonly prepareDatabase: (place: StepPlace, permissions: Permissions) => Promise<Answer<readonly string[]>>;
   readonly close: () => void;
 };
-
-export const configFile = "agentbay.config.yaml";
 
 const httpLimits = { maximumResponseBytes: 10 * 1024 * 1024, timeoutMilliseconds: 60_000 };
 
@@ -87,7 +83,7 @@ export function nodeKernelPorts(environment: Environment): KernelPorts {
   };
 }
 
-export function secretStoreOf(options: Omit<KernelOptions, "project" | "kit">): SecretStore {
+export function secretStoreOf(options: Omit<KernelOptions, "layout">): SecretStore {
   return new SecretStore({
     environment: options.environment,
     processes: options.ports.processes,
@@ -127,8 +123,7 @@ function migratingRunner(runner: ScriptRunner, prepare: Kernel["prepareDatabase"
 }
 
 export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel>> {
-  const { ports, project: root } = options;
-  const layout: SystemLayout = { root, configFile };
+  const { ports, layout } = options;
   const loaded = await loadSystem(ports.files, layout);
   if (!loaded.ok) {
     return loaded;
@@ -139,8 +134,8 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
     return policy;
   }
   const secrets = secretStoreOf(options);
-  const store = await SqliteRunStore.open(ports.folders, join(root, kernelDatabaseFile));
-  const services = { root, files: ports.files, inspector: ports.inspector, http: ports.http, secrets };
+  const store = await SqliteRunStore.open(ports.folders, join(layout.project, kernelDatabaseFile));
+  const services = { layout, files: ports.files, inspector: ports.inspector, http: ports.http, secrets };
   const shared = { ...services, events: store, clock: ports.clock, childProcesses: ports.childProcesses };
   const brokerFor = (place: StepPlace, permissions: Permissions): Broker =>
     new Broker({ ...shared, place, permissions });
@@ -153,13 +148,10 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
     policyOf: policy.value,
     clock: ports.clock,
     files: ports.files,
-    root,
     scrubber: secrets,
   });
   const kernel: Kernel = {
     limits: { toolCallsPerRound: maximumToolCallsPerRound, ...options.limits },
-    root,
-    kit: options.kit,
     layout,
     ports,
     system,

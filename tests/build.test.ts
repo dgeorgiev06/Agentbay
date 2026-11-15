@@ -27,7 +27,6 @@ test("planAgents gives one agent per mode and skill, at the highest tier asked, 
     system: kernel.system,
     policyOf: kernel.policyOf,
     files: kernel.ports.files,
-    root: kernel.root,
   });
   assert.ok(planned.ok, planned.ok ? "" : JSON.stringify(planned.problems));
   assert.equal(planned.value.length, 1);
@@ -51,7 +50,6 @@ test("planAgents reports a skill whose front matter cannot be read", async () =>
     system: kernel.system,
     policyOf: kernel.policyOf,
     files: kernel.ports.files,
-    root: kernel.root,
   });
   assert.ok(!planned.ok);
   assert.match(planned.problems[0]?.message ?? "", /has no front matter/);
@@ -102,4 +100,20 @@ test("the terminal reads a line and all of stdin", async () => {
   const all = terminal.readAll();
   input.end('{"text":"x"}');
   assert.equal(await all, '{"text":"x"}');
+});
+
+test("planAgents plans agents only for the active modes, each pointing at its skill file by absolute path", async () => {
+  const project = await makeProject();
+  const kernel = await openKernel(project);
+  const planning = { policyOf: kernel.policyOf, files: kernel.ports.files };
+  const active = await planAgents({ ...planning, system: kernel.system });
+  assert.ok(active.ok, active.ok ? "" : JSON.stringify(active.problems));
+  assert.deepEqual(
+    active.value.map((agent) => agent.skillFile),
+    [`${project.root}/components/modes/writer/skills/draft/SKILL.md`],
+  );
+  const inactive = await planAgents({ ...planning, system: { ...kernel.system, active: new Set(["greeter"]) } });
+  assert.deepEqual(inactive, { ok: true, value: [] });
+  kernel.close();
+  await project.remove();
 });

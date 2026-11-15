@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import type { Finding } from "../bay/check-context.ts";
-import { checkSystem, type CheckReport, type FileListing } from "../bay/check.ts";
+import type { FileListing, Finding } from "../bay/check-context.ts";
+import { checkSystem, type CheckReport } from "../bay/check.ts";
+import type { Layout } from "../bay/layout.ts";
 import { fakeFileSystem, type FakeFileSystem } from "./fakes.ts";
 import { layout, rooted, validFiles } from "./system-fixture.ts";
 
@@ -55,18 +56,18 @@ export function cleanFiles(): Record<string, string> {
   };
 }
 
-function listingOf(files: FakeFileSystem): FileListing {
+export function listingOf(files: FakeFileSystem): FileListing {
   return {
-    projectFiles: (root) => {
-      const prefix = `${root}/`;
+    projectFiles: (folder) => {
+      const prefix = `${folder}/`;
       const paths = [...files.contents.keys()].filter((path) => path.startsWith(prefix));
       return Promise.resolve(paths.map((path) => path.slice(prefix.length)).sort());
     },
   };
 }
 
-export async function checkFake(files: FakeFileSystem): Promise<CheckReport> {
-  return checkSystem({ files, listing: listingOf(files) }, layout);
+export async function checkFake(files: FakeFileSystem, checkedLayout: Layout = layout): Promise<CheckReport> {
+  return checkSystem({ files, listing: listingOf(files) }, checkedLayout);
 }
 
 export async function check(files: Readonly<Record<string, string>>): Promise<CheckReport> {

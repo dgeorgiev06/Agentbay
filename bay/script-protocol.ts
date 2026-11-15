@@ -4,6 +4,8 @@ import type { SqlParameters } from "./database.ts";
 import { isJsonRecord, parsedLine } from "./protocol-json.ts";
 import type { HttpRequest } from "./ports.ts";
 
+export const sdkSpecifier = "agentbay/sdk";
+
 export type ResourceRequest =
   | { readonly resource: "db.execute" | "db.query"; readonly sql: string; readonly parameters: SqlParameters }
   | { readonly resource: "files.read" | "files.list"; readonly path: string }

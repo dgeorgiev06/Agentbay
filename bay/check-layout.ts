@@ -2,10 +2,11 @@ import { join } from "node:path/posix";
 import {
   errors,
   filesUnder,
-  interfacesFolder,
   isLoaded,
+  kitInterfacesFolder,
   type CheckContext,
   type Finding,
+  type KitTree,
   type LoadedModeFolder,
   type ModeFolder,
 } from "./check-context.ts";
@@ -20,6 +21,7 @@ type ExamplePlace = {
   readonly mode: LoadedModeFolder;
   readonly action: string;
   readonly file: string;
+  readonly label: string;
 };
 
 const topLevelFiles = ["mode.yaml", "README.md"] as const;
@@ -53,7 +55,7 @@ function topLevelProblems(mode: ModeFolder): readonly Problem[] {
   }
   return [...strays].map(([entry, path]) =>
     fileProblem(path, {
-      message: `The mode folder ${mode.folder} holds ${entry}, which the mode-folder layout does not name.`,
+      message: `The mode folder ${mode.label} holds ${entry}, which the mode-folder layout does not name.`,
       fix: `Move it into one of the entries a mode folder may hold: ${allowedTopLevel}.`,
     }),
   );
@@ -66,8 +68,8 @@ function skillFolderProblems(mode: ModeFolder): readonly Problem[] {
     .filter((folder) => !skillFiles.includes(`${folder}/SKILL.md`))
     .map((folder) =>
       fileProblem(join(mode.folder, "skills", folder), {
-        message: `The skill folder ${mode.folder}/skills/${folder} has no SKILL.md.`,
-        fix: `Add ${mode.folder}/skills/${folder}/SKILL.md, or remove the folder.`,
+        message: `The skill folder ${mode.label}/skills/${folder} has no SKILL.md.`,
+        fix: `Add ${mode.label}/skills/${folder}/SKILL.md, or remove the folder.`,
       }),
     );
 }
@@ -77,7 +79,7 @@ function scriptProblems(mode: ModeFolder): readonly Problem[] {
     .filter((file) => !file.endsWith(".ts"))
     .map((file) =>
       fileProblem(join(mode.folder, "scripts", file), {
-        message: `The script folder of ${mode.folder} holds ${file}, which is not a .ts file.`,
+        message: `The script folder of ${mode.label} holds ${file}, which is not a .ts file.`,
         fix: "Scripts are TypeScript: rename it to .ts, or move it out of scripts/.",
       }),
     );
@@ -90,7 +92,7 @@ function migrationNumber(name: string): number | undefined {
 
 function badMigrationName(mode: ModeFolder, name: string): Problem {
   return fileProblem(join(mode.folder, "migrations", name), {
-    message: `The migration ${name} of ${mode.folder} is not named NNNN-name.sql.`,
+    message: `The migration ${name} of ${mode.label} is not named NNNN-name.sql.`,
     fix: "Name it with four digits, a dash and a kebab-case name, such as 0001-create-items.sql.",
   });
 }
@@ -109,7 +111,7 @@ function migrationProblems(mode: ModeFolder): readonly Problem[] {
       problems.push(
         fileProblem(join(mode.folder, "migrations", name), {
           message:
-            `The migration ${name} of ${mode.folder} has the number ${String(number)}, but the next number is ` +
+            `The migration ${name} of ${mode.label} has the number ${String(number)}, but the next number is ` +
             `${expected}; migration numbers start at 0001 and rise by one, with no gaps or repeats.`,
           fix: `Renumber the migrations so that they run 0001, 0002 and so on.`,
         }),
@@ -134,7 +136,7 @@ async function readJson(context: CheckContext, file: string): Promise<JsonFile> 
 }
 
 function exampleLabel(place: ExamplePlace): string {
-  return `The example ${place.file} of action ${place.action}`;
+  return `The example ${place.label} of action ${place.action}`;
 }
 
 function exampleShapeProblems(place: ExamplePlace, value: unknown): readonly Problem[] {
@@ -186,7 +188,7 @@ async function exampleProblems(context: CheckContext, place: ExamplePlace): Prom
         fileProblem(place.file, {
           message:
             `Action ${place.action} of mode ${place.mode.manifest.value.name} has no example: ` +
-            `${place.file} does not exist.`,
+            `${place.label} does not exist.`,
           fix: 'Add it as { "input": ..., "output": ... }: one input and the output it should give.',
         }),
       ];
@@ -194,7 +196,7 @@ async function exampleProblems(context: CheckContext, place: ExamplePlace): Prom
       return [
         fileProblem(place.file, {
           message: `${exampleLabel(place)} is not valid JSON: ${example.reason}.`,
-          fix: `Correct the JSON in ${place.file}.`,
+          fix: `Correct the JSON in ${place.label}.`,
         }),
       ];
     case "read": {
@@ -210,8 +212,9 @@ async function exampleProblems(context: CheckContext, place: ExamplePlace): Prom
 async function modeExampleProblems(context: CheckContext, mode: LoadedModeFolder): Promise<readonly Problem[]> {
   const problems: Problem[] = [];
   for (const action of Object.keys(mode.manifest.value.actions)) {
-    const file = join(mode.folder, "tests", `${action}.example.json`);
-    problems.push(...(await exampleProblems(context, { mode, action, file })));
+    const example = join("tests", `${action}.example.json`);
+    const place = { mode, action, file: join(mode.folder, example), label: join(mode.label, example) };
+    problems.push(...(await exampleProblems(context, place)));
   }
   return problems;
 }
@@ -232,31 +235,31 @@ function componentsProblems(paths: readonly string[]): readonly Problem[] {
 
 function interfaceEntryProblem(file: string, interfaceNames: readonly string[]): Problem | undefined {
   const [first = "", ...rest] = file.split("/");
-  const path = join(interfacesFolder, file);
+  const path = join(kitInterfacesFolder, file);
   if (rest.length === 0) {
     return first.endsWith(".yaml")
       ? undefined
       : fileProblem(path, {
-          message: `${interfacesFolder} holds ${first}, which is not an interface .yaml file.`,
-          fix: `Move it out of ${interfacesFolder}; the folder holds interface files and their schema folders only.`,
+          message: `${kitInterfacesFolder} holds ${first}, which is not an interface .yaml file.`,
+          fix: `Move it out of ${kitInterfacesFolder}; the folder holds interface files and their schema folders only.`,
         });
   }
   if (!interfaceNames.includes(first)) {
     return fileProblem(path, {
-      message: `${interfacesFolder} has the folder ${first}/, but no interface file ${first}.yaml beside it.`,
+      message: `${kitInterfacesFolder} has the folder ${first}/, but no interface file ${first}.yaml beside it.`,
       fix: `A schema folder is named after its interface file; rename the folder or add ${first}.yaml.`,
     });
   }
   return file.endsWith(".json")
     ? undefined
     : fileProblem(path, {
-        message: `The schema folder ${interfacesFolder}/${first} holds ${rest.join("/")}, which is not a .json schema.`,
+        message: `The schema folder ${kitInterfacesFolder}/${first} holds ${rest.join("/")}, which is not a .json schema.`,
         fix: "Keep only JSON Schema files in an interface's schema folder.",
       });
 }
 
 function interfacesFolderProblems(paths: readonly string[]): readonly Problem[] {
-  const entries = filesUnder(paths, interfacesFolder);
+  const entries = filesUnder(paths, kitInterfacesFolder);
   const interfaceNames = entries
     .filter((file) => !file.includes("/") && file.endsWith(".yaml"))
     .map((file) => file.slice(0, -".yaml".length));
@@ -269,7 +272,7 @@ function modeLayoutProblems(mode: ModeFolder): readonly Problem[] {
 }
 
 export async function checkLayout(context: CheckContext): Promise<readonly Finding[]> {
-  const problems: Problem[] = [...componentsProblems(context.paths), ...interfacesFolderProblems(context.paths)];
+  const problems: Problem[] = [];
   for (const mode of context.modes) {
     problems.push(...modeLayoutProblems(mode));
   }
@@ -277,4 +280,8 @@ export async function checkLayout(context: CheckContext): Promise<readonly Findi
     problems.push(...(await modeExampleProblems(context, mode)));
   }
   return errors(problems);
+}
+
+export function checkKitLayout(kit: KitTree): readonly Finding[] {
+  return errors([...componentsProblems(kit.paths), ...interfacesFolderProblems(kit.paths)]);
 }

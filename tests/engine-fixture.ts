@@ -18,6 +18,7 @@ import type { Interface } from "../bay/generated/interface.ts";
 import type { Action, Mode } from "../bay/generated/mode.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
 import { numberField, textField } from "../bay/json.ts";
+import { layoutOf } from "../bay/layout.ts";
 import { loadSystem, type System } from "../bay/registry.ts";
 import { SqliteRunStore, type RunStore } from "../bay/run-store.ts";
 import type { EngineResult, RunView, Waiting } from "../bay/run-state.ts";
@@ -299,7 +300,7 @@ function fixtureFiles(changes: Changes): Record<string, string> {
 
 export async function fixtureSystem(changes: Changes = {}): Promise<{ system: System; files: FakeFileSystem }> {
   const files = fakeFileSystem(fixtureFiles(changes));
-  const outcome = await loadSystem(files, { root, configFile: "agentbay.config.yaml" });
+  const outcome = await loadSystem(files, layoutOf({ kit: root, project: root }));
   assert.ok(outcome.ok, outcome.ok ? "" : JSON.stringify(outcome.problems, null, 2));
   return { system: outcome.value, files };
 }
@@ -344,7 +345,6 @@ export async function harness(
       policyOf: fakePolicy,
       clock,
       files,
-      root,
       scrubber: fakeScrubber,
       owner: fresh.owner ?? `engine-${String(engines)}`,
       newId: () => `run-${String(engines)}`,

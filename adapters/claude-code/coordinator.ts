@@ -1,4 +1,5 @@
-import { isAbsolute, join, relative } from "node:path";
+import { join } from "node:path";
+import type { Layout } from "../../bay/adapter.ts";
 
 export const blockStart = "<!-- agentbay:start -->";
 
@@ -9,9 +10,15 @@ export type BlockAddition = {
   readonly separator: string;
 };
 
-export function bayCommand(root: string, kit: string): string {
-  const path = relative(root, join(kit, "bay.sh"));
-  return path.startsWith("..") || isAbsolute(path) ? path : `./${path}`;
+function shellWord(text: string): string {
+  return /^[A-Za-z0-9_./-]+$/.test(text) ? text : `'${text}'`;
+}
+
+export function bayCommand(layout: Layout): string {
+  if (layout.kit === layout.project) {
+    return "./bay.sh";
+  }
+  return `${shellWord(join(layout.kit, "bay.sh"))} --project ${shellWord(layout.project)}`;
 }
 
 export function coordinatorBlock(bay: string): string {

@@ -67,7 +67,7 @@ const echo: Command = {
     Promise.resolve({
       exitCode: 0,
       json: {
-        project: invocation.project,
+        project: invocation.layout.project,
         positionals: [...invocation.positionals],
         values: Object.fromEntries(invocation.values),
         flags: [...invocation.flags],

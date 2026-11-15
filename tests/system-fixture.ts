@@ -3,8 +3,9 @@ import type { Config } from "../bay/generated/config.ts";
 import type { Interface } from "../bay/generated/interface.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
+import { layoutOf } from "../bay/layout.ts";
 
-export const layout = { root: "/kit", configFile: "agentbay.config.yaml" };
+export const layout = layoutOf({ kit: "/kit", project: "/kit" });
 
 export const paths = {
   itemsStore: "components/base/interfaces/items-store.yaml",
@@ -162,5 +163,5 @@ export function validFiles(): Record<string, string> {
 }
 
 export function rooted(files: Readonly<Record<string, string>>): Record<string, string> {
-  return Object.fromEntries(Object.entries(files).map(([path, text]) => [`${layout.root}/${path}`, text]));
+  return Object.fromEntries(Object.entries(files).map(([path, text]) => [`${layout.project}/${path}`, text]));
 }

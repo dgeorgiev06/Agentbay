@@ -1,5 +1,15 @@
 import { dirname, join, normalize } from "node:path/posix";
-import { errors, lineOfIndex, type CheckContext, type Finding, type ModeFolder } from "./check-context.ts";
+import {
+  errors,
+  lineOfIndex,
+  type CheckContext,
+  type Finding,
+  type KitTree,
+  type ModeFolder,
+} from "./check-context.ts";
+import { isInsideOrEqual, pathIn, shownPath, type Layout } from "./layout.ts";
+import type { FileSystem } from "./ports.ts";
+import { sdkSpecifier } from "./script-protocol.ts";
 import type { Problem } from "./spec.ts";
 
 type Specifier =
@@ -18,6 +28,12 @@ type LiteralImport = {
 };
 
 type Graph = ReadonlyMap<string, readonly string[]>;
+
+type ModeImport = {
+  readonly layout: Layout;
+  readonly mode: ModeFolder;
+  readonly entry: LiteralImport;
+};
 
 const staticImportPattern =
   /(?<![\w$.])(?:import|export)\s+(?:type\s+)?(?:[\w$*{}\s,]+?\s+from\s+)?(["'])([^"'\n]+)\1/g;
@@ -53,10 +69,10 @@ function importSpecifiers(text: string): readonly Specifier[] {
   ].sort((first, second) => first.line - second.line);
 }
 
-async function readSources(context: CheckContext, files: readonly string[]): Promise<readonly SourceFile[]> {
+async function readSources(files: FileSystem, paths: readonly string[]): Promise<readonly SourceFile[]> {
   const sources: SourceFile[] = [];
-  for (const file of files) {
-    const text = await context.files.readText(file);
+  for (const file of paths) {
+    const text = await files.readText(file);
     sources.push({ file, specifiers: text === undefined ? [] : importSpecifiers(text) });
   }
   return sources;
@@ -76,47 +92,57 @@ function resolved(file: string, specifier: string): string {
   return normalize(join(dirname(file), specifier));
 }
 
-function isInside(path: string, folder: string): boolean {
-  return path.startsWith(`${folder}/`);
+function sdkWords(layout: Layout): string {
+  return `${sdkSpecifier} (or, in a mode of the kit, a relative import of ${shownPath(layout, sdkFileOf(layout))})`;
 }
 
-function bareImportProblem(mode: ModeFolder, entry: LiteralImport): Problem {
+function sdkFileOf(layout: Layout): string {
+  return pathIn(layout, "kit", sdkFile);
+}
+
+function bareImportProblem(found: ModeImport): Problem {
+  const { layout, mode, entry } = found;
+  const file = shownPath(layout, entry.file);
   return {
     file: entry.file,
     path: "",
     line: entry.line,
-    message: `${entry.file} imports the package ${entry.text}; mode code has no dependencies in 5.0.0.`,
-    fix: `Use ${sdkFile} or a node: built-in instead, or copy what you need into ${mode.folder}.`,
+    message: `${file} imports the package ${entry.text}; mode code has no dependencies in 5.0.0.`,
+    fix: `Use ${sdkWords(layout)} or a node: built-in instead, or copy what you need into ${mode.label}.`,
   };
 }
 
-function outsideImportProblem(mode: ModeFolder, entry: LiteralImport, target: string): Problem {
+function outsideImportProblem(found: ModeImport, target: string): Problem {
+  const { layout, mode, entry } = found;
   return {
     file: entry.file,
     path: "",
     line: entry.line,
     message:
-      `${entry.file} imports ${entry.text}, which resolves to ${target}, outside the mode folder ${mode.folder}; ` +
-      `mode code imports only ${sdkFile}, node: built-ins and files of its own mode.`,
-    fix: "Call the other mode's actions through an interface, or use what bay/sdk.ts gives.",
+      `${shownPath(layout, entry.file)} imports ${entry.text}, which resolves to ${shownPath(layout, target)}, ` +
+      `outside the mode folder ${mode.label}; mode code imports only ${sdkWords(layout)}, node: built-ins ` +
+      "and files of its own mode.",
+    fix: `Call the other mode's actions through an interface, or use what ${sdkSpecifier} gives.`,
   };
 }
 
-function modeImportProblem(mode: ModeFolder, entry: LiteralImport): Problem | undefined {
-  if (entry.text.startsWith("node:")) {
+function modeImportProblem(found: ModeImport): Problem | undefined {
+  const { layout, mode, entry } = found;
+  if (entry.text.startsWith("node:") || entry.text === sdkSpecifier) {
     return undefined;
   }
   if (entry.text.startsWith("/")) {
-    return outsideImportProblem(mode, entry, entry.text);
+    return outsideImportProblem(found, entry.text);
   }
   if (!isRelative(entry.text)) {
-    return bareImportProblem(mode, entry);
+    return bareImportProblem(found);
   }
   const target = resolved(entry.file, entry.text);
-  return target === sdkFile || isInside(target, mode.folder) ? undefined : outsideImportProblem(mode, entry, target);
+  const isKitSdk = mode.home === "kit" && target === sdkFileOf(layout);
+  return isKitSdk || isInsideOrEqual(target, mode.folder) ? undefined : outsideImportProblem(found, target);
 }
 
-function computedImportProblems(source: SourceFile): readonly Problem[] {
+function computedImportProblems(layout: Layout, source: SourceFile): readonly Problem[] {
   return source.specifiers
     .filter((specifier) => specifier.kind === "computed")
     .map((specifier) => ({
@@ -124,18 +150,19 @@ function computedImportProblems(source: SourceFile): readonly Problem[] {
       path: "",
       line: specifier.line,
       message:
-        `${source.file} calls import() with a specifier that is not a plain string, ` +
+        `${shownPath(layout, source.file)} calls import() with a specifier that is not a plain string, ` +
         "which bay check cannot follow.",
-      fix: "Use a static import of a file of the mode, bay/sdk.ts or a node: built-in.",
+      fix: `Use a static import of a file of the mode, ${sdkSpecifier} or a node: built-in.`,
     }));
 }
 
 async function modeImportProblems(context: CheckContext, mode: ModeFolder): Promise<readonly Problem[]> {
-  const files = mode.files.filter((file) => file.endsWith(".ts")).map((file) => join(mode.folder, file));
-  const sources = await readSources(context, files);
+  const { layout } = context;
+  const paths = mode.files.filter((file) => file.endsWith(".ts")).map((file) => join(mode.folder, file));
+  const sources = await readSources(context.files, paths);
   return sources.flatMap((source) => [
-    ...literalImports(source).flatMap((entry) => modeImportProblem(mode, entry) ?? []),
-    ...computedImportProblems(source),
+    ...literalImports(source).flatMap((entry) => modeImportProblem({ layout, mode, entry }) ?? []),
+    ...computedImportProblems(layout, source),
   ]);
 }
 
@@ -214,9 +241,9 @@ function entryPointImportProblem(entry: LiteralImport): Problem | undefined {
   };
 }
 
-async function kernelImportProblems(context: CheckContext): Promise<readonly Problem[]> {
-  const files = context.paths.filter((path) => path.startsWith("bay/") && path.endsWith(".ts"));
-  const sources = await readSources(context, files);
+async function kernelImportProblems(kit: KitTree): Promise<readonly Problem[]> {
+  const files = kit.paths.filter((path) => path.startsWith("bay/") && path.endsWith(".ts"));
+  const sources = await readSources(kit.files, files);
   const boundary = sources.flatMap((source) =>
     literalImports(source).flatMap((entry) => entryPointImportProblem(entry) ?? []),
   );
@@ -228,6 +255,9 @@ export async function checkImports(context: CheckContext): Promise<readonly Find
   for (const mode of context.modes) {
     problems.push(...(await modeImportProblems(context, mode)));
   }
-  problems.push(...(await kernelImportProblems(context)));
   return errors(problems);
+}
+
+export async function checkKernelImports(kit: KitTree): Promise<readonly Finding[]> {
+  return errors(await kernelImportProblems(kit));
 }

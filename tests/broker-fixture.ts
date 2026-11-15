@@ -7,12 +7,17 @@ import type { Answer, Failure, Refusal } from "../bay/answers.ts";
 import type { EventSink, Permissions, RunEvent, StepPlace } from "../bay/contracts.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import type { Http, HttpRequest, HttpResponse, ProcessRequest, ProcessResult, Processes } from "../bay/ports.ts";
+import { layoutOf, type Home, type Layout } from "../bay/layout.ts";
 import type { LoadedMode, System } from "../bay/registry.ts";
 import type { Outcome, Problem } from "../bay/spec.ts";
 
 export const kitFolder = fileURLToPath(new URL("..", import.meta.url));
 
 export const sdkFile = join(kitFolder, "bay", "sdk.ts");
+
+export function projectLayout(project: string): Layout {
+  return layoutOf({ kit: kitFolder, project });
+}
 
 export function modeNamed(name: string, resources: Mode["resources"], actions?: Mode["actions"]): Mode {
   return {
@@ -26,12 +31,20 @@ export function modeNamed(name: string, resources: Mode["resources"], actions?: 
   };
 }
 
-export function systemOf(modes: readonly { readonly folder: string; readonly manifest: Mode }[]): System {
+type ModeEntry = { readonly folder: string; readonly manifest: Mode; readonly home?: Home };
+
+export function systemOf(modes: readonly ModeEntry[]): System {
   const loaded = new Map<string, LoadedMode>();
-  for (const mode of modes) {
-    loaded.set(mode.manifest.name, { ...mode, workflows: new Map(), settings: {} });
+  for (const { folder, manifest, home } of modes) {
+    loaded.set(manifest.name, { home: home ?? "kit", folder, manifest, workflows: new Map(), settings: {} });
   }
-  return { modes: loaded, interfaces: new Map(), bindings: new Map(), config: { bindings: {}, adapter: "local" } };
+  return {
+    modes: loaded,
+    active: new Set(loaded.keys()),
+    interfaces: new Map(),
+    bindings: new Map(),
+    config: { bindings: {}, adapter: "local" },
+  };
 }
 
 export type RecordingSink = EventSink & { readonly events: RunEvent[] };

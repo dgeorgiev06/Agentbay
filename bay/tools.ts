@@ -10,7 +10,6 @@ import { isRecord } from "./spec.ts";
 import { resolveCall, resolveOwnAction, type ActionTarget } from "./targets.ts";
 import { checkTaskToken, issueTaskToken } from "./task-tokens.ts";
 import { skillStepAt, type SkillStepAt } from "./waiting.ts";
-import { join } from "node:path/posix";
 
 export type ToolResult = { readonly ok: true; readonly value: Json } | { readonly ok: false; readonly refusal: string };
 
@@ -298,7 +297,7 @@ async function performed(
   if (limited !== undefined) {
     return limited;
   }
-  const tools = await skillToolsOf(kernel.ports.files, join(kernel.root, step.skillFile));
+  const tools = await skillToolsOf(kernel.ports.files, step.skillFile);
   if (!tools.kernelTools.includes(name)) {
     const named = tools.kernelTools.join(", ");
     return refused(

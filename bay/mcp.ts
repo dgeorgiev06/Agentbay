@@ -3,6 +3,7 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import type { Json } from "./contracts.ts";
 import { loadKernel, nodeKernelPorts, type Kernel } from "./kernel.ts";
+import { layoutOf } from "./layout.ts";
 import { replyTo, type ToolServer } from "./mcp-server.ts";
 import type { Outcome } from "./spec.ts";
 import { toolDefinitions } from "./tool-definitions.ts";
@@ -24,8 +25,7 @@ function refusalOfProblems(kernel: Outcome<Kernel>): ToolResult {
 async function main(): Promise<void> {
   const environment = process.env;
   const kernel = await loadKernel({
-    project: projectOf(process.argv.slice(2)),
-    kit,
+    layout: layoutOf({ kit, project: projectOf(process.argv.slice(2)) }),
     ports: nodeKernelPorts(environment),
     environment,
     platform: process.platform,

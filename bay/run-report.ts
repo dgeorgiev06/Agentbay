@@ -10,6 +10,7 @@ import { issueTaskToken } from "./task-tokens.ts";
 import { askedByKind } from "./tools.ts";
 import { storedWaiting } from "./waiting.ts";
 import { problemsResult, type CommandResult, type JsonObject } from "./command-context.ts";
+import { shownProblems } from "./layout.ts";
 import type { EngineResult } from "./run-state.ts";
 
 export type TokenChoice = "issue" | "replace" | "withhold";
@@ -305,7 +306,7 @@ export async function engineOutput(
   skillWaitBefore: string | undefined,
 ): Promise<CommandResult> {
   if (!result.ok) {
-    return problemsResult(result.problems);
+    return problemsResult(shownProblems(kernel.layout, result.problems));
   }
   const state = result.run.state;
   if (state.status !== "waiting") {

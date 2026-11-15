@@ -1,5 +1,5 @@
 import { normalize } from "node:path";
-import type { BuildRequest, SkillAgent } from "../../../bay/adapter.ts";
+import type { BuildRequest, Layout, SkillAgent } from "../../../bay/adapter.ts";
 import type { Files, Removal } from "../adapter-types.ts";
 
 export type FilesWithRemoval = Files & { readonly removal: Removal };
@@ -31,9 +31,11 @@ export function memoryFiles(initial: Readonly<Record<string, string>> = {}): Mem
   };
 }
 
-export const root = "/proj";
+export const project = "/proj";
 
 export const kit = "/kit";
+
+export const layout: Layout = { kit, project, configFile: `${project}/agentbay.config.yaml` };
 
 type AgentShape = {
   readonly mode: string;
@@ -58,7 +60,7 @@ export function skillAgent(shape: AgentShape): SkillAgent {
     permissions: {
       mode: shape.mode,
       modeFolder,
-      databaseFile: `${root}/.agentbay/data/${shape.mode}.db`,
+      databaseFile: `${project}/.agentbay/data/${shape.mode}.db`,
       migrationsFolder: `${modeFolder}/migrations`,
       readPaths: shape.read,
       writePaths: shape.write,
@@ -75,8 +77,8 @@ export const digestAgent = skillAgent({
   skill: "digest",
   tier: "balanced",
   kernelTools: ["db_query"],
-  read: [`${kit}/components/modes/mail-briefing`, `${root}/notes`, `${root}/out/digests`],
-  write: [`${root}/out/digests`],
+  read: [`${kit}/components/modes/mail-briefing`, `${project}/notes`, `${project}/out/digests`],
+  write: [`${project}/out/digests`],
   commands: [],
 });
 
@@ -95,8 +97,8 @@ export const buildAgent = skillAgent({
   skill: "build",
   tier: "deep",
   kernelTools: [],
-  read: [`${kit}/components/modes/forge`, `${root}/work`],
-  write: [`${root}/work`],
+  read: [`${kit}/components/modes/forge`, `${project}/work`],
+  write: [`${project}/work`],
   commands: ["node --test", "git status"],
 });
 
@@ -105,11 +107,12 @@ export const allAgents = [digestAgent, scanAgent, buildAgent];
 export function buildRequest(files: FilesWithRemoval, agents: readonly SkillAgent[] = allAgents): BuildRequest {
   const system = {
     modes: new Map(),
+    active: new Set<string>(),
     interfaces: new Map(),
     bindings: new Map<string, string>(),
     config: { bindings: {}, adapter: "claude-code" },
   };
-  return { system, root, kit, agents, files, removal: files.removal };
+  return { system, layout, agents, files, removal: files.removal };
 }
 
 export const userSettings =
@@ -121,8 +124,8 @@ export const userMcp = '{\n\t"mcpServers": { "mine": { "command": "x", "args": [
 export const userClaude = "# mine\n\nKeep this.";
 
 export const existingProject: Readonly<Record<string, string>> = {
-  [`${root}/.claude/settings.json`]: userSettings,
-  [`${root}/.mcp.json`]: userMcp,
-  [`${root}/CLAUDE.md`]: userClaude,
-  [`${root}/src/app.ts`]: "export {};\n",
+  [`${project}/.claude/settings.json`]: userSettings,
+  [`${project}/.mcp.json`]: userMcp,
+  [`${project}/CLAUDE.md`]: userClaude,
+  [`${project}/src/app.ts`]: "export {};\n",
 };

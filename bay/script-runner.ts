@@ -1,11 +1,11 @@
-import { relative, resolve } from "node:path/posix";
+import { resolve } from "node:path/posix";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { type Answer, failed, granted, manifestOf, refused } from "./answers.ts";
 import { Broker, type BrokerLimits } from "./broker.ts";
 import type { ChildEnd, ChildProcesses, ChildRequest, Clock, FileInspector, FileSystem, Http } from "./ports.ts";
 import type { EventSink, Json, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "./contracts.ts";
-import { isInsideOrEqual } from "./file-access.ts";
 import { escapingLinks } from "./folder-links.ts";
+import { isInsideOrEqual, shownPath, type Layout } from "./layout.ts";
 import { isJsonRecord } from "./protocol-json.ts";
 import { type ChildMessage, childMessageOf, type ResourceRequest } from "./script-protocol.ts";
 import type { SecretStore } from "./secrets.ts";
@@ -15,7 +15,7 @@ export type ScriptRunnerLimits = {
 };
 
 export type ScriptRunnerOptions = {
-  readonly root: string;
+  readonly layout: Layout;
   readonly files: FileSystem;
   readonly inspector: FileInspector;
   readonly http: Http;
@@ -198,12 +198,12 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
       return `The script ${request.script} lies outside the folder of the mode ${permissions.mode}.`;
     }
     const folders = [permissions.modeFolder, ...permissions.readPaths, ...permissions.writePaths];
-    const links = await escapingLinks(options.inspector, options.root, folders);
+    const links = await escapingLinks(options.inspector, options.layout, folders);
     if (links.length === 0) {
       return undefined;
     }
     const described = links.map(
-      (found) => `${relative(options.root, found.link)} points to ${found.target ?? "nothing"}`,
+      (found) => `${shownPath(options.layout, found.link)} points to ${found.target ?? "nothing"}`,
     );
     const answer = await broker.report(
       refused({
@@ -260,7 +260,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
       return failure("The step has no time left, so the script was not started.");
     }
     const broker = new Broker({
-      root: options.root,
+      layout: options.layout,
       permissions: request.permissions,
       place: request.place,
       files: options.files,

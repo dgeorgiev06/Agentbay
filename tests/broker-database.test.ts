@@ -20,6 +20,7 @@ import {
   valueOf,
   withProject,
   writeProjectFile,
+  projectLayout,
 } from "./broker-fixture.ts";
 
 type Setup = { readonly root: string; readonly broker: Broker; readonly events: ReturnType<typeof recordingSink> };
@@ -27,7 +28,7 @@ type Setup = { readonly root: string; readonly broker: Broker; readonly events: 
 function brokerFor(root: string, effects: readonly Effect[], extra: Partial<Permissions> = {}): Setup {
   const events = recordingSink();
   const broker = new Broker({
-    root,
+    layout: projectLayout(root),
     permissions: permissionsIn(root, { effects, ...extra }),
     place,
     files: nodeFileSystem,

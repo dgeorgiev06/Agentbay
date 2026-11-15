@@ -75,9 +75,9 @@ function refusal(why: string): Decision {
 }
 
 async function decision(): Promise<Decision> {
-  const root = projectArgument(process.argv.slice(2));
+  const project = projectArgument(process.argv.slice(2));
   const script = process.argv[1];
-  if (root === undefined || script === undefined) {
+  if (project === undefined || script === undefined) {
     return refusal("the hook was started without an absolute --project folder");
   }
   const input = await readStandardInput();
@@ -85,8 +85,8 @@ async function decision(): Promise<Decision> {
     return refusal(input.why);
   }
   const kit = resolve(dirname(script), "..", "..");
-  const policy = readPolicy(readOptionalText(join(root, ".agentbay", "steps.json")), root);
-  return decide({ root, kit, policy }, input.payload, nodeFacts);
+  const policy = readPolicy(readOptionalText(join(project, ".agentbay", "steps.json")), project);
+  return decide({ project, kit, policy }, input.payload, nodeFacts);
 }
 
 function report(outcome: Decision): void {

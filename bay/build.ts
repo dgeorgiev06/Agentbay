@@ -11,7 +11,6 @@ export type AgentPlanning = {
   readonly system: System;
   readonly policyOf: PolicyOf;
   readonly files: FileSystem;
-  readonly root: string;
 };
 
 type SkillUse = {
@@ -47,6 +46,9 @@ function skillSteps(mode: LoadedMode): readonly SkillStepUse[] {
 function skillUses(system: System): readonly SkillUse[] {
   const uses = new Map<string, SkillUse>();
   for (const [mode, loaded] of system.modes) {
+    if (!system.active.has(mode)) {
+      continue;
+    }
     for (const step of skillSteps(loaded)) {
       const key = `${mode}/${skillNameOf(step.skill)}`;
       const use = uses.get(key) ?? {
@@ -68,11 +70,11 @@ function skillUses(system: System): readonly SkillUse[] {
 
 async function agentOf(planning: AgentPlanning, use: SkillUse): Promise<Outcome<SkillAgent>> {
   const skillFile = join(use.folder, use.skill, "SKILL.md");
-  const parsed = await parseSkill(planning.files, join(planning.root, skillFile));
+  const parsed = await parseSkill(planning.files, skillFile);
   if (!parsed.ok) {
     return parsed;
   }
-  const tools = await skillToolsOf(planning.files, join(planning.root, skillFile));
+  const tools = await skillToolsOf(planning.files, skillFile);
   const skill = skillNameOf(use.skill);
   const agent: SkillAgent = {
     agent: agentName(use.mode, skill),

@@ -1,12 +1,13 @@
-import { basename, relative, resolve } from "node:path/posix";
+import { basename, resolve } from "node:path/posix";
 import { type AgentQueryResult, runAgentQuery } from "./agent-query.ts";
 import { type Answer, failed, granted, listed, manifestOf, refused } from "./answers.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, Http, HttpRequest, HttpResponse } from "./ports.ts";
 import type { EventSink, Json, Permissions, StepPlace } from "./contracts.ts";
 import type { DatabaseResult, ExecuteResult, Migration, Row, SqlParameters } from "./database.ts";
 import { DatabaseProcess } from "./database-process.ts";
-import { checkPath, isInsideOrEqual, type PathCheck, type Purpose } from "./file-access.ts";
+import { checkPath, type PathCheck, type Purpose } from "./file-access.ts";
 import { checkUrl, type Hop, loggedHeaders, nextRequest, redirectTarget, type UrlCheck } from "./http-access.ts";
+import { isInsideOrEqual, shownPath, type Layout } from "./layout.ts";
 import type { SecretStore } from "./secrets.ts";
 import { isJsonRecord } from "./protocol-json.ts";
 import { leadingKeyword, readKeywords, writeKeywords } from "./sql-statements.ts";
@@ -23,7 +24,7 @@ export type BrokerLimits = {
 };
 
 export type BrokerOptions = {
-  readonly root: string;
+  readonly layout: Layout;
   readonly permissions: Permissions;
   readonly place: StepPlace;
   readonly files: FileSystem;
@@ -354,14 +355,14 @@ export class Broker {
 
   async #checkedPath(path: string, purpose: Purpose): Promise<Answer<string>> {
     const permitted = purpose === "read" ? this.#permissions.readPaths : this.#permissions.writePaths;
-    const check = await checkPath(this.#options.inspector, { root: this.#options.root, path, permitted, purpose });
+    const check = await checkPath(this.#options.inspector, { layout: this.#options.layout, path, permitted, purpose });
     return check.status === "allowed" ? granted(check.path) : this.#pathRefusal(check, purpose);
   }
 
   #pathRefusal(check: Exclude<PathCheck, { readonly status: "allowed" }>, purpose: Purpose): Answer<string> {
-    const root = this.#options.root;
+    const layout = this.#options.layout;
     const permitted = purpose === "read" ? this.#permissions.readPaths : this.#permissions.writePaths;
-    const shown = permitted.map((path) => relative(root, path) || ".");
+    const shown = permitted.map((path) => shownPath(layout, path));
     const asked = `${this.#asking} to ${purpose} ${check.path}`;
     const manifestLine = `resources.files.${purpose} in ${manifestOf(this.#permissions)}`;
     switch (check.status) {
@@ -370,7 +371,7 @@ export class Broker {
           resource: "files",
           asked,
           declared: `the mode ${this.#permissions.mode} may ${purpose} only: ${listed(shown, "nothing")}`,
-          change: `To allow it, add ${relative(root, check.path)} under ${manifestLine}.`,
+          change: `To allow it, add ${shownPath(layout, check.path)} under ${manifestLine}.`,
         });
       case "through-link":
         return refused({

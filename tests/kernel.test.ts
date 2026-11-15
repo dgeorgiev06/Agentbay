@@ -5,6 +5,7 @@ import { rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { stringify } from "yaml";
+import { layoutOf } from "../bay/layout.ts";
 import { loadKernel, nodeKernelPorts } from "../bay/kernel.ts";
 import { createProjectFileListing, nodeFileInspector } from "../bay/node-ports.ts";
 import { openProject, testEnvironment } from "./kernel-fixture.ts";
@@ -27,8 +28,7 @@ test("the kernel returns the registry's problems instead of a kernel", async () 
   const project = await makeProject();
   await project.write("agentbay.config.yaml", stringify({ bindings: {}, adapter: "fake" }));
   const loaded = await loadKernel({
-    project: project.root,
-    kit,
+    layout: layoutOf({ kit, project: project.root }),
     ports: nodeKernelPorts(testEnvironment),
     environment: testEnvironment,
     platform: "linux",
@@ -44,8 +44,7 @@ test("the kernel returns the policy's problems when a mode declares a kernel pat
   const manifest = await project.read("components/modes/writer/mode.yaml");
   await project.write("components/modes/writer/mode.yaml", manifest.replace("- out/notes/", "- bay/"));
   const loaded = await loadKernel({
-    project: project.root,
-    kit,
+    layout: layoutOf({ kit, project: project.root }),
     ports: nodeKernelPorts(testEnvironment),
     environment: testEnvironment,
     platform: "linux",

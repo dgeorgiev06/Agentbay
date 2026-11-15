@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { Layout } from "../../../bay/adapter.ts";
 import { agentFileText, modelForTier, projectPath, toolsFor } from "../agent-file.ts";
 import { bayCommand, blockEnd, blockStart, coordinatorBlock } from "../coordinator.ts";
 import { guardEntry } from "../settings.ts";
 import { stepsFileText } from "../steps-file.ts";
-import { buildAgent, digestAgent, kit, root, scanAgent, skillAgent } from "./build-fixture.ts";
+import { buildAgent, digestAgent, kit, layout, project, scanAgent, skillAgent } from "./build-fixture.ts";
 
 const neverGiven = ["Agent", "Task", "WebFetch", "WebSearch", "Monitor", "PowerShell", "NotebookEdit", "MultiEdit"];
 
@@ -68,13 +69,13 @@ test("no combination of paths and commands gives a step an agent-starting, web o
 
 test("the model is chosen by tier from the adapter's table", () => {
   assert.deepEqual(modelForTier, { fast: "haiku", balanced: "sonnet", deep: "opus" });
-  assert.equal(frontMatter(agentFileText(scanAgent, root))["model"], "haiku");
-  assert.equal(frontMatter(agentFileText(digestAgent, root))["model"], "sonnet");
-  assert.equal(frontMatter(agentFileText(buildAgent, root))["model"], "opus");
+  assert.equal(frontMatter(agentFileText(scanAgent, project))["model"], "haiku");
+  assert.equal(frontMatter(agentFileText(digestAgent, project))["model"], "sonnet");
+  assert.equal(frontMatter(agentFileText(buildAgent, project))["model"], "opus");
 });
 
 test("the agent file's front matter names the agent, lists its tools and describes it on one line", () => {
-  const text = agentFileText(digestAgent, root);
+  const text = agentFileText(digestAgent, project);
   const header = frontMatter(text);
   assert.deepEqual(Object.keys(header), ["name", "description", "tools", "model"]);
   assert.equal(header["name"], "agentbay-mail-briefing-digest");
@@ -88,13 +89,13 @@ test("the agent file's front matter names the agent, lists its tools and describ
 });
 
 test("the agent file's body states the protocol in under 40 lines", () => {
-  const text = agentFileText(digestAgent, root);
+  const text = agentFileText(digestAgent, project);
   const body = text.slice(text.indexOf("---\n", 4) + 4);
   assert.ok(body.split("\n").length < 40, String(body.split("\n").length));
   for (const phrase of [
     "`token`, `runId`, `stepKey`, `skillFile`, `input`,",
     "`outputSchema`, `round` and `feedback`",
-    "Read the SKILL.md file at `skillFile` and follow it",
+    "Read the skill file `/kit/components/modes/mail-briefing/skills/digest/SKILL.md` (the task's `skillFile`)",
     "Pass the task's `token` in every call to an agentbay tool",
     "Take data only from the agentbay tools and from the files that your skill's Resources section names",
     "call `mcp__agentbay__submit` with the token and your output",
@@ -105,15 +106,17 @@ test("the agent file's body states the protocol in under 40 lines", () => {
   ]) {
     assert.ok(body.includes(phrase), phrase);
   }
-  assert.ok(agentFileText(scanAgent, root).includes("this step writes no files"));
-  assert.ok(agentFileText(buildAgent, root).includes("Run only commands that start with `node --test`, `git status`"));
+  assert.ok(agentFileText(scanAgent, project).includes("this step writes no files"));
+  assert.ok(
+    agentFileText(buildAgent, project).includes("Run only commands that start with `node --test`, `git status`"),
+  );
 });
 
 test("a path outside the project is shown whole and a path inside it relative to the project", () => {
-  assert.equal(projectPath(root, "/proj/out/digests"), "out/digests");
-  assert.equal(projectPath(root, "/elsewhere/x"), "/elsewhere/x");
-  assert.equal(projectPath(root, "/proj"), "/proj");
-  assert.equal(projectPath(root, "notes"), "notes");
+  assert.equal(projectPath(project, "/proj/out/digests"), "out/digests");
+  assert.equal(projectPath(project, "/elsewhere/x"), "/elsewhere/x");
+  assert.equal(projectPath(project, "/proj"), "/proj");
+  assert.equal(projectPath(project, "notes"), "notes");
 });
 
 test("the step policy holds each agent's tools, absolute roots and commands", () => {
@@ -126,10 +129,10 @@ test("the step policy holds each agent's tools, absolute roots and commands", ()
     write: [],
     commands: [],
   });
-  const steps: unknown = JSON.parse(stepsFileText(root, kit, [digestAgent, relativeAgent]));
+  const steps: unknown = JSON.parse(stepsFileText(layout, [digestAgent, relativeAgent]));
   assert.deepEqual(steps, {
     version: 1,
-    root,
+    project,
     kit,
     agents: {
       "agentbay-mail-briefing-digest": {
@@ -177,14 +180,25 @@ test("the coordinator block states the protocol between its markers in under 40 
   }
 });
 
-test("the coordinator runs the kit's bay.sh by a path relative to the project", () => {
-  assert.equal(bayCommand("/proj", "/proj"), "./bay.sh");
-  assert.equal(bayCommand("/proj", "/proj/vendor/agentbay"), "./vendor/agentbay/bay.sh");
-  assert.equal(bayCommand("/proj", "/kits/agentbay"), "../kits/agentbay/bay.sh");
+function layoutWith(kitFolder: string, projectFolder: string): Layout {
+  return { kit: kitFolder, project: projectFolder, configFile: `${projectFolder}/agentbay.config.yaml` };
+}
+
+test("the coordinator runs ./bay.sh in the kit, and the kit's bay.sh by absolute path with --project elsewhere", () => {
+  assert.equal(bayCommand(layoutWith("/proj", "/proj")), "./bay.sh");
+  assert.equal(
+    bayCommand(layoutWith("/proj/vendor/agentbay", "/proj")),
+    "/proj/vendor/agentbay/bay.sh --project /proj",
+  );
+  assert.equal(bayCommand(layoutWith("/kits/agentbay", "/proj")), "/kits/agentbay/bay.sh --project /proj");
+  assert.equal(
+    bayCommand(layoutWith("/my kits/agentbay", "/my proj")),
+    "'/my kits/agentbay/bay.sh' --project '/my proj'",
+  );
 });
 
 test("the hook entry runs the guard for every tool, quoted, and blocks when the hook fails", () => {
-  assert.deepEqual(guardEntry("/kit dir", "/my project"), {
+  assert.deepEqual(guardEntry(layoutWith("/kit dir", "/my project")), {
     matcher: "*",
     hooks: [
       {

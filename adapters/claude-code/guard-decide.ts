@@ -17,7 +17,7 @@ import {
 } from "./guard-paths.ts";
 
 export type GuardSetup = {
-  readonly root: string;
+  readonly project: string;
   readonly kit: string;
   readonly policy: PolicyReading;
 };
@@ -86,12 +86,13 @@ function targetOf(call: ToolCall): unknown {
 }
 
 function workingFolder(call: ToolCall, places: Places): string {
-  return call.cwd ?? places.root;
+  return call.cwd ?? places.project;
 }
 
 function ownerClosedFolders(places: Places, facts: PathFacts): readonly string[] {
-  const roots = [places.root, ...realRoots([places.root], facts)];
-  return [...roots.flatMap((root) => ownerClosedNames.map((name) => join(root, name))), ...kitFoldersOf(places, facts)];
+  const projects = [places.project, ...realRoots([places.project], facts)];
+  const closedNames = projects.flatMap((project) => ownerClosedNames.map((name) => join(project, name)));
+  return [...closedNames, ...kitFoldersOf(places, facts)];
 }
 
 function ownerDecision(call: ToolCall, places: Places, facts: PathFacts): Decision {
@@ -215,7 +216,7 @@ function patternDecision(context: StepContext, pattern: unknown): Decision {
 }
 
 function linkAllowed(context: StepContext, path: string): boolean {
-  const target = resolveTarget(path, context.places.root, context.facts);
+  const target = resolveTarget(path, context.places.project, context.facts);
   return (
     target.kind === "resolved" &&
     closedNameIn([target.real], context.places, context.facts) === undefined &&
@@ -325,7 +326,7 @@ export function decide(setup: GuardSetup, payload: unknown, facts: PathFacts): D
     return deny(`this tool call: ${reading.reason}, so the hook cannot tell who asked or what for`);
   }
   const { call } = reading;
-  const places: Places = { root: setup.root, kit: setup.kit };
+  const places: Places = { project: setup.project, kit: setup.kit };
   const caller = identify(setup, call);
   switch (caller.kind) {
     case "owner":

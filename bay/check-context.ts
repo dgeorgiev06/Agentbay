@@ -1,31 +1,50 @@
-import { join } from "node:path/posix";
+import { basename, join, relative } from "node:path/posix";
 import type { Interface } from "./generated/interface.ts";
 import type { Mode } from "./generated/mode.ts";
+import { homeFolder, isProjectTheKit, shownPath, type Home, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
+import { findInterfaceFiles, findModeFolders } from "./registry.ts";
 import { loadSpec, type Loaded, type Problem } from "./spec.ts";
 
 export type Severity = "error" | "warning";
 
 export type Finding = Problem & { readonly severity: Severity };
 
+export type FileListing = {
+  readonly projectFiles: (folder: string) => Promise<readonly string[]>;
+};
+
 export type ModeFolder = {
+  readonly home: Home;
   readonly folder: string;
+  readonly label: string;
   readonly files: readonly string[];
   readonly manifest: Loaded<Mode> | undefined;
 };
 
 export type LoadedModeFolder = ModeFolder & { readonly manifest: Loaded<Mode> };
 
-export type CheckContext = {
+export type KitTree = {
   readonly files: FileSystem;
   readonly paths: readonly string[];
+};
+
+export type CheckContext = {
+  readonly layout: Layout;
+  readonly files: FileSystem;
+  readonly kit: KitTree;
   readonly modes: readonly ModeFolder[];
   readonly interfaces: ReadonlyMap<string, Interface>;
 };
 
-const modeTiers = ["components/base", "components/modes"] as const;
+export type CheckSources = {
+  readonly files: FileSystem;
+  readonly listing: FileListing;
+  readonly layout: Layout;
+  readonly active: ReadonlySet<string>;
+};
 
-export const interfacesFolder = "components/base/interfaces";
+export const kitInterfacesFolder = "components/base/interfaces";
 
 export function errors(problems: readonly Problem[]): readonly Finding[] {
   return problems.map((problem) => ({ ...problem, severity: "error" }));
@@ -35,7 +54,7 @@ export function warnings(problems: readonly Problem[]): readonly Finding[] {
   return problems.map((problem) => ({ ...problem, severity: "warning" }));
 }
 
-export function rootedFileSystem(files: FileSystem, root: string): FileSystem {
+function rootedFileSystem(files: FileSystem, root: string): FileSystem {
   return {
     readText: (path) => files.readText(join(root, path)),
     list: (directory) => files.list(join(root, directory)),
@@ -57,36 +76,43 @@ export function lineOfIndex(text: string, index: number): number {
   return text.slice(0, index).split("\n").length;
 }
 
-async function modeFolderNames(files: FileSystem): Promise<readonly string[]> {
-  const folders: string[] = [];
-  for (const tier of modeTiers) {
-    for (const name of await files.list(tier)) {
-      const folder = join(tier, name);
-      if (folder !== interfacesFolder && (await files.exists(join(folder, "mode.yaml")))) {
-        folders.push(folder);
-      }
-    }
-  }
-  return folders;
+function listingsOf(sources: CheckSources): (home: Home) => Promise<readonly string[]> {
+  const listings = new Map<Home, Promise<readonly string[]>>();
+  return (home) => {
+    const folder = homeFolder(sources.layout, home);
+    const earlier = listings.get(home) ?? sources.listing.projectFiles(folder);
+    listings.set(home, earlier);
+    return earlier;
+  };
 }
 
-async function loadModeFolders(files: FileSystem, paths: readonly string[]): Promise<readonly ModeFolder[]> {
+function isChecked(sources: CheckSources, home: Home, name: string): boolean {
+  return home === "project" || isProjectTheKit(sources.layout) || sources.active.has(name);
+}
+
+async function loadModeFolders(
+  sources: CheckSources,
+  listing: (home: Home) => Promise<readonly string[]>,
+): Promise<readonly ModeFolder[]> {
+  const { files, layout } = sources;
   const modes: ModeFolder[] = [];
-  for (const folder of await modeFolderNames(files)) {
-    const outcome = await loadSpec(files, join(folder, "mode.yaml"), "mode");
+  for (const found of await findModeFolders(files, layout)) {
+    const outcome = await loadSpec(files, join(found.folder, "mode.yaml"), "mode");
     const manifest = outcome.ok ? outcome.value : undefined;
-    modes.push({ folder, files: filesUnder(paths, folder), manifest });
+    if (!isChecked(sources, found.home, manifest?.value.name ?? basename(found.folder))) {
+      continue;
+    }
+    const below = relative(homeFolder(layout, found.home), found.folder);
+    const modeFiles = filesUnder(await listing(found.home), below);
+    modes.push({ ...found, label: shownPath(layout, found.folder), files: modeFiles, manifest });
   }
   return modes;
 }
 
-async function loadInterfaceDefinitions(files: FileSystem): Promise<ReadonlyMap<string, Interface>> {
+async function loadInterfaceDefinitions(files: FileSystem, layout: Layout): Promise<ReadonlyMap<string, Interface>> {
   const definitions = new Map<string, Interface>();
-  for (const name of await files.list(interfacesFolder)) {
-    if (!name.endsWith(".yaml")) {
-      continue;
-    }
-    const outcome = await loadSpec(files, join(interfacesFolder, name), "interface");
+  for (const file of await findInterfaceFiles(files, layout)) {
+    const outcome = await loadSpec(files, file, "interface");
     if (outcome.ok) {
       const definition = outcome.value.value;
       definitions.set(`${definition.name}@${String(definition.version)}`, definition);
@@ -95,8 +121,12 @@ async function loadInterfaceDefinitions(files: FileSystem): Promise<ReadonlyMap<
   return definitions;
 }
 
-export async function loadCheckContext(files: FileSystem, paths: readonly string[]): Promise<CheckContext> {
-  const modes = await loadModeFolders(files, paths);
-  const interfaces = await loadInterfaceDefinitions(files);
-  return { files, paths, modes, interfaces };
+export async function loadCheckContext(sources: CheckSources): Promise<CheckContext> {
+  const { files, layout } = sources;
+  const listing = listingsOf(sources);
+  const kitPaths = isProjectTheKit(layout) ? await listing("kit") : [];
+  const modes = await loadModeFolders(sources, listing);
+  const interfaces = await loadInterfaceDefinitions(files, layout);
+  const kit = { files: rootedFileSystem(files, layout.kit), paths: kitPaths };
+  return { layout, files, kit, modes, interfaces };
 }

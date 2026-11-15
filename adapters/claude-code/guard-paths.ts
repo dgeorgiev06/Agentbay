@@ -14,7 +14,7 @@ export type PathFacts = {
 };
 
 export type Places = {
-  readonly root: string;
+  readonly project: string;
   readonly kit: string;
 };
 
@@ -106,7 +106,7 @@ function segmentsBelowBase(path: string, bases: readonly string[]): readonly str
 }
 
 export function closedNameIn(paths: readonly string[], places: Places, facts: PathFacts): string | undefined {
-  const bases = [...bothForms(places.root, facts), ...bothForms(places.kit, facts)];
+  const bases = [...bothForms(places.project, facts), ...bothForms(places.kit, facts)];
   for (const path of paths) {
     const name = segmentsBelowBase(path, bases)
       .map(closedName)
@@ -122,8 +122,16 @@ export function kitFoldersOf(places: Places, facts: PathFacts): readonly string[
   return bothForms(places.kit, facts).flatMap((kit) => kitFolders.map((folder) => join(kit, folder)));
 }
 
+function stepClosedKitFolders(places: Places, facts: PathFacts): readonly string[] {
+  const kits = bothForms(places.kit, facts);
+  const projects = bothForms(places.project, facts);
+  const isProjectTheKit = kits.some((kit) => projects.includes(kit));
+  return isProjectTheKit ? kitFoldersOf(places, facts) : [...kitFoldersOf(places, facts), ...kits];
+}
+
 export function kitFolderHolding(paths: readonly string[], places: Places, facts: PathFacts): string | undefined {
-  return kitFoldersOf(places, facts).find((folder) => paths.some((path) => isInsideIgnoringCase(path, folder)));
+  const folders = stepClosedKitFolders(places, facts);
+  return folders.find((folder) => paths.some((path) => isInsideIgnoringCase(path, folder)));
 }
 
 export type WalkFinding =

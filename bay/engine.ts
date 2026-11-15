@@ -12,6 +12,7 @@ import {
 import type { Json, PolicyOf, RunEvent, Scrubber, ScriptRunner, Spend, Submission } from "./contracts.ts";
 import type { Budget } from "./generated/mode.ts";
 import { byteSize, fieldOf, numberField, textField, toJson, withFields } from "./json.ts";
+import { inactiveModeWording } from "./policy.ts";
 import type { Clock, FileSystem } from "./ports.ts";
 import type { System } from "./registry.ts";
 import {
@@ -39,7 +40,6 @@ export type EngineOptions = {
   readonly policyOf: PolicyOf;
   readonly clock: Clock;
   readonly files: FileSystem;
-  readonly root: string;
   readonly scrubber: Scrubber;
   readonly owner?: string;
   readonly newId?: () => string;
@@ -294,6 +294,10 @@ export class Engine {
     if (typeof target === "string") {
       return refusal(options.id ?? "new", { message: target });
     }
+    const inactive = this.#inactiveRefusal(options.id ?? "new", target.mode.manifest.name);
+    if (inactive !== undefined) {
+      return inactive;
+    }
     const check = { mode: target.mode, schema: target.action.input, value: input, label: "input" };
     const problems = await schemaProblems(this.#services, check);
     if (problems.length > 0) {
@@ -310,6 +314,10 @@ export class Engine {
     options: StartOptions = {},
   ): Promise<EngineResult> {
     const { mode, path } = reference;
+    const inactive = this.#inactiveRefusal(options.id ?? "new", mode);
+    if (inactive !== undefined) {
+      return inactive;
+    }
     const workflow = this.#services.system.modes.get(mode)?.workflows.get(path);
     if (workflow === undefined) {
       return refusal(options.id ?? "new", { message: `Mode ${mode} has no workflow ${path}.` });
@@ -437,8 +445,16 @@ export class Engine {
           fix: `Try again when it is done, or after ${staleMinutes} minutes without a heartbeat.`,
         });
       case "acquired":
-        return this.#holding(lock.writer, async () => body(await this.#read(runId), lock.writer, now));
+        return this.#holding(lock.writer, async () => {
+          const run = await this.#read(runId);
+          return this.#inactiveRefusal(run.id, run.target.mode) ?? body(run, lock.writer, now);
+        });
     }
+  }
+
+  #inactiveRefusal(runId: string, mode: string): EngineResult | undefined {
+    const system = this.#services.system;
+    return system.modes.has(mode) && !system.active.has(mode) ? refusal(runId, inactiveModeWording(mode)) : undefined;
   }
 
   async #holding(writer: Writer, body: () => Promise<EngineResult>): Promise<EngineResult> {

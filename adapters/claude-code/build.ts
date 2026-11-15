@@ -38,7 +38,7 @@ function problem(file: string, message: string, fix?: string): Problem {
 }
 
 function folderProblems(request: BuildRequest): readonly Problem[] {
-  return [request.root, request.kit].flatMap((folder) => {
+  return [request.layout.project, request.layout.kit].flatMap((folder) => {
     if (!isAbsolute(folder)) {
       return [problem(folder, "the project and kit folders must be absolute paths")];
     }
@@ -76,9 +76,9 @@ function createdFiles(request: BuildRequest): readonly { readonly path: string; 
   return [
     ...request.agents.map((agent) => ({
       path: `.claude/agents/${agent.agent}.md`,
-      text: agentFileText(agent, request.root),
+      text: agentFileText(agent, request.layout.project),
     })),
-    { path: ".agentbay/steps.json", text: stepsFileText(request.root, request.kit, request.agents) },
+    { path: ".agentbay/steps.json", text: stepsFileText(request.layout, request.agents) },
   ];
 }
 
@@ -107,7 +107,8 @@ async function planCreated(request: BuildRequest, previous: BuildRecord | undefi
   const problems: Problem[] = [];
   for (const file of createdFiles(request)) {
     const recorded = previous?.created.find((entry) => entry.path === file.path);
-    const change = createdChange(await request.files.readText(join(request.root, file.path)), file.text, recorded);
+    const current = await request.files.readText(join(request.layout.project, file.path));
+    const change = createdChange(current, file.text, recorded);
     if (change === "foreign") {
       problems.push(problem(file.path, "the file exists and agentbay did not write it", "move it away, then build"));
     } else {
@@ -122,7 +123,7 @@ async function planMerged(request: BuildRequest, previous: BuildRecord | undefin
   const problems: Problem[] = [];
   for (const target of mergeTargets(request)) {
     const recorded = previous?.merged.find((entry) => entry.path === target.path);
-    const plan = planMerge(target, await request.files.readText(join(request.root, target.path)), recorded);
+    const plan = planMerge(target, await request.files.readText(join(request.layout.project, target.path)), recorded);
     if (typeof plan === "string") {
       problems.push(problem(target.path, plan));
     } else {
@@ -136,7 +137,7 @@ async function planStale(request: BuildRequest, previous: BuildRecord | undefine
   const built = new Set(createdFiles(request).map((file) => file.path));
   const stale: StalePlan[] = [];
   for (const entry of previous?.created.filter((file) => !built.has(file.path)) ?? []) {
-    const current = await request.files.readText(join(request.root, entry.path));
+    const current = await request.files.readText(join(request.layout.project, entry.path));
     if (current !== undefined) {
       stale.push({ path: entry.path, remove: sha256(current) === entry.sha256 });
     }
@@ -171,7 +172,7 @@ async function foldersToCreate(
   const paths = [recordPath, ...plans.created.map((file) => file.path), ...plans.merged.map((file) => file.path)];
   const folders = new Set(previous?.createdFolders ?? []);
   for (const folder of new Set(paths.flatMap(foldersAbove))) {
-    if (!(await request.files.exists(join(request.root, folder)))) {
+    if (!(await request.files.exists(join(request.layout.project, folder)))) {
       folders.add(folder);
     }
   }
@@ -181,7 +182,8 @@ async function foldersToCreate(
 }
 
 async function carryOut(request: BuildRequest, plans: Plans, previous?: BuildRecord): Promise<readonly string[]> {
-  const { files, root } = request;
+  const { files } = request;
+  const { project } = request.layout;
   const record: BuildRecord = {
     version: 1,
     adapter: "claude-code",
@@ -189,15 +191,15 @@ async function carryOut(request: BuildRequest, plans: Plans, previous?: BuildRec
     merged: plans.merged.map((file) => file.entry),
     createdFolders: await foldersToCreate(request, plans, previous),
   };
-  await files.writeAtomic(join(root, recordPath), recordText(record));
+  await files.writeAtomic(join(project, recordPath), recordText(record));
   const report = [`${recordPath}: written`];
   for (const file of [...plans.created, ...plans.merged].filter((plan) => plan.change !== "unchanged")) {
-    await files.writeAtomic(join(root, file.path), file.text);
+    await files.writeAtomic(join(project, file.path), file.text);
   }
   report.push(...[...plans.created, ...plans.merged].map((file) => `${file.path}: ${changeWords[file.change]}`));
   for (const file of plans.stale) {
     if (file.remove) {
-      await request.removal.remove(join(root, file.path));
+      await request.removal.remove(join(project, file.path));
     }
     report.push(`${file.path}: ${file.remove ? staleDeleted : staleKept}`);
   }
@@ -213,7 +215,7 @@ export async function build(request: BuildRequest): Promise<ListOutcome> {
   if (rootIssues.length > 0) {
     return { ok: false, problems: rootIssues };
   }
-  const reading = readRecord(await request.files.readText(join(request.root, recordPath)));
+  const reading = readRecord(await request.files.readText(join(request.layout.project, recordPath)));
   if (reading.kind === "unreadable") {
     return { ok: false, problems: [unreadableRecord] };
   }

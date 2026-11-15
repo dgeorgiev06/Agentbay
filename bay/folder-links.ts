@@ -1,6 +1,7 @@
-import { join, relative } from "node:path/posix";
+import { join } from "node:path/posix";
+import { expectedRealPath } from "./file-access.ts";
+import { isInsideOrEqual, type Layout } from "./layout.ts";
 import type { FileInspector } from "./ports.ts";
-import { isInsideOrEqual } from "./file-access.ts";
 
 export type EscapingLink = {
   readonly link: string;
@@ -29,17 +30,16 @@ async function linksLeaving(inspector: FileInspector, folder: string, realFolder
 
 export async function escapingLinks(
   inspector: FileInspector,
-  root: string,
+  layout: Layout,
   folders: readonly string[],
 ): Promise<readonly EscapingLink[]> {
-  const realRoot = (await inspector.realPath(root)) ?? root;
   const found: EscapingLink[] = [];
   for (const folder of new Set(folders)) {
     const realFolder = await inspector.realPath(folder);
     if (realFolder === undefined) {
       continue;
     }
-    if (realFolder !== join(realRoot, relative(root, folder))) {
+    if (realFolder !== (await expectedRealPath(inspector, layout, folder))) {
       found.push({ link: folder, folder, target: realFolder });
       continue;
     }

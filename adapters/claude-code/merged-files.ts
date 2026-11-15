@@ -25,7 +25,7 @@ export type MergePlan = {
 };
 
 function blockTarget(request: BuildRequest): MergeTarget {
-  const block = coordinatorBlock(bayCommand(request.root, request.kit));
+  const block = coordinatorBlock(bayCommand(request.layout));
   return {
     path: "CLAUDE.md",
     merge: (base, current, previous) => {
@@ -40,8 +40,8 @@ function blockTarget(request: BuildRequest): MergeTarget {
 }
 
 export function mergeTargets(request: BuildRequest): readonly MergeTarget[] {
-  const entry = guardEntry(request.kit, request.root);
-  const server = kernelServer(request.kit, request.root);
+  const entry = guardEntry(request.layout);
+  const server = kernelServer(request.layout);
   return [
     { path: ".claude/settings.json", merge: (base) => mergeSettings(base, entry) },
     { path: ".mcp.json", merge: (base) => mergeMcp(base, server) },

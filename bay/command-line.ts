@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { layoutOf } from "./layout.ts";
 import {
   usageResult,
   type CommandContext,
@@ -188,6 +189,7 @@ export async function runCommandLine(
     return parsed;
   }
   const project = resolve(context.workingDirectory, parsed.values.get("project") ?? ".");
-  const result = await command.handler({ context, project, ...parsed });
+  const layout = layoutOf({ kit: context.kit, project });
+  const result = await command.handler({ context, layout, ...parsed });
   return rendered(result, asJson);
 }

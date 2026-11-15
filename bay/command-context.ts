@@ -1,6 +1,7 @@
 import type { Json } from "./contracts.ts";
 import { loadKernel, type Environment, type Kernel, type KernelPorts } from "./kernel.ts";
 import { parseJson } from "./json.ts";
+import type { Layout } from "./layout.ts";
 import type { Problem } from "./spec.ts";
 
 export type Terminal = {
@@ -20,7 +21,7 @@ export type CommandContext = {
 
 export type Invocation = {
   readonly context: CommandContext;
-  readonly project: string;
+  readonly layout: Layout;
   readonly positionals: readonly string[];
   readonly values: ReadonlyMap<string, string>;
   readonly flags: ReadonlySet<string>;
@@ -80,8 +81,7 @@ export async function withKernel(
 ): Promise<CommandResult> {
   const { context } = invocation;
   const loaded = await loadKernel({
-    project: invocation.project,
-    kit: context.kit,
+    layout: invocation.layout,
     ports: context.ports,
     environment: context.environment,
     platform: context.platform,

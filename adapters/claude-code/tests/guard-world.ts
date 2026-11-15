@@ -149,7 +149,7 @@ const tampered: StepRules = {
 
 export const stepsFile: StepsFile = {
   version: 1,
-  root: "/p",
+  project: "/p",
   kit: "/k",
   agents: {
     "agentbay-mail-digest": digest,
@@ -161,7 +161,7 @@ export const stepsFile: StepsFile = {
   },
 };
 
-export const setup: GuardSetup = { root: "/p", kit: "/k", policy: readPolicy(JSON.stringify(stepsFile), "/p") };
+export const setup: GuardSetup = { project: "/p", kit: "/k", policy: readPolicy(JSON.stringify(stepsFile), "/p") };
 
 type Asked = { readonly agent: string; readonly tool: string; readonly input: Readonly<Record<string, unknown>> };
 

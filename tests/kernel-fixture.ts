@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { layoutOf } from "../bay/layout.ts";
 import { loadKernel, nodeKernelPorts, type Kernel, type KernelLimits, type KernelPorts } from "../bay/kernel.ts";
 import { kit, makeProject, type Project, type ProjectOptions } from "./project-fixture.ts";
 
@@ -13,8 +14,7 @@ export const testEnvironment = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
 export async function openKernel(project: Project, setup: KernelSetup = {}): Promise<Kernel> {
   const environment = { ...testEnvironment, ...setup.environment };
   const loaded = await loadKernel({
-    project: project.root,
-    kit,
+    layout: layoutOf({ kit, project: project.root }),
     ports: { ...nodeKernelPorts(environment), ...setup.ports },
     environment,
     platform: "linux",

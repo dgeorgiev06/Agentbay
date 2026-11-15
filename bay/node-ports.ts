@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { access, lstat, mkdir, readdir, readFile, realpath, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { FileListing } from "./check.ts";
+import type { FileListing } from "./check-context.ts";
 import type {
   Child,
   ChildEnd,

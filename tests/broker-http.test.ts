@@ -15,6 +15,7 @@ import {
   refusalOf as refusal,
   scriptedHttp,
   type ScriptedHttp,
+  projectLayout,
 } from "./broker-fixture.ts";
 
 const madeUpToken = "made-up-bearer-value-9876";
@@ -35,7 +36,7 @@ function setup(answer: (request: HttpRequest) => HttpResponse, limits: Partial<B
     platform: "linux",
   });
   const broker = new Broker({
-    root: "/project",
+    layout: projectLayout("/project"),
     permissions: permissionsIn("/project", {
       hosts: ["api.example.com", "*.files.example.com"],
       secrets: ["API_TOKEN"],

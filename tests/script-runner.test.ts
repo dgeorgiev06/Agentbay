@@ -13,6 +13,7 @@ import {
   noProcesses,
   permissionsIn,
   place,
+  projectLayout,
   recordingSink,
   scriptedHttp,
   sdkFile,
@@ -62,7 +63,7 @@ async function runScript(root: string, options: RunOptions): Promise<Run> {
     platform: "linux",
   });
   const runner = createScriptRunner({
-    root,
+    layout: projectLayout(root),
     files: nodeFileSystem,
     inspector: nodeFileInspector,
     http: scriptedHttp((request) => {

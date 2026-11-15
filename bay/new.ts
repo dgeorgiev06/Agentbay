@@ -1,13 +1,16 @@
-import { join } from "node:path/posix";
+import { basename, dirname, join, relative } from "node:path/posix";
 import { isMap, isScalar, isSeq, parseDocument, type Document } from "yaml";
+import { isProjectTheKit, pathIn, shownPath, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
+import { findModeFolders, ownInterfacesFolder, type ModeFolder } from "./registry.ts";
+import { sdkSpecifier } from "./script-protocol.ts";
 import type { Outcome, Problem } from "./spec.ts";
 
 export type ModeTier = "base" | "modes";
 
 export type Workspace = {
   readonly files: FileSystem;
-  readonly root: string;
+  readonly layout: Layout;
 };
 
 export type Generated = Outcome<readonly string[]>;
@@ -38,7 +41,7 @@ type ModePart = {
 
 const templatesFolder = "bay/templates";
 
-const interfacesFolder = "components/base/interfaces";
+const sdkFile = "bay/sdk.ts";
 
 const tierFolders: { readonly [Tier in ModeTier]: string } = {
   base: "components/base",
@@ -85,7 +88,7 @@ function fill(text: string, slots: Slots): string {
 
 async function render(workspace: Workspace, use: TemplateUse): Promise<Outcome<PlannedFile>> {
   const templateFile = join(templatesFolder, use.template);
-  const text = await workspace.files.readText(join(workspace.root, templateFile));
+  const text = await workspace.files.readText(pathIn(workspace.layout, "kit", templateFile));
   if (text === undefined) {
     return refused([problem(templateFile, `The template ${templateFile} is missing.`, "Restore it from the kit.")]);
   }
@@ -116,7 +119,7 @@ async function renderAll(workspace: Workspace, uses: readonly TemplateUse[]): Pr
 async function existingProblems(workspace: Workspace, planned: readonly PlannedFile[]): Promise<readonly Problem[]> {
   const problems: Problem[] = [];
   for (const file of planned.filter((entry) => !entry.edit)) {
-    if (await workspace.files.exists(join(workspace.root, file.path))) {
+    if (await workspace.files.exists(pathIn(workspace.layout, "project", file.path))) {
       problems.push(
         problem(file.path, `${file.path} already exists; bay new never overwrites a file.`, "Choose another name."),
       );
@@ -134,29 +137,40 @@ async function writePlanned(workspace: Workspace, planned: Planned): Promise<Gen
     return refused(existing);
   }
   for (const file of planned.value) {
-    await workspace.files.writeAtomic(join(workspace.root, file.path), file.text);
+    await workspace.files.writeAtomic(pathIn(workspace.layout, "project", file.path), file.text);
   }
   return { ok: true, value: planned.value.map((file) => file.path) };
 }
 
-async function modeFolderOf(workspace: Workspace, mode: string): Promise<string | undefined> {
-  for (const tierFolder of Object.values(tierFolders)) {
-    const folder = join(tierFolder, mode);
-    if (await workspace.files.exists(join(workspace.root, folder, "mode.yaml"))) {
-      return folder;
-    }
+async function foundMode(workspace: Workspace, mode: string): Promise<ModeFolder | undefined> {
+  const found = await findModeFolders(workspace.files, workspace.layout);
+  return found.find((entry) => basename(entry.folder) === mode);
+}
+
+function tierRefusals(workspace: Workspace, name: string, tier: ModeTier): readonly Problem[] {
+  if (tier === "modes" || isProjectTheKit(workspace.layout)) {
+    return [];
   }
-  return undefined;
+  return [
+    problem(
+      join(tierFolders.base, name),
+      "Tier base is for the base modes of the kit itself, and this project is not the kit; " +
+        "bay new writes only into the project.",
+      `Make the mode in this project with --tier modes, or run bay new in the kit's own folder.`,
+    ),
+  ];
 }
 
 async function existingModeProblems(workspace: Workspace, name: string): Promise<readonly Problem[]> {
+  const { layout } = workspace;
+  const inKit = Object.values(tierFolders).map((tier) => pathIn(layout, "kit", join(tier, name)));
+  const inProject = isProjectTheKit(layout) ? [] : [pathIn(layout, "project", join(tierFolders.modes, name))];
+  const folders = [...inKit, ...inProject];
   const problems: Problem[] = [];
-  for (const tierFolder of Object.values(tierFolders)) {
-    const folder = join(tierFolder, name);
-    if (await workspace.files.exists(join(workspace.root, folder))) {
-      problems.push(
-        problem(folder, `${folder} already exists; every mode needs its own name.`, "Choose another name."),
-      );
+  for (const folder of folders) {
+    if (await workspace.files.exists(folder)) {
+      const shown = shownPath(layout, folder);
+      problems.push(problem(shown, `${shown} already exists; every mode needs its own name.`, "Choose another name."));
     }
   }
   return problems;
@@ -164,7 +178,7 @@ async function existingModeProblems(workspace: Workspace, name: string): Promise
 
 export async function newMode(workspace: Workspace, name: string, tier: ModeTier): Promise<Generated> {
   const folder = join(tierFolders[tier], name);
-  const refusals = nameProblems("mode", name, folder);
+  const refusals = [...tierRefusals(workspace, name, tier), ...nameProblems("mode", name, folder)];
   if (refusals.length > 0) {
     return refused(refusals);
   }
@@ -180,9 +194,12 @@ export async function newMode(workspace: Workspace, name: string, tier: ModeTier
 }
 
 async function modeTarget(workspace: Workspace, mode: string): Promise<Outcome<string>> {
-  const folder = await modeFolderOf(workspace, mode);
-  if (folder === undefined) {
-    const where = `${tierFolders.base}/${mode} or ${tierFolders.modes}/${mode}`;
+  const { layout } = workspace;
+  const found = await foundMode(workspace, mode);
+  if (found === undefined) {
+    const where = isProjectTheKit(layout)
+      ? `${tierFolders.base}/${mode} or ${tierFolders.modes}/${mode}`
+      : `${tierFolders.modes}/${mode}`;
     return refused([
       problem(
         "components",
@@ -191,12 +208,22 @@ async function modeTarget(workspace: Workspace, mode: string): Promise<Outcome<s
       ),
     ]);
   }
-  return { ok: true, value: folder };
+  if (found.home === "kit" && !isProjectTheKit(layout)) {
+    const shown = shownPath(layout, found.folder);
+    return refused([
+      problem(
+        shown,
+        `Mode ${mode} lives in the kit (${shown}), and bay new writes only into the project, never into the kit.`,
+        "Make a mode of your own with bay new mode, or change the kit's mode in the kit's own folder.",
+      ),
+    ]);
+  }
+  return { ok: true, value: relative(layout.project, found.folder) };
 }
 
 async function editManifest(workspace: Workspace, folder: string, edit: ManifestEdit): Promise<Outcome<PlannedFile>> {
   const manifest = join(folder, "mode.yaml");
-  const text = (await workspace.files.readText(join(workspace.root, manifest))) ?? "";
+  const text = (await workspace.files.readText(pathIn(workspace.layout, "project", manifest))) ?? "";
   const document = parseDocument(text);
   if (document.errors.length > 0) {
     return refused([problem(manifest, `${manifest} cannot be read as YAML.`, "Correct it, then run bay new again.")]);
@@ -245,7 +272,15 @@ function addActionEntry(name: string): ManifestEdit {
   };
 }
 
-function actionFiles(folder: string, name: string): readonly TemplateUse[] {
+function sdkImportOf(layout: Layout, script: string): string {
+  if (!isProjectTheKit(layout)) {
+    return sdkSpecifier;
+  }
+  return relative(dirname(pathIn(layout, "project", script)), pathIn(layout, "kit", sdkFile));
+}
+
+function actionFiles(layout: Layout, folder: string, name: string): readonly TemplateUse[] {
+  const script = join(folder, "scripts", `${name}.ts`);
   const schema = (direction: string): TemplateUse => ({
     template: "action/schema.json",
     path: join(folder, "schemas", `${name}-${direction}.json`),
@@ -254,7 +289,7 @@ function actionFiles(folder: string, name: string): readonly TemplateUse[] {
   return [
     schema("input"),
     schema("output"),
-    { template: "action/script.ts.template", path: join(folder, "scripts", `${name}.ts`), slots: {} },
+    { template: "action/script.ts.template", path: script, slots: { sdk: sdkImportOf(layout, script) } },
     { template: "action/example.json", path: join(folder, "tests", `${name}.example.json`), slots: {} },
   ];
 }
@@ -274,7 +309,7 @@ async function inMode(
 
 export async function newAction(workspace: Workspace, mode: string, name: string): Promise<Generated> {
   return inMode(workspace, { mode, kind: "action", name }, async (folder) => {
-    const planned = await renderAll(workspace, actionFiles(folder, name));
+    const planned = await renderAll(workspace, actionFiles(workspace.layout, folder, name));
     return withManifest(planned, await editManifest(workspace, folder, addActionEntry(name)));
   });
 }
@@ -320,7 +355,8 @@ export async function newWorkflow(workspace: Workspace, mode: string, name: stri
 }
 
 export async function newInterface(workspace: Workspace, name: string): Promise<Generated> {
-  const path = join(interfacesFolder, `${name}.yaml`);
+  const folder = relative(workspace.layout.project, ownInterfacesFolder(workspace.layout));
+  const path = join(folder, `${name}.yaml`);
   const refusals = nameProblems("interface", name, path);
   if (refusals.length > 0) {
     return refused(refusals);

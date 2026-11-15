@@ -10,8 +10,9 @@ import {
   digestAgent,
   existingProject,
   kit,
+  layout,
   memoryFiles,
-  root,
+  project,
   scanAgent,
   skillAgent,
   userClaude,
@@ -32,11 +33,11 @@ async function built(files: MemoryFiles, agents = allAgents): Promise<readonly s
 }
 
 async function cleaned(files: MemoryFiles): Promise<readonly string[]> {
-  return lines(await adapter.clean({ root, files, removal: files.removal }));
+  return lines(await adapter.clean({ layout, files, removal: files.removal }));
 }
 
 function parsed(files: MemoryFiles, path: string): unknown {
-  return JSON.parse(files.snapshot()[`${root}/${path}`] ?? "null");
+  return JSON.parse(files.snapshot()[`${project}/${path}`] ?? "null");
 }
 
 const builtPaths = [
@@ -48,7 +49,7 @@ const builtPaths = [
   ".claude/settings.json",
   ".mcp.json",
   "CLAUDE.md",
-].map((path) => `${root}/${path}`);
+].map((path) => `${project}/${path}`);
 
 test("the adapter is named claude-code", () => {
   assert.equal(adapter.name, "claude-code");
@@ -60,11 +61,11 @@ test("a build into an empty project writes every file and clean leaves the proje
   assert.deepEqual(Object.keys(files.snapshot()), builtPaths);
   assert.ok(report.includes(".claude/agents/agentbay-store-scan.md: created"));
   assert.ok(report.includes(".claude/settings.json: merged"));
-  assert.deepEqual(parsed(files, ".claude/settings.json"), { hooks: { PreToolUse: [guardEntry(kit, root)] } });
+  assert.deepEqual(parsed(files, ".claude/settings.json"), { hooks: { PreToolUse: [guardEntry(layout)] } });
   assert.deepEqual(parsed(files, ".mcp.json"), {
-    mcpServers: { agentbay: { command: "node", args: [`${kit}/bay/mcp.ts`, "--project", root] } },
+    mcpServers: { agentbay: { command: "node", args: [`${kit}/bay/mcp.ts`, "--project", project] } },
   });
-  const claude = files.snapshot()[`${root}/CLAUDE.md`] ?? "";
+  const claude = files.snapshot()[`${project}/CLAUDE.md`] ?? "";
   assert.ok(claude.startsWith(`${blockStart}\n`) && claude.endsWith(`${blockEnd}\n`));
   const cleanReport = await cleaned(files);
   assert.deepEqual(files.snapshot(), {});
@@ -79,7 +80,7 @@ test("a build keeps the user's settings, servers and CLAUDE.md, and clean restor
   assert.deepEqual(settings, {
     model: "opus",
     hooks: {
-      PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "mine" }] }, guardEntry(kit, root)],
+      PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "mine" }] }, guardEntry(layout)],
       Stop: [],
     },
     permissions: { allow: ["Bash(ls:*)"], deny: ["Read(./secrets/**)"] },
@@ -88,11 +89,11 @@ test("a build keeps the user's settings, servers and CLAUDE.md, and clean restor
   assert.deepEqual(parsed(files, ".mcp.json"), {
     mcpServers: {
       mine: { command: "x", args: [] },
-      agentbay: { command: "node", args: [`${kit}/bay/mcp.ts`, "--project", root] },
+      agentbay: { command: "node", args: [`${kit}/bay/mcp.ts`, "--project", project] },
     },
     other: 1,
   });
-  const claude = files.snapshot()[`${root}/CLAUDE.md`] ?? "";
+  const claude = files.snapshot()[`${project}/CLAUDE.md`] ?? "";
   assert.ok(claude.startsWith(`${userClaude}\n\n${blockStart}\n`), claude);
   await cleaned(files);
   assert.deepEqual(files.snapshot(), existingProject);
@@ -117,7 +118,7 @@ test("building twice changes nothing and clean still restores the starting bytes
 test("a build after a hand edit of an agent file overwrites it and says so", async () => {
   const files = memoryFiles();
   await built(files);
-  const path = `${root}/.claude/agents/agentbay-store-scan.md`;
+  const path = `${project}/.claude/agents/agentbay-store-scan.md`;
   const generated = files.snapshot()[path];
   await files.writeAtomic(path, "---\nname: agentbay-store-scan\ntools: Bash, Agent\n---\n");
   const report = await built(files);
@@ -130,7 +131,7 @@ test("a build after a hand edit of an agent file overwrites it and says so", asy
 test("clean leaves a created file the user edited and reports it", async () => {
   const files = memoryFiles();
   await built(files);
-  const path = `${root}/.claude/agents/agentbay-store-scan.md`;
+  const path = `${project}/.claude/agents/agentbay-store-scan.md`;
   await files.writeAtomic(path, "mine now");
   const report = await cleaned(files);
   assert.ok(report.includes(".claude/agents/agentbay-store-scan.md: changed since the build, left in place"));
@@ -140,25 +141,25 @@ test("clean leaves a created file the user edited and reports it", async () => {
 test("clean keeps edits the user made to a merged file after the build", async () => {
   const files = memoryFiles(existingProject);
   await built(files);
-  const settingsPath = `${root}/.claude/settings.json`;
+  const settingsPath = `${project}/.claude/settings.json`;
   const settings: unknown = JSON.parse(files.snapshot()[settingsPath] ?? "{}");
   assert.ok(typeof settings === "object" && settings !== null);
   await files.writeAtomic(settingsPath, JSON.stringify({ ...settings, theme: "dark" }));
-  await files.writeAtomic(`${root}/CLAUDE.md`, `${files.snapshot()[`${root}/CLAUDE.md`] ?? ""}\nAdded later.\n`);
+  await files.writeAtomic(`${project}/CLAUDE.md`, `${files.snapshot()[`${project}/CLAUDE.md`] ?? ""}\nAdded later.\n`);
   const report = await cleaned(files);
   assert.ok(report.includes(".claude/settings.json: agentbay's part removed, later edits kept"));
   assert.deepEqual(parsed(files, ".claude/settings.json"), { ...JSON.parse(userSettings), theme: "dark" });
-  assert.equal(files.snapshot()[`${root}/CLAUDE.md`], `${userClaude}\nAdded later.\n`);
-  assert.equal(files.snapshot()[`${root}/.mcp.json`], userMcp);
+  assert.equal(files.snapshot()[`${project}/CLAUDE.md`], `${userClaude}\nAdded later.\n`);
+  assert.equal(files.snapshot()[`${project}/.mcp.json`], userMcp);
 });
 
 test("settings that the build created and the user extended keep only the user's part", async () => {
   const files = memoryFiles();
   await built(files);
-  const settingsPath = `${root}/.claude/settings.json`;
+  const settingsPath = `${project}/.claude/settings.json`;
   await files.writeAtomic(
     settingsPath,
-    JSON.stringify({ hooks: { PreToolUse: [guardEntry(kit, root)] }, model: "haiku" }),
+    JSON.stringify({ hooks: { PreToolUse: [guardEntry(layout)] }, model: "haiku" }),
   );
   await cleaned(files);
   assert.deepEqual(files.snapshot(), { [settingsPath]: '{\n  "model": "haiku"\n}\n' });
@@ -167,8 +168,8 @@ test("settings that the build created and the user extended keep only the user's
 test("a hand-changed agentbay hook entry is left in place by clean and refused by build", async () => {
   const files = memoryFiles();
   await built(files);
-  const settingsPath = `${root}/.claude/settings.json`;
-  const loosened = { hooks: { PreToolUse: [{ ...guardEntry(kit, root), matcher: "Write" }] } };
+  const settingsPath = `${project}/.claude/settings.json`;
+  const loosened = { hooks: { PreToolUse: [{ ...guardEntry(layout), matcher: "Write" }] } };
   await files.writeAtomic(settingsPath, JSON.stringify(loosened));
   const outcome = await adapter.build(buildRequest(files));
   assert.ok(!outcome.ok);
@@ -182,9 +183,9 @@ test("a hand-changed agentbay hook entry is left in place by clean and refused b
 });
 
 test("a block the user moved stays in place when the build replaces it, and clean removes it", async () => {
-  const files = memoryFiles({ [`${root}/CLAUDE.md`]: userClaude });
+  const files = memoryFiles({ [`${project}/CLAUDE.md`]: userClaude });
   await built(files);
-  const claudePath = `${root}/CLAUDE.md`;
+  const claudePath = `${project}/CLAUDE.md`;
   const current = files.snapshot()[claudePath] ?? "";
   const block = current.slice(current.indexOf(blockStart));
   const moved = `${block.replace("You are the owner's coordinator.", "Edited.")}\n# mine\n\nKeep this.`;
@@ -199,9 +200,9 @@ test("a block the user moved stays in place when the build replaces it, and clea
 
 test("a server the user had under the name agentbay comes back after clean", async () => {
   const own = '{"mcpServers": {"agentbay": {"command": "my-own"}}}';
-  const files = memoryFiles({ [`${root}/.mcp.json`]: own });
+  const files = memoryFiles({ [`${project}/.mcp.json`]: own });
   await built(files);
-  await files.writeAtomic(`${root}/.mcp.json`, `${files.snapshot()[`${root}/.mcp.json`] ?? ""}\n`);
+  await files.writeAtomic(`${project}/.mcp.json`, `${files.snapshot()[`${project}/.mcp.json`] ?? ""}\n`);
   await cleaned(files);
   assert.deepEqual(parsed(files, ".mcp.json"), JSON.parse(own));
 });
@@ -209,7 +210,7 @@ test("a server the user had under the name agentbay comes back after clean", asy
 test("a step that is no longer built has its agent file deleted, unless the user edited it", async () => {
   const files = memoryFiles();
   await built(files);
-  const scanPath = `${root}/.claude/agents/agentbay-store-scan.md`;
+  const scanPath = `${project}/.claude/agents/agentbay-store-scan.md`;
   const report = await built(files, [digestAgent]);
   assert.ok(report.includes(".claude/agents/agentbay-store-scan.md: deleted; no step needs it now"));
   assert.equal(files.snapshot()[scanPath], undefined);
@@ -221,7 +222,7 @@ test("a step that is no longer built has its agent file deleted, unless the user
 });
 
 test("a build refuses to overwrite a file agentbay did not write, and writes nothing", async () => {
-  const start = { [`${root}/.claude/agents/agentbay-store-scan.md`]: "the user's own agent" };
+  const start = { [`${project}/.claude/agents/agentbay-store-scan.md`]: "the user's own agent" };
   const files = memoryFiles(start);
   const outcome = await adapter.build(buildRequest(files));
   assert.ok(!outcome.ok);
@@ -231,12 +232,12 @@ test("a build refuses to overwrite a file agentbay did not write, and writes not
 
 test("a malformed settings file, server file or record is reported and nothing is written", async () => {
   const cases = [
-    { [`${root}/.claude/settings.json`]: "{ not json" },
-    { [`${root}/.claude/settings.json`]: '{"hooks": []}' },
-    { [`${root}/.claude/settings.json`]: '{"hooks": {"PreToolUse": {}}}' },
-    { [`${root}/.mcp.json`]: "[]" },
-    { [`${root}/.mcp.json`]: '{"mcpServers": 3}' },
-    { [`${root}/.agentbay/build.json`]: '{"version": 1, "adapter": "claude-code", "created": [{}], "merged": []}' },
+    { [`${project}/.claude/settings.json`]: "{ not json" },
+    { [`${project}/.claude/settings.json`]: '{"hooks": []}' },
+    { [`${project}/.claude/settings.json`]: '{"hooks": {"PreToolUse": {}}}' },
+    { [`${project}/.mcp.json`]: "[]" },
+    { [`${project}/.mcp.json`]: '{"mcpServers": 3}' },
+    { [`${project}/.agentbay/build.json`]: '{"version": 1, "adapter": "claude-code", "created": [{}], "merged": []}' },
   ];
   for (const start of cases) {
     const files = memoryFiles(start);
@@ -244,8 +245,8 @@ test("a malformed settings file, server file or record is reported and nothing i
     assert.ok(!outcome.ok, JSON.stringify(start));
     assert.deepEqual(files.snapshot(), start);
   }
-  const broken = memoryFiles({ [`${root}/.agentbay/build.json`]: "nope" });
-  const outcome = await adapter.clean({ root, files: broken, removal: broken.removal });
+  const broken = memoryFiles({ [`${project}/.agentbay/build.json`]: "nope" });
+  const outcome = await adapter.clean({ layout, files: broken, removal: broken.removal });
   assert.ok(!outcome.ok);
   assert.equal(outcome.problems[0]?.file, ".agentbay/build.json");
 });
@@ -253,7 +254,8 @@ test("a malformed settings file, server file or record is reported and nothing i
 test("a build reports every problem with the request at once", async () => {
   const renamed = { ...digestAgent, agent: "digest" };
   const oddTool = { ...scanAgent, kernelTools: ["files_read", "mcp__x__*"] };
-  const request = { ...buildRequest(memoryFiles(), [renamed, oddTool, oddTool]), root: "proj", kit: "/k'it" };
+  const layout = { project: "proj", kit: "/k'it", configFile: "proj/agentbay.config.yaml" };
+  const request = { ...buildRequest(memoryFiles(), [renamed, oddTool, oddTool]), layout };
   const outcome = await adapter.build(request);
   assert.ok(!outcome.ok);
   const messages = outcome.problems.map((problem) => problem.message);
@@ -274,23 +276,23 @@ test("clean with no build record is a no-op that says so", async () => {
 test("the record lists the folders the build created, deepest first, and clean reports them", async () => {
   const empty = memoryFiles();
   await built(empty);
-  const record: unknown = JSON.parse(empty.snapshot()[`${root}/.agentbay/build.json`] ?? "{}");
+  const record: unknown = JSON.parse(empty.snapshot()[`${project}/.agentbay/build.json`] ?? "{}");
   assert.ok(typeof record === "object" && record !== null && "createdFolders" in record);
   assert.deepEqual(record.createdFolders, [".claude/agents", ".agentbay", ".claude"]);
   const report = await cleaned(empty);
   assert.ok(report.includes(".claude/agents/: deleted; the build had created it"));
-  const existing = memoryFiles({ ...existingProject, [`${root}/.agentbay/kernel.db`]: "data" });
+  const existing = memoryFiles({ ...existingProject, [`${project}/.agentbay/kernel.db`]: "data" });
   await built(existing);
-  const kept: unknown = JSON.parse(existing.snapshot()[`${root}/.agentbay/build.json`] ?? "{}");
+  const kept: unknown = JSON.parse(existing.snapshot()[`${project}/.agentbay/build.json`] ?? "{}");
   assert.ok(typeof kept === "object" && kept !== null && "createdFolders" in kept);
   assert.deepEqual(kept.createdFolders, [".claude/agents"]);
   await cleaned(existing);
-  assert.deepEqual(existing.snapshot(), { ...existingProject, [`${root}/.agentbay/kernel.db`]: "data" });
+  assert.deepEqual(existing.snapshot(), { ...existingProject, [`${project}/.agentbay/kernel.db`]: "data" });
 });
 
 test("a build refuses a step granted a folder that holds a closed name, and writes nothing", async () => {
   for (const secret of ["notes/.env", "notes/deep/.env.local", "notes/.git/config", "notes/sub/.Agentbay/x"]) {
-    const start = { [`${root}/${secret}`]: "secret", [`${root}/notes/a.md`]: "a" };
+    const start = { [`${project}/${secret}`]: "secret", [`${project}/notes/a.md`]: "a" };
     const files = memoryFiles(start);
     const outcome = await adapter.build(buildRequest(files));
     assert.ok(!outcome.ok, secret);
@@ -298,21 +300,23 @@ test("a build refuses a step granted a folder that holds a closed name, and writ
     assert.equal(outcome.problems[0]?.file, digestAgent.skillFile);
     assert.deepEqual(files.snapshot(), start);
   }
-  const closedRoot = skillAgent({ ...shape, write: [`${root}/.agentbay/out`] });
+  const closedRoot = skillAgent({ ...shape, write: [`${project}/.agentbay/out`] });
   const outcome = await adapter.build(buildRequest(memoryFiles(), [closedRoot]));
   assert.ok(!outcome.ok);
   assert.match(outcome.problems[0]?.message ?? "", /names a closed location/);
 });
 
 test("a build refuses a granted folder larger than the bound it checks", async () => {
-  const many = Object.fromEntries(Array.from({ length: 5001 }, (_, index) => [`${root}/notes/f${String(index)}`, ""]));
+  const many = Object.fromEntries(
+    Array.from({ length: 5001 }, (_, index) => [`${project}/notes/f${String(index)}`, ""]),
+  );
   const wide = await adapter.build(buildRequest(memoryFiles(many)));
   assert.ok(!wide.ok);
   assert.match(wide.problems[0]?.message ?? "", /more than 5000 entries/);
   const levels = Array.from({ length: 13 }, (_, level) => `d${String(level)}`);
-  const deep = await adapter.build(buildRequest(memoryFiles({ [`${root}/notes/${levels.join("/")}/x`]: "" })));
+  const deep = await adapter.build(buildRequest(memoryFiles({ [`${project}/notes/${levels.join("/")}/x`]: "" })));
   assert.ok(!deep.ok);
   assert.match(deep.problems[0]?.message ?? "", /deeper than 12 levels/);
-  const allowed = memoryFiles({ [`${root}/notes/${levels.slice(0, 11).join("/")}/x`]: "" });
+  const allowed = memoryFiles({ [`${project}/notes/${levels.slice(0, 11).join("/")}/x`]: "" });
   assert.ok((await adapter.build(buildRequest(allowed))).ok);
 });

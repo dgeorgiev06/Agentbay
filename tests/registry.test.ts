@@ -543,3 +543,8 @@ test("$item outside a foreach is reported, and inside one it is accepted", async
     ["/steps/0/input/text", "/steps/1/foreach"],
   );
 });
+
+test("a when condition on a workflow step is refused; steps have no conditions", async () => {
+  const problems = await problemsOf(withWorkflowSteps([{ id: "keep", approval: "Keep it?", when: "$trigger" }]));
+  findProblem(problems, workflowFile, "steps.0 has the field when, which is not allowed here.");
+});

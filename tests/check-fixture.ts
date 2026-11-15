@@ -66,7 +66,7 @@ function listingOf(files: FakeFileSystem): FileListing {
   };
 }
 
-async function checkFake(files: FakeFileSystem): Promise<CheckReport> {
+export async function checkFake(files: FakeFileSystem): Promise<CheckReport> {
   return checkSystem({ files, listing: listingOf(files) }, layout);
 }
 

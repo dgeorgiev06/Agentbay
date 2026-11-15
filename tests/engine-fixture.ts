@@ -6,6 +6,7 @@ import type {
   Json,
   Permissions,
   ScriptRequest,
+  Scrubber,
   ScriptRunner,
   Spend,
   StepOutcome,
@@ -110,6 +111,10 @@ function fakeRunner(overrides: Readonly<Record<string, Script>> = {}): FakeRunne
     },
   };
 }
+
+export const fakeScrubber: Scrubber = {
+  redact: (text) => text.replaceAll(/SECRET-[A-Z0-9]+/g, "[redacted]"),
+};
 
 export function fakePolicy(mode: string): Permissions {
   return {
@@ -331,6 +336,7 @@ export async function harness(
       clock,
       files,
       root,
+      scrubber: fakeScrubber,
       owner: `engine-${String(engines)}`,
       newId: () => `run-${String(engines)}`,
     });

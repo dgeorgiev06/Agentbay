@@ -9,7 +9,7 @@ import {
   smallestBudget,
   type BudgetFrame,
 } from "./budget.ts";
-import type { Json, PolicyOf, RunEvent, ScriptRunner, Spend, Submission } from "./contracts.ts";
+import type { Json, PolicyOf, RunEvent, Scrubber, ScriptRunner, Spend, Submission } from "./contracts.ts";
 import type { Budget } from "./generated/mode.ts";
 import { byteSize, fieldOf, numberField, textField, toJson, withFields } from "./json.ts";
 import type { Clock, FileSystem } from "./ports.ts";
@@ -25,6 +25,7 @@ import {
   type Writer,
 } from "./run-store.ts";
 import type { ApprovalDecision, EngineResult, RunStatus, RunView } from "./run-state.ts";
+import { scrubbedStore } from "./scrubbed-store.ts";
 import type { Problem } from "./spec.ts";
 import { resolveActionReference, resolveOwnAction } from "./targets.ts";
 import { hasUndoRecords, runUndo } from "./undo.ts";
@@ -39,6 +40,7 @@ export type EngineOptions = {
   readonly clock: Clock;
   readonly files: FileSystem;
   readonly root: string;
+  readonly scrubber: Scrubber;
   readonly owner?: string;
   readonly newId?: () => string;
 };
@@ -280,8 +282,8 @@ export class Engine {
   readonly #newId: () => string;
 
   constructor(options: EngineOptions) {
-    const { owner, newId, ...services } = options;
-    this.#services = services;
+    const { owner, newId, scrubber, store, ...collaborators } = options;
+    this.#services = { ...collaborators, store: scrubbedStore(store, scrubber) };
     this.#owner = owner ?? `engine-${randomUUID()}`;
     this.#newId = newId ?? randomUUID;
   }

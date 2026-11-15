@@ -130,12 +130,23 @@ function stepEndEvent(walk: Walk, end: RecordEnd): RunEvent {
   }
 }
 
+function storedSettled(record: StepRecord): Settled | undefined {
+  switch (record.status) {
+    case "started":
+      return undefined;
+    case "finished":
+      return done(record.output);
+    case "failed":
+      return failed(record.reason);
+  }
+}
+
 export async function endRecord(walk: Walk, end: RecordEnd, events: readonly RunEvent[] = []): Promise<Settled> {
   const at = walk.services.clock.now().toISOString();
   const event = stepEndEvent(walk, end);
   const record = await walk.services.store.saveStepOutput(walk.writer, stepEndOf(end, at), [...events, event]);
   walk.records.set(record.key, record);
-  return end.settled;
+  return storedSettled(record) ?? end.settled;
 }
 
 export async function changeDetail(walk: Walk, key: string, detail: Json): Promise<StepRecord> {

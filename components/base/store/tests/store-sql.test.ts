@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { Json } from "../../../../bay/sdk.ts";
@@ -100,4 +101,9 @@ test("a direct call with no caller uses the owner's own partition", async () => 
   const files = await project.partition("store", "owner").query("select count(*) as n from items");
   assert.ok(files.ok);
   assert.deepEqual(files.value, [{ n: 1 }]);
+});
+
+test("the store writes only database files under .agentbay/data: one partition per caller, and the kernel's own", () => {
+  const files = readdirSync(join(project.root, ".agentbay", "data")).filter((name) => !/-(wal|shm)$/.test(name));
+  assert.deepEqual(files.sort(), ["store--mail-briefing.db", "store--owner.db", "store--todo.db", "store.db"]);
 });

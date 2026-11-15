@@ -143,6 +143,7 @@ test("sync applies the selector: the source's native fields, then the store's ma
   await withBriefing({ selector: { authors: ["vitalik", "lido"], text: ["staking"] } }, async (project) => {
     const output = fieldsOf(await project.output("feed-briefing.sync", { since }));
     assert.deepEqual([output.fetched, output.added, output.skipped], [8, 4, 4]);
+    assert.deepEqual(output.cost, { items: 8, usd: 0.008 });
     const stored = await project.output("store.query", { order: "oldest" }, { caller: "feed-briefing" });
     const ids = listOf(fieldsOf(stored).items).map((item) => textOf(fieldsOf(item).id) ?? "");
     assert.deepEqual(ids, ["fake:1003", "fake:1011", "fake:1022", "fake:1030"]);

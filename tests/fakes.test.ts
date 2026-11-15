@@ -14,10 +14,10 @@ test("the fake file system reads, lists, finds and writes files held in memory",
   assert.equal(files.contents.get("/a/c/e.txt"), "e");
 });
 
-test("the fake folders record each folder they are asked to make", async () => {
+test("the fake folders record each owner-only file they are asked to make", async () => {
   const folders = fakeFolders();
-  await folders.ensureFolder("/a/b/../c");
-  assert.deepEqual(folders.created, ["/a/c"]);
+  await folders.ensureOwnerOnlyFile("/a/b/../c.db");
+  assert.deepEqual(folders.created, ["/a/c.db"]);
 });
 
 test("the fake clock stands still until it is advanced", () => {

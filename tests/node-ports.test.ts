@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -55,12 +55,21 @@ test("the system clock tells the current time", () => {
   assert.ok(now >= before && now <= Date.now());
 });
 
-test("ensureFolder makes a folder and its parents, and is harmless when it exists", async () => {
+test("ensureOwnerOnlyFile makes the file and its folders owner-only, narrows a wider one, and keeps its bytes", async () => {
   await withTemporaryFolder(async (folder) => {
-    const nested = join(folder, "a", "b");
-    await nodeFolders.ensureFolder(nested);
-    await nodeFolders.ensureFolder(nested);
+    const file = join(folder, "a", "b", "kernel.db");
+    await nodeFolders.ensureOwnerOnlyFile(file);
     assert.deepEqual(await readdir(join(folder, "a")), ["b"]);
+    assert.equal((await stat(file)).mode & 0o777, 0o600);
+    assert.equal((await stat(join(folder, "a", "b"))).mode & 0o777, 0o700);
+    assert.equal((await stat(join(folder, "a"))).mode & 0o777, 0o700);
+    await writeFile(file, "kept");
+    await chmod(file, 0o644);
+    await chmod(join(folder, "a", "b"), 0o755);
+    await nodeFolders.ensureOwnerOnlyFile(file);
+    assert.equal((await stat(file)).mode & 0o777, 0o600);
+    assert.equal((await stat(join(folder, "a", "b"))).mode & 0o777, 0o700);
+    assert.equal(await readFile(file, "utf8"), "kept");
   });
 });
 

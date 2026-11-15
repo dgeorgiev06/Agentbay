@@ -44,7 +44,7 @@ async function synced(project: ModeProject): Promise<void> {
   await project.output("feed-briefing.sync", { since: "2026-11-01T00:00:00Z" });
 }
 
-test("after a run and a store write the folders are 0700 and every database file, side files too, is 0600", async () => {
+test("after a run and a store write the folders are 0700 and every database file is 0600", async () => {
   const project = await openModeProject(config);
   try {
     await synced(project);
@@ -79,7 +79,7 @@ test("a folder or database file left wider than owner-only is narrowed when the 
   }
 });
 
-test("running the fake source and the feed briefing makes only kernel.db and the store's partition for the briefing", async () => {
+test("the fake source and the feed briefing make only kernel.db and the briefing's store partition", async () => {
   const project = await openModeProject(config);
   try {
     await project.output("fake-source.describe", {});

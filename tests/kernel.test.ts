@@ -55,7 +55,7 @@ test("the kernel returns the policy's problems when a mode declares a kernel pat
   await project.remove();
 });
 
-test("a mode's database is made only when it is first used, with its migrations applied before the first statement", async () => {
+test("a mode's database is made when first used, with its migrations applied before the first statement", async () => {
   const opened = await openProject();
   const { kernel } = opened;
   const permissions = kernel.policyOf("writer");

@@ -102,7 +102,12 @@ const twoItems = [0, 1].map((index) => ({
 
 function sourceScript(output: Json): string {
   const value = JSON.stringify(output);
-  return `import { defineScript } from "agentbay/sdk";\n\nexport const run = defineScript(() => Promise.resolve(${value}));\n`;
+  const lines = [
+    'import { defineScript } from "agentbay/sdk";',
+    "",
+    `export const run = defineScript(() => Promise.resolve(${value}));`,
+  ];
+  return `${lines.join("\n")}\n`;
 }
 
 function writeNotesBriefing(): void {

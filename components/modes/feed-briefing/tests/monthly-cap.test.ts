@@ -67,7 +67,7 @@ test("a cap above what the sync needs lets every page through", async () => {
   });
 });
 
-test("a cap that allows two of three pages stops cleanly after two, with the reason, the cap, the spend and the month", async () => {
+test("a cap that allows two of three pages stops after two, with the reason, cap, spend and month", async () => {
   await withCaps({ fake: 0.025 }, async (project) => {
     const run = await project.run("feed-briefing.sync", { since });
     if (run.state.status !== "done") {
@@ -132,7 +132,7 @@ test("a cap that leaves exactly one page's cost lets that page through, then sto
   });
 });
 
-test("the rule: stop when less than one page's cost is left, or, when a page's cost is unknown, when nothing is", () => {
+test("the rule: stop below one page's cost, or, when a page's cost is unknown, when nothing is left", () => {
   assert.equal(stopsBeforePage(0.01, 0.01), false);
   assert.equal(stopsBeforePage(0.009, 0.01), true);
   assert.equal(stopsBeforePage(0.001, undefined), false);

@@ -73,7 +73,9 @@ test("config prints every setting of the config schema and of each mode's settin
     const ran = await bay(["config", "--project", project.root]);
     assert.equal(ran.exitCode, 0, ran.output);
     for (const expected of [
-      'bindings: object (Which mode serves each interface, as interface name: binding; one major per project in 5.0.0.)\n  current: {"greeting-source":"greeter"}',
+      "bindings: object (Which mode serves each interface, as interface name: binding; " +
+        "one major per project in 5.0.0.)" +
+        '\n  current: {"greeting-source":"greeter"}',
       'adapter: string (The adapter that runs skill steps.)\n  current: "fake"',
       "budget.usd: number (The most US dollars the run may spend.)\n  current: not set",
       'approvals.from: list of one of "terminal", "chat" (The channels approve accepts; without this setting only terminal.)\n  current: not set',

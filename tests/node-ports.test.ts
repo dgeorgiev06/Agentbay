@@ -55,7 +55,7 @@ test("the system clock tells the current time", () => {
   assert.ok(now >= before && now <= Date.now());
 });
 
-test("ensureOwnerOnlyFile makes the file and its folders owner-only, narrows a wider one, and keeps its bytes", async () => {
+test("ensureOwnerOnlyFile makes a file and its folders owner-only and narrows a wider one", async () => {
   await withTemporaryFolder(async (folder) => {
     const file = join(folder, "a", "b", "kernel.db");
     await nodeFolders.ensureOwnerOnlyFile(file);

@@ -124,7 +124,8 @@ test("a requiring mode with no entry and no default is not bound, and the proble
   );
   assert.equal(
     problem.fix,
-    "Add notes: <mode> or default: <mode> under bindings.items-store; modes that implement items-store@1: store, vault.",
+    "Add notes: <mode> or default: <mode> under bindings.items-store; " +
+      "modes that implement items-store@1: store, vault.",
   );
 });
 
@@ -171,7 +172,7 @@ test("an entry bound to a kit mode that does not load says so", async () => {
   );
 });
 
-test("the active set follows each requirer's own entry: a mode bound only for an inactive requirer stays inactive", async () => {
+test("the active set follows each requirer's entry: a mode bound for an inactive requirer stays inactive", async () => {
   const report = await reportOf({ itemsStore: { notes: "store", ledger: "vault" }, withJournal: false });
   assert.ok(report.outcome.ok, report.outcome.ok ? "" : JSON.stringify(report.outcome.problems, null, 2));
   assert.deepEqual([...report.active].sort(), ["ledger", "vault"]);

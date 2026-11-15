@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { DatabaseSync } from "node:sqlite";
-import type { RunEvent } from "../bay/contracts.ts";
-import { lockStaleMilliseconds, type NewRun, type StoredState, type Writer } from "../bay/runs/run-store.ts";
-import type { SkillDetail } from "../bay/runs/step-detail.ts";
-import { SqliteRunStore } from "../bay/runs/sqlite-run-store.ts";
-import { nodeFolders } from "../bay/node-ports.ts";
-import { fakeFolders } from "./fakes.ts";
+import type { RunEvent } from "../../../bay/contracts.ts";
+import { lockStaleMilliseconds, type NewRun, type StoredState, type Writer } from "../../../bay/runs/run-store.ts";
+import type { SkillDetail } from "../../../bay/runs/step-detail.ts";
+import { SqliteRunStore } from "../../../bay/runs/sqlite-run-store.ts";
+import { nodeFolders } from "../../../bay/node-ports.ts";
+import { fakeFolders } from "../../fakes.ts";
 import { temporaryKernelDb } from "./kernel-db-fixture.ts";
 
 type Opened = {

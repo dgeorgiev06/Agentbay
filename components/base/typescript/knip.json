@@ -4,7 +4,7 @@
     "{tests,components/**/tests,adapters/**/tests}/**/*.test.ts",
     "bay/cli.ts!",
     "bay/mcp.ts!",
-    "tests/race-driver.ts",
+    "tests/inside/runs/race-driver.ts",
     "bay/sdk.ts!",
     "bay/script-host.ts!",
     "bay/script-preload.ts!",

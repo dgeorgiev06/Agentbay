@@ -1,13 +1,20 @@
 import { appendFileSync, existsSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
-import type { ScriptRequest } from "../bay/contracts.ts";
-import { finished, harness } from "./engine-fixture.ts";
+import type { ScriptRequest } from "../../../bay/contracts.ts";
+import { finished } from "../../runs-fixture.ts";
+import { harness } from "./engine-harness.ts";
 
-const [file, markerFile, goFile, owner] = process.argv.slice(2);
+const [file, runId, markerFile, goFile, owner] = process.argv.slice(2);
 
 async function race(): Promise<void> {
-  if (file === undefined || markerFile === undefined || goFile === undefined || owner === undefined) {
-    throw new Error("usage: race-driver.ts <kernel.db> <marker file> <go file> <owner>");
+  if (
+    file === undefined ||
+    runId === undefined ||
+    markerFile === undefined ||
+    goFile === undefined ||
+    owner === undefined
+  ) {
+    throw new Error("usage: race-driver.ts <kernel.db> <run id> <marker file> <go file> <owner>");
   }
   const scripts = {
     "notes:scripts/spend.ts": async (request: ScriptRequest) => {
@@ -22,7 +29,7 @@ async function race(): Promise<void> {
   while (!existsSync(goFile)) {
     await sleep(10);
   }
-  const result = await engine.extendBudget("race", { items: 5 });
+  const result = await engine.extendBudget(runId, { items: 5 });
   const summary = result.ok
     ? { ok: true, status: result.value.state.status }
     : { ok: false, problems: result.problems };

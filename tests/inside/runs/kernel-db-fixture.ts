@@ -2,8 +2,8 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync, type SQLOutputValue } from "node:sqlite";
-import type { RunStore } from "../bay/runs/run-store.ts";
-import type { SqliteRunStore } from "../bay/runs/sqlite-run-store.ts";
+import type { RunStore } from "../../../bay/runs/run-store.ts";
+import type { SqliteRunStore } from "../../../bay/runs/sqlite-run-store.ts";
 
 export type KernelDb = {
   readonly file: string;

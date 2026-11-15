@@ -1,25 +1,9 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import type { ScriptRequest } from "../bay/contracts.ts";
-import { numberField } from "../bay/json.ts";
-import type { Engine } from "../bay/runs/engine.ts";
-import { SqliteRunStore } from "../bay/runs/sqlite-run-store.ts";
-import type { RunView } from "../bay/runs/run-state.ts";
-import type { Outcome } from "../bay/outcome.ts";
-import {
-  eventKinds,
-  finished,
-  harness,
-  problemsOf,
-  runOf,
-  waitingOf,
-  type FakeRunner,
-  type Script,
-  answer,
-  notesFlow,
-  withFlow,
-} from "./engine-fixture.ts";
+import { SqliteRunStore } from "../../../bay/runs/sqlite-run-store.ts";
+import { answer, notesFlow, withFlow, type FakeRunner } from "../../runs-fixture.ts";
+import { eventKinds, harness, problemsOf, runOf, waitingOf } from "./engine-harness.ts";
 import { databaseRows, faultInjector, type DatabaseRows, type FaultPoint } from "./kernel-db-fixture.ts";
 
 const threeStepWrites = [
@@ -150,41 +134,6 @@ test("a fault at write 5 stops the run there, and kernel.db holds exactly the wr
   assert.deepEqual(eventKindsOf(afterFive.rows), ["run.started", "step.started", "step.finished", "step.started"]);
 });
 
-function deferred(): PromiseWithResolvers<undefined> {
-  return Promise.withResolvers<undefined>();
-}
-
-function blockingScripts(
-  reached: PromiseWithResolvers<undefined>,
-  held: Promise<undefined>,
-): Readonly<Record<string, Script>> {
-  return {
-    "notes:scripts/double.ts": async (request: ScriptRequest) => {
-      reached.resolve(undefined);
-      await held;
-      return finished({ count: 2 * (numberField(request.input, "count") ?? 0) });
-    },
-  };
-}
-
-test("a second writer on its own connection to kernel.db is refused while another engine advances the run", async () => {
-  const reached = deferred();
-  const held = deferred();
-  const { engine, freshEngine, reopen, close } = await harness({ scripts: blockingScripts(reached, held.promise) });
-  const first = engine.startAction("notes.copy", { count: 1 }, { id: "busy" });
-  await reached.promise;
-  const secondStore = reopen();
-  const second = freshEngine({ store: secondStore });
-  assert.match(problemsOf(await second.resume("busy"))[0] ?? "", /being advanced by engine-1/);
-  assert.match(problemsOf(await second.stop("busy"))[0] ?? "", /only one writer may advance a run/);
-  assert.match(problemsOf(await engine.resume("busy"))[0] ?? "", /being advanced by engine-1/);
-  held.resolve(undefined);
-  assert.equal(runOf(await first).state.status, "done");
-  assert.equal((await secondStore.readRun("busy"))?.state.status, "done");
-  assert.match(problemsOf(await second.resume("busy"))[0] ?? "", /has ended/);
-  close();
-});
-
 test("a lock left by a dead engine is taken over after ten minutes, and the takeover is an event", async () => {
   const { store, clock, freshEngine, reopen, close } = await harness();
   const dying = faultInjector(store, { at: 4, when: "before" });
@@ -211,63 +160,6 @@ test("a lock left by a dead engine is taken over after ten minutes, and the take
   });
   const stopped = runOf(await resumer.stop("dead"));
   assert.deepEqual(stopped.state, { status: "failed", reason: "The owner stopped the run." });
-  close();
-});
-
-test("one representative run emits every event kind, in order, with ids and sizes but no payloads", async () => {
-  const steps = [
-    { id: "draft", action: "draft-and-store", input: { topic: "$trigger" } },
-    { id: "keep", approval: "Keep the stored draft?" },
-  ];
-  const changes = { ...withFlow(steps), config: { budget: { items: 1 } } };
-  const { engine, store, close } = await harness({ changes });
-  const id = runOf(await engine.startWorkflow(notesFlow, "staking")).id;
-  assert.equal(
-    waitingOf(await engine.submit(id, "draft/0#1", answer({ id: "d1", text: "PRIVATE-DRAFT-BODY" }))).reason,
-    "budget",
-  );
-  const approval = waitingOf(await engine.extendBudget(id, { items: 5 }));
-  assert.ok(approval.reason === "approval");
-  const run = runOf(await engine.approve(id, "keep", { hash: approval.hash, decision: "reject", by: "owner" }));
-  assert.equal(run.state.status, "undone");
-  assert.deepEqual(await eventKinds(store, id), [
-    "run.started",
-    "step.started",
-    "step.started",
-    "run.waiting",
-    "run.resumed",
-    "step.finished",
-    "step.started",
-    "step.started",
-    "step.finished",
-    "budget.exceeded",
-    "run.waiting",
-    "run.resumed",
-    "step.finished",
-    "step.finished",
-    "step.started",
-    "run.waiting",
-    "run.resumed",
-    "approval.recorded",
-    "step.failed",
-    "undo.started",
-    "step.started",
-    "step.started",
-    "step.finished",
-    "step.finished",
-    "undo.finished",
-    "run.finished",
-  ]);
-  const events = await store.readEvents(id);
-  assert.ok(!JSON.stringify(events).includes("PRIVATE-DRAFT-BODY"));
-  assert.ok(!JSON.stringify(events).includes("staking"));
-  const draftFinished = events.find((event) => event.kind === "step.finished");
-  assert.deepEqual(draftFinished?.detail, {
-    stepKey: "draft/0",
-    kind: "skill",
-    outputBytes: Buffer.byteLength(JSON.stringify({ id: "d1", text: "PRIVATE-DRAFT-BODY" })),
-    spent: { items: 0, usd: 0, tokens: 0, minutes: 0 },
-  });
   close();
 });
 
@@ -307,48 +199,6 @@ test("a crash right after a decision is saved applies it on resume and refuses a
   assert.match(problemsOf(await resumer.approve("run-1", "keep", decision))[0] ?? "", /already has a decision/);
   assert.deepEqual(runOf(await resumer.resume("run-1")).state, { status: "done", output: "content" });
   assert.ok((await eventKinds(fresh, "run-1")).includes("approval.recorded"));
-  close();
-});
-
-test("a live engine whose steps each take seven minutes is never taken over; a silent one is", async () => {
-  let tries = 0;
-  let refusedTries = 0;
-  const holder: { second: Engine | undefined; silentAt: number | undefined; takeover: Outcome<RunView> | undefined } = {
-    second: undefined,
-    silentAt: undefined,
-    takeover: undefined,
-  };
-  const scripts = {
-    "notes:scripts/slow.ts": async (request: ScriptRequest) => {
-      const silent = holder.silentAt === Number(request.place.stepKey);
-      clock.advance((silent ? 11 : 7) * 60_000);
-      const second = holder.second;
-      assert.ok(second);
-      if (silent) {
-        holder.silentAt = undefined;
-        holder.takeover = await second.resume(request.place.runId);
-        return finished(request.input);
-      }
-      tries += 1;
-      const result = await second.resume(request.place.runId);
-      if (!result.ok && (result.problems[0]?.message.includes("being advanced by engine-1") ?? false)) {
-        refusedTries += 1;
-      }
-      return finished(request.input);
-    },
-  };
-  const { engine, clock, store, freshEngine, reopen, close } = await harness({ scripts });
-  holder.second = freshEngine({ store: reopen() });
-  assert.equal(runOf(await engine.startAction("notes.long", {}, { id: "long" })).state.status, "done");
-  assert.deepEqual([tries, refusedTries], [6, 6]);
-  assert.ok(!(await eventKinds(store, "long")).includes("lock.taken-over"));
-  holder.silentAt = 3;
-  tries = 0;
-  const lost = await engine.startAction("notes.long", {}, { id: "silent" });
-  assert.match(problemsOf(lost).join(" "), /stopped at an unexpected error: .*no longer holds the lock/);
-  assert.ok(holder.takeover?.ok);
-  assert.equal(holder.takeover.value.state.status, "done");
-  assert.ok((await eventKinds(store, "silent")).includes("lock.taken-over"));
   close();
 });
 

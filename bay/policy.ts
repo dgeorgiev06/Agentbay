@@ -1,9 +1,18 @@
 import { isAbsolute, join, normalize } from "node:path/posix";
 import type { ModeGrants, PolicyOf } from "./contracts.ts";
 import type { Mode } from "./generated/mode.ts";
-import { isInsideOrEqual, isProjectTheKit, pathIn, shownProblems, type Home, type Layout } from "./layout.ts";
-import type { LoadedMode, System } from "./registry.ts";
-import type { Outcome, Problem } from "./spec.ts";
+import type { FileSystem } from "./ports.ts";
+import {
+  isInsideOrEqual,
+  isProjectTheKit,
+  pathIn,
+  shownPath,
+  shownProblems,
+  type Home,
+  type Layout,
+} from "./layout.ts";
+import { loadSystemReport, type LoadedMode, type System, type SystemReport } from "./registry.ts";
+import { problemAt, type Loaded, type Outcome, type PathSegments, type Problem, type Wording } from "./spec.ts";
 
 type ProtectedArea = {
   readonly path: string;
@@ -51,12 +60,19 @@ const kernelFolders: readonly NamedFolder[] = [
 
 const forgeFolder = "components/base/forge";
 
+const baseTier = "components/base";
+
 export const secretNamePattern = /^[A-Z][A-Z0-9_]*$/;
 
 const hostPattern = /^(\*\.)?([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)*[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
 function manifestFile(mode: LoadedMode): string {
   return join(mode.folder, "mode.yaml");
+}
+
+function manifestProblem(mode: LoadedMode, path: PathSegments, wording: Wording): Problem {
+  const loaded: Loaded<Mode> = { file: manifestFile(mode), value: mode.manifest, lineOf: mode.lineOf };
+  return problemAt(loaded, path, wording);
 }
 
 function isForge(mode: LoadedMode, layout: Layout): boolean {
@@ -174,12 +190,10 @@ function pathProblems(context: PolicyContext, mode: LoadedMode): readonly Proble
       return [];
     }
     return [
-      {
-        file: manifestFile(mode),
-        path: `/resources/files/${declared.direction}/${String(declared.index)}`,
+      manifestProblem(mode, ["resources", "files", declared.direction, declared.index], {
         message,
         fix: "Name a folder outside the kernel, state and other modes' folders, and outside the mode's own code.",
-      },
+      }),
     ];
   });
 }
@@ -189,12 +203,10 @@ function secretProblems(mode: LoadedMode): readonly Problem[] {
     secretNamePattern.test(name)
       ? []
       : [
-          {
-            file: manifestFile(mode),
-            path: `/resources/secrets/${String(index)}`,
+          manifestProblem(mode, ["resources", "secrets", index], {
             message: `The secret name ${name} is not made of upper-case letters, digits and underscores.`,
             fix: `Rename it, for example to ${name.toUpperCase().replace(/[^A-Z0-9_]/g, "_")}.`,
-          },
+          }),
         ],
   );
 }
@@ -204,13 +216,29 @@ function hostProblems(mode: LoadedMode): readonly Problem[] {
     hostPattern.test(host)
       ? []
       : [
-          {
-            file: manifestFile(mode),
-            path: `/resources/network/${String(index)}`,
+          manifestProblem(mode, ["resources", "network", index], {
             message: `The host ${host} is not a lower-case host name, or a host name after a leading *.`,
             fix: "Write the host alone, such as api.example.com or *.example.com, with no scheme, port or path.",
-          },
+          }),
         ],
+  );
+}
+
+function isBaseMode(mode: LoadedMode, layout: Layout): boolean {
+  return mode.home === "kit" && isInsideOrEqual(mode.folder, pathIn(layout, "kit", baseTier));
+}
+
+function commandProblems(mode: LoadedMode, layout: Layout): readonly Problem[] {
+  if (isBaseMode(mode, layout)) {
+    return [];
+  }
+  return declaredResources(mode.manifest).commands.map((command, index) =>
+    manifestProblem(mode, ["resources", "commands", index], {
+      message:
+        `Mode ${mode.manifest.name} lists the command ${command}; a listed command can run code the agent wrote. ` +
+        `Only a mode under the kit's ${baseTier}/ may list commands.`,
+      fix: `Remove the command from ${shownPath(layout, manifestFile(mode))}; a skill step's checks belong in script steps.`,
+    }),
   );
 }
 
@@ -247,7 +275,12 @@ export function permissionsFor(system: System, modeName: string, layout: Layout)
     return refusedMode(inactiveModeWording(modeName));
   }
   const context = { system, layout };
-  const problems = [...pathProblems(context, mode), ...secretProblems(mode), ...hostProblems(mode)];
+  const problems = [
+    ...pathProblems(context, mode),
+    ...secretProblems(mode),
+    ...hostProblems(mode),
+    ...commandProblems(mode, layout),
+  ];
   if (problems.length > 0) {
     return { ok: false, problems: shownProblems(layout, problems) };
   }
@@ -285,4 +318,21 @@ export function policyFor(system: System, layout: Layout): Outcome<PolicyOf> {
       return found;
     },
   };
+}
+
+export type PolicedSystem = {
+  readonly system: System;
+  readonly policyOf: PolicyOf;
+};
+
+export type PolicedReport = Omit<SystemReport, "outcome"> & { readonly outcome: Outcome<PolicedSystem> };
+
+export async function loadPolicedSystem(files: FileSystem, layout: Layout): Promise<PolicedReport> {
+  const report = await loadSystemReport(files, layout);
+  if (!report.outcome.ok) {
+    return { ...report, outcome: report.outcome };
+  }
+  const system = report.outcome.value;
+  const policy = policyFor(system, layout);
+  return { ...report, outcome: policy.ok ? { ok: true, value: { system, policyOf: policy.value } } : policy };
 }

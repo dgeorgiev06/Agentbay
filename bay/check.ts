@@ -1,4 +1,3 @@
-import { join } from "node:path/posix";
 import {
   errors,
   isLoaded,
@@ -15,7 +14,7 @@ import { checkLimits } from "./check-limits.ts";
 import { checkSkills } from "./check-skills.ts";
 import { isInsideOrEqual, isProjectTheKit, pathIn, shownPath, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
-import { loadSystemReport } from "./registry.ts";
+import { loadPolicedSystem } from "./policy.ts";
 import { problemAt, type Problem } from "./spec.ts";
 
 export type CheckPorts = {
@@ -43,20 +42,12 @@ function commandProblems(mode: LoadedModeFolder): readonly Problem[] {
   );
 }
 
-function outsideBaseProblems(mode: LoadedModeFolder): readonly Problem[] {
-  return commandProblems(mode).map((problem) => ({
-    ...problem,
-    message: `${problem.message} Only a mode under the kit's ${baseTier}/ may list commands.`,
-    fix: `Remove the command from ${join(mode.label, "mode.yaml")}; a skill step's checks belong in script steps.`,
-  }));
-}
-
-function checkCommands(context: CheckContext): readonly Finding[] {
+function checkBaseCommands(context: CheckContext): readonly Finding[] {
   const base = pathIn(context.layout, "kit", baseTier);
-  return context.modes.filter(isLoaded).flatMap((mode) => {
-    const isBase = mode.home === "kit" && isInsideOrEqual(mode.folder, base);
-    return isBase ? warnings(commandProblems(mode)) : errors(outsideBaseProblems(mode));
-  });
+  return context.modes
+    .filter(isLoaded)
+    .filter((mode) => mode.home === "kit" && isInsideOrEqual(mode.folder, base))
+    .flatMap((mode) => warnings(commandProblems(mode)));
 }
 
 async function kitFindings(context: CheckContext): Promise<readonly Finding[]> {
@@ -75,7 +66,7 @@ function shownFindings(layout: Layout, findings: readonly Finding[]): readonly F
 }
 
 export async function checkSystem(ports: CheckPorts, layout: Layout): Promise<CheckReport> {
-  const report = await loadSystemReport(ports.files, layout);
+  const report = await loadPolicedSystem(ports.files, layout);
   const context = await loadCheckContext({ ...ports, layout, active: report.active });
   const registryFindings = report.outcome.ok ? [] : errors(report.outcome.problems);
   const findings = shownFindings(layout, [
@@ -84,7 +75,7 @@ export async function checkSystem(ports: CheckPorts, layout: Layout): Promise<Ch
     ...(await checkSkills(context)),
     ...(await checkLayout(context)),
     ...(await checkImports(context)),
-    ...checkCommands(context),
+    ...checkBaseCommands(context),
     ...(await kitFindings(context)),
   ]);
   const errorCount = findings.filter((finding) => finding.severity === "error").length;

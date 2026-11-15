@@ -3,7 +3,8 @@ import type { Broker } from "./broker.ts";
 import type { Json } from "./contracts.ts";
 import { byteSize, fieldOf, numberField, textField } from "./json.ts";
 import type { Kernel } from "./kernel.ts";
-import type { EngineResult } from "./run-state.ts";
+import type { StepRecord } from "./run-store.ts";
+import type { EngineResult, RunView } from "./run-state.ts";
 import { isToolName, skillToolsOf, type SkillTools, type ToolName } from "./skill-tools.ts";
 import { isRecord } from "./spec.ts";
 import { resolveCall, resolveOwnAction, type ActionTarget } from "./targets.ts";
@@ -23,6 +24,8 @@ type ToolCall = {
 type ToolHandler = (call: ToolCall) => Promise<ToolResult>;
 
 export const toolResultBytes = 256 * 1024;
+
+export const askedByKind = "run.asked-by";
 
 function refused(refusal: string): ToolResult {
   return { ok: false, refusal };
@@ -111,6 +114,18 @@ function callTarget(call: ToolCall, action: string): ActionTarget | string {
   return resolveOwnAction(call.kernel.system, mode.manifest.name, action);
 }
 
+async function recordAskedBy(call: ToolCall, result: EngineResult): Promise<void> {
+  if (!result.ok) {
+    return;
+  }
+  await call.kernel.store.append({
+    at: call.kernel.ports.clock.now().toISOString(),
+    runId: result.run.id,
+    kind: askedByKind,
+    detail: { runId: call.step.task.place.runId, stepKey: call.step.waitingKey },
+  });
+}
+
 function calledResult(result: EngineResult, action: string): ToolResult {
   if (!result.ok) {
     return refused(result.problems.map((problem) => problem.message).join(" "));
@@ -118,7 +133,7 @@ function calledResult(result: EngineResult, action: string): ToolResult {
   const state = result.run.state;
   switch (state.status) {
     case "done":
-      return { ok: true, value: { output: state.output } };
+      return { ok: true, value: { output: state.output, run: result.run.id } };
     case "failed":
     case "undone":
       return refused(`The action ${action} failed: ${state.reason}`);
@@ -148,6 +163,7 @@ async function callAction(call: ToolCall): Promise<ToolResult> {
   }
   const reference = `${target.mode.manifest.name}.${target.name}`;
   const result = await call.kernel.engine.startAction(reference, fieldOf(call.input, "input") ?? {});
+  await recordAskedBy(call, result);
   return calledResult(result, action);
 }
 
@@ -163,13 +179,27 @@ function spentAmount(input: Json, name: string): number | string {
   return amount;
 }
 
+function settledSubmission(run: RunView, record: StepRecord | undefined): Json {
+  const waiting = run.state.status === "waiting" ? run.state.waiting : undefined;
+  const next =
+    waiting?.reason === "skill"
+      ? { next: `The run waits for another skill step; bay runs ${run.id} --new-token gives its task.` }
+      : {};
+  const reason = record?.status === "failed" ? { reason: record.reason } : {};
+  const summary = {
+    id: run.id,
+    status: run.state.status,
+    ...(waiting === undefined ? {} : { waitingFor: waiting.reason }),
+  };
+  return { accepted: record?.status === "finished", run: summary, ...reason, ...next };
+}
+
 async function submittedResult(call: ToolCall, result: EngineResult): Promise<ToolResult> {
   if (!result.ok) {
     return { ok: true, value: { accepted: false, problems: result.problems.map((problem) => problem.message) } };
   }
   const run = result.run;
   const record = run.steps.find((step) => step.key === call.step.task.place.stepKey);
-  const summary = { id: run.id, status: run.state.status };
   if (run.state.status === "waiting" && run.state.waiting.reason === "skill" && record?.status === "started") {
     const task = run.state.waiting.task;
     const place = { runId: run.id, stepKey: run.state.waiting.stepKey, round: task.round };
@@ -179,12 +209,7 @@ async function submittedResult(call: ToolCall, result: EngineResult): Promise<To
       value: { accepted: false, round: task.round, feedback: [...task.feedback], stepKey: place.stepKey, token },
     };
   }
-  const waitingFor = run.state.status === "waiting" ? { waitingFor: run.state.waiting.reason } : {};
-  const reason = record?.status === "failed" ? { reason: record.reason } : {};
-  return {
-    ok: true,
-    value: { accepted: record?.status === "finished", run: { ...summary, ...waitingFor }, ...reason },
-  };
+  return { ok: true, value: settledSubmission(run, record) };
 }
 
 async function submit(call: ToolCall): Promise<ToolResult> {
@@ -247,11 +272,32 @@ async function recordCall(kernel: Kernel, step: SkillStepAt, entry: { name: Tool
   });
 }
 
+async function callsThisRound(kernel: Kernel, step: SkillStepAt): Promise<number> {
+  const events = await kernel.store.readEvents(step.task.place.runId);
+  return events.filter(
+    (event) => event.kind === "tool.called" && textField(event.detail, "stepKey") === step.waitingKey,
+  ).length;
+}
+
+async function overLimit(kernel: Kernel, name: ToolName, step: SkillStepAt): Promise<ToolResult | undefined> {
+  if (name === "submit" || (await callsThisRound(kernel, step)) < kernel.limits.toolCallsPerRound) {
+    return undefined;
+  }
+  return refused(
+    `This round of step ${step.waitingKey} has used its ${String(kernel.limits.toolCallsPerRound)} tool calls. ` +
+      "Submit your output now with submit; only submit still works in this round.",
+  );
+}
+
 async function performed(
   kernel: Kernel,
   request: { name: ToolName; input: Json; step: SkillStepAt },
 ): Promise<ToolResult> {
   const { name, input, step } = request;
+  const limited = await overLimit(kernel, name, step);
+  if (limited !== undefined) {
+    return limited;
+  }
   const tools = await skillToolsOf(kernel.ports.files, join(kernel.root, step.skillFile));
   if (!tools.kernelTools.includes(name)) {
     const named = tools.kernelTools.join(", ");

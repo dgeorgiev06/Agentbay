@@ -118,7 +118,11 @@ test("call_action runs a listed read-only action through the engine and refuses 
       action: "greeting-source.fetch",
       input: { name: "Bo" },
     });
-    assert.deepEqual(valueOf(fetched), { output: { greeting: "Hello, Bo" } });
+    const childRun = textField(valueOf(fetched), "run") ?? "";
+    assert.deepEqual(valueOf(fetched), { output: { greeting: "Hello, Bo" }, run: childRun });
+    const childEvents = await kernel.store.readEvents(childRun);
+    const askedBy = childEvents.find((event) => event.kind === "run.asked-by");
+    assert.deepEqual(askedBy?.detail, { runId: waiting.runId, stepKey: waiting.stepKey });
     const writing = await callKernelTool(kernel, "call_action", { token, action: "compose", input: { name: "Bo" } });
     assert.match(refusalOf(writing), /has the effects read, write; a skill may call only actions whose effects/);
     const unlisted = await callKernelTool(kernel, "call_action", { token, action: "greeter.fetch", input: {} });
@@ -191,6 +195,22 @@ test("files_write is refused when the step's action does not declare the write e
     path: "components/modes/writer/mode.yaml",
   });
   assert.ok(read.ok);
+  kernel.close();
+  await project.remove();
+});
+
+test("a skill step round gets a bounded number of tool calls; then only submit works", async () => {
+  const project = await makeProject();
+  const kernel = await openKernel(project, { limits: { toolCallsPerRound: 2 } });
+  const waiting = await waitingCompose(kernel);
+  const query = { token: waiting.token, sql: "select 1 as one" };
+  assert.ok((await callKernelTool(kernel, "db_query", query)).ok);
+  assert.ok(!(await callKernelTool(kernel, "files_read", { token: waiting.token, path: "nowhere" })).ok);
+  const third = await callKernelTool(kernel, "db_query", query);
+  assert.match(refusalOf(third), /has used its 2 tool calls\. Submit your output now with submit/);
+  const short = valueOf(await callKernelTool(kernel, "submit", { token: waiting.token, output: { text: "short" } }));
+  const next = textField(short, "token") ?? "";
+  assert.ok((await callKernelTool(kernel, "db_query", { token: next, sql: "select 1" })).ok);
   kernel.close();
   await project.remove();
 });

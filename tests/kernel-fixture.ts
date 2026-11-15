@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { loadKernel, nodeKernelPorts, type Kernel, type KernelPorts } from "../bay/kernel.ts";
+import { loadKernel, nodeKernelPorts, type Kernel, type KernelLimits, type KernelPorts } from "../bay/kernel.ts";
 import { kit, makeProject, type Project, type ProjectOptions } from "./project-fixture.ts";
 
 export type KernelSetup = {
+  readonly limits?: Partial<KernelLimits>;
   readonly environment?: Readonly<Record<string, string>>;
   readonly ports?: Partial<KernelPorts>;
 };
@@ -17,6 +18,7 @@ export async function openKernel(project: Project, setup: KernelSetup = {}): Pro
     ports: { ...nodeKernelPorts(environment), ...setup.ports },
     environment,
     platform: "linux",
+    ...(setup.limits === undefined ? {} : { limits: setup.limits }),
   });
   assert.ok(loaded.ok, loaded.ok ? "" : JSON.stringify(loaded.problems, null, 2));
   return loaded.value;

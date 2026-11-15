@@ -18,6 +18,7 @@ const sampleSchema = {
     count: { type: "integer" },
     ready: { const: true },
     labels: { type: "object", additionalProperties: { type: "string" } },
+    extra: { type: "object" },
     steps: { type: "array", items: { $ref: "#/$defs/step" } },
   },
   $defs: {
@@ -30,7 +31,8 @@ test("typeDeclarations writes a readonly type for the schema and one for each de
     typeDeclarations(sampleSchema),
     [
       "export type Sample = { readonly name: string; readonly count?: number; readonly ready?: true; " +
-        "readonly labels?: Readonly<Record<string, string>>; readonly steps: ReadonlyArray<Step>; };",
+        "readonly labels?: Readonly<Record<string, string>>; readonly extra?: Readonly<Record<string, unknown>>; " +
+        "readonly steps: ReadonlyArray<Step>; };",
       'export type Step = { readonly run: "fast" | "slow"; };',
     ].join("\n\n"),
   );

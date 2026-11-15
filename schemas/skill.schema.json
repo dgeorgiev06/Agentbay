@@ -7,9 +7,9 @@
   "required": ["name", "description"],
   "properties": {
     "name": {
-      "description": "The skill's name; the same as the name of its folder.",
+      "description": "The skill's name, the same as its folder's: kebab-case, and not constructor.",
       "type": "string",
-      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+      "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*$"
     },
     "description": {
       "description": "What the skill does and when it is used.",

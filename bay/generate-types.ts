@@ -36,7 +36,10 @@ function objectType(schema: JsonObject): string {
   if (isJsonObject(schema.additionalProperties)) {
     return `Readonly<Record<string, ${typeOf(schema.additionalProperties)}>>`;
   }
-  const properties = isJsonObject(schema.properties) ? schema.properties : {};
+  if (!isJsonObject(schema.properties)) {
+    return "Readonly<Record<string, unknown>>";
+  }
+  const properties = schema.properties;
   const required: readonly unknown[] = Array.isArray(schema.required) ? schema.required : [];
   const members = Object.entries(properties).map(([name, property]) => {
     const optional = required.includes(name) ? "" : "?";

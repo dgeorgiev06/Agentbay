@@ -6,6 +6,7 @@ export type Mode = {
   readonly implements?: ReadonlyArray<InterfaceReference>;
   readonly resources?: Resources;
   readonly actions: Readonly<Record<string, Action>>;
+  readonly settings?: RelativePath;
   readonly workflows?: ReadonlyArray<RelativePath>;
 };
 

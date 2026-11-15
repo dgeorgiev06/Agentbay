@@ -7,7 +7,7 @@
   "required": ["bindings", "adapter"],
   "properties": {
     "bindings": {
-      "description": "Which mode serves each interface, as interface name: mode name.",
+      "description": "Which mode serves each interface, as interface name: mode name; one major per project in 5.0.0.",
       "type": "object",
       "propertyNames": { "$ref": "#/$defs/name" },
       "additionalProperties": { "$ref": "#/$defs/name" }
@@ -16,6 +16,12 @@
       "description": "The adapter that runs skill steps.",
       "$ref": "#/$defs/name"
     },
+    "settings": {
+      "description": "Settings per mode, as mode name: settings; each is checked against the mode's settings schema.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/name" },
+      "additionalProperties": { "description": "The settings of one mode.", "type": "object" }
+    },
     "budget": {
       "description": "The default limits for a run that sets none of its own.",
       "$ref": "#/$defs/budget"
@@ -23,9 +29,9 @@
   },
   "$defs": {
     "name": {
-      "description": "A kebab-case name: lowercase letters, digits and single hyphens, starting with a letter.",
+      "description": "Kebab-case, starting with a letter; not constructor, a name every JavaScript object has.",
       "type": "string",
-      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+      "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*$"
     },
     "budget": {
       "description": "Limits for a run; every nested call draws from the same budget.",

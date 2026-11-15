@@ -24,9 +24,9 @@
   },
   "$defs": {
     "name": {
-      "description": "A kebab-case name: lowercase letters, digits and single hyphens, starting with a letter.",
+      "description": "Kebab-case, starting with a letter; not constructor, a name every JavaScript object has.",
       "type": "string",
-      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+      "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*$"
     },
     "relativePath": {
       "description": "A path relative to the interfaces folder that neither starts with / nor contains a .. segment.",

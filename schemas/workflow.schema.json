@@ -7,9 +7,8 @@
   "required": ["name", "steps"],
   "properties": {
     "name": {
-      "description": "The workflow's kebab-case name.",
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+      "description": "The workflow's name.",
+      "$ref": "#/$defs/name"
     },
     "trigger": {
       "description": "What starts the workflow: an event, a schedule, or only a person.",
@@ -52,6 +51,11 @@
     }
   },
   "$defs": {
+    "name": {
+      "description": "Kebab-case, starting with a letter; not constructor, a name every JavaScript object has.",
+      "type": "string",
+      "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    },
     "budget": {
       "description": "Limits for a run; every nested call draws from the same budget.",
       "type": "object",
@@ -69,48 +73,64 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["action"],
+          "required": ["action", "id"],
           "properties": {
             "action": {
               "description": "An action of this mode, or interface.action of an interface it requires.",
               "type": "string",
-              "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.[a-z][a-z0-9]*(-[a-z0-9]+)*)?$"
+              "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*)?$"
+            },
+            "id": {
+              "description": "The step's id, unique in the whole file; its output is saved under it.",
+              "$ref": "#/$defs/name"
             }
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["approval"],
+          "required": ["approval", "id"],
           "properties": {
             "approval": {
               "description": "The question put to the owner about the output of the step before.",
               "type": "string",
               "minLength": 1
+            },
+            "id": {
+              "description": "The step's id, unique in the whole file; its output is saved under it.",
+              "$ref": "#/$defs/name"
             }
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["wait"],
+          "required": ["wait", "id"],
           "properties": {
             "wait": {
               "description": "How long to wait, as a whole number of minutes, hours or days: 30m, 2h, 3d.",
               "type": "string",
               "pattern": "^[1-9][0-9]*[mhd]$"
+            },
+            "id": {
+              "description": "The step's id, unique in the whole file; its output is saved under it.",
+              "$ref": "#/$defs/name"
             }
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["foreach", "steps"],
+          "required": ["foreach", "id", "steps"],
           "properties": {
             "foreach": {
               "description": "A JSON pointer to a list in the output of the step before; the steps run once per item.",
               "type": "string",
               "pattern": "^(/[^/]+)*$"
+            },
+            "id": {
+              "description": "The step's id, unique in the whole file; its output is saved under it.",
+              "$ref": "#/$defs/name"
             },
             "steps": {
               "description": "The steps run for each item, in order.",

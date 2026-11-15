@@ -50,6 +50,10 @@
       "propertyNames": { "$ref": "#/$defs/name" },
       "additionalProperties": { "$ref": "#/$defs/action" }
     },
+    "settings": {
+      "description": "The JSON Schema file of the mode's settings, which the project config gives under settings.",
+      "$ref": "#/$defs/relativePath"
+    },
     "workflows": {
       "description": "Workflow files of this mode, relative to its folder.",
       "type": "array",
@@ -59,14 +63,14 @@
   },
   "$defs": {
     "name": {
-      "description": "A kebab-case name: lowercase letters, digits and single hyphens, starting with a letter.",
+      "description": "Kebab-case, starting with a letter; not constructor, a name every JavaScript object has.",
       "type": "string",
-      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+      "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*$"
     },
     "interfaceReference": {
       "description": "An interface name and its major version, as name@major, for example items-store@1.",
       "type": "string",
-      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*@(0|[1-9][0-9]*)$"
+      "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*@(0|[1-9][0-9]*)$"
     },
     "relativePath": {
       "description": "A path relative to the mode's folder that neither starts with / nor contains a .. segment.",
@@ -201,7 +205,7 @@
             "call": {
               "description": "The action to call, as interface.action, of an interface this mode requires.",
               "type": "string",
-              "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*\\.[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+              "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*\\.(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*$"
             }
           }
         }

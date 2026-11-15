@@ -1,9 +1,11 @@
 export type Workflow = {
-  readonly name: string;
+  readonly name: Name;
   readonly trigger?: { readonly event: string } | { readonly schedule: string } | { readonly manual: true };
   readonly budget?: Budget;
   readonly steps: ReadonlyArray<Step>;
 };
+
+export type Name = string;
 
 export type Budget = {
   readonly items?: number;
@@ -13,7 +15,7 @@ export type Budget = {
 };
 
 export type Step =
-  | { readonly action: string }
-  | { readonly approval: string }
-  | { readonly wait: string }
-  | { readonly foreach: string; readonly steps: ReadonlyArray<Step> };
+  | { readonly action: string; readonly id: Name }
+  | { readonly approval: string; readonly id: Name }
+  | { readonly wait: string; readonly id: Name }
+  | { readonly foreach: string; readonly id: Name; readonly steps: ReadonlyArray<Step> };

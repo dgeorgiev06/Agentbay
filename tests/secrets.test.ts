@@ -135,3 +135,38 @@ test("the secret store is the engine's scrubber", async () => {
   await store.get("MAIL_TOKEN", permissions);
   assert.equal(scrubber.redact(`reason: ${madeUpToken}`), "reason: [redacted:MAIL_TOKEN]");
 });
+
+test("ordinary prose that only mentions passwords, tokens, keys or secrets is left unchanged", () => {
+  const store = storeWith({});
+  for (const text of [
+    "exists passwd:denied",
+    "password: see the README",
+    "token count: 1200",
+    "api_key is not set",
+    "the secret to good bread: time",
+    "secret: tremendously",
+    "pwd: /home/someone/projects",
+    "password=",
+    "the bearer of bad news",
+    "refresh_token: none",
+  ]) {
+    assert.equal(store.redact(text), text, text);
+  }
+});
+
+test("each pattern still catches a plausible secret value", () => {
+  const store = storeWith({});
+  const caught: readonly (readonly [string, string])[] = [
+    ["password=Hunter2.Secret!", "password"],
+    ["password=s3cr3t.pass", "password"],
+    ["passwd: 'quoted Pass 42'", "password"],
+    ["PWD=Zx9!kLmN", "password"],
+    ["api_key=abcdefghijklmnopqrstuvwxyzABCD", "secret-assignment"],
+    ["client_secret=AbCdEfGhIjKlMnOpQrStUv", "secret-assignment"],
+    ["refresh_token: 1//0gAbCdEfGhIjKl", "secret-assignment"],
+    ["Bearer abcdefghijklmnopqrstuvwxyz012345", "bearer"],
+  ];
+  for (const [text, kind] of caught) {
+    assert.match(store.redact(`see ${text}`), new RegExp(`^see \\[redacted:${kind}\\]`), text);
+  }
+});

@@ -4,7 +4,6 @@ type QueryOrder = {
   readonly file: string;
   readonly sql: string;
   readonly rows: number;
-  readonly cellCharacters: number;
   readonly resultBytes: number;
 };
 
@@ -21,23 +20,15 @@ function isOrder(value: unknown): value is QueryOrder {
     typeof order.file === "string" &&
     typeof order.sql === "string" &&
     typeof order.rows === "number" &&
-    typeof order.cellCharacters === "number" &&
     typeof order.resultBytes === "number"
   );
 }
 
-function cell(value: SQLOutputValue, cellCharacters: number): unknown {
+function cell(value: SQLOutputValue): unknown {
   if (value instanceof Uint8Array) {
     return `<blob ${String(value.byteLength)} bytes>`;
   }
-  if (typeof value === "bigint") {
-    return Number(value);
-  }
-  if (typeof value === "string" && value.length > cellCharacters) {
-    const cut = value.length - cellCharacters;
-    return `${value.slice(0, cellCharacters)}…[cut ${String(cut)} characters; select less with substr()]`;
-  }
-  return value;
+  return typeof value === "bigint" ? Number(value) : value;
 }
 
 function runOrder(order: QueryOrder): QueryReply {
@@ -56,7 +47,7 @@ function runOrder(order: QueryOrder): QueryReply {
     if (rows.length === order.rows) {
       return { ok: false, reason: `the query returns more than ${String(order.rows)} rows` };
     }
-    const cells = Object.values(row).map((value) => cell(value, order.cellCharacters));
+    const cells = Object.values(row).map(cell);
     bytes += JSON.stringify(cells).length;
     if (bytes > order.resultBytes) {
       return { ok: false, reason: `the result is larger than ${String(order.resultBytes)} bytes` };

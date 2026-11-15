@@ -209,7 +209,7 @@ test("an agent query with an endless recursive CTE is killed at the time limit, 
   });
 });
 
-test("an agent query cuts long cells and redacts what it returns", async () => {
+test("an agent query redacts what it returns before it cuts long cells", async () => {
   await withBroker(["read", "write"], async ({ broker }) => {
     valueOf(await broker.execute("create table notes (body text)"));
     valueOf(await broker.execute("insert into notes values (?), (?)", ["x".repeat(5000), "password=Hunter2.Secret!"]));
@@ -218,6 +218,11 @@ test("an agent query cuts long cells and redacts what it returns", async () => {
     assert.equal(typeof first, "string");
     assert.ok(typeof first === "string" && first.length < 4100 && first.includes("[cut 1000 characters"));
     assert.match(JSON.stringify(rows[1]?.[0]), /\[redacted:password\]/);
+    valueOf(
+      await broker.execute("insert into notes values (?)", [`${"y".repeat(3990)} sk-ant-api03-${"a".repeat(40)}`]),
+    );
+    const straddling = valueOf(await broker.agentQuery("select body from notes where body like 'yyy%'")).rows;
+    assert.doesNotMatch(JSON.stringify(straddling), /sk-ant/);
   });
 });
 

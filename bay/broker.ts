@@ -141,7 +141,6 @@ export class Broker {
       sql,
       limits: {
         rows: limits.agentQueryRows,
-        cellCharacters: limits.agentQueryCellCharacters,
         resultBytes: limits.agentQueryResultBytes,
         milliseconds: limits.agentQueryMilliseconds,
       },
@@ -292,7 +291,16 @@ export class Broker {
 
   #redactedResult(result: AgentQueryResult): AgentQueryResult {
     const secrets = this.#options.secrets;
-    return { columns: result.columns, rows: result.rows.map((row) => row.map((cell) => secrets.redactJson(cell))) };
+    const longest = this.#limits.agentQueryCellCharacters;
+    const shown = (cell: Json): Json => {
+      const redacted = secrets.redactJson(cell);
+      if (typeof redacted !== "string" || redacted.length <= longest) {
+        return redacted;
+      }
+      const cut = String(redacted.length - longest);
+      return `${redacted.slice(0, longest)}…[cut ${cut} characters; select less with substr()]`;
+    };
+    return { columns: result.columns, rows: result.rows.map((row) => row.map(shown)) };
   }
 
   #statementRefusal<T>(keyword: string, allowed: readonly string[]): Answer<T> {

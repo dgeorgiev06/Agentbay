@@ -6,7 +6,6 @@ import { isRecord } from "./spec.ts";
 
 export type AgentQueryLimits = {
   readonly rows: number;
-  readonly cellCharacters: number;
   readonly resultBytes: number;
   readonly milliseconds: number;
 };
@@ -83,7 +82,6 @@ export async function runAgentQuery(children: ChildProcesses, order: AgentQueryO
       file: order.databaseFile,
       sql: order.sql,
       rows: order.limits.rows,
-      cellCharacters: order.limits.cellCharacters,
       resultBytes: order.limits.resultBytes,
     }),
   );

@@ -153,6 +153,10 @@ export function writableFolders(permissions: Permissions): readonly string[] {
   return permissions.actionEffects.includes(writesFiles.effect) ? permissions.grants.writePaths : [];
 }
 
+export function mayRemoveFiles(permissions: Permissions): boolean {
+  return writableFolders(permissions).length > 0 && permissions.actionEffects.includes(deletesData.effect);
+}
+
 export function changesDataAllowed(effects: readonly Effect[]): boolean {
   return effects.includes(changesData.effect);
 }

@@ -1,6 +1,6 @@
-import { isBuiltin, registerHooks } from "node:module";
+import { isBuiltin, registerHooks, syncBuiltinESMExports } from "node:module";
 import { Socket } from "node:net";
-import { sdkSpecifier } from "./script-protocol.ts";
+import { removalAllowedArgument, sdkSpecifier } from "./script-protocol.ts";
 
 const availableBuiltins: ReadonlySet<string> = new Set([
   "assert",
@@ -35,6 +35,19 @@ const networkGlobals: readonly string[] = ["fetch", "WebSocket", "EventSource"];
 const processInternals: readonly string[] = ["binding", "_linkedBinding", "dlopen", "_debugProcess"];
 
 const pipeMethods: readonly string[] = ["bind", "listen", "connect", "open"];
+
+const removingFunctions: readonly string[] = [
+  "unlink",
+  "unlinkSync",
+  "rm",
+  "rmSync",
+  "rmdir",
+  "rmdirSync",
+  "rename",
+  "renameSync",
+];
+
+const removingPromiseFunctions: readonly string[] = ["unlink", "rm", "rmdir", "rename"];
 
 function isAvailable(specifier: string): boolean {
   return availableBuiltins.has(specifier.replace(/^node:/, ""));
@@ -116,4 +129,18 @@ for (const prototype of handlePrototypes) {
   for (const name of pipeMethods) {
     fixed(prototype, name, unavailable(`The ${name} method of a standard stream's handle`, "it opens sockets."));
   }
+}
+
+function withoutRemoval(target: object, names: readonly string[], prefix: string): void {
+  for (const name of names) {
+    const value = unavailable(`${prefix}${name}`, "removing or renaming a file needs the delete effect.");
+    Object.defineProperty(target, name, { value, writable: false, configurable: false, enumerable: true });
+  }
+}
+
+if (!process.argv.includes(removalAllowedArgument)) {
+  const fileSystem = process.getBuiltinModule("node:fs");
+  withoutRemoval(fileSystem, removingFunctions, "fs.");
+  withoutRemoval(fileSystem.promises, removingPromiseFunctions, "fs.promises.");
+  syncBuiltinESMExports();
 }

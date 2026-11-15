@@ -4,7 +4,7 @@ import { mkdir, readFile, symlink } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { ActionCaller, Json, ScriptRequest, StepOutcome } from "../bay/contracts.ts";
+import type { ActionCaller, Effect, Json, ScriptRequest, StepOutcome } from "../bay/contracts.ts";
 import { fieldOf } from "../bay/json.ts";
 import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
 import type { Clock } from "../bay/ports.ts";
@@ -274,6 +274,70 @@ test("a write path that does not exist before the run can be made and written by
   });
 });
 
+const deletingExpressions: readonly string[] = [
+  "fs.unlinkSync(file)",
+  "fs.rmSync(file)",
+  "fs.renameSync(file, `${file}.moved`)",
+  "await fs.promises.unlink(file)",
+  "await fs.promises.rm(file, { force: true })",
+  "await fs.promises.rename(file, `${file}.moved`)",
+  "await new Promise((resolve, reject) => fs.unlink(file, (error) => (error ? reject(error) : resolve(1))))",
+  "(await import('node:fs/promises')).unlink(file)",
+  "(await import('fs')).unlinkSync(file)",
+  "process.getBuiltinModule('fs').rmSync(file)",
+  "fs.rmdirSync(folder)",
+];
+
+function deletingScript(root: string, expression: string): string {
+  return [
+    "const fs = await import('node:fs');",
+    `const file = ${JSON.stringify(join(root, "notes-out/keep.txt"))};`,
+    `const folder = ${JSON.stringify(join(root, "notes-out/empty"))};`,
+    tryIt(expression),
+  ].join("\n");
+}
+
+test("a script whose action declares write but not delete cannot remove or rename a file with node:fs", async () => {
+  await withScriptProject(async (root) => {
+    for (const expression of deletingExpressions) {
+      await writeProjectFile(root, "notes-out/keep.txt", "kept");
+      await mkdir(join(root, "notes-out/empty"), { recursive: true });
+      const run = await attempt(root, deletingScript(root, expression), {
+        permissions: { effects: ["read", "write"] },
+      });
+      assert.match(JSON.stringify(outputOf(run)), /"refused":".*needs the delete effect/, expression);
+      assert.equal(await readFile(join(root, "notes-out/keep.txt"), "utf8"), "kept", expression);
+    }
+  });
+});
+
+test("a script cannot put back the removal functions that its preload took away", async () => {
+  await withScriptProject(async (root) => {
+    await writeProjectFile(root, "notes-out/keep.txt", "kept");
+    const run = await attempt(
+      root,
+      [
+        "const fs = await import('node:fs');",
+        `const file = ${JSON.stringify(join(root, "notes-out/keep.txt"))};`,
+        tryIt("Object.defineProperty(fs.default, 'unlinkSync', { value: () => 1 })"),
+      ].join("\n"),
+      { permissions: { effects: ["read", "write"] } },
+    );
+    assert.match(JSON.stringify(outputOf(run)), /"refused":".*Cannot redefine property/);
+  });
+});
+
+test("a script whose action declares write and delete may remove a file in its write paths", async () => {
+  await withScriptProject(async (root) => {
+    await writeProjectFile(root, "notes-out/keep.txt", "kept");
+    const run = await attempt(root, deletingScript(root, "fs.unlinkSync(file)"), {
+      permissions: { effects: ["read", "write", "delete"] },
+    });
+    assert.deepEqual(outputOf(run), { escaped: "undefined" });
+    await assert.rejects(readFile(join(root, "notes-out/keep.txt"), "utf8"), /ENOENT/);
+  });
+});
+
 test("the runner starts node with the permission model, the grants and the preload, and nothing else", () => {
   const request: ScriptRequest = {
     place,
@@ -308,6 +372,23 @@ test("the runner starts node with the permission model, the grants and the prelo
     `${bay}/script-host.ts`,
     "/project/components/modes/notes/scripts/a.ts",
   ]);
+});
+
+test("the runner tells the preload that files may be removed only when the action declares write and delete", () => {
+  const commandFor = (effects: readonly Effect[]): readonly string[] =>
+    scriptCommand("/project/components/modes/notes/scripts/a.ts", {
+      place,
+      script: "scripts/a.ts",
+      input: null,
+      permissions: permissionsIn("/project", { writePaths: ["/project/out"], effects }),
+      settings: {},
+      remaining: {},
+      timeLimitMilliseconds: 1000,
+      call: () => Promise.resolve({ status: "failed", reason: "no", spent: noSpend }),
+    });
+  assert.equal(commandFor(["read", "write", "delete"]).at(-1), "--agentbay-may-remove-files");
+  assert.ok(!commandFor(["read", "write"]).includes("--agentbay-may-remove-files"));
+  assert.ok(!commandFor(["read", "delete"]).includes("--agentbay-may-remove-files"));
 });
 
 test("a run is refused before it starts when a granted folder holds a link that leaves it", async () => {

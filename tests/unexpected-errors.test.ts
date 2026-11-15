@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { stringify } from "yaml";
@@ -248,4 +248,42 @@ test("the last-resort handler prints one line and exits non-zero", () => {
   assert.deepEqual(exits, [70]);
   assert.equal(written.length, 1);
   assert.equal(written[0], `bay: ${lastResortWording}: first line\n`);
+});
+
+test("a kernel tool whose skill file cannot be read answers with a refusal, not a rejection", async () => {
+  const opened = await openProject();
+  try {
+    const { kernel, project } = opened;
+    const result = await kernel.engine.startAction("writer.compose", { name: "Ada" });
+    assert.ok(result.ok && result.run.state.status === "waiting", JSON.stringify(result));
+    const place = { runId: result.run.id, stepKey: result.run.state.waiting.stepKey, round: 1 };
+    const token = await issueTaskToken(kernel.store, place, new Date());
+    const skillFile = join(project.root, "components", "modes", "writer", "skills", "draft", "SKILL.md");
+    await rm(skillFile);
+    await mkdir(skillFile);
+    const queried = await callKernelTool(kernel, "db_query", { token, sql: "select 1" });
+    assert.ok(!queried.ok);
+    assert.match(queried.refusal, /The tool db_query stopped at an unexpected error: EISDIR/);
+  } finally {
+    await opened.close();
+  }
+});
+
+test("a command that fails inside the kernel answers with a problem that says the run can be resumed", async () => {
+  const project = await makeProject();
+  try {
+    const terminal = {
+      isInteractive: () => true,
+      ask: () => Promise.reject(new Error("the terminal went away")),
+      readAll: () => Promise.resolve(""),
+    };
+    const argv = ["approve", "no-run", "keep", "--hash", "abc", "--project", project.root, "--json"];
+    const ran = await bay(argv, { terminal });
+    assert.equal(ran.exitCode, 1);
+    const text = JSON.stringify(ran.json);
+    assert.match(text, /bay stopped at an unexpected error: the terminal went away/);
+    assert.match(text, /a run it was advancing can be resumed/);
+  } finally {
+    await project.remove();
+  }
 });

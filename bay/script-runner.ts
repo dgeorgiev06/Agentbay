@@ -164,10 +164,6 @@ async function answerFor(started: Started, request: ResourceRequest): Promise<An
   return brokerAnswer(started.broker, request);
 }
 
-function unexpectedReason(request: ResourceRequest, error: unknown): string {
-  return `The request ${request.resource} stopped at an unexpected error: ${errorLine(error)}`;
-}
-
 function endReason(end: ChildEnd, limits: { readonly milliseconds: number; readonly outputBytes: number }): string {
   switch (end.how) {
     case "timed-out":
@@ -259,11 +255,9 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
         state.malformed = true;
         child.kill();
       } else if (message.type === "request") {
-        const answered = answerFor(started, message.request)
-          .catch((error: unknown) => failed(options.secrets.redact(unexpectedReason(message.request, error))))
-          .then((answer) => {
-            child.send(JSON.stringify({ type: "answer", id: message.id, answer }));
-          });
+        const answered = answerFor(started, message.request).then((answer) => {
+          child.send(JSON.stringify({ type: "answer", id: message.id, answer }));
+        });
         state.inFlight.push(answered);
       } else {
         state.final = message;

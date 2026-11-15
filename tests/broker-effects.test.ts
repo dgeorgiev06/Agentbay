@@ -148,6 +148,18 @@ test("db: a statement that deletes needs delete as well as write", async () => {
   });
 });
 
+test("db: a write the leading word does not show is still refused without write, by the read-only connection", async () => {
+  const hidden = "with source as (select 'a' as x) insert into notes select x from source";
+  await withBroker(["read"], async (broker) => {
+    const answer = await broker.execute(hidden);
+    assert.ok(!answer.ok && answer.kind === "refused", JSON.stringify(answer));
+    assert.match(answer.message, /to run a write statement/);
+  });
+  await withBroker(["read", "write"], async (broker) => {
+    assert.ok((await broker.execute(hidden)).ok);
+  });
+});
+
 test("db: queries, agent queries and migrations need no effect", async () => {
   await withBroker([], async (broker) => {
     assert.deepEqual(await broker.query("select count(*) as n from notes"), { ok: true, value: [{ n: 0 }] });

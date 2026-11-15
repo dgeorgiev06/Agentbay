@@ -79,7 +79,22 @@ test("a key is read by its grammar: an undo key and the items of a foreach named
 });
 
 test("text that no constructor writes is not a key", () => {
-  for (const text of ["", "/0", "0/", "01", "0#", "0#x", "0.check0", "loop[0]x", "Fetch", "0..call0", "a#1", "end#1"]) {
+  for (const text of [
+    "",
+    "/0",
+    "0/",
+    "01",
+    "0#",
+    "0#x",
+    "0.check0",
+    "loop[0]x",
+    "Fetch",
+    "0..call0",
+    "a#1",
+    "end#1",
+    "fetch.call0",
+    "0#1.call0",
+  ]) {
     assert.equal(parseStepKey(text), undefined, text);
   }
 });

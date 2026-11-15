@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { Json } from "../bay/contracts.ts";
 import { fieldOf, textField } from "../bay/json.ts";
 import type { Kernel } from "../bay/kernel.ts";
+import type { StoredRun } from "../bay/run-store.ts";
 import { issueTaskToken } from "../bay/task-tokens.ts";
 import { callKernelTool, toolResultBytes } from "../bay/tools.ts";
 import { problemText, type Outcome } from "../bay/outcome.ts";
@@ -133,6 +134,12 @@ test("call_action runs a listed read-only action through the engine and refuses 
   });
 });
 
+async function storedRun(kernel: Kernel, runId: string): Promise<StoredRun> {
+  const run = await kernel.store.readRun(runId);
+  assert.ok(run !== undefined, runId);
+  return run;
+}
+
 test("an action a skill starts through call_action is charged to the calling run and held to what it has left", async () => {
   const project = await makeProject();
   const config = await project.read("agentbay.config.yaml");
@@ -146,12 +153,20 @@ test("an action a skill starts through call_action is charged to the calling run
       action: "greeting-source.fetch",
       input: { name: "Bo" },
     });
-    const child = await kernel.store.readRun(textField(valueOf(fetched), "run") ?? "");
-    const after = await kernel.store.readRun(waiting.runId);
-    assert.ok(before !== undefined && child !== undefined && after !== undefined);
-    assert.ok(child.spent.minutes > 0);
+    const again = await callKernelTool(kernel, "call_action", {
+      token: waiting.token,
+      action: "greeting-source.fetch",
+      input: { name: "Cy" },
+    });
+    const child = await storedRun(kernel, textField(valueOf(fetched), "run") ?? "");
+    const second = await storedRun(kernel, textField(valueOf(again), "run") ?? "");
+    const after = await storedRun(kernel, waiting.runId);
+    assert.ok(before !== undefined);
+    assert.ok(child.spent.minutes > 0 && second.spent.minutes > 0);
     assert.equal(child.limit.minutes, 30 - before.spent.minutes);
-    assert.ok(Math.abs(after.spent.minutes - before.spent.minutes - child.spent.minutes) < 1e-9);
+    assert.ok((second.limit.minutes ?? 30) < (child.limit.minutes ?? 0));
+    const charged = after.spent.minutes - before.spent.minutes;
+    assert.ok(Math.abs(charged - child.spent.minutes - second.spent.minutes) < 1e-9);
     assert.equal(after.state.status, "waiting");
     const output = { text: "Hello, Ada, and welcome back." };
     const accepted = valueOf(await callKernelTool(kernel, "submit", { token: waiting.token, output }));
@@ -159,7 +174,7 @@ test("an action a skill starts through call_action is charged to the calling run
     const done = await kernel.store.readRun(waiting.runId);
     const skillStep = done?.steps.find((step) => step.key === "1");
     assert.ok(skillStep !== undefined && skillStep.status !== "started");
-    assert.ok(skillStep.spent.minutes >= child.spent.minutes);
+    assert.ok(skillStep.spent.minutes >= child.spent.minutes + second.spent.minutes);
   } finally {
     kernel.close();
     await project.remove();

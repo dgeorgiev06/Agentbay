@@ -85,7 +85,7 @@ export function permissionsIn(root: string, overrides: Partial<Permissions> = {}
     mode: "notes",
     modeFolder,
     databaseFile: join(root, ".agentbay", "data", "notes.db"),
-    readPaths: [modeFolder, join(root, "notes-in")],
+    readPaths: [modeFolder, join(root, "notes-in"), join(root, "notes-out")],
     writePaths: [join(root, "notes-out")],
     secrets: [],
     hosts: [],

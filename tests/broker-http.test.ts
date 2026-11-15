@@ -6,7 +6,16 @@ import type { HttpRequest, HttpResponse } from "../bay/ports.ts";
 import { nodeChildProcesses, nodeFileInspector, nodeFileSystem } from "../bay/node-ports.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import { fakeClock } from "./fakes.ts";
-import { noProcesses, permissionsIn, place, recordingSink, scriptedHttp, type ScriptedHttp } from "./broker-fixture.ts";
+import {
+  failureOf,
+  noProcesses,
+  permissionsIn,
+  place,
+  recordingSink,
+  refusalOf as refusal,
+  scriptedHttp,
+  type ScriptedHttp,
+} from "./broker-fixture.ts";
 
 const madeUpToken = "made-up-bearer-value-9876";
 
@@ -52,9 +61,7 @@ function get(url: string, headers: Readonly<Record<string, string>> = {}): HttpR
 }
 
 function refusalOf<T>(answer: Answer<T>): string {
-  assert.equal(answer.ok, false, "expected a refusal");
-  assert.equal(answer.ok ? "" : answer.kind, "refused");
-  return answer.ok ? "" : answer.message;
+  return refusal(answer).message;
 }
 
 test("a request to a declared host over https goes through", async () => {
@@ -138,8 +145,7 @@ test("redirects between declared hosts are followed hop by hop, dropping credent
 
 test("too many redirects fail", async () => {
   const { broker, http } = setup(() => ({ status: 302, headers: { location: "/again" }, body: "" }));
-  const answer = await broker.request(get("https://api.example.com/again"));
-  assert.equal(answer.ok ? "" : answer.kind, "failed");
+  failureOf(await broker.request(get("https://api.example.com/again")));
   assert.equal(http.requests.length, 6);
 });
 
@@ -152,9 +158,7 @@ test("request and response bodies are capped", async () => {
     await broker.request({ method: "POST", url: "https://api.example.com/x", headers: {}, body: "x".repeat(101) }),
   );
   assert.equal(http.requests.length, 0);
-  const answer = await broker.request(get("https://api.example.com/x"));
-  assert.equal(answer.ok ? "" : answer.kind, "failed");
-  assert.match(answer.ok ? "" : answer.message, /1000 bytes/);
+  assert.match(failureOf(await broker.request(get("https://api.example.com/x"))).message, /1000 bytes/);
 });
 
 test("a transport error is a failed answer with a redacted message, not an exception", async () => {
@@ -162,9 +166,9 @@ test("a transport error is a failed answer with a redacted message, not an excep
     throw new Error(`connection reset while sending ${madeUpToken}`);
   });
   await secrets.get("API_TOKEN", permissionsIn("/project", { secrets: ["API_TOKEN"] }));
-  const answer = await broker.request(get("https://api.example.com/x"));
-  assert.equal(answer.ok ? "" : answer.kind, "failed");
-  assert.doesNotMatch(answer.ok ? "" : answer.message, new RegExp(madeUpToken));
+  const message = failureOf(await broker.request(get("https://api.example.com/x"))).message;
+  assert.doesNotMatch(message, new RegExp(madeUpToken));
+  assert.match(message, /connection reset/);
 });
 
 test("every request is logged as an event with credentials redacted", async () => {
@@ -184,8 +188,8 @@ test("every request is logged as an event with credentials redacted", async () =
   assert.doesNotMatch(text, new RegExp(madeUpToken));
   assert.doesNotMatch(text, /another-made-up-key-1/);
   assert.match(text, /"Accept":"text\/plain"/);
-  assert.equal(logged[0]?.runId, "run-1");
-  assert.equal(logged[0]?.at, "2026-11-14T08:00:00.000Z");
+  assert.equal(logged.at(0)?.runId, "run-1");
+  assert.equal(logged.at(0)?.at, "2026-11-14T08:00:00.000Z");
   assert.ok(secrets.redact(madeUpToken).startsWith("[redacted:"));
 });
 
@@ -205,7 +209,7 @@ test("a script may not emit an event that looks like a refusal", async () => {
   const { broker, events } = setup(() => ok);
   refusalOf(await broker.emit("refused", { forged: true }));
   assert.equal(events.events.filter((event) => event.kind === "refused").length, 1);
-  assert.match(JSON.stringify(events.events[0]?.detail), /^\{"resource":"events","message":"The script asked/);
+  assert.match(JSON.stringify(events.events[0]?.detail), /^\{"resource":"events","message":"The step asked/);
   assert.doesNotMatch(JSON.stringify(events.events), /forged/);
 });
 

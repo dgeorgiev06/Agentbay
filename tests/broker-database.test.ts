@@ -7,11 +7,14 @@ import type { Effect, Permissions } from "../bay/contracts.ts";
 import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import {
+  failureOf,
   noProcesses,
   permissionsIn,
   place,
   recordingSink,
+  refusalOf as refusal,
   scriptedHttp,
+  valueOf,
   withProject,
   writeProjectFile,
 } from "./broker-fixture.ts";
@@ -47,17 +50,8 @@ async function withBroker(effects: readonly Effect[], run: (setup: Setup) => Pro
   });
 }
 
-function valueOf<T>(answer: Answer<T>): T {
-  if (!answer.ok) {
-    assert.fail(`expected a value, got: ${answer.message}`);
-  }
-  return answer.value;
-}
-
 function refusalOf<T>(answer: Answer<T>): string {
-  assert.equal(answer.ok, false, "expected a refusal");
-  assert.equal(answer.ok ? "" : answer.kind, "refused");
-  return answer.ok ? "" : answer.message;
+  return refusal(answer).message;
 }
 
 async function seedItems(broker: Broker, count: number): Promise<void> {
@@ -79,9 +73,7 @@ test("migrations run in order inside a transaction and are recorded once", async
     assert.deepEqual(recorded, [{ name: "0001-create.sql" }, { name: "0002-add-index.sql" }]);
     await writeProjectFile(root, "components/modes/notes/migrations/0003-good.sql", "create table u (y text);");
     await writeProjectFile(root, "components/modes/notes/migrations/0004-broken.sql", "create tabel v;");
-    const broken = await broker.migrate("migrations");
-    assert.equal(broken.ok, false);
-    assert.match(broken.ok ? "" : broken.message, /0004-broken\.sql/);
+    assert.match(failureOf(await broker.migrate("migrations")).message, /0004-broken\.sql/);
     const tables = valueOf(await broker.query("select name from sqlite_schema where name = 'u'"));
     assert.deepEqual(tables, [], "the failed batch left nothing behind");
   });
@@ -176,27 +168,29 @@ test("an agent query returns rows, columns and full-text matches", async () => {
   });
 });
 
-const hostileAgentQueries: readonly (readonly [string, string])[] = [
-  ["a second statement", "select 1; delete from items"],
-  ["a second statement after closing the wrapper", "select 1) ; attach 'other.db' as y; select (1"],
-  ["attach", "attach '/tmp/other.db' as other"],
-  ["attach after closing the wrapper", "select 1) ; attach '/tmp/other.db' as other --"],
-  ["a pragma write", "pragma user_version = 7"],
-  ["turning query_only off", "pragma query_only = off"],
-  ["insert", "insert into items (title) values ('x')"],
-  ["with ... insert", "with x as (select 1) insert into items (title) select * from x"],
-  ["create temp table", "create temp table t (x)"],
-  ["load_extension", "select load_extension('/tmp/x.so')"],
-  ["the outer-limit escape", "select * from items) limit 100000 --"],
-  ["more rows than the limit", "select * from items"],
+const hostileAgentQueries: readonly (readonly [string, string, RegExp])[] = [
+  ["a second statement", "select 1; delete from items", /near ";": syntax error/],
+  ["a second statement after closing the wrapper", "select 1) ; attach 'other.db' as y; select (1", /more than one/],
+  ["attach", "attach '/tmp/other.db' as other", /syntax error/],
+  ["attach after closing the wrapper", "select 1) ; attach '/tmp/other.db' as other --", /more than one statement/],
+  ["a pragma write", "pragma user_version = 7", /syntax error/],
+  ["turning query_only off", "pragma query_only = off", /syntax error/],
+  ["insert", "insert into items (title) values ('x')", /near "insert": syntax error/],
+  ["with ... insert", "with x as (select 1) insert into items (title) select * from x", /near "insert"/],
+  ["create temp table", "create temp table t (x)", /near "create": syntax error/],
+  ["load_extension", "select load_extension('/tmp/x.so')", /not authorized/],
+  ["the outer-limit escape", "select * from items) as x limit 100000 /*", /more than 200 rows/],
+  ["the outer-limit escape with a line comment", "select * from items) limit 100000 --", /syntax error/],
+  ["more rows than the limit", "select * from items", /more than 200 rows/],
 ];
 
-for (const [label, text] of hostileAgentQueries) {
+for (const [label, text, reason] of hostileAgentQueries) {
   test(`an agent query is refused: ${label}`, async () => {
     await withBroker(["read", "write"], async ({ broker }) => {
       await seedItems(broker, 250);
-      refusalOf(await broker.agentQuery(text));
+      assert.match(refusalOf(await broker.agentQuery(text)), reason);
       assert.deepEqual(valueOf(await broker.query("select count(*) as n from items")), [{ n: 250 }]);
+      assert.deepEqual(valueOf(await broker.query("select * from pragma_user_version")), [{ user_version: 0 }]);
     });
   });
 }
@@ -223,14 +217,12 @@ test("an agent query cuts long cells and redacts what it returns", async () => {
     const first = rows[0]?.[0];
     assert.equal(typeof first, "string");
     assert.ok(typeof first === "string" && first.length < 4100 && first.includes("[cut 1000 characters"));
-    assert.match(String(rows[1]?.[0]), /\[redacted:password\]/);
+    assert.match(JSON.stringify(rows[1]?.[0]), /\[redacted:password\]/);
   });
 });
 
 test("an agent query against a mode with no database yet fails plainly", async () => {
   await withBroker(["read"], async ({ broker }) => {
-    const answer = await broker.agentQuery("select 1");
-    assert.equal(answer.ok ? "" : answer.kind, "failed");
-    assert.match(answer.ok ? "" : answer.message, /no database yet/);
+    assert.match(failureOf(await broker.agentQuery("select 1")).message, /no database yet/);
   });
 });

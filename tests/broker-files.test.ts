@@ -11,6 +11,8 @@ import {
   permissionsIn,
   place,
   recordingSink,
+  refusalOf as refusal,
+  failureOf,
   scriptedHttp,
   withProject,
   writeProjectFile,
@@ -46,9 +48,7 @@ async function withFilesBroker(run: (setup: Setup) => Promise<void>): Promise<vo
 }
 
 function refusalOf<T>(answer: Answer<T>): string {
-  assert.equal(answer.ok, false, "expected a refusal");
-  assert.equal(answer.ok ? "" : answer.kind, "refused");
-  return answer.ok ? "" : answer.message;
+  return refusal(answer).message;
 }
 
 test("files inside the read paths can be read, by project path or absolute path", async () => {
@@ -122,8 +122,6 @@ test("a write path with a linked component is refused, even when the link stays 
 
 test("reading a missing file fails plainly", async () => {
   await withFilesBroker(async ({ broker }) => {
-    const answer = await broker.readFile("notes-in/missing.md");
-    assert.equal(answer.ok ? "" : answer.kind, "failed");
-    assert.match(answer.ok ? "" : answer.message, /does not exist/);
+    assert.match(failureOf(await broker.readFile("notes-in/missing.md")).message, /does not exist/);
   });
 });

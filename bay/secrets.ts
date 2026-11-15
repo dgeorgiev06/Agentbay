@@ -57,7 +57,7 @@ export class SecretStore {
   }
 
   async get(name: string, permissions: Permissions): Promise<Answer<string>> {
-    const asked = `The script asked for the secret ${name}`;
+    const asked = `The step asked for the secret ${name}`;
     if (!secretNamePattern.test(name)) {
       return refused({
         resource: "secrets",

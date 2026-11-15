@@ -26,7 +26,7 @@ import {
   writeProjectFile,
 } from "./broker-fixture.ts";
 import { bay } from "./cli-fixture.ts";
-import { harness, finished, problemsOf, runOf } from "./engine-fixture.ts";
+import { harness, finished, problemsOf, runOf, secretValue } from "./engine-fixture.ts";
 import { openProject, startedTask, testEnvironment } from "./kernel-fixture.ts";
 import { kit, makeProject, type Project } from "./project-fixture.ts";
 import { problemText } from "../bay/outcome.ts";
@@ -194,7 +194,7 @@ test("an engine whose runner throws returns a problem, releases the lock and can
     scripts: {
       "notes:scripts/add-one.ts": (request) => {
         if (throwing) {
-          throw new Error("the runner broke on SECRET-ABC123");
+          throw new Error(`the runner broke on ${secretValue}`);
         }
         const count = fieldOf(request.input, "count");
         return finished({ count: (typeof count === "number" ? count : 0) + 1 });
@@ -204,7 +204,7 @@ test("an engine whose runner throws returns a problem, releases the lock and can
   try {
     const started = await setup.engine.startAction("notes.copy", { count: 1 });
     const [problem] = problemsOf(started);
-    assert.match(problem ?? "", /stopped at an unexpected error: the runner broke on \[redacted\]/);
+    assert.match(problem ?? "", /stopped at an unexpected error: the runner broke on \[redacted:NOTES_TOKEN\]/);
     throwing = false;
     const resumed = await setup.freshEngine().resume("run-1");
     assert.deepEqual(runOf(resumed).state, { status: "done", output: { count: 5 } });

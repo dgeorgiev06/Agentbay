@@ -107,7 +107,7 @@ const defaultScripts: Readonly<Record<string, Script>> = {
   "store:scripts/remove.ts": (request) => finished(request.input),
 };
 
-function fakeRunner(overrides: Readonly<Record<string, Script>> = {}): FakeRunner {
+export function fakeRunner(overrides: Readonly<Record<string, Script>> = {}): FakeRunner {
   const scripts = { ...defaultScripts, ...overrides };
   const calls: ScriptRequest[] = [];
   return {
@@ -122,7 +122,7 @@ function fakeRunner(overrides: Readonly<Record<string, Script>> = {}): FakeRunne
   };
 }
 
-const fakeScrubber: Scrubber = {
+export const fakeScrubber: Scrubber = {
   redact: (text) => text.replaceAll(/SECRET-[A-Z0-9]+/g, "[redacted]"),
 };
 

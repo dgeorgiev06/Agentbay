@@ -13,7 +13,8 @@
     "bay/query-child.ts",
     "bay/database-child.ts",
     "tests/script-runner-driver.ts",
-    "bay/adapter.ts"
+    "bay/adapter.ts",
+    "adapters/claude-code/step-guard.ts"
   ],
   "project": ["{bay,adapters,components,tests}/**/*.ts"],
   "ignoreExportsUsedInFile": {

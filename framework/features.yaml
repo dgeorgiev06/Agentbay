@@ -1,0 +1,198 @@
+# The kernel's features. Each is a deep module: other features import only its entry files.
+# Words are defined in CONTEXT.md; the rule is docs/adr/0006.
+# Status on 2026-11-15: a target, not yet enforced. Files have not moved into folders.
+
+features:
+  vocabulary:
+    purpose: The few types and helpers every feature shares. No behaviour of its own.
+    entry:
+      [
+        bay/contracts.ts,
+        bay/outcome.ts,
+        bay/json.ts,
+        bay/layout.ts,
+        bay/ports.ts,
+        bay/version.ts,
+      ]
+    private: []
+    may_import: []
+
+  platform:
+    purpose: The real adapters for the ports - files, clock, processes, network, terminal.
+    entry: [bay/node-ports.ts]
+    private:
+      [
+        bay/owner-only.ts,
+        bay/terminal.ts,
+        bay/last-resort.ts,
+        bay/folder-links.ts,
+      ]
+    may_import: [vocabulary]
+
+  manifests:
+    purpose: Reads modes, interfaces, skills, workflows and the config into one checked system.
+    entry: [bay/registry.ts]
+    private:
+      [
+        bay/spec.ts,
+        bay/references.ts,
+        bay/targets.ts,
+        bay/generate-types.ts,
+        bay/generated/config.ts,
+        bay/generated/interface.ts,
+        bay/generated/mode.ts,
+        bay/generated/skill.ts,
+        bay/generated/workflow.ts,
+      ]
+    may_import: [vocabulary]
+
+  safety:
+    purpose: Turns a mode's grants and an action's effects into what is allowed, by one rule.
+    entry: [bay/policy.ts]
+    private: [bay/effect-rule.ts, bay/sql-statements.ts]
+    may_import: [vocabulary, manifests]
+
+  secrets:
+    purpose: Stores the owner's secrets and scrubs them from anything that is written or shown.
+    entry: [bay/secrets.ts]
+    private: [bay/secret-patterns.ts]
+    may_import: [vocabulary]
+
+  broker:
+    purpose: Every request for a database, file, secret, host or event passes through here.
+    entry: [bay/broker.ts]
+    private:
+      [
+        bay/answers.ts,
+        bay/file-access.ts,
+        bay/http-access.ts,
+        bay/database.ts,
+        bay/database-child.ts,
+        bay/database-process.ts,
+        bay/agent-query.ts,
+        bay/query-child.ts,
+      ]
+    may_import: [vocabulary, safety, secrets]
+
+  scripts:
+    purpose: Runs a mode's script in a confined child process and gives it the toolbox.
+    entry: [bay/script-runner.ts, bay/sdk.ts]
+    private:
+      [
+        bay/script-host.ts,
+        bay/script-preload.ts,
+        bay/script-protocol.ts,
+        bay/protocol-json.ts,
+      ]
+    may_import: [vocabulary, safety, broker]
+
+  runs:
+    purpose: Advances a run step by step, durably - waiting, resuming, budgets, approvals, undo.
+    entry: [bay/engine.ts]
+    private:
+      [
+        bay/action-steps.ts,
+        bay/workflow-steps.ts,
+        bay/skill-steps.ts,
+        bay/walk.ts,
+        bay/undo.ts,
+        bay/waiting.ts,
+        bay/budget.ts,
+        bay/run-state.ts,
+        bay/run-store.ts,
+        bay/sqlite-run-store.ts,
+        bay/scrubbed-store.ts,
+        bay/step-key.ts,
+        bay/step-detail.ts,
+        bay/run-report.ts,
+      ]
+    may_import: [vocabulary, manifests, safety, secrets, scripts]
+
+  agent-tools:
+    purpose: The tools a harness's agent may call during a skill step, and the server that offers them.
+    entry: [bay/tools.ts, bay/mcp.ts]
+    private:
+      [
+        bay/tool-definitions.ts,
+        bay/skill-tools.ts,
+        bay/task-tokens.ts,
+        bay/mcp-server.ts,
+      ]
+    may_import: [vocabulary, manifests, safety, broker, runs]
+
+  check:
+    purpose: Says whether a kit and project are well formed, in sentences an owner can act on.
+    entry: [bay/check.ts]
+    private:
+      [
+        bay/check-context.ts,
+        bay/check-imports.ts,
+        bay/check-layout.ts,
+        bay/check-limits.ts,
+        bay/check-skills.ts,
+        bay/import-scanner.ts,
+      ]
+    may_import: [vocabulary, manifests, safety]
+
+  scaffold:
+    purpose: Generates a new mode, action, skill, interface or workflow from templates.
+    entry: [bay/new.ts]
+    private: []
+    may_import: [vocabulary, manifests]
+
+  harness:
+    purpose: What a harness adapter must provide, and the build that asks it to.
+    entry: [bay/adapter.ts, bay/build.ts]
+    private: [bay/settings-listing.ts]
+    may_import: [vocabulary, manifests, safety]
+
+  kernel:
+    purpose: Puts the features together into one running kernel.
+    entry: [bay/kernel.ts]
+    private: []
+    may_import:
+      [
+        vocabulary,
+        platform,
+        manifests,
+        safety,
+        secrets,
+        broker,
+        scripts,
+        runs,
+        agent-tools,
+        harness,
+      ]
+
+  command-line:
+    purpose: The bay commands. Parses arguments, calls the kernel, prints answers.
+    entry: [bay/cli.ts]
+    private:
+      [
+        bay/command-line.ts,
+        bay/command-context.ts,
+        bay/commands.ts,
+        bay/commands/approve.ts,
+        bay/commands/build.ts,
+        bay/commands/call.ts,
+        bay/commands/check.ts,
+        bay/commands/config.ts,
+        bay/commands/new.ts,
+        bay/commands/not-built.ts,
+        bay/commands/resume.ts,
+        bay/commands/runs.ts,
+        bay/commands/secret.ts,
+        bay/commands/submit.ts,
+      ]
+    may_import:
+      [
+        vocabulary,
+        platform,
+        kernel,
+        check,
+        scaffold,
+        harness,
+        manifests,
+        runs,
+        secrets,
+      ]

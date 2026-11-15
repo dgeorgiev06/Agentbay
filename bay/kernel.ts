@@ -12,10 +12,11 @@ import {
   nodeFileSystem,
   nodeFolders,
   nodeProcesses,
+  nodeRemoval,
   systemClock,
 } from "./node-ports.ts";
 import { policyFor } from "./policy.ts";
-import type { ChildProcesses, Clock, FileInspector, FileSystem, Folders, Http, Processes } from "./ports.ts";
+import type { ChildProcesses, Clock, FileInspector, FileSystem, Folders, Http, Processes, Removal } from "./ports.ts";
 import { loadSystem, type System, type SystemLayout } from "./registry.ts";
 import { kernelDatabaseFile, SqliteRunStore } from "./run-store.ts";
 import { createScriptRunner } from "./script-runner.ts";
@@ -25,6 +26,7 @@ import type { Outcome } from "./spec.ts";
 export type KernelPorts = {
   readonly files: FileSystem;
   readonly folders: Folders;
+  readonly removal: Removal;
   readonly inspector: FileInspector;
   readonly http: Http;
   readonly processes: Processes;
@@ -67,6 +69,7 @@ export function nodeKernelPorts(environment: Environment): KernelPorts {
   return {
     files: nodeFileSystem,
     folders: nodeFolders,
+    removal: nodeRemoval,
     inspector: nodeFileInspector,
     http: createNodeHttp(httpLimits),
     processes: nodeProcesses,

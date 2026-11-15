@@ -5,14 +5,14 @@ import type { Kernel } from "../kernel.ts";
 import type { Outcome } from "../spec.ts";
 
 async function built(invocation: Invocation, kernel: Kernel): Promise<Outcome<readonly string[]>> {
-  const files = kernel.ports.files;
+  const { files, removal } = kernel.ports;
   const name = invocation.values.get("adapter") ?? kernel.system.config.adapter;
   const adapter = await loadAdapter(files, kernel.kit, name);
   if (!adapter.ok) {
     return adapter;
   }
   if (invocation.flags.has("clean")) {
-    return adapter.value.clean({ root: kernel.root, files });
+    return adapter.value.clean({ root: kernel.root, files, removal });
   }
   const agents = await planAgents({ system: kernel.system, policyOf: kernel.policyOf, files, root: kernel.root });
   if (!agents.ok) {
@@ -23,6 +23,7 @@ async function built(invocation: Invocation, kernel: Kernel): Promise<Outcome<re
     root: kernel.root,
     kit: kernel.kit,
     agents: agents.value,
+    removal,
     files,
   });
 }

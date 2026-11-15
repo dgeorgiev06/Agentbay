@@ -54,7 +54,7 @@ export class MemoryRunStore implements RunStore {
   };
 
   readonly saveStepInput = (writer: Writer, start: StepStart, events: readonly RunEvent[]): Promise<StepRecord> => {
-    const entry = this.#owned(writer);
+    const entry = this.#owned(writer, start.at);
     if (entry.steps.has(start.key)) {
       throw new Error(`Step ${start.key} of run ${writer.runId} already exists.`);
     }
@@ -70,7 +70,7 @@ export class MemoryRunStore implements RunStore {
   };
 
   readonly saveStepOutput = (writer: Writer, end: StepEnd, events: readonly RunEvent[]): Promise<StepRecord> => {
-    const entry = this.#owned(writer);
+    const entry = this.#owned(writer, end.at);
     const started = this.#started(entry, end.key);
     this.#finishOrder += 1;
     const finished = { spent: end.spent, finishOrder: this.#finishOrder, finishedAt: end.at };
@@ -82,13 +82,13 @@ export class MemoryRunStore implements RunStore {
   };
 
   readonly saveStepDetail = (writer: Writer, change: StepDetail, events: readonly RunEvent[]): Promise<StepRecord> => {
-    const entry = this.#owned(writer);
+    const entry = this.#owned(writer, change.at);
     const record: StepRecord = { ...this.#started(entry, change.key), detail: structuredClone(change.detail) };
     return Promise.resolve(this.#keep(entry, { record, at: change.at, events }));
   };
 
   readonly updateRun = (writer: Writer, patch: RunPatch, events: readonly RunEvent[]): Promise<void> => {
-    const entry = this.#owned(writer);
+    const entry = this.#owned(writer, patch.at);
     entry.run = {
       ...entry.run,
       state: structuredClone(patch.state ?? entry.run.state),
@@ -140,7 +140,7 @@ export class MemoryRunStore implements RunStore {
   };
 
   readonly heartbeat = (writer: Writer, now: Date): Promise<void> => {
-    this.#owned(writer).lock = { owner: writer.owner, heartbeatAt: now.toISOString() };
+    this.#owned(writer, now.toISOString());
     return Promise.resolve();
   };
 
@@ -152,7 +152,7 @@ export class MemoryRunStore implements RunStore {
     return Promise.resolve();
   };
 
-  #owned(writer: Writer): Entry {
+  #owned(writer: Writer, at: string): Entry {
     const entry = this.#entries.get(writer.runId);
     if (entry === undefined) {
       throw new Error(`There is no run ${writer.runId}.`);
@@ -160,6 +160,7 @@ export class MemoryRunStore implements RunStore {
     if (entry.lock?.owner !== writer.owner) {
       throw new Error(`The writer ${writer.owner} no longer holds the lock of run ${writer.runId}.`);
     }
+    entry.lock = { owner: writer.owner, heartbeatAt: at };
     return entry;
   }
 

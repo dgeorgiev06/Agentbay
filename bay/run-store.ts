@@ -356,7 +356,7 @@ export class SqliteRunStore implements RunStore {
 
   readonly saveStepInput = (writer: Writer, start: StepStart, events: readonly RunEvent[]): Promise<StepRecord> =>
     this.#write(() => {
-      this.#checkOwner(writer);
+      this.#claim(writer, start.at);
       this.#database
         .prepare(
           `insert into steps (run_id, key, kind, status, input, detail, spent, started_at)
@@ -370,7 +370,7 @@ export class SqliteRunStore implements RunStore {
 
   readonly saveStepOutput = (writer: Writer, end: StepEnd, events: readonly RunEvent[]): Promise<StepRecord> =>
     this.#write(() => {
-      this.#checkOwner(writer);
+      this.#claim(writer, end.at);
       this.#checkStarted(writer.runId, end.key);
       const output = end.status === "finished" ? JSON.stringify(end.output) : null;
       const reason = end.status === "failed" ? end.reason : null;
@@ -388,7 +388,7 @@ export class SqliteRunStore implements RunStore {
 
   readonly saveStepDetail = (writer: Writer, change: StepDetail, events: readonly RunEvent[]): Promise<StepRecord> =>
     this.#write(() => {
-      this.#checkOwner(writer);
+      this.#claim(writer, change.at);
       this.#checkStarted(writer.runId, change.key);
       this.#database
         .prepare("update steps set detail = ? where run_id = ? and key = ?")
@@ -400,7 +400,7 @@ export class SqliteRunStore implements RunStore {
 
   readonly updateRun = (writer: Writer, patch: RunPatch, events: readonly RunEvent[]): Promise<void> =>
     this.#write(() => {
-      this.#checkOwner(writer);
+      this.#claim(writer, patch.at);
       const current = this.#run(writer.runId);
       const state = stateColumns(patch.state ?? current.state);
       this.#database
@@ -467,8 +467,7 @@ export class SqliteRunStore implements RunStore {
 
   readonly heartbeat = (writer: Writer, now: Date): Promise<void> =>
     this.#write(() => {
-      this.#checkOwner(writer);
-      this.#database.prepare("update runs set lock_heartbeat = ? where id = ?").run(now.toISOString(), writer.runId);
+      this.#claim(writer, now.toISOString());
     });
 
   readonly release = (writer: Writer): Promise<void> =>
@@ -522,6 +521,11 @@ export class SqliteRunStore implements RunStore {
       throw new Error(`kernel.db has no step ${key} in run ${runId}.`);
     }
     return stepOf(row);
+  }
+
+  #claim(writer: Writer, at: string): void {
+    this.#checkOwner(writer);
+    this.#database.prepare("update runs set lock_heartbeat = ? where id = ?").run(at, writer.runId);
   }
 
   #checkOwner(writer: Writer): void {

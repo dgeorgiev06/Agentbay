@@ -85,6 +85,7 @@ const defaultScripts: Readonly<Record<string, Script>> = {
   "notes:scripts/double.ts": (request) => finished({ count: countOf(request.input) * 2 }),
   "notes:scripts/stringify.ts": () => finished({ count: "five" }),
   "notes:scripts/log.ts": (request) => finished(request.input),
+  "notes:scripts/slow.ts": (request) => finished(request.input),
   "notes:scripts/fail.ts": () => failure("the script gave up"),
   "notes:scripts/spend.ts": (request) => finished(request.input, { [measureOf(request.input)]: 1 }),
   "notes:scripts/long-enough.ts": (request) => {
@@ -202,6 +203,7 @@ const notesActions: Readonly<Record<string, Action>> = {
   broken: { ...scriptAction(["read"], ["stringify.ts"]), output: "schemas/count.json" },
   log: scriptAction(["write"], ["log.ts"]),
   spend: scriptAction(["read", "spend"], ["spend.ts", "spend.ts", "spend.ts"]),
+  long: scriptAction(["read"], ["slow.ts", "slow.ts", "slow.ts", "slow.ts", "slow.ts", "slow.ts"]),
   "store-one": {
     input: "schemas/item.json",
     output: "schemas/receipt.json",
@@ -248,7 +250,7 @@ const draftSkill = [
   "",
 ].join("\n");
 
-const scriptNames = ["add-one", "double", "stringify", "log", "fail", "spend", "long-enough"];
+const scriptNames = ["add-one", "double", "stringify", "log", "fail", "spend", "long-enough", "slow"];
 
 function fixtureFiles(changes: Changes): Record<string, string> {
   const workflows = changes.workflows ?? {};

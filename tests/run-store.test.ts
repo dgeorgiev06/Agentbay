@@ -22,6 +22,8 @@ type Opened = {
 
 const start = new Date("2026-11-14T09:00:00.000Z");
 
+const spent = { items: 0, usd: 0, tokens: 0, minutes: 0 };
+
 function minutesLater(minutes: number): Date {
   return new Date(start.getTime() + minutes * 60_000);
 }
@@ -219,6 +221,26 @@ function runStoreContract(name: string, open: () => Opened): void {
       assert.equal((await store.readEvents("run-1")).length, events.length);
       await store.release(writer);
       assert.equal((await store.acquire("run-1", "engine-c", staleAt)).status, "held");
+      close();
+    });
+
+    test("every write by the lock's holder refreshes the lock, so a busy writer never looks stale", async () => {
+      const { store, close } = open();
+      const writer = await created(store);
+      const writes = [
+        (at: string) => store.saveStepInput(writer, { key: "0", kind: "skill", input: 1, detail: {}, at }, []),
+        (at: string) => store.saveStepDetail(writer, { key: "0", detail: { round: 2 }, at }, []),
+        (at: string) => store.saveStepOutput(writer, { key: "0", status: "finished", output: 1, spent, at }, []),
+        (at: string) => store.updateRun(writer, { at }, []),
+      ];
+      for (const [index, write] of writes.entries()) {
+        const at = minutesLater(9 * (index + 1));
+        await write(at.toISOString());
+        const later = new Date(at.getTime() + lockStaleMilliseconds);
+        assert.equal((await store.acquire("run-1", "engine-b", later)).status, "held", `after write ${String(index)}`);
+      }
+      const silent = new Date(minutesLater(36).getTime() + lockStaleMilliseconds + 1);
+      assert.equal((await store.acquire("run-1", "engine-b", silent)).status, "acquired");
       close();
     });
 

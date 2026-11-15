@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { ScriptRequest } from "../bay/contracts.ts";
 import { numberField } from "../bay/json.ts";
+import type { Engine } from "../bay/engine.ts";
 import { SqliteRunStore, type RunStore } from "../bay/run-store.ts";
+import type { EngineResult } from "../bay/run-state.ts";
 import {
   eventKinds,
   finished,
@@ -320,4 +322,45 @@ test("a crash right after a decision is saved applies it on resume and refuses a
   assert.match(problemsOf(await resumer.approve("run-1", "keep", decision))[0] ?? "", /already has a decision/);
   assert.deepEqual(runOf(await resumer.resume("run-1")).state, { status: "done", output: "content" });
   assert.ok((await eventKinds(inner, "run-1")).includes("approval.recorded"));
+});
+
+test("a live engine whose steps each take seven minutes is never taken over; a silent one is", async () => {
+  let tries = 0;
+  let refusedTries = 0;
+  const holder: { second: Engine | undefined; silentAt: number | undefined; takeover: EngineResult | undefined } = {
+    second: undefined,
+    silentAt: undefined,
+    takeover: undefined,
+  };
+  const scripts = {
+    "notes:scripts/slow.ts": async (request: ScriptRequest) => {
+      const silent = holder.silentAt === request.place.stepIndex;
+      clock.advance((silent ? 11 : 7) * 60_000);
+      const second = holder.second;
+      assert.ok(second);
+      if (silent) {
+        holder.silentAt = undefined;
+        holder.takeover = await second.resume(request.place.runId);
+        return finished(request.input);
+      }
+      tries += 1;
+      const result = await second.resume(request.place.runId);
+      if (!result.ok && (result.problems[0]?.message.includes("being advanced by engine-1") ?? false)) {
+        refusedTries += 1;
+      }
+      return finished(request.input);
+    },
+  };
+  const { engine, clock, store, freshEngine } = await harness({ scripts });
+  holder.second = freshEngine();
+  assert.equal(runOf(await engine.startAction("notes.long", {}, { id: "long" })).state.status, "done");
+  assert.deepEqual([tries, refusedTries], [6, 6]);
+  assert.ok(!(await eventKinds(store, "long")).includes("lock.taken-over"));
+  holder.silentAt = 3;
+  tries = 0;
+  const lost = engine.startAction("notes.long", {}, { id: "silent" });
+  await assert.rejects(lost, /no longer holds the lock/);
+  assert.ok(holder.takeover?.ok);
+  assert.equal(holder.takeover.run.state.status, "done");
+  assert.ok((await eventKinds(store, "silent")).includes("lock.taken-over"));
 });

@@ -6,7 +6,13 @@
     "bay/new.ts",
     "bay/engine.ts",
     "bay/run-store.ts",
-    "tests/race-driver.ts"
+    "tests/race-driver.ts",
+    "bay/sdk.ts",
+    "bay/script-host.ts",
+    "bay/script-preload.ts",
+    "bay/query-child.ts",
+    "bay/database-child.ts",
+    "tests/script-runner-driver.ts"
   ],
   "project": ["{bay,adapters,components,tests}/**/*.ts"],
   "ignoreExportsUsedInFile": {

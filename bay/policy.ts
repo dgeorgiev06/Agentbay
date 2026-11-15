@@ -1,0 +1,256 @@
+import { isAbsolute, join, normalize } from "node:path/posix";
+import type { Effect, Permissions, PolicyOf } from "./contracts.ts";
+import type { Mode } from "./generated/mode.ts";
+import type { LoadedMode, System, SystemLayout } from "./registry.ts";
+import type { Outcome, Problem } from "./spec.ts";
+
+type ProtectedArea = {
+  readonly path: string;
+  readonly name: string;
+  readonly rule: string;
+};
+
+type Direction = "read" | "write";
+
+type DeclaredPath = {
+  readonly direction: Direction;
+  readonly index: number;
+  readonly path: string;
+};
+
+const noMode = "which no mode may name";
+
+const onlyForge = "which only the base mode forge may name";
+
+const ownCode = "and only the base mode forge may write a mode's own code";
+
+const stateAreas: readonly ProtectedArea[] = [
+  { path: ".agentbay", name: "the kernel's state folder .agentbay/", rule: noMode },
+  { path: ".git", name: "the git folder .git/", rule: noMode },
+];
+
+const kernelAreas: readonly ProtectedArea[] = [
+  { path: "bay", name: "the kernel folder bay/", rule: onlyForge },
+  { path: "schemas", name: "the schemas folder schemas/", rule: onlyForge },
+  { path: "adapters", name: "the adapters folder adapters/", rule: onlyForge },
+  { path: "framework", name: "the framework folder framework/", rule: onlyForge },
+];
+
+const forgeFolder = "components/base/forge";
+
+export const secretNamePattern = /^[A-Z][A-Z0-9_]*$/;
+
+const hostPattern = /^(\*\.)?([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)*[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+
+function manifestFile(mode: LoadedMode): string {
+  return join(mode.folder, "mode.yaml");
+}
+
+function isInsideOrEqual(path: string, folder: string): boolean {
+  return path === folder || path.startsWith(`${folder}/`);
+}
+
+function isForge(mode: LoadedMode): boolean {
+  return mode.manifest.name === "forge" && normalized(mode.folder) === forgeFolder;
+}
+
+function ownCodeAreas(own: LoadedMode): readonly ProtectedArea[] {
+  const folder = normalized(own.folder);
+  return [
+    { path: `${folder}/mode.yaml`, name: "the mode's own mode.yaml", rule: ownCode },
+    { path: `${folder}/scripts`, name: "the mode's own scripts/ folder", rule: ownCode },
+    { path: `${folder}/skills`, name: "the mode's own skills/ folder", rule: ownCode },
+  ];
+}
+
+function protectedAreas(system: System, own: LoadedMode, direction: Direction): readonly ProtectedArea[] {
+  if (isForge(own)) {
+    return stateAreas;
+  }
+  const otherModes = [...system.modes.values()]
+    .filter((mode) => mode !== own)
+    .map((mode) => ({
+      path: normalized(mode.folder),
+      name: `the folder of the mode ${mode.manifest.name}`,
+      rule: onlyForge,
+    }));
+  const code = direction === "write" ? ownCodeAreas(own) : [];
+  return [...stateAreas, ...kernelAreas, ...otherModes, ...code];
+}
+
+type DeclaredResources = {
+  readonly read: readonly string[];
+  readonly write: readonly string[];
+  readonly secrets: readonly string[];
+  readonly hosts: readonly string[];
+  readonly commands: readonly string[];
+  readonly migrations: string;
+};
+
+function declaredResources(manifest: Mode): DeclaredResources {
+  const resources = manifest.resources ?? {};
+  const files = resources.files ?? {};
+  return {
+    read: files.read ?? [],
+    write: files.write ?? [],
+    secrets: resources.secrets ?? [],
+    hosts: resources.network ?? [],
+    commands: resources.commands ?? [],
+    migrations: resources.db?.migrations ?? "migrations",
+  };
+}
+
+function declaredPaths(manifest: Mode): readonly DeclaredPath[] {
+  const declared = declaredResources(manifest);
+  const read = declared.read.map((path, index) => ({ direction: "read" as const, index, path }));
+  const write = declared.write.map((path, index) => ({ direction: "write" as const, index, path }));
+  return [...read, ...write];
+}
+
+function normalized(path: string): string {
+  return normalize(path).replace(/\/+$/, "");
+}
+
+function pathWording(declared: DeclaredPath, areas: readonly ProtectedArea[]): string | undefined {
+  const path = normalized(declared.path);
+  if (isAbsolute(declared.path) || path === ".." || path.startsWith("../")) {
+    return `The path ${declared.path} leaves the project root.`;
+  }
+  const folded = path.toLowerCase();
+  for (const area of areas) {
+    const areaFolded = area.path.toLowerCase();
+    if (isInsideOrEqual(folded, areaFolded)) {
+      return `The path ${declared.path} points into ${area.name}, ${area.rule}.`;
+    }
+    if (folded === "." || areaFolded.startsWith(`${folded}/`)) {
+      return `The path ${declared.path} contains ${area.name}, ${area.rule}.`;
+    }
+  }
+  return undefined;
+}
+
+function pathProblems(system: System, mode: LoadedMode): readonly Problem[] {
+  return declaredPaths(mode.manifest).flatMap((declared) => {
+    const message = pathWording(declared, protectedAreas(system, mode, declared.direction));
+    if (message === undefined) {
+      return [];
+    }
+    return [
+      {
+        file: manifestFile(mode),
+        path: `/resources/files/${declared.direction}/${String(declared.index)}`,
+        message,
+        fix: "Name a folder outside the kernel, state and other modes' folders, and outside the mode's own code.",
+      },
+    ];
+  });
+}
+
+function secretProblems(mode: LoadedMode): readonly Problem[] {
+  return declaredResources(mode.manifest).secrets.flatMap((name, index) =>
+    secretNamePattern.test(name)
+      ? []
+      : [
+          {
+            file: manifestFile(mode),
+            path: `/resources/secrets/${String(index)}`,
+            message: `The secret name ${name} is not made of upper-case letters, digits and underscores.`,
+            fix: `Rename it, for example to ${name.toUpperCase().replace(/[^A-Z0-9_]/g, "_")}.`,
+          },
+        ],
+  );
+}
+
+function hostProblems(mode: LoadedMode): readonly Problem[] {
+  return declaredResources(mode.manifest).hosts.flatMap((host, index) =>
+    hostPattern.test(host)
+      ? []
+      : [
+          {
+            file: manifestFile(mode),
+            path: `/resources/network/${String(index)}`,
+            message: `The host ${host} is not a lower-case host name, or a host name after a leading *.`,
+            fix: "Write the host alone, such as api.example.com or *.example.com, with no scheme, port or path.",
+          },
+        ],
+  );
+}
+
+function unionOfEffects(manifest: Mode): readonly Effect[] {
+  const effects = new Set<Effect>();
+  for (const action of Object.values(manifest.actions)) {
+    for (const effect of action.effects) {
+      effects.add(effect);
+    }
+  }
+  return [...effects];
+}
+
+function rootedPaths(root: string, paths: readonly string[]): readonly string[] {
+  return paths.map((path) => join(root, normalized(path)));
+}
+
+function unknownMode(name: string): Outcome<Permissions> {
+  return {
+    ok: false,
+    problems: [
+      { file: "", path: "", message: `There is no mode named ${name}.`, fix: "Name a mode the registry loaded." },
+    ],
+  };
+}
+
+function permissionsOfMode(mode: LoadedMode, layout: SystemLayout): Permissions {
+  const declared = declaredResources(mode.manifest);
+  const modeFolder = join(layout.root, normalized(mode.folder));
+  const writePaths = rootedPaths(layout.root, declared.write);
+  return {
+    mode: mode.manifest.name,
+    modeFolder,
+    databaseFile: join(layout.root, ".agentbay", "data", `${mode.manifest.name}.db`),
+    migrationsFolder: join(modeFolder, normalized(declared.migrations)),
+    readPaths: [modeFolder, ...rootedPaths(layout.root, declared.read), ...writePaths],
+    writePaths,
+    secrets: [...declared.secrets],
+    hosts: [...declared.hosts],
+    commands: [...declared.commands],
+    effects: unionOfEffects(mode.manifest),
+  };
+}
+
+export function permissionsFor(system: System, modeName: string, layout: SystemLayout): Outcome<Permissions> {
+  const mode = system.modes.get(modeName);
+  if (mode === undefined) {
+    return unknownMode(modeName);
+  }
+  const problems = [...pathProblems(system, mode), ...secretProblems(mode), ...hostProblems(mode)];
+  if (problems.length > 0) {
+    return { ok: false, problems };
+  }
+  return { ok: true, value: permissionsOfMode(mode, layout) };
+}
+
+export function policyFor(system: System, layout: SystemLayout): Outcome<PolicyOf> {
+  const permissions = new Map<string, Permissions>();
+  const problems: Problem[] = [];
+  for (const name of system.modes.keys()) {
+    const outcome = permissionsFor(system, name, layout);
+    if (outcome.ok) {
+      permissions.set(name, outcome.value);
+    } else {
+      problems.push(...outcome.problems);
+    }
+  }
+  if (problems.length > 0) {
+    return { ok: false, problems };
+  }
+  return {
+    ok: true,
+    value: (mode) => {
+      const found = permissions.get(mode);
+      if (found === undefined) {
+        throw new Error(`The policy was asked for the mode ${mode}, which the system does not hold.`);
+      }
+      return found;
+    },
+  };
+}

@@ -1,210 +1,254 @@
 ---
-# Approval is recorded in the ledger by `bay approve`; this file grants nothing. Design only: nothing is changed before the gate. The owner decided in chat on 2026-11-14 to port everything to TypeScript, to keep the work in this repository, and to have Opus builders reviewed by Fable. Every count cited was read on main at a7a425d (4.0.0). Where the plan and this proposal differ, the plan wins.
+# Approval is recorded by the owner in chat for this proposal, because the gate and the guard are themselves being replaced. Design only: nothing is changed before approval. Owner decisions of 2026-11-14, followed here as given: everything in TypeScript; nothing has to stay compatible and anything may change; every existing mode exists in the first release; the safety model is redesigned as declared permissions per mode; mode code uses only an official toolbox; no build step; Opus builders started from chat, reviewed by Fable. Counts were read on main at a7a425d (4.0.0). Where the plan and this proposal differ, the plan wins.
 id: "0022"
 status: draft
 touches:
-  - { path: bay/, reason: "every Python module is replaced by a TypeScript module of the same name; bay/templates/ emits TypeScript connectors; the Python files are deleted at cutover" }
-  - { path: bay.sh, reason: "launches `node bay/cli.ts` instead of `python3 bay/cli.py`" }
-  - { path: adapters/claude-code/, reason: "the adapter is ported; every generated hook, shim and launcher names node, not python3" }
-  - { path: adapters/codex/, reason: "NEW in phase 2: a second adapter" }
-  - { path: components/, reason: "all 26 Python files under components/ (connectors, checkers, derive scripts) are ported with their tests; connector.yaml `entry:` values change extension" }
-  - { path: components/base/python/, reason: "replaced by components/base/typescript/ (tsconfig, eslint config, the typescript-check connector)" }
-  - { path: components/base/typescript/, reason: "NEW: the TypeScript standards component" }
-  - { path: schemas/, reason: "unchanged in the port; phase 2 adds `undo` to interface endpoints and nothing else" }
-  - { path: framework/kernel.yaml, reason: "owns: and protected: name the new files (package.json, package-lock.json, tsconfig.json replace requirements*.txt)" }
-  - { path: framework/limits.yaml, reason: "the Python-specific measures are redefined for TypeScript and written once at cutover" }
-  - { path: framework/roles/builder.yaml, reason: "the check commands name tsc, eslint and the node test runner" }
-  - { path: framework/rules/conformance.yaml, reason: "rules that name Python files or tools are reworded" }
-  - { path: tests/, reason: "all 49 test files are ported to the node test runner; golden JSON files are kept byte for byte" }
-  - { path: package.json, reason: "NEW: pinned runtime and dev dependencies, the test and check scripts" }
-  - { path: package-lock.json, reason: "NEW" }
-  - { path: tsconfig.json, reason: "NEW" }
-  - { path: requirements.txt, reason: "deleted at cutover" }
-  - { path: requirements-dev.txt, reason: "deleted at cutover" }
-  - { path: conftest.py, reason: "deleted at cutover" }
-  - { path: README.md, reason: "install and launch text; the folder map" }
-  - { path: docs/DESIGN.md, reason: "the safety model names node; resume and undo in phase 2" }
-  - { path: docs/INTERFACES.md, reason: "the connector contract in TypeScript; the skill contract and `undo` in phase 2" }
-  - { path: CHANGELOG.md, reason: "release entries with an Upgrading section" }
+  - { path: bay/, reason: "replaced whole: the Python kernel is deleted at cutover and a TypeScript kernel takes the folder" }
+  - { path: bay.sh, reason: "launches `node bay/cli.ts`" }
+  - { path: adapters/, reason: "claude-code is rewritten against the new adapter interface; codex is added in 5.1" }
+  - { path: components/, reason: "every mode is rewritten to the new mode contract; connectors become small capability modes; components/base/python is replaced by components/base/typescript" }
+  - { path: schemas/, reason: "replaced: schemas for the new manifest, interface, skill front matter, workflow and config" }
+  - { path: framework/, reason: "kernel.yaml and limits.yaml are rewritten for the new layout; roles/ is removed (a role becomes a skill step)" }
+  - { path: tests/, reason: "replaced: new tests on the node test runner; the Python tests and goldens are deleted at cutover" }
+  - { path: package.json, reason: "NEW, with package-lock.json and tsconfig.json" }
+  - { path: requirements.txt, reason: "deleted at cutover, with requirements-dev.txt and conftest.py" }
+  - { path: README.md, reason: "rewritten" }
+  - { path: docs/DESIGN.md, reason: "rewritten for the new design" }
+  - { path: docs/INTERFACES.md, reason: "rewritten: the mode, skill, interface, workflow and adapter contracts" }
+  - { path: CHANGELOG.md, reason: "5.0.0 entry with an Upgrading section" }
 exceptions:
-  - { measure: bay_lines, to: "measured at cutover", reason: "the measure changes language; typed code is expected to be longer. The ceiling is written once from the real count and falls from there." }
-  - { measure: kit_python_lines, to: "renamed kit_lines, measured at cutover", reason: "same" }
-  - { measure: long_lines, to: "measured at cutover", reason: "same" }
-  - { measure: top_level_folders, to: 7, reason: "unchanged: TypeScript lives in bay/, Node runs it without a build folder" }
+  - { measure: all, to: "new ceilings written at cutover", reason: "every measure is redefined for the new kernel (see Limits); the kernel budget is 4,000 lines against 9,703 today" }
 ---
 
-# 0022: Port agentbay to TypeScript
+# 0022: agentbay 5, a smaller kernel in TypeScript
 
 ## Summary
 
-agentbay is 31 Python files in `bay/` (9,703 lines), one adapter (535 lines), 26 Python files under `components/` (6,415 lines) and 576 tests in 49 files. This proposal replaces all of it with TypeScript on Node, and then adds four features the current kernel lacks.
+agentbay 4 is a Python kernel of 9,703 lines with 6,415 lines of Python connectors, seven concepts a mode author must learn (role, mode, agent profile, environment, connector, capability interface, component) and a guard that parses shell commands. This proposal replaces it with a TypeScript kernel of at most 4,000 lines built around one unit, the mode, and rebuilds every existing mode on it.
+
+It is a redesign, not a port. Nothing reads agentbay 4 manifests, state or data, with one exception: a one-time importer for your own to-dos and other local items, which no source can re-create.
 
 What you get:
 
-- **One language.** Kernel, adapter, connectors, checkers and tests are TypeScript. Python is no longer needed to run or change agentbay.
-- **The same behaviour.** Manifests stay `agentbay/v4`. Schemas, CLI commands, ledger events, call state files, store files and settings keys do not change. A project built on 4.0.0 needs a recent Node installed and one `bay build`; nothing else.
-- **No build step.** Node runs `.ts` files directly (verified on 22.23.4). `bay.sh` runs `node bay/cli.ts`. There is no `dist/` folder and no bundler.
-- **Four features, after the port:** a fixed structure for skills, resume after a crash, undo for failed calls, and a Codex adapter.
+- **One unit.** A mode is a folder with a manifest, typed actions, skills, scripts, workflows and migrations. A connector is no longer a separate thing: Gmail is a small mode that implements an interface, and the mail briefing composes it.
+- **Composition like contracts.** Modes call each other only through interfaces, the callee's permissions apply, and a binding in the project config says which mode serves each interface.
+- **Skills with a fixed structure.** Seven sections, checked by `bay check`.
+- **Runs that survive.** Every step is saved before the next starts; a run resumes after a crash, waits days for an approval, has a budget, and can undo finished steps when it fails.
+- **Permissions declared, not parsed.** A mode gets only the tables, paths, secrets, hosts and commands its manifest names. Agents do not get a general shell.
+- **All of today's modes:** Chief of Staff, forge, store, the mail and feed briefings with Gmail and X, todo, improve and delivery.
 
-The port is release 5.0.0. Each feature is its own minor release after it (5.1 to 5.4).
+What it costs, stated plainly:
 
-What it costs, measured and stated plainly:
+- Everything is rewritten: kernel, modes and tests. The 576 existing tests and the golden guard matrix cannot be reused, so the safety net of comparing old and new behaviour is gone. In its place, each builder reads the old tests of what it rebuilds and lists every behaviour as kept or dropped, and the reviewer checks that list.
+- The new safety model is younger than the one it replaces. It is simpler and closes the known bypass (code an agent runs outside the guard), but it has not been attacked yet. Main stays on 4.0.0 until cutover, and a `v4` branch remains after it.
+- The kernel budget of 4,000 lines is a target, not a measurement. If the engine stage shows it cannot hold, that comes back to you before the modes are built.
 
-- About 16,650 lines of Python are rewritten. 87% of the tests call Python directly and are rewritten too; only the golden JSON files (283 KB) carry over unchanged.
-- The guard, the SQL sandbox and the secret handling are security code. A port can weaken them silently. The plan treats them as their own slices with the golden guard matrix as the oracle.
-- Three things are not known to work yet and are settled by spikes before any slice that depends on them: an SQLite binding for Node with an authorizer and a progress handler, YAML 1.1 parsing that matches PyYAML, and a Node equivalent of `python3 -E` for the use shims.
-- Until cutover the branch holds both kernels. Nothing reaches main until the whole suite passes on TypeScript and the Python is deleted in the same pull request.
+Release 5.0.0 is the cutover. A Codex adapter is 5.1.
 
-What the build needs from you: approval of this proposal and its plan, five choices (see Choices for you), and one more gate before cutover.
+## Concepts: seven become three
 
-## What does not change
-
-| Thing | Stays as it is |
+| agentbay 4 | agentbay 5 |
 |---|---|
-| Manifests | `agentbay/v4`, every kind, every field |
-| Schemas | every file under `schemas/`, byte for byte, in the port |
-| CLI | the 16 commands, their flags and their output text |
-| Ledger | `events.jsonl` line format and event types |
-| Call state | `.agentbay/calls/<callId>.json` |
-| Store | `corpus.db`, `state.json`, views, the SQL limits |
-| Golden files | `tests/golden/*` and the three component goldens |
-| Rules | B-1 to B-12, C-1 onward, the gate, plan approval, review |
-| Layout | `components/base/`, `components/modes/`, seven top-level folders |
+| Mode with features and steps | **Mode** with actions; an action's `run` is an ordered list of skill steps and script steps |
+| Connector, capability interface | A small **mode** that `implements` an **interface**; the interface is a set of action signatures with no code |
+| Environment (bindings, secrets, hosts, paths, tiers) | The mode's own `resources:` block, plus `bindings:` in the project config |
+| Role (lead, analyst, builder, reviewer, researcher) | A **skill** step with a tier (`fast`, `balanced`, `deep`) and an allow-list; review is a skill like any other |
+| Playbook and rules file | The skill's Instructions, Definition of done and Rules sections |
+| Agent profile | The adapter's tier-to-model table |
+| Component, content type | A mode folder; a content type is a schema and views inside the mode that owns the data |
+| `extends:` inheritance | Removed. The briefings and todo compose the store through its interface |
+| Gate, plan approval | The `approval` workflow step, bound to the content it approves |
+| Ledger, call state files | The `runs` and `events` tables in the kernel database |
+| Guard, protected paths, use shims | Declared permissions enforced by the broker and the adapter (see Safety) |
 
-## The design
+## The kernel
 
-### 1. Where the code lives
+Five parts, in `bay/`, with a line budget of 4,000 excluding generated types.
 
-Each `bay/<name>.py` becomes `bay/<name>.ts` with the same module name, so a reviewer reads the old and the new file side by side. During the build both sit in `bay/`. The cutover commit deletes every `.py` file.
+| Part | Does |
+|---|---|
+| Registry | Finds mode folders, loads and validates manifests, resolves interfaces to bound modes |
+| Broker | Hands a run the resources its mode declared and nothing else: database, files, secrets, HTTP, events |
+| Engine | Runs actions and workflows step by step, saving each step; approvals, waits, budgets, undo, resume |
+| Policy | Turns a mode's `resources:` into the permission set of a run, for the broker and for the adapter |
+| Check | `bay check`: validates manifests, schemas, skills, workflows, imports, dependency cycles and limits |
 
-Node runs TypeScript by stripping the types, so the code uses only syntax that can be stripped: no `enum`, no `namespace`, no constructor parameter properties. `tsconfig.json` sets `erasableSyntaxOnly` so the compiler rejects them. Imports name the `.ts` file.
+Around it: `bay/sdk.ts`, the only kernel file mode code may import; `bay/cli.ts`; and `bay/mcp.ts`, which serves the broker's resources and the callable actions to an agent as tools.
 
-### 2. Structure rules for the TypeScript
+The layout:
 
-The Python kernel has four import cycles (model with config, rules and contenttypes; checks with lint). The port removes them and keeps them out by rule.
+```
+bay/               kernel (budgeted), sdk.ts, cli.ts, mcp.ts
+adapters/          claude-code/   codex/ (5.1)
+schemas/           manifest, interface, skill, workflow, config
+components/
+  base/            interfaces/  store/  cos/  forge/  improve/  delivery/  typescript/
+  modes/           gmail/  x/  mail-briefing/  feed-briefing/  todo/
+tests/             kernel tests; each mode keeps its own tests/
+```
 
-- **A `spec` core first.** `SpecError`, YAML loading, schema checking and path helpers move out of `model` into `bay/spec.ts`. Everything else imports it; it imports nothing from `bay/`.
-- **Pure core, effects at the edges.** Reading files, running git, starting processes, HTTP and the clock go through five small interfaces in `bay/ports.ts`. `model`, `lint`, `workflows`, `selector`, `rules` and `playbook` take them as arguments and are tested with fakes. Only `cli.ts`, `guard.ts` and `hook.ts` create the real ones.
-- **Types from the schemas.** The TypeScript types of manifests are generated from `schemas/*.json` by a script and committed. A check fails when they are stale. A manifest field cannot exist in code and not in a schema.
-- **Gaps are values.** Functions that find problems return them; they do not throw. This is how `bay check` reports every gap at once today.
-- **No cycles, no deep imports.** An eslint rule fails on an import cycle, on a core module importing `cli`, `guard`, `hook` or an adapter, and on a component importing anything from `bay/` outside the connector contract (section 4).
+A mode folder:
 
-### 3. Standards, enforced by the existing standards step
+```
+<mode>/
+  mode.yaml          manifest
+  skills/<name>/SKILL.md
+  scripts/*.ts       deterministic code; imports only bay/sdk.ts
+  workflows/*.yaml
+  schemas/*.json     input and output types
+  migrations/*.sql   its own tables and views
+  tests/             example inputs and expected outputs per action
+```
 
-`components/base/typescript/` replaces `components/base/python/`. It holds the configs and the `typescript-check` connector, which reports through the same `standards` step as today.
+## The mode contract
 
-| Check | Tool | Setting |
+```yaml
+name: mail-briefing
+version: 5.0.0
+description: Syncs mail into the store and writes a daily digest
+
+requires:
+  interfaces: [items-source@1, items-store@1]
+
+resources:
+  db:      { migrations: migrations/ }
+  files:   { write: [out/digests/] }
+  secrets: []
+  network: []
+  commands: []
+
+actions:
+  sync:
+    input:  schemas/sync-req.json
+    output: schemas/sync-result.json
+    effects: [read, write, network, spend]
+    run:
+      - call: items-source.fetch
+      - call: items-store.put
+  digest:
+    input:  schemas/digest-req.json
+    output: schemas/digest.json
+    effects: [read]
+    run:
+      - script: scripts/select.ts
+      - skill:  skills/digest
+        tier:   balanced
+      - script: scripts/check-citations.ts
+
+workflows: [workflows/daily.yaml]
+```
+
+- A step is `script`, `skill` or `call` (an action of an interface the mode requires). Callers see only input and output.
+- `effects` is declared and checked: a `call` may not have an effect its caller lacks.
+- An action may name `undo: <action>`.
+- A mode that serves an interface says `implements: [items-source@1]` and the project config binds it: `bindings: { items-source: gmail }`. The mail briefing never sees the Gmail token.
+
+## The skill contract
+
+A `SKILL.md` is a standard Agent Skill whose body has seven sections in this order. `bay check` rejects a skill that lacks one.
+
+| Section | Holds | Checked |
 |---|---|---|
-| Types | `tsc --noEmit` | `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `erasableSyntaxOnly` |
-| Lint | eslint with typescript-eslint | the `strict-type-checked` set, a complexity cap, no `any`, no non-null `!` |
-| Escapes | `typescript-check` | a finding for every `@ts-ignore`, `@ts-expect-error` and `eslint-disable` |
-| Dead code | knip | unused files, exports and dependencies; replaces the Python AST detector in `deadcode` |
-| Comments | `comments-check` | unchanged rule: no comment lines in kit code; it already takes the comment syntax from `component.yaml` |
-| Format | prettier | line width 120, as today |
+| Input | What it receives, with its schema | The schema exists and matches the step before it |
+| Output | What it returns, with its schema | The result is validated at run time |
+| Definition of done | `- [DOD-n] (must\|should\|must_not) ...`; an item may name a script check | Script checks run after the skill; a failed must item sends it back, three rounds at most |
+| Instructions | The steps | A length cap |
+| Tools | The actions and resources it may call | A subset of the mode's manifest |
+| Resources | Files, templates, tables and paths it may read or write | A subset of the mode's manifest |
+| Rules and constraints | What it must never do | Present and not empty |
 
-Readable code is the rule, as decided for 0021: a line packed to meet a ceiling is a review failure.
+`bay new skill` writes the file with all seven headings.
 
-### 3a. Code standards for classes, functions, modules and readability
+## Workflows and runs
 
-TypeScript publishes no official style guide. What is official is the compiler's own options (the TSConfig reference marks `strict` and its family as recommended), the `erasableSyntaxOnly` rule set, and the handbook's "Do's and Don'ts". The rules below start from those and add the typescript-eslint rule that enforces each. A rule with no tool behind it is a review check (R-2).
+A workflow is a YAML list of steps of four kinds: `action`, `approval`, `wait`, `foreach`. Anything more belongs in a script.
+
+- **Saved every step.** Input and output of each step go to the `runs` table before the next starts. `bay resume <run>` continues from the last finished step. A step with only `read` effects is run again without asking; any other unfinished step stops and asks you.
+- **Approval binds content.** An `approval` step records the hash of what it showed. If that changes, the run returns to the approval.
+- **Budget.** A workflow or action sets limits for items, dollars, tokens and minutes. Every nested call draws from the same budget. At the limit the run waits and asks whether to extend or stop.
+- **Undo.** When a run fails for good, the engine runs the `undo` action of each finished step in reverse order and lists the steps that had none. `delete` effects are never undone automatically.
+- **Skill steps wait.** A skill step puts the run in `waiting` with the task, tier, tools and schemas. The adapter decides who picks it up: the Claude Code session that made the call runs it as a subagent and submits the result, as today, or a headless process does. The engine does not know the difference, which is what lets the same kernel run always-on later.
+
+## Safety
+
+The threat model is unchanged: agent mistakes and overreach, prompt injection through data agents read, and modes that overreach. Not you.
+
+What changes is where the rules live. Today they live in a hook that parses every shell command. In agentbay 5 they live in the mode's manifest, and three things enforce it:
+
+1. **The broker.** Every database, file, secret, HTTP and action request from a skill or a script goes through the broker with the run's permission set. Not declared means denied. HTTP is checked against the mode's hosts. Secrets are fetched by name, never listed, and every value seen is redacted from output and logs.
+2. **No general shell for agents.** A skill step gets the kernel's tools and the harness's file tools limited to its declared paths. It gets a shell command only when the manifest lists it under `commands:` as an exact prefix (for example `node --test`). The adapter writes this as the harness's own allow and deny settings, plus one small hook that denies anything outside the set. The hook compares against a list; it does not parse shell.
+3. **Scripts run confined.** A script step runs in a child Node process with the permission model on: file access limited to the mode's paths, no child processes, network only through the broker. This closes the bypass DESIGN.md names today, where code a builder runs is outside the guard. Whether Node's permission model can do all of this is spike C.
+
+Kept from today, by other means:
+
+- **The kernel changes only through forge.** `bay/`, `schemas/`, `adapters/`, `framework/` and `components/base/` are writable only by forge's `extend` action, behind an approval. `bay check --base` rejects a change to them that no approved proposal lists.
+- **Agent SQL is read-only and bounded.** Each mode has its own SQLite file. An agent query runs on a read-only connection to that file, one SELECT, in a worker with a time and row limit. Isolation comes from the file, not from an authorizer. Spike A confirms the limits can be enforced on Node.
+- **Nothing an agent submits is trusted.** Outputs are validated against the schema and scanned for secrets before they are stored.
+
+What is deliberately dropped: shell-command parsing, case-folded and inode path comparison in a hook, the use shims, per-role units, and the `agentbay/v4` kinds. Each is replaced above or no longer needed.
+
+## Code standards
+
+TypeScript publishes no official style guide. What is official is the compiler's options, the `erasableSyntaxOnly` rule set and the handbook's "Do's and Don'ts"; the rules start there. `components/base/typescript/` holds the configs, and forge's checks run them.
 
 | Area | Rule | Enforced by |
 |---|---|---|
-| Modules | ES modules only; no `namespace`, no `import =` | `erasableSyntaxOnly` |
-| Modules | Named exports only; no default export; no file that only re-exports | eslint `no-restricted-exports`, review |
-| Modules | `import type` for anything used only as a type | `verbatimModuleSyntax` |
-| Modules | One responsibility per module; no import cycle; core never imports an edge module | eslint import rules |
-| Functions | Exported functions state their parameter and return types | `explicit-module-boundary-types` |
-| Functions | `unknown`, never `any`; no `Object`, `String`, `Number`, `Boolean` wrapper types | `no-explicit-any`, `no-wrapper-object-types` |
-| Functions | A callback whose result is ignored returns `void`; callbacks have no optional parameters | review |
-| Functions | A union type or an optional parameter instead of overloads | `unified-signatures` |
-| Functions | At most three positional parameters, then one options object; a complexity cap | `max-params`, `complexity` |
-| Functions | Parameters are not reassigned; array and object parameters are `readonly` where the function does not change them | `no-param-reassign`, `prefer-readonly-parameter-types` (kernel only) |
-| Classes | A class only for something with state and a lifecycle (dispatcher, guard, ledger, store). Data is a `readonly` type and the code that works on it is functions | review |
-| Classes | No inheritance between classes; a class may implement an interface | eslint `no-restricted-syntax` on `extends` |
-| Classes | Fields declared in the body, `readonly` unless reassigned, private state as `#name`; no parameter properties | `erasableSyntaxOnly`, `prefer-readonly` |
-| Types | No `enum`; a union of string literals, or an `as const` object | `erasableSyntaxOnly` |
-| Types | A closed set is a discriminated union, and every `switch` over it is exhaustive | `switch-exhaustiveness-check` |
-| Types | No type assertion (`as`) except `as const`; no non-null `!` | `consistent-type-assertions`, `no-non-null-assertion` |
-| Readability | Prettier formats everything; width 120; no nested ternary; full words in names | prettier, `no-nested-ternary`, review |
-| Readability | No comment lines in kit code: a reason goes in a name, an error message or the README | `comments-check`, unchanged |
+| Compiler | `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `erasableSyntaxOnly`, `verbatimModuleSyntax` | `tsc --noEmit` |
+| Modules | ES modules, named exports only, no file that only re-exports, no import cycle | eslint |
+| Modules | Kernel core never imports `cli`, `mcp` or an adapter; mode code imports only `bay/sdk.ts` | eslint, `bay check` |
+| Functions | Exported functions state parameter and return types; `unknown`, never `any` | typescript-eslint strict set |
+| Functions | At most three positional parameters, then an options object; a complexity cap; unions instead of overloads | eslint |
+| Classes | Only for something with state and a lifecycle (engine, broker, store). No inheritance. Fields `readonly` unless reassigned, private state as `#name` | eslint, review |
+| Types | No `enum`; closed sets are discriminated unions and every `switch` over one is exhaustive; no `as` except `as const`; no `!` | eslint |
+| Types | Manifest types are generated from `schemas/` and committed; a stale file fails the check | script |
+| Effects | Files, git, processes, HTTP and the clock go through `bay/ports.ts`; core logic takes them as arguments | eslint, review |
+| Errors | Problems a user can fix are returned as values, all at once; exceptions are for bugs | review |
+| Readability | Prettier, width 120, no nested ternary, full words in names, no comment lines in kit code, no line packed to meet a limit | prettier, checks, review |
+| Dead code | No unused file, export or dependency | knip |
 
-### 4. Connectors
+Dependencies: `yaml`, `ajv` and the MCP SDK at run time; SQLite from Node itself unless spike A says otherwise. TypeScript, eslint, knip and prettier for development. Tests use Node's runner. Node runs the `.ts` files directly; there is no build folder.
 
-Connectors stay in-process. A connector is a TypeScript module that exports `create(ctx)`; the dispatcher loads it with `import()` and calls its endpoints as today.
+## Limits
 
-Today connectors import about 30 kernel modules directly (`bay.model`, `bay.boundary`, `bay.sqlsandbox` and more). The port narrows this to one module, `bay/connector.ts`, which exports the `Context` type, `ConnectorError`, and the helpers connectors really use (`parseTime`, `inWindow`, `shortHash`, the selector matcher, the secret scrub, the SQL sandbox). The four kit connectors that are part of the framework itself (`corpus-store`, `improve-detect`, `improve-store`, `scaffold`) are protected paths and may import the kernel modules they wrap; every other connector may import only `bay/connector.ts`. Lint rule B-7 is extended to enforce it.
+| Measure | Counts | Ceiling |
+|---|---|---|
+| `kernel_lines` | lines in `bay/*.ts`, generated types excluded | 4,000 |
+| `adapter_lines` | lines per adapter | 800 |
+| `sdk_exports` | names exported by `bay/sdk.ts` | written at cutover |
+| `concepts` | manifest kinds in `schemas/` | 5 |
+| `cli_commands` | entries in the command table | 12 |
+| `top_level_folders` | as today | 7 |
+| `long_lines`, `comment_lines` | as today, on `.ts` | 0 for comments; long lines written at cutover |
 
-### 5. Dependencies
+Ceilings only fall after cutover, as today.
 
-Runtime: `yaml`, `ajv` with `ajv-formats`, and one SQLite binding chosen by spike. Development: `typescript`, `eslint` with `typescript-eslint`, `knip`, `prettier`. All pinned, lockfile committed. Tests use Node's built-in runner; there is no test framework dependency. Adding a dependency is a `forge.extend` proposal.
+## The modes
 
-### 6. Proving it behaves the same
-
-Three layers, strongest first:
-
-1. **A differential harness.** A script runs `python3 bay/cli.py` and `node bay/cli.ts` on the same fixture projects for `check`, `describe`, `catalog`, `config`, `build` and the fake-source calls, and compares output, exit code and written files byte for byte. It exists only on the branch and is deleted at cutover.
-2. **The golden files.** The guard matrix records every guard decision for every unit, Bash spelling and file tool. The TypeScript guard must reproduce all of it. The stages, improve and briefing goldens work the same way.
-3. **The ported tests.** Each Python test function becomes a TypeScript test of the same name with the same assertions. The count may not fall: 576 before, 576 or more after.
-
-Two things must match Python byte for byte and get a dedicated helper each, with tests generated from Python output:
-
-- **Message text.** Lint and resolve messages print lists and missing values the Python way (`['a']`, `None`), and tests assert on them. `bay/pytext.ts` reproduces that formatting. Simplifying the messages is a later proposal, not part of a port.
-- **Hashes.** Finding ids hash `json.dumps(sort_keys=True)` output. `bay/pytext.ts` also holds a serializer with Python's separators and key order, or every stored finding id changes.
-
-### 7. The security code
-
-- **Guard.** It parses shell commands with POSIX `shlex` rules, compares paths case-folded and by inode, and fails closed. The port carries its own `shlex` split and Unicode case folding, each tested against a corpus produced by Python. The guard matrix must match exactly.
-- **Use shims.** `python3 -E` ignores environment variables that could load foreign code. The Node shim must do the same for `NODE_OPTIONS` and `NODE_PATH` and must not resolve modules from the project. The spike decides how; the reviewer checks it against the threat model in DESIGN.md.
-- **SQL sandbox.** It depends on SQLite's authorizer, progress handler, limits and `hard_heap_limit`. Node 22's built-in SQLite exposes none of the first two (checked on Node 22.23.4). The spike picks a binding that does. If none does, the sandbox runs each query in a short-lived worker with a hard timeout and an allow-list check on the parsed statement, and that design comes back to you before it is built.
-- **Secrets.** `vault` and `secretscan` are ported first and their tests run against the Python regexes' behaviour (`\Z`, `re.S`).
-
-### 8. Limits
-
-| Measure today | After |
+| Mode | In agentbay 5 |
 |---|---|
-| `bay_lines` (lines in `bay/*.py`) | lines in `bay/*.ts`, generated type files excluded |
-| `kit_python_lines` | `kit_lines`: `.ts` lines in protected `components/` and `adapters/` paths, tests excluded |
-| `cli_commands` (regex on argparse) | entries in the command table in `bay/cli.ts` |
-| `tests` (`^def test_`) | `test(` calls in protected test files |
-| `long_lines` | lines over 120 characters in the same `.ts` files |
-| `comment_lines` | comment lines found by the TypeScript scanner |
-| `framework_folders`, `schemas`, `top_level_folders` | unchanged |
+| `store` | Implements `items-store`: put, update, delete, query, get, and bounded SQL over views. One SQLite file per composing mode. Keeps the scope rule and the remembered deletions |
+| `gmail`, `x` | Implement `items-source`; hold their own secrets and hosts; each ships a fake for tests |
+| `mail-briefing`, `feed-briefing` | Compose a source and the store: sync, digest, ask, prune |
+| `todo` | Composes the store; agenda, complete, reopen, drop, delegate, track; rules as scripts |
+| `cos` | The root mode: takes your request, calls actions and workflows of other modes, relays approvals |
+| `forge` | `create` (scaffold a mode) and `extend` (proposal, plan, approval, implement, checks, review, release) as a workflow |
+| `improve` | Scan, audit, triage, backlog, implement, verify, reading the `runs` and `events` tables and session transcripts |
+| `delivery` | Research and build |
 
-Ceilings are written once at cutover from the real counts and only fall afterwards.
+## Upgrading
 
-## Phase 2: the four features
+- Install a recent Node; the spike fixes the minimum version.
+- agentbay 4 projects are not read. Config is rewritten by hand from the new template.
+- Synced items are fetched again from Gmail and X.
+- `bay import-v4` copies local items (your to-dos and anything you added by hand) from the old store once. It is removed in 5.1.
+- Run history in `events.jsonl` is not migrated; the file is left where it is.
 
-Each is designed in full in its own short proposal after 5.0.0. The shape is fixed here so the port leaves room for it.
+## Out of scope for 5.0.0
 
-- **5.1 Skill contract.** A `SKILL.md` has seven sections in this order: Input, Output, Definition of done, Instructions, Tools, Resources, Rules and constraints. Lint rejects a skill that lacks one. Tools and Resources may only name endpoints the feature's `uses:` grants. `bay new` gains the kind `skill`. The eight shipped skills are rewritten to it. Playbooks already have a fixed structure and do not change.
-- **5.2 Resume.** Today a call's state is saved only at pauses, so a process that dies mid-step loses the call. The dispatcher will save state before the first step and after every step, and take a lock on the call file. A call found with a started, unfinished step is resumed by `bay call --resume <callId>`: a step with only `read` effects is run again; any other step stops as `blocked` and asks you. No new command.
-- **5.3 Undo.** An interface endpoint may name `undo: <endpoint>` of the same interface. When a call fails after write steps, the dispatcher runs the undo endpoints of finished steps in reverse order and records each in the ledger. A step with no undo is listed in the result. `delete` effects are never undone automatically.
-- **5.4 Codex adapter.** First the kernel stops assuming Claude Code: runtime names, hook payload fields, tool names and `CLAUDE_PROJECT_DIR` move behind the adapter interface (about a dozen places in `dispatch`, `model`, `hook`, `guard`, `ledger`, `cli` and `conformance`). Then `adapters/codex/` is built. Whether Codex can enforce the guard before every tool call is not known; if it cannot, the adapter says so in its profile and `bay check` refuses roles that need the guard on that runtime.
-
-## Compatibility and safety
-
-- A user project keeps its `agentbay.config.yaml`, data and settings. After upgrading it needs a recent Node (the spike fixes the minimum version) and one `bay build`, because every generated hook and shim changes from `python3` to `node`.
-- A third-party connector written in Python stops working. The upgrade note says so and gives the TypeScript contract. No Python bridge is kept (B-12).
-- The macOS keychain provider is unchanged (`security`).
-- Main is never in a mixed state. The branch holds both kernels; the cutover pull request deletes Python in the same change that makes TypeScript the launcher.
-
-## Out of scope
-
-- Any change to manifest formats, schemas (before phase 2), CLI text or ledger format.
-- Simplifying messages, merging duplicated code, or dropping features. Four unused items found by the inventory (`model.LEVEL_RANK`, `Protection.covers`, `proposal.load_touches`, `model.item_kinds`) are simply not ported.
-- Token budgets, cloud drivers, interfaces between modes, a mode index. They are in the design document and come after phase 2.
+Codex adapter (5.1), a background daemon with schedules and events, cloud drivers, a mode index with `bay install`, agent-to-agent protocols. The design leaves room for each and builds none.
 
 ## Measured and estimated
 
-Measured on main a7a425d: 576 tests pass in 113 s; 31 files and 9,703 lines in `bay/`; 26 files and 6,415 lines of Python under `components/`; 535 lines in the adapter; test classes 52% direct calls, 13% CLI, 35% connector; Node 22.23.4 runs `.ts` directly and its SQLite has no authorizer.
+Measured on main a7a425d: 576 tests pass; 9,703 lines in `bay/`; 6,415 lines of Python under `components/`; 8 modes; 15 interface files; Node 22.23.4 runs `.ts` directly and its SQLite has no authorizer.
 
-Estimated, not measured: the size of the TypeScript; the oldest Node release that runs `.ts` without a flag (the TypeScript documentation names 23.6; 22.23.4 works here; the spike fixes the minimum); whether a Node SQLite binding offers an authorizer and progress handler; whether `yaml` in 1.1 mode matches PyYAML on every manifest in the kit; what Codex's hook system can enforce.
-
-## Choices for you
-
-1. **Message text.** Keep Python-style message text exactly (recommended: it makes the byte-for-byte comparison possible), or switch to JSON-style text now and edit the tests.
-2. **Connector imports.** Narrow unprotected connectors to `bay/connector.ts` (recommended), or let them import any kernel module as today.
-3. **No build step.** Require a recent Node and run `.ts` directly (recommended), or add a build step and support older Node.
-4. **How builders run.** Opus builders started from this chat with Fable reviewing each slice, as you asked (recommended for the port, because the guard and `forge.extend` are themselves being replaced), or through `forge.extend` and the Chief of Staff.
-5. **Phase 2 order.** Skill contract, resume, undo, Codex (recommended: smallest first, Codex last because it needs the kernel changes), or another order.
+Estimated: the 4,000-line kernel; that Node's permission model can confine scripts as described; that Claude Code's permission settings can express a per-step allow-list; the minimum Node version. Spikes answer the last three before anything depends on them.

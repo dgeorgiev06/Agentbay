@@ -1,156 +1,152 @@
-# Plan 0022: port agentbay to TypeScript
+# Plan 0022: agentbay 5 in TypeScript
 
 ## Summary
 
-This plan is for proposal 0022 (main a7a425d, 4.0.0). It implements nothing. Three Opus agents read the whole repository on 2026-11-14: the static half of the kernel, the runtime half with the adapter, and the tests with the kit code. Their findings are the basis of the build order below. Where this plan and the proposal differ, the plan wins.
+This plan is for proposal 0022 (main a7a425d, 4.0.0). It implements nothing. Three Opus agents read the whole repository on 2026-11-14; their findings on what the Python kernel does, and where it is fragile, are the basis of this plan. Where this plan and the proposal differ, the plan wins.
 
-- **The port is 18 slices in 8 stages**, then 4 feature slices. At most three builders work at once; slices in one stage touch no common file.
-- **Every builder is an Opus agent. Fable reviews every slice** against this plan, the proposal and the standards, one round, before the slice merges into the integration branch.
-- **Stage 0 is spikes.** Three unknowns can each change the design. They are answered with running code before any dependent slice starts, and the answers come back to the owner if they change the proposal.
-- **Nothing reaches main until cutover.** The integration branch is `feat/0022-typescript`. The cutover pull request deletes Python and is the owner's second gate.
+- **14 slices in 8 stages.** At most three builders work at once; slices in one stage touch no common file.
+- **Every builder is an Opus agent. Fable reviews every slice once** against the proposal, this plan and the code standards before it merges into the integration branch.
+- **Stage 0 is spikes.** Three unknowns can each change the design. They are answered with running code first, and the answers come back to the owner if they change the proposal.
+- **Stage 4 is a checkpoint.** One real mode runs end to end and the kernel is measured against its 4,000-line budget before the other modes are built.
+- **Main stays on 4.0.0 until cutover.** The integration branch is `feat/0022-agentbay5`. The cutover pull request is the owner's last approval.
 
-## What was measured and how
+## What was measured
 
-All on main a7a425d, on Python 3.13.18 and Node 22.23.4.
+All on main a7a425d, Python 3.13.18, Node 22.23.4.
 
-| Fact | Value | How |
+| Fact | Value |
+|---|---|
+| Suite | 576 passed, 0 failed, 113 s |
+| Kernel | 31 files, 9,703 lines; 4 import cycles |
+| Kit Python | 26 files, 6,415 lines |
+| Adapter | 535 lines |
+| Modes | 8 (cos, forge, improve, store, delivery, mail-briefing, feed-briefing, todo); 15 interface files |
+| Node runs `.ts` with no flag | yes |
+| Node 22 SQLite authorizer and progress handler | absent |
+
+## What the inventory says to carry over, and what to leave
+
+Behaviour worth keeping, each with where it lives today so a builder can read it with `git show main:<path>`:
+
+| Behaviour | Today |
+|---|---|
+| `check` reports every gap at once, each naming the fix | `bay/model.py`, `bay/lint.py` |
+| A gate binds the content it approved; a changed file returns the call to the gate | `bay/dispatch.py:395-399` |
+| Secrets are scoped by name and every value seen is redacted | `bay/vault.py:86-87`, `bay/secretscan.py` |
+| HTTP only to the declared hosts, https only | `bay/connect.py` |
+| The store's scope rule, remembered deletions, spend saved before items are committed | `corpus_store.py:414-434` |
+| One shared selector matcher so every source behaves the same | `bay/selector.py` |
+| Review returns one verdict per Definition of done id; a failed must item halts | DESIGN.md, Features |
+| The size ratchet: ceilings only fall | `bay/limits.py` |
+| Atomic state writes | `bay/util.py:83-87` |
+
+Known weaknesses the new design must not repeat:
+
+| Weakness | Today | In agentbay 5 |
 |---|---|---|
-| Suite | 576 passed, 0 failed, 113 s | `python3 tests/run.py -q` |
-| Kernel | 31 files, 9,703 lines | `git ls-files 'bay/*.py'`, `framework/limits.yaml` |
-| Kit Python | 26 files, 6,415 lines | `git ls-files` under `components/`, tests excluded |
-| Adapter | 535 lines | `adapters/claude-code/claude_code.py` |
-| Tests by kind | about 300 call `bay.*` directly, 76 run the CLI, 200 test connectors | AST classification of each test function |
-| Golden data | 283 KB in 6 files | `tests/golden`, `components/base/{improve,store}/tests/golden` |
-| Node runs `.ts` | yes, no flag | `node a.ts` |
-| Node 22 SQLite authorizer | absent | method list of `DatabaseSync` |
-| Import cycles in `bay/` | 4 | model with config, rules, contenttypes; checks with lint |
-
-Not measured: anything about the TypeScript that does not exist yet.
-
-## Where the port is harder than it looks
-
-1. **Connectors import the kernel.** `corpus_store.py` imports seven kernel modules, `pipeline.py` four, and the adapter five. Lint rule at `bay/lint.py:1105-1119` requires every `from bay import X` to resolve to `bay/X.py`, so it fails the moment a module is ported. The rule is switched to the TypeScript contract in stage 6, not before.
-2. **Tests assert on Python formatting.** Messages contain `['a']` and `None` (`bay/model.py:126,311,623,634`, `bay/lint.py:279`). `bay/pytext.ts` reproduces it (proposal, section 6).
-3. **Persisted ids depend on Python's JSON.** `util.short_hash` hashes `json.dumps(sort_keys=True, ensure_ascii=False, default=str)` (`bay/util.py:56`). The serializer must match byte for byte.
-4. **YAML 1.1.** PyYAML reads `yes`, `on`, octal and timestamps differently from YAML 1.2 parsers and lets duplicate keys through. `rules._LineLoader` needs node line numbers (`bay/rules.py:50-60`).
-5. **Schema error text.** `jsonschema` messages reach lint output and tests. Ajv words them differently. Either the messages are mapped per keyword in `spec.ts`, or the tests that quote them are edited; spike B decides by counting the affected tests.
-6. **Checks that read Python source.** The dead-code graph (`bay/graph.py:118-122,267-352`), `effects_match_code` (`bay/conformance.py:197-257`), the stdlib-only check for `derive.py` (`bay/contenttypes.py:255-272`), B-7's import scan (`bay/lint.py:466-534`) and five of the nine limits (`bay/limits.py:25-86`). Each is rebuilt on the TypeScript compiler API or replaced by knip.
-7. **The guard's Python semantics.** `shlex.split`, `fnmatchcase`, `casefold`, inode comparison, `O_NOFOLLOW` (`bay/guard.py:136-160,175-183,234-249`).
-8. **Truthiness and ordering.** Empty lists and dicts are falsy in Python and the code relies on it. JavaScript objects move integer-like keys first. Builders use `Map` where key order is observable and never rely on `||` for empty collections.
-9. **`python3` is baked into generated files** at `adapters/claude-code/claude_code.py:96,102,106,354,371`, `bay.sh:3` and `bay/guard.py:47,69,427`.
+| A call that dies mid-step is lost | state saved only at pauses (`bay/dispatch.py:378,758`) | saved every step, with a lock |
+| No lock on state files | none | one writer per run |
+| Budget is enforced by one connector; a role's budget is prose | `corpus_store.py`, `claude_code.py:287-289` | the engine enforces it for every run |
+| Code an agent runs is outside the guard | DESIGN.md, Safety model | scripts run confined |
+| The kernel names Claude Code in a dozen places | `dispatch.py:93,650`, `model.py:37,464`, `hook.py:76`, `guard.py:15-19` | only adapters name a runtime |
+| Connectors import about 20 kernel modules | `pipeline.py:13`, `corpus_store.py:16-19` | mode code imports only `bay/sdk.ts` |
 
 ## Stage 0: spikes and toolchain (one builder)
 
-Slice S0. It writes throwaway code under a scratch folder and commits only the toolchain and a one-page result in this plan's "Spike results" section.
+Slice S0 commits the toolchain and writes its findings into "Spike results" below. Spike code is thrown away.
 
 | Spike | Question | Pass | If it fails |
 |---|---|---|---|
-| A. SQLite | Is there a Node binding with authorizer, progress handler, `setlimit` and `hard_heap_limit`? Candidates: the built-in module on a newer Node, the official SQLite WebAssembly build, a native binding. | `bay/sqlsandbox.py`'s tests can be expressed against it | Back to the owner with the worker-and-timeout design before S7 |
-| B. YAML and schemas | Does `yaml` in 1.1 mode load every manifest in the kit to the same value as PyYAML, with line numbers? How many tests quote a `jsonschema` message? | A script compares both loaders over every `.yaml` in the repo; zero differences | Differences are listed; each gets a rule in `spec.ts` |
-| C. Shim isolation | How does a Node launcher ignore `NODE_OPTIONS` and `NODE_PATH` and refuse to resolve modules from the project? | A shim started with hostile values of both loads nothing foreign | Back to the owner |
+| A. SQLite | Can Node's own SQLite give one file per mode, a read-only connection for agent queries, a hard time limit by ending a worker, a row limit, and full-text search? | A hostile query (endless recursion, a second statement, an attach) is stopped | A named third-party binding; owner decides |
+| B. Agent steps | Can the Claude Code adapter give one skill step its own allow-list (tools, paths, command prefixes) through agent files, settings and one deny hook, and get the result back by `bay submit`? | A subagent asked to write outside its paths and to run an unlisted command is refused both | Owner decides what the hook must do |
+| C. Script confinement | Can a script step run in a child Node process limited to the mode's paths, with no child processes and no direct network? What is the oldest Node that does this and runs `.ts`? | A script that tries each is refused | Owner decides; the fallback is scripts reviewed and run unconfined, as in agentbay 4 |
 
-Toolchain committed by S0: `package.json`, lockfile, `tsconfig.json`, `components/base/typescript/` configs, the test script, the differential harness `tests/parity/run.ts`, and the Python-output corpora for `shlex`, `casefold`, `repr` and `json.dumps`.
+Toolchain committed by S0: `package.json` and lockfile, `tsconfig.json`, eslint, prettier and knip configs in `components/base/typescript/`, the test script, and the first commit of the integration branch, which removes the Python kernel, connectors and tests. Main and the `v4` branch keep them; builders read old code with `git show main:<path>`.
 
 ## Build order
 
-A slice is one builder, one branch from `feat/0022-typescript`, one pull request into it. Slices in the same stage run in parallel.
+A slice is one builder in its own worktree, on a branch from `feat/0022-agentbay5`, merged into it after review. Slices in the same stage run in parallel.
 
-| Stage | Slice | Ports | Lines of Python |
+| Stage | Slice | Builds | Budget |
 |---|---|---|---|
-| 1 | S1 | `spec` (new, out of `model`), `util`, `pytext` (new), `protocol`, `proposal`, `playbook` | about 300 |
-| 1 | S2 | `secretscan`, `vault`, `ledger` | 491 |
-| 1 | S3 | `ports` (new), `boundary`, `selector`, `workflows` | 1,003 |
-| 2 | S4 | `rules`, `config`, `model` | 1,631 |
-| 2 | S5 | `guard`, `hook`, `use_shim` | 743 |
-| 3 | S6 | `lint`, `checks` | 1,243 |
-| 3 | S7 | `sqlsandbox`, `contenttypes` | 1,005 |
-| 3 | S8 | `graph`, `conformance`, `limits`, `standards` on the TypeScript compiler API and knip | 935 |
-| 4 | S9 | `connect`, `adapter`, `registry`, `scaffold`, templates | 644 |
-| 4 | S10 | `dispatch` | 868 |
-| 5 | S11 | `cli`, `bay.sh` | 845 |
-| 5 | S12 | `adapters/claude-code` | 535 |
-| 6 | S13 | store connectors: `corpus-store`, `store`, the three `derive` scripts, `fake`, `fake-mail` | about 2,000 |
-| 6 | S14 | source and mode connectors: `gmail-api`, `x-api`, `todo-rules`, `workflow-runner`, `delivery` | about 1,600 |
-| 6 | S15 | framework connectors: the `improve` set, `scaffold`, `typescript-check` (replaces `python-check`), `comments-check` | about 2,800 |
-| 7 | S16 | the remaining tests in `tests/` not ported with their module; the full suite green on TypeScript only | - |
-| 8 | S17 | cutover: delete every `.py`, `requirements*.txt`, `conftest.py`, `tests/parity/`; `kernel.yaml`, `limits.yaml`, roles, conformance rules | - |
-| 8 | S18 | docs, CHANGELOG with Upgrading, version 5.0.0 | - |
+| 1 | K1 | `schemas/` for manifest, interface, skill, workflow, config; generated types; `spec.ts`, `ports.ts`, `registry.ts` (load, validate, bind interfaces, reject cycles) | 700 lines |
+| 2 | K2 | `check.ts` (manifest, skill sections, workflow wiring, effects, imports, limits) and `new.ts` with templates for mode, action, skill, workflow, interface | 900 |
+| 2 | K3 | `broker.ts`, `policy.ts`, `sdk.ts`; the resources db, files, secrets, http, events; the confined script runner | 800 |
+| 2 | K4 | `engine.ts`: the `runs` and `events` tables, steps, `call`, approval, wait, foreach, resume, budget, undo | 900 |
+| 3 | K5 | `mcp.ts` and `cli.ts`: check, new, call, submit, runs, approve, resume, build, secret, auth, config | 500 |
+| 3 | K6 | `adapters/claude-code`: agent files, settings, the deny hook, the coordinator document, tier-to-model table | 800 (adapter) |
+| 4 | M1 | `base/interfaces` (`items-store`, `items-source`), `store`, a fake source, and one briefing action run end to end through Claude Code | - |
+| 5 | M2 | `gmail`, `mail-briefing` | - |
+| 5 | M3 | `x`, `feed-briefing` | - |
+| 5 | M4 | `todo`, and `bay import-v4` for local items | - |
+| 6 | M5 | `cos` | - |
+| 6 | M6 | `forge`, with the standards, limits and boundary checks as its scripts | - |
+| 6 | M7 | `improve`, `delivery` | - |
+| 7 | C1 | README, DESIGN.md, INTERFACES.md, CHANGELOG with Upgrading, `kernel.yaml`, `limits.yaml` written from real counts, version 5.0.0, the cutover pull request | - |
 
-Notes on the order:
+The kernel budgets add up to 3,800 lines and leave 200 spare. A slice that needs more than its budget says so before writing the extra, and the reviewer decides whether another part gives it up.
 
-- `guard` (S5) needs only `secretscan` and `ledger`, so it starts early and has the longest review.
-- `model` (S4) is one builder: it is the largest file and everything after it reads its types.
-- A module's own test file is ported in the same slice as the module. S16 covers tests that span modules (`test_boundaries.py`, `test_protection.py`, the goldens).
-- Until stage 6, ported kernel modules are exercised by their TypeScript tests and the harness; the Python connectors keep running on the Python kernel. Stage 6 is the first point where a full call runs on TypeScript end to end.
+After stage 4 the work stops for the owner: the mode runs, the kernel line count is reported, and the owner says continue or change course.
+
+## What every builder is told
+
+- The proposal and this plan are the spec. Where they are silent, choose the smaller design and say so in the report.
+- Read the old code for the behaviour being rebuilt (`git show main:<path>`) and its old tests. Report each behaviour as **kept**, **changed** (how) or **dropped** (why). Nothing is dropped silently.
+- Write the tests first for anything in the Safety section.
+- Change only the files of your slice.
+- Report with the last line of each check, and list anything not verified as not verified.
 
 ## Definition of done for every slice
 
-A builder's pull request is ready for review when all of these hold, and it says so with the last line of each command:
-
-- [DOD-1] (must) Every test function of the ported module's Python test file exists in TypeScript with the same name and the same assertions, and passes.
-- [DOD-2] (must) `tsc --noEmit` and eslint report nothing on the files of the slice.
-- [DOD-3] (must) No `any`, `@ts-ignore`, `@ts-expect-error`, `eslint-disable` or non-null `!`.
-- [DOD-4] (must) The differential harness shows no difference for every command the slice makes runnable.
-- [DOD-5] (must) The Python suite still passes; no Python file is changed, except as this plan names.
-- [DOD-6] (must) The slice changes only the files this plan lists for it.
+- [DOD-1] (must) `tsc --noEmit`, eslint, prettier and knip report nothing on the slice.
+- [DOD-2] (must) No `any`, `@ts-ignore`, `@ts-expect-error`, `eslint-disable`, type assertion other than `as const`, or non-null `!`.
+- [DOD-3] (must) Every exported function and every manifest rule has a test; every refusal in the Safety section has a test that shows it refusing.
+- [DOD-4] (must) `node --test` passes for the whole branch, not just the slice.
+- [DOD-5] (must) The slice is within its line budget, counted after prettier.
+- [DOD-6] (must) The kept, changed and dropped list covers every test function of the old files named for the slice.
 - [DOD-7] (must) No comment lines in kit code; no line over 120 characters; no line packed to save lines.
-- [DOD-8] (must_not) No new runtime dependency.
-- [DOD-9] (should) Each exported function has the same name as its Python counterpart in camelCase, so the two files can be read side by side.
-- [DOD-10] (must) Anything the builder could not verify is listed as unverified, not as done.
+- [DOD-8] (must_not) No new dependency.
+- [DOD-9] (must_not) No name of a runtime (Claude Code, Codex) outside `adapters/`.
+- [DOD-10] (must) For a mode slice: `bay check` is clean, every action has example inputs and expected outputs in `tests/`, every skill has the seven sections, and mode code imports only `bay/sdk.ts`.
 
 ## Review
 
-Fable reviews each pull request once and returns a verdict per DOD id plus these checks:
+Fable reviews each slice once and returns a verdict per DOD id, plus:
 
-- R-1 The TypeScript does what the Python does, read function by function, including the error paths.
-- R-2 Structure rules of the proposal, sections 2 and 3a: no cycle, effects only through `ports`, types generated not hand-written, and the class, function and module rules that no tool enforces.
-- R-3 For S5, S7, S2 and S10: the security behaviour is unchanged, checked against the Safety model in DESIGN.md and, for the guard, the whole golden matrix.
-- R-4 Tests assert behaviour, not implementation; a test weakened to pass is a blocker.
-- R-5 The diff holds nothing the slice did not need.
+- R-1 The code does what the proposal says, read against it section by section.
+- R-2 The code standards that no tool enforces: classes only where there is state and a lifecycle, effects only through `ports`, problems returned as values, names in full words.
+- R-3 For K3, K4, K6 and M6: each refusal in the Safety section is attempted by hand, not only by the builder's tests.
+- R-4 Tests assert behaviour, not implementation. A test written to pass rather than to check is a blocker.
+- R-5 The dropped list: each dropped behaviour is either named in the proposal as dropped or comes back to the owner.
+- R-6 The diff holds nothing the slice did not need.
 
 A failed must item or a blocker goes back to the same builder once. A second failure stops the slice and goes to the owner.
-
-## Phase 2 slices
-
-Each gets its own short proposal and gate after 5.0.0, in the order the owner chooses.
-
-| Slice | Feature | Main files |
-|---|---|---|
-| F1 | Skill contract | `lint.ts`, `scaffold.ts`, a skill template, the 8 `SKILL.md` files, INTERFACES.md |
-| F2 | Resume | `dispatch.ts`, `util.ts` (lock), `cli.ts` (`call --resume`), DESIGN.md |
-| F3 | Undo | `schemas/interface.schema.json`, `dispatch.ts`, `lint.ts`, `ledger.ts`, DESIGN.md |
-| F4 | Codex adapter | adapter interface in `adapter.ts`; `dispatch`, `model`, `hook`, `guard`, `ledger`, `cli`, `conformance` lose their Claude Code names; `adapters/codex/` |
-
-F4 starts with a research step on what Codex can enforce; its result is part of that proposal.
 
 ## Risks
 
 | Risk | Why it matters | What limits it |
 |---|---|---|
-| The guard is weaker after the port | It is the main safety boundary for subagents | The golden matrix must match in full; own slice; R-3; fails closed |
-| No SQLite binding has an authorizer | Agent SQL would lose its sandbox | Spike A before S7; owner decides on the fallback |
-| A subtle YAML or ordering difference | Manifests resolve differently with no error | Spike B; the harness compares `describe` and `catalog` output for every mode |
-| Tests are translated loosely | A green suite would prove nothing | DOD-1 same names and assertions; R-4; test count may not fall |
-| The branch lives a long time | Main moves under it | No other framework change merges until cutover, or it is ported in the same pull request |
-| Builders drift from the structure | The new kernel ends up as tangled as the old | eslint cycle and boundary rules from S0; R-2 |
-| Agent-written code is larger than needed | The limits ratchet starts from a bloated count | R-5; DOD-9 keeps a one-to-one mapping; ceilings are written only at cutover after review |
-
-## Cost against the ceilings
-
-No ceiling is checked against the TypeScript until cutover, because five of the nine measures count Python. At cutover `bay check --limits --write` records the real counts once. `tests` must be at least 463 by the new definition. `top_level_folders` stays 7 and `schemas` stays 16 in the port.
+| The new safety model has a hole the old one did not | It protects your secrets and your files | Spikes B and C before any mode; tests first; R-3 by hand; 4.0.0 stays available |
+| A behaviour is lost without anyone deciding to drop it | No old test will catch it | DOD-6 and R-5 |
+| The kernel does not fit 4,000 lines | The design's main promise | Budgets per slice; the stage 4 checkpoint |
+| Builders drift from the structure | The new kernel becomes as tangled as the old | Cycle and boundary rules from S0; R-2 |
+| Claude Code cannot express a per-step allow-list | Agent steps would be less confined than today | Spike B decides before K6 |
+| The branch is long-lived | Main moves under it | Framework changes wait for cutover |
+| Your to-dos are lost | No source can re-create them | `bay import-v4` in M4, tested on a copy of the real store before cutover |
 
 ## Release
 
-- 5.0.0 at S18. Upgrading: install Node at or above the minimum spike C fixes, run `npm ci` in the kit, run `bay build` in each project. Python connectors outside the kit must be rewritten.
-- 5.1 to 5.4, one per phase 2 slice.
+- 5.0.0 at C1. Upgrading is in the proposal.
+- 5.1: the Codex adapter, starting with research on what Codex can enforce.
+- `bay import-v4` is removed in 5.1.
 
 ## Where the builders need the owner
 
-1. Approval of the proposal and this plan, with the five choices.
-2. Spike results, if any spike fails or changes the proposal.
-3. A second failed review on any slice.
-4. The cutover pull request into main.
-5. Each phase 2 proposal.
+1. Approval of the proposal and this plan.
+2. Spike results, if a spike fails or changes the proposal.
+3. The stage 4 checkpoint.
+4. A second failed review on any slice, or a dropped behaviour the proposal does not name.
+5. The cutover pull request into main.
 
 ## Spike results
 

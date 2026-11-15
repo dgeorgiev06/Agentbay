@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SqlResponse",
+  "description": "The rows a select returned, within the row and time limits.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "columns",
+    "rows"
+  ],
+  "properties": {
+    "columns": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "A column name."
+      },
+      "description": "The names of the columns, in order."
+    },
+    "rows": {
+      "type": "array",
+      "description": "The rows, each a list of cells in column order.",
+      "items": {
+        "type": "array",
+        "description": "One row: its cells in column order."
+      }
+    }
+  }
+}

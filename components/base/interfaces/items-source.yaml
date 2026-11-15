@@ -1,0 +1,11 @@
+name: items-source
+version: 1
+actions:
+  fetch:
+    input: items-source/fetch-request.json
+    output: items-source/fetch-response.json
+    effects: [read, network, spend]
+  describe:
+    input: items-source/describe-request.json
+    output: items-source/describe-response.json
+    effects: [read]

@@ -75,7 +75,9 @@ function startNode(
       timeoutMilliseconds: limits.timeout,
       maximumOutputBytes: limits.output,
     },
-    (line) => lines.push(line),
+    (line) => {
+      lines.push(line);
+    },
   );
   return { lines, send: child.send, ended: child.ended };
 }
@@ -137,6 +139,6 @@ test("the HTTP port does not follow redirects and refuses a response over its ca
     assert.equal(small.body, "small");
     await assert.rejects(http.request({ method: "GET", url: `${base}/big`, headers: {} }), /more than 1000 bytes/);
   } finally {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await new Promise<void>((resolve) => server.close(() => { resolve(); }));
   }
 });

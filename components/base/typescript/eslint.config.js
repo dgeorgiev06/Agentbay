@@ -74,6 +74,10 @@ const bannedSyntax = [
   { selector: "ClassExpression[superClass]", message: "No class inheritance." },
   { selector: "ExportDefaultDeclaration", message: "Named exports only." },
   { selector: "ExportSpecifier[exported.name='default']", message: "Named exports only." },
+  {
+    selector: ":matches(PropertyDefinition, MethodDefinition)[accessibility]",
+    message: "No private, protected or public keyword: a private member is written #name.",
+  },
 ];
 
 const dynamicImportSyntax = {

@@ -9,7 +9,7 @@ Held by: **check** (fails `npm run check`), **review** (the reviewer verifies it
 | Id | Practice | Held by |
 |---|---|---|
 | P-01 | No comments in code. Comments go stale. A name says what; a decision record says why; `bay/README.md` says how the parts fit. | check: lint rule `agentbay/no-comments` |
-| P-02 | No `any`, no `as` except `as const`, no `!`, no enum, no inheritance, named exports, at most three parameters, complexity at most 10. | check: lint |
+| P-02 | The language's own practices, with a good and a bad example each, are in the toolchain's file: for TypeScript, `components/base/typescript/practices.md` (TS-01 to TS-17). A brief's Input names that file. | check: compiler and lint for most; review for the rest |
 | P-03 | Problems are returned as values (`Outcome<T>`), not thrown, except where the process cannot go on. | review |
 | P-04 | Readable before short. No line is packed to save lines. | check: format; review |
 | P-05 | Model the domain in types: a closed set is a union with one shape per case, so a state that cannot happen cannot be written. | review |

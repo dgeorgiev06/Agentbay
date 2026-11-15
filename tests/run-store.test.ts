@@ -305,13 +305,13 @@ test("a SQLite store keeps runs, steps and events when the file is opened again"
   assert.equal((await second.readEvents("run-1")).length, 1);
   second.close();
   const database = new DatabaseSync(file);
-  assert.equal(database.prepare("pragma user_version").get()?.user_version, 1);
+  assert.equal(database.prepare("pragma user_version").get()?.user_version, 2);
   assert.deepEqual(
     database
       .prepare("select name from sqlite_master where type = 'table' and name not like 'sqlite_%' order by name")
       .all()
       .map((row) => row.name),
-    ["events", "runs", "steps"],
+    ["events", "runs", "steps", "task_tokens"],
   );
   database.close();
   remove();

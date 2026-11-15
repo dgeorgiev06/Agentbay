@@ -144,6 +144,20 @@ export type RunStore = EventSink & {
   readonly release: (writer: Writer) => Promise<void>;
 };
 
+export type StoredTaskToken = {
+  readonly hash: string;
+  readonly runId: string;
+  readonly stepKey: string;
+  readonly round: number;
+  readonly issuedAt: string;
+};
+
+export type TaskTokenStore = {
+  readonly replaceTaskToken: (token: StoredTaskToken) => Promise<void>;
+  readonly taskTokens: () => Promise<readonly StoredTaskToken[]>;
+  readonly removeTaskTokens: (runId: string) => Promise<void>;
+};
+
 type Row = Readonly<Record<string, SQLOutputValue>>;
 
 const migrations: readonly string[] = [
@@ -192,6 +206,14 @@ const migrations: readonly string[] = [
     detail text not null
   );
   create index events_by_run on events (run_id, id);`,
+  `create table task_tokens (
+    hash text primary key,
+    run_id text not null references runs (id),
+    step_key text not null,
+    round integer not null,
+    issued_at text not null
+  );
+  create index task_tokens_by_run on task_tokens (run_id);`,
 ];
 
 function textColumn(row: Row, name: string): string {
@@ -301,6 +323,16 @@ function eventOf(row: Row): RunEvent {
   };
 }
 
+function taskTokenOf(row: Row): StoredTaskToken {
+  return {
+    hash: textColumn(row, "hash"),
+    runId: textColumn(row, "run_id"),
+    stepKey: textColumn(row, "step_key"),
+    round: integerColumn(row, "round"),
+    issuedAt: textColumn(row, "issued_at"),
+  };
+}
+
 function stateColumns(state: StoredState): readonly SQLInputValue[] {
   switch (state.status) {
     case "running":
@@ -328,7 +360,7 @@ function isStale(heartbeatAt: string, now: Date): boolean {
   return now.getTime() - new Date(heartbeatAt).getTime() > lockStaleMilliseconds;
 }
 
-export class SqliteRunStore implements RunStore {
+export class SqliteRunStore implements RunStore, TaskTokenStore {
   readonly #database: DatabaseSync;
 
   static async open(folders: Folders, file: string): Promise<SqliteRunStore> {
@@ -503,6 +535,24 @@ export class SqliteRunStore implements RunStore {
       this.#database
         .prepare("update runs set lock_owner = null, lock_heartbeat = null where id = ? and lock_owner = ?")
         .run(writer.runId, writer.owner);
+    });
+
+  readonly replaceTaskToken = (token: StoredTaskToken): Promise<void> =>
+    this.#write(() => {
+      this.#database.prepare("delete from task_tokens where run_id = ?").run(token.runId);
+      this.#database
+        .prepare("insert into task_tokens (hash, run_id, step_key, round, issued_at) values (?, ?, ?, ?, ?)")
+        .run(token.hash, token.runId, token.stepKey, token.round, token.issuedAt);
+    });
+
+  readonly taskTokens = (): Promise<readonly StoredTaskToken[]> => {
+    const rows = this.#database.prepare("select * from task_tokens order by issued_at, run_id").all();
+    return Promise.resolve(rows.map(taskTokenOf));
+  };
+
+  readonly removeTaskTokens = (runId: string): Promise<void> =>
+    this.#write(() => {
+      this.#database.prepare("delete from task_tokens where run_id = ?").run(runId);
     });
 
   #migrate(): void {

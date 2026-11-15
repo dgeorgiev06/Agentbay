@@ -2,6 +2,11 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": ["{tests,components/**/tests,adapters/**/tests}/**/*.test.ts"],
   "project": ["{bay,adapters,components,tests}/**/*.ts"],
+  "ignoreExportsUsedInFile": { "type": true },
+  "ignoreIssues": {
+    "bay/generated/**": ["types"],
+    "bay/ports.ts": ["types"]
+  },
   "eslint": { "config": ["components/base/typescript/eslint.config.js"] },
   "prettier": { "config": ["components/base/typescript/prettier.json"] }
 }

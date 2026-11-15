@@ -12,7 +12,9 @@
     "lint": "eslint --config components/base/typescript/eslint.config.js --max-warnings 0 .",
     "format:check": "prettier --config components/base/typescript/prettier.json --check \"**/*.{ts,js}\" package.json tsconfig.json \"components/base/typescript/*.json\"",
     "deadcode": "knip --config components/base/typescript/knip.json",
-    "check": "npm run typecheck && npm run lint && npm run format:check && npm run deadcode && npm test"
+    "check": "npm run generate:check && npm run typecheck && npm run lint && npm run format:check && npm run deadcode && npm test",
+    "generate": "node bay/generate-types.ts",
+    "generate:check": "node bay/generate-types.ts --check"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
@@ -21,5 +23,9 @@
     "prettier": "3.10.1",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.2"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "yaml": "2.9.1"
   }
 }

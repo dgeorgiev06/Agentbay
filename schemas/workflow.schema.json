@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Workflow",
+  "description": "A workflow of a mode: steps of four kinds, run one after another and saved after each.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "steps"],
+  "properties": {
+    "name": {
+      "description": "The workflow's name.",
+      "$ref": "#/$defs/name"
+    },
+    "trigger": {
+      "description": "What starts the workflow: an event, a schedule, or only a person.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["event"],
+          "properties": {
+            "event": { "description": "The name of the event that starts it.", "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schedule"],
+          "properties": {
+            "schedule": { "description": "A cron expression.", "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["manual"],
+          "properties": {
+            "manual": { "description": "Started only by a person.", "const": true }
+          }
+        }
+      ]
+    },
+    "budget": {
+      "description": "Limits for a run of the workflow.",
+      "$ref": "#/$defs/budget"
+    },
+    "steps": {
+      "description": "The steps, in order.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/step" }
+    }
+  },
+  "$defs": {
+    "name": {
+      "description": "Kebab-case, starting with a letter; not constructor, a name every JavaScript object has.",
+      "type": "string",
+      "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    },
+    "budget": {
+      "description": "Limits for a run; every nested call draws from the same budget.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "items": { "description": "The most items the run may handle.", "type": "integer", "minimum": 0 },
+        "usd": { "description": "The most US dollars the run may spend.", "type": "number", "minimum": 0 },
+        "tokens": { "description": "The most model tokens the run may use.", "type": "integer", "minimum": 0 },
+        "minutes": { "description": "The most minutes the run may take.", "type": "number", "minimum": 0 }
+      }
+    },
+    "step": {
+      "description": "One step: an action, an approval, a wait or a foreach.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "id"],
+          "properties": {
+            "action": {
+              "description": "An action of this mode, or interface.action of an interface it requires.",
+              "type": "string",
+              "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*)?$"
+            },
+            "id": {
+              "description": "The step's id, unique in the whole file; its output is saved under it.",
+              "$ref": "#/$defs/name"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["approval", "id"],
+          "properties": {
+            "approval": {
+              "description": "The question put to the owner about the output of the step before.",
+              "type": "string",
+              "minLength": 1
+            },
+            "id": {
+              "description": "The step's id, unique in the whole file; its output is saved under it.",
+              "$ref": "#/$defs/name"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["wait", "id"],
+          "properties": {
+            "wait": {
+              "description": "How long to wait, as a whole number of minutes, hours or days: 30m, 2h, 3d.",
+              "type": "string",
+              "pattern": "^[1-9][0-9]*[mhd]$"
+            },
+            "id": {
+              "description": "The step's id, unique in the whole file; its output is saved under it.",
+              "$ref": "#/$defs/name"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["foreach", "id", "steps"],
+          "properties": {
+            "foreach": {
+              "description": "A JSON pointer to a list in the output of the step before; the steps run once per item.",
+              "type": "string",
+              "pattern": "^(/[^/]+)*$"
+            },
+            "id": {
+              "description": "The step's id, unique in the whole file; its output is saved under it.",
+              "$ref": "#/$defs/name"
+            },
+            "steps": {
+              "description": "The steps run for each item, in order.",
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/step" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

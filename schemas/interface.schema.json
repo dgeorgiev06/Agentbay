@@ -1,49 +1,58 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v4/Interface",
-  "title": "Capability interface",
-  "description": "Versioned contract: named endpoints with in/out JSON schemas and declared effects. File: interfaces/<name>.v<N>.yaml. binding=connector: implemented by connector code called by the dispatcher. binding=tools: satisfied by runtime tools (Read, Bash, ...) bound in an environment.",
+  "title": "Interface",
+  "description": "A named, versioned set of action signatures with no code, in components/base/interfaces/.",
   "type": "object",
-  "required": ["apiVersion", "kind", "metadata", "spec"],
   "additionalProperties": false,
+  "required": ["name", "version", "actions"],
   "properties": {
-    "apiVersion": { "const": "agentbay/v4" },
-    "kind": { "const": "Interface" },
-    "metadata": {
-      "type": "object",
-      "required": ["name", "description"],
-      "additionalProperties": false,
-      "properties": {
-        "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$" },
-        "description": { "type": "string" }
-      }
+    "name": {
+      "description": "The interface's name; modes refer to it as name@version.",
+      "$ref": "#/$defs/name"
     },
-    "spec": {
+    "version": {
+      "description": "The interface's major version; a change that breaks a caller or an implementer raises it.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "actions": {
+      "description": "The action signatures, by kebab-case name.",
       "type": "object",
-      "required": ["version", "endpoints"],
+      "propertyNames": { "$ref": "#/$defs/name" },
+      "additionalProperties": { "$ref": "#/$defs/signature" }
+    }
+  },
+  "$defs": {
+    "name": {
+      "description": "Kebab-case, starting with a letter; not constructor, a name every JavaScript object has.",
+      "type": "string",
+      "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    },
+    "relativePath": {
+      "description": "A path relative to the interfaces folder that neither starts with / nor contains a .. segment.",
+      "type": "string",
+      "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$)).+$"
+    },
+    "effect": {
+      "description": "A kind of effect an action may have.",
+      "type": "string",
+      "enum": ["read", "write", "network", "spend", "delete"]
+    },
+    "signature": {
+      "description": "What a caller sees of an action: its input, its output and the most effects it may have.",
+      "type": "object",
       "additionalProperties": false,
+      "required": ["input", "output", "effects"],
       "properties": {
-        "version": { "type": "integer", "minimum": 1 },
-        "binding": { "enum": ["connector", "tools"], "default": "connector" },
-        "dispatcherOnly": { "type": "boolean", "default": false, "description": "Run by code steps only: agents never read it, even when a mode needs it (e.g. improve.detect). Other read-only connector endpoints of a mode's needs are readable by the roles of that mode through their use shims." },
-        "endpoints": {
-          "type": "object",
-          "minProperties": 1,
-          "additionalProperties": {
-            "type": "object",
-            "required": ["effects"],
-            "additionalProperties": false,
-            "properties": {
-              "description": { "type": "string" },
-              "ownerOnly": { "type": "boolean", "default": false, "description": "Reached only by the owner's own command (Dispatcher.run_capability, for instance `bay approve <F-id>`): the resolver and lint refuse a step of any mode that runs it." },
-              "in": { "type": "object", "description": "JSON Schema. {\"$ref\": \"item/v1\"} pulls in a data schema." },
-              "out": { "type": "object" },
-              "effects": { "type": "array", "items": { "$ref": "#/$defs/effect" }, "uniqueItems": true }
-            }
-          }
+        "input": { "description": "The JSON Schema file of the input.", "$ref": "#/$defs/relativePath" },
+        "output": { "description": "The JSON Schema file of the output.", "$ref": "#/$defs/relativePath" },
+        "effects": {
+          "description": "The effects an implementation may have; it may declare fewer, never more.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/effect" }
         }
       }
     }
-  },
-  "$defs": { "effect": { "enum": ["read", "write", "network", "spend", "delete"] } }
+  }
 }

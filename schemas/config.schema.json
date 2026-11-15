@@ -1,164 +1,47 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v4/Config",
-  "title": "agentbay.config.yaml",
-  "description": "Per-project user settings. modes.<name> is validated against that mode's config schema; connectors.<name> against the connector's config schema. Settings can only tighten mode constraints and env limits: a cap above the env's `limits:` is refused. Capabilities are bound only in an env manifest (components/<tier>/<mode>/envs/<env>.yaml); there is no config-level binding override.",
+  "title": "Config",
+  "description": "The project file agentbay.config.yaml.",
   "type": "object",
   "additionalProperties": false,
+  "required": ["bindings", "adapter"],
   "properties": {
-    "apiVersion": {
-      "const": "agentbay/v4"
+    "bindings": {
+      "description": "Which mode serves each interface, as interface name: mode name; one major per project in 5.0.0.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/name" },
+      "additionalProperties": { "$ref": "#/$defs/name" }
     },
-    "agent": {
+    "adapter": {
+      "description": "The adapter that runs skill steps.",
+      "$ref": "#/$defs/name"
+    },
+    "settings": {
+      "description": "Settings per mode, as mode name: settings; each is checked against the mode's settings schema.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/name" },
+      "additionalProperties": { "description": "The settings of one mode.", "type": "object" }
+    },
+    "budget": {
+      "description": "The default limits for a run that sets none of its own.",
+      "$ref": "#/$defs/budget"
+    }
+  },
+  "$defs": {
+    "name": {
+      "description": "Kebab-case, starting with a letter; not constructor, a name every JavaScript object has.",
       "type": "string",
-      "description": "The runtime adapter (adapters/<name>/adapter.yaml) whose `profile:` runs every role: how one LLM product maps tiers to models. Default: claude-code."
+      "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*$"
     },
-    "modes": {
-      "type": "object",
-      "additionalProperties": {
-        "type": "object"
-      }
-    },
-    "connectors": {
-      "type": "object",
-      "additionalProperties": {
-        "type": "object"
-      }
-    },
-    "secrets": {
+    "budget": {
+      "description": "Limits for a run; every nested call draws from the same budget.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "provider": {
-          "enum": [
-            "keychain",
-            "env"
-          ]
-        }
-      }
-    },
-    "approve": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "Who decides and what needs a plan. from: where the owner can decide a gate or a backlog item, terminal (an interactive `bay approve`) and/or chat (`bay approve --via chat --quote ...`, relayed by the Chief of Staff and labelled user@chat-via-cos in the ledger); default [terminal]. plans: role steps that run a plan step and an approval gate before the step itself, as <mode>.<endpoint> or <mode>.<endpoint>.<step>. planner: tier and effort of those plan steps.",
-      "properties": {
-        "from": {
-          "type": "array",
-          "minItems": 1,
-          "uniqueItems": true,
-          "items": {
-            "enum": [
-              "terminal",
-              "chat"
-            ]
-          },
-          "default": [
-            "terminal"
-          ]
-        },
-        "plans": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)?$"
-          },
-          "default": []
-        },
-        "planner": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "tier": {
-              "enum": [
-                "fast",
-                "balanced",
-                "deep"
-              ]
-            },
-            "effort": {
-              "enum": [
-                "low",
-                "medium",
-                "high"
-              ]
-            }
-          }
-        }
-      }
-    },
-    "offline": {
-      "type": "boolean",
-      "default": false,
-      "description": "true: every env that has an `offline:` block binds what that block lists (fake sources) and has no network and no secrets. Envs without the block are unchanged. Default false."
-    },
-    "workflows": {
-      "type": "object",
-      "description": "Project workflows: ordered stages composing mode endpoints, run via cos.run. Stage kinds are `call` (<mode>.<endpoint>) and `gate` (approval). `with`, `when`, $in.<field> and $steps.<id>.<field> mean what they mean in a feature's steps. `bay check` checks every target against the registry and every `with` against that endpoint's input schema.",
-      "propertyNames": {
-        "pattern": "^[a-z][a-z0-9-]*$"
-      },
-      "additionalProperties": {
-        "type": "object",
-        "required": [
-          "steps"
-        ],
-        "additionalProperties": false,
-        "properties": {
-          "description": {
-            "type": "string"
-          },
-          "in": {
-            "type": "object",
-            "description": "JSON Schema for this workflow's own input, referenced as $in.<field>."
-          },
-          "steps": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-              "type": "object",
-              "required": [
-                "id"
-              ],
-              "additionalProperties": false,
-              "oneOf": [
-                {
-                  "required": [
-                    "call"
-                  ]
-                },
-                {
-                  "required": [
-                    "gate"
-                  ]
-                }
-              ],
-              "properties": {
-                "id": {
-                  "type": "string",
-                  "pattern": "^[a-z][a-z0-9-]*$"
-                },
-                "call": {
-                  "type": "string",
-                  "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
-                  "description": "The endpoint this stage runs, as `bay call` spells it."
-                },
-                "with": {
-                  "type": "object",
-                  "description": "Input for the endpoint. $in.<field> and $steps.<id>.<field> are substituted; keys whose value is missing are dropped."
-                },
-                "when": {
-                  "type": "string",
-                  "pattern": "^!?\\$(?:in|steps)\\.[A-Za-z][A-Za-z0-9-]*(?:\\.[A-Za-z][A-Za-z0-9-]*)*$",
-                  "description": "Skip the stage unless this value is truthy; a leading `!` skips when it is truthy instead. A gate takes no `when` (`bay check` refuses it)."
-                },
-                "gate": {
-                  "type": "string",
-                  "description": "Approval gate: the run stops and only `bay approve` passes it. It takes no `when`."
-                }
-              }
-            }
-          }
-        }
+        "items": { "description": "The most items the run may handle.", "type": "integer", "minimum": 0 },
+        "usd": { "description": "The most US dollars the run may spend.", "type": "number", "minimum": 0 },
+        "tokens": { "description": "The most model tokens the run may use.", "type": "integer", "minimum": 0 },
+        "minutes": { "description": "The most minutes the run may take.", "type": "number", "minimum": 0 }
       }
     }
   }

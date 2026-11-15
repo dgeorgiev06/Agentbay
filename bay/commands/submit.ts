@@ -1,16 +1,8 @@
 import { resolve } from "node:path";
-import {
-  jsonArgument,
-  refusedResult,
-  usageResult,
-  withKernel,
-  type CommandResult,
-  type Invocation,
-} from "../command-context.ts";
+import { jsonArgument, usageResult, withKernel, type CommandResult, type Invocation } from "../command-context.ts";
 import type { Command } from "../command-line.ts";
 import type { Json, Spend } from "../contracts.ts";
-import { submittedOutput } from "../run-report.ts";
-import { checkTaskToken } from "../runs/task-tokens.ts";
+import { runResult } from "../run-report.ts";
 import { failedWith, problemText, unplacedProblem, type Outcome } from "../outcome.ts";
 
 const usage = "submit <json | @file | -> --token <token> [--tokens <n>] [--usd <x>]";
@@ -68,18 +60,10 @@ async function runSubmit(invocation: Invocation): Promise<CommandResult> {
   if (!output.ok) {
     return usageResult(problemText(output.problems), usage);
   }
-  return withKernel(invocation, async (kernel) => {
-    const checked = await checkTaskToken(
-      { tokens: kernel.runs.agentTools.store, runs: kernel.runs.agentTools.store },
-      token,
-    );
-    if (!checked.ok) {
-      return refusedResult(problemText(checked.problems));
-    }
-    const { runId, stepKey } = checked.value;
-    const result = await kernel.runs.agentTools.engine.submit(runId, stepKey, { output: output.value, spent });
-    return submittedOutput(kernel, result, stepKey);
-  });
+  const submission = { output: output.value, spent };
+  return withKernel(invocation, async (kernel) =>
+    runResult(kernel.layout, await kernel.runs.submit(token, submission), { after: "submit" }),
+  );
 }
 
 export const submitCommand: Command = {

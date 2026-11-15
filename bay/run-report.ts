@@ -9,11 +9,13 @@ import type { Outcome } from "./outcome.ts";
 import { skillNameOf } from "./skill-tools.ts";
 import { issueTaskToken } from "./task-tokens.ts";
 import { askedByKind } from "./tools.ts";
-import { storedWaiting } from "./waiting.ts";
+import { skillStepAt, storedWaiting } from "./waiting.ts";
 import { problemsResult, type CommandResult, type JsonObject } from "./command-context.ts";
 import { shownProblems } from "./layout.ts";
 
-export type TokenChoice = "issue" | "replace" | "withhold";
+export type TokenChoice = "issue" | "replace" | "withhold" | "defer";
+
+export type TokenFor = (waitingKey: string) => TokenChoice;
 
 export type ReportOptions = {
   readonly token?: TokenChoice;
@@ -33,6 +35,7 @@ const tokenNotices: { readonly [Choice in TokenChoice]: (runId: string) => strin
   replace: () => "A new task token was issued; the token shown earlier for this task no longer works.",
   withhold: (runId) =>
     `The token was shown when this task was issued. bay runs ${runId} --new-token replaces it with a new one.`,
+  defer: (runId) => `The run waits for another skill step; bay runs ${runId} --new-token gives its task with a token.`,
 };
 
 function targetText(run: StoredRun): string {
@@ -135,8 +138,8 @@ async function taskOf(kernel: Kernel, request: TaskRequest): Promise<Task> {
   const { task, waitingKey } = request;
   const folder = kernel.system.modes.get(task.place.mode)?.folder ?? "";
   const place = { runId: task.place.runId, stepKey: waitingKey, round: task.round };
-  const token =
-    request.token === "withhold" ? undefined : await issueTaskToken(kernel.store, place, kernel.ports.clock.now());
+  const shown = request.token === "issue" || request.token === "replace";
+  const token = shown ? await issueTaskToken(kernel.store, place, kernel.ports.clock.now()) : undefined;
   return {
     agent: agentName(task.place.mode, skillNameOf(task.skill)),
     token,
@@ -306,7 +309,7 @@ export async function skillWaitOf(kernel: Kernel, runId: string): Promise<string
 export async function engineOutput(
   kernel: Kernel,
   result: Outcome<RunView>,
-  skillWaitBefore: string | undefined,
+  tokenFor: TokenFor,
 ): Promise<CommandResult> {
   if (!result.ok) {
     return problemsResult(shownProblems(kernel.layout, result.problems));
@@ -316,6 +319,16 @@ export async function engineOutput(
     return runOutput(kernel, result.value.id);
   }
   const waiting = state.waiting;
-  const entered = waiting.reason === "skill" && waiting.stepKey !== skillWaitBefore;
-  return runOutput(kernel, result.value.id, { waiting, token: entered ? "issue" : "withhold" });
+  const token = waiting.reason === "skill" ? tokenFor(waiting.stepKey) : "withhold";
+  return runOutput(kernel, result.value.id, { waiting, token });
+}
+
+export async function submittedOutput(
+  kernel: Kernel,
+  result: Outcome<RunView>,
+  submittedKey: string,
+): Promise<CommandResult> {
+  const run = result.ok ? await kernel.store.readRun(result.value.id) : undefined;
+  const again = run !== undefined && typeof skillStepAt(kernel, run, submittedKey) !== "string";
+  return engineOutput(kernel, result, () => (again ? "issue" : "defer"));
 }

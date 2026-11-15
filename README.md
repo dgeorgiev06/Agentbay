@@ -147,7 +147,7 @@ tests/           python3 tests/run.py (the tests of a component live in its own 
 | `bay catalog [<name>] [--roles]`, `bay describe <name>` | what is installed, resolved; `--roles` lists the role units |
 | `bay show <mode> --resolved` | a mode's features after `extends`, with the file each comes from |
 | `bay call <mode>.<endpoint> '<json>'` | run a feature |
-| `bay submit <callId> <step> '<json>'`, `bay show <callId>`, `bay show reclaim <runId>`, `bay show close <callId> --reason <text>` | hand back a step's output; current state; mark a stuck run reclaimed; end an open call as abandoned |
+| `bay submit '<json>' --token <token>`, `bay show <callId>`, `bay show reclaim <runId>`, `bay show close <callId> --reason <text>` | hand back a step's output; current state; mark a stuck run reclaimed; end an open call as abandoned |
 | `bay approve <callId\|runId> [--reject]` | pass an approval gate in your terminal, or from chat when `approve.from` lists chat |
 | `bay approve <F-id> [--defer\|--wontfix]` | decide a backlog item from the analysis mode (follows `approve.from`, like a gate) |
 | `bay status [--agents\|--log]`, `bay note <ref> "text"` | calls, steps, cost, agent runs (grouped by role, mode, model, tier); the raw run log; a note |

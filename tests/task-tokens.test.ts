@@ -7,7 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import type { StoredState, Writer } from "../bay/run-store.ts";
 import { SqliteRunStore } from "../bay/sqlite-run-store.ts";
-import { checkTaskToken, checkTaskTokenFor, issueTaskToken } from "../bay/task-tokens.ts";
+import { checkTaskToken, issueTaskToken } from "../bay/task-tokens.ts";
 import { problemText } from "../bay/outcome.ts";
 
 type Opened = {
@@ -89,20 +89,6 @@ test("a wrong token is refused", async () => {
     assert.ok(!checked.ok, wrong);
     assert.match(problemText(checked.problems), /The token is not valid/);
   }
-  context.remove();
-});
-
-test("a token for another step, or another run, is refused for this one", async () => {
-  const context = opened();
-  await runWaitingAt(context, "run-1", "1#1");
-  await runWaitingAt(context, "run-2", "1#1");
-  const first = await issueTaskToken(context.store, { runId: "run-1", stepKey: "1#1", round: 1 }, now);
-  const otherStep = await checkTaskTokenFor(stores(context), first, { runId: "run-1", stepKey: "2#1" });
-  assert.ok(!otherStep.ok);
-  assert.match(problemText(otherStep.problems), /belongs to step 1#1 of run run-1, not to step 2#1 of run run-1/);
-  const otherRun = await checkTaskTokenFor(stores(context), first, { runId: "run-2", stepKey: "1#1" });
-  assert.ok(!otherRun.ok);
-  assert.ok((await checkTaskTokenFor(stores(context), first, { runId: "run-1", stepKey: "1#1" })).ok);
   context.remove();
 });
 

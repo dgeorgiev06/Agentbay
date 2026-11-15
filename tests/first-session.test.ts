@@ -191,11 +191,11 @@ test("the owner's first session in a fresh project beside the kit runs from new 
   assert.equal(refused.status, 1, refused.output);
   assert.equal(refused.output.includes("not for the step"), false);
 
-  const short = taskOf(succeeded(["submit", runId, "1#1", '{"text":"short"}', "--token", token]));
+  const short = taskOf(succeeded(["submit", '{"text":"short"}', "--token", token]));
   assert.equal(numberField(short, "round"), 2);
   assert.deepEqual(fieldOf(short, "feedback"), ["Write at least 12 characters."]);
   const retry = textField(short, "token") ?? "";
-  const done = succeeded(["submit", runId, "1#2", '{"text":"tidy me, tidied"}', "--token", retry]);
+  const done = succeeded(["submit", '{"text":"tidy me, tidied"}', "--token", retry]);
   const run = fieldOf(done, "run") ?? null;
   assert.equal(textField(run, "status"), "done");
   assert.equal(text(fieldOf(run, "output")), "tidy me, tidied");

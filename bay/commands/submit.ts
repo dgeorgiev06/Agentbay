@@ -9,11 +9,11 @@ import {
 } from "../command-context.ts";
 import type { Command } from "../command-line.ts";
 import type { Json, Spend } from "../contracts.ts";
-import { engineOutput } from "../run-report.ts";
-import { checkTaskTokenFor } from "../task-tokens.ts";
+import { submittedOutput } from "../run-report.ts";
+import { checkTaskToken } from "../task-tokens.ts";
 import { failedWith, problemText, unplacedProblem, type Outcome } from "../outcome.ts";
 
-const usage = "submit <run> <stepKey> <json | @file | -> --token <token> [--tokens <n>] [--usd <x>]";
+const usage = "submit <json | @file | -> --token <token> [--tokens <n>] [--usd <x>]";
 
 function amountOf(invocation: Invocation, name: string): number | string {
   const text = invocation.values.get(name);
@@ -55,7 +55,7 @@ async function outputOf(invocation: Invocation, source: string): Promise<Outcome
 }
 
 async function runSubmit(invocation: Invocation): Promise<CommandResult> {
-  const [runId = "", stepKey = "", source = ""] = invocation.positionals;
+  const [source = ""] = invocation.positionals;
   const token = invocation.values.get("token");
   if (token === undefined) {
     return usageResult("submit needs --token: the token the task carries.", usage);
@@ -69,12 +69,13 @@ async function runSubmit(invocation: Invocation): Promise<CommandResult> {
     return usageResult(problemText(output.problems), usage);
   }
   return withKernel(invocation, async (kernel) => {
-    const checked = await checkTaskTokenFor({ tokens: kernel.store, runs: kernel.store }, token, { runId, stepKey });
+    const checked = await checkTaskToken({ tokens: kernel.store, runs: kernel.store }, token);
     if (!checked.ok) {
       return refusedResult(problemText(checked.problems));
     }
+    const { runId, stepKey } = checked.value;
     const result = await kernel.engine.submit(runId, stepKey, { output: output.value, spent });
-    return engineOutput(kernel, result, stepKey);
+    return submittedOutput(kernel, result, stepKey);
   });
 }
 
@@ -87,6 +88,6 @@ export const submitCommand: Command = {
     { name: "tokens", takesValue: true },
     { name: "usd", takesValue: true },
   ],
-  positionals: { least: 3, most: 3 },
+  positionals: { least: 1, most: 1 },
   handler: runSubmit,
 };

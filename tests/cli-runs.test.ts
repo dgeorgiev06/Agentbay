@@ -151,51 +151,78 @@ test("call refuses a wrong command line with exit 2 and an engine refusal with e
   });
 });
 
-test("submit needs the task's own token and reads the output from JSON, a file or stdin", async () => {
+test("submit takes the output and the task's token, and reads the output from JSON, a file or stdin", async () => {
   await withProject(async (project) => {
     const root = ["--project", project.root];
     const task = taskOf((await bay(["call", "writer.compose", '{"name":"Ada"}', ...root, "--json"])).json);
-    const other = taskOf((await bay(["call", "writer.compose", '{"name":"Bo"}', ...root, "--json"])).json);
     const output = '{"text":"short"}';
-    assert.equal((await bay(["submit", task.runId, task.stepKey, output, ...root])).exitCode, 2);
-    const wrong = await bay(["submit", task.runId, task.stepKey, output, "--token", other.token, ...root]);
-    assert.equal(wrong.exitCode, 1);
-    assert.match(wrong.output, new RegExp(`The token belongs to step 1#1 of run ${other.runId}`));
-    const badSpend = await bay([
-      "submit",
-      task.runId,
-      task.stepKey,
-      output,
-      "--token",
-      task.token,
-      "--usd",
-      "-2",
-      ...root,
-    ]);
+    const badSpend = await bay(["submit", output, "--token", task.token, "--usd", "-2", ...root]);
     assert.equal(badSpend.exitCode, 2);
     assert.match(badSpend.output, /--usd takes a number of at least 0/);
     await project.write("short.json", output);
-    const fromFile = await bay(
-      ["submit", task.runId, task.stepKey, "@short.json", "--token", task.token, ...root, "--json"],
-      {
-        workingDirectory: project.root,
-      },
-    );
+    const fromFile = await bay(["submit", "@short.json", "--token", task.token, ...root, "--json"], {
+      workingDirectory: project.root,
+    });
     const retry = taskOf(fromFile.json);
     assert.equal(retry.stepKey, "1#2");
     assert.deepEqual(fieldOf(fieldOf(runOf(fromFile.json), "task") ?? {}, "feedback"), [
       "The note has 5 characters; write at least 20.",
     ]);
     const terminal = fakeTerminal({ input: '{"text":"Hello, Ada, and welcome back."}' });
-    const fromStdin = await bay(
-      ["submit", task.runId, retry.stepKey, "-", "--token", retry.token, "--tokens", "42", ...root, "--json"],
-      { terminal },
-    );
+    const fromStdin = await bay(["submit", "-", "--token", retry.token, "--tokens", "42", ...root, "--json"], {
+      terminal,
+    });
     assert.equal(fromStdin.exitCode, 0, fromStdin.output);
     assert.equal(textField(runOf(fromStdin.json), "status"), "done");
     assert.equal(numberField(fieldOf(runOf(fromStdin.json), "spent") ?? {}, "tokens"), 42);
-    const missing = await bay(["submit", task.runId, "1#3", "@nowhere.json", "--token", retry.token, ...root]);
+    const missing = await bay(["submit", "@nowhere.json", "--token", retry.token, ...root]);
     assert.equal(missing.exitCode, 2);
+    assert.match(missing.output, /The file nowhere\.json does not exist\./);
+  });
+});
+
+test("submit refuses a run or step argument, a missing token, an unknown token and a spent token", async () => {
+  await withProject(async (project) => {
+    const root = ["--project", project.root];
+    const task = taskOf((await bay(["call", "writer.compose", '{"name":"Ada"}', ...root, "--json"])).json);
+    const output = '{"text":"Hello, Ada, and welcome back."}';
+    const named = await bay(["submit", task.runId, task.stepKey, output, "--token", task.token, ...root]);
+    assert.equal(named.exitCode, 2);
+    assert.match(named.output, /^bay submit takes 1 arguments, but 3 were given\.$/m);
+    const runOnly = await bay(["submit", task.runId, output, "--token", task.token, ...root]);
+    assert.equal(runOnly.exitCode, 2);
+    assert.match(runOnly.output, /^bay submit takes 1 arguments, but 2 were given\.$/m);
+    const tokenless = await bay(["submit", output, ...root]);
+    assert.equal(tokenless.exitCode, 2);
+    assert.match(tokenless.output, /^submit needs --token: the token the task carries\.$/m);
+    const unknown = await bay(["submit", output, "--token", "made-up", ...root]);
+    assert.equal(unknown.exitCode, 1);
+    assert.match(unknown.output, /The token is not valid: it was never issued/);
+    assert.equal((await bay(["submit", output, "--token", task.token, ...root])).exitCode, 0);
+    const spent = await bay(["submit", output, "--token", task.token, ...root]);
+    assert.equal(spent.exitCode, 1);
+    assert.match(spent.output, new RegExp(`issued for step 1#1 of run ${task.runId}, which is no longer waiting`));
+  });
+});
+
+test("submit never prints the token of the next skill step, and says how the coordinator gets its task", async () => {
+  await withProject(async (project) => {
+    const root = ["--project", project.root];
+    const started = await bay(["call", "--workflow", "writer:workflows/twice.yaml", ...root, "--json"]);
+    const first = taskOf(started.json);
+    assert.equal(first.stepKey, "first/1#1");
+    const good = '{"text":"Hello, Ada, and welcome back."}';
+    const submitted = await bay(["submit", good, "--token", first.token, ...root, "--json"]);
+    assert.equal(submitted.exitCode, 0, submitted.output);
+    const task = fieldOf(runOf(submitted.json), "task") ?? null;
+    assert.equal(textField(task, "stepKey"), "second/1#1");
+    assert.equal(fieldOf(task, "token"), undefined);
+    assert.doesNotMatch(submitted.output, /"token":/);
+    const notice = textField(runOf(submitted.json), "notice") ?? "";
+    assert.match(notice, new RegExp(`bay runs ${first.runId} --new-token gives its task`));
+    const second = taskOf((await bay(["runs", first.runId, "--new-token", ...root, "--json"])).json);
+    assert.equal(second.stepKey, "second/1#1");
+    assert.equal((await query(project, second.token)).exitCode, 0);
   });
 });
 

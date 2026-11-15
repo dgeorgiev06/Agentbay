@@ -111,7 +111,7 @@ const writerMode = {
       ],
     },
   },
-  workflows: ["workflows/review.yaml"],
+  workflows: ["workflows/review.yaml", "workflows/twice.yaml"],
 };
 
 const reviewWorkflow = {
@@ -120,6 +120,15 @@ const reviewWorkflow = {
   steps: [
     { id: "fetch", action: "greeting-source.fetch" },
     { id: "keep", approval: "Keep this greeting?", show: "$steps.fetch.output" },
+  ],
+};
+
+const twiceWorkflow = {
+  name: "twice",
+  trigger: { manual: true },
+  steps: [
+    { id: "first", action: "compose", input: { name: "Ada" } },
+    { id: "second", action: "compose", input: { name: "Ada" } },
   ],
 };
 
@@ -224,6 +233,7 @@ function writerFiles(): Record<string, string> {
     ),
     [`${folder}/skills/draft/SKILL.md`]: skillText,
     [`${folder}/workflows/review.yaml`]: stringify(reviewWorkflow),
+    [`${folder}/workflows/twice.yaml`]: stringify(twiceWorkflow),
     [`${folder}/migrations/0001-notes.sql`]:
       "create table notes (id integer primary key, text text not null);\n" +
       "insert into notes (text) values ('The first note.');\n",

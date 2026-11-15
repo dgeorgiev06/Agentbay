@@ -261,11 +261,6 @@ export async function runOutput(kernel: Kernel, runId: string, options: OldOptio
   return runResult(kernel.layout, shown, after === undefined ? rest : { ...rest, after });
 }
 
-export async function skillWaitOf(kernel: Kernel, runId: string): Promise<string | undefined> {
-  const state = (await kernel.runs.agentTools.store.readRun(runId))?.state;
-  return state?.status === "waiting" && state.reason === "skill" ? state.stepKey : undefined;
-}
-
 export async function engineOutput(
   kernel: Kernel,
   result: Outcome<RunView>,

@@ -32,9 +32,6 @@ breaks:
   - from: bay/check.ts
     to: bay/spec.ts
     rule: private-file
-  - from: bay/commands/resume.ts
-    to: bay/runs/run-state.ts
-    rule: private-file
   - from: bay/commands/submit.ts
     to: bay/runs/task-tokens.ts
     rule: private-file

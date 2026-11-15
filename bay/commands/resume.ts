@@ -3,9 +3,9 @@ import type { Command } from "../command-line.ts";
 import { measures } from "../contracts.ts";
 import type { Budget } from "../generated/mode.ts";
 import type { Kernel } from "../kernel.ts";
-import type { RunView } from "../runs/run-state.ts";
 import type { Outcome } from "../outcome.ts";
-import { engineOutput, skillWaitOf } from "../run-report.ts";
+import { runResult } from "../run-report.ts";
+import type { Run } from "../runs/runs.ts";
 
 type Form =
   | { readonly kind: "due" }
@@ -69,7 +69,7 @@ function formOf(invocation: Invocation): Form | string {
 }
 
 async function resumeDue(kernel: Kernel): Promise<CommandResult> {
-  const results = await kernel.runs.agentTools.engine.tick(kernel.ports.clock.now());
+  const results = await kernel.runs.wakeDue();
   const woken = results.flatMap((result) => (result.ok ? [result.value] : []));
   const problems = results.flatMap((result) => (result.ok ? [] : result.problems));
   if (problems.length > 0) {
@@ -80,14 +80,14 @@ async function resumeDue(kernel: Kernel): Promise<CommandResult> {
   return { exitCode: 0, json, text: lines.length === 0 ? "No run is due." : lines.join("\n") };
 }
 
-function engineCall(kernel: Kernel, form: Exclude<Form, { readonly kind: "due" }>): Promise<Outcome<RunView>> {
+function runsCall(kernel: Kernel, form: Exclude<Form, { readonly kind: "due" }>): Promise<Outcome<Run>> {
   switch (form.kind) {
     case "resume":
-      return kernel.runs.agentTools.engine.resume(form.runId, { rerunUnfinished: form.rerun });
+      return kernel.runs.resume(form.runId, { rerun: form.rerun });
     case "extend":
-      return kernel.runs.agentTools.engine.extendBudget(form.runId, form.extra);
+      return kernel.runs.extend(form.runId, form.extra);
     case "stop":
-      return kernel.runs.agentTools.engine.stop(form.runId);
+      return kernel.runs.stop(form.runId);
   }
 }
 
@@ -96,13 +96,9 @@ function runResume(invocation: Invocation): Promise<CommandResult> {
   if (typeof form === "string") {
     return Promise.resolve(usageResult(form, usage));
   }
-  return withKernel(invocation, async (kernel) => {
-    if (form.kind === "due") {
-      return resumeDue(kernel);
-    }
-    const before = await skillWaitOf(kernel, form.runId);
-    return engineOutput(kernel, await engineCall(kernel, form), (key) => (key === before ? "withhold" : "issue"));
-  });
+  return withKernel(invocation, async (kernel) =>
+    form.kind === "due" ? resumeDue(kernel) : runResult(kernel.layout, await runsCall(kernel, form)),
+  );
 }
 
 export const resumeCommand: Command = {

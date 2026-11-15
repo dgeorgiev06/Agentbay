@@ -4,7 +4,7 @@ import { checkSystem, type CheckReport, type FileListing } from "../bay/check.ts
 import { fakeFileSystem, type FakeFileSystem } from "./fakes.ts";
 import { layout, rooted, validFiles } from "./system-fixture.ts";
 
-const notesSkillFile = "components/modes/notes/skills/write-note/SKILL.md";
+export const notesSkillFile = "components/modes/notes/skills/write-note/SKILL.md";
 
 export const limitsText = [
   "kernel_lines: 4000",
@@ -16,7 +16,7 @@ export const limitsText = [
   "",
 ].join("\n");
 
-const skillSections = {
+export const skillSections = {
   input: ["## Input", "", "One note request, as schemas/add-input.json describes.", ""],
   output: ["## Output", "", "The note, as schemas/add-output.json describes.", ""],
   done: [
@@ -32,7 +32,7 @@ const skillSections = {
   rules: ["## Rules and constraints", "", "Never invent a source.", ""],
 } as const;
 
-function skillText(sections: readonly (readonly string[])[], name = "write-note"): string {
+export function skillText(sections: readonly (readonly string[])[], name = "write-note"): string {
   const frontMatter = ["---", `name: ${name}`, "description: Writes one note from the input.", "---", ""];
   return [...frontMatter, ...sections.flat()].join("\n");
 }

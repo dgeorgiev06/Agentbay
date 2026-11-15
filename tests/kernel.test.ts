@@ -63,7 +63,7 @@ test("a mode's database is made when first used, with its migrations applied bef
   const started = await kernel.engine.startAction("writer.compose", { name: "Ada" });
   assert.ok(started.ok && started.value.state.status === "waiting", JSON.stringify(started));
   assert.ok(!existsSync(grants.databaseFile), "a script that never used context.db made the database");
-  const place = { runId: "none", mode: "writer", action: "compose", stepIndex: 0, stepKey: "0" };
+  const place = { runId: "none", mode: "writer", action: "compose", stepKey: "0" };
   const broker = kernel.brokerFor(place, permissions);
   try {
     assert.deepEqual(await broker.query("select text from notes"), { ok: true, value: [{ text: "The first note." }] });

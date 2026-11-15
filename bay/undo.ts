@@ -2,14 +2,12 @@ import { runNestedAction } from "./action-steps.ts";
 import { noSpend, rootFrame, type BudgetFrame } from "./budget.ts";
 import type { Json, Spend } from "./contracts.ts";
 import type { Action } from "./generated/mode.ts";
-import { textField } from "./json.ts";
 import type { System } from "./registry.ts";
 import type { StepRecord } from "./run-store.ts";
 import type { RunStatus, UndoEntry, UndoReport } from "./run-state.ts";
+import { isInsideFrame, isUndoKey, undoStepKey } from "./step-key.ts";
 import { resolveOwnAction, type ActionTarget } from "./targets.ts";
 import { eventOf, type Progress, type Walk } from "./walk.ts";
-
-const undoPrefix = "undo[";
 
 type FinishedAction = {
   readonly entry: UndoEntry;
@@ -42,19 +40,16 @@ function undoTargetOf(system: System, mode: string, action: Action | undefined):
 }
 
 function finishedActionOf(system: System, record: StepRecord): FinishedAction | undefined {
-  if (record.status !== "finished" || (record.kind !== "call" && record.kind !== "action")) {
+  const nested = record.kind === "call" || record.kind === "action";
+  if (record.status !== "done" || !nested || isUndoKey(record.key)) {
     return undefined;
   }
-  if (record.key.startsWith(undoPrefix)) {
-    return undefined;
-  }
-  const modeName = textField(record.detail, "mode") ?? "";
-  const actionName = textField(record.detail, "action") ?? "";
+  const { mode: modeName, action: actionName, caller } = record.detail;
   const target = resolveOwnAction(system, modeName, actionName);
   const action = typeof target === "string" ? undefined : target.action;
   return {
     entry: { stepKey: record.key, action: `${modeName}.${actionName}` },
-    caller: textField(record.detail, "caller"),
+    caller,
     key: record.key,
     output: record.output,
     finishOrder: record.finishOrder,
@@ -80,7 +75,7 @@ function coversItsSteps(finished: FinishedAction): boolean {
 }
 
 function isCovered(finished: FinishedAction, all: readonly FinishedAction[]): boolean {
-  return all.some((outer) => finished.key.startsWith(`${outer.key}/`) && coversItsSteps(outer));
+  return all.some((outer) => isInsideFrame(finished.key, outer.key) && coversItsSteps(outer));
 }
 
 export function undoPlan(system: System, records: readonly StepRecord[]): UndoPlan {
@@ -100,7 +95,7 @@ function isNeeded(plan: UndoPlan): boolean {
 }
 
 export function hasUndoRecords(records: ReadonlyMap<string, StepRecord>): boolean {
-  return [...records.keys()].some((key) => key.startsWith(undoPrefix));
+  return [...records.keys()].some(isUndoKey);
 }
 
 function undoOne(
@@ -113,7 +108,7 @@ function undoOne(
     readonly caller: string | undefined;
   },
 ): Promise<Progress> {
-  const key = `${undoPrefix}${String(at.index)}]`;
+  const key = undoStepKey(at.index);
   const events = hasUndoRecords(walk.records) ? [] : [eventOf(walk, "undo.started", {})];
   const nested = { key, kind: "undo" as const, target: at.target, input: at.input, caller: at.caller, events };
   return runNestedAction(walk, budget, nested);
@@ -135,7 +130,7 @@ export async function runUndo(walk: Walk, reason: string): Promise<UndoOutcome> 
     }
     const at = { index, target: finished.target, input: finished.output, caller: finished.caller };
     const progress = await undoOne(undoWalk, budget, at);
-    switch (progress.kind) {
+    switch (progress.status) {
       case "waiting":
         return { status: { status: "waiting", waiting: progress.waiting }, spent: budget.spent };
       case "done":

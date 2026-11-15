@@ -183,7 +183,7 @@ function settledSubmission(run: RunView, record: StepRecord | undefined): Json {
     status: run.state.status,
     ...(waiting === undefined ? {} : { waitingFor: waiting.reason }),
   };
-  return { accepted: record?.status === "finished", run: summary, ...reason, ...next };
+  return { accepted: record?.status === "done", run: summary, ...reason, ...next };
 }
 
 async function submittedResult(call: ToolCall, result: Outcome<RunView>): Promise<Outcome<Json>> {

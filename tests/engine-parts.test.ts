@@ -18,7 +18,7 @@ function finishedAction(key: string, action: string, order: number): StepRecord 
     input: {},
     detail: { mode, action: name },
     startedAt: "t",
-    status: "finished",
+    status: "done",
     output: { id: key },
     spent,
     finishOrder: order,
@@ -53,11 +53,18 @@ async function walkOf(changes: Partial<Pick<Walk, "phase" | "stopReason">>): Pro
 test("replayed returns the saved result of a settled step and charges its spend; a started step replays nothing", () => {
   const budget = rootFrame({ items: 5 });
   assert.equal(replayed(budget, undefined), undefined);
-  const started: StepRecord = { key: "0", kind: "script", input: 1, detail: {}, startedAt: "t", status: "started" };
+  const started: StepRecord = {
+    key: "0",
+    kind: "script",
+    input: 1,
+    detail: { script: "scripts/a.ts" },
+    startedAt: "t",
+    status: "started",
+  };
   assert.equal(replayed(budget, started), undefined);
-  assert.deepEqual(replayed(budget, finishedAction("0", "store.put", 1)), { kind: "done", output: { id: "0" } });
+  assert.deepEqual(replayed(budget, finishedAction("0", "store.put", 1)), { status: "done", output: { id: "0" } });
   const failed: StepRecord = { ...started, status: "failed", reason: "no", spent, finishOrder: 2, finishedAt: "t" };
-  assert.deepEqual(replayed(budget, failed), { kind: "failed", reason: "no" });
+  assert.deepEqual(replayed(budget, failed), { status: "failed", reason: "no" });
   assert.equal(budget.spent.items, 2);
 });
 
@@ -67,12 +74,12 @@ test("the gate stops a stopped run, holds an overspent one, and lets the undo ph
   const main = await walkOf({});
   assert.deepEqual(gate(main, rootFrame({}), "0"), undefined);
   assert.deepEqual(gate(main, over, "3"), {
-    kind: "waiting",
+    status: "waiting",
     waiting: { reason: "budget", stepKey: "3", overrun: { measure: "items", limit: 0, spent: 1 } },
   });
   const stopped = await walkOf({ stopReason: "stop" });
-  assert.deepEqual(gate(stopped, over, "3"), { kind: "failed", reason: "stop" });
-  assert.deepEqual(stopGate(stopped), { kind: "failed", reason: "stop" });
+  assert.deepEqual(gate(stopped, over, "3"), { status: "failed", reason: "stop" });
+  assert.deepEqual(stopGate(stopped), { status: "failed", reason: "stop" });
   const undoing = await walkOf({ stopReason: "stop", phase: "undo" });
   assert.equal(gate(undoing, over, "3"), undefined);
   assert.equal(stopGate(undoing), undefined);

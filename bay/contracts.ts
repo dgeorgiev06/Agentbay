@@ -34,7 +34,6 @@ export type StepPlace = {
   readonly runId: string;
   readonly mode: string;
   readonly action: string;
-  readonly stepIndex: number;
   readonly stepKey: string;
 };
 
@@ -53,9 +52,10 @@ export type ScriptRequest = {
   readonly skillInput?: Json;
 };
 
-export type StepOutcome =
-  | { readonly status: "done"; readonly output: Json; readonly spent: Spend }
-  | { readonly status: "failed"; readonly reason: string; readonly spent: Spend };
+export type Settled =
+  { readonly status: "done"; readonly output: Json } | { readonly status: "failed"; readonly reason: string };
+
+export type StepOutcome = Settled & { readonly spent: Spend };
 
 export type ScriptRunner = {
   readonly run: (request: ScriptRequest) => Promise<StepOutcome>;

@@ -18,7 +18,8 @@ import {
 import { loadPolicedSystem } from "./policy.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, Folders, Http, Processes, Removal } from "./ports.ts";
 import type { System } from "./registry.ts";
-import { kernelDatabaseFile, SqliteRunStore } from "./run-store.ts";
+import { kernelDatabaseFile } from "./run-store.ts";
+import { SqliteRunStore } from "./sqlite-run-store.ts";
 import { createScriptRunner } from "./script-runner.ts";
 import { SecretStore } from "./secrets.ts";
 import type { Outcome } from "./outcome.ts";

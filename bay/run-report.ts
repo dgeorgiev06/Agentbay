@@ -168,7 +168,7 @@ function stepJson(step: StepRecord, full: boolean): JsonObject {
   switch (step.status) {
     case "started":
       return { ...base, ...payload };
-    case "finished":
+    case "done":
       return {
         ...base,
         finishedAt: step.finishedAt,

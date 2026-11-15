@@ -70,7 +70,7 @@ function reasonOf(run: RunView): string {
 }
 
 function partitionOf(kernel: Kernel, mode: string, name: string): DatabasePartition {
-  const place: StepPlace = { runId: "harness", mode, action: "harness", stepIndex: 0, stepKey: "harness" };
+  const place: StepPlace = { runId: "harness", mode, action: "harness", stepKey: "harness" };
   const permissions = { grants: kernel.policyOf(mode), actionEffects: ["read" as const, "write" as const] };
   const broker = (): ReturnType<Kernel["brokerFor"]> => kernel.brokerFor(place, permissions);
   const closing = async <T>(use: (opened: ReturnType<Kernel["brokerFor"]>) => Promise<T>): Promise<T> => {

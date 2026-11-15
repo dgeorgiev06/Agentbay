@@ -5,14 +5,9 @@ import { join } from "node:path";
 import { describe, test } from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import type { RunEvent } from "../bay/contracts.ts";
-import {
-  lockStaleMilliseconds,
-  SqliteRunStore,
-  type NewRun,
-  type RunStore,
-  type StoredState,
-  type Writer,
-} from "../bay/run-store.ts";
+import { lockStaleMilliseconds, type NewRun, type RunStore, type StoredState, type Writer } from "../bay/run-store.ts";
+import type { SkillDetail } from "../bay/step-detail.ts";
+import { SqliteRunStore } from "../bay/sqlite-run-store.ts";
 import { nodeFolders } from "../bay/node-ports.ts";
 import { fakeFolders } from "./fakes.ts";
 import { MemoryRunStore } from "./memory-run-store.ts";
@@ -25,6 +20,22 @@ type Opened = {
 const start = new Date("2026-11-14T09:00:00.000Z");
 
 const spent = { items: 0, usd: 0, tokens: 0, minutes: 0 };
+
+const script = { script: "scripts/a.ts" };
+
+const call = { mode: "store", action: "put" };
+
+const skillDetail: SkillDetail = {
+  mode: "notes",
+  action: "draft",
+  skill: "skills/draft",
+  tier: "fast",
+  schemas: ["schemas/draft.json"],
+  round: 1,
+  feedback: [],
+  earlierSpent: spent,
+  calledSpent: spent,
+};
 
 function minutesLater(minutes: number): Date {
   return new Date(start.getTime() + minutes * 60_000);
@@ -72,21 +83,19 @@ function runStoreContract(name: string, open: () => Opened): void {
       const at = start.toISOString();
       const startedRecord = await store.saveStepInput(
         writer,
-        { key: "0", kind: "script", input: { a: 1 }, detail: { note: "x" }, at },
+        { key: "0", kind: "script", input: { a: 1 }, detail: script, at },
         [event("run-1", "step.started")],
       );
       assert.equal(startedRecord.status, "started");
       assert.deepEqual((await store.readRun("run-1"))?.steps, [startedRecord]);
       const spent = { items: 2, usd: 0.5, tokens: 10, minutes: 1 };
-      const finished = await store.saveStepOutput(
-        writer,
-        { key: "0", status: "finished", output: { b: 2 }, spent, at },
-        [event("run-1", "step.finished")],
-      );
-      assert.ok(finished.status === "finished");
+      const finished = await store.saveStepOutput(writer, { key: "0", status: "done", output: { b: 2 }, spent, at }, [
+        event("run-1", "step.finished"),
+      ]);
+      assert.ok(finished.status === "done");
       assert.deepEqual(finished.output, { b: 2 });
       assert.deepEqual(finished.spent, spent);
-      await store.saveStepInput(writer, { key: "1", kind: "call", input: null, detail: {}, at }, []);
+      await store.saveStepInput(writer, { key: "1", kind: "call", input: null, detail: call, at }, []);
       const failed = await store.saveStepOutput(
         writer,
         { key: "1", status: "failed", reason: "no", spent: finished.spent, at },
@@ -99,7 +108,7 @@ function runStoreContract(name: string, open: () => Opened): void {
       assert.deepEqual(
         steps.map((step) => [step.key, step.status]),
         [
-          ["0", "finished"],
+          ["0", "done"],
           ["1", "failed"],
         ],
       );
@@ -112,17 +121,17 @@ function runStoreContract(name: string, open: () => Opened): void {
       const { store, close } = open();
       const writer = await created(store);
       const at = start.toISOString();
-      await store.saveStepInput(writer, { key: "0", kind: "script", input: 1, detail: {}, at }, []);
+      await store.saveStepInput(writer, { key: "0", kind: "script", input: 1, detail: script, at }, []);
       await assert.rejects(async () => {
-        await store.saveStepInput(writer, { key: "0", kind: "script", input: 1, detail: {}, at }, []);
+        await store.saveStepInput(writer, { key: "0", kind: "script", input: 1, detail: script, at }, []);
       });
-      const end = { key: "9", status: "finished", output: 1, spent: { items: 0, usd: 0, tokens: 0, minutes: 0 }, at };
+      const end = { key: "9", status: "done", output: 1, spent: { items: 0, usd: 0, tokens: 0, minutes: 0 }, at };
       await assert.rejects(async () => {
-        await store.saveStepOutput(writer, { ...end, status: "finished" }, []);
+        await store.saveStepOutput(writer, { ...end, status: "done" }, []);
       });
-      await store.saveStepOutput(writer, { ...end, key: "0", status: "finished" }, []);
+      await store.saveStepOutput(writer, { ...end, key: "0", status: "done" }, []);
       await assert.rejects(async () => {
-        await store.saveStepDetail(writer, { key: "0", detail: {}, at }, []);
+        await store.saveStepDetail(writer, { key: "0", kind: "script", detail: script, at }, []);
       });
       close();
     });
@@ -131,12 +140,40 @@ function runStoreContract(name: string, open: () => Opened): void {
       const { store, close } = open();
       const writer = await created(store);
       const at = start.toISOString();
-      await store.saveStepInput(writer, { key: "0", kind: "skill", input: 1, detail: { round: 1 }, at }, []);
-      const changed = await store.saveStepDetail(writer, { key: "0", detail: { round: 2 }, at }, [
+      await store.saveStepInput(writer, { key: "0", kind: "skill", input: 1, detail: skillDetail, at }, []);
+      const secondRound = { ...skillDetail, round: 2, feedback: ["longer"] };
+      const changed = await store.saveStepDetail(writer, { key: "0", kind: "skill", detail: secondRound, at }, [
         event("run-1", "run.waiting"),
       ]);
-      assert.deepEqual(changed.detail, { round: 2 });
-      assert.deepEqual((await store.readRun("run-1"))?.steps[0]?.detail, { round: 2 });
+      assert.deepEqual(changed.detail, secondRound);
+      assert.deepEqual((await store.readRun("run-1"))?.steps[0]?.detail, secondRound);
+      await assert.rejects(async () => {
+        await store.saveStepDetail(writer, { key: "0", kind: "script", detail: script, at }, []);
+      }, /is a skill step, not a script step/);
+      close();
+    });
+
+    test("a step refused before it could start is saved failed at once, with no detail and both events", async () => {
+      const { store, close } = open();
+      const writer = await created(store);
+      const at = start.toISOString();
+      const refusal = { key: "2", kind: "call" as const, input: { a: 1 }, reason: "not bound", at };
+      const refused = await store.saveRefusal(writer, refusal, [
+        event("run-1", "step.started"),
+        event("run-1", "step.failed"),
+      ]);
+      assert.ok(refused.status === "failed");
+      assert.equal(refused.detail, null);
+      assert.equal(refused.reason, "not bound");
+      assert.deepEqual(refused.spent, spent);
+      assert.deepEqual((await store.readRun("run-1"))?.steps, [refused]);
+      assert.deepEqual(
+        (await store.readEvents("run-1")).map((entry) => entry.kind),
+        ["run.started", "step.started", "step.failed"],
+      );
+      await assert.rejects(async () => {
+        await store.saveRefusal(writer, refusal, []);
+      });
       close();
     });
 
@@ -212,7 +249,7 @@ function runStoreContract(name: string, open: () => Opened): void {
         detail: { previousOwner: "engine-a", heartbeatAt: minutesLater(5).toISOString(), owner: "engine-b" },
       });
       await assert.rejects(async () => {
-        await store.saveStepInput(writer, { key: "0", kind: "script", input: 1, detail: {}, at: "x" }, [
+        await store.saveStepInput(writer, { key: "0", kind: "script", input: 1, detail: script, at: "x" }, [
           event("run-1", "step.started"),
         ]);
       }, /no longer holds the lock/);
@@ -230,9 +267,10 @@ function runStoreContract(name: string, open: () => Opened): void {
       const { store, close } = open();
       const writer = await created(store);
       const writes = [
-        (at: string) => store.saveStepInput(writer, { key: "0", kind: "skill", input: 1, detail: {}, at }, []),
-        (at: string) => store.saveStepDetail(writer, { key: "0", detail: { round: 2 }, at }, []),
-        (at: string) => store.saveStepOutput(writer, { key: "0", status: "finished", output: 1, spent, at }, []),
+        (at: string) => store.saveStepInput(writer, { key: "0", kind: "skill", input: 1, detail: skillDetail, at }, []),
+        (at: string) =>
+          store.saveStepDetail(writer, { key: "0", kind: "skill", detail: { ...skillDetail, round: 2 }, at }, []),
+        (at: string) => store.saveStepOutput(writer, { key: "0", status: "done", output: 1, spent, at }, []),
         (at: string) => store.updateRun(writer, { at }, []),
       ];
       for (const [index, write] of writes.entries()) {
@@ -294,7 +332,7 @@ test("a SQLite store keeps runs, steps and events when the file is opened again"
   const { file, remove } = temporaryFile();
   const first = new SqliteRunStore(file);
   const writer = await created(first);
-  await first.saveStepInput(writer, { key: "0", kind: "script", input: [1], detail: {}, at: "t" }, []);
+  await first.saveStepInput(writer, { key: "0", kind: "script", input: [1], detail: script, at: "t" }, []);
   first.close();
   const second = new SqliteRunStore(file);
   const run = await second.readRun("run-1");

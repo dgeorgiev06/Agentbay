@@ -90,7 +90,7 @@ export const noProcesses: Processes = {
   run: () => Promise.reject(new Error("no process may be started in this test")),
 };
 
-export const place: StepPlace = { runId: "run-1", mode: "notes", action: "look", stepIndex: 0, stepKey: "look.0" };
+export const place: StepPlace = { runId: "run-1", mode: "notes", action: "look", stepKey: "look.0" };
 
 export type PermissionChanges = Partial<ModeGrants> & { readonly effects?: readonly Effect[] };
 

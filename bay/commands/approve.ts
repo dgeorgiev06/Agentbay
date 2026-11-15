@@ -1,8 +1,7 @@
 import { refusedResult, usageResult, withKernel, type CommandResult, type Invocation } from "../command-context.ts";
 import type { Command } from "../command-line.ts";
 import type { Kernel } from "../kernel.ts";
-import { engineOutput } from "../run-report.ts";
-import { storedWaiting } from "../runs/waiting.ts";
+import { runResult } from "../run-report.ts";
 
 type Channel = { readonly via: "terminal" } | { readonly via: "chat"; readonly quote: string };
 
@@ -17,7 +16,7 @@ type Decision = {
   readonly runId: string;
   readonly stepKey: string;
   readonly hash: string;
-  readonly decision: "approve" | "reject";
+  readonly verdict: "approve" | "reject";
 };
 
 const usage =
@@ -43,8 +42,9 @@ function allowedChannels(kernel: Kernel): readonly string[] {
 }
 
 async function shownText(kernel: Kernel, decision: Decision): Promise<string> {
-  const run = await kernel.store.readRun(decision.runId);
-  const waiting = run === undefined ? undefined : storedWaiting(kernel, run);
+  const shown = await kernel.runs.show(decision.runId);
+  const state = shown.ok ? shown.value.state : undefined;
+  const waiting = state?.status === "waiting" ? state.waiting : undefined;
   if (waiting?.reason !== "approval" || waiting.stepKey !== decision.stepKey) {
     return `step ${decision.stepKey} of run ${decision.runId}`;
   }
@@ -63,7 +63,7 @@ async function terminalRefusal(
       "run it yourself in a terminal, or, if the project config lists chat under approvals.from, use --via chat --quote."
     );
   }
-  const verb = decision.decision === "approve" ? "Approve" : "Reject";
+  const verb = decision.verdict === "approve" ? "Approve" : "Reject";
   const answer = await terminal.ask(`${verb} ${await shownText(kernel, decision)}\nType yes to confirm: `);
   return answer.trim().toLowerCase() === "yes" ? undefined : "Not confirmed; nothing changed.";
 }
@@ -83,12 +83,8 @@ async function decide(request: ApprovalRequest): Promise<CommandResult> {
   }
   const by =
     channel.via === "terminal" ? "owner at the terminal" : `owner via chat, quoted: ${JSON.stringify(channel.quote)}`;
-  const result = await kernel.engine.approve(decision.runId, decision.stepKey, {
-    hash: decision.hash,
-    decision: decision.decision,
-    by,
-  });
-  return engineOutput(kernel, result, () => "issue");
+  const { runId, stepKey, hash, verdict } = decision;
+  return runResult(kernel.layout, await kernel.runs.approve(runId, { stepKey, hash, verdict, by }));
 }
 
 function runApprove(invocation: Invocation): Promise<CommandResult> {
@@ -101,7 +97,7 @@ function runApprove(invocation: Invocation): Promise<CommandResult> {
   if (typeof channel === "string") {
     return Promise.resolve(usageResult(channel, usage));
   }
-  const decision: Decision = { runId, stepKey, hash, decision: invocation.flags.has("reject") ? "reject" : "approve" };
+  const decision: Decision = { runId, stepKey, hash, verdict: invocation.flags.has("reject") ? "reject" : "approve" };
   return withKernel(invocation, (kernel) => decide({ invocation, kernel, channel, decision }));
 }
 

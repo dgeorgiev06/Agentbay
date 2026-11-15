@@ -1,8 +1,6 @@
-import type { Json, Spend } from "../contracts.ts";
+import { measures, type Json, type Spend } from "../contracts.ts";
 import type { Budget } from "../generated/mode.ts";
 import { numberField } from "../json.ts";
-
-export const measures = ["items", "usd", "tokens", "minutes"] as const;
 
 export type Measure = (typeof measures)[number];
 

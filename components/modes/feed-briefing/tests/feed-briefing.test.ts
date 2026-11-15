@@ -64,7 +64,7 @@ function waitingSkillOf(run: Awaited<ReturnType<ModeProject["run"]>>): WaitingSk
 
 async function submitted(project: ModeProject, waiting: WaitingSkill, output: Json): ReturnType<ModeProject["run"]> {
   const spent = { items: 0, usd: 0, tokens: 0, minutes: 0 };
-  return runOf(await project.kernel.engine.submit(waiting.runId, waiting.stepKey, { output, spent }));
+  return runOf(await project.kernel.runs.agentTools.engine.submit(waiting.runId, waiting.stepKey, { output, spent }));
 }
 
 function outputOf(run: Awaited<ReturnType<ModeProject["run"]>>): Json {
@@ -158,7 +158,7 @@ test("with a budget smaller than one page the run waits for budget and stores no
     }
     assert.equal(run.state.waiting.reason, "budget");
     assert.equal(await storedCount(project), 0);
-    const resumed = runOf(await project.kernel.engine.extendBudget(run.id, { usd: 1 }));
+    const resumed = runOf(await project.kernel.runs.agentTools.engine.extendBudget(run.id, { usd: 1 }));
     assert.equal(fieldsOf(outputOf(resumed)).added, 30);
     assert.equal(resumed.spent.usd, 0.03);
     const status = fieldsOf(await project.output("store.status", {}, { caller: "feed-briefing" }));
@@ -218,7 +218,7 @@ test("the check refuses no citations, long summaries, copied text and changed co
       { title: "Too long", summary: Array.from({ length: 61 }, () => "word").join(" "), cites: ["fake:1001"] },
     ];
     const draft = { ...fieldsOf(draftFor(waiting.input, themes)), selectorChanged: true };
-    const run = await project.kernel.engine.submit(waiting.runId, waiting.stepKey, {
+    const run = await project.kernel.runs.agentTools.engine.submit(waiting.runId, waiting.stepKey, {
       output: draft,
       spent: { items: 0, usd: 0, tokens: 0, minutes: 0 },
     });
@@ -291,7 +291,7 @@ test("ask answers from the store and its check refuses an id the store does not 
 
 test("the daily workflow syncs, waits for the digest skill, then for approval of the digest", async () => {
   await withBriefing({}, async (project) => {
-    const engine = project.kernel.engine;
+    const engine = project.kernel.runs.agentTools.engine;
     const started = runOf(await engine.startWorkflow({ mode: "feed-briefing", path: "workflows/daily.yaml" }, {}));
     const waiting = waitingSkillOf(started);
     const selection = waiting.input;

@@ -95,8 +95,9 @@ features:
   runs:
     purpose: Advances a run step by step, durably - waiting, resuming, budgets, approvals, undo.
     entry:
-      - bay/runs/engine.ts
+      - bay/runs/runs.ts
     private:
+      - bay/runs/engine.ts
       - bay/runs/action-steps.ts
       - bay/runs/workflow-steps.ts
       - bay/runs/skill-steps.ts

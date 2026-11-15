@@ -22,7 +22,7 @@ type ToolHandler = (call: ToolCall) => Promise<Outcome<Json>>;
 
 const toolResultBytes = 256 * 1024;
 
-export const askedByKind = "run.asked-by";
+const askedByKind = "run.asked-by";
 
 function refused(refusal: string): Outcome<never> {
   return failedWith([unplacedProblem(refusal)]);
@@ -104,7 +104,7 @@ async function recordAskedBy(call: ToolCall, result: Outcome<RunView>): Promise<
   if (!result.ok) {
     return;
   }
-  await call.kernel.store.append({
+  await call.kernel.runs.agentTools.store.append({
     at: call.kernel.ports.clock.now().toISOString(),
     runId: result.value.id,
     kind: askedByKind,
@@ -148,7 +148,7 @@ async function callAction(call: ToolCall): Promise<Outcome<Json>> {
     );
   }
   const caller = action.includes(".") ? { caller: call.step.target.mode.manifest.name } : {};
-  const result = await call.kernel.engine.startForSkill({
+  const result = await call.kernel.runs.agentTools.engine.startForSkill({
     runId: call.step.task.place.runId,
     stepKey: call.step.waitingKey,
     reference: `${target.mode.manifest.name}.${target.name}`,
@@ -195,7 +195,7 @@ async function submittedResult(call: ToolCall, result: Outcome<RunView>): Promis
   if (run.state.status === "waiting" && run.state.waiting.reason === "skill" && record?.status === "started") {
     const task = run.state.waiting.task;
     const place = { runId: run.id, stepKey: run.state.waiting.stepKey, round: task.round };
-    const token = await issueTaskToken(call.kernel.store, place, call.kernel.ports.clock.now());
+    const token = await issueTaskToken(call.kernel.runs.agentTools.store, place, call.kernel.ports.clock.now());
     return {
       ok: true,
       value: { accepted: false, round: task.round, feedback: [...task.feedback], stepKey: place.stepKey, token },
@@ -216,7 +216,7 @@ async function submit(call: ToolCall): Promise<Outcome<Json>> {
   }
   const spent = { items: 0, usd, tokens, minutes: 0 };
   const place = call.step.task.place;
-  const result = await call.kernel.engine.submit(place.runId, call.step.waitingKey, { output, spent });
+  const result = await call.kernel.runs.agentTools.engine.submit(place.runId, call.step.waitingKey, { output, spent });
   return submittedResult(call, result);
 }
 
@@ -230,11 +230,14 @@ const handlers: { readonly [Name in ToolName]: ToolHandler } = {
 };
 
 async function stepOfToken(kernel: Kernel, token: string): Promise<SkillStepAt | string> {
-  const checked = await checkTaskToken({ tokens: kernel.store, runs: kernel.store }, token);
+  const checked = await checkTaskToken(
+    { tokens: kernel.runs.agentTools.store, runs: kernel.runs.agentTools.store },
+    token,
+  );
   if (!checked.ok) {
     return problemText(checked.problems);
   }
-  const run = await kernel.store.readRun(checked.value.runId);
+  const run = await kernel.runs.agentTools.store.readRun(checked.value.runId);
   if (run === undefined) {
     return `There is no run ${checked.value.runId}.`;
   }
@@ -261,7 +264,7 @@ function capped(kernel: Kernel, result: Outcome<Json>): Outcome<Json> {
 }
 
 async function recordCall(kernel: Kernel, step: SkillStepAt, entry: { name: ToolName; ok: boolean }): Promise<void> {
-  await kernel.store.append({
+  await kernel.runs.agentTools.store.append({
     at: kernel.ports.clock.now().toISOString(),
     runId: step.task.place.runId,
     kind: "tool.called",
@@ -270,7 +273,7 @@ async function recordCall(kernel: Kernel, step: SkillStepAt, entry: { name: Tool
 }
 
 async function callsThisRound(kernel: Kernel, step: SkillStepAt): Promise<number> {
-  const events = await kernel.store.readEvents(step.task.place.runId);
+  const events = await kernel.runs.agentTools.store.readEvents(step.task.place.runId);
   return events.filter(
     (event) => event.kind === "tool.called" && textField(event.detail, "stepKey") === step.waitingKey,
   ).length;

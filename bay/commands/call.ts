@@ -10,7 +10,7 @@ import {
 import type { Command } from "../command-line.ts";
 import type { Json } from "../contracts.ts";
 import type { Kernel } from "../kernel.ts";
-import { engineOutput } from "../run-report.ts";
+import { runResult } from "../run-report.ts";
 import { callKernelTool } from "../tools.ts";
 import { problemText } from "../outcome.ts";
 
@@ -58,13 +58,11 @@ async function callTool(kernel: Kernel, name: string, input: Json): Promise<Comm
 async function callForm(kernel: Kernel, form: Form, input: Json): Promise<CommandResult> {
   switch (form.kind) {
     case "action":
-      return engineOutput(kernel, await kernel.engine.startAction(form.reference, input), () => "issue");
-    case "workflow":
-      return engineOutput(
-        kernel,
-        await kernel.engine.startWorkflow({ mode: form.mode, path: form.path }, input),
-        () => "issue",
-      );
+      return runResult(kernel.layout, await kernel.runs.start({ action: form.reference }, input));
+    case "workflow": {
+      const workflow = { mode: form.mode, path: form.path };
+      return runResult(kernel.layout, await kernel.runs.start({ workflow }, input));
+    }
     case "tool":
       return callTool(kernel, form.name, input);
   }

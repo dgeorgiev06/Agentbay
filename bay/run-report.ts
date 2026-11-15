@@ -1,72 +1,64 @@
-import { join } from "node:path/posix";
 import { agentName } from "./adapter.ts";
-import type { Json, RunEvent, SkillTask } from "./contracts.ts";
-import { byteSize, textField, toJson } from "./json.ts";
-import type { Kernel } from "./kernel.ts";
-import type { RunWithSteps, StepRecord, StoredRun, StoredState } from "./runs/run-store.ts";
-import type { RunView, Waiting } from "./runs/run-state.ts";
+import type { Json, RunEvent } from "./contracts.ts";
+import { byteSize, toJson } from "./json.ts";
+import type { Run, RunSummary, Task } from "./runs/runs.ts";
 import type { Outcome } from "./outcome.ts";
 import { skillNameOf } from "./skill-tools.ts";
-import { issueTaskToken } from "./runs/task-tokens.ts";
-import { askedByKind } from "./tools.ts";
-import { skillStepAt, storedWaiting } from "./runs/waiting.ts";
 import { problemsResult, type CommandResult, type JsonObject } from "./command-context.ts";
-import { shownProblems } from "./layout.ts";
+import { shownProblems, type Layout } from "./layout.ts";
 
-export type TokenChoice = "issue" | "replace" | "withhold" | "defer";
-
-export type TokenFor = (waitingKey: string) => TokenChoice;
-
-export type ReportOptions = {
-  readonly token?: TokenChoice;
-  readonly waiting?: Waiting;
+type ReportOptions = {
+  readonly after?: "submit" | "reissue";
   readonly full?: boolean;
   readonly events?: boolean;
   readonly steps?: boolean;
 };
 
-export type RunReport = {
-  readonly json: JsonObject;
-  readonly text: string;
-};
+type State = Run["state"];
 
-const tokenNotices: { readonly [Choice in TokenChoice]: (runId: string) => string } = {
-  issue: () => "A task token was issued with this task; it is shown only now.",
-  replace: () => "A new task token was issued; the token shown earlier for this task no longer works.",
-  withhold: (runId) =>
-    `The token was shown when this task was issued. bay runs ${runId} --new-token replaces it with a new one.`,
-  defer: (runId) => `The run waits for another skill step; bay runs ${runId} --new-token gives its task with a token.`,
-};
+type Waiting = Extract<State, { readonly status: "waiting" }>["waiting"];
 
-function targetText(run: StoredRun): string {
-  return `${run.target.kind} ${run.target.mode}${run.target.kind === "action" ? "." : ":"}${run.target.name}`;
+type Step = Run["steps"][number];
+
+const issuedNotice = "A task token was issued with this task; it is shown only now.";
+
+const replacedNotice = "A new task token was issued; the token shown earlier for this task no longer works.";
+
+function noticeOf(run: Run, task: Task, after: ReportOptions["after"]): string {
+  if (task.token !== undefined) {
+    return after === "reissue" ? replacedNotice : issuedNotice;
+  }
+  if (after === "submit") {
+    return `The run waits for another skill step; bay runs ${run.id} --new-token gives its task with a token.`;
+  }
+  return `The token was shown when this task was issued. bay runs ${run.id} --new-token replaces it with a new one.`;
 }
 
-function stateJson(state: StoredState): JsonObject {
+function targetText(target: Run["target"]): string {
+  return `${target.kind} ${target.mode}${target.kind === "action" ? "." : ":"}${target.name}`;
+}
+
+function stateJson(state: State): JsonObject {
   switch (state.status) {
     case "running":
       return { status: state.status };
     case "waiting":
-      return { status: state.status, waitingFor: state.reason, stepKey: state.stepKey };
+      return { status: state.status, waitingFor: state.waiting.reason, stepKey: state.waiting.stepKey };
     case "done":
       return { status: state.status, output: state.output };
     case "failed":
       return { status: state.status, reason: state.reason };
     case "undone":
-      return { status: state.status, reason: state.reason, undo: state.undo };
+      return { status: state.status, reason: state.reason, undo: toJson(state.undo) };
   }
 }
 
-function stateLine(state: StoredState): string {
-  switch (state.status) {
-    case "waiting":
-      return `waiting for ${state.reason} at ${state.stepKey}`;
-    case "running":
-    case "done":
-    case "failed":
-    case "undone":
-      return state.status;
-  }
+function stateLine(state: State): string {
+  return state.status === "waiting" ? `waiting for ${state.waiting.reason} at ${state.waiting.stepKey}` : state.status;
+}
+
+function statusLine(summary: RunSummary): string {
+  return summary.status === "waiting" ? `waiting for ${summary.waitingFor} at ${summary.stepKey}` : summary.status;
 }
 
 function waitingJson(waiting: Waiting): JsonObject {
@@ -95,7 +87,7 @@ function pretty(value: Json): string {
   return JSON.stringify(value, null, 2);
 }
 
-function waitingText(run: StoredRun, waiting: Waiting): string {
+function waitingText(run: Run, waiting: Waiting): string {
   switch (waiting.reason) {
     case "skill":
       return "";
@@ -115,56 +107,27 @@ function waitingText(run: StoredRun, waiting: Waiting): string {
   }
 }
 
-type Task = {
-  readonly agent: string;
-  readonly token: string | undefined;
-  readonly runId: string;
-  readonly stepKey: string;
-  readonly skillFile: string;
-  readonly input: Json;
-  readonly outputSchema: string;
-  readonly alsoMatches: readonly string[];
-  readonly round: number;
-  readonly feedback: readonly string[];
-};
-
-type TaskRequest = {
-  readonly task: SkillTask;
-  readonly waitingKey: string;
-  readonly token: TokenChoice;
-};
-
-async function taskOf(kernel: Kernel, request: TaskRequest): Promise<Task> {
-  const { task, waitingKey } = request;
-  const folder = kernel.system.modes.get(task.place.mode)?.folder ?? "";
-  const place = { runId: task.place.runId, stepKey: waitingKey, round: task.round };
-  const shown = request.token === "issue" || request.token === "replace";
-  const token = shown ? await issueTaskToken(kernel.store, place, kernel.ports.clock.now()) : undefined;
-  return {
-    agent: agentName(task.place.mode, skillNameOf(task.skill)),
-    token,
-    runId: task.place.runId,
-    stepKey: waitingKey,
-    skillFile: join(folder, task.skill, "SKILL.md"),
-    input: task.input,
-    outputSchema: task.outputSchema === "" ? "" : join(folder, task.outputSchema),
-    alsoMatches: task.alsoMatches.map((schema) => join(folder, schema)),
-    round: task.round,
-    feedback: task.feedback,
-  };
+function agentOf(task: Task): string {
+  return agentName(task.place.mode, skillNameOf(task.skill));
 }
 
 function taskJson(task: Task): JsonObject {
-  const { token, alsoMatches, ...rest } = task;
-  const also = alsoMatches.length === 0 ? {} : { alsoMatches: [...alsoMatches] };
-  return { ...rest, ...also, ...(token === undefined ? {} : { token }), feedback: [...task.feedback] };
+  const { files, token } = task;
+  return {
+    agent: agentOf(task),
+    runId: task.runId,
+    stepKey: task.stepKey,
+    skillFile: files.skill,
+    input: task.input,
+    outputSchema: files.outputSchema,
+    round: task.round,
+    feedback: [...task.feedback],
+    ...(files.alsoMatches.length === 0 ? {} : { alsoMatches: [...files.alsoMatches] }),
+    ...(token === undefined ? {} : { token }),
+  };
 }
 
-function askedByOf(events: readonly RunEvent[]): Json | undefined {
-  return events.find((event) => event.kind === askedByKind)?.detail;
-}
-
-function stepJson(step: StepRecord, full: boolean): JsonObject {
+function stepJson(step: Step, full: boolean): JsonObject {
   const base = { key: step.key, kind: step.kind, status: step.status, startedAt: step.startedAt };
   const sizes = { inputBytes: byteSize(step.input) };
   const payload = full ? { input: step.input, detail: step.detail } : sizes;
@@ -187,7 +150,7 @@ function eventJson(event: RunEvent): JsonObject {
   return { at: event.at, kind: event.kind, detail: event.detail };
 }
 
-function stepsText(steps: readonly StepRecord[]): string {
+function stepsText(steps: readonly Step[]): string {
   return ["steps:", ...steps.map((step) => `  ${step.key}  ${step.kind}  ${step.status}`)].join("\n");
 }
 
@@ -196,7 +159,7 @@ function eventsText(events: readonly RunEvent[]): string {
   return ["events:", ...lines].join("\n");
 }
 
-function outcomeText(state: StoredState): string {
+function outcomeText(state: State): string {
   switch (state.status) {
     case "done":
       return `output:\n${pretty(state.output)}`;
@@ -209,126 +172,74 @@ function outcomeText(state: StoredState): string {
   }
 }
 
-type Gathered = {
-  readonly run: RunWithSteps;
-  readonly waiting: Waiting | undefined;
-  readonly task: Task | undefined;
-  readonly events: readonly RunEvent[];
-  readonly options: ReportOptions;
-};
-
-function noticeOf(gathered: Gathered): string {
-  return tokenNotices[gathered.options.token ?? "withhold"](gathered.run.id);
+function waitingIn(run: Run): Waiting | undefined {
+  return run.state.status === "waiting" ? run.state.waiting : undefined;
 }
 
-function reportJson(gathered: Gathered): JsonObject {
-  const { run, waiting, task, events, options } = gathered;
-  const steps = run.steps.map((step) => stepJson(step, options.full ?? false));
-  const askedBy = askedByOf(events);
+function taskIn(run: Run): Task | undefined {
+  const waiting = waitingIn(run);
+  return waiting?.reason === "skill" ? waiting.task : undefined;
+}
+
+function reportJson(run: Run, options: ReportOptions): JsonObject {
+  const waiting = waitingIn(run);
+  const task = taskIn(run);
+  const { askedBy } = run;
   return {
     id: run.id,
-    target: { kind: run.target.kind, mode: run.target.mode, name: run.target.name },
+    target: { ...run.target },
     ...stateJson(run.state),
     spent: { ...run.spent },
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
     ...(waiting === undefined ? {} : { waiting: waitingJson(waiting) }),
-    ...(task === undefined ? {} : { task: taskJson(task), notice: noticeOf(gathered) }),
-    ...(askedBy === undefined ? {} : { askedBy }),
-    ...(options.steps === true ? { steps } : {}),
-    ...(options.events === true ? { events: events.map(eventJson) } : {}),
+    ...(task === undefined ? {} : { task: taskJson(task), notice: noticeOf(run, task, options.after) }),
+    ...(askedBy === undefined ? {} : { askedBy: { ...askedBy } }),
+    ...(options.steps === true ? { steps: run.steps.map((step) => stepJson(step, options.full ?? false)) } : {}),
+    ...(options.events === true ? { events: run.events.map(eventJson) } : {}),
   };
 }
 
-function reportText(gathered: Gathered): string {
-  const { run, waiting, task, events, options } = gathered;
+function taskText(run: Run, options: ReportOptions): string {
+  const task = taskIn(run);
+  if (task === undefined) {
+    return "";
+  }
+  return `task for the agent ${agentOf(task)}. ${noticeOf(run, task, options.after)}\n${pretty(taskJson(task))}`;
+}
+
+function reportText(run: Run, options: ReportOptions): string {
+  const waiting = waitingIn(run);
+  const { askedBy } = run;
   const lines = [
-    `run ${run.id} (${targetText(run)}): ${stateLine(run.state)}`,
+    `run ${run.id} (${targetText(run.target)}): ${stateLine(run.state)}`,
     outcomeText(run.state),
     waiting === undefined ? "" : waitingText(run, waiting),
-    askedByText(askedByOf(events)),
-    task === undefined ? "" : `task for the agent ${task.agent}. ${noticeOf(gathered)}\n${pretty(taskJson(task))}`,
+    askedBy === undefined ? "" : `asked for by step ${askedBy.stepKey} of run ${askedBy.runId} (call_action)`,
+    taskText(run, options),
     options.steps === true ? stepsText(run.steps) : "",
-    options.events === true ? eventsText(events) : "",
+    options.events === true ? eventsText(run.events) : "",
   ];
   return lines.filter((line) => line !== "").join("\n");
 }
 
-function askedByText(askedBy: Json | undefined): string {
-  if (askedBy === undefined) {
-    return "";
+export function runResult(layout: Layout, result: Outcome<Run>, options: ReportOptions = {}): CommandResult {
+  if (!result.ok) {
+    return problemsResult(shownProblems(layout, result.problems));
   }
-  const step = textField(askedBy, "stepKey") ?? "";
-  return `asked for by step ${step} of run ${textField(askedBy, "runId") ?? ""} (call_action)`;
-}
-
-async function reportRun(kernel: Kernel, run: RunWithSteps, options: ReportOptions = {}): Promise<RunReport> {
-  const waiting = options.waiting ?? storedWaiting(kernel, run);
-  const token = options.token ?? "withhold";
-  const task =
-    waiting?.reason === "skill"
-      ? await taskOf(kernel, { task: waiting.task, waitingKey: waiting.stepKey, token })
-      : undefined;
-  const events = await kernel.store.readEvents(run.id);
-  const gathered = { run, waiting, task, events, options };
-  return { json: reportJson(gathered), text: reportText(gathered) };
-}
-
-export function runLine(run: StoredRun): string {
-  return `${run.id}  ${run.createdAt}  ${targetText(run)}  ${stateLine(run.state)}`;
-}
-
-export function runListJson(run: StoredRun): JsonObject {
+  const run = result.value;
+  const ended = run.state.status === "failed" || run.state.status === "undone";
   return {
-    id: run.id,
-    target: { kind: run.target.kind, mode: run.target.mode, name: run.target.name },
-    createdAt: run.createdAt,
-    updatedAt: run.updatedAt,
-    status: run.state.status,
-    ...(run.state.status === "waiting" ? { waitingFor: run.state.reason, stepKey: run.state.stepKey } : {}),
+    exitCode: ended ? 1 : 0,
+    json: { ok: !ended, run: reportJson(run, options) },
+    text: reportText(run, options),
   };
 }
 
-export async function runOutput(kernel: Kernel, runId: string, options: ReportOptions = {}): Promise<CommandResult> {
-  const run = await kernel.store.readRun(runId);
-  if (run === undefined) {
-    return problemsResult([
-      { file: "", path: "", message: `There is no run ${runId}.`, fix: "bay runs lists the runs." },
-    ]);
-  }
-  const report = await reportRun(kernel, run, options);
-  const ended = run.state.status === "failed" || run.state.status === "undone";
-  return { exitCode: ended ? 1 : 0, json: { ok: !ended, run: report.json }, text: report.text };
+export function runLine(summary: RunSummary): string {
+  return `${summary.id}  ${summary.createdAt}  ${targetText(summary.target)}  ${statusLine(summary)}`;
 }
 
-export async function skillWaitOf(kernel: Kernel, runId: string): Promise<string | undefined> {
-  const state = (await kernel.store.readRun(runId))?.state;
-  return state?.status === "waiting" && state.reason === "skill" ? state.stepKey : undefined;
-}
-
-export async function engineOutput(
-  kernel: Kernel,
-  result: Outcome<RunView>,
-  tokenFor: TokenFor,
-): Promise<CommandResult> {
-  if (!result.ok) {
-    return problemsResult(shownProblems(kernel.layout, result.problems));
-  }
-  const state = result.value.state;
-  if (state.status !== "waiting") {
-    return runOutput(kernel, result.value.id);
-  }
-  const waiting = state.waiting;
-  const token = waiting.reason === "skill" ? tokenFor(waiting.stepKey) : "withhold";
-  return runOutput(kernel, result.value.id, { waiting, token });
-}
-
-export async function submittedOutput(
-  kernel: Kernel,
-  result: Outcome<RunView>,
-  submittedKey: string,
-): Promise<CommandResult> {
-  const run = result.ok ? await kernel.store.readRun(result.value.id) : undefined;
-  const again = run !== undefined && typeof skillStepAt(kernel, run, submittedKey) !== "string";
-  return engineOutput(kernel, result, () => (again ? "issue" : "defer"));
+export function runListJson(summary: RunSummary): JsonObject {
+  return { ...summary, target: { ...summary.target } };
 }

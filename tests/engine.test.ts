@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { measures } from "../bay/runs/budget.ts";
-import type { ScriptRequest } from "../bay/contracts.ts";
+import { measures, type ScriptRequest } from "../bay/contracts.ts";
 import type { Action } from "../bay/generated/mode.ts";
 import {
   eventKinds,

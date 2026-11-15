@@ -6,7 +6,7 @@ import type { RunWithSteps, StepRecord } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
 import { skillTaskOf, startedSkillOf } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
-import { resolveOwnAction, type ActionTarget } from "../targets.ts";
+import { resolveCall, resolveOwnAction, type ActionTarget } from "../targets.ts";
 
 export type SkillStepAt = {
   readonly waitingKey: string;
@@ -38,6 +38,14 @@ export function skillStepAt(context: WaitingContext, run: RunWithSteps, waitingK
   const permissions = { grants: context.policyOf(detail.mode), actionEffects: target.action.effects };
   const task = skillTaskOf({ runId: run.id, key: record.key, input: record.input, detail }, permissions);
   return { waitingKey, task, target, skillFile: join(target.mode.folder, detail.skill, "SKILL.md") };
+}
+
+export function calledTarget(system: System, modeName: string, action: string): ActionTarget | string {
+  const mode = system.modes.get(modeName);
+  if (mode === undefined) {
+    return `There is no mode ${modeName}.`;
+  }
+  return action.includes(".") ? resolveCall(system, mode, action) : resolveOwnAction(system, modeName, action);
 }
 
 function approvalWaiting(run: RunWithSteps, stepKey: string): Waiting | undefined {

@@ -24,13 +24,13 @@ export type SkillDetail = {
   readonly submission?: Submission;
 };
 
-export type NestedDetail = {
+type NestedDetail = {
   readonly mode: string;
   readonly action: string;
   readonly caller?: string;
 };
 
-export type ApprovalVerdict = {
+type ApprovalVerdict = {
   readonly decision: "approve" | "reject";
   readonly by: string;
 };
@@ -43,7 +43,7 @@ export type ApprovalDetail = {
   readonly verdict?: ApprovalVerdict;
 };
 
-export type WaitDetail = {
+type WaitDetail = {
   readonly until: string;
 };
 

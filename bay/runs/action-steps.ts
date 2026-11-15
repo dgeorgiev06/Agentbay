@@ -43,7 +43,7 @@ const maximumRounds = 3;
 
 const maximumScriptMilliseconds = 8 * 60_000;
 
-export type NestedAction = {
+type NestedAction = {
   readonly key: string;
   readonly kind: "call" | "action" | "undo";
   readonly target: ActionTarget;

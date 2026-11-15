@@ -40,7 +40,7 @@ export type ActionFrame = ActionTarget & {
   readonly caller: string | undefined;
 };
 
-export type EventKind =
+type EventKind =
   | "run.started"
   | "step.started"
   | "step.finished"
@@ -53,22 +53,22 @@ export type EventKind =
   | "undo.finished"
   | "run.finished";
 
-export type RecordStart = StepDetail & {
+type RecordStart = StepDetail & {
   readonly key: string;
   readonly input: Json;
 };
 
-export type RecordEnd = StepOutcome & {
+type RecordEnd = StepOutcome & {
   readonly key: string;
 };
 
-export type RefusedStart = {
+type RefusedStart = {
   readonly key: string;
   readonly kind: StepKind;
   readonly input: Json;
 };
 
-export type SchemaCheck = {
+type SchemaCheck = {
   readonly mode: LoadedMode;
   readonly schema: string;
   readonly value: Json;
@@ -137,7 +137,7 @@ export async function changeDetail(walk: Walk, change: StepDetail & { readonly k
   return keep(walk, await walk.services.store.saveStepDetail(walk.writer, { ...change, at }, []));
 }
 
-export type CompositeEnd = {
+type CompositeEnd = {
   readonly key: string;
   readonly progress: Progress;
   readonly spent: Spend;

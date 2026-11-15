@@ -1,4 +1,4 @@
-export type KeySegment =
+type KeySegment =
   | { readonly kind: "step"; readonly index: number }
   | { readonly kind: "end" }
   | { readonly kind: "workflow"; readonly id: string }
@@ -8,9 +8,9 @@ export type KeySegment =
   | { readonly kind: "check"; readonly index: number }
   | { readonly kind: "call"; readonly index: number };
 
-export type StepKey = readonly KeySegment[];
+type StepKey = readonly KeySegment[];
 
-export type SkillRound = {
+type SkillRound = {
   readonly step: string;
   readonly round: number;
 };
@@ -67,7 +67,7 @@ function appended(parent: string, segment: KeySegment): string {
   return parent === "" ? segmentText(segment) : `${parent}${separatorBefore(segment)}${segmentText(segment)}`;
 }
 
-export function stepKeyText(key: StepKey): string {
+function stepKeyText(key: StepKey): string {
   return key.reduce(appended, "");
 }
 
@@ -181,7 +181,7 @@ function readNext(rest: string, previous: KeySegment | undefined): Reading | und
   return undefined;
 }
 
-export function parseStepKey(text: string): StepKey | undefined {
+function parseStepKey(text: string): StepKey | undefined {
   const segments: KeySegment[] = [];
   let rest = text;
   while (rest !== "") {

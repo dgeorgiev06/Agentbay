@@ -8,7 +8,7 @@ export type TaskPlace = {
   readonly round: number;
 };
 
-export type TokenStores = {
+type TokenStores = {
   readonly tokens: TaskTokenStore;
   readonly runs: Pick<RunStore, "readRun">;
 };

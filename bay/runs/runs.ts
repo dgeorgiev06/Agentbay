@@ -34,7 +34,7 @@ import { skillRoundOf } from "./step-key.ts";
 import { checkTaskToken, issueTaskToken, type TaskPlace } from "./task-tokens.ts";
 import { calledTarget, storedWaiting } from "./waiting.ts";
 
-export type RunsNeeds = {
+type RunsNeeds = {
   readonly project: string;
   readonly folders: Folders;
   readonly files: FileSystem;

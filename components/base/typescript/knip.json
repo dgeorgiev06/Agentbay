@@ -12,7 +12,8 @@
     "bay/script-preload.ts",
     "bay/query-child.ts",
     "bay/database-child.ts",
-    "tests/script-runner-driver.ts"
+    "tests/script-runner-driver.ts",
+    "bay/adapter.ts"
   ],
   "project": ["{bay,adapters,components,tests}/**/*.ts"],
   "ignoreExportsUsedInFile": {

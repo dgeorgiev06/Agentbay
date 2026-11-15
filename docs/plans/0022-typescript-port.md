@@ -264,3 +264,26 @@ K3 and K4 are built in parallel and meet at `bay/contracts.ts` (types only). Nei
 - `Scrubber` is what the engine uses to redact secrets from submitted outputs, failure reasons and event details before they are stored. The secret store implements it.
 - `StepOutcome.spent` is what the step itself spent and excludes its nested calls; the engine adds those from their own records.
 - Only the base mode `forge` may declare write paths inside `bay/`, `schemas/`, `adapters/`, `framework/` and other modes' folders. No mode may declare a write path that contains its own `mode.yaml`, `scripts/` or `skills/`, except `forge`.
+
+## Stage 3 contracts (written by the reviewer before K5 and K6 start)
+
+K5 and K6 are built in parallel and meet at `bay/adapter.ts` (the reviewer's file; neither edits it) and at the rules below.
+
+**Who owns what**
+
+| Slice | Files |
+|---|---|
+| K5 | `bay/cli.ts`, `bay/mcp.ts`, `bay/kernel.ts` (the one place that wires registry, policy, broker, runner, engine and stores together), `bay/build.ts`, `bay/task-tokens.ts`, additions to `bay/run-store.ts` for tokens, `schemas/config.schema.json` (approvals), `bay.sh`, their tests |
+| K6 | everything under `adapters/claude-code/`, their tests under `adapters/claude-code/tests/` |
+
+**Commands (twelve, the ceiling).** `check`, `new`, `call`, `submit`, `runs`, `approve`, `resume`, `build`, `secret`, `auth`, `config`, `import-v4`. `auth` and `import-v4` are registered and answer "not built yet" until their mode slices. `build --clean` removes what a build wrote. `resume --due` wakes runs whose wait has elapsed. Every command takes `--project <folder>` (default: the current folder) and `--json`; with `--json` it prints exactly one JSON object and nothing else. Exit code 0 means done, 1 means problems were reported, 2 means the command line was wrong.
+
+**A waiting skill, as the commands show it.** `call`, `submit`, `resume` and `runs <id>` print the run. When it waits for a skill the output carries a `task` with: `agent` (the name from `agentName(mode, skill)`), `token`, `runId`, `stepKey`, `skillFile`, `input`, `outputSchema`, `round`, `feedback`. A coordinator starts the agent of that name and gives it the task as its prompt.
+
+**Task tokens.** A token is 32 random bytes, shown once when a task is first printed and stored only as a SHA-256 hash in `kernel.db` with the run, step key and round. It dies when the step finishes or the round changes. Every kernel tool call and every `submit` must carry it. The token is what ties a tool call to one step's permissions, so an agent cannot use another step's.
+
+**Kernel tools for agents.** `bay/mcp.ts` serves them over MCP on stdio (server name `agentbay`), and `bay tool <name> '<json>'` is NOT a thirteenth command: instead `bay call --tool <name> '<json>'` reaches the same tools for a harness without MCP. The tools: `db_query` (the broker's agent query on the mode's own database), `files_read`, `files_list`, `files_write` (inside the step's paths), `call_action` (an `interface.action` or own action that the skill's Tools section lists and whose effects are `read` only), `submit` (the step's output, with optional `tokens` and `usd` spent; the answer is either accepted, or the schema problems or check feedback so the agent can correct and submit again in the same session). A skill gets only the tools its Tools section names, plus `submit`.
+
+**Approvals from chat.** The owner works without a terminal. The project config gains `approvals: { from: [terminal, chat] }` (default `[terminal]`). From a terminal, `approve` needs an interactive stdin. From chat, `approve --via chat --quote "<the owner's words>"` is accepted only when the config lists `chat`; the quote and the channel are recorded in the approval event. `approve` always needs `--hash`.
+
+**What the Claude Code adapter writes.** One agent file per `SkillAgent` at `.claude/agents/<agent>.md` (tools: the harness file tools the step's paths allow, the `mcp__agentbay__*` tools it may use, no shell unless the mode lists commands, never the tool that starts other agents; model by tier); `.agentbay/steps.json` (the per-agent policy the hook reads); the hook registration and deny rules merged into `.claude/settings.json`; the `agentbay` server merged into `.mcp.json`; a marked block in `CLAUDE.md` that tells the coordinator how to run a call, hand a task to its agent and read the run afterwards; and `.agentbay/build.json`, the record of everything written or merged, from which `clean` restores the project exactly. The hook is `adapters/claude-code/step-guard.ts`, registered to fail closed.

@@ -24,6 +24,9 @@ export function coordinatorBlock(bay: string): string {
     "You are the owner's coordinator. Run agentbay actions through its command line and give each skill step",
     "to the agent made for it.",
     "",
+    `At the start of a session, run \`${bay} check\`. If it reports that the agentbay hook is not registered,`,
+    "stop and tell the owner: without the hook, nothing confines the skill steps.",
+    "",
     `1. Run an action: \`${bay} call <mode.action> '<json input>' --json\`. It prints one JSON object: the run.`,
     "2. When the run waits for a skill, the output carries a `task`. Start the subagent named `task.agent` with",
     "   the Agent tool, and give it the task JSON, exactly as printed, as its whole prompt and nothing else.",
@@ -39,6 +42,8 @@ export function coordinatorBlock(bay: string): string {
     "  `framework/`);",
     "- do a skill step's work yourself, change a task before you hand it over, or hand it to another agent;",
     "- start other subagents here: the agentbay hook denies every tool call of a subagent that is not a step.",
+    "",
+    "Change `approvals` in agentbay.config.yaml only when the owner asks for exactly that, in their own words.",
     blockEnd,
   ].join("\n");
 }

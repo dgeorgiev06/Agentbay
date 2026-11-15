@@ -14,8 +14,9 @@ function kernelToolName(tool: string): string {
 
 export function toolsFor(agent: SkillAgent): readonly string[] {
   const { readPaths, writePaths, commands } = agent.permissions;
-  const kernelTools = [...new Set([...agent.kernelTools, "submit"])].map(kernelToolName);
+  const kernelTools = [...new Set(agent.kernelTools)].filter((tool) => tool !== "submit").map(kernelToolName);
   return [
+    kernelToolName("submit"),
     ...(readPaths.length > 0 ? ["Read", "Glob", "Grep"] : []),
     ...(writePaths.length > 0 ? ["Write", "Edit"] : []),
     ...(commands.length > 0 ? ["Bash"] : []),

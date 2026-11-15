@@ -20,18 +20,25 @@ function frontMatter(text: string): Readonly<Record<string, string>> {
 
 test("a step with read and write paths gets the file tools and its kernel tools, with submit", () => {
   assert.deepEqual(toolsFor(digestAgent), [
+    "mcp__agentbay__submit",
     "Read",
     "Glob",
     "Grep",
     "Write",
     "Edit",
     "mcp__agentbay__db_query",
-    "mcp__agentbay__submit",
   ]);
 });
 
 test("a step without write paths gets no write tools, and submit appears once", () => {
-  assert.deepEqual(toolsFor(scanAgent), ["Read", "Glob", "Grep", "mcp__agentbay__submit", "mcp__agentbay__files_read"]);
+  assert.deepEqual(toolsFor(scanAgent), ["mcp__agentbay__submit", "Read", "Glob", "Grep", "mcp__agentbay__files_read"]);
+});
+
+test("a step gets the read tools only when it has a read root, its mode folder counting as one", () => {
+  const base = { mode: "store", skill: "s", tier: "fast", kernelTools: [], write: [], commands: [] } as const;
+  assert.deepEqual(toolsFor(skillAgent({ ...base, read: [] })), ["mcp__agentbay__submit"]);
+  const modeOnly = skillAgent({ ...base, read: ["/kit/components/modes/store"] });
+  assert.deepEqual(toolsFor(modeOnly), ["mcp__agentbay__submit", "Read", "Glob", "Grep"]);
 });
 
 test("only a step with commands gets Bash", () => {
@@ -109,7 +116,7 @@ test("a path outside the project is shown whole and a path inside it relative to
   assert.equal(projectPath(root, "notes"), "notes");
 });
 
-test("the step policy holds each agent's tools, absolute roots and commands, and the closed names", () => {
+test("the step policy holds each agent's tools, absolute roots and commands", () => {
   const relativeAgent = skillAgent({
     mode: "x",
     skill: "y",
@@ -124,10 +131,6 @@ test("the step policy holds each agent's tools, absolute roots and commands, and
     version: 1,
     root,
     kit,
-    alwaysDenied: {
-      names: [".agentbay", ".claude", ".git", ".mcp.json", "CLAUDE.md", "agentbay.config.yaml", ".env", ".env.*"],
-      kitFolders: ["bay", "schemas", "adapters", "framework"],
-    },
     agents: {
       "agentbay-mail-briefing-digest": {
         mode: "mail-briefing",
@@ -167,6 +170,8 @@ test("the coordinator block states the protocol between its markers in under 40 
     "approve on your own",
     "edit `.agentbay/`, `.claude/`, `.mcp.json`, or the agentbay kit",
     "do a skill step's work yourself",
+    "At the start of a session, run `./bay.sh check`. If it reports that the agentbay hook is not registered,",
+    "Change `approvals` in agentbay.config.yaml only when the owner asks for exactly that, in their own words.",
   ]) {
     assert.ok(block.includes(phrase), phrase);
   }

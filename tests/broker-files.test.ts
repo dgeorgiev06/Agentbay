@@ -16,6 +16,7 @@ import {
   scriptedHttp,
   withProject,
   writeProjectFile,
+  projectLayout,
 } from "./broker-fixture.ts";
 
 type Setup = { readonly root: string; readonly broker: Broker; readonly events: ReturnType<typeof recordingSink> };
@@ -28,7 +29,7 @@ async function withFilesBroker(run: (setup: Setup) => Promise<void>): Promise<vo
     await mkdir(join(root, "notes-out"), { recursive: true });
     const events = recordingSink();
     const broker = new Broker({
-      root,
+      layout: projectLayout(root),
       permissions: permissionsIn(root),
       place,
       files: nodeFileSystem,
@@ -131,7 +132,7 @@ test("a granted path that is itself a link to another folder of the project is r
     await writeProjectFile(root, ".agentbay/data/store.db", "made-up database bytes");
     await symlink(join(root, ".agentbay/data"), join(root, "notes-in"));
     const broker = new Broker({
-      root,
+      layout: projectLayout(root),
       permissions: permissionsIn(root),
       place,
       files: nodeFileSystem,

@@ -68,7 +68,7 @@ test("a subagent that is not in the policy is denied everything", () => {
 });
 
 test("with an unusable policy a subagent is denied and the main thread is still guarded", () => {
-  for (const text of [undefined, "not json", "[]", JSON.stringify({ version: 2, root: "/p" })]) {
+  for (const text of [undefined, "not json", "[]", JSON.stringify({ version: 2, project: "/p" })]) {
     const broken = { ...setup, policy: readPolicy(text, "/p") };
     const read = { tool_name: "Read", tool_input: { file_path: "/p/notes/a.md" }, cwd: "/p" };
     assertDenied(decide(broken, { ...read, agent_id: "a1", agent_type: digest }, world), "step policy");
@@ -79,7 +79,7 @@ test("with an unusable policy a subagent is denied and the main thread is still 
 });
 
 test("a policy written for another project is unusable", () => {
-  const moved = { ...setup, root: "/q", policy: readPolicy(JSON.stringify(stepsFile), "/q") };
+  const moved = { ...setup, project: "/q", policy: readPolicy(JSON.stringify(stepsFile), "/q") };
   const payload = { tool_name: "Read", tool_input: { file_path: "/p/notes/a.md" }, agent_id: "a", agent_type: digest };
   assertDenied(decide(moved, payload, world), "not version 1 for the project /q");
 });
@@ -179,6 +179,19 @@ test("a step reads kit folders only inside its read roots, and writes them only 
   assertDenied(ask(wide, "Write", { file_path: "/k/Bay/x.ts" }), "is closed to every step whose write paths");
   assertAllowed(ask(wide, "Write", { file_path: "/k/components/x.md" }));
   assertAllowed(ask(wide, "Read", { file_path: "/k/bay/sdk.ts" }));
+});
+
+test("when the project is not the kit, the whole kit is closed to a step's writes, wherever the kit is", () => {
+  const closed = "the kit folder /k is closed to every step whose write paths do not lie inside it";
+  assertDenied(ask(digest, "Write", { file_path: "/k/components/mail/notes.md" }), closed);
+  assertDenied(ask(digest, "Write", { file_path: "/k/README.md" }), closed);
+  assertDenied(ask("agentbay-forge-extend", "Write", { file_path: "/k/components/x.md" }), closed);
+  assertAllowed(ask(digest, "Read", { file_path: "/k/components/mail/mode.yaml" }));
+  const kitAsProject = { ...setup, kit: "/p" };
+  const write = { cwd: "/p", tool_name: "Write", tool_input: { file_path: "/p/out/digest.md" } };
+  assertAllowed(decide(kitAsProject, { ...write, agent_id: "agent-1", agent_type: digest }, world));
+  const kernel = { ...write, tool_input: { file_path: "/p/bay/x.ts" } };
+  assertDenied(decide(kitAsProject, { ...kernel, agent_id: "agent-1", agent_type: digest }, world), "/p/bay is closed");
 });
 
 test("a link inside a root that points at a closed folder is closed", () => {

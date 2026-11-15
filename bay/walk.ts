@@ -17,7 +17,6 @@ export type Services = {
   readonly policyOf: PolicyOf;
   readonly clock: Clock;
   readonly files: FileSystem;
-  readonly root: string;
 };
 
 export type Walk = {
@@ -218,7 +217,7 @@ function parsedSchema(text: string): { readonly schema: unknown } | { readonly r
 
 export async function schemaProblems(services: Services, check: SchemaCheck): Promise<readonly Problem[]> {
   const file = join(check.mode.folder, check.schema);
-  const text = await services.files.readText(join(services.root, file));
+  const text = await services.files.readText(file);
   if (text === undefined) {
     return [
       { file, path: "", message: `The schema file ${file} does not exist, so the ${check.label} is not checked.` },

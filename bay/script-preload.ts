@@ -1,5 +1,6 @@
 import { isBuiltin, registerHooks } from "node:module";
 import { Socket } from "node:net";
+import { sdkSpecifier } from "./script-protocol.ts";
 
 const availableBuiltins: ReadonlySet<string> = new Set([
   "assert",
@@ -26,6 +27,8 @@ const availableBuiltins: ReadonlySet<string> = new Set([
   "util/types",
   "zlib",
 ]);
+
+const sdkUrl = new URL("sdk.ts", import.meta.url).href;
 
 const networkGlobals: readonly string[] = ["fetch", "WebSocket", "EventSource"];
 
@@ -56,6 +59,9 @@ function fixed(target: object, name: string, value: unknown): void {
 
 registerHooks({
   resolve: (specifier, context, nextResolve) => {
+    if (specifier === sdkSpecifier) {
+      return { url: sdkUrl, format: "module-typescript", shortCircuit: true };
+    }
     if (isBuiltin(specifier) && !isAvailable(specifier)) {
       throw unavailableModule(specifier);
     }

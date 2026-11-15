@@ -11,6 +11,11 @@ const kernelImportsForModes = {
   message: "Mode code may import from bay/ only bay/sdk.ts.",
 };
 
+const kitSpecifiersForModes = {
+  regex: "^agentbay/(?!sdk$)",
+  message: "Mode code names the kit only as agentbay/sdk.",
+};
+
 const modeTiers = ["base", "modes"];
 
 const deepestModeFolderLevel = 6;
@@ -45,7 +50,10 @@ const modeBoundaryConfigs = modeFolders().flatMap(({ tier, mode }) =>
   Array.from({ length: deepestModeFolderLevel + 1 }, (_, depth) => ({
     files: [`components/${tier}/${mode}/${"*/".repeat(depth)}*.ts`],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [kernelImportsForModes, otherModeImports(tier, mode, depth)] }],
+      "no-restricted-imports": [
+        "error",
+        { patterns: [kernelImportsForModes, kitSpecifiersForModes, otherModeImports(tier, mode, depth)] },
+      ],
     },
   })),
 );
@@ -138,7 +146,7 @@ export default defineConfig(
   {
     files: ["components/**/*.ts"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [kernelImportsForModes] }],
+      "no-restricted-imports": ["error", { patterns: [kernelImportsForModes, kitSpecifiersForModes] }],
       "no-restricted-syntax": ["error", ...bannedSyntax, dynamicImportSyntax],
     },
   },

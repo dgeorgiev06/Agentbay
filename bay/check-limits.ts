@@ -1,12 +1,12 @@
 import { isMap, isScalar, LineCounter, parseDocument, type Pair } from "yaml";
-import { errors, warnings, type CheckContext, type Finding } from "./check-context.ts";
+import { errors, warnings, type KitTree, type Finding } from "./check-context.ts";
 import type { Problem } from "./spec.ts";
 
 const measures = ["kernel_lines", "adapter_lines", "concepts", "cli_commands", "top_level_folders"] as const;
 
 type Measure = (typeof measures)[number];
 
-type Counter = (context: CheckContext) => Promise<number>;
+type Counter = (kit: KitTree) => Promise<number>;
 
 type Ceiling = {
   readonly measure: Measure;
@@ -22,40 +22,40 @@ const limitsFile = "framework/limits.yaml";
 
 const measureList = measures.join(", ");
 
-async function linesOf(context: CheckContext, files: readonly string[]): Promise<number> {
+async function linesOf(kit: KitTree, files: readonly string[]): Promise<number> {
   let total = 0;
   for (const file of files) {
-    const text = (await context.files.readText(file)) ?? "";
+    const text = (await kit.files.readText(file)) ?? "";
     total += text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
   }
   return total;
 }
 
-function typeScriptFilesUnder(context: CheckContext, folder: string): readonly string[] {
-  return context.paths.filter((path) => path.startsWith(folder) && path.endsWith(".ts"));
+function typeScriptFilesUnder(kit: KitTree, folder: string): readonly string[] {
+  return kit.paths.filter((path) => path.startsWith(folder) && path.endsWith(".ts"));
 }
 
-async function kernelLines(context: CheckContext): Promise<number> {
-  const files = typeScriptFilesUnder(context, "bay/").filter((path) => !path.startsWith("bay/generated/"));
-  return linesOf(context, files);
+async function kernelLines(kit: KitTree): Promise<number> {
+  const files = typeScriptFilesUnder(kit, "bay/").filter((path) => !path.startsWith("bay/generated/"));
+  return linesOf(kit, files);
 }
 
-async function largestAdapterLines(context: CheckContext): Promise<number> {
-  const adapters = new Set(typeScriptFilesUnder(context, "adapters/").map((path) => path.split("/")[1] ?? ""));
+async function largestAdapterLines(kit: KitTree): Promise<number> {
+  const adapters = new Set(typeScriptFilesUnder(kit, "adapters/").map((path) => path.split("/")[1] ?? ""));
   let largest = 0;
   for (const adapter of adapters) {
-    const code = typeScriptFilesUnder(context, `adapters/${adapter}/`).filter((path) => !path.includes("/tests/"));
-    largest = Math.max(largest, await linesOf(context, code));
+    const code = typeScriptFilesUnder(kit, `adapters/${adapter}/`).filter((path) => !path.includes("/tests/"));
+    largest = Math.max(largest, await linesOf(kit, code));
   }
   return largest;
 }
 
-function conceptCount(context: CheckContext): Promise<number> {
-  return Promise.resolve(context.paths.filter((path) => /^schemas\/[^/]+\.schema\.json$/.test(path)).length);
+function conceptCount(kit: KitTree): Promise<number> {
+  return Promise.resolve(kit.paths.filter((path) => /^schemas\/[^/]+\.schema\.json$/.test(path)).length);
 }
 
-function topLevelFolderCount(context: CheckContext): Promise<number> {
-  const folders = context.paths.filter((path) => path.includes("/")).map((path) => path.split("/")[0]);
+function topLevelFolderCount(kit: KitTree): Promise<number> {
+  const folders = kit.paths.filter((path) => path.includes("/")).map((path) => path.split("/")[0]);
   return Promise.resolve(new Set(folders).size);
 }
 
@@ -63,8 +63,8 @@ const commandTableFile = "bay/commands.ts";
 
 const commandTablePattern = /export const commands: readonly Command\[\] = \[([^\]]*)\];/;
 
-async function commandCount(context: CheckContext): Promise<number> {
-  const text = (await context.files.readText(commandTableFile)) ?? "";
+async function commandCount(kit: KitTree): Promise<number> {
+  const text = (await kit.files.readText(commandTableFile)) ?? "";
   const entries = commandTablePattern.exec(text)?.[1] ?? "";
   return entries.split(",").filter((entry) => entry.trim() !== "").length;
 }
@@ -137,9 +137,9 @@ function parseCeilings(text: string): Ceilings {
   return problems.length > 0 ? { ok: false, problems } : { ok: true, ceilings };
 }
 
-async function overCeiling(context: CheckContext, entry: Ceiling): Promise<readonly Problem[]> {
+async function overCeiling(kit: KitTree, entry: Ceiling): Promise<readonly Problem[]> {
   const counter = counters[entry.measure];
-  const count = counter === undefined ? 0 : await counter(context);
+  const count = counter === undefined ? 0 : await counter(kit);
   if (count <= entry.ceiling) {
     return [];
   }
@@ -150,8 +150,8 @@ async function overCeiling(context: CheckContext, entry: Ceiling): Promise<reado
   return [limitsProblem(entry.line, message, fix)];
 }
 
-export async function checkLimits(context: CheckContext): Promise<readonly Finding[]> {
-  const text = await context.files.readText(limitsFile);
+export async function checkLimits(kit: KitTree): Promise<readonly Finding[]> {
+  const text = await kit.files.readText(limitsFile);
   if (text === undefined) {
     const fix = `Create it with a ceiling for each of ${measureList}.`;
     return errors([limitsProblem(undefined, `${limitsFile} does not exist.`, fix)]);
@@ -162,7 +162,7 @@ export async function checkLimits(context: CheckContext): Promise<readonly Findi
   }
   const problems: Problem[] = [];
   for (const entry of parsed.ceilings) {
-    problems.push(...(await overCeiling(context, entry)));
+    problems.push(...(await overCeiling(kit, entry)));
   }
   return warnings(problems);
 }

@@ -59,9 +59,11 @@ test("a valid three-mode system resolves with every required interface bound", a
   assert.equal(system.config.adapter, "local");
   const notes = system.modes.get("notes");
   assert.ok(notes);
-  assert.equal(notes.folder, "components/modes/notes");
+  assert.equal(notes.folder, "/kit/components/modes/notes");
+  assert.equal(notes.home, "kit");
   assert.equal(notes.workflows.get("workflows/daily.yaml")?.name, "daily");
-  assert.equal(system.interfaces.get("notes@1")?.file, paths.notesInterface);
+  assert.equal(system.interfaces.get("notes@1")?.file, `/kit/${paths.notesInterface}`);
+  assert.deepEqual([...system.active].sort(), ["briefing", "notes", "store"]);
   assert.deepEqual(system.modes.get("briefing")?.settings, { lookback: "3d" });
   assert.deepEqual(system.modes.get("store")?.settings, {});
 });
@@ -97,7 +99,7 @@ test("two modes with the same name are reported", async () => {
   findProblem(
     problems,
     "components/modes/store/mode.yaml",
-    "Two modes are named store: components/base/store and components/modes/store.",
+    "Two modes are named store: components/base/store/mode.yaml and components/modes/store/mode.yaml.",
   );
 });
 
@@ -429,7 +431,7 @@ test("a mode.yaml in the interfaces folder is reported once, plainly", async () 
       file: misplaced,
       path: "",
       message: "components/base/interfaces holds interface files only, but it has a mode.yaml.",
-      fix: "Move the mode to a folder of its own, such as components/base/<mode>/mode.yaml.",
+      fix: "Move the mode to a folder of its own, such as components/modes/<mode>/mode.yaml.",
     },
   ]);
 });

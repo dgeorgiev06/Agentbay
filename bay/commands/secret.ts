@@ -11,7 +11,7 @@ const usage = "secret set <NAME> | secret check <NAME>";
 function lookupPermissions(invocation: Invocation, name: string): Permissions {
   return {
     mode: "bay secret check",
-    modeFolder: invocation.project,
+    modeFolder: invocation.layout.project,
     databaseFile: "",
     migrationsFolder: "",
     readPaths: [],

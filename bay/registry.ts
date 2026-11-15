@@ -1,9 +1,10 @@
-import { basename, join } from "node:path/posix";
+import { basename, dirname, join } from "node:path/posix";
 import { isDeepStrictEqual } from "node:util";
 import type { Config } from "./generated/config.ts";
 import type { Interface, Signature } from "./generated/interface.ts";
 import type { Action, Mode, Step } from "./generated/mode.ts";
 import type { Workflow, Step as WorkflowStep } from "./generated/workflow.ts";
+import { isProjectTheKit, pathIn, shownPath, shownProblems, type Home, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
 import { workflowReferenceIssues } from "./references.ts";
 import {
@@ -18,6 +19,7 @@ import {
 } from "./spec.ts";
 
 export type LoadedMode = {
+  readonly home: Home;
   readonly folder: string;
   readonly manifest: Mode;
   readonly workflows: ReadonlyMap<string, Workflow>;
@@ -31,25 +33,38 @@ export type LoadedInterface = {
 
 export type System = {
   readonly modes: ReadonlyMap<string, LoadedMode>;
+  readonly active: ReadonlySet<string>;
   readonly interfaces: ReadonlyMap<string, LoadedInterface>;
   readonly bindings: ReadonlyMap<string, string>;
   readonly config: Config;
 };
 
-export type SystemLayout = {
-  readonly root: string;
-  readonly configFile: string;
+export type SystemReport = {
+  readonly outcome: Outcome<System>;
+  readonly active: ReadonlySet<string>;
+  readonly notices: readonly Problem[];
 };
 
-type ModeSource = Loaded<Mode> & { readonly folder: string };
+export type ModeFolder = {
+  readonly home: Home;
+  readonly folder: string;
+};
+
+type ModeSource = Loaded<Mode> & ModeFolder;
+
+type UnloadedMode = ModeFolder & {
+  readonly name: string;
+  readonly problems: readonly Problem[];
+};
 
 type Collected<T> = {
   readonly values: readonly T[];
   readonly problems: readonly Problem[];
 };
 
-type LoadedModes = Collected<ModeSource> & {
-  readonly unloaded: ReadonlySet<string>;
+type LoadedModes = {
+  readonly values: readonly ModeSource[];
+  readonly unloaded: readonly UnloadedMode[];
 };
 
 type Indexed<T> = {
@@ -59,10 +74,17 @@ type Indexed<T> = {
 
 type Context = {
   readonly files: FileSystem;
+  readonly layout: Layout;
   readonly modes: ReadonlyMap<string, ModeSource>;
   readonly interfaces: ReadonlyMap<string, Loaded<Interface>>;
   readonly config: Loaded<Config> | undefined;
   readonly unloadedModes: ReadonlySet<string>;
+  readonly active: ReadonlySet<string>;
+};
+
+type Activation = {
+  readonly active: ReadonlySet<string>;
+  readonly problems: readonly Problem[];
 };
 
 type ActionPlace = {
@@ -82,9 +104,15 @@ type CallTarget = {
   readonly known: readonly string[];
 };
 
+type RequiredBinding = {
+  readonly reference: string;
+  readonly bound: string;
+};
+
 type ImplementedSignature = {
   readonly reference: string;
   readonly signature: Signature;
+  readonly folder: string;
 };
 
 type FileReference = {
@@ -111,19 +139,43 @@ type WorkflowStepPlace = {
   readonly path: PathSegments;
 };
 
-const modeTiers = ["components/base", "components/modes"] as const;
+const kitModeTiers = ["components/base", "components/modes"] as const;
 
-const interfacesFolder = "components/base/interfaces";
+const projectModeTier = "components/modes";
+
+const kitInterfacesFolder = "components/base/interfaces";
+
+const projectInterfacesFolder = "components/interfaces";
+
+const forge = "forge";
 
 const schemaDirections = ["input", "output"] as const;
 
-function rootedFileSystem(files: FileSystem, root: string): FileSystem {
-  return {
-    readText: (path) => files.readText(join(root, path)),
-    list: (directory) => files.list(join(root, directory)),
-    exists: (path) => files.exists(join(root, path)),
-    writeAtomic: (path, text) => files.writeAtomic(join(root, path), text),
-  };
+function modeTierFolders(layout: Layout): readonly ModeFolder[] {
+  const kitTiers = kitModeTiers.map((tier) => ({ home: "kit" as const, folder: pathIn(layout, "kit", tier) }));
+  if (isProjectTheKit(layout)) {
+    return kitTiers;
+  }
+  return [...kitTiers, { home: "project", folder: pathIn(layout, "project", projectModeTier) }];
+}
+
+export function ownInterfacesFolder(layout: Layout): string {
+  return isProjectTheKit(layout)
+    ? pathIn(layout, "kit", kitInterfacesFolder)
+    : pathIn(layout, "project", projectInterfacesFolder);
+}
+
+function interfaceFolders(layout: Layout): readonly string[] {
+  const kitFolder = pathIn(layout, "kit", kitInterfacesFolder);
+  return isProjectTheKit(layout) ? [kitFolder] : [kitFolder, ownInterfacesFolder(layout)];
+}
+
+function shown(context: Context, path: string): string {
+  return shownPath(context.layout, path);
+}
+
+function manifestFileOf(mode: ModeFolder): string {
+  return join(mode.folder, "mode.yaml");
 }
 
 function interfaceName(reference: string): string {
@@ -161,6 +213,10 @@ function boundModeOf(context: Context, reference: string): string | undefined {
   return boundMode !== undefined && context.modes.has(boundMode) ? boundMode : undefined;
 }
 
+function activeModesOf(context: Context): readonly ModeSource[] {
+  return [...context.modes.values()].filter((mode) => context.active.has(mode.value.name));
+}
+
 async function loadEach<T>(
   paths: readonly string[],
   load: (path: string) => Promise<Outcome<T>>,
@@ -178,63 +234,74 @@ async function loadEach<T>(
   return { values, problems };
 }
 
-async function modeFolders(files: FileSystem): Promise<readonly string[]> {
-  const folders: string[] = [];
-  for (const tier of modeTiers) {
-    for (const name of await files.list(tier)) {
-      const folder = join(tier, name);
-      if (folder !== interfacesFolder && (await files.exists(join(folder, "mode.yaml")))) {
-        folders.push(folder);
+export async function findModeFolders(files: FileSystem, layout: Layout): Promise<readonly ModeFolder[]> {
+  const interfacesFolders = interfaceFolders(layout);
+  const found: ModeFolder[] = [];
+  for (const tier of modeTierFolders(layout)) {
+    for (const name of await files.list(tier.folder)) {
+      const folder = join(tier.folder, name);
+      if (!interfacesFolders.includes(folder) && (await files.exists(join(folder, "mode.yaml")))) {
+        found.push({ home: tier.home, folder });
       }
     }
   }
-  return folders;
+  return found;
 }
 
-async function interfaceFiles(files: FileSystem): Promise<readonly string[]> {
-  const names = await files.list(interfacesFolder);
-  return names
-    .filter((name) => name.endsWith(".yaml") && name !== "mode.yaml")
-    .map((name) => join(interfacesFolder, name));
-}
-
-async function modeInInterfacesProblems(files: FileSystem): Promise<readonly Problem[]> {
-  const file = join(interfacesFolder, "mode.yaml");
-  if (!(await files.exists(file))) {
-    return [];
+export async function findInterfaceFiles(files: FileSystem, layout: Layout): Promise<readonly string[]> {
+  const found: string[] = [];
+  for (const folder of interfaceFolders(layout)) {
+    const names = await files.list(folder);
+    found.push(
+      ...names.filter((name) => name.endsWith(".yaml") && name !== "mode.yaml").map((name) => join(folder, name)),
+    );
   }
-  const problem = {
-    file,
-    path: "",
-    message: `${interfacesFolder} holds interface files only, but it has a mode.yaml.`,
-    fix: "Move the mode to a folder of its own, such as components/base/<mode>/mode.yaml.",
-  };
-  return [problem];
+  return found;
 }
 
-async function loadModes(files: FileSystem): Promise<LoadedModes> {
-  const folders = await modeFolders(files);
-  const collected = await loadEach(folders, async (folder) => {
-    const outcome = await loadSpec(files, join(folder, "mode.yaml"), "mode");
-    return outcome.ok ? { ok: true, value: { ...outcome.value, folder } } : outcome;
-  });
-  const loadedFolders = new Set(collected.values.map((mode) => mode.folder));
-  const unloaded = folders.filter((folder) => !loadedFolders.has(folder)).map((folder) => basename(folder));
-  return { ...collected, unloaded: new Set(unloaded) };
+async function modeInInterfacesProblems(files: FileSystem, layout: Layout): Promise<readonly Problem[]> {
+  const problems: Problem[] = [];
+  for (const folder of interfaceFolders(layout)) {
+    const file = join(folder, "mode.yaml");
+    if (await files.exists(file)) {
+      problems.push({
+        file,
+        path: "",
+        message: `${shownPath(layout, folder)} holds interface files only, but it has a mode.yaml.`,
+        fix: "Move the mode to a folder of its own, such as components/modes/<mode>/mode.yaml.",
+      });
+    }
+  }
+  return problems;
 }
 
-async function loadInterfaces(files: FileSystem): Promise<Collected<Loaded<Interface>>> {
-  return loadEach(await interfaceFiles(files), (file) => loadSpec(files, file, "interface"));
+async function loadModes(files: FileSystem, layout: Layout): Promise<LoadedModes> {
+  const values: ModeSource[] = [];
+  const unloaded: UnloadedMode[] = [];
+  for (const found of await findModeFolders(files, layout)) {
+    const outcome = await loadSpec(files, manifestFileOf(found), "mode");
+    if (outcome.ok) {
+      values.push({ ...outcome.value, ...found });
+    } else {
+      unloaded.push({ ...found, name: basename(found.folder), problems: outcome.problems });
+    }
+  }
+  return { values, unloaded };
 }
 
-async function loadConfig(files: FileSystem, configFile: string): Promise<Outcome<Loaded<Config>>> {
+async function loadInterfaces(files: FileSystem, layout: Layout): Promise<Collected<Loaded<Interface>>> {
+  return loadEach(await findInterfaceFiles(files, layout), (file) => loadSpec(files, file, "interface"));
+}
+
+async function loadConfig(files: FileSystem, layout: Layout): Promise<Outcome<Loaded<Config>>> {
+  const configFile = layout.configFile;
   if (await files.exists(configFile)) {
     return loadSpec(files, configFile, "config");
   }
   const problem = {
     file: configFile,
     path: "",
-    message: `The project config ${configFile} does not exist.`,
+    message: `The project config ${shownPath(layout, configFile)} does not exist.`,
     fix: "Create it with bindings: (interface name: mode name) and adapter:.",
   };
   return { ok: false, problems: [problem] };
@@ -252,7 +319,7 @@ async function loadWorkflows(context: Context): Promise<Collected<ModeWorkflow>>
       const outcome = await loadSpec(context.files, file, "workflow");
       if (outcome.ok) {
         values.push({ mode, path, loaded: outcome.value });
-      } else {
+      } else if (context.active.has(mode.value.name)) {
         problems.push(...outcome.problems);
       }
     }
@@ -260,41 +327,153 @@ async function loadWorkflows(context: Context): Promise<Collected<ModeWorkflow>>
   return { values, problems };
 }
 
-function folderNameProblems(modes: readonly ModeSource[]): readonly Problem[] {
-  return modes.flatMap((mode) => {
+function homesOf(modes: LoadedModes): ReadonlyMap<string, ModeFolder> {
+  const loaded = modes.values.map((mode) => ({ name: mode.value.name, home: mode.home, folder: mode.folder }));
+  const homes = new Map<string, ModeFolder>();
+  for (const mode of [...loaded, ...modes.unloaded]) {
+    if (!homes.has(mode.name)) {
+      homes.set(mode.name, { home: mode.home, folder: mode.folder });
+    }
+  }
+  return homes;
+}
+
+function listedModeProblem(context: Context, name: string, index: number): Problem | undefined {
+  const config = context.config;
+  if (config === undefined) {
+    return undefined;
+  }
+  if (name === forge && !isProjectTheKit(context.layout)) {
+    return problemAt(config, ["modes", index], {
+      message: "modes lists forge, which can be active only when the project is the kit itself.",
+      fix: "Remove forge from modes; forge changes the kit, so it runs only in the kit's own folder.",
+    });
+  }
+  if (context.modes.has(name) || context.unloadedModes.has(name)) {
+    return undefined;
+  }
+  return problemAt(config, ["modes", index], {
+    message: `modes lists ${name}, which is not a mode of the kit or of the project.`,
+    fix: `Correct the name, or remove ${name} from modes.`,
+  });
+}
+
+function seedModes(context: Context, homes: ReadonlyMap<string, ModeFolder>): Activation {
+  const listed = context.config?.value.modes ?? [];
+  const problems = listed.flatMap((name, index) => listedModeProblem(context, name, index) ?? []);
+  if (isProjectTheKit(context.layout)) {
+    return { active: new Set(homes.keys()), problems };
+  }
+  const own = [...homes].filter(([, mode]) => mode.home === "project").map(([name]) => name);
+  const known = listed.filter((name) => homes.has(name) && name !== forge);
+  return { active: new Set([...own, ...known]), problems };
+}
+
+function boundForgeProblems(context: Context, reference: string): readonly Problem[] {
+  const config = context.config;
+  if (config === undefined) {
+    return [];
+  }
+  const name = interfaceName(reference);
+  const problem = problemAt(config, ["bindings", name], {
+    message: `bindings binds ${name} to forge, which can be active only when the project is the kit itself.`,
+    fix: `Bind ${name} to another mode that implements ${reference}.`,
+  });
+  return [problem];
+}
+
+function bindingsFrom(context: Context, name: string): readonly RequiredBinding[] {
+  const mode = context.modes.get(name);
+  const references = mode === undefined ? [] : requiredReferences(mode.value);
+  return references.flatMap((reference) => {
+    const bound = context.config?.value.bindings[interfaceName(reference)];
+    return bound === undefined ? [] : [{ reference, bound }];
+  });
+}
+
+function activation(context: Context, homes: ReadonlyMap<string, ModeFolder>): Activation {
+  const seeded = seedModes(context, homes);
+  const active = new Set(seeded.active);
+  const problems = [...seeded.problems];
+  const queue = [...active];
+  for (let name = queue.shift(); name !== undefined; name = queue.shift()) {
+    for (const { reference, bound } of bindingsFrom(context, name)) {
+      if (active.has(bound) || !homes.has(bound)) {
+        continue;
+      }
+      if (bound === forge && !isProjectTheKit(context.layout)) {
+        problems.push(...boundForgeProblems(context, reference));
+        continue;
+      }
+      active.add(bound);
+      queue.push(bound);
+    }
+  }
+  return { active, problems };
+}
+
+function inactiveNotice(layout: Layout, mode: UnloadedMode): Problem {
+  const count = mode.problems.length;
+  const first = mode.problems[0]?.message ?? "";
+  return {
+    file: manifestFileOf(mode),
+    path: "",
+    message:
+      `Mode ${mode.name} of the kit does not load (${String(count)} problem${count === 1 ? "" : "s"}; ` +
+      `the first: ${first}) It is not active in this project, so the project does not use it.`,
+    fix: `Correct ${shownPath(layout, manifestFileOf(mode))}; bay check run in the kit's own folder lists every problem.`,
+  };
+}
+
+function folderNameProblems(context: Context): readonly Problem[] {
+  return activeModesOf(context).flatMap((mode) => {
     const folderName = basename(mode.folder);
     if (folderName === mode.value.name) {
       return [];
     }
     return [
       problemAt(mode, ["name"], {
-        message: `The mode is named ${mode.value.name}, but its folder is ${mode.folder}.`,
+        message: `The mode is named ${mode.value.name}, but its folder is ${shown(context, mode.folder)}.`,
         fix: `Rename the folder to ${mode.value.name}, or set name: ${folderName}.`,
       }),
     ];
   });
 }
 
-function indexModes(modes: readonly ModeSource[]): Indexed<ModeSource> {
+function duplicateWording(layout: Layout, name: string, files: readonly string[]): Wording {
+  const both = files.map((file) => shownPath(layout, file)).join(" and ");
+  return {
+    message: `Two modes are named ${name}: ${both}.`,
+    fix: "Rename one of them; every mode needs its own name, and a project mode cannot replace a kit mode.",
+  };
+}
+
+function indexModes(modes: LoadedModes, layout: Layout): Indexed<ModeSource> {
   const index = new Map<string, ModeSource>();
+  const seen = new Map<string, string>();
   const problems: Problem[] = [];
-  for (const mode of modes) {
-    const first = index.get(mode.value.name);
-    if (first === undefined) {
-      index.set(mode.value.name, mode);
+  for (const mode of modes.unloaded) {
+    const first = seen.get(mode.name);
+    const file = manifestFileOf(mode);
+    if (first !== undefined) {
+      problems.push({ file, path: "", ...duplicateWording(layout, mode.name, [first, file]) });
+    }
+    seen.set(mode.name, first ?? file);
+  }
+  for (const mode of modes.values) {
+    const name = mode.value.name;
+    const first = seen.get(name);
+    if (first !== undefined) {
+      problems.push(problemAt(mode, ["name"], duplicateWording(layout, name, [first, mode.file])));
       continue;
     }
-    problems.push(
-      problemAt(mode, ["name"], {
-        message: `Two modes are named ${mode.value.name}: ${first.folder} and ${mode.folder}.`,
-        fix: "Rename one of them; every mode needs its own name.",
-      }),
-    );
+    seen.set(name, mode.file);
+    index.set(name, mode);
   }
   return { index, problems };
 }
 
-function indexInterfaces(interfaces: readonly Loaded<Interface>[]): Indexed<Loaded<Interface>> {
+function indexInterfaces(interfaces: readonly Loaded<Interface>[], layout: Layout): Indexed<Loaded<Interface>> {
   const index = new Map<string, Loaded<Interface>>();
   const problems: Problem[] = [];
   for (const loaded of interfaces) {
@@ -306,7 +485,7 @@ function indexInterfaces(interfaces: readonly Loaded<Interface>[]): Indexed<Load
     }
     problems.push(
       problemAt(loaded, ["name"], {
-        message: `Two interface files define ${reference}: ${first.file} and ${loaded.file}.`,
+        message: `Two interface files define ${reference}: ${shownPath(layout, first.file)} and ${shownPath(layout, loaded.file)}.`,
         fix: "Remove one of them, or give one a different name or version.",
       }),
     );
@@ -317,9 +496,10 @@ function indexInterfaces(interfaces: readonly Loaded<Interface>[]): Indexed<Load
 function unknownInterface(context: Context, subject: string, reference: string): Wording {
   const otherVersions = [...context.interfaces.keys()].filter((key) => interfaceName(key) === interfaceName(reference));
   const found = otherVersions.length === 0 ? "" : ` (found: ${otherVersions.join(", ")})`;
+  const folders = interfaceFolders(context.layout).map((folder) => shown(context, folder));
   return {
-    message: `${subject} ${reference}, but no interface file in ${interfacesFolder} defines it${found}.`,
-    fix: `Correct the name or major version, or add the interface to ${interfacesFolder}.`,
+    message: `${subject} ${reference}, but no interface file in ${folders.join(" or ")} defines it${found}.`,
+    fix: `Correct the name or major version, or add the interface to ${folders.at(-1) ?? ""}.`,
   };
 }
 
@@ -405,7 +585,7 @@ async function shapeProblems(
     const ownPath = place.action[direction];
     const declaredPath = implemented.signature[direction];
     const own = await readSchemaFile(files, join(place.mode.folder, ownPath));
-    const declared = await readSchemaFile(files, join(interfacesFolder, declaredPath));
+    const declared = await readSchemaFile(files, join(implemented.folder, declaredPath));
     if (own.state !== "valid" || declared.state !== "valid" || isDeepStrictEqual(own.schema, declared.schema)) {
       continue;
     }
@@ -424,11 +604,12 @@ async function shapeProblems(
 async function signatureProblems(
   files: FileSystem,
   mode: ModeSource,
-  definition: Interface,
+  definition: Loaded<Interface>,
 ): Promise<readonly Problem[]> {
-  const reference = interfaceReference(definition);
+  const reference = interfaceReference(definition.value);
+  const folder = dirname(definition.file);
   const problems: Problem[] = [];
-  for (const [name, signature] of Object.entries(definition.actions)) {
+  for (const [name, signature] of Object.entries(definition.value.actions)) {
     const action = mode.value.actions[name];
     if (action === undefined) {
       problems.push(
@@ -440,8 +621,8 @@ async function signatureProblems(
       continue;
     }
     const place = { mode, name, action };
-    problems.push(...extraEffectProblems(place, { reference, signature }));
-    problems.push(...(await shapeProblems(files, place, { reference, signature })));
+    problems.push(...extraEffectProblems(place, { reference, signature, folder }));
+    problems.push(...(await shapeProblems(files, place, { reference, signature, folder })));
   }
   return problems;
 }
@@ -455,7 +636,7 @@ async function implementsProblems(context: Context, mode: ModeSource): Promise<r
       problems.push(problemAt(mode, ["implements", index], unknownInterface(context, subject, reference)));
       continue;
     }
-    problems.push(...(await signatureProblems(context.files, mode, definition.value)));
+    problems.push(...(await signatureProblems(context.files, mode, definition)));
   }
   return problems;
 }
@@ -625,28 +806,30 @@ function interfaceReferences(loaded: Loaded<Interface>): readonly FileReference[
       kind: "schema" as const,
       owner: loaded,
       path: ["actions", name, direction],
-      file: join(interfacesFolder, signature[direction]),
+      file: join(dirname(loaded.file), signature[direction]),
       subject: `Action ${name} of interface ${reference} names the ${direction} schema ${signature[direction]}`,
     })),
   );
 }
 
-async function fileReferenceProblem(files: FileSystem, reference: FileReference): Promise<Problem | undefined> {
+async function fileReferenceProblem(context: Context, reference: FileReference): Promise<Problem | undefined> {
+  const file = shown(context, reference.file);
   const missing = {
-    message: `${reference.subject}, but ${reference.file} does not exist.`,
-    fix: `Create ${reference.file}, or correct the path.`,
+    message: `${reference.subject}, but ${file} does not exist.`,
+    fix: `Create ${file}, or correct the path.`,
   };
   if (reference.kind === "file") {
-    return (await files.exists(reference.file)) ? undefined : problemAt(reference.owner, reference.path, missing);
+    const exists = await context.files.exists(reference.file);
+    return exists ? undefined : problemAt(reference.owner, reference.path, missing);
   }
-  const schemaFile = await readSchemaFile(files, reference.file);
+  const schemaFile = await readSchemaFile(context.files, reference.file);
   switch (schemaFile.state) {
     case "missing":
       return problemAt(reference.owner, reference.path, missing);
     case "invalid":
       return problemAt(reference.owner, reference.path, {
-        message: `${reference.subject}, but ${reference.file} is not valid JSON: ${schemaFile.reason}.`,
-        fix: `Correct the JSON in ${reference.file}.`,
+        message: `${reference.subject}, but ${file} is not valid JSON: ${schemaFile.reason}.`,
+        fix: `Correct the JSON in ${file}.`,
       });
     case "valid":
       return undefined;
@@ -655,12 +838,12 @@ async function fileReferenceProblem(files: FileSystem, reference: FileReference)
 
 async function referenceProblems(context: Context): Promise<readonly Problem[]> {
   const references = [
-    ...[...context.modes.values()].flatMap(modeReferences),
+    ...activeModesOf(context).flatMap(modeReferences),
     ...[...context.interfaces.values()].flatMap(interfaceReferences),
   ];
   const problems: Problem[] = [];
   for (const reference of references) {
-    const problem = await fileReferenceProblem(context.files, reference);
+    const problem = await fileReferenceProblem(context, reference);
     if (problem !== undefined) {
       problems.push(problem);
     }
@@ -670,7 +853,7 @@ async function referenceProblems(context: Context): Promise<readonly Problem[]> 
 
 function dependencyGraph(context: Context): ReadonlyMap<string, readonly string[]> {
   const graph = new Map<string, readonly string[]>();
-  for (const mode of context.modes.values()) {
+  for (const mode of activeModesOf(context)) {
     const dependencies = requiredReferences(mode.value).flatMap((reference) => boundModeOf(context, reference) ?? []);
     graph.set(mode.value.name, dependencies);
   }
@@ -792,7 +975,8 @@ function workflowReferenceProblems(entry: ModeWorkflow): readonly Problem[] {
 }
 
 function workflowProblems(context: Context, workflows: readonly ModeWorkflow[]): readonly Problem[] {
-  return workflows.flatMap((entry) => {
+  const active = workflows.filter((entry) => context.active.has(entry.mode.value.name));
+  return active.flatMap((entry) => {
     const actionProblems = workflowStepPlaces(entry.loaded.value.steps, []).flatMap(
       (place) => workflowActionProblem(context, entry, place) ?? [],
     );
@@ -820,7 +1004,7 @@ async function modeSettingsProblems(context: Context, mode: ModeSource): Promise
       message:
         `Mode ${mode.value.name} names the settings schema ${settingsPath}, ` +
         `which is not a usable JSON Schema: ${check.reason}.`,
-      fix: `Correct ${join(mode.folder, settingsPath)}.`,
+      fix: `Correct ${shown(context, join(mode.folder, settingsPath))}.`,
     }),
   ];
 }
@@ -832,7 +1016,7 @@ function straySettingsProblems(context: Context): readonly Problem[] {
   }
   return Object.keys(config.value.settings ?? {}).flatMap((modeName) => {
     const mode = context.modes.get(modeName);
-    if (context.unloadedModes.has(modeName)) {
+    if (context.unloadedModes.has(modeName) || (mode !== undefined && !context.active.has(modeName))) {
       return [];
     }
     if (mode === undefined) {
@@ -857,7 +1041,7 @@ function straySettingsProblems(context: Context): readonly Problem[] {
 
 async function consistencyProblems(context: Context): Promise<readonly Problem[]> {
   const problems: Problem[] = [];
-  for (const mode of context.modes.values()) {
+  for (const mode of activeModesOf(context)) {
     problems.push(...requiresProblems(context, mode));
     problems.push(...(await implementsProblems(context, mode)));
     problems.push(...actionsOf(mode).flatMap((place) => actionProblems(context, place)));
@@ -877,11 +1061,14 @@ function buildSystem(context: Context, config: Config, workflows: readonly ModeW
       .filter((entry) => entry.mode.value.name === name)
       .map((entry) => [entry.path, entry.loaded.value] as const);
     modes.set(name, {
+      home: mode.home,
       folder: mode.folder,
       manifest: mode.value,
       workflows: new Map(own),
       settings: settingsOf(config, name),
     });
+  }
+  for (const mode of activeModesOf(context)) {
     for (const reference of requiredReferences(mode.value)) {
       const boundMode = boundModeOf(context, reference);
       if (boundMode !== undefined) {
@@ -893,38 +1080,57 @@ function buildSystem(context: Context, config: Config, workflows: readonly ModeW
   for (const [reference, loaded] of context.interfaces) {
     interfaces.set(reference, { file: loaded.file, definition: loaded.value });
   }
-  return { modes, interfaces, bindings, config };
+  return { modes, active: context.active, interfaces, bindings, config };
 }
 
-export async function loadSystem(files: FileSystem, layout: SystemLayout): Promise<Outcome<System>> {
-  const rooted = rootedFileSystem(files, layout.root);
-  const modes = await loadModes(rooted);
-  const interfaces = await loadInterfaces(rooted);
-  const config = await loadConfig(rooted, layout.configFile);
-  const modeIndex = indexModes(modes.values);
-  const interfaceIndex = indexInterfaces(interfaces.values);
-  const context: Context = {
-    files: rooted,
+function loadProblems(context: Context, modes: LoadedModes): Collected<UnloadedMode> {
+  const inactive = modes.unloaded.filter((mode) => !context.active.has(mode.name));
+  const active = modes.unloaded.filter((mode) => context.active.has(mode.name));
+  return { values: inactive, problems: active.flatMap((mode) => mode.problems) };
+}
+
+export async function loadSystemReport(files: FileSystem, layout: Layout): Promise<SystemReport> {
+  const modes = await loadModes(files, layout);
+  const interfaces = await loadInterfaces(files, layout);
+  const config = await loadConfig(files, layout);
+  const modeIndex = indexModes(modes, layout);
+  const interfaceIndex = indexInterfaces(interfaces.values, layout);
+  const loaded = {
+    files,
+    layout,
     modes: modeIndex.index,
     interfaces: interfaceIndex.index,
     config: config.ok ? config.value : undefined,
-    unloadedModes: modes.unloaded,
+    unloadedModes: new Set(modes.unloaded.map((mode) => mode.name)),
   };
+  const activated = activation({ ...loaded, active: new Set() }, homesOf(modes));
+  const context: Context = { ...loaded, active: activated.active };
+  const unloaded = loadProblems(context, modes);
   const workflows = await loadWorkflows(context);
   const problems = [
-    ...(await modeInInterfacesProblems(rooted)),
-    ...modes.problems,
+    ...(await modeInInterfacesProblems(files, layout)),
+    ...unloaded.problems,
     ...interfaces.problems,
     ...(config.ok ? [] : config.problems),
-    ...folderNameProblems(modes.values),
+    ...activated.problems,
+    ...folderNameProblems(context),
     ...modeIndex.problems,
     ...interfaceIndex.problems,
     ...(await consistencyProblems(context)),
     ...workflows.problems,
     ...workflowProblems(context, workflows.values),
   ];
+  const notices = shownProblems(
+    layout,
+    unloaded.values.map((mode) => inactiveNotice(layout, mode)),
+  );
+  const report = { active: context.active, notices };
   if (problems.length > 0 || !config.ok) {
-    return { ok: false, problems };
+    return { ...report, outcome: { ok: false, problems: shownProblems(layout, problems) } };
   }
-  return { ok: true, value: buildSystem(context, config.value.value, workflows.values) };
+  return { ...report, outcome: { ok: true, value: buildSystem(context, config.value.value, workflows.values) } };
+}
+
+export async function loadSystem(files: FileSystem, layout: Layout): Promise<Outcome<System>> {
+  return (await loadSystemReport(files, layout)).outcome;
 }

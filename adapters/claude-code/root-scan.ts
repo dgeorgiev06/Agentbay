@@ -36,7 +36,7 @@ async function scanFolder(files: Files, folder: string): Promise<Scan> {
 
 async function rootProblem(request: BuildRequest, agent: SkillAgent, folder: string): Promise<Problem | undefined> {
   const where = { file: agent.skillFile, path: "" };
-  if (ownClosedSegment(folder, [request.root, request.kit])) {
+  if (ownClosedSegment(folder, [request.layout.project, request.layout.kit])) {
     return { ...where, message: `the step ${agent.agent} is granted ${folder}, whose path names a closed location` };
   }
   const scan = await scanFolder(request.files, folder);
@@ -65,7 +65,8 @@ export async function grantedRootProblems(request: BuildRequest): Promise<readon
   for (const agent of request.agents) {
     const roots = new Set([...agent.permissions.readPaths, ...agent.permissions.writePaths]);
     for (const folder of roots) {
-      const problem = await rootProblem(request, agent, isAbsolute(folder) ? folder : join(request.root, folder));
+      const absolute = isAbsolute(folder) ? folder : join(request.layout.project, folder);
+      const problem = await rootProblem(request, agent, absolute);
       if (problem !== undefined) {
         problems.push(problem);
       }

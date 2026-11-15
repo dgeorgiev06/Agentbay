@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { failed, granted, listed, manifestOf, refused } from "../bay/answers.ts";
-import { checkPath, isInsideOrEqual } from "../bay/file-access.ts";
+import { checkPath } from "../bay/file-access.ts";
+import { isInsideOrEqual, layoutOf } from "../bay/layout.ts";
 import { checkUrl, hostAllowed, loggedHeaders, nextRequest, redirectTarget } from "../bay/http-access.ts";
 import { isJson, isJsonRecord, parsedLine } from "../bay/protocol-json.ts";
 import { childMessageOf, parentMessageOf } from "../bay/script-protocol.ts";
@@ -140,7 +141,8 @@ test("a path check resolves links on the deepest existing ancestor", async () =>
     isLink: (path) => Promise.resolve(links.has(path)),
     entries: () => Promise.resolve([]),
   };
-  const request = { root: "/root", permitted: ["/root/in"], purpose: "read" as const };
+  const layout = layoutOf({ kit: "/root", project: "/root" });
+  const request = { layout, permitted: ["/root/in"], purpose: "read" as const };
   assert.deepEqual(await checkPath(inspector, { ...request, path: "in/new/file.txt" }), {
     status: "allowed",
     path: "/root/in/new/file.txt",

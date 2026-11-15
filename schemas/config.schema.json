@@ -16,6 +16,12 @@
       "description": "The adapter that runs skill steps.",
       "$ref": "#/$defs/name"
     },
+    "modes": {
+      "description": "Kit modes this project uses; its own modes, and the modes they bind, are used anyway.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/name" }
+    },
     "settings": {
       "description": "Settings per mode, as mode name: settings; each is checked against the mode's settings schema.",
       "type": "object",

@@ -3,23 +3,20 @@ import {
   errors,
   isLoaded,
   loadCheckContext,
-  rootedFileSystem,
   warnings,
   type CheckContext,
+  type FileListing,
   type Finding,
   type LoadedModeFolder,
 } from "./check-context.ts";
-import { checkImports } from "./check-imports.ts";
-import { checkLayout } from "./check-layout.ts";
+import { checkImports, checkKernelImports } from "./check-imports.ts";
+import { checkKitLayout, checkLayout } from "./check-layout.ts";
 import { checkLimits } from "./check-limits.ts";
 import { checkSkills } from "./check-skills.ts";
+import { isInsideOrEqual, isProjectTheKit, pathIn, shownPath, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
-import { loadSystem, type SystemLayout } from "./registry.ts";
+import { loadSystemReport } from "./registry.ts";
 import { problemAt, type Problem } from "./spec.ts";
-
-export type FileListing = {
-  readonly projectFiles: (root: string) => Promise<readonly string[]>;
-};
 
 export type CheckPorts = {
   readonly files: FileSystem;
@@ -32,7 +29,7 @@ export type CheckReport = {
   readonly warnings: number;
 };
 
-const baseTier = "components/base/";
+const baseTier = "components/base";
 
 function commandProblems(mode: LoadedModeFolder): readonly Problem[] {
   const commands = mode.manifest.value.resources?.commands ?? [];
@@ -49,35 +46,47 @@ function commandProblems(mode: LoadedModeFolder): readonly Problem[] {
 function outsideBaseProblems(mode: LoadedModeFolder): readonly Problem[] {
   return commandProblems(mode).map((problem) => ({
     ...problem,
-    message: `${problem.message} Only a mode under ${baseTier} may list commands.`,
-    fix: `Remove the command from ${join(mode.folder, "mode.yaml")}; a skill step's checks belong in script steps.`,
+    message: `${problem.message} Only a mode under the kit's ${baseTier}/ may list commands.`,
+    fix: `Remove the command from ${join(mode.label, "mode.yaml")}; a skill step's checks belong in script steps.`,
   }));
 }
 
 function checkCommands(context: CheckContext): readonly Finding[] {
+  const base = pathIn(context.layout, "kit", baseTier);
   return context.modes.filter(isLoaded).flatMap((mode) => {
-    const isBase = mode.folder.startsWith(baseTier);
+    const isBase = mode.home === "kit" && isInsideOrEqual(mode.folder, base);
     return isBase ? warnings(commandProblems(mode)) : errors(outsideBaseProblems(mode));
   });
 }
 
-async function registryFindings(ports: CheckPorts, layout: SystemLayout): Promise<readonly Finding[]> {
-  const outcome = await loadSystem(ports.files, layout);
-  return outcome.ok ? [] : errors(outcome.problems);
+async function kitFindings(context: CheckContext): Promise<readonly Finding[]> {
+  if (!isProjectTheKit(context.layout)) {
+    return [];
+  }
+  return [
+    ...checkKitLayout(context.kit),
+    ...(await checkKernelImports(context.kit)),
+    ...(await checkLimits(context.kit)),
+  ];
 }
 
-export async function checkSystem(ports: CheckPorts, layout: SystemLayout): Promise<CheckReport> {
-  const files = rootedFileSystem(ports.files, layout.root);
-  const paths = await ports.listing.projectFiles(layout.root);
-  const context = await loadCheckContext(files, paths);
-  const findings = [
-    ...(await registryFindings(ports, layout)),
+function shownFindings(layout: Layout, findings: readonly Finding[]): readonly Finding[] {
+  return findings.map((finding) => ({ ...finding, file: shownPath(layout, finding.file) }));
+}
+
+export async function checkSystem(ports: CheckPorts, layout: Layout): Promise<CheckReport> {
+  const report = await loadSystemReport(ports.files, layout);
+  const context = await loadCheckContext({ ...ports, layout, active: report.active });
+  const registryFindings = report.outcome.ok ? [] : errors(report.outcome.problems);
+  const findings = shownFindings(layout, [
+    ...registryFindings,
+    ...warnings(report.notices),
     ...(await checkSkills(context)),
     ...(await checkLayout(context)),
     ...(await checkImports(context)),
     ...checkCommands(context),
-    ...(await checkLimits(context)),
-  ];
+    ...(await kitFindings(context)),
+  ]);
   const errorCount = findings.filter((finding) => finding.severity === "error").length;
   return { findings, errors: errorCount, warnings: findings.length - errorCount };
 }

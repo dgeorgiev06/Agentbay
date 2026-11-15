@@ -1,6 +1,7 @@
 import { basename, join, normalize } from "node:path/posix";
 import type { Mode } from "./generated/mode.ts";
 import { errors, isLoaded, type CheckContext, type Finding, type LoadedModeFolder } from "./check-context.ts";
+import { pathIn } from "./layout.ts";
 import { parseSkill, type Problem, type Wording } from "./spec.ts";
 
 type BodyLine = {
@@ -368,29 +369,31 @@ function declaredPaths(mode: Mode): readonly string[] {
   return [...(files?.read ?? []), ...(files?.write ?? [])].map(withoutTrailingSlash);
 }
 
-function isInsideMode(mode: LoadedModeFolder, path: string): boolean {
-  return isUnder(path, mode.folder) || mode.files.some((file) => isUnder(file, path));
+function isInsideMode(context: CheckContext, mode: LoadedModeFolder, path: string): boolean {
+  const inProject = pathIn(context.layout, "project", path);
+  return isUnder(inProject, mode.folder) || mode.files.some((file) => isUnder(file, path));
 }
 
-function isAllowedResource(mode: LoadedModeFolder, entry: string): boolean {
+function isAllowedResource(context: CheckContext, mode: LoadedModeFolder, entry: string): boolean {
   if (escapes(entry)) {
     return false;
   }
   const path = withoutTrailingSlash(entry);
-  return isInsideMode(mode, path) || declaredPaths(mode.manifest.value).some((declared) => isUnder(path, declared));
+  const declared = declaredPaths(mode.manifest.value);
+  return isInsideMode(context, mode, path) || declared.some((folder) => isUnder(path, folder));
 }
 
-function resourcesProblems(place: SkillPlace, skill: SkillText): readonly Problem[] {
+function resourcesProblems(context: CheckContext, place: SkillPlace, skill: SkillText): readonly Problem[] {
   const modeName = place.mode.manifest.value.name;
   const declared = declaredPaths(place.mode.manifest.value);
   const declaredText = declared.length === 0 ? "none" : declared.join(", ");
   return entriesOf(skill, "Resources")
-    .filter((item) => !isAllowedResource(place.mode, item.entry))
+    .filter((item) => !isAllowedResource(context, place.mode, item.entry))
     .map((item) =>
       at(place, item.line, {
         message:
           `${skillLabel(place)} lists the resource ${item.entry}, which is neither a file of the mode folder ` +
-          `${place.mode.folder} nor inside the paths mode ${modeName} declares in resources.files (${declaredText}).`,
+          `${place.mode.label} nor inside the paths mode ${modeName} declares in resources.files (${declaredText}).`,
         fix: `Name a file of the mode folder, relative to it, or add the path to resources.files of ${modeName}.`,
       }),
     );
@@ -403,7 +406,7 @@ function nameProblems(place: SkillPlace, skill: SkillText, name: string): readon
   }
   return [
     at(place, skill.nameLine, {
-      message: `The skill in ${place.mode.folder}/${place.folder} is named ${name}, but its folder is ${folderName}.`,
+      message: `The skill in ${place.mode.label}/${place.folder} is named ${name}, but its folder is ${folderName}.`,
       fix: `Set name: ${folderName}, or rename the folder to ${name}.`,
     }),
   ];
@@ -419,7 +422,7 @@ function contentProblems(context: CheckContext, place: SkillPlace, skill: SkillT
     ...definitionOfDoneProblems(place, skill),
     ...instructionsProblems(place, skill),
     ...toolsProblems(context, place, skill),
-    ...resourcesProblems(place, skill),
+    ...resourcesProblems(context, place, skill),
   ];
 }
 

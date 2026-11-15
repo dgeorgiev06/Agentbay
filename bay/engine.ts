@@ -12,6 +12,7 @@ import {
 import type { Json, PolicyOf, RunEvent, Scrubber, ScriptRunner, Spend, Submission } from "./contracts.ts";
 import type { Budget } from "./generated/mode.ts";
 import { byteSize, fieldOf, numberField, textField, toJson, withFields } from "./json.ts";
+import { inactiveModeWording } from "./policy.ts";
 import type { Clock, FileSystem } from "./ports.ts";
 import type { System } from "./registry.ts";
 import {
@@ -39,7 +40,6 @@ export type EngineOptions = {
   readonly policyOf: PolicyOf;
   readonly clock: Clock;
   readonly files: FileSystem;
-  readonly root: string;
   readonly scrubber: Scrubber;
   readonly owner?: string;
   readonly newId?: () => string;
@@ -294,6 +294,9 @@ export class Engine {
     if (typeof target === "string") {
       return refusal(options.id ?? "new", { message: target });
     }
+    if (!system.active.has(target.mode.manifest.name)) {
+      return refusal(options.id ?? "new", inactiveModeWording(target.mode.manifest.name));
+    }
     const check = { mode: target.mode, schema: target.action.input, value: input, label: "input" };
     const problems = await schemaProblems(this.#services, check);
     if (problems.length > 0) {
@@ -310,6 +313,9 @@ export class Engine {
     options: StartOptions = {},
   ): Promise<EngineResult> {
     const { mode, path } = reference;
+    if (this.#services.system.modes.has(mode) && !this.#services.system.active.has(mode)) {
+      return refusal(options.id ?? "new", inactiveModeWording(mode));
+    }
     const workflow = this.#services.system.modes.get(mode)?.workflows.get(path);
     if (workflow === undefined) {
       return refusal(options.id ?? "new", { message: `Mode ${mode} has no workflow ${path}.` });

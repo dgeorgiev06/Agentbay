@@ -47,7 +47,7 @@ async function runNew(invocation: Invocation): Promise<CommandResult> {
   if (generator === undefined) {
     return usageResult(`There is no kind ${kind}; the kinds are ${[...generators.keys()].join(", ")}.`, usage);
   }
-  const workspace = { files: invocation.context.ports.files, root: invocation.project };
+  const workspace = { files: invocation.context.ports.files, layout: invocation.layout };
   const generated = generator(workspace, invocation, name);
   if (typeof generated === "string") {
     return usageResult(generated, usage);

@@ -32,7 +32,7 @@ function templateFiles(): Record<string, string> {
 
 function setup(extra: Readonly<Record<string, string>> = {}): Setup {
   const files = fakeFileSystem(rooted({ ...cleanFiles(), ...templateFiles(), ...extra }));
-  return { files, workspace: { files, root: layout.root } };
+  return { files, workspace: { files, layout } };
 }
 
 function written(outcome: Generated): readonly string[] {
@@ -57,7 +57,7 @@ function member(value: unknown, key: string): unknown {
 }
 
 function text(files: FakeFileSystem, path: string): string {
-  const content = files.contents.get(`${layout.root}/${path}`);
+  const content = files.contents.get(`${layout.project}/${path}`);
   assert.ok(content !== undefined, `${path} was not written`);
   return content;
 }
@@ -208,7 +208,7 @@ test("newInterface writes the interface file and refuses one that exists", async
 
 test("a missing template is reported and nothing is written", async () => {
   const files = fakeFileSystem(rooted(cleanFiles()));
-  const outcome = await newInterface({ files, root: layout.root }, "alerts");
+  const outcome = await newInterface({ files, layout }, "alerts");
   refusal(outcome, "The template bay/templates/interface/interface.yaml is missing.");
-  assert.equal(files.contents.has(`${layout.root}/components/base/interfaces/alerts.yaml`), false);
+  assert.equal(files.contents.has(`${layout.project}/components/base/interfaces/alerts.yaml`), false);
 });

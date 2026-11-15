@@ -27,7 +27,6 @@ test("planAgents gives one agent per mode and skill, at the highest tier asked, 
     system: kernel.system,
     policyOf: kernel.policyOf,
     files: kernel.ports.files,
-    root: kernel.root,
   });
   assert.ok(planned.ok, planned.ok ? "" : JSON.stringify(planned.problems));
   assert.equal(planned.value.length, 1);
@@ -51,7 +50,6 @@ test("planAgents reports a skill whose front matter cannot be read", async () =>
     system: kernel.system,
     policyOf: kernel.policyOf,
     files: kernel.ports.files,
-    root: kernel.root,
   });
   assert.ok(!planned.ok);
   assert.match(planned.problems[0]?.message ?? "", /has no front matter/);

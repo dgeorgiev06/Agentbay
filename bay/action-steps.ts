@@ -243,7 +243,7 @@ async function skillSchemas(
   skill: SkillStep,
 ): Promise<readonly string[] | string> {
   const file = join(frame.mode.folder, skill.skill, "SKILL.md");
-  const parsed = await parseSkill(services.files, join(services.root, file));
+  const parsed = await parseSkill(services.files, file);
   if (!parsed.ok) {
     return `The skill ${file} cannot be read: ${problemText(parsed.problems)}`;
   }

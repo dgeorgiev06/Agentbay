@@ -36,7 +36,6 @@ async function walkOf(changes: Partial<Pick<Walk, "phase" | "stopReason">>): Pro
     policyOf: fakePolicy,
     clock: { now: () => startTime },
     files,
-    root: "/kit",
   };
   const base: Walk = {
     services,

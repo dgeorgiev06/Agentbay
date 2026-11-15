@@ -1,14 +1,10 @@
 import { checkSystem, summarizeCheck } from "../check.ts";
 import type { Invocation, CommandResult } from "../command-context.ts";
 import type { Command } from "../command-line.ts";
-import { configFile } from "../kernel.ts";
 
 async function runCheck(invocation: Invocation): Promise<CommandResult> {
   const { ports } = invocation.context;
-  const report = await checkSystem(
-    { files: ports.files, listing: ports.listing },
-    { root: invocation.project, configFile },
-  );
+  const report = await checkSystem({ files: ports.files, listing: ports.listing }, invocation.layout);
   const findings = report.findings.map((finding) => ({
     severity: finding.severity,
     file: finding.file,

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
+import type { Layout } from "../../bay/adapter.ts";
 import { isRecord } from "./guard-input.ts";
 import { listOf, parseObject, withMember, withoutMember, jsonText, type JsonObject } from "./json-file.ts";
 
@@ -20,14 +21,14 @@ function shellQuoted(text: string): string {
   return `'${text}'`;
 }
 
-export function guardEntry(kit: string, root: string): JsonObject {
-  const guard = join(kit, "adapters", "claude-code", "step-guard.ts");
+export function guardEntry(layout: Layout): JsonObject {
+  const guard = join(layout.kit, "adapters", "claude-code", "step-guard.ts");
   return {
     matcher: "*",
     hooks: [
       {
         type: "command",
-        command: `node ${shellQuoted(guard)} --project ${shellQuoted(root)}`,
+        command: `node ${shellQuoted(guard)} --project ${shellQuoted(layout.project)}`,
         timeout: 30,
         onFailure: "block",
       },

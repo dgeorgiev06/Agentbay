@@ -7,21 +7,21 @@ import type { Outcome } from "../spec.ts";
 async function built(invocation: Invocation, kernel: Kernel): Promise<Outcome<readonly string[]>> {
   const { files, removal } = kernel.ports;
   const name = invocation.values.get("adapter") ?? kernel.system.config.adapter;
-  const adapter = await loadAdapter(files, kernel.kit, name);
+  const { layout } = kernel;
+  const adapter = await loadAdapter(files, layout.kit, name);
   if (!adapter.ok) {
     return adapter;
   }
   if (invocation.flags.has("clean")) {
-    return adapter.value.clean({ root: kernel.root, files, removal });
+    return adapter.value.clean({ layout, files, removal });
   }
-  const agents = await planAgents({ system: kernel.system, policyOf: kernel.policyOf, files, root: kernel.root });
+  const agents = await planAgents({ system: kernel.system, policyOf: kernel.policyOf, files });
   if (!agents.ok) {
     return agents;
   }
   return adapter.value.build({
     system: kernel.system,
-    root: kernel.root,
-    kit: kernel.kit,
+    layout,
     agents: agents.value,
     removal,
     files,

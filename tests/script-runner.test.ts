@@ -18,6 +18,7 @@ import {
   sdkFile,
   withProject,
   writeProjectFile,
+  projectLayout,
 } from "./broker-fixture.ts";
 
 const madeUpToken = "made-up-script-token-31337";
@@ -62,7 +63,7 @@ async function runScript(root: string, options: RunOptions): Promise<Run> {
     platform: "linux",
   });
   const runner = createScriptRunner({
-    root,
+    layout: projectLayout(root),
     files: nodeFileSystem,
     inspector: nodeFileInspector,
     http: scriptedHttp((request) => {

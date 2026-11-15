@@ -50,7 +50,7 @@ test("a listed command in a mode outside components/base is an error", async () 
   const report = await check({ ...cleanFiles(), [paths.notes]: manifest });
   const finding = findFinding(report, paths.notes, "Mode notes lists the command git status");
   assert.equal(finding.severity, "error");
-  assert.match(finding.message, /Only a mode under components\/base\/ may list commands\./);
+  assert.match(finding.message, /Only a mode under the kit's components\/base\/ may list commands\./);
 });
 
 test("the summary groups findings by file, errors first, each with its fix, and ends with the counts", () => {

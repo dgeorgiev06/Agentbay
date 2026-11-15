@@ -7,12 +7,12 @@ import { stringify } from "yaml";
 
 export const kit = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 
-export type SdkImport = "relative" | "absolute";
+type SdkImport = "relative" | "specifier";
 
-let sdkImport: SdkImport = "absolute";
+let sdkImport: SdkImport = "specifier";
 
 function script(lines: readonly string[]): string {
-  const from = sdkImport === "relative" ? "../../../../bay/sdk.ts" : join(kit, "bay", "sdk.ts");
+  const from = sdkImport === "relative" ? "../../../../bay/sdk.ts" : "agentbay/sdk";
   return [`import { defineScript, fail } from ${JSON.stringify(from)};`, "", ...lines, ""].join("\n");
 }
 
@@ -123,8 +123,7 @@ const reviewWorkflow = {
   ],
 };
 
-function interfaceFiles(): Record<string, string> {
-  const folder = "components/base/interfaces";
+function interfaceFiles(folder: string): Record<string, string> {
   const definition = {
     name: "greeting-source",
     version: 1,
@@ -252,11 +251,12 @@ function configText(options: ProjectOptions = {}): string {
 const ignored = [".agentbay/", "out/", "bay", "schemas", "node_modules", "package.json"];
 
 function projectFiles(options: ProjectOptions = {}): Record<string, string> {
-  sdkImport = options.ownKernel === true ? "relative" : "absolute";
+  const ownKernel = options.ownKernel === true;
+  sdkImport = ownKernel ? "relative" : "specifier";
   return {
     "agentbay.config.yaml": configText(options),
     ".gitignore": `${ignored.join("\n")}\n`,
-    ...interfaceFiles(),
+    ...interfaceFiles(ownKernel ? "components/base/interfaces" : "components/interfaces"),
     ...greeterFiles(),
     ...writerFiles(),
   };
@@ -279,8 +279,8 @@ export async function makeProject(options: ProjectOptions = {}): Promise<Project
   for (const [path, text] of Object.entries(projectFiles(options))) {
     await write(path, text);
   }
-  await write("framework/limits.yaml", await readFile(join(kit, "framework", "limits.yaml"), "utf8"));
   if (options.ownKernel === true) {
+    await write("framework/limits.yaml", await readFile(join(kit, "framework", "limits.yaml"), "utf8"));
     await cp(join(kit, "bay"), join(root, "bay"), { recursive: true });
     await cp(join(kit, "schemas"), join(root, "schemas"), { recursive: true });
     await cp(join(kit, "package.json"), join(root, "package.json"));

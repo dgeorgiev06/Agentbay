@@ -18,11 +18,12 @@ async function withProject(body: (project: Project) => Promise<void>, ownKernel 
 
 test("check prints the summary and exits 0 on a clean project, 1 with every error listed", async () => {
   await withProject(async (project) => {
-    const clean = await bay(["check", "--project", project.root]);
+    const asKit = { kit: project.root };
+    const clean = await bay(["check", "--project", project.root], asKit);
     assert.equal(clean.exitCode, 0, clean.output);
     assert.equal(clean.output, "bay check: 0 errors, 0 warnings.");
     await project.write("components/modes/writer/skills/draft/SKILL.md", skillText.replace("## Tools", "## Tooling"));
-    const broken = await bay(["check", "--project", project.root, "--json"]);
+    const broken = await bay(["check", "--project", project.root, "--json"], asKit);
     assert.equal(broken.exitCode, 1);
     const json = toJson(broken.json);
     assert.equal(fieldOf(json, "ok"), false);
@@ -36,8 +37,8 @@ test("check counts warnings without failing", async () => {
       "framework/limits.yaml",
       "kernel_lines: 0\nadapter_lines: 0\nconcepts: 0\ncli_commands: 0\n" + "top_level_folders: 0\n",
     );
-    const ran = await bay(["check", "--project", project.root, "--json"]);
-    assert.equal(ran.exitCode, 0);
+    const ran = await bay(["check", "--project", project.root, "--json"], { kit: project.root });
+    assert.equal(ran.exitCode, 0, JSON.stringify(ran.json));
     assert.ok(Number(fieldOf(toJson(ran.json), "warnings")) > 0);
   }, true);
 });
@@ -45,11 +46,12 @@ test("check counts warnings without failing", async () => {
 test("new writes from the K2 templates and checks the options each kind needs", async () => {
   await withProject(async (project) => {
     const root = ["--project", project.root];
-    const skill = await bay(["new", "skill", "summarize", "--mode", "writer", ...root]);
+    const asKit = { kit: project.root };
+    const skill = await bay(["new", "skill", "summarize", "--mode", "writer", ...root], asKit);
     assert.equal(skill.exitCode, 0, skill.output);
     assert.equal(skill.output, "+ components/modes/writer/skills/summarize/SKILL.md");
     assert.match(await project.read("components/modes/writer/skills/summarize/SKILL.md"), /## Rules and constraints/);
-    const mode = await bay(["new", "mode", "keeper", "--tier", "base", ...root, "--json"]);
+    const mode = await bay(["new", "mode", "keeper", "--tier", "base", ...root, "--json"], asKit);
     assert.ok(JSON.stringify(mode.json).includes("components/base/keeper/mode.yaml"));
     const cases: readonly (readonly [readonly string[], RegExp])[] = [
       [["new", "action", "tidy"], /This kind needs --mode <mode>\./],
@@ -57,11 +59,11 @@ test("new writes from the K2 templates and checks the options each kind needs", 
       [["new", "mode", "x", "--tier", "top"], /--tier is base or modes\./],
     ];
     for (const [argv, message] of cases) {
-      const ran = await bay([...argv, ...root]);
+      const ran = await bay([...argv, ...root], asKit);
       assert.equal(ran.exitCode, 2, argv.join(" "));
       assert.match(ran.output, message);
     }
-    const again = await bay(["new", "mode", "keeper", "--tier", "base", ...root]);
+    const again = await bay(["new", "mode", "keeper", "--tier", "base", ...root], asKit);
     assert.equal(again.exitCode, 1);
   }, true);
 });
@@ -86,6 +88,7 @@ test("config prints every setting of the config schema and of each mode's settin
     assert.deepEqual(names, [
       "bindings",
       "adapter",
+      "modes",
       "budget.items",
       "budget.usd",
       "budget.tokens",
@@ -111,16 +114,16 @@ export const adapter = {
   name: "fake",
   build: async (request) => {
     const record = {
-      root: request.root,
-      kit: request.kit,
+      project: request.layout.project,
+      kit: request.layout.kit,
       modes: [...request.system.modes.keys()].sort(),
       agents: request.agents,
     };
-    await request.files.writeAtomic(request.root + "/.fake/build.json", JSON.stringify(record));
+    await request.files.writeAtomic(request.layout.project + "/.fake/build.json", JSON.stringify(record));
     return { ok: true, value: [".fake/build.json"] };
   },
   clean: async (request) => {
-    await writeFile(request.root + "/.fake/cleaned", "yes");
+    await writeFile(request.layout.project + "/.fake/cleaned", "yes");
     return { ok: true, value: [".fake/build.json"] };
   },
 };
@@ -146,14 +149,14 @@ test("build plans one agent per skill and hands the request to the adapter the c
       assert.equal(built.exitCode, 0, JSON.stringify(built.json));
       assert.deepEqual(built.json, { ok: true, paths: [".fake/build.json"] });
       const record = toJson(JSON.parse(await project.read(".fake/build.json")));
-      assert.equal(textField(record, "root"), project.root);
+      assert.equal(textField(record, "project"), project.root);
       assert.equal(textField(record, "kit"), kitFolder);
       assert.deepEqual(fieldOf(record, "modes"), ["greeter", "writer"]);
       const agents = listOf(fieldOf(record, "agents"));
       assert.equal(agents.length, 1);
       const agent = agents[0] ?? null;
       assert.equal(textField(agent, "agent"), "agentbay-writer-draft");
-      assert.equal(textField(agent, "skillFile"), "components/modes/writer/skills/draft/SKILL.md");
+      assert.equal(textField(agent, "skillFile"), join(project.root, "components/modes/writer/skills/draft/SKILL.md"));
       assert.equal(textField(agent, "tier"), "balanced");
       assert.deepEqual(fieldOf(agent, "kernelTools"), [
         "db_query",

@@ -1,4 +1,5 @@
 import type { Permissions, Tier } from "./contracts.ts";
+import type { Layout } from "./layout.ts";
 import type { FileSystem, Removal } from "./ports.ts";
 import type { System } from "./registry.ts";
 import type { Outcome } from "./spec.ts";
@@ -14,17 +15,18 @@ export type SkillAgent = {
   readonly permissions: Permissions;
 };
 
+export type { Layout } from "./layout.ts";
+
 export type BuildRequest = {
   readonly system: System;
-  readonly root: string;
-  readonly kit: string;
+  readonly layout: Layout;
   readonly agents: readonly SkillAgent[];
   readonly files: FileSystem;
   readonly removal: Removal;
 };
 
 export type CleanRequest = {
-  readonly root: string;
+  readonly layout: Layout;
   readonly files: FileSystem;
   readonly removal: Removal;
 };

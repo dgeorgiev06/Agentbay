@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import { test } from "node:test";
 import type { Json } from "../bay/contracts.ts";
 import { fieldOf, numberField, textField, toJson } from "../bay/json.ts";
@@ -55,8 +56,9 @@ test("call starts an action and prints the waiting skill's task with every field
     ]);
     assert.equal(textField(task ?? null, "agent"), "agentbay-writer-draft");
     assert.equal(textField(task ?? null, "stepKey"), "1#1");
-    assert.equal(textField(task ?? null, "skillFile"), "components/modes/writer/skills/draft/SKILL.md");
-    assert.equal(textField(task ?? null, "outputSchema"), "components/modes/writer/schemas/draft-output.json");
+    const writer = join(project.root, "components/modes/writer");
+    assert.equal(textField(task ?? null, "skillFile"), join(writer, "skills/draft/SKILL.md"));
+    assert.equal(textField(task ?? null, "outputSchema"), join(writer, "schemas/draft-output.json"));
     assert.equal(numberField(task ?? null, "round"), 1);
     assert.equal(textField(runOf(ran.json), "notice"), "A task token was issued with this task; it is shown only now.");
     const text = await bay(["call", "greeter.fetch", '{"name":"Bo"}', "--project", project.root]);

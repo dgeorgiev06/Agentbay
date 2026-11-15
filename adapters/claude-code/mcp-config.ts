@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
+import type { Layout } from "../../bay/adapter.ts";
 import { isRecord } from "./guard-input.ts";
 import { parseObject, withMember, withoutMember, jsonText, type JsonObject } from "./json-file.ts";
 import type { Merged, Unmerged } from "./settings.ts";
@@ -13,8 +14,8 @@ export type McpAddition = {
   readonly createdServers: boolean;
 };
 
-export function kernelServer(kit: string, root: string): JsonObject {
-  return { command: "node", args: [join(kit, "bay", "mcp.ts"), "--project", root] };
+export function kernelServer(layout: Layout): JsonObject {
+  return { command: "node", args: [join(layout.kit, "bay", "mcp.ts"), "--project", layout.project] };
 }
 
 export function mergeMcp(text: string | undefined, server: JsonObject): Merged<McpAddition> {

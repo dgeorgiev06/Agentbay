@@ -11,16 +11,13 @@ import {
   smallestBudget,
   type BudgetFrame,
 } from "./budget.ts";
-import type { Json, PolicyOf, RunEvent, Scrubber, ScriptRunner, Spend, Submission } from "../contracts.ts";
+import type { Json, RunEvent, Spend, Submission } from "../contracts.ts";
 import type { Budget } from "../generated/mode.ts";
 import { byteSize, toJson } from "../json.ts";
 import { inactiveModeWording } from "../policy.ts";
-import type { Clock, FileSystem } from "../ports.ts";
-import type { System } from "../registry.ts";
 import {
   kernelDatabaseFile,
   lockStaleMilliseconds,
-  type RunStore,
   type RunTarget,
   type RunWithSteps,
   type StepRecord,
@@ -37,14 +34,7 @@ import { hasUndoRecords, runUndo } from "./undo.ts";
 import { eventOf, failed, schemaProblems, type Progress, type Services, type Walk } from "./walk.ts";
 import { runWorkflowSteps } from "./workflow-steps.ts";
 
-type EngineOptions = {
-  readonly system: System;
-  readonly store: RunStore;
-  readonly runner: ScriptRunner;
-  readonly policyOf: PolicyOf;
-  readonly clock: Clock;
-  readonly files: FileSystem;
-  readonly scrubber: Scrubber;
+type EngineOptions = Services & {
   readonly owner?: string;
   readonly newId?: () => string;
 };
@@ -277,12 +267,10 @@ export class Engine {
   readonly #services: Services;
   readonly #owner: string;
   readonly #newId: () => string;
-  readonly #scrubber: Scrubber;
 
   constructor(options: EngineOptions) {
     const { owner, newId, scrubber, store, ...collaborators } = options;
-    this.#services = { ...collaborators, store: scrubbedStore(store, scrubber) };
-    this.#scrubber = scrubber;
+    this.#services = { ...collaborators, store: scrubbedStore(store, scrubber), scrubber };
     this.#owner = owner ?? `engine-${randomUUID()}`;
     this.#newId = newId ?? randomUUID;
   }
@@ -491,7 +479,9 @@ export class Engine {
       return await body();
     } catch (error) {
       return refusal(writer.runId, {
-        message: this.#scrubber.redact(`Run ${writer.runId} stopped at an unexpected error: ${errorLine(error)}`),
+        message: this.#services.scrubber.redact(
+          `Run ${writer.runId} stopped at an unexpected error: ${errorLine(error)}`,
+        ),
         fix: `Fix the cause, then continue it with bay resume ${writer.runId}.`,
       });
     } finally {

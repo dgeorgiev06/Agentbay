@@ -2,11 +2,12 @@ import { runNestedAction } from "./action-steps.ts";
 import { noSpend, subtractSpend, type BudgetFrame } from "./budget.ts";
 import type { Json } from "../contracts.ts";
 import type { Step as WorkflowStep } from "../generated/workflow.ts";
-import { hashOf, toJson } from "../json.ts";
+import { toJson } from "../json.ts";
 import { problemText, succeededWith } from "../outcome.ts";
 import { resolveInput, resolveValue, type ReferenceScope } from "../references.ts";
 import type { LoadedMode } from "../registry.ts";
 import type { StepRecord } from "./run-store.ts";
+import { approvalContentOf, type ApprovalContent } from "./scrubbed-store.ts";
 import type { ApprovalDetail } from "./step-detail.ts";
 import { foreachItemKey, workflowStepKey } from "./step-key.ts";
 import { resolveWorkflowAction } from "../targets.ts";
@@ -55,10 +56,8 @@ type StepAt<T> = {
   readonly previous: Json;
 };
 
-type Shown = {
+type Shown = ApprovalContent & {
   readonly detail: ApprovalDetail;
-  readonly content: Json;
-  readonly hash: string;
 };
 
 const unitMilliseconds: ReadonlyMap<string, number> = new Map([
@@ -151,14 +150,14 @@ async function runApproval(walk: Walk, scope: WorkflowScope, at: StepAt<Approval
   if (stopped !== undefined) {
     return stopped;
   }
-  const hash = hashOf(content.value);
+  const shown = approvalContentOf(content.value, walk.services.scrubber);
   const detail = record === undefined ? undefined : approvalDetailOf(record);
   if (detail === undefined) {
-    const started = { question: at.step.approval, hash };
-    await startRecord(walk, { key: at.key, kind: "approval", input: content.value, detail: started });
-    return approvalWaiting(at, started, content.value);
+    const started = { question: at.step.approval, hash: shown.hash };
+    await startRecord(walk, { key: at.key, kind: "approval", input: shown.content, detail: started });
+    return approvalWaiting(at, started, shown.content);
   }
-  return settleApproval(walk, at, { detail, content: content.value, hash });
+  return settleApproval(walk, at, { ...shown, detail });
 }
 
 async function runWait(walk: Walk, scope: WorkflowScope, at: StepAt<WaitStep>): Promise<Progress> {

@@ -1,6 +1,6 @@
 import { join } from "node:path/posix";
 import { charge, frameOverrun, noSpend, type BudgetFrame } from "./budget.ts";
-import type { Json, PolicyOf, RunEvent, ScriptRunner, Settled, Spend, StepOutcome } from "../contracts.ts";
+import type { Json, PolicyOf, RunEvent, Scrubber, ScriptRunner, Settled, Spend, StepOutcome } from "../contracts.ts";
 import type { Budget } from "../generated/mode.ts";
 import { byteSize } from "../json.ts";
 import type { Clock, FileSystem } from "../ports.ts";
@@ -19,6 +19,7 @@ export type Services = {
   readonly policyOf: PolicyOf;
   readonly clock: Clock;
   readonly files: FileSystem;
+  readonly scrubber: Scrubber;
 };
 
 export type Walk = {

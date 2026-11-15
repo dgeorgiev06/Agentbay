@@ -84,7 +84,12 @@ function startNode(
 
 test("a child exchanges lines over its standard streams", async () => {
   const child = startNode(
-    "process.stdin.on('data', (d) => { process.stdout.write('got ' + d.toString().trim() + '\\nsecond\\n'); process.exit(0); })",
+    [
+      "process.stdin.on('data', (d) => {",
+      "  process.stdout.write('got ' + d.toString().trim() + '\\nsecond\\n');",
+      "  process.exit(0);",
+      "});",
+    ].join("\n"),
     { timeout: 10_000, output: 1000 },
   );
   child.send("hello");

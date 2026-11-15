@@ -210,7 +210,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     const answer = await broker.report(
       refused({
         resource: "script",
-        asked: `The script ${request.script} was to run with folders that hold links leaving them: ${described.join("; ")}`,
+        asked: `The script ${request.script} was to run with links that leave their folders (${described.join("; ")})`,
         declared: "a granted folder may hold only links that stay inside it",
         change: `Remove the links, or change resources.files in ${manifestOf(permissions)}.`,
       }),

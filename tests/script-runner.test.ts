@@ -243,7 +243,10 @@ test("a write path that does not exist before the run can be made and written by
       [
         "const fs = await import('node:fs');",
         tryIt(
-          `fs.mkdirSync(${JSON.stringify(folder)}) ?? fs.writeFileSync(${JSON.stringify(join(folder, "a.txt"))}, 'made')`,
+          [
+            `fs.mkdirSync(${JSON.stringify(folder)})`,
+            `?? fs.writeFileSync(${JSON.stringify(join(folder, "a.txt"))}, 'made')`,
+          ].join(" "),
         ),
       ].join("\n"),
       { permissions: { writePaths: [folder], readPaths: [join(root, "components/modes/notes"), folder] } },
@@ -421,7 +424,13 @@ test("a script cannot connect through the socket class behind its own standard s
         [
           "const Socket = process.stdout.constructor;",
           tryIt(
-            `await new Promise((resolve, reject) => { const s = new Socket(); s.on('error', reject); s.connect(${String(port)}, '127.0.0.1', () => resolve('connected')); })`,
+            [
+              "await new Promise((resolve, reject) => {",
+              "  const s = new Socket();",
+              "  s.on('error', reject);",
+              `  s.connect(${String(port)}, '127.0.0.1', () => resolve('connected'));`,
+              "})",
+            ].join("\n"),
           ),
         ].join("\n"),
       );
@@ -475,7 +484,10 @@ test("a parent started with a hostile NODE_OPTIONS and NODE_PATH starts a child 
           "  options: process.env.NODE_OPTIONS ?? null,",
           "  path: process.env.NODE_PATH ?? null,",
           "  execArgv: process.execArgv.join(' '),",
-          "  planted: await import('planted').then((loaded) => ({ escaped: loaded.default }), (error) => ({ refused: error.code })),",
+          "  planted: await import('planted').then(",
+          "    (loaded) => ({ escaped: loaded.default }),",
+          "    (error) => ({ refused: error.code }),",
+          "  ),",
           "};",
         ].join("\n"),
       ),
@@ -544,7 +556,7 @@ test("a script that returns or prints a secret value has it redacted", async () 
   });
 });
 
-test("through the broker, a script is refused an undeclared host, http and a redirect to an undeclared host", async () => {
+test("through the broker, a script is refused an undeclared host, http and a redirect elsewhere", async () => {
   await withScriptProject(async (root) => {
     const run = await attempt(
       root,
@@ -566,7 +578,7 @@ test("through the broker, a script is refused an undeclared host, http and a red
   });
 });
 
-test("through the broker, a script of a read-only action is refused a write statement and another mode's file", async () => {
+test("through the broker, a read-only action's script is refused a write and another mode's file", async () => {
   await withScriptProject(async (root) => {
     const run = await attempt(
       root,
@@ -603,7 +615,9 @@ test("a script whose database query never ends is still killed at the time limit
       root,
       [
         "await context.db.execute('create table t (x)');",
-        "return await context.db.query('with recursive r(n) as (select 1 union all select n + 1 from r) select count(*) from r');",
+        "return await context.db.query(",
+        "  'with recursive r(n) as (select 1 union all select n + 1 from r) select count(*) from r',",
+        ");",
       ].join("\n"),
       { remaining: { minutes: 0.03 }, permissions: { effects: ["read", "write"] } },
     );
@@ -656,7 +670,11 @@ test("a script that sends a forged final message with a value that is not JSON f
   await withScriptProject(async (root) => {
     const run = await attempt(
       root,
-      "const fs = await import('node:fs'); fs.writeSync(1, JSON.stringify({ type: 'done' }) + '\\n'); await new Promise(() => {});",
+      [
+        "const fs = await import('node:fs');",
+        "fs.writeSync(1, JSON.stringify({ type: 'done' }) + '\\n');",
+        "await new Promise(() => {});",
+      ].join("\n"),
     );
     assert.match(reasonOf(run), /not a valid message/);
   });

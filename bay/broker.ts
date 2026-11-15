@@ -344,13 +344,14 @@ export class Broker {
     const permitted = purpose === "read" ? this.#permissions.readPaths : this.#permissions.writePaths;
     const shown = permitted.map((path) => relative(root, path) || ".");
     const asked = `${asking} to ${purpose} ${check.path}`;
+    const manifestLine = `resources.files.${purpose} in ${manifestOf(this.#permissions)}`;
     switch (check.status) {
       case "outside":
         return refused({
           resource: "files",
           asked,
           declared: `the mode ${this.#permissions.mode} may ${purpose} only: ${listed(shown, "nothing")}`,
-          change: `To allow it, add ${relative(root, check.path)} under resources.files.${purpose} in ${manifestOf(this.#permissions)}.`,
+          change: `To allow it, add ${relative(root, check.path)} under ${manifestLine}.`,
         });
       case "through-link":
         return refused({

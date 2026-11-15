@@ -104,7 +104,11 @@ test("the script protocol accepts well-formed messages only", () => {
     '{"type":"done"}',
     '{"type":"request","id":"1","request":{"resource":"files.read","path":"a"}}',
     '{"type":"request","id":1,"request":{"resource":"shell","command":"id"}}',
-    '{"type":"request","id":1,"request":{"resource":"http.request","request":{"method":"TRACE","url":"x","headers":{}}}}',
+    JSON.stringify({
+      type: "request",
+      id: 1,
+      request: { resource: "http.request", request: { method: "TRACE", url: "x", headers: {} } },
+    }),
     '{"type":"failed","reason":3}',
   ]) {
     assert.equal(childMessageOf(line), undefined, line);

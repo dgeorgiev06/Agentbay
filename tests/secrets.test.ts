@@ -38,7 +38,7 @@ test("a secret shorter than 8 characters is refused, without printing it", async
   assert.equal(store.redact("x abc1234 y"), "x abc1234 y");
 });
 
-test("on macOS a secret missing from the environment is read from the keychain, and nothing else is tried", async () => {
+test("on macOS a secret missing from the environment comes from the keychain, and nothing else", async () => {
   const processes = recordingProcesses(() => ({ exitCode: 0, stdout: `${madeUpToken}\n`, stderr: "" }));
   const store = new SecretStore({ environment: {}, processes, platform: "darwin" });
   assert.deepEqual(await store.get("MAIL_TOKEN", permissions), { ok: true, value: madeUpToken });

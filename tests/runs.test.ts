@@ -186,10 +186,10 @@ test("list gives every run newest first, with what a waiting run waits for", asy
   const waiting = runOf(await runs.start({ action: "notes.draft" }, {}));
   const listed = await runs.list();
   assert.deepEqual(
-    listed.map((run) => [run.id, run.status, run.waitingFor ?? null, run.stepKey ?? null]),
+    listed.map((run) => [run.id, run.status, ...(run.status === "waiting" ? [run.waitingFor, run.stepKey] : [])]),
     [
       [waiting.id, "waiting", "skill", "0#1"],
-      [done.id, "done", null, null],
+      [done.id, "done"],
     ],
   );
   assert.deepEqual(listed[1]?.target, { kind: "action", mode: "notes", name: "copy" });

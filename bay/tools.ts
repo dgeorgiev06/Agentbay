@@ -22,7 +22,7 @@ type ToolHandler = (call: ToolCall) => Promise<Outcome<Json>>;
 
 const toolResultBytes = 256 * 1024;
 
-export const askedByKind = "run.asked-by";
+const askedByKind = "run.asked-by";
 
 function refused(refusal: string): Outcome<never> {
   return failedWith([unplacedProblem(refusal)]);

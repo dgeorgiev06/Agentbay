@@ -38,9 +38,6 @@ breaks:
   - from: bay/commands/resume.ts
     to: bay/runs/run-state.ts
     rule: private-file
-  - from: bay/commands/runs.ts
-    to: bay/runs/run-store.ts
-    rule: private-file
   - from: bay/commands/submit.ts
     to: bay/runs/task-tokens.ts
     rule: private-file
@@ -76,15 +73,6 @@ breaks:
     rule: private-file
   - from: bay/run-report.ts
     to: bay/runs/run-state.ts
-    rule: private-file
-  - from: bay/run-report.ts
-    to: bay/runs/run-store.ts
-    rule: private-file
-  - from: bay/run-report.ts
-    to: bay/runs/task-tokens.ts
-    rule: private-file
-  - from: bay/run-report.ts
-    to: bay/runs/waiting.ts
     rule: private-file
   - from: bay/run-report.ts
     to: bay/skill-tools.ts

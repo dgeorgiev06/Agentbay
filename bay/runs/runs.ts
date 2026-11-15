@@ -94,11 +94,11 @@ export type Run = {
   readonly events: readonly RunEvent[];
 };
 
-export type RunSummary = Pick<Run, "id" | "target" | "createdAt" | "updatedAt"> & {
-  readonly status: Run["state"]["status"];
-  readonly waitingFor?: WaitingReason;
-  readonly stepKey?: string;
-};
+export type RunSummary = Pick<Run, "id" | "target" | "createdAt" | "updatedAt"> &
+  (
+    | { readonly status: Exclude<Run["state"]["status"], "waiting"> }
+    | { readonly status: "waiting"; readonly waitingFor: WaitingReason; readonly stepKey: string }
+  );
 
 type Start = { readonly action: string } | { readonly workflow: { readonly mode: string; readonly path: string } };
 
@@ -430,11 +430,13 @@ async function summaries(store: SqliteRunStore): Promise<readonly RunSummary[]> 
     listed.push(...(await store.listRuns(status)));
   }
   listed.sort((first, second) => second.createdAt.localeCompare(first.createdAt) || second.id.localeCompare(first.id));
-  return listed.map((run) => {
-    const { id, target, createdAt, updatedAt, state } = run;
-    const waiting = state.status === "waiting" ? { waitingFor: state.reason, stepKey: state.stepKey } : {};
-    const shownTarget = { kind: target.kind, mode: target.mode, name: target.name };
-    return { id, target: shownTarget, createdAt, updatedAt, status: state.status, ...waiting };
+  return listed.map((run): RunSummary => {
+    const { id, createdAt, updatedAt, state } = run;
+    const target = { kind: run.target.kind, mode: run.target.mode, name: run.target.name };
+    if (state.status !== "waiting") {
+      return { id, target, createdAt, updatedAt, status: state.status };
+    }
+    return { id, target, createdAt, updatedAt, status: state.status, waitingFor: state.reason, stepKey: state.stepKey };
   });
 }
 

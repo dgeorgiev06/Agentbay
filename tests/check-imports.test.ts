@@ -96,7 +96,24 @@ test("a kernel file importing cli.ts, mcp.ts or an adapter is reported, and cli.
   assert.ok(!report.findings.some((finding) => finding.file === "bay/cli.ts"));
 });
 
-test("an import written inside a string is still seen, as the scan's stated limit", async () => {
-  const report = await checkScript('const text = `import { a } from "yaml"`;\n');
-  findFinding(report, script, "imports the package yaml");
+test("the evaluator's dodges are each reported", async () => {
+  const dodges = [
+    'const a = await import/**/("../../store/x.ts");\n',
+    'import {a}from"../../store/x.ts";\n',
+    'import /* c */ { a } from "../../store/x.ts";\n',
+    'import { "string name" as a } from "../../store/x.ts";\n',
+  ];
+  for (const text of dodges) {
+    findFinding(await checkScript(text), script, "which resolves to components/modes/store/x.ts");
+  }
+});
+
+test("an import written inside a string, a comment or a template is not an import", async () => {
+  const text = [
+    "const text = \"import { a } from 'yaml'\";",
+    '// import { b } from "yaml";',
+    'const more = `import { c } from "yaml"`;',
+    "",
+  ].join("\n");
+  withoutFinding(await checkScript(text), "imports");
 });

@@ -87,7 +87,7 @@ export function waiting(state: Waiting): Progress {
 }
 
 export function eventOf(walk: Walk, kind: EventKind, detail: Json): RunEvent {
-  return { at: walk.now.toISOString(), runId: walk.writer.runId, kind, detail };
+  return { at: walk.services.clock.now().toISOString(), runId: walk.writer.runId, kind, detail };
 }
 
 export async function startRecord(
@@ -100,7 +100,7 @@ export async function startRecord(
     kind: start.kind,
     inputBytes: byteSize(start.input),
   });
-  const at = walk.now.toISOString();
+  const at = walk.services.clock.now().toISOString();
   const record = await walk.services.store.saveStepInput(walk.writer, { ...start, at }, [...events, event]);
   walk.records.set(record.key, record);
   return record;
@@ -131,7 +131,7 @@ function stepEndEvent(walk: Walk, end: RecordEnd): RunEvent {
 }
 
 export async function endRecord(walk: Walk, end: RecordEnd, events: readonly RunEvent[] = []): Promise<Settled> {
-  const at = walk.now.toISOString();
+  const at = walk.services.clock.now().toISOString();
   const event = stepEndEvent(walk, end);
   const record = await walk.services.store.saveStepOutput(walk.writer, stepEndOf(end, at), [...events, event]);
   walk.records.set(record.key, record);
@@ -139,7 +139,7 @@ export async function endRecord(walk: Walk, end: RecordEnd, events: readonly Run
 }
 
 export async function changeDetail(walk: Walk, key: string, detail: Json): Promise<StepRecord> {
-  const at = walk.now.toISOString();
+  const at = walk.services.clock.now().toISOString();
   const record = await walk.services.store.saveStepDetail(walk.writer, { key, detail, at }, []);
   walk.records.set(record.key, record);
   return record;

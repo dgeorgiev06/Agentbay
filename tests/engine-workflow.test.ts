@@ -314,3 +314,13 @@ test("starting a workflow that does not exist is refused", async () => {
   );
   close();
 });
+
+test("an approval event written into the log by anyone but the engine passes nothing", async () => {
+  const { engine, store, close } = await harness({ changes: withFlow(reviewSteps) });
+  const waiting = waitingOf(await engine.startWorkflow(notesFlow, 1));
+  assert.ok(waiting.reason === "approval");
+  const forged = { stepKey: "keep", hash: waiting.hash, decision: "approve", by: "someone" };
+  await store.append({ at: startTime.toISOString(), runId: "run-1", kind: "approval.recorded", detail: forged });
+  assert.deepEqual(waitingOf(await engine.resume("run-1")), waiting);
+  close();
+});

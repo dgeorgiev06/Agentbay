@@ -78,7 +78,7 @@ function isCovered(finished: FinishedAction, all: readonly FinishedAction[]): bo
   return all.some((outer) => isInsideFrame(finished.key, outer.key) && coversItsSteps(outer));
 }
 
-export function undoPlan(system: System, records: readonly StepRecord[]): UndoPlan {
+function undoPlan(system: System, records: readonly StepRecord[]): UndoPlan {
   const all = records.flatMap((record) => finishedActionOf(system, record) ?? []);
   const uncovered = all
     .filter((finished) => !isCovered(finished, all))

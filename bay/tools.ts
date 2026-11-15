@@ -20,7 +20,7 @@ type ToolCall = {
 
 type ToolHandler = (call: ToolCall) => Promise<Outcome<Json>>;
 
-export const toolResultBytes = 256 * 1024;
+const toolResultBytes = 256 * 1024;
 
 export const askedByKind = "run.asked-by";
 

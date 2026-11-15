@@ -17,11 +17,6 @@ export type Clock = {
   readonly now: () => Date;
 };
 
-export type Git = {
-  readonly headCommit: (directory: string) => Promise<string>;
-  readonly changedFiles: (directory: string, base: string) => Promise<readonly string[]>;
-};
-
 export type ProcessRequest = {
   readonly command: string;
   readonly arguments: readonly string[];

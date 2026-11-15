@@ -74,7 +74,7 @@ export function remainingBudget(limit: Budget, spent: Spend): Budget {
   });
 }
 
-export function overrunOf(limit: Budget, spent: Spend): Overrun | undefined {
+function overrunOf(limit: Budget, spent: Spend): Overrun | undefined {
   for (const measure of measures) {
     const value = limit[measure];
     if (value !== undefined && spent[measure] > value) {

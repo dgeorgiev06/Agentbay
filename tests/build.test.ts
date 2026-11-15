@@ -3,9 +3,10 @@ import { PassThrough } from "node:stream";
 import { test } from "node:test";
 import { parse, stringify } from "yaml";
 import { planAgents } from "../bay/build.ts";
-import { skillNameOf, skillToolsOfText } from "../bay/skill-tools.ts";
+import { skillNameOf, skillToolsOf } from "../bay/skill-tools.ts";
 import { isRecord } from "../bay/json.ts";
 import { streamTerminal } from "../bay/terminal.ts";
+import { fakeFileSystem } from "./fakes.ts";
 import { openKernel } from "./kernel-fixture.ts";
 import { makeProject } from "./project-fixture.ts";
 
@@ -57,7 +58,7 @@ test("planAgents reports a skill whose front matter cannot be read", async () =>
   await project.remove();
 });
 
-test("a skill's Tools section maps to kernel tools; secrets, http and events give none", () => {
+test("a skill's Tools section maps to kernel tools; secrets, http and events give none", async () => {
   const text = [
     "## Instructions",
     "- db",
@@ -72,15 +73,16 @@ test("a skill's Tools section maps to kernel tools; secrets, http and events giv
     "## Resources",
     "- db",
   ].join("\n");
-  assert.deepEqual(skillToolsOfText(text), {
+  const files = fakeFileSystem({ "/s/a.md": text, "/s/b.md": "## Tools\n- items-store.get\n- db\n" });
+  assert.deepEqual(await skillToolsOf(files, "/s/a.md"), {
     kernelTools: ["files_read", "files_list", "files_write", "submit"],
     actions: [],
   });
-  assert.deepEqual(skillToolsOfText("## Tools\n- items-store.get\n- db\n"), {
+  assert.deepEqual(await skillToolsOf(files, "/s/b.md"), {
     kernelTools: ["db_query", "call_action", "submit"],
     actions: ["items-store.get"],
   });
-  assert.deepEqual(skillToolsOfText(""), { kernelTools: ["submit"], actions: [] });
+  assert.deepEqual(await skillToolsOf(files, "/s/missing.md"), { kernelTools: ["submit"], actions: [] });
   assert.equal(skillNameOf("skills/draft/"), "draft");
 });
 

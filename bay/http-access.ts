@@ -19,7 +19,7 @@ const sensitiveHeaderName = /authorization|cookie|token|secret|key|session|passw
 
 const ipLiteral = /^(\d{1,3}(\.\d{1,3}){3}|\[[0-9a-f:.]+\])$/i;
 
-export function hostAllowed(host: string, declared: readonly string[]): boolean {
+function hostAllowed(host: string, declared: readonly string[]): boolean {
   const name = host.toLowerCase();
   return declared.some((entry) => {
     const pattern = entry.toLowerCase();

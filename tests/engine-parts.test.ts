@@ -3,7 +3,6 @@ import { test } from "node:test";
 import { charge, rootFrame } from "../bay/budget.ts";
 import type { StepRecord } from "../bay/run-store.ts";
 import { resolveActionReference, resolveCall, resolveOwnAction, resolveWorkflowAction } from "../bay/targets.ts";
-import { undoPlan } from "../bay/undo.ts";
 import { gate, replayed, stopGate, type Walk } from "../bay/walk.ts";
 import { fakePolicy, fixtureSystem, harness, runOf, startTime } from "./engine-fixture.ts";
 import { MemoryRunStore } from "./memory-run-store.ts";
@@ -114,25 +113,6 @@ test("targets resolve own actions, interface calls through bindings, and say pla
   assert.ok(typeof reserved === "string");
   assert.match(reserved, /has no action constructor/);
   assert.equal(resolveOwnAction(system, "ghost", "x"), "There is no mode ghost.");
-});
-
-test("the undo plan undoes newest first, lets an undoable action cover its calls, and lists the rest", async () => {
-  const { system } = await fixtureSystem();
-  const plan = undoPlan(system, [
-    finishedAction("first", "store.put", 1),
-    finishedAction("kept/0", "store.put", 2),
-    finishedAction("kept", "notes.store-one", 3),
-    finishedAction("wipe/0", "store.put", 4),
-    finishedAction("wipe", "store.erase", 5),
-    finishedAction("look", "store.get", 6),
-    finishedAction("undo[0]", "store.put", 7),
-  ]);
-  assert.deepEqual(
-    plan.toUndo.map((entry) => entry.key),
-    ["kept/0", "first"],
-  );
-  assert.deepEqual(plan.noUndo, [{ stepKey: "kept", action: "notes.store-one" }]);
-  assert.deepEqual(plan.deleteNotUndone, [{ stepKey: "wipe", action: "store.erase" }]);
 });
 
 test("a call or workflow action whose binding vanished before resume fails the step with a plain reason", async () => {

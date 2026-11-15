@@ -1,16 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  byteSize,
-  canonicalJson,
-  fieldOf,
-  hashOf,
-  numberField,
-  parseJson,
-  textField,
-  textsField,
-  toJson,
-} from "../bay/json.ts";
+import { byteSize, fieldOf, hashOf, numberField, parseJson, textField, textsField, toJson } from "../bay/json.ts";
 
 test("toJson copies JSON values and refuses anything that is not JSON", () => {
   assert.deepEqual(toJson({ a: [1, "x", null, true, { b: 2 }] }), { a: [1, "x", null, true, { b: 2 }] });
@@ -21,7 +11,7 @@ test("toJson copies JSON values and refuses anything that is not JSON", () => {
 });
 
 test("canonical JSON sorts keys at every depth, so equal content hashes the same", () => {
-  assert.equal(canonicalJson({ b: 1, a: [{ d: 1, c: 2 }] }), '{"a":[{"c":2,"d":1}],"b":1}');
+  assert.equal(hashOf({ b: 1, a: [{ d: 1, c: 2 }] }), hashOf({ a: [{ c: 2, d: 1 }], b: 1 }));
   assert.equal(hashOf({ b: 1, a: 2 }), hashOf({ a: 2, b: 1 }));
   assert.notEqual(hashOf({ a: 1 }), hashOf({ a: 2 }));
   assert.match(hashOf(null), /^[0-9a-f]{64}$/);

@@ -11,7 +11,6 @@ import {
   frameOverrun,
   frameRemaining,
   noSpend,
-  overrunOf,
   remainingBudget,
   rootFrame,
   smallestBudget,
@@ -42,8 +41,12 @@ test("an extension raises only limited measures; added extensions sum", () => {
 
 test("remaining and overrun compare spend with the limit", () => {
   assert.deepEqual(remainingBudget({ items: 5, usd: 1 }, spend(2, 1.5)), { items: 3, usd: -0.5 });
-  assert.deepEqual(overrunOf({ items: 5, usd: 1 }, spend(2, 1.5)), { measure: "usd", limit: 1, spent: 1.5 });
-  assert.equal(overrunOf({ items: 5 }, spend(5)), undefined);
+  const over = rootFrame({ items: 5, usd: 1 });
+  charge(over, spend(2, 1.5));
+  assert.deepEqual(frameOverrun(over), { measure: "usd", limit: 1, spent: 1.5 });
+  const exact = rootFrame({ items: 5 });
+  charge(exact, spend(5));
+  assert.equal(frameOverrun(exact), undefined);
 });
 
 test("a nested frame draws from its caller: its limit is the smaller of its own and what the caller has left", () => {

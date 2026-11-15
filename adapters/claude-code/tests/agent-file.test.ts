@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Layout } from "../../../bay/adapter.ts";
-import { agentFileText, modelForTier, projectPath, toolsFor } from "../agent-file.ts";
-import { bayCommand, blockEnd, blockStart, coordinatorBlock } from "../coordinator.ts";
+import { agentFileText, toolsFor } from "../agent-file.ts";
+import { bayCommand, coordinatorBlock } from "../coordinator.ts";
 import { guardEntry } from "../settings.ts";
 import { stepsFileText } from "../steps-file.ts";
 import { buildAgent, digestAgent, kit, layout, project, scanAgent, skillAgent } from "./build-fixture.ts";
@@ -95,7 +95,6 @@ test("no combination of paths and commands gives a step an agent-starting, web o
 });
 
 test("the model is chosen by tier from the adapter's table", () => {
-  assert.deepEqual(modelForTier, { fast: "haiku", balanced: "sonnet", deep: "opus" });
   assert.equal(frontMatter(agentFileText(scanAgent, project))["model"], "haiku");
   assert.equal(frontMatter(agentFileText(digestAgent, project))["model"], "sonnet");
   assert.equal(frontMatter(agentFileText(buildAgent, project))["model"], "opus");
@@ -139,11 +138,17 @@ test("the agent file's body states the protocol in under 40 lines", () => {
   );
 });
 
-test("a path outside the project is shown whole and a path inside it relative to the project", () => {
-  assert.equal(projectPath(project, "/proj/out/digests"), "out/digests");
-  assert.equal(projectPath(project, "/elsewhere/x"), "/elsewhere/x");
-  assert.equal(projectPath(project, "/proj"), "/proj");
-  assert.equal(projectPath(project, "notes"), "notes");
+test("a write folder outside the project is shown whole in the agent file", () => {
+  const outside = skillAgent({
+    mode: "notes",
+    skill: "move",
+    tier: "fast",
+    kernelTools: [],
+    read: [],
+    write: ["/elsewhere/x"],
+    commands: [],
+  });
+  assert.ok(agentFileText(outside, project).includes("Never create, edit or delete a file outside `/elsewhere/x`."));
 });
 
 test("the step policy holds each agent's tools, absolute roots and commands", () => {
@@ -185,8 +190,8 @@ test("the step policy holds each agent's tools, absolute roots and commands", ()
 test("the coordinator block states the protocol between its markers in under 40 lines", () => {
   const block = coordinatorBlock("./bay.sh");
   const blockLines = block.split("\n");
-  assert.equal(blockLines[0], blockStart);
-  assert.equal(blockLines.at(-1), blockEnd);
+  assert.equal(blockLines[0], "<!-- agentbay:start -->");
+  assert.equal(blockLines.at(-1), "<!-- agentbay:end -->");
   assert.ok(blockLines.length < 40, String(blockLines.length));
   for (const phrase of [
     "`./bay.sh call <mode.action> '<json input>' --json`",

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { lineOfIndex, loadCheckContext, type CheckContext } from "../bay/check-context.ts";
+import { loadCheckContext, type CheckContext } from "../bay/check-context.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import { cleanFiles, listingOf } from "./check-fixture.ts";
 import { layout, rooted } from "./system-fixture.ts";
@@ -33,10 +33,4 @@ test("the check context indexes interfaces by name and major version, ignoring o
   const files = { ...cleanFiles(), "components/base/interfaces/notes.md": "not an interface" };
   const context = await contextOf(files);
   assert.deepEqual([...context.interfaces.keys()].sort(), ["items-store@1", "notes@1"]);
-});
-
-test("lineOfIndex counts lines from 1", () => {
-  assert.equal(lineOfIndex("a\nb\nc", 0), 1);
-  assert.equal(lineOfIndex("a\nb\nc", 2), 2);
-  assert.equal(lineOfIndex("a\nb\nc", 4), 3);
 });

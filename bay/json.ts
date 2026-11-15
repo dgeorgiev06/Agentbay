@@ -26,7 +26,7 @@ export function parseJson(text: string): Json {
   return toJson(parsed);
 }
 
-export function canonicalJson(value: Json): string {
+function canonicalJson(value: Json): string {
   if (Array.isArray(value)) {
     return `[${value.map((element: unknown) => canonicalJson(toJson(element))).join(",")}]`;
   }

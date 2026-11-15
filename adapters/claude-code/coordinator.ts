@@ -1,9 +1,9 @@
 import { join } from "node:path";
 import type { Layout } from "../../bay/adapter.ts";
 
-export const blockStart = "<!-- agentbay:start -->";
+const blockStart = "<!-- agentbay:start -->";
 
-export const blockEnd = "<!-- agentbay:end -->";
+const blockEnd = "<!-- agentbay:end -->";
 
 export type BlockAddition = {
   readonly kind: "claude-md";

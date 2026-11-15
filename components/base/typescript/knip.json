@@ -2,28 +2,25 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
     "{tests,components/**/tests,adapters/**/tests}/**/*.test.ts",
-    "bay/cli.ts",
-    "bay/mcp.ts",
+    "bay/cli.ts!",
+    "bay/mcp.ts!",
     "tests/race-driver.ts",
-    "bay/sdk.ts",
-    "bay/script-host.ts",
-    "bay/script-preload.ts",
-    "bay/query-child.ts",
-    "bay/database-child.ts",
+    "bay/sdk.ts!",
+    "bay/script-host.ts!",
+    "bay/script-preload.ts!",
+    "bay/query-child.ts!",
+    "bay/database-child.ts!",
     "tests/script-runner-driver.ts",
-    "bay/adapter.ts",
-    "components/*/*/scripts/*.ts",
-    "adapters/claude-code/step-guard.ts"
+    "bay/adapter.ts!",
+    "components/*/*/scripts/*.ts!",
+    "adapters/claude-code/adapter.ts!",
+    "adapters/claude-code/step-guard.ts!",
+    "bay/generate-types.ts!"
   ],
-  "project": ["{bay,adapters,components,tests}/**/*.ts"],
+  "project": ["{bay,adapters,components,tests}/**/*.ts!", "!{tests,components/**/tests,adapters/**/tests}/**!"],
   "ignoreExportsUsedInFile": {
+    "function": true,
     "type": true
-  },
-  "ignoreIssues": {
-    "bay/generated/**": ["types"],
-    "bay/ports.ts": ["types"],
-    "bay/contracts.ts": ["types"],
-    "bay/node-ports.ts": ["exports"]
   },
   "eslint": {
     "config": ["components/base/typescript/eslint.config.js"]

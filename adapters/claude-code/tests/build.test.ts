@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { adapter } from "../adapter.ts";
 import type { ListOutcome } from "../adapter-types.ts";
-import { blockEnd, blockStart } from "../coordinator.ts";
 import { guardEntry } from "../settings.ts";
+
 import {
   allAgents,
   buildRequest,
@@ -20,6 +20,10 @@ import {
   userSettings,
   type MemoryFiles,
 } from "./build-fixture.ts";
+
+const blockStart = "<!-- agentbay:start -->";
+
+const blockEnd = "<!-- agentbay:end -->";
 
 const shape = { mode: "x", skill: "y", tier: "fast", kernelTools: [], read: [], write: [], commands: [] } as const;
 

@@ -1249,7 +1249,3 @@ export async function loadSystemReport(files: FileSystem, layout: Layout): Promi
   }
   return { ...report, outcome: { ok: true, value: buildSystem(context, config.value.value, workflows.values) } };
 }
-
-export async function loadSystem(files: FileSystem, layout: Layout): Promise<Outcome<System>> {
-  return (await loadSystemReport(files, layout)).outcome;
-}

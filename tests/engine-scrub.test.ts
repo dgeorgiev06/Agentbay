@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { redactJson } from "../bay/scrubbed-store.ts";
-import { answer, failure, fakeScrubber, harness, runOf, storeKinds, waitingOf } from "./engine-fixture.ts";
+import { answer, failure, harness, runOf, storeKinds, waitingOf } from "./engine-fixture.ts";
 
 for (const storeKind of storeKinds) {
   describe(`secrets are scrubbed before they reach the ${storeKind} store`, () => {
@@ -83,8 +82,3 @@ for (const storeKind of storeKinds) {
     });
   });
 }
-
-test("redactJson redacts every string value at any depth and keeps other values", () => {
-  const value = { a: "SECRET-A1", list: [1, true, null, { b: "x SECRET-B2" }] };
-  assert.deepEqual(redactJson(value, fakeScrubber), { a: "[redacted]", list: [1, true, null, { b: "x [redacted]" }] });
-});

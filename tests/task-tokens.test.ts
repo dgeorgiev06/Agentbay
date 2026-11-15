@@ -60,13 +60,16 @@ test("a token is 32 random bytes, shown once, and kernel.db keeps only its SHA-2
   const rows = database.prepare("select * from task_tokens").all();
   database.close();
   assert.equal(rows.length, 1);
-  assert.deepEqual({ ...rows[0] }, {
-    hash: createHash("sha256").update(token).digest("hex"),
-    run_id: "run-1",
-    step_key: "1#1",
-    round: 1,
-    issued_at: at,
-  });
+  assert.deepEqual(
+    { ...rows[0] },
+    {
+      hash: createHash("sha256").update(token).digest("hex"),
+      run_id: "run-1",
+      step_key: "1#1",
+      round: 1,
+      issued_at: at,
+    },
+  );
   assert.ok(!JSON.stringify(rows).includes(token));
   assert.deepEqual(await checkTaskToken(stores(context), token), {
     ok: true,

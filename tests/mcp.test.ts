@@ -10,6 +10,7 @@ import { issueTaskToken } from "../bay/task-tokens.ts";
 import { toolDefinitions } from "../bay/tool-definitions.ts";
 import { openKernel, testEnvironment } from "./kernel-fixture.ts";
 import { kit, makeProject } from "./project-fixture.ts";
+import { listOf } from "./cli-fixture.ts";
 
 type Session = {
   readonly request: (method: string, params?: Json) => Promise<Json>;
@@ -79,8 +80,7 @@ function resultOf(reply: Json): Json {
 
 function toolText(reply: Json): { readonly isError: Json | undefined; readonly text: string } {
   const result = resultOf(reply);
-  const content = fieldOf(result, "content");
-  const first = Array.isArray(content) ? content[0] : undefined;
+  const first = listOf(fieldOf(result, "content"))[0];
   return { isError: fieldOf(result, "isError"), text: first === undefined ? "" : (textField(first, "text") ?? "") };
 }
 
@@ -93,14 +93,13 @@ test("the MCP server answers initialize, lists six tools that each need a token,
   assert.deepEqual(fieldOf(initialized, "capabilities"), { tools: { listChanged: false } });
   server.send(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }));
   assert.deepEqual(resultOf(await server.request("ping")), {});
-  const listed = fieldOf(resultOf(await server.request("tools/list")), "tools");
-  assert.ok(Array.isArray(listed));
+  const listed = listOf(fieldOf(resultOf(await server.request("tools/list")), "tools"));
   assert.deepEqual(
     listed.map((tool) => textField(tool, "name")),
     ["db_query", "files_read", "files_list", "files_write", "call_action", "submit"],
   );
   for (const tool of listed) {
-    const schema = fieldOf(tool, "inputSchema");
+    const schema = fieldOf(tool, "inputSchema") ?? null;
     assert.ok(JSON.stringify(fieldOf(schema, "required")).includes('"token"'));
     assert.ok((textField(tool, "description") ?? "").length > 40);
   }

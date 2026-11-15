@@ -222,7 +222,7 @@ export type ProjectOptions = {
   readonly ownKernel?: boolean;
 };
 
-export function configText(options: ProjectOptions = {}): string {
+function configText(options: ProjectOptions = {}): string {
   const config = {
     bindings: { "greeting-source": "greeter" },
     adapter: options.adapter ?? "fake",
@@ -234,7 +234,7 @@ export function configText(options: ProjectOptions = {}): string {
 
 const ignored = [".agentbay/", "out/", "bay", "schemas", "node_modules", "package.json"];
 
-export function projectFiles(options: ProjectOptions = {}): Record<string, string> {
+function projectFiles(options: ProjectOptions = {}): Record<string, string> {
   sdkImport = options.ownKernel === true ? "relative" : "absolute";
   return {
     "agentbay.config.yaml": configText(options),

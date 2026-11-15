@@ -142,9 +142,11 @@ export class Broker {
         milliseconds: limits.agentQueryMilliseconds,
       },
     });
+    const rows = String(limits.agentQueryRows);
+    const milliseconds = String(limits.agentQueryMilliseconds);
     const rules =
       "agent queries run one read-only select over the mode's own database, where every table is readable, " +
-      `return at most ${String(limits.agentQueryRows)} rows and stop at the time limit of ${String(limits.agentQueryMilliseconds)} ms`;
+      `return at most ${rows} rows and stop at the time limit of ${milliseconds} ms`;
     const change = "Send one select statement, narrowed with where, limit or an aggregate.";
     switch (outcome.status) {
       case "done":

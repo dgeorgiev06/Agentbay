@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { Dirent } from "node:fs";
-import { access, lstat, mkdir, readdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, readdir, readFile, realpath, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { FileListing } from "./check.ts";
 import type {
@@ -21,10 +21,15 @@ import type {
   Processes,
   ProcessRequest,
   ProcessResult,
+  Removal,
 } from "./ports.ts";
 
 function isMissingFile(error: unknown): boolean {
   return error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR");
+}
+
+function isFolderNotEmpty(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOTEMPTY";
 }
 
 function isUnresolvable(error: unknown): boolean {
@@ -86,6 +91,19 @@ export const nodeFolders: Folders = {
     await mkdir(path, { recursive: true });
   },
 };
+
+async function removeFileOrEmptyFolder(path: string): Promise<void> {
+  try {
+    const entry = await lstat(path);
+    await (entry.isDirectory() ? rmdir(path) : rm(path));
+  } catch (error) {
+    if (!isMissingFile(error) && !isFolderNotEmpty(error)) {
+      throw error;
+    }
+  }
+}
+
+export const nodeRemoval: Removal = { remove: removeFileOrEmptyFolder };
 
 async function realPath(path: string): Promise<string | undefined> {
   try {

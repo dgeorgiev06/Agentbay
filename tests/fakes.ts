@@ -1,8 +1,9 @@
 import { normalize } from "node:path/posix";
-import type { Clock, FileSystem, Folders } from "../bay/ports.ts";
+import type { Clock, FileSystem, Folders, Removal } from "../bay/ports.ts";
 
 export type FakeFileSystem = FileSystem & {
   readonly contents: ReadonlyMap<string, string>;
+  readonly removal: Removal;
 };
 
 type FakeClock = Clock & {
@@ -30,6 +31,12 @@ export function fakeFileSystem(initial: Readonly<Record<string, string>> = {}): 
     writeAtomic: (path, text) => {
       contents.set(normalize(path), text);
       return Promise.resolve();
+    },
+    removal: {
+      remove: (path) => {
+        contents.delete(normalize(path));
+        return Promise.resolve();
+      },
     },
   };
 }

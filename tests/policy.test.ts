@@ -235,3 +235,42 @@ test("forge may write its own code", () => {
   );
   assert.deepEqual(permissions.writePaths, ["/project/components/base/forge/scripts"]);
 });
+
+test("a folder that shares a prefix with a mode's folder is neither that mode's folder nor inside it", () => {
+  const notes = modeNamed("notes", {
+    files: { write: ["components/modes/notes-archive/out", "components/modes/notes2"] },
+  });
+  const archive = modeNamed("notes-archive", { files: { write: ["components/modes/notes-archive/out"] } });
+  const siblings = systemOf([
+    { folder: "components/modes/notes", manifest: notes },
+    { folder: "components/modes/notes-archive", manifest: archive },
+  ]);
+  const problems = problemsOf(permissionsFor(siblings, "notes", layout));
+  assert.equal(problems.length, 1);
+  assert.match(problems[0]?.message ?? "", /the folder of the mode notes-archive/);
+  const own = accepted(permissionsFor(siblings, "notes-archive", layout));
+  assert.deepEqual(own.writePaths, ["/project/components/modes/notes-archive/out"]);
+});
+
+test("a folder that shares a prefix with a mode's own code folders is not its code", () => {
+  const permissions = accepted(
+    permissionsFor(
+      withFiles({ write: ["components/modes/briefing/scripts2", "components/modes/briefing/skills-notes"] }),
+      "briefing",
+      layout,
+    ),
+  );
+  assert.equal(permissions.writePaths.length, 2);
+});
+
+test("a project folder that shares a prefix with a protected folder is not protected", () => {
+  const permissions = accepted(
+    permissionsFor(
+      withFiles({ read: ["bay-backup/notes"], write: ["schemas-old", "frameworks", ".gitlab"] }),
+      "briefing",
+      layout,
+    ),
+  );
+  assert.deepEqual(permissions.writePaths, ["/project/schemas-old", "/project/frameworks", "/project/.gitlab"]);
+  assert.ok(permissions.readPaths.includes("/project/bay-backup/notes"));
+});

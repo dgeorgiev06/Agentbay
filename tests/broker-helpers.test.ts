@@ -149,3 +149,33 @@ test("a path check resolves links on the deepest existing ancestor", async () =>
   assert.equal((await checkPath(inspector, { ...request, path: "out/x" })).status, "outside");
   assert.equal(isInsideOrEqual("/root/inside", "/root/in"), false);
 });
+
+test("an exact host entry matches only that host, never a host that merely ends with it", () => {
+  for (const host of ["evil-api.example.com", "notapi.example.com", "api.example.com.evil.test", "xapi.example.com"]) {
+    assert.equal(hostAllowed(host, ["api.example.com"]), false, host);
+  }
+  assert.equal(hostAllowed("api.example.com", ["api.example.com"]), true);
+});
+
+test("a wildcard entry matches subdomains at any depth, but not the bare domain or look-alikes", () => {
+  const declared = ["*.example.com"];
+  assert.equal(hostAllowed("a.example.com", declared), true);
+  assert.equal(hostAllowed("a.b.example.com", declared), true);
+  for (const host of ["example.com", "evilexample.com", "example.com.evil.test"]) {
+    assert.equal(hostAllowed(host, declared), false, host);
+  }
+});
+
+test("a URL is decided on the host the request would really reach", () => {
+  const hosts = ["api.example.com"];
+  assert.equal(checkUrl("https://API.EXAMPLE.COM/x", hosts).status, "allowed");
+  assert.equal(checkUrl("https://api.example.com./x", hosts).status, "undeclared-host");
+  assert.equal(checkUrl("https://api.example.com:8443/x", hosts).status, "other-port");
+  const userinfo = checkUrl("https://api.example.com@evil.test/", hosts);
+  assert.notEqual(userinfo.status, "allowed");
+  assert.equal(userinfo.status === "not-a-url" ? "" : userinfo.url.hostname, "evil.test");
+  assert.equal(hostAllowed("evil.test", hosts), false);
+  assert.equal(checkUrl("https://93.184.216.34/x", hosts).status, "undeclared-host");
+  assert.equal(checkUrl("https://93.184.216.34/x", ["*.184.216.34"]).status, "undeclared-host");
+  assert.equal(checkUrl("https://[::1]/x", hosts).status, "undeclared-host");
+});

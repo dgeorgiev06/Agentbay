@@ -7,7 +7,7 @@ import { test } from "node:test";
 import type { ActionCaller, Json, Permissions, ScriptRequest, StepOutcome } from "../bay/contracts.ts";
 import type { Budget } from "../bay/generated/mode.ts";
 import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
-import { createScriptRunner } from "../bay/script-runner.ts";
+import { createScriptRunner, scriptCommand } from "../bay/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import {
   kitFolder,
@@ -106,8 +106,10 @@ function outputOf(run: Run): Json {
 }
 
 function reasonOf(run: Run): string {
-  assert.equal(run.outcome.status, "failed", `expected failed, got ${JSON.stringify(run.outcome)}`);
-  return run.outcome.status === "failed" ? run.outcome.reason : "";
+  if (run.outcome.status !== "failed") {
+    assert.fail(`expected failed, got ${JSON.stringify(run.outcome)}`);
+  }
+  return run.outcome.reason;
 }
 
 const tryIt = (expression: string): string =>
@@ -141,7 +143,11 @@ async function withListener(run: (port: number, connections: () => number) => Pr
   try {
     await run(port, () => count);
   } finally {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await new Promise<void>((resolve) =>
+      server.close(() => {
+        resolve();
+      }),
+    );
   }
 }
 
@@ -229,6 +235,58 @@ test("a script cannot write outside its write paths directly, even inside a read
   });
 });
 
+test("a write path that does not exist before the run can be made and written by the script itself", async () => {
+  await withScriptProject(async (root) => {
+    const folder = join(root, "notes-later");
+    const run = await attempt(
+      root,
+      [
+        "const fs = await import('node:fs');",
+        tryIt(
+          `fs.mkdirSync(${JSON.stringify(folder)}) ?? fs.writeFileSync(${JSON.stringify(join(folder, "a.txt"))}, 'made')`,
+        ),
+      ].join("\n"),
+      { permissions: { writePaths: [folder], readPaths: [join(root, "components/modes/notes"), folder] } },
+    );
+    assert.deepEqual(outputOf(run), { escaped: "undefined" });
+    assert.equal(await readFile(join(folder, "a.txt"), "utf8"), "made");
+  });
+});
+
+test("the runner starts node with the permission model, the grants and the preload, and nothing else", () => {
+  const request: ScriptRequest = {
+    place,
+    script: "scripts/a.ts",
+    input: null,
+    permissions: permissionsIn("/project", {
+      readPaths: ["/project/components/modes/notes", "/project/in"],
+      writePaths: ["/project/out"],
+    }),
+    settings: {},
+    remaining: {},
+    call: () => Promise.resolve({ status: "failed", reason: "no", spent: noSpend }),
+  };
+  const bay = join(kitFolder, "bay");
+  assert.deepEqual(scriptCommand("/project/components/modes/notes/scripts/a.ts", request), [
+    "--permission",
+    `--allow-fs-read=${bay}/script-host.ts`,
+    `--allow-fs-read=${bay}/script-preload.ts`,
+    `--allow-fs-read=${bay}/script-protocol.ts`,
+    `--allow-fs-read=${bay}/json.ts`,
+    `--allow-fs-read=${bay}/sdk.ts`,
+    "--allow-fs-read=/project/components/modes/notes",
+    "--allow-fs-read=/project/components/modes/notes/*",
+    "--allow-fs-read=/project/in",
+    "--allow-fs-read=/project/in/*",
+    "--allow-fs-write=/project/out",
+    "--allow-fs-write=/project/out/*",
+    "--disable-warning=ExperimentalWarning",
+    `--import=file://${bay}/script-preload.ts`,
+    `${bay}/script-host.ts`,
+    "/project/components/modes/notes/scripts/a.ts",
+  ]);
+});
+
 test("a run is refused before it starts when a granted folder holds a link that leaves it", async () => {
   await withScriptProject(async (root) => {
     await writeProjectFile(root, "components/modes/notes/scripts/probe.ts", scriptSource("return 'ran';"));
@@ -251,6 +309,16 @@ test("a run is refused when the mode folder holds a link that leaves it, or a da
     await writeProjectFile(root, "components/modes/notes/scripts/probe.ts", scriptSource("return 'ran';"));
     await symlink(join(root, "nowhere"), join(root, "notes-out/dangling"));
     assert.match(reasonOf(await runScript(root, {})), /notes-out\/dangling/);
+  });
+});
+
+test("a run is refused when a granted folder is itself a link to another folder of the project", async () => {
+  await withProject(async (root) => {
+    await writeProjectFile(root, "components/modes/notes/scripts/probe.ts", scriptSource("return 'ran';"));
+    await writeProjectFile(root, ".agentbay/data/store.db", "made-up database bytes");
+    await mkdir(join(root, "notes-out"));
+    await symlink(join(root, ".agentbay/data"), join(root, "notes-in"));
+    assert.match(reasonOf(await runScript(root, {})), /notes-in points to .*\.agentbay\/data/);
   });
 });
 
@@ -364,10 +432,20 @@ test("a script cannot connect through the socket class behind its own standard s
   });
 });
 
-test.todo(
-  "HOLE: a script can still reach raw handles such as process.stdout._handle (a libuv pipe wrap); " +
-    "the preload does not remove them, and on Node 22 nothing else stops a script that knows the internals",
-);
+test("a script cannot bind, listen or connect with the raw handle behind its standard streams", async () => {
+  await withScriptProject(async (root) => {
+    const socket = join(root, "outside", "made.sock");
+    for (const expression of [
+      `new (process.stdout._handle.constructor)(0).bind(${JSON.stringify(socket)})`,
+      "new (process.stdin._handle.constructor)(0).listen(1)",
+      "process.stderr._handle.connect({ oncomplete() {} }, '/tmp/agentbay-no.sock')",
+    ]) {
+      const run = await attempt(root, tryIt(expression));
+      assert.match(JSON.stringify(outputOf(run)), /"refused":".*it opens sockets/, expression);
+    }
+    await assert.rejects(readFile(socket), /ENOENT/);
+  });
+});
 
 test("a script finds no secret, token or NODE_OPTIONS in its environment", async () => {
   await withScriptProject(async (root) => {
@@ -515,6 +593,22 @@ test("a script that never returns is killed at the time limit", async () => {
     });
     assert.match(reasonOf(run), /time limit of 1\.2 seconds/);
     assert.ok(Date.now() - started < 8000);
+  });
+});
+
+test("a script whose database query never ends is still killed at the time limit", async () => {
+  await withScriptProject(async (root) => {
+    const started = Date.now();
+    const run = await attempt(
+      root,
+      [
+        "await context.db.execute('create table t (x)');",
+        "return await context.db.query('with recursive r(n) as (select 1 union all select n + 1 from r) select count(*) from r');",
+      ].join("\n"),
+      { remaining: { minutes: 0.03 }, permissions: { effects: ["read", "write"] } },
+    );
+    assert.match(reasonOf(run), /time limit of 1\.8 seconds/);
+    assert.ok(Date.now() - started < 8000, `took ${String(Date.now() - started)} ms`);
   });
 });
 

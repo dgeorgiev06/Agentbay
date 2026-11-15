@@ -20,7 +20,7 @@ export function isInsideOrEqual(path: string, folder: string): boolean {
   return path === folder || path.startsWith(folder.endsWith("/") ? folder : `${folder}/`);
 }
 
-export async function realPathOfDeepestAncestor(inspector: FileInspector, path: string): Promise<string> {
+async function realPathOfDeepestAncestor(inspector: FileInspector, path: string): Promise<string> {
   const missing: string[] = [];
   let current = path;
   for (;;) {
@@ -48,13 +48,12 @@ async function firstLinkedComponent(inspector: FileInspector, root: string, path
   return undefined;
 }
 
-async function realInsideAny(inspector: FileInspector, real: string, folders: readonly string[]): Promise<boolean> {
-  for (const folder of folders) {
-    if (isInsideOrEqual(real, await realPathOfDeepestAncestor(inspector, folder))) {
-      return true;
-    }
-  }
-  return false;
+function realInsideAny(
+  real: string,
+  folders: readonly string[],
+  roots: { readonly root: string; readonly realRoot: string },
+): boolean {
+  return folders.some((folder) => isInsideOrEqual(real, join(roots.realRoot, relative(roots.root, folder))));
 }
 
 export async function checkPath(inspector: FileInspector, request: PathRequest): Promise<PathCheck> {
@@ -65,7 +64,7 @@ export async function checkPath(inspector: FileInspector, request: PathRequest):
   }
   const real = await realPathOfDeepestAncestor(inspector, path);
   const realRoot = await realPathOfDeepestAncestor(inspector, request.root);
-  if (!isInsideOrEqual(real, realRoot) || !(await realInsideAny(inspector, real, lexical))) {
+  if (!isInsideOrEqual(real, realRoot) || !realInsideAny(real, lexical, { root: request.root, realRoot })) {
     return { status: "through-link", path, realPath: real };
   }
   if (request.purpose === "write") {

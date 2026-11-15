@@ -65,7 +65,7 @@ test("the undo of a called action runs with the same caller as the action", asyn
 });
 
 test("a run started for a caller keeps it in the store, and its later steps and checks still see it", async () => {
-  const { engine, runner, store, freshEngine, close } = await harness({ storeKind: "sqlite" });
+  const { engine, runner, store, freshEngine, close } = await harness();
   const result = await engine.startAction("notes.draft", { topic: "rain" }, { caller: "store" });
   const started = runOf(result);
   assert.deepEqual(started.target, { kind: "action", mode: "notes", name: "draft", caller: "store" });

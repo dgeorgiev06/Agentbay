@@ -333,12 +333,12 @@ test("two SQLite stores on the same file see one lock: the second writer is refu
   remove();
 });
 
-test("opening a SQLite store makes its folder through the Folders port first", async () => {
+test("opening a SQLite store makes its file owner-only through the Folders port first", async () => {
   const folder = mkdtempSync(join(tmpdir(), "agentbay-open-"));
   const file = join(folder, "project", ".agentbay", "kernel.db");
   const recorded = fakeFolders();
   await assert.rejects(SqliteRunStore.open(recorded, file));
-  assert.deepEqual(recorded.created, [join(folder, "project", ".agentbay")]);
+  assert.deepEqual(recorded.created, [file]);
   const store = await SqliteRunStore.open(nodeFolders, file);
   await created(store);
   assert.equal((await store.readRun("run-1"))?.id, "run-1");

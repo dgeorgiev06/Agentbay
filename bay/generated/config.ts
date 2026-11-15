@@ -1,11 +1,15 @@
 export type Config = {
-  readonly bindings: Readonly<Record<string, Name>>;
+  readonly bindings: Readonly<Record<string, Binding>>;
   readonly adapter: Name;
   readonly modes?: ReadonlyArray<Name>;
   readonly settings?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   readonly budget?: Budget;
   readonly approvals?: { readonly from?: ReadonlyArray<"terminal" | "chat"> };
 };
+
+export type Binding = Name | BindingMap;
+
+export type BindingMap = Readonly<Record<string, Name>>;
 
 export type Name = string;
 

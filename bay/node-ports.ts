@@ -4,6 +4,7 @@ import type { Dirent } from "node:fs";
 import { access, lstat, mkdir, readdir, readFile, realpath, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { FileListing } from "./check-context.ts";
+import { createOwnerOnlyFile } from "./owner-only.ts";
 import type {
   Child,
   ChildEnd,
@@ -87,8 +88,9 @@ export const nodeFileSystem: FileSystem = { readText, list, exists, writeAtomic 
 export const systemClock: Clock = { now: () => new Date() };
 
 export const nodeFolders: Folders = {
-  ensureFolder: async (path) => {
-    await mkdir(path, { recursive: true });
+  ensureOwnerOnlyFile: (file) => {
+    createOwnerOnlyFile(file);
+    return Promise.resolve();
   },
 };
 

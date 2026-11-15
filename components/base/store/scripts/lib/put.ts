@@ -2,6 +2,7 @@ import { fail, shortHash, type DatabaseStatements, type Json } from "../../../..
 import { itemsOf, localSource, rowParameters, type Item } from "./items.ts";
 import { fieldsOf, isFields, numberOf, parsedJson, textOf, textsOf, type Fields } from "./json.ts";
 import { changesOf, rowsOf } from "./partition.ts";
+import { monthOf } from "./month.ts";
 import { matches, selectorOf } from "./selector.ts";
 import {
   recordSpend,
@@ -105,7 +106,7 @@ async function recordCost(database: DatabaseStatements, put: Put, now: Date): Pr
   const spend = {
     page: pageOf(put),
     source: put.source,
-    month: now.toISOString().slice(0, 7),
+    month: monthOf(now),
     items: cost.items,
     usd: cost.usd,
     recorded_at: now.toISOString(),

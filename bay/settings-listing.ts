@@ -3,6 +3,7 @@ import configSchema from "../schemas/config.schema.json" with { type: "json" };
 import type { Json } from "./contracts.ts";
 import { toJson } from "./json.ts";
 import type { Kernel } from "./kernel.ts";
+import type { BindingUse } from "./registry.ts";
 import { isRecord } from "./spec.ts";
 
 export type Setting = {
@@ -110,4 +111,12 @@ export function settingLines(settings: readonly Setting[]): string {
       return [heading, `  current: ${current}`];
     })
     .join("\n");
+}
+
+export function bindingLines(uses: readonly BindingUse[]): string {
+  if (uses.length === 0) {
+    return "bindings in use: none";
+  }
+  const lines = uses.map((use) => `  ${use.interfaceName}: ${use.servedBy} serves ${use.requirers.join(", ")}`);
+  return ["bindings in use:", ...lines].join("\n");
 }

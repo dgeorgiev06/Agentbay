@@ -1,9 +1,9 @@
-import { dirname } from "node:path";
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
 import { budgetFromJson, spendFromJson } from "./budget.ts";
 import type { EventSink, Json, RunEvent, Spend } from "./contracts.ts";
 import type { Budget } from "./generated/mode.ts";
 import { parseJson } from "./json.ts";
+import { narrowSideFiles } from "./owner-only.ts";
 import type { Folders } from "./ports.ts";
 
 export const kernelDatabaseFile = ".agentbay/kernel.db";
@@ -367,7 +367,7 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
   readonly #database: DatabaseSync;
 
   static async open(folders: Folders, file: string): Promise<SqliteRunStore> {
-    await folders.ensureFolder(dirname(file));
+    await folders.ensureOwnerOnlyFile(file);
     return new SqliteRunStore(file);
   }
 
@@ -375,6 +375,7 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
     this.#database = new DatabaseSync(file, { timeout: options.busyMilliseconds ?? defaultBusyMilliseconds });
     this.#database.exec("pragma journal_mode = wal; pragma foreign_keys = on;");
     this.#migrate();
+    narrowSideFiles(file);
   }
 
   close(): void {

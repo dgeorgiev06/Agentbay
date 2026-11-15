@@ -316,3 +316,19 @@ test("the daily workflow syncs, waits for the digest skill, then for approval of
     assert.deepEqual(done.state, { status: "done", output: shown.content });
   });
 });
+
+test("sync and digest take now from the kernel's clock: the lookback window ends at the clock's time", async () => {
+  const later = await openModeProject(configOf(), { startAt: "2027-01-01T00:00:00.000Z" });
+  try {
+    const nothing = fieldsOf(await later.output("feed-briefing.sync", {}));
+    assert.deepEqual([nothing.fetched, nothing.added], [0, 0]);
+    later.setTime("2026-11-16T00:00:00.000Z");
+    const recent = fieldsOf(await later.output("feed-briefing.sync", {}));
+    assert.deepEqual([recent.fetched, recent.added], [29, 29]);
+    const waiting = waitingSkillOf(await later.run("feed-briefing.digest", {}));
+    const period = fieldsOf(waiting.input).period;
+    assert.deepEqual(period, { since: "2026-11-02T00:00:00.000Z", until: "2026-11-16T00:00:00.000Z" });
+  } finally {
+    await later.close();
+  }
+});

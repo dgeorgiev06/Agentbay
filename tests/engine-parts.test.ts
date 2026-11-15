@@ -97,10 +97,10 @@ test("targets resolve own actions, interface calls through bindings, and say pla
     resolveCall(system, notes, "put"),
     "put does not name an action of an interface; write <interface>.<action>.",
   );
-  const unbound = { ...system, bindings: new Map<string, string>() };
+  const unbound = { ...system, config: { ...system.config, bindings: {} } };
   assert.equal(
     resolveCall(unbound, notes, "items-store.put"),
-    "Mode notes calls items-store.put, but no mode is bound to items-store@1.",
+    "Mode notes calls items-store.put, but no mode is bound to items-store@1 for it.",
   );
   assert.equal(resolveActionReference(system, "notes"), "notes does not name an action; write <mode>.<action>.");
   const reserved = resolveOwnAction(system, "notes", "constructor");
@@ -139,8 +139,8 @@ test("a call or workflow action whose binding vanished before resume fails the s
     },
   };
   const { engine, system, freshEngine, close } = await harness({ changes: { workflows } });
-  const unbound = freshEngine({ system: { ...system, bindings: new Map<string, string>() } });
-  const reason = "Mode notes calls items-store.put, but no mode is bound to items-store@1.";
+  const unbound = freshEngine({ system: { ...system, config: { ...system.config, bindings: {} } } });
+  const reason = "Mode notes calls items-store.put, but no mode is bound to items-store@1 for it.";
   const id = runOf(await engine.startAction("notes.draft-and-store", {})).id;
   const run = runOf(await unbound.submit(id, "0#1", { output: { id: "d1", text: "draft" }, spent }));
   assert.deepEqual(run.state, { status: "failed", reason });

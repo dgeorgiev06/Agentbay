@@ -61,3 +61,6 @@ export const selectSources = `select sync_state.source, sync_state.kinds, sync_s
   from sync_state order by sync_state.source`;
 
 export const selectSpend = "select source, month, items, usd from spend_by_month order by source, month";
+
+export const selectMonthSpend =
+  "select coalesce(sum(usd), 0) as usd from spend where source = :source and month = :month";

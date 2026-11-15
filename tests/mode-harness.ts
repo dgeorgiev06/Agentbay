@@ -9,6 +9,7 @@ import type { Config } from "../bay/generated/config.ts";
 import { layoutOf } from "../bay/layout.ts";
 import { loadKernel, nodeKernelPorts, type Kernel } from "../bay/kernel.ts";
 import type { EngineResult, RunView } from "../bay/run-state.ts";
+import type { Clock } from "../bay/ports.ts";
 import type { DatabasePartition } from "../bay/sdk.ts";
 import { testEnvironment } from "./kernel-fixture.ts";
 import { kit } from "./project-fixture.ts";
@@ -16,6 +17,24 @@ import { kit } from "./project-fixture.ts";
 export type CallOptions = {
   readonly caller?: string;
 };
+
+export type ProjectOptions = {
+  readonly startAt?: string;
+};
+
+type SettableClock = Clock & {
+  readonly set: (time: string) => void;
+};
+
+function settableClock(startAt: string | undefined): SettableClock {
+  let fixed = startAt === undefined ? undefined : Date.parse(startAt);
+  return {
+    now: () => (fixed === undefined ? new Date() : new Date(fixed)),
+    set: (time) => {
+      fixed = Date.parse(time);
+    },
+  };
+}
 
 export type ModeProject = {
   readonly root: string;
@@ -25,6 +44,7 @@ export type ModeProject = {
   readonly failure: (reference: string, input: Json, options?: CallOptions) => Promise<string>;
   readonly refusal: (reference: string, input: Json) => Promise<string>;
   readonly partition: (mode: string, name: string) => DatabasePartition;
+  readonly setTime: (time: string) => void;
   readonly reopen: (config: Config) => Promise<ModeProject>;
   readonly close: () => Promise<void>;
 };
@@ -68,17 +88,24 @@ function partitionOf(kernel: Kernel, mode: string, name: string): DatabasePartit
   };
 }
 
-export async function openModeProject(config: Config): Promise<ModeProject> {
+export async function openModeProject(config: Config, options: ProjectOptions = {}): Promise<ModeProject> {
   const root = await realpath(await mkdtemp(join(tmpdir(), "agentbay-modes-")));
   execFileSync("git", ["init", "-q"], { cwd: root });
-  return projectIn(root, config, 0);
+  return projectIn(root, { config, clock: settableClock(options.startAt) }, 0);
 }
 
-async function projectIn(root: string, config: Config, firstRun: number): Promise<ModeProject> {
+type Opening = {
+  readonly config: Config;
+  readonly clock: SettableClock;
+};
+
+async function projectIn(root: string, opening: Opening, firstRun: number): Promise<ModeProject> {
+  const { config, clock } = opening;
   await writeFile(join(root, "agentbay.config.yaml"), stringify(config), "utf8");
+  const ports = nodeKernelPorts(testEnvironment);
   const loaded = await loadKernel({
     layout: layoutOf({ kit, project: root }),
-    ports: nodeKernelPorts(testEnvironment),
+    ports: { ...ports, clock },
     environment: testEnvironment,
     platform: "linux",
   });
@@ -103,9 +130,10 @@ async function projectIn(root: string, config: Config, firstRun: number): Promis
       return result.problems.map((problem) => problem.message).join(" ");
     },
     partition: (mode, name) => partitionOf(kernel, mode, name),
+    setTime: clock.set,
     reopen: async (changed) => {
       kernel.close();
-      return projectIn(root, changed, runs + 1000);
+      return projectIn(root, { config: changed, clock }, runs + 1000);
     },
     close: async () => {
       kernel.close();

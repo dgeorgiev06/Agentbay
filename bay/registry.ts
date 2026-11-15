@@ -35,8 +35,13 @@ export type System = {
   readonly modes: ReadonlyMap<string, LoadedMode>;
   readonly active: ReadonlySet<string>;
   readonly interfaces: ReadonlyMap<string, LoadedInterface>;
-  readonly bindings: ReadonlyMap<string, string>;
   readonly config: Config;
+};
+
+export type BindingUse = {
+  readonly interfaceName: string;
+  readonly requirers: readonly string[];
+  readonly servedBy: string;
 };
 
 export type SystemReport = {
@@ -106,7 +111,13 @@ type CallTarget = {
 
 type RequiredBinding = {
   readonly reference: string;
-  readonly bound: string;
+  readonly bound: BoundMode;
+};
+
+type BoundMode = {
+  readonly mode: string;
+  readonly path: PathSegments;
+  readonly label: string;
 };
 
 type ImplementedSignature = {
@@ -148,6 +159,8 @@ const kitInterfacesFolder = "components/base/interfaces";
 const projectInterfacesFolder = "components/interfaces";
 
 const forge = "forge";
+
+const defaultKey = "default";
 
 const schemaDirections = ["input", "output"] as const;
 
@@ -208,9 +221,49 @@ function settingsOf(config: Config, modeName: string): Readonly<Record<string, u
   return config.settings?.[modeName] ?? {};
 }
 
-function boundModeOf(context: Context, reference: string): string | undefined {
-  const boundMode = context.config?.value.bindings[interfaceName(reference)];
-  return boundMode !== undefined && context.modes.has(boundMode) ? boundMode : undefined;
+function bindingFor(bindings: Config["bindings"], requirer: string, reference: string): BoundMode | undefined {
+  const name = interfaceName(reference);
+  const binding = Object.hasOwn(bindings, name) ? bindings[name] : undefined;
+  if (binding === undefined) {
+    return undefined;
+  }
+  if (typeof binding === "string") {
+    return { mode: binding, path: ["bindings", name], label: name };
+  }
+  const key = Object.hasOwn(binding, requirer) ? requirer : defaultKey;
+  const mode = Object.hasOwn(binding, key) ? binding[key] : undefined;
+  return mode === undefined ? undefined : { mode, path: ["bindings", name, key], label: `${name} for ${requirer}` };
+}
+
+export function servingMode(system: System, requirer: string, reference: string): string | undefined {
+  const bound = bindingFor(system.config.bindings, requirer, reference)?.mode;
+  return bound !== undefined && system.modes.has(bound) ? bound : undefined;
+}
+
+function servedReferences(system: System, requirer: string): readonly (readonly [string, string])[] {
+  const mode = system.modes.get(requirer);
+  const references = mode === undefined ? [] : requiredReferences(mode.manifest);
+  return references.flatMap((reference) => {
+    const servedBy = servingMode(system, requirer, reference);
+    return servedBy === undefined ? [] : [[interfaceName(reference), servedBy] as const];
+  });
+}
+
+export function bindingUses(system: System): readonly BindingUse[] {
+  const uses = new Map<string, BindingUse>();
+  for (const requirer of [...system.active].sort()) {
+    for (const [name, servedBy] of servedReferences(system, requirer)) {
+      const key = `${name} ${servedBy}`;
+      const requirers = uses.get(key)?.requirers ?? [];
+      uses.set(key, { interfaceName: name, requirers: [...requirers, requirer], servedBy });
+    }
+  }
+  return [...uses.values()].sort((first, second) => first.interfaceName.localeCompare(second.interfaceName));
+}
+
+function boundModeOf(context: Context, requirer: string, reference: string): BoundMode | undefined {
+  const config = context.config;
+  return config === undefined ? undefined : bindingFor(config.value.bindings, requirer, reference);
 }
 
 function activeModesOf(context: Context): readonly ModeSource[] {
@@ -369,15 +422,15 @@ function seedModes(context: Context, homes: ReadonlyMap<string, ModeFolder>): Ac
   return { active: new Set([...own, ...known]), problems };
 }
 
-function boundForgeProblems(context: Context, reference: string): readonly Problem[] {
+function boundForgeProblems(context: Context, binding: RequiredBinding): readonly Problem[] {
   const config = context.config;
   if (config === undefined) {
     return [];
   }
-  const name = interfaceName(reference);
-  const problem = problemAt(config, ["bindings", name], {
-    message: `bindings binds ${name} to forge, which can be active only when the project is the kit itself.`,
-    fix: `Bind ${name} to another mode that implements ${reference}.`,
+  const { reference, bound } = binding;
+  const problem = problemAt(config, bound.path, {
+    message: `bindings binds ${bound.label} to forge, which can be active only when the project is the kit itself.`,
+    fix: `Bind ${interfaceName(reference)} to another mode that implements ${reference}.`,
   });
   return [problem];
 }
@@ -386,7 +439,7 @@ function bindingsFrom(context: Context, name: string): readonly RequiredBinding[
   const mode = context.modes.get(name);
   const references = mode === undefined ? [] : requiredReferences(mode.value);
   return references.flatMap((reference) => {
-    const bound = context.config?.value.bindings[interfaceName(reference)];
+    const bound = boundModeOf(context, name, reference);
     return bound === undefined ? [] : [{ reference, bound }];
   });
 }
@@ -397,12 +450,13 @@ function activation(context: Context, homes: ReadonlyMap<string, ModeFolder>): A
   const problems = [...seeded.problems];
   const queue = [...active];
   for (let name = queue.shift(); name !== undefined; name = queue.shift()) {
-    for (const { reference, bound } of bindingsFrom(context, name)) {
+    for (const binding of bindingsFrom(context, name)) {
+      const bound = binding.bound.mode;
       if (active.has(bound) || !homes.has(bound)) {
         continue;
       }
       if (bound === forge && !isProjectTheKit(context.layout)) {
-        problems.push(...boundForgeProblems(context, reference));
+        problems.push(...boundForgeProblems(context, binding));
         continue;
       }
       active.add(bound);
@@ -503,40 +557,115 @@ function unknownInterface(context: Context, subject: string, reference: string):
   };
 }
 
-function bindingProblem(context: Context, mode: ModeSource, reference: string): Problem | undefined {
-  if (context.config === undefined) {
-    return undefined;
-  }
-  const name = interfaceName(reference);
-  const boundMode = context.config.value.bindings[name];
+function candidatesOf(context: Context, reference: string): string {
   const implementers = implementersOf(context, reference);
-  const candidates = implementers.length === 0 ? "none yet" : implementers.join(", ");
-  if (boundMode === undefined) {
-    return problemAt(context.config, ["bindings"], {
-      message: `Mode ${mode.value.name} requires ${reference}, but bindings names no mode for ${name}.`,
+  return implementers.length === 0 ? "none yet" : implementers.join(", ");
+}
+
+type Requirement = {
+  readonly requirer: string;
+  readonly reference: string;
+};
+
+function notBoundProblem(context: Context, config: Loaded<Config>, requirement: Requirement): Problem {
+  const { requirer, reference } = requirement;
+  const name = interfaceName(reference);
+  const candidates = candidatesOf(context, reference);
+  if (!Object.hasOwn(config.value.bindings, name)) {
+    return problemAt(config, ["bindings"], {
+      message: `Mode ${requirer} requires ${reference}, but bindings names no mode for ${name}.`,
       fix: `Add ${name}: <mode> under bindings; modes that implement ${reference}: ${candidates}.`,
     });
   }
-  if (context.unloadedModes.has(boundMode)) {
+  const missing = `bindings.${name} has no entry for ${requirer} and no default`;
+  return problemAt(config, ["bindings", name], {
+    message: `Mode ${requirer} requires ${reference}, but ${missing}.`,
+    fix:
+      `Add ${requirer}: <mode> or default: <mode> under bindings.${name}; ` +
+      `modes that implement ${reference}: ${candidates}.`,
+  });
+}
+
+function boundModeProblem(context: Context, requirer: string, reference: string): Problem | undefined {
+  const config = context.config;
+  if (config === undefined) {
     return undefined;
   }
-  if (!context.modes.has(boundMode)) {
-    return problemAt(context.config, ["bindings", name], {
-      message: `bindings binds ${name} to ${boundMode}, which is not a mode.`,
+  const bound = boundModeOf(context, requirer, reference);
+  if (bound === undefined) {
+    return notBoundProblem(context, config, { requirer, reference });
+  }
+  const candidates = candidatesOf(context, reference);
+  const name = interfaceName(reference);
+  if (context.unloadedModes.has(bound.mode)) {
+    return problemAt(config, bound.path, {
+      message: `bindings binds ${bound.label} to ${bound.mode}, which does not load; its own problems are listed.`,
+      fix: `Correct the manifest of ${bound.mode}, or bind ${name} to another mode that implements ${reference}.`,
+    });
+  }
+  if (!context.modes.has(bound.mode)) {
+    return problemAt(config, bound.path, {
+      message: `bindings binds ${bound.label} to ${bound.mode}, which is not a mode.`,
       fix: `Bind ${name} to a mode that implements ${reference}: ${candidates}.`,
     });
   }
-  if (!implementers.includes(boundMode)) {
-    return problemAt(context.config, ["bindings", name], {
+  if (!implementersOf(context, reference).includes(bound.mode)) {
+    return problemAt(config, bound.path, {
       message:
-        `bindings binds ${name} to ${boundMode}, which does not implement ${reference}, ` +
-        `as mode ${mode.value.name} requires.`,
+        `bindings binds ${bound.label} to ${bound.mode}, which does not implement ${reference}, ` +
+        `as mode ${requirer} requires.`,
       fix:
         `Bind ${name} to a mode that implements ${reference} (${candidates}), ` +
-        `or add ${reference} to the implements of ${boundMode}.`,
+        `or add ${reference} to the implements of ${bound.mode}.`,
     });
   }
   return undefined;
+}
+
+function requirersOf(context: Context, name: string): readonly string[] {
+  return [...context.modes.values()]
+    .filter((mode) => requiredReferences(mode.value).some((reference) => interfaceName(reference) === name))
+    .map((mode) => mode.value.name);
+}
+
+function mapEntryProblem(
+  context: Context,
+  at: { name: string; key: string },
+  config: Loaded<Config>,
+): readonly Problem[] {
+  const { name, key } = at;
+  if (key === defaultKey || context.unloadedModes.has(key)) {
+    return [];
+  }
+  if (!context.modes.has(key)) {
+    return [
+      problemAt(config, ["bindings", name, key], {
+        message: `bindings.${name} has an entry for ${key}, which is not a mode.`,
+        fix: `Correct the name, or remove ${key} from bindings.${name}.`,
+      }),
+    ];
+  }
+  if (requirersOf(context, name).includes(key)) {
+    return [];
+  }
+  return [
+    problemAt(config, ["bindings", name, key], {
+      message: `bindings.${name} has an entry for ${key}, but mode ${key} does not require ${name}.`,
+      fix: `Remove ${key} from bindings.${name}, or add ${name}@<major> to requires.interfaces of ${key}.`,
+    }),
+  ];
+}
+
+function bindingMapProblems(context: Context): readonly Problem[] {
+  const config = context.config;
+  if (config === undefined) {
+    return [];
+  }
+  return Object.entries(config.value.bindings).flatMap(([name, binding]) =>
+    typeof binding === "string"
+      ? []
+      : Object.keys(binding).flatMap((key) => mapEntryProblem(context, { name, key }, config)),
+  );
 }
 
 function requiresProblems(context: Context, mode: ModeSource): readonly Problem[] {
@@ -545,7 +674,7 @@ function requiresProblems(context: Context, mode: ModeSource): readonly Problem[
       const subject = `Mode ${mode.value.name} requires`;
       return [problemAt(mode, ["requires", "interfaces", index], unknownInterface(context, subject, reference))];
     }
-    return bindingProblem(context, mode, reference) ?? [];
+    return boundModeProblem(context, mode.value.name, reference) ?? [];
   });
 }
 
@@ -854,8 +983,12 @@ async function referenceProblems(context: Context): Promise<readonly Problem[]> 
 function dependencyGraph(context: Context): ReadonlyMap<string, readonly string[]> {
   const graph = new Map<string, readonly string[]>();
   for (const mode of activeModesOf(context)) {
-    const dependencies = requiredReferences(mode.value).flatMap((reference) => boundModeOf(context, reference) ?? []);
-    graph.set(mode.value.name, dependencies);
+    const name = mode.value.name;
+    const dependencies = requiredReferences(mode.value).flatMap((reference) => {
+      const bound = boundModeOf(context, name, reference)?.mode;
+      return bound !== undefined && context.modes.has(bound) ? [bound] : [];
+    });
+    graph.set(name, dependencies);
   }
   return graph;
 }
@@ -1048,6 +1181,7 @@ async function consistencyProblems(context: Context): Promise<readonly Problem[]
     problems.push(...(await modeSettingsProblems(context, mode)));
   }
   problems.push(...straySettingsProblems(context));
+  problems.push(...bindingMapProblems(context));
   problems.push(...(await referenceProblems(context)));
   problems.push(...cycleProblems(context));
   return problems;
@@ -1055,7 +1189,6 @@ async function consistencyProblems(context: Context): Promise<readonly Problem[]
 
 function buildSystem(context: Context, config: Config, workflows: readonly ModeWorkflow[]): System {
   const modes = new Map<string, LoadedMode>();
-  const bindings = new Map<string, string>();
   for (const [name, mode] of context.modes) {
     const own = workflows
       .filter((entry) => entry.mode.value.name === name)
@@ -1068,19 +1201,11 @@ function buildSystem(context: Context, config: Config, workflows: readonly ModeW
       settings: settingsOf(config, name),
     });
   }
-  for (const mode of activeModesOf(context)) {
-    for (const reference of requiredReferences(mode.value)) {
-      const boundMode = boundModeOf(context, reference);
-      if (boundMode !== undefined) {
-        bindings.set(reference, boundMode);
-      }
-    }
-  }
   const interfaces = new Map<string, LoadedInterface>();
   for (const [reference, loaded] of context.interfaces) {
     interfaces.set(reference, { file: loaded.file, definition: loaded.value });
   }
-  return { modes, active: context.active, interfaces, bindings, config };
+  return { modes, active: context.active, interfaces, config };
 }
 
 function loadProblems(context: Context, modes: LoadedModes): Collected<UnloadedMode> {

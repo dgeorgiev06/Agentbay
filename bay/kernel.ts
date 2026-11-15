@@ -1,5 +1,4 @@
 import { join } from "node:path/posix";
-import type { Answer } from "./answers.ts";
 import { Broker } from "./broker.ts";
 import type { FileListing } from "./check-context.ts";
 import type { Layout } from "./layout.ts";
@@ -63,7 +62,6 @@ export type Kernel = {
   readonly runner: ScriptRunner;
   readonly engine: Engine;
   readonly brokerFor: (place: StepPlace, permissions: Permissions) => Broker;
-  readonly prepareDatabase: (place: StepPlace, permissions: Permissions) => Promise<Answer<readonly string[]>>;
   readonly close: () => void;
 };
 
@@ -91,37 +89,6 @@ export function secretStoreOf(options: Omit<KernelOptions, "layout">): SecretSto
   });
 }
 
-function databasePreparer(
-  brokerFor: Kernel["brokerFor"],
-): (place: StepPlace, permissions: Permissions) => Promise<Answer<readonly string[]>> {
-  const prepared = new Map<string, Promise<Answer<readonly string[]>>>();
-  return (place, permissions) => {
-    const earlier = prepared.get(permissions.mode);
-    if (earlier !== undefined) {
-      return earlier;
-    }
-    const broker = brokerFor(place, permissions);
-    const migrated = broker.migrate().finally(() => {
-      broker.close();
-    });
-    prepared.set(permissions.mode, migrated);
-    return migrated;
-  };
-}
-
-function migratingRunner(runner: ScriptRunner, prepare: Kernel["prepareDatabase"]): ScriptRunner {
-  return {
-    run: async (request) => {
-      const migrated = await prepare(request.place, request.permissions);
-      if (!migrated.ok) {
-        const reason = `The database of mode ${request.permissions.mode} could not be migrated: ${migrated.message}`;
-        return { status: "failed", reason, spent: { items: 0, usd: 0, tokens: 0, minutes: 0 } };
-      }
-      return runner.run(request);
-    },
-  };
-}
-
 export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel>> {
   const { ports, layout } = options;
   const loaded = await loadSystem(ports.files, layout);
@@ -139,8 +106,7 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
   const shared = { ...services, events: store, clock: ports.clock, childProcesses: ports.childProcesses };
   const brokerFor = (place: StepPlace, permissions: Permissions): Broker =>
     new Broker({ ...shared, place, permissions });
-  const prepareDatabase = databasePreparer(brokerFor);
-  const runner = migratingRunner(createScriptRunner(shared), prepareDatabase);
+  const runner = createScriptRunner(shared);
   const engine = new Engine({
     system,
     store,
@@ -161,7 +127,6 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
     runner,
     engine,
     brokerFor,
-    prepareDatabase,
     close: () => {
       store.close();
     },

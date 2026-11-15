@@ -42,7 +42,6 @@ export function systemOf(modes: readonly ModeEntry[]): System {
     modes: loaded,
     active: new Set(loaded.keys()),
     interfaces: new Map(),
-    bindings: new Map(),
     config: { bindings: {}, adapter: "local" },
   };
 }

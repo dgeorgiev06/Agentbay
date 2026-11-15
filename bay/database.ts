@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync } from "node:fs";
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue, type StatementSync } from "node:sqlite";
 import type { Json } from "./contracts.ts";
+import { createOwnerOnlyFile, narrowSideFiles } from "./owner-only.ts";
 import { isOneStatement } from "./sql-statements.ts";
 
 export type SqlParameters = readonly Json[] | Readonly<Record<string, Json>>;
@@ -121,6 +121,7 @@ export class ModeDatabase {
   readonly #file: string;
   #writable: DatabaseSync | undefined;
   #readOnly: DatabaseSync | undefined;
+  #sideFilesNarrowed = false;
 
   constructor(file: string) {
     this.#file = file;
@@ -131,7 +132,9 @@ export class ModeDatabase {
   }
 
   execute(sql: string, parameters: SqlParameters, connection: Connection): DatabaseResult<ExecuteResult> {
-    return this.#prepared({ sql, parameters, connection }, (bound) => bound.run());
+    const result = this.#prepared({ sql, parameters, connection }, (bound) => bound.run());
+    this.#narrowSideFiles();
+    return result;
   }
 
   applyMigrations(migrations: readonly Migration[], appliedAt: string): DatabaseResult<readonly string[]> {
@@ -139,6 +142,18 @@ export class ModeDatabase {
     if (database === undefined) {
       return { status: "missing" };
     }
+    try {
+      return this.#migrated(database, migrations, appliedAt);
+    } finally {
+      this.#narrowSideFiles();
+    }
+  }
+
+  #migrated(
+    database: DatabaseSync,
+    migrations: readonly Migration[],
+    appliedAt: string,
+  ): DatabaseResult<readonly string[]> {
     database.exec("create table if not exists _migrations (name text primary key, applied_at text not null)");
     const applied = new Set(
       database
@@ -172,7 +187,7 @@ export class ModeDatabase {
   #open(connection: Connection): DatabaseSync | undefined {
     if (connection === "writable") {
       if (this.#writable === undefined) {
-        mkdirSync(dirname(this.#file), { recursive: true });
+        createOwnerOnlyFile(this.#file);
         this.#writable = new DatabaseSync(this.#file);
         this.#writable.exec("pragma journal_mode = wal");
       }
@@ -186,6 +201,13 @@ export class ModeDatabase {
       this.#readOnly.exec("pragma query_only = on");
     }
     return this.#readOnly;
+  }
+
+  #narrowSideFiles(): void {
+    if (!this.#sideFilesNarrowed && this.#writable !== undefined) {
+      narrowSideFiles(this.#file);
+      this.#sideFilesNarrowed = true;
+    }
   }
 
   #prepared<T>(statement: Statement, use: (bound: Bound) => T): DatabaseResult<T> {

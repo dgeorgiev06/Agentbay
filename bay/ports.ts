@@ -6,7 +6,7 @@ export type FileSystem = {
 };
 
 export type Folders = {
-  readonly ensureFolder: (path: string) => Promise<void>;
+  readonly ensureOwnerOnlyFile: (file: string) => Promise<void>;
 };
 
 export type Removal = {

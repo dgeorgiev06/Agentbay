@@ -5,7 +5,9 @@ import { createServer, type Server } from "node:net";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { ActionCaller, Json, Permissions, ScriptRequest, StepOutcome } from "../bay/contracts.ts";
+import { fieldOf } from "../bay/json.ts";
 import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
+import type { Clock } from "../bay/ports.ts";
 import { createScriptRunner, scriptCommand } from "../bay/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import {
@@ -20,6 +22,7 @@ import {
   withProject,
   writeProjectFile,
 } from "./broker-fixture.ts";
+import { fakeClock } from "./fakes.ts";
 
 const madeUpToken = "made-up-script-token-31337";
 
@@ -38,6 +41,7 @@ type RunOptions = {
   readonly script?: string;
   readonly caller?: string;
   readonly skillInput?: Json;
+  readonly clock?: Clock;
 };
 
 function scriptSource(body: string): string {
@@ -76,7 +80,7 @@ async function runScript(root: string, options: RunOptions): Promise<Run> {
     }),
     secrets,
     events,
-    clock: systemClock,
+    clock: options.clock ?? systemClock,
     childProcesses: nodeChildProcesses,
     limits: { outputBytes: options.outputBytes ?? 1_000_000 },
   });
@@ -760,6 +764,18 @@ test("a script sees the caller and the skill input the engine gives it, and none
     assert.deepEqual(outputOf(given), { caller: "feed-briefing", skillInput: { items: ["a:1"] } });
     const none = await attempt(root, body);
     assert.deepEqual(outputOf(none), { caller: null, skillInput: null });
+  });
+});
+
+test("context.now() is the kernel clock's time when the step started, so a fake clock controls it", async () => {
+  await withProject(async (root) => {
+    const clock = fakeClock(new Date("2026-11-30T23:59:59.000Z"));
+    const body = "  return { now: context.now().toISOString(), again: context.now().toISOString() };";
+    const before = await attempt(root, body, { clock });
+    assert.deepEqual(outputOf(before), { now: "2026-11-30T23:59:59.000Z", again: "2026-11-30T23:59:59.000Z" });
+    clock.advance(1000);
+    const after = await attempt(root, body, { clock });
+    assert.equal(fieldOf(outputOf(after), "now"), "2026-12-01T00:00:00.000Z");
   });
 });
 

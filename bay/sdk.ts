@@ -48,6 +48,7 @@ export type ScriptContext = {
   };
   readonly call: (reference: string, input: Json) => Promise<Answer<Json>>;
   readonly settings: Readonly<Record<string, Json>>;
+  readonly now: () => Date;
   readonly spend: (spending: Spending) => Promise<Answer<null>>;
   readonly caller: string | undefined;
   readonly skillInput: Json | undefined;

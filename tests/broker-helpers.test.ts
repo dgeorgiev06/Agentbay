@@ -114,11 +114,13 @@ test("the script protocol accepts well-formed messages only", () => {
   ]) {
     assert.equal(childMessageOf(line), undefined, line);
   }
-  assert.deepEqual(parentMessageOf('{"type":"start","input":null,"settings":{}}'), {
+  assert.deepEqual(parentMessageOf('{"type":"start","input":null,"settings":{},"now":"2026-11-15T00:00:00.000Z"}'), {
     type: "start",
     input: null,
     settings: {},
+    now: "2026-11-15T00:00:00.000Z",
   });
+  assert.equal(parentMessageOf('{"type":"start","input":null,"settings":{}}'), undefined);
   assert.equal(parentMessageOf('{"type":"answer","id":1,"answer":{"ok":false,"kind":"refused"}}'), undefined);
 });
 

@@ -14,7 +14,7 @@ export const run = defineScript(async (input, context) => {
     const removed = await changesOf(partition, deleteItem, { id });
     (removed > 0 ? deleted : missing).push(id);
     if (!id.startsWith(`${localSource}:`)) {
-      await changesOf(partition, rememberDeletion, { id, deleted_at: new Date().toISOString() });
+      await changesOf(partition, rememberDeletion, { id, deleted_at: context.now().toISOString() });
       remembered.push(id);
     }
   }

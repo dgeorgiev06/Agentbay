@@ -45,8 +45,8 @@ export function fakeFolders(): Folders & { readonly created: readonly string[] }
   const created: string[] = [];
   return {
     created,
-    ensureFolder: (path) => {
-      created.push(normalize(path));
+    ensureOwnerOnlyFile: (file) => {
+      created.push(normalize(file));
       return Promise.resolve();
     },
   };

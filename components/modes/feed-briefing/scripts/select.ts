@@ -2,14 +2,15 @@ import { canonicalJson, defineScript, parseIsoTime, type Json } from "../../../.
 import { called } from "./lib/calls.ts";
 import { fieldsOf, listOf, textOf, textsOf, type Fields } from "./lib/json.ts";
 import { digestLimits } from "./lib/limits.ts";
-import { settingsOf, timeOf } from "./lib/settings.ts";
+import { settingsOf, timeOf, type Settings } from "./lib/settings.ts";
 
 const excerptCharacters = 400;
 
-function windowOf(input: Fields, lookbackMilliseconds: number, selector: Fields): { since: string; until: string } {
-  const asked = parseIsoTime(textOf(input.until) ?? "")?.getTime() ?? Date.now();
+function windowOf(input: Fields, settings: Settings, now: Date): { since: string; until: string } {
+  const selector = settings.selector;
+  const asked = parseIsoTime(textOf(input.until) ?? "")?.getTime() ?? now.getTime();
   const until = Math.min(asked, timeOf(selector.until) ?? asked);
-  const since = Math.max(asked - lookbackMilliseconds, timeOf(selector.since) ?? 0);
+  const since = Math.max(asked - settings.lookbackMilliseconds, timeOf(selector.since) ?? 0);
   return { since: new Date(since).toISOString(), until: new Date(until).toISOString() };
 }
 
@@ -41,7 +42,7 @@ function hasSelectorChanged(status: Fields, selector: Fields): boolean {
 export const run = defineScript(async (input, context) => {
   const request = fieldsOf(input);
   const settings = settingsOf(context.settings);
-  const period = windowOf(request, settings.lookbackMilliseconds, settings.selector);
+  const period = windowOf(request, settings, context.now());
   const selector = { ...settings.selector, ...period, limit: settings.maxItems };
   const found = fieldsOf(await called(context, "items-store.query", { selector, order: "oldest" }));
   const status = fieldsOf(await called(context, "items-store.status", {}));

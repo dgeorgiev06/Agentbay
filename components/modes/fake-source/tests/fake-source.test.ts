@@ -119,11 +119,12 @@ test("every post is a valid item: its source, kind, time and url follow the base
   assert.equal(fieldOf(result.items[1], "url"), null);
 });
 
-test("describe names the source, its kinds and the selector fields it applies itself", async () => {
+test("describe names the source, its kinds, the selector fields it applies itself and what a page costs", async () => {
   assert.deepEqual(await project.output("fake-source.describe", {}), {
     source: "fake",
     kinds: ["post"],
     nativeFields: ["authors", "since", "until", "limit"],
+    pageCostUsd: 0.02,
   });
 });
 

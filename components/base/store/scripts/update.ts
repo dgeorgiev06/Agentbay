@@ -13,6 +13,6 @@ export const run = defineScript(async (input, context) => {
     return fail(`There is no item ${id} in the store to update.`);
   }
   const item = itemOf({ ...itemOfRow(row), ...fieldsOf(request.set) });
-  await changesOf(partition, upsertItem, rowParameters(item, new Date().toISOString()));
+  await changesOf(partition, upsertItem, rowParameters(item, context.now().toISOString()));
   return { item };
 });

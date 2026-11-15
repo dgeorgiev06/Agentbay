@@ -76,11 +76,57 @@
     },
     "more": {
       "type": "boolean",
-      "description": "Whether the source had more ready when maxItems stopped the sync."
+      "description": "Whether the source had more ready when maxItems or the monthly cap stopped the sync; true when the cap stopped it before its first fetch, since it could not ask."
     },
     "selectorChanged": {
       "type": "boolean",
       "description": "Whether the configured selector differed from the last sync's, in which case this sync started again from the beginning of its window."
+    },
+    "stopped": {
+      "enum": [
+        "monthly cap"
+      ],
+      "description": "Why the sync stopped before the source ran out or maxItems was reached; left out when it did not stop early. monthly cap: what the store's monthlyUsd leaves this month is less than one more page could cost, so nothing more was fetched or stored."
+    },
+    "monthlyCap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "month",
+        "capUsd",
+        "spentUsd",
+        "remainingUsd"
+      ],
+      "description": "The allowance that stopped the sync, given with stopped.",
+      "properties": {
+        "month": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$",
+          "description": "The calendar month in UTC, as YYYY-MM."
+        },
+        "capUsd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "The monthly cap on this source in US dollars."
+        },
+        "spentUsd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "US dollars spent on this source this month, this sync included."
+        },
+        "remainingUsd": {
+          "type": "number",
+          "description": "What the cap still leaves, less than one page costs."
+        }
+      }
     }
+  },
+  "dependentRequired": {
+    "stopped": [
+      "monthlyCap"
+    ],
+    "monthlyCap": [
+      "stopped"
+    ]
   }
 }

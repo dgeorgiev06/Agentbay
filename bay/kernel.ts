@@ -5,8 +5,8 @@ import type { FileListing } from "./check.ts";
 import type { Permissions, PolicyOf, ScriptRunner, StepPlace } from "./contracts.ts";
 import { Engine } from "./engine.ts";
 import {
-  createGitFileListing,
   createNodeHttp,
+  createProjectFileListing,
   nodeChildProcesses,
   nodeFileInspector,
   nodeFileSystem,
@@ -37,7 +37,14 @@ export type KernelPorts = {
 
 export type Environment = Readonly<Record<string, string | undefined>>;
 
+export type KernelLimits = {
+  readonly toolCallsPerRound: number;
+};
+
+const maximumToolCallsPerRound = 200;
+
 export type KernelOptions = {
+  readonly limits?: Partial<KernelLimits>;
   readonly project: string;
   readonly kit: string;
   readonly ports: KernelPorts;
@@ -46,6 +53,7 @@ export type KernelOptions = {
 };
 
 export type Kernel = {
+  readonly limits: KernelLimits;
   readonly root: string;
   readonly kit: string;
   readonly layout: SystemLayout;
@@ -75,7 +83,7 @@ export function nodeKernelPorts(environment: Environment): KernelPorts {
     processes: nodeProcesses,
     childProcesses: nodeChildProcesses,
     clock: systemClock,
-    listing: createGitFileListing({ PATH: environment.PATH ?? "/usr/bin:/bin" }),
+    listing: createProjectFileListing({ PATH: environment.PATH ?? "/usr/bin:/bin" }, nodeFileInspector),
   };
 }
 
@@ -149,6 +157,7 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
     scrubber: secrets,
   });
   const kernel: Kernel = {
+    limits: { toolCallsPerRound: maximumToolCallsPerRound, ...options.limits },
     root,
     kit: options.kit,
     layout,

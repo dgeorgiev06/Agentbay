@@ -28,6 +28,5 @@
   },
   "prettier": {
     "config": ["components/base/typescript/prettier.json"]
-  },
-  "ignore": ["bay/contracts.ts"]
+  }
 }

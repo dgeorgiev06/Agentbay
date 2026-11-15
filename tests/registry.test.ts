@@ -287,6 +287,19 @@ test("a dependency cycle between modes through bindings is reported and named", 
   assert.equal(cycle.file, paths.config);
 });
 
+test("a mode that depends on itself through a binding is reported as a cycle", async () => {
+  const files = {
+    ...validFiles(),
+    [paths.store]: withMode(storeMode, { requires: { interfaces: ["items-store@1"] } }),
+  };
+  const problems = await problemsOf(files);
+  const cycles = problems.filter((problem) => problem.message.includes("cycle"));
+  assert.deepEqual(
+    cycles.map((problem) => problem.message),
+    ["Modes depend on each other in a cycle through bindings: store -> store."],
+  );
+});
+
 test("a missing project config is reported with what to put in it", async () => {
   const problems = await problemsOf(without(validFiles(), paths.config));
   const problem = findProblem(problems, paths.config, "The project config agentbay.config.yaml does not exist.");

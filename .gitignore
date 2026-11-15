@@ -4,3 +4,5 @@ agentbay.config.yaml
 /.claude/
 /CLAUDE.md
 /.mcp.json
+__pycache__/
+*.pyc

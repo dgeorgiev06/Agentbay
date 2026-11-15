@@ -40,7 +40,7 @@ What you get:
 What it costs, stated plainly:
 
 - Everything is rewritten: kernel, modes and tests. The 576 existing tests and the golden guard matrix cannot be reused, so the safety net of comparing old and new behaviour is gone. In its place, each builder reads the old tests of what it rebuilds and lists every behaviour as kept or dropped, and the reviewer checks that list.
-- The new safety model is younger than the one it replaces. It is simpler and closes the known bypass (code an agent runs outside the guard), but it has not been attacked yet. Main stays on 4.0.0 until cutover, and a `v4` branch remains after it.
+- The new safety model is younger than the one it replaces. It is simpler and narrows the known bypass (code an agent runs outside the guard), but it has not been attacked yet, and the per-step hook has been tested only with sample inputs, not inside a live Claude Code session. Main stays on 4.0.0 until cutover, and a `v4` branch remains after it.
 - The kernel budget of 4,000 lines is a target, not a measurement. If the engine stage shows it cannot hold, that comes back to you before the modes are built.
 
 Release 5.0.0 is the cutover. A Codex adapter is 5.1.
@@ -176,13 +176,21 @@ The threat model is unchanged: agent mistakes and overreach, prompt injection th
 What changes is where the rules live. Today they live in a hook that parses every shell command. In agentbay 5 they live in the mode's manifest, and three things enforce it:
 
 1. **The broker.** Every database, file, secret, HTTP and action request from a skill or a script goes through the broker with the run's permission set. Not declared means denied. HTTP is checked against the mode's hosts. Secrets are fetched by name, never listed, and every value seen is redacted from output and logs.
-2. **No general shell for agents.** A skill step gets the kernel's tools and the harness's file tools limited to its declared paths. It gets a shell command only when the manifest lists it under `commands:` as an exact prefix (for example `node --test`). The adapter writes this as the harness's own allow and deny settings, plus one small hook that denies anything outside the set. The hook compares against a list; it does not parse shell.
-3. **Scripts run confined.** A script step runs in a child Node process with the permission model on: file access limited to the mode's paths, no child processes, network only through the broker. This closes the bypass DESIGN.md names today, where code a builder runs is outside the guard. Whether Node's permission model can do all of this is spike C.
+2. **No shell for agents by default.** A skill step gets the kernel's tools and the harness's file tools limited to its declared paths. Tests and checks are script steps that the engine runs; their failures go back to the skill. A mode may list exact command prefixes under `commands:`; in 5.0.0 only `forge` does (for example `node --test`), so its builders can test as they work. The adapter writes one agent file per skill step and one hook that denies anything outside the step's tools, paths and commands. The hook compares against a list and allows only plain argument characters after a prefix; it does not parse shell. A listed command that runs code can run whatever the agent wrote, so `bay check` warns on every `commands:` entry and refuses one outside `components/base/`.
+3. **Scripts run with a seat belt.** A script step runs in a child Node process started with a clean environment and the permission model on: file access limited to the mode's paths, no child processes, no workers. A preload refuses the network and SQLite modules, so a script reaches both only through the broker. Spike C showed what this is and is not: it stops mistakes, and it keeps secrets out of reach because none are in the environment or in a readable folder, but Node documents the permission model as a guard for trusted code, and on Node 22 it does not block the network. It narrows the bypass DESIGN.md names today; it does not close it.
+
+The safety level rises with the audience, and each step is a gate before the next audience is let in:
+
+| Audience | Added before it |
+|---|---|
+| The owner alone (5.0.0) | Everything above |
+| A team | `commands:` removed from forge, so no agent has a shell; a per-run budget on every mode; a review of every installed mode's manifest |
+| The public | One container per run with no network except through the broker; signed modes in the index; an outside security review |
 
 Kept from today, by other means:
 
 - **The kernel changes only through forge.** `bay/`, `schemas/`, `adapters/`, `framework/` and `components/base/` are writable only by forge's `extend` action, behind an approval. `bay check --base` rejects a change to them that no approved proposal lists.
-- **Agent SQL is read-only and bounded.** Each mode has its own SQLite file. An agent query runs on a read-only connection to that file, one SELECT, in a worker with a time and row limit. Isolation comes from the file, not from an authorizer. Spike A confirms the limits can be enforced on Node.
+- **Agent SQL is read-only and bounded.** Each mode has its own SQLite file. An agent query runs in a child process on a read-only connection to that file, wrapped so that only one SELECT can run, with a row limit and a time limit enforced by killing the process. Spike A showed this works on Node's own SQLite, that a worker cannot stop a runaway query, and that `attach` must be kept out by the wrapper because a read-only connection allows it.
 - **Nothing an agent submits is trusted.** Outputs are validated against the schema and scanned for secrets before they are stored.
 
 What is deliberately dropped: shell-command parsing, case-folded and inode path comparison in a hook, the use shims, per-role units, and the `agentbay/v4` kinds. Each is replaced above or no longer needed.

@@ -210,3 +210,12 @@ Consequences: on Node 22 a script step is confined for files, processes and work
 2. Spike B: decide what a skill step may do with a command that runs code, such as `node --test`. One choice is to forbid such commands in `commands:`. Another is to have the adapter route them through the confined runner of spike C, which has its own gaps.
 3. Spike C: choose one of these. Stay on Node 22.18 with the in-process preload as a guard against mistakes, and treat scripts as reviewed code without a network boundary. Require Node 25 or later for `--allow-net`. Or add an OS sandbox, which is Linux only and outside Node.
 4. Separately: the proposal calls script confinement a closed bypass. The Node documentation calls the permission model a seat belt for trusted code, so the Safety section should not claim it stops a hostile script.
+
+### Decided by the owner on 2026-11-14
+
+1. Agent SQL runs in a child process per query.
+2. No shell for agents by default. A mode may list command prefixes; in 5.0.0 only `forge` does. The owner uses agentbay alone for now, then a team, then the public; the proposal's Safety section lists what is added before each.
+3. Scripts run with the Node 22 seat belt (clean environment, file and process limits, the preload). A container per run comes with the cloud stage.
+4. The proposal no longer says confinement closes the bypass.
+
+Reviewer's note on S0: the checks were rerun and pass; the worker and permission-model findings were reproduced independently. Spike B was not run inside a live Claude Code session, so K6's hook is verified on the owner's machine at the stage 4 checkpoint. Two rules are still missing from the lint config and go to K1: `prefer-readonly`, and a ban on one mode importing another mode's files.

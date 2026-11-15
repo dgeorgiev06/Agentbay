@@ -1,391 +1,210 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agentbay/v4/Mode",
   "title": "Mode",
-  "description": "A job playbook: one logical job. Its features each run steps: code steps (run: <capability>/v<N>.<endpoint>), agentic steps (role: <role>) and gates. Modes name capabilities, never concrete tools.",
+  "description": "The manifest of a mode, mode.yaml at the root of its folder.",
   "type": "object",
-  "required": [
-    "apiVersion",
-    "kind",
-    "metadata",
-    "spec"
-  ],
   "additionalProperties": false,
+  "required": ["name", "version", "description", "actions"],
   "properties": {
-    "apiVersion": {
-      "const": "agentbay/v4"
+    "name": {
+      "description": "The mode's name; the same as the name of its folder.",
+      "$ref": "#/$defs/name"
     },
-    "kind": {
-      "const": "Mode"
+    "version": {
+      "description": "The mode's version, as major.minor.patch.",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"
     },
-    "metadata": {
+    "description": {
+      "description": "One sentence on what the mode does.",
+      "type": "string",
+      "minLength": 1
+    },
+    "requires": {
+      "description": "What the mode needs from other modes.",
       "type": "object",
-      "required": [
-        "name",
-        "version"
-      ],
       "additionalProperties": false,
+      "required": ["interfaces"],
       "properties": {
-        "name": {
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9-]{1,40}$"
-        },
-        "version": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
+        "interfaces": {
+          "description": "The interfaces whose actions this mode calls; the project config binds each to a mode.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/interfaceReference" }
         }
       }
     },
-    "spec": {
+    "implements": {
+      "description": "The interfaces this mode serves; it must have every action of each, with the same signature.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/interfaceReference" }
+    },
+    "resources": {
+      "description": "Everything a run of this mode may use; anything not declared here is denied.",
+      "$ref": "#/$defs/resources"
+    },
+    "actions": {
+      "description": "The mode's actions, by kebab-case name.",
       "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "extends": {
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9-]{1,40}$",
-          "description": "Parent mode, resolved at build time: the child inherits features, playbooks, rules, review settings, roles (the role -> env map, overridden entry by entry), coordinator, constraints, configDefaults, needs, config, types, skills and the coordinator playbook, and overrides any of them (a child's feature replaces the parent's feature of that name whole, never key by key). Inheritance cycles and missing parents are errors."
-        },
-        "abstract": {
-          "type": "boolean",
-          "description": "A base for `extends` only: linted, never resolved, installed or called. Not inherited."
-        },
-        "composes": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9-]{1,40}$"
-          },
-          "description": "Modes whose connectors it binds or types it reads; each must be used. Not in a base mode."
-        },
-        "purpose": {
-          "type": "string"
-        },
-        "features": {
-          "type": "object",
-          "minProperties": 1,
-          "propertyNames": {
-            "pattern": "^[a-z][a-z0-9-]*$"
-          },
-          "description": "What the mode can do, one entry per feature, called as <mode>.<feature>: its interface (in, out, effects), its steps, and optionally a playbook and rules. A feature with no role step (code only) needs neither file.",
-          "additionalProperties": {
-            "type": "object",
-            "required": [
-              "steps",
-              "effects"
-            ],
-            "additionalProperties": false,
-            "properties": {
-              "description": {
-                "type": "string"
-              },
-              "steps": {
-                "type": "array",
-                "minItems": 1,
-                "items": {
-                  "$ref": "#/$defs/step"
-                },
-                "description": "The feature's steps, in order. A review step is injected from `review` (at a `{review: here}` marker, else after the last step)."
-              },
-              "in": {
-                "type": "string",
-                "description": "Type name: components/<tier>/<mode>/types/<Name>.schema.json"
-              },
-              "out": {
-                "type": "string"
-              },
-              "effects": {
-                "type": "array",
-                "items": {
-                  "enum": [
-                    "read",
-                    "write",
-                    "network",
-                    "spend",
-                    "delete"
-                  ]
-                },
-                "uniqueItems": true,
-                "description": "Everything this feature may do. Every step's effects must be declared here and allowed by the env."
-              },
-              "playbook": {
-                "type": "string",
-                "description": "features/<feature>/playbook.md (relative to the mode folder). Required when a step runs a role; a code-only feature has none."
-              },
-              "rules": {
-                "type": "string",
-                "description": "features/<feature>/rules.yaml. Optional."
-              },
-              "uses": {
-                "type": "array",
-                "uniqueItems": true,
-                "items": {
-                  "type": "string",
-                  "pattern": "^[a-z][a-z0-9.-]*/v[0-9]+\\.[a-z][A-Za-z0-9]*$"
-                },
-                "description": "The read endpoints (<interface>/v<N>.<endpoint>, e.g. items.store/v2.sql) this feature's role steps may call through the use shim. Each must be granted to a role of the feature; `[]` means none. Required when a role of the feature is granted any."
-              },
-              "skills": {
-                "type": "array",
-                "uniqueItems": true,
-                "items": {
-                  "type": "string",
-                  "pattern": "^[a-z][a-z0-9-]*$"
-                },
-                "description": "The mode's skills (short names) the step plan hands this feature's role steps. Absent: every skill of the mode."
-              },
-              "review": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "when"
-                ],
-                "properties": {
-                  "role": {
-                    "type": "string"
-                  },
-                  "when": {
-                    "enum": [
-                      "always",
-                      "never"
-                    ]
-                  },
-                  "tier": {
-                    "$ref": "#/$defs/tier",
-                    "description": "Tier of the review step (default: the review role's tier)."
-                  },
-                  "effort": {
-                    "enum": [
-                      "low",
-                      "medium",
-                      "high"
-                    ]
-                  },
-                  "rulesets": {
-                    "type": "array",
-                    "uniqueItems": true,
-                    "items": {
-                      "type": "string",
-                      "pattern": "^[a-z][a-z0-9-]*$"
-                    },
-                    "description": "Framework rule sets (framework/rules/<name>.yaml, e.g. conformance) added to the reviewer's plan next to the feature's DoD and rules."
-                  }
-                },
-                "if": {
-                  "properties": {
-                    "when": {
-                      "const": "always"
-                    }
-                  }
-                },
-                "then": {
-                  "required": [
-                    "role",
-                    "when"
-                  ]
-                },
-                "description": "Optional. The ONLY place review is configured. when: always injects a review step after the output step."
-              },
-              "schedule": {
-                "type": "string"
-              },
-              "roles": {
-                "$ref": "#/$defs/roleEnvs",
-                "description": "This feature's role -> env overrides over the mode's `roles` (e.g. forge.extend: {builder: framework-dev}). Only roles the mode lists."
-              },
-              "tier": {
-                "$ref": "#/$defs/tier",
-                "description": "Tier of this feature's role steps (default: each role's tier). A step's own `tier` wins; review steps take theirs from `review`."
-              },
-              "effort": {
-                "$ref": "#/$defs/effort",
-                "description": "Effort of this feature's role steps (default: each role's effort). A step's own `effort` wins."
-              }
-            }
-          }
-        },
-        "coordinator": {
-          "type": "string"
-        },
-        "roles": {
-          "$ref": "#/$defs/roleEnvs",
-          "description": "The roles this mode uses and the env each one works in: {role: env}. Features and steps may override entries (`roles:` of the same shape); one env per step. Children inherit the map and override it entry by entry."
-        },
-        "constraints": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "lookbackMax": {
-              "type": "string",
-              "pattern": "^[0-9]+[mhdw]$"
-            },
-            "spendUsd": {
-              "type": "number",
-              "minimum": 0
-            },
-            "monthlyItems": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "Items a source may read per UTC month."
-            },
-            "maxItemsPerRun": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "Items one sync may read."
-            }
-          }
-        },
-        "needs": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Interfaces the mode's steps and roles use, versioned (`<interface>/v<N>`); `bay check` refuses an unversioned name (B-6)."
-        },
-        "reads": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Item kinds (content types) the mode reads, versioned (`<kind>/v<N>`, e.g. `<kind>/v1`). `bay check` refuses an unversioned or unknown kind, and a kind or version that no items.source connector bound in the mode's envs produces (B-6). An abstract mode may declare none; inherited by children unless they set their own."
-        },
-        "config": {
-          "type": "string",
-          "description": "JSON Schema file (in the mode folder) for agentbay.config.yaml modes.<name>."
-        },
-        "configDefaults": {
-          "type": "object",
-          "description": "Defaults that replace the config schema's `default`s for this mode (e.g. a child's own default selectors), so a child never copies its parent's config schema. Merged key by key over the parent's; each key must be a property of the config schema and its value must match it."
-        }
-      },
-      "if": {
-        "not": {
-          "required": [
-            "extends"
-          ]
-        }
-      },
-      "then": {
-        "required": [
-          "purpose",
-          "features",
-          "roles"
-        ]
-      }
+      "propertyNames": { "$ref": "#/$defs/name" },
+      "additionalProperties": { "$ref": "#/$defs/action" }
+    },
+    "workflows": {
+      "description": "Workflow files of this mode, relative to its folder.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/relativePath" }
     }
   },
   "$defs": {
-    "step": {
+    "name": {
+      "description": "A kebab-case name: lowercase letters, digits and single hyphens, starting with a letter.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    },
+    "interfaceReference": {
+      "description": "An interface name and its major version, as name@major, for example items-store@1.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*@(0|[1-9][0-9]*)$"
+    },
+    "relativePath": {
+      "description": "A path relative to the mode's folder that neither starts with / nor contains a .. segment.",
+      "type": "string",
+      "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$)).+$"
+    },
+    "effect": {
+      "description": "A kind of effect an action may have.",
+      "type": "string",
+      "enum": ["read", "write", "network", "spend", "delete"]
+    },
+    "budget": {
+      "description": "Limits for a run; every nested call draws from the same budget.",
       "type": "object",
-      "required": [
-        "id"
-      ],
       "additionalProperties": false,
-      "oneOf": [
-        {
-          "required": [
-            "run"
-          ]
-        },
-        {
-          "required": [
-            "role"
-          ]
-        },
-        {
-          "required": [
-            "gate"
-          ]
-        },
-        {
-          "required": [
-            "review"
-          ]
-        }
-      ],
       "properties": {
-        "id": {
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9-]*$"
+        "items": { "description": "The most items the run may handle.", "type": "integer", "minimum": 0 },
+        "usd": { "description": "The most US dollars the run may spend.", "type": "number", "minimum": 0 },
+        "tokens": { "description": "The most model tokens the run may use.", "type": "integer", "minimum": 0 },
+        "minutes": { "description": "The most minutes the run may take.", "type": "number", "minimum": 0 }
+      }
+    },
+    "resources": {
+      "description": "The resources a mode declares.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "db": {
+          "description": "The mode's own database.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["migrations"],
+          "properties": {
+            "migrations": {
+              "description": "The folder of SQL migrations, relative to the mode's folder.",
+              "$ref": "#/$defs/relativePath"
+            }
+          }
+        },
+        "files": {
+          "description": "Project paths the mode may read and write.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "read": {
+              "description": "Paths the mode may read.",
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1, "description": "A file or folder path." }
+            },
+            "write": {
+              "description": "Paths the mode may write.",
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1, "description": "A file or folder path." }
+            }
+          }
+        },
+        "secrets": {
+          "description": "Names of the secrets the mode may fetch.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "description": "A secret's name." }
+        },
+        "network": {
+          "description": "Hosts the mode may reach over HTTPS.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "description": "A host name." }
+        },
+        "commands": {
+          "description": "Exact command prefixes the mode's skill steps may run.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "description": "A command prefix." }
+        }
+      }
+    },
+    "action": {
+      "description": "An action: typed input and output, declared effects and the steps that run it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "output", "effects", "run"],
+      "properties": {
+        "input": { "description": "The JSON Schema file of the action's input.", "$ref": "#/$defs/relativePath" },
+        "output": { "description": "The JSON Schema file of the action's output.", "$ref": "#/$defs/relativePath" },
+        "effects": {
+          "description": "Every effect the action may have, including those of the actions it calls.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/effect" }
         },
         "run": {
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)*/v[0-9]+\\.[a-z][a-z0-9-]*$",
-          "description": "Code step: <capability>/v<N>.<endpoint>, e.g. items.store/v2.sync (same spelling as role `uses`)."
+          "description": "The steps of the action, in order.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/step" }
         },
-        "role": {
-          "type": "string"
-        },
-        "with": {
+        "undo": { "description": "The action of this mode that reverses this one.", "$ref": "#/$defs/name" },
+        "budget": { "description": "Limits for a run of this action.", "$ref": "#/$defs/budget" }
+      }
+    },
+    "step": {
+      "description": "One step of an action: a script, a skill or a call to an action of a required interface.",
+      "oneOf": [
+        {
           "type": "object",
-          "description": "Input for a code step. \"$in.<field>\" and \"$steps.<id>.<field>\" are substituted; missing values are dropped."
+          "additionalProperties": false,
+          "required": ["script"],
+          "properties": {
+            "script": { "description": "The script file to run.", "$ref": "#/$defs/relativePath" }
+          }
         },
-        "when": {
-          "type": "string",
-          "pattern": "^(stale\\s*>\\s*[0-9]+[mhdw]|!?\\$(?:in|steps)\\.[A-Za-z][A-Za-z0-9-]*(?:\\.[A-Za-z][A-Za-z0-9-]*)*)$",
-          "description": "`stale > 2h` (code step: skip unless the store is older), `$in.<field>` or `$steps.<id>.<field>` (skip unless truthy); a leading `!` skips when true instead."
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["skill", "tier"],
+          "properties": {
+            "skill": { "description": "The skill folder, which holds SKILL.md.", "$ref": "#/$defs/relativePath" },
+            "tier": {
+              "description": "How capable a model the skill needs.",
+              "type": "string",
+              "enum": ["fast", "balanced", "deep"]
+            }
+          }
         },
-        "task": {
-          "type": "string",
-          "description": "What the role should do in this step (goal of its TaskEnvelope)."
-        },
-        "out": {
-          "type": "string"
-        },
-        "gate": {
-          "type": "string",
-          "description": "Approval gate: the dispatcher stops with status awaiting-approval and shows this text; only the owner passes it, with `bay approve <callId>` (a terminal, or `--via chat` when `approve.from` lists chat). A gate takes no `when:`."
-        },
-        "approves": {
-          "type": "string",
-          "pattern": "^\\$in\\.[A-Za-z][A-Za-z0-9-]*(?:\\.[A-Za-z][A-Za-z0-9-]*)*(\\|\\$steps\\.[A-Za-z][A-Za-z0-9-]*(?:\\.[A-Za-z][A-Za-z0-9-]*)*)?$",
-          "description": "Gate only: `$in.<field>` names a project file whose exact content the gate approves; `|$steps.<id>.<field>` falls back to the docs/proposals file listed in an earlier step's output (its `artifacts`). The ledger records its path and sha256 with the approval; a later call naming the same file with the same content skips the gate, any edit makes it run again."
-        },
-        "review": {
-          "const": "here",
-          "description": "Position marker for the review step configured on the feature (mode.yaml features.<f>.review). Without a marker, review runs after the last step."
-        },
-        "roles": {
-          "$ref": "#/$defs/roleEnvs",
-          "description": "This step's env for its role ({<role>: <env>}, one entry), over the feature's and the mode's."
-        },
-        "tier": {
-          "$ref": "#/$defs/tier",
-          "description": "Tier of this role step (over the feature's and the role's)."
-        },
-        "effort": {
-          "$ref": "#/$defs/effort",
-          "description": "Effort of this role step (over the feature's and the role's)."
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["call"],
+          "properties": {
+            "call": {
+              "description": "The action to call, as interface.action, of an interface this mode requires.",
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*\\.[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+            }
+          }
         }
-      }
-    },
-    "roleEnvs": {
-      "type": "object",
-      "minProperties": 1,
-      "propertyNames": {
-        "pattern": "^[a-z][a-z0-9-]{1,40}$"
-      },
-      "additionalProperties": {
-        "type": [
-          "string",
-          "null"
-        ]
-      }
-    },
-    "tier": {
-      "enum": [
-        "fast",
-        "balanced",
-        "deep"
-      ],
-      "description": "fast | balanced | deep; the agent profile maps it to a model."
-    },
-    "effort": {
-      "enum": [
-        "low",
-        "medium",
-        "high"
       ]
     }
   }

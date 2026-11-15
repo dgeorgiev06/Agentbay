@@ -58,6 +58,23 @@ test("db_query runs one select on the mode's own database, migrated first, and r
   });
 });
 
+test("a read tool, a call_action and a submit are each recorded once", async () => {
+  await withWaiting(async ({ kernel }, waiting) => {
+    const token = waiting.token;
+    assert.ok((await callKernelTool(kernel, "db_query", { token, sql: "select 1" })).ok);
+    const input = { name: "Bo" };
+    assert.ok((await callKernelTool(kernel, "call_action", { token, action: "greeting-source.fetch", input })).ok);
+    assert.ok((await callKernelTool(kernel, "submit", { token, output: { text: "short" } })).ok);
+    const { events } = await shownRun(kernel, waiting.runId);
+    const calls = events.filter((event) => event.kind === "tool.called").map((event) => event.detail);
+    assert.deepEqual(calls, [
+      { tool: "db_query", stepKey: waiting.stepKey },
+      { tool: "call_action", stepKey: waiting.stepKey },
+      { tool: "submit", stepKey: waiting.stepKey },
+    ]);
+  });
+});
+
 test("a call without a token, with a wrong token or to an unknown tool is refused", async () => {
   await withWaiting(async ({ kernel }, waiting) => {
     assert.match(refusalOf(await callKernelTool(kernel, "db_query", { sql: "select 1" })), /needs token/);

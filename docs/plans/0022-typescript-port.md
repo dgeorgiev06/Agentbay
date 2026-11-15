@@ -137,8 +137,10 @@ A failed must item or a blocker goes back to the same builder once. A second fai
 ## Release
 
 - 5.0.0 at C1. Upgrading is in the proposal.
-- 5.1: the Codex adapter, starting with research on what Codex can enforce.
+- 5.1: always-on in the cloud (a daemon with schedules and events, a headless agent adapter, a chat channel, one container per run). It gets its own proposal, starting with where it is hosted. Owner requirements of 2026-11-14 for that proposal: reached over Telegram; shared with anyone the owner invites; guests may only ask questions (actions with the `read` effect only, on modes the owner marks as shared, never approvals); each guest has a budget. Inviting guests broadly is the proposal's "public" audience, so its Safety gates apply before the first guest outside the owner's trusted circle.
+- 5.2: the Codex adapter, starting with research on what Codex can enforce.
 - `bay import-v4` is removed in 5.1.
+- After the existing modes: a real estate mode (free state parcel and sales data, listings parsed from alert emails through the Gmail mode). Research: the owner has the report of 2026-11-14.
 
 ## Where the builders need the owner
 
@@ -251,3 +253,14 @@ K3 and K4 are built in parallel and meet at `bay/contracts.ts` (types only). Nei
 **Scripts.** A script is a `.ts` file whose only export is `run`, made with `defineScript` from `bay/sdk.ts`: `export const run = defineScript(async (input, context) => output)`. `context` gives `db`, `files`, `secrets`, `http`, `events`, `call`, `settings` and `spend`. The script runs in a child process with the seat belt from spike C; every resource request crosses to the parent as one JSON line and is checked there against the run's `Permissions`.
 
 **Secrets.** Looked up by name, first in the environment as `AGENTBAY_SECRET_<NAME>`, then in the macOS keychain through the processes port. Never listed; every value handed out is remembered and redacted from outputs, events and error text.
+
+### Contract changes after the first stage 2 review (2026-11-14)
+
+- `Permissions.effects` is what the ACTION being run declares, not the union over the mode. The engine sets it for each script request; the broker's write check relies on it.
+- `Permissions.migrationsFolder` is the mode's migrations folder.
+- `StepPlace.stepKey` is the engine's key for the step, which also identifies nested steps; adapters and events use it.
+- `ScriptRequest.timeLimitMilliseconds` is set by the engine: the smaller of the remaining minutes and eight minutes. The run lock goes stale after ten minutes, and the store refreshes the lock on every write, so a live engine never looks dead.
+- `Submission` carries a skill step's output and what the agent spent; `submit` takes it and charges the spend to the budget.
+- `Scrubber` is what the engine uses to redact secrets from submitted outputs, failure reasons and event details before they are stored. The secret store implements it.
+- `StepOutcome.spent` is what the step itself spent and excludes its nested calls; the engine adds those from their own records.
+- Only the base mode `forge` may declare write paths inside `bay/`, `schemas/`, `adapters/`, `framework/` and other modes' folders. No mode may declare a write path that contains its own `mode.yaml`, `scripts/` or `skills/`, except `forge`.

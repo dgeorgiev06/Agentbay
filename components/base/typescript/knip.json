@@ -1,6 +1,12 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["{tests,components/**/tests,adapters/**/tests}/**/*.test.ts", "bay/engine.ts", "bay/run-store.ts"],
+  "entry": [
+    "{tests,components/**/tests,adapters/**/tests}/**/*.test.ts",
+    "bay/check.ts",
+    "bay/new.ts",
+    "bay/engine.ts",
+    "bay/run-store.ts"
+  ],
   "project": ["{bay,adapters,components,tests}/**/*.ts"],
   "ignoreExportsUsedInFile": {
     "type": true

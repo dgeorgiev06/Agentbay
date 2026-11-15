@@ -5,8 +5,8 @@ import { fieldOf, textField } from "../bay/json.ts";
 import type { Kernel } from "../bay/kernel.ts";
 import { issueTaskToken } from "../bay/task-tokens.ts";
 import { callKernelTool, toolResultBytes, type ToolResult } from "../bay/tools.ts";
-import { openProject, type Opened } from "./kernel-fixture.ts";
-import { skillText } from "./project-fixture.ts";
+import { openKernel, openProject, type Opened } from "./kernel-fixture.ts";
+import { makeProject, skillText } from "./project-fixture.ts";
 
 type Waiting = {
   readonly runId: string;
@@ -168,4 +168,29 @@ test("submit returns schema problems, then check feedback with a new token, then
     const after = await callKernelTool(kernel, "db_query", { token: next, sql: "select 1" });
     assert.match(refusalOf(after), /no longer waiting for it \(the run is done\)/);
   });
+});
+
+test("files_write is refused when the step's action does not declare the write effect", async () => {
+  const project = await makeProject();
+  const manifest = await project.read("components/modes/writer/mode.yaml");
+  await project.write(
+    "components/modes/writer/mode.yaml",
+    manifest.replace("      - read\n      - write\n", "      - read\n"),
+  );
+  const kernel = await openKernel(project);
+  const waiting = await waitingCompose(kernel);
+  assert.deepEqual(kernel.system.modes.get("writer")?.manifest.actions.compose?.effects, ["read"]);
+  const written = await callKernelTool(kernel, "files_write", {
+    token: waiting.token,
+    path: "out/notes/a.txt",
+    text: "x",
+  });
+  assert.match(refusalOf(written), /does not declare the write effect, so its skill may not write files/);
+  const read = await callKernelTool(kernel, "files_read", {
+    token: waiting.token,
+    path: "components/modes/writer/mode.yaml",
+  });
+  assert.ok(read.ok);
+  kernel.close();
+  await project.remove();
 });

@@ -194,6 +194,13 @@
               "description": "How capable a model the skill needs.",
               "type": "string",
               "enum": ["fast", "balanced", "deep"]
+            },
+            "checks": {
+              "description": "Scripts that check the output; a failure sends the skill back, three rounds at most.",
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/relativePath" }
             }
           }
         },

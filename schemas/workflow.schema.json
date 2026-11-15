@@ -56,6 +56,11 @@
       "type": "string",
       "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*$"
     },
+    "reference": {
+      "description": "Resolved whole: $trigger, $steps.<id>.output[.path], $item in a foreach, $settings.<key>.",
+      "type": "string",
+      "pattern": "^\\$"
+    },
     "budget": {
       "description": "Limits for a run; every nested call draws from the same budget.",
       "type": "object",
@@ -80,6 +85,10 @@
               "type": "string",
               "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*)?$"
             },
+            "input": {
+              "description": "Values are literals or references; without it, the output of the step before.",
+              "type": "object"
+            },
             "id": {
               "description": "The step's id, unique in the whole file; its output is saved under it.",
               "$ref": "#/$defs/name"
@@ -92,9 +101,13 @@
           "required": ["approval", "id"],
           "properties": {
             "approval": {
-              "description": "The question put to the owner about the output of the step before.",
+              "description": "The question put to the owner about what the step shows.",
               "type": "string",
               "minLength": 1
+            },
+            "show": {
+              "description": "What the owner approves; without it, the output of the step before.",
+              "$ref": "#/$defs/reference"
             },
             "id": {
               "description": "The step's id, unique in the whole file; its output is saved under it.",
@@ -124,9 +137,8 @@
           "required": ["foreach", "id", "steps"],
           "properties": {
             "foreach": {
-              "description": "A JSON pointer to a list in the output of the step before; the steps run once per item.",
-              "type": "string",
-              "pattern": "^(/[^/]+)*$"
+              "description": "A reference that resolves to a list; the steps run once per element, in order.",
+              "$ref": "#/$defs/reference"
             },
             "id": {
               "description": "The step's id, unique in the whole file; its output is saved under it.",

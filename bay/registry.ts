@@ -5,6 +5,7 @@ import type { Interface, Signature } from "./generated/interface.ts";
 import type { Action, Mode, Step } from "./generated/mode.ts";
 import type { Workflow, Step as WorkflowStep } from "./generated/workflow.ts";
 import type { FileSystem } from "./ports.ts";
+import { workflowReferenceIssues } from "./references.ts";
 import {
   checkValue,
   loadSpec,
@@ -545,27 +546,40 @@ function actionProblems(context: Context, place: ActionPlace): readonly Problem[
   return [...calls, ...undoProblems(place)];
 }
 
-function stepReference(place: ActionPlace, step: Step, index: number): FileReference | undefined {
+function checkReferences(place: ActionPlace, checks: readonly string[], index: number): readonly FileReference[] {
+  return checks.map((check, checkIndex) => ({
+    kind: "file",
+    owner: place.mode,
+    path: ["actions", place.name, "run", index, "checks", checkIndex],
+    file: join(place.mode.folder, check),
+    subject: `${actionLabel(place)} checks its skill step with the script ${check}`,
+  }));
+}
+
+function stepReferences(place: ActionPlace, step: Step, index: number): readonly FileReference[] {
   const folder = place.mode.folder;
   if ("script" in step) {
-    return {
-      kind: "file",
-      owner: place.mode,
-      path: ["actions", place.name, "run", index, "script"],
-      file: join(folder, step.script),
-      subject: `${actionLabel(place)} runs the script ${step.script}`,
-    };
+    return [
+      {
+        kind: "file",
+        owner: place.mode,
+        path: ["actions", place.name, "run", index, "script"],
+        file: join(folder, step.script),
+        subject: `${actionLabel(place)} runs the script ${step.script}`,
+      },
+    ];
   }
   if ("skill" in step) {
-    return {
+    const skill: FileReference = {
       kind: "file",
       owner: place.mode,
       path: ["actions", place.name, "run", index, "skill"],
       file: join(folder, step.skill, "SKILL.md"),
       subject: `${actionLabel(place)} runs the skill ${step.skill}`,
     };
+    return [skill, ...checkReferences(place, step.checks ?? [], index)];
   }
-  return undefined;
+  return [];
 }
 
 function actionReferences(place: ActionPlace): readonly FileReference[] {
@@ -576,7 +590,7 @@ function actionReferences(place: ActionPlace): readonly FileReference[] {
     file: join(place.mode.folder, place.action[direction]),
     subject: `${actionLabel(place)} names the ${direction} schema ${place.action[direction]}`,
   }));
-  const steps = place.action.run.flatMap((step, index) => stepReference(place, step, index) ?? []);
+  const steps = place.action.run.flatMap((step, index) => stepReferences(place, step, index));
   return [...schemas, ...steps];
 }
 
@@ -768,12 +782,21 @@ function workflowActionProblem(context: Context, entry: ModeWorkflow, place: Wor
   });
 }
 
+function workflowReferenceProblems(entry: ModeWorkflow): readonly Problem[] {
+  return workflowReferenceIssues(entry.loaded.value.steps).map((issue) =>
+    problemAt(entry.loaded, issue.path, {
+      message: `Workflow ${entry.path} of mode ${entry.mode.value.name} has a reference problem: ${issue.message}`,
+      ...(issue.fix === undefined ? {} : { fix: issue.fix }),
+    }),
+  );
+}
+
 function workflowProblems(context: Context, workflows: readonly ModeWorkflow[]): readonly Problem[] {
   return workflows.flatMap((entry) => {
     const actionProblems = workflowStepPlaces(entry.loaded.value.steps, []).flatMap(
       (place) => workflowActionProblem(context, entry, place) ?? [],
     );
-    return [...duplicateStepIdProblems(entry), ...actionProblems];
+    return [...duplicateStepIdProblems(entry), ...actionProblems, ...workflowReferenceProblems(entry)];
   });
 }
 

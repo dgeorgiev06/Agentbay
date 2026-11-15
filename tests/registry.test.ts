@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Mode } from "../bay/generated/mode.ts";
+import type { Action, Mode } from "../bay/generated/mode.ts";
 import { loadSystem, type System } from "../bay/registry.ts";
 import type { Problem } from "../bay/spec.ts";
 import { fakeFileSystem } from "./fakes.ts";
@@ -317,7 +317,7 @@ function withWorkflowSteps(steps: readonly unknown[]): Record<string, string> {
 test("workflow step ids must be unique in the whole file, inside foreach steps too", async () => {
   const files = withWorkflowSteps([
     { id: "write", action: "add" },
-    { id: "each", foreach: "/items", steps: [{ id: "write", action: "add" }] },
+    { id: "each", foreach: "$trigger", steps: [{ id: "write", action: "add" }] },
   ]);
   const problem = findProblem(
     await problemsOf(files),
@@ -460,4 +460,86 @@ test("a settings schema that is missing or not usable is reported in the mode's 
   const unusable = { ...briefingSettingsSchema, type: "mapping" };
   const problems = await problemsOf({ ...validFiles(), [settingsSchemaFile]: JSON.stringify(unusable) });
   findProblem(problems, paths.briefing, "which is not a usable JSON Schema");
+});
+
+test("a skill step's check script that does not exist is reported", async () => {
+  const add: Action = {
+    input: "schemas/add-input.json",
+    output: "schemas/add-output.json",
+    effects: ["read", "write"],
+    run: [{ skill: "skills/write-note", tier: "fast", checks: ["scripts/length.ts"] }, { call: "items-store.put" }],
+  };
+  const actions = { add };
+  const files = { ...validFiles(), [paths.notes]: withMode(notesMode, { actions }) };
+  const problem = findProblem(
+    await problemsOf(files),
+    paths.notes,
+    "checks its skill step with the script scripts/length.ts, but components/modes/notes/scripts/length.ts",
+  );
+  assert.equal(problem.path, "/actions/add/run/0/checks/0");
+  await systemOf({ ...files, "components/modes/notes/scripts/length.ts": "" });
+});
+
+test("well-formed workflow references to earlier steps, the trigger, the item and settings are accepted", async () => {
+  const files = withWorkflowSteps([
+    { id: "write", action: "add", input: { text: "$trigger", tag: "literal", count: 3 } },
+    { id: "check", action: "items-store.get", input: { id: "$steps.write.output.id", lookback: "$settings.lookback" } },
+    {
+      id: "each",
+      foreach: "$steps.check.output.items",
+      steps: [
+        { id: "again", action: "add", input: { text: "$item", first: "$steps.write.output" } },
+        { id: "look", approval: "Fine?", show: "$steps.again.output" },
+      ],
+    },
+    { id: "keep", approval: "Keep it?", show: "$steps.each.output" },
+  ]);
+  await systemOf(files);
+});
+
+test("a malformed workflow reference is reported with the grammar", async () => {
+  const files = withWorkflowSteps([
+    { id: "write", action: "add", input: { text: "$trigger.text", price: "$5" } },
+    { id: "keep", approval: "Keep it?", show: "$steps.write" },
+  ]);
+  const problems = await problemsOf(files);
+  for (const [path, text] of [
+    ["/steps/0/input/text", "$trigger.text"],
+    ["/steps/0/input/price", "$5"],
+    ["/steps/1/show", "$steps.write"],
+  ] as const) {
+    const problem = findProblem(problems, workflowFile, `${text} is not a reference`);
+    assert.ok(problems.some((candidate) => candidate.path === path && candidate.message.includes(`${text} is not`)));
+    assert.match(problem.fix ?? "", /\$steps\.<id>\.output/);
+  }
+});
+
+test("a reference to a step that is not defined earlier in its scope is reported", async () => {
+  const files = withWorkflowSteps([
+    { id: "write", action: "add", input: { text: "$steps.keep.output" } },
+    { id: "each", foreach: "$trigger", steps: [{ id: "inner", action: "add" }] },
+    { id: "keep", approval: "Keep it?", show: "$steps.inner.output" },
+    { id: "self", action: "add", input: { text: "$steps.self.output" } },
+  ]);
+  const problems = await problemsOf(files);
+  const later = findProblem(problems, workflowFile, "$steps.keep.output names the step keep");
+  assert.equal(later.path, "/steps/0/input/text");
+  assert.match(later.message, /earlier steps: none/);
+  const nested = findProblem(problems, workflowFile, "$steps.inner.output names the step inner");
+  assert.match(nested.message, /earlier steps: write, each\)/);
+  findProblem(problems, workflowFile, "$steps.self.output names the step self");
+});
+
+test("$item outside a foreach is reported, and inside one it is accepted", async () => {
+  const problems = await problemsOf(
+    withWorkflowSteps([
+      { id: "write", action: "add", input: { text: "$item" } },
+      { id: "each", foreach: "$item", steps: [{ id: "inner", action: "add", input: { text: "$item" } }] },
+    ]),
+  );
+  const outside = problems.filter((problem) => problem.message.includes("$item is used outside a foreach"));
+  assert.deepEqual(
+    outside.map((problem) => problem.path),
+    ["/steps/0/input/text", "/steps/1/foreach"],
+  );
 });

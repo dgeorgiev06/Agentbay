@@ -41,7 +41,7 @@ test("an interface, a workflow and a config each load against their own schema",
   const workflow = {
     name: "daily",
     trigger: { manual: true },
-    steps: [{ id: "each", foreach: "/items", steps: [{ id: "add", action: "add" }] }],
+    steps: [{ id: "each", foreach: "$trigger", steps: [{ id: "add", action: "add" }] }],
   };
   const files = fakeFileSystem({
     "/i.yaml": yamlText(itemsStore),

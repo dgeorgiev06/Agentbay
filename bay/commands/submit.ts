@@ -6,12 +6,12 @@ import {
   withKernel,
   type CommandResult,
   type Invocation,
-  type JsonArgument,
 } from "../command-context.ts";
 import type { Command } from "../command-line.ts";
-import type { Spend } from "../contracts.ts";
+import type { Json, Spend } from "../contracts.ts";
 import { engineOutput } from "../run-report.ts";
 import { checkTaskTokenFor } from "../task-tokens.ts";
+import { failedWith, problemText, unplacedProblem, type Outcome } from "../outcome.ts";
 
 const usage = "submit <run> <stepKey> <json | @file | -> --token <token> [--tokens <n>] [--usd <x>]";
 
@@ -46,10 +46,10 @@ async function outputText(invocation: Invocation, source: string): Promise<strin
   return source;
 }
 
-async function outputOf(invocation: Invocation, source: string): Promise<JsonArgument> {
+async function outputOf(invocation: Invocation, source: string): Promise<Outcome<Json>> {
   const text = await outputText(invocation, source);
   if (text === undefined) {
-    return { ok: false, message: `The file ${source.slice(1)} does not exist.` };
+    return failedWith([unplacedProblem(`The file ${source.slice(1)} does not exist.`)]);
   }
   return jsonArgument(text, "output");
 }
@@ -66,12 +66,12 @@ async function runSubmit(invocation: Invocation): Promise<CommandResult> {
     return usageResult(spent, usage);
   }
   if (!output.ok) {
-    return usageResult(output.message, usage);
+    return usageResult(problemText(output.problems), usage);
   }
   return withKernel(invocation, async (kernel) => {
     const checked = await checkTaskTokenFor({ tokens: kernel.store, runs: kernel.store }, token, { runId, stepKey });
     if (!checked.ok) {
-      return refusedResult(checked.reason);
+      return refusedResult(problemText(checked.problems));
     }
     const result = await kernel.engine.submit(runId, stepKey, { output: output.value, spent });
     return engineOutput(kernel, result, stepKey);

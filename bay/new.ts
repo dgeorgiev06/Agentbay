@@ -4,7 +4,7 @@ import { isProjectTheKit, pathIn, shownPath, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
 import { findModeFolders, ownInterfacesFolder, type ModeFolder } from "./registry.ts";
 import { sdkSpecifier } from "./script-protocol.ts";
-import type { Outcome, Problem } from "./spec.ts";
+import { failedWith, type Outcome, type Problem } from "./outcome.ts";
 
 export type ModeTier = "base" | "modes";
 
@@ -56,10 +56,6 @@ function problem(file: string, message: string, fix: string): Problem {
   return { file, path: "", message, fix };
 }
 
-function refused(problems: readonly Problem[]): { readonly ok: false; readonly problems: readonly Problem[] } {
-  return { ok: false, problems };
-}
-
 function nameProblems(kind: string, name: string, file: string): readonly Problem[] {
   if (name === "constructor") {
     return [
@@ -90,12 +86,12 @@ async function render(workspace: Workspace, use: TemplateUse): Promise<Outcome<P
   const templateFile = join(templatesFolder, use.template);
   const text = await workspace.files.readText(pathIn(workspace.layout, "kit", templateFile));
   if (text === undefined) {
-    return refused([problem(templateFile, `The template ${templateFile} is missing.`, "Restore it from the kit.")]);
+    return failedWith([problem(templateFile, `The template ${templateFile} is missing.`, "Restore it from the kit.")]);
   }
   const filled = fill(text, use.slots);
   const leftover = leftoverSlotPattern.exec(filled)?.[0];
   if (leftover !== undefined) {
-    return refused([
+    return failedWith([
       problem(templateFile, `The template ${templateFile} has the unfilled slot ${leftover}.`, "Correct the template."),
     ]);
   }
@@ -113,7 +109,7 @@ async function renderAll(workspace: Workspace, uses: readonly TemplateUse[]): Pr
       problems.push(...outcome.problems);
     }
   }
-  return problems.length > 0 ? refused(problems) : { ok: true, value: planned };
+  return problems.length > 0 ? failedWith(problems) : { ok: true, value: planned };
 }
 
 async function existingProblems(workspace: Workspace, planned: readonly PlannedFile[]): Promise<readonly Problem[]> {
@@ -134,7 +130,7 @@ async function writePlanned(workspace: Workspace, planned: Planned): Promise<Gen
   }
   const existing = await existingProblems(workspace, planned.value);
   if (existing.length > 0) {
-    return refused(existing);
+    return failedWith(existing);
   }
   for (const file of planned.value) {
     await workspace.files.writeAtomic(pathIn(workspace.layout, "project", file.path), file.text);
@@ -180,11 +176,11 @@ export async function newMode(workspace: Workspace, name: string, tier: ModeTier
   const folder = join(tierFolders[tier], name);
   const refusals = [...tierRefusals(workspace, name, tier), ...nameProblems("mode", name, folder)];
   if (refusals.length > 0) {
-    return refused(refusals);
+    return failedWith(refusals);
   }
   const existing = await existingModeProblems(workspace, name);
   if (existing.length > 0) {
-    return refused(existing);
+    return failedWith(existing);
   }
   const planned = await renderAll(workspace, [
     { template: "mode/mode.yaml", path: join(folder, "mode.yaml"), slots: { name } },
@@ -200,7 +196,7 @@ async function modeTarget(workspace: Workspace, mode: string): Promise<Outcome<s
     const where = isProjectTheKit(layout)
       ? `${tierFolders.base}/${mode} or ${tierFolders.modes}/${mode}`
       : `${tierFolders.modes}/${mode}`;
-    return refused([
+    return failedWith([
       problem(
         "components",
         `There is no mode ${mode}: neither ${where} has a mode.yaml.`,
@@ -210,7 +206,7 @@ async function modeTarget(workspace: Workspace, mode: string): Promise<Outcome<s
   }
   if (found.home === "kit" && !isProjectTheKit(layout)) {
     const shown = shownPath(layout, found.folder);
-    return refused([
+    return failedWith([
       problem(
         shown,
         `Mode ${mode} lives in the kit (${shown}), and bay new writes only into the project, never into the kit.`,
@@ -226,18 +222,20 @@ async function editManifest(workspace: Workspace, folder: string, edit: Manifest
   const text = (await workspace.files.readText(pathIn(workspace.layout, "project", manifest))) ?? "";
   const document = parseDocument(text);
   if (document.errors.length > 0) {
-    return refused([problem(manifest, `${manifest} cannot be read as YAML.`, "Correct it, then run bay new again.")]);
+    return failedWith([
+      problem(manifest, `${manifest} cannot be read as YAML.`, "Correct it, then run bay new again."),
+    ]);
   }
   const refusal = edit(document, manifest);
   if (refusal !== undefined) {
-    return refused([refusal]);
+    return failedWith([refusal]);
   }
   return { ok: true, value: { path: manifest, text: document.toString(), edit: true } };
 }
 
 function withManifest(planned: Planned, manifest: Outcome<PlannedFile>): Planned {
   if (!manifest.ok) {
-    return planned.ok ? manifest : refused([...planned.problems, ...manifest.problems]);
+    return planned.ok ? manifest : failedWith([...planned.problems, ...manifest.problems]);
   }
   return planned.ok ? { ok: true, value: [...planned.value, manifest.value] } : planned;
 }
@@ -302,7 +300,7 @@ async function inMode(
   const target = await modeTarget(workspace, part.mode);
   const refusals = nameProblems(part.kind, part.name, target.ok ? target.value : part.mode);
   if (!target.ok || refusals.length > 0) {
-    return refused([...(target.ok ? [] : target.problems), ...refusals]);
+    return failedWith([...(target.ok ? [] : target.problems), ...refusals]);
   }
   return writePlanned(workspace, await plan(target.value));
 }
@@ -359,7 +357,7 @@ export async function newInterface(workspace: Workspace, name: string): Promise<
   const path = join(folder, `${name}.yaml`);
   const refusals = nameProblems("interface", name, path);
   if (refusals.length > 0) {
-    return refused(refusals);
+    return failedWith(refusals);
   }
   const planned = await renderAll(workspace, [{ template: "interface/interface.yaml", path, slots: { name } }]);
   return writePlanned(workspace, planned);

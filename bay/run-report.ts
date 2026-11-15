@@ -4,14 +4,14 @@ import type { Json, RunEvent, SkillTask } from "./contracts.ts";
 import { byteSize, textField, toJson } from "./json.ts";
 import type { Kernel } from "./kernel.ts";
 import type { RunWithSteps, StepRecord, StoredRun, StoredState } from "./run-store.ts";
-import type { Waiting } from "./run-state.ts";
+import type { RunView, Waiting } from "./run-state.ts";
+import type { Outcome } from "./outcome.ts";
 import { skillNameOf } from "./skill-tools.ts";
 import { issueTaskToken } from "./task-tokens.ts";
 import { askedByKind } from "./tools.ts";
 import { storedWaiting } from "./waiting.ts";
 import { problemsResult, type CommandResult, type JsonObject } from "./command-context.ts";
 import { shownProblems } from "./layout.ts";
-import type { EngineResult } from "./run-state.ts";
 
 export type TokenChoice = "issue" | "replace" | "withhold";
 
@@ -168,7 +168,7 @@ function stepJson(step: StepRecord, full: boolean): JsonObject {
   switch (step.status) {
     case "started":
       return { ...base, ...payload };
-    case "finished":
+    case "done":
       return {
         ...base,
         finishedAt: step.finishedAt,
@@ -305,17 +305,17 @@ export async function skillWaitOf(kernel: Kernel, runId: string): Promise<string
 
 export async function engineOutput(
   kernel: Kernel,
-  result: EngineResult,
+  result: Outcome<RunView>,
   skillWaitBefore: string | undefined,
 ): Promise<CommandResult> {
   if (!result.ok) {
     return problemsResult(shownProblems(kernel.layout, result.problems));
   }
-  const state = result.run.state;
+  const state = result.value.state;
   if (state.status !== "waiting") {
-    return runOutput(kernel, result.run.id);
+    return runOutput(kernel, result.value.id);
   }
   const waiting = state.waiting;
   const entered = waiting.reason === "skill" && waiting.stepKey !== skillWaitBefore;
-  return runOutput(kernel, result.run.id, { waiting, token: entered ? "issue" : "withhold" });
+  return runOutput(kernel, result.value.id, { waiting, token: entered ? "issue" : "withhold" });
 }

@@ -8,7 +8,7 @@ All paths are in the project. Every effect goes through the file port of the req
 
 | File | How | What |
 |---|---|---|
-| `.claude/agents/<agent>.md` | created | One agent per skill step. Its `tools` are `mcp__agentbay__submit` first, then `Read, Glob, Grep` when the step has read paths, `Write, Edit` when it has write paths, `Bash` only when its mode lists commands, and `mcp__agentbay__<tool>` for each other kernel tool. Never `Agent` and never web tools. Its `model` comes from the tier: fast `haiku`, balanced `sonnet`, deep `opus` |
+| `.claude/agents/<agent>.md` | created | One agent per skill step. Its `tools` are `mcp__agentbay__submit` first, then `Read, Glob, Grep` when the step has read paths, `Write, Edit` when it has write paths, `Bash` only when its mode lists commands and every action that uses the skill declares all five effects, and `mcp__agentbay__<tool>` for each other kernel tool. Never `Agent` and never web tools. Its `model` comes from the tier: fast `haiku`, balanced `sonnet`, deep `opus` |
 | `.agentbay/steps.json` | created | The hook's policy, keyed by agent: tools, read roots, write roots (absolute) and command prefixes. The closed names are constants in the hook, not in this file |
 | `.claude/settings.json` | merged | One `PreToolUse` entry, matcher `*`, running `node '<kit>/adapters/claude-code/step-guard.ts' --project '<root>'` with `timeout: 30` and `onFailure: "block"`. No allow or deny rules: settings rules apply to the whole session, the main thread included, so the per-step list lives only in the hook |
 | `.mcp.json` | merged | The server `agentbay`: `node <kit>/bay/mcp.ts --project <root>` |

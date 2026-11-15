@@ -1,13 +1,15 @@
 import { join } from "node:path/posix";
 import { charge, frameOverrun, noSpend, type BudgetFrame } from "./budget.ts";
-import type { Json, PolicyOf, RunEvent, ScriptRunner, Spend } from "./contracts.ts";
+import type { Json, PolicyOf, RunEvent, ScriptRunner, Settled, Spend, StepOutcome } from "./contracts.ts";
 import type { Budget } from "./generated/mode.ts";
 import { byteSize } from "./json.ts";
 import type { Clock, FileSystem } from "./ports.ts";
 import type { LoadedMode, System } from "./registry.ts";
-import type { RunStore, StepEnd, StepKind, StepRecord, Writer } from "./run-store.ts";
+import { settledOf, type RunStore, type StepRecord, type Writer } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
-import { checkValue, type Problem } from "./spec.ts";
+import type { StepDetail, StepKind } from "./step-detail.ts";
+import { checkValue } from "./spec.ts";
+import type { Problem } from "./outcome.ts";
 import type { ActionTarget } from "./targets.ts";
 
 export type Services = {
@@ -30,10 +32,7 @@ export type Walk = {
   readonly phase: "main" | "undo";
 };
 
-export type Settled =
-  { readonly kind: "done"; readonly output: Json } | { readonly kind: "failed"; readonly reason: string };
-
-export type Progress = Settled | { readonly kind: "waiting"; readonly waiting: Waiting };
+export type Progress = Settled | { readonly status: "waiting"; readonly waiting: Waiting };
 
 export type ActionFrame = ActionTarget & {
   readonly key: string;
@@ -54,17 +53,19 @@ export type EventKind =
   | "undo.finished"
   | "run.finished";
 
-export type RecordStart = {
+export type RecordStart = StepDetail & {
+  readonly key: string;
+  readonly input: Json;
+};
+
+export type RecordEnd = StepOutcome & {
+  readonly key: string;
+};
+
+export type RefusedStart = {
   readonly key: string;
   readonly kind: StepKind;
   readonly input: Json;
-  readonly detail: Json;
-};
-
-export type RecordEnd = {
-  readonly key: string;
-  readonly settled: Settled;
-  readonly spent: Spend;
 };
 
 export type SchemaCheck = {
@@ -75,15 +76,15 @@ export type SchemaCheck = {
 };
 
 export function done(output: Json): Settled {
-  return { kind: "done", output };
+  return { status: "done", output };
 }
 
 export function failed(reason: string): Settled {
-  return { kind: "failed", reason };
+  return { status: "failed", reason };
 }
 
 export function waiting(state: Waiting): Progress {
-  return { kind: "waiting", waiting: state };
+  return { status: "waiting", waiting: state };
 }
 
 export function eventOf(walk: Walk, kind: EventKind, detail: Json): RunEvent {
@@ -101,90 +102,65 @@ export async function startRecord(
     inputBytes: byteSize(start.input),
   });
   const at = walk.services.clock.now().toISOString();
-  const record = await walk.services.store.saveStepInput(walk.writer, { ...start, at }, [...events, event]);
-  walk.records.set(record.key, record);
-  return record;
-}
-
-function stepEndOf(end: RecordEnd, at: string): StepEnd {
-  switch (end.settled.kind) {
-    case "done":
-      return { key: end.key, status: "finished", output: end.settled.output, spent: end.spent, at };
-    case "failed":
-      return { key: end.key, status: "failed", reason: end.settled.reason, spent: end.spent, at };
-  }
+  return keep(walk, await walk.services.store.saveStepInput(walk.writer, { ...start, at }, [...events, event]));
 }
 
 function stepEndEvent(walk: Walk, end: RecordEnd): RunEvent {
   const kind = walk.records.get(end.key)?.kind ?? "script";
-  switch (end.settled.kind) {
+  switch (end.status) {
     case "done":
       return eventOf(walk, "step.finished", {
         stepKey: end.key,
         kind,
-        outputBytes: byteSize(end.settled.output),
+        outputBytes: byteSize(end.output),
         spent: end.spent,
       });
     case "failed":
-      return eventOf(walk, "step.failed", { stepKey: end.key, kind, reasonBytes: byteSize(end.settled.reason) });
+      return eventOf(walk, "step.failed", { stepKey: end.key, kind, reasonBytes: byteSize(end.reason) });
   }
 }
 
-function storedSettled(record: StepRecord): Settled | undefined {
-  switch (record.status) {
-    case "started":
-      return undefined;
-    case "finished":
-      return done(record.output);
-    case "failed":
-      return failed(record.reason);
-  }
+function keep(walk: Walk, record: StepRecord): StepRecord {
+  walk.records.set(record.key, record);
+  return record;
 }
 
 export async function endRecord(walk: Walk, end: RecordEnd, events: readonly RunEvent[] = []): Promise<Settled> {
   const at = walk.services.clock.now().toISOString();
   const event = stepEndEvent(walk, end);
-  const record = await walk.services.store.saveStepOutput(walk.writer, stepEndOf(end, at), [...events, event]);
-  walk.records.set(record.key, record);
-  return storedSettled(record) ?? end.settled;
+  const record = keep(walk, await walk.services.store.saveStepOutput(walk.writer, { ...end, at }, [...events, event]));
+  return settledOf(record) ?? end;
 }
 
-export async function changeDetail(walk: Walk, key: string, detail: Json): Promise<StepRecord> {
+export async function changeDetail(walk: Walk, change: StepDetail & { readonly key: string }): Promise<StepRecord> {
   const at = walk.services.clock.now().toISOString();
-  const record = await walk.services.store.saveStepDetail(walk.writer, { key, detail, at }, []);
-  walk.records.set(record.key, record);
-  return record;
+  return keep(walk, await walk.services.store.saveStepDetail(walk.writer, { ...change, at }, []));
 }
 
-export async function concludeComposite(
-  walk: Walk,
-  key: string,
-  outcome: Progress & { spent: Spend },
-): Promise<Progress> {
-  switch (outcome.kind) {
+export type CompositeEnd = {
+  readonly key: string;
+  readonly progress: Progress;
+  readonly spent: Spend;
+};
+
+export async function concludeComposite(walk: Walk, end: CompositeEnd): Promise<Progress> {
+  const { key, progress: outcome, spent } = end;
+  switch (outcome.status) {
     case "waiting":
-      return outcome;
+      return waiting(outcome.waiting);
     case "done":
-      return endRecord(walk, { key, settled: done(outcome.output), spent: outcome.spent });
+      return endRecord(walk, { key, status: "done", output: outcome.output, spent });
     case "failed":
-      return endRecord(walk, { key, settled: failed(outcome.reason), spent: outcome.spent });
+      return endRecord(walk, { key, status: "failed", reason: outcome.reason, spent });
   }
 }
 
 export function replayed(budget: BudgetFrame, record: StepRecord | undefined): Settled | undefined {
-  if (record === undefined) {
+  if (record === undefined || record.status === "started") {
     return undefined;
   }
-  switch (record.status) {
-    case "started":
-      return undefined;
-    case "finished":
-      charge(budget, record.spent);
-      return done(record.output);
-    case "failed":
-      charge(budget, record.spent);
-      return failed(record.reason);
-  }
+  charge(budget, record.spent);
+  return settledOf(record);
 }
 
 export function stopGate(walk: Walk): Settled | undefined {
@@ -200,11 +176,17 @@ export function gate(walk: Walk, budget: BudgetFrame, stepKey: string): Progress
   return overrun === undefined ? undefined : waiting({ reason: "budget", stepKey, overrun });
 }
 
-export async function refuse(walk: Walk, start: Omit<RecordStart, "detail">, reason: string): Promise<Settled> {
-  if (!walk.records.has(start.key)) {
-    await startRecord(walk, { ...start, detail: {} });
+export async function refuse(walk: Walk, start: RefusedStart, reason: string): Promise<Settled> {
+  if (walk.records.has(start.key)) {
+    return endRecord(walk, { key: start.key, status: "failed", reason, spent: noSpend });
   }
-  return endRecord(walk, { key: start.key, settled: failed(reason), spent: noSpend });
+  const at = walk.services.clock.now().toISOString();
+  const events = [
+    eventOf(walk, "step.started", { stepKey: start.key, kind: start.kind, inputBytes: byteSize(start.input) }),
+    eventOf(walk, "step.failed", { stepKey: start.key, kind: start.kind, reasonBytes: byteSize(reason) }),
+  ];
+  const record = await walk.services.store.saveRefusal(walk.writer, { ...start, reason, at }, events);
+  return settledOf(keep(walk, record)) ?? failed(reason);
 }
 
 function parsedSchema(text: string): { readonly schema: unknown } | { readonly reason: string } {
@@ -234,8 +216,4 @@ export async function schemaProblems(services: Services, check: SchemaCheck): Pr
     return [{ file, path: "", message: `The schema file ${file} is not a usable JSON Schema: ${result.reason}.` }];
   }
   return result.problems;
-}
-
-export function problemText(problems: readonly Problem[]): string {
-  return problems.map((problem) => problem.message).join(" ");
 }

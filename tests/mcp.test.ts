@@ -116,8 +116,8 @@ test("the MCP server accepts a submit with a real token on a real project", asyn
   const project = await makeProject();
   const kernel = await openKernel(project);
   const started = await kernel.engine.startAction("writer.compose", { name: "Ada" });
-  assert.ok(started.ok && started.run.state.status === "waiting" && started.run.state.waiting.reason === "skill");
-  const place = { runId: started.run.id, stepKey: started.run.state.waiting.stepKey, round: 1 };
+  assert.ok(started.ok && started.value.state.status === "waiting" && started.value.state.waiting.reason === "skill");
+  const place = { runId: started.value.id, stepKey: started.value.state.waiting.stepKey, round: 1 };
   const token = await issueTaskToken(kernel.store, place, new Date());
   kernel.close();
   const server = startServer(project.root);

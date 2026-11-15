@@ -8,7 +8,8 @@ import type { Json, StepPlace } from "../bay/contracts.ts";
 import type { Config } from "../bay/generated/config.ts";
 import { layoutOf } from "../bay/layout.ts";
 import { loadKernel, nodeKernelPorts, type Kernel } from "../bay/kernel.ts";
-import type { EngineResult, RunView } from "../bay/run-state.ts";
+import type { RunView } from "../bay/run-state.ts";
+import type { Outcome } from "../bay/outcome.ts";
 import type { Clock } from "../bay/ports.ts";
 import type { DatabasePartition } from "../bay/sdk.ts";
 import { testEnvironment } from "./kernel-fixture.ts";
@@ -49,9 +50,9 @@ export type ModeProject = {
   readonly close: () => Promise<void>;
 };
 
-export function runOf(result: EngineResult): RunView {
+export function runOf(result: Outcome<RunView>): RunView {
   assert.ok(result.ok, result.ok ? "" : JSON.stringify(result.problems, null, 2));
-  return result.run;
+  return result.value;
 }
 
 function outputOf(run: RunView): Json {
@@ -69,7 +70,7 @@ function reasonOf(run: RunView): string {
 }
 
 function partitionOf(kernel: Kernel, mode: string, name: string): DatabasePartition {
-  const place: StepPlace = { runId: "harness", mode, action: "harness", stepIndex: 0, stepKey: "harness" };
+  const place: StepPlace = { runId: "harness", mode, action: "harness", stepKey: "harness" };
   const permissions = { grants: kernel.policyOf(mode), actionEffects: ["read" as const, "write" as const] };
   const broker = (): ReturnType<Kernel["brokerFor"]> => kernel.brokerFor(place, permissions);
   const closing = async <T>(use: (opened: ReturnType<Kernel["brokerFor"]>) => Promise<T>): Promise<T> => {

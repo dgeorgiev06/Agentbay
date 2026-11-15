@@ -3,8 +3,10 @@ import { test } from "node:test";
 import type { Json } from "../bay/contracts.ts";
 import { fieldOf, textField } from "../bay/json.ts";
 import type { Kernel } from "../bay/kernel.ts";
+import type { StoredRun } from "../bay/run-store.ts";
 import { issueTaskToken } from "../bay/task-tokens.ts";
-import { callKernelTool, toolResultBytes, type ToolResult } from "../bay/tools.ts";
+import { callKernelTool, toolResultBytes } from "../bay/tools.ts";
+import { problemText, type Outcome } from "../bay/outcome.ts";
 import { openKernel, openProject, type Opened } from "./kernel-fixture.ts";
 import { makeProject, skillText } from "./project-fixture.ts";
 
@@ -16,21 +18,21 @@ type Waiting = {
 
 async function waitingCompose(kernel: Kernel): Promise<Waiting> {
   const result = await kernel.engine.startAction("writer.compose", { name: "Ada" });
-  assert.ok(result.ok && result.run.state.status === "waiting", JSON.stringify(result));
-  const waiting = result.run.state.waiting;
+  assert.ok(result.ok && result.value.state.status === "waiting", JSON.stringify(result));
+  const waiting = result.value.state.waiting;
   assert.equal(waiting.reason, "skill");
-  const place = { runId: result.run.id, stepKey: waiting.stepKey, round: 1 };
+  const place = { runId: result.value.id, stepKey: waiting.stepKey, round: 1 };
   return { ...place, token: await issueTaskToken(kernel.store, place, new Date()) };
 }
 
-function valueOf(result: ToolResult): Json {
-  assert.ok(result.ok, result.ok ? "" : result.refusal);
+function valueOf(result: Outcome<Json>): Json {
+  assert.ok(result.ok, result.ok ? "" : problemText(result.problems));
   return result.value;
 }
 
-function refusalOf(result: ToolResult): string {
+function refusalOf(result: Outcome<Json>): string {
   assert.ok(!result.ok, `expected a refusal, got ${JSON.stringify(result)}`);
-  return result.refusal;
+  return problemText(result.problems);
 }
 
 async function withWaiting(body: (opened: Opened, waiting: Waiting) => Promise<void>): Promise<void> {
@@ -132,6 +134,53 @@ test("call_action runs a listed read-only action through the engine and refuses 
   });
 });
 
+async function storedRun(kernel: Kernel, runId: string): Promise<StoredRun> {
+  const run = await kernel.store.readRun(runId);
+  assert.ok(run !== undefined, runId);
+  return run;
+}
+
+test("an action a skill starts through call_action is charged to the calling run and held to what it has left", async () => {
+  const project = await makeProject();
+  const config = await project.read("agentbay.config.yaml");
+  await project.write("agentbay.config.yaml", `${config}budget:\n  minutes: 30\n`);
+  const kernel = await openKernel(project);
+  try {
+    const waiting = await waitingCompose(kernel);
+    const before = await kernel.store.readRun(waiting.runId);
+    const fetched = await callKernelTool(kernel, "call_action", {
+      token: waiting.token,
+      action: "greeting-source.fetch",
+      input: { name: "Bo" },
+    });
+    const again = await callKernelTool(kernel, "call_action", {
+      token: waiting.token,
+      action: "greeting-source.fetch",
+      input: { name: "Cy" },
+    });
+    const child = await storedRun(kernel, textField(valueOf(fetched), "run") ?? "");
+    const second = await storedRun(kernel, textField(valueOf(again), "run") ?? "");
+    const after = await storedRun(kernel, waiting.runId);
+    assert.ok(before !== undefined);
+    assert.ok(child.spent.minutes > 0 && second.spent.minutes > 0);
+    assert.equal(child.limit.minutes, 30 - before.spent.minutes);
+    assert.ok((second.limit.minutes ?? 30) < (child.limit.minutes ?? 0));
+    const charged = after.spent.minutes - before.spent.minutes;
+    assert.ok(Math.abs(charged - child.spent.minutes - second.spent.minutes) < 1e-9);
+    assert.equal(after.state.status, "waiting");
+    const output = { text: "Hello, Ada, and welcome back." };
+    const accepted = valueOf(await callKernelTool(kernel, "submit", { token: waiting.token, output }));
+    assert.equal(fieldOf(accepted, "accepted"), true);
+    const done = await kernel.store.readRun(waiting.runId);
+    const skillStep = done?.steps.find((step) => step.key === "1");
+    assert.ok(skillStep !== undefined && skillStep.status !== "started");
+    assert.ok(skillStep.spent.minutes >= child.spent.minutes + second.spent.minutes);
+  } finally {
+    kernel.close();
+    await project.remove();
+  }
+});
+
 test("tool results pass through the scrubber and are capped in size", async () => {
   await withWaiting(async ({ kernel, project }, waiting) => {
     const permissions = { ...kernel.policyOf("writer"), secrets: ["NOTE_KEY"] };
@@ -164,7 +213,14 @@ test("submit returns schema problems, then check feedback with a new token, then
       output: { text: "long enough now?" },
     });
     assert.match(refusalOf(replayed), /The token is not valid/);
-    const good = { token: next, output: { text: "Hello, Ada, and welcome back." }, tokens: 300, usd: 0.01 };
+    const paid = { token: next, output: { text: "Hello, Ada, and welcome back." }, tokens: 300, usd: 0.01 };
+    const unpaid = valueOf(await callKernelTool(kernel, "submit", paid));
+    assert.equal(fieldOf(unpaid, "accepted"), false);
+    assert.match(
+      JSON.stringify(fieldOf(unpaid, "problems")),
+      /Reporting dollars an agent spent needs the spend effect/,
+    );
+    const good = { token: next, output: { text: "Hello, Ada, and welcome back." }, tokens: 300 };
     const accepted = valueOf(await callKernelTool(kernel, "submit", good));
     assert.deepEqual(accepted, { accepted: true, run: { id: waiting.runId, status: "done" } });
     const run = await kernel.store.readRun(waiting.runId);

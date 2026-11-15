@@ -31,6 +31,33 @@ for (const storeKind of storeKinds) {
       close();
     });
 
+    test("a step refused before it starts is stored at once, redacted, with its start and its failure", async () => {
+      const workflows = {
+        "workflows/flow.yaml": {
+          name: "flow",
+          steps: [{ id: "each", foreach: "$settings.greeting", steps: [{ id: "keep", approval: "Send?" }] }],
+        },
+      };
+      const config = { settings: { notes: { greeting: "hi SECRET-GREET1" } } };
+      const { engine, store, close } = await harness({ storeKind, changes: { workflows, config } });
+      const run = runOf(await engine.startWorkflow({ mode: "notes", path: "workflows/flow.yaml" }, null));
+      assert.equal(run.state.status, "failed");
+      const stored = await store.readRun(run.id);
+      const refused = stored?.steps.find((step) => step.key === "each");
+      assert.ok(refused?.status === "failed");
+      assert.equal(refused.detail, null);
+      assert.match(refused.reason, /which is the value "hi \[redacted\]", not a list/);
+      assert.ok(!JSON.stringify(stored).includes("SECRET-"));
+      const events = (await store.readEvents(run.id)).filter((event) =>
+        JSON.stringify(event.detail).includes('"each"'),
+      );
+      assert.deepEqual(
+        events.map((event) => event.kind),
+        ["step.started", "step.failed"],
+      );
+      close();
+    });
+
     test("approval content and event details are stored redacted", async () => {
       const workflows = {
         "workflows/flow.yaml": { name: "flow", steps: [{ id: "keep", approval: "Send?", show: "$settings.greeting" }] },

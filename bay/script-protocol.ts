@@ -6,6 +6,8 @@ import type { HttpRequest } from "./ports.ts";
 
 export const sdkSpecifier = "agentbay/sdk";
 
+export const removalAllowedArgument = "--agentbay-may-remove-files";
+
 export type ResourceRequest =
   | {
       readonly resource: "db.execute" | "db.query";

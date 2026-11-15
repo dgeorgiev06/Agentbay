@@ -1,9 +1,9 @@
 import type { Effect, ModeGrants, Tier } from "./contracts.ts";
-import { writableFolders } from "./effect-rule.ts";
+import { grantedCommands, writableFolders } from "./effect-rule.ts";
 import type { Layout } from "./layout.ts";
 import type { FileSystem, Removal } from "./ports.ts";
 import type { System } from "./registry.ts";
-import type { Outcome } from "./spec.ts";
+import type { Outcome } from "./outcome.ts";
 
 export type SkillAgent = {
   readonly agent: string;
@@ -45,4 +45,8 @@ export function agentName(mode: string, skill: string): string {
 
 export function agentWritableFolders(agent: SkillAgent): readonly string[] {
   return writableFolders({ grants: agent.grants, actionEffects: agent.effects });
+}
+
+export function agentCommands(agent: SkillAgent): readonly string[] {
+  return grantedCommands({ grants: agent.grants, actionEffects: agent.effects });
 }

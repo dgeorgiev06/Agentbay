@@ -25,15 +25,15 @@ for (const storeKind of storeKinds) {
       const run = runOf(await engine.startAction("notes.copy", { count: 1 }));
       assert.deepEqual(run.state, { status: "done", output: { count: 5 } });
       assert.deepEqual(
-        run.steps.map((step) => [step.key, step.status, step.input, step.status === "finished" ? step.output : null]),
+        run.steps.map((step) => [step.key, step.status, step.input, step.status === "done" ? step.output : null]),
         [
-          ["0", "finished", { count: 1 }, { count: 2 }],
-          ["1", "finished", { count: 2 }, { count: 4 }],
-          ["2", "finished", { count: 4 }, { count: 5 }],
+          ["0", "done", { count: 1 }, { count: 2 }],
+          ["1", "done", { count: 2 }, { count: 4 }],
+          ["2", "done", { count: 4 }, { count: 5 }],
         ],
       );
       assert.deepEqual(
-        runner.calls.map((call) => [call.place.stepIndex, call.script, call.input]),
+        runner.calls.map((call) => [Number(call.place.stepKey), call.script, call.input]),
         [
           [0, "scripts/add-one.ts", { count: 1 }],
           [1, "scripts/double.ts", { count: 2 }],
@@ -42,7 +42,7 @@ for (const storeKind of storeKinds) {
       );
       const [firstCall] = runner.calls;
       assert.ok(firstCall);
-      assert.deepEqual(firstCall.place, { runId: run.id, mode: "notes", action: "copy", stepIndex: 0, stepKey: "0" });
+      assert.deepEqual(firstCall.place, { runId: run.id, mode: "notes", action: "copy", stepKey: "0" });
       assert.deepEqual(firstCall.settings, { greeting: "hello" });
       close();
     });
@@ -73,15 +73,15 @@ for (const storeKind of storeKinds) {
       assert.deepEqual(run.state, { status: "done", output: { id: "n1" } });
       const [put] = runner.calls;
       assert.ok(put);
-      assert.deepEqual(put.place, { runId: run.id, mode: "store", action: "put", stepIndex: 0, stepKey: "0/0" });
+      assert.deepEqual(put.place, { runId: run.id, mode: "store", action: "put", stepKey: "0/0" });
       assert.deepEqual(put.permissions, { grants: fakePolicy("store"), actionEffects: ["write"] });
       assert.equal(put.timeLimitMilliseconds, 8 * 60_000);
       assert.deepEqual(put.settings, {});
       assert.deepEqual(
         run.steps.map((step) => [step.key, step.kind, step.status]),
         [
-          ["0", "call", "finished"],
-          ["0/0", "script", "finished"],
+          ["0", "call", "done"],
+          ["0/0", "script", "done"],
         ],
       );
       close();
@@ -190,7 +190,7 @@ for (const storeKind of storeKinds) {
         reason: "skill",
         stepKey: "0#1",
         task: {
-          place: { runId: id, mode: "notes", action: "draft-and-store", stepIndex: 0, stepKey: "0" },
+          place: { runId: id, mode: "notes", action: "draft-and-store", stepKey: "0" },
           skill: "skills/draft",
           tier: "fast",
           input: { topic: "staking" },
@@ -330,9 +330,9 @@ test("a script may call an action through its context, and that call is saved li
   assert.deepEqual(
     run.steps.map((step) => [step.key, step.kind, step.status]),
     [
-      ["0", "script", "finished"],
-      ["0.call0", "call", "finished"],
-      ["0.call0/0", "script", "finished"],
+      ["0", "script", "done"],
+      ["0.call0", "call", "done"],
+      ["0.call0/0", "script", "done"],
       ["0.call1", "call", "failed"],
     ],
   );
@@ -369,8 +369,28 @@ test("the spend of every round of a skill counts, and a negative spend is refuse
   const run = runOf(await engine.submit(id, "0#2", answer({ text: "long enough now" }, { tokens: 20 })));
   assert.equal(run.state.status, "done");
   assert.equal(run.spent.tokens, 30);
-  assert.ok(run.steps[0]?.status === "finished");
+  assert.ok(run.steps[0]?.status === "done");
   assert.equal(run.steps[0].spent.tokens, 30);
+  close();
+});
+
+test("a submission that reports dollars is refused when the skill's action does not declare spend", async () => {
+  const paid = { input: "schemas/anything.json", output: "schemas/draft.json", effects: ["read", "spend"] as const };
+  const notesActions = { "paid-draft": { ...paid, run: [{ skill: "skills/draft", tier: "fast" as const }] } };
+  const { engine, store, close } = await harness({ changes: { notesActions } });
+  const id = runOf(await engine.startAction("notes.draft", {})).id;
+  const refused = problemsOf(await engine.submit(id, "0#1", answer({ text: "long enough" }, { usd: 0.5 })));
+  assert.match(refused[0] ?? "", /The step 0#1 of action draft asked to report spending/);
+  assert.match(refused[0] ?? "", /the action draft declares the effects: read/);
+  assert.match(refused[0] ?? "", /add spend to actions\.draft\.effects in \S*components\/modes\/notes\/mode\.yaml/);
+  assert.equal((await store.readRun(id))?.state.status, "waiting");
+  const tokensOnly = runOf(await engine.submit(id, "0#1", answer({ text: "long enough" }, { tokens: 40 })));
+  assert.equal(tokensOnly.state.status, "done");
+  assert.equal(tokensOnly.spent.tokens, 40);
+  const paidId = runOf(await engine.startAction("notes.paid-draft", {}, { id: "paid" })).id;
+  const accepted = runOf(await engine.submit(paidId, "0#1", answer({ text: "long enough" }, { usd: 0.5 })));
+  assert.equal(accepted.state.status, "done");
+  assert.equal(accepted.spent.usd, 0.5);
   close();
 });
 
@@ -396,7 +416,7 @@ test("a script that calls an action is charged once: its own spend plus the call
   assert.equal(run.spent.items, 3);
   const spentOf = (key: string): number => {
     const step = run.steps.find((candidate) => candidate.key === key);
-    assert.ok(step?.status === "finished");
+    assert.ok(step?.status === "done");
     return step.spent.items;
   };
   assert.deepEqual([spentOf("0"), spentOf("0.call0"), spentOf("0.call0/0")], [3, 2, 2]);

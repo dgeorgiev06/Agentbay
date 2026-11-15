@@ -4,7 +4,8 @@ import type { Mode } from "./generated/mode.ts";
 import { homeFolder, isProjectTheKit, shownPath, type Home, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
 import { findInterfaceFiles, findModeFolders } from "./registry.ts";
-import { loadSpec, type Loaded, type Problem } from "./spec.ts";
+import { loadSpec, type Loaded } from "./spec.ts";
+import type { Problem } from "./outcome.ts";
 
 export type Severity = "error" | "warning";
 

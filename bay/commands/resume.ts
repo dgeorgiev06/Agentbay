@@ -3,7 +3,8 @@ import { problemsResult, usageResult, withKernel, type CommandResult, type Invoc
 import type { Command } from "../command-line.ts";
 import type { Budget } from "../generated/mode.ts";
 import type { Kernel } from "../kernel.ts";
-import type { EngineResult } from "../run-state.ts";
+import type { RunView } from "../run-state.ts";
+import type { Outcome } from "../outcome.ts";
 import { engineOutput, skillWaitOf } from "../run-report.ts";
 
 type Form =
@@ -69,7 +70,7 @@ function formOf(invocation: Invocation): Form | string {
 
 async function resumeDue(kernel: Kernel): Promise<CommandResult> {
   const results = await kernel.engine.tick(kernel.ports.clock.now());
-  const woken = results.flatMap((result) => (result.ok ? [result.run] : []));
+  const woken = results.flatMap((result) => (result.ok ? [result.value] : []));
   const problems = results.flatMap((result) => (result.ok ? [] : result.problems));
   if (problems.length > 0) {
     return problemsResult(problems);
@@ -79,7 +80,7 @@ async function resumeDue(kernel: Kernel): Promise<CommandResult> {
   return { exitCode: 0, json, text: lines.length === 0 ? "No run is due." : lines.join("\n") };
 }
 
-function engineCall(kernel: Kernel, form: Exclude<Form, { readonly kind: "due" }>): Promise<EngineResult> {
+function engineCall(kernel: Kernel, form: Exclude<Form, { readonly kind: "due" }>): Promise<Outcome<RunView>> {
   switch (form.kind) {
     case "resume":
       return kernel.engine.resume(form.runId, { rerunUnfinished: form.rerun });

@@ -9,7 +9,7 @@ import type { Mode } from "../bay/generated/mode.ts";
 import type { Http, HttpRequest, HttpResponse, ProcessRequest, ProcessResult, Processes } from "../bay/ports.ts";
 import { layoutOf, type Home, type Layout } from "../bay/layout.ts";
 import type { LoadedMode, System } from "../bay/registry.ts";
-import type { Outcome, Problem } from "../bay/spec.ts";
+import type { Outcome, Problem } from "../bay/outcome.ts";
 
 export const kitFolder = fileURLToPath(new URL("..", import.meta.url));
 
@@ -90,7 +90,7 @@ export const noProcesses: Processes = {
   run: () => Promise.reject(new Error("no process may be started in this test")),
 };
 
-export const place: StepPlace = { runId: "run-1", mode: "notes", action: "look", stepIndex: 0, stepKey: "look.0" };
+export const place: StepPlace = { runId: "run-1", mode: "notes", action: "look", stepKey: "look.0" };
 
 export type PermissionChanges = Partial<ModeGrants> & { readonly effects?: readonly Effect[] };
 

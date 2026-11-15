@@ -1,7 +1,6 @@
 import type { Overrun } from "./budget.ts";
 import type { Json, SkillTask, Spend } from "./contracts.ts";
 import type { RunTarget, StepRecord } from "./run-store.ts";
-import type { Problem } from "./spec.ts";
 
 export type Waiting =
   | { readonly reason: "skill"; readonly stepKey: string; readonly task: SkillTask }
@@ -42,9 +41,6 @@ export type RunView = {
   readonly spent: Spend;
   readonly steps: readonly StepRecord[];
 };
-
-export type EngineResult =
-  { readonly ok: true; readonly run: RunView } | { readonly ok: false; readonly problems: readonly Problem[] };
 
 export type ApprovalDecision = {
   readonly hash: string;

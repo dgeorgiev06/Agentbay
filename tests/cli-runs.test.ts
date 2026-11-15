@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { Json } from "../bay/contracts.ts";
-import { fieldOf, numberField, textField, toJson } from "../bay/json.ts";
+import { fieldOf, numberField, textField, toJson, isRecord } from "../bay/json.ts";
 import { bay, fakeTerminal, listOf } from "./cli-fixture.ts";
-import { isRecord } from "../bay/spec.ts";
 import { makeProject, type Project } from "./project-fixture.ts";
 
 type Task = {

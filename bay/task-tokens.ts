@@ -1,14 +1,12 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { RunStore, StoredState, TaskTokenStore } from "./run-store.ts";
+import { failedWith, succeededWith, unplacedProblem, type Outcome } from "./outcome.ts";
 
 export type TaskPlace = {
   readonly runId: string;
   readonly stepKey: string;
   readonly round: number;
 };
-
-export type TokenCheck =
-  { readonly ok: true; readonly place: TaskPlace } | { readonly ok: false; readonly reason: string };
 
 export type TokenStores = {
   readonly tokens: TaskTokenStore;
@@ -20,6 +18,10 @@ const tokenBytes = 32;
 const unknownToken =
   "The token is not valid: it was never issued, or a newer token for the same task replaced it. " +
   "Ask the coordinator for the task again; it carries a fresh token.";
+
+function refusedToken(reason: string): Outcome<never> {
+  return failedWith([unplacedProblem(reason)]);
+}
 
 function hashOf(token: string): Buffer {
   return createHash("sha256").update(token, "utf8").digest();
@@ -56,35 +58,33 @@ async function storedPlace(store: TaskTokenStore, token: string): Promise<TaskPl
   return found;
 }
 
-export async function checkTaskToken(stores: TokenStores, token: string): Promise<TokenCheck> {
+export async function checkTaskToken(stores: TokenStores, token: string): Promise<Outcome<TaskPlace>> {
   const place = await storedPlace(stores.tokens, token);
   if (place === undefined) {
-    return { ok: false, reason: unknownToken };
+    return refusedToken(unknownToken);
   }
   const run = await stores.runs.readRun(place.runId);
   if (run === undefined) {
-    return { ok: false, reason: unknownToken };
+    return refusedToken(unknownToken);
   }
   if (!isWaitingAt(run.state, place.stepKey)) {
     await stores.tokens.removeTaskTokens(place.runId);
-    return { ok: false, reason: deadReason(place, run.state) };
+    return refusedToken(deadReason(place, run.state));
   }
-  return { ok: true, place };
+  return succeededWith(place);
 }
 
 export async function checkTaskTokenFor(
   stores: TokenStores,
   token: string,
   expected: Omit<TaskPlace, "round">,
-): Promise<TokenCheck> {
+): Promise<Outcome<TaskPlace>> {
   const checked = await checkTaskToken(stores, token);
-  if (!checked.ok || (checked.place.runId === expected.runId && checked.place.stepKey === expected.stepKey)) {
+  if (!checked.ok || (checked.value.runId === expected.runId && checked.value.stepKey === expected.stepKey)) {
     return checked;
   }
-  return {
-    ok: false,
-    reason:
-      `The token belongs to step ${checked.place.stepKey} of run ${checked.place.runId}, ` +
+  return refusedToken(
+    `The token belongs to step ${checked.value.stepKey} of run ${checked.value.runId}, ` +
       `not to step ${expected.stepKey} of run ${expected.runId}.`,
-  };
+  );
 }

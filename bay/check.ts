@@ -15,7 +15,8 @@ import { checkSkills } from "./check-skills.ts";
 import { isInsideOrEqual, isProjectTheKit, pathIn, shownPath, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
 import { loadPolicedSystem } from "./policy.ts";
-import { problemAt, type Problem } from "./spec.ts";
+import { problemAt } from "./spec.ts";
+import type { Problem } from "./outcome.ts";
 
 export type CheckPorts = {
   readonly files: FileSystem;

@@ -2,7 +2,7 @@ import { problemsResult, succeeded, withKernel, type CommandResult, type Invocat
 import type { Command } from "../command-line.ts";
 import { loadAdapter, planAgents } from "../build.ts";
 import type { Kernel } from "../kernel.ts";
-import type { Outcome } from "../spec.ts";
+import type { Outcome } from "../outcome.ts";
 
 async function built(invocation: Invocation, kernel: Kernel): Promise<Outcome<readonly string[]>> {
   const { files, removal } = kernel.ports;

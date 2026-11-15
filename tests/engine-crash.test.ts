@@ -6,8 +6,10 @@ import { test } from "node:test";
 import type { ScriptRequest } from "../bay/contracts.ts";
 import { numberField } from "../bay/json.ts";
 import type { Engine } from "../bay/engine.ts";
-import { SqliteRunStore, type RunStore } from "../bay/run-store.ts";
-import type { EngineResult } from "../bay/run-state.ts";
+import type { RunStore } from "../bay/run-store.ts";
+import { SqliteRunStore } from "../bay/sqlite-run-store.ts";
+import type { RunView } from "../bay/run-state.ts";
+import type { Outcome } from "../bay/outcome.ts";
 import {
   eventKinds,
   finished,
@@ -61,6 +63,7 @@ function crashingStore(inner: RunStore, point: CrashPoint | undefined): Crashing
     saveStepOutput: (writer, end, events) => write("saveStepOutput", () => inner.saveStepOutput(writer, end, events)),
     saveStepDetail: (writer, change, events) =>
       write("saveStepDetail", () => inner.saveStepDetail(writer, change, events)),
+    saveRefusal: (writer, refusal, events) => write("saveRefusal", () => inner.saveRefusal(writer, refusal, events)),
     updateRun: (writer, patch, events) => write("updateRun", () => inner.updateRun(writer, patch, events)),
     append: (event) => write("append", () => inner.append(event)),
     acquire: (runId, owner, now) => write("acquire", () => inner.acquire(runId, owner, now)),
@@ -75,7 +78,8 @@ function crashingStore(inner: RunStore, point: CrashPoint | undefined): Crashing
 function executionsByStep(runner: FakeRunner): readonly number[] {
   const counts = [0, 0, 0];
   for (const call of runner.calls) {
-    counts[call.place.stepIndex] = (counts[call.place.stepIndex] ?? 0) + 1;
+    const index = Number(call.place.stepKey);
+    counts[index] = (counts[index] ?? 0) + 1;
   }
   return counts;
 }
@@ -328,14 +332,14 @@ test("a crash right after a decision is saved applies it on resume and refuses a
 test("a live engine whose steps each take seven minutes is never taken over; a silent one is", async () => {
   let tries = 0;
   let refusedTries = 0;
-  const holder: { second: Engine | undefined; silentAt: number | undefined; takeover: EngineResult | undefined } = {
+  const holder: { second: Engine | undefined; silentAt: number | undefined; takeover: Outcome<RunView> | undefined } = {
     second: undefined,
     silentAt: undefined,
     takeover: undefined,
   };
   const scripts = {
     "notes:scripts/slow.ts": async (request: ScriptRequest) => {
-      const silent = holder.silentAt === request.place.stepIndex;
+      const silent = holder.silentAt === Number(request.place.stepKey);
       clock.advance((silent ? 11 : 7) * 60_000);
       const second = holder.second;
       assert.ok(second);
@@ -362,7 +366,7 @@ test("a live engine whose steps each take seven minutes is never taken over; a s
   const lost = await engine.startAction("notes.long", {}, { id: "silent" });
   assert.match(problemsOf(lost).join(" "), /stopped at an unexpected error: .*no longer holds the lock/);
   assert.ok(holder.takeover?.ok);
-  assert.equal(holder.takeover.run.state.status, "done");
+  assert.equal(holder.takeover.value.state.status, "done");
   assert.ok((await eventKinds(store, "silent")).includes("lock.taken-over"));
 });
 

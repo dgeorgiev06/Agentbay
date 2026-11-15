@@ -1,6 +1,6 @@
 import { isMap, isScalar, LineCounter, parseDocument, type Pair } from "yaml";
 import { errors, warnings, type KitTree, type Finding } from "./check-context.ts";
-import type { Problem } from "./spec.ts";
+import { failedWith, succeededWith, type Outcome, type Problem } from "./outcome.ts";
 
 const measures = ["kernel_lines", "adapter_lines", "concepts", "cli_commands", "top_level_folders"] as const;
 
@@ -13,10 +13,6 @@ type Ceiling = {
   readonly ceiling: number;
   readonly line: number;
 };
-
-type Ceilings =
-  | { readonly ok: true; readonly ceilings: readonly Ceiling[] }
-  | { readonly ok: false; readonly problems: readonly Problem[] };
 
 const limitsFile = "framework/limits.yaml";
 
@@ -117,7 +113,7 @@ function missingProblems(ceilings: readonly Ceiling[]): readonly Problem[] {
   );
 }
 
-function parseCeilings(text: string): Ceilings {
+function parseCeilings(text: string): Outcome<readonly Ceiling[]> {
   const lineCounter = new LineCounter();
   const document = parseDocument(text, { lineCounter, prettyErrors: false });
   const lineOf = (offset: number): number => lineCounter.linePos(offset).line;
@@ -125,16 +121,16 @@ function parseCeilings(text: string): Ceilings {
     limitsProblem(lineOf(error.pos[0]), `The YAML cannot be read: ${error.message}.`, "Correct the YAML syntax."),
   );
   if (syntax.length > 0) {
-    return { ok: false, problems: syntax };
+    return failedWith(syntax);
   }
   if (!isMap(document.contents)) {
     const message = `${limitsFile} is not a mapping of measure to ceiling.`;
-    return { ok: false, problems: [limitsProblem(1, message, `Write one line per measure: ${measureList}.`)] };
+    return failedWith([limitsProblem(1, message, `Write one line per measure: ${measureList}.`)]);
   }
   const entries = document.contents.items.map((pair) => ceilingOf(pair, lineOf));
   const ceilings = entries.filter(isCeiling);
   const problems = [...entries.filter(isProblem), ...missingProblems(ceilings)];
-  return problems.length > 0 ? { ok: false, problems } : { ok: true, ceilings };
+  return problems.length > 0 ? failedWith(problems) : succeededWith(ceilings);
 }
 
 async function overCeiling(kit: KitTree, entry: Ceiling): Promise<readonly Problem[]> {
@@ -161,7 +157,7 @@ export async function checkLimits(kit: KitTree): Promise<readonly Finding[]> {
     return errors(parsed.problems);
   }
   const problems: Problem[] = [];
-  for (const entry of parsed.ceilings) {
+  for (const entry of parsed.value) {
     problems.push(...(await overCeiling(kit, entry)));
   }
   return warnings(problems);

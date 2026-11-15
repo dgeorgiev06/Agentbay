@@ -20,7 +20,8 @@ export type BrokerOperation =
   | { readonly kind: "secrets.get"; readonly name: string }
   | { readonly kind: "http.request"; readonly method: HttpRequest["method"]; readonly url: string }
   | { readonly kind: "events.emit"; readonly eventKind: string }
-  | { readonly kind: "spend"; readonly amounts: SpendAmounts };
+  | { readonly kind: "spend"; readonly amounts: SpendAmounts }
+  | { readonly kind: "skill.submit"; readonly usd: number };
 
 export type ActionAt = {
   readonly stepKey: string;
@@ -35,6 +36,8 @@ type Need = {
 
 const deletingWords: readonly string[] = ["delete", "drop", "truncate"];
 
+const everyEffect: readonly Effect[] = ["read", "write", "network", "spend", "delete"];
+
 const changesData: Need = { effect: "write", because: "A statement that changes data needs the write effect" };
 
 const deletesData: Need = { effect: "delete", because: "A statement that deletes needs the delete effect" };
@@ -44,6 +47,8 @@ const writesFiles: Need = { effect: "write", because: "Writing a file needs the 
 const usesNetwork: Need = { effect: "network", because: "A request over the network needs the network effect" };
 
 const spends: Need = { effect: "spend", because: "Spending more than nothing needs the spend effect" };
+
+const reportsDollars: Need = { effect: "spend", because: "Reporting dollars an agent spent needs the spend effect" };
 
 export function deletes(sql: string): boolean {
   return statementWords(sql).some((word) => deletingWords.includes(word));
@@ -77,6 +82,7 @@ const operationRules: { readonly [Kind in BrokerOperation["kind"]]: OperationRul
   "http.request": { resource: "http", needs: [usesNetwork] },
   "events.emit": { resource: "events", needs: [] },
   spend: { resource: "spend", needs: [] },
+  "skill.submit": { resource: "spend", needs: [] },
 };
 
 function contentNeeds(operation: BrokerOperation): readonly Need[] {
@@ -85,6 +91,9 @@ function contentNeeds(operation: BrokerOperation): readonly Need[] {
   }
   if (operation.kind === "spend") {
     return isSpending(operation.amounts) ? [spends] : [];
+  }
+  if (operation.kind === "skill.submit") {
+    return operation.usd > 0 ? [reportsDollars] : [];
   }
   return [];
 }
@@ -128,6 +137,8 @@ export function describedOperation(operation: BrokerOperation): string {
       return `emit an event of the kind ${operation.eventKind}`;
     case "spend":
       return `report spending ${JSON.stringify(operation.amounts)}`;
+    case "skill.submit":
+      return `report spending ${String(operation.usd)} US dollars`;
   }
 }
 
@@ -151,6 +162,15 @@ export function effectRefusal(
 
 export function writableFolders(permissions: Permissions): readonly string[] {
   return permissions.actionEffects.includes(writesFiles.effect) ? permissions.grants.writePaths : [];
+}
+
+export function grantedCommands(permissions: Permissions): readonly string[] {
+  const declaresEvery = everyEffect.every((effect) => permissions.actionEffects.includes(effect));
+  return declaresEvery ? permissions.grants.commands : [];
+}
+
+export function mayRemoveFiles(permissions: Permissions): boolean {
+  return writableFolders(permissions).length > 0 && permissions.actionEffects.includes(deletesData.effect);
 }
 
 export function changesDataAllowed(effects: readonly Effect[]): boolean {

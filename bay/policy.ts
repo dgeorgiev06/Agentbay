@@ -12,7 +12,8 @@ import {
   type Layout,
 } from "./layout.ts";
 import { loadSystemReport, type LoadedMode, type System, type SystemReport } from "./registry.ts";
-import { problemAt, type Loaded, type Outcome, type PathSegments, type Problem, type Wording } from "./spec.ts";
+import { problemAt, type Loaded, type PathSegments, type Wording } from "./spec.ts";
+import type { Outcome, Problem } from "./outcome.ts";
 
 type ProtectedArea = {
   readonly path: string;

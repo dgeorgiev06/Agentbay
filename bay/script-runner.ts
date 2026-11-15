@@ -4,10 +4,10 @@ import { type Answer, errorLine, failed, granted, manifestOf, refused } from "./
 import { Broker, type BrokerLimits } from "./broker.ts";
 import type { ChildEnd, ChildProcesses, ChildRequest, Clock, FileInspector, FileSystem, Http } from "./ports.ts";
 import type { EventSink, Json, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "./contracts.ts";
-import { writableFolders } from "./effect-rule.ts";
+import { mayRemoveFiles, writableFolders } from "./effect-rule.ts";
 import { escapingLinks } from "./folder-links.ts";
 import { isInsideOrEqual, shownPath, type Layout } from "./layout.ts";
-import { type ChildMessage, childMessageOf, type ResourceRequest } from "./script-protocol.ts";
+import { type ChildMessage, childMessageOf, removalAllowedArgument, type ResourceRequest } from "./script-protocol.ts";
 import type { SecretStore } from "./secrets.ts";
 
 export type ScriptRunnerLimits = {
@@ -78,6 +78,7 @@ export function scriptCommand(scriptFile: string, request: ScriptRequest): reado
     `--import=${pathToFileURL(preloadFile).href}`,
     hostFile,
     scriptFile,
+    ...(mayRemoveFiles(request.permissions) ? [removalAllowedArgument] : []),
   ];
 }
 

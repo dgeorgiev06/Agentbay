@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import type { Json } from "./contracts.ts";
-import { isRecord } from "./spec.ts";
+
+export function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 export function toJson(value: unknown): Json {
   if (value === null || typeof value === "boolean" || typeof value === "string") {
@@ -67,14 +70,4 @@ export function textsField(value: Json, name: string): readonly string[] {
     return [];
   }
   return field.flatMap((element) => (typeof element === "string" ? [element] : []));
-}
-
-export function withFields(value: Json, fields: Readonly<Record<string, Json>>, removed: readonly string[] = []): Json {
-  const base = isRecord(value) ? Object.entries(value) : [];
-  const kept = base.filter(([key]) => !removed.includes(key) && !Object.hasOwn(fields, key));
-  const entries: [string, Json][] = [
-    ...kept.map(([key, element]): [string, Json] => [key, toJson(element)]),
-    ...Object.entries(fields),
-  ];
-  return Object.fromEntries(entries);
 }

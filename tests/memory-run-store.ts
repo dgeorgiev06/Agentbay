@@ -8,13 +8,15 @@ import {
   type RunStatusName,
   type RunStore,
   type RunWithSteps,
-  type StepDetail,
+  type StepChange,
+  type StepRefusal,
   type StepEnd,
   type StepRecord,
   type StepStart,
   type StoredRun,
   type Writer,
 } from "../bay/run-store.ts";
+import { decodedStepDetail, stepDetailJson } from "../bay/step-detail.ts";
 
 type Lock = {
   readonly owner: string;
@@ -59,10 +61,9 @@ export class MemoryRunStore implements RunStore {
       throw new Error(`Step ${start.key} of run ${writer.runId} already exists.`);
     }
     const record: StepRecord = {
+      ...decodedStepDetail(start.kind, stepDetailJson(start)),
       key: start.key,
-      kind: start.kind,
       input: structuredClone(start.input),
-      detail: structuredClone(start.detail),
       startedAt: start.at,
       status: "started",
     };
@@ -75,16 +76,50 @@ export class MemoryRunStore implements RunStore {
     this.#finishOrder += 1;
     const finished = { spent: end.spent, finishOrder: this.#finishOrder, finishedAt: end.at };
     const record: StepRecord =
-      end.status === "finished"
-        ? { ...started, ...finished, status: "finished", output: structuredClone(end.output) }
+      end.status === "done"
+        ? { ...started, ...finished, status: "done", output: structuredClone(end.output) }
         : { ...started, ...finished, status: "failed", reason: end.reason };
     return Promise.resolve(this.#keep(entry, { record, at: end.at, events }));
   };
 
-  readonly saveStepDetail = (writer: Writer, change: StepDetail, events: readonly RunEvent[]): Promise<StepRecord> => {
+  readonly saveStepDetail = (writer: Writer, change: StepChange, events: readonly RunEvent[]): Promise<StepRecord> => {
     const entry = this.#owned(writer, change.at);
-    const record: StepRecord = { ...this.#started(entry, change.key), detail: structuredClone(change.detail) };
+    const started = this.#started(entry, change.key);
+    if (started.kind !== change.kind) {
+      throw new Error(
+        `Step ${change.key} of run ${writer.runId} is a ${started.kind} step, not a ${change.kind} step.`,
+      );
+    }
+    const detail = decodedStepDetail(change.kind, stepDetailJson(change));
+    const record: StepRecord = {
+      ...detail,
+      key: started.key,
+      input: started.input,
+      startedAt: started.startedAt,
+      status: "started",
+    };
     return Promise.resolve(this.#keep(entry, { record, at: change.at, events }));
+  };
+
+  readonly saveRefusal = (writer: Writer, refusal: StepRefusal, events: readonly RunEvent[]): Promise<StepRecord> => {
+    const entry = this.#owned(writer, refusal.at);
+    if (entry.steps.has(refusal.key)) {
+      throw new Error(`Step ${refusal.key} of run ${writer.runId} already exists.`);
+    }
+    this.#finishOrder += 1;
+    const record: StepRecord = {
+      key: refusal.key,
+      kind: refusal.kind,
+      input: structuredClone(refusal.input),
+      detail: null,
+      startedAt: refusal.at,
+      spent: noSpend,
+      finishOrder: this.#finishOrder,
+      finishedAt: refusal.at,
+      status: "failed",
+      reason: refusal.reason,
+    };
+    return Promise.resolve(this.#keep(entry, { record, at: refusal.at, events }));
   };
 
   readonly updateRun = (writer: Writer, patch: RunPatch, events: readonly RunEvent[]): Promise<void> => {
@@ -164,7 +199,7 @@ export class MemoryRunStore implements RunStore {
     return entry;
   }
 
-  #started(entry: Entry, key: string): StepRecord & { readonly status: "started" } {
+  #started(entry: Entry, key: string): Extract<StepRecord, { readonly status: "started" }> {
     const record = entry.steps.get(key);
     if (record?.status !== "started") {
       throw new Error(`Step ${key} of run ${entry.run.id} is ${record?.status ?? "missing"}, not started.`);

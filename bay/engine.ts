@@ -1,18 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { errorLine } from "./answers.ts";
-import { runActionFrame, skillStepKey, submissionProblems } from "./action-steps.ts";
+import { runActionFrame } from "./action-steps.ts";
 import {
   addBudgets,
   addSpend,
   budgetProblems,
   extendedBudget,
+  remainingBudget,
   rootFrame,
   smallestBudget,
   type BudgetFrame,
 } from "./budget.ts";
 import type { Json, PolicyOf, RunEvent, Scrubber, ScriptRunner, Spend, Submission } from "./contracts.ts";
 import type { Budget } from "./generated/mode.ts";
-import { byteSize, fieldOf, numberField, textField, toJson, withFields } from "./json.ts";
+import { byteSize, toJson } from "./json.ts";
 import { inactiveModeWording } from "./policy.ts";
 import type { Clock, FileSystem } from "./ports.ts";
 import type { System } from "./registry.ts";
@@ -26,9 +27,11 @@ import {
   type StoredState,
   type Writer,
 } from "./run-store.ts";
-import type { ApprovalDecision, EngineResult, RunStatus, RunView } from "./run-state.ts";
+import type { ApprovalDecision, RunView, RunStatus } from "./run-state.ts";
+import { failedWith, succeededWith, type Outcome, type Problem } from "./outcome.ts";
 import { scrubbedStore } from "./scrubbed-store.ts";
-import type { Problem } from "./spec.ts";
+import { startedSkillOf, submissionProblems, type StartedSkill } from "./skill-steps.ts";
+import { skillRoundOf } from "./step-key.ts";
 import { resolveActionReference, resolveOwnAction } from "./targets.ts";
 import { hasUndoRecords, runUndo } from "./undo.ts";
 import { eventOf, failed, schemaProblems, type Progress, type Services, type Walk } from "./walk.ts";
@@ -54,13 +57,22 @@ export type WorkflowReference = {
 export type StartOptions = {
   readonly id?: string;
   readonly caller?: string;
+  readonly within?: Budget;
+};
+
+export type SkillCall = {
+  readonly runId: string;
+  readonly stepKey: string;
+  readonly reference: string;
+  readonly input: Json;
+  readonly caller?: string;
 };
 
 export type ResumeOptions = {
   readonly rerunUnfinished?: boolean;
 };
 
-type Cause = "submit" | "approve" | "resume" | "tick" | "extend" | "stop";
+type Cause = "submit" | "approve" | "resume" | "tick" | "extend" | "stop" | "charge";
 
 type Advance = {
   readonly now: Date;
@@ -84,15 +96,15 @@ type Ending = {
   readonly spent: Spend;
 };
 
-type StartedRecord = StepRecord & { readonly status: "started" };
+type StartedApproval = Extract<StepRecord, { readonly kind: "approval"; readonly status: "started" }>;
 
 const stopReason = "The owner stopped the run.";
 
 const staleMinutes = String(lockStaleMilliseconds / 60_000);
 
-function refusal(runId: string, wording: { readonly message: string; readonly fix?: string }): EngineResult {
+function refusal(runId: string, wording: { readonly message: string; readonly fix?: string }): Outcome<never> {
   const problem: Problem = { file: kernelDatabaseFile, path: `/runs/${runId}`, ...wording };
-  return { ok: false, problems: [problem] };
+  return failedWith([problem]);
 }
 
 function describeState(state: StoredState): string {
@@ -108,7 +120,7 @@ function describeState(state: StoredState): string {
   }
 }
 
-function endedRefusal(run: RunWithSteps): EngineResult | undefined {
+function endedRefusal(run: RunWithSteps): Outcome<never> | undefined {
   const status = run.state.status;
   if (status !== "done" && status !== "failed" && status !== "undone") {
     return undefined;
@@ -116,7 +128,7 @@ function endedRefusal(run: RunWithSteps): EngineResult | undefined {
   return refusal(run.id, { message: `Run ${run.id} has ended (${status}); nothing more can be done with it.` });
 }
 
-function waitingRefusal(run: RunWithSteps, expected: { reason: string; stepKey: string }): EngineResult | undefined {
+function waitingRefusal(run: RunWithSteps, expected: { reason: string; stepKey: string }): Outcome<never> | undefined {
   const state = run.state;
   if (state.status === "waiting" && state.reason === expected.reason && state.stepKey === expected.stepKey) {
     return undefined;
@@ -129,56 +141,50 @@ function waitingRefusal(run: RunWithSteps, expected: { reason: string; stepKey: 
   });
 }
 
-function startedRecord(run: RunWithSteps, key: string): StartedRecord | undefined {
-  const record = run.steps.find((step) => step.key === key);
-  return record?.status === "started" ? record : undefined;
+function recordAt(run: RunWithSteps, key: string): StepRecord | undefined {
+  return run.steps.find((step) => step.key === key);
 }
 
-type Found = { readonly record: StartedRecord } | { readonly refused: EngineResult };
-
-function waitingSkill(run: RunWithSteps, stepKey: string): Found {
+function waitingSkill(run: RunWithSteps, stepKey: string): Outcome<StartedSkill> {
   const refused = endedRefusal(run) ?? waitingRefusal(run, { reason: "skill", stepKey });
   if (refused !== undefined) {
-    return { refused };
+    return refused;
   }
-  const record = startedRecord(run, stepKey.slice(0, stepKey.lastIndexOf("#")));
-  const round = record === undefined ? undefined : numberField(record.detail, "round");
-  const unsubmitted = record !== undefined && fieldOf(record.detail, "submitted") === undefined;
-  if (record?.kind === "skill" && round !== undefined && unsubmitted && skillStepKey(record.key, round) === stepKey) {
-    return { record };
+  const round = skillRoundOf(stepKey);
+  const record = startedSkillOf(round === undefined ? undefined : recordAt(run, round.step));
+  if (record !== undefined && record.detail.submission === undefined && record.detail.round === round?.round) {
+    return succeededWith(record);
   }
-  return {
-    refused: refusal(run.id, {
-      message: `Run ${run.id} already has a submission for ${stepKey}; it is applied once.`,
-      fix: "Submit once per round, to the step key the waiting run shows.",
-    }),
-  };
+  return refusal(run.id, {
+    message: `Run ${run.id} already has a submission for ${stepKey}; it is applied once.`,
+    fix: "Submit once per round, to the step key the waiting run shows.",
+  });
 }
 
-function waitingApproval(run: RunWithSteps, stepKey: string, hash: string): Found {
+function startedApprovalOf(record: StepRecord | undefined): StartedApproval | undefined {
+  return record?.kind === "approval" && record.status === "started" ? record : undefined;
+}
+
+function waitingApproval(run: RunWithSteps, stepKey: string, hash: string): Outcome<StartedApproval> {
   const refused = endedRefusal(run) ?? waitingRefusal(run, { reason: "approval", stepKey });
-  const record = startedRecord(run, stepKey);
-  if (refused !== undefined || record?.kind !== "approval") {
-    return { refused: refused ?? refusal(run.id, { message: `Run ${run.id} has no waiting approval ${stepKey}.` }) };
+  const record = startedApprovalOf(recordAt(run, stepKey));
+  if (refused !== undefined || record === undefined) {
+    return refused ?? refusal(run.id, { message: `Run ${run.id} has no waiting approval ${stepKey}.` });
   }
-  if (fieldOf(record.detail, "decision") !== undefined) {
-    return {
-      refused: refusal(run.id, {
-        message: `Step ${stepKey} of run ${run.id} already has a decision; it is applied once.`,
-        fix: "Resume the run to apply the recorded decision.",
-      }),
-    };
+  if (record.detail.verdict !== undefined) {
+    return refusal(run.id, {
+      message: `Step ${stepKey} of run ${run.id} already has a decision; it is applied once.`,
+      fix: "Resume the run to apply the recorded decision.",
+    });
   }
-  const shownHash = textField(record.detail, "hash");
+  const shownHash = record.detail.hash;
   if (shownHash === hash) {
-    return { record };
+    return succeededWith(record);
   }
-  return {
-    refused: refusal(run.id, {
-      message: `The hash ${hash} is not the hash of what step ${stepKey} showed (${shownHash ?? "none"}).`,
-      fix: "Approve or reject exactly what the waiting approval shows, naming its hash.",
-    }),
-  };
+  return refusal(run.id, {
+    message: `The hash ${hash} is not the hash of what step ${stepKey} showed (${shownHash}).`,
+    fix: "Approve or reject exactly what the waiting approval shows, naming its hash.",
+  });
 }
 
 function storedStateOf(status: RunStatus): StoredState {
@@ -194,17 +200,6 @@ function storedStateOf(status: RunStatus): StoredState {
       return { status: "failed", reason: status.reason };
     case "undone":
       return { status: "undone", reason: status.reason, undo: toJson(status.undo) };
-  }
-}
-
-function statusOf(progress: Progress): RunStatus {
-  switch (progress.kind) {
-    case "waiting":
-      return { status: "waiting", waiting: progress.waiting };
-    case "done":
-      return { status: "done", output: progress.output };
-    case "failed":
-      return { status: "failed", reason: progress.reason };
   }
 }
 
@@ -253,7 +248,7 @@ function mainProgress(walk: Walk, run: RunWithSteps, budget: BudgetFrame): Promi
       if (mode === undefined || workflow === undefined) {
         return Promise.resolve(failed(`Mode ${run.target.mode} has no workflow ${run.target.name}.`));
       }
-      const scope = { mode, budget, prefix: "", trigger: run.input, outputs: new Map<string, Json>(), item: undefined };
+      const scope = { mode, budget, within: "", trigger: run.input, outputs: new Map<string, Json>(), item: undefined };
       return runWorkflowSteps(walk, scope, { steps: workflow.steps, start: run.input });
     }
   }
@@ -262,8 +257,8 @@ function mainProgress(walk: Walk, run: RunWithSteps, budget: BudgetFrame): Promi
 async function driveRun(walk: Walk, run: RunWithSteps): Promise<Ending> {
   const budget = rootFrame(extendedBudget(run.limit, walk.extra));
   const progress = await mainProgress(walk, run, budget);
-  if (progress.kind !== "failed") {
-    return { status: statusOf(progress), spent: budget.spent };
+  if (progress.status !== "failed") {
+    return { status: progress, spent: budget.spent };
   }
   const undo = await runUndo(walk, progress.reason);
   return { status: undo.status, spent: addSpend(budget.spent, undo.spent) };
@@ -292,7 +287,7 @@ export class Engine {
     this.#newId = newId ?? randomUUID;
   }
 
-  async startAction(reference: string, input: Json, options: StartOptions = {}): Promise<EngineResult> {
+  async startAction(reference: string, input: Json, options: StartOptions = {}): Promise<Outcome<RunView>> {
     const system = this.#services.system;
     const target = resolveActionReference(system, reference);
     if (typeof target === "string") {
@@ -305,19 +300,34 @@ export class Engine {
     const check = { mode: target.mode, schema: target.action.input, value: input, label: "input" };
     const problems = await schemaProblems(this.#services, check);
     if (problems.length > 0) {
-      return { ok: false, problems };
+      return failedWith(problems);
     }
     const caller = options.caller === undefined ? {} : { caller: options.caller };
     const runTarget: RunTarget = { kind: "action", mode: target.mode.manifest.name, name: target.name, ...caller };
-    const limit = smallestBudget([target.action.budget, system.config.budget]);
+    const limit = smallestBudget([target.action.budget, system.config.budget, options.within]);
     return this.#start({ target: runTarget, input, limit }, options);
+  }
+
+  async startForSkill(call: SkillCall): Promise<Outcome<RunView>> {
+    const calling = await this.#services.store.readRun(call.runId);
+    if (calling === undefined) {
+      return refusal(call.runId, { message: `There is no run ${call.runId}.` });
+    }
+    const within = remainingBudget(extendedBudget(calling.limit, calling.extra), calling.spent);
+    const caller = call.caller === undefined ? {} : { caller: call.caller };
+    const called = await this.startAction(call.reference, call.input, { ...caller, within });
+    if (!called.ok) {
+      return called;
+    }
+    const charged = await this.#chargeSkill(call, called.value.spent);
+    return charged.ok ? called : charged;
   }
 
   async startWorkflow(
     reference: WorkflowReference,
     triggerInput: Json,
     options: StartOptions = {},
-  ): Promise<EngineResult> {
+  ): Promise<Outcome<RunView>> {
     const { mode, path } = reference;
     const inactive = this.#inactiveRefusal(options.id ?? "new", mode);
     if (inactive !== undefined) {
@@ -331,49 +341,50 @@ export class Engine {
     return this.#start({ target: { kind: "workflow", mode, name: path }, input: triggerInput, limit }, options);
   }
 
-  submit(runId: string, stepKey: string, submission: Submission): Promise<EngineResult> {
+  submit(runId: string, stepKey: string, submission: Submission): Promise<Outcome<RunView>> {
     return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
       const found = waitingSkill(run, stepKey);
-      if ("refused" in found) {
-        return found.refused;
+      if (!found.ok) {
+        return found;
       }
       const spendProblems = budgetProblems(submission.spent);
       if (spendProblems.length > 0) {
         return refusal(run.id, { message: `The submission's spend is not valid: ${spendProblems.join(" ")}` });
       }
-      const problems = await submissionProblems(this.#services, found.record, submission.output);
+      const problems = await submissionProblems(this.#services, found.value, submission);
       if (problems.length > 0) {
-        return { ok: false, problems };
+        return failedWith(problems);
       }
-      const fields = { submitted: submission.output, submittedSpent: submission.spent };
-      const change = { key: found.record.key, detail: withFields(found.record.detail, fields) };
-      await this.#services.store.saveStepDetail(writer, { ...change, at: now.toISOString() }, []);
+      const detail = { ...found.value.detail, submission };
+      const change = { key: found.value.key, kind: "skill" as const, detail, at: now.toISOString() };
+      await this.#services.store.saveStepDetail(writer, change, []);
       return this.#continue(writer, { now, cause: "submit", rerunUnfinished: false }, {});
     });
   }
 
-  approve(runId: string, stepKey: string, decision: ApprovalDecision): Promise<EngineResult> {
+  approve(runId: string, stepKey: string, decision: ApprovalDecision): Promise<Outcome<RunView>> {
     return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
       const found = waitingApproval(run, stepKey, decision.hash);
-      if ("refused" in found) {
-        return found.refused;
+      if (!found.ok) {
+        return found;
       }
-      const detail = withFields(found.record.detail, { decision: decision.decision, by: decision.by });
-      await this.#services.store.saveStepDetail(writer, { key: stepKey, detail, at: now.toISOString() }, []);
+      const detail = { ...found.value.detail, verdict: { decision: decision.decision, by: decision.by } };
+      const change = { key: stepKey, kind: "approval" as const, detail, at: now.toISOString() };
+      await this.#services.store.saveStepDetail(writer, change, []);
       return this.#continue(writer, { now, cause: "approve", rerunUnfinished: false }, {});
     });
   }
 
-  resume(runId: string, options: ResumeOptions = {}): Promise<EngineResult> {
+  resume(runId: string, options: ResumeOptions = {}): Promise<Outcome<RunView>> {
     return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
       const rerunUnfinished = options.rerunUnfinished ?? false;
       return endedRefusal(run) ?? this.#continue(writer, { now, cause: "resume", rerunUnfinished }, {});
     });
   }
 
-  async tick(now: Date): Promise<readonly EngineResult[]> {
+  async tick(now: Date): Promise<readonly Outcome<RunView>[]> {
     const waitingRuns = await this.#services.store.listRuns("waiting");
-    const results: EngineResult[] = [];
+    const results: Outcome<RunView>[] = [];
     for (const run of waitingRuns.filter((candidate) => isDueAt(candidate.state, now))) {
       const result = await this.#withRun(run.id, now, (current, writer) =>
         isDueAt(current.state, now)
@@ -385,7 +396,7 @@ export class Engine {
     return results;
   }
 
-  extendBudget(runId: string, extra: Budget): Promise<EngineResult> {
+  extendBudget(runId: string, extra: Budget): Promise<Outcome<RunView>> {
     return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
       const problems = budgetProblems(extra);
       if (problems.length > 0) {
@@ -398,7 +409,7 @@ export class Engine {
     });
   }
 
-  stop(runId: string): Promise<EngineResult> {
+  stop(runId: string): Promise<Outcome<RunView>> {
     return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
       return (
         endedRefusal(run) ?? this.#continue(writer, { now, cause: "stop", rerunUnfinished: false }, { stopReason })
@@ -406,7 +417,20 @@ export class Engine {
     });
   }
 
-  async #start(plan: NewRunPlan, options: StartOptions): Promise<EngineResult> {
+  #chargeSkill(call: SkillCall, spent: Spend): Promise<Outcome<RunView>> {
+    return this.#withRun(call.runId, this.#services.clock.now(), async (run, writer, now) => {
+      const found = waitingSkill(run, call.stepKey);
+      if (!found.ok) {
+        return found;
+      }
+      const detail = { ...found.value.detail, calledSpent: addSpend(found.value.detail.calledSpent, spent) };
+      const change = { key: found.value.key, kind: "skill" as const, detail, at: now.toISOString() };
+      await this.#services.store.saveStepDetail(writer, change, []);
+      return this.#advance(writer, { now, cause: "charge", rerunUnfinished: false });
+    });
+  }
+
+  async #start(plan: NewRunPlan, options: StartOptions): Promise<Outcome<RunView>> {
     const id = options.id ?? this.#newId();
     if ((await this.#services.store.readRun(id)) !== undefined) {
       return refusal(id, { message: `A run with the id ${id} already exists.` });
@@ -431,8 +455,8 @@ export class Engine {
   async #withRun(
     runId: string,
     now: Date,
-    body: (run: RunWithSteps, writer: Writer, now: Date) => Promise<EngineResult>,
-  ): Promise<EngineResult> {
+    body: (run: RunWithSteps, writer: Writer, now: Date) => Promise<Outcome<RunView>>,
+  ): Promise<Outcome<RunView>> {
     const lock = await this.#services.store.acquire(runId, this.#owner, now);
     switch (lock.status) {
       case "missing":
@@ -457,12 +481,12 @@ export class Engine {
     }
   }
 
-  #inactiveRefusal(runId: string, mode: string): EngineResult | undefined {
+  #inactiveRefusal(runId: string, mode: string): Outcome<RunView> | undefined {
     const system = this.#services.system;
     return system.modes.has(mode) && !system.active.has(mode) ? refusal(runId, inactiveModeWording(mode)) : undefined;
   }
 
-  async #holding(writer: Writer, body: () => Promise<EngineResult>): Promise<EngineResult> {
+  async #holding(writer: Writer, body: () => Promise<Outcome<RunView>>): Promise<Outcome<RunView>> {
     try {
       return await body();
     } catch (error) {
@@ -483,7 +507,7 @@ export class Engine {
     return run;
   }
 
-  async #continue(writer: Writer, advance: Advance, patch: ControlPatch): Promise<EngineResult> {
+  async #continue(writer: Writer, advance: Advance, patch: ControlPatch): Promise<Outcome<RunView>> {
     const resumed: RunEvent = {
       at: advance.now.toISOString(),
       runId: writer.runId,
@@ -495,7 +519,7 @@ export class Engine {
     return this.#advance(writer, advance);
   }
 
-  async #advance(writer: Writer, advance: Advance): Promise<EngineResult> {
+  async #advance(writer: Writer, advance: Advance): Promise<Outcome<RunView>> {
     const run = await this.#read(writer.runId);
     const walk: Walk = {
       services: this.#services,
@@ -517,6 +541,6 @@ export class Engine {
       spent: ending.spent,
       steps: [...walk.records.values()],
     };
-    return { ok: true, run: view };
+    return succeededWith(view);
   }
 }

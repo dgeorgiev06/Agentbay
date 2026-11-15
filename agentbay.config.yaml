@@ -1,0 +1,15 @@
+modes: [feed-briefing]
+bindings:
+  items-source: fake-source
+  items-store: store
+adapter: claude-code
+settings:
+  feed-briefing:
+    selector:
+      labels: [staking, custody]
+    lookback: 15d
+    maxItems: 40
+  fake-source:
+    baseDate: "2026-11-15T00:00:00Z"
+    pageSize: 10
+    costPerItemUsd: 0.001

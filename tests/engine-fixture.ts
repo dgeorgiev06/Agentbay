@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
   Json,
-  Permissions,
+  ModeGrants,
   ScriptRequest,
   Scrubber,
   ScriptRunner,
@@ -124,7 +124,7 @@ export const fakeScrubber: Scrubber = {
   redact: (text) => text.replaceAll(/SECRET-[A-Z0-9]+/g, "[redacted]"),
 };
 
-export function fakePolicy(mode: string): Permissions {
+export function fakePolicy(mode: string): ModeGrants {
   return {
     mode,
     modeFolder: `components/${mode}`,
@@ -135,7 +135,6 @@ export function fakePolicy(mode: string): Permissions {
     secrets: [],
     hosts: [],
     commands: [],
-    effects: [],
   };
 }
 

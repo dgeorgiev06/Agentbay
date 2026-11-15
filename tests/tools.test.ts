@@ -189,7 +189,7 @@ test("files_write is refused when the step's action does not declare the write e
     path: "out/notes/a.txt",
     text: "x",
   });
-  assert.match(refusalOf(written), /does not declare the write effect, so its skill may not write files/);
+  assert.match(refusalOf(written), /Writing a file needs the write effect; to allow it, add write to actions.compose/);
   const read = await callKernelTool(kernel, "files_read", {
     token: waiting.token,
     path: "components/modes/writer/mode.yaml",
@@ -224,5 +224,17 @@ test("call_action starts an interface action for the skill's mode, which the cal
     });
     const childRun = await kernel.store.readRun(textField(valueOf(fetched), "run") ?? "");
     assert.deepEqual(childRun?.target, { kind: "action", mode: "greeter", name: "fetch", caller: "writer" });
+  });
+});
+
+test("a tool's refusal is redacted by the tool layer itself, even when nothing else redacted it", async () => {
+  await withWaiting(async ({ kernel }, waiting) => {
+    const secret = "s3cr3t-note-value-42";
+    const handedOut = await kernel.secrets.get("NOTE_KEY", { ...kernel.policyOf("writer"), secrets: ["NOTE_KEY"] });
+    assert.ok(handedOut.ok);
+    const refused = await callKernelTool(kernel, "call_action", { token: waiting.token, action: secret });
+    const refusal = refusalOf(refused);
+    assert.doesNotMatch(refusal, new RegExp(secret));
+    assert.match(refusal, /The skill does not list \[redacted:NOTE_KEY\] under Tools/);
   });
 });

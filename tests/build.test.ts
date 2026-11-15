@@ -36,8 +36,8 @@ test("planAgents gives one agent per mode and skill, at the highest tier asked, 
   assert.equal(agent.skill, "draft");
   assert.equal(agent.tier, "deep");
   assert.equal(agent.description, "Writes a short note that greets the person named in the input.");
-  assert.deepEqual([...agent.permissions.effects].sort(), ["read", "spend", "write"]);
-  assert.deepEqual(agent.permissions.writePaths, [`${project.root}/out/notes`]);
+  assert.deepEqual([...agent.effects].sort(), ["read", "spend", "write"]);
+  assert.deepEqual(agent.grants.writePaths, [`${project.root}/out/notes`]);
   kernel.close();
   await project.remove();
 });

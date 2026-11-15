@@ -13,7 +13,7 @@ export type Spend = {
   readonly minutes: number;
 };
 
-export type Permissions = {
+export type ModeGrants = {
   readonly mode: string;
   readonly modeFolder: string;
   readonly databaseFile: string;
@@ -23,7 +23,11 @@ export type Permissions = {
   readonly secrets: readonly string[];
   readonly hosts: readonly string[];
   readonly commands: readonly string[];
-  readonly effects: readonly Effect[];
+};
+
+export type Permissions = {
+  readonly grants: ModeGrants;
+  readonly actionEffects: readonly Effect[];
 };
 
 export type StepPlace = {
@@ -63,6 +67,7 @@ export type SkillTask = {
   readonly tier: Tier;
   readonly input: Json;
   readonly outputSchema: string;
+  readonly alsoMatches: readonly string[];
   readonly permissions: Permissions;
   readonly round: number;
   readonly feedback: readonly string[];
@@ -88,4 +93,4 @@ export type EventSink = {
   readonly append: (event: RunEvent) => Promise<void>;
 };
 
-export type PolicyOf = (mode: string) => Permissions;
+export type PolicyOf = (mode: string) => ModeGrants;

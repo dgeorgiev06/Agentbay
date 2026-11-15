@@ -116,7 +116,8 @@ function approvalWaiting(at: StepAt<ApprovalStep>, record: StepRecord, content: 
 async function settleApproval(walk: Walk, at: StepAt<ApprovalStep>, shown: Shown): Promise<Progress> {
   const recordedHash = textField(shown.record.detail, "hash") ?? "";
   if (recordedHash !== shown.hash) {
-    const changed = await changeDetail(walk, at.key, { hash: shown.hash, previousHash: recordedHash });
+    const detail = { hash: shown.hash, previousHash: recordedHash, shown: shown.content };
+    const changed = await changeDetail(walk, at.key, detail);
     return approvalWaiting(at, changed, shown.content);
   }
   const decision = textField(shown.record.detail, "decision");

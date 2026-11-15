@@ -74,7 +74,7 @@ for (const storeKind of storeKinds) {
       const [put] = runner.calls;
       assert.ok(put);
       assert.deepEqual(put.place, { runId: run.id, mode: "store", action: "put", stepIndex: 0, stepKey: "0/0" });
-      assert.deepEqual(put.permissions, { ...fakePolicy("store"), effects: ["write"] });
+      assert.deepEqual(put.permissions, { grants: fakePolicy("store"), actionEffects: ["write"] });
       assert.equal(put.timeLimitMilliseconds, 8 * 60_000);
       assert.deepEqual(put.settings, {});
       assert.deepEqual(
@@ -195,7 +195,8 @@ for (const storeKind of storeKinds) {
           tier: "fast",
           input: { topic: "staking" },
           outputSchema: "schemas/draft.json",
-          permissions: { ...fakePolicy("notes"), effects: ["read", "write"] },
+          alsoMatches: [],
+          permissions: { grants: fakePolicy("notes"), actionEffects: ["read", "write"] },
           round: 1,
           feedback: [],
         },
@@ -216,6 +217,27 @@ for (const storeKind of storeKinds) {
       assert.deepEqual(problems, ["output.text must not be empty."]);
       assert.deepEqual((await store.readRun(id))?.state, { status: "waiting", reason: "skill", stepKey: "0#1" });
       assert.equal(runOf(await engine.submit(id, "0#1", answer({ id: "d1", text: "fine" }))).state.status, "done");
+      close();
+    });
+
+    test("a last skill step shows the agent every schema its output is checked against", async () => {
+      const finale = {
+        input: "schemas/anything.json",
+        output: "schemas/item.json",
+        effects: ["read" as const],
+        run: [{ skill: "skills/draft", tier: "fast" as const }],
+      };
+      const { engine, close } = await harness({ storeKind, changes: { notesActions: { finale } } });
+      const started = await engine.startAction("notes.finale", {});
+      const waiting = waitingOf(started);
+      assert.ok(waiting.reason === "skill");
+      const shown = [waiting.task.outputSchema, ...waiting.task.alsoMatches];
+      assert.deepEqual(shown, ["schemas/draft.json", "schemas/item.json"]);
+      const id = runOf(started).id;
+      const onlyTheFirst = problemsOf(await engine.submit(id, "0#1", answer({ text: "a draft" })));
+      assert.ok(onlyTheFirst.length > 0);
+      const both = runOf(await engine.submit(id, "0#1", answer({ id: "d1", text: "a draft" })));
+      assert.deepEqual(both.state, { status: "done", output: { id: "d1", text: "a draft" } });
       close();
     });
 

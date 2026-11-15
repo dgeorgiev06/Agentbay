@@ -9,7 +9,7 @@ import { childMessageOf, parentMessageOf } from "../bay/script-protocol.ts";
 import { scrubSecretPatterns } from "../bay/secret-patterns.ts";
 import { isOneStatement, leadingKeyword } from "../bay/sql-statements.ts";
 import type { FileInspector } from "../bay/ports.ts";
-import { permissionsIn } from "./broker-fixture.ts";
+import { grantsIn } from "./broker-fixture.ts";
 
 test("a refusal says what was asked, what was declared and what to change, in one sentence", () => {
   const refusal = refused({ resource: "http", asked: "A asked", declared: "B declared", change: "Do C." });
@@ -18,7 +18,7 @@ test("a refusal says what was asked, what was declared and what to change, in on
   assert.deepEqual(failed("no"), { ok: false, kind: "failed", message: "no" });
   assert.equal(listed([], "none"), "none");
   assert.equal(listed(["a", "b"], "none"), "a, b");
-  assert.equal(manifestOf(permissionsIn("/p")), "/p/components/modes/notes/mode.yaml");
+  assert.equal(manifestOf(grantsIn("/p")), "/p/components/modes/notes/mode.yaml");
 });
 
 test("the leading keyword skips blanks and comments, and one statement may end in a semicolon and comments", () => {

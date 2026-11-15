@@ -3,9 +3,13 @@ import { describe, test } from "node:test";
 import type { ScriptRequest } from "../bay/contracts.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
 import { hashOf, textField } from "../bay/json.ts";
+import type { System } from "../bay/registry.ts";
+import type { Waiting } from "../bay/run-state.ts";
+import { storedWaiting } from "../bay/waiting.ts";
 import {
   eventKinds,
   failure,
+  fakePolicy,
   finished,
   fixtureSystem,
   harness,
@@ -196,6 +200,24 @@ for (const storeKind of storeKinds) {
       close();
     });
 
+    test("after the shown content changes, the stored approval shows the new content under its new hash", async () => {
+      const changes = withFlow([{ id: "keep", approval: "Send this greeting?", show: "$settings.greeting" }]);
+      const { engine, store, freshEngine, close } = await harness({ storeKind, changes });
+      const first = waitingOf(await engine.startWorkflow(notesFlow, null));
+      assert.ok(first.reason === "approval");
+      const stored = async (system: System): Promise<Waiting | undefined> => {
+        const run = await store.readRun("run-1");
+        assert.ok(run);
+        return storedWaiting({ system, policyOf: fakePolicy }, run);
+      };
+      assert.deepEqual(await stored((await fixtureSystem(changes)).system), first);
+      const edited = await fixtureSystem({ ...changes, config: { settings: { notes: { greeting: "goodbye" } } } });
+      const back = waitingOf(await freshEngine({ system: edited.system }).resume("run-1"));
+      assert.equal(back.reason === "approval" ? back.content : undefined, "goodbye");
+      assert.deepEqual(await stored(edited.system), back);
+      close();
+    });
+
     test("a rejected approval fails the run and undoes finished actions, newest first", async () => {
       const changes = withFlow([
         { id: "first", action: "items-store.put", input: { id: "a" } },
@@ -300,7 +322,7 @@ test("an action run that fails after a call wrote something undoes that call", a
   assert.ok(run.state.status === "undone");
   assert.deepEqual(run.state.undo.undone, [{ stepKey: "0", action: "store.put" }]);
   assert.deepEqual(
-    runner.runsOf("store:scripts/remove.ts").map((call) => [call.input, call.permissions.mode]),
+    runner.runsOf("store:scripts/remove.ts").map((call) => [call.input, call.permissions.grants.mode]),
     [[{ id: "x" }, "store"]],
   );
   close();

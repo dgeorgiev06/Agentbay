@@ -8,6 +8,7 @@ import { replyTo, type ToolServer } from "./mcp-server.ts";
 import type { Outcome } from "./spec.ts";
 import { toolDefinitions } from "./tool-definitions.ts";
 import { callKernelTool, type ToolResult } from "./tools.ts";
+import { lastResortHandler } from "./last-resort.ts";
 
 const kit = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 
@@ -62,6 +63,14 @@ async function main(): Promise<void> {
     });
   });
 }
+
+process.on(
+  "unhandledRejection",
+  lastResortHandler("agentbay-mcp", {
+    write: (text) => process.stderr.write(text),
+    exit: (code) => process.exit(code),
+  }),
+);
 
 main().catch((error: unknown) => {
   process.stderr.write(`internal error: ${error instanceof Error ? error.message : String(error)}\n`);

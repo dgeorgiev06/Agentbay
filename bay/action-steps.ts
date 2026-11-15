@@ -196,7 +196,7 @@ function actionCaller(walk: Walk, frame: ActionFrame, at: { scriptKey: string; h
 }
 
 function actionPermissions(walk: Walk, frame: ActionFrame): Permissions {
-  return { ...walk.services.policyOf(frame.mode.manifest.name), effects: frame.action.effects };
+  return { grants: walk.services.policyOf(frame.mode.manifest.name), actionEffects: frame.action.effects };
 }
 
 function timeLimitOf(remaining: Budget): number {
@@ -304,18 +304,20 @@ async function skillSchemas(
     return `The skill ${file} cannot be read: ${problemText(parsed.problems)}`;
   }
   const own = parsed.value.frontMatter.metadata?.output;
-  return [...(own === undefined ? [] : [own]), ...(skill.last ? [frame.action.output] : [])];
+  return [...new Set([...(own === undefined ? [] : [own]), ...(skill.last ? [frame.action.output] : [])])];
 }
 
 function skillWaiting(walk: Walk, frame: ActionFrame, at: { skill: SkillStep; record: StepRecord }): Progress {
   const { skill, record } = at;
   const round = numberField(record.detail, "round") ?? 1;
+  const schemas = textsField(record.detail, "schemas");
   const task: SkillTask = {
     place: skill.place,
     skill: skill.skill,
     tier: skill.tier,
     input: record.input,
-    outputSchema: textsField(record.detail, "schemas")[0] ?? "",
+    outputSchema: schemas[0] ?? "",
+    alsoMatches: schemas.slice(1),
     permissions: actionPermissions(walk, frame),
     round,
     feedback: textsField(record.detail, "feedback"),

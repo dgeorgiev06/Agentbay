@@ -22,6 +22,7 @@ export type LoadedMode = {
   readonly home: Home;
   readonly folder: string;
   readonly manifest: Mode;
+  readonly lineOf: Loaded<Mode>["lineOf"];
   readonly workflows: ReadonlyMap<string, Workflow>;
   readonly settings: Readonly<Record<string, unknown>>;
 };
@@ -1197,6 +1198,7 @@ function buildSystem(context: Context, config: Config, workflows: readonly ModeW
       home: mode.home,
       folder: mode.folder,
       manifest: mode.value,
+      lineOf: mode.lineOf,
       workflows: new Map(own),
       settings: settingsOf(config, name),
     });

@@ -1,12 +1,12 @@
 import { resolve } from "node:path/posix";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { type Answer, failed, granted, manifestOf, refused } from "./answers.ts";
+import { type Answer, errorLine, failed, granted, manifestOf, refused } from "./answers.ts";
 import { Broker, type BrokerLimits } from "./broker.ts";
 import type { ChildEnd, ChildProcesses, ChildRequest, Clock, FileInspector, FileSystem, Http } from "./ports.ts";
 import type { EventSink, Json, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "./contracts.ts";
+import { writableFolders } from "./effect-rule.ts";
 import { escapingLinks } from "./folder-links.ts";
 import { isInsideOrEqual, shownPath, type Layout } from "./layout.ts";
-import { isJsonRecord } from "./protocol-json.ts";
 import { type ChildMessage, childMessageOf, type ResourceRequest } from "./script-protocol.ts";
 import type { SecretStore } from "./secrets.ts";
 
@@ -60,8 +60,6 @@ const filesTheHostReads: readonly string[] = [
   `${bayFolder}sdk.ts`,
 ];
 
-const spendMeasures = ["items", "usd", "tokens"] as const;
-
 function grants(access: "read" | "write", path: string): readonly string[] {
   if (filesTheHostReads.includes(path)) {
     return [`--allow-fs-${access}=${path}`];
@@ -70,12 +68,12 @@ function grants(access: "read" | "write", path: string): readonly string[] {
 }
 
 export function scriptCommand(scriptFile: string, request: ScriptRequest): readonly string[] {
-  const permissions = request.permissions;
-  const readable = [...new Set([...filesTheHostReads, permissions.modeFolder, ...permissions.readPaths])];
+  const granted = request.permissions.grants;
+  const readable = [...new Set([...filesTheHostReads, granted.modeFolder, ...granted.readPaths])];
   return [
     "--permission",
     ...readable.flatMap((path) => grants("read", path)),
-    ...permissions.writePaths.flatMap((path) => grants("write", path)),
+    ...writableFolders(request.permissions).flatMap((path) => grants("write", path)),
     "--disable-warning=ExperimentalWarning",
     `--import=${pathToFileURL(preloadFile).href}`,
     hostFile,
@@ -92,30 +90,6 @@ function startMessage(request: ScriptRequest, now: Date): Readonly<Record<string
 
 function seconds(milliseconds: number): string {
   return String(Number((milliseconds / 1000).toFixed(3)));
-}
-
-function spendingAnswer(spending: Json, spent: Spent): Answer<null> {
-  const wrong = refused({
-    resource: "spend",
-    asked: `The step reported the spending ${JSON.stringify(spending)}`,
-    declared: "spending is given as items, usd and tokens, each a number of at least 0",
-    change: "Report spending as { items, usd, tokens } with numbers of at least 0.",
-  });
-  if (!isJsonRecord(spending)) {
-    return wrong;
-  }
-  const amounts: Partial<Spent> = {};
-  for (const measure of spendMeasures) {
-    const amount = spending[measure];
-    if (amount !== undefined && (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0)) {
-      return wrong;
-    }
-    amounts[measure] = amount ?? 0;
-  }
-  for (const measure of spendMeasures) {
-    spent[measure] += amounts[measure] ?? 0;
-  }
-  return granted(null);
 }
 
 type DatabaseRequest = Extract<ResourceRequest, { resource: `db.${string}` }>;
@@ -157,13 +131,35 @@ function brokerAnswer(broker: Broker, request: Exclude<ResourceRequest, { resour
   }
 }
 
-async function answerFor(started: Started, request: ResourceRequest): Promise<Answer<Json>> {
-  if (request.resource === "call") {
+async function calledAnswer(started: Started, request: { reference: string; input: Json }): Promise<Answer<Json>> {
+  try {
     const outcome = await started.request.call(request.reference, request.input);
     return outcome.status === "done" ? granted(outcome.output) : failed(outcome.reason);
+  } catch (error) {
+    return started.broker.report(
+      failed(`The call to ${request.reference} stopped at an unexpected error: ${errorLine(error)}`),
+    );
+  }
+}
+
+async function spentAnswer(started: Started, spending: Json): Promise<Answer<Json>> {
+  const answer = await started.broker.spend(spending);
+  if (!answer.ok) {
+    return answer;
+  }
+  const spent = started.state.spent;
+  spent.items += answer.value.items;
+  spent.usd += answer.value.usd;
+  spent.tokens += answer.value.tokens;
+  return granted(null);
+}
+
+async function answerFor(started: Started, request: ResourceRequest): Promise<Answer<Json>> {
+  if (request.resource === "call") {
+    return calledAnswer(started, request);
   }
   if (request.resource === "spend") {
-    return started.broker.report(spendingAnswer(request.spending, started.state.spent));
+    return spentAnswer(started, request.spending);
   }
   return brokerAnswer(started.broker, request);
 }
@@ -217,7 +213,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
   });
 
   async function refusedBeforeStart(request: ScriptRequest, broker: Broker): Promise<string | undefined> {
-    const permissions = request.permissions;
+    const permissions = request.permissions.grants;
     const scriptFile = resolve(permissions.modeFolder, request.script);
     if (!isInsideOrEqual(scriptFile, permissions.modeFolder)) {
       return `The script ${request.script} lies outside the folder of the mode ${permissions.mode}.`;
@@ -247,8 +243,8 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     const startedAt = startTime.getTime();
     const childRequest: ChildRequest = {
       command: process.execPath,
-      arguments: scriptCommand(resolve(request.permissions.modeFolder, request.script), request),
-      directory: request.permissions.modeFolder,
+      arguments: scriptCommand(resolve(request.permissions.grants.modeFolder, request.script), request),
+      directory: request.permissions.grants.modeFolder,
       environment: {},
       timeoutMilliseconds: milliseconds,
       maximumOutputBytes: limits.outputBytes,

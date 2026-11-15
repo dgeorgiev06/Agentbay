@@ -236,6 +236,21 @@ test("status reports counts, the cursor, the last sync, the selector and the spe
   assert.deepEqual(field(kept[0] ?? null, "selector"), selector);
 });
 
+test("a cost is recorded when only its items or only its dollars are zero, and not when both are", async () => {
+  const caller = "half-costs";
+  const month = new Date().toISOString().slice(0, 7);
+  const spentOf = async (): Promise<Json> => {
+    const sources = listOf(field(await project.output("store.status", {}, { caller }), "sources"));
+    return field(sources[0] ?? null, "spent");
+  };
+  await project.output("store.put", page([post(1)], { cursor: "c-1", cost: { items: 0, usd: 0 } }), { caller });
+  assert.deepEqual(await spentOf(), []);
+  await project.output("store.put", page([post(2)], { cursor: "c-2", cost: { items: 0, usd: 0.5 } }), { caller });
+  assert.deepEqual(await spentOf(), [{ month, items: 0, usd: 0.5 }]);
+  await project.output("store.put", page([post(3)], { cursor: "c-3", cost: { items: 4, usd: 0 } }), { caller });
+  assert.deepEqual(await spentOf(), [{ month, items: 4, usd: 0.5 }]);
+});
+
 test("text that looks like a secret is not persisted, in the item or in the full-text index", async () => {
   const caller = "secrets";
   const leaky = post(1, { text: "Rotate it: password=Hunter2-made-up-99 before Friday." });

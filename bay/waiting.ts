@@ -1,7 +1,7 @@
 import { join } from "node:path/posix";
 import type { PolicyOf, SkillTask } from "./contracts.ts";
 import type { Step as WorkflowStep } from "./generated/workflow.ts";
-import { hashOf, numberField, textField, textsField } from "./json.ts";
+import { fieldOf, hashOf, numberField, textField, textsField } from "./json.ts";
 import type { System } from "./registry.ts";
 import type { RunWithSteps, StepRecord } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
@@ -68,13 +68,15 @@ export function skillStepAt(context: WaitingContext, run: RunWithSteps, waitingK
     return `Step ${String(position.index)} of action ${target.name} is not a skill step.`;
   }
   const mode = target.mode.manifest.name;
+  const schemas = textsField(record.detail, "schemas");
   const task: SkillTask = {
     place: { runId: run.id, mode, action: target.name, stepIndex: position.index, stepKey: key },
     skill: step.skill,
     tier: step.tier,
     input: record.input,
-    outputSchema: textsField(record.detail, "schemas")[0] ?? "",
-    permissions: { ...context.policyOf(mode), effects: target.action.effects },
+    outputSchema: schemas[0] ?? "",
+    alsoMatches: schemas.slice(1),
+    permissions: { grants: context.policyOf(mode), actionEffects: target.action.effects },
     round: numberField(record.detail, "round") ?? 1,
     feedback: textsField(record.detail, "feedback"),
   };
@@ -111,7 +113,8 @@ function approvalWaiting(context: WaitingContext, run: RunWithSteps, stepKey: st
     return undefined;
   }
   const previousHash = textField(record.detail, "previousHash");
-  const content = hashOf(record.input) === hash ? record.input : null;
+  const shown = fieldOf(record.detail, "shown") ?? record.input;
+  const content = hashOf(shown) === hash ? shown : null;
   return {
     reason: "approval",
     stepKey,

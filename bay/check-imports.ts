@@ -1,24 +1,14 @@
 import { dirname, join, normalize } from "node:path/posix";
-import {
-  errors,
-  lineOfIndex,
-  type CheckContext,
-  type Finding,
-  type KitTree,
-  type ModeFolder,
-} from "./check-context.ts";
+import { errors, type CheckContext, type Finding, type KitTree, type ModeFolder } from "./check-context.ts";
+import { importSpecifiers, type ImportSpecifier } from "./import-scanner.ts";
 import { isInsideOrEqual, pathIn, shownPath, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
 import { sdkSpecifier } from "./script-protocol.ts";
 import type { Problem } from "./spec.ts";
 
-type Specifier =
-  | { readonly kind: "literal"; readonly text: string; readonly line: number }
-  | { readonly kind: "computed"; readonly line: number };
-
 type SourceFile = {
   readonly file: string;
-  readonly specifiers: readonly Specifier[];
+  readonly specifiers: readonly ImportSpecifier[];
 };
 
 type LiteralImport = {
@@ -35,41 +25,11 @@ type ModeImport = {
   readonly entry: LiteralImport;
 };
 
-const staticImportPattern =
-  /(?<![\w$.])(?:import|export)\s+(?:type\s+)?(?:[\w$*{}\s,]+?\s+from\s+)?(["'])([^"'\n]+)\1/g;
-
-const literalDynamicImportPattern = /(?<![\w$.])import\s*\(\s*(["'`])([^"'`\n$]*)\1\s*[,)]/g;
-
-const anyDynamicImportPattern = /(?<![\w$.])import\s*\(/g;
-
 const sdkFile = "bay/sdk.ts";
 
 const modeHarnessFile = "tests/mode-harness.ts";
 
 const entryPoints = ["bay/cli.ts", "bay/mcp.ts"] as const;
-
-function literalSpecifiers(text: string, pattern: RegExp): readonly Specifier[] {
-  return [...text.matchAll(pattern)].map((match) => ({
-    kind: "literal" as const,
-    text: match[2] ?? "",
-    line: lineOfIndex(text, match.index),
-  }));
-}
-
-function computedSpecifiers(text: string): readonly Specifier[] {
-  const literalStarts = new Set([...text.matchAll(literalDynamicImportPattern)].map((match) => match.index));
-  return [...text.matchAll(anyDynamicImportPattern)]
-    .filter((match) => !literalStarts.has(match.index))
-    .map((match) => ({ kind: "computed" as const, line: lineOfIndex(text, match.index) }));
-}
-
-function importSpecifiers(text: string): readonly Specifier[] {
-  return [
-    ...literalSpecifiers(text, staticImportPattern),
-    ...literalSpecifiers(text, literalDynamicImportPattern),
-    ...computedSpecifiers(text),
-  ].sort((first, second) => first.line - second.line);
-}
 
 async function readSources(files: FileSystem, paths: readonly string[]): Promise<readonly SourceFile[]> {
   const sources: SourceFile[] = [];

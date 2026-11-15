@@ -1,4 +1,4 @@
-import type { Answer } from "./answers.ts";
+import { errorLine, type Answer } from "./answers.ts";
 import type { Broker } from "./broker.ts";
 import type { Json } from "./contracts.ts";
 import { byteSize, fieldOf, numberField, textField } from "./json.ts";
@@ -79,13 +79,6 @@ async function filesList(call: ToolCall): Promise<ToolResult> {
 }
 
 async function filesWrite(call: ToolCall): Promise<ToolResult> {
-  const place = call.step.task.place;
-  if (!call.step.task.permissions.effects.includes("write")) {
-    return refused(
-      `The action ${place.action} of mode ${place.mode} does not declare the write effect, ` +
-        "so its skill may not write files.",
-    );
-  }
   const path = textInput(call, "path");
   const text = textInput(call, "text");
   if (typeof path !== "string") {
@@ -306,6 +299,14 @@ async function performed(
 }
 
 export async function callKernelTool(kernel: Kernel, name: string, input: Json): Promise<ToolResult> {
+  try {
+    return await checkedToolCall(kernel, name, input);
+  } catch (error) {
+    return refused(kernel.secrets.redact(`The tool ${name} stopped at an unexpected error: ${errorLine(error)}`));
+  }
+}
+
+async function checkedToolCall(kernel: Kernel, name: string, input: Json): Promise<ToolResult> {
   if (!isToolName(name)) {
     return refused(
       `There is no kernel tool ${name}; the tools are db_query, files_read, files_list, ` +

@@ -43,6 +43,7 @@ type AgentShape = {
   readonly tier: SkillAgent["tier"];
   readonly kernelTools: readonly string[];
   readonly read: readonly string[];
+  readonly effects?: SkillAgent["effects"];
   readonly write: readonly string[];
   readonly commands: readonly string[];
 };
@@ -57,7 +58,7 @@ export function skillAgent(shape: AgentShape): SkillAgent {
     description: `Writes the ${shape.skill}\nfor the "${shape.mode}" mode: briefly.`,
     tier: shape.tier,
     kernelTools: shape.kernelTools,
-    permissions: {
+    grants: {
       mode: shape.mode,
       modeFolder,
       databaseFile: `${project}/.agentbay/data/${shape.mode}.db`,
@@ -67,8 +68,8 @@ export function skillAgent(shape: AgentShape): SkillAgent {
       secrets: [],
       hosts: [],
       commands: shape.commands,
-      effects: ["read"],
     },
+    effects: shape.effects ?? (shape.write.length > 0 ? ["read", "write"] : ["read"]),
   };
 }
 

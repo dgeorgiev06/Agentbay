@@ -1,6 +1,5 @@
 node_modules/
 .agentbay/
-agentbay.config.yaml
 /.claude/
 /CLAUDE.md
 /.mcp.json

@@ -15,9 +15,9 @@ import {
   nodeRemoval,
   systemClock,
 } from "./node-ports.ts";
-import { policyFor } from "./policy.ts";
+import { loadPolicedSystem } from "./policy.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, Folders, Http, Processes, Removal } from "./ports.ts";
-import { loadSystem, type System } from "./registry.ts";
+import type { System } from "./registry.ts";
 import { kernelDatabaseFile, SqliteRunStore } from "./run-store.ts";
 import { createScriptRunner } from "./script-runner.ts";
 import { SecretStore } from "./secrets.ts";
@@ -91,15 +91,11 @@ export function secretStoreOf(options: Omit<KernelOptions, "layout">): SecretSto
 
 export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel>> {
   const { ports, layout } = options;
-  const loaded = await loadSystem(ports.files, layout);
+  const loaded = (await loadPolicedSystem(ports.files, layout)).outcome;
   if (!loaded.ok) {
     return loaded;
   }
-  const system = loaded.value;
-  const policy = policyFor(system, layout);
-  if (!policy.ok) {
-    return policy;
-  }
+  const { system, policyOf } = loaded.value;
   const secrets = secretStoreOf(options);
   const store = await SqliteRunStore.open(ports.folders, join(layout.project, kernelDatabaseFile));
   const services = { layout, files: ports.files, inspector: ports.inspector, http: ports.http, secrets };
@@ -111,7 +107,7 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
     system,
     store,
     runner,
-    policyOf: policy.value,
+    policyOf,
     clock: ports.clock,
     files: ports.files,
     scrubber: secrets,
@@ -121,7 +117,7 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
     layout,
     ports,
     system,
-    policyOf: policy.value,
+    policyOf,
     secrets,
     store,
     runner,

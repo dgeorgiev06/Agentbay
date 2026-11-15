@@ -120,6 +120,7 @@ type Task = {
   readonly skillFile: string;
   readonly input: Json;
   readonly outputSchema: string;
+  readonly alsoMatches: readonly string[];
   readonly round: number;
   readonly feedback: readonly string[];
 };
@@ -144,14 +145,16 @@ async function taskOf(kernel: Kernel, request: TaskRequest): Promise<Task> {
     skillFile: join(folder, task.skill, "SKILL.md"),
     input: task.input,
     outputSchema: task.outputSchema === "" ? "" : join(folder, task.outputSchema),
+    alsoMatches: task.alsoMatches.map((schema) => join(folder, schema)),
     round: task.round,
     feedback: task.feedback,
   };
 }
 
 function taskJson(task: Task): JsonObject {
-  const { token, ...rest } = task;
-  return { ...rest, ...(token === undefined ? {} : { token }), feedback: [...task.feedback] };
+  const { token, alsoMatches, ...rest } = task;
+  const also = alsoMatches.length === 0 ? {} : { alsoMatches: [...alsoMatches] };
+  return { ...rest, ...also, ...(token === undefined ? {} : { token }), feedback: [...task.feedback] };
 }
 
 function askedByOf(events: readonly RunEvent[]): Json | undefined {

@@ -16,7 +16,6 @@ const briefing: Mode = modeNamed(
     files: { read: ["notes/in/", "shared/./glossary.md"], write: ["out/digests/"] },
     secrets: ["MAIL_TOKEN"],
     network: ["api.example.com", "*.cdn.example.com"],
-    commands: ["node --test"],
   },
   {
     digest: { input: "a.json", output: "b.json", effects: ["read"], run: [{ script: "scripts/a.ts" }] },
@@ -44,7 +43,7 @@ function pathProblems(files: DeclaredFiles): readonly string[] {
   );
 }
 
-test("a mode's permissions hold its folder, database, migrations, paths, secrets, hosts, commands and effects", () => {
+test("a mode's grants hold its folder, database, migrations, paths, secrets, hosts and commands, not effects", () => {
   const outcome = permissionsFor(system, "briefing", layout);
   assert.deepEqual(outcome, {
     ok: true,
@@ -62,8 +61,7 @@ test("a mode's permissions hold its folder, database, migrations, paths, secrets
       writePaths: ["/project/out/digests"],
       secrets: ["MAIL_TOKEN"],
       hosts: ["api.example.com", "*.cdn.example.com"],
-      commands: ["node --test"],
-      effects: ["read", "write", "network"],
+      commands: [],
     },
   });
 });
@@ -73,7 +71,7 @@ test("a mode that declares no resources may read only its own folder", () => {
   assert.deepEqual(permissions.readPaths, ["/project/components/base/store"]);
   assert.deepEqual(permissions.writePaths, []);
   assert.deepEqual(permissions.secrets, []);
-  assert.deepEqual(permissions.effects, ["read"]);
+  assert.deepEqual(Object.keys(permissions).includes("effects"), false);
 });
 
 test("a declared path that leaves the project root is refused", () => {
@@ -398,4 +396,15 @@ test("a mode that is not active gets no permissions, and the policy skips it", (
   const policy = accepted(policyFor(system, separate));
   assert.equal(policy("briefing").modeFolder, "/kit/components/modes/briefing");
   assert.throws(() => policy("journal"), /not active in the system/);
+});
+
+test("only a mode under the kit's components/base may list commands", () => {
+  const withCommand = { ...briefing, resources: { commands: ["node --test"] } };
+  const outside = systemOf([{ folder: "/project/components/modes/briefing", manifest: withCommand }]);
+  const [problem] = problemsOf(permissionsFor(outside, "briefing", layout));
+  assert.ok(problem);
+  assert.equal(problem.path, "/resources/commands/0");
+  assert.match(problem.message, /Only a mode under the kit's components\/base\/ may list commands\./);
+  const base = systemOf([{ folder: "/project/components/base/briefing", manifest: withCommand }]);
+  assert.deepEqual(accepted(permissionsFor(base, "briefing", layout)).commands, ["node --test"]);
 });

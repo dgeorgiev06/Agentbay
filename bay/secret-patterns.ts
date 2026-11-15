@@ -64,7 +64,7 @@ function scrubbedBy(text: string, secretPattern: SecretPattern): string {
   }
   return text.replace(secretPattern.pattern, (match: string, ...rest: unknown[]) => {
     const groups = rest.at(-1);
-    const value = typeof groups === "object" && groups !== null ? Reflect.get(groups, "value") : undefined;
+    const value: unknown = typeof groups === "object" && groups !== null ? Reflect.get(groups, "value") : undefined;
     return typeof value === "string" && looksLikeSecretValue(value, shortestValue) ? marker : match;
   });
 }

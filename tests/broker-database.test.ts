@@ -194,7 +194,9 @@ for (const [label, text, reason] of hostileAgentQueries) {
   test(`an agent query is refused: ${label}`, async () => {
     await withBroker(["read", "write"], async ({ broker }) => {
       await seedItems(broker, 250);
-      assert.match(refusalOf(await broker.agentQuery(text)), reason);
+      const message = refusalOf(await broker.agentQuery(text));
+      assert.match(message, reason);
+      assert.match(message, /every table is readable/);
       assert.deepEqual(valueOf(await broker.query("select count(*) as n from items")), [{ n: 250 }]);
       assert.deepEqual(valueOf(await broker.query("select * from pragma_user_version")), [{ user_version: 0 }]);
     });

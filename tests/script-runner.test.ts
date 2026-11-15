@@ -557,7 +557,7 @@ test("a script that returns or prints a secret value has it redacted", async () 
   });
 });
 
-test("a secret a script writes through context.files.write is redacted in the file, and the event names the file", async () => {
+test("a secret written through context.files.write is redacted in the file, and an event names the file", async () => {
   await withScriptProject(async (root) => {
     const run = await attempt(
       root,

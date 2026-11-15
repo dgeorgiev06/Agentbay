@@ -43,7 +43,7 @@ function pathProblems(files: DeclaredFiles): readonly string[] {
   );
 }
 
-test("a mode's permissions hold its folder, database, migrations, paths, secrets, hosts, commands and all effects", () => {
+test("a mode's permissions hold its folder, database, migrations, paths, secrets, hosts, commands and effects", () => {
   const outcome = permissionsFor(system, "briefing", layout);
   assert.deepEqual(outcome, {
     ok: true,

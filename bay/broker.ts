@@ -143,8 +143,8 @@ export class Broker {
       },
     });
     const rules =
-      `agent queries run one read-only select over the mode's own database, return at most ` +
-      `${String(limits.agentQueryRows)} rows and stop at the time limit of ${String(limits.agentQueryMilliseconds)} ms`;
+      "agent queries run one read-only select over the mode's own database, where every table is readable, " +
+      `return at most ${String(limits.agentQueryRows)} rows and stop at the time limit of ${String(limits.agentQueryMilliseconds)} ms`;
     const change = "Send one select statement, narrowed with where, limit or an aggregate.";
     switch (outcome.status) {
       case "done":
@@ -334,7 +334,7 @@ export class Broker {
       case "writes-on-read-only":
         return refused({
           resource: "db",
-          asked: `${this.#asking} in action ${place.action} to run a statement that writes (it starts with "${keyword}")`,
+          asked: `${this.#asking} in action ${place.action} to run a write statement (it starts with "${keyword}")`,
           declared: `the action ${place.action} declares the effects: ${listed(this.#permissions.effects, "none")}`,
           change: `To allow it, add write to actions.${place.action}.effects in ${manifestOf(this.#permissions)}.`,
         });

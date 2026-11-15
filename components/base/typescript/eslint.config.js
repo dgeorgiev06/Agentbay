@@ -1,3 +1,5 @@
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, globalIgnores } from "eslint/config";
 import tseslint from "typescript-eslint";
@@ -8,6 +10,45 @@ const kernelImportsForModes = {
   regex: "(^|/)bay/(?!sdk\\.ts$)",
   message: "Mode code may import from bay/ only bay/sdk.ts.",
 };
+
+const modeTiers = ["base", "modes"];
+
+const deepestModeFolderLevel = 6;
+
+function modeFolders() {
+  return modeTiers.flatMap((tier) => {
+    const tierFolder = join(repositoryRoot, "components", tier);
+    if (!existsSync(tierFolder)) {
+      return [];
+    }
+    return readdirSync(tierFolder, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => ({ tier, mode: entry.name }));
+  });
+}
+
+function parentSteps(count) {
+  return `(\\.\\./){${count}}`;
+}
+
+function otherModeImports(tier, mode, depth) {
+  const intoTier = `${parentSteps(depth + 1)}(?!${mode}/|\\.\\./)`;
+  const intoComponents = `${parentSteps(depth + 2)}(?!${tier}/${mode}/|\\.\\./)`;
+  const intoRepository = `${parentSteps(depth + 3)}components/(?!${tier}/${mode}/)`;
+  return {
+    regex: `^(${intoTier}|${intoComponents}|${intoRepository})`,
+    message: "A mode may not import the files of another mode; call its actions through an interface.",
+  };
+}
+
+const modeBoundaryConfigs = modeFolders().flatMap(({ tier, mode }) =>
+  Array.from({ length: deepestModeFolderLevel + 1 }, (_, depth) => ({
+    files: [`components/${tier}/${mode}/${"*/".repeat(depth)}*.ts`],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [kernelImportsForModes, otherModeImports(tier, mode, depth)] }],
+    },
+  })),
+);
 
 const kernelImportsForAdapters = {
   regex: "(^|/)bay/(?!(sdk|adapter)\\.ts$)",
@@ -46,6 +87,7 @@ export default defineConfig(
     rules: {
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-non-null-assertion": "error",
+      "@typescript-eslint/prefer-readonly": "error",
       "@typescript-eslint/consistent-type-assertions": ["error", { assertionStyle: "never" }],
       "@typescript-eslint/switch-exhaustiveness-check": ["error", { considerDefaultExhaustiveForUnions: false }],
       "@typescript-eslint/explicit-module-boundary-types": "error",
@@ -76,6 +118,7 @@ export default defineConfig(
       "no-restricted-syntax": ["error", ...bannedSyntax, dynamicImportSyntax],
     },
   },
+  ...modeBoundaryConfigs,
   {
     files: ["adapters/**/*.ts"],
     rules: {

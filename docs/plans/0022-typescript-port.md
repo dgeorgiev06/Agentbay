@@ -84,7 +84,7 @@ A slice is one builder in its own worktree, on a branch from `feat/0022-agentbay
 | 6 | M7 | `improve`, `delivery` | - |
 | 7 | C1 | README, DESIGN.md, INTERFACES.md, CHANGELOG with Upgrading, `kernel.yaml`, `limits.yaml` written from real counts, version 5.0.0, the cutover pull request | - |
 
-The kernel budgets add up to 3,800 lines and leave 200 spare. A slice that needs more than its budget says so before writing the extra, and the reviewer decides whether another part gives it up.
+The kernel budgets add up to 3,800 lines and leave 200 spare. A budget is a signal, not a limit on quality: readable, well-structured code comes first (owner decision, 2026-11-14). A slice that needs more than its budget writes the code properly, reports the real count and the reason, and the reviewer checks whether the extra is needed design or avoidable bulk. Code is never shortened, packed or made less clear to meet a number.
 
 After stage 4 the work stops for the owner: the mode runs, the kernel line count is reported, and the owner says continue or change course.
 
@@ -102,7 +102,7 @@ After stage 4 the work stops for the owner: the mode runs, the kernel line count
 - [DOD-2] (must) No `any`, `@ts-ignore`, `@ts-expect-error`, `eslint-disable`, type assertion other than `as const`, or non-null `!`.
 - [DOD-3] (must) Every exported function and every manifest rule has a test; every refusal in the Safety section has a test that shows it refusing.
 - [DOD-4] (must) `node --test` passes for the whole branch, not just the slice.
-- [DOD-5] (must) The slice is within its line budget, counted after prettier.
+- [DOD-5] (must) The slice reports its line count after prettier against its budget. Being over is not a failure when the report explains why; code made less readable to stay under is.
 - [DOD-6] (must) The kept, changed and dropped list covers every test function of the old files named for the slice.
 - [DOD-7] (must) No comment lines in kit code; no line over 120 characters; no line packed to save lines.
 - [DOD-8] (must_not) No new dependency.

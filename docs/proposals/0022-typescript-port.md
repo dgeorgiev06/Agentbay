@@ -41,7 +41,7 @@ What it costs, stated plainly:
 
 - Everything is rewritten: kernel, modes and tests. The 576 existing tests and the golden guard matrix cannot be reused, so the safety net of comparing old and new behaviour is gone. In its place, each builder reads the old tests of what it rebuilds and lists every behaviour as kept or dropped, and the reviewer checks that list.
 - The new safety model is younger than the one it replaces. It is simpler and narrows the known bypass (code an agent runs outside the guard), but it has not been attacked yet, and the per-step hook has been tested only with sample inputs, not inside a live Claude Code session. Main stays on 4.0.0 until cutover, and a `v4` branch remains after it.
-- The kernel budget of 4,000 lines is a target, not a measurement. If the engine stage shows it cannot hold, that comes back to you before the modes are built.
+- The kernel budget of 4,000 lines is a target, not a measurement, and it never outranks code quality or readability. If the engine stage shows it cannot hold with clear code, the budget is what gives, and that comes back to you before the modes are built.
 
 Release 5.0.0 is the cutover. A Codex adapter is 5.1.
 

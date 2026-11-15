@@ -117,7 +117,7 @@ async function projectIn(root: string, opening: Opening, firstRun: number): Prom
     runs += 1;
     const id = `harness-${String(runs)}`;
     const caller = options.caller === undefined ? {} : { caller: options.caller };
-    return runOf(await kernel.engine.startAction(reference, input, { id, ...caller }));
+    return runOf(await kernel.runs.agentTools.engine.startAction(reference, input, { id, ...caller }));
   };
   return {
     root,
@@ -126,7 +126,9 @@ async function projectIn(root: string, opening: Opening, firstRun: number): Prom
     output: async (reference, input, options) => outputOf(await run(reference, input, options)),
     failure: async (reference, input, options) => reasonOf(await run(reference, input, options)),
     refusal: async (reference, input) => {
-      const result = await kernel.engine.startAction(reference, input, { id: `refused-${String(runs)}` });
+      const result = await kernel.runs.agentTools.engine.startAction(reference, input, {
+        id: `refused-${String(runs)}`,
+      });
       assert.ok(!result.ok, `expected ${reference} to be refused, got ${JSON.stringify(result)}`);
       return result.problems.map((problem) => problem.message).join(" ");
     },

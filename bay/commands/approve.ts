@@ -43,7 +43,7 @@ function allowedChannels(kernel: Kernel): readonly string[] {
 }
 
 async function shownText(kernel: Kernel, decision: Decision): Promise<string> {
-  const run = await kernel.store.readRun(decision.runId);
+  const run = await kernel.runs.agentTools.store.readRun(decision.runId);
   const waiting = run === undefined ? undefined : storedWaiting(kernel, run);
   if (waiting?.reason !== "approval" || waiting.stepKey !== decision.stepKey) {
     return `step ${decision.stepKey} of run ${decision.runId}`;
@@ -83,7 +83,7 @@ async function decide(request: ApprovalRequest): Promise<CommandResult> {
   }
   const by =
     channel.via === "terminal" ? "owner at the terminal" : `owner via chat, quoted: ${JSON.stringify(channel.quote)}`;
-  const result = await kernel.engine.approve(decision.runId, decision.stepKey, {
+  const result = await kernel.runs.agentTools.engine.approve(decision.runId, decision.stepKey, {
     hash: decision.hash,
     decision: decision.decision,
     by,

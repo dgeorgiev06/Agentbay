@@ -1,9 +1,7 @@
-import { join } from "node:path/posix";
 import { Broker } from "./broker.ts";
 import type { FileListing } from "./check-context.ts";
 import type { Layout } from "./layout.ts";
-import type { Permissions, PolicyOf, ScriptRunner, StepPlace } from "./contracts.ts";
-import { Engine } from "./runs/engine.ts";
+import type { Permissions, PolicyOf, StepPlace } from "./contracts.ts";
 import {
   createNodeHttp,
   createProjectFileListing,
@@ -18,8 +16,7 @@ import {
 import { loadPolicedSystem } from "./policy.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, Folders, Http, Processes, Removal } from "./ports.ts";
 import type { System } from "./registry.ts";
-import { kernelDatabaseFile } from "./runs/run-store.ts";
-import { SqliteRunStore } from "./runs/sqlite-run-store.ts";
+import { openRuns, type Runs } from "./runs/runs.ts";
 import { createScriptRunner } from "./script-runner.ts";
 import { SecretStore } from "./secrets.ts";
 import type { Outcome } from "./outcome.ts";
@@ -59,9 +56,7 @@ export type Kernel = {
   readonly system: System;
   readonly policyOf: PolicyOf;
   readonly secrets: SecretStore;
-  readonly store: SqliteRunStore;
-  readonly runner: ScriptRunner;
-  readonly engine: Engine;
+  readonly runs: Runs;
   readonly brokerFor: (place: StepPlace, permissions: Permissions) => Broker;
   readonly close: () => void;
 };
@@ -98,35 +93,32 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
   }
   const { system, policyOf } = loaded.value;
   const secrets = secretStoreOf(options);
-  const store = await SqliteRunStore.open(ports.folders, join(layout.project, kernelDatabaseFile));
+  const limits = { toolCallsPerRound: maximumToolCallsPerRound, ...options.limits };
   const services = { layout, files: ports.files, inspector: ports.inspector, http: ports.http, secrets };
-  const shared = { ...services, events: store, clock: ports.clock, childProcesses: ports.childProcesses };
-  const brokerFor = (place: StepPlace, permissions: Permissions): Broker =>
-    new Broker({ ...shared, place, permissions });
-  const runner = createScriptRunner(shared);
-  const engine = new Engine({
-    system,
-    store,
-    runner,
-    policyOf,
-    clock: ports.clock,
+  const processes = { clock: ports.clock, childProcesses: ports.childProcesses };
+  const runs = await openRuns({
+    project: layout.project,
+    folders: ports.folders,
     files: ports.files,
+    clock: ports.clock,
+    system,
+    policyOf,
     scrubber: secrets,
+    toolCallsPerRound: limits.toolCallsPerRound,
+    runner: (events) => createScriptRunner({ ...services, ...processes, events }),
   });
+  const brokerFor = (place: StepPlace, permissions: Permissions): Broker =>
+    new Broker({ ...services, ...processes, events: runs.events, place, permissions });
   const kernel: Kernel = {
-    limits: { toolCallsPerRound: maximumToolCallsPerRound, ...options.limits },
+    limits,
     layout,
     ports,
     system,
     policyOf,
     secrets,
-    store,
-    runner,
-    engine,
+    runs,
     brokerFor,
-    close: () => {
-      store.close();
-    },
+    close: runs.close,
   };
   return { ok: true, value: kernel };
 }

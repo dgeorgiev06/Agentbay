@@ -7,7 +7,7 @@ import { runStatuses, type StoredRun } from "../runs/run-store.ts";
 async function allRuns(kernel: Kernel): Promise<readonly StoredRun[]> {
   const runs: StoredRun[] = [];
   for (const status of runStatuses) {
-    runs.push(...(await kernel.store.listRuns(status)));
+    runs.push(...(await kernel.runs.agentTools.store.listRuns(status)));
   }
   return runs.sort(
     (first, second) => second.createdAt.localeCompare(first.createdAt) || second.id.localeCompare(first.id),

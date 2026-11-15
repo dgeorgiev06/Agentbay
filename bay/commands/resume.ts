@@ -69,7 +69,7 @@ function formOf(invocation: Invocation): Form | string {
 }
 
 async function resumeDue(kernel: Kernel): Promise<CommandResult> {
-  const results = await kernel.engine.tick(kernel.ports.clock.now());
+  const results = await kernel.runs.agentTools.engine.tick(kernel.ports.clock.now());
   const woken = results.flatMap((result) => (result.ok ? [result.value] : []));
   const problems = results.flatMap((result) => (result.ok ? [] : result.problems));
   if (problems.length > 0) {
@@ -83,11 +83,11 @@ async function resumeDue(kernel: Kernel): Promise<CommandResult> {
 function engineCall(kernel: Kernel, form: Exclude<Form, { readonly kind: "due" }>): Promise<Outcome<RunView>> {
   switch (form.kind) {
     case "resume":
-      return kernel.engine.resume(form.runId, { rerunUnfinished: form.rerun });
+      return kernel.runs.agentTools.engine.resume(form.runId, { rerunUnfinished: form.rerun });
     case "extend":
-      return kernel.engine.extendBudget(form.runId, form.extra);
+      return kernel.runs.agentTools.engine.extendBudget(form.runId, form.extra);
     case "stop":
-      return kernel.engine.stop(form.runId);
+      return kernel.runs.agentTools.engine.stop(form.runId);
   }
 }
 

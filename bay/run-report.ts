@@ -139,7 +139,7 @@ async function taskOf(kernel: Kernel, request: TaskRequest): Promise<Task> {
   const folder = kernel.system.modes.get(task.place.mode)?.folder ?? "";
   const place = { runId: task.place.runId, stepKey: waitingKey, round: task.round };
   const shown = request.token === "issue" || request.token === "replace";
-  const token = shown ? await issueTaskToken(kernel.store, place, kernel.ports.clock.now()) : undefined;
+  const token = shown ? await issueTaskToken(kernel.runs.agentTools.store, place, kernel.ports.clock.now()) : undefined;
   return {
     agent: agentName(task.place.mode, skillNameOf(task.skill)),
     token,
@@ -269,7 +269,7 @@ async function reportRun(kernel: Kernel, run: RunWithSteps, options: ReportOptio
     waiting?.reason === "skill"
       ? await taskOf(kernel, { task: waiting.task, waitingKey: waiting.stepKey, token })
       : undefined;
-  const events = await kernel.store.readEvents(run.id);
+  const events = await kernel.runs.agentTools.store.readEvents(run.id);
   const gathered = { run, waiting, task, events, options };
   return { json: reportJson(gathered), text: reportText(gathered) };
 }
@@ -290,7 +290,7 @@ export function runListJson(run: StoredRun): JsonObject {
 }
 
 export async function runOutput(kernel: Kernel, runId: string, options: ReportOptions = {}): Promise<CommandResult> {
-  const run = await kernel.store.readRun(runId);
+  const run = await kernel.runs.agentTools.store.readRun(runId);
   if (run === undefined) {
     return problemsResult([
       { file: "", path: "", message: `There is no run ${runId}.`, fix: "bay runs lists the runs." },
@@ -302,7 +302,7 @@ export async function runOutput(kernel: Kernel, runId: string, options: ReportOp
 }
 
 export async function skillWaitOf(kernel: Kernel, runId: string): Promise<string | undefined> {
-  const state = (await kernel.store.readRun(runId))?.state;
+  const state = (await kernel.runs.agentTools.store.readRun(runId))?.state;
   return state?.status === "waiting" && state.reason === "skill" ? state.stepKey : undefined;
 }
 
@@ -328,7 +328,7 @@ export async function submittedOutput(
   result: Outcome<RunView>,
   submittedKey: string,
 ): Promise<CommandResult> {
-  const run = result.ok ? await kernel.store.readRun(result.value.id) : undefined;
+  const run = result.ok ? await kernel.runs.agentTools.store.readRun(result.value.id) : undefined;
   const again = run !== undefined && typeof skillStepAt(kernel, run, submittedKey) !== "string";
   return engineOutput(kernel, result, () => (again ? "issue" : "defer"));
 }

@@ -115,10 +115,10 @@ test("the MCP server answers initialize, lists six tools that each need a token,
 test("the MCP server accepts a submit with a real token on a real project", async () => {
   const project = await makeProject();
   const kernel = await openKernel(project);
-  const started = await kernel.engine.startAction("writer.compose", { name: "Ada" });
+  const started = await kernel.runs.agentTools.engine.startAction("writer.compose", { name: "Ada" });
   assert.ok(started.ok && started.value.state.status === "waiting" && started.value.state.waiting.reason === "skill");
   const place = { runId: started.value.id, stepKey: started.value.state.waiting.stepKey, round: 1 };
-  const token = await issueTaskToken(kernel.store, place, new Date());
+  const token = await issueTaskToken(kernel.runs.agentTools.store, place, new Date());
   kernel.close();
   const server = startServer(project.root);
   await server.request("initialize", { protocolVersion: "2024-11-05", capabilities: {} });

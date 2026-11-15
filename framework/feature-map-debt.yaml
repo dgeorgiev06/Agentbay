@@ -59,12 +59,6 @@ breaks:
   - from: bay/kernel.ts
     to: bay/check-context.ts
     rule: may-not-import
-  - from: bay/kernel.ts
-    to: bay/runs/run-store.ts
-    rule: private-file
-  - from: bay/kernel.ts
-    to: bay/runs/sqlite-run-store.ts
-    rule: private-file
   - from: bay/mcp.ts
     to: bay/mcp-server.ts
     rule: private-file

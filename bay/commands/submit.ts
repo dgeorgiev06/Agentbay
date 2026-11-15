@@ -69,12 +69,15 @@ async function runSubmit(invocation: Invocation): Promise<CommandResult> {
     return usageResult(problemText(output.problems), usage);
   }
   return withKernel(invocation, async (kernel) => {
-    const checked = await checkTaskToken({ tokens: kernel.store, runs: kernel.store }, token);
+    const checked = await checkTaskToken(
+      { tokens: kernel.runs.agentTools.store, runs: kernel.runs.agentTools.store },
+      token,
+    );
     if (!checked.ok) {
       return refusedResult(problemText(checked.problems));
     }
     const { runId, stepKey } = checked.value;
-    const result = await kernel.engine.submit(runId, stepKey, { output: output.value, spent });
+    const result = await kernel.runs.agentTools.engine.submit(runId, stepKey, { output: output.value, spent });
     return submittedOutput(kernel, result, stepKey);
   });
 }

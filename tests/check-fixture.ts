@@ -12,7 +12,6 @@ export const limitsText = [
   "concepts: 5",
   "cli_commands: 12",
   "top_level_folders: 7",
-  "comment_lines: 0",
   "",
 ].join("\n");
 

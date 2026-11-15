@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { commentLineNumbers } from "../bay/check-limits.ts";
 import { check, cleanFiles, findFinding, limitsText, withoutFinding } from "./check-fixture.ts";
 
 const limitsFile = "framework/limits.yaml";
@@ -17,41 +16,6 @@ function ceilings(changes: Readonly<Record<string, number | string>>): string {
     .map(([measure = "", value = ""]) => [measure, String(changes[measure] ?? value)]);
   return lines(...entries.map(([measure, value]) => `${String(measure)}: ${String(value)}`));
 }
-
-test("a comment marker inside a string is not a comment", () => {
-  assert.deepEqual(commentLineNumbers(lines('const a = "//";', "const b = '/* no */';", 'const c = "a\\"//";')), []);
-});
-
-test("a line comment and a one-line block comment are counted, after code too", () => {
-  const text = lines("// first", "const a = 1; /* note */", "const b = 2; // trailing", "const c = 3;");
-  assert.deepEqual(commentLineNumbers(text), [1, 2, 3]);
-});
-
-test("a block comment spanning lines counts every line it touches", () => {
-  const text = lines("const a = 1;", "/*", " * text", " */", "const b = 2;");
-  assert.deepEqual(commentLineNumbers(text), [2, 3, 4]);
-});
-
-test("a URL in a template literal, nested interpolations and regular expressions are not comments", () => {
-  const text = lines(
-    "const url = `https://example.com/${path}//x`;",
-    'const nested = `a ${`b ${"//"}`} ${ { key: "/*" }.key } c`;',
-    "const pattern = /\\/\\//g;",
-    "const klass = /[/]/;",
-    "const ratio = total / count;",
-    "const after = `${ratio}`; // real",
-  );
-  assert.deepEqual(commentLineNumbers(text), [6]);
-});
-
-test("a template literal spanning lines with // inside is not a comment", () => {
-  const text = lines("const text = `", "  //  not a comment", "  ${value}", "`;", "/* yes */");
-  assert.deepEqual(commentLineNumbers(text), [5]);
-});
-
-test("a shebang line is not a comment", () => {
-  assert.deepEqual(commentLineNumbers(lines("#!/usr/bin/env node", "const a = 1;")), []);
-});
 
 test("each measure over its ceiling is a warning that gives the count and the ceiling", async () => {
   const report = await check({
@@ -84,21 +48,6 @@ test("each measure over its ceiling is a warning that gives the count and the ce
 test("measures at their ceilings give no finding", async () => {
   const report = await check({ ...cleanFiles(), "bay/a.ts": lines("const a = 1;", "export { a };") });
   withoutFinding(report, "over its ceiling");
-});
-
-test("comment lines in kit code are an error naming each file and line", async () => {
-  const report = await check({
-    ...cleanFiles(),
-    "bay/a.ts": lines("const a = 1;", "// why", "export { a };"),
-    "components/modes/notes/scripts/tidy.ts": lines("/* one", "two */"),
-    "tests/a.test.ts": lines("// tests are not counted"),
-  });
-  const kernel = findFinding(report, "bay/a.ts", "bay/a.ts has comment lines at 2; comment_lines is 3 in all");
-  assert.equal(kernel.severity, "error");
-  assert.equal(kernel.line, 2);
-  findFinding(report, "components/modes/notes/scripts/tidy.ts", "has comment lines at 1, 2; comment_lines is 3 in all");
-  assert.match(kernel.message, /over its ceiling of 0\./);
-  withoutFinding(report, "tests/a.test.ts");
 });
 
 test("a missing limits file is reported", async () => {

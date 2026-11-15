@@ -101,3 +101,19 @@ test("the terminal reads a line and all of stdin", async () => {
   input.end('{"text":"x"}');
   assert.equal(await all, '{"text":"x"}');
 });
+
+test("planAgents plans agents only for the active modes, each pointing at its skill file by absolute path", async () => {
+  const project = await makeProject();
+  const kernel = await openKernel(project);
+  const planning = { policyOf: kernel.policyOf, files: kernel.ports.files };
+  const active = await planAgents({ ...planning, system: kernel.system });
+  assert.ok(active.ok, active.ok ? "" : JSON.stringify(active.problems));
+  assert.deepEqual(
+    active.value.map((agent) => agent.skillFile),
+    [`${project.root}/components/modes/writer/skills/draft/SKILL.md`],
+  );
+  const inactive = await planAgents({ ...planning, system: { ...kernel.system, active: new Set(["greeter"]) } });
+  assert.deepEqual(inactive, { ok: true, value: [] });
+  kernel.close();
+  await project.remove();
+});

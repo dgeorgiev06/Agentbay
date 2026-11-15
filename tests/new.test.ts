@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+import { layoutOf } from "../bay/layout.ts";
 import { newAction, newInterface, newMode, newSkill, newWorkflow, type Generated, type Workspace } from "../bay/new.ts";
 import { isRecord, type Problem } from "../bay/spec.ts";
 import { checkFake, cleanFiles } from "./check-fixture.ts";
@@ -211,4 +212,62 @@ test("a missing template is reported and nothing is written", async () => {
   const outcome = await newInterface({ files, layout }, "alerts");
   refusal(outcome, "The template bay/templates/interface/interface.yaml is missing.");
   assert.equal(files.contents.has(`${layout.project}/components/base/interfaces/alerts.yaml`), false);
+});
+
+const separate = layoutOf({ kit: "/kit", project: "/project" });
+
+function separateSetup(): Setup {
+  const kit = Object.entries({ ...cleanFiles(), ...templateFiles() }).filter(
+    ([path]) => path !== "agentbay.config.yaml",
+  );
+  const project = { "/project/agentbay.config.yaml": "bindings: {}\nadapter: local\n" };
+  const files = fakeFileSystem({
+    ...Object.fromEntries(kit.map(([path, text]) => [`/kit/${path}`, text])),
+    ...project,
+  });
+  return { files, workspace: { files, layout: separate } };
+}
+
+function kitContents(files: FakeFileSystem): ReadonlyMap<string, string> {
+  return new Map([...files.contents].filter(([path]) => path.startsWith("/kit/")));
+}
+
+test("in a separate project, bay new reads the kit's templates and writes every kind into the project", async () => {
+  const { files, workspace } = separateSetup();
+  const kitBefore = kitContents(files);
+  assert.deepEqual(written(await newMode(workspace, "journal", "modes")), [
+    "components/modes/journal/mode.yaml",
+    "components/modes/journal/README.md",
+  ]);
+  written(await newAction(workspace, "journal", "tidy"));
+  written(await newSkill(workspace, "journal", "tidy-up"));
+  written(await newWorkflow(workspace, "journal", "daily"));
+  assert.deepEqual(written(await newInterface(workspace, "diary")), ["components/interfaces/diary.yaml"]);
+  const script = files.contents.get("/project/components/modes/journal/scripts/tidy.ts") ?? "";
+  assert.match(script, /^import \{ defineScript \} from "agentbay\/sdk";$/m);
+  for (const path of [
+    "components/modes/journal/skills/tidy-up/SKILL.md",
+    "components/modes/journal/workflows/daily.yaml",
+    "components/interfaces/diary.yaml",
+  ]) {
+    assert.ok(files.contents.has(`/project/${path}`), path);
+  }
+  assert.deepEqual(kitContents(files), kitBefore);
+  const report = await checkFake(files, separate);
+  assert.deepEqual(report.findings, [], JSON.stringify(report.findings, null, 2));
+});
+
+test("in a separate project, bay new refuses the base tier, kit modes and the names of kit modes", async () => {
+  const { files, workspace } = separateSetup();
+  const before = new Map(files.contents);
+  const base = refusal(await newMode(workspace, "keeper", "base"), "Tier base is for the base modes of the kit itself");
+  assert.equal(base.fix, "Make the mode in this project with --tier modes, or run bay new in the kit's own folder.");
+  refusal(await newMode(workspace, "notes", "modes"), "kit:components/modes/notes already exists");
+  refusal(await newMode(workspace, "store", "modes"), "kit:components/base/store already exists");
+  const sentence = "Mode notes lives in the kit (kit:components/modes/notes), and bay new writes only into the project";
+  refusal(await newAction(workspace, "notes", "tidy"), sentence);
+  refusal(await newSkill(workspace, "notes", "tidy-up"), sentence);
+  refusal(await newWorkflow(workspace, "notes", "daily"), sentence);
+  refusal(await newAction(workspace, "nowhere", "tidy"), "There is no mode nowhere: neither components/modes/nowhere");
+  assert.deepEqual(files.contents, before);
 });

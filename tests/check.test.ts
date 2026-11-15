@@ -1,16 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { summarizeCheck, type CheckReport } from "../bay/check.ts";
+import { layoutOf } from "../bay/layout.ts";
 import {
   assertClean,
   check,
+  checkFake,
   cleanFiles,
   findFinding,
   notesSkillFile,
   skillSections,
   skillText,
+  withoutFinding,
 } from "./check-fixture.ts";
-import { notesMode, paths, storeMode, yamlText } from "./system-fixture.ts";
+import { fakeFileSystem, type FakeFileSystem } from "./fakes.ts";
+import { config, notesMode, paths, schemaText, storeMode, yamlText } from "./system-fixture.ts";
 
 test("a valid system with complete skills, examples and limits passes with no findings", async () => {
   const report = await check(cleanFiles());
@@ -87,4 +91,110 @@ test("the summary of a clean report is only the counts", () => {
     warnings: 0,
   };
   assert.match(summarizeCheck(one), /bay check: 1 error, 0 warnings\.$/);
+});
+
+const separate = layoutOf({ kit: "/kit", project: "/project" });
+
+function separateFiles(project: Readonly<Record<string, string>>): FakeFileSystem {
+  const kit = Object.entries(cleanFiles()).filter(
+    ([path]) => path !== paths.config && path !== "framework/limits.yaml",
+  );
+  return fakeFileSystem({
+    ...Object.fromEntries(kit.map(([path, text]) => [`/kit/${path}`, text])),
+    ...Object.fromEntries(Object.entries(project).map(([path, text]) => [`/project/${path}`, text])),
+  });
+}
+
+const journalFolder = "components/modes/journal";
+
+function journalFiles(script: string): Record<string, string> {
+  const journal = {
+    name: "journal",
+    version: "1.0.0",
+    description: "Keeps a journal.",
+    actions: {
+      write: {
+        input: "schemas/in.json",
+        output: "schemas/out.json",
+        effects: ["read"],
+        run: [{ script: "scripts/write.ts" }],
+      },
+    },
+  };
+  return {
+    [`${journalFolder}/mode.yaml`]: yamlText(journal),
+    [`${journalFolder}/schemas/in.json`]: schemaText("in"),
+    [`${journalFolder}/schemas/out.json`]: schemaText("out"),
+    [`${journalFolder}/scripts/write.ts`]: script,
+    [`${journalFolder}/tests/write.example.json`]: JSON.stringify({ input: {}, output: {} }),
+  };
+}
+
+const sdkScript =
+  'import { defineScript } from "agentbay/sdk";\n\nexport const run = defineScript((input) => Promise.resolve(input));\n';
+
+test("bay check in a separate project does not demand framework/limits.yaml or check the kit's own layout", async () => {
+  const files = separateFiles({ "agentbay.config.yaml": yamlText(config), ...journalFiles(sdkScript) });
+  await files.writeAtomic("/kit/components/extra/notes.md", "a folder the kit's layout does not name");
+  await files.writeAtomic("/kit/bay/a.ts", 'import "./b.ts";\n');
+  await files.writeAtomic("/kit/bay/b.ts", 'import "./a.ts";\n');
+  const report = await checkFake(files, separate);
+  assertClean(report);
+  const inKit = await checkFake(files, layoutOf({ kit: "/kit", project: "/kit" }));
+  findFinding(inKit, "framework/limits.yaml", "framework/limits.yaml does not exist.");
+  findFinding(inKit, "components/extra", "components/ holds extra");
+  findFinding(inKit, "bay/a.ts", "Kernel files import each other in a cycle");
+});
+
+test("bay check in a separate project checks its own modes and every active kit mode, showing kit files as kit:", async () => {
+  const files = separateFiles({
+    "agentbay.config.yaml": yamlText({ ...config, bindings: { notes: "notes", "items-store": "store" }, settings: {} }),
+    ...journalFiles(sdkScript),
+    [`${journalFolder}/playbook.md`]: "old",
+  });
+  await files.writeAtomic("/kit/components/modes/notes/playbook.md", "old");
+  await files.writeAtomic("/kit/components/modes/briefing/playbook.md", "old");
+  const report = await checkFake(files, separate);
+  findFinding(report, `${journalFolder}/playbook.md`, `The mode folder ${journalFolder} holds playbook.md`);
+  assert.deepEqual(
+    report.findings.map((finding) => finding.file),
+    [`${journalFolder}/playbook.md`],
+    JSON.stringify(report.findings, null, 2),
+  );
+  const listed = separateFiles({
+    "agentbay.config.yaml": yamlText({ ...config, modes: ["notes"] }),
+    ...journalFiles(sdkScript),
+  });
+  await listed.writeAtomic("/kit/components/modes/notes/playbook.md", "old");
+  await listed.writeAtomic("/kit/components/modes/briefing/playbook.md", "old");
+  const active = await checkFake(listed, separate);
+  findFinding(
+    active,
+    "kit:components/modes/notes/playbook.md",
+    "The mode folder kit:components/modes/notes holds playbook.md",
+  );
+  withoutFinding(active, "components/modes/briefing holds");
+});
+
+test("bay check in a separate project warns once for each kit mode that does not load", async () => {
+  const files = separateFiles({ "agentbay.config.yaml": yamlText(config), ...journalFiles(sdkScript) });
+  await files.writeAtomic("/kit/components/modes/todo/mode.yaml", "apiVersion: agentbay/v4\nkind: Mode\n");
+  const report = await checkFake(files, separate);
+  assert.equal(report.errors, 0, JSON.stringify(report.findings, null, 2));
+  assert.equal(report.warnings, 1);
+  const notice = findFinding(report, "kit:components/modes/todo/mode.yaml", "Mode todo of the kit does not load");
+  assert.equal(notice.severity, "warning");
+});
+
+test("a project script imports the SDK only as agentbay/sdk, never by a path to the kit", async () => {
+  const relativeScript = sdkScript.replace('"agentbay/sdk"', '"../../../../bay/sdk.ts"');
+  const otherScript = sdkScript.replace('"agentbay/sdk"', '"agentbay/kernel"');
+  for (const [script, words] of [
+    [relativeScript, "imports ../../../../bay/sdk.ts, which resolves to bay/sdk.ts, outside the mode folder"],
+    [otherScript, "imports the package agentbay/kernel; mode code has no dependencies in 5.0.0."],
+  ] as const) {
+    const files = separateFiles({ "agentbay.config.yaml": yamlText(config), ...journalFiles(script) });
+    const finding = findFinding(await checkFake(files, separate), `${journalFolder}/scripts/write.ts`, words);
+    assert.match(finding.message + (finding.fix ?? ""), /agentbay\/sdk/);
+  }
 });

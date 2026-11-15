@@ -1,42 +1,24 @@
 breaks:
   - from: bay/action-steps.ts
-    to: bay/generated/mode.ts
-    rule: private-file
-  - from: bay/action-steps.ts
     to: bay/targets.ts
     rule: private-file
   - from: bay/adapter.ts
     to: bay/effect-rule.ts
     rule: private-file
-  - from: bay/agent-query.ts
-    to: bay/protocol-json.ts
-    rule: may-not-import
   - from: bay/answers.ts
     to: bay/secret-patterns.ts
-    rule: private-file
+    rule: may-not-import
   - from: bay/broker.ts
     to: bay/effect-rule.ts
     rule: private-file
   - from: bay/broker.ts
-    to: bay/protocol-json.ts
-    rule: may-not-import
-  - from: bay/broker.ts
     to: bay/sql-statements.ts
-    rule: private-file
-  - from: bay/budget.ts
-    to: bay/generated/mode.ts
     rule: private-file
   - from: bay/build.ts
     to: bay/skill-tools.ts
     rule: may-not-import
   - from: bay/build.ts
     to: bay/spec.ts
-    rule: private-file
-  - from: bay/check-context.ts
-    to: bay/generated/interface.ts
-    rule: private-file
-  - from: bay/check-context.ts
-    to: bay/generated/mode.ts
     rule: private-file
   - from: bay/check-context.ts
     to: bay/spec.ts
@@ -48,91 +30,31 @@ breaks:
     to: bay/spec.ts
     rule: private-file
   - from: bay/check-skills.ts
-    to: bay/generated/mode.ts
-    rule: private-file
-  - from: bay/check-skills.ts
     to: bay/spec.ts
     rule: private-file
   - from: bay/check.ts
     to: bay/spec.ts
     rule: private-file
-  - from: bay/cli.ts
-    to: bay/last-resort.ts
-    rule: private-file
-  - from: bay/cli.ts
-    to: bay/terminal.ts
-    rule: private-file
-  - from: bay/command-context.ts
-    to: bay/answers.ts
-    rule: may-not-import
-  - from: bay/command-line.ts
-    to: bay/answers.ts
-    rule: may-not-import
-  - from: bay/commands/approve.ts
-    to: bay/run-report.ts
-    rule: private-file
   - from: bay/commands/approve.ts
     to: bay/waiting.ts
-    rule: private-file
-  - from: bay/commands/call.ts
-    to: bay/run-report.ts
-    rule: private-file
-  - from: bay/commands/call.ts
-    to: bay/tools.ts
-    rule: may-not-import
-  - from: bay/commands/config.ts
-    to: bay/settings-listing.ts
     rule: private-file
   - from: bay/commands/resume.ts
     to: bay/budget.ts
     rule: private-file
   - from: bay/commands/resume.ts
-    to: bay/generated/mode.ts
-    rule: private-file
-  - from: bay/commands/resume.ts
-    to: bay/run-report.ts
-    rule: private-file
-  - from: bay/commands/resume.ts
     to: bay/run-state.ts
-    rule: private-file
-  - from: bay/commands/runs.ts
-    to: bay/run-report.ts
     rule: private-file
   - from: bay/commands/runs.ts
     to: bay/run-store.ts
     rule: private-file
-  - from: bay/commands/secret.ts
-    to: bay/policy.ts
-    rule: may-not-import
-  - from: bay/commands/submit.ts
-    to: bay/run-report.ts
-    rule: private-file
   - from: bay/commands/submit.ts
     to: bay/task-tokens.ts
-    rule: may-not-import
-  - from: bay/contracts.ts
-    to: bay/generated/mode.ts
-    rule: may-not-import
-  - from: bay/database-child.ts
-    to: bay/protocol-json.ts
-    rule: may-not-import
-  - from: bay/database-process.ts
-    to: bay/protocol-json.ts
-    rule: may-not-import
+    rule: private-file
   - from: bay/database.ts
     to: bay/owner-only.ts
     rule: may-not-import
   - from: bay/database.ts
     to: bay/sql-statements.ts
-    rule: private-file
-  - from: bay/effect-rule.ts
-    to: bay/answers.ts
-    rule: may-not-import
-  - from: bay/engine.ts
-    to: bay/answers.ts
-    rule: may-not-import
-  - from: bay/engine.ts
-    to: bay/generated/mode.ts
     rule: private-file
   - from: bay/engine.ts
     to: bay/targets.ts
@@ -152,15 +74,12 @@ breaks:
   - from: bay/kernel.ts
     to: bay/sqlite-run-store.ts
     rule: private-file
-  - from: bay/last-resort.ts
-    to: bay/answers.ts
-    rule: may-not-import
   - from: bay/mcp.ts
-    to: bay/kernel.ts
-    rule: may-not-import
+    to: bay/mcp-server.ts
+    rule: private-file
   - from: bay/mcp.ts
-    to: bay/last-resort.ts
-    rule: may-not-import
+    to: bay/tool-definitions.ts
+    rule: private-file
   - from: bay/new.ts
     to: bay/script-protocol.ts
     rule: may-not-import
@@ -168,49 +87,31 @@ breaks:
     to: bay/check-context.ts
     rule: may-not-import
   - from: bay/policy.ts
-    to: bay/generated/mode.ts
-    rule: private-file
-  - from: bay/policy.ts
     to: bay/spec.ts
     rule: private-file
   - from: bay/run-report.ts
-    to: bay/adapter.ts
-    rule: may-not-import
+    to: bay/run-state.ts
+    rule: private-file
   - from: bay/run-report.ts
-    to: bay/command-context.ts
-    rule: may-not-import
-  - from: bay/run-report.ts
-    to: bay/kernel.ts
-    rule: may-not-import
+    to: bay/run-store.ts
+    rule: private-file
   - from: bay/run-report.ts
     to: bay/skill-tools.ts
-    rule: may-not-import
+    rule: private-file
   - from: bay/run-report.ts
     to: bay/task-tokens.ts
-    rule: may-not-import
+    rule: private-file
   - from: bay/run-report.ts
-    to: bay/tools.ts
-    rule: may-not-import
-  - from: bay/run-store.ts
-    to: bay/generated/mode.ts
+    to: bay/waiting.ts
     rule: private-file
   - from: bay/script-host.ts
     to: bay/agent-query.ts
     rule: private-file
   - from: bay/script-host.ts
-    to: bay/answers.ts
-    rule: private-file
-  - from: bay/script-host.ts
     to: bay/database.ts
     rule: private-file
   - from: bay/script-protocol.ts
-    to: bay/answers.ts
-    rule: private-file
-  - from: bay/script-protocol.ts
     to: bay/database.ts
-    rule: private-file
-  - from: bay/script-runner.ts
-    to: bay/answers.ts
     rule: private-file
   - from: bay/script-runner.ts
     to: bay/effect-rule.ts
@@ -225,23 +126,8 @@ breaks:
     to: bay/agent-query.ts
     rule: private-file
   - from: bay/sdk.ts
-    to: bay/answers.ts
-    rule: private-file
-  - from: bay/sdk.ts
     to: bay/database.ts
     rule: private-file
-  - from: bay/secrets.ts
-    to: bay/answers.ts
-    rule: may-not-import
-  - from: bay/secrets.ts
-    to: bay/policy.ts
-    rule: may-not-import
-  - from: bay/settings-listing.ts
-    to: bay/kernel.ts
-    rule: may-not-import
-  - from: bay/skill-steps.ts
-    to: bay/answers.ts
-    rule: may-not-import
   - from: bay/skill-steps.ts
     to: bay/effect-rule.ts
     rule: private-file
@@ -256,12 +142,6 @@ breaks:
     rule: may-not-import
   - from: bay/task-tokens.ts
     to: bay/run-store.ts
-    rule: private-file
-  - from: bay/terminal.ts
-    to: bay/command-context.ts
-    rule: may-not-import
-  - from: bay/tools.ts
-    to: bay/answers.ts
     rule: private-file
   - from: bay/tools.ts
     to: bay/kernel.ts
@@ -279,25 +159,16 @@ breaks:
     to: bay/waiting.ts
     rule: private-file
   - from: bay/undo.ts
-    to: bay/generated/mode.ts
-    rule: private-file
-  - from: bay/undo.ts
     to: bay/targets.ts
     rule: private-file
   - from: bay/waiting.ts
     to: bay/targets.ts
     rule: private-file
   - from: bay/walk.ts
-    to: bay/generated/mode.ts
-    rule: private-file
-  - from: bay/walk.ts
     to: bay/spec.ts
     rule: private-file
   - from: bay/walk.ts
     to: bay/targets.ts
-    rule: private-file
-  - from: bay/workflow-steps.ts
-    to: bay/generated/workflow.ts
     rule: private-file
   - from: bay/workflow-steps.ts
     to: bay/references.ts

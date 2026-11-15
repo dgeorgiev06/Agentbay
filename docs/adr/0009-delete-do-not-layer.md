@@ -15,4 +15,4 @@ Date: 2026-11-15. Status: accepted.
 
 **Cost.** Nothing is backwards compatible inside the kit. A slice that replaces something must update every caller, so its diff is larger and its write scope must say so.
 
-**Known gaps on the day this was written.** The dead-code tool is told to ignore unused types in `bay/contracts.ts` and `bay/ports.ts` and unused exports in `bay/node-ports.ts`. It counts tests as users, so it cannot see code that only tests call. Both are to be fixed in the slice that adds the feature-map tests.
+**Exemption in force (reviewer, 2026-11-15, after slice F1).** The earlier exemptions are gone and the dead-code tool runs twice, the second time without counting tests as users. One setting remains: an exported function that its own file also calls is not reported. Today it hides eight functions that tests import directly: `permissionsFor`, `policyFor`, `isReferenceText`, `parseReference`, `resolveReference`, `scriptCommand`, `stepKeyText`, `parseStepKey`. Each goes when its feature is deepened and its tests move to the entry file. The setting is removed with the last of them.

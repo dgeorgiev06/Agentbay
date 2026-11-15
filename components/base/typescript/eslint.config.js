@@ -73,6 +73,25 @@ const dynamicImportSyntax = {
   message: "Mode and adapter code uses static imports only.",
 };
 
+const noComments = {
+  meta: {
+    type: "problem",
+    schema: [],
+    messages: { comment: "No comments in kit code: put the reason in a name, an error message or the README." },
+  },
+  create(context) {
+    return {
+      Program() {
+        for (const comment of context.sourceCode.getAllComments()) {
+          context.report({ loc: comment.loc, messageId: "comment" });
+        }
+      },
+    };
+  },
+};
+
+const agentbayPlugin = { rules: { "no-comments": noComments } };
+
 export default defineConfig(
   globalIgnores(["node_modules/"]),
   {
@@ -110,6 +129,11 @@ export default defineConfig(
       "no-param-reassign": "error",
       "no-restricted-syntax": ["error", ...bannedSyntax],
     },
+  },
+  {
+    files: ["bay/**/*.ts", "adapters/**/*.ts", "components/**/*.ts"],
+    plugins: { agentbay: agentbayPlugin },
+    rules: { "agentbay/no-comments": "error" },
   },
   {
     files: ["components/**/*.ts"],

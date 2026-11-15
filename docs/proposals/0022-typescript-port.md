@@ -43,7 +43,7 @@ What it costs, stated plainly:
 - The new safety model is younger than the one it replaces. It is simpler and narrows the known bypass (code an agent runs outside the guard), but it has not been attacked yet, and the per-step hook has been tested only with sample inputs, not inside a live Claude Code session. Main stays on 4.0.0 until cutover, and a `v4` branch remains after it.
 - The kernel budget of 4,000 lines is a target, not a measurement, and it never outranks code quality or readability. If the engine stage shows it cannot hold with clear code, the budget is what gives, and that comes back to you before the modes are built.
 
-Release 5.0.0 is the cutover. A Codex adapter is 5.1.
+Release 5.0.0 is the cutover. 5.1 is the always-on cloud version, because the owner works from a phone; the Codex adapter follows as 5.2 (owner decision, 2026-11-14).
 
 ## Concepts: seven become three
 
@@ -253,7 +253,7 @@ Ceilings only fall after cutover, as today.
 
 ## Out of scope for 5.0.0
 
-Codex adapter (5.1), a background daemon with schedules and events, cloud drivers, a mode index with `bay install`, agent-to-agent protocols. The design leaves room for each and builds none.
+The always-on cloud version with its daemon, schedules, events and a chat channel (5.1), the Codex adapter (5.2), a mode index with `bay install`, agent-to-agent protocols. The design leaves room for each and builds none.
 
 ## Measured and estimated
 

@@ -2,6 +2,8 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
     "{tests,components/**/tests,adapters/**/tests}/**/*.test.ts",
+    "bay/check.ts",
+    "bay/new.ts",
     "bay/sdk.ts",
     "bay/script-host.ts",
     "bay/script-preload.ts",

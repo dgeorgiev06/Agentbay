@@ -81,7 +81,7 @@ function isCovered(finished: FinishedAction, all: readonly FinishedAction[]): bo
   return all.some((outer) => finished.key.startsWith(`${outer.key}/`) && coversItsSteps(outer));
 }
 
-function undoPlan(system: System, records: readonly StepRecord[]): UndoPlan {
+export function undoPlan(system: System, records: readonly StepRecord[]): UndoPlan {
   const all = records.flatMap((record) => finishedActionOf(system, record) ?? []);
   const uncovered = all
     .filter((finished) => !isCovered(finished, all))

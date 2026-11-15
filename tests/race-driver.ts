@@ -25,7 +25,9 @@ async function race(): Promise<void> {
     await sleep(10);
   }
   const result = await engine.extendBudget("race", { items: 5 });
-  const summary = result.ok ? { ok: true, status: result.run.state.status } : { ok: false, problems: result.problems };
+  const summary = result.ok
+    ? { ok: true, status: result.value.state.status }
+    : { ok: false, problems: result.problems };
   process.stdout.write(`${JSON.stringify(summary)}\n`);
   store.close();
 }

@@ -21,7 +21,7 @@ import type { System } from "./registry.ts";
 import { kernelDatabaseFile, SqliteRunStore } from "./run-store.ts";
 import { createScriptRunner } from "./script-runner.ts";
 import { SecretStore } from "./secrets.ts";
-import type { Outcome } from "./spec.ts";
+import type { Outcome } from "./outcome.ts";
 
 export type KernelPorts = {
   readonly files: FileSystem;

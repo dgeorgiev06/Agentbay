@@ -3,7 +3,7 @@ import type { Json } from "./contracts.ts";
 import { loadKernel, type Environment, type Kernel, type KernelPorts } from "./kernel.ts";
 import { parseJson } from "./json.ts";
 import type { Layout } from "./layout.ts";
-import type { Problem } from "./spec.ts";
+import { failedWith, unplacedProblem, type Outcome, type Problem } from "./outcome.ts";
 
 export type Terminal = {
   readonly isInteractive: () => boolean;
@@ -101,10 +101,7 @@ export async function withKernel(
   }
 }
 
-export type JsonArgument =
-  { readonly ok: true; readonly value: Json } | { readonly ok: false; readonly message: string };
-
-export function jsonArgument(text: string | undefined, what: string): JsonArgument {
+export function jsonArgument(text: string | undefined, what: string): Outcome<Json> {
   if (text === undefined) {
     return { ok: true, value: {} };
   }
@@ -112,6 +109,6 @@ export function jsonArgument(text: string | undefined, what: string): JsonArgume
     return { ok: true, value: parseJson(text) };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    return { ok: false, message: `The ${what} is not valid JSON: ${reason}.` };
+    return failedWith([unplacedProblem(`The ${what} is not valid JSON: ${reason}.`)]);
   }
 }

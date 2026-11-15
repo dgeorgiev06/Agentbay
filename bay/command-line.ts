@@ -9,6 +9,7 @@ import {
   type ExitCode,
   type Handler,
 } from "./command-context.ts";
+import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome } from "./outcome.ts";
 
 export type OptionSpec = {
   readonly name: string;
@@ -90,24 +91,26 @@ function addOption(parsed: Parsed, spec: OptionSpec, value: string | undefined):
   return undefined;
 }
 
-type OptionToken =
-  | { readonly ok: true; readonly spec: OptionSpec; readonly value: string | undefined; readonly next: number }
-  | { readonly ok: false; readonly problem: string };
+type OptionRead = {
+  readonly spec: OptionSpec;
+  readonly value: string | undefined;
+  readonly next: number;
+};
 
-function readOption(tokens: readonly string[], index: number, allowed: readonly OptionSpec[]): OptionToken {
+function readOption(tokens: readonly string[], index: number, allowed: readonly OptionSpec[]): Outcome<OptionRead> {
   const [name = "", ...valueParts] = (tokens[index] ?? "").slice(2).split("=");
   const spec = allowed.find((option) => option.name === name);
   if (spec === undefined) {
-    return { ok: false, problem: `The option --${name} is not an option of this command.` };
+    return failedWith([unplacedProblem(`The option --${name} is not an option of this command.`)]);
   }
   if (valueParts.length > 0) {
-    return { ok: true, spec, value: valueParts.join("="), next: index + 1 };
+    return succeededWith({ spec, value: valueParts.join("="), next: index + 1 });
   }
   const next = tokens[index + 1];
   if (spec.takesValue) {
-    return { ok: true, spec, value: next?.startsWith("--") === true ? undefined : next, next: index + 2 };
+    return succeededWith({ spec, value: next?.startsWith("--") === true ? undefined : next, next: index + 2 });
   }
-  return { ok: true, spec, value: undefined, next: index + 1 };
+  return succeededWith({ spec, value: undefined, next: index + 1 });
 }
 
 function parseTokens(tokens: readonly string[], allowed: readonly OptionSpec[]): Parsed | string {
@@ -125,11 +128,14 @@ function parseTokens(tokens: readonly string[], allowed: readonly OptionSpec[]):
       continue;
     }
     const option = readOption(tokens, index, allowed);
-    const problem = option.ok ? addOption(parsed, option.spec, option.value) : option.problem;
-    if (problem !== undefined || !option.ok) {
-      return problem ?? "";
+    if (!option.ok) {
+      return problemText(option.problems);
     }
-    index = option.next;
+    const problem = addOption(parsed, option.value.spec, option.value.value);
+    if (problem !== undefined) {
+      return problem;
+    }
+    index = option.value.next;
   }
   return parsed;
 }

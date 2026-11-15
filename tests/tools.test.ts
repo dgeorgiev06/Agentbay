@@ -4,7 +4,8 @@ import type { Json } from "../bay/contracts.ts";
 import { fieldOf, textField } from "../bay/json.ts";
 import type { Kernel } from "../bay/kernel.ts";
 import { issueTaskToken } from "../bay/task-tokens.ts";
-import { callKernelTool, toolResultBytes, type ToolResult } from "../bay/tools.ts";
+import { callKernelTool, toolResultBytes } from "../bay/tools.ts";
+import { problemText, type Outcome } from "../bay/outcome.ts";
 import { openKernel, openProject, type Opened } from "./kernel-fixture.ts";
 import { makeProject, skillText } from "./project-fixture.ts";
 
@@ -16,21 +17,21 @@ type Waiting = {
 
 async function waitingCompose(kernel: Kernel): Promise<Waiting> {
   const result = await kernel.engine.startAction("writer.compose", { name: "Ada" });
-  assert.ok(result.ok && result.run.state.status === "waiting", JSON.stringify(result));
-  const waiting = result.run.state.waiting;
+  assert.ok(result.ok && result.value.state.status === "waiting", JSON.stringify(result));
+  const waiting = result.value.state.waiting;
   assert.equal(waiting.reason, "skill");
-  const place = { runId: result.run.id, stepKey: waiting.stepKey, round: 1 };
+  const place = { runId: result.value.id, stepKey: waiting.stepKey, round: 1 };
   return { ...place, token: await issueTaskToken(kernel.store, place, new Date()) };
 }
 
-function valueOf(result: ToolResult): Json {
-  assert.ok(result.ok, result.ok ? "" : result.refusal);
+function valueOf(result: Outcome<Json>): Json {
+  assert.ok(result.ok, result.ok ? "" : problemText(result.problems));
   return result.value;
 }
 
-function refusalOf(result: ToolResult): string {
+function refusalOf(result: Outcome<Json>): string {
   assert.ok(!result.ok, `expected a refusal, got ${JSON.stringify(result)}`);
-  return result.refusal;
+  return problemText(result.problems);
 }
 
 async function withWaiting(body: (opened: Opened, waiting: Waiting) => Promise<void>): Promise<void> {

@@ -3,7 +3,7 @@ import { grantedCommands, writableFolders } from "./effect-rule.ts";
 import type { Layout } from "./layout.ts";
 import type { FileSystem, Removal } from "./ports.ts";
 import type { System } from "./registry.ts";
-import type { Outcome } from "./spec.ts";
+import type { Outcome } from "./outcome.ts";
 
 export type SkillAgent = {
   readonly agent: string;

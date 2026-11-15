@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { parse, stringify } from "yaml";
 import { planAgents } from "../bay/build.ts";
 import { skillNameOf, skillToolsOfText } from "../bay/skill-tools.ts";
-import { isRecord } from "../bay/spec.ts";
+import { isRecord } from "../bay/json.ts";
 import { streamTerminal } from "../bay/terminal.ts";
 import { openKernel } from "./kernel-fixture.ts";
 import { makeProject } from "./project-fixture.ts";

@@ -21,7 +21,8 @@ import { numberField, textField } from "../bay/json.ts";
 import { layoutOf } from "../bay/layout.ts";
 import { loadSystem, type System } from "../bay/registry.ts";
 import { SqliteRunStore, type RunStore } from "../bay/run-store.ts";
-import type { EngineResult, RunView, Waiting } from "../bay/run-state.ts";
+import type { RunView, Waiting } from "../bay/run-state.ts";
+import type { Outcome } from "../bay/outcome.ts";
 import { fakeClock, fakeFileSystem, type FakeFileSystem } from "./fakes.ts";
 import { MemoryRunStore } from "./memory-run-store.ts";
 import { yamlText } from "./system-fixture.ts";
@@ -361,18 +362,18 @@ export async function harness(
   };
 }
 
-export function runOf(result: EngineResult): RunView {
+export function runOf(result: Outcome<RunView>): RunView {
   assert.ok(result.ok, result.ok ? "" : JSON.stringify(result.problems, null, 2));
-  return result.run;
+  return result.value;
 }
 
-export function waitingOf(result: EngineResult): Waiting {
+export function waitingOf(result: Outcome<RunView>): Waiting {
   const run = runOf(result);
   assert.equal(run.state.status, "waiting", JSON.stringify(run.state));
   return run.state.waiting;
 }
 
-export function problemsOf(result: EngineResult): readonly string[] {
+export function problemsOf(result: Outcome<RunView>): readonly string[] {
   assert.ok(!result.ok, `expected a refusal, got ${JSON.stringify(result)}`);
   return result.problems.map((problem) => problem.message);
 }

@@ -5,7 +5,9 @@ import type { Effect, PolicyOf, Tier } from "./contracts.ts";
 import type { FileSystem } from "./ports.ts";
 import type { LoadedMode, System } from "./registry.ts";
 import { skillNameOf, skillToolsOf } from "./skill-tools.ts";
-import { isRecord, parseSkill, type Outcome, type Problem } from "./spec.ts";
+import { parseSkill } from "./spec.ts";
+import { isRecord } from "./json.ts";
+import type { Outcome, Problem } from "./outcome.ts";
 
 export type AgentPlanning = {
   readonly system: System;

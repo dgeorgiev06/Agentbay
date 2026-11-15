@@ -4,7 +4,7 @@ import type { Config } from "../bay/generated/config.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import { layoutOf } from "../bay/layout.ts";
 import { loadSystemReport, servingMode, type SystemReport } from "../bay/registry.ts";
-import type { Problem } from "../bay/spec.ts";
+import type { Problem } from "../bay/outcome.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import { briefingMode, config, paths, schemaText, validFiles, yamlText } from "./system-fixture.ts";
 

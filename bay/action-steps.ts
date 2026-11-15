@@ -27,7 +27,8 @@ import type { Budget, Step } from "./generated/mode.ts";
 import { fieldOf, numberField, textField, textsField, withFields } from "./json.ts";
 import type { LoadedMode } from "./registry.ts";
 import type { StepRecord } from "./run-store.ts";
-import { parseSkill, type Problem } from "./spec.ts";
+import { parseSkill } from "./spec.ts";
+import { problemText, type Problem } from "./outcome.ts";
 import { resolveCall, type ActionTarget } from "./targets.ts";
 import {
   changeDetail,
@@ -37,7 +38,6 @@ import {
   eventOf,
   failed,
   gate,
-  problemText,
   refuse,
   replayed,
   schemaProblems,

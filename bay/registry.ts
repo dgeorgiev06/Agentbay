@@ -7,16 +7,8 @@ import type { Workflow, Step as WorkflowStep } from "./generated/workflow.ts";
 import { isProjectTheKit, pathIn, shownPath, shownProblems, type Home, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
 import { workflowReferenceIssues } from "./references.ts";
-import {
-  checkValue,
-  loadSpec,
-  problemAt,
-  type Loaded,
-  type Outcome,
-  type PathSegments,
-  type Problem,
-  type Wording,
-} from "./spec.ts";
+import { checkValue, loadSpec, problemAt, type Loaded, type PathSegments, type Wording } from "./spec.ts";
+import type { Outcome, Problem } from "./outcome.ts";
 
 export type LoadedMode = {
   readonly home: Home;

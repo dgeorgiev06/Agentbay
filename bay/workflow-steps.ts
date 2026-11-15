@@ -3,7 +3,8 @@ import { noSpend, subtractSpend, type BudgetFrame } from "./budget.ts";
 import type { Json } from "./contracts.ts";
 import type { Step as WorkflowStep } from "./generated/workflow.ts";
 import { hashOf, textField, toJson } from "./json.ts";
-import { resolveInput, resolveValue, type ReferenceScope, type Resolution } from "./references.ts";
+import { problemText, succeededWith } from "./outcome.ts";
+import { resolveInput, resolveValue, type ReferenceScope } from "./references.ts";
 import type { LoadedMode } from "./registry.ts";
 import type { StepRecord } from "./run-store.ts";
 import { resolveWorkflowAction } from "./targets.ts";
@@ -74,10 +75,6 @@ function durationMilliseconds(text: string): number {
   return Number(text.slice(0, -1)) * unit;
 }
 
-function given(value: Json): Resolution {
-  return { ok: true, value };
-}
-
 async function runWorkflowAction(walk: Walk, scope: WorkflowScope, at: StepAt<ActionStep>): Promise<Progress> {
   const record = walk.records.get(at.key);
   const replay = replayed(scope.budget, record);
@@ -88,10 +85,10 @@ async function runWorkflowAction(walk: Walk, scope: WorkflowScope, at: StepAt<Ac
   const stepInput = at.step.input;
   const input =
     record !== undefined || stepInput === undefined
-      ? given(at.previous)
+      ? succeededWith(at.previous)
       : resolveInput(stepInput, referenceScope(scope));
   if (!input.ok) {
-    return refuse(walk, start, `Step ${at.step.id} cannot start: ${input.problems.join(" ")}`);
+    return refuse(walk, start, `Step ${at.step.id} cannot start: ${problemText(input.problems)}`);
   }
   const target = resolveWorkflowAction(walk.services.system, scope.mode, at.step.action);
   if (typeof target === "string") {
@@ -138,10 +135,10 @@ async function runApproval(walk: Walk, scope: WorkflowScope, at: StepAt<Approval
     return replay;
   }
   const show = at.step.show;
-  const content = show === undefined ? given(at.previous) : resolveValue(show, referenceScope(scope));
+  const content = show === undefined ? succeededWith(at.previous) : resolveValue(show, referenceScope(scope));
   if (!content.ok) {
     const start = { key: at.key, kind: "approval" as const, input: at.previous };
-    return refuse(walk, start, `Step ${at.step.id} cannot show anything: ${content.problems.join(" ")}`);
+    return refuse(walk, start, `Step ${at.step.id} cannot show anything: ${problemText(content.problems)}`);
   }
   const stopped = stopGate(walk);
   if (stopped !== undefined) {
@@ -189,9 +186,10 @@ async function runForeach(walk: Walk, scope: WorkflowScope, at: StepAt<ForeachSt
     return replay;
   }
   const start = { key: at.key, kind: "foreach" as const, input: at.previous };
-  const list = record === undefined ? resolveValue(at.step.foreach, referenceScope(scope)) : given(record.input);
+  const list =
+    record === undefined ? resolveValue(at.step.foreach, referenceScope(scope)) : succeededWith(record.input);
   if (!list.ok) {
-    return refuse(walk, start, `Step ${at.step.id} has no list: ${list.problems.join(" ")}`);
+    return refuse(walk, start, `Step ${at.step.id} has no list: ${problemText(list.problems)}`);
   }
   if (!Array.isArray(list.value)) {
     const reason =

@@ -9,6 +9,7 @@ import { issueTaskToken } from "../bay/task-tokens.ts";
 import { callKernelTool } from "../bay/tools.ts";
 import { openKernel } from "./kernel-fixture.ts";
 import { makeProject, skillText, type Project } from "./project-fixture.ts";
+import { problemText } from "../bay/outcome.ts";
 
 const nameSchema = { type: "object", additionalProperties: false, required: ["name"], properties: { name: {} } };
 
@@ -116,7 +117,7 @@ async function twoRequirers(bindings: Bindings, body: (kernel: Kernel) => Promis
 
 function doneOutput(result: Awaited<ReturnType<Kernel["engine"]["startAction"]>>): Json {
   assert.ok(result.ok, JSON.stringify(result));
-  const state = result.run.state;
+  const state = result.value.state;
   if (state.status !== "done") {
     assert.fail(`expected the run to be done, got ${JSON.stringify(state)}`);
   }
@@ -130,16 +131,16 @@ function calledMode(run: RunView, key: string): Json {
 
 async function greetingByTool(kernel: Kernel, requirer: string): Promise<string | undefined> {
   const result = await kernel.engine.startAction(`${requirer}.ask`, { name: "Ada" });
-  assert.ok(result.ok && result.run.state.status === "waiting", JSON.stringify(result));
-  const waiting = result.run.state.waiting;
-  const place = { runId: result.run.id, stepKey: waiting.stepKey, round: 1 };
+  assert.ok(result.ok && result.value.state.status === "waiting", JSON.stringify(result));
+  const waiting = result.value.state.waiting;
+  const place = { runId: result.value.id, stepKey: waiting.stepKey, round: 1 };
   const token = await issueTaskToken(kernel.store, place, new Date());
   const called = await callKernelTool(kernel, "call_action", {
     token,
     action: "greeting-source.fetch",
     input: { name: "Ada" },
   });
-  assert.ok(called.ok, called.ok ? "" : called.refusal);
+  assert.ok(called.ok, called.ok ? "" : problemText(called.problems));
   return textField(fieldOf(called.value, "output") ?? null, "greeting");
 }
 
@@ -155,7 +156,7 @@ test("two requirers bound to two servers each reach their own through a call ste
     assert.deepEqual(doneOutput(alphaScript), { greeting: "Hello, Bo" });
     assert.deepEqual(doneOutput(betaScript), { greeting: "Echo, Bo" });
     assert.ok(betaScript.ok);
-    assert.equal(calledMode(betaScript.run, "0.call0"), "echoer");
+    assert.equal(calledMode(betaScript.value, "0.call0"), "echoer");
   });
 });
 

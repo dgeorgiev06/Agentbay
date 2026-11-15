@@ -12,6 +12,7 @@ import type { Json } from "../contracts.ts";
 import type { Kernel } from "../kernel.ts";
 import { engineOutput } from "../run-report.ts";
 import { callKernelTool } from "../tools.ts";
+import { problemText } from "../outcome.ts";
 
 type Form =
   | { readonly kind: "action"; readonly reference: string; readonly input: string | undefined }
@@ -49,7 +50,7 @@ function formOf(invocation: Invocation): Form | string {
 async function callTool(kernel: Kernel, name: string, input: Json): Promise<CommandResult> {
   const result = await callKernelTool(kernel, name, input);
   if (!result.ok) {
-    return problemsResult([{ file: "", path: "", message: result.refusal }]);
+    return problemsResult(result.problems);
   }
   return succeeded({ result: result.value }, JSON.stringify(result.value, null, 2));
 }
@@ -76,7 +77,7 @@ async function runCall(invocation: Invocation): Promise<CommandResult> {
   }
   const input = jsonArgument(form.input, "input");
   if (!input.ok) {
-    return usageResult(input.message, usage);
+    return usageResult(problemText(input.problems), usage);
   }
   return withKernel(invocation, (kernel) => callForm(kernel, form, input.value));
 }

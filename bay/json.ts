@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import type { Json } from "./contracts.ts";
-import { isRecord } from "./spec.ts";
+
+export function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 export function toJson(value: unknown): Json {
   if (value === null || typeof value === "boolean" || typeof value === "string") {

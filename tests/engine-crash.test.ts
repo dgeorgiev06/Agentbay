@@ -7,7 +7,8 @@ import type { ScriptRequest } from "../bay/contracts.ts";
 import { numberField } from "../bay/json.ts";
 import type { Engine } from "../bay/engine.ts";
 import { SqliteRunStore, type RunStore } from "../bay/run-store.ts";
-import type { EngineResult } from "../bay/run-state.ts";
+import type { RunView } from "../bay/run-state.ts";
+import type { Outcome } from "../bay/outcome.ts";
 import {
   eventKinds,
   finished,
@@ -328,7 +329,7 @@ test("a crash right after a decision is saved applies it on resume and refuses a
 test("a live engine whose steps each take seven minutes is never taken over; a silent one is", async () => {
   let tries = 0;
   let refusedTries = 0;
-  const holder: { second: Engine | undefined; silentAt: number | undefined; takeover: EngineResult | undefined } = {
+  const holder: { second: Engine | undefined; silentAt: number | undefined; takeover: Outcome<RunView> | undefined } = {
     second: undefined,
     silentAt: undefined,
     takeover: undefined,
@@ -362,7 +363,7 @@ test("a live engine whose steps each take seven minutes is never taken over; a s
   const lost = await engine.startAction("notes.long", {}, { id: "silent" });
   assert.match(problemsOf(lost).join(" "), /stopped at an unexpected error: .*no longer holds the lock/);
   assert.ok(holder.takeover?.ok);
-  assert.equal(holder.takeover.run.state.status, "done");
+  assert.equal(holder.takeover.value.state.status, "done");
   assert.ok((await eventKinds(store, "silent")).includes("lock.taken-over"));
 });
 

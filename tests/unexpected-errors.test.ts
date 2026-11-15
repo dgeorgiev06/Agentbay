@@ -30,6 +30,7 @@ import { bay } from "./cli-fixture.ts";
 import { harness, finished, problemsOf, runOf } from "./engine-fixture.ts";
 import { openProject, testEnvironment } from "./kernel-fixture.ts";
 import { kit, makeProject, type Project } from "./project-fixture.ts";
+import { problemText } from "../bay/outcome.ts";
 
 const anything = `${JSON.stringify({ type: "object" })}\n`;
 
@@ -138,13 +139,13 @@ test("files_write onto a folder is a refusal, not a rejected tool call", async (
   try {
     const { kernel, project } = opened;
     const result = await kernel.engine.startAction("writer.compose", { name: "Ada" });
-    assert.ok(result.ok && result.run.state.status === "waiting", JSON.stringify(result));
-    const place = { runId: result.run.id, stepKey: result.run.state.waiting.stepKey, round: 1 };
+    assert.ok(result.ok && result.value.state.status === "waiting", JSON.stringify(result));
+    const place = { runId: result.value.id, stepKey: result.value.state.waiting.stepKey, round: 1 };
     const token = await issueTaskToken(kernel.store, place, new Date());
     await mkdir(join(project.root, "out", "notes", "taken"), { recursive: true });
     const written = await callKernelTool(kernel, "files_write", { token, path: "out/notes/taken", text: "x" });
     assert.ok(!written.ok);
-    assert.match(written.refusal, /could not write out\/notes\/taken/);
+    assert.match(problemText(written.problems), /could not write out\/notes\/taken/);
   } finally {
     await opened.close();
   }
@@ -156,12 +157,12 @@ test("a migration that cannot be read makes db_query a refusal, not a rejected t
     const { kernel, project } = opened;
     await mkdir(join(project.root, "components", "modes", "writer", "migrations", "0002-folder.sql"));
     const result = await kernel.engine.startAction("writer.compose", { name: "Ada" });
-    assert.ok(result.ok && result.run.state.status === "waiting", JSON.stringify(result));
-    const place = { runId: result.run.id, stepKey: result.run.state.waiting.stepKey, round: 1 };
+    assert.ok(result.ok && result.value.state.status === "waiting", JSON.stringify(result));
+    const place = { runId: result.value.id, stepKey: result.value.state.waiting.stepKey, round: 1 };
     const token = await issueTaskToken(kernel.store, place, new Date());
     const queried = await callKernelTool(kernel, "db_query", { token, sql: "select 1" });
     assert.ok(!queried.ok);
-    assert.match(queried.refusal, /could not read the migrations/);
+    assert.match(problemText(queried.problems), /could not read the migrations/);
   } finally {
     await opened.close();
   }
@@ -255,15 +256,15 @@ test("a kernel tool whose skill file cannot be read answers with a refusal, not 
   try {
     const { kernel, project } = opened;
     const result = await kernel.engine.startAction("writer.compose", { name: "Ada" });
-    assert.ok(result.ok && result.run.state.status === "waiting", JSON.stringify(result));
-    const place = { runId: result.run.id, stepKey: result.run.state.waiting.stepKey, round: 1 };
+    assert.ok(result.ok && result.value.state.status === "waiting", JSON.stringify(result));
+    const place = { runId: result.value.id, stepKey: result.value.state.waiting.stepKey, round: 1 };
     const token = await issueTaskToken(kernel.store, place, new Date());
     const skillFile = join(project.root, "components", "modes", "writer", "skills", "draft", "SKILL.md");
     await rm(skillFile);
     await mkdir(skillFile);
     const queried = await callKernelTool(kernel, "db_query", { token, sql: "select 1" });
     assert.ok(!queried.ok);
-    assert.match(queried.refusal, /The tool db_query stopped at an unexpected error: EISDIR/);
+    assert.match(problemText(queried.problems), /The tool db_query stopped at an unexpected error: EISDIR/);
   } finally {
     await opened.close();
   }

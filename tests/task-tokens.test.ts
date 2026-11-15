@@ -7,6 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { SqliteRunStore, type StoredState, type Writer } from "../bay/run-store.ts";
 import { checkTaskToken, checkTaskTokenFor, issueTaskToken } from "../bay/task-tokens.ts";
+import { problemText } from "../bay/outcome.ts";
 
 type Opened = {
   readonly store: SqliteRunStore;
@@ -73,7 +74,7 @@ test("a token is 32 random bytes, shown once, and kernel.db keeps only its SHA-2
   assert.ok(!JSON.stringify(rows).includes(token));
   assert.deepEqual(await checkTaskToken(stores(context), token), {
     ok: true,
-    place: { runId: "run-1", stepKey: "1#1", round: 1 },
+    value: { runId: "run-1", stepKey: "1#1", round: 1 },
   });
   context.remove();
 });
@@ -85,7 +86,7 @@ test("a wrong token is refused", async () => {
   for (const wrong of ["", "nope", `${token}x`, token.slice(1), token.toUpperCase()]) {
     const checked = await checkTaskToken(stores(context), wrong);
     assert.ok(!checked.ok, wrong);
-    assert.match(checked.reason, /The token is not valid/);
+    assert.match(problemText(checked.problems), /The token is not valid/);
   }
   context.remove();
 });
@@ -97,7 +98,7 @@ test("a token for another step, or another run, is refused for this one", async 
   const first = await issueTaskToken(context.store, { runId: "run-1", stepKey: "1#1", round: 1 }, now);
   const otherStep = await checkTaskTokenFor(stores(context), first, { runId: "run-1", stepKey: "2#1" });
   assert.ok(!otherStep.ok);
-  assert.match(otherStep.reason, /belongs to step 1#1 of run run-1, not to step 2#1 of run run-1/);
+  assert.match(problemText(otherStep.problems), /belongs to step 1#1 of run run-1, not to step 2#1 of run run-1/);
   const otherRun = await checkTaskTokenFor(stores(context), first, { runId: "run-2", stepKey: "1#1" });
   assert.ok(!otherRun.ok);
   assert.ok((await checkTaskTokenFor(stores(context), first, { runId: "run-1", stepKey: "1#1" })).ok);
@@ -111,7 +112,7 @@ test("a token dies when its step finishes", async () => {
   await moveTo(context, "run-1", { status: "done", output: {} });
   const checked = await checkTaskToken(stores(context), token);
   assert.ok(!checked.ok);
-  assert.match(checked.reason, /no longer waiting for it \(the run is done\)/);
+  assert.match(problemText(checked.problems), /no longer waiting for it \(the run is done\)/);
   assert.deepEqual(await context.store.taskTokens(), []);
   context.remove();
 });
@@ -123,7 +124,7 @@ test("a token from an earlier round is refused once the round changes", async ()
   await moveTo(context, "run-1", { status: "waiting", reason: "skill", stepKey: "1#2" });
   const checked = await checkTaskToken(stores(context), token);
   assert.ok(!checked.ok);
-  assert.match(checked.reason, /the run is waiting for skill at 1#2/);
+  assert.match(problemText(checked.problems), /the run is waiting for skill at 1#2/);
   context.remove();
 });
 
@@ -148,8 +149,8 @@ test("tokens of different runs live side by side", async () => {
   const second = await issueTaskToken(context.store, { runId: "run-2", stepKey: "0#1", round: 1 }, now);
   const checkedFirst = await checkTaskToken(stores(context), first);
   const checkedSecond = await checkTaskToken(stores(context), second);
-  assert.ok(checkedFirst.ok && checkedFirst.place.runId === "run-1");
-  assert.ok(checkedSecond.ok && checkedSecond.place.runId === "run-2");
+  assert.ok(checkedFirst.ok && checkedFirst.value.runId === "run-1");
+  assert.ok(checkedSecond.ok && checkedSecond.value.runId === "run-2");
   await context.store.removeTaskTokens("run-1");
   assert.ok(!(await checkTaskToken(stores(context), first)).ok);
   assert.ok((await checkTaskToken(stores(context), second)).ok);

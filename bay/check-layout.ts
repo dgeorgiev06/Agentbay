@@ -10,7 +10,9 @@ import {
   type LoadedModeFolder,
   type ModeFolder,
 } from "./check-context.ts";
-import { checkValue, isRecord, type Problem, type Wording } from "./spec.ts";
+import { checkValue, type Wording } from "./spec.ts";
+import { isRecord } from "./json.ts";
+import type { Problem } from "./outcome.ts";
 
 type JsonFile =
   | { readonly state: "missing" }

@@ -10,15 +10,9 @@ import type { Interface } from "./generated/interface.ts";
 import type { Mode } from "./generated/mode.ts";
 import type { SkillFrontMatter } from "./generated/skill.ts";
 import type { Workflow } from "./generated/workflow.ts";
+import { isRecord } from "./json.ts";
+import { failedWith, type Outcome, type Problem } from "./outcome.ts";
 import type { FileSystem } from "./ports.ts";
-
-export type Problem = {
-  readonly file: string;
-  readonly path: string;
-  readonly line?: number;
-  readonly message: string;
-  readonly fix?: string;
-};
 
 export type Wording = {
   readonly message: string;
@@ -32,9 +26,6 @@ export type Loaded<T> = {
   readonly value: T;
   readonly lineOf: (path: PathSegments) => number | undefined;
 };
-
-export type Outcome<T> =
-  { readonly ok: true; readonly value: T } | { readonly ok: false; readonly problems: readonly Problem[] };
 
 export type ValuePlace = {
   readonly loaded: Loaded<unknown>;
@@ -74,10 +65,6 @@ const validators: { readonly [Kind in keyof Kinds]: ValidateFunction<Kinds[Kind]
   skill: ajv.compile<SkillFrontMatter>(skillSchema),
 };
 
-export function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 export function pointer(path: PathSegments): string {
   return path.map((segment) => `/${String(segment).replaceAll("~", "~0").replaceAll("/", "~1")}`).join("");
 }
@@ -95,10 +82,6 @@ function segmentsOf(instancePath: string): readonly string[] {
 export function problemAt<T>(loaded: Loaded<T>, path: PathSegments, wording: Wording): Problem {
   const line = loaded.lineOf(path);
   return { file: loaded.file, path: pointer(path), ...(line === undefined ? {} : { line }), ...wording };
-}
-
-function failed(problems: readonly Problem[]): { readonly ok: false; readonly problems: readonly Problem[] } {
-  return { ok: false, problems };
 }
 
 function placeName(location: PathSegments): string {
@@ -312,7 +295,7 @@ function parseSpec<Kind extends keyof Kinds>(source: Source, kind: Kind): Outcom
     return isNode(node) && node.range ? lineAt(node.range[0]) : undefined;
   };
   if (document.errors.length > 0) {
-    return failed(
+    return failedWith(
       document.errors.map((error) => ({
         file: source.file,
         path: "",
@@ -328,7 +311,7 @@ function parseSpec<Kind extends keyof Kinds>(source: Source, kind: Kind): Outcom
     return { ok: true, value: { file: source.file, value, lineOf } };
   }
   const loaded: Loaded<unknown> = { file: source.file, value, lineOf };
-  return failed(errorProblems(validate.errors ?? [], { loaded, path: [] }));
+  return failedWith(errorProblems(validate.errors ?? [], { loaded, path: [] }));
 }
 
 function missingFile(file: string): Problem {
@@ -342,7 +325,7 @@ export async function loadSpec<Kind extends keyof Kinds>(
 ): Promise<Outcome<Loaded<Kinds[Kind]>>> {
   const text = await files.readText(file);
   if (text === undefined) {
-    return failed([missingFile(file)]);
+    return failedWith([missingFile(file)]);
   }
   return parseSpec({ file, text, firstLine: 1 }, kind);
 }
@@ -367,12 +350,12 @@ function levelTwoHeadings(lines: readonly string[]): readonly string[] {
 export async function parseSkill(files: FileSystem, file: string): Promise<Outcome<Skill>> {
   const text = await files.readText(file);
   if (text === undefined) {
-    return failed([missingFile(file)]);
+    return failedWith([missingFile(file)]);
   }
   const lines = text.split(/\r?\n/);
   const closing = lines.findIndex((line, index) => index > 0 && line.trim() === "---");
   if (lines[0]?.trim() !== "---" || closing < 0) {
-    return failed([
+    return failedWith([
       {
         file,
         path: "",

@@ -1,7 +1,6 @@
 import type { Json, RunEvent, Scrubber } from "./contracts.ts";
-import { toJson } from "./json.ts";
+import { toJson, isRecord } from "./json.ts";
 import type { RunPatch, RunStore, StepEnd, StoredState } from "./run-store.ts";
-import { isRecord } from "./spec.ts";
 
 export function redactJson(value: Json, scrubber: Scrubber): Json {
   if (typeof value === "string") {

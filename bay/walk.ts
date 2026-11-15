@@ -7,7 +7,8 @@ import type { Clock, FileSystem } from "./ports.ts";
 import type { LoadedMode, System } from "./registry.ts";
 import type { RunStore, StepEnd, StepKind, StepRecord, Writer } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
-import { checkValue, type Problem } from "./spec.ts";
+import { checkValue } from "./spec.ts";
+import type { Problem } from "./outcome.ts";
 import type { ActionTarget } from "./targets.ts";
 
 export type Services = {
@@ -234,8 +235,4 @@ export async function schemaProblems(services: Services, check: SchemaCheck): Pr
     return [{ file, path: "", message: `The schema file ${file} is not a usable JSON Schema: ${result.reason}.` }];
   }
   return result.problems;
-}
-
-export function problemText(problems: readonly Problem[]): string {
-  return problems.map((problem) => problem.message).join(" ");
 }

@@ -1,5 +1,5 @@
 import { isAbsolute, join, normalize, relative } from "node:path/posix";
-import type { Problem } from "./spec.ts";
+import type { Problem } from "./outcome.ts";
 
 export type Home = "kit" | "project";
 

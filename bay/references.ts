@@ -1,7 +1,8 @@
 import type { Json } from "./contracts.ts";
 import type { Step as WorkflowStep } from "./generated/workflow.ts";
-import { toJson } from "./json.ts";
-import { isRecord, type PathSegments, type Wording } from "./spec.ts";
+import { toJson, isRecord } from "./json.ts";
+import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome, type Problem } from "./outcome.ts";
+import type { PathSegments, Wording } from "./spec.ts";
 
 export type Reference =
   | { readonly kind: "trigger"; readonly text: string }
@@ -9,18 +10,12 @@ export type Reference =
   | { readonly kind: "settings"; readonly text: string; readonly key: string }
   | { readonly kind: "steps"; readonly text: string; readonly id: string; readonly path: readonly string[] };
 
-export type ParsedReference =
-  { readonly ok: true; readonly reference: Reference } | { readonly ok: false; readonly message: string };
-
 export type ReferenceScope = {
   readonly trigger: Json;
   readonly outputs: ReadonlyMap<string, Json>;
   readonly item?: Json;
   readonly settings: Readonly<Record<string, unknown>>;
 };
-
-export type Resolution =
-  { readonly ok: true; readonly value: Json } | { readonly ok: false; readonly problems: readonly string[] };
 
 export type ReferenceIssue = Wording & { readonly path: PathSegments };
 
@@ -45,26 +40,24 @@ export function isReferenceText(value: unknown): value is string {
   return typeof value === "string" && value.startsWith("$");
 }
 
-export function parseReference(text: string): ParsedReference {
+export function parseReference(text: string): Outcome<Reference> {
   if (text === "$trigger") {
-    return { ok: true, reference: { kind: "trigger", text } };
+    return succeededWith({ kind: "trigger", text });
   }
   if (text === "$item") {
-    return { ok: true, reference: { kind: "item", text } };
+    return succeededWith({ kind: "item", text });
   }
   const settings = settingsPattern.exec(text);
   if (settings?.[1] !== undefined) {
-    return { ok: true, reference: { kind: "settings", text, key: settings[1] } };
+    return succeededWith({ kind: "settings", text, key: settings[1] });
   }
   const steps = stepsPattern.exec(text);
   if (steps?.[1] !== undefined) {
     const path = (steps[2] ?? "").split(".").filter((segment) => segment !== "");
-    return { ok: true, reference: { kind: "steps", text, id: steps[1], path } };
+    return succeededWith({ kind: "steps", text, id: steps[1], path });
   }
-  return {
-    ok: false,
-    message: `${text} is not a reference: ${grammar}. Every value that starts with $ is read as a reference.`,
-  };
+  const message = `${text} is not a reference: ${grammar}. Every value that starts with $ is read as a reference.`;
+  return failedWith([unplacedProblem(message)]);
 }
 
 function listed(names: readonly string[]): string {
@@ -92,7 +85,7 @@ function childOf(value: Json, segment: string): Json | undefined {
   return undefined;
 }
 
-function followPath(reference: Reference & { readonly kind: "steps" }, output: Json): Resolution {
+function followPath(reference: Reference & { readonly kind: "steps" }, output: Json): Outcome<Json> {
   let current = output;
   for (const [index, segment] of reference.path.entries()) {
     const next = childOf(current, segment);
@@ -101,43 +94,43 @@ function followPath(reference: Reference & { readonly kind: "steps" }, output: J
       const problem =
         `${reference.text} resolves to nothing: ${walked} of step ${reference.id} has no ${segment}; ` +
         `it is ${keysOf(current)}.`;
-      return { ok: false, problems: [problem] };
+      return failedWith([unplacedProblem(problem)]);
     }
     current = next;
   }
   return { ok: true, value: current };
 }
 
-function resolveSteps(reference: Reference & { readonly kind: "steps" }, scope: ReferenceScope): Resolution {
+function resolveSteps(reference: Reference & { readonly kind: "steps" }, scope: ReferenceScope): Outcome<Json> {
   const output = scope.outputs.get(reference.id);
   if (output === undefined) {
     const available = listed([...scope.outputs.keys()]);
     const problem =
       `${reference.text} resolves to nothing: no step ${reference.id} has finished before it ` +
       `(available: ${available}).`;
-    return { ok: false, problems: [problem] };
+    return failedWith([unplacedProblem(problem)]);
   }
   return followPath(reference, output);
 }
 
-function resolveSettings(reference: Reference & { readonly kind: "settings" }, scope: ReferenceScope): Resolution {
+function resolveSettings(reference: Reference & { readonly kind: "settings" }, scope: ReferenceScope): Outcome<Json> {
   if (!Object.hasOwn(scope.settings, reference.key)) {
     const available = listed(Object.keys(scope.settings));
     const problem =
       `${reference.text} resolves to nothing: the mode's settings have no ${reference.key} ` +
       `(available: ${available}).`;
-    return { ok: false, problems: [problem] };
+    return failedWith([unplacedProblem(problem)]);
   }
   return { ok: true, value: toJson(scope.settings[reference.key]) };
 }
 
-export function resolveReference(reference: Reference, scope: ReferenceScope): Resolution {
+export function resolveReference(reference: Reference, scope: ReferenceScope): Outcome<Json> {
   switch (reference.kind) {
     case "trigger":
       return { ok: true, value: scope.trigger };
     case "item":
       if (scope.item === undefined) {
-        return { ok: false, problems: [`$item resolves to nothing: it is used outside a foreach.`] };
+        return failedWith([unplacedProblem("$item resolves to nothing: it is used outside a foreach.")]);
       }
       return { ok: true, value: scope.item };
     case "settings":
@@ -147,29 +140,28 @@ export function resolveReference(reference: Reference, scope: ReferenceScope): R
   }
 }
 
-export function resolveValue(value: unknown, scope: ReferenceScope): Resolution {
+export function resolveValue(value: unknown, scope: ReferenceScope): Outcome<Json> {
   if (!isReferenceText(value)) {
     return { ok: true, value: toJson(value) };
   }
   const parsed = parseReference(value);
-  if (!parsed.ok) {
-    return { ok: false, problems: [parsed.message] };
-  }
-  return resolveReference(parsed.reference, scope);
+  return parsed.ok ? resolveReference(parsed.value, scope) : parsed;
 }
 
-export function resolveInput(input: Readonly<Record<string, unknown>>, scope: ReferenceScope): Resolution {
+export function resolveInput(input: Readonly<Record<string, unknown>>, scope: ReferenceScope): Outcome<Json> {
   const resolved: Record<string, Json> = {};
-  const problems: string[] = [];
+  const problems: Problem[] = [];
   for (const [key, value] of Object.entries(input)) {
     const resolution = resolveValue(value, scope);
     if (resolution.ok) {
       resolved[key] = resolution.value;
     } else {
-      problems.push(...resolution.problems.map((problem) => `input.${key}: ${problem}`));
+      problems.push(
+        ...resolution.problems.map((problem) => ({ ...problem, message: `input.${key}: ${problem.message}` })),
+      );
     }
   }
-  return problems.length === 0 ? { ok: true, value: resolved } : { ok: false, problems };
+  return problems.length === 0 ? succeededWith(resolved) : failedWith(problems);
 }
 
 function referencePlaces(step: WorkflowStep, path: PathSegments): readonly ReferencePlace[] {
@@ -211,9 +203,9 @@ function scopeIssue(reference: Reference, scope: StaticScope): Wording | undefin
 function placeIssue(place: ReferencePlace, scope: StaticScope): ReferenceIssue | undefined {
   const parsed = parseReference(place.text);
   if (!parsed.ok) {
-    return { path: place.path, message: parsed.message, fix: `Correct the reference: ${grammar}.` };
+    return { path: place.path, message: problemText(parsed.problems), fix: `Correct the reference: ${grammar}.` };
   }
-  const issue = scopeIssue(parsed.reference, scope);
+  const issue = scopeIssue(parsed.value, scope);
   return issue === undefined ? undefined : { path: place.path, ...issue };
 }
 

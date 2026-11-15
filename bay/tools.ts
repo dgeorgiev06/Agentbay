@@ -1,17 +1,15 @@
 import { errorLine, type Answer } from "./answers.ts";
 import type { Broker } from "./broker.ts";
 import type { Json } from "./contracts.ts";
-import { byteSize, fieldOf, numberField, textField } from "./json.ts";
+import { byteSize, fieldOf, numberField, textField, isRecord } from "./json.ts";
 import type { Kernel } from "./kernel.ts";
 import type { StepRecord } from "./run-store.ts";
-import type { EngineResult, RunView } from "./run-state.ts";
+import type { RunView } from "./run-state.ts";
+import { failedWith, problemText, unplacedProblem, type Outcome, type Problem } from "./outcome.ts";
 import { isToolName, skillToolsOf, type SkillTools, type ToolName } from "./skill-tools.ts";
-import { isRecord } from "./spec.ts";
 import { resolveCall, resolveOwnAction, type ActionTarget } from "./targets.ts";
 import { checkTaskToken, issueTaskToken } from "./task-tokens.ts";
 import { skillStepAt, type SkillStepAt } from "./waiting.ts";
-
-export type ToolResult = { readonly ok: true; readonly value: Json } | { readonly ok: false; readonly refusal: string };
 
 type ToolCall = {
   readonly kernel: Kernel;
@@ -20,21 +18,21 @@ type ToolCall = {
   readonly input: Json;
 };
 
-type ToolHandler = (call: ToolCall) => Promise<ToolResult>;
+type ToolHandler = (call: ToolCall) => Promise<Outcome<Json>>;
 
 export const toolResultBytes = 256 * 1024;
 
 export const askedByKind = "run.asked-by";
 
-function refused(refusal: string): ToolResult {
-  return { ok: false, refusal };
+function refused(refusal: string): Outcome<never> {
+  return failedWith([unplacedProblem(refusal)]);
 }
 
-function answered<T extends Json>(answer: Answer<T>, shape: (value: T) => Json): ToolResult {
+function answered<T extends Json>(answer: Answer<T>, shape: (value: T) => Json): Outcome<Json> {
   return answer.ok ? { ok: true, value: shape(answer.value) } : refused(answer.message);
 }
 
-async function withBroker(call: ToolCall, use: (broker: Broker) => Promise<ToolResult>): Promise<ToolResult> {
+async function withBroker(call: ToolCall, use: (broker: Broker) => Promise<Outcome<Json>>): Promise<Outcome<Json>> {
   const broker = call.kernel.brokerFor(call.step.task.place, call.step.task.permissions);
   try {
     return await use(broker);
@@ -43,11 +41,11 @@ async function withBroker(call: ToolCall, use: (broker: Broker) => Promise<ToolR
   }
 }
 
-function textInput(call: ToolCall, name: string): string | ToolResult {
+function textInput(call: ToolCall, name: string): string | Outcome<Json> {
   return textField(call.input, name) ?? refused(`The call needs ${name} as text.`);
 }
 
-async function databaseQuery(call: ToolCall): Promise<ToolResult> {
+async function databaseQuery(call: ToolCall): Promise<Outcome<Json>> {
   const sql = textInput(call, "sql");
   if (typeof sql !== "string") {
     return sql;
@@ -60,7 +58,7 @@ async function databaseQuery(call: ToolCall): Promise<ToolResult> {
   });
 }
 
-async function filesRead(call: ToolCall): Promise<ToolResult> {
+async function filesRead(call: ToolCall): Promise<Outcome<Json>> {
   const path = textInput(call, "path");
   if (typeof path !== "string") {
     return path;
@@ -68,7 +66,7 @@ async function filesRead(call: ToolCall): Promise<ToolResult> {
   return withBroker(call, async (broker) => answered(await broker.readFile(path), (text) => ({ path, text })));
 }
 
-async function filesList(call: ToolCall): Promise<ToolResult> {
+async function filesList(call: ToolCall): Promise<Outcome<Json>> {
   const path = textInput(call, "path");
   if (typeof path !== "string") {
     return path;
@@ -78,7 +76,7 @@ async function filesList(call: ToolCall): Promise<ToolResult> {
   );
 }
 
-async function filesWrite(call: ToolCall): Promise<ToolResult> {
+async function filesWrite(call: ToolCall): Promise<Outcome<Json>> {
   const path = textInput(call, "path");
   const text = textInput(call, "text");
   if (typeof path !== "string") {
@@ -102,38 +100,38 @@ function callTarget(call: ToolCall, action: string): ActionTarget | string {
   return resolveOwnAction(call.kernel.system, mode.manifest.name, action);
 }
 
-async function recordAskedBy(call: ToolCall, result: EngineResult): Promise<void> {
+async function recordAskedBy(call: ToolCall, result: Outcome<RunView>): Promise<void> {
   if (!result.ok) {
     return;
   }
   await call.kernel.store.append({
     at: call.kernel.ports.clock.now().toISOString(),
-    runId: result.run.id,
+    runId: result.value.id,
     kind: askedByKind,
     detail: { runId: call.step.task.place.runId, stepKey: call.step.waitingKey },
   });
 }
 
-function calledResult(result: EngineResult, action: string): ToolResult {
+function calledResult(result: Outcome<RunView>, action: string): Outcome<Json> {
   if (!result.ok) {
-    return refused(result.problems.map((problem) => problem.message).join(" "));
+    return result;
   }
-  const state = result.run.state;
+  const state = result.value.state;
   switch (state.status) {
     case "done":
-      return { ok: true, value: { output: state.output, run: result.run.id } };
+      return { ok: true, value: { output: state.output, run: result.value.id } };
     case "failed":
     case "undone":
       return refused(`The action ${action} failed: ${state.reason}`);
     case "waiting":
       return refused(
-        `The action ${action} stopped to wait for ${state.waiting.reason} (run ${result.run.id}); ` +
+        `The action ${action} stopped to wait for ${state.waiting.reason} (run ${result.value.id}); ` +
           "an action called from a skill must finish without waiting.",
       );
   }
 }
 
-async function callAction(call: ToolCall): Promise<ToolResult> {
+async function callAction(call: ToolCall): Promise<Outcome<Json>> {
   const action = textInput(call, "action");
   if (typeof action !== "string") {
     return action;
@@ -188,11 +186,11 @@ function settledSubmission(run: RunView, record: StepRecord | undefined): Json {
   return { accepted: record?.status === "finished", run: summary, ...reason, ...next };
 }
 
-async function submittedResult(call: ToolCall, result: EngineResult): Promise<ToolResult> {
+async function submittedResult(call: ToolCall, result: Outcome<RunView>): Promise<Outcome<Json>> {
   if (!result.ok) {
     return { ok: true, value: { accepted: false, problems: result.problems.map((problem) => problem.message) } };
   }
-  const run = result.run;
+  const run = result.value;
   const record = run.steps.find((step) => step.key === call.step.task.place.stepKey);
   if (run.state.status === "waiting" && run.state.waiting.reason === "skill" && record?.status === "started") {
     const task = run.state.waiting.task;
@@ -206,7 +204,7 @@ async function submittedResult(call: ToolCall, result: EngineResult): Promise<To
   return { ok: true, value: settledSubmission(run, record) };
 }
 
-async function submit(call: ToolCall): Promise<ToolResult> {
+async function submit(call: ToolCall): Promise<Outcome<Json>> {
   const output = fieldOf(call.input, "output");
   if (output === undefined) {
     return refused("The call needs output: your result, matching the task's outputSchema.");
@@ -234,19 +232,24 @@ const handlers: { readonly [Name in ToolName]: ToolHandler } = {
 async function stepOfToken(kernel: Kernel, token: string): Promise<SkillStepAt | string> {
   const checked = await checkTaskToken({ tokens: kernel.store, runs: kernel.store }, token);
   if (!checked.ok) {
-    return checked.reason;
+    return problemText(checked.problems);
   }
-  const run = await kernel.store.readRun(checked.place.runId);
+  const run = await kernel.store.readRun(checked.value.runId);
   if (run === undefined) {
-    return `There is no run ${checked.place.runId}.`;
+    return `There is no run ${checked.value.runId}.`;
   }
-  return skillStepAt(kernel, run, checked.place.stepKey);
+  return skillStepAt(kernel, run, checked.value.stepKey);
 }
 
-function capped(kernel: Kernel, result: ToolResult): ToolResult {
-  const scrubbed: ToolResult = result.ok
+function redactedProblem(kernel: Kernel, problem: Problem): Problem {
+  const fix = problem.fix === undefined ? {} : { fix: kernel.secrets.redact(problem.fix) };
+  return { ...problem, message: kernel.secrets.redact(problem.message), ...fix };
+}
+
+function capped(kernel: Kernel, result: Outcome<Json>): Outcome<Json> {
+  const scrubbed: Outcome<Json> = result.ok
     ? { ok: true, value: kernel.secrets.redactJson(result.value) }
-    : refused(kernel.secrets.redact(result.refusal));
+    : failedWith(result.problems.map((problem) => redactedProblem(kernel, problem)));
   const size = scrubbed.ok ? byteSize(scrubbed.value) : 0;
   if (size <= toolResultBytes) {
     return scrubbed;
@@ -273,7 +276,7 @@ async function callsThisRound(kernel: Kernel, step: SkillStepAt): Promise<number
   ).length;
 }
 
-async function overLimit(kernel: Kernel, name: ToolName, step: SkillStepAt): Promise<ToolResult | undefined> {
+async function overLimit(kernel: Kernel, name: ToolName, step: SkillStepAt): Promise<Outcome<Json> | undefined> {
   if (name === "submit" || (await callsThisRound(kernel, step)) < kernel.limits.toolCallsPerRound) {
     return undefined;
   }
@@ -286,7 +289,7 @@ async function overLimit(kernel: Kernel, name: ToolName, step: SkillStepAt): Pro
 async function performed(
   kernel: Kernel,
   request: { name: ToolName; input: Json; step: SkillStepAt },
-): Promise<ToolResult> {
+): Promise<Outcome<Json>> {
   const { name, input, step } = request;
   const limited = await overLimit(kernel, name, step);
   if (limited !== undefined) {
@@ -303,7 +306,7 @@ async function performed(
   return handlers[name]({ kernel, step, tools, input });
 }
 
-export async function callKernelTool(kernel: Kernel, name: string, input: Json): Promise<ToolResult> {
+export async function callKernelTool(kernel: Kernel, name: string, input: Json): Promise<Outcome<Json>> {
   try {
     return await checkedToolCall(kernel, name, input);
   } catch (error) {
@@ -311,7 +314,7 @@ export async function callKernelTool(kernel: Kernel, name: string, input: Json):
   }
 }
 
-async function checkedToolCall(kernel: Kernel, name: string, input: Json): Promise<ToolResult> {
+async function checkedToolCall(kernel: Kernel, name: string, input: Json): Promise<Outcome<Json>> {
   if (!isToolName(name)) {
     return refused(
       `There is no kernel tool ${name}; the tools are db_query, files_read, files_list, ` +

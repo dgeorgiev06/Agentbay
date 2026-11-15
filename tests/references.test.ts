@@ -10,6 +10,7 @@ import {
   workflowReferenceIssues,
   type ReferenceScope,
 } from "../bay/references.ts";
+import { problemText } from "../bay/outcome.ts";
 
 const scope: ReferenceScope = {
   trigger: { topic: "staking" },
@@ -28,20 +29,20 @@ test("only a string that starts with $ is a reference", () => {
 });
 
 test("the four reference forms parse, and nothing else does", () => {
-  assert.deepEqual(parseReference("$trigger"), { ok: true, reference: { kind: "trigger", text: "$trigger" } });
-  assert.deepEqual(parseReference("$item"), { ok: true, reference: { kind: "item", text: "$item" } });
+  assert.deepEqual(parseReference("$trigger"), { ok: true, value: { kind: "trigger", text: "$trigger" } });
+  assert.deepEqual(parseReference("$item"), { ok: true, value: { kind: "item", text: "$item" } });
   assert.deepEqual(parseReference("$settings.lookback"), {
     ok: true,
-    reference: { kind: "settings", text: "$settings.lookback", key: "lookback" },
+    value: { kind: "settings", text: "$settings.lookback", key: "lookback" },
   });
   assert.deepEqual(parseReference("$steps.fetch.output.items.0.id"), {
     ok: true,
-    reference: { kind: "steps", text: "$steps.fetch.output.items.0.id", id: "fetch", path: ["items", "0", "id"] },
+    value: { kind: "steps", text: "$steps.fetch.output.items.0.id", id: "fetch", path: ["items", "0", "id"] },
   });
   for (const text of ["$", "$trigger.topic", "$item.id", "$steps.fetch", "$steps.fetch.input", "$settings", "$x"]) {
     const parsed = parseReference(text);
     assert.ok(!parsed.ok, text);
-    assert.match(parsed.message, new RegExp(`^\\${text} is not a reference`));
+    assert.match(problemText(parsed.problems), new RegExp(`^\\${text} is not a reference`));
   }
 });
 
@@ -60,7 +61,7 @@ test("a reference that resolves to nothing is a problem naming it and what was a
   const problemsOf = (text: string): readonly string[] => {
     const resolution = resolveValue(text, scope);
     assert.ok(!resolution.ok, text);
-    return resolution.problems;
+    return resolution.problems.map((problem) => problem.message);
   };
   assert.deepEqual(problemsOf("$steps.later.output"), [
     "$steps.later.output resolves to nothing: no step later has finished before it (available: fetch, count).",
@@ -78,7 +79,7 @@ test("a reference that resolves to nothing is a problem naming it and what was a
 test("resolveReference takes a parsed reference", () => {
   const parsed = parseReference("$steps.fetch.output.items.0");
   assert.ok(parsed.ok);
-  assert.deepEqual(resolveReference(parsed.reference, scope), { ok: true, value: { id: "a" } });
+  assert.deepEqual(resolveReference(parsed.value, scope), { ok: true, value: { id: "a" } });
 });
 
 test("an input mapping resolves each top-level value and reports every problem at once", () => {
@@ -90,8 +91,8 @@ test("an input mapping resolves each top-level value and reports every problem a
   const failed = resolveInput({ first: "$steps.nope.output", second: "$bad", fine: "$trigger" }, scope);
   assert.ok(!failed.ok);
   assert.equal(failed.problems.length, 2);
-  assert.match(failed.problems[0] ?? "", /^input\.first: \$steps\.nope\.output resolves to nothing/);
-  assert.match(failed.problems[1] ?? "", /^input\.second: \$bad is not a reference/);
+  assert.match(failed.problems[0]?.message ?? "", /^input\.first: \$steps\.nope\.output resolves to nothing/);
+  assert.match(failed.problems[1]?.message ?? "", /^input\.second: \$bad is not a reference/);
 });
 
 test("workflow reference issues name the path of each bad reference", () => {

@@ -5,9 +5,9 @@ import type { Json } from "./contracts.ts";
 import { loadKernel, nodeKernelPorts, type Kernel } from "./kernel.ts";
 import { layoutOf } from "./layout.ts";
 import { replyTo, type ToolServer } from "./mcp-server.ts";
-import type { Outcome } from "./spec.ts";
+import { failedWith, unplacedProblem, type Outcome } from "./outcome.ts";
 import { toolDefinitions } from "./tool-definitions.ts";
-import { callKernelTool, type ToolResult } from "./tools.ts";
+import { callKernelTool } from "./tools.ts";
 import { lastResortHandler } from "./last-resort.ts";
 
 const kit = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
@@ -18,9 +18,9 @@ function projectOf(argv: readonly string[]): string {
   return resolve(process.cwd(), given ?? ".");
 }
 
-function refusalOfProblems(kernel: Outcome<Kernel>): ToolResult {
+function refusalOfProblems(kernel: Outcome<Kernel>): Outcome<Json> {
   const problems = kernel.ok ? [] : kernel.problems.map((problem) => `${problem.file}: ${problem.message}`);
-  return { ok: false, refusal: `The project cannot be loaded, so no tool works: ${problems.join(" ")}` };
+  return failedWith([unplacedProblem(`The project cannot be loaded, so no tool works: ${problems.join(" ")}`)]);
 }
 
 async function main(): Promise<void> {

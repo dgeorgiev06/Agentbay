@@ -223,7 +223,7 @@ test("the check refuses no citations, long summaries, copied text and changed co
       spent: { items: 0, usd: 0, tokens: 0, minutes: 0 },
     });
     if (run.ok) {
-      assert.fail(`the schema should refuse a theme with no citation, got ${JSON.stringify(run.run.state)}`);
+      assert.fail(`the schema should refuse a theme with no citation, got ${JSON.stringify(run.value.state)}`);
     }
     const withOneCite = themes.map((theme, index) => (index === 0 ? { ...theme, cites: ["fake:1002"] } : theme));
     const back = waitingSkillOf(

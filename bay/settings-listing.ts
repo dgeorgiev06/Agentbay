@@ -1,10 +1,9 @@
 import { join } from "node:path/posix";
 import configSchema from "../schemas/config.schema.json" with { type: "json" };
 import type { Json } from "./contracts.ts";
-import { toJson } from "./json.ts";
+import { toJson, isRecord } from "./json.ts";
 import type { Kernel } from "./kernel.ts";
 import type { BindingUse } from "./registry.ts";
-import { isRecord } from "./spec.ts";
 
 export type Setting = {
   readonly name: string;

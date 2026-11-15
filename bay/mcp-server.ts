@@ -1,13 +1,12 @@
 import type { Json } from "./contracts.ts";
-import { fieldOf, parseJson, textField } from "./json.ts";
-import { isRecord } from "./spec.ts";
+import { fieldOf, parseJson, textField, isRecord } from "./json.ts";
 import type { ToolDefinition } from "./tool-definitions.ts";
-import type { ToolResult } from "./tools.ts";
+import { problemText, type Outcome } from "./outcome.ts";
 import { VERSION } from "./version.ts";
 
 export type ToolServer = {
   readonly definitions: readonly ToolDefinition[];
-  readonly call: (name: string, input: Json) => Promise<ToolResult>;
+  readonly call: (name: string, input: Json) => Promise<Outcome<Json>>;
 };
 
 type Request = {
@@ -75,7 +74,7 @@ async function callTool(server: ToolServer, request: Request): Promise<Json | Pr
   }
   const result = await server.call(name, fieldOf(request.params, "arguments") ?? {});
   if (!result.ok) {
-    return { content: [{ type: "text", text: result.refusal }], isError: true };
+    return { content: [{ type: "text", text: problemText(result.problems) }], isError: true };
   }
   return { content: [{ type: "text", text: JSON.stringify(result.value) }], isError: false };
 }

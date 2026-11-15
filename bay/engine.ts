@@ -294,8 +294,9 @@ export class Engine {
     if (typeof target === "string") {
       return refusal(options.id ?? "new", { message: target });
     }
-    if (!system.active.has(target.mode.manifest.name)) {
-      return refusal(options.id ?? "new", inactiveModeWording(target.mode.manifest.name));
+    const inactive = this.#inactiveRefusal(options.id ?? "new", target.mode.manifest.name);
+    if (inactive !== undefined) {
+      return inactive;
     }
     const check = { mode: target.mode, schema: target.action.input, value: input, label: "input" };
     const problems = await schemaProblems(this.#services, check);
@@ -313,8 +314,9 @@ export class Engine {
     options: StartOptions = {},
   ): Promise<EngineResult> {
     const { mode, path } = reference;
-    if (this.#services.system.modes.has(mode) && !this.#services.system.active.has(mode)) {
-      return refusal(options.id ?? "new", inactiveModeWording(mode));
+    const inactive = this.#inactiveRefusal(options.id ?? "new", mode);
+    if (inactive !== undefined) {
+      return inactive;
     }
     const workflow = this.#services.system.modes.get(mode)?.workflows.get(path);
     if (workflow === undefined) {
@@ -443,8 +445,16 @@ export class Engine {
           fix: `Try again when it is done, or after ${staleMinutes} minutes without a heartbeat.`,
         });
       case "acquired":
-        return this.#holding(lock.writer, async () => body(await this.#read(runId), lock.writer, now));
+        return this.#holding(lock.writer, async () => {
+          const run = await this.#read(runId);
+          return this.#inactiveRefusal(run.id, run.target.mode) ?? body(run, lock.writer, now);
+        });
     }
+  }
+
+  #inactiveRefusal(runId: string, mode: string): EngineResult | undefined {
+    const system = this.#services.system;
+    return system.modes.has(mode) && !system.active.has(mode) ? refusal(runId, inactiveModeWording(mode)) : undefined;
   }
 
   async #holding(writer: Writer, body: () => Promise<EngineResult>): Promise<EngineResult> {

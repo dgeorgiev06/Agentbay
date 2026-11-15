@@ -345,3 +345,15 @@ test("the engine refuses to start an action or a workflow of a mode that is not 
   assert.equal(active.state.status, "done");
   close();
 });
+
+test("a run of a mode that is no longer active is refused when it would advance, and left as it was", async () => {
+  const { system, freshEngine, store, close } = await harness({ changes: withFlow(reviewSteps) });
+  const waiting = runOf(await freshEngine().startWorkflow(notesFlow, 1));
+  assert.equal(waiting.state.status, "waiting");
+  const engine = freshEngine({ system: { ...system, active: new Set(["store"]) } });
+  for (const result of [await engine.resume(waiting.id), await engine.stop(waiting.id)]) {
+    assert.deepEqual(problemsOf(result), ["Mode notes is not active in this project, so nothing of it runs here."]);
+  }
+  assert.equal((await store.readRun(waiting.id))?.state.status, "waiting");
+  close();
+});

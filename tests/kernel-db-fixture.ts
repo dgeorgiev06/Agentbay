@@ -59,7 +59,6 @@ export function faultInjector(store: SqliteRunStore, point?: FaultPoint): Faulty
     }
     return result;
   };
-  const read = async <T>(operation: () => Promise<T>): Promise<T> => (dead ? crash() : operation());
   return {
     writes,
     createRun: (run, owner, events) => write("createRun", () => store.createRun(run, owner, events)),
@@ -73,9 +72,9 @@ export function faultInjector(store: SqliteRunStore, point?: FaultPoint): Faulty
     acquire: (runId, owner, now) => write("acquire", () => store.acquire(runId, owner, now)),
     heartbeat: (writer, now) => write("heartbeat", () => store.heartbeat(writer, now)),
     release: (writer) => write("release", () => store.release(writer)),
-    readRun: (runId) => read(() => store.readRun(runId)),
-    listRuns: (status) => read(() => store.listRuns(status)),
-    readEvents: (runId) => read(() => store.readEvents(runId)),
+    readRun: (runId) => store.readRun(runId),
+    listRuns: (status) => store.listRuns(status),
+    readEvents: (runId) => store.readEvents(runId),
   };
 }
 

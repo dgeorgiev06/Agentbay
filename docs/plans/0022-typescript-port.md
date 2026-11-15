@@ -312,3 +312,20 @@ The two may be the same folder: that is how agentbay itself is developed.
 6. `bay check` runs the kit-only checks (limits, import cycles in `bay/`, the kit's layout) only when the project is the kit. In any project it checks the project's own modes and every active mode.
 7. `bay build` passes both folders to the adapter; agent files point at skill files by absolute path, and the hook's policy holds absolute roots.
 8. The Claude Code hook treats the kit as closed to every step except forge's own write roots, wherever the kit is.
+
+## Stage 4 contracts: the store (written by the reviewer before M1, 2026-11-15)
+
+**Who is calling.** `ScriptRequest` gains `caller`: the name of the mode whose action made the `call`, or nothing when the owner started the action directly. The engine sets it; a script cannot forge it. The store uses it to keep each composing mode's items apart.
+
+**One database file per composing mode.** The broker's database resource gains a partition: `context.db.partition(name)` gives the same operations on the file `.agentbay/data/<mode>--<name>.db` (the name is kebab-case; the unnamed database stays `.agentbay/data/<mode>.db`). The store opens the partition named after its caller, so the mail briefing's items and the to-dos never share a file, and SQL written by an agent for one cannot read the other. Migrations apply per partition.
+
+**The interfaces** live in `components/base/interfaces/`:
+
+- `items-source@1`: `fetch` (effects read, network, spend): takes a selector and a cursor, returns items, the next cursor and what it cost. `describe` (read): what selector fields the source understands.
+- `items-store@1`: `put`, `update`, `delete` (effect delete, never undone automatically), `get`, `query`, `sql` (one bounded SELECT over the store's views, for agents), `prune`, `status`.
+
+**An item** is `{ id: "<source>:<external id>", kind, source, at, title, text, url, author, labels, data }`. `data` holds what only that kind has.
+
+**Kept from agentbay 4:** a deleted item is remembered and never stored again; `put` refuses kinds the caller's sources do not produce; spend is saved before items are committed; item text is scrubbed for secrets when stored; one shared selector matcher lives in the store so every source behaves alike; full-text search.
+
+**The modes of stage 4:** `store` (base), `fake-source` (kit mode, for tests and the demo), and `feed-briefing` (kit mode: `sync` = fetch then put; `digest` = select script, the digest skill with a citation check, a format script). The X source comes in stage 5 and binds in place of the fake.

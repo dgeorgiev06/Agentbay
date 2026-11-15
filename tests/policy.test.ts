@@ -281,3 +281,121 @@ test("a project folder that shares a prefix with a protected folder is not prote
   assert.deepEqual(permissions.writePaths, ["/project/schemas-old", "/project/frameworks", "/project/.gitlab"]);
   assert.ok(permissions.readPaths.includes("/project/bay-backup/notes"));
 });
+
+const separate = layoutOf({ kit: "/kit", project: "/project" });
+
+const journal: Mode = modeNamed("journal", { db: { migrations: "migrations" }, files: { write: ["out/journal"] } });
+
+function separateSystem(files: DeclaredFiles): ReturnType<typeof systemOf> {
+  return systemOf([
+    { folder: "/project/components/modes/journal", manifest: { ...journal, resources: { files } }, home: "project" },
+    { folder: "/kit/components/modes/briefing", manifest: briefing },
+    { folder: "/kit/components/base/store", manifest: store },
+  ]);
+}
+
+test("a kit mode keeps its folder and migrations in the kit, and its paths and database in the project", () => {
+  const permissions = accepted(permissionsFor(separateSystem({}), "briefing", separate));
+  assert.equal(permissions.modeFolder, "/kit/components/modes/briefing");
+  assert.equal(permissions.migrationsFolder, "/kit/components/modes/briefing/migrations");
+  assert.equal(permissions.databaseFile, "/project/.agentbay/data/briefing.db");
+  assert.deepEqual(permissions.writePaths, ["/project/out/digests"]);
+  assert.deepEqual(permissions.readPaths, [
+    "/kit/components/modes/briefing",
+    "/project/notes/in",
+    "/project/shared/glossary.md",
+    "/project/out/digests",
+  ]);
+  const own = accepted(permissionsFor(separateSystem({ write: ["out/journal"] }), "journal", separate));
+  assert.equal(own.modeFolder, "/project/components/modes/journal");
+  assert.equal(own.databaseFile, "/project/.agentbay/data/journal.db");
+});
+
+test("a project mode may not name the project's kernel-like folders or its state", () => {
+  const problems = problemsOf(
+    permissionsFor(separateSystem({ write: ["bay/", "schemas", ".agentbay/data", ".git"] }), "journal", separate),
+  );
+  assert.deepEqual(
+    problems.map((problem) => [problem.file, problem.message]),
+    [
+      [
+        "components/modes/journal/mode.yaml",
+        "The path bay/ points into the kernel folder bay/, which only the base mode forge may name.",
+      ],
+      [
+        "components/modes/journal/mode.yaml",
+        "The path schemas points into the schemas folder schemas/, which only the base mode forge may name.",
+      ],
+      [
+        "components/modes/journal/mode.yaml",
+        "The path .agentbay/data points into the kernel's state folder .agentbay/, which no mode may name.",
+      ],
+      ["components/modes/journal/mode.yaml", "The path .git points into the git folder .git/, which no mode may name."],
+    ],
+  );
+});
+
+test("a project mode may not name a kit that lies inside the project, nor its kernel or mode folders", () => {
+  const kitInside = layoutOf({ kit: "/project/vendor/agentbay", project: "/project" });
+  const system = systemOf([
+    { folder: "/project/components/modes/journal", manifest: journal, home: "project" },
+    { folder: "/project/vendor/agentbay/components/modes/briefing", manifest: briefing },
+  ]);
+  const declared = (files: DeclaredFiles): ReturnType<typeof systemOf> =>
+    systemOf(
+      [...system.modes.values()].map((mode) => ({
+        folder: mode.folder,
+        home: mode.home,
+        manifest: mode.manifest.name === "journal" ? { ...journal, resources: { files } } : mode.manifest,
+      })),
+    );
+  const write = [
+    "vendor/agentbay/bay",
+    "vendor/agentbay/components/modes/briefing/out",
+    "vendor/agentbay/README.md",
+    "vendor",
+  ];
+  const problems = problemsOf(permissionsFor(declared({ write }), "journal", kitInside));
+  assert.deepEqual(
+    problems.map((problem) => problem.message),
+    [
+      "The path vendor/agentbay/bay points into the kernel folder bay/ of the kit, which only the base mode forge may name.",
+      "The path vendor/agentbay/components/modes/briefing/out points into the agentbay kit /project/vendor/agentbay, which a mode may name only when the project is the kit itself.",
+      "The path vendor/agentbay/README.md points into the agentbay kit /project/vendor/agentbay, which a mode may name only when the project is the kit itself.",
+      "The path vendor contains the kernel folder bay/ of the kit, which only the base mode forge may name.",
+    ],
+  );
+  assert.deepEqual(accepted(permissionsFor(declared({ write: ["vendor/other"] }), "journal", kitInside)).writePaths, [
+    "/project/vendor/other",
+  ]);
+});
+
+test("forge gets no forge rights when the project is not the kit", () => {
+  const forgeMode = modeNamed("forge", { files: { write: ["bay/", "components/modes/journal"] } });
+  const system = systemOf([
+    { folder: "/kit/components/base/forge", manifest: forgeMode },
+    { folder: "/project/components/modes/journal", manifest: journal, home: "project" },
+  ]);
+  const problems = problemsOf(permissionsFor(system, "forge", separate));
+  assert.equal(problems.length, 2);
+  for (const problem of problems) {
+    assert.match(problem.message, /which only the base mode forge may name/);
+  }
+});
+
+test("a mode that is not active gets no permissions, and the policy skips it", () => {
+  const system = { ...separateSystem({ write: ["bay/"] }), active: new Set(["briefing", "store"]) };
+  const problems = problemsOf(permissionsFor(system, "journal", separate));
+  assert.deepEqual(
+    problems.map((problem) => [problem.message, problem.fix]),
+    [
+      [
+        "Mode journal is not active in this project, so nothing of it runs here.",
+        "Add journal to modes: in agentbay.config.yaml, or bind an interface it implements.",
+      ],
+    ],
+  );
+  const policy = accepted(policyFor(system, separate));
+  assert.equal(policy("briefing").modeFolder, "/kit/components/modes/briefing");
+  assert.throws(() => policy("journal"), /not active in the system/);
+});

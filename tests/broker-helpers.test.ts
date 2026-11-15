@@ -181,3 +181,31 @@ test("a URL is decided on the host the request would really reach", () => {
   assert.equal(checkUrl("https://93.184.216.34/x", ["*.184.216.34"]).status, "undeclared-host");
   assert.equal(checkUrl("https://[::1]/x", hosts).status, "undeclared-host");
 });
+
+test("a path check resolves relative paths in the project and judges a kit folder against the kit", async () => {
+  const links = new Map([["/kit/components/modes/notes/link", "/kit/bay"]]);
+  const inspector: FileInspector = {
+    realPath: (path) => {
+      for (const [link, target] of links) {
+        if (isInsideOrEqual(path, link)) {
+          return Promise.resolve(target + path.slice(link.length));
+        }
+      }
+      return Promise.resolve(["/kit", "/p", "/kit/components/modes/notes", "/p/out"].includes(path) ? path : undefined);
+    },
+    isLink: (path) => Promise.resolve(links.has(path)),
+    entries: () => Promise.resolve([]),
+  };
+  const layout = layoutOf({ kit: "/kit", project: "/p" });
+  const permitted = ["/kit/components/modes/notes", "/p/out"];
+  const request = { layout, permitted, purpose: "read" as const };
+  const own = await checkPath(inspector, { ...request, path: "/kit/components/modes/notes/a.md" });
+  assert.deepEqual(own, { status: "allowed", path: "/kit/components/modes/notes/a.md" });
+  assert.deepEqual(await checkPath(inspector, { ...request, path: "out/x.md" }), {
+    status: "allowed",
+    path: "/p/out/x.md",
+  });
+  assert.equal((await checkPath(inspector, { ...request, path: "/kit/bay/sdk.ts" })).status, "outside");
+  const linked = await checkPath(inspector, { ...request, path: "/kit/components/modes/notes/link/sdk.ts" });
+  assert.equal(linked.status, "through-link");
+});

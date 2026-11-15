@@ -13,12 +13,12 @@ import {
   noProcesses,
   permissionsIn,
   place,
+  projectLayout,
   recordingSink,
   scriptedHttp,
   sdkFile,
   withProject,
   writeProjectFile,
-  projectLayout,
 } from "./broker-fixture.ts";
 
 const madeUpToken = "made-up-script-token-31337";

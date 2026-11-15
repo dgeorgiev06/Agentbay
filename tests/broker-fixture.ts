@@ -7,7 +7,7 @@ import type { Answer, Failure, Refusal } from "../bay/answers.ts";
 import type { EventSink, Permissions, RunEvent, StepPlace } from "../bay/contracts.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import type { Http, HttpRequest, HttpResponse, ProcessRequest, ProcessResult, Processes } from "../bay/ports.ts";
-import { layoutOf, type Layout } from "../bay/layout.ts";
+import { layoutOf, type Home, type Layout } from "../bay/layout.ts";
 import type { LoadedMode, System } from "../bay/registry.ts";
 import type { Outcome, Problem } from "../bay/spec.ts";
 
@@ -31,10 +31,12 @@ export function modeNamed(name: string, resources: Mode["resources"], actions?: 
   };
 }
 
-export function systemOf(modes: readonly { readonly folder: string; readonly manifest: Mode }[]): System {
+type ModeEntry = { readonly folder: string; readonly manifest: Mode; readonly home?: Home };
+
+export function systemOf(modes: readonly ModeEntry[]): System {
   const loaded = new Map<string, LoadedMode>();
-  for (const mode of modes) {
-    loaded.set(mode.manifest.name, { home: "kit", ...mode, workflows: new Map(), settings: {} });
+  for (const { folder, manifest, home } of modes) {
+    loaded.set(manifest.name, { home: home ?? "kit", folder, manifest, workflows: new Map(), settings: {} });
   }
   return {
     modes: loaded,

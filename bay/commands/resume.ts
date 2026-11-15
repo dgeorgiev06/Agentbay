@@ -1,6 +1,6 @@
-import { measures } from "../runs/budget.ts";
 import { problemsResult, usageResult, withKernel, type CommandResult, type Invocation } from "../command-context.ts";
 import type { Command } from "../command-line.ts";
+import { measures } from "../contracts.ts";
 import type { Budget } from "../generated/mode.ts";
 import type { Kernel } from "../kernel.ts";
 import type { RunView } from "../runs/run-state.ts";

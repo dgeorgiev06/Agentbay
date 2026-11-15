@@ -6,6 +6,8 @@ export type Effect = "read" | "write" | "network" | "spend" | "delete";
 
 export type Tier = "fast" | "balanced" | "deep";
 
+export const measures = ["items", "usd", "tokens", "minutes"] as const;
+
 export type Spend = {
   readonly items: number;
   readonly usd: number;

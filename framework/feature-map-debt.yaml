@@ -36,9 +36,6 @@ breaks:
     to: bay/runs/waiting.ts
     rule: private-file
   - from: bay/commands/resume.ts
-    to: bay/runs/budget.ts
-    rule: private-file
-  - from: bay/commands/resume.ts
     to: bay/runs/run-state.ts
     rule: private-file
   - from: bay/commands/runs.ts

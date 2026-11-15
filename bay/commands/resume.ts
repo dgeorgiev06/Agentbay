@@ -101,7 +101,7 @@ function runResume(invocation: Invocation): Promise<CommandResult> {
       return resumeDue(kernel);
     }
     const before = await skillWaitOf(kernel, form.runId);
-    return engineOutput(kernel, await engineCall(kernel, form), before);
+    return engineOutput(kernel, await engineCall(kernel, form), (key) => (key === before ? "withhold" : "issue"));
   });
 }
 

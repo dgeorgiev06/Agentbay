@@ -232,6 +232,27 @@ test("submit returns schema problems, then check feedback with a new token, then
   });
 });
 
+test("submit never returns the token of the next skill step, and says how the coordinator gets its task", async () => {
+  const opened = await openProject();
+  try {
+    const { kernel } = opened;
+    const started = await kernel.engine.startWorkflow({ mode: "writer", path: "workflows/twice.yaml" }, {});
+    assert.ok(started.ok && started.value.state.status === "waiting", JSON.stringify(started));
+    const place = { runId: started.value.id, stepKey: started.value.state.waiting.stepKey, round: 1 };
+    assert.equal(place.stepKey, "first/1#1");
+    const token = await issueTaskToken(kernel.store, place, new Date());
+    const output = { text: "Hello, Ada, and welcome back." };
+    const submitted = valueOf(await callKernelTool(kernel, "submit", { token, output }));
+    assert.deepEqual(submitted, {
+      accepted: true,
+      run: { id: place.runId, status: "waiting", waitingFor: "skill" },
+      next: `The run waits for another skill step; bay runs ${place.runId} --new-token gives its task.`,
+    });
+  } finally {
+    await opened.close();
+  }
+});
+
 test("files_write is refused when the step's action does not declare the write effect", async () => {
   const project = await makeProject();
   const manifest = await project.read("components/modes/writer/mode.yaml");

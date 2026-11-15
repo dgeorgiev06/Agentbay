@@ -97,6 +97,11 @@ const layouts: readonly Case[] = [
   { name: "a file that ends inside a template", source: "const t = `never ${closed", found: [] },
   { name: "a file that ends after import(", source: "await import(", found: [computed()] },
   { name: "a file that ends after from", source: "import { a } from", found: [] },
+  {
+    name: "an escaped quote does not end a string",
+    source: 'const s = "a\\"b"; import "./x.ts";',
+    found: [literal("./x.ts")],
+  },
   { name: "an escaped quote in a string", source: 'const s = "a \\" import \\"yaml\\"";', found: [] },
 ];
 

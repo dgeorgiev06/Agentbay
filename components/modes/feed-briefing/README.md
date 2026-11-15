@@ -9,7 +9,7 @@ It requires `items-source@1` and `items-store@1`. The project config binds each 
 
 | action | effects | runs |
 |---|---|---|
-| `sync` | read, write, network, spend | `scripts/sync.ts`: asks the source for its name, reads the store's status for the saved cursor, then loops page by page: `items-source.fetch`, then `items-store.put`. It stops when the source has no more or `maxItems` items were fetched. It returns the counts, the cost and the cursor. When the configured selector differs from the one of the last sync, it starts again from the beginning of its window. |
+| `sync` | read, write, network, spend | `scripts/sync.ts`: asks the source for its name, reads the store's status for the saved cursor, then loops page by page: `items-source.fetch`, then `items-store.put`. It stops when the source has no more or `maxItems` items were fetched. Before every fetch it asks `items-store.allowance` for the source; it stops when what the store's monthly cap leaves is less than one more page could cost (see below). It returns the counts, the cost and the cursor. When the configured selector differs from the one of the last sync, it starts again from the beginning of its window. |
 | `digest` | read | `scripts/select.ts` queries the store for the lookback window. The `digest` skill (tier balanced) writes themes, and `scripts/check-citations.ts` holds each one to its input. Then `scripts/format.ts` attaches each cited post's author, time and link from the store. |
 | `ask` | read | The `ask` skill (tier balanced) answers from the store through `items-store.query`, `items-store.sql` and `items-store.get`; `scripts/check-answer.ts` checks that every cited id is in the store. |
 
@@ -20,6 +20,15 @@ it makes the digest the output of the run.
 run's budget still holds for every page. When a fetch overspends it, the run waits for budget before that page is
 stored, and nothing of the page is stored. After `bay resume <run> --extend usd=<amount>`, the sync goes on:
 the pages it already fetched are replayed from the run's records, not fetched again.
+
+### The monthly cap
+
+The store's setting `monthlyUsd` caps what this mode may spend on a source in a calendar month (UTC). The rule
+`sync` applies before every fetch: when the allowance has a cap and what it leaves is less than the source's
+`pageCostUsd` (what one full page can cost, from `describe`), the sync stops. A source that cannot say what a page
+costs gives no `pageCostUsd`; then the sync stops only when nothing is left. A stopped sync stores nothing more,
+does not fail, and returns `stopped: "monthly cap"` and `monthlyCap` with the month, the cap, what was spent and
+what is left. The next calendar month starts from nothing spent.
 
 ### The citation check
 
@@ -53,12 +62,17 @@ Given under `settings.feed-briefing` (`schemas/settings.json`):
 
 ```yaml
 modes: [feed-briefing]
-bindings: { items-source: fake-source, items-store: store }
+bindings: { items-source: { feed-briefing: fake-source }, items-store: store }
 adapter: claude-code
 settings:
   feed-briefing: { selector: { labels: [staking, custody, regulation] }, lookback: 7d, maxItems: 50 }
   fake-source: { baseDate: "2026-11-15T12:00:00Z", pageSize: 10, costPerItemUsd: 0.001 }
+  store: { monthlyUsd: { fake: 0.025 } }
 ```
+
+A binding is either one mode for every mode that requires the interface (`items-store: store`) or a map from
+requiring mode to serving mode, with an optional `default`, so the mail briefing and this one can each have
+their own source.
 
 ```sh
 ./bay.sh call feed-briefing.sync '{"since":"2026-11-01T00:00:00Z"}'

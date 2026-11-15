@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "StoreSettings",
+  "description": "Settings of the store, given under settings.store in agentbay.config.yaml.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {
+    "monthlyUsd": {
+      "type": "object",
+      "description": "The most US dollars each composing mode may spend on a source in one calendar month (UTC), as source name: dollars; a source without an entry has no cap.",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+        "maxLength": 64
+      },
+      "additionalProperties": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Dollars per calendar month."
+      }
+    }
+  }
+}

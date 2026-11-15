@@ -46,6 +46,11 @@
         ],
         "description": "A selector field."
       }
+    },
+    "pageCostUsd": {
+      "type": "number",
+      "minimum": 0,
+      "description": "The most one fetch can cost in US dollars, so a sync can stop before a page would pass a monthly cap; left out when the source cannot say."
     }
   }
 }

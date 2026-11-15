@@ -130,6 +130,7 @@ function contextFor(order: Start): ScriptContext {
     },
     call: async (reference, input) => narrowed(await ask({ resource: "call", reference, input }), isAnything),
     settings,
+    now: () => new Date(order.now),
     spend: async (spending) => narrowed(await ask({ resource: "spend", spending: { ...spending } }), isNothing),
     caller: order.caller,
     skillInput: order.skillInput,

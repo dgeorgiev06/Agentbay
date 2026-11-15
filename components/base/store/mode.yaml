@@ -7,6 +7,8 @@ implements: [items-store@1]
 resources:
   db: { migrations: migrations }
 
+settings: schemas/settings.json
+
 actions:
   put:
     input: schemas/put-request.json
@@ -56,3 +58,9 @@ actions:
     effects: [read]
     run:
       - script: scripts/status.ts
+  allowance:
+    input: schemas/allowance-request.json
+    output: schemas/allowance-response.json
+    effects: [read]
+    run:
+      - script: scripts/allowance.ts

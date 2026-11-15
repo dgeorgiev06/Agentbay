@@ -14,7 +14,7 @@ that item text is data gets exercised.
 | action | effects | does |
 |---|---|---|
 | `fetch` | read, network, spend | Returns one page of posts, oldest first, after `cursor`. It applies the selector's `authors` (plain names; a pattern with `*` is left to the store), `since`, `until` and `limit` itself, and leaves every other field to the store's matcher. The response says whether `more` is ready, and the made-up `cost` of the page is also reported to the run's budget. |
-| `describe` | read | Names the source (`fake`), its kinds (`post`) and the selector fields it applies itself. |
+| `describe` | read | Names the source (`fake`), its kinds (`post`), the selector fields it applies itself, and `pageCostUsd`: what a full page costs (`pageSize` × `costPerItemUsd`), which a briefing's sync compares with what its monthly cap leaves. |
 
 `fetch` declares `network` and `spend` because the interface does, so a briefing that calls it is written exactly
 as it will be for X. The fake itself touches no network and spends no real money.

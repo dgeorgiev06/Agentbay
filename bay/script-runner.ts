@@ -83,10 +83,11 @@ export function scriptCommand(scriptFile: string, request: ScriptRequest): reado
   ];
 }
 
-function startMessage(request: ScriptRequest): Readonly<Record<string, unknown>> {
+function startMessage(request: ScriptRequest, now: Date): Readonly<Record<string, unknown>> {
   const caller = request.caller === undefined ? {} : { caller: request.caller };
   const skillInput = request.skillInput === undefined ? {} : { skillInput: request.skillInput };
-  return { type: "start", input: request.input, settings: request.settings, ...caller, ...skillInput };
+  const fields = { input: request.input, settings: request.settings, now: now.toISOString() };
+  return { type: "start", ...fields, ...caller, ...skillInput };
 }
 
 function seconds(milliseconds: number): string {
@@ -242,7 +243,8 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
 
   async function runChild(started: Started, milliseconds: number): Promise<StepOutcome> {
     const { request, state, broker } = started;
-    const startedAt = options.clock.now().getTime();
+    const startTime = options.clock.now();
+    const startedAt = startTime.getTime();
     const childRequest: ChildRequest = {
       command: process.execPath,
       arguments: scriptCommand(resolve(request.permissions.modeFolder, request.script), request),
@@ -265,7 +267,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
         state.final = message;
       }
     });
-    child.send(JSON.stringify(startMessage(request)));
+    child.send(JSON.stringify(startMessage(request, startTime)));
     const end = await child.ended;
     broker.close();
     await Promise.all(state.inFlight);

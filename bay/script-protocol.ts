@@ -33,6 +33,7 @@ type StartMessage = {
   readonly type: "start";
   readonly input: Json;
   readonly settings: { readonly [key: string]: Json };
+  readonly now: string;
   readonly caller?: string;
   readonly skillInput?: Json;
 };
@@ -191,10 +192,12 @@ function answerOf(value: Json | undefined): Answer<Json> | undefined {
   return value.ok === false && value.kind === "refused" ? refusalOf(value) : undefined;
 }
 
-function startMessageOf(fields: Fields, input: Json, settings: { readonly [key: string]: Json }): ParentMessage {
+type StartFields = Omit<StartMessage, "type" | "caller" | "skillInput">;
+
+function startMessageOf(fields: Fields, given: StartFields): ParentMessage {
   const caller = isText(fields.caller) ? { caller: fields.caller } : {};
   const skillInput = fields.skillInput === undefined ? {} : { skillInput: fields.skillInput };
-  return { type: "start", input, settings, ...caller, ...skillInput };
+  return { type: "start", ...given, ...caller, ...skillInput };
 }
 
 export function parentMessageOf(line: string): ParentMessage | undefined {
@@ -202,8 +205,9 @@ export function parentMessageOf(line: string): ParentMessage | undefined {
   if (!isJsonRecord(value)) {
     return undefined;
   }
-  if (value.type === "start" && value.input !== undefined && isJsonRecord(value.settings)) {
-    return startMessageOf(value, value.input, value.settings);
+  const { input, settings, now } = value;
+  if (value.type === "start" && input !== undefined && isJsonRecord(settings) && isText(now)) {
+    return startMessageOf(value, { input, settings, now });
   }
   const answer = value.type === "answer" ? answerOf(value.answer) : undefined;
   if (answer !== undefined && typeof value.id === "number") {

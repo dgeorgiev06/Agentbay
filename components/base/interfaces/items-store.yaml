@@ -33,3 +33,7 @@ actions:
     input: items-store/status-request.json
     output: items-store/status-response.json
     effects: [read]
+  allowance:
+    input: items-store/allowance-request.json
+    output: items-store/allowance-response.json
+    effects: [read]

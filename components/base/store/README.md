@@ -18,6 +18,21 @@ calling mode, uses the partition `owner`.
 | `sql` | read | Runs one read-only select that an agent wrote over the caller's partition, at most 200 rows and 2 seconds. It refuses a second statement, a write and `attach`. |
 | `prune` | read, write, delete | Drops the items from a source that were created before `before`. It never drops local items. |
 | `status` | read | Counts items and deletions. For each source it gives the kinds, the cursor, the last sync, the selector of that sync and the spend per month. |
+| `allowance` | read | For one source, how much the caller may still spend on it this calendar month: the cap from `monthlyUsd`, the dollars its partition recorded for that source this month, and what is left (`null` when there is no cap; below zero when a page overspent it). |
+
+## Settings
+
+Given under `settings.store` in `agentbay.config.yaml` (`schemas/settings.json`):
+
+| setting | meaning |
+|---|---|
+| `monthlyUsd` | A map from source name to the most US dollars one composing mode may spend on that source in a calendar month. A source without an entry has no cap. |
+
+The cap is per composing mode and per source: each caller's partition records its own spend, so with
+`monthlyUsd: { x: 20 }` the feed briefing and the mail briefing may each spend $20 a month on X. Months are
+calendar months in UTC, read from the kernel's clock (`context.now()`), so the spend recorded at 23:59 UTC on
+the last day of a month counts for that month. The store only answers; a briefing's sync asks `allowance` before
+each fetch and stops itself.
 
 ## The selector
 

@@ -1,0 +1,12 @@
+{
+  "input": {
+    "source": "fake"
+  },
+  "output": {
+    "source": "fake",
+    "month": "2026-11",
+    "capUsd": null,
+    "spentUsd": 0,
+    "remainingUsd": null
+  }
+}

@@ -11,8 +11,8 @@ import {
   type BuildRecord,
   type CreatedFile,
 } from "./build-record.ts";
-import { canRemove, removalProblem } from "./file-removal.ts";
 import { mergeTargets, planMerge, type MergePlan } from "./merged-files.ts";
+import { grantedRootProblems } from "./root-scan.ts";
 import { stepsFileText } from "./steps-file.ts";
 
 type CreatedChange = "created" | "updated" | "unchanged" | "overwritten";
@@ -150,22 +150,44 @@ async function plansFor(request: BuildRequest, previous: BuildRecord | undefined
     await planMerged(request, previous),
     await planStale(request, previous),
   ];
-  const needsRemoval = parts.some((part) => part.stale.some((file) => file.remove)) && !canRemove(request.files);
   return {
     created: parts.flatMap((part) => part.created),
     merged: parts.flatMap((part) => part.merged),
     stale: parts.flatMap((part) => part.stale),
-    problems: [...parts.flatMap((part) => part.problems), ...(needsRemoval ? [removalProblem(recordPath)] : [])],
+    problems: parts.flatMap((part) => part.problems),
   };
 }
 
-async function carryOut(request: BuildRequest, plans: Plans): Promise<readonly string[]> {
+function foldersAbove(path: string): readonly string[] {
+  const segments = path.split("/").slice(0, -1);
+  return segments.map((_, index) => segments.slice(0, index + 1).join("/"));
+}
+
+async function foldersToCreate(
+  request: BuildRequest,
+  plans: Plans,
+  previous?: BuildRecord,
+): Promise<readonly string[]> {
+  const paths = [recordPath, ...plans.created.map((file) => file.path), ...plans.merged.map((file) => file.path)];
+  const folders = new Set(previous?.createdFolders ?? []);
+  for (const folder of new Set(paths.flatMap(foldersAbove))) {
+    if (!(await request.files.exists(join(request.root, folder)))) {
+      folders.add(folder);
+    }
+  }
+  return [...folders].sort(
+    (left, right) => right.split("/").length - left.split("/").length || left.localeCompare(right),
+  );
+}
+
+async function carryOut(request: BuildRequest, plans: Plans, previous?: BuildRecord): Promise<readonly string[]> {
   const { files, root } = request;
   const record: BuildRecord = {
     version: 1,
     adapter: "claude-code",
     created: plans.created.map((file) => ({ path: file.path, sha256: sha256(file.text) })),
     merged: plans.merged.map((file) => file.entry),
+    createdFolders: await foldersToCreate(request, plans, previous),
   };
   await files.writeAtomic(join(root, recordPath), recordText(record));
   const report = [`${recordPath}: written`];
@@ -174,8 +196,8 @@ async function carryOut(request: BuildRequest, plans: Plans): Promise<readonly s
   }
   report.push(...[...plans.created, ...plans.merged].map((file) => `${file.path}: ${changeWords[file.change]}`));
   for (const file of plans.stale) {
-    if (file.remove && canRemove(files)) {
-      await files.remove(join(root, file.path));
+    if (file.remove) {
+      await request.removal.remove(join(root, file.path));
     }
     report.push(`${file.path}: ${file.remove ? staleDeleted : staleKept}`);
   }
@@ -187,13 +209,18 @@ export async function build(request: BuildRequest): Promise<ListOutcome> {
   if (requestIssues.length > 0) {
     return { ok: false, problems: requestIssues };
   }
+  const rootIssues = await grantedRootProblems(request);
+  if (rootIssues.length > 0) {
+    return { ok: false, problems: rootIssues };
+  }
   const reading = readRecord(await request.files.readText(join(request.root, recordPath)));
   if (reading.kind === "unreadable") {
     return { ok: false, problems: [unreadableRecord] };
   }
-  const plans = await plansFor(request, reading.kind === "record" ? reading.record : undefined);
+  const previous = reading.kind === "record" ? reading.record : undefined;
+  const plans = await plansFor(request, previous);
   if (plans.problems.length > 0) {
     return { ok: false, problems: plans.problems };
   }
-  return { ok: true, value: await carryOut(request, plans) };
+  return { ok: true, value: await carryOut(request, plans, previous) };
 }

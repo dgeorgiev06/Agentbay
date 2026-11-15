@@ -13,11 +13,14 @@ import {
   memoryFiles,
   root,
   scanAgent,
+  skillAgent,
   userClaude,
   userMcp,
   userSettings,
   type MemoryFiles,
 } from "./build-fixture.ts";
+
+const shape = { mode: "x", skill: "y", tier: "fast", kernelTools: [], read: [], write: [], commands: [] } as const;
 
 function lines(outcome: ListOutcome): readonly string[] {
   assert.ok(outcome.ok, JSON.stringify(outcome));
@@ -29,7 +32,7 @@ async function built(files: MemoryFiles, agents = allAgents): Promise<readonly s
 }
 
 async function cleaned(files: MemoryFiles): Promise<readonly string[]> {
-  return lines(await adapter.clean({ root, files }));
+  return lines(await adapter.clean({ root, files, removal: files.removal }));
 }
 
 function parsed(files: MemoryFiles, path: string): unknown {
@@ -242,7 +245,7 @@ test("a malformed settings file, server file or record is reported and nothing i
     assert.deepEqual(files.snapshot(), start);
   }
   const broken = memoryFiles({ [`${root}/.agentbay/build.json`]: "nope" });
-  const outcome = await adapter.clean({ root, files: broken });
+  const outcome = await adapter.clean({ root, files: broken, removal: broken.removal });
   assert.ok(!outcome.ok);
   assert.equal(outcome.problems[0]?.file, ".agentbay/build.json");
 });
@@ -268,19 +271,48 @@ test("clean with no build record is a no-op that says so", async () => {
   assert.deepEqual(files.snapshot(), existingProject);
 });
 
-test("a file port without remove makes clean and a shrinking build report a problem", async () => {
-  const files = memoryFiles();
-  await built(files);
-  const withoutRemove = {
-    readText: files.readText,
-    list: files.list,
-    exists: files.exists,
-    writeAtomic: files.writeAtomic,
-  };
-  const outcome = await adapter.clean({ root, files: withoutRemove });
+test("the record lists the folders the build created, deepest first, and clean reports them", async () => {
+  const empty = memoryFiles();
+  await built(empty);
+  const record: unknown = JSON.parse(empty.snapshot()[`${root}/.agentbay/build.json`] ?? "{}");
+  assert.ok(typeof record === "object" && record !== null && "createdFolders" in record);
+  assert.deepEqual(record.createdFolders, [".claude/agents", ".agentbay", ".claude"]);
+  const report = await cleaned(empty);
+  assert.ok(report.includes(".claude/agents/: deleted; the build had created it"));
+  const existing = memoryFiles({ ...existingProject, [`${root}/.agentbay/kernel.db`]: "data" });
+  await built(existing);
+  const kept: unknown = JSON.parse(existing.snapshot()[`${root}/.agentbay/build.json`] ?? "{}");
+  assert.ok(typeof kept === "object" && kept !== null && "createdFolders" in kept);
+  assert.deepEqual(kept.createdFolders, [".claude/agents"]);
+  await cleaned(existing);
+  assert.deepEqual(existing.snapshot(), { ...existingProject, [`${root}/.agentbay/kernel.db`]: "data" });
+});
+
+test("a build refuses a step granted a folder that holds a closed name, and writes nothing", async () => {
+  for (const secret of ["notes/.env", "notes/deep/.env.local", "notes/.git/config", "notes/sub/.Agentbay/x"]) {
+    const start = { [`${root}/${secret}`]: "secret", [`${root}/notes/a.md`]: "a" };
+    const files = memoryFiles(start);
+    const outcome = await adapter.build(buildRequest(files));
+    assert.ok(!outcome.ok, secret);
+    assert.match(outcome.problems[0]?.message ?? "", /is granted \/proj\/notes, which holds \/proj\/notes\//);
+    assert.equal(outcome.problems[0]?.file, digestAgent.skillFile);
+    assert.deepEqual(files.snapshot(), start);
+  }
+  const closedRoot = skillAgent({ ...shape, write: [`${root}/.agentbay/out`] });
+  const outcome = await adapter.build(buildRequest(memoryFiles(), [closedRoot]));
   assert.ok(!outcome.ok);
-  assert.match(outcome.problems[0]?.message ?? "", /cannot delete files/);
-  const shrinking = await adapter.build({ ...buildRequest(files, [digestAgent]), files: withoutRemove });
-  assert.ok(!shrinking.ok);
-  assert.ok(files.snapshot()[`${root}/.claude/agents/agentbay-store-scan.md`] !== undefined);
+  assert.match(outcome.problems[0]?.message ?? "", /names a closed location/);
+});
+
+test("a build refuses a granted folder larger than the bound it checks", async () => {
+  const many = Object.fromEntries(Array.from({ length: 5001 }, (_, index) => [`${root}/notes/f${String(index)}`, ""]));
+  const wide = await adapter.build(buildRequest(memoryFiles(many)));
+  assert.ok(!wide.ok);
+  assert.match(wide.problems[0]?.message ?? "", /more than 5000 entries/);
+  const levels = Array.from({ length: 13 }, (_, level) => `d${String(level)}`);
+  const deep = await adapter.build(buildRequest(memoryFiles({ [`${root}/notes/${levels.join("/")}/x`]: "" })));
+  assert.ok(!deep.ok);
+  assert.match(deep.problems[0]?.message ?? "", /deeper than 12 levels/);
+  const allowed = memoryFiles({ [`${root}/notes/${levels.slice(0, 11).join("/")}/x`]: "" });
+  assert.ok((await adapter.build(buildRequest(allowed))).ok);
 });

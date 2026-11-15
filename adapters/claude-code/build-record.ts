@@ -35,6 +35,7 @@ export type BuildRecord = {
   readonly adapter: "claude-code";
   readonly created: readonly CreatedFile[];
   readonly merged: readonly MergedFile[];
+  readonly createdFolders: readonly string[];
 };
 
 export type RecordReading =
@@ -124,10 +125,13 @@ export function readRecord(text: string | undefined): RecordReading {
   }
   const created = allRead(parsed.value["created"], createdOf);
   const merged = allRead(parsed.value["merged"], mergedOf);
-  if (created === undefined || merged === undefined) {
+  const createdFolders = allRead(parsed.value["createdFolders"], (value) =>
+    typeof value === "string" ? value : undefined,
+  );
+  if (created === undefined || merged === undefined || createdFolders === undefined) {
     return { kind: "unreadable" };
   }
-  return { kind: "record", record: { version: 1, adapter: "claude-code", created, merged } };
+  return { kind: "record", record: { version: 1, adapter: "claude-code", created, merged, createdFolders } };
 }
 
 export function recordText(record: BuildRecord): string {

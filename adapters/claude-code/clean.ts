@@ -2,10 +2,12 @@ import { join } from "node:path";
 import type { CleanRequest } from "../../bay/adapter.ts";
 import type { ListOutcome } from "./adapter-types.ts";
 import { readRecord, recordPath, sha256, unreadableRecord, type CreatedFile, type MergedFile } from "./build-record.ts";
-import { canRemove, removalProblem, type RemovableFiles } from "./file-removal.ts";
+import type { Files, Removal } from "./adapter-types.ts";
 import { restoredText } from "./merged-files.ts";
 
-async function cleanCreated(files: RemovableFiles, root: string, entry: CreatedFile): Promise<string> {
+type Effects = { readonly files: Files; readonly removal: Removal; readonly root: string };
+
+async function cleanCreated({ files, removal, root }: Effects, entry: CreatedFile): Promise<string> {
   const path = join(root, entry.path);
   const current = await files.readText(path);
   if (current === undefined) {
@@ -14,11 +16,11 @@ async function cleanCreated(files: RemovableFiles, root: string, entry: CreatedF
   if (sha256(current) !== entry.sha256) {
     return `${entry.path}: changed since the build, left in place`;
   }
-  await files.remove(path);
+  await removal.remove(path);
   return `${entry.path}: deleted`;
 }
 
-async function cleanMerged(files: RemovableFiles, root: string, entry: MergedFile): Promise<string> {
+async function cleanMerged({ files, removal, root }: Effects, entry: MergedFile): Promise<string> {
   const path = join(root, entry.path);
   const current = await files.readText(path);
   if (current === undefined) {
@@ -29,16 +31,22 @@ async function cleanMerged(files: RemovableFiles, root: string, entry: MergedFil
     return `${entry.path}: the part agentbay added was changed since the build, left in place`;
   }
   if (restored.text === undefined) {
-    await files.remove(path);
+    await removal.remove(path);
     return `${entry.path}: deleted; it held only what agentbay added`;
   }
   await files.writeAtomic(path, restored.text);
   return `${entry.path}: ${restored.exact ? "restored as it was before the build" : "agentbay's part removed, later edits kept"}`;
 }
 
+async function cleanFolder({ files, removal, root }: Effects, folder: string): Promise<string> {
+  await removal.remove(join(root, folder));
+  return (await files.exists(join(root, folder)))
+    ? `${folder}/: kept; it still holds files`
+    : `${folder}/: deleted; the build had created it`;
+}
+
 export async function clean(request: CleanRequest): Promise<ListOutcome> {
-  const { files, root } = request;
-  const reading = readRecord(await files.readText(join(root, recordPath)));
+  const reading = readRecord(await request.files.readText(join(request.root, recordPath)));
   switch (reading.kind) {
     case "none":
       return { ok: true, value: [`${recordPath}: no build record, so there is nothing to clean`] };
@@ -47,16 +55,18 @@ export async function clean(request: CleanRequest): Promise<ListOutcome> {
     case "record":
       break;
   }
-  if (!canRemove(files)) {
-    return { ok: false, problems: [removalProblem(recordPath)] };
-  }
+  const effects: Effects = request;
   const report: string[] = [];
   for (const entry of reading.record.created) {
-    report.push(await cleanCreated(files, root, entry));
+    report.push(await cleanCreated(effects, entry));
   }
   for (const entry of reading.record.merged) {
-    report.push(await cleanMerged(files, root, entry));
+    report.push(await cleanMerged(effects, entry));
   }
-  await files.remove(join(root, recordPath));
-  return { ok: true, value: [...report, `${recordPath}: deleted`] };
+  await request.removal.remove(join(request.root, recordPath));
+  report.push(`${recordPath}: deleted`);
+  for (const folder of reading.record.createdFolders) {
+    report.push(await cleanFolder(effects, folder));
+  }
+  return { ok: true, value: report };
 }

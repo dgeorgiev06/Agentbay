@@ -1,14 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, rmdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { adapter } from "../adapter.ts";
-import type { RemovableFiles } from "../file-removal.ts";
-import { buildRequest, skillAgent } from "./build-fixture.ts";
+import { buildRequest, skillAgent, type FilesWithRemoval } from "./build-fixture.ts";
 
 const kit = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
 const scratch = mkdtempSync(join(tmpdir(), "agentbay adapter "));
@@ -18,16 +17,18 @@ after(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-const diskFiles: RemovableFiles = {
+const diskFiles: FilesWithRemoval = {
   readText: async (path) => readFile(path, "utf8").catch(() => undefined),
-  list: (directory) => Promise.resolve(readdirSync(directory)),
+  list: async (directory) => readdir(directory).catch(() => []),
   exists: async (path) => (await readFile(path, "utf8").catch(() => undefined)) !== undefined,
   writeAtomic: async (path, text) => {
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, text);
   },
-  remove: async (path) => {
-    await rm(path);
+  removal: {
+    remove: async (path) => {
+      await rm(path, { recursive: false }).catch(async () => rmdir(path).catch(() => undefined));
+    },
   },
 };
 
@@ -79,9 +80,10 @@ test("a real build registers a hook command that confines its step and cleans up
   assert.equal(runHook(command, owner), 2);
   assert.equal(runHook(command, { ...owner, tool_input: { file_path: join(root, "notes", "b.md") } }), 0);
   assert.equal(runHook(command, { ...owner, tool_input: { file_path: join(kit, "bay", "sdk.ts") } }), 2);
-  const cleaned = await adapter.clean({ root, files: diskFiles });
+  const cleaned = await adapter.clean({ root, files: diskFiles, removal: diskFiles.removal });
   assert.ok(cleaned.ok, JSON.stringify(cleaned));
   assert.equal(await diskFiles.readText(join(root, ".claude", "settings.json")), undefined);
   assert.equal(await diskFiles.readText(join(root, ".agentbay", "build.json")), undefined);
   assert.equal(await diskFiles.readText(join(root, "notes", "a.md")), "note");
+  assert.deepEqual(readdirSync(root).sort(), ["notes", "out"]);
 });

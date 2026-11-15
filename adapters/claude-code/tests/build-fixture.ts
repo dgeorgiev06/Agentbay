@@ -1,8 +1,10 @@
 import { normalize } from "node:path";
 import type { BuildRequest, SkillAgent } from "../../../bay/adapter.ts";
-import type { RemovableFiles } from "../file-removal.ts";
+import type { Files, Removal } from "../adapter-types.ts";
 
-export type MemoryFiles = RemovableFiles & { readonly snapshot: () => Readonly<Record<string, string>> };
+export type FilesWithRemoval = Files & { readonly removal: Removal };
+
+export type MemoryFiles = FilesWithRemoval & { readonly snapshot: () => Readonly<Record<string, string>> };
 
 export function memoryFiles(initial: Readonly<Record<string, string>> = {}): MemoryFiles {
   const contents = new Map(Object.entries(initial).map(([path, text]) => [normalize(path), text]));
@@ -19,9 +21,11 @@ export function memoryFiles(initial: Readonly<Record<string, string>> = {}): Mem
       contents.set(normalize(path), text);
       return Promise.resolve();
     },
-    remove: (path) => {
-      contents.delete(normalize(path));
-      return Promise.resolve();
+    removal: {
+      remove: (path) => {
+        contents.delete(normalize(path));
+        return Promise.resolve();
+      },
     },
     snapshot: () => Object.fromEntries([...contents.entries()].sort(([left], [right]) => left.localeCompare(right))),
   };
@@ -98,14 +102,14 @@ export const buildAgent = skillAgent({
 
 export const allAgents = [digestAgent, scanAgent, buildAgent];
 
-export function buildRequest(files: RemovableFiles, agents: readonly SkillAgent[] = allAgents): BuildRequest {
+export function buildRequest(files: FilesWithRemoval, agents: readonly SkillAgent[] = allAgents): BuildRequest {
   const system = {
     modes: new Map(),
     interfaces: new Map(),
     bindings: new Map<string, string>(),
     config: { bindings: {}, adapter: "claude-code" },
   };
-  return { system, root, kit, agents, files };
+  return { system, root, kit, agents, files, removal: files.removal };
 }
 
 export const userSettings =

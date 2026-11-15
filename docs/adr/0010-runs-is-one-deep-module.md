@@ -24,4 +24,4 @@ Three designs were written under different constraints and compared (`docs/desig
 2. R2: move the runs files and `task-tokens.ts` into `bay/runs/`. Nothing else changes.
 3. R3: add the entry file with the interface above over the existing engine; move every caller to it; no other feature imports a runs file but the entry.
 4. R4: tests move to the entry file; real policy and scrubber; the fault injector; delete the in-memory store and the test-only exports.
-5. R5: delete and merge inside the feature until the deletion test finds nothing; the feature ends smaller than it started.
+5. R5: delete and merge inside the feature until the deletion test finds nothing. Size is reported, not targeted.

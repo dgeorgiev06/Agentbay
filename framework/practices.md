@@ -25,7 +25,7 @@ Held by: **check** (fails `npm run check`), **review** (the reviewer verifies it
 | P-10 | A port exists only when two adapters exist. | review |
 | P-11 | Replace and delete, never layer. Callers move and the old thing goes in the same slice. No shim, alias or re-export (ADR 9). | check: two dead-code runs; review of line counts |
 | P-12 | The same code or rule lives in one place (ADR 11). | planned check: copy-paste detector with a threshold |
-| P-13 | Before adding, remove what is in the way. A slice that restructures ends smaller than it started. | review: line counts in every report |
+| P-13 | Before adding, remove what is in the way. Size is reported before and after every slice and a rise is explained, but size is never a target: quality and readability decide. | review: line counts in every report |
 | P-14 | A wide or new interface is designed at least three ways, under different constraints, and compared before it is built (ADR 10 is the example). | review |
 
 ## Tests

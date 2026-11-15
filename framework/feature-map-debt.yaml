@@ -1,7 +1,4 @@
 breaks:
-  - from: bay/action-steps.ts
-    to: bay/targets.ts
-    rule: private-file
   - from: bay/adapter.ts
     to: bay/effect-rule.ts
     rule: private-file
@@ -36,28 +33,25 @@ breaks:
     to: bay/spec.ts
     rule: private-file
   - from: bay/commands/approve.ts
-    to: bay/waiting.ts
+    to: bay/runs/waiting.ts
     rule: private-file
   - from: bay/commands/resume.ts
-    to: bay/budget.ts
+    to: bay/runs/budget.ts
     rule: private-file
   - from: bay/commands/resume.ts
-    to: bay/run-state.ts
+    to: bay/runs/run-state.ts
     rule: private-file
   - from: bay/commands/runs.ts
-    to: bay/run-store.ts
+    to: bay/runs/run-store.ts
     rule: private-file
   - from: bay/commands/submit.ts
-    to: bay/task-tokens.ts
+    to: bay/runs/task-tokens.ts
     rule: private-file
   - from: bay/database.ts
     to: bay/owner-only.ts
     rule: may-not-import
   - from: bay/database.ts
     to: bay/sql-statements.ts
-    rule: private-file
-  - from: bay/engine.ts
-    to: bay/targets.ts
     rule: private-file
   - from: bay/folder-links.ts
     to: bay/file-access.ts
@@ -69,10 +63,10 @@ breaks:
     to: bay/check-context.ts
     rule: may-not-import
   - from: bay/kernel.ts
-    to: bay/run-store.ts
+    to: bay/runs/run-store.ts
     rule: private-file
   - from: bay/kernel.ts
-    to: bay/sqlite-run-store.ts
+    to: bay/runs/sqlite-run-store.ts
     rule: private-file
   - from: bay/mcp.ts
     to: bay/mcp-server.ts
@@ -90,19 +84,52 @@ breaks:
     to: bay/spec.ts
     rule: private-file
   - from: bay/run-report.ts
-    to: bay/run-state.ts
+    to: bay/runs/run-state.ts
     rule: private-file
   - from: bay/run-report.ts
-    to: bay/run-store.ts
+    to: bay/runs/run-store.ts
+    rule: private-file
+  - from: bay/run-report.ts
+    to: bay/runs/task-tokens.ts
+    rule: private-file
+  - from: bay/run-report.ts
+    to: bay/runs/waiting.ts
     rule: private-file
   - from: bay/run-report.ts
     to: bay/skill-tools.ts
     rule: private-file
-  - from: bay/run-report.ts
-    to: bay/task-tokens.ts
+  - from: bay/runs/action-steps.ts
+    to: bay/targets.ts
     rule: private-file
-  - from: bay/run-report.ts
-    to: bay/waiting.ts
+  - from: bay/runs/engine.ts
+    to: bay/targets.ts
+    rule: private-file
+  - from: bay/runs/skill-steps.ts
+    to: bay/effect-rule.ts
+    rule: private-file
+  - from: bay/runs/skill-steps.ts
+    to: bay/spec.ts
+    rule: private-file
+  - from: bay/runs/sqlite-run-store.ts
+    to: bay/owner-only.ts
+    rule: may-not-import
+  - from: bay/runs/undo.ts
+    to: bay/targets.ts
+    rule: private-file
+  - from: bay/runs/waiting.ts
+    to: bay/targets.ts
+    rule: private-file
+  - from: bay/runs/walk.ts
+    to: bay/spec.ts
+    rule: private-file
+  - from: bay/runs/walk.ts
+    to: bay/targets.ts
+    rule: private-file
+  - from: bay/runs/workflow-steps.ts
+    to: bay/references.ts
+    rule: private-file
+  - from: bay/runs/workflow-steps.ts
+    to: bay/targets.ts
     rule: private-file
   - from: bay/script-host.ts
     to: bay/agent-query.ts
@@ -128,51 +155,24 @@ breaks:
   - from: bay/sdk.ts
     to: bay/database.ts
     rule: private-file
-  - from: bay/skill-steps.ts
-    to: bay/effect-rule.ts
-    rule: private-file
-  - from: bay/skill-steps.ts
-    to: bay/spec.ts
-    rule: private-file
   - from: bay/skill-tools.ts
     to: bay/check-skills.ts
     rule: may-not-import
-  - from: bay/sqlite-run-store.ts
-    to: bay/owner-only.ts
-    rule: may-not-import
-  - from: bay/task-tokens.ts
-    to: bay/run-store.ts
-    rule: private-file
   - from: bay/tools.ts
     to: bay/kernel.ts
     rule: may-not-import
   - from: bay/tools.ts
-    to: bay/run-state.ts
+    to: bay/runs/run-state.ts
     rule: private-file
   - from: bay/tools.ts
-    to: bay/run-store.ts
+    to: bay/runs/run-store.ts
     rule: private-file
   - from: bay/tools.ts
-    to: bay/targets.ts
+    to: bay/runs/task-tokens.ts
     rule: private-file
   - from: bay/tools.ts
-    to: bay/waiting.ts
+    to: bay/runs/waiting.ts
     rule: private-file
-  - from: bay/undo.ts
-    to: bay/targets.ts
-    rule: private-file
-  - from: bay/waiting.ts
-    to: bay/targets.ts
-    rule: private-file
-  - from: bay/walk.ts
-    to: bay/spec.ts
-    rule: private-file
-  - from: bay/walk.ts
-    to: bay/targets.ts
-    rule: private-file
-  - from: bay/workflow-steps.ts
-    to: bay/references.ts
-    rule: private-file
-  - from: bay/workflow-steps.ts
+  - from: bay/tools.ts
     to: bay/targets.ts
     rule: private-file

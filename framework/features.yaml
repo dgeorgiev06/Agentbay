@@ -95,21 +95,22 @@ features:
   runs:
     purpose: Advances a run step by step, durably - waiting, resuming, budgets, approvals, undo.
     entry:
-      - bay/engine.ts
+      - bay/runs/engine.ts
     private:
-      - bay/action-steps.ts
-      - bay/workflow-steps.ts
-      - bay/skill-steps.ts
-      - bay/walk.ts
-      - bay/undo.ts
-      - bay/waiting.ts
-      - bay/budget.ts
-      - bay/run-state.ts
-      - bay/run-store.ts
-      - bay/sqlite-run-store.ts
-      - bay/scrubbed-store.ts
-      - bay/step-key.ts
-      - bay/step-detail.ts
+      - bay/runs/action-steps.ts
+      - bay/runs/workflow-steps.ts
+      - bay/runs/skill-steps.ts
+      - bay/runs/walk.ts
+      - bay/runs/undo.ts
+      - bay/runs/waiting.ts
+      - bay/runs/budget.ts
+      - bay/runs/run-state.ts
+      - bay/runs/run-store.ts
+      - bay/runs/sqlite-run-store.ts
+      - bay/runs/scrubbed-store.ts
+      - bay/runs/step-key.ts
+      - bay/runs/step-detail.ts
+      - bay/runs/task-tokens.ts
     may_import:
       - vocabulary
       - manifests
@@ -123,7 +124,6 @@ features:
     private:
       - bay/tool-definitions.ts
       - bay/skill-tools.ts
-      - bay/task-tokens.ts
       - bay/mcp-server.ts
     may_import:
       - vocabulary

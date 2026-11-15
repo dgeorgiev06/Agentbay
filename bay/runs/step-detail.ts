@@ -1,6 +1,6 @@
 import { noSpend, spendFromJson } from "./budget.ts";
-import type { Json, Spend, Submission, Tier } from "./contracts.ts";
-import { fieldOf, numberField, textField, textsField } from "./json.ts";
+import type { Json, Spend, Submission, Tier } from "../contracts.ts";
+import { fieldOf, numberField, textField, textsField } from "../json.ts";
 
 export const stepKinds = ["script", "check", "skill", "call", "action", "undo", "approval", "wait", "foreach"] as const;
 

@@ -3,13 +3,13 @@ import type { Broker } from "./broker.ts";
 import type { Json } from "./contracts.ts";
 import { byteSize, fieldOf, numberField, textField, isRecord } from "./json.ts";
 import type { Kernel } from "./kernel.ts";
-import type { StepRecord } from "./run-store.ts";
-import type { RunView } from "./run-state.ts";
+import type { StepRecord } from "./runs/run-store.ts";
+import type { RunView } from "./runs/run-state.ts";
 import { failedWith, problemText, unplacedProblem, type Outcome, type Problem } from "./outcome.ts";
 import { isToolName, skillToolsOf, type SkillTools, type ToolName } from "./skill-tools.ts";
 import { resolveCall, resolveOwnAction, type ActionTarget } from "./targets.ts";
-import { checkTaskToken, issueTaskToken } from "./task-tokens.ts";
-import { skillStepAt, type SkillStepAt } from "./waiting.ts";
+import { checkTaskToken, issueTaskToken } from "./runs/task-tokens.ts";
+import { skillStepAt, type SkillStepAt } from "./runs/waiting.ts";
 
 type ToolCall = {
   readonly kernel: Kernel;

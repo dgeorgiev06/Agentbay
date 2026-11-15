@@ -14,7 +14,7 @@ import {
   stepKeyText,
   undoStepKey,
   workflowStepKey,
-} from "../bay/step-key.ts";
+} from "../bay/runs/step-key.ts";
 
 test("the constructors write the keys the run store has always held", () => {
   assert.equal(actionStepKey("", 3), "3");

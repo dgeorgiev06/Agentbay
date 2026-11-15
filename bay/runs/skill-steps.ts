@@ -1,11 +1,11 @@
 import { join } from "node:path/posix";
-import { refused } from "./answers.ts";
-import type { Json, Permissions, SkillTask, Submission } from "./contracts.ts";
-import { effectRefusal } from "./effect-rule.ts";
-import { problemText, unplacedProblem, type Problem } from "./outcome.ts";
-import type { LoadedMode } from "./registry.ts";
+import { refused } from "../answers.ts";
+import type { Json, Permissions, SkillTask, Submission } from "../contracts.ts";
+import { effectRefusal } from "../effect-rule.ts";
+import { problemText, unplacedProblem, type Problem } from "../outcome.ts";
+import type { LoadedMode } from "../registry.ts";
 import type { StepRecord } from "./run-store.ts";
-import { parseSkill } from "./spec.ts";
+import { parseSkill } from "../spec.ts";
 import type { SkillDetail } from "./step-detail.ts";
 import { skillRoundKey } from "./step-key.ts";
 import { schemaProblems, type Services } from "./walk.ts";

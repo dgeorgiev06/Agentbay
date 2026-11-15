@@ -16,7 +16,7 @@ import {
   smallestBudget,
   spendFromJson,
   subtractSpend,
-} from "../bay/budget.ts";
+} from "../bay/runs/budget.ts";
 
 const spend = (items: number, usd = 0) => ({ items, usd, tokens: 0, minutes: 0 });
 

@@ -1,15 +1,15 @@
 import { runNestedAction } from "./action-steps.ts";
 import { noSpend, subtractSpend, type BudgetFrame } from "./budget.ts";
-import type { Json } from "./contracts.ts";
-import type { Step as WorkflowStep } from "./generated/workflow.ts";
-import { hashOf, toJson } from "./json.ts";
-import { problemText, succeededWith } from "./outcome.ts";
-import { resolveInput, resolveValue, type ReferenceScope } from "./references.ts";
-import type { LoadedMode } from "./registry.ts";
+import type { Json } from "../contracts.ts";
+import type { Step as WorkflowStep } from "../generated/workflow.ts";
+import { hashOf, toJson } from "../json.ts";
+import { problemText, succeededWith } from "../outcome.ts";
+import { resolveInput, resolveValue, type ReferenceScope } from "../references.ts";
+import type { LoadedMode } from "../registry.ts";
 import type { StepRecord } from "./run-store.ts";
 import type { ApprovalDetail } from "./step-detail.ts";
 import { foreachItemKey, workflowStepKey } from "./step-key.ts";
-import { resolveWorkflowAction } from "./targets.ts";
+import { resolveWorkflowAction } from "../targets.ts";
 import {
   changeDetail,
   concludeComposite,

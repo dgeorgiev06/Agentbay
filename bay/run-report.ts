@@ -3,13 +3,13 @@ import { agentName } from "./adapter.ts";
 import type { Json, RunEvent, SkillTask } from "./contracts.ts";
 import { byteSize, textField, toJson } from "./json.ts";
 import type { Kernel } from "./kernel.ts";
-import type { RunWithSteps, StepRecord, StoredRun, StoredState } from "./run-store.ts";
-import type { RunView, Waiting } from "./run-state.ts";
+import type { RunWithSteps, StepRecord, StoredRun, StoredState } from "./runs/run-store.ts";
+import type { RunView, Waiting } from "./runs/run-state.ts";
 import type { Outcome } from "./outcome.ts";
 import { skillNameOf } from "./skill-tools.ts";
-import { issueTaskToken } from "./task-tokens.ts";
+import { issueTaskToken } from "./runs/task-tokens.ts";
 import { askedByKind } from "./tools.ts";
-import { skillStepAt, storedWaiting } from "./waiting.ts";
+import { skillStepAt, storedWaiting } from "./runs/waiting.ts";
 import { problemsResult, type CommandResult, type JsonObject } from "./command-context.ts";
 import { shownProblems } from "./layout.ts";
 

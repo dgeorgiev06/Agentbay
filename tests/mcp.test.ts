@@ -6,7 +6,7 @@ import { test } from "node:test";
 import type { Json } from "../bay/contracts.ts";
 import { fieldOf, parseJson, textField } from "../bay/json.ts";
 import { replyTo, type ToolServer } from "../bay/mcp-server.ts";
-import { issueTaskToken } from "../bay/task-tokens.ts";
+import { issueTaskToken } from "../bay/runs/task-tokens.ts";
 import { toolDefinitions } from "../bay/tool-definitions.ts";
 import { openKernel, testEnvironment } from "./kernel-fixture.ts";
 import { kit, makeProject } from "./project-fixture.ts";

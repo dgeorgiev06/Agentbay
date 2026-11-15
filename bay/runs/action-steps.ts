@@ -11,15 +11,15 @@ import type {
   StepPlace,
   Submission,
   Tier,
-} from "./contracts.ts";
-import type { Budget, Step } from "./generated/mode.ts";
-import { fieldOf, textField } from "./json.ts";
-import { problemText } from "./outcome.ts";
+} from "../contracts.ts";
+import type { Budget, Step } from "../generated/mode.ts";
+import { fieldOf, textField } from "../json.ts";
+import { problemText } from "../outcome.ts";
 import type { StepRecord } from "./run-store.ts";
 import { skillSchemas, skillTaskOf, startedSkillOf, type SkillAt } from "./skill-steps.ts";
 import type { ScriptDetail, SkillDetail } from "./step-detail.ts";
 import { actionEndKey, actionStepKey, checkStepKey, scriptCallKey, skillRoundKey } from "./step-key.ts";
-import { resolveCall, type ActionTarget } from "./targets.ts";
+import { resolveCall, type ActionTarget } from "../targets.ts";
 import {
   changeDetail,
   concludeComposite,

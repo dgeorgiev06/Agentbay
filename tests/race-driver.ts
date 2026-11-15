@@ -1,7 +1,7 @@
 import { appendFileSync, existsSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { ScriptRequest } from "../bay/contracts.ts";
-import { SqliteRunStore } from "../bay/sqlite-run-store.ts";
+import { SqliteRunStore } from "../bay/runs/sqlite-run-store.ts";
 import { finished, harness } from "./engine-fixture.ts";
 
 const [file, markerFile, goFile, owner] = process.argv.slice(2);

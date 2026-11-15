@@ -1,5 +1,5 @@
-import type { Json, RunEvent, Scrubber } from "./contracts.ts";
-import { toJson, isRecord } from "./json.ts";
+import type { Json, RunEvent, Scrubber } from "../contracts.ts";
+import { toJson, isRecord } from "../json.ts";
 import type { RunPatch, RunStore, StepEnd, StoredState } from "./run-store.ts";
 import { decodedStepDetail, stepDetailJson, type StepDetail } from "./step-detail.ts";
 

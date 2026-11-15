@@ -196,3 +196,23 @@ features:
         runs,
         secrets,
       ]
+
+# Outside the kernel. These are not kernel features, but the same rule holds:
+# they reach the kernel through one entry file and nothing reaches into them.
+outside:
+  adapters/claude-code:
+    purpose: Fits Claude Code to the kernel - agent files, the step guard, settings, the tool server config.
+    entry: [adapters/claude-code/adapter.ts, adapters/claude-code/step-guard.ts]
+    imports_kernel_through: [bay/adapter.ts]
+
+  components/base/store:
+    purpose: The store mode. Implements items-store.
+    imports_kernel_through: [bay/sdk.ts]
+
+  components/modes/fake-source:
+    purpose: A source of made-up items for tests and the demo. Implements items-source.
+    imports_kernel_through: [bay/sdk.ts]
+
+  components/modes/feed-briefing:
+    purpose: Syncs a source into the store, writes a digest and answers questions about it.
+    imports_kernel_through: [bay/sdk.ts]

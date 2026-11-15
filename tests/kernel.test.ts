@@ -14,7 +14,8 @@ import { kit, makeProject } from "./project-fixture.ts";
 test("the kernel loads a project and holds its system, policy, store and engine", async () => {
   const opened = await openProject();
   const { kernel } = opened;
-  assert.deepEqual([...kernel.system.modes.keys()].sort(), ["greeter", "writer"]);
+  assert.deepEqual([...kernel.system.active].sort(), ["greeter", "writer"]);
+  assert.ok(kernel.system.modes.has("greeter") && kernel.system.modes.has("writer"));
   assert.equal(kernel.policyOf("writer").databaseFile, join(opened.project.root, ".agentbay/data/writer.db"));
   assert.ok(existsSync(join(opened.project.root, ".agentbay/kernel.db")));
   assert.equal(kernel.limits.toolCallsPerRound, 200);

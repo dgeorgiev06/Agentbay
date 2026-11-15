@@ -8,6 +8,7 @@ import {
   subtractSpend,
   type BudgetFrame,
 } from "./budget.ts";
+import { refused } from "./answers.ts";
 import type {
   ActionCaller,
   Json,
@@ -18,10 +19,13 @@ import type {
   Spend,
   StepOutcome,
   StepPlace,
+  Submission,
   Tier,
 } from "./contracts.ts";
+import { effectRefusal } from "./effect-rule.ts";
 import type { Budget, Step } from "./generated/mode.ts";
 import { fieldOf, numberField, textField, textsField, withFields } from "./json.ts";
+import type { LoadedMode } from "./registry.ts";
 import type { StepRecord } from "./run-store.ts";
 import { parseSkill, type Problem } from "./spec.ts";
 import { resolveCall, type ActionTarget } from "./targets.ts";
@@ -330,7 +334,7 @@ async function startSkill(walk: Walk, frame: ActionFrame, skill: SkillStep): Pro
   if (typeof schemas === "string") {
     return refuse(walk, { key: skill.key, kind: "skill", input: skill.input }, schemas);
   }
-  const detail = { mode: frame.mode.manifest.name, schemas: [...schemas], round: 1, feedback: [] };
+  const detail = { mode: frame.mode.manifest.name, action: frame.name, schemas: [...schemas], round: 1, feedback: [] };
   const record = await startRecord(walk, { key: skill.key, kind: "skill", input: skill.input, detail });
   return skillWaiting(walk, frame, { skill, record });
 }
@@ -539,10 +543,23 @@ export async function runActionFrame(walk: Walk, frame: ActionFrame, input: Json
   return frameOutput(walk, frame, value);
 }
 
+function submittedSpendProblems(mode: LoadedMode, record: StepRecord, submission: Submission): readonly Problem[] {
+  const actionName = textField(record.detail, "action") ?? "";
+  const effects = mode.manifest.actions[actionName]?.effects ?? [];
+  const manifest = join(mode.folder, "mode.yaml");
+  const at = {
+    stepKey: skillStepKey(record.key, numberField(record.detail, "round") ?? 1),
+    action: actionName,
+    manifest,
+  };
+  const wording = effectRefusal({ kind: "skill.submit", usd: submission.spent.usd }, effects, at);
+  return wording === undefined ? [] : [{ file: manifest, path: "", message: refused(wording).message }];
+}
+
 export async function submissionProblems(
   services: Services,
   record: StepRecord,
-  output: Json,
+  submission: Submission,
 ): Promise<readonly Problem[]> {
   const modeName = textField(record.detail, "mode") ?? "";
   const mode = services.system.modes.get(modeName);
@@ -551,9 +568,10 @@ export async function submissionProblems(
       { file: "", path: "", message: `The skill step ${record.key} belongs to mode ${modeName}, which is gone.` },
     ];
   }
-  const problems: Problem[] = [];
+  const problems: Problem[] = [...submittedSpendProblems(mode, record, submission)];
   for (const schema of textsField(record.detail, "schemas")) {
-    problems.push(...(await schemaProblems(services, { mode, schema, value: output, label: "output" })));
+    const check = { mode, schema, value: submission.output, label: "output" };
+    problems.push(...(await schemaProblems(services, check)));
   }
   return problems;
 }

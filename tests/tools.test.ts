@@ -164,7 +164,14 @@ test("submit returns schema problems, then check feedback with a new token, then
       output: { text: "long enough now?" },
     });
     assert.match(refusalOf(replayed), /The token is not valid/);
-    const good = { token: next, output: { text: "Hello, Ada, and welcome back." }, tokens: 300, usd: 0.01 };
+    const paid = { token: next, output: { text: "Hello, Ada, and welcome back." }, tokens: 300, usd: 0.01 };
+    const unpaid = valueOf(await callKernelTool(kernel, "submit", paid));
+    assert.equal(fieldOf(unpaid, "accepted"), false);
+    assert.match(
+      JSON.stringify(fieldOf(unpaid, "problems")),
+      /Reporting dollars an agent spent needs the spend effect/,
+    );
+    const good = { token: next, output: { text: "Hello, Ada, and welcome back." }, tokens: 300 };
     const accepted = valueOf(await callKernelTool(kernel, "submit", good));
     assert.deepEqual(accepted, { accepted: true, run: { id: waiting.runId, status: "done" } });
     const run = await kernel.store.readRun(waiting.runId);

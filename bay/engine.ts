@@ -341,7 +341,7 @@ export class Engine {
       if (spendProblems.length > 0) {
         return refusal(run.id, { message: `The submission's spend is not valid: ${spendProblems.join(" ")}` });
       }
-      const problems = await submissionProblems(this.#services, found.record, submission.output);
+      const problems = await submissionProblems(this.#services, found.record, submission);
       if (problems.length > 0) {
         return { ok: false, problems };
       }

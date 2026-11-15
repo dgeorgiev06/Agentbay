@@ -374,6 +374,26 @@ test("the spend of every round of a skill counts, and a negative spend is refuse
   close();
 });
 
+test("a submission that reports dollars is refused when the skill's action does not declare spend", async () => {
+  const paid = { input: "schemas/anything.json", output: "schemas/draft.json", effects: ["read", "spend"] as const };
+  const notesActions = { "paid-draft": { ...paid, run: [{ skill: "skills/draft", tier: "fast" as const }] } };
+  const { engine, store, close } = await harness({ changes: { notesActions } });
+  const id = runOf(await engine.startAction("notes.draft", {})).id;
+  const refused = problemsOf(await engine.submit(id, "0#1", answer({ text: "long enough" }, { usd: 0.5 })));
+  assert.match(refused[0] ?? "", /The step 0#1 of action draft asked to report spending/);
+  assert.match(refused[0] ?? "", /the action draft declares the effects: read/);
+  assert.match(refused[0] ?? "", /add spend to actions\.draft\.effects in \S*components\/modes\/notes\/mode\.yaml/);
+  assert.equal((await store.readRun(id))?.state.status, "waiting");
+  const tokensOnly = runOf(await engine.submit(id, "0#1", answer({ text: "long enough" }, { tokens: 40 })));
+  assert.equal(tokensOnly.state.status, "done");
+  assert.equal(tokensOnly.spent.tokens, 40);
+  const paidId = runOf(await engine.startAction("notes.paid-draft", {}, { id: "paid" })).id;
+  const accepted = runOf(await engine.submit(paidId, "0#1", answer({ text: "long enough" }, { usd: 0.5 })));
+  assert.equal(accepted.state.status, "done");
+  assert.equal(accepted.spent.usd, 0.5);
+  close();
+});
+
 test("a script's time limit is the smaller of eight minutes and the minutes left", async () => {
   const { engine, runner, close } = await harness({ changes: { config: { budget: { minutes: 3 } } } });
   runOf(await engine.startAction("notes.spend", { measure: "minutes" }));

@@ -50,6 +50,7 @@ export type Opening = {
   readonly scripts?: Readonly<Record<string, Script>>;
   readonly changes?: Changes;
   readonly toolCallsPerRound?: number;
+  readonly secretHandedOut?: "at open" | "later";
 };
 
 export type OpenedRuns = FixtureSystem & {
@@ -60,6 +61,7 @@ export type OpenedRuns = FixtureSystem & {
   readonly createdBeforeRunner: readonly string[];
   readonly sink: () => EventSink;
   readonly reopen: (system?: System) => Promise<Runs>;
+  readonly handOutSecret: () => Promise<void>;
   readonly close: () => void;
 };
 
@@ -321,11 +323,19 @@ export function policyOfSystem(system: System): PolicyOf {
   return policy.value;
 }
 
-export async function fixtureScrubber(policyOf: PolicyOf): Promise<SecretStore> {
+function secretStore(): SecretStore {
   const environment = { [`AGENTBAY_SECRET_${secretName}`]: secretValue };
-  const scrubber = new SecretStore({ environment, processes: noProcesses, platform: "linux" });
+  return new SecretStore({ environment, processes: noProcesses, platform: "linux" });
+}
+
+async function handOut(scrubber: SecretStore, policyOf: PolicyOf): Promise<void> {
   const handedOut = await scrubber.get(secretName, policyOf("notes"));
   assert.ok(handedOut.ok);
+}
+
+export async function fixtureScrubber(policyOf: PolicyOf): Promise<SecretStore> {
+  const scrubber = secretStore();
+  await handOut(scrubber, policyOf);
   return scrubber;
 }
 
@@ -355,7 +365,11 @@ export async function openedRuns(opening: Opening = {}): Promise<OpenedRuns> {
   const { project, remove } = projectFolder();
   const fixture = await fixtureSystem(opening.changes);
   const { policyOf, files } = fixture;
-  const scrubber = await fixtureScrubber(policyOf);
+  const scrubber = secretStore();
+  const handOutSecret = (): Promise<void> => handOut(scrubber, policyOf);
+  if (opening.secretHandedOut !== "later") {
+    await handOutSecret();
+  }
   const folders = fakeFolders();
   const clock = fakeClock(startTime);
   const runner = fakeRunner(opening.scripts);
@@ -395,7 +409,7 @@ export async function openedRuns(opening: Opening = {}): Promise<OpenedRuns> {
     remove();
   };
   const database = join(project, ".agentbay/kernel.db");
-  return { ...fixture, runs, runner, clock, database, createdBeforeRunner, sink, reopen, close };
+  return { ...fixture, runs, runner, clock, database, createdBeforeRunner, sink, reopen, handOutSecret, close };
 }
 
 export function runOf(result: Outcome<Run>): Run {

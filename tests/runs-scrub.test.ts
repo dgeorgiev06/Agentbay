@@ -6,6 +6,7 @@ import {
   crashingOnce,
   failure,
   finished,
+  fixtureSystem,
   messagesOf,
   notesFlow,
   openedRuns,
@@ -30,6 +31,8 @@ const keepStep = { id: "keep", approval: "Send?", show: "$settings.greeting" };
 const redactedHash = "96ea0fed2d8b3e13e8704f4cc6d72c6d834804e0ac050d88b6fdc05914260622";
 
 const clearHash = "db5b10692f2ff8484a8c6e69cd8d5ebda1c38fde0fab854a467de69b0d4c9b5e";
+
+const helloHash = "5aa762ae383fbb727af3c7a36d4940a5b8c40a989452d2304fc958ff3f354e7a";
 
 const redactedApproval = {
   reason: "approval",
@@ -112,6 +115,43 @@ describe("secrets are scrubbed before they are stored", () => {
       by: `owner ${redacted}`,
     });
     assert.ok(!JSON.stringify(stored).includes(secretValue));
+    close();
+  });
+});
+
+describe("an approval's content is scrubbed again when it is shown", () => {
+  test("content that changes to hold a secret is shown redacted, under the hash of the redacted content", async () => {
+    const keep = withFlow([keepStep]);
+    const { runs, reopen, close } = await openedRuns({ changes: keep });
+    const started = await runs.start(flow, null);
+    const id = runOf(started).id;
+    const first = waitingOf(started);
+    assert.ok(first.reason === "approval");
+    assert.equal(first.hash, helloHash);
+    const edited = await fixtureSystem({ ...keep, config: greetingWithSecret });
+    const later = await reopen(edited.system);
+    const decision = { stepKey: "keep", verdict: "approve", by: "owner" } as const;
+    const back = await later.approve(id, { ...decision, hash: helloHash });
+    assert.deepEqual(waitingOf(back), { ...redactedApproval, previousHash: helloHash });
+    assert.ok(!JSON.stringify(runOf(back)).includes(secretValue), JSON.stringify(back));
+    const run = runOf(await later.approve(id, { ...decision, hash: redactedHash }));
+    assert.deepEqual(run.state, { status: "done", output: `hi ${redacted}` });
+    close();
+  });
+
+  test("content stored before its secret was handed out is not shown once the secret is known", async () => {
+    const keep = withFlow([keepStep]);
+    const opening = { changes: { ...keep, config: greetingWithSecret }, secretHandedOut: "later" } as const;
+    const { runs, handOutSecret, close } = await openedRuns(opening);
+    const id = runOf(await runs.start(flow, null)).id;
+    await handOutSecret();
+    assert.deepEqual(waitingOf(await runs.show(id)), {
+      reason: "approval",
+      stepKey: "keep",
+      question: "Send?",
+      hash: clearHash,
+      content: null,
+    });
     close();
   });
 });

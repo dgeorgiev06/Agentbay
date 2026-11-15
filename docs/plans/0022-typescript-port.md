@@ -470,3 +470,52 @@ skills: { forge.review: { model: fable }, forge.build: { model: opus } }
 **Skills, written to the seven-section contract**, each with a definition of done the checks can test: `propose`, `plan`, `challenge`, `build`, `review`, `evaluate`. Their Rules sections carry the hard-won lines: never report a check as passed without its output; never weaken a test to make it pass; never edit a file the task does not own; stop and say so when the spec is wrong.
 
 **Forge works on two kinds of target:** the kit itself (only when the project is the kit, with the kernel folders in its write paths) and a project's own modes and files.
+
+### Forge is language-neutral (owner requirement, 2026-11-15)
+
+Forge must build Go, or any other language, as well as TypeScript, and best practices must be something the owner can add to. So forge itself knows no language. Everything about a language lives in a small mode that implements one interface, and practices are files.
+
+**The interface `toolchain@1`** (in `components/base/interfaces/`), every action taking the changed files and the folder to work in:
+
+| Action | Answers |
+|---|---|
+| `describe` | The language, the file patterns it claims, the commands it needs, the standards it ships |
+| `check-types`, `lint`, `check-format`, `find-dead-code` | Findings as `{ file, line, rule, message }`; an action a language has no tool for answers "not applicable" |
+| `test` | Which tests ran, which failed, with output |
+| `mutants` | Small deliberate changes to the given lines, each as a patch, for the mutation check |
+| `standards` | The practice files that apply to the given paths |
+
+**Toolchain modes** implement it: `typescript` (replacing `components/base/typescript/` as a plain config folder) first, then `go`. Each holds its tool configuration, its mutation operators and its practices, and lists the commands it runs. Adding a language is adding one mode; forge does not change.
+
+**Several toolchains at once.** A repository can hold more than one language, so an interface may be bound to a list of modes for one requirer:
+
+```yaml
+bindings:
+  toolchain: { forge: [typescript, go] }
+settings:
+  forge:
+    toolchains:
+      - { paths: ["**/*.ts"], use: typescript }
+      - { paths: ["**/*.go"], use: go }
+    firstSession: scripts/first-session.sh
+    standards: [standards/]
+```
+
+A script that calls an interface bound to a list says which server it means, by a name from that list. Forge routes each changed file to the toolchain whose patterns claim it and merges the findings. A file no toolchain claims gets only the language-neutral checks.
+
+**Practices are files, and anyone can add one.** A practice file is Markdown with one entry per rule:
+
+```markdown
+## TS-014 Closed sets are discriminated unions
+Applies to: **/*.ts
+Enforced by: lint rule switch-exhaustiveness-check
+Why: a new case that is not handled must fail to compile.
+Good: ...
+Bad: ...
+```
+
+`Enforced by` is a tool rule or the word `review`. Practices come from three places, later ones adding to earlier ones: the toolchain mode (the language's own), forge (language-neutral ones such as "problems are values", "one owner per file", "no claim without its output"), and the project's own `standards/` folder. `bay check` validates the entries and that every rule id is unique. The build skill is given the practices that apply to its task's files; the review skill's verdict cites rule ids; a finding with no rule behind it is marked as the reviewer's judgment. `bay new practice` writes a new entry from a template. A practice that review keeps enforcing by hand is a candidate for a tool rule, and the evaluation skill says so.
+
+**What stays language-neutral in forge:** the stages, ownership of files, the kept, changed and dropped list, evidence over claims, the review and evaluation skills, the mutation loop (apply a mutant, run the tests, expect a failure), the first-session check (a script the project names), approvals and release.
+
+**Kernel addition for this:** a binding may be a list for one requirer, `context.call` takes the server's name when it is, and `context.bound(interface)` lists the names.

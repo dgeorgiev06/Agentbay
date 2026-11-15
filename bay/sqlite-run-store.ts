@@ -63,7 +63,7 @@ const migrations: readonly string[] = [
     run_id text not null references runs (id),
     key text not null,
     kind text not null,
-    status text not null check (status in ('started', 'finished', 'failed')),
+    status text not null check (status in ('started', 'done', 'failed')),
     input text not null,
     output text,
     reason text,
@@ -170,7 +170,7 @@ function runOf(row: Row): StoredRun {
   };
 }
 
-const storedStepStatuses = ["started", "finished", "failed"] as const;
+const storedStepStatuses = ["started", "done", "failed"] as const;
 
 function stepEndOf(row: Row): { readonly spent: Spend; readonly finishOrder: number; readonly finishedAt: string } {
   return {
@@ -196,15 +196,11 @@ function stepOf(row: Row): StepRecord {
   switch (status) {
     case "started":
       return { ...start, ...typed, status };
-    case "finished":
-      return { ...start, ...typed, ...stepEndOf(row), status: "done", output: jsonColumn(row, "output") };
+    case "done":
+      return { ...start, ...typed, ...stepEndOf(row), status, output: jsonColumn(row, "output") };
     case "failed":
       return { ...start, ...typed, ...stepEndOf(row), status, reason: textColumn(row, "reason") };
   }
-}
-
-function storedStepStatus(end: StepEnd): "finished" | "failed" {
-  return end.status === "done" ? "finished" : "failed";
 }
 
 function eventOf(row: Row): RunEvent {
@@ -331,16 +327,7 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
             finish_order = (select coalesce(max(finish_order), 0) + 1 from steps where run_id = ?)
            where run_id = ? and key = ?`,
         )
-        .run(
-          storedStepStatus(end),
-          output,
-          reason,
-          JSON.stringify(end.spent),
-          end.at,
-          writer.runId,
-          writer.runId,
-          end.key,
-        );
+        .run(end.status, output, reason, JSON.stringify(end.spent), end.at, writer.runId, writer.runId, end.key);
       this.#touch(writer.runId, end.at);
       this.#insertEvents(events);
       return this.#step(writer.runId, end.key);
@@ -564,7 +551,7 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
   #checkStarted(runId: string, key: string): StepRecord {
     const step = this.#step(runId, key);
     if (step.status !== "started") {
-      throw new Error(`Step ${key} of run ${runId} has already ${step.status === "done" ? "finished" : step.status}.`);
+      throw new Error(`Step ${key} of run ${runId} is already ${step.status}.`);
     }
     return step;
   }

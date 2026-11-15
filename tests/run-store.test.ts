@@ -355,6 +355,32 @@ test("a SQLite store keeps runs, steps and events when the file is opened again"
   remove();
 });
 
+test("a SQLite store keeps a finished step's status as done, the word every reader uses", async () => {
+  const { file, remove } = temporaryFile();
+  const store = new SqliteRunStore(file);
+  const writer = await created(store);
+  for (const key of ["0", "1"]) {
+    await store.saveStepInput(writer, { key, kind: "script", input: null, detail: script, at: "t" }, []);
+  }
+  await store.saveStepOutput(writer, { key: "0", status: "done", output: 1, spent, at: "t" }, []);
+  await store.saveStepOutput(writer, { key: "1", status: "failed", reason: "no", spent, at: "t" }, []);
+  store.close();
+  const database = new DatabaseSync(file);
+  const statuses = database.prepare("select key, status from steps order by key").all();
+  assert.deepEqual(
+    statuses.map((row) => [row.key, row.status]),
+    [
+      ["0", "done"],
+      ["1", "failed"],
+    ],
+  );
+  assert.throws(() => {
+    database.prepare("update steps set status = 'finished' where key = '0'").run();
+  }, /CHECK constraint failed/);
+  database.close();
+  remove();
+});
+
 test("two SQLite stores on the same file see one lock: the second writer is refused", async () => {
   const { file, remove } = temporaryFile();
   const first = new SqliteRunStore(file);

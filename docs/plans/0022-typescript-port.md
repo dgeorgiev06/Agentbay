@@ -287,3 +287,28 @@ K5 and K6 are built in parallel and meet at `bay/adapter.ts` (the reviewer's fil
 **Approvals from chat.** The owner works without a terminal. The project config gains `approvals: { from: [terminal, chat] }` (default `[terminal]`). From a terminal, `approve` needs an interactive stdin. From chat, `approve --via chat --quote "<the owner's words>"` is accepted only when the config lists `chat`; the quote and the channel are recorded in the approval event. `approve` always needs `--hash`.
 
 **What the Claude Code adapter writes.** One agent file per `SkillAgent` at `.claude/agents/<agent>.md` (tools: the harness file tools the step's paths allow, the `mcp__agentbay__*` tools it may use, no shell unless the mode lists commands, never the tool that starts other agents; model by tier); `.agentbay/steps.json` (the per-agent policy the hook reads); the hook registration and deny rules merged into `.claude/settings.json`; the `agentbay` server merged into `.mcp.json`; a marked block in `CLAUDE.md` that tells the coordinator how to run a call, hand a task to its agent and read the run afterwards; and `.agentbay/build.json`, the record of everything written or merged, from which `clean` restores the project exactly. The hook is `adapters/claude-code/step-guard.ts`, registered to fail closed.
+
+## Slice K7: the kit and the project are two folders (added by the reviewer, 2026-11-15)
+
+Found when the merged kernel was first run as a user would run it: a fresh project folder beside the kit. `bay new` looked for its templates in the project, `bay check` demanded the kit's `framework/limits.yaml` there, and the registry loads modes from one root only. Every unit test used one folder for both, so none caught it. K7 runs before stage 4.
+
+**The two folders**
+
+| | Kit | Project |
+|---|---|---|
+| Is | The agentbay checkout | The owner's folder, where agentbay is used |
+| Holds | `bay/`, `schemas/`, `adapters/`, `framework/`, `components/base/` (base modes and interfaces), `components/modes/` (modes that ship with the kit) | `agentbay.config.yaml`, `components/modes/` (the owner's own modes), `.agentbay/` (databases, run state, build output), and the files modes read and write |
+| Found by | The folder that holds the running `bay/cli.ts` | `--project`, default the current folder |
+
+The two may be the same folder: that is how agentbay itself is developed.
+
+**Rules**
+
+1. Modes are loaded from the kit's `components/base/`, the kit's `components/modes/` and the project's `components/modes/`. Interfaces come from the kit's `components/base/interfaces/` and, for the owner's own, the project's `components/interfaces/`. A name defined twice is a problem; a project cannot shadow a kit mode.
+2. A mode is ACTIVE when it lies in the project, or the project config lists it under `modes:`, or an active mode reaches it through a binding. Base modes are not active by default. `forge` can be active only when the project is the kit. Binding, settings and file problems are reported for active modes only; an inactive mode is still checked against its schema so a broken kit is noticed.
+3. A loaded mode knows which folder it lives in (kit or project) and its absolute folder. Paths in `resources.files` are relative to the PROJECT. A mode's own code (scripts, skills, schemas, migrations) is read from wherever the mode lives. Databases are always in the project's `.agentbay/data/`.
+4. The script runner grants read access to the mode's folder wherever it is, and to the kit's `bay/sdk.ts` and host files; write access only to project paths. The policy's closed areas are judged in both folders.
+5. `bay new` reads templates from the kit and writes into the project. Tier `base` and `bay new interface` in the kit's base are refused unless the project is the kit.
+6. `bay check` runs the kit-only checks (limits, import cycles in `bay/`, the kit's layout) only when the project is the kit. In any project it checks the project's own modes and every active mode.
+7. `bay build` passes both folders to the adapter; agent files point at skill files by absolute path, and the hook's policy holds absolute roots.
+8. The Claude Code hook treats the kit as closed to every step except forge's own write roots, wherever the kit is.

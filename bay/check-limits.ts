@@ -44,7 +44,8 @@ async function largestAdapterLines(context: CheckContext): Promise<number> {
   const adapters = new Set(typeScriptFilesUnder(context, "adapters/").map((path) => path.split("/")[1] ?? ""));
   let largest = 0;
   for (const adapter of adapters) {
-    largest = Math.max(largest, await linesOf(context, typeScriptFilesUnder(context, `adapters/${adapter}/`)));
+    const code = typeScriptFilesUnder(context, `adapters/${adapter}/`).filter((path) => !path.includes("/tests/"));
+    largest = Math.max(largest, await linesOf(context, code));
   }
   return largest;
 }

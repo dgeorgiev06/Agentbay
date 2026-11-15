@@ -23,7 +23,8 @@
   "ignoreIssues": {
     "bay/generated/**": ["types"],
     "bay/ports.ts": ["types"],
-    "bay/contracts.ts": ["types"]
+    "bay/contracts.ts": ["types"],
+    "bay/node-ports.ts": ["exports"]
   },
   "eslint": {
     "config": ["components/base/typescript/eslint.config.js"]

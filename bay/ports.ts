@@ -9,6 +9,10 @@ export type Folders = {
   readonly ensureFolder: (path: string) => Promise<void>;
 };
 
+export type Removal = {
+  readonly remove: (path: string) => Promise<void>;
+};
+
 export type Clock = {
   readonly now: () => Date;
 };

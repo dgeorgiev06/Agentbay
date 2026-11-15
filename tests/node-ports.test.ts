@@ -63,3 +63,27 @@ test("ensureFolder makes a folder and its parents, and is harmless when it exist
     assert.deepEqual(await readdir(join(folder, "a")), ["b"]);
   });
 });
+
+test("remove deletes a file, deletes a folder only when it is empty, and ignores a missing path", async () => {
+  const fileSystem = await import("node:fs/promises");
+  const operatingSystem = await import("node:os");
+  const paths = await import("node:path");
+  const ports = await import("../bay/node-ports.ts");
+  const folder = await fileSystem.mkdtemp(paths.join(operatingSystem.tmpdir(), "agentbay-remove-"));
+  await fileSystem.mkdir(paths.join(folder, "full"));
+  await fileSystem.mkdir(paths.join(folder, "empty"));
+  await fileSystem.writeFile(paths.join(folder, "full", "kept.txt"), "kept");
+  await fileSystem.writeFile(paths.join(folder, "gone.txt"), "gone");
+  for (const name of ["gone.txt", "empty", "full", "never-existed"]) {
+    await ports.nodeRemoval.remove(paths.join(folder, name));
+  }
+  const exists = async (name: string): Promise<boolean> =>
+    fileSystem.stat(paths.join(folder, name)).then(
+      () => true,
+      () => false,
+    );
+  assert.deepEqual(
+    [await exists("gone.txt"), await exists("empty"), await exists("full"), await exists("full/kept.txt")],
+    [false, false, true, true],
+  );
+});

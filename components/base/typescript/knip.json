@@ -12,6 +12,7 @@
     "bay/database-child.ts",
     "tests/script-runner-driver.ts",
     "bay/adapter.ts",
+    "components/*/*/scripts/*.ts",
     "adapters/claude-code/step-guard.ts"
   ],
   "project": ["{bay,adapters,components,tests}/**/*.ts"],

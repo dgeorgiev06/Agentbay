@@ -107,6 +107,7 @@ After stage 4 the work stops for the owner: the mode runs, the kernel line count
 - [DOD-7] (must) No comment lines in kit code; no line over 120 characters; no line packed to save lines.
 - [DOD-8] (must_not) No new dependency.
 - [DOD-9] (must_not) No name of a runtime (Claude Code, Codex) outside `adapters/`.
+- [DOD-12] (must) The same code lives in one place (`docs/adr/0011`): the report lists everything the slice touched or added that also exists elsewhere and what was done; the reviewer runs the copy-paste detector and the count does not rise.
 - [DOD-11] (must) Replace and delete, never layer (`docs/adr/0009`): everything the slice made unnecessary is deleted in the slice, no shim or alias is left, and the report lists deletions with line counts.
 - [DOD-10] (must) For a mode slice: `bay check` is clean, every action has example inputs and expected outputs in `tests/`, every skill has the seven sections, and mode code imports only `bay/sdk.ts`.
 

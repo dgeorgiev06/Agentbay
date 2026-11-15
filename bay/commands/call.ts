@@ -57,9 +57,13 @@ async function callTool(kernel: Kernel, name: string, input: Json): Promise<Comm
 async function callForm(kernel: Kernel, form: Form, input: Json): Promise<CommandResult> {
   switch (form.kind) {
     case "action":
-      return engineOutput(kernel, await kernel.engine.startAction(form.reference, input));
+      return engineOutput(kernel, await kernel.engine.startAction(form.reference, input), undefined);
     case "workflow":
-      return engineOutput(kernel, await kernel.engine.startWorkflow({ mode: form.mode, path: form.path }, input));
+      return engineOutput(
+        kernel,
+        await kernel.engine.startWorkflow({ mode: form.mode, path: form.path }, input),
+        undefined,
+      );
     case "tool":
       return callTool(kernel, form.name, input);
   }

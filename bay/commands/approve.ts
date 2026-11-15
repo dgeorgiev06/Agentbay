@@ -88,7 +88,7 @@ async function decide(request: ApprovalRequest): Promise<CommandResult> {
     decision: decision.decision,
     by,
   });
-  return engineOutput(kernel, result);
+  return engineOutput(kernel, result, undefined);
 }
 
 function runApprove(invocation: Invocation): Promise<CommandResult> {

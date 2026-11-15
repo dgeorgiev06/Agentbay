@@ -73,7 +73,8 @@ async function runSubmit(invocation: Invocation): Promise<CommandResult> {
     if (!checked.ok) {
       return refusedResult(checked.reason);
     }
-    return engineOutput(kernel, await kernel.engine.submit(runId, stepKey, { output: output.value, spent }));
+    const result = await kernel.engine.submit(runId, stepKey, { output: output.value, spent });
+    return engineOutput(kernel, result, stepKey);
   });
 }
 

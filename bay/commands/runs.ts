@@ -26,16 +26,24 @@ function runRuns(invocation: Invocation): Promise<CommandResult> {
     if (runId === undefined) {
       return listRuns(kernel);
     }
-    const options = { steps: true, full: invocation.flags.has("full"), events: invocation.flags.has("events") };
+    const options = {
+      steps: true,
+      full: invocation.flags.has("full"),
+      events: invocation.flags.has("events"),
+      token: invocation.flags.has("new-token") ? ("replace" as const) : ("withhold" as const),
+    };
     return runOutput(kernel, runId, options);
   });
 }
 
 export const runsCommand: Command = {
   name: "runs",
-  summary: "List the runs, newest first; or show one run with its steps, its task and, with --events, its events.",
-  usage: "runs [<run> [--full] [--events]]",
+  summary:
+    "List the runs, newest first; or show one run with its steps and task; --events adds events, " +
+    "--new-token replaces the task's token.",
+  usage: "runs [<run> [--full] [--events] [--new-token]]",
   options: [
+    { name: "new-token", takesValue: false },
     { name: "full", takesValue: false },
     { name: "events", takesValue: false },
   ],

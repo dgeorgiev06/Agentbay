@@ -58,7 +58,7 @@ test("call starts an action and prints the waiting skill's task with every field
     assert.equal(textField(task ?? null, "skillFile"), "components/modes/writer/skills/draft/SKILL.md");
     assert.equal(textField(task ?? null, "outputSchema"), "components/modes/writer/schemas/draft-output.json");
     assert.equal(numberField(task ?? null, "round"), 1);
-    assert.match(textField(runOf(ran.json), "notice") ?? "", /no longer works/);
+    assert.equal(textField(runOf(ran.json), "notice"), "A task token was issued with this task; it is shown only now.");
     const text = await bay(["call", "greeter.fetch", '{"name":"Bo"}', "--project", project.root]);
     assert.equal(text.exitCode, 0);
     assert.match(
@@ -73,21 +73,53 @@ function isObject(value: Json | undefined): Readonly<Record<string, unknown>> {
   return value;
 }
 
-test("showing a waiting task again issues a fresh token and kills the old one", async () => {
+function query(project: Project, token: string): Promise<{ readonly exitCode: number; readonly output: string }> {
+  return bay([
+    "call",
+    "--tool",
+    "db_query",
+    JSON.stringify({ token, sql: "select 1 as one" }),
+    "--project",
+    project.root,
+  ]);
+}
+
+test("showing a waiting run, alone or in the list, never issues or replaces its token", async () => {
   await withProject(async (project) => {
-    const first = taskOf(
-      (await bay(["call", "writer.compose", '{"name":"Ada"}', "--project", project.root, "--json"])).json,
-    );
-    const shown = await bay(["runs", first.runId, "--project", project.root, "--json"]);
-    const second = taskOf(shown.json);
+    const root = ["--project", project.root];
+    const first = taskOf((await bay(["call", "writer.compose", '{"name":"Ada"}', ...root, "--json"])).json);
+    const shown = await bay(["runs", first.runId, ...root, "--json"]);
+    const task = fieldOf(runOf(shown.json), "task") ?? null;
+    assert.equal(fieldOf(task, "token"), undefined);
+    assert.equal(textField(task, "stepKey"), "1#1");
+    assert.match(textField(runOf(shown.json), "notice") ?? "", /The token was shown when this task was issued/);
+    await bay(["runs", ...root]);
+    await bay(["runs", first.runId, "--events", "--full", ...root]);
+    assert.equal((await query(project, first.token)).exitCode, 0);
+    const resumed = await bay(["resume", first.runId, ...root, "--json"]);
+    assert.equal(fieldOf(fieldOf(runOf(resumed.json), "task") ?? null, "token"), undefined);
+    assert.equal((await query(project, first.token)).exitCode, 0);
+    const human = await bay(["runs", first.runId, ...root]);
+    assert.match(human.output, new RegExp(`bay runs ${first.runId} --new-token replaces it`));
+    assert.ok(!human.output.includes(first.token));
+  });
+});
+
+test("runs <id> --new-token replaces the token, and the old one cannot be replayed", async () => {
+  await withProject(async (project) => {
+    const root = ["--project", project.root];
+    const first = taskOf((await bay(["call", "writer.compose", '{"name":"Ada"}', ...root, "--json"])).json);
+    const renewed = await bay(["runs", first.runId, "--new-token", ...root, "--json"]);
+    const second = taskOf(renewed.json);
     assert.notEqual(first.token, second.token);
-    const query = (token: string): Promise<{ readonly exitCode: number; readonly output: string }> =>
-      bay(["call", "--tool", "db_query", JSON.stringify({ token, sql: "select 1 as one" }), "--project", project.root]);
-    assert.equal((await query(first.token)).exitCode, 1);
-    assert.match((await query(first.token)).output, /The token is not valid/);
-    assert.equal((await query(second.token)).exitCode, 0);
-    const human = await bay(["runs", first.runId, "--project", project.root]);
-    assert.match(human.output, /A new task token was issued with this task; any token shown earlier/);
+    assert.match(
+      textField(runOf(renewed.json), "notice") ?? "",
+      /the token shown earlier for this task no longer works/,
+    );
+    const replayed = await query(project, first.token);
+    assert.equal(replayed.exitCode, 1);
+    assert.match(replayed.output, /The token is not valid/);
+    assert.equal((await query(project, second.token)).exitCode, 0);
   });
 });
 
@@ -223,6 +255,69 @@ test("a project with problems makes every command that needs the kernel print th
         ran.output,
         /agentbay\.config\.yaml:1: This file is missing the required field bindings\.\n  fix: Add bindings\./,
       );
+    }
+  });
+});
+
+test("runs shows which run and step asked for a run that call_action started", async () => {
+  await withProject(async (project) => {
+    const root = ["--project", project.root];
+    const task = taskOf((await bay(["call", "writer.compose", '{"name":"Ada"}', ...root, "--json"])).json);
+    const input = { token: task.token, action: "greeting-source.fetch", input: { name: "Bo" } };
+    const called = await bay(["call", "--tool", "call_action", JSON.stringify(input), ...root, "--json"]);
+    const child = textField(fieldOf(toJson(called.json), "result") ?? null, "run") ?? "";
+    const shown = await bay(["runs", child, ...root, "--json"]);
+    assert.deepEqual(fieldOf(runOf(shown.json), "askedBy"), { runId: task.runId, stepKey: "1#1" });
+    const human = await bay(["runs", child, ...root]);
+    assert.match(human.output, new RegExp(`asked for by step 1#1 of run ${task.runId} \\(call_action\\)`));
+  });
+});
+
+test("resume --extend raises a spent budget and the run continues; too little waits again; --stop ends it", async () => {
+  await withProject(async (project) => {
+    const root = ["--project", project.root];
+    const started = runOf((await bay(["call", "greeter.tally", '{"name":"Ada"}', ...root, "--json"])).json);
+    const runId = textField(started, "id") ?? "";
+    assert.equal(textField(started, "waitingFor"), "budget");
+    assert.deepEqual(fieldOf(fieldOf(started, "waiting") ?? null, "overrun"), {
+      measure: "tokens",
+      limit: 5,
+      spent: 10,
+    });
+    const little = runOf((await bay(["resume", runId, "--extend", "tokens=2", ...root, "--json"])).json);
+    assert.equal(textField(little, "waitingFor"), "budget");
+    const enough = await bay(["resume", runId, "--extend", "tokens=3, usd=1", ...root, "--json"]);
+    assert.equal(enough.exitCode, 0);
+    assert.equal(textField(runOf(enough.json), "status"), "done");
+    assert.deepEqual(fieldOf(runOf(enough.json), "output"), { greeting: "Hello, Ada" });
+    const other = textField(
+      runOf((await bay(["call", "greeter.tally", '{"name":"Bo"}', ...root, "--json"])).json),
+      "id",
+    );
+    const stopped = await bay(["resume", other ?? "", "--stop", ...root, "--json"]);
+    assert.equal(stopped.exitCode, 1);
+    assert.equal(textField(runOf(stopped.json), "reason"), "The owner stopped the run.");
+  });
+});
+
+test("resume --extend refuses unknown measures, negative or missing amounts, and mixed options with exit 2", async () => {
+  await withProject(async (project) => {
+    const root = ["--project", project.root];
+    const cases: readonly (readonly [readonly string[], RegExp])[] = [
+      [["resume", "r", "--extend", "dollars=1"], /--extend names the measure dollars; the measures are items, usd/],
+      [["resume", "r", "--extend", "tokens=-1"], /gives tokens the amount -1; an amount is a number of at least 0/],
+      [["resume", "r", "--extend", "tokens="], /gives tokens the amount ;/],
+      [["resume", "r", "--extend", "tokens=1=2"], /an amount is a number/],
+      [["resume", "r", "--extend", "tokens=x"], /an amount is a number/],
+      [["resume", "r", "--extend", "tokens=1", "--stop"], /Give at most one of --rerun, --extend and --stop/],
+      [["resume", "r", "--stop", "--rerun"], /Give at most one of/],
+      [["resume", "--due", "--stop"], /--due wakes every due run and takes no run and no other option/],
+      [["resume", "--extend", "tokens=1"], /Name the run to resume, or give --due/],
+    ];
+    for (const [argv, message] of cases) {
+      const ran = await bay([...argv, ...root]);
+      assert.equal(ran.exitCode, 2, argv.join(" "));
+      assert.match(ran.output, message);
     }
   });
 });

@@ -74,7 +74,8 @@ test("an action runs end to end through the command line: script, skill with a c
   assert.equal(textField(runOf(shown), "stepKey"), "1#2");
   assert.equal(numberField(taskOf(shown), "round"), 2);
 
-  const fresh = textField(taskOf(shown), "token") ?? "";
+  assert.equal(fieldOf(taskOf(shown), "token"), undefined);
+  const fresh = textField(feedback, "token") ?? "";
   const accepted = toolCall(project, "submit", { token: fresh, output: { text: "Hello, Ada, and welcome back." } });
   assert.deepEqual(fieldOf(accepted.json, "result"), { accepted: true, run: { id: runId, status: "done" } });
   assert.equal(await project.read("out/notes/note.txt"), "Hello, Ada, and welcome back.");

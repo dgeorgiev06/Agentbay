@@ -82,6 +82,13 @@ const greeterMode = {
       effects: ["read"],
       run: [{ script: "scripts/fetch.ts" }],
     },
+    tally: {
+      input: "schemas/fetch-input.json",
+      output: "schemas/fetch-output.json",
+      effects: ["read", "spend"],
+      budget: { tokens: 5 },
+      run: [{ script: "scripts/spend.ts" }, { script: "scripts/fetch.ts" }],
+    },
   },
 };
 
@@ -149,6 +156,16 @@ function greeterFiles(): Record<string, string> {
       "  return { greeting: `Hello, ${name}` };",
       "});",
     ]),
+    [`${folder}/scripts/spend.ts`]: script([
+      "export const run = defineScript(async (input, context) => {",
+      "  const spent = await context.spend({ tokens: 10 });",
+      "  return spent.ok ? input : fail(spent.message);",
+      "});",
+    ]),
+    [`${folder}/tests/tally.example.json`]: JSON.stringify({
+      input: { name: "Ada" },
+      output: { greeting: "Hello, Ada" },
+    }),
     [`${folder}/tests/fetch.example.json`]: JSON.stringify({
       input: { name: "Ada" },
       output: { greeting: "Hello, Ada" },

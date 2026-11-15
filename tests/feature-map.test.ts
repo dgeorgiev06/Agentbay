@@ -290,12 +290,15 @@ test("the debt file is written only when FEATURE_MAP_DEBT is write", () => {
   assert.equal(writesDebt({ FEATURE_MAP_DEBT: "write" }), true);
 });
 
-test("the scan of the kit reads the kernel, the adapters and the modes", () => {
+test("the scan of the kit reads files in the kernel and in every folder the map lists outside it", () => {
   const files = kitFiles();
-  for (const file of ["bay/kernel.ts", "bay/generated/mode.ts", "adapters/claude-code/adapter.ts"]) {
-    assert.ok(files.includes(file), file);
+  const map = parsedMap(readFileSync(mapFile, "utf8"));
+  for (const folder of ["bay", "bay/generated", ...map.outside.map((outside) => outside.folder)]) {
+    assert.ok(
+      files.some((file) => isInside(file, folder)),
+      folder,
+    );
   }
-  assert.ok(files.includes("components/base/store/scripts/put.ts"));
 });
 
 test("every kernel file of the kit is in exactly one feature", () => {

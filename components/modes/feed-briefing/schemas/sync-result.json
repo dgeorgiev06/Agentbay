@@ -76,7 +76,7 @@
     },
     "more": {
       "type": "boolean",
-      "description": "Whether the source had more ready when maxItems stopped the sync."
+      "description": "Whether the source had more ready when maxItems or the monthly cap stopped the sync; true when the cap stopped it before its first fetch, since it could not ask."
     },
     "selectorChanged": {
       "type": "boolean",

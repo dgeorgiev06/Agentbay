@@ -31,7 +31,7 @@ import type { RunView, UndoEntry, UndoReport, Waiting } from "./run-state.ts";
 import { scrubbedStore } from "./scrubbed-store.ts";
 import { SqliteRunStore } from "./sqlite-run-store.ts";
 import { skillRoundOf } from "./step-key.ts";
-import { checkTaskToken, issueTaskToken } from "./task-tokens.ts";
+import { checkTaskToken, issueTaskToken, type TaskPlace } from "./task-tokens.ts";
 import { calledTarget, storedWaiting } from "./waiting.ts";
 
 export type RunsNeeds = {
@@ -148,6 +148,8 @@ type Stored = {
 const askedByKind = "run.asked-by";
 
 const toolCalledKind = "tool.called";
+
+const toolsCountedWhereMade: readonly string[] = ["call_action", "submit"];
 
 const shownOnly: Showing = { waiting: undefined, issue: () => false };
 
@@ -321,8 +323,31 @@ function sameStep(waitingKey: string, submittedKey: string): boolean {
   return step !== undefined && skillRoundOf(waitingKey)?.step === step;
 }
 
+function placeOf(opened: Opened, token: string): Promise<Outcome<TaskPlace>> {
+  return checkTaskToken({ tokens: opened.store, runs: opened.store }, token);
+}
+
+async function countedCall(opened: Opened, token: string, tool: string): Promise<Outcome<TaskPlace>> {
+  const place = await placeOf(opened, token);
+  if (!place.ok) {
+    return place;
+  }
+  const { runId, stepKey } = place.value;
+  const used = toolCallsAt(await opened.store.readEvents(runId), stepKey);
+  const limit = opened.needs.toolCallsPerRound;
+  if (tool !== "submit" && used >= limit) {
+    return refusal(
+      `This round of step ${stepKey} has used its ${String(limit)} tool calls. ` +
+        "Submit your output now with submit; only submit still works in this round.",
+    );
+  }
+  const at = opened.needs.clock.now().toISOString();
+  await opened.events.append({ at, runId, kind: toolCalledKind, detail: { tool, stepKey } });
+  return place;
+}
+
 async function submitted(opened: Opened, token: string, submission: Submission): Promise<Outcome<Run>> {
-  const place = await checkTaskToken({ tokens: opened.store, runs: opened.store }, token);
+  const place = await countedCall(opened, token, "submit");
   if (!place.ok) {
     return place;
   }
@@ -331,12 +356,8 @@ async function submitted(opened: Opened, token: string, submission: Submission):
   return resultOf(opened, result, (waitingKey) => sameStep(waitingKey, stepKey));
 }
 
-async function taskOfToken(opened: Opened, token: string): Promise<Outcome<Task>> {
-  const place = await checkTaskToken({ tokens: opened.store, runs: opened.store }, token);
-  if (!place.ok) {
-    return place;
-  }
-  const run = await shownRun(opened, place.value.runId, shownOnly);
+async function taskAt(opened: Opened, place: TaskPlace): Promise<Outcome<Task>> {
+  const run = await shownRun(opened, place.runId, shownOnly);
   if (!run.ok) {
     return run;
   }
@@ -348,21 +369,9 @@ async function taskOfToken(opened: Opened, token: string): Promise<Outcome<Task>
 }
 
 async function toolTask(opened: Opened, token: string, tool: string): Promise<Outcome<Task>> {
-  const found = await taskOfToken(opened, token);
-  if (!found.ok) {
-    return found;
-  }
-  const task = found.value;
-  const limit = opened.needs.toolCallsPerRound;
-  if (tool !== "submit" && task.toolCalls >= limit) {
-    return refusal(
-      `This round of step ${task.stepKey} has used its ${String(limit)} tool calls. ` +
-        "Submit your output now with submit; only submit still works in this round.",
-    );
-  }
-  const at = opened.needs.clock.now().toISOString();
-  await opened.events.append({ at, runId: task.runId, kind: toolCalledKind, detail: { tool, stepKey: task.stepKey } });
-  return succeededWith({ ...task, toolCalls: task.toolCalls + 1 });
+  const countedWhereMade = toolsCountedWhereMade.includes(tool);
+  const place = countedWhereMade ? await placeOf(opened, token) : await countedCall(opened, token, tool);
+  return place.ok ? taskAt(opened, place.value) : place;
 }
 
 function calledOf(result: Outcome<RunView>, action: string): Outcome<Called> {
@@ -389,7 +398,11 @@ async function calledAction(
   token: string,
   call: { action: string; input: Json },
 ): Promise<Outcome<Called>> {
-  const found = await taskOfToken(opened, token);
+  const place = await countedCall(opened, token, "call_action");
+  if (!place.ok) {
+    return place;
+  }
+  const found = await taskAt(opened, place.value);
   if (!found.ok) {
     return found;
   }

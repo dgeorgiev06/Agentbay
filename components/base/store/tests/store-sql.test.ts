@@ -25,9 +25,12 @@ function postsOf(source: string, count: number): Json {
 }
 
 before(async () => {
-  project = await openModeProject({ bindings: {}, adapter: "claude-code", modes: ["store"] });
-  await project.output("store.put", postsOf("fake", 3), { caller: "mail-briefing" });
-  await project.output("store.put", postsOf("other", 250), { caller: "todo" });
+  project = await openModeProject(
+    { bindings: { "items-store": "store" }, adapter: "claude-code", modes: ["store"] },
+    { callers: ["mail-briefing", "todo"] },
+  );
+  await project.output("items-store.put", postsOf("fake", 3), { caller: "mail-briefing" });
+  await project.output("items-store.put", postsOf("other", 250), { caller: "todo" });
 });
 
 after(async () => {
@@ -35,7 +38,7 @@ after(async () => {
 });
 
 async function sql(text: string, caller = "mail-briefing"): Promise<Json> {
-  return project.output("store.sql", { sql: text }, { caller });
+  return project.output("items-store.sql", { sql: text }, { caller });
 }
 
 test("sql runs one select over the caller's views and returns columns and rows", async () => {
@@ -59,32 +62,32 @@ test("sql refuses a second statement, a write and attach, and the items stay", a
     "pragma query_only = off",
   ];
   for (const text of refused) {
-    const reason = await project.failure("store.sql", { sql: text }, { caller: "mail-briefing" });
+    const reason = await project.failure("items-store.sql", { sql: text }, { caller: "mail-briefing" });
     assert.match(reason, /^An agent.s query was refused/, text);
   }
   assert.deepEqual(fieldsOf(await sql("select count(*) from items")).rows, [[3]]);
 });
 
 test("sql refuses more rows than its limit and stops a runaway query", async () => {
-  const many = await project.failure("store.sql", { sql: "select id from items" }, { caller: "todo" });
+  const many = await project.failure("items-store.sql", { sql: "select id from items" }, { caller: "todo" });
   assert.match(many, /more than 200 rows/);
   const endless = "with recursive r(n) as (select 1 union all select n + 1 from r) select count(*) from r";
   const started = Date.now();
-  const stopped = await project.failure("store.sql", { sql: endless }, { caller: "todo" });
+  const stopped = await project.failure("items-store.sql", { sql: endless }, { caller: "todo" });
   assert.match(stopped, /still running and was killed/);
   assert.ok(Date.now() - started < 15_000);
   assert.deepEqual(fieldsOf(await sql("select count(*) from items", "todo")).rows, [[250]]);
 });
 
 test("one caller cannot see another caller's items through query, get or sql", async () => {
-  const queried = await project.output("store.query", { selector: { limit: 1000 } }, { caller: "mail-briefing" });
+  const queried = await project.output("items-store.query", { selector: { limit: 1000 } }, { caller: "mail-briefing" });
   assert.equal(listOf(fieldsOf(queried).items).length, 3);
-  const got = await project.output("store.get", { ids: ["other:1"] }, { caller: "mail-briefing" });
+  const got = await project.output("items-store.get", { ids: ["other:1"] }, { caller: "mail-briefing" });
   assert.deepEqual(fieldsOf(got).missing, ["other:1"]);
   assert.deepEqual(fieldsOf(await sql("select count(*) from items where source = 'other'")).rows, [[0]]);
   const otherFile = join(project.root, ".agentbay", "data", "store--todo.db");
   const attach = await project.failure(
-    "store.sql",
+    "items-store.sql",
     { sql: `attach '${otherFile}' as todo` },
     { caller: "mail-briefing" },
   );
@@ -96,7 +99,7 @@ test("one caller cannot see another caller's items through query, get or sql", a
 test("a direct call with no caller uses the owner's own partition", async () => {
   await project.output("store.put", postsOf("fake", 1), {});
   assert.deepEqual(fieldsOf(await project.output("store.status", {}, {})).items, 1);
-  const mail = await project.output("store.status", {}, { caller: "mail-briefing" });
+  const mail = await project.output("items-store.status", {}, { caller: "mail-briefing" });
   assert.equal(fieldsOf(mail).items, 3);
   const files = await project.partition("store", "owner").query("select count(*) as n from items");
   assert.ok(files.ok);

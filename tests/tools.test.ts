@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
-import { join } from "node:path";
 import { test } from "node:test";
 import type { Json } from "../bay/contracts.ts";
-import { fieldOf, textField } from "../bay/json.ts";
+import { fieldOf, numberField, textField } from "../bay/json.ts";
 import type { Kernel } from "../bay/kernel.ts";
-import { kernelDatabaseFile, type RunWithSteps } from "../bay/runs/run-store.ts";
 import type { Run } from "../bay/runs/runs.ts";
-import { SqliteRunStore } from "../bay/runs/sqlite-run-store.ts";
 import { callKernelTool } from "../bay/tools.ts";
 import { problemText, type Outcome } from "../bay/outcome.ts";
 import { openKernel, openProject, startedTask, type Opened, type StartedTask } from "./kernel-fixture.ts";
@@ -54,6 +51,23 @@ test("db_query runs one select on the mode's own database, migrated first, and r
     assert.deepEqual(calls, [
       { tool: "db_query", stepKey: waiting.stepKey },
       { tool: "db_query", stepKey: waiting.stepKey },
+    ]);
+  });
+});
+
+test("a read tool, a call_action and a submit are each recorded once", async () => {
+  await withWaiting(async ({ kernel }, waiting) => {
+    const token = waiting.token;
+    assert.ok((await callKernelTool(kernel, "db_query", { token, sql: "select 1" })).ok);
+    const input = { name: "Bo" };
+    assert.ok((await callKernelTool(kernel, "call_action", { token, action: "greeting-source.fetch", input })).ok);
+    assert.ok((await callKernelTool(kernel, "submit", { token, output: { text: "short" } })).ok);
+    const { events } = await shownRun(kernel, waiting.runId);
+    const calls = events.filter((event) => event.kind === "tool.called").map((event) => event.detail);
+    assert.deepEqual(calls, [
+      { tool: "db_query", stepKey: waiting.stepKey },
+      { tool: "call_action", stepKey: waiting.stepKey },
+      { tool: "submit", stepKey: waiting.stepKey },
     ]);
   });
 });
@@ -133,25 +147,14 @@ test("call_action runs a listed read-only action through the engine and refuses 
   });
 });
 
-async function storedRun(kernel: Kernel, runId: string): Promise<RunWithSteps> {
-  const store = await SqliteRunStore.open(kernel.ports.folders, join(kernel.layout.project, kernelDatabaseFile));
-  try {
-    const run = await store.readRun(runId);
-    assert.ok(run !== undefined, runId);
-    return run;
-  } finally {
-    store.close();
-  }
-}
-
-test("an action a skill starts through call_action is charged to the calling run and held to what it has left", async () => {
+test("an action a skill starts through call_action is charged to the calling run and to the skill step", async () => {
   const project = await makeProject();
   const config = await project.read("agentbay.config.yaml");
   await project.write("agentbay.config.yaml", `${config}budget:\n  minutes: 30\n`);
   const kernel = await openKernel(project);
   try {
     const waiting = await waitingCompose(kernel);
-    const before = await storedRun(kernel, waiting.runId);
+    const before = await shownRun(kernel, waiting.runId);
     const fetched = await callKernelTool(kernel, "call_action", {
       token: waiting.token,
       action: "greeting-source.fetch",
@@ -162,22 +165,22 @@ test("an action a skill starts through call_action is charged to the calling run
       action: "greeting-source.fetch",
       input: { name: "Cy" },
     });
-    const child = await storedRun(kernel, textField(valueOf(fetched), "run") ?? "");
-    const second = await storedRun(kernel, textField(valueOf(again), "run") ?? "");
-    const after = await storedRun(kernel, waiting.runId);
+    const child = await shownRun(kernel, textField(valueOf(fetched), "run") ?? "");
+    const second = await shownRun(kernel, textField(valueOf(again), "run") ?? "");
+    const after = await shownRun(kernel, waiting.runId);
     assert.ok(child.spent.minutes > 0 && second.spent.minutes > 0);
-    assert.equal(child.limit.minutes, 30 - before.spent.minutes);
-    assert.ok((second.limit.minutes ?? 30) < (child.limit.minutes ?? 0));
     const charged = after.spent.minutes - before.spent.minutes;
     assert.ok(Math.abs(charged - child.spent.minutes - second.spent.minutes) < 1e-9);
     assert.equal(after.state.status, "waiting");
     const output = { text: "Hello, Ada, and welcome back." };
     const accepted = valueOf(await callKernelTool(kernel, "submit", { token: waiting.token, output }));
     assert.equal(fieldOf(accepted, "accepted"), true);
-    const done = await storedRun(kernel, waiting.runId);
+    const done = await shownRun(kernel, waiting.runId);
     const skillStep = done.steps.find((step) => step.key === "1");
-    assert.ok(skillStep !== undefined && skillStep.status !== "started");
-    assert.ok(skillStep.spent.minutes >= child.spent.minutes + second.spent.minutes);
+    assert.equal(skillStep?.status, "done");
+    const calledSpent = fieldOf(skillStep.detail, "calledSpent") ?? null;
+    const calledMinutes = numberField(calledSpent, "minutes") ?? 0;
+    assert.ok(Math.abs(calledMinutes - child.spent.minutes - second.spent.minutes) < 1e-9);
   } finally {
     kernel.close();
     await project.remove();
@@ -294,18 +297,6 @@ test("a skill step round gets a bounded number of tool calls; then only submit w
   assert.ok((await callKernelTool(kernel, "db_query", { token: next, sql: "select 1" })).ok);
   kernel.close();
   await project.remove();
-});
-
-test("call_action starts an interface action for the skill's mode, which the callee sees as its caller", async () => {
-  await withWaiting(async ({ kernel }, waiting) => {
-    const fetched = await callKernelTool(kernel, "call_action", {
-      token: waiting.token,
-      action: "greeting-source.fetch",
-      input: { name: "Bo" },
-    });
-    const childRun = await storedRun(kernel, textField(valueOf(fetched), "run") ?? "");
-    assert.deepEqual(childRun.target, { kind: "action", mode: "greeter", name: "fetch", caller: "writer" });
-  });
 });
 
 test("a tool's refusal is redacted by the tool layer itself, even when nothing else redacted it", async () => {

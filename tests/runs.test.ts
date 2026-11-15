@@ -308,7 +308,7 @@ test("reissueTask gives the task a new token and the old one stops working", asy
   close();
 });
 
-test("task checks the token, counts each tool call of the round and refuses past the limit except submit", async () => {
+test("task checks the token, counts each read tool call of the round and refuses past the limit except submit", async () => {
   const { runs, close } = await opened({ toolCallsPerRound: 2 });
   const started = runOf(await runs.start({ action: "notes.draft" }, { topic: "tea" }));
   const token = tokenOf(started);
@@ -327,10 +327,37 @@ test("task checks the token, counts each tool call of the round and refuses past
     [
       { tool: "db_query", stepKey: "0#1" },
       { tool: "files_read", stepKey: "0#1" },
-      { tool: "submit", stepKey: "0#1" },
     ],
   );
   assert.match(messagesOf(await runs.task("made-up", "db_query")), /The token is not valid/);
+  close();
+});
+
+test("callAction counts against the round's limit with no task before it, and submit is never refused", async () => {
+  const { runs, close } = await opened({ toolCallsPerRound: 2 });
+  const started = runOf(await runs.start({ action: "notes.draft" }, {}));
+  const token = tokenOf(started);
+  assert.ok((await runs.callAction(token, "items-store.get", { id: "a" })).ok);
+  assert.ok((await runs.callAction(token, "items-store.get", { id: "b" })).ok);
+  const third = await runs.callAction(token, "items-store.get", { id: "c" });
+  assert.match(messagesOf(third), /This round of step 0#1 has used its 2 tool calls/);
+  const retry = runOf(await runs.submit(token, answer({ text: "short" })));
+  const called = runOf(await runs.show(started.id)).events.filter((event) => event.kind === "tool.called");
+  assert.deepEqual(
+    called.map((event) => event.detail),
+    [
+      { tool: "call_action", stepKey: "0#1" },
+      { tool: "call_action", stepKey: "0#1" },
+      { tool: "submit", stepKey: "0#1" },
+    ],
+  );
+  const next = tokenOf(retry);
+  assert.ok((await runs.task(next, "db_query")).ok);
+  assert.ok((await runs.callAction(next, "items-store.get", { id: "d" })).ok);
+  assert.match(messagesOf(await runs.callAction(next, "items-store.get", { id: "e" })), /0#2 has used its 2/);
+  assert.match(messagesOf(await runs.task(next, "files_read")), /0#2 has used its 2 tool calls/);
+  const done = runOf(await runs.submit(next, good));
+  assert.equal(done.state.status, "done");
   close();
 });
 
@@ -380,6 +407,21 @@ test("callAction runs a read-only action for the skill, records who asked, and r
   const saving = await runs.callAction(token, "save", { count: 1 });
   assert.match(messagesOf(saving), /has the effects read, write; a skill may call only actions/);
   assert.match(messagesOf(await runs.callAction("made-up", "copy", {})), /The token is not valid/);
+  close();
+});
+
+test("callAction runs the action as the skill's mode, held to what the calling run has left, and charges it", async () => {
+  const scripts: Record<string, Script> = {
+    "store:scripts/get.ts": (request) => finished({ caller: request.caller ?? null }, { items: 2 }),
+  };
+  const { runs, close } = await opened({ scripts, changes: { config: { budget: { items: 3 } } } });
+  const started = runOf(await runs.start({ action: "notes.draft" }, {}));
+  const token = tokenOf(started);
+  const first = await runs.callAction(token, "items-store.get", {});
+  assert.deepEqual(first.ok ? first.value.output : null, { caller: "notes" });
+  assert.equal(runOf(await runs.show(started.id)).spent.items, 2);
+  const second = await runs.callAction(token, "items-store.get", {});
+  assert.match(messagesOf(second), /The action items-store.get stopped to wait for budget/);
   close();
 });
 

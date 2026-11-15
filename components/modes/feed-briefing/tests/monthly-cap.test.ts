@@ -11,6 +11,8 @@ const since = "2026-11-01T00:00:00Z";
 
 type Caps = Readonly<Record<string, number>>;
 
+const otherCaller = "notes-briefing";
+
 function configOf(caps: Caps | undefined): Parameters<typeof openModeProject>[0] {
   return {
     bindings: { "items-source": "fake-source", "items-store": "store" },
@@ -25,7 +27,10 @@ function configOf(caps: Caps | undefined): Parameters<typeof openModeProject>[0]
 }
 
 async function withCaps(caps: Caps | undefined, body: (project: ModeProject) => Promise<void>): Promise<void> {
-  const project = await openModeProject(configOf(caps), { startAt: "2026-11-20T09:00:00.000Z" });
+  const project = await openModeProject(configOf(caps), {
+    startAt: "2026-11-20T09:00:00.000Z",
+    callers: [otherCaller],
+  });
   try {
     await body(project);
   } finally {
@@ -37,23 +42,35 @@ async function synced(project: ModeProject): Promise<Readonly<Record<string, Jso
   return fieldsOf(await project.output("feed-briefing.sync", { since }));
 }
 
-async function allowance(project: ModeProject, source: string, caller: string): Promise<Json> {
-  return project.output("store.allowance", { source }, { caller });
+async function allowance(project: ModeProject, source: string): Promise<Json> {
+  return project.output("items-store.allowance", { source }, { caller: otherCaller });
+}
+
+async function briefingRows(project: ModeProject, sql: string): Promise<readonly Json[]> {
+  const rows = await project.partition("store", "feed-briefing").query(sql);
+  assert.ok(rows.ok, rows.ok ? "" : rows.message);
+  return rows.value;
 }
 
 async function storedCount(project: ModeProject): Promise<Json> {
-  return fieldsOf(await project.output("store.status", {}, { caller: "feed-briefing" })).items ?? null;
+  const [row] = await briefingRows(project, "select count(*) as count from items");
+  return fieldsOf(row ?? null).count ?? null;
+}
+
+async function briefingSpend(project: ModeProject): Promise<readonly Json[]> {
+  return briefingRows(project, "select source, month, items, usd from spend_by_month order by source, month");
 }
 
 test("with no cap set a sync fetches every page and the allowance says there is no cap", async () => {
   await withCaps(undefined, async (project) => {
     const output = await synced(project);
     assert.deepEqual([output.pages, output.fetched, output.stopped, output.monthlyCap], [3, 30, undefined, undefined]);
-    assert.deepEqual(await allowance(project, "fake", "feed-briefing"), {
+    assert.deepEqual(await briefingSpend(project), [{ source: "fake", month: "2026-11", items: 30, usd: 0.03 }]);
+    assert.deepEqual(await allowance(project, "fake"), {
       source: "fake",
       month: "2026-11",
       capUsd: null,
-      spentUsd: 0.03,
+      spentUsd: 0,
       remainingUsd: null,
     });
   });
@@ -96,8 +113,10 @@ test("a second sync in the same month fetches nothing and says why, and the next
     const december = await synced(project);
     assert.deepEqual([december.pages, december.fetched, december.more, december.stopped], [1, 10, false, undefined]);
     assert.equal(await storedCount(project), 30);
-    const left = await allowance(project, "fake", "feed-briefing");
-    assert.deepEqual(left, { source: "fake", month: "2026-12", capUsd: 0.025, spentUsd: 0.01, remainingUsd: 0.015 });
+    assert.deepEqual(await briefingSpend(project), [
+      { source: "fake", month: "2026-11", items: 20, usd: 0.02 },
+      { source: "fake", month: "2026-12", items: 10, usd: 0.01 },
+    ]);
   });
 });
 
@@ -105,13 +124,12 @@ test("a cap is kept per calling mode and per source", async () => {
   await withCaps({ fake: 0.025, other: 1 }, async (project) => {
     await synced(project);
     const page = { source: "other", kinds: ["post"], items: [], cursor: null, cost: { items: 5, usd: 0.5 } };
-    await project.output("store.put", page, { caller: "feed-briefing" });
-    const ownFake = await allowance(project, "fake", "feed-briefing");
-    const ownOther = await allowance(project, "other", "feed-briefing");
-    const elsewhere = await allowance(project, "fake", "notes-briefing");
-    assert.deepEqual([fieldsOf(ownFake).spentUsd, fieldsOf(ownFake).remainingUsd], [0.02, 0.005]);
+    await project.output("items-store.put", page, { caller: otherCaller });
+    const ownOther = await allowance(project, "other");
+    const ownFake = await allowance(project, "fake");
     assert.deepEqual([fieldsOf(ownOther).spentUsd, fieldsOf(ownOther).remainingUsd], [0.5, 0.5]);
-    assert.deepEqual([fieldsOf(elsewhere).spentUsd, fieldsOf(elsewhere).remainingUsd], [0, 0.025]);
+    assert.deepEqual([fieldsOf(ownFake).spentUsd, fieldsOf(ownFake).remainingUsd], [0, 0.025]);
+    assert.deepEqual(await briefingSpend(project), [{ source: "fake", month: "2026-11", items: 20, usd: 0.02 }]);
   });
 });
 

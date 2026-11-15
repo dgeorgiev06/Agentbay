@@ -11,6 +11,8 @@ export const alwaysDeniedNames: readonly string[] = [
 
 export const kitFolders: readonly string[] = ["bay", "schemas", "adapters", "framework"];
 
+export const searchBound = { entries: 5000, depth: 12 } as const;
+
 export type StepRules = {
   readonly mode: string;
   readonly skill: string;
@@ -24,13 +26,10 @@ export type StepsFile = {
   readonly version: 1;
   readonly root: string;
   readonly kit: string;
-  readonly alwaysDenied: { readonly names: readonly string[]; readonly kitFolders: readonly string[] };
   readonly agents: Readonly<Record<string, StepRules>>;
 };
 
 export type StepsPolicy = {
-  readonly deniedNames: readonly string[];
-  readonly deniedKitFolders: readonly string[];
   readonly agents: ReadonlyMap<string, StepRules>;
 };
 
@@ -103,26 +102,14 @@ export function readPolicy(text: string | undefined, root: string): PolicyReadin
   if (parsed === undefined || !isRecord(parsed.value)) {
     return unusable("the step policy .agentbay/steps.json is not a JSON object");
   }
-  const { version, alwaysDenied } = parsed.value;
-  if (version !== 1 || parsed.value["root"] !== root) {
+  if (parsed.value["version"] !== 1 || parsed.value["root"] !== root) {
     return unusable(`the step policy .agentbay/steps.json is not version 1 for the project ${root}`);
   }
   const agents = agentsOf(parsed.value["agents"]);
-  if (agents === undefined || !isRecord(alwaysDenied)) {
-    return unusable("the step policy .agentbay/steps.json has a malformed agents or alwaysDenied entry");
+  if (agents === undefined) {
+    return unusable("the step policy .agentbay/steps.json has a malformed agents entry");
   }
-  const { names, kitFolders: folders } = alwaysDenied;
-  if (!isStringList(names) || !isStringList(folders)) {
-    return unusable("the step policy .agentbay/steps.json has a malformed alwaysDenied entry");
-  }
-  return {
-    kind: "read",
-    policy: {
-      deniedNames: [...new Set([...alwaysDeniedNames, ...names])],
-      deniedKitFolders: [...new Set([...kitFolders, ...folders])],
-      agents,
-    },
-  };
+  return { kind: "read", policy: { agents } };
 }
 
 function optionalText(value: unknown): { readonly ok: boolean; readonly text: string | undefined } {

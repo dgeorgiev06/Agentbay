@@ -1,7 +1,7 @@
 import { isAbsolute, join, normalize } from "node:path";
 import type { SkillAgent } from "../../bay/adapter.ts";
 import { toolsFor } from "./agent-file.ts";
-import { alwaysDeniedNames, kitFolders, type StepRules, type StepsFile } from "./guard-input.ts";
+import type { StepRules, StepsFile } from "./guard-input.ts";
 
 function absolutePaths(root: string, paths: readonly string[]): readonly string[] {
   return paths.map((path) => normalize(isAbsolute(path) ? path : join(root, path)));
@@ -23,7 +23,6 @@ export function stepsFileText(root: string, kit: string, agents: readonly SkillA
     version: 1,
     root,
     kit,
-    alwaysDenied: { names: alwaysDeniedNames, kitFolders },
     agents: Object.fromEntries(agents.map((agent) => [agent.agent, rulesOf(agent, root)])),
   };
   return `${JSON.stringify(steps, null, 2)}\n`;

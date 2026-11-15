@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { decide } from "../guard-decide.ts";
 import { readPolicy } from "../guard-input.ts";
-import { ask, assertAllowed, assertDenied, setup, stepsFile, world } from "./guard-world.ts";
+import type { FolderEntry, PathFacts } from "../guard-paths.ts";
+import { ask, askIn, assertAllowed, assertDenied, setup, stepsFile, world } from "./guard-world.ts";
 
 const digest = "agentbay-mail-digest";
 const builder = "agentbay-forge-build";
@@ -152,10 +153,6 @@ test("agentbay's own files and secrets are closed to steps even inside a read ro
     ["/p/sub/.env.local", ".env.*"],
     ["/p/.Agentbay/steps.json", ".agentbay"],
     ["/p/.AGENTBAY", ".agentbay"],
-    ["/k/bay/sdk.ts", "the kit's bay/ folder"],
-    ["/k/Schemas/x.json", "the kit's schemas/ folder"],
-    ["/k/adapters/claude-code/step-guard.ts", "the kit's adapters/ folder"],
-    ["/k/framework/limits.yaml", "the kit's framework/ folder"],
   ];
   for (const [path, part] of closed) {
     assertDenied(ask(survey, "Read", { file_path: path }), `${part} is closed`, path);
@@ -166,25 +163,82 @@ test("agentbay's own files and secrets are closed to steps even inside a read ro
   assertAllowed(ask(survey, "Read", { file_path: "/k/components/mail/mode.yaml" }));
 });
 
+test("a step reads kit folders only inside its read roots, and writes them only through a root inside them", () => {
+  const forge = "agentbay-forge-extend";
+  const wide = "agentbay-wide-everything";
+  assertAllowed(ask(survey, "Read", { file_path: "/k/bay/sdk.ts" }));
+  assertAllowed(ask(forge, "Read", { file_path: "/k/bay/sdk.ts" }));
+  assertDenied(ask(digest, "Read", { file_path: "/k/bay/sdk.ts" }), "resources.files.read");
+  assertAllowed(ask(forge, "Write", { file_path: "/k/bay/x.ts", content: "" }));
+  assertAllowed(ask(forge, "Edit", { file_path: "/k/bay/sdk.ts", old_string: "a", new_string: "b" }));
+  assertDenied(ask(forge, "Write", { file_path: "/k/schemas/x.json" }), "the kit folder /k/schemas is closed");
+  assertDenied(ask(forge, "Write", { file_path: "/p/.agentbay/steps.json" }), ".agentbay is closed");
+  assertDenied(ask(forge, "Write", { file_path: "/p/CLAUDE.md" }), "CLAUDE.md is closed");
+  assertDenied(ask(forge, "Write", { file_path: "/p/.env" }), ".env is closed");
+  assertDenied(ask(wide, "Write", { file_path: "/k/bay/x.ts" }), "the kit folder /k/bay is closed");
+  assertDenied(ask(wide, "Write", { file_path: "/k/Bay/x.ts" }), "is closed to every step whose write paths");
+  assertAllowed(ask(wide, "Write", { file_path: "/k/components/x.md" }));
+  assertAllowed(ask(wide, "Read", { file_path: "/k/bay/sdk.ts" }));
+});
+
 test("a link inside a root that points at a closed folder is closed", () => {
   assertDenied(ask(survey, "Read", { file_path: "/p/docs/steps.json" }), ".agentbay is closed");
 });
 
-test("a search runs only in a read root that holds no closed location", () => {
-  assertAllowed(ask(digest, "Glob", { pattern: "**/*.md", path: "/p/notes" }));
-  assertAllowed(ask(digest, "Grep", { pattern: "x", path: "/p/out", glob: "*.md" }));
+test("a search runs only in a read root whose tree holds no closed name", () => {
+  assertAllowed(ask(digest, "Glob", { pattern: "**/*.md", path: "/p/clean" }));
+  assertAllowed(ask(digest, "Grep", { pattern: "x", path: "/p/clean", glob: "*.md" }));
+  assertAllowed(ask(digest, "Grep", { pattern: "x", path: "/p/clean/drafts" }));
   assertDenied(ask(digest, "Glob", { pattern: "*", path: "/p/src" }), "resources.files.read");
   assertDenied(ask(digest, "Grep", { pattern: "x" }), "resources.files.read");
-  assertDenied(ask(survey, "Grep", { pattern: "token" }), "that folder holds /p/.agentbay");
-  assertDenied(ask(survey, "Glob", { pattern: "*", path: "/k" }), "that folder holds");
+  assertDenied(ask(survey, "Grep", { pattern: "token" }), "it holds /p/.agentbay, which is closed");
+  assertAllowed(ask(survey, "Glob", { pattern: "*", path: "/k" }));
   assertAllowed(ask(survey, "Glob", { pattern: "*", path: "/p/src" }));
   assertDenied(ask(digest, "Glob", { pattern: "*", path: 3 }), "search path is not text");
-  assertDenied(ask(digest, "Glob", { path: "/p/notes" }), "no pattern text");
+  assertDenied(ask(digest, "Glob", { path: "/p/clean" }), "no pattern text");
+});
+
+test("a search over a folder that holds secrets deeper down is denied, though each file is denied alone", () => {
+  for (const file of ["/p/vault/.env", "/p/vault/.env.local", "/p/vault/.git/config"]) {
+    assertDenied(ask(digest, "Read", { file_path: file }), "is closed");
+  }
+  assertAllowed(ask(digest, "Read", { file_path: "/p/vault/plain.md" }));
+  assertDenied(ask(digest, "Grep", { pattern: "KEY", path: "/p/vault" }), "it holds /p/vault/.env, which is closed");
+  assertDenied(ask(digest, "Glob", { pattern: "*.md", path: "/p/vault" }), "search a narrower folder");
+});
+
+test("a search over a folder with a link out of the read roots or into a closed folder is denied", () => {
+  assertDenied(ask(digest, "Grep", { pattern: "x", path: "/p/notes" }), "the link /p/notes/escape");
+  assertDenied(ask(digest, "Grep", { pattern: "x", path: "/p/out" }), "the link /p/out/closed");
+  assertAllowed(ask(digest, "Read", { file_path: "/p/notes/a.md" }));
+});
+
+function boundedWorld(width: number, depth: number): PathFacts {
+  return {
+    inspect: (path) => ({ kind: "exists", realPath: path }),
+    entries: (folder) => {
+      const level = folder.split("/").length - 3;
+      if (level < depth) {
+        return [{ name: `d${String(level)}`, kind: "folder" }];
+      }
+      return Array.from({ length: width }, (_, index): FolderEntry => ({ name: `f${String(index)}`, kind: "other" }));
+    },
+  };
+}
+
+test("a search is denied when its folder holds more entries or levels than the hook checks", () => {
+  const search = { agent: digest, tool: "Grep", input: { pattern: "x", path: "/p/clean" } };
+  assertAllowed(askIn(boundedWorld(4999, 0), search));
+  assertDenied(askIn(boundedWorld(5001, 0), search), "more than 5000 entries or is deeper than 12 levels");
+  assertAllowed(askIn(boundedWorld(1, 12), search));
+  assertDenied(askIn(boundedWorld(1, 13), search), "deeper than 12 levels");
+  const unlistable: PathFacts = { ...world, entries: () => undefined };
+  assertDenied(askIn(unlistable, search), "cannot list /p/clean");
 });
 
 test("a search with no path searches the working folder", () => {
   const payload = { tool_name: "Glob", tool_input: { pattern: "*.md" }, agent_id: "a", agent_type: digest };
-  assertAllowed(decide(setup, { ...payload, cwd: "/p/notes" }, world));
+  assertAllowed(decide(setup, { ...payload, cwd: "/p/clean" }, world));
   assertDenied(decide(setup, { ...payload, cwd: "/p" }, world), "resources.files.read");
   assertDenied(decide(setup, payload, world), "resources.files.read");
 });
@@ -192,14 +246,15 @@ test("a search with no path searches the working folder", () => {
 test("a search pattern may not climb, start at home, name a closed location or reach outside", () => {
   const patterns = ["../*", "notes/../../etc/*", "~/x", ".agentbay/**", "x/.ENV", "**/.env*", ".g*/config"];
   for (const pattern of [...patterns, "/etc/*", "/p/src/**"]) {
-    assertDenied(ask(digest, "Glob", { pattern, path: "/p/notes" }), "", pattern);
+    assertDenied(ask(digest, "Glob", { pattern, path: "/p/clean" }), "", pattern);
   }
-  assertDenied(ask(digest, "Grep", { pattern: "x", path: "/p/notes", glob: "../**" }), "climb");
-  assertDenied(ask(digest, "Grep", { pattern: "x", path: "/p/notes", glob: 5 }), "must be text");
-  assertAllowed(ask(digest, "Glob", { pattern: "/p/notes/**/*.md", path: "/p/notes" }));
-  assertAllowed(ask(digest, "Glob", { pattern: "drafts/*.md", path: "/p/notes" }));
-  assertAllowed(ask(digest, "Glob", { pattern: ".drafts/a.md", path: "/p/notes" }));
-  assertDenied(ask(digest, "Grep", { pattern: "x", path: "/p/notes", glob: ".*" }), "hidden");
+  assertDenied(ask(digest, "Grep", { pattern: "x", path: "/p/clean", glob: "../**" }), "climb");
+  assertDenied(ask(digest, "Grep", { pattern: "x", path: "/p/clean", glob: 5 }), "must be text");
+  assertAllowed(ask(digest, "Glob", { pattern: "/p/clean/**/*.md", path: "/p/clean" }));
+  assertDenied(ask(digest, "Glob", { pattern: "/p/vault/**/*.md", path: "/p/clean" }), "it holds /p/vault/.env");
+  assertAllowed(ask(digest, "Glob", { pattern: "drafts/*.md", path: "/p/clean" }));
+  assertAllowed(ask(digest, "Glob", { pattern: ".drafts/a.md", path: "/p/clean" }));
+  assertDenied(ask(digest, "Grep", { pattern: "x", path: "/p/clean", glob: ".*" }), "hidden");
 });
 
 test("a command must be a listed prefix, alone or followed by a space and plain arguments", () => {

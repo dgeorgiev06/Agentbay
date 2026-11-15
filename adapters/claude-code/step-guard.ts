@@ -1,9 +1,9 @@
-import { lstatSync, readFileSync, realpathSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import process from "node:process";
 import { decide, type Decision } from "./guard-decide.ts";
 import { readPolicy } from "./guard-input.ts";
-import type { PathFacts, PathState } from "./guard-paths.ts";
+import type { FolderEntry, PathFacts, PathState } from "./guard-paths.ts";
 
 const maximumPayloadBytes = 32 * 1024 * 1024;
 
@@ -15,7 +15,20 @@ function inspect(path: string): PathState {
   }
 }
 
-const nodeFacts: PathFacts = { inspect };
+function entries(folder: string): readonly FolderEntry[] | undefined {
+  try {
+    return readdirSync(folder, { withFileTypes: true }).map((entry) => {
+      if (entry.isSymbolicLink()) {
+        return { name: entry.name, kind: "link" };
+      }
+      return { name: entry.name, kind: entry.isDirectory() ? "folder" : "other" };
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+const nodeFacts: PathFacts = { inspect, entries };
 
 function projectArgument(argumentsGiven: readonly string[]): string | undefined {
   const index = argumentsGiven.indexOf("--project");

@@ -1,19 +1,21 @@
 import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
+import { alwaysDeniedNames, kitFolders, searchBound } from "./guard-input.ts";
 
 export type PathState =
   | { readonly kind: "exists"; readonly realPath: string }
   | { readonly kind: "missing" }
   | { readonly kind: "unresolvable" };
 
+export type FolderEntry = { readonly name: string; readonly kind: "folder" | "link" | "other" };
+
 export type PathFacts = {
   readonly inspect: (path: string) => PathState;
+  readonly entries: (folder: string) => readonly FolderEntry[] | undefined;
 };
 
 export type Places = {
   readonly root: string;
   readonly kit: string;
-  readonly deniedNames: readonly string[];
-  readonly deniedKitFolders: readonly string[];
 };
 
 export type Target =
@@ -82,10 +84,18 @@ export function insideAnyRoot(path: string, roots: readonly string[]): boolean {
   return roots.some((root) => isInside(path, root));
 }
 
-export function matchesName(segment: string, name: string): boolean {
+function matchesName(segment: string, name: string): boolean {
   const folded = segment.toLowerCase();
   const pattern = name.toLowerCase();
   return pattern.endsWith("*") ? folded.startsWith(pattern.slice(0, -1)) : folded === pattern;
+}
+
+export function closedName(segment: string): string | undefined {
+  return alwaysDeniedNames.find((name) => matchesName(segment, name));
+}
+
+function bothForms(path: string, facts: PathFacts): readonly string[] {
+  return [path, ...realRoots([path], facts)];
 }
 
 function segmentsBelowBase(path: string, bases: readonly string[]): readonly string[] {
@@ -95,24 +105,12 @@ function segmentsBelowBase(path: string, bases: readonly string[]): readonly str
   return below.split(sep).filter((segment) => segment !== "");
 }
 
-function deniedNameIn(path: string, places: Places, bases: readonly string[]): string | undefined {
-  const segments = segmentsBelowBase(path, bases);
-  return places.deniedNames.find((name) => segments.some((segment) => matchesName(segment, name)));
-}
-
-function deniedKitFolderIn(path: string, places: Places, kits: readonly string[]): string | undefined {
-  return places.deniedKitFolders.find((folder) => kits.some((kit) => isInsideIgnoringCase(path, join(kit, folder))));
-}
-
-export function protectedPart(paths: readonly string[], places: Places, facts: PathFacts): string | undefined {
-  const roots = [places.root, ...realRoots([places.root], facts)];
-  const kits = [places.kit, ...realRoots([places.kit], facts)];
+export function closedNameIn(paths: readonly string[], places: Places, facts: PathFacts): string | undefined {
+  const bases = [...bothForms(places.root, facts), ...bothForms(places.kit, facts)];
   for (const path of paths) {
-    const folder = deniedKitFolderIn(path, places, kits);
-    if (folder !== undefined) {
-      return `the kit's ${folder}/ folder`;
-    }
-    const name = deniedNameIn(path, places, [...roots, ...kits]);
+    const name = segmentsBelowBase(path, bases)
+      .map(closedName)
+      .find((found) => found !== undefined);
     if (name !== undefined) {
       return name;
     }
@@ -120,12 +118,72 @@ export function protectedPart(paths: readonly string[], places: Places, facts: P
   return undefined;
 }
 
-export function protectedLocations(places: Places, facts: PathFacts): readonly string[] {
-  const exactNames = places.deniedNames.filter((name) => !name.endsWith("*"));
-  const roots = [places.root, ...realRoots([places.root], facts)];
-  const kits = [places.kit, ...realRoots([places.kit], facts)];
-  return [
-    ...[...roots, ...kits].flatMap((base) => exactNames.map((name) => join(base, name))),
-    ...kits.flatMap((kit) => places.deniedKitFolders.map((folder) => join(kit, folder))),
-  ];
+export function kitFoldersOf(places: Places, facts: PathFacts): readonly string[] {
+  return bothForms(places.kit, facts).flatMap((kit) => kitFolders.map((folder) => join(kit, folder)));
+}
+
+export function kitFolderHolding(paths: readonly string[], places: Places, facts: PathFacts): string | undefined {
+  return kitFoldersOf(places, facts).find((folder) => paths.some((path) => isInsideIgnoringCase(path, folder)));
+}
+
+export type WalkFinding =
+  | { readonly kind: "clear" }
+  | { readonly kind: "closed"; readonly path: string }
+  | { readonly kind: "link"; readonly path: string }
+  | { readonly kind: "unlistable"; readonly path: string }
+  | { readonly kind: "too-large" };
+
+type Walk = {
+  readonly facts: PathFacts;
+  readonly linkAllowed: (path: string) => boolean;
+  readonly queue: { readonly path: string; readonly depth: number }[];
+  seen: number;
+};
+
+function entryFinding(walk: Walk, path: string, entry: FolderEntry): WalkFinding | undefined {
+  if (closedName(entry.name) !== undefined) {
+    return { kind: "closed", path };
+  }
+  if (entry.kind === "link" && !walk.linkAllowed(path)) {
+    return { kind: "link", path };
+  }
+  return undefined;
+}
+
+function folderFinding(walk: Walk, folder: string, depth: number): WalkFinding | undefined {
+  const entries = walk.facts.entries(folder);
+  if (entries === undefined) {
+    return { kind: "unlistable", path: folder };
+  }
+  for (const entry of entries) {
+    walk.seen += 1;
+    const path = join(folder, entry.name);
+    const finding = walk.seen > searchBound.entries ? { kind: "too-large" as const } : entryFinding(walk, path, entry);
+    if (finding !== undefined) {
+      return finding;
+    }
+    if (entry.kind === "folder" && depth >= searchBound.depth) {
+      return { kind: "too-large" };
+    }
+    if (entry.kind === "folder") {
+      walk.queue.push({ path, depth: depth + 1 });
+    }
+  }
+  return undefined;
+}
+
+export function walkSearchFolder(
+  folder: string,
+  facts: PathFacts,
+  linkAllowed: (path: string) => boolean,
+): WalkFinding {
+  const walk: Walk = { facts, linkAllowed, queue: [{ path: folder, depth: 0 }], seen: 0 };
+  for (let index = 0; index < walk.queue.length; index += 1) {
+    const next = walk.queue[index];
+    const finding = next === undefined ? undefined : folderFinding(walk, next.path, next.depth);
+    if (finding !== undefined) {
+      return finding;
+    }
+  }
+  return { kind: "clear" };
 }

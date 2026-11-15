@@ -17,9 +17,20 @@ after(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-for (const folder of [".agentbay", "out", "notes", "src"].map((name) => join(root, name))) {
+for (const folder of [".agentbay", "out", "notes", "src", "vault/.git", "wide", "deep"].map((name) =>
+  join(root, name),
+)) {
   mkdirSync(folder, { recursive: true });
 }
+writeFileSync(join(root, "vault", "plain.md"), "plain");
+writeFileSync(join(root, "vault", ".env"), "KEY=1");
+writeFileSync(join(root, "vault", ".env.local"), "KEY=2");
+writeFileSync(join(root, "vault", ".git", "config"), "[core]");
+for (let index = 0; index < 5001; index += 1) {
+  writeFileSync(join(root, "wide", `f${String(index)}.md`), "");
+}
+const twelveDeep = join(root, "deep", ...Array.from({ length: 12 }, (_, level) => `d${String(level)}`));
+mkdirSync(twelveDeep, { recursive: true });
 mkdirSync(outside);
 writeFileSync(join(outside, "secret.txt"), "not for agents");
 writeFileSync(join(root, "notes", "a.md"), "note");
@@ -30,13 +41,12 @@ const policy: StepsFile = {
   version: 1,
   root,
   kit: dirname(dirname(adapterFolder)),
-  alwaysDenied: { names: [], kitFolders: [] },
   agents: {
     "agentbay-mail-digest": {
       mode: "mail",
       skill: "digest",
-      tools: ["Read", "Write", "Bash", "mcp__agentbay__submit"],
-      read: [join(root, "notes"), join(root, "out")],
+      tools: ["Read", "Write", "Bash", "Grep", "mcp__agentbay__submit"],
+      read: ["notes", "out", "vault", "wide", "deep"].map((name) => join(root, name)),
       write: [join(root, "out")],
       commands: ["node --test"],
     },
@@ -95,6 +105,28 @@ test("the hook process denies with the documented output and exit code 2", () =>
 test("the hook process follows real links out of a root and into a closed folder", () => {
   assertDeniedRun(runGuard(payload("Read", { file_path: join(root, "notes", "escape", "secret.txt") })), "real path");
   assertDeniedRun(runGuard(payload("Write", { file_path: join(root, "out", "closed", "steps.json") })), ".agentbay");
+  assertDeniedRun(runGuard(payload("Grep", { pattern: "x", path: join(root, "notes") })), "the link");
+});
+
+test("the hook process denies a search over a folder that holds secrets deeper down", () => {
+  for (const file of [".env", ".env.local", ".git/config"]) {
+    assertDeniedRun(runGuard(payload("Read", { file_path: join(root, "vault", file) })), "is closed");
+  }
+  assertAllowedRun(runGuard(payload("Read", { file_path: join(root, "vault", "plain.md") })));
+  const grep = runGuard(payload("Grep", { pattern: "KEY", path: join(root, "vault") }));
+  assertDeniedRun(grep, "which is closed to every skill step, so search a narrower folder");
+  assert.match(grep.stderr, /vault\/\.(env|env\.local|git),/);
+});
+
+test("the hook process walks at most 5000 entries and 12 levels", () => {
+  assertDeniedRun(runGuard(payload("Grep", { pattern: "x", path: join(root, "wide") })), "more than 5000 entries");
+  assertAllowedRun(runGuard(payload("Grep", { pattern: "x", path: join(root, "deep") })));
+  mkdirSync(join(twelveDeep, "d12"));
+  try {
+    assertDeniedRun(runGuard(payload("Grep", { pattern: "x", path: join(root, "deep") })), "deeper than 12 levels");
+  } finally {
+    rmSync(join(twelveDeep, "d12"), { recursive: true });
+  }
 });
 
 test("the hook process denies invalid, empty and oversized input", () => {

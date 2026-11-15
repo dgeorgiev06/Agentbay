@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { decide, type Decision, type GuardSetup } from "../guard-decide.ts";
 import { readPolicy, type StepRules, type StepsFile } from "../guard-input.ts";
-import type { PathFacts, PathState } from "../guard-paths.ts";
+import type { FolderEntry, PathFacts, PathState } from "../guard-paths.ts";
 
 type WorldShape = {
   readonly existing: readonly string[];
@@ -16,9 +16,30 @@ function followLinks(path: string, links: Readonly<Record<string, string>>): str
   return link === undefined ? path : `${links[link] ?? ""}${path.slice(link.length)}`;
 }
 
+function childrenOf(
+  folder: string,
+  existing: ReadonlySet<string>,
+  links: Readonly<Record<string, string>>,
+): readonly FolderEntry[] {
+  const prefix = folder === "/" ? "/" : `${folder}/`;
+  const names = new Set(
+    [...existing, ...Object.keys(links)]
+      .filter((path) => path.startsWith(prefix) && path !== folder)
+      .map((path) => path.slice(prefix.length).split("/")[0] ?? ""),
+  );
+  return [...names].sort().map((name): FolderEntry => {
+    const path = `${prefix}${name}`;
+    if (path in links) {
+      return { name, kind: "link" };
+    }
+    return { name, kind: [...existing].some((known) => known.startsWith(`${path}/`)) ? "folder" : "other" };
+  });
+}
+
 function fakeWorld(shape: WorldShape): PathFacts {
   const existing = new Set(["/", ...shape.existing]);
   return {
+    entries: (folder: string) => (existing.has(folder) ? childrenOf(folder, existing, shape.links) : undefined),
     inspect: (path: string): PathState => {
       if (shape.broken.includes(path)) {
         return { kind: "unresolvable" };
@@ -34,6 +55,16 @@ export const world = fakeWorld({
     "/p",
     "/p/notes",
     "/p/notes/a.md",
+    "/p/clean",
+    "/p/clean/a.md",
+    "/p/clean/drafts",
+    "/p/clean/drafts/b.md",
+    "/p/vault",
+    "/p/vault/.env",
+    "/p/vault/.env.local",
+    "/p/vault/.git",
+    "/p/vault/.git/config",
+    "/p/vault/plain.md",
     "/p/out",
     "/p/notes-out",
     "/p/notes-out2",
@@ -66,7 +97,7 @@ const digest: StepRules = {
   mode: "mail",
   skill: "digest",
   tools: ["Read", "Glob", "Grep", "Write", "Edit", "MultiEdit", "NotebookEdit", "mcp__agentbay__submit"],
-  read: ["/k/components/mail", "/p/notes", "/p/out", "/p/notes-out"],
+  read: ["/k/components/mail", "/p/notes", "/p/out", "/p/notes-out", "/p/clean", "/p/vault"],
   write: ["/p/out", "/p/notes-out"],
   commands: [],
 };
@@ -89,6 +120,24 @@ const survey: StepRules = {
   commands: [],
 };
 
+const forge: StepRules = {
+  mode: "forge",
+  skill: "extend",
+  tools: ["Read", "Write", "Edit", "Glob"],
+  read: ["/k/bay", "/p/src"],
+  write: ["/k/bay", "/p/src"],
+  commands: [],
+};
+
+const wide: StepRules = {
+  mode: "wide",
+  skill: "everything",
+  tools: ["Read", "Write"],
+  read: ["/k"],
+  write: ["/k", "/p"],
+  commands: [],
+};
+
 const tampered: StepRules = {
   mode: "odd",
   skill: "odd",
@@ -102,16 +151,24 @@ export const stepsFile: StepsFile = {
   version: 1,
   root: "/p",
   kit: "/k",
-  alwaysDenied: { names: [], kitFolders: [] },
   agents: {
     "agentbay-mail-digest": digest,
     "agentbay-forge-build": builder,
     "agentbay-store-survey": survey,
     "agentbay-odd-odd": tampered,
+    "agentbay-forge-extend": forge,
+    "agentbay-wide-everything": wide,
   },
 };
 
 export const setup: GuardSetup = { root: "/p", kit: "/k", policy: readPolicy(JSON.stringify(stepsFile), "/p") };
+
+type Asked = { readonly agent: string; readonly tool: string; readonly input: Readonly<Record<string, unknown>> };
+
+export function askIn(facts: PathFacts, asked: Asked): Decision {
+  const payload = { cwd: "/p", tool_name: asked.tool, tool_input: asked.input };
+  return decide(setup, { ...payload, agent_id: "agent-1", agent_type: asked.agent }, facts);
+}
 
 export function ask(agent: string | undefined, tool: string, input: Readonly<Record<string, unknown>>): Decision {
   const identity = agent === undefined ? {} : { agent_id: "agent-1", agent_type: agent };

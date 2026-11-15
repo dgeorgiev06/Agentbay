@@ -63,9 +63,6 @@ breaks:
     to: bay/spec.ts
     rule: private-file
   - from: bay/run-report.ts
-    to: bay/runs/run-state.ts
-    rule: private-file
-  - from: bay/run-report.ts
     to: bay/skill-tools.ts
     rule: private-file
   - from: bay/runs/action-steps.ts

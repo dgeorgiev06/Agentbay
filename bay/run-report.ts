@@ -1,15 +1,13 @@
 import { agentName } from "./adapter.ts";
 import type { Json, RunEvent } from "./contracts.ts";
 import { byteSize, toJson } from "./json.ts";
-import type { Kernel } from "./kernel.ts";
-import type { RunView } from "./runs/run-state.ts";
 import type { Run, RunSummary, Task } from "./runs/runs.ts";
 import type { Outcome } from "./outcome.ts";
 import { skillNameOf } from "./skill-tools.ts";
 import { problemsResult, type CommandResult, type JsonObject } from "./command-context.ts";
 import { shownProblems, type Layout } from "./layout.ts";
 
-export type ReportOptions = {
+type ReportOptions = {
   readonly after?: "submit" | "reissue";
   readonly full?: boolean;
   readonly events?: boolean;
@@ -21,10 +19,6 @@ type State = Run["state"];
 type Waiting = Extract<State, { readonly status: "waiting" }>["waiting"];
 
 type Step = Run["steps"][number];
-
-export type TokenChoice = "issue" | "replace" | "withhold" | "defer";
-
-export type TokenFor = (waitingKey: string) => TokenChoice;
 
 const issuedNotice = "A task token was issued with this task; it is shown only now.";
 
@@ -248,38 +242,4 @@ export function runLine(summary: RunSummary): string {
 
 export function runListJson(summary: RunSummary): JsonObject {
   return { ...summary, target: { ...summary.target } };
-}
-
-type OldOptions = Omit<ReportOptions, "after"> & { readonly token?: TokenChoice };
-
-export async function runOutput(kernel: Kernel, runId: string, options: OldOptions = {}): Promise<CommandResult> {
-  const { token, ...rest } = options;
-  const shown =
-    token === "replace" || token === "issue" ? await kernel.runs.reissueTask(runId) : await kernel.runs.show(runId);
-  const afters: Partial<Record<TokenChoice, ReportOptions["after"]>> = { replace: "reissue", defer: "submit" };
-  const after = token === undefined ? undefined : afters[token];
-  return runResult(kernel.layout, shown, after === undefined ? rest : { ...rest, after });
-}
-
-export async function engineOutput(
-  kernel: Kernel,
-  result: Outcome<RunView>,
-  tokenFor: TokenFor,
-): Promise<CommandResult> {
-  if (!result.ok) {
-    return problemsResult(shownProblems(kernel.layout, result.problems));
-  }
-  const state = result.value.state;
-  const waiting = state.status === "waiting" ? state.waiting : undefined;
-  const token = waiting?.reason === "skill" ? tokenFor(waiting.stepKey) : "withhold";
-  return runOutput(kernel, result.value.id, { token });
-}
-
-export async function submittedOutput(
-  kernel: Kernel,
-  result: Outcome<RunView>,
-  submittedKey: string,
-): Promise<CommandResult> {
-  const before = submittedKey.slice(0, submittedKey.lastIndexOf("#"));
-  return engineOutput(kernel, result, (key) => (key.slice(0, key.lastIndexOf("#")) === before ? "issue" : "defer"));
 }

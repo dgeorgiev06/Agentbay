@@ -221,7 +221,7 @@ function patternDecision(context: StepContext, pattern: unknown): Decision {
 function searchedFolderDecision(context: StepContext, folder: string): Decision {
   const target = resolveTarget(folder, workingFolder(context.call, context.places), context.facts);
   if (target.kind === "refused") {
-    return allow;
+    return deny(`${context.call.tool} in ${folder} for step ${context.name}: ${target.why}`);
   }
   const held = protectedLocations(context.places, context.facts).find((location) =>
     [target.written, target.real].some((path) => isInsideIgnoringCase(location, path)),

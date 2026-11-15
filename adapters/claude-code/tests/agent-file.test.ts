@@ -35,6 +35,16 @@ test("a step without write paths gets no write tools, and submit appears once", 
   assert.deepEqual(toolsFor(scanAgent), ["mcp__agentbay__submit", "Read", "Glob", "Grep", "mcp__agentbay__files_read"]);
 });
 
+test("a step whose actions lack write gets no write tools, no write roots and the no-write rule", () => {
+  const readOnly = { ...digestAgent, effects: ["read" as const] };
+  assert.ok(!toolsFor(readOnly).includes("Write") && !toolsFor(readOnly).includes("Edit"));
+  assert.ok(toolsFor(digestAgent).includes("Write") && toolsFor(digestAgent).includes("Edit"));
+  const steps: unknown = JSON.parse(stepsFileText(layout, [readOnly]));
+  assert.ok(typeof steps === "object" && steps !== null && "agents" in steps);
+  assert.deepEqual(JSON.stringify(steps.agents).includes('"write":[]'), true);
+  assert.match(agentFileText(readOnly, project), /Never create, edit or delete any file: this step writes no files/);
+});
+
 test("a step gets the read tools only when it has a read root, its mode folder counting as one", () => {
   const base = { mode: "store", skill: "s", tier: "fast", kernelTools: [], write: [], commands: [] } as const;
   assert.deepEqual(toolsFor(skillAgent({ ...base, read: [] })), ["mcp__agentbay__submit"]);
@@ -139,8 +149,8 @@ test("the step policy holds each agent's tools, absolute roots and commands", ()
         mode: "mail-briefing",
         skill: "digest",
         tools: toolsFor(digestAgent),
-        read: digestAgent.permissions.readPaths,
-        write: digestAgent.permissions.writePaths,
+        read: digestAgent.grants.readPaths,
+        write: digestAgent.grants.writePaths,
         commands: [],
       },
       "agentbay-x-y": {

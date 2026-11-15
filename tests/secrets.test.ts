@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Scrubber } from "../bay/contracts.ts";
 import { SecretStore } from "../bay/secrets.ts";
-import { failureOf, noProcesses, permissionsIn, recordingProcesses, refusalOf } from "./broker-fixture.ts";
+import { failureOf, noProcesses, grantsIn, recordingProcesses, refusalOf } from "./broker-fixture.ts";
 
-const permissions = permissionsIn("/project", { secrets: ["MAIL_TOKEN", "SHORT_ONE", "MISSING_ONE"] });
+const permissions = grantsIn("/project", { secrets: ["MAIL_TOKEN", "SHORT_ONE", "MISSING_ONE"] });
 
 const madeUpToken = "made-up-token-value-4242";
 
@@ -125,7 +125,7 @@ test("redaction reaches every string and key of a JSON value", async () => {
 
 test("a declared name that is not upper case with underscores is refused before any lookup", async () => {
   const store = storeWith({ "AGENTBAY_SECRET_mail-token": madeUpToken });
-  const answer = await store.get("mail-token", permissionsIn("/project", { secrets: ["mail-token"] }));
+  const answer = await store.get("mail-token", grantsIn("/project", { secrets: ["mail-token"] }));
   assert.match(refusalOf(answer).message, /upper-case letters, digits and underscores/);
 });
 

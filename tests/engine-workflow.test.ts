@@ -300,7 +300,7 @@ test("an action run that fails after a call wrote something undoes that call", a
   assert.ok(run.state.status === "undone");
   assert.deepEqual(run.state.undo.undone, [{ stepKey: "0", action: "store.put" }]);
   assert.deepEqual(
-    runner.runsOf("store:scripts/remove.ts").map((call) => [call.input, call.permissions.mode]),
+    runner.runsOf("store:scripts/remove.ts").map((call) => [call.input, call.permissions.grants.mode]),
     [[{ id: "x" }, "store"]],
   );
   close();

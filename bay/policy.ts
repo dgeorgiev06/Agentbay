@@ -1,5 +1,5 @@
 import { isAbsolute, join, normalize } from "node:path/posix";
-import type { Effect, Permissions, PolicyOf } from "./contracts.ts";
+import type { ModeGrants, PolicyOf } from "./contracts.ts";
 import type { Mode } from "./generated/mode.ts";
 import { isInsideOrEqual, isProjectTheKit, pathIn, shownProblems, type Home, type Layout } from "./layout.ts";
 import type { LoadedMode, System } from "./registry.ts";
@@ -214,25 +214,15 @@ function hostProblems(mode: LoadedMode): readonly Problem[] {
   );
 }
 
-function unionOfEffects(manifest: Mode): readonly Effect[] {
-  const effects = new Set<Effect>();
-  for (const action of Object.values(manifest.actions)) {
-    for (const effect of action.effects) {
-      effects.add(effect);
-    }
-  }
-  return [...effects];
-}
-
 function projectPaths(layout: Layout, paths: readonly string[]): readonly string[] {
   return paths.map((path) => pathIn(layout, "project", normalized(path)));
 }
 
-function refusedMode(wording: { readonly message: string; readonly fix: string }): Outcome<Permissions> {
+function refusedMode(wording: { readonly message: string; readonly fix: string }): Outcome<ModeGrants> {
   return { ok: false, problems: [{ file: "", path: "", ...wording }] };
 }
 
-function permissionsOfMode(mode: LoadedMode, layout: Layout): Permissions {
+function grantsOfMode(mode: LoadedMode, layout: Layout): ModeGrants {
   const declared = declaredResources(mode.manifest);
   const writePaths = projectPaths(layout, declared.write);
   return {
@@ -245,11 +235,10 @@ function permissionsOfMode(mode: LoadedMode, layout: Layout): Permissions {
     secrets: [...declared.secrets],
     hosts: [...declared.hosts],
     commands: [...declared.commands],
-    effects: unionOfEffects(mode.manifest),
   };
 }
 
-export function permissionsFor(system: System, modeName: string, layout: Layout): Outcome<Permissions> {
+export function permissionsFor(system: System, modeName: string, layout: Layout): Outcome<ModeGrants> {
   const mode = system.modes.get(modeName);
   if (mode === undefined) {
     return refusedMode({ message: `There is no mode named ${modeName}.`, fix: "Name a mode the registry loaded." });
@@ -262,7 +251,7 @@ export function permissionsFor(system: System, modeName: string, layout: Layout)
   if (problems.length > 0) {
     return { ok: false, problems: shownProblems(layout, problems) };
   }
-  return { ok: true, value: permissionsOfMode(mode, layout) };
+  return { ok: true, value: grantsOfMode(mode, layout) };
 }
 
 export function inactiveModeWording(modeName: string): { readonly message: string; readonly fix: string } {
@@ -273,7 +262,7 @@ export function inactiveModeWording(modeName: string): { readonly message: strin
 }
 
 export function policyFor(system: System, layout: Layout): Outcome<PolicyOf> {
-  const permissions = new Map<string, Permissions>();
+  const permissions = new Map<string, ModeGrants>();
   const problems: Problem[] = [];
   for (const name of system.active) {
     const outcome = permissionsFor(system, name, layout);

@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import type { Answer, Failure, Refusal } from "../bay/answers.ts";
-import type { EventSink, Permissions, RunEvent, StepPlace } from "../bay/contracts.ts";
+import type { Effect, EventSink, ModeGrants, Permissions, RunEvent, StepPlace } from "../bay/contracts.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import type { Http, HttpRequest, HttpResponse, ProcessRequest, ProcessResult, Processes } from "../bay/ports.ts";
 import { layoutOf, type Home, type Layout } from "../bay/layout.ts";
@@ -91,7 +91,9 @@ export const noProcesses: Processes = {
 
 export const place: StepPlace = { runId: "run-1", mode: "notes", action: "look", stepIndex: 0, stepKey: "look.0" };
 
-export function permissionsIn(root: string, overrides: Partial<Permissions> = {}): Permissions {
+export type PermissionChanges = Partial<ModeGrants> & { readonly effects?: readonly Effect[] };
+
+export function grantsIn(root: string, overrides: Partial<ModeGrants> = {}): ModeGrants {
   const modeFolder = join(root, "components", "modes", "notes");
   return {
     mode: "notes",
@@ -103,9 +105,13 @@ export function permissionsIn(root: string, overrides: Partial<Permissions> = {}
     secrets: [],
     hosts: [],
     commands: [],
-    effects: ["read"],
     ...overrides,
   };
+}
+
+export function permissionsIn(root: string, changes: PermissionChanges = {}): Permissions {
+  const { effects, ...grants } = changes;
+  return { grants: grantsIn(root, grants), actionEffects: effects ?? ["read"] };
 }
 
 export async function withProject(run: (root: string) => Promise<void>): Promise<void> {

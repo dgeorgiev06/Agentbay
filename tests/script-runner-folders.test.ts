@@ -27,7 +27,7 @@ async function withSeparateFolders(body: (folders: Folders) => Promise<void>): P
 
 function permissionsOf(layout: Layout, modeFolder: string): Permissions {
   const writable = join(layout.project, "notes-out");
-  return {
+  const grants = {
     mode: "notes",
     modeFolder,
     databaseFile: join(layout.project, ".agentbay", "data", "notes.db"),
@@ -37,8 +37,8 @@ function permissionsOf(layout: Layout, modeFolder: string): Permissions {
     secrets: [],
     hosts: [],
     commands: [],
-    effects: ["read", "write"],
   };
+  return { grants, actionEffects: ["read", "write"] };
 }
 
 async function run(layout: Layout, modeFolder: string): Promise<StepOutcome> {

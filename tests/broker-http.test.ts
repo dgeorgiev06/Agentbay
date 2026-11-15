@@ -9,6 +9,7 @@ import { fakeClock } from "./fakes.ts";
 import {
   failureOf,
   noProcesses,
+  grantsIn,
   permissionsIn,
   place,
   recordingSink,
@@ -166,7 +167,7 @@ test("a transport error is a failed answer with a redacted message, not an excep
   const { broker, secrets } = setup(() => {
     throw new Error(`connection reset while sending ${madeUpToken}`);
   });
-  await secrets.get("API_TOKEN", permissionsIn("/project", { secrets: ["API_TOKEN"] }));
+  await secrets.get("API_TOKEN", grantsIn("/project", { secrets: ["API_TOKEN"] }));
   const message = failureOf(await broker.request(get("https://api.example.com/x"))).message;
   assert.doesNotMatch(message, new RegExp(madeUpToken));
   assert.match(message, /connection reset/);

@@ -2,9 +2,16 @@ import { basename, dirname, join, resolve } from "node:path/posix";
 import { type AgentQueryOutcome, type AgentQueryResult, runAgentQuery } from "./agent-query.ts";
 import { type Answer, errorLine, failed, granted, listed, manifestOf, refused } from "./answers.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, Http, HttpRequest, HttpResponse } from "./ports.ts";
-import type { EventSink, Json, Permissions, StepPlace } from "./contracts.ts";
+import type { Effect, EventSink, Json, ModeGrants, Permissions, StepPlace } from "./contracts.ts";
 import type { DatabaseResult, ExecuteResult, Migration, Row, SqlParameters } from "./database.ts";
 import { DatabaseProcess } from "./database-process.ts";
+import {
+  describedOperation,
+  effectRefusal,
+  type BrokerOperation,
+  changesDataAllowed,
+  type SpendAmounts,
+} from "./effect-rule.ts";
 import { checkPath, type PathCheck, type Purpose } from "./file-access.ts";
 import { checkUrl, type Hop, loggedHeaders, nextRequest, redirectTarget, type UrlCheck } from "./http-access.ts";
 import { isInsideOrEqual, shownPath, type Layout } from "./layout.ts";
@@ -78,21 +85,51 @@ function redactedParameters(parameters: SqlParameters, redact: (text: string) =>
   return Object.fromEntries(Object.entries(parameters).map(([name, value]) => [name, redacted(value)]));
 }
 
+const noAmounts: SpendAmounts = { items: 0, usd: 0, tokens: 0 };
+
+const spendMeasures = ["items", "usd", "tokens"] as const;
+
+function isAmount(value: Json | undefined): boolean {
+  return value === undefined || (typeof value === "number" && Number.isFinite(value) && value >= 0);
+}
+
+function amountOf(value: Json | undefined): number {
+  return typeof value === "number" ? value : 0;
+}
+
+function spendAmountsOf(spending: Json): SpendAmounts | undefined {
+  if (!isJsonRecord(spending) || !spendMeasures.every((measure) => isAmount(spending[measure]))) {
+    return undefined;
+  }
+  return { items: amountOf(spending.items), usd: amountOf(spending.usd), tokens: amountOf(spending.tokens) };
+}
+
+function spendingRefusal(spending: Json): Answer<never> {
+  return refused({
+    resource: "spend",
+    asked: `The step reported the spending ${JSON.stringify(spending)}`,
+    declared: "spending is given as items, usd and tokens, each a number of at least 0",
+    change: "Report spending as { items, usd, tokens } with numbers of at least 0.",
+  });
+}
+
 export class Broker {
   readonly #options: BrokerOptions;
-  readonly #permissions: Permissions;
+  readonly #grants: ModeGrants;
+  readonly #effects: readonly Effect[];
   readonly #limits: BrokerLimits;
   readonly #databases = new Map<string, DatabaseProcess>();
   #unnamedMigration: Promise<Answer<readonly string[]>> | undefined;
 
   constructor(options: BrokerOptions) {
     this.#options = options;
-    this.#permissions = options.permissions;
+    this.#grants = options.permissions.grants;
+    this.#effects = options.permissions.actionEffects;
     this.#limits = { ...defaultBrokerLimits, ...options.limits };
   }
 
   #partitionFile(partition: string | undefined): Answer<string> {
-    const databaseFile = this.#permissions.databaseFile;
+    const databaseFile = this.#grants.databaseFile;
     if (partition === undefined) {
       return granted(databaseFile);
     }
@@ -106,15 +143,15 @@ export class Broker {
         change: "Name the partition with lowercase letters, digits and single dashes, such as feed-briefing.",
       });
     }
-    return granted(join(dirname(databaseFile), `${this.#permissions.mode}--${partition}.db`));
+    return granted(join(dirname(databaseFile), `${this.#grants.mode}--${partition}.db`));
   }
 
   migrate(partition?: string): Promise<Answer<readonly string[]>> {
-    return this.#guarded("run the migrations", () => this.#migrateNow(partition));
+    return this.#guarded({ kind: "db.migrate" }, () => this.#migrateNow(partition));
   }
 
   execute(sql: string, parameters: SqlParameters = [], partition?: string): Promise<Answer<ExecuteResult>> {
-    return this.#guarded("run a statement", async () => {
+    return this.#guarded({ kind: "db.execute", sql }, async () => {
       const file = this.#partitionFile(partition);
       if (!file.ok) {
         return file;
@@ -127,7 +164,7 @@ export class Broker {
       if (!migrated.ok) {
         return migrated;
       }
-      const writable = this.#permissions.effects.includes("write");
+      const writable = changesDataAllowed(this.#effects);
       const stored = await this.#storedParameters(parameters);
       const order = { method: "execute" as const, sql, parameters: stored, writable };
       const result = await this.#databaseOf(file.value).request(order);
@@ -136,7 +173,7 @@ export class Broker {
   }
 
   query(sql: string, parameters: SqlParameters = [], partition?: string): Promise<Answer<readonly Row[]>> {
-    return this.#guarded("run a query", async () => {
+    return this.#guarded({ kind: "db.query", sql }, async () => {
       const file = this.#partitionFile(partition);
       if (!file.ok) {
         return file;
@@ -155,7 +192,7 @@ export class Broker {
   }
 
   agentQuery(sql: string, partition?: string): Promise<Answer<AgentQueryResult>> {
-    return this.#guarded("run an agent's query", async () => {
+    return this.#guarded({ kind: "db.agentQuery" }, async () => {
       const file = this.#partitionFile(partition);
       if (!file.ok) {
         return file;
@@ -165,14 +202,14 @@ export class Broker {
         return migrated;
       }
       if (!(await this.#options.files.exists(file.value))) {
-        return failed(`The mode ${this.#permissions.mode} has no database yet; run its migrations first.`);
+        return failed(`The mode ${this.#grants.mode} has no database yet; run its migrations first.`);
       }
       return this.#agentQueryAnswer(await this.#runAgentQuery(file.value, sql));
     });
   }
 
   readFile(path: string): Promise<Answer<string>> {
-    return this.#guarded(`read ${this.#shown(path)}`, async () => {
+    return this.#guarded({ kind: "files.read", path: this.#shown(path) }, async () => {
       const checked = await this.#checkedPath(path, "read");
       if (!checked.ok) {
         return checked;
@@ -183,7 +220,7 @@ export class Broker {
   }
 
   writeFile(path: string, text: string): Promise<Answer<null>> {
-    return this.#guarded(`write ${this.#shown(path)}`, async () => {
+    return this.#guarded({ kind: "files.write", path: this.#shown(path) }, async () => {
       const checked = await this.#checkedPath(path, "write");
       if (!checked.ok) {
         return checked;
@@ -202,7 +239,7 @@ export class Broker {
   }
 
   listFiles(path: string): Promise<Answer<readonly string[]>> {
-    return this.#guarded(`list ${this.#shown(path)}`, async () => {
+    return this.#guarded({ kind: "files.list", path: this.#shown(path) }, async () => {
       const checked = await this.#checkedPath(path, "read");
       if (!checked.ok) {
         return checked;
@@ -212,15 +249,16 @@ export class Broker {
   }
 
   secret(name: string): Promise<Answer<string>> {
-    return this.#guarded(`get the secret ${name}`, () => this.#options.secrets.get(name, this.#permissions));
+    return this.#guarded({ kind: "secrets.get", name }, () => this.#options.secrets.get(name, this.#grants));
   }
 
   request(request: HttpRequest): Promise<Answer<HttpResponse>> {
-    return this.#guarded(`send a request to ${request.url}`, () => this.#sendFollowingRedirects(request));
+    const operation = { kind: "http.request" as const, method: request.method, url: request.url };
+    return this.#guarded(operation, () => this.#sendFollowingRedirects(request));
   }
 
   emit(kind: string, detail: Json): Promise<Answer<null>> {
-    return this.#guarded(`emit an event of the kind ${kind}`, async () => {
+    return this.#guarded({ kind: "events.emit", eventKind: kind }, async () => {
       if (brokerKinds.includes(kind)) {
         return refused({
           resource: "events",
@@ -234,6 +272,13 @@ export class Broker {
     });
   }
 
+  spend(spending: Json): Promise<Answer<SpendAmounts>> {
+    const amounts = spendAmountsOf(spending);
+    return this.#guarded({ kind: "spend", amounts: amounts ?? noAmounts }, () =>
+      Promise.resolve(amounts === undefined ? spendingRefusal(spending) : granted(amounts)),
+    );
+  }
+
   report<T>(answer: Answer<T>): Promise<Answer<T>> {
     return this.#settle(answer);
   }
@@ -242,11 +287,15 @@ export class Broker {
     return `The step ${this.#options.place.stepKey} asked`;
   }
 
-  async #guarded<T>(doing: string, body: () => Promise<Answer<T>>): Promise<Answer<T>> {
+  async #guarded<T>(operation: BrokerOperation, body: () => Promise<Answer<T>>): Promise<Answer<T>> {
+    const stepKey = this.#options.place.stepKey;
+    const at = { stepKey, action: this.#options.place.action, manifest: manifestOf(this.#grants) };
+    const refusal = effectRefusal(operation, this.#effects, at);
     try {
-      return await this.#settle(await body());
+      return await this.#settle(refusal === undefined ? await body() : refused(refusal));
     } catch (error) {
-      return this.#settle(failed(`The step ${this.#options.place.stepKey} could not ${doing}: ${errorLine(error)}`));
+      const doing = describedOperation(operation);
+      return this.#settle(failed(`The step ${stepKey} could not ${doing}: ${errorLine(error)}`));
     }
   }
 
@@ -259,13 +308,13 @@ export class Broker {
     if (!file.ok) {
       return file;
     }
-    const migrations = resolve(this.#permissions.modeFolder, this.#permissions.migrationsFolder);
-    if (!isInsideOrEqual(migrations, this.#permissions.modeFolder)) {
+    const migrations = resolve(this.#grants.modeFolder, this.#grants.migrationsFolder);
+    if (!isInsideOrEqual(migrations, this.#grants.modeFolder)) {
       return refused({
         resource: "db",
         asked: `${this.#asking} to run the migrations in ${migrations}`,
-        declared: `migrations must lie inside the mode's folder ${this.#permissions.modeFolder}`,
-        change: `Point resources.db.migrations in ${manifestOf(this.#permissions)} at a folder of the mode.`,
+        declared: `migrations must lie inside the mode's folder ${this.#grants.modeFolder}`,
+        change: `Point resources.db.migrations in ${manifestOf(this.#grants)} at a folder of the mode.`,
       });
     }
     const ordered = await this.#migrationsIn(migrations);
@@ -353,7 +402,7 @@ export class Broker {
     }
     let current = request;
     for (let hops = 0; hops <= this.#limits.httpRedirects; hops += 1) {
-      const check = checkUrl(current.url, this.#permissions.hosts);
+      const check = checkUrl(current.url, this.#grants.hosts);
       if (check.status !== "allowed") {
         return this.#urlRefusal(check, hops > 0);
       }
@@ -472,13 +521,13 @@ export class Broker {
           ? granted(result.value)
           : failed("The database process gave an answer of the wrong shape.");
       case "missing":
-        return failed(`The mode ${this.#permissions.mode} has no database yet; run its migrations first.`);
+        return failed(`The mode ${this.#grants.mode} has no database yet; run its migrations first.`);
       case "writes-on-read-only":
         return refused({
           resource: "db",
           asked: `${this.#asking} in action ${place.action} to run a write statement (it starts with "${keyword}")`,
-          declared: `the action ${place.action} declares the effects: ${listed(this.#permissions.effects, "none")}`,
-          change: `To allow it, add write to actions.${place.action}.effects in ${manifestOf(this.#permissions)}.`,
+          declared: `the action ${place.action} declares the effects: ${listed(this.#effects, "none")}`,
+          change: `To allow it, add write to actions.${place.action}.effects in ${manifestOf(this.#grants)}.`,
         });
       case "several-statements":
         return refused({
@@ -493,23 +542,23 @@ export class Broker {
   }
 
   async #checkedPath(path: string, purpose: Purpose): Promise<Answer<string>> {
-    const permitted = purpose === "read" ? this.#permissions.readPaths : this.#permissions.writePaths;
+    const permitted = purpose === "read" ? this.#grants.readPaths : this.#grants.writePaths;
     const check = await checkPath(this.#options.inspector, { layout: this.#options.layout, path, permitted, purpose });
     return check.status === "allowed" ? granted(check.path) : this.#pathRefusal(check, purpose);
   }
 
   #pathRefusal(check: Exclude<PathCheck, { readonly status: "allowed" }>, purpose: Purpose): Answer<string> {
     const layout = this.#options.layout;
-    const permitted = purpose === "read" ? this.#permissions.readPaths : this.#permissions.writePaths;
+    const permitted = purpose === "read" ? this.#grants.readPaths : this.#grants.writePaths;
     const shown = permitted.map((path) => shownPath(layout, path));
     const asked = `${this.#asking} to ${purpose} ${check.path}`;
-    const manifestLine = `resources.files.${purpose} in ${manifestOf(this.#permissions)}`;
+    const manifestLine = `resources.files.${purpose} in ${manifestOf(this.#grants)}`;
     switch (check.status) {
       case "outside":
         return refused({
           resource: "files",
           asked,
-          declared: `the mode ${this.#permissions.mode} may ${purpose} only: ${listed(shown, "nothing")}`,
+          declared: `the mode ${this.#grants.mode} may ${purpose} only: ${listed(shown, "nothing")}`,
           change: `To allow it, add ${shownPath(layout, check.path)} under ${manifestLine}.`,
         });
       case "through-link":
@@ -530,10 +579,10 @@ export class Broker {
   }
 
   #urlRefusal(check: Exclude<UrlCheck, { readonly status: "allowed" }>, redirected: boolean): Answer<never> {
-    const hosts = this.#permissions.hosts;
+    const hosts = this.#grants.hosts;
     const target = check.status === "not-a-url" ? "something that is not a URL" : check.url.href;
     const asked = redirected ? `A request was redirected to ${target}` : `${this.#asking} for ${target}`;
-    const declaredHosts = `the mode ${this.#permissions.mode} declares the hosts: ${listed(hosts, "none")}`;
+    const declaredHosts = `the mode ${this.#grants.mode} declares the hosts: ${listed(hosts, "none")}`;
     return refused({ resource: "http", asked, ...this.#urlRule(check, declaredHosts) });
   }
 
@@ -559,7 +608,7 @@ export class Broker {
       case "undeclared-host":
         return {
           declared: declaredHosts,
-          change: `To allow it, add ${check.url.hostname} under resources.network in ${manifestOf(this.#permissions)}.`,
+          change: `To allow it, add ${check.url.hostname} under resources.network in ${manifestOf(this.#grants)}.`,
         };
     }
   }

@@ -1,4 +1,5 @@
-import type { Permissions, Tier } from "./contracts.ts";
+import type { Effect, ModeGrants, Tier } from "./contracts.ts";
+import { writableFolders } from "./effect-rule.ts";
 import type { Layout } from "./layout.ts";
 import type { FileSystem, Removal } from "./ports.ts";
 import type { System } from "./registry.ts";
@@ -12,7 +13,8 @@ export type SkillAgent = {
   readonly description: string;
   readonly tier: Tier;
   readonly kernelTools: readonly string[];
-  readonly permissions: Permissions;
+  readonly grants: ModeGrants;
+  readonly effects: readonly Effect[];
 };
 
 export type { Layout } from "./layout.ts";
@@ -39,4 +41,8 @@ export type Adapter = {
 
 export function agentName(mode: string, skill: string): string {
   return `agentbay-${mode}-${skill}`;
+}
+
+export function agentWritableFolders(agent: SkillAgent): readonly string[] {
+  return writableFolders({ grants: agent.grants, actionEffects: agent.effects });
 }

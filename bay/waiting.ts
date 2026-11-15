@@ -74,7 +74,7 @@ export function skillStepAt(context: WaitingContext, run: RunWithSteps, waitingK
     tier: step.tier,
     input: record.input,
     outputSchema: textsField(record.detail, "schemas")[0] ?? "",
-    permissions: { ...context.policyOf(mode), effects: target.action.effects },
+    permissions: { grants: context.policyOf(mode), actionEffects: target.action.effects },
     round: numberField(record.detail, "round") ?? 1,
     feedback: textsField(record.detail, "feedback"),
   };

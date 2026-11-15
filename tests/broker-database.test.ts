@@ -6,7 +6,7 @@ import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
 import { runAgentQuery } from "../bay/agent-query.ts";
 import { Broker } from "../bay/broker.ts";
-import type { Effect, Permissions } from "../bay/contracts.ts";
+import type { Effect, ModeGrants } from "../bay/contracts.ts";
 import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import {
@@ -25,7 +25,7 @@ import {
 
 type Setup = { readonly root: string; readonly broker: Broker; readonly events: ReturnType<typeof recordingSink> };
 
-function brokerFor(root: string, effects: readonly Effect[], extra: Partial<Permissions> = {}): Setup {
+function brokerFor(root: string, effects: readonly Effect[], extra: Partial<ModeGrants> = {}): Setup {
   const events = recordingSink();
   const broker = new Broker({
     layout: projectLayout(root),

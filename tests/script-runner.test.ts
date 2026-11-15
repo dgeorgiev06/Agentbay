@@ -4,7 +4,7 @@ import { mkdir, readFile, symlink } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { ActionCaller, Json, Permissions, ScriptRequest, StepOutcome } from "../bay/contracts.ts";
+import type { ActionCaller, Json, ScriptRequest, StepOutcome } from "../bay/contracts.ts";
 import { fieldOf } from "../bay/json.ts";
 import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
 import type { Clock } from "../bay/ports.ts";
@@ -15,6 +15,7 @@ import {
   noProcesses,
   permissionsIn,
   place,
+  type PermissionChanges,
   projectLayout,
   recordingSink,
   scriptedHttp,
@@ -34,7 +35,7 @@ type Run = {
 
 type RunOptions = {
   readonly input?: Json;
-  readonly permissions?: Partial<Permissions>;
+  readonly permissions?: PermissionChanges;
   readonly timeLimit?: number;
   readonly call?: ActionCaller;
   readonly outputBytes?: number;
@@ -177,7 +178,7 @@ test("a script that reads, writes, queries, calls, reports spend and returns out
         "const emitted = await context.events.emit('noted', { day: input.day });",
         "return { today, written, rows, called, spent, listed, emitted, settings: context.settings };",
       ].join("\n"),
-      { input: { day: "2026-11-14" }, permissions: { effects: ["read", "write"] } },
+      { input: { day: "2026-11-14" }, permissions: { effects: ["read", "write", "spend"] } },
     );
     assert.deepEqual(outputOf(run), {
       today: { ok: true, value: "today" },
@@ -230,6 +231,7 @@ test("a script cannot write outside its write paths directly, even inside a read
       const run = await attempt(
         root,
         ["const fs = await import('node:fs');", tryIt(`fs.writeFileSync(${JSON.stringify(file)}, 'x')`)].join("\n"),
+        { permissions: { effects: ["read", "write"] } },
       );
       assert.deepEqual(outputOf(run), { refused: "ERR_ACCESS_DENIED" }, file);
     }
@@ -239,6 +241,7 @@ test("a script cannot write outside its write paths directly, even inside a read
         "const fs = await import('node:fs');",
         tryIt(`fs.writeFileSync(${JSON.stringify(join(root, "notes-out/direct.txt"))}, 'direct')`),
       ].join("\n"),
+      { permissions: { effects: ["read", "write"] } },
     );
     assert.deepEqual(outputOf(allowed), { escaped: "undefined" });
   });
@@ -258,7 +261,13 @@ test("a write path that does not exist before the run can be made and written by
           ].join(" "),
         ),
       ].join("\n"),
-      { permissions: { writePaths: [folder], readPaths: [join(root, "components/modes/notes"), folder] } },
+      {
+        permissions: {
+          writePaths: [folder],
+          readPaths: [join(root, "components/modes/notes"), folder],
+          effects: ["read", "write"],
+        },
+      },
     );
     assert.deepEqual(outputOf(run), { escaped: "undefined" });
     assert.equal(await readFile(join(folder, "a.txt"), "utf8"), "made");
@@ -273,6 +282,7 @@ test("the runner starts node with the permission model, the grants and the prelo
     permissions: permissionsIn("/project", {
       readPaths: ["/project/components/modes/notes", "/project/in"],
       writePaths: ["/project/out"],
+      effects: ["read", "write"],
     }),
     settings: {},
     remaining: {},
@@ -576,6 +586,7 @@ test("a secret written through context.files.write is redacted in the file, and 
         "const hex = Buffer.from(value).toString('hex');",
         "return await context.files.write('notes-out/leak.txt', `raw ${value} hex ${hex} b64 ${btoa(value)}`);",
       ].join("\n"),
+      { permissions: { effects: ["read", "write"] } },
     );
     assert.deepEqual(outputOf(run), { ok: true, value: null });
     const written = await readFile(join(root, "notes-out/leak.txt"), "utf8");
@@ -592,6 +603,7 @@ test("a file written without a secret value is written as given, with no redacte
     const run = await attempt(
       root,
       "return await context.files.write('notes-out/plain.txt', 'password: see the README');",
+      { permissions: { effects: ["read", "write"] } },
     );
     assert.deepEqual(outputOf(run), { ok: true, value: null });
     assert.equal(await readFile(join(root, "notes-out/plain.txt"), "utf8"), "password: see the README");
@@ -612,6 +624,7 @@ test("through the broker, a script is refused an undeclared host, http and a red
         "  redirected: await get('https://api.example.com/redirect'),",
         "};",
       ].join("\n"),
+      { permissions: { effects: ["read", "network"] } },
     );
     const output = JSON.stringify(outputOf(run));
     assert.match(output, /"declared":\{"ok":true,"value":\{"status":200/);

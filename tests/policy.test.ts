@@ -44,7 +44,7 @@ function pathProblems(files: DeclaredFiles): readonly string[] {
   );
 }
 
-test("a mode's permissions hold its folder, database, migrations, paths, secrets, hosts, commands and effects", () => {
+test("a mode's grants hold its folder, database, migrations, paths, secrets, hosts and commands, not effects", () => {
   const outcome = permissionsFor(system, "briefing", layout);
   assert.deepEqual(outcome, {
     ok: true,
@@ -63,7 +63,6 @@ test("a mode's permissions hold its folder, database, migrations, paths, secrets
       secrets: ["MAIL_TOKEN"],
       hosts: ["api.example.com", "*.cdn.example.com"],
       commands: ["node --test"],
-      effects: ["read", "write", "network"],
     },
   });
 });
@@ -73,7 +72,7 @@ test("a mode that declares no resources may read only its own folder", () => {
   assert.deepEqual(permissions.readPaths, ["/project/components/base/store"]);
   assert.deepEqual(permissions.writePaths, []);
   assert.deepEqual(permissions.secrets, []);
-  assert.deepEqual(permissions.effects, ["read"]);
+  assert.deepEqual(Object.keys(permissions).includes("effects"), false);
 });
 
 test("a declared path that leaves the project root is refused", () => {

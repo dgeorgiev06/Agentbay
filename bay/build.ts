@@ -84,7 +84,8 @@ async function agentOf(planning: AgentPlanning, use: SkillUse): Promise<Outcome<
     description: parsed.value.frontMatter.description,
     tier: use.tier,
     kernelTools: tools.kernelTools,
-    permissions: { ...planning.policyOf(use.mode), effects: [...use.effects] },
+    grants: planning.policyOf(use.mode),
+    effects: [...use.effects],
   };
   return { ok: true, value: agent };
 }

@@ -196,7 +196,7 @@ function actionCaller(walk: Walk, frame: ActionFrame, at: { scriptKey: string; h
 }
 
 function actionPermissions(walk: Walk, frame: ActionFrame): Permissions {
-  return { ...walk.services.policyOf(frame.mode.manifest.name), effects: frame.action.effects };
+  return { grants: walk.services.policyOf(frame.mode.manifest.name), actionEffects: frame.action.effects };
 }
 
 function timeLimitOf(remaining: Budget): number {

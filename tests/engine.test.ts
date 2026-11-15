@@ -74,7 +74,7 @@ for (const storeKind of storeKinds) {
       const [put] = runner.calls;
       assert.ok(put);
       assert.deepEqual(put.place, { runId: run.id, mode: "store", action: "put", stepIndex: 0, stepKey: "0/0" });
-      assert.deepEqual(put.permissions, { ...fakePolicy("store"), effects: ["write"] });
+      assert.deepEqual(put.permissions, { grants: fakePolicy("store"), actionEffects: ["write"] });
       assert.equal(put.timeLimitMilliseconds, 8 * 60_000);
       assert.deepEqual(put.settings, {});
       assert.deepEqual(
@@ -195,7 +195,7 @@ for (const storeKind of storeKinds) {
           tier: "fast",
           input: { topic: "staking" },
           outputSchema: "schemas/draft.json",
-          permissions: { ...fakePolicy("notes"), effects: ["read", "write"] },
+          permissions: { grants: fakePolicy("notes"), actionEffects: ["read", "write"] },
           round: 1,
           feedback: [],
         },

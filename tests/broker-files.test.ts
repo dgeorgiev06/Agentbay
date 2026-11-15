@@ -30,7 +30,7 @@ async function withFilesBroker(run: (setup: Setup) => Promise<void>): Promise<vo
     const events = recordingSink();
     const broker = new Broker({
       layout: projectLayout(root),
-      permissions: permissionsIn(root),
+      permissions: permissionsIn(root, { effects: ["read", "write"] }),
       place,
       files: nodeFileSystem,
       inspector: nodeFileInspector,

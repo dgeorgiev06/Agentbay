@@ -189,7 +189,7 @@ test("files_write is refused when the step's action does not declare the write e
     path: "out/notes/a.txt",
     text: "x",
   });
-  assert.match(refusalOf(written), /does not declare the write effect, so its skill may not write files/);
+  assert.match(refusalOf(written), /Writing a file needs the write effect; to allow it, add write to actions.compose/);
   const read = await callKernelTool(kernel, "files_read", {
     token: waiting.token,
     path: "components/modes/writer/mode.yaml",

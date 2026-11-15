@@ -63,7 +63,7 @@ async function rootProblem(request: BuildRequest, agent: SkillAgent, folder: str
 export async function grantedRootProblems(request: BuildRequest): Promise<readonly Problem[]> {
   const problems: Problem[] = [];
   for (const agent of request.agents) {
-    const roots = new Set([...agent.permissions.readPaths, ...agent.permissions.writePaths]);
+    const roots = new Set([...agent.grants.readPaths, ...agent.grants.writePaths]);
     for (const folder of roots) {
       const absolute = isAbsolute(folder) ? folder : join(request.layout.project, folder);
       const problem = await rootProblem(request, agent, absolute);

@@ -1,5 +1,5 @@
 import { isAbsolute, join, relative } from "node:path";
-import type { SkillAgent } from "../../bay/adapter.ts";
+import { agentWritableFolders, type SkillAgent } from "../../bay/adapter.ts";
 import type { Tier } from "./adapter-types.ts";
 
 export const modelForTier: Readonly<Record<Tier, string>> = {
@@ -13,7 +13,8 @@ function kernelToolName(tool: string): string {
 }
 
 export function toolsFor(agent: SkillAgent): readonly string[] {
-  const { readPaths, writePaths, commands } = agent.permissions;
+  const { readPaths, commands } = agent.grants;
+  const writePaths = agentWritableFolders(agent);
   const kernelTools = [...new Set(agent.kernelTools)].filter((tool) => tool !== "submit").map(kernelToolName);
   return [
     kernelToolName("submit"),
@@ -35,14 +36,14 @@ function oneLine(text: string): string {
 }
 
 function writeRule(agent: SkillAgent, project: string): string {
-  const folders = agent.permissions.writePaths.map((path) => `\`${projectPath(project, path)}\``);
+  const folders = agentWritableFolders(agent).map((path) => `\`${projectPath(project, path)}\``);
   return folders.length === 0
     ? "- Never create, edit or delete any file: this step writes no files."
     : `- Never create, edit or delete a file outside ${folders.join(", ")}.`;
 }
 
 function commandRule(agent: SkillAgent): string {
-  const commands = agent.permissions.commands.map((command) => `\`${command}\``);
+  const commands = agent.grants.commands.map((command) => `\`${command}\``);
   return commands.length === 0
     ? "- Never try to run shell commands: this step has none."
     : `- Run only commands that start with ${commands.join(", ")}, with plain arguments.`;

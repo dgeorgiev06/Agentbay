@@ -2,7 +2,7 @@ import type { Json } from "../../../../../bay/sdk.ts";
 
 export type Fields = { readonly [key: string]: Json };
 
-export function isFields(value: Json | undefined): value is Fields {
+function isFields(value: Json | undefined): value is Fields {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 

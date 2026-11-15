@@ -1,9 +1,9 @@
 import { fail, type DatabasePartition, type DatabaseStatements, type ScriptContext } from "../../../../../bay/sdk.ts";
 import type { Fields } from "./json.ts";
 
-export const ownerPartition = "owner";
+const ownerPartition = "owner";
 
-export function partitionName(context: ScriptContext): string {
+function partitionName(context: ScriptContext): string {
   return context.caller ?? ownerPartition;
 }
 

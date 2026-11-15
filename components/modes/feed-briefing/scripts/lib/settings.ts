@@ -13,7 +13,7 @@ const defaultMaxItems = 100;
 
 const unitMilliseconds: Readonly<Record<string, number>> = { h: 3_600_000, d: 86_400_000, w: 604_800_000 };
 
-export function durationMilliseconds(text: string): number {
+function durationMilliseconds(text: string): number {
   const unit = unitMilliseconds[text.slice(-1)] ?? 0;
   return Number(text.slice(0, -1)) * unit;
 }

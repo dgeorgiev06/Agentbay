@@ -35,7 +35,7 @@ function normalName(name: string): string {
   return name.trim().toLowerCase().replace(/^@/, "");
 }
 
-export function globMatches(pattern: string, text: string): boolean {
+function globMatches(pattern: string, text: string): boolean {
   const [head = "", ...rest] = pattern.split("*");
   if (rest.length === 0) {
     return pattern === text;

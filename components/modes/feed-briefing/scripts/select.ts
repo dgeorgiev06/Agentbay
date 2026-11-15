@@ -1,9 +1,8 @@
 import { canonicalJson, defineScript, parseIsoTime, type Json } from "../../../../bay/sdk.ts";
 import { called } from "./lib/calls.ts";
 import { fieldsOf, listOf, textOf, textsOf, type Fields } from "./lib/json.ts";
+import { digestLimits } from "./lib/limits.ts";
 import { settingsOf, timeOf } from "./lib/settings.ts";
-
-export const digestLimits = { themes: 7, titleWords: 10, summaryWords: 60, notesWords: 80 };
 
 const excerptCharacters = 400;
 

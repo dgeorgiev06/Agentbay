@@ -1,22 +1,30 @@
 import assert from "node:assert/strict";
-import type { Json, PolicyOf, ScriptRequest, ScriptRunner, Spend, StepOutcome, Submission } from "../bay/contracts.ts";
-import { Engine } from "../bay/runs/engine.ts";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type {
+  EventSink,
+  Json,
+  PolicyOf,
+  ScriptRequest,
+  ScriptRunner,
+  Spend,
+  StepOutcome,
+  Submission,
+} from "../bay/contracts.ts";
 import type { Config } from "../bay/generated/config.ts";
 import type { Interface } from "../bay/generated/interface.ts";
 import type { Action, Mode } from "../bay/generated/mode.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
-import { numberField, textField } from "../bay/json.ts";
+import { fieldOf, numberField, textField } from "../bay/json.ts";
 import { layoutOf } from "../bay/layout.ts";
 import { loadPolicedSystem, policyFor } from "../bay/policy.ts";
 import type { System } from "../bay/registry.ts";
-import type { RunStore } from "../bay/runs/run-store.ts";
-import { SqliteRunStore } from "../bay/runs/sqlite-run-store.ts";
-import type { RunView, Waiting } from "../bay/runs/run-state.ts";
 import type { Outcome } from "../bay/outcome.ts";
+import { openRuns, type Run, type Runs, type Task } from "../bay/runs/runs.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import { noProcesses } from "./broker-fixture.ts";
-import { fakeClock, fakeFileSystem, type FakeFileSystem } from "./fakes.ts";
-import { temporaryKernelDb, type KernelDb } from "./kernel-db-fixture.ts";
+import { fakeClock, fakeFileSystem, fakeFolders, type FakeFileSystem } from "./fakes.ts";
 import { yamlText } from "./system-fixture.ts";
 
 export type Script = (request: ScriptRequest) => StepOutcome | Promise<StepOutcome>;
@@ -32,27 +40,26 @@ export type Changes = {
   readonly config?: Partial<Config>;
 };
 
-type FreshEngine = {
-  readonly system?: System;
-  readonly store?: RunStore;
-  readonly owner?: string;
-};
-
 export type FixtureSystem = {
   readonly system: System;
   readonly policyOf: PolicyOf;
   readonly files: FakeFileSystem;
 };
 
-export type Harness = FixtureSystem & {
-  readonly engine: Engine;
-  readonly store: SqliteRunStore;
-  readonly file: string;
-  readonly reopen: () => SqliteRunStore;
+export type Opening = {
+  readonly scripts?: Readonly<Record<string, Script>>;
+  readonly changes?: Changes;
+  readonly toolCallsPerRound?: number;
+};
+
+export type OpenedRuns = FixtureSystem & {
+  readonly runs: Runs;
   readonly runner: FakeRunner;
   readonly clock: ReturnType<typeof fakeClock>;
-  readonly scrubber: SecretStore;
-  readonly freshEngine: (options?: FreshEngine) => Engine;
+  readonly database: string;
+  readonly createdBeforeRunner: readonly string[];
+  readonly sink: () => EventSink;
+  readonly reopen: (system?: System) => Promise<Runs>;
   readonly close: () => void;
 };
 
@@ -114,6 +121,17 @@ const defaultScripts: Readonly<Record<string, Script>> = {
   "store:scripts/erase.ts": (request) => finished({ id: textField(request.input, "id") ?? "" }),
   "store:scripts/remove.ts": (request) => finished(request.input),
 };
+
+export function crashingOnce(answered: Script): Script {
+  let calls = 0;
+  return (request) => {
+    calls += 1;
+    if (calls === 1) {
+      throw new Error("the process died");
+    }
+    return answered(request);
+  };
+}
 
 export function fakeRunner(overrides: Readonly<Record<string, Script>> = {}): FakeRunner {
   const scripts = { ...defaultScripts, ...overrides };
@@ -311,81 +329,121 @@ export async function fixtureScrubber(policyOf: PolicyOf): Promise<SecretStore> 
   return scrubber;
 }
 
-function kernelFile(file: string | undefined): KernelDb {
-  return file === undefined ? temporaryKernelDb() : { file, remove: () => undefined };
+function closedOnce(runs: Runs): Runs {
+  let closed = false;
+  return {
+    ...runs,
+    close: () => {
+      if (!closed) {
+        closed = true;
+        runs.close();
+      }
+    },
+  };
 }
 
-export async function harness(
-  options: {
-    readonly scripts?: Readonly<Record<string, Script>>;
-    readonly changes?: Changes;
-    readonly file?: string;
-  } = {},
-): Promise<Harness> {
-  const fixture = await fixtureSystem(options.changes);
-  const { system, policyOf, files } = fixture;
-  const kernelDb = kernelFile(options.file);
-  const opened: SqliteRunStore[] = [];
-  const reopen = (): SqliteRunStore => {
-    const store = new SqliteRunStore(kernelDb.file);
-    opened.push(store);
-    return store;
+function projectFolder(): { readonly project: string; readonly remove: () => void } {
+  const project = mkdtempSync(join(tmpdir(), "agentbay-runs-"));
+  mkdirSync(join(project, ".agentbay"));
+  const remove = (): void => {
+    rmSync(project, { recursive: true, force: true });
   };
-  const store = reopen();
+  return { project, remove };
+}
+
+export async function openedRuns(opening: Opening = {}): Promise<OpenedRuns> {
+  const { project, remove } = projectFolder();
+  const fixture = await fixtureSystem(opening.changes);
+  const { policyOf, files } = fixture;
   const scrubber = await fixtureScrubber(policyOf);
-  const runner = fakeRunner(options.scripts);
+  const folders = fakeFolders();
   const clock = fakeClock(startTime);
-  let engines = 0;
-  const freshEngine = (fresh: FreshEngine = {}): Engine => {
-    engines += 1;
-    return new Engine({
-      system: fresh.system ?? system,
-      store: fresh.store ?? store,
-      runner,
-      policyOf: fresh.system === undefined ? policyOf : policyOfSystem(fresh.system),
-      clock,
+  const runner = fakeRunner(opening.scripts);
+  const createdBeforeRunner: string[] = [];
+  const sinks: EventSink[] = [];
+  const opened: Runs[] = [];
+  const reopen = async (system: System = fixture.system): Promise<Runs> => {
+    const runs = await openRuns({
+      project,
+      folders,
       files,
+      clock,
+      system,
+      policyOf: system === fixture.system ? policyOf : policyOfSystem(system),
       scrubber,
-      owner: fresh.owner ?? `engine-${String(engines)}`,
-      newId: () => `run-${String(engines)}`,
+      toolCallsPerRound: opening.toolCallsPerRound ?? 200,
+      runner: (events) => {
+        createdBeforeRunner.push(...folders.created);
+        sinks.push(events);
+        return runner;
+      },
     });
+    const once = closedOnce(runs);
+    opened.push(once);
+    return once;
+  };
+  const runs = await reopen();
+  const sink = (): EventSink => {
+    const first = sinks[0];
+    assert.ok(first);
+    return first;
   };
   const close = (): void => {
     for (const each of opened) {
       each.close();
     }
-    kernelDb.remove();
+    remove();
   };
-  return {
-    ...fixture,
-    engine: freshEngine(),
-    store,
-    file: kernelDb.file,
-    reopen,
-    runner,
-    clock,
-    scrubber,
-    freshEngine,
-    close,
-  };
+  const database = join(project, ".agentbay/kernel.db");
+  return { ...fixture, runs, runner, clock, database, createdBeforeRunner, sink, reopen, close };
 }
 
-export function runOf(result: Outcome<RunView>): RunView {
+export function runOf(result: Outcome<Run>): Run {
   assert.ok(result.ok, result.ok ? "" : JSON.stringify(result.problems, null, 2));
   return result.value;
 }
 
-export function waitingOf(result: Outcome<RunView>): Waiting {
-  const run = runOf(result);
-  assert.equal(run.state.status, "waiting", JSON.stringify(run.state));
-  return run.state.waiting;
-}
-
-export function problemsOf(result: Outcome<RunView>): readonly string[] {
+export function problemsOf(result: Outcome<unknown>): readonly string[] {
   assert.ok(!result.ok, `expected a refusal, got ${JSON.stringify(result)}`);
   return result.problems.map((problem) => problem.message);
 }
 
-export async function eventKinds(store: RunStore, runId: string): Promise<readonly string[]> {
-  return (await store.readEvents(runId)).map((event) => event.kind);
+export function messagesOf(result: Outcome<unknown>): string {
+  return problemsOf(result).join(" ");
+}
+
+export function waitingOf(result: Outcome<Run>): Extract<Run["state"], { readonly status: "waiting" }>["waiting"] {
+  const state = runOf(result).state;
+  assert.ok(state.status === "waiting", JSON.stringify(state));
+  return state.waiting;
+}
+
+export function waitingTask(run: Run): Task {
+  const state = run.state;
+  assert.ok(state.status === "waiting" && state.waiting.reason === "skill", JSON.stringify(state));
+  return state.waiting.task;
+}
+
+export function tokenOf(run: Run): string {
+  const token = waitingTask(run).token;
+  assert.ok(token !== undefined, "the task carries no token");
+  return token;
+}
+
+export function spentAt(run: Run, stepKey: string): Spend {
+  const finishedAt = run.events.find(
+    (event) => event.kind === "step.finished" && textField(event.detail, "stepKey") === stepKey,
+  );
+  const spent = finishedAt === undefined ? undefined : fieldOf(finishedAt.detail, "spent");
+  assert.ok(spent !== undefined, `step ${stepKey} has no step.finished event with its spend`);
+  return {
+    items: numberField(spent, "items") ?? 0,
+    usd: numberField(spent, "usd") ?? 0,
+    tokens: numberField(spent, "tokens") ?? 0,
+    minutes: numberField(spent, "minutes") ?? 0,
+  };
+}
+
+export function eventKinds(run: Run): readonly string[] {
+  return run.events.map((event) => event.kind);
 }

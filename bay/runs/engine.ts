@@ -37,7 +37,7 @@ import { hasUndoRecords, runUndo } from "./undo.ts";
 import { eventOf, failed, schemaProblems, type Progress, type Services, type Walk } from "./walk.ts";
 import { runWorkflowSteps } from "./workflow-steps.ts";
 
-export type EngineOptions = {
+type EngineOptions = {
   readonly system: System;
   readonly store: RunStore;
   readonly runner: ScriptRunner;
@@ -49,18 +49,18 @@ export type EngineOptions = {
   readonly newId?: () => string;
 };
 
-export type WorkflowReference = {
+type WorkflowReference = {
   readonly mode: string;
   readonly path: string;
 };
 
-export type StartOptions = {
+type StartOptions = {
   readonly id?: string;
   readonly caller?: string;
   readonly within?: Budget;
 };
 
-export type SkillCall = {
+type SkillCall = {
   readonly runId: string;
   readonly stepKey: string;
   readonly reference: string;
@@ -68,7 +68,7 @@ export type SkillCall = {
   readonly caller?: string;
 };
 
-export type ResumeOptions = {
+type ResumeOptions = {
   readonly rerunUnfinished?: boolean;
 };
 

@@ -27,7 +27,7 @@ type UndoPlan = {
 
 type Classification = "undo" | "no-undo" | "delete" | "nothing";
 
-export type UndoOutcome = {
+type UndoOutcome = {
   readonly status: RunStatus;
   readonly spent: Spend;
 };

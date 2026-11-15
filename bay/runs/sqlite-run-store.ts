@@ -30,7 +30,7 @@ import { decodedStepDetail, stepDetailJson, stepKinds } from "./step-detail.ts";
 
 const defaultBusyMilliseconds = 3000;
 
-export type SqliteOptions = {
+type SqliteOptions = {
   readonly busyMilliseconds?: number;
 };
 

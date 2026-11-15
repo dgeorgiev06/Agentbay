@@ -7,7 +7,7 @@ import { skillTaskOf, startedSkillOf } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
 import { resolveCall, resolveOwnAction, type ActionTarget } from "../targets.ts";
 
-export type WaitingContext = {
+type WaitingContext = {
   readonly system: System;
   readonly policyOf: PolicyOf;
 };

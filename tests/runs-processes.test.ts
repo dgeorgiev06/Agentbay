@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
-import { harness, waitingOf } from "./engine-fixture.ts";
+import { openedRuns, runOf, waitingOf } from "./runs-fixture.ts";
 
 type Driver = {
   readonly child: ChildProcess;
@@ -13,7 +13,7 @@ type Driver = {
 };
 
 function startDriver(arguments_: readonly string[]): Driver {
-  const driver = join(import.meta.dirname, "race-driver.ts");
+  const driver = join(import.meta.dirname, "inside", "runs", "race-driver.ts");
   const child = spawn(process.execPath, [driver, ...arguments_], { stdio: ["ignore", "pipe", "ignore"] });
   let text = "";
   child.stdout.on("data", (chunk: Buffer) => {
@@ -42,30 +42,31 @@ test(
   "two OS processes race to advance one run in one kernel.db: one advances, one is refused",
   { timeout: 60_000 },
   async () => {
-    const { engine, file, reopen, close } = await harness({ changes: { config: { budget: { items: 1 } } } });
-    const folder = dirname(file);
+    const { runs, database, close } = await openedRuns({ changes: { config: { budget: { items: 1 } } } });
+    const folder = dirname(database);
     const marker = join(folder, "marker.txt");
     const go = join(folder, "go");
     writeFileSync(marker, "");
-    assert.equal(
-      waitingOf(await engine.startAction("notes.spend", { measure: "items" }, { id: "race" })).reason,
-      "budget",
-    );
-    const drivers = [startDriver([file, marker, go, "process-a"]), startDriver([file, marker, go, "process-b"])];
+    const started = await runs.start({ action: "notes.spend" }, { measure: "items" });
+    assert.equal(waitingOf(started).reason, "budget");
+    const id = runOf(started).id;
+    const drivers = [
+      startDriver([database, id, marker, go, "process-a"]),
+      startDriver([database, id, marker, go, "process-b"]),
+    ];
     await untilReady(drivers);
     writeFileSync(go, "");
     const codes = await Promise.all(drivers.map((driver) => driver.exited));
     assert.deepEqual(codes, [0, 0]);
     const results = drivers.map(resultOf);
     const advanced = results.filter((result) => JSON.stringify(result) === '{"ok":true,"status":"done"}');
-    const refused = results.filter((result) =>
-      /"ok":false.*(being advanced by process-|Another engine is writing run race)/.test(JSON.stringify(result)),
-    );
+    const refusal = new RegExp(`"ok":false.*(being advanced by process-|Another engine is writing run ${id})`);
+    const refused = results.filter((result) => refusal.test(JSON.stringify(result)));
     assert.deepEqual([advanced.length, refused.length], [1, 1], JSON.stringify(results));
     const ran = readFileSync(marker, "utf8").trim().split("\n");
     assert.equal(ran.length, 1, ran.join(" | "));
     assert.match(ran[0] ?? "", /^process-[ab] ran 2$/);
-    assert.equal((await reopen().readRun("race"))?.state.status, "done");
+    assert.equal(runOf(await runs.show(id)).state.status, "done");
     close();
   },
 );

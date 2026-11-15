@@ -26,7 +26,7 @@ import {
   writeProjectFile,
 } from "./broker-fixture.ts";
 import { bay } from "./cli-fixture.ts";
-import { harness, finished, problemsOf, runOf, secretValue } from "./engine-fixture.ts";
+import { finished, messagesOf, openedRuns, runOf, secretValue } from "./runs-fixture.ts";
 import { openProject, startedTask, testEnvironment } from "./kernel-fixture.ts";
 import { kit, makeProject, type Project } from "./project-fixture.ts";
 import { problemText } from "../bay/outcome.ts";
@@ -188,9 +188,9 @@ test("a database process whose end cannot be observed answers its waiting reques
   assert.match(result.message, /could not be watched/);
 });
 
-test("an engine whose runner throws returns a problem, releases the lock and can resume the run", async () => {
+test("a run whose runner throws returns a problem, releases the lock and can be resumed", async () => {
   let throwing = true;
-  const setup = await harness({
+  const setup = await openedRuns({
     scripts: {
       "notes:scripts/add-one.ts": (request) => {
         if (throwing) {
@@ -202,11 +202,12 @@ test("an engine whose runner throws returns a problem, releases the lock and can
     },
   });
   try {
-    const started = await setup.engine.startAction("notes.copy", { count: 1 });
-    const [problem] = problemsOf(started);
-    assert.match(problem ?? "", /stopped at an unexpected error: the runner broke on \[redacted:NOTES_TOKEN\]/);
+    const started = await setup.runs.start({ action: "notes.copy" }, { count: 1 });
+    assert.match(messagesOf(started), /stopped at an unexpected error: the runner broke on \[redacted:NOTES_TOKEN\]/);
+    const [run] = await setup.runs.list();
+    assert.ok(run?.status === "running");
     throwing = false;
-    const resumed = await setup.freshEngine().resume("run-1");
+    const resumed = await (await setup.reopen()).resume(run.id);
     assert.deepEqual(runOf(resumed).state, { status: "done", output: { count: 5 } });
   } finally {
     setup.close();

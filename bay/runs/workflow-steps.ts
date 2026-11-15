@@ -26,7 +26,7 @@ import {
   type Walk,
 } from "./walk.ts";
 
-export type WorkflowScope = {
+type WorkflowScope = {
   readonly mode: LoadedMode;
   readonly budget: BudgetFrame;
   readonly within: string;

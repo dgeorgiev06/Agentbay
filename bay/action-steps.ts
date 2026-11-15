@@ -1,8 +1,17 @@
 import { join } from "node:path/posix";
-import { charge, childFrame, frameRemaining, subtractSpend, type BudgetFrame } from "./budget.ts";
+import {
+  addSpend,
+  charge,
+  childFrame,
+  frameRemaining,
+  spendFromJson,
+  subtractSpend,
+  type BudgetFrame,
+} from "./budget.ts";
 import type {
   ActionCaller,
   Json,
+  Permissions,
   RunEvent,
   ScriptRequest,
   SkillTask,
@@ -11,7 +20,7 @@ import type {
   StepPlace,
   Tier,
 } from "./contracts.ts";
-import type { Step } from "./generated/mode.ts";
+import type { Budget, Step } from "./generated/mode.ts";
 import { fieldOf, numberField, textField, textsField, withFields } from "./json.ts";
 import type { StepRecord } from "./run-store.ts";
 import { parseSkill, type Problem } from "./spec.ts";
@@ -29,6 +38,7 @@ import {
   replayed,
   schemaProblems,
   startRecord,
+  stopGate,
   waiting,
   type ActionFrame,
   type Progress,
@@ -38,6 +48,8 @@ import {
 } from "./walk.ts";
 
 const maximumRounds = 3;
+
+const maximumScriptMilliseconds = 8 * 60_000;
 
 export type NestedAction = {
   readonly key: string;
@@ -167,14 +179,28 @@ function actionCaller(walk: Walk, frame: ActionFrame, scriptKey: string): Action
   };
 }
 
+function actionPermissions(walk: Walk, frame: ActionFrame): Permissions {
+  return { ...walk.services.policyOf(frame.mode.manifest.name), effects: frame.action.effects };
+}
+
+function timeLimitOf(remaining: Budget): number {
+  const minutes = remaining.minutes;
+  if (minutes === undefined) {
+    return maximumScriptMilliseconds;
+  }
+  return Math.max(0, Math.min(maximumScriptMilliseconds, minutes * 60_000));
+}
+
 function scriptRequest(walk: Walk, frame: ActionFrame, leaf: ScriptLeaf): ScriptRequest {
+  const remaining = frameRemaining(frame.budget);
   return {
     place: leaf.place,
     script: leaf.script,
     input: leaf.input,
-    permissions: walk.services.policyOf(frame.mode.manifest.name),
+    permissions: actionPermissions(walk, frame),
     settings: frame.mode.settings,
-    remaining: frameRemaining(frame.budget),
+    remaining,
+    timeLimitMilliseconds: timeLimitOf(remaining),
     call: actionCaller(walk, frame, leaf.key),
   };
 }
@@ -190,7 +216,7 @@ async function runScript(walk: Walk, frame: ActionFrame, leaf: ScriptLeaf): Prom
   if (replay !== undefined) {
     return replay;
   }
-  const blocked = gate(walk, frame.budget, leaf.key);
+  const blocked = leaf.kind === "check" ? stopGate(walk) : gate(walk, frame.budget, leaf.key);
   if (blocked !== undefined) {
     return blocked;
   }
@@ -234,7 +260,7 @@ function skillWaiting(walk: Walk, frame: ActionFrame, at: { skill: SkillStep; re
     tier: skill.tier,
     input: record.input,
     outputSchema: textsField(record.detail, "schemas")[0] ?? "",
-    permissions: walk.services.policyOf(frame.mode.manifest.name),
+    permissions: actionPermissions(walk, frame),
     round,
     feedback: textsField(record.detail, "feedback"),
   };
@@ -248,7 +274,7 @@ async function startSkill(walk: Walk, frame: ActionFrame, skill: SkillStep): Pro
   }
   const detail = { mode: frame.mode.manifest.name, schemas: [...schemas], round: 1, feedback: [] };
   const record = await startRecord(walk, { key: skill.key, kind: "skill", input: skill.input, detail });
-  return skillWaiting(walk, frame, { skill: skill, record: record });
+  return skillWaiting(walk, frame, { skill, record });
 }
 
 function chargeEarlierRounds(walk: Walk, frame: ActionFrame, at: { skill: SkillStep; round: number }): void {
@@ -276,11 +302,17 @@ async function runSkill(walk: Walk, frame: ActionFrame, skill: SkillStep): Promi
   const before = frame.budget.spent;
   const round = numberField(record.detail, "round") ?? 1;
   chargeEarlierRounds(walk, frame, { skill, round });
+  charge(frame.budget, spendFromJson(fieldOf(record.detail, "earlierSpent") ?? {}));
   const submitted = fieldOf(record.detail, "submitted");
   if (submitted === undefined) {
-    return skillWaiting(walk, frame, { skill: skill, record: record });
+    return skillWaiting(walk, frame, { skill, record });
   }
+  charge(frame.budget, submittedSpent(record));
   return runChecks(walk, frame, { skill, record, round, submitted, before });
+}
+
+function submittedSpent(record: StepRecord): Spend {
+  return spendFromJson(fieldOf(record.detail, "submittedSpent") ?? {});
 }
 
 function verdictOf(check: string, progress: Settled): Verdict {
@@ -305,7 +337,8 @@ async function runChecks(walk: Walk, frame: ActionFrame, attempt: Attempt): Prom
   const feedback: string[] = [];
   for (const [index, check] of attempt.skill.checks.entries()) {
     const key = checkKey(attempt.skill.key, attempt.round, index);
-    const leaf = { key, kind: "check" as const, script: check, input: attempt.submitted, place: attempt.skill.place };
+    const place = { ...attempt.skill.place, stepKey: key };
+    const leaf = { key, kind: "check" as const, script: check, input: attempt.submitted, place };
     const progress = await runScript(walk, frame, leaf);
     if (progress.kind === "waiting") {
       return progress;
@@ -338,9 +371,10 @@ async function concludeRound(
       `the last round: ${feedback.join(" ")}`;
     return endRecord(walk, { key: attempt.skill.key, settled: failed(reason), spent });
   }
-  const detail = withFields(attempt.record.detail, { round: attempt.round + 1, feedback: [...feedback] }, [
-    "submitted",
-  ]);
+  const earlier = spendFromJson(fieldOf(attempt.record.detail, "earlierSpent") ?? {});
+  const earlierSpent = addSpend(earlier, submittedSpent(attempt.record));
+  const fields = { round: attempt.round + 1, feedback: [...feedback], earlierSpent };
+  const detail = withFields(attempt.record.detail, fields, ["submitted", "submittedSpent"]);
   const record = await changeDetail(walk, attempt.skill.key, detail);
   return skillWaiting(walk, frame, { skill: attempt.skill, record: record });
 }
@@ -350,6 +384,10 @@ export async function runNestedAction(walk: Walk, parent: BudgetFrame, nested: N
   const replay = replayed(parent, record);
   if (replay !== undefined) {
     return replay;
+  }
+  const blocked = record === undefined ? gate(walk, parent, nested.key) : undefined;
+  if (blocked !== undefined) {
+    return blocked;
   }
   const before = parent.spent;
   const input = record?.input ?? nested.input;
@@ -397,6 +435,7 @@ function runActionStep(walk: Walk, frame: ActionFrame, at: ActionStepAt): Promis
     mode: frame.mode.manifest.name,
     action: frame.name,
     stepIndex: at.index,
+    stepKey: key,
   };
   switch (step.kind) {
     case "script":

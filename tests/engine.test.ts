@@ -15,6 +15,7 @@ import {
   startTime,
   storeKinds,
   waitingOf,
+  answer,
 } from "./engine-fixture.ts";
 
 for (const storeKind of storeKinds) {
@@ -41,7 +42,7 @@ for (const storeKind of storeKinds) {
       );
       const [firstCall] = runner.calls;
       assert.ok(firstCall);
-      assert.deepEqual(firstCall.place, { runId: run.id, mode: "notes", action: "copy", stepIndex: 0 });
+      assert.deepEqual(firstCall.place, { runId: run.id, mode: "notes", action: "copy", stepIndex: 0, stepKey: "0" });
       assert.deepEqual(firstCall.settings, { greeting: "hello" });
       close();
     });
@@ -72,8 +73,9 @@ for (const storeKind of storeKinds) {
       assert.deepEqual(run.state, { status: "done", output: { id: "n1" } });
       const [put] = runner.calls;
       assert.ok(put);
-      assert.deepEqual(put.place, { runId: run.id, mode: "store", action: "put", stepIndex: 0 });
-      assert.deepEqual(put.permissions, fakePolicy("store"));
+      assert.deepEqual(put.place, { runId: run.id, mode: "store", action: "put", stepIndex: 0, stepKey: "0/0" });
+      assert.deepEqual(put.permissions, { ...fakePolicy("store"), effects: ["write"] });
+      assert.equal(put.timeLimitMilliseconds, 8 * 60_000);
       assert.deepEqual(put.settings, {});
       assert.deepEqual(
         run.steps.map((step) => [step.key, step.kind, step.status]),
@@ -188,29 +190,32 @@ for (const storeKind of storeKinds) {
         reason: "skill",
         stepKey: "0#1",
         task: {
-          place: { runId: id, mode: "notes", action: "draft-and-store", stepIndex: 0 },
+          place: { runId: id, mode: "notes", action: "draft-and-store", stepIndex: 0, stepKey: "0" },
           skill: "skills/draft",
           tier: "fast",
           input: { topic: "staking" },
           outputSchema: "schemas/draft.json",
-          permissions: fakePolicy("notes"),
+          permissions: { ...fakePolicy("notes"), effects: ["read", "write"] },
           round: 1,
           feedback: [],
         },
       });
-      const run = runOf(await engine.submit(id, "0#1", { id: "d1", text: "a draft" }));
+      const run = runOf(await engine.submit(id, "0#1", answer({ id: "d1", text: "a draft" })));
       assert.deepEqual(run.state, { status: "done", output: { id: "d1" } });
-      assert.match(problemsOf(await engine.submit(id, "0#1", { id: "d1", text: "again" }))[0] ?? "", /has ended/);
+      assert.match(
+        problemsOf(await engine.submit(id, "0#1", answer({ id: "d1", text: "again" })))[0] ?? "",
+        /has ended/,
+      );
       close();
     });
 
     test("a submission that breaks the skill's output schema is refused and the round stays open", async () => {
       const { engine, store, close } = await harness({ storeKind });
       const id = runOf(await engine.startAction("notes.draft-and-store", {})).id;
-      const problems = problemsOf(await engine.submit(id, "0#1", { id: "d1", text: "" }));
+      const problems = problemsOf(await engine.submit(id, "0#1", answer({ id: "d1", text: "" })));
       assert.deepEqual(problems, ["output.text must not be empty."]);
       assert.deepEqual((await store.readRun(id))?.state, { status: "waiting", reason: "skill", stepKey: "0#1" });
-      assert.equal(runOf(await engine.submit(id, "0#1", { id: "d1", text: "fine" })).state.status, "done");
+      assert.equal(runOf(await engine.submit(id, "0#1", answer({ id: "d1", text: "fine" }))).state.status, "done");
       close();
     });
 
@@ -219,25 +224,28 @@ for (const storeKind of storeKinds) {
       const id = runOf(await engine.startAction("notes.draft", {})).id;
       const before = await store.readRun(id);
       for (const key of ["1#1", "0#2", "0", "#1"]) {
-        assert.match(problemsOf(await engine.submit(id, key, { text: "long enough text" }))[0] ?? "", /not waiting/);
+        assert.match(
+          problemsOf(await engine.submit(id, key, answer({ text: "long enough text" })))[0] ?? "",
+          /not waiting/,
+        );
       }
       assert.deepEqual(await store.readRun(id), before);
       assert.deepEqual(runner.calls, []);
-      assert.match(problemsOf(await engine.submit("nobody", "0#1", {}))[0] ?? "", /There is no run nobody/);
+      assert.match(problemsOf(await engine.submit("nobody", "0#1", answer({})))[0] ?? "", /There is no run nobody/);
       close();
     });
 
     test("a failed check sends the skill back with feedback, and a passing round 2 finishes it", async () => {
       const { engine, runner, close } = await harness({ storeKind });
       const id = runOf(await engine.startAction("notes.draft", { topic: "staking" })).id;
-      const second = waitingOf(await engine.submit(id, "0#1", { text: "short" }));
+      const second = waitingOf(await engine.submit(id, "0#1", answer({ text: "short" })));
       assert.equal(second.reason, "skill");
       assert.equal(second.stepKey, "0#2");
       assert.equal(second.task.round, 2);
       assert.deepEqual(second.task.feedback, ["too short: short"]);
       assert.deepEqual(second.task.input, { topic: "staking" });
-      assert.match(problemsOf(await engine.submit(id, "0#1", { text: "short" }))[0] ?? "", /not waiting/);
-      const run = runOf(await engine.submit(id, "0#2", { text: "long enough now" }));
+      assert.match(problemsOf(await engine.submit(id, "0#1", answer({ text: "short" })))[0] ?? "", /not waiting/);
+      const run = runOf(await engine.submit(id, "0#2", answer({ text: "long enough now" })));
       assert.deepEqual(run.state, { status: "done", output: { text: "long enough now" } });
       assert.deepEqual(
         runner.calls.map((call) => [call.script, call.input]),
@@ -252,10 +260,10 @@ for (const storeKind of storeKinds) {
     test("a check that still fails in round 3 fails the run", async () => {
       const { engine, close } = await harness({ storeKind });
       const id = runOf(await engine.startAction("notes.draft", {})).id;
-      waitingOf(await engine.submit(id, "0#1", { text: "one" }));
-      const third = waitingOf(await engine.submit(id, "0#2", { text: "two" }));
+      waitingOf(await engine.submit(id, "0#1", answer({ text: "one" })));
+      const third = waitingOf(await engine.submit(id, "0#2", answer({ text: "two" })));
       assert.equal(third.stepKey, "0#3");
-      const run = runOf(await engine.submit(id, "0#3", { text: "three" }));
+      const run = runOf(await engine.submit(id, "0#3", answer({ text: "three" })));
       assert.equal(run.state.status, "failed");
       assert.match(run.state.reason, /failed its checks in round 3, the last round: too short: three/);
       close();
@@ -265,7 +273,7 @@ for (const storeKind of storeKinds) {
       const scripts = { "notes:scripts/long-enough.ts": () => finished({ verdict: "fine" }) };
       const { engine, close } = await harness({ storeKind, scripts });
       const id = runOf(await engine.startAction("notes.draft", {})).id;
-      const run = runOf(await engine.submit(id, "0#1", { text: "anything at all" }));
+      const run = runOf(await engine.submit(id, "0#1", answer({ text: "anything at all" })));
       assert.ok(run.state.status === "failed");
       assert.match(run.state.reason, /returned neither/);
       close();
@@ -314,5 +322,61 @@ test("the run's clock time is when its events happen", async () => {
   const id = runOf(await engine.startAction("notes.copy", { count: 1 })).id;
   const events = await store.readEvents(id);
   assert.ok(events.every((event) => event.at === startTime.toISOString()));
+  close();
+});
+
+test("a skill's reported spend is charged; over the budget, the run waits right after the skill", async () => {
+  const { engine, runner, close } = await harness({ changes: { config: { budget: { tokens: 100 } } } });
+  const id = runOf(await engine.startAction("notes.draft-and-store", {})).id;
+  const waiting = waitingOf(await engine.submit(id, "0#1", answer({ id: "d1", text: "draft" }, { tokens: 150 })));
+  assert.deepEqual(waiting, { reason: "budget", stepKey: "1", overrun: { measure: "tokens", limit: 100, spent: 150 } });
+  assert.deepEqual(runner.calls, []);
+  const run = runOf(await engine.extendBudget(id, { tokens: 100 }));
+  assert.equal(run.state.status, "done");
+  assert.equal(run.spent.tokens, 150);
+  const refused = await engine.submit(id, "0#1", answer({}, { usd: -1 }));
+  assert.match(problemsOf(refused)[0] ?? "", /has ended/);
+  close();
+});
+
+test("the spend of every round of a skill counts, and a negative spend is refused", async () => {
+  const { engine, close } = await harness();
+  const id = runOf(await engine.startAction("notes.draft", {})).id;
+  assert.match(problemsOf(await engine.submit(id, "0#1", answer({ text: "x" }, { usd: -1 })))[0] ?? "", /not valid/);
+  waitingOf(await engine.submit(id, "0#1", answer({ text: "short" }, { tokens: 10 })));
+  const run = runOf(await engine.submit(id, "0#2", answer({ text: "long enough now" }, { tokens: 20 })));
+  assert.equal(run.state.status, "done");
+  assert.equal(run.spent.tokens, 30);
+  assert.ok(run.steps[0]?.status === "finished");
+  assert.equal(run.steps[0].spent.tokens, 30);
+  close();
+});
+
+test("a script's time limit is the smaller of eight minutes and the minutes left", async () => {
+  const { engine, runner, close } = await harness({ changes: { config: { budget: { minutes: 3 } } } });
+  runOf(await engine.startAction("notes.spend", { measure: "minutes" }));
+  assert.deepEqual(
+    runner.calls.map((call) => call.timeLimitMilliseconds),
+    [180_000, 120_000, 60_000],
+  );
+  close();
+});
+
+test("a script that calls an action is charged once: its own spend plus the call's, from the call's records", async () => {
+  const scripts = {
+    "notes:scripts/log.ts": async (request: ScriptRequest) => {
+      await request.call("items-store.put", { id: "inner" });
+      return finished({}, { items: 1 });
+    },
+  };
+  const { engine, close } = await harness({ scripts });
+  const run = runOf(await engine.startAction("notes.log", {}));
+  assert.equal(run.spent.items, 3);
+  const spentOf = (key: string): number => {
+    const step = run.steps.find((candidate) => candidate.key === key);
+    assert.ok(step?.status === "finished");
+    return step.spent.items;
+  };
+  assert.deepEqual([spentOf("0"), spentOf("0.call0"), spentOf("0.call0/0")], [3, 2, 2]);
   close();
 });

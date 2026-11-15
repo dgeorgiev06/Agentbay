@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Json, Permissions, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "../bay/contracts.ts";
+import type {
+  Json,
+  Permissions,
+  ScriptRequest,
+  ScriptRunner,
+  Spend,
+  StepOutcome,
+  Submission,
+} from "../bay/contracts.ts";
 import { Engine } from "../bay/engine.ts";
 import type { Config } from "../bay/generated/config.ts";
 import type { Interface } from "../bay/generated/interface.ts";
@@ -52,6 +60,10 @@ const noSpend: Spend = { items: 0, usd: 0, tokens: 0, minutes: 0 };
 
 export function finished(output: Json, spent: Partial<Spend> = {}): StepOutcome {
   return { status: "done", output, spent: { ...noSpend, ...spent } };
+}
+
+export function answer(output: Json, spent: Partial<Spend> = {}): Submission {
+  return { output, spent: { ...noSpend, ...spent } };
 }
 
 export function failure(reason: string): StepOutcome {
@@ -104,6 +116,7 @@ export function fakePolicy(mode: string): Permissions {
     mode,
     modeFolder: `components/${mode}`,
     databaseFile: `.agentbay/data/${mode}.db`,
+    migrationsFolder: `components/${mode}/migrations`,
     readPaths: [],
     writePaths: [],
     secrets: [],

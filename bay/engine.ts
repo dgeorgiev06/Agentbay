@@ -9,7 +9,7 @@ import {
   smallestBudget,
   type BudgetFrame,
 } from "./budget.ts";
-import type { Json, PolicyOf, RunEvent, ScriptRunner, Spend } from "./contracts.ts";
+import type { Json, PolicyOf, RunEvent, ScriptRunner, Spend, Submission } from "./contracts.ts";
 import type { Budget } from "./generated/mode.ts";
 import { byteSize, fieldOf, numberField, textField, toJson, withFields } from "./json.ts";
 import type { Clock, FileSystem } from "./ports.ts";
@@ -316,17 +316,22 @@ export class Engine {
     return this.#start({ target: { kind: "workflow", mode, name: path }, input: triggerInput, limit }, options);
   }
 
-  submit(runId: string, stepKey: string, output: Json): Promise<EngineResult> {
+  submit(runId: string, stepKey: string, submission: Submission): Promise<EngineResult> {
     return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
       const found = waitingSkill(run, stepKey);
       if ("refused" in found) {
         return found.refused;
       }
-      const problems = await submissionProblems(this.#services, found.record, output);
+      const spendProblems = budgetProblems(submission.spent);
+      if (spendProblems.length > 0) {
+        return refusal(run.id, { message: `The submission's spend is not valid: ${spendProblems.join(" ")}` });
+      }
+      const problems = await submissionProblems(this.#services, found.record, submission.output);
       if (problems.length > 0) {
         return { ok: false, problems };
       }
-      const change = { key: found.record.key, detail: withFields(found.record.detail, { submitted: output }) };
+      const fields = { submitted: submission.output, submittedSpent: submission.spent };
+      const change = { key: found.record.key, detail: withFields(found.record.detail, fields) };
       await this.#services.store.saveStepDetail(writer, { ...change, at: now.toISOString() }, []);
       return this.#continue(writer, { now, cause: "submit", rerunUnfinished: false }, {});
     });

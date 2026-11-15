@@ -15,6 +15,7 @@ import {
   waitingOf,
   type FakeRunner,
   type Script,
+  answer,
 } from "./engine-fixture.ts";
 import { MemoryRunStore } from "./memory-run-store.ts";
 
@@ -234,7 +235,7 @@ test("one representative run emits every event kind, in order, with ids and size
   const { engine, store, close } = await harness({ changes });
   const id = runOf(await engine.startWorkflow({ mode: "notes", path: "workflows/flow.yaml" }, "staking")).id;
   assert.equal(
-    waitingOf(await engine.submit(id, "draft/0#1", { id: "d1", text: "PRIVATE-DRAFT-BODY" })).reason,
+    waitingOf(await engine.submit(id, "draft/0#1", answer({ id: "d1", text: "PRIVATE-DRAFT-BODY" }))).reason,
     "budget",
   );
   const approval = waitingOf(await engine.extendBudget(id, { items: 5 }));
@@ -287,13 +288,16 @@ test("a crash right after a submission is saved runs its checks on resume and re
   const { engine, runner, clock, freshEngine } = await harness({ store: inner });
   const id = runOf(await engine.startAction("notes.draft", {}, { id: "draft" })).id;
   const crashing = crashingStore(inner, { at: 2, when: "after" });
-  await assert.rejects(freshEngine({ store: crashing }).submit(id, "0#1", { text: "long enough text" }), /simulated/);
+  await assert.rejects(
+    freshEngine({ store: crashing }).submit(id, "0#1", answer({ text: "long enough text" })),
+    /simulated/,
+  );
   assert.deepEqual(crashing.operations, ["acquire", "saveStepDetail"]);
   assert.deepEqual(runner.calls, []);
   clock.advance(11 * 60_000);
   const resumer = freshEngine({ store: inner });
   assert.match(
-    problemsOf(await resumer.submit(id, "0#1", { text: "another text" }))[0] ?? "",
+    problemsOf(await resumer.submit(id, "0#1", answer({ text: "another text" })))[0] ?? "",
     /already has a submission/,
   );
   assert.deepEqual(runOf(await resumer.resume(id)).state, { status: "done", output: { text: "long enough text" } });

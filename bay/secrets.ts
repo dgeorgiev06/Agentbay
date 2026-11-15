@@ -41,7 +41,8 @@ function base64Cores(value: string): readonly string[] {
 function encodedForms(value: string): readonly string[] {
   const formEncoded = new URLSearchParams({ value }).toString().slice("value=".length);
   const jsonEscaped = JSON.stringify(value).slice(1, -1);
-  return [value, encodeURIComponent(value), formEncoded, jsonEscaped, ...base64Cores(value)];
+  const hex = Buffer.from(value, "utf8").toString("hex");
+  return [value, encodeURIComponent(value), formEncoded, jsonEscaped, hex, hex.toUpperCase(), ...base64Cores(value)];
 }
 
 export class SecretStore {
@@ -94,11 +95,15 @@ export class SecretStore {
   }
 
   redact(text: string): string {
+    return scrubSecretPatterns(this.redactHandedOut(text));
+  }
+
+  redactHandedOut(text: string): string {
     let redacted = text;
     for (const form of this.#formsLongestFirst()) {
       redacted = redacted.replaceAll(form.text, `[redacted:${form.name}]`);
     }
-    return scrubSecretPatterns(redacted);
+    return redacted;
   }
 
   redactJson(value: Json): Json {

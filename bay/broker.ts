@@ -49,7 +49,7 @@ const defaultBrokerLimits: BrokerLimits = {
 
 const migrationName = /^\d{4}-[^/]+\.sql$/;
 
-const brokerKinds: readonly string[] = ["refused", "http"];
+const brokerKinds: readonly string[] = ["refused", "http", "redacted"];
 
 const isRows = (value: Json): value is readonly Row[] =>
   Array.isArray(value) && value.every((row: Json) => isJsonRecord(row));
@@ -186,7 +186,15 @@ export class Broker {
     if (!checked.ok) {
       return this.#settle(checked);
     }
-    await this.#options.files.writeAtomic(checked.value, text);
+    const redacted = this.#options.secrets.redactHandedOut(text);
+    if (redacted !== text) {
+      await this.#append("redacted", {
+        step: this.#options.place.stepKey,
+        file: checked.value,
+        message: "A secret value handed out to this step was removed from the text before the file was written.",
+      });
+    }
+    await this.#options.files.writeAtomic(checked.value, redacted);
     return this.#settle(granted(null));
   }
 

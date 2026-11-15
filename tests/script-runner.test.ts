@@ -557,6 +557,39 @@ test("a script that returns or prints a secret value has it redacted", async () 
   });
 });
 
+test("a secret a script writes through context.files.write is redacted in the file, and the event names the file", async () => {
+  await withScriptProject(async (root) => {
+    const run = await attempt(
+      root,
+      [
+        "const token = await context.secrets.get('API_TOKEN');",
+        "const value = token.ok ? token.value : '';",
+        "const hex = Buffer.from(value).toString('hex');",
+        "return await context.files.write('notes-out/leak.txt', `raw ${value} hex ${hex} b64 ${btoa(value)}`);",
+      ].join("\n"),
+    );
+    assert.deepEqual(outputOf(run), { ok: true, value: null });
+    const written = await readFile(join(root, "notes-out/leak.txt"), "utf8");
+    assert.equal(written, "raw [redacted:API_TOKEN] hex [redacted:API_TOKEN] b64 [redacted:API_TOKEN]");
+    const redacted = run.events.events.filter((event) => event.kind === "redacted");
+    assert.equal(redacted.length, 1);
+    assert.match(JSON.stringify(redacted[0]?.detail), /notes-out\/leak\.txt/);
+    assert.doesNotMatch(JSON.stringify(run.events.events), new RegExp(madeUpToken));
+  });
+});
+
+test("a file written without a secret value is written as given, with no redacted event", async () => {
+  await withScriptProject(async (root) => {
+    const run = await attempt(
+      root,
+      "return await context.files.write('notes-out/plain.txt', 'password: see the README');",
+    );
+    assert.deepEqual(outputOf(run), { ok: true, value: null });
+    assert.equal(await readFile(join(root, "notes-out/plain.txt"), "utf8"), "password: see the README");
+    assert.equal(run.events.events.filter((event) => event.kind === "redacted").length, 0);
+  });
+});
+
 test("through the broker, a script is refused an undeclared host, http and a redirect elsewhere", async () => {
   await withScriptProject(async (root) => {
     const run = await attempt(

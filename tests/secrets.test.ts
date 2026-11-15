@@ -68,20 +68,25 @@ test("the keychain is not asked off macOS", async () => {
   failureOf(await store.get("MAIL_TOKEN", permissions));
 });
 
-test("a value handed out is redacted raw, in base64, in URL-safe base64 and URL-encoded", async () => {
+test("a value handed out is redacted raw, in base64, URL-safe base64, URL-encoded and lower or upper hex", async () => {
   const value = "made+up/secret value?&=42";
   const store = storeWith({ AGENTBAY_SECRET_MAIL_TOKEN: value });
   await store.get("MAIL_TOKEN", permissions);
   const base64 = Buffer.from(value).toString("base64");
   const urlSafe = Buffer.from(value).toString("base64url");
   const basicAuth = Buffer.from(`someone:${value}`).toString("base64");
-  const text = [value, base64, urlSafe, encodeURIComponent(value), `Basic ${basicAuth}`].join(" | ");
+  const hex = Buffer.from(value).toString("hex");
+  const text = [value, base64, urlSafe, encodeURIComponent(value), `Basic ${basicAuth}`, hex, hex.toUpperCase()].join(
+    " | ",
+  );
   const redacted = store.redact(text);
   assert.doesNotMatch(redacted, /made\+up/);
   assert.ok(!redacted.includes(base64));
   assert.ok(!redacted.includes(urlSafe));
   assert.ok(!redacted.includes(encodeURIComponent(value)));
   assert.ok(!redacted.includes(basicAuth));
+  assert.ok(!redacted.toLowerCase().includes(hex));
+  assert.equal(redacted.split("[redacted:MAIL_TOKEN]").length - 1, 7);
   assert.match(redacted, /^\[redacted:MAIL_TOKEN\] \| \[redacted:MAIL_TOKEN\]/);
 });
 

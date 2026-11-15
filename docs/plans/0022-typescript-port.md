@@ -379,3 +379,94 @@ Found while preparing stage 5: the project config binds each interface to ONE mo
    Every place that resolves an interface resolves it FOR the mode that asks: the registry (problems, cycles, the active set), the engine (`call` steps, workflow steps, script calls), the `call_action` tool (the skill's mode), `bay check`, `bay build` and `bay config`. A requirer with no entry and no default is the existing "not bound" problem, naming the requirer.
 2. **Monthly cap.** `items-store@1` gains `allowance` (effects read): given a source, it answers how much may still be spent on it this calendar month, from the store's setting `monthlyUsd` (a map from source to dollars; a source without an entry has no cap) and the spend the store has recorded. A briefing's `sync` asks before every fetch and stops, with a reason in its output, when the next page could exceed what is left. `feed-briefing` does this now; `mail-briefing` will in stage 5.
 3. **Owner-only databases.** Every database file the kernel creates (`kernel.db`, each mode's database and partitions, their `-wal` and `-shm` files where the platform allows) is created readable and writable by the owner only, and the `.agentbay/` folder likewise.
+
+## Slice K9: fix what the independent evaluation found (reviewer, 2026-11-15)
+
+An independent Fable agent evaluated the integration branch at d9c8af7 without having seen the build. Its report is `docs/research/2026-11-15-quality-evaluation.md`. It verified three defects the slice reviews missed and graded interfaces C+ and size C. The owner decided on 2026-11-15 to fix the structural findings now, before more modes are built. K9 runs after K8 and before the forge mode and stage 5. Finding numbers below are the report's.
+
+**Part 1, defects (first, each with a test that fails before the fix)**
+
+- F1: an error inside a broker request must become a refused answer, never an unobserved promise; no run stays locked.
+- F2 and F6: effects are enforced for every resource, by the broker, from the action being run: file writes and `events` need `write`; `http` needs `network`; a reported spend needs `spend`; a `delete` statement or file removal needs `delete`. `Permissions` carries the mode's grants and the action's effects as two separately named things.
+- F3 and F9: `bay check` and the kernel load the system through one function and `bay check` runs the policy, so a manifest `bay check` passes is one `bay call` loads.
+- F16: the import scan is replaced by a tokenising scan of import and export specifiers that the listed dodges do not pass, or by the TypeScript-free parser that is smallest and exact; state its limits in a test.
+- F17: the kit has a checked-in config for its own development and a test runs the real `bay check` on the real kit.
+- The three conditions the evaluator's bug injection found untested get tests.
+
+**Part 2, structure (each makes the code smaller and plainer; no behaviour change except where stated)**
+
+- F4: the engine's step state becomes typed. One module owns the step key: a `StepKey` value with a constructor and a parser, used everywhere a key is built or read; no other file splits or joins keys by hand. `StepRecord.detail` becomes a discriminated union per step kind; no field is read by name from a JSON bag.
+- F5: one result shape. `Outcome<T>` (`ok` with a value, or problems) is the only "worked or did not" type in the kernel; `StepOutcome` stays for the script contract; the others are removed with the code that converts between them.
+- F12: the broker's refusal logging happens in one wrapper every method passes through, by construction.
+- F13: the small leaks past `ports.ts` go through ports.
+- F14: scripts get a transaction (`context.db.transaction`) and typed readers for JSON columns; `context.now()` arrives with K8.
+- F15: the statement classifier that runs a statement on an empty database is replaced by the plain design the evaluator names, or kept with a test that pins what it guesses.
+- F18 and F19: the store's scripts stop pretending to be async where they are not; guards check what their types say.
+- F10 and F11: `Workflow.trigger` is removed from the schema until something reads it; manifests, interfaces, workflows and the config carry `agentbay: 5`, and a file without it is refused with a sentence.
+- F8: the item envelope is defined once and the interface schemas refer to it; the registry learns to follow a `$ref` to a file in the same interface folder.
+
+**Part 3, what a maintainer must be told (the comment ban stays; the knowledge goes where it will be read)**
+
+- F7 and F20: `bay/README.md` explains, briefly: the layers and which may import which; the step-key grammar; the three wire protocols (script host, database child, tool server) with one example message each; what the preload blocks and why each entry is there; and the lists of things that must change together. A test fails when a kernel file is not named in that README's layer table.
+- The root `README.md` is rewritten now, not at stage 7: it described agentbay 4.
+
+**Measure:** the kernel's line count before and after, reported, with no target. The evaluator estimated 2,000 to 2,500 lines could go while improving clarity.
+
+## The forge mode: how agentbay builds things (reviewer's design, 2026-11-15)
+
+The owner asked for a best-in-class mode for building things, with stages for proposals, technical plans, tasks, implementation and reviews, done by different agents and models, and shaped by what this build and its evaluation taught. It replaces the plan's slice M6 and is built after K9, before stage 5, so the remaining modes are built WITH it.
+
+**What this build taught, and where forge puts each lesson**
+
+| Lesson | In forge |
+|---|---|
+| A reviewer who watched the build shares its blind spots | Review and evaluation are separate skills, run by a different model than the builder, each in a fresh agent that is given the diff and the spec and nothing of the builder's reasoning |
+| Passing tests proved less than they seemed | A `mutation` check injects bugs into the changed lines and fails the task when the tests do not notice |
+| The worst defect was found only by using the thing | A `first-session` check runs the real commands in a fresh project outside the kit; every task that changes a command or a mode adds to it |
+| Parallel slices drifted where they met | The plan must name the contract file between tasks and who owns every file; a task may not edit a file it does not own |
+| "Done" was claimed before it was shown | A skill's output is evidence: the last lines of each check, never a statement that it passed; the checks are run again by the engine, not trusted from the agent |
+| Things were dropped without anyone deciding | Every task that replaces something lists each old behaviour as kept, changed or dropped; a drop the proposal does not name goes to the owner |
+| A size target fought readability | Limits are warnings for the reviewer; readability rules are errors |
+| The owner was asked the same thing in different words | Every owner decision is an `approval` step with the choices spelled out and a recommendation |
+
+**The workflow `build`**
+
+| Stage | Step | Who | Model tier | Output |
+|---|---|---|---|---|
+| 1 Brief | script | kernel | - | The request, the repository's state, `bay check` results, open findings |
+| 2 Proposal | skill `propose` | proposer | deep | What and why in the owner's words, what changes for the owner, costs and risks stated plainly, choices with a recommendation, out of scope |
+| | approval | owner | - | The proposal and its choices |
+| 3 Plan | skill `plan` | planner, a fresh agent | deep | Read against the code: what the proposal got wrong, spikes for unknowns, tasks with owned files, contracts between tasks, a definition of done per task, the order |
+| | skill `challenge` | challenger, a different model | deep | An adversarial read of the plan: what is missing, what will collide, what cannot be verified; the planner answers once |
+| | approval | owner | - | The plan |
+| 4 Tasks | script | kernel | - | One task record per plan task: files owned, depends on, checks to run |
+| 5 Build, per task | skill `build` | builder | balanced | Code and tests; tests first for anything in a safety list; the kept, changed, dropped list |
+| | checks, by script | kernel | - | types, lint, format, dead code, tests, `bay check`, changed files within the task's own, mutation, first session |
+| | check, by skill `review` | reviewer, a different model, fresh | deep | A verdict per definition-of-done item with evidence; reads the diff against the plan; may run the checks, may not edit |
+| | | | | A failed check or review sends the task back to the builder with the feedback. Two rounds, then the owner |
+| 6 Integrate | script | kernel | - | Merge the task, run every check on the whole |
+| 7 Evaluate | skill `evaluate` | evaluator, fresh, sees no history | deep | Grades and ranked findings with file and line; runs at the end and at any milestone the plan names |
+| | approval | owner | - | The findings: fix now, later, or accept |
+| 8 Release | script | kernel | - | Version, changelog, the record of who approved what |
+
+**Models.** A skill step names a tier. The project config maps tiers to models for the adapter, and may give one skill its own model:
+
+```yaml
+adapter: claude-code
+models: { fast: haiku, balanced: opus, deep: fable }
+skills: { forge.review: { model: fable }, forge.build: { model: opus } }
+```
+
+`bay check` warns when the reviewer and the builder of a mode resolve to the same model.
+
+**What the kernel must gain for this** (built with the forge mode, each small)
+
+1. **A check may be a skill.** A skill step's `checks` list takes script paths and skills. A skill check gets the step's input and output and answers `passed` or `feedback`, like a script check. The step's `rounds` (default 3) is settable.
+2. **Commands for scripts.** A script may run a command its mode lists under `commands:` through `context.commands.run`, executed by the kernel outside the confined process, with a time limit and its output returned. Only base modes may list commands, as today.
+3. **Write scope per task.** A skill step may narrow its mode's write paths to a list taken from its input (the task's owned files), and the adapter's hook enforces the narrowed list.
+4. **A skill's own model** in the config, as above.
+5. **`foreach` over tasks** stays in order for 5.0.0. Tasks that could run side by side are a later change to the engine.
+
+**Skills, written to the seven-section contract**, each with a definition of done the checks can test: `propose`, `plan`, `challenge`, `build`, `review`, `evaluate`. Their Rules sections carry the hard-won lines: never report a check as passed without its output; never weaken a test to make it pass; never edit a file the task does not own; stop and say so when the spec is wrong.
+
+**Forge works on two kinds of target:** the kit itself (only when the project is the kit, with the kernel folders in its write paths) and a project's own modes and files.

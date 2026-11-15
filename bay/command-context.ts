@@ -6,7 +6,6 @@ import type { Problem } from "./spec.ts";
 export type Terminal = {
   readonly isInteractive: () => boolean;
   readonly ask: (question: string) => Promise<string>;
-  readonly askHidden: (question: string) => Promise<string>;
   readonly readAll: () => Promise<string>;
 };
 

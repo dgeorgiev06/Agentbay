@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Json } from "../bay/contracts.ts";
 import { fieldOf, textField, toJson } from "../bay/json.ts";
-import type { ProcessRequest, ProcessResult, Processes } from "../bay/ports.ts";
 import { bay, fakeTerminal, listOf } from "./cli-fixture.ts";
 import { makeProject, type Project, type ProjectOptions } from "./project-fixture.ts";
 
@@ -106,71 +105,28 @@ test("approve always needs the hash of what was shown, and a quote only with cha
   });
 });
 
-type RecordingProcesses = Processes & { readonly requests: ProcessRequest[] };
-
-function recordingProcesses(result: ProcessResult): RecordingProcesses {
-  const requests: ProcessRequest[] = [];
-  return {
-    requests,
-    run: (request) => {
-      requests.push(request);
-      return Promise.resolve(result);
-    },
-  };
-}
-
-const value = "keychain-value-123";
-
-test("secret set stores a value read from an interactive stdin in the macOS keychain, never from an argument", async () => {
-  const processes = recordingProcesses({ exitCode: 0, stdout: "", stderr: "" });
-  const terminal = fakeTerminal({ interactive: true, hidden: value });
-  const stored = await bay(["secret", "set", "API_TOKEN", "--json"], {
-    platform: "darwin",
-    terminal,
-    ports: { processes },
+test("secret set on macOS prints the one keychain command for the owner to run, and reads nothing", async () => {
+  const terminal = fakeTerminal({ interactive: true, answer: "typed-value-123" });
+  const ran = await bay(["secret", "set", "API_TOKEN", "--json"], { platform: "darwin", terminal });
+  assert.equal(ran.exitCode, 0);
+  assert.deepEqual(ran.json, {
+    ok: true,
+    name: "API_TOKEN",
+    stored: false,
+    command: "security add-generic-password -U -s agentbay -a API_TOKEN -w",
   });
-  assert.equal(stored.exitCode, 0, JSON.stringify(stored.json));
-  assert.deepEqual(stored.json, { ok: true, name: "API_TOKEN", stored: true });
-  assert.equal(processes.requests.length, 1);
-  const [request] = processes.requests;
-  assert.ok(request);
-  assert.equal(request.command, "security");
-  assert.deepEqual(request.arguments, ["add-generic-password", "-U", "-s", "agentbay", "-a", "API_TOKEN", "-w"]);
-  assert.equal(request.input, `${value}\n${value}\n`);
-  assert.ok(!JSON.stringify(request.arguments).includes(value));
-  assert.ok(!stored.output.includes(value));
-  assert.deepEqual(terminal.asked, ["API_TOKEN (input hidden): "]);
+  assert.deepEqual(terminal.asked, []);
+  const text = await bay(["secret", "set", "API_TOKEN"], { platform: "darwin" });
+  assert.match(
+    text.output,
+    /Run this yourself in a terminal[^\n]*\n {2}security add-generic-password -U -s agentbay -a API_TOKEN -w\n/,
+  );
 });
 
-test("secret set refuses a pipe, another platform, a short value and a failed keychain without showing the value", async () => {
-  const processes = recordingProcesses({ exitCode: 45, stdout: "", stderr: `cannot store ${value}` });
-  const piped = await bay(["secret", "set", "API_TOKEN"], {
-    platform: "darwin",
-    terminal: fakeTerminal({ interactive: false, hidden: value }),
-    ports: { processes },
-  });
-  assert.equal(piped.exitCode, 1);
-  assert.match(piped.output, /needs an interactive terminal/);
-  const linux = await bay(["secret", "set", "API_TOKEN"], {
-    terminal: fakeTerminal({ interactive: true, hidden: value }),
-  });
+test("secret set elsewhere says how to set the environment variable; a bad name or action is exit 2", async () => {
+  const linux = await bay(["secret", "set", "API_TOKEN"]);
   assert.equal(linux.exitCode, 1);
   assert.match(linux.output, /Set AGENTBAY_SECRET_API_TOKEN in the environment/);
-  const short = await bay(["secret", "set", "API_TOKEN"], {
-    platform: "darwin",
-    terminal: fakeTerminal({ interactive: true, hidden: "short" }),
-    ports: { processes },
-  });
-  assert.equal(short.exitCode, 1);
-  assert.equal(processes.requests.length, 0);
-  const failed = await bay(["secret", "set", "API_TOKEN"], {
-    platform: "darwin",
-    terminal: fakeTerminal({ interactive: true, hidden: value }),
-    ports: { processes },
-  });
-  assert.equal(failed.exitCode, 1);
-  assert.match(failed.output, /The keychain did not store API_TOKEN: cannot store \[redacted\]/);
-  assert.ok(!failed.output.includes(value));
   for (const argv of [
     ["secret", "set", "api-token"],
     ["secret", "show", "API_TOKEN"],
@@ -179,6 +135,8 @@ test("secret set refuses a pipe, another platform, a short value and a failed ke
     assert.equal((await bay(argv)).exitCode, 2, argv.join(" "));
   }
 });
+
+const value = "keychain-value-123";
 
 test("secret check says whether a value can be found and never prints it", async () => {
   const found = await bay(["secret", "check", "API_TOKEN", "--json"], {

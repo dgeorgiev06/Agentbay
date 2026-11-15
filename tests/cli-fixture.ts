@@ -13,7 +13,6 @@ export type FakeTerminal = Terminal & { readonly asked: string[] };
 export type TerminalScript = {
   readonly interactive?: boolean;
   readonly answer?: string;
-  readonly hidden?: string;
   readonly input?: string;
 };
 
@@ -25,10 +24,6 @@ export function fakeTerminal(script: TerminalScript = {}): FakeTerminal {
     ask: (question) => {
       asked.push(question);
       return Promise.resolve(script.answer ?? "");
-    },
-    askHidden: (question) => {
-      asked.push(question);
-      return Promise.resolve(script.hidden ?? "");
     },
     readAll: () => Promise.resolve(script.input ?? ""),
   };

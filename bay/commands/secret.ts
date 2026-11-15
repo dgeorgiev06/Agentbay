@@ -8,10 +8,6 @@ type Action = "set" | "check";
 
 const usage = "secret set <NAME> | secret check <NAME>";
 
-const shortestValue = 8;
-
-const keychainMilliseconds = 30_000;
-
 function lookupPermissions(invocation: Invocation, name: string): Permissions {
   return {
     mode: "bay secret check",
@@ -31,39 +27,23 @@ function environmentHint(name: string): string {
   return `Set AGENTBAY_SECRET_${name} in the environment that runs bay, for example in your shell profile.`;
 }
 
-async function setSecret(invocation: Invocation, name: string): Promise<CommandResult> {
+function setSecret(invocation: Invocation, name: string): Promise<CommandResult> {
   const { context } = invocation;
   if (context.platform !== "darwin") {
-    return refusedResult(
-      `bay secret set stores secrets in the macOS keychain, and this is ${context.platform}.`,
-      environmentHint(name),
+    return Promise.resolve(
+      refusedResult(
+        `bay secret set stores secrets in the macOS keychain, and this is ${context.platform}.`,
+        environmentHint(name),
+      ),
     );
   }
-  if (!context.terminal.isInteractive()) {
-    return refusedResult(
-      "bay secret set needs an interactive terminal (stdin is not a TTY); it never reads a secret from a pipe, " +
-        "an argument or --json, so an agent cannot set one. Run it yourself in a terminal.",
-    );
-  }
-  const value = await context.terminal.askHidden(`${name} (input hidden): `);
-  if (value.length < shortestValue) {
-    return refusedResult(
-      `The value is shorter than ${String(shortestValue)} characters, too short to redact safely; nothing was stored.`,
-    );
-  }
-  const result = await context.ports.processes.run({
-    command: "security",
-    arguments: ["add-generic-password", "-U", "-s", "agentbay", "-a", name, "-w"],
-    directory: "/",
-    environment: {},
-    timeoutMilliseconds: keychainMilliseconds,
-    input: `${value}\n${value}\n`,
-  });
-  if (result.exitCode !== 0) {
-    const reason = result.stderr.replaceAll(value, "[redacted]").trim();
-    return refusedResult(`The keychain did not store ${name}: ${reason}`, environmentHint(name));
-  }
-  return succeeded({ name, stored: true }, `Stored ${name} in the macOS keychain (service agentbay).`);
+  const command = `security add-generic-password -U -s agentbay -a ${name} -w`;
+  const text = [
+    "Run this yourself in a terminal; it asks for the value and does not echo it:",
+    `  ${command}`,
+    `Then bay secret check ${name} says whether agentbay can find it.`,
+  ].join("\n");
+  return Promise.resolve(succeeded({ name, stored: false, command }, text));
 }
 
 async function checkSecret(invocation: Invocation, name: string): Promise<CommandResult> {

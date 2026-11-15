@@ -86,7 +86,7 @@ test("a skill's Tools section maps to kernel tools; secrets, http and events giv
   assert.equal(skillNameOf("skills/draft/"), "draft");
 });
 
-test("the terminal reads a line, a hidden value with erasing, and all of stdin", async () => {
+test("the terminal reads a line and all of stdin", async () => {
   const input = new PassThrough();
   const output = new PassThrough();
   let shown = "";
@@ -98,13 +98,7 @@ test("the terminal reads a line, a hidden value with erasing, and all of stdin",
   const answer = terminal.ask("Type yes: ");
   input.write("yes\n");
   assert.equal(await answer, "yes");
-  const hidden = terminal.askHidden("Value: ");
-  input.write("secrex\u007ft-value\r");
-  assert.equal(await hidden, "secret-value");
-  assert.ok(!shown.includes("secret"), shown);
-  const interrupted = terminal.askHidden("Value: ");
-  input.write("abc\u0003");
-  assert.equal(await interrupted, "");
+  assert.equal(shown, "Type yes: ");
   const all = terminal.readAll();
   input.end('{"text":"x"}');
   assert.equal(await all, '{"text":"x"}');

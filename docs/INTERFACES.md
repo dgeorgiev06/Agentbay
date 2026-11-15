@@ -189,7 +189,7 @@ targets against the registry and each `with` against the endpoint's input schema
 ## 7. Dispatcher
 `bay call <mode>.<endpoint> '<json>'` -> `{callId, status, output | next, checks, review, cost}`.
 Status: `done | partial | blocked | failed | needs-agent | awaiting-approval | abandoned`.
-`bay submit <callId> <stepId> '<json>' [--usage '{"tokens": N, "costUsd": X, "durationMs": N}']` resumes an agentic
+`bay submit '<json>' --token <token> [--tokens <n>] [--usd <x>]` resumes an agentic
 step; `bay show <callId>` prints the current state.
 The standards step is `run: standards.check/v1.findings` with `base: $call.base`. The dispatcher runs every bound
 checker on the base export and on a copy of the working tree, with configs from the base (a project's own ruff and

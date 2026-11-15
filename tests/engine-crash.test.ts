@@ -5,10 +5,10 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { ScriptRequest } from "../bay/contracts.ts";
 import { numberField } from "../bay/json.ts";
-import type { Engine } from "../bay/engine.ts";
-import type { RunStore } from "../bay/run-store.ts";
-import { SqliteRunStore } from "../bay/sqlite-run-store.ts";
-import type { RunView } from "../bay/run-state.ts";
+import type { Engine } from "../bay/runs/engine.ts";
+import type { RunStore } from "../bay/runs/run-store.ts";
+import { SqliteRunStore } from "../bay/runs/sqlite-run-store.ts";
+import type { RunView } from "../bay/runs/run-state.ts";
 import type { Outcome } from "../bay/outcome.ts";
 import {
   eventKinds,

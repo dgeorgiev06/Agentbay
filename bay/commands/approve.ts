@@ -2,7 +2,7 @@ import { refusedResult, usageResult, withKernel, type CommandResult, type Invoca
 import type { Command } from "../command-line.ts";
 import type { Kernel } from "../kernel.ts";
 import { engineOutput } from "../run-report.ts";
-import { storedWaiting } from "../waiting.ts";
+import { storedWaiting } from "../runs/waiting.ts";
 
 type Channel = { readonly via: "terminal" } | { readonly via: "chat"; readonly quote: string };
 

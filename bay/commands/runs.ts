@@ -2,7 +2,7 @@ import { succeeded, withKernel, type CommandResult, type Invocation } from "../c
 import type { Command } from "../command-line.ts";
 import type { Kernel } from "../kernel.ts";
 import { runListJson, runLine, runOutput } from "../run-report.ts";
-import { runStatuses, type StoredRun } from "../run-store.ts";
+import { runStatuses, type StoredRun } from "../runs/run-store.ts";
 
 async function allRuns(kernel: Kernel): Promise<readonly StoredRun[]> {
   const runs: StoredRun[] = [];

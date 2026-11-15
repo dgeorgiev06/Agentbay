@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { errorLine } from "./answers.ts";
+import { errorLine } from "../answers.ts";
 import { runActionFrame } from "./action-steps.ts";
 import {
   addBudgets,
@@ -11,12 +11,12 @@ import {
   smallestBudget,
   type BudgetFrame,
 } from "./budget.ts";
-import type { Json, PolicyOf, RunEvent, Scrubber, ScriptRunner, Spend, Submission } from "./contracts.ts";
-import type { Budget } from "./generated/mode.ts";
-import { byteSize, toJson } from "./json.ts";
-import { inactiveModeWording } from "./policy.ts";
-import type { Clock, FileSystem } from "./ports.ts";
-import type { System } from "./registry.ts";
+import type { Json, PolicyOf, RunEvent, Scrubber, ScriptRunner, Spend, Submission } from "../contracts.ts";
+import type { Budget } from "../generated/mode.ts";
+import { byteSize, toJson } from "../json.ts";
+import { inactiveModeWording } from "../policy.ts";
+import type { Clock, FileSystem } from "../ports.ts";
+import type { System } from "../registry.ts";
 import {
   kernelDatabaseFile,
   lockStaleMilliseconds,
@@ -28,11 +28,11 @@ import {
   type Writer,
 } from "./run-store.ts";
 import type { ApprovalDecision, RunView, RunStatus } from "./run-state.ts";
-import { failedWith, succeededWith, type Outcome, type Problem } from "./outcome.ts";
+import { failedWith, succeededWith, type Outcome, type Problem } from "../outcome.ts";
 import { scrubbedStore } from "./scrubbed-store.ts";
 import { startedSkillOf, submissionProblems, type StartedSkill } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
-import { resolveActionReference, resolveOwnAction } from "./targets.ts";
+import { resolveActionReference, resolveOwnAction } from "../targets.ts";
 import { hasUndoRecords, runUndo } from "./undo.ts";
 import { eventOf, failed, schemaProblems, type Progress, type Services, type Walk } from "./walk.ts";
 import { runWorkflowSteps } from "./workflow-steps.ts";

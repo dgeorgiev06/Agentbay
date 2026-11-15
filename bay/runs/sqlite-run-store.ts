@@ -1,9 +1,9 @@
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
 import { budgetFromJson, spendFromJson } from "./budget.ts";
-import type { Json, RunEvent, Spend } from "./contracts.ts";
-import { parseJson } from "./json.ts";
-import { narrowSideFiles } from "./owner-only.ts";
-import type { Folders } from "./ports.ts";
+import type { Json, RunEvent, Spend } from "../contracts.ts";
+import { parseJson } from "../json.ts";
+import { narrowSideFiles } from "../owner-only.ts";
+import type { Folders } from "../ports.ts";
 import {
   lockStaleMilliseconds,
   runStatuses,

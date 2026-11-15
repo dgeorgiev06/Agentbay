@@ -1,12 +1,12 @@
 import { join } from "node:path/posix";
-import type { PolicyOf, SkillTask } from "./contracts.ts";
-import { hashOf } from "./json.ts";
-import type { System } from "./registry.ts";
+import type { PolicyOf, SkillTask } from "../contracts.ts";
+import { hashOf } from "../json.ts";
+import type { System } from "../registry.ts";
 import type { RunWithSteps, StepRecord } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
 import { skillTaskOf, startedSkillOf } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
-import { resolveOwnAction, type ActionTarget } from "./targets.ts";
+import { resolveOwnAction, type ActionTarget } from "../targets.ts";
 
 export type SkillStepAt = {
   readonly waitingKey: string;

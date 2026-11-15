@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import type { StoredState, Writer } from "../bay/run-store.ts";
-import { SqliteRunStore } from "../bay/sqlite-run-store.ts";
-import { checkTaskToken, issueTaskToken } from "../bay/task-tokens.ts";
+import type { StoredState, Writer } from "../bay/runs/run-store.ts";
+import { SqliteRunStore } from "../bay/runs/sqlite-run-store.ts";
+import { checkTaskToken, issueTaskToken } from "../bay/runs/task-tokens.ts";
 import { problemText } from "../bay/outcome.ts";
 
 type Opened = {

@@ -13,7 +13,7 @@ import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } fr
 import { createScriptRunner } from "../bay/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import type { ChildProcesses } from "../bay/ports.ts";
-import { issueTaskToken } from "../bay/task-tokens.ts";
+import { issueTaskToken } from "../bay/runs/task-tokens.ts";
 import { callKernelTool } from "../bay/tools.ts";
 import {
   noProcesses,

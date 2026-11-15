@@ -8,7 +8,7 @@ import type { Json, StepPlace } from "../bay/contracts.ts";
 import type { Config } from "../bay/generated/config.ts";
 import { layoutOf } from "../bay/layout.ts";
 import { loadKernel, nodeKernelPorts, type Kernel } from "../bay/kernel.ts";
-import type { RunView } from "../bay/run-state.ts";
+import type { RunView } from "../bay/runs/run-state.ts";
 import type { Outcome } from "../bay/outcome.ts";
 import type { Clock } from "../bay/ports.ts";
 import type { DatabasePartition } from "../bay/sdk.ts";

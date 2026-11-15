@@ -4,8 +4,8 @@ import type { ScriptRequest } from "../bay/contracts.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
 import { hashOf, textField } from "../bay/json.ts";
 import type { System } from "../bay/registry.ts";
-import type { Waiting } from "../bay/run-state.ts";
-import { storedWaiting } from "../bay/waiting.ts";
+import type { Waiting } from "../bay/runs/run-state.ts";
+import { storedWaiting } from "../bay/runs/waiting.ts";
 import {
   eventKinds,
   failure,

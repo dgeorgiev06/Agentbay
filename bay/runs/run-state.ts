@@ -1,5 +1,5 @@
 import type { Overrun } from "./budget.ts";
-import type { Json, SkillTask, Spend } from "./contracts.ts";
+import type { Json, SkillTask, Spend } from "../contracts.ts";
 import type { RunTarget, StepRecord } from "./run-store.ts";
 
 export type Waiting =

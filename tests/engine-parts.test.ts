@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { charge, rootFrame } from "../bay/budget.ts";
-import type { StepRecord } from "../bay/run-store.ts";
+import { charge, rootFrame } from "../bay/runs/budget.ts";
+import type { StepRecord } from "../bay/runs/run-store.ts";
 import { resolveActionReference, resolveCall, resolveOwnAction, resolveWorkflowAction } from "../bay/targets.ts";
-import { gate, replayed, stopGate, type Walk } from "../bay/walk.ts";
+import { gate, replayed, stopGate, type Walk } from "../bay/runs/walk.ts";
 import { fakePolicy, fixtureSystem, harness, runOf, startTime } from "./engine-fixture.ts";
 import { MemoryRunStore } from "./memory-run-store.ts";
 

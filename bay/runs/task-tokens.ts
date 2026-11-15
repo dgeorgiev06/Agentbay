@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { RunStore, StoredState, TaskTokenStore } from "./run-store.ts";
-import { failedWith, succeededWith, unplacedProblem, type Outcome } from "./outcome.ts";
+import { failedWith, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
 
 export type TaskPlace = {
   readonly runId: string;

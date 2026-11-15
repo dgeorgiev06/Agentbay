@@ -10,7 +10,7 @@ import {
 import type { Command } from "../command-line.ts";
 import type { Json, Spend } from "../contracts.ts";
 import { submittedOutput } from "../run-report.ts";
-import { checkTaskToken } from "../task-tokens.ts";
+import { checkTaskToken } from "../runs/task-tokens.ts";
 import { failedWith, problemText, unplacedProblem, type Outcome } from "../outcome.ts";
 
 const usage = "submit <json | @file | -> --token <token> [--tokens <n>] [--usd <x>]";

@@ -1,5 +1,5 @@
-import type { EventSink, Json, RunEvent, Settled, Spend } from "./contracts.ts";
-import type { Budget } from "./generated/mode.ts";
+import type { EventSink, Json, RunEvent, Settled, Spend } from "../contracts.ts";
+import type { Budget } from "../generated/mode.ts";
 import type { RefusedDetail, StepDetail, StepKind } from "./step-detail.ts";
 
 export const kernelDatabaseFile = ".agentbay/kernel.db";

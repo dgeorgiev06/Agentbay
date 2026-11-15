@@ -1,16 +1,16 @@
 import { join } from "node:path/posix";
 import { charge, frameOverrun, noSpend, type BudgetFrame } from "./budget.ts";
-import type { Json, PolicyOf, RunEvent, ScriptRunner, Settled, Spend, StepOutcome } from "./contracts.ts";
-import type { Budget } from "./generated/mode.ts";
-import { byteSize } from "./json.ts";
-import type { Clock, FileSystem } from "./ports.ts";
-import type { LoadedMode, System } from "./registry.ts";
+import type { Json, PolicyOf, RunEvent, ScriptRunner, Settled, Spend, StepOutcome } from "../contracts.ts";
+import type { Budget } from "../generated/mode.ts";
+import { byteSize } from "../json.ts";
+import type { Clock, FileSystem } from "../ports.ts";
+import type { LoadedMode, System } from "../registry.ts";
 import { settledOf, type RunStore, type StepRecord, type Writer } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
 import type { StepDetail, StepKind } from "./step-detail.ts";
-import { checkValue } from "./spec.ts";
-import type { Problem } from "./outcome.ts";
-import type { ActionTarget } from "./targets.ts";
+import { checkValue } from "../spec.ts";
+import type { Problem } from "../outcome.ts";
+import type { ActionTarget } from "../targets.ts";
 
 export type Services = {
   readonly system: System;

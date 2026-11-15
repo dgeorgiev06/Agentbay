@@ -1,0 +1,124 @@
+import { normalize } from "node:path";
+import type { BuildRequest, SkillAgent } from "../../../bay/adapter.ts";
+import type { RemovableFiles } from "../file-removal.ts";
+
+export type MemoryFiles = RemovableFiles & { readonly snapshot: () => Readonly<Record<string, string>> };
+
+export function memoryFiles(initial: Readonly<Record<string, string>> = {}): MemoryFiles {
+  const contents = new Map(Object.entries(initial).map(([path, text]) => [normalize(path), text]));
+  const childNames = (directory: string): readonly string[] => {
+    const prefix = `${normalize(directory).replace(/\/$/, "")}/`;
+    const names = [...contents.keys()].filter((path) => path.startsWith(prefix));
+    return [...new Set(names.map((path) => path.slice(prefix.length).split("/")[0] ?? ""))].sort();
+  };
+  return {
+    readText: (path) => Promise.resolve(contents.get(normalize(path))),
+    list: (directory) => Promise.resolve(childNames(directory)),
+    exists: (path) => Promise.resolve(contents.has(normalize(path)) || childNames(path).length > 0),
+    writeAtomic: (path, text) => {
+      contents.set(normalize(path), text);
+      return Promise.resolve();
+    },
+    remove: (path) => {
+      contents.delete(normalize(path));
+      return Promise.resolve();
+    },
+    snapshot: () => Object.fromEntries([...contents.entries()].sort(([left], [right]) => left.localeCompare(right))),
+  };
+}
+
+export const root = "/proj";
+
+export const kit = "/kit";
+
+type AgentShape = {
+  readonly mode: string;
+  readonly skill: string;
+  readonly tier: SkillAgent["tier"];
+  readonly kernelTools: readonly string[];
+  readonly read: readonly string[];
+  readonly write: readonly string[];
+  readonly commands: readonly string[];
+};
+
+export function skillAgent(shape: AgentShape): SkillAgent {
+  const modeFolder = `${kit}/components/modes/${shape.mode}`;
+  return {
+    agent: `agentbay-${shape.mode}-${shape.skill}`,
+    mode: shape.mode,
+    skill: shape.skill,
+    skillFile: `${modeFolder}/skills/${shape.skill}/SKILL.md`,
+    description: `Writes the ${shape.skill}\nfor the "${shape.mode}" mode: briefly.`,
+    tier: shape.tier,
+    kernelTools: shape.kernelTools,
+    permissions: {
+      mode: shape.mode,
+      modeFolder,
+      databaseFile: `${root}/.agentbay/data/${shape.mode}.db`,
+      migrationsFolder: `${modeFolder}/migrations`,
+      readPaths: shape.read,
+      writePaths: shape.write,
+      secrets: [],
+      hosts: [],
+      commands: shape.commands,
+      effects: ["read"],
+    },
+  };
+}
+
+export const digestAgent = skillAgent({
+  mode: "mail-briefing",
+  skill: "digest",
+  tier: "balanced",
+  kernelTools: ["db_query"],
+  read: [`${kit}/components/modes/mail-briefing`, `${root}/notes`, `${root}/out/digests`],
+  write: [`${root}/out/digests`],
+  commands: [],
+});
+
+export const scanAgent = skillAgent({
+  mode: "store",
+  skill: "scan",
+  tier: "fast",
+  kernelTools: ["submit", "files_read"],
+  read: [`${kit}/components/modes/store`],
+  write: [],
+  commands: [],
+});
+
+export const buildAgent = skillAgent({
+  mode: "forge",
+  skill: "build",
+  tier: "deep",
+  kernelTools: [],
+  read: [`${kit}/components/modes/forge`, `${root}/work`],
+  write: [`${root}/work`],
+  commands: ["node --test", "git status"],
+});
+
+export const allAgents = [digestAgent, scanAgent, buildAgent];
+
+export function buildRequest(files: RemovableFiles, agents: readonly SkillAgent[] = allAgents): BuildRequest {
+  const system = {
+    modes: new Map(),
+    interfaces: new Map(),
+    bindings: new Map<string, string>(),
+    config: { bindings: {}, adapter: "claude-code" },
+  };
+  return { system, root, kit, agents, files };
+}
+
+export const userSettings =
+  '{"model":   "opus",\n "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "mine"}]}],' +
+  ' "Stop": []},\n "permissions": {"allow": ["Bash(ls:*)"], "deny": ["Read(./secrets/**)"]}}';
+
+export const userMcp = '{\n\t"mcpServers": { "mine": { "command": "x", "args": [] } },\n\t"other": 1\n}\n';
+
+export const userClaude = "# mine\n\nKeep this.";
+
+export const existingProject: Readonly<Record<string, string>> = {
+  [`${root}/.claude/settings.json`]: userSettings,
+  [`${root}/.mcp.json`]: userMcp,
+  [`${root}/CLAUDE.md`]: userClaude,
+  [`${root}/src/app.ts`]: "export {};\n",
+};

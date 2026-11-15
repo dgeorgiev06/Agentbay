@@ -365,6 +365,7 @@ async function runSkill(walk: Walk, frame: ActionFrame, skill: SkillStep): Promi
   const round = numberField(record.detail, "round") ?? 1;
   chargeEarlierRounds(walk, frame, { skill, round });
   charge(frame.budget, spendFromJson(fieldOf(record.detail, "earlierSpent") ?? {}));
+  charge(frame.budget, spendFromJson(fieldOf(record.detail, "calledSpent") ?? {}));
   const submitted = fieldOf(record.detail, "submitted");
   if (submitted === undefined) {
     return skillWaiting(walk, frame, { skill, record });

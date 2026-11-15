@@ -149,9 +149,14 @@ async function callAction(call: ToolCall): Promise<ToolResult> {
         "are read only.",
     );
   }
-  const reference = `${target.mode.manifest.name}.${target.name}`;
   const caller = action.includes(".") ? { caller: call.step.target.mode.manifest.name } : {};
-  const result = await call.kernel.engine.startAction(reference, fieldOf(call.input, "input") ?? {}, caller);
+  const result = await call.kernel.engine.startForSkill({
+    runId: call.step.task.place.runId,
+    stepKey: call.step.waitingKey,
+    reference: `${target.mode.manifest.name}.${target.name}`,
+    input: fieldOf(call.input, "input") ?? {},
+    ...caller,
+  });
   await recordAskedBy(call, result);
   return calledResult(result, action);
 }

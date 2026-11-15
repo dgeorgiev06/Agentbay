@@ -132,6 +132,39 @@ test("call_action runs a listed read-only action through the engine and refuses 
   });
 });
 
+test("an action a skill starts through call_action is charged to the calling run and held to what it has left", async () => {
+  const project = await makeProject();
+  const config = await project.read("agentbay.config.yaml");
+  await project.write("agentbay.config.yaml", `${config}budget:\n  minutes: 30\n`);
+  const kernel = await openKernel(project);
+  try {
+    const waiting = await waitingCompose(kernel);
+    const before = await kernel.store.readRun(waiting.runId);
+    const fetched = await callKernelTool(kernel, "call_action", {
+      token: waiting.token,
+      action: "greeting-source.fetch",
+      input: { name: "Bo" },
+    });
+    const child = await kernel.store.readRun(textField(valueOf(fetched), "run") ?? "");
+    const after = await kernel.store.readRun(waiting.runId);
+    assert.ok(before !== undefined && child !== undefined && after !== undefined);
+    assert.ok(child.spent.minutes > 0);
+    assert.equal(child.limit.minutes, 30 - before.spent.minutes);
+    assert.ok(Math.abs(after.spent.minutes - before.spent.minutes - child.spent.minutes) < 1e-9);
+    assert.equal(after.state.status, "waiting");
+    const output = { text: "Hello, Ada, and welcome back." };
+    const accepted = valueOf(await callKernelTool(kernel, "submit", { token: waiting.token, output }));
+    assert.equal(fieldOf(accepted, "accepted"), true);
+    const done = await kernel.store.readRun(waiting.runId);
+    const skillStep = done?.steps.find((step) => step.key === "1");
+    assert.ok(skillStep !== undefined && skillStep.status !== "started");
+    assert.ok(skillStep.spent.minutes >= child.spent.minutes);
+  } finally {
+    kernel.close();
+    await project.remove();
+  }
+});
+
 test("tool results pass through the scrubber and are capped in size", async () => {
   await withWaiting(async ({ kernel, project }, waiting) => {
     const permissions = { ...kernel.policyOf("writer"), secrets: ["NOTE_KEY"] };

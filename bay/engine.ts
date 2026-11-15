@@ -6,8 +6,10 @@ import {
   addSpend,
   budgetProblems,
   extendedBudget,
+  remainingBudget,
   rootFrame,
   smallestBudget,
+  spendFromJson,
   type BudgetFrame,
 } from "./budget.ts";
 import type { Json, PolicyOf, RunEvent, Scrubber, ScriptRunner, Spend, Submission } from "./contracts.ts";
@@ -54,13 +56,22 @@ export type WorkflowReference = {
 export type StartOptions = {
   readonly id?: string;
   readonly caller?: string;
+  readonly within?: Budget;
+};
+
+export type SkillCall = {
+  readonly runId: string;
+  readonly stepKey: string;
+  readonly reference: string;
+  readonly input: Json;
+  readonly caller?: string;
 };
 
 export type ResumeOptions = {
   readonly rerunUnfinished?: boolean;
 };
 
-type Cause = "submit" | "approve" | "resume" | "tick" | "extend" | "stop";
+type Cause = "submit" | "approve" | "resume" | "tick" | "extend" | "stop" | "charge";
 
 type Advance = {
   readonly now: Date;
@@ -309,8 +320,23 @@ export class Engine {
     }
     const caller = options.caller === undefined ? {} : { caller: options.caller };
     const runTarget: RunTarget = { kind: "action", mode: target.mode.manifest.name, name: target.name, ...caller };
-    const limit = smallestBudget([target.action.budget, system.config.budget]);
+    const limit = smallestBudget([target.action.budget, system.config.budget, options.within]);
     return this.#start({ target: runTarget, input, limit }, options);
+  }
+
+  async startForSkill(call: SkillCall): Promise<EngineResult> {
+    const calling = await this.#services.store.readRun(call.runId);
+    if (calling === undefined) {
+      return refusal(call.runId, { message: `There is no run ${call.runId}.` });
+    }
+    const within = remainingBudget(extendedBudget(calling.limit, calling.extra), calling.spent);
+    const caller = call.caller === undefined ? {} : { caller: call.caller };
+    const called = await this.startAction(call.reference, call.input, { ...caller, within });
+    if (!called.ok) {
+      return called;
+    }
+    const charged = await this.#chargeSkill(call, called.run.spent);
+    return charged.ok ? called : charged;
   }
 
   async startWorkflow(
@@ -403,6 +429,19 @@ export class Engine {
       return (
         endedRefusal(run) ?? this.#continue(writer, { now, cause: "stop", rerunUnfinished: false }, { stopReason })
       );
+    });
+  }
+
+  #chargeSkill(call: SkillCall, spent: Spend): Promise<EngineResult> {
+    return this.#withRun(call.runId, this.#services.clock.now(), async (run, writer, now) => {
+      const found = waitingSkill(run, call.stepKey);
+      if ("refused" in found) {
+        return found.refused;
+      }
+      const calledSpent = addSpend(spendFromJson(fieldOf(found.record.detail, "calledSpent") ?? {}), spent);
+      const change = { key: found.record.key, detail: withFields(found.record.detail, { calledSpent }) };
+      await this.#services.store.saveStepDetail(writer, { ...change, at: now.toISOString() }, []);
+      return this.#advance(writer, { now, cause: "charge", rerunUnfinished: false });
     });
   }
 

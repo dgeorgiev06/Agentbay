@@ -13,6 +13,7 @@ const undoPrefix = "undo[";
 
 type FinishedAction = {
   readonly entry: UndoEntry;
+  readonly caller: string | undefined;
   readonly key: string;
   readonly output: Json;
   readonly finishOrder: number;
@@ -53,6 +54,7 @@ function finishedActionOf(system: System, record: StepRecord): FinishedAction | 
   const action = typeof target === "string" ? undefined : target.action;
   return {
     entry: { stepKey: record.key, action: `${modeName}.${actionName}` },
+    caller: textField(record.detail, "caller"),
     key: record.key,
     output: record.output,
     finishOrder: record.finishOrder,
@@ -104,11 +106,17 @@ export function hasUndoRecords(records: ReadonlyMap<string, StepRecord>): boolea
 function undoOne(
   walk: Walk,
   budget: BudgetFrame,
-  at: { readonly index: number; readonly target: ActionTarget; readonly input: Json },
+  at: {
+    readonly index: number;
+    readonly target: ActionTarget;
+    readonly input: Json;
+    readonly caller: string | undefined;
+  },
 ): Promise<Progress> {
   const key = `${undoPrefix}${String(at.index)}]`;
   const events = hasUndoRecords(walk.records) ? [] : [eventOf(walk, "undo.started", {})];
-  return runNestedAction(walk, budget, { key, kind: "undo", target: at.target, input: at.input, events });
+  const nested = { key, kind: "undo" as const, target: at.target, input: at.input, caller: at.caller, events };
+  return runNestedAction(walk, budget, nested);
 }
 
 export async function runUndo(walk: Walk, reason: string): Promise<UndoOutcome> {
@@ -125,7 +133,8 @@ export async function runUndo(walk: Walk, reason: string): Promise<UndoOutcome> 
       failedUndos.push({ ...finished.entry, reason: finished.target });
       continue;
     }
-    const progress = await undoOne(undoWalk, budget, { index, target: finished.target, input: finished.output });
+    const at = { index, target: finished.target, input: finished.output, caller: finished.caller };
+    const progress = await undoOne(undoWalk, budget, at);
     switch (progress.kind) {
       case "waiting":
         return { status: { status: "waiting", waiting: progress.waiting }, spent: budget.spent };

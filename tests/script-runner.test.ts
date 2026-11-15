@@ -36,6 +36,8 @@ type RunOptions = {
   readonly call?: ActionCaller;
   readonly outputBytes?: number;
   readonly script?: string;
+  readonly caller?: string;
+  readonly skillInput?: Json;
 };
 
 function scriptSource(body: string): string {
@@ -92,6 +94,8 @@ async function runScript(root: string, options: RunOptions): Promise<Run> {
         calls.push([reference, input]);
         return Promise.resolve({ status: "done", output: { called: reference }, spent: noSpend });
       }),
+    ...(options.caller === undefined ? {} : { caller: options.caller }),
+    ...(options.skillInput === undefined ? {} : { skillInput: options.skillInput }),
   };
   const outcome = await runner.run(request);
   return { outcome, events, calls };
@@ -746,5 +750,47 @@ test("spend that is negative or not a number is refused", async () => {
     const run = await attempt(root, "return [await context.spend({ items: -1 }), await context.spend({ usd: 'x' })];");
     assert.match(JSON.stringify(outputOf(run)), /^\[\{"ok":false,"kind":"refused".*\{"ok":false,"kind":"refused"/);
     assert.equal(run.outcome.spent.items, 0);
+  });
+});
+
+test("a script sees the caller and the skill input the engine gives it, and none when it gives none", async () => {
+  await withProject(async (root) => {
+    const body = "  return { caller: context.caller ?? null, skillInput: context.skillInput ?? null };";
+    const given = await attempt(root, body, { caller: "feed-briefing", skillInput: { items: ["a:1"] } });
+    assert.deepEqual(outputOf(given), { caller: "feed-briefing", skillInput: { items: ["a:1"] } });
+    const none = await attempt(root, body);
+    assert.deepEqual(outputOf(none), { caller: null, skillInput: null });
+  });
+});
+
+test("a script reaches a database partition through its context: migrate, execute, query and agent query", async () => {
+  await withProject(async (root) => {
+    await writeProjectFile(root, "components/modes/notes/migrations/0001-notes.sql", "create table notes (text text);");
+    const body = [
+      '  const alpha = context.db.partition("alpha");',
+      '  const beta = context.db.partition("beta");',
+      "  const migrated = await alpha.migrate();",
+      "  await beta.migrate();",
+      '  await alpha.execute("insert into notes (text) values (?)", ["in alpha"]);',
+      '  const own = await alpha.query("select text from notes");',
+      '  const other = await beta.query("select text from notes");',
+      '  const agent = await alpha.agentQuery("select count(*) as n from notes");',
+      '  const bad = await context.db.partition("../notes").query("select 1");',
+      "  return {",
+      "    migrated: migrated.ok ? migrated.value : migrated.message,",
+      "    own: own.ok ? own.value : own.message,",
+      "    other: other.ok ? other.value : other.message,",
+      "    agent: agent.ok ? agent.value.rows : agent.message,",
+      '    bad: bad.ok ? "granted" : bad.kind,',
+      "  };",
+    ].join("\n");
+    const run = await attempt(root, body, { permissions: { effects: ["read", "write"] } });
+    assert.deepEqual(outputOf(run), {
+      migrated: ["0001-notes.sql"],
+      own: [{ text: "in alpha" }],
+      other: [],
+      agent: [[1]],
+      bad: "refused",
+    });
   });
 });

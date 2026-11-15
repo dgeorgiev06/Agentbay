@@ -25,7 +25,7 @@ export const stepKinds = ["script", "check", "skill", "call", "action", "undo", 
 export type StepKind = (typeof stepKinds)[number];
 
 export type RunTarget =
-  | { readonly kind: "action"; readonly mode: string; readonly name: string }
+  | { readonly kind: "action"; readonly mode: string; readonly name: string; readonly caller?: string }
   | { readonly kind: "workflow"; readonly mode: string; readonly name: string };
 
 export type StoredState =
@@ -214,6 +214,7 @@ const migrations: readonly string[] = [
     issued_at text not null
   );
   create index task_tokens_by_run on task_tokens (run_id);`,
+  "alter table runs add column target_caller text;",
 ];
 
 function textColumn(row: Row, name: string): string {
@@ -250,7 +251,9 @@ function literalOf<T extends string>(choices: readonly T[], value: string): T {
 
 function targetOf(row: Row): RunTarget {
   const kind = literalOf(["action", "workflow"], textColumn(row, "target_kind"));
-  return { kind, mode: textColumn(row, "target_mode"), name: textColumn(row, "target_name") };
+  const target = { kind, mode: textColumn(row, "target_mode"), name: textColumn(row, "target_name") };
+  const caller = optionalText(row, "target_caller");
+  return kind === "action" && caller !== undefined ? { ...target, kind, caller } : target;
 }
 
 function waitingStateOf(row: Row): StoredState {
@@ -382,15 +385,16 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
     this.#write(() => {
       this.#database
         .prepare(
-          `insert into runs (id, target_kind, target_mode, target_name, input, status, limits, extra, spent,
-            lock_owner, lock_heartbeat, created_at, updated_at)
-           values (?, ?, ?, ?, ?, 'running', ?, '{}', ?, ?, ?, ?, ?)`,
+          `insert into runs (id, target_kind, target_mode, target_name, target_caller, input, status, limits, extra,
+            spent, lock_owner, lock_heartbeat, created_at, updated_at)
+           values (?, ?, ?, ?, ?, ?, 'running', ?, '{}', ?, ?, ?, ?, ?)`,
         )
         .run(
           run.id,
           run.target.kind,
           run.target.mode,
           run.target.name,
+          run.target.kind === "action" ? (run.target.caller ?? null) : null,
           JSON.stringify(run.input),
           JSON.stringify(run.limit),
           JSON.stringify({ items: 0, usd: 0, tokens: 0, minutes: 0 }),

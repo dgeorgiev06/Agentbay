@@ -97,7 +97,8 @@ async function runWorkflowAction(walk: Walk, scope: WorkflowScope, at: StepAt<Ac
   if (typeof target === "string") {
     return refuse(walk, start, target);
   }
-  return runNestedAction(walk, scope.budget, { key: at.key, kind: "action", target, input: input.value });
+  const caller = at.step.action.includes(".") ? scope.mode.manifest.name : undefined;
+  return runNestedAction(walk, scope.budget, { key: at.key, kind: "action", target, input: input.value, caller });
 }
 
 function approvalWaiting(at: StepAt<ApprovalStep>, record: StepRecord, content: Json): Progress {

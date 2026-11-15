@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { AgentQueryResult } from "./agent-query.ts";
 import type { Answer } from "./answers.ts";
 import type { Json } from "./contracts.ts";
 import type { ExecuteResult, Row, SqlParameters } from "./database.ts";
@@ -17,10 +18,19 @@ export type Spending = {
   readonly tokens?: number;
 };
 
+export type DatabaseStatements = {
+  readonly execute: (sql: string, parameters?: SqlParameters) => Promise<Answer<ExecuteResult>>;
+  readonly query: (sql: string, parameters?: SqlParameters) => Promise<Answer<readonly Row[]>>;
+};
+
+export type DatabasePartition = DatabaseStatements & {
+  readonly migrate: () => Promise<Answer<readonly string[]>>;
+  readonly agentQuery: (sql: string) => Promise<Answer<AgentQueryResult>>;
+};
+
 export type ScriptContext = {
-  readonly db: {
-    readonly execute: (sql: string, parameters?: SqlParameters) => Promise<Answer<ExecuteResult>>;
-    readonly query: (sql: string, parameters?: SqlParameters) => Promise<Answer<readonly Row[]>>;
+  readonly db: DatabaseStatements & {
+    readonly partition: (name: string) => DatabasePartition;
   };
   readonly files: {
     readonly read: (path: string) => Promise<Answer<string>>;
@@ -39,6 +49,8 @@ export type ScriptContext = {
   readonly call: (reference: string, input: Json) => Promise<Answer<Json>>;
   readonly settings: Readonly<Record<string, Json>>;
   readonly spend: (spending: Spending) => Promise<Answer<null>>;
+  readonly caller: string | undefined;
+  readonly skillInput: Json | undefined;
 };
 
 export type ScriptHandler = (input: Json, context: ScriptContext) => Promise<Json>;

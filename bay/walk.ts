@@ -38,6 +38,7 @@ export type Progress = Settled | { readonly kind: "waiting"; readonly waiting: W
 export type ActionFrame = ActionTarget & {
   readonly key: string;
   readonly budget: BudgetFrame;
+  readonly caller: string | undefined;
 };
 
 export type EventKind =

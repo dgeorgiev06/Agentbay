@@ -56,6 +56,7 @@ export type NestedAction = {
   readonly kind: "call" | "action" | "undo";
   readonly target: ActionTarget;
   readonly input: Json;
+  readonly caller: string | undefined;
   readonly events?: readonly RunEvent[];
 };
 
@@ -70,6 +71,18 @@ type ScriptLeaf = {
   readonly script: string;
   readonly input: Json;
   readonly place: StepPlace;
+  readonly skillInput?: Json;
+};
+
+type HeldWait = {
+  waiting: Progress | undefined;
+};
+
+type StoppedAttempt = {
+  readonly leaf: ScriptLeaf;
+  readonly record: StepRecord;
+  readonly outcome: StepOutcome;
+  readonly waiting: Progress;
 };
 
 type SkillStep = {
@@ -161,20 +174,23 @@ function calledOutcome(progress: Progress, reference: string, spent: Spend): Ste
       return {
         status: "failed",
         reason:
-          `${reference} stopped to wait for ${progress.waiting.reason}, ` +
-          "which an action called from a script cannot do.",
+          `${reference} stopped to wait for ${progress.waiting.reason}; ` +
+          "this step stops too and runs again when the run resumes, with its finished calls replayed.",
         spent,
       };
   }
 }
 
-function actionCaller(walk: Walk, frame: ActionFrame, scriptKey: string): ActionCaller {
+function actionCaller(walk: Walk, frame: ActionFrame, at: { scriptKey: string; held: HeldWait }): ActionCaller {
   let count = 0;
   return async (reference, input) => {
-    const key = `${scriptKey}.call${String(count)}`;
+    const key = `${at.scriptKey}.call${String(count)}`;
     count += 1;
     const before = frame.budget.spent;
     const progress = await runCall(walk, frame, { key, call: reference, input });
+    if (progress.kind === "waiting") {
+      at.held.waiting ??= progress;
+    }
     return calledOutcome(progress, reference, subtractSpend(frame.budget.spent, before));
   };
 }
@@ -191,7 +207,8 @@ function timeLimitOf(remaining: Budget): number {
   return Math.max(0, Math.min(maximumScriptMilliseconds, minutes * 60_000));
 }
 
-function scriptRequest(walk: Walk, frame: ActionFrame, leaf: ScriptLeaf): ScriptRequest {
+function scriptRequest(walk: Walk, frame: ActionFrame, at: { leaf: ScriptLeaf; held: HeldWait }): ScriptRequest {
+  const { leaf, held } = at;
   const remaining = frameRemaining(frame.budget);
   return {
     place: leaf.place,
@@ -201,8 +218,25 @@ function scriptRequest(walk: Walk, frame: ActionFrame, leaf: ScriptLeaf): Script
     settings: frame.mode.settings,
     remaining,
     timeLimitMilliseconds: timeLimitOf(remaining),
-    call: actionCaller(walk, frame, leaf.key),
+    call: actionCaller(walk, frame, { scriptKey: leaf.key, held }),
+    ...(frame.caller === undefined ? {} : { caller: frame.caller }),
+    ...(leaf.skillInput === undefined ? {} : { skillInput: leaf.skillInput }),
   };
+}
+
+function stoppedSpentOf(record: StepRecord): Spend {
+  return spendFromJson(fieldOf(record.detail, "stoppedSpent") ?? {});
+}
+
+function stoppedForCall(record: StepRecord | undefined): boolean {
+  return record !== undefined && fieldOf(record.detail, "stoppedForCall") === true;
+}
+
+async function stopForCall(walk: Walk, stopped: StoppedAttempt): Promise<Progress> {
+  const stoppedSpent = addSpend(stoppedSpentOf(stopped.record), stopped.outcome.spent);
+  const detail = withFields(stopped.record.detail, { stoppedForCall: true, stoppedSpent });
+  await changeDetail(walk, stopped.leaf.key, detail);
+  return stopped.waiting;
 }
 
 async function noteRerun(walk: Walk, leaf: ScriptLeaf): Promise<void> {
@@ -220,19 +254,41 @@ async function runScript(walk: Walk, frame: ActionFrame, leaf: ScriptLeaf): Prom
   if (blocked !== undefined) {
     return blocked;
   }
-  if (record !== undefined && !mayRerun(walk, frame)) {
+  if (record !== undefined && !mayRerun(walk, frame) && !stoppedForCall(record)) {
     return unfinishedWaiting(frame, leaf.key);
   }
-  const input = record?.input ?? leaf.input;
-  if (record === undefined) {
-    await startRecord(walk, { key: leaf.key, kind: leaf.kind, input, detail: { script: leaf.script } });
-  } else {
+  return attemptScript(walk, frame, { leaf, record });
+}
+
+async function startedScript(
+  walk: Walk,
+  at: { leaf: ScriptLeaf; record: StepRecord | undefined },
+): Promise<StepRecord> {
+  const { leaf, record } = at;
+  if (record !== undefined) {
     await noteRerun(walk, leaf);
+    return record;
   }
+  return startRecord(walk, { key: leaf.key, kind: leaf.kind, input: leaf.input, detail: { script: leaf.script } });
+}
+
+async function attemptScript(
+  walk: Walk,
+  frame: ActionFrame,
+  at: { leaf: ScriptLeaf; record: StepRecord | undefined },
+): Promise<Progress> {
+  const leaf = at.leaf;
+  const input = at.record?.input ?? leaf.input;
+  const started = await startedScript(walk, { leaf: { ...leaf, input }, record: at.record });
   await walk.services.store.heartbeat(walk.writer, walk.services.clock.now());
   const before = frame.budget.spent;
-  const outcome = await walk.services.runner.run(scriptRequest(walk, frame, { ...leaf, input }));
+  charge(frame.budget, stoppedSpentOf(started));
+  const held: HeldWait = { waiting: undefined };
+  const outcome = await walk.services.runner.run(scriptRequest(walk, frame, { leaf: { ...leaf, input }, held }));
   charge(frame.budget, outcome.spent);
+  if (held.waiting !== undefined) {
+    return stopForCall(walk, { leaf, record: started, outcome, waiting: held.waiting });
+  }
   const spent = subtractSpend(frame.budget.spent, before);
   return endRecord(walk, { key: leaf.key, settled: settledOf(outcome), spent });
 }
@@ -338,7 +394,8 @@ async function runChecks(walk: Walk, frame: ActionFrame, attempt: Attempt): Prom
   for (const [index, check] of attempt.skill.checks.entries()) {
     const key = checkKey(attempt.skill.key, attempt.round, index);
     const place = { ...attempt.skill.place, stepKey: key };
-    const leaf = { key, kind: "check" as const, script: check, input: attempt.submitted, place };
+    const skillInput = attempt.record.input;
+    const leaf = { key, kind: "check" as const, script: check, input: attempt.submitted, place, skillInput };
     const progress = await runScript(walk, frame, leaf);
     if (progress.kind === "waiting") {
       return progress;
@@ -392,11 +449,13 @@ export async function runNestedAction(walk: Walk, parent: BudgetFrame, nested: N
   const before = parent.spent;
   const input = record?.input ?? nested.input;
   if (record === undefined) {
-    const detail = { mode: nested.target.mode.manifest.name, action: nested.target.name };
+    const caller = nested.caller === undefined ? {} : { caller: nested.caller };
+    const detail = { mode: nested.target.mode.manifest.name, action: nested.target.name, ...caller };
     await startRecord(walk, { key: nested.key, kind: nested.kind, input, detail }, nested.events ?? []);
   }
   const budget = childFrame(parent, nested.target.action.budget, walk.extra);
-  const progress = await runActionFrame(walk, { ...nested.target, key: nested.key, budget }, input);
+  const caller = record === undefined ? nested.caller : textField(record.detail, "caller");
+  const progress = await runActionFrame(walk, { ...nested.target, key: nested.key, budget, caller }, input);
   return concludeComposite(walk, nested.key, { ...progress, spent: subtractSpend(parent.spent, before) });
 }
 
@@ -417,7 +476,8 @@ async function runCall(walk: Walk, frame: ActionFrame, call: CallStep): Promise<
       `that ${frame.name} does not declare; the call is refused.`;
     return refuse(walk, start, reason);
   }
-  return runNestedAction(walk, frame.budget, { key: call.key, kind: "call", target, input: call.input });
+  const caller = frame.mode.manifest.name;
+  return runNestedAction(walk, frame.budget, { key: call.key, kind: "call", target, input: call.input, caller });
 }
 
 type ActionStepAt = {

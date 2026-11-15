@@ -7,7 +7,14 @@ import type { HttpRequest } from "./ports.ts";
 export const sdkSpecifier = "agentbay/sdk";
 
 export type ResourceRequest =
-  | { readonly resource: "db.execute" | "db.query"; readonly sql: string; readonly parameters: SqlParameters }
+  | {
+      readonly resource: "db.execute" | "db.query";
+      readonly sql: string;
+      readonly parameters: SqlParameters;
+      readonly partition?: string;
+    }
+  | { readonly resource: "db.migrate"; readonly partition: string }
+  | { readonly resource: "db.agentQuery"; readonly sql: string; readonly partition: string }
   | { readonly resource: "files.read" | "files.list"; readonly path: string }
   | { readonly resource: "files.write"; readonly path: string; readonly text: string }
   | { readonly resource: "secrets.get"; readonly name: string }
@@ -22,9 +29,16 @@ export type ChildMessage =
   | { readonly type: "failed"; readonly reason: string }
   | { readonly type: "crashed"; readonly reason: string };
 
+type StartMessage = {
+  readonly type: "start";
+  readonly input: Json;
+  readonly settings: { readonly [key: string]: Json };
+  readonly caller?: string;
+  readonly skillInput?: Json;
+};
+
 export type ParentMessage =
-  | { readonly type: "start"; readonly input: Json; readonly settings: { readonly [key: string]: Json } }
-  | { readonly type: "answer"; readonly id: number; readonly answer: Answer<Json> };
+  StartMessage | { readonly type: "answer"; readonly id: number; readonly answer: Answer<Json> };
 
 type Fields = { readonly [key: string]: Json };
 
@@ -64,12 +78,27 @@ function httpRequestOf(value: Json | undefined): HttpRequest | undefined {
     : undefined;
 }
 
-function databaseRequestOf(fields: Fields): ResourceRequest | undefined {
-  const resource = fields.resource;
-  if ((resource === "db.execute" || resource === "db.query") && isText(fields.sql) && isParameters(fields.parameters)) {
-    return { resource, sql: fields.sql, parameters: fields.parameters };
+function partitionRequestOf(fields: Fields): ResourceRequest | undefined {
+  const { resource, partition, sql } = fields;
+  if (!isText(partition)) {
+    return undefined;
   }
-  return undefined;
+  if (resource === "db.migrate") {
+    return { resource, partition };
+  }
+  return resource === "db.agentQuery" && isText(sql) ? { resource, sql, partition } : undefined;
+}
+
+function databaseRequestOf(fields: Fields): ResourceRequest | undefined {
+  const { resource, sql, parameters, partition } = fields;
+  const isStatement = resource === "db.execute" || resource === "db.query";
+  if (!isStatement || !isText(sql) || !isParameters(parameters)) {
+    return partitionRequestOf(fields);
+  }
+  if (partition === undefined) {
+    return { resource, sql, parameters };
+  }
+  return isText(partition) ? { resource, sql, parameters, partition } : undefined;
 }
 
 function fileRequestOf(fields: Fields): ResourceRequest | undefined {
@@ -162,13 +191,19 @@ function answerOf(value: Json | undefined): Answer<Json> | undefined {
   return value.ok === false && value.kind === "refused" ? refusalOf(value) : undefined;
 }
 
+function startMessageOf(fields: Fields, input: Json, settings: { readonly [key: string]: Json }): ParentMessage {
+  const caller = isText(fields.caller) ? { caller: fields.caller } : {};
+  const skillInput = fields.skillInput === undefined ? {} : { skillInput: fields.skillInput };
+  return { type: "start", input, settings, ...caller, ...skillInput };
+}
+
 export function parentMessageOf(line: string): ParentMessage | undefined {
   const value = parsedLine(line);
   if (!isJsonRecord(value)) {
     return undefined;
   }
   if (value.type === "start" && value.input !== undefined && isJsonRecord(value.settings)) {
-    return { type: "start", input: value.input, settings: value.settings };
+    return startMessageOf(value, value.input, value.settings);
   }
   const answer = value.type === "answer" ? answerOf(value.answer) : undefined;
   if (answer !== undefined && typeof value.id === "number") {

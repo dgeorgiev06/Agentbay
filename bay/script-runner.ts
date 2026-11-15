@@ -83,6 +83,12 @@ export function scriptCommand(scriptFile: string, request: ScriptRequest): reado
   ];
 }
 
+function startMessage(request: ScriptRequest): Readonly<Record<string, unknown>> {
+  const caller = request.caller === undefined ? {} : { caller: request.caller };
+  const skillInput = request.skillInput === undefined ? {} : { skillInput: request.skillInput };
+  return { type: "start", input: request.input, settings: request.settings, ...caller, ...skillInput };
+}
+
 function seconds(milliseconds: number): string {
   return String(Number((milliseconds / 1000).toFixed(3)));
 }
@@ -111,12 +117,30 @@ function spendingAnswer(spending: Json, spent: Spent): Answer<null> {
   return granted(null);
 }
 
-function brokerAnswer(broker: Broker, request: Exclude<ResourceRequest, { resource: "call" | "spend" }>) {
+type DatabaseRequest = Extract<ResourceRequest, { resource: `db.${string}` }>;
+
+function databaseAnswer(broker: Broker, request: DatabaseRequest) {
   switch (request.resource) {
     case "db.execute":
-      return broker.execute(request.sql, request.parameters);
+      return broker.execute(request.sql, request.parameters, request.partition);
     case "db.query":
-      return broker.query(request.sql, request.parameters);
+      return broker.query(request.sql, request.parameters, request.partition);
+    case "db.migrate":
+      return broker.migrate(request.partition);
+    case "db.agentQuery":
+      return broker.agentQuery(request.sql, request.partition);
+  }
+}
+
+function isDatabaseRequest(request: ResourceRequest): request is DatabaseRequest {
+  return request.resource.startsWith("db.");
+}
+
+function brokerAnswer(broker: Broker, request: Exclude<ResourceRequest, { resource: "call" | "spend" }>) {
+  if (isDatabaseRequest(request)) {
+    return databaseAnswer(broker, request);
+  }
+  switch (request.resource) {
     case "files.read":
       return broker.readFile(request.path);
     case "files.write":
@@ -241,7 +265,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
         state.final = message;
       }
     });
-    child.send(JSON.stringify({ type: "start", input: request.input, settings: request.settings }));
+    child.send(JSON.stringify(startMessage(request)));
     const end = await child.ended;
     broker.close();
     await Promise.all(state.inFlight);

@@ -1,0 +1,22 @@
+{
+  "input": {
+    "id": "local:note-1",
+    "set": {
+      "text": "Ask about the daily reward reports."
+    }
+  },
+  "output": {
+    "item": {
+      "id": "local:note-1",
+      "kind": "note",
+      "source": "local",
+      "at": "2026-11-12T09:30:00Z",
+      "title": "Call the custodian",
+      "text": "Ask about the daily reward reports.",
+      "url": null,
+      "author": null,
+      "labels": [],
+      "data": {}
+    }
+  }
+}

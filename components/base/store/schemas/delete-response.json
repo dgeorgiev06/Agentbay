@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeleteResponse",
+  "description": "What a delete removed and remembered.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "deleted",
+    "missing",
+    "remembered"
+  ],
+  "properties": {
+    "deleted": {
+      "type": "array",
+      "description": "Ids that were removed.",
+      "items": {
+        "type": "string",
+        "description": "An item id, <source>:<external id>."
+      }
+    },
+    "missing": {
+      "type": "array",
+      "description": "Ids the store did not hold; a source id among them is still remembered.",
+      "items": {
+        "type": "string",
+        "description": "An item id, <source>:<external id>."
+      }
+    },
+    "remembered": {
+      "type": "array",
+      "description": "Ids from a source that no later put stores again; local ids are not remembered.",
+      "items": {
+        "type": "string",
+        "description": "An item id, <source>:<external id>."
+      }
+    }
+  }
+}

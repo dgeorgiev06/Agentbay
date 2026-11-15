@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeleteRequest",
+  "description": "Items to remove from the store.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ids"
+  ],
+  "properties": {
+    "ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "uniqueItems": true,
+      "description": "The ids of the items to remove; an id from a source is remembered so that no later put stores it again.",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*:\\S",
+        "maxLength": 300,
+        "description": "An item id, <source>:<external id>."
+      }
+    }
+  }
+}

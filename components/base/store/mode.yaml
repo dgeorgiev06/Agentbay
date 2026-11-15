@@ -1,0 +1,58 @@
+name: store
+version: 1.0.0
+description: Keeps the items of each mode that composes it in a database of that mode's own, with search and bounded SQL.
+
+implements: [items-store@1]
+
+resources:
+  db: { migrations: migrations }
+
+actions:
+  put:
+    input: schemas/put-request.json
+    output: schemas/put-response.json
+    effects: [read, write]
+    run:
+      - script: scripts/put.ts
+  update:
+    input: schemas/update-request.json
+    output: schemas/update-response.json
+    effects: [read, write]
+    run:
+      - script: scripts/update.ts
+  delete:
+    input: schemas/delete-request.json
+    output: schemas/delete-response.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/delete.ts
+  get:
+    input: schemas/get-request.json
+    output: schemas/get-response.json
+    effects: [read]
+    run:
+      - script: scripts/get.ts
+  query:
+    input: schemas/query-request.json
+    output: schemas/query-response.json
+    effects: [read]
+    run:
+      - script: scripts/query.ts
+  sql:
+    input: schemas/sql-request.json
+    output: schemas/sql-response.json
+    effects: [read]
+    run:
+      - script: scripts/sql.ts
+  prune:
+    input: schemas/prune-request.json
+    output: schemas/prune-response.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/prune.ts
+  status:
+    input: schemas/status-request.json
+    output: schemas/status-response.json
+    effects: [read]
+    run:
+      - script: scripts/status.ts

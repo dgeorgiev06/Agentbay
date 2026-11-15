@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PruneResponse",
+  "description": "What a prune dropped and kept.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "removed",
+    "remaining"
+  ],
+  "properties": {
+    "removed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Items dropped."
+    },
+    "remaining": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Items the store still holds."
+    }
+  }
+}

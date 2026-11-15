@@ -2,10 +2,13 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import assert from "node:assert/strict";
+import type { Answer, Failure, Refusal } from "../bay/answers.ts";
 import type { EventSink, Permissions, RunEvent, StepPlace } from "../bay/contracts.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import type { Http, HttpRequest, HttpResponse, ProcessRequest, ProcessResult, Processes } from "../bay/ports.ts";
 import type { LoadedMode, System } from "../bay/registry.ts";
+import type { Outcome, Problem } from "../bay/spec.ts";
 
 export const kitFolder = fileURLToPath(new URL("..", import.meta.url));
 
@@ -108,4 +111,39 @@ export async function writeProjectFile(root: string, path: string, text: string)
   await mkdir(dirname(file), { recursive: true });
   await writeFile(file, text);
   return file;
+}
+
+export function valueOf<T>(answer: Answer<T>): T {
+  if (!answer.ok) {
+    assert.fail(`expected a value, got ${answer.kind}: ${answer.message}`);
+  }
+  return answer.value;
+}
+
+export function refusalOf<T>(answer: Answer<T>): Refusal {
+  if (answer.ok || answer.kind !== "refused") {
+    assert.fail(`expected a refusal, got ${JSON.stringify(answer)}`);
+  }
+  return answer;
+}
+
+export function failureOf<T>(answer: Answer<T>): Failure {
+  if (answer.ok || answer.kind !== "failed") {
+    assert.fail(`expected a failure, got ${JSON.stringify(answer)}`);
+  }
+  return answer;
+}
+
+export function accepted<T>(outcome: Outcome<T>): T {
+  if (!outcome.ok) {
+    assert.fail(`expected no problems, got ${JSON.stringify(outcome.problems)}`);
+  }
+  return outcome.value;
+}
+
+export function problemsOf<T>(outcome: Outcome<T>): readonly Problem[] {
+  if (outcome.ok) {
+    assert.fail("expected problems, got none");
+  }
+  return outcome.problems;
 }

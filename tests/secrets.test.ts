@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { SecretStore } from "../bay/secrets.ts";
-import { noProcesses, permissionsIn, recordingProcesses } from "./broker-fixture.ts";
+import { failureOf, noProcesses, permissionsIn, recordingProcesses, refusalOf } from "./broker-fixture.ts";
 
 const permissions = permissionsIn("/project", { secrets: ["MAIL_TOKEN", "SHORT_ONE", "MISSING_ONE"] });
 
@@ -18,10 +18,7 @@ test("a secret the permissions list is read from AGENTBAY_SECRET_<NAME>", async 
 
 test("a secret the permissions do not list is refused, naming the manifest line to change", async () => {
   const store = storeWith({ AGENTBAY_SECRET_OTHER_TOKEN: madeUpToken });
-  const answer = await store.get("OTHER_TOKEN", permissions);
-  assert.equal(answer.ok, false);
-  assert.equal(answer.ok ? "" : answer.kind, "refused");
-  const message = answer.ok ? "" : answer.message;
+  const message = refusalOf(await store.get("OTHER_TOKEN", permissions)).message;
   assert.match(message, /asked for the secret OTHER_TOKEN/);
   assert.match(message, /MAIL_TOKEN, SHORT_ONE, MISSING_ONE/);
   assert.match(message, /resources\.secrets in \/project\/components\/modes\/notes\/mode\.yaml/);
@@ -30,17 +27,12 @@ test("a secret the permissions do not list is refused, naming the manifest line 
 
 test("only the AGENTBAY_SECRET_ variable is read, never a variable of the bare name", async () => {
   const store = storeWith({ MAIL_TOKEN: madeUpToken });
-  const answer = await store.get("MAIL_TOKEN", permissions);
-  assert.equal(answer.ok, false);
-  assert.equal(answer.ok ? "" : answer.kind, "failed");
-  assert.match(answer.ok ? "" : answer.message, /AGENTBAY_SECRET_MAIL_TOKEN/);
+  assert.match(failureOf(await store.get("MAIL_TOKEN", permissions)).message, /AGENTBAY_SECRET_MAIL_TOKEN/);
 });
 
 test("a secret shorter than 8 characters is refused, without printing it", async () => {
   const store = storeWith({ AGENTBAY_SECRET_SHORT_ONE: "abc1234" });
-  const answer = await store.get("SHORT_ONE", permissions);
-  assert.equal(answer.ok, false);
-  const message = answer.ok ? "" : answer.message;
+  const message = refusalOf(await store.get("SHORT_ONE", permissions)).message;
   assert.match(message, /shorter than 8 characters/);
   assert.doesNotMatch(message, /abc1234/);
   assert.equal(store.redact("x abc1234 y"), "x abc1234 y");
@@ -51,8 +43,8 @@ test("on macOS a secret missing from the environment is read from the keychain, 
   const store = new SecretStore({ environment: {}, processes, platform: "darwin" });
   assert.deepEqual(await store.get("MAIL_TOKEN", permissions), { ok: true, value: madeUpToken });
   assert.equal(processes.requests.length, 1);
-  assert.equal(processes.requests[0]?.command, "security");
-  assert.deepEqual(processes.requests[0]?.arguments, [
+  assert.equal(processes.requests.at(0)?.command, "security");
+  assert.deepEqual(processes.requests.at(0)?.arguments, [
     "find-generic-password",
     "-s",
     "agentbay",
@@ -60,22 +52,19 @@ test("on macOS a secret missing from the environment is read from the keychain, 
     "MAIL_TOKEN",
     "-w",
   ]);
-  assert.deepEqual(processes.requests[0]?.environment, {});
+  assert.deepEqual(processes.requests.at(0)?.environment, {});
 });
 
 test("a secret in neither place fails with how to set it", async () => {
   const processes = recordingProcesses(() => ({ exitCode: 44, stdout: "", stderr: "not found" }));
   const store = new SecretStore({ environment: {}, processes, platform: "darwin" });
-  const answer = await store.get("MISSING_ONE", permissions);
-  assert.equal(answer.ok, false);
-  assert.equal(answer.ok ? "" : answer.kind, "failed");
-  assert.match(answer.ok ? "" : answer.message, /security add-generic-password -s agentbay -a MISSING_ONE -w/);
+  const message = failureOf(await store.get("MISSING_ONE", permissions)).message;
+  assert.match(message, /security add-generic-password -s agentbay -a MISSING_ONE -w/);
 });
 
 test("the keychain is not asked off macOS", async () => {
   const store = new SecretStore({ environment: {}, processes: noProcesses, platform: "linux" });
-  const answer = await store.get("MAIL_TOKEN", permissions);
-  assert.equal(answer.ok ? "" : answer.kind, "failed");
+  failureOf(await store.get("MAIL_TOKEN", permissions));
 });
 
 test("a value handed out is redacted raw, in base64, in URL-safe base64 and URL-encoded", async () => {
@@ -131,6 +120,5 @@ test("redaction reaches every string and key of a JSON value", async () => {
 test("a declared name that is not upper case with underscores is refused before any lookup", async () => {
   const store = storeWith({ "AGENTBAY_SECRET_mail-token": madeUpToken });
   const answer = await store.get("mail-token", permissionsIn("/project", { secrets: ["mail-token"] }));
-  assert.equal(answer.ok, false);
-  assert.match(answer.ok ? "" : answer.message, /upper-case letters, digits and underscores/);
+  assert.match(refusalOf(answer).message, /upper-case letters, digits and underscores/);
 });

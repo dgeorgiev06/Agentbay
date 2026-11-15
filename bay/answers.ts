@@ -1,3 +1,6 @@
+import { join } from "node:path/posix";
+import type { Permissions } from "./contracts.ts";
+
 export type Resource = "db" | "files" | "secrets" | "http" | "events" | "call" | "spend" | "script";
 
 export type Refusal = {
@@ -44,4 +47,8 @@ export function failed(message: string): Failure {
 
 export function listed(values: readonly string[], noneWording: string): string {
   return values.length === 0 ? noneWording : values.join(", ");
+}
+
+export function manifestOf(permissions: Permissions): string {
+  return join(permissions.modeFolder, "mode.yaml");
 }

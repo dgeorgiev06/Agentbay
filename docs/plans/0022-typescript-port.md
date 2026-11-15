@@ -137,8 +137,10 @@ A failed must item or a blocker goes back to the same builder once. A second fai
 ## Release
 
 - 5.0.0 at C1. Upgrading is in the proposal.
-- 5.1: the Codex adapter, starting with research on what Codex can enforce.
+- 5.1: always-on in the cloud (a daemon with schedules and events, a headless agent adapter, a chat channel, one container per run). It gets its own proposal, starting with where it is hosted.
+- 5.2: the Codex adapter, starting with research on what Codex can enforce.
 - `bay import-v4` is removed in 5.1.
+- After the existing modes: a real estate mode (free state parcel and sales data, listings parsed from alert emails through the Gmail mode). Research: the owner has the report of 2026-11-14.
 
 ## Where the builders need the owner
 

@@ -5,6 +5,10 @@ export type FileSystem = {
   readonly writeAtomic: (path: string, text: string) => Promise<void>;
 };
 
+export type Folders = {
+  readonly ensureFolder: (path: string) => Promise<void>;
+};
+
 export type Clock = {
   readonly now: () => Date;
 };

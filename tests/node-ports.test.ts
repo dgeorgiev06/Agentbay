@@ -3,7 +3,7 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { nodeFileSystem, systemClock } from "../bay/node-ports.ts";
+import { nodeFileSystem, nodeFolders, systemClock } from "../bay/node-ports.ts";
 
 async function withTemporaryFolder(run: (folder: string) => Promise<void>): Promise<void> {
   const folder = await mkdtemp(join(tmpdir(), "agentbay-node-ports-"));
@@ -53,4 +53,13 @@ test("the system clock tells the current time", () => {
   const before = Date.now();
   const now = systemClock.now().getTime();
   assert.ok(now >= before && now <= Date.now());
+});
+
+test("ensureFolder makes a folder and its parents, and is harmless when it exists", async () => {
+  await withTemporaryFolder(async (folder) => {
+    const nested = join(folder, "a", "b");
+    await nodeFolders.ensureFolder(nested);
+    await nodeFolders.ensureFolder(nested);
+    assert.deepEqual(await readdir(join(folder, "a")), ["b"]);
+  });
 });

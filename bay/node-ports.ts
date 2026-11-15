@@ -13,6 +13,7 @@ import type {
   EntryKind,
   FileInspector,
   FileSystem,
+  Folders,
   Http,
   HttpRequest,
   HttpResponse,
@@ -78,6 +79,12 @@ async function writeAtomic(path: string, text: string): Promise<void> {
 export const nodeFileSystem: FileSystem = { readText, list, exists, writeAtomic };
 
 export const systemClock: Clock = { now: () => new Date() };
+
+export const nodeFolders: Folders = {
+  ensureFolder: async (path) => {
+    await mkdir(path, { recursive: true });
+  },
+};
 
 async function realPath(path: string): Promise<string | undefined> {
   try {

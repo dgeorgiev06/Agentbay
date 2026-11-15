@@ -1,5 +1,5 @@
 import { normalize } from "node:path/posix";
-import type { Clock, FileSystem } from "../bay/ports.ts";
+import type { Clock, FileSystem, Folders } from "../bay/ports.ts";
 
 export type FakeFileSystem = FileSystem & {
   readonly contents: ReadonlyMap<string, string>;
@@ -29,6 +29,17 @@ export function fakeFileSystem(initial: Readonly<Record<string, string>> = {}): 
     exists: (path) => Promise.resolve(contents.has(normalize(path)) || childNames(contents, path).length > 0),
     writeAtomic: (path, text) => {
       contents.set(normalize(path), text);
+      return Promise.resolve();
+    },
+  };
+}
+
+export function fakeFolders(): Folders & { readonly created: readonly string[] } {
+  const created: string[] = [];
+  return {
+    created,
+    ensureFolder: (path) => {
+      created.push(normalize(path));
       return Promise.resolve();
     },
   };

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { fakeClock, fakeFileSystem } from "./fakes.ts";
+import { fakeClock, fakeFileSystem, fakeFolders } from "./fakes.ts";
 
 test("the fake file system reads, lists, finds and writes files held in memory", async () => {
   const files = fakeFileSystem({ "/a/b.txt": "b", "/a/c/d.txt": "d" });
@@ -12,6 +12,12 @@ test("the fake file system reads, lists, finds and writes files held in memory",
   assert.equal(await files.exists("/a/c/e.txt"), false);
   await files.writeAtomic("/a/c/e.txt", "e");
   assert.equal(files.contents.get("/a/c/e.txt"), "e");
+});
+
+test("the fake folders record each folder they are asked to make", async () => {
+  const folders = fakeFolders();
+  await folders.ensureFolder("/a/b/../c");
+  assert.deepEqual(folders.created, ["/a/c"]);
 });
 
 test("the fake clock stands still until it is advanced", () => {

@@ -44,5 +44,9 @@ export type Action = {
 
 export type Step =
   | { readonly script: RelativePath }
-  | { readonly skill: RelativePath; readonly tier: "fast" | "balanced" | "deep" }
+  | {
+      readonly skill: RelativePath;
+      readonly tier: "fast" | "balanced" | "deep";
+      readonly checks?: ReadonlyArray<RelativePath>;
+    }
   | { readonly call: string };

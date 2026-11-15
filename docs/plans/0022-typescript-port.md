@@ -329,3 +329,35 @@ The two may be the same folder: that is how agentbay itself is developed.
 **Kept from agentbay 4:** a deleted item is remembered and never stored again; `put` refuses kinds the caller's sources do not produce; spend is saved before items are committed; item text is scrubbed for secrets when stored; one shared selector matcher lives in the store so every source behaves alike; full-text search.
 
 **The modes of stage 4:** `store` (base), `fake-source` (kit mode, for tests and the demo), and `feed-briefing` (kit mode: `sync` = fetch then put; `digest` = select script, the digest skill with a citation check, a format script). The X source comes in stage 5 and binds in place of the fake.
+
+## Stage 4 checkpoint (reviewer, 2026-11-15)
+
+**What ran.** In a fresh project folder outside the kit: `check` (0 errors, 0 warnings), `build` with the Claude Code adapter, `call feed-briefing.sync` against the fake source (18 fetched, 14 stored, cost recorded), `call feed-briefing.digest`, the digest skill step done by a real agent (a Sonnet subagent of the review session, given the generated agent file's instructions and the task, reaching the kernel through `call --tool`), accepted by the citation check on its first submission, formatted by the last script, run `done`.
+
+**What that did not prove.** The agent ran in the review session, not in Claude Code: the hook, the generated agent file's tool list and the MCP server over stdio were not in force. Those have only simulated tests.
+
+**Measured**
+
+| | Lines | Files |
+|---|---|---|
+| Kernel (`bay/`, generated types excluded) | 12,995 | 75 |
+| Claude Code adapter | 1,854 | 18 |
+| Modes (store, fake source, feed briefing) | 1,495 | |
+| Tests | 11,782 | 63 |
+
+679 tests pass. Runtime dependencies: `yaml`, `ajv`. agentbay 4 for comparison: kernel 9,703, connectors 6,415, adapter 535.
+
+**Test strength (deliberate bugs injected, one at a time)**
+
+| Area | Caught at first | After added tests |
+|---|---|---|
+| Registry and check | 9 of 10 | 10 of 10 |
+| Broker, policy, secrets | 10 of 13 | 13 of 13, and one real bug found |
+| Engine and run store | 10 of 10 | |
+| Tokens and kernel tools | 6 of 6 | |
+| Adapter (builder's own run) | 19 of 19 | |
+| Store and briefing (builder's own run) | 27 of 28 | 28 of 28 |
+
+**Found only by running it as a user would:** the kit and the project had to become two folders (slice K7).
+
+**Open for the owner:** the kernel's size; monthly spend caps (reported, no longer enforced); database files are not created owner-only; the old scope rule is kept only in part (a changed selector is flagged, reads are not refused).

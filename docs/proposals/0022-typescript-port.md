@@ -20,11 +20,11 @@ exceptions:
   - { measure: all, to: "new ceilings written at cutover", reason: "every measure is redefined for the new kernel (see Limits); the kernel budget is 4,000 lines against 9,703 today" }
 ---
 
-# 0022: agentbay 5, a smaller kernel in TypeScript
+# 0022: agentbay 5 in TypeScript, built around one unit
 
 ## Summary
 
-agentbay 4 is a Python kernel of 9,703 lines with 6,415 lines of Python connectors, seven concepts a mode author must learn (role, mode, agent profile, environment, connector, capability interface, component) and a guard that parses shell commands. This proposal replaces it with a TypeScript kernel of at most 4,000 lines built around one unit, the mode, and rebuilds every existing mode on it.
+agentbay 4 is a Python kernel of 9,703 lines with 6,415 lines of Python connectors, seven concepts a mode author must learn (role, mode, agent profile, environment, connector, capability interface, component) and a guard that parses shell commands. This proposal replaces it with a TypeScript kernel built around one unit, the mode, and rebuilds every existing mode on it. The kernel was first budgeted at 4,000 lines; measured at the stage 4 checkpoint it is 12,995 (see the plan), so it is not smaller than the one it replaces. It does more: durable runs, budgets, undo, a confined script runner and a tool server.
 
 It is a redesign, not a port. Nothing reads agentbay 4 manifests, state or data, with one exception: a one-time importer for your own to-dos and other local items, which no source can re-create.
 

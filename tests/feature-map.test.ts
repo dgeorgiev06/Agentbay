@@ -169,6 +169,10 @@ function sortedBreaks(breaks: readonly Break[]): readonly Break[] {
   return [...breaks].sort((left, right) => keyOf(left).localeCompare(keyOf(right)));
 }
 
+function writesDebt(environment: Readonly<Record<string, string | undefined>>): boolean {
+  return environment[writeDebtVariable] === "write";
+}
+
 function kitFiles(): readonly string[] {
   return scannedFolders.flatMap((folder) =>
     readdirSync(folder, { recursive: true, encoding: "utf8" })
@@ -280,6 +284,20 @@ test("the debt file is read back as the breaks it lists, and entries with an unk
   assert.deepEqual(parsedDebt(text), [{ from: "bay/a.ts", to: "bay/b.ts", rule: "private-file" }]);
 });
 
+test("the debt file is written only when FEATURE_MAP_DEBT is write", () => {
+  assert.equal(writesDebt({}), false);
+  assert.equal(writesDebt({ FEATURE_MAP_DEBT: "yes" }), false);
+  assert.equal(writesDebt({ FEATURE_MAP_DEBT: "write" }), true);
+});
+
+test("the scan of the kit reads the kernel, the adapters and the modes", () => {
+  const files = kitFiles();
+  for (const file of ["bay/kernel.ts", "bay/generated/mode.ts", "adapters/claude-code/adapter.ts"]) {
+    assert.ok(files.includes(file), file);
+  }
+  assert.ok(files.includes("components/base/store/scripts/put.ts"));
+});
+
 test("every kernel file of the kit is in exactly one feature", () => {
   const map = parsedMap(readFileSync(mapFile, "utf8"));
   assert.deepEqual(coverageProblems(map, kitFiles().filter(isKernelFile)), []);
@@ -293,7 +311,7 @@ test("the kit's imports break the feature map only where the debt file says so",
       kitFiles().map((file) => scanned(file, readFileSync(file, "utf8"))),
     ),
   );
-  if (process.env[writeDebtVariable] === "write") {
+  if (writesDebt(process.env)) {
     writeFileSync(debtFile, stringify({ breaks }));
   }
   const debt = debtOf(breaks, parsedDebt(readFileSync(debtFile, "utf8")));

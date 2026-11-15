@@ -59,7 +59,7 @@
           "$ref": "#/$defs/selector"
         }
       ],
-      "description": "The selector these items were fetched with; status reports it, so a reader can tell when the configured selector has changed since."
+      "description": "The selector these items were fetched with: an item it does not match is skipped, so the store keeps what the selector asks for even from a source that returns more; status reports it, so a reader can tell when the configured selector has changed since."
     }
   },
   "$defs": {

@@ -2,6 +2,7 @@ import { fail, shortHash, type DatabaseStatements, type Json } from "../../../..
 import { itemsOf, localSource, rowParameters, type Item } from "./items.ts";
 import { fieldsOf, isFields, numberOf, parsedJson, textOf, textsOf, type Fields } from "./json.ts";
 import { changesOf, rowsOf } from "./partition.ts";
+import { matches, selectorOf } from "./selector.ts";
 import {
   recordSpend,
   selectDeletedIds,
@@ -128,6 +129,16 @@ async function saveSyncState(database: DatabaseStatements, put: Put, now: Date):
   await changesOf(database, upsertSyncState, state);
 }
 
+function skipReason(put: Put, item: Item, deleted: ReadonlySet<string>): string | undefined {
+  if (deleted.has(item.id)) {
+    return `${item.id} was deleted from the store, so it is never stored again.`;
+  }
+  if (put.selector !== undefined && !matches(selectorOf(put.selector), item)) {
+    return `${item.id} does not match the selector it was fetched with, so it is not kept.`;
+  }
+  return undefined;
+}
+
 export async function putItems(database: DatabaseStatements, input: Json, now: Date): Promise<Json> {
   const put = putOf(input);
   refuseForeignItems(put);
@@ -139,8 +150,9 @@ export async function putItems(database: DatabaseStatements, input: Json, now: D
   let added = 0;
   let updated = 0;
   for (const item of put.items) {
-    if (deleted.has(item.id)) {
-      skipped.push({ id: item.id, reason: `${item.id} was deleted from the store, so it is never stored again.` });
+    const reason = skipReason(put, item, deleted);
+    if (reason !== undefined) {
+      skipped.push({ id: item.id, reason });
       continue;
     }
     await changesOf(database, upsertItem, rowParameters(item, now.toISOString()));

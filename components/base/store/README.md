@@ -10,7 +10,7 @@ calling mode, uses the partition `owner`.
 
 | action | effects | does |
 |---|---|---|
-| `put` | read, write | Stores the items of one source, each replacing a stored item with the same id. It refuses the whole put when an item has another source, an id without the `<source>:` prefix, or a kind that the source does not list in `kinds`. A local item (source `local`) may not take a kind a source produces. It skips ids that were deleted earlier and says why. It records `cost` once per page before it stores the items, and saves `cursor` and `selector` after them. |
+| `put` | read, write | Stores the items of one source, each replacing a stored item with the same id. It refuses the whole put when an item has another source, an id without the `<source>:` prefix, or a kind that the source does not list in `kinds`. A local item (source `local`) may not take a kind a source produces. It skips ids that were deleted earlier, and items that the put's `selector` does not match, and says why. It records `cost` once per page before it stores the items, and saves `cursor` and `selector` after them. |
 | `update` | read, write | Changes fields of a local item. Items from a source are replaced by their next sync, so their ids are refused. |
 | `delete` | read, write, delete | Removes items. It remembers every id that is not local, so no later put stores it again. |
 | `get` | read | Returns items by id, in the order asked, and the ids it does not hold. |

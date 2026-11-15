@@ -55,15 +55,21 @@ test("the kernel returns the policy's problems when a mode declares a kernel pat
   await project.remove();
 });
 
-test("a mode's migrations run once per kernel, before its first script or query", async () => {
+test("a mode's database is made only when it is first used, with its migrations applied before the first statement", async () => {
   const opened = await openProject();
   const { kernel } = opened;
   const permissions = kernel.policyOf("writer");
+  const started = await kernel.engine.startAction("writer.compose", { name: "Ada" });
+  assert.ok(started.ok && started.run.state.status === "waiting", JSON.stringify(started));
+  assert.ok(!existsSync(permissions.databaseFile), "a script that never used context.db made the database");
   const place = { runId: "none", mode: "writer", action: "compose", stepIndex: 0, stepKey: "0" };
-  assert.ok(!existsSync(permissions.databaseFile));
-  const first = await kernel.prepareDatabase(place, permissions);
-  assert.deepEqual(first, { ok: true, value: ["0001-notes.sql"] });
-  assert.equal(await kernel.prepareDatabase(place, permissions), await kernel.prepareDatabase(place, permissions));
+  const broker = kernel.brokerFor(place, permissions);
+  try {
+    assert.deepEqual(await broker.query("select text from notes"), { ok: true, value: [{ text: "The first note." }] });
+    assert.deepEqual(await broker.migrate(), { ok: true, value: [] });
+  } finally {
+    broker.close();
+  }
   assert.ok(existsSync(permissions.databaseFile));
   await opened.close();
 });

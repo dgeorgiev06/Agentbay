@@ -52,10 +52,6 @@ async function databaseQuery(call: ToolCall): Promise<ToolResult> {
   if (typeof sql !== "string") {
     return sql;
   }
-  const prepared = await call.kernel.prepareDatabase(call.step.task.place, call.step.task.permissions);
-  if (!prepared.ok) {
-    return refused(prepared.message);
-  }
   return withBroker(call, async (broker) => {
     const answer = await broker.agentQuery(sql);
     return answer.ok

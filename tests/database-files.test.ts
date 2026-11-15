@@ -78,3 +78,17 @@ test("a folder or database file left wider than owner-only is narrowed when the 
     await project.close();
   }
 });
+
+test("running the fake source and the feed briefing makes only kernel.db and the store's partition for the briefing", async () => {
+  const project = await openModeProject(config);
+  try {
+    await project.output("fake-source.describe", {});
+    await synced(project);
+    const names = (await readdir(join(project.root, ".agentbay", "data"))).filter((name) => name.endsWith(".db"));
+    assert.deepEqual(names, ["store--feed-briefing.db"]);
+    const top = (await readdir(join(project.root, ".agentbay"))).filter((name) => name.endsWith(".db"));
+    assert.deepEqual(top, ["kernel.db"]);
+  } finally {
+    await project.close();
+  }
+});

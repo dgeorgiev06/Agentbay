@@ -83,6 +83,7 @@ export class Broker {
   readonly #permissions: Permissions;
   readonly #limits: BrokerLimits;
   readonly #databases = new Map<string, DatabaseProcess>();
+  #unnamedMigration: Promise<Answer<readonly string[]>> | undefined;
 
   constructor(options: BrokerOptions) {
     this.#options = options;
@@ -133,6 +134,9 @@ export class Broker {
     for (const name of names.sort()) {
       ordered.push({ name, sql: (await this.#options.files.readText(`${migrations}/${name}`)) ?? "" });
     }
+    if (ordered.length === 0 && !(await this.#options.files.exists(file.value))) {
+      return granted([]);
+    }
     const appliedAt = this.#options.clock.now().toISOString();
     const order = { method: "migrate" as const, migrations: ordered, appliedAt };
     const result = await this.#databaseOf(file.value).request(order);
@@ -147,6 +151,10 @@ export class Broker {
     const keyword = leadingKeyword(sql);
     if (![...readKeywords, ...writeKeywords].includes(keyword)) {
       return this.#settle(this.#statementRefusal(keyword, [...readKeywords, ...writeKeywords]));
+    }
+    const migrated = await this.#migratedFirst(partition);
+    if (!migrated.ok) {
+      return migrated;
     }
     const writable = this.#permissions.effects.includes("write");
     const stored = await this.#storedParameters(parameters);
@@ -163,6 +171,10 @@ export class Broker {
     if (!readKeywords.includes(keyword)) {
       return this.#settle(this.#statementRefusal(keyword, readKeywords));
     }
+    const migrated = await this.#migratedFirst(partition);
+    if (!migrated.ok) {
+      return migrated;
+    }
     const result = await this.#databaseOf(file.value).request({ method: "query", sql, parameters });
     return this.#settle(this.#databaseAnswer(result, { keyword, fits: isRows }));
   }
@@ -173,6 +185,10 @@ export class Broker {
       return this.#settle(file);
     }
     const databaseFile = file.value;
+    const migrated = await this.#migratedFirst(partition);
+    if (!migrated.ok) {
+      return migrated;
+    }
     if (!(await this.#options.files.exists(databaseFile))) {
       return this.#settle(failed(`The mode ${this.#permissions.mode} has no database yet; run its migrations first.`));
     }
@@ -316,6 +332,14 @@ export class Broker {
       database.close();
     }
     this.#databases.clear();
+  }
+
+  #migratedFirst(partition: string | undefined): Promise<Answer<readonly string[]>> {
+    if (partition !== undefined) {
+      return Promise.resolve(granted([]));
+    }
+    this.#unnamedMigration ??= this.migrate();
+    return this.#unnamedMigration;
   }
 
   #databaseOf(file: string): DatabaseProcess {

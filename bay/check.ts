@@ -9,6 +9,7 @@ import {
   type Finding,
   type LoadedModeFolder,
 } from "./check-context.ts";
+import { checkLimits } from "./check-limits.ts";
 import type { FileSystem } from "./ports.ts";
 import { loadSystem, type SystemLayout } from "./registry.ts";
 import { problemAt, type Problem } from "./spec.ts";
@@ -66,7 +67,11 @@ export async function checkSystem(ports: CheckPorts, layout: SystemLayout): Prom
   const files = rootedFileSystem(ports.files, layout.root);
   const paths = await ports.listing.projectFiles(layout.root);
   const context = await loadCheckContext(files, paths);
-  const findings = [...(await registryFindings(ports, layout)), ...checkCommands(context)];
+  const findings = [
+    ...(await registryFindings(ports, layout)),
+    ...checkCommands(context),
+    ...(await checkLimits(context)),
+  ];
   const errorCount = findings.filter((finding) => finding.severity === "error").length;
   return { findings, errors: errorCount, warnings: findings.length - errorCount };
 }

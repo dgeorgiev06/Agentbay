@@ -6,7 +6,7 @@ import { layout, rooted, validFiles } from "./system-fixture.ts";
 
 const notesSkillFile = "components/modes/notes/skills/write-note/SKILL.md";
 
-const limitsText = [
+export const limitsText = [
   "kernel_lines: 4000",
   "adapter_lines: 800",
   "concepts: 5",
@@ -86,4 +86,9 @@ export function findFinding(report: CheckReport, file: string, words: string): F
 
 export function assertClean(report: CheckReport): void {
   assert.deepEqual(report.findings, [], describe(report.findings));
+}
+
+export function withoutFinding(report: CheckReport, words: string): void {
+  const found = report.findings.filter((finding) => finding.message.includes(words));
+  assert.deepEqual(found, [], describe(found));
 }

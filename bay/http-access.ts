@@ -17,11 +17,13 @@ const redirectStatuses: readonly number[] = [301, 302, 303, 307, 308];
 
 const sensitiveHeaderName = /authorization|cookie|token|secret|key|session|password|signature|credential/i;
 
+const ipLiteral = /^(\d{1,3}(\.\d{1,3}){3}|\[[0-9a-f:.]+\])$/i;
+
 export function hostAllowed(host: string, declared: readonly string[]): boolean {
   const name = host.toLowerCase();
   return declared.some((entry) => {
     const pattern = entry.toLowerCase();
-    if (pattern.startsWith("*.")) {
+    if (pattern.startsWith("*.") && !ipLiteral.test(name)) {
       return name.endsWith(pattern.slice(1)) && name.length > pattern.length - 1;
     }
     return name === pattern;

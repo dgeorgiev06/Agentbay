@@ -68,12 +68,14 @@ export function skillStepAt(context: WaitingContext, run: RunWithSteps, waitingK
     return `Step ${String(position.index)} of action ${target.name} is not a skill step.`;
   }
   const mode = target.mode.manifest.name;
+  const schemas = textsField(record.detail, "schemas");
   const task: SkillTask = {
     place: { runId: run.id, mode, action: target.name, stepIndex: position.index, stepKey: key },
     skill: step.skill,
     tier: step.tier,
     input: record.input,
-    outputSchema: textsField(record.detail, "schemas")[0] ?? "",
+    outputSchema: schemas[0] ?? "",
+    alsoMatches: schemas.slice(1),
     permissions: { grants: context.policyOf(mode), actionEffects: target.action.effects },
     round: numberField(record.detail, "round") ?? 1,
     feedback: textsField(record.detail, "feedback"),

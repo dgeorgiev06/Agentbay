@@ -304,18 +304,20 @@ async function skillSchemas(
     return `The skill ${file} cannot be read: ${problemText(parsed.problems)}`;
   }
   const own = parsed.value.frontMatter.metadata?.output;
-  return [...(own === undefined ? [] : [own]), ...(skill.last ? [frame.action.output] : [])];
+  return [...new Set([...(own === undefined ? [] : [own]), ...(skill.last ? [frame.action.output] : [])])];
 }
 
 function skillWaiting(walk: Walk, frame: ActionFrame, at: { skill: SkillStep; record: StepRecord }): Progress {
   const { skill, record } = at;
   const round = numberField(record.detail, "round") ?? 1;
+  const schemas = textsField(record.detail, "schemas");
   const task: SkillTask = {
     place: skill.place,
     skill: skill.skill,
     tier: skill.tier,
     input: record.input,
-    outputSchema: textsField(record.detail, "schemas")[0] ?? "",
+    outputSchema: schemas[0] ?? "",
+    alsoMatches: schemas.slice(1),
     permissions: actionPermissions(walk, frame),
     round,
     feedback: textsField(record.detail, "feedback"),

@@ -67,6 +67,7 @@ export type SkillTask = {
   readonly tier: Tier;
   readonly input: Json;
   readonly outputSchema: string;
+  readonly alsoMatches: readonly string[];
   readonly permissions: Permissions;
   readonly round: number;
   readonly feedback: readonly string[];

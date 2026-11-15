@@ -82,7 +82,7 @@ export const toolDefinitions: readonly ToolDefinition[] = [
       "answer gives.",
     inputSchema: inputSchema(
       {
-        output: { description: "Your output, matching the task's outputSchema." },
+        output: { description: "Your output, matching the task's outputSchema and every schema in alsoMatches." },
         tokens: { type: "integer", minimum: 0, description: "The model tokens you used, if you know them." },
         usd: { type: "number", minimum: 0, description: "The US dollars you spent, if you know them." },
       },

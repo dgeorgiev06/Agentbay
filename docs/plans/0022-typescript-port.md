@@ -219,3 +219,35 @@ Consequences: on Node 22 a script step is confined for files, processes and work
 4. The proposal no longer says confinement closes the bypass.
 
 Reviewer's note on S0: the checks were rerun and pass; the worker and permission-model findings were reproduced independently. Spike B was not run inside a live Claude Code session, so K6's hook is verified on the owner's machine at the stage 4 checkpoint. Two rules are still missing from the lint config and go to K1: `prefer-readonly`, and a ban on one mode importing another mode's files.
+
+## Stage 2 contracts (written by the reviewer before K2, K3 and K4 start)
+
+K3 and K4 are built in parallel and meet at `bay/contracts.ts` (types only). Neither edits that file; a needed change is reported, not made.
+
+**Who owns what in stage 2**
+
+| Slice | Files |
+|---|---|
+| K2 | `bay/check.ts`, `bay/new.ts`, `bay/templates/`, their tests. No schema changes |
+| K3 | `bay/policy.ts`, `bay/broker.ts`, `bay/sdk.ts`, `bay/script-runner.ts`, `bay/script-host.ts`, `bay/script-preload.ts`, `bay/query-child.ts`, `bay/secrets.ts`, their tests |
+| K4 | `bay/engine.ts`, `bay/run-store.ts`, `bay/references.ts`, `schemas/workflow.schema.json`, `schemas/mode.schema.json`, the regenerated types, and the registry rules those schema changes need, their tests |
+
+**Where state lives.** The kernel database is `.agentbay/kernel.db` in the project (tables `runs`, `steps`, `events`). Each mode's own database is `.agentbay/data/<mode>.db`. Both are SQLite through `node:sqlite`.
+
+**How an action runs.** The steps of an action form a pipeline: the action's input goes to the first step, each step's output is the next step's input, and the last output is checked against the action's output schema. A `script` step goes to the `ScriptRunner` (K3). A `call` step runs the bound mode's action through the engine, with the callee's permissions. A `skill` step saves a `SkillTask` and puts the run in `waiting`; `submit` brings the output back, which is checked against the schema before the run continues.
+
+**Skill checks.** A skill step may list `checks:` (script paths). After a submitted output passes its schema, the engine runs each check script with that output as input. A check returns `{ "passed": true }` or `{ "passed": false, "feedback": "..." }`. On a failure the same skill step returns to `waiting` with the feedback and `round` raised by one. After round 3 fails, the run fails. K4 adds `checks` to the mode schema.
+
+**Workflow steps.** K4 adds an optional `input:` to `action` steps and an optional `show:` to `approval` steps. A value in `input` that is a string starting with `$` is a reference, resolved whole (no string interpolation): `$trigger` (the workflow's input), `$steps.<id>.output` with an optional dotted path after it, `$item` (inside `foreach`), `$settings.<key>`. Anything else is a literal. `foreach` takes one such reference that must resolve to a list; its nested steps run once per element, in order, and are saved under `<foreach id>[<n>].<step id>`. `wait` is a duration (`30m`, `2h`, `3d`). An `approval` records the SHA-256 of the canonical JSON of what `show` resolved to; `approve` must name that hash, and a run whose shown content has changed returns to the approval.
+
+**Run states.** `running`, `waiting` (for `skill`, `approval`, `time` or `budget`), `done`, `failed`, `undone`. Every step's input and output is saved before the next step starts. One writer per run: the engine takes a lock row before it advances a run and refuses a second writer.
+
+**Resume.** `resume` continues from the first step with no saved output. A step that had started and not finished is run again only when its action's effects are `read` only; otherwise the run stays `waiting` for the owner to say rerun or skip.
+
+**Budget.** The budget of a run is the smallest of the workflow's, the action's and the project default, per measure. Every `StepOutcome` reports what it spent; nested calls draw from the caller's remaining budget. When a measure would go below zero the run goes to `waiting` for `budget`.
+
+**Undo.** When a run fails after steps with `write` effects finished, the engine runs the `undo` action of each finished action, newest first, each with that action's output as input, and ends `undone`, listing the actions that had no undo. Actions with the `delete` effect are never undone automatically.
+
+**Scripts.** A script is a `.ts` file whose only export is `run`, made with `defineScript` from `bay/sdk.ts`: `export const run = defineScript(async (input, context) => output)`. `context` gives `db`, `files`, `secrets`, `http`, `events`, `call`, `settings` and `spend`. The script runs in a child process with the seat belt from spike C; every resource request crosses to the parent as one JSON line and is checked there against the run's `Permissions`.
+
+**Secrets.** Looked up by name, first in the environment as `AGENTBAY_SECRET_<NAME>`, then in the macOS keychain through the processes port. Never listed; every value handed out is remembered and redacted from outputs, events and error text.

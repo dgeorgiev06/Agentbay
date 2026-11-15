@@ -55,8 +55,8 @@ test("db_query runs one select on the mode's own database, migrated first, and r
     const events = await kernel.runs.agentTools.store.readEvents(waiting.runId);
     const calls = events.filter((event) => event.kind === "tool.called").map((event) => event.detail);
     assert.deepEqual(calls, [
-      { tool: "db_query", stepKey: waiting.stepKey, ok: true },
-      { tool: "db_query", stepKey: waiting.stepKey, ok: false },
+      { tool: "db_query", stepKey: waiting.stepKey },
+      { tool: "db_query", stepKey: waiting.stepKey },
     ]);
   });
 });

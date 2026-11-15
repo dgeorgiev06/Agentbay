@@ -128,3 +128,154 @@ breaks:
   - from: bay/tools.ts
     to: bay/kernel.ts
     rule: may-not-import
+test_breaks:
+  - from: tests/broker-database.test.ts
+    to: bay/agent-query.ts
+    rule: test-reaches-in
+  - from: tests/broker-effects.test.ts
+    to: bay/effect-rule.ts
+    rule: test-reaches-in
+  - from: tests/broker-helpers.test.ts
+    to: bay/file-access.ts
+    rule: test-reaches-in
+  - from: tests/broker-helpers.test.ts
+    to: bay/http-access.ts
+    rule: test-reaches-in
+  - from: tests/broker-helpers.test.ts
+    to: bay/script-protocol.ts
+    rule: test-reaches-in
+  - from: tests/broker-helpers.test.ts
+    to: bay/secret-patterns.ts
+    rule: test-reaches-in
+  - from: tests/broker-helpers.test.ts
+    to: bay/sql-statements.ts
+    rule: test-reaches-in
+  - from: tests/budget.test.ts
+    to: bay/runs/budget.ts
+    rule: test-reaches-in
+  - from: tests/build.test.ts
+    to: bay/skill-tools.ts
+    rule: test-reaches-in
+  - from: tests/build.test.ts
+    to: bay/terminal.ts
+    rule: test-reaches-in
+  - from: tests/check-context.test.ts
+    to: bay/check-context.ts
+    rule: test-reaches-in
+  - from: tests/check-fixture.ts
+    to: bay/check-context.ts
+    rule: test-reaches-in
+  - from: tests/cli-fixture.ts
+    to: bay/command-context.ts
+    rule: test-reaches-in
+  - from: tests/cli-fixture.ts
+    to: bay/command-line.ts
+    rule: test-reaches-in
+  - from: tests/cli-fixture.ts
+    to: bay/commands.ts
+    rule: test-reaches-in
+  - from: tests/command-line.test.ts
+    to: bay/command-line.ts
+    rule: test-reaches-in
+  - from: tests/command-line.test.ts
+    to: bay/commands.ts
+    rule: test-reaches-in
+  - from: tests/engine-crash.test.ts
+    to: bay/runs/engine.ts
+    rule: test-reaches-in
+  - from: tests/engine-crash.test.ts
+    to: bay/runs/run-state.ts
+    rule: test-reaches-in
+  - from: tests/engine-crash.test.ts
+    to: bay/runs/sqlite-run-store.ts
+    rule: test-reaches-in
+  - from: tests/engine-fixture.ts
+    to: bay/runs/engine.ts
+    rule: test-reaches-in
+  - from: tests/engine-fixture.ts
+    to: bay/runs/run-state.ts
+    rule: test-reaches-in
+  - from: tests/engine-fixture.ts
+    to: bay/runs/run-store.ts
+    rule: test-reaches-in
+  - from: tests/engine-fixture.ts
+    to: bay/runs/sqlite-run-store.ts
+    rule: test-reaches-in
+  - from: tests/engine-parts.test.ts
+    to: bay/runs/budget.ts
+    rule: test-reaches-in
+  - from: tests/engine-parts.test.ts
+    to: bay/runs/run-store.ts
+    rule: test-reaches-in
+  - from: tests/engine-parts.test.ts
+    to: bay/runs/walk.ts
+    rule: test-reaches-in
+  - from: tests/engine-parts.test.ts
+    to: bay/targets.ts
+    rule: test-reaches-in
+  - from: tests/engine-workflow.test.ts
+    to: bay/runs/run-state.ts
+    rule: test-reaches-in
+  - from: tests/engine-workflow.test.ts
+    to: bay/runs/waiting.ts
+    rule: test-reaches-in
+  - from: tests/feature-map.test.ts
+    to: bay/import-scanner.ts
+    rule: test-reaches-in
+  - from: tests/generate-types.test.ts
+    to: bay/generate-types.ts
+    rule: test-reaches-in
+  - from: tests/import-scanner.test.ts
+    to: bay/import-scanner.ts
+    rule: test-reaches-in
+  - from: tests/kernel-db-fixture.ts
+    to: bay/runs/run-store.ts
+    rule: test-reaches-in
+  - from: tests/kernel-db-fixture.ts
+    to: bay/runs/sqlite-run-store.ts
+    rule: test-reaches-in
+  - from: tests/mcp.test.ts
+    to: bay/mcp-server.ts
+    rule: test-reaches-in
+  - from: tests/mcp.test.ts
+    to: bay/tool-definitions.ts
+    rule: test-reaches-in
+  - from: tests/references.test.ts
+    to: bay/references.ts
+    rule: test-reaches-in
+  - from: tests/run-report.test.ts
+    to: bay/run-report.ts
+    rule: test-reaches-in
+  - from: tests/run-store.test.ts
+    to: bay/runs/run-store.ts
+    rule: test-reaches-in
+  - from: tests/run-store.test.ts
+    to: bay/runs/sqlite-run-store.ts
+    rule: test-reaches-in
+  - from: tests/run-store.test.ts
+    to: bay/runs/step-detail.ts
+    rule: test-reaches-in
+  - from: tests/spec.test.ts
+    to: bay/spec.ts
+    rule: test-reaches-in
+  - from: tests/step-key.test.ts
+    to: bay/runs/step-key.ts
+    rule: test-reaches-in
+  - from: tests/task-tokens.test.ts
+    to: bay/runs/run-store.ts
+    rule: test-reaches-in
+  - from: tests/task-tokens.test.ts
+    to: bay/runs/sqlite-run-store.ts
+    rule: test-reaches-in
+  - from: tests/task-tokens.test.ts
+    to: bay/runs/task-tokens.ts
+    rule: test-reaches-in
+  - from: tests/unexpected-errors.test.ts
+    to: bay/database-process.ts
+    rule: test-reaches-in
+  - from: tests/unexpected-errors.test.ts
+    to: bay/last-resort.ts
+    rule: test-reaches-in
+  - from: tests/unexpected-errors.test.ts
+    to: bay/mcp-server.ts
+    rule: test-reaches-in

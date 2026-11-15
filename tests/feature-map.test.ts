@@ -29,7 +29,13 @@ type SourceFile = {
   readonly imports: readonly string[];
 };
 
-type Rule = "may-not-import" | "private-file" | "outside-reaches-in" | "kernel-reaches-out";
+type Rule =
+  | "may-not-import"
+  | "private-file"
+  | "outside-reaches-in"
+  | "kernel-reaches-out"
+  | "test-reaches-in"
+  | "inside-reaches-across";
 
 type Break = {
   readonly from: string;
@@ -42,9 +48,22 @@ type Debt = {
   readonly stale: readonly Break[];
 };
 
-const rules: readonly Rule[] = ["may-not-import", "private-file", "outside-reaches-in", "kernel-reaches-out"];
+const rules: readonly Rule[] = [
+  "may-not-import",
+  "private-file",
+  "outside-reaches-in",
+  "kernel-reaches-out",
+  "test-reaches-in",
+  "inside-reaches-across",
+];
 
 const scannedFolders = ["bay", "adapters", "components"] as const;
+
+const testFolder = "tests";
+
+const debtKeys = { kit: "breaks", tests: "test_breaks" } as const;
+
+const featuresTestedAtTheirEntry: readonly string[] = ["runs"];
 
 const mapFile = "framework/features.yaml";
 
@@ -127,7 +146,27 @@ function outsideImportRule(map: FeatureMap, from: string, to: string): Rule | un
   return isKernelFile(to) && !allowed.includes(to) ? "outside-reaches-in" : undefined;
 }
 
+function insideFeatureOf(file: string): string | undefined {
+  const [first, second, feature, ...rest] = file.split("/");
+  return first === "tests" && second === "inside" && rest.length > 0 ? feature : undefined;
+}
+
+function testImportRule(map: FeatureMap, from: string, to: string): Rule | undefined {
+  const [target] = featuresOf(map, to);
+  if (target === undefined || !target.private.includes(to)) {
+    return undefined;
+  }
+  const inside = insideFeatureOf(from);
+  if (inside === undefined) {
+    return "test-reaches-in";
+  }
+  return inside === target.name ? undefined : "inside-reaches-across";
+}
+
 function ruleOf(map: FeatureMap, from: string, to: string): Rule | undefined {
+  if (isInside(from, testFolder)) {
+    return testImportRule(map, from, to);
+  }
   return isKernelFile(from) ? kernelImportRule(map, from, to) : outsideImportRule(map, from, to);
 }
 
@@ -160,8 +199,8 @@ function breakOf(entry: Json): Break | undefined {
   return rule === undefined || from === undefined || to === undefined ? undefined : { from, to, rule };
 }
 
-function parsedDebt(text: string): readonly Break[] {
-  const entries = fieldOf(toJson(parse(text)), "breaks");
+function parsedDebt(text: string, key: string): readonly Break[] {
+  const entries = fieldOf(toJson(parse(text)), key);
   return Array.isArray(entries) ? entries.flatMap((entry: unknown) => breakOf(toJson(entry)) ?? []) : [];
 }
 
@@ -173,11 +212,24 @@ function writesDebt(environment: Readonly<Record<string, string | undefined>>): 
   return environment[writeDebtVariable] === "write";
 }
 
-function kitFiles(): readonly string[] {
-  return scannedFolders.flatMap((folder) =>
+function typeScriptFiles(folders: readonly string[]): readonly string[] {
+  return folders.flatMap((folder) =>
     readdirSync(folder, { recursive: true, encoding: "utf8" })
       .filter((file) => file.endsWith(".ts"))
       .map((file) => join(folder, file)),
+  );
+}
+
+function kitFiles(): readonly string[] {
+  return typeScriptFiles(scannedFolders);
+}
+
+function breaksIn(map: FeatureMap, files: readonly string[]): readonly Break[] {
+  return sortedBreaks(
+    mapBreaks(
+      map,
+      files.map((file) => scanned(file, readFileSync(file, "utf8"))),
+    ),
   );
 }
 
@@ -266,6 +318,37 @@ test("a kernel file that imports from adapters/ or components/ breaks kernel-rea
   ]);
 });
 
+test("a test outside tests/inside/<feature>/ may import a feature's entry file, and its private file breaks test-reaches-in", () => {
+  const sources = [
+    scanned("tests/engine.test.ts", `${relative("../bay/engine.ts")}\n${relative("../bay/words.ts")}`),
+    scanned("tests/walk.test.ts", relative("../bay/walk.ts")),
+    scanned("tests/spelling-fixture.ts", relative("../bay/spelling.ts")),
+    scanned("tests/inside/walk.test.ts", relative("../../bay/walk.ts")),
+  ];
+  assert.deepEqual(mapBreaks(smallMap, sources), [
+    { from: "tests/walk.test.ts", to: "bay/walk.ts", rule: "test-reaches-in" },
+    { from: "tests/spelling-fixture.ts", to: "bay/spelling.ts", rule: "test-reaches-in" },
+    { from: "tests/inside/walk.test.ts", to: "bay/walk.ts", rule: "test-reaches-in" },
+  ]);
+});
+
+test("a file in tests/inside/<feature>/ may import its own feature's private files, and another's breaks inside-reaches-across", () => {
+  const sources = [
+    scanned("tests/inside/runs/crash.test.ts", relative("../../../bay/walk.ts")),
+    scanned(
+      "tests/inside/runs/crash-fixture.ts",
+      `${relative("../../../bay/words.ts")}\n${relative("../../fakes.ts")}`,
+    ),
+    scanned("tests/inside/runs/spelling.test.ts", relative("../../../bay/spelling.ts")),
+    scanned("tests/inside/words/walk.test.ts", relative("../../../bay/walk.ts")),
+    scanned("tests/inside/words/spelling.test.ts", relative("../../../bay/spelling.ts")),
+  ];
+  assert.deepEqual(mapBreaks(smallMap, sources), [
+    { from: "tests/inside/runs/spelling.test.ts", to: "bay/spelling.ts", rule: "inside-reaches-across" },
+    { from: "tests/inside/words/walk.test.ts", to: "bay/walk.ts", rule: "inside-reaches-across" },
+  ]);
+});
+
 test("a break listed in the debt passes, an unlisted break fails, and a listed entry with no break is stale", () => {
   const listed: Break = { from: "bay/words.ts", to: "bay/engine.ts", rule: "may-not-import" };
   const unlisted: Break = { from: "bay/walk.ts", to: "bay/spelling.ts", rule: "private-file" };
@@ -281,7 +364,8 @@ test("the debt file is read back as the breaks it lists, and entries with an unk
       { from: "bay/a.ts", to: "bay/c.ts", rule: "ignored" },
     ],
   });
-  assert.deepEqual(parsedDebt(text), [{ from: "bay/a.ts", to: "bay/b.ts", rule: "private-file" }]);
+  assert.deepEqual(parsedDebt(text, "breaks"), [{ from: "bay/a.ts", to: "bay/b.ts", rule: "private-file" }]);
+  assert.deepEqual(parsedDebt(text, "test_breaks"), []);
 });
 
 test("the debt file is written only when FEATURE_MAP_DEBT is write", () => {
@@ -306,18 +390,35 @@ test("every kernel file of the kit is in exactly one feature", () => {
   assert.deepEqual(coverageProblems(map, kitFiles().filter(isKernelFile)), []);
 });
 
-test("the kit's imports break the feature map only where the debt file says so", () => {
+test("the kit's imports and its tests' imports break the feature map only where the debt file says so", () => {
   const map = parsedMap(readFileSync(mapFile, "utf8"));
-  const breaks = sortedBreaks(
-    mapBreaks(
-      map,
-      kitFiles().map((file) => scanned(file, readFileSync(file, "utf8"))),
-    ),
-  );
+  const found = { kit: breaksIn(map, kitFiles()), tests: breaksIn(map, typeScriptFiles([testFolder])) };
   if (writesDebt(process.env)) {
-    writeFileSync(debtFile, stringify({ breaks }));
+    writeFileSync(debtFile, stringify({ [debtKeys.kit]: found.kit, [debtKeys.tests]: found.tests }));
   }
-  const debt = debtOf(breaks, parsedDebt(readFileSync(debtFile, "utf8")));
-  assert.deepEqual(debt.unlisted.map(keyOf), [], "These imports break framework/features.yaml.");
-  assert.deepEqual(debt.stale.map(keyOf), [], `These entries of ${debtFile} match no import any more: delete them.`);
+  const text = readFileSync(debtFile, "utf8");
+  for (const list of ["kit", "tests"] as const) {
+    const debt = debtOf(found[list], parsedDebt(text, debtKeys[list]));
+    const key = debtKeys[list];
+    assert.deepEqual(debt.unlisted.map(keyOf), [], `These imports break framework/features.yaml (${key}).`);
+    assert.deepEqual(debt.stale.map(keyOf), [], `These entries of ${key} in ${debtFile} match no import: delete them.`);
+  }
+});
+
+test("no test reaches into a feature whose tests have moved to its entry file, and the debt lists none", () => {
+  const map = parsedMap(readFileSync(mapFile, "utf8"));
+  const moved = map.features.filter((feature) => featuresTestedAtTheirEntry.includes(feature.name));
+  assert.deepEqual(
+    moved.map((feature) => feature.name),
+    featuresTestedAtTheirEntry,
+  );
+  const reachesMoved = (found: Break): boolean => moved.some((feature) => feature.private.includes(found.to));
+  const listed = parsedDebt(readFileSync(debtFile, "utf8"), debtKeys.tests);
+  assert.deepEqual(
+    breaksIn(map, typeScriptFiles([testFolder]))
+      .filter(reachesMoved)
+      .map(keyOf),
+    [],
+  );
+  assert.deepEqual(listed.filter(reachesMoved).map(keyOf), []);
 });

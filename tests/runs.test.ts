@@ -9,14 +9,16 @@ import type { Outcome } from "../bay/outcome.ts";
 import { openRuns, type Run, type Runs, type Task } from "../bay/runs/runs.ts";
 import {
   answer,
-  fakePolicy,
   fakeRunner,
-  fakeScrubber,
   finished,
+  fixtureScrubber,
   fixtureSystem,
+  secretValue,
   startTime,
   type Changes,
   type Script,
+  notesFlow,
+  withFlow,
 } from "./engine-fixture.ts";
 import { fakeClock, fakeFolders } from "./fakes.ts";
 
@@ -40,7 +42,8 @@ type Opened = {
 async function opened(opening: Opening = {}): Promise<Opened> {
   const project = mkdtempSync(join(tmpdir(), "agentbay-runs-"));
   mkdirSync(join(project, ".agentbay"));
-  const { system, files } = await fixtureSystem(opening.changes);
+  const { system, policyOf, files } = await fixtureSystem(opening.changes);
+  const scrubber = await fixtureScrubber(policyOf);
   const folders = fakeFolders();
   const clock = fakeClock(startTime);
   const createdBeforeRunner: string[] = [];
@@ -52,8 +55,8 @@ async function opened(opening: Opening = {}): Promise<Opened> {
       files,
       clock,
       system,
-      policyOf: fakePolicy,
-      scrubber: fakeScrubber,
+      policyOf,
+      scrubber,
       toolCallsPerRound: opening.toolCallsPerRound ?? 200,
       runner: (events) => {
         createdBeforeRunner.push(...folders.created);
@@ -100,11 +103,7 @@ function tokenOf(run: Run): string {
   return token;
 }
 
-function withFlow(steps: Workflow["steps"]): Changes {
-  return { workflows: { "workflows/flow.yaml": { name: "flow", steps } } };
-}
-
-const flow = { workflow: { mode: "notes", path: "workflows/flow.yaml" } };
+const flow = { workflow: notesFlow };
 
 const good = answer({ text: "long enough to pass" });
 
@@ -123,7 +122,7 @@ test("openRuns opens kernel.db owner-only before it builds the runner, whose eve
   const said: EventSink[] = [];
   const scripts: Record<string, Script> = {
     "notes:scripts/log.ts": async (request) => {
-      await said[0]?.append({ at: "now", runId: request.place.runId, kind: "script.said", detail: "SECRET-ABC" });
+      await said[0]?.append({ at: "now", runId: request.place.runId, kind: "script.said", detail: secretValue });
       return finished(request.input);
     },
   };
@@ -132,7 +131,7 @@ test("openRuns opens kernel.db owner-only before it builds the runner, whose eve
   assert.deepEqual(createdBeforeRunner, [database]);
   const run = runOf(await runs.start({ action: "notes.log" }, { note: "hi" }));
   const event = run.events.find((entry) => entry.kind === "script.said");
-  assert.equal(event?.detail, "[redacted]");
+  assert.equal(event?.detail, "[redacted:NOTES_TOKEN]");
   close();
 });
 
@@ -428,12 +427,14 @@ test("callAction runs the action as the skill's mode, held to what the calling r
 test("events appends to the run, and close leaves the runs for the next openRuns on the project", async () => {
   const { runs, reopen, remove } = await opened();
   const started = runOf(await runs.start({ action: "notes.draft" }, {}));
-  const detail: Json = { said: "SECRET-XYZ" };
+  const detail: Json = { said: `the token is ${secretValue}` };
   await runs.events.append({ at: "now", runId: started.id, kind: "owner.said", detail });
   runs.close();
   const again = await reopen();
   const shown = runOf(await again.show(started.id));
-  assert.deepEqual(shown.events.find((event) => event.kind === "owner.said")?.detail, { said: "[redacted]" });
+  assert.deepEqual(shown.events.find((event) => event.kind === "owner.said")?.detail, {
+    said: "the token is [redacted:NOTES_TOKEN]",
+  });
   assert.equal(waitingTask(shown).stepKey, "0#1");
   again.close();
   remove();

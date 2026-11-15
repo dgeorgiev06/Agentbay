@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import type { ScriptRequest } from "../bay/contracts.ts";
 import { numberField } from "../bay/json.ts";
 import type { Engine } from "../bay/runs/engine.ts";
-import type { RunStore } from "../bay/runs/run-store.ts";
 import { SqliteRunStore } from "../bay/runs/sqlite-run-store.ts";
 import type { RunView } from "../bay/runs/run-state.ts";
 import type { Outcome } from "../bay/outcome.ts";
@@ -20,60 +17,25 @@ import {
   type FakeRunner,
   type Script,
   answer,
+  notesFlow,
+  withFlow,
 } from "./engine-fixture.ts";
-import { MemoryRunStore } from "./memory-run-store.ts";
+import { databaseRows, faultInjector, type DatabaseRows, type FaultPoint } from "./kernel-db-fixture.ts";
 
-type CrashPoint = {
-  readonly at: number;
-  readonly when: "before" | "after";
-};
-
-type CrashingStore = RunStore & {
-  readonly operations: readonly string[];
-};
-
-const crashMessage = "simulated crash";
-
-function crashingStore(inner: RunStore, point: CrashPoint | undefined): CrashingStore {
-  const operations: string[] = [];
-  let dead = false;
-  const crash = (): never => {
-    dead = true;
-    throw new Error(crashMessage);
-  };
-  const write = async <T>(name: string, operation: () => Promise<T>): Promise<T> => {
-    if (dead) {
-      throw new Error(crashMessage);
-    }
-    operations.push(name);
-    if (point?.at === operations.length && point.when === "before") {
-      crash();
-    }
-    const result = await operation();
-    if (point?.at === operations.length && point.when === "after") {
-      crash();
-    }
-    return result;
-  };
-  const read = async <T>(operation: () => Promise<T>): Promise<T> => (dead ? crash() : operation());
-  return {
-    operations,
-    createRun: (run, owner, events) => write("createRun", () => inner.createRun(run, owner, events)),
-    saveStepInput: (writer, start, events) => write("saveStepInput", () => inner.saveStepInput(writer, start, events)),
-    saveStepOutput: (writer, end, events) => write("saveStepOutput", () => inner.saveStepOutput(writer, end, events)),
-    saveStepDetail: (writer, change, events) =>
-      write("saveStepDetail", () => inner.saveStepDetail(writer, change, events)),
-    saveRefusal: (writer, refusal, events) => write("saveRefusal", () => inner.saveRefusal(writer, refusal, events)),
-    updateRun: (writer, patch, events) => write("updateRun", () => inner.updateRun(writer, patch, events)),
-    append: (event) => write("append", () => inner.append(event)),
-    acquire: (runId, owner, now) => write("acquire", () => inner.acquire(runId, owner, now)),
-    heartbeat: (writer, now) => write("heartbeat", () => inner.heartbeat(writer, now)),
-    release: (writer) => write("release", () => inner.release(writer)),
-    readRun: (runId) => read(() => inner.readRun(runId)),
-    listRuns: (status) => read(() => inner.listRuns(status)),
-    readEvents: (runId) => read(() => inner.readEvents(runId)),
-  };
-}
+const threeStepWrites = [
+  "createRun",
+  "saveStepInput",
+  "heartbeat",
+  "saveStepOutput",
+  "saveStepInput",
+  "heartbeat",
+  "saveStepOutput",
+  "saveStepInput",
+  "heartbeat",
+  "saveStepOutput",
+  "updateRun",
+  "release",
+];
 
 function executionsByStep(runner: FakeRunner): readonly number[] {
   const counts = [0, 0, 0];
@@ -84,30 +46,34 @@ function executionsByStep(runner: FakeRunner): readonly number[] {
   return counts;
 }
 
-async function cleanWrites(action: string): Promise<number> {
-  const store = crashingStore(new MemoryRunStore(), undefined);
-  const { engine } = await harness({ store });
-  runOf(await engine.startAction(`notes.${action}`, { count: 1 }, { id: "clean" }));
-  return store.operations.length;
+async function cleanWrites(action: string): Promise<readonly string[]> {
+  const { store, freshEngine, close } = await harness();
+  const counting = faultInjector(store);
+  runOf(await freshEngine({ store: counting }).startAction(`notes.${action}`, { count: 1 }, { id: "clean" }));
+  close();
+  return counting.writes;
 }
 
-async function crashAndResume(action: string, point: CrashPoint): Promise<void> {
-  const inner = new MemoryRunStore();
-  const { engine, runner, clock, freshEngine } = await harness({ store: crashingStore(inner, point) });
-  await assert.rejects(engine.startAction(`notes.${action}`, { count: 1 }, { id: "crash" }), /simulated crash/);
-  const afterCrash = await inner.readRun("crash");
+async function resumedAfterCrash(action: string, point: FaultPoint): Promise<void> {
+  const { store, runner, clock, freshEngine, reopen, close } = await harness();
+  const crashing = freshEngine({ store: faultInjector(store, point) });
+  await assert.rejects(crashing.startAction(`notes.${action}`, { count: 1 }, { id: "crash" }), /simulated crash/);
+  const fresh = reopen();
+  const afterCrash = await fresh.readRun("crash");
   if (afterCrash === undefined) {
     assert.deepEqual([point.at, runner.calls.length], [1, 0]);
+    close();
     return;
   }
   const unfinished = afterCrash.steps.filter((step) => step.status === "started").map((step) => step.key);
   assert.ok(unfinished.length <= 1, `at most one step can be unfinished: ${unfinished.join(", ")}`);
   clock.advance(11 * 60_000);
-  const resumer = freshEngine({ store: inner });
+  const resumer = freshEngine({ store: fresh });
   let result = await resumer.resume("crash");
   if (!result.ok) {
     assert.match(problemsOf(result)[0] ?? "", /has ended \(done\)/);
-    assert.deepEqual((await inner.readRun("crash"))?.state, { status: "done", output: { count: 5 } });
+    assert.deepEqual((await fresh.readRun("crash"))?.state, { status: "done", output: { count: 5 } });
+    close();
     return;
   }
   const label = `${action} crashed ${point.when} write ${String(point.at)}`;
@@ -129,19 +95,60 @@ async function crashAndResume(action: string, point: CrashPoint): Promise<void> 
     const allowed = unfinished.includes(String(index)) ? 2 : 1;
     assert.ok(count >= 1 && count <= allowed, `${label}: step ${String(index)} ran ${String(count)} times`);
   }
+  close();
 }
 
 for (const action of ["copy", "save"]) {
-  test(`a crash between any two writes of the three-step ${action} action resumes on a fresh engine`, async () => {
+  test(`a crash before or after any write of the three-step ${action} action resumes on a fresh engine`, async () => {
     const writes = await cleanWrites(action);
-    assert.ok(writes >= 12, `a three-step run makes at least 12 writes, saw ${String(writes)}`);
-    for (let at = 1; at <= writes; at += 1) {
+    assert.deepEqual(writes, threeStepWrites);
+    for (let at = 1; at <= writes.length; at += 1) {
       for (const when of ["before", "after"] as const) {
-        await crashAndResume(action, { at, when });
+        await resumedAfterCrash(action, { at, when });
       }
     }
   });
 }
+
+async function rowsAfterFault(
+  point: FaultPoint,
+): Promise<{ readonly writes: readonly string[]; readonly rows: DatabaseRows }> {
+  const { store, file, freshEngine, close } = await harness();
+  const faulty = faultInjector(store, point);
+  const crashing = freshEngine({ store: faulty, owner: "engine-1" });
+  await assert.rejects(crashing.startAction("notes.copy", { count: 1 }, { id: "crash" }), /simulated crash/);
+  const rows = databaseRows(file);
+  close();
+  return { writes: faulty.writes, rows };
+}
+
+function stepsOf(rows: DatabaseRows): readonly unknown[] {
+  return (rows.steps ?? []).map((row) => [row.key, row.status]);
+}
+
+function eventKindsOf(rows: DatabaseRows): readonly unknown[] {
+  return (rows.events ?? []).map((row) => row.kind);
+}
+
+test("a fault at write 5 stops the run there, and kernel.db holds exactly the writes before it", async () => {
+  const beforeFive = await rowsAfterFault({ at: 5, when: "before" });
+  assert.deepEqual(beforeFive.writes, ["createRun", "saveStepInput", "heartbeat", "saveStepOutput", "saveStepInput"]);
+  assert.deepEqual(
+    (beforeFive.rows.runs ?? []).map((row) => [row.id, row.status, row.lock_owner]),
+    [["crash", "running", "engine-1"]],
+  );
+  assert.deepEqual(stepsOf(beforeFive.rows), [["0", "done"]]);
+  assert.deepEqual(eventKindsOf(beforeFive.rows), ["run.started", "step.started", "step.finished"]);
+  const afterFour = await rowsAfterFault({ at: 4, when: "after" });
+  assert.deepEqual(afterFour.writes, ["createRun", "saveStepInput", "heartbeat", "saveStepOutput"]);
+  assert.deepEqual(afterFour.rows, beforeFive.rows);
+  const afterFive = await rowsAfterFault({ at: 5, when: "after" });
+  assert.deepEqual(stepsOf(afterFive.rows), [
+    ["0", "done"],
+    ["1", "started"],
+  ]);
+  assert.deepEqual(eventKindsOf(afterFive.rows), ["run.started", "step.started", "step.finished", "step.started"]);
+});
 
 function deferred(): PromiseWithResolvers<undefined> {
   return Promise.withResolvers<undefined>();
@@ -160,54 +167,32 @@ function blockingScripts(
   };
 }
 
-test("a second writer is refused while another engine advances the run", async () => {
+test("a second writer on its own connection to kernel.db is refused while another engine advances the run", async () => {
   const reached = deferred();
   const held = deferred();
-  const { engine, freshEngine, close } = await harness({ scripts: blockingScripts(reached, held.promise) });
+  const { engine, freshEngine, reopen, close } = await harness({ scripts: blockingScripts(reached, held.promise) });
   const first = engine.startAction("notes.copy", { count: 1 }, { id: "busy" });
   await reached.promise;
-  const second = freshEngine();
+  const secondStore = reopen();
+  const second = freshEngine({ store: secondStore });
   assert.match(problemsOf(await second.resume("busy"))[0] ?? "", /being advanced by engine-1/);
   assert.match(problemsOf(await second.stop("busy"))[0] ?? "", /only one writer may advance a run/);
   assert.match(problemsOf(await engine.resume("busy"))[0] ?? "", /being advanced by engine-1/);
   held.resolve(undefined);
   assert.equal(runOf(await first).state.status, "done");
+  assert.equal((await secondStore.readRun("busy"))?.state.status, "done");
   assert.match(problemsOf(await second.resume("busy"))[0] ?? "", /has ended/);
   close();
 });
 
-test("two engines on two SQLite connections to one kernel.db: the second writer is refused", async () => {
-  const folder = mkdtempSync(join(tmpdir(), "agentbay-writers-"));
-  const file = join(folder, ".agentbay", "kernel.db");
-  mkdirSync(join(folder, ".agentbay"));
-  const firstStore = new SqliteRunStore(file);
-  const secondStore = new SqliteRunStore(file);
-  const reached = deferred();
-  const held = deferred();
-  const scripts = blockingScripts(reached, held.promise);
-  const { engine, freshEngine } = await harness({ scripts, store: firstStore });
-  const first = engine.startAction("notes.copy", { count: 1 }, { id: "busy" });
-  await reached.promise;
-  const second = freshEngine({ store: secondStore });
-  assert.match(problemsOf(await second.resume("busy"))[0] ?? "", /being advanced by engine-1/);
-  held.resolve(undefined);
-  assert.equal(runOf(await first).state.status, "done");
-  assert.deepEqual((await secondStore.readRun("busy"))?.state.status, "done");
-  firstStore.close();
-  secondStore.close();
-  rmSync(folder, { recursive: true, force: true });
-});
-
 test("a lock left by a dead engine is taken over after ten minutes, and the takeover is an event", async () => {
-  const writes = crashingStore(new MemoryRunStore(), undefined);
-  const { engine: counting } = await harness({ store: writes });
-  runOf(await counting.startAction("notes.save", { count: 1 }, { id: "clean" }));
-  const firstOutput = writes.operations.indexOf("saveStepOutput") + 1;
-  const inner = new MemoryRunStore();
-  const point = { at: firstOutput, when: "before" } as const;
-  const { engine, clock, freshEngine } = await harness({ store: crashingStore(inner, point) });
-  await assert.rejects(engine.startAction("notes.save", { count: 1 }, { id: "dead" }), /simulated crash/);
-  const resumer = freshEngine({ store: inner });
+  const { store, clock, freshEngine, reopen, close } = await harness();
+  const dying = faultInjector(store, { at: 4, when: "before" });
+  const dead = freshEngine({ store: dying, owner: "engine-1" });
+  await assert.rejects(dead.startAction("notes.save", { count: 1 }, { id: "dead" }), /simulated crash/);
+  assert.deepEqual(dying.writes, ["createRun", "saveStepInput", "heartbeat", "saveStepOutput"]);
+  const fresh = reopen();
+  const resumer = freshEngine({ store: fresh, owner: "engine-2" });
   clock.advance(9 * 60_000);
   assert.match(problemsOf(await resumer.resume("dead"))[0] ?? "", /being advanced by engine-1/);
   clock.advance(2 * 60_000);
@@ -218,7 +203,7 @@ test("a lock left by a dead engine is taken over after ten minutes, and the take
       "Step 0 started and did not finish, and action save of mode notes has the effects read, write, so running it " +
       "again could repeat them. Resume with rerunUnfinished to run it again, or stop the run.",
   });
-  const takeover = (await inner.readEvents("dead")).find((event) => event.kind === "lock.taken-over");
+  const takeover = (await fresh.readEvents("dead")).find((event) => event.kind === "lock.taken-over");
   assert.deepEqual(takeover?.detail, {
     previousOwner: "engine-1",
     heartbeatAt: "2026-11-14T09:00:00.000Z",
@@ -226,21 +211,17 @@ test("a lock left by a dead engine is taken over after ten minutes, and the take
   });
   const stopped = runOf(await resumer.stop("dead"));
   assert.deepEqual(stopped.state, { status: "failed", reason: "The owner stopped the run." });
+  close();
 });
 
 test("one representative run emits every event kind, in order, with ids and sizes but no payloads", async () => {
-  const workflows = {
-    "workflows/flow.yaml": {
-      name: "flow",
-      steps: [
-        { id: "draft", action: "draft-and-store", input: { topic: "$trigger" } },
-        { id: "keep", approval: "Keep the stored draft?" },
-      ],
-    },
-  };
-  const changes = { workflows, config: { budget: { items: 1 } } };
+  const steps = [
+    { id: "draft", action: "draft-and-store", input: { topic: "$trigger" } },
+    { id: "keep", approval: "Keep the stored draft?" },
+  ];
+  const changes = { ...withFlow(steps), config: { budget: { items: 1 } } };
   const { engine, store, close } = await harness({ changes });
-  const id = runOf(await engine.startWorkflow({ mode: "notes", path: "workflows/flow.yaml" }, "staking")).id;
+  const id = runOf(await engine.startWorkflow(notesFlow, "staking")).id;
   assert.equal(
     waitingOf(await engine.submit(id, "draft/0#1", answer({ id: "d1", text: "PRIVATE-DRAFT-BODY" }))).reason,
     "budget",
@@ -291,42 +272,42 @@ test("one representative run emits every event kind, in order, with ids and size
 });
 
 test("a crash right after a submission is saved runs its checks on resume and refuses it a second time", async () => {
-  const inner = new MemoryRunStore();
-  const { engine, runner, clock, freshEngine } = await harness({ store: inner });
+  const { engine, store, runner, clock, freshEngine, reopen, close } = await harness();
   const id = runOf(await engine.startAction("notes.draft", {}, { id: "draft" })).id;
-  const crashing = crashingStore(inner, { at: 2, when: "after" });
+  const crashing = faultInjector(store, { at: 2, when: "after" });
   await assert.rejects(
     freshEngine({ store: crashing }).submit(id, "0#1", answer({ text: "long enough text" })),
     /simulated/,
   );
-  assert.deepEqual(crashing.operations, ["acquire", "saveStepDetail"]);
+  assert.deepEqual(crashing.writes, ["acquire", "saveStepDetail"]);
   assert.deepEqual(runner.calls, []);
   clock.advance(11 * 60_000);
-  const resumer = freshEngine({ store: inner });
+  const resumer = freshEngine({ store: reopen() });
   assert.match(
     problemsOf(await resumer.submit(id, "0#1", answer({ text: "another text" })))[0] ?? "",
     /already has a submission/,
   );
   assert.deepEqual(runOf(await resumer.resume(id)).state, { status: "done", output: { text: "long enough text" } });
   assert.equal(runner.calls.length, 1);
+  close();
 });
 
 test("a crash right after a decision is saved applies it on resume and refuses a second decision", async () => {
-  const inner = new MemoryRunStore();
-  const workflows = {
-    "workflows/flow.yaml": { name: "flow", steps: [{ id: "keep", approval: "Keep?", show: "$trigger" }] },
-  };
-  const { engine, clock, freshEngine } = await harness({ store: inner, changes: { workflows } });
-  const waiting = waitingOf(await engine.startWorkflow({ mode: "notes", path: "workflows/flow.yaml" }, "content"));
+  const changes = withFlow([{ id: "keep", approval: "Keep?", show: "$trigger" }]);
+  const { engine, store, clock, freshEngine, reopen, close } = await harness({ changes });
+  const waiting = waitingOf(await engine.startWorkflow(notesFlow, "content"));
   assert.ok(waiting.reason === "approval");
   const decision = { hash: waiting.hash, decision: "approve", by: "owner" } as const;
-  const crashing = crashingStore(inner, { at: 2, when: "after" });
+  const crashing = faultInjector(store, { at: 2, when: "after" });
   await assert.rejects(freshEngine({ store: crashing }).approve("run-1", "keep", decision), /simulated/);
+  assert.deepEqual(crashing.writes, ["acquire", "saveStepDetail"]);
   clock.advance(11 * 60_000);
-  const resumer = freshEngine({ store: inner });
+  const fresh = reopen();
+  const resumer = freshEngine({ store: fresh });
   assert.match(problemsOf(await resumer.approve("run-1", "keep", decision))[0] ?? "", /already has a decision/);
   assert.deepEqual(runOf(await resumer.resume("run-1")).state, { status: "done", output: "content" });
-  assert.ok((await eventKinds(inner, "run-1")).includes("approval.recorded"));
+  assert.ok((await eventKinds(fresh, "run-1")).includes("approval.recorded"));
+  close();
 });
 
 test("a live engine whose steps each take seven minutes is never taken over; a silent one is", async () => {
@@ -356,8 +337,8 @@ test("a live engine whose steps each take seven minutes is never taken over; a s
       return finished(request.input);
     },
   };
-  const { engine, clock, store, freshEngine } = await harness({ scripts });
-  holder.second = freshEngine();
+  const { engine, clock, store, freshEngine, reopen, close } = await harness({ scripts });
+  holder.second = freshEngine({ store: reopen() });
   assert.equal(runOf(await engine.startAction("notes.long", {}, { id: "long" })).state.status, "done");
   assert.deepEqual([tries, refusedTries], [6, 6]);
   assert.ok(!(await eventKinds(store, "long")).includes("lock.taken-over"));
@@ -368,15 +349,20 @@ test("a live engine whose steps each take seven minutes is never taken over; a s
   assert.ok(holder.takeover?.ok);
   assert.equal(holder.takeover.value.state.status, "done");
   assert.ok((await eventKinds(store, "silent")).includes("lock.taken-over"));
+  close();
 });
 
 test("a database that stays busy is a refusal to try again, not an exception", async () => {
-  const inner = new MemoryRunStore();
-  const { engine } = await harness({ store: inner, changes: { config: { budget: { items: 1 } } } });
+  const { engine, file, freshEngine, close } = await harness({ changes: { config: { budget: { items: 1 } } } });
   const id = runOf(await engine.startAction("notes.spend", { measure: "items" })).id;
-  const busy: RunStore = { ...crashingStore(inner, undefined), acquire: () => Promise.resolve({ status: "busy" }) };
-  const { freshEngine } = await harness({ store: busy });
-  assert.deepEqual(problemsOf(await freshEngine().extendBudget(id, { items: 5 })), [
+  const blocker = new DatabaseSync(file);
+  blocker.exec("begin immediate");
+  const impatient = new SqliteRunStore(file, { busyMilliseconds: 50 });
+  assert.deepEqual(problemsOf(await freshEngine({ store: impatient }).extendBudget(id, { items: 5 })), [
     `Another engine is writing run ${id}; try again.`,
   ]);
+  blocker.exec("rollback");
+  blocker.close();
+  impatient.close();
+  close();
 });

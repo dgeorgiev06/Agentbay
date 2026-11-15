@@ -4,8 +4,7 @@ import { charge, rootFrame } from "../bay/runs/budget.ts";
 import type { StepRecord } from "../bay/runs/run-store.ts";
 import { resolveActionReference, resolveCall, resolveOwnAction, resolveWorkflowAction } from "../bay/targets.ts";
 import { gate, replayed, stopGate, type Walk } from "../bay/runs/walk.ts";
-import { fakePolicy, fixtureSystem, harness, runOf, startTime } from "./engine-fixture.ts";
-import { MemoryRunStore } from "./memory-run-store.ts";
+import { fixtureSystem, harness, notesFlow, runOf, startTime, withFlow } from "./engine-fixture.ts";
 
 const spent = { items: 1, usd: 0, tokens: 0, minutes: 0 };
 
@@ -26,13 +25,13 @@ function finishedAction(key: string, action: string, order: number): StepRecord 
 }
 
 async function walkOf(changes: Partial<Pick<Walk, "phase" | "stopReason">>): Promise<Walk> {
-  const { system, files } = await fixtureSystem();
-  const store = new MemoryRunStore();
+  const { system, policyOf, files, store, close } = await harness();
+  close();
   const services = {
     system,
     store,
     runner: { run: () => Promise.reject(new Error("no scripts here")) },
-    policyOf: fakePolicy,
+    policyOf,
     clock: { now: () => startTime },
     files,
   };
@@ -116,22 +115,17 @@ test("targets resolve own actions, interface calls through bindings, and say pla
 });
 
 test("a call or workflow action whose binding vanished before resume fails the step with a plain reason", async () => {
-  const workflows = {
-    "workflows/flow.yaml": {
-      name: "flow",
-      steps: [
-        { id: "keep", approval: "Go?" },
-        { id: "put", action: "items-store.put", input: { id: "a" } },
-      ],
-    },
-  };
-  const { engine, system, freshEngine, close } = await harness({ changes: { workflows } });
+  const changes = withFlow([
+    { id: "keep", approval: "Go?" },
+    { id: "put", action: "items-store.put", input: { id: "a" } },
+  ]);
+  const { engine, system, freshEngine, close } = await harness({ changes });
   const unbound = freshEngine({ system: { ...system, config: { ...system.config, bindings: {} } } });
   const reason = "Mode notes calls items-store.put, but no mode is bound to items-store@1 for it.";
   const id = runOf(await engine.startAction("notes.draft-and-store", {})).id;
   const run = runOf(await unbound.submit(id, "0#1", { output: { id: "d1", text: "draft" }, spent }));
   assert.deepEqual(run.state, { status: "failed", reason });
-  const flow = runOf(await engine.startWorkflow({ mode: "notes", path: "workflows/flow.yaml" }, null, { id: "flow" }));
+  const flow = runOf(await engine.startWorkflow(notesFlow, null, { id: "flow" }));
   assert.ok(flow.state.status === "waiting" && flow.state.waiting.reason === "approval");
   const decision = { hash: flow.state.waiting.hash, decision: "approve", by: "owner" } as const;
   assert.deepEqual(runOf(await unbound.approve("flow", "keep", decision)).state, { status: "failed", reason });

@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
-import { SqliteRunStore } from "../bay/runs/sqlite-run-store.ts";
 import { harness, waitingOf } from "./engine-fixture.ts";
 
 type Driver = {
@@ -44,19 +42,15 @@ test(
   "two OS processes race to advance one run in one kernel.db: one advances, one is refused",
   { timeout: 60_000 },
   async () => {
-    const folder = mkdtempSync(join(tmpdir(), "agentbay-race-"));
-    mkdirSync(join(folder, ".agentbay"));
-    const file = join(folder, ".agentbay", "kernel.db");
+    const { engine, file, reopen, close } = await harness({ changes: { config: { budget: { items: 1 } } } });
+    const folder = dirname(file);
     const marker = join(folder, "marker.txt");
     const go = join(folder, "go");
     writeFileSync(marker, "");
-    const setup = new SqliteRunStore(file);
-    const { engine } = await harness({ store: setup, changes: { config: { budget: { items: 1 } } } });
     assert.equal(
       waitingOf(await engine.startAction("notes.spend", { measure: "items" }, { id: "race" })).reason,
       "budget",
     );
-    setup.close();
     const drivers = [startDriver([file, marker, go, "process-a"]), startDriver([file, marker, go, "process-b"])];
     await untilReady(drivers);
     writeFileSync(go, "");
@@ -71,9 +65,7 @@ test(
     const ran = readFileSync(marker, "utf8").trim().split("\n");
     assert.equal(ran.length, 1, ran.join(" | "));
     assert.match(ran[0] ?? "", /^process-[ab] ran 2$/);
-    const after = new SqliteRunStore(file);
-    assert.equal((await after.readRun("race"))?.state.status, "done");
-    after.close();
-    rmSync(folder, { recursive: true, force: true });
+    assert.equal((await reopen().readRun("race"))?.state.status, "done");
+    close();
   },
 );

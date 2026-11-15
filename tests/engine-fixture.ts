@@ -1,17 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type {
-  Json,
-  ModeGrants,
-  ScriptRequest,
-  Scrubber,
-  ScriptRunner,
-  Spend,
-  StepOutcome,
-  Submission,
-} from "../bay/contracts.ts";
+import type { Json, PolicyOf, ScriptRequest, ScriptRunner, Spend, StepOutcome, Submission } from "../bay/contracts.ts";
 import { Engine } from "../bay/runs/engine.ts";
 import type { Config } from "../bay/generated/config.ts";
 import type { Interface } from "../bay/generated/interface.ts";
@@ -19,13 +7,16 @@ import type { Action, Mode } from "../bay/generated/mode.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
 import { numberField, textField } from "../bay/json.ts";
 import { layoutOf } from "../bay/layout.ts";
-import { loadSystemReport, type System } from "../bay/registry.ts";
+import { loadPolicedSystem, policyFor } from "../bay/policy.ts";
+import type { System } from "../bay/registry.ts";
 import type { RunStore } from "../bay/runs/run-store.ts";
 import { SqliteRunStore } from "../bay/runs/sqlite-run-store.ts";
 import type { RunView, Waiting } from "../bay/runs/run-state.ts";
 import type { Outcome } from "../bay/outcome.ts";
+import { SecretStore } from "../bay/secrets.ts";
+import { noProcesses } from "./broker-fixture.ts";
 import { fakeClock, fakeFileSystem, type FakeFileSystem } from "./fakes.ts";
-import { MemoryRunStore } from "./memory-run-store.ts";
+import { temporaryKernelDb, type KernelDb } from "./kernel-db-fixture.ts";
 import { yamlText } from "./system-fixture.ts";
 
 export type Script = (request: ScriptRequest) => StepOutcome | Promise<StepOutcome>;
@@ -34,8 +25,6 @@ export type FakeRunner = ScriptRunner & {
   readonly calls: ScriptRequest[];
   readonly runsOf: (script: string) => readonly ScriptRequest[];
 };
-
-export type StoreKind = "memory" | "sqlite";
 
 export type Changes = {
   readonly workflows?: Readonly<Record<string, Workflow>>;
@@ -49,24 +38,43 @@ type FreshEngine = {
   readonly owner?: string;
 };
 
-export type Harness = {
+export type FixtureSystem = {
+  readonly system: System;
+  readonly policyOf: PolicyOf;
+  readonly files: FakeFileSystem;
+};
+
+export type Harness = FixtureSystem & {
   readonly engine: Engine;
-  readonly store: RunStore;
+  readonly store: SqliteRunStore;
+  readonly file: string;
+  readonly reopen: () => SqliteRunStore;
   readonly runner: FakeRunner;
   readonly clock: ReturnType<typeof fakeClock>;
-  readonly files: FakeFileSystem;
-  readonly system: System;
+  readonly scrubber: SecretStore;
   readonly freshEngine: (options?: FreshEngine) => Engine;
   readonly close: () => void;
 };
-
-export const storeKinds: readonly StoreKind[] = ["memory", "sqlite"];
 
 export const startTime = new Date("2026-11-14T09:00:00.000Z");
 
 const root = "/kit";
 
+const layout = layoutOf({ kit: root, project: root });
+
+const secretName = "NOTES_TOKEN";
+
+export const secretValue = "notes-token-7f3a9c2e";
+
 const noSpend: Spend = { items: 0, usd: 0, tokens: 0, minutes: 0 };
+
+export const notesFlow = { mode: "notes", path: "workflows/flow.yaml" };
+
+export function withFlow(
+  steps: Workflow["steps"],
+): Changes & { readonly workflows: Readonly<Record<string, Workflow>> } {
+  return { workflows: { [notesFlow.path]: { name: "flow", steps } } };
+}
 
 export function finished(output: Json, spent: Partial<Spend> = {}): StepOutcome {
   return { status: "done", output, spent: { ...noSpend, ...spent } };
@@ -119,24 +127,6 @@ export function fakeRunner(overrides: Readonly<Record<string, Script>> = {}): Fa
       assert.ok(script, `the fake runner has no script ${request.place.mode}:${request.script}`);
       return script(request);
     },
-  };
-}
-
-export const fakeScrubber: Scrubber = {
-  redact: (text) => text.replaceAll(/SECRET-[A-Z0-9]+/g, "[redacted]"),
-};
-
-export function fakePolicy(mode: string): ModeGrants {
-  return {
-    mode,
-    modeFolder: `components/${mode}`,
-    databaseFile: `.agentbay/data/${mode}.db`,
-    migrationsFolder: `components/${mode}/migrations`,
-    readPaths: [],
-    writePaths: [],
-    secrets: [],
-    hosts: [],
-    commands: [],
   };
 }
 
@@ -268,6 +258,7 @@ function fixtureFiles(changes: Changes): Record<string, string> {
     description: "Writes notes and keeps them in the store.",
     requires: { interfaces: ["items-store@1"] },
     settings: "schemas/settings.json",
+    resources: { secrets: [secretName] },
     actions: { ...notesActions, ...(changes.notesActions ?? {}) },
     ...(Object.keys(workflows).length === 0 ? {} : { workflows: Object.keys(workflows) }),
   };
@@ -299,41 +290,49 @@ function fixtureFiles(changes: Changes): Record<string, string> {
   return Object.fromEntries(Object.entries(files).map(([path, text]) => [`${root}/${path}`, text]));
 }
 
-export async function fixtureSystem(changes: Changes = {}): Promise<{ system: System; files: FakeFileSystem }> {
+export async function fixtureSystem(changes: Changes = {}): Promise<FixtureSystem> {
   const files = fakeFileSystem(fixtureFiles(changes));
-  const outcome = (await loadSystemReport(files, layoutOf({ kit: root, project: root }))).outcome;
+  const outcome = (await loadPolicedSystem(files, layout)).outcome;
   assert.ok(outcome.ok, outcome.ok ? "" : JSON.stringify(outcome.problems, null, 2));
-  return { system: outcome.value, files };
+  return { ...outcome.value, files };
 }
 
-function openStore(kind: StoreKind): { readonly store: RunStore; readonly close: () => void } {
-  if (kind === "memory") {
-    return { store: new MemoryRunStore(), close: () => undefined };
-  }
-  const folder = mkdtempSync(join(tmpdir(), "agentbay-engine-"));
-  mkdirSync(join(folder, ".agentbay"));
-  const store = new SqliteRunStore(join(folder, ".agentbay", "kernel.db"));
-  return {
-    store,
-    close: () => {
-      store.close();
-      rmSync(folder, { recursive: true, force: true });
-    },
-  };
+export function policyOfSystem(system: System): PolicyOf {
+  const policy = policyFor(system, layout);
+  assert.ok(policy.ok, policy.ok ? "" : JSON.stringify(policy.problems, null, 2));
+  return policy.value;
+}
+
+export async function fixtureScrubber(policyOf: PolicyOf): Promise<SecretStore> {
+  const environment = { [`AGENTBAY_SECRET_${secretName}`]: secretValue };
+  const scrubber = new SecretStore({ environment, processes: noProcesses, platform: "linux" });
+  const handedOut = await scrubber.get(secretName, policyOf("notes"));
+  assert.ok(handedOut.ok);
+  return scrubber;
+}
+
+function kernelFile(file: string | undefined): KernelDb {
+  return file === undefined ? temporaryKernelDb() : { file, remove: () => undefined };
 }
 
 export async function harness(
   options: {
     readonly scripts?: Readonly<Record<string, Script>>;
     readonly changes?: Changes;
-    readonly storeKind?: StoreKind;
-    readonly store?: RunStore;
+    readonly file?: string;
   } = {},
 ): Promise<Harness> {
-  const { system, files } = await fixtureSystem(options.changes);
-  const opened = options.store === undefined ? openStore(options.storeKind ?? "memory") : undefined;
-  const store = options.store ?? opened?.store;
-  assert.ok(store);
+  const fixture = await fixtureSystem(options.changes);
+  const { system, policyOf, files } = fixture;
+  const kernelDb = kernelFile(options.file);
+  const opened: SqliteRunStore[] = [];
+  const reopen = (): SqliteRunStore => {
+    const store = new SqliteRunStore(kernelDb.file);
+    opened.push(store);
+    return store;
+  };
+  const store = reopen();
+  const scrubber = await fixtureScrubber(policyOf);
   const runner = fakeRunner(options.scripts);
   const clock = fakeClock(startTime);
   let engines = 0;
@@ -343,23 +342,31 @@ export async function harness(
       system: fresh.system ?? system,
       store: fresh.store ?? store,
       runner,
-      policyOf: fakePolicy,
+      policyOf: fresh.system === undefined ? policyOf : policyOfSystem(fresh.system),
       clock,
       files,
-      scrubber: fakeScrubber,
+      scrubber,
       owner: fresh.owner ?? `engine-${String(engines)}`,
       newId: () => `run-${String(engines)}`,
     });
   };
+  const close = (): void => {
+    for (const each of opened) {
+      each.close();
+    }
+    kernelDb.remove();
+  };
   return {
+    ...fixture,
     engine: freshEngine(),
     store,
+    file: kernelDb.file,
+    reopen,
     runner,
     clock,
-    files,
-    system,
+    scrubber,
     freshEngine,
-    close: opened?.close ?? (() => undefined),
+    close,
   };
 }
 

@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import type { StoredState, Writer } from "../bay/runs/run-store.ts";
 import { SqliteRunStore } from "../bay/runs/sqlite-run-store.ts";
 import { checkTaskToken, issueTaskToken } from "../bay/runs/task-tokens.ts";
 import { problemText } from "../bay/outcome.ts";
+import { temporaryKernelDb } from "./kernel-db-fixture.ts";
 
 type Opened = {
   readonly store: SqliteRunStore;
@@ -22,8 +20,7 @@ const at = "2026-11-14T09:00:00.000Z";
 const now = new Date(at);
 
 function opened(): Opened {
-  const folder = mkdtempSync(join(tmpdir(), "agentbay-tokens-"));
-  const file = join(folder, "kernel.db");
+  const { file, remove } = temporaryKernelDb();
   const store = new SqliteRunStore(file);
   return {
     store,
@@ -31,7 +28,7 @@ function opened(): Opened {
     writers: new Map(),
     remove: () => {
       store.close();
-      rmSync(folder, { recursive: true, force: true });
+      remove();
     },
   };
 }
@@ -145,8 +142,7 @@ test("tokens of different runs live side by side", async () => {
 });
 
 test("a kernel.db of the first version gains the token table and keeps its runs", async () => {
-  const folder = mkdtempSync(join(tmpdir(), "agentbay-tokens-"));
-  const file = join(folder, "kernel.db");
+  const { file, remove } = temporaryKernelDb();
   const first = new SqliteRunStore(file);
   const target = { kind: "action" as const, mode: "writer", name: "compose" };
   await first.createRun({ id: "old-run", target, input: {}, limit: {}, at }, "test", []);
@@ -158,5 +154,5 @@ test("a kernel.db of the first version gains the token table and keeps its runs"
   assert.equal((await reopened.readRun("old-run"))?.id, "old-run");
   assert.deepEqual(await reopened.taskTokens(), []);
   reopened.close();
-  rmSync(folder, { recursive: true, force: true });
+  remove();
 });

@@ -3,17 +3,14 @@ import type { Broker } from "./broker.ts";
 import type { Json } from "./contracts.ts";
 import { byteSize, fieldOf, numberField, textField, isRecord } from "./json.ts";
 import type { Kernel } from "./kernel.ts";
-import type { StepRecord } from "./runs/run-store.ts";
-import type { RunView } from "./runs/run-state.ts";
-import { failedWith, problemText, unplacedProblem, type Outcome, type Problem } from "./outcome.ts";
+import type { Run, Task } from "./runs/runs.ts";
+import { failedWith, unplacedProblem, type Outcome, type Problem } from "./outcome.ts";
 import { isToolName, skillToolsOf, type SkillTools, type ToolName } from "./skill-tools.ts";
-import { resolveCall, resolveOwnAction, type ActionTarget } from "./targets.ts";
-import { checkTaskToken, issueTaskToken } from "./runs/task-tokens.ts";
-import { skillStepAt, type SkillStepAt } from "./runs/waiting.ts";
 
 type ToolCall = {
   readonly kernel: Kernel;
-  readonly step: SkillStepAt;
+  readonly token: string;
+  readonly task: Task;
   readonly tools: SkillTools;
   readonly input: Json;
 };
@@ -21,8 +18,6 @@ type ToolCall = {
 type ToolHandler = (call: ToolCall) => Promise<Outcome<Json>>;
 
 const toolResultBytes = 256 * 1024;
-
-const askedByKind = "run.asked-by";
 
 function refused(refusal: string): Outcome<never> {
   return failedWith([unplacedProblem(refusal)]);
@@ -33,7 +28,7 @@ function answered<T extends Json>(answer: Answer<T>, shape: (value: T) => Json):
 }
 
 async function withBroker(call: ToolCall, use: (broker: Broker) => Promise<Outcome<Json>>): Promise<Outcome<Json>> {
-  const broker = call.kernel.brokerFor(call.step.task.place, call.step.task.permissions);
+  const broker = call.kernel.brokerFor(call.task.place, call.task.permissions);
   try {
     return await use(broker);
   } finally {
@@ -88,47 +83,12 @@ async function filesWrite(call: ToolCall): Promise<Outcome<Json>> {
   return withBroker(call, async (broker) => answered(await broker.writeFile(path, text), () => ({ written: path })));
 }
 
-function callTarget(call: ToolCall, action: string): ActionTarget | string {
-  if (!call.tools.actions.includes(action)) {
-    const listed = call.tools.actions.join(", ");
-    return `The skill does not list ${action} under Tools; it may call: ${listed === "" ? "nothing" : listed}.`;
+function unlisted(call: ToolCall, action: string): Outcome<Json> | undefined {
+  if (call.tools.actions.includes(action)) {
+    return undefined;
   }
-  const mode = call.step.target.mode;
-  if (action.includes(".")) {
-    return resolveCall(call.kernel.system, mode, action);
-  }
-  return resolveOwnAction(call.kernel.system, mode.manifest.name, action);
-}
-
-async function recordAskedBy(call: ToolCall, result: Outcome<RunView>): Promise<void> {
-  if (!result.ok) {
-    return;
-  }
-  await call.kernel.runs.agentTools.store.append({
-    at: call.kernel.ports.clock.now().toISOString(),
-    runId: result.value.id,
-    kind: askedByKind,
-    detail: { runId: call.step.task.place.runId, stepKey: call.step.waitingKey },
-  });
-}
-
-function calledResult(result: Outcome<RunView>, action: string): Outcome<Json> {
-  if (!result.ok) {
-    return result;
-  }
-  const state = result.value.state;
-  switch (state.status) {
-    case "done":
-      return { ok: true, value: { output: state.output, run: result.value.id } };
-    case "failed":
-    case "undone":
-      return refused(`The action ${action} failed: ${state.reason}`);
-    case "waiting":
-      return refused(
-        `The action ${action} stopped to wait for ${state.waiting.reason} (run ${result.value.id}); ` +
-          "an action called from a skill must finish without waiting.",
-      );
-  }
+  const listed = call.tools.actions.join(", ");
+  return refused(`The skill does not list ${action} under Tools; it may call: ${listed === "" ? "nothing" : listed}.`);
 }
 
 async function callAction(call: ToolCall): Promise<Outcome<Json>> {
@@ -136,27 +96,12 @@ async function callAction(call: ToolCall): Promise<Outcome<Json>> {
   if (typeof action !== "string") {
     return action;
   }
-  const target = callTarget(call, action);
-  if (typeof target === "string") {
-    return refused(target);
+  const refusal = unlisted(call, action);
+  if (refusal !== undefined) {
+    return refusal;
   }
-  const effects = target.action.effects;
-  if (effects.some((effect) => effect !== "read")) {
-    return refused(
-      `The action ${action} has the effects ${effects.join(", ")}; a skill may call only actions whose effects ` +
-        "are read only.",
-    );
-  }
-  const caller = action.includes(".") ? { caller: call.step.target.mode.manifest.name } : {};
-  const result = await call.kernel.runs.agentTools.engine.startForSkill({
-    runId: call.step.task.place.runId,
-    stepKey: call.step.waitingKey,
-    reference: `${target.mode.manifest.name}.${target.name}`,
-    input: fieldOf(call.input, "input") ?? {},
-    ...caller,
-  });
-  await recordAskedBy(call, result);
-  return calledResult(result, action);
+  const called = await call.kernel.runs.callAction(call.token, action, fieldOf(call.input, "input") ?? {});
+  return called.ok ? { ok: true, value: { output: called.value.output, run: called.value.runId } } : called;
 }
 
 function spentAmount(input: Json, name: string): number | string {
@@ -171,37 +116,35 @@ function spentAmount(input: Json, name: string): number | string {
   return amount;
 }
 
-function settledSubmission(run: RunView, record: StepRecord | undefined): Json {
+function settledSubmission(run: Run, step: Run["steps"][number] | undefined): Json {
   const waiting = run.state.status === "waiting" ? run.state.waiting : undefined;
   const next =
     waiting?.reason === "skill"
       ? { next: `The run waits for another skill step; bay runs ${run.id} --new-token gives its task.` }
       : {};
-  const reason = record?.status === "failed" ? { reason: record.reason } : {};
+  const reason = step?.status === "failed" ? { reason: step.reason } : {};
   const summary = {
     id: run.id,
     status: run.state.status,
     ...(waiting === undefined ? {} : { waitingFor: waiting.reason }),
   };
-  return { accepted: record?.status === "done", run: summary, ...reason, ...next };
+  return { accepted: step?.status === "done", run: summary, ...reason, ...next };
 }
 
-async function submittedResult(call: ToolCall, result: Outcome<RunView>): Promise<Outcome<Json>> {
+function submittedResult(call: ToolCall, result: Outcome<Run>): Json {
   if (!result.ok) {
-    return { ok: true, value: { accepted: false, problems: result.problems.map((problem) => problem.message) } };
+    return { accepted: false, problems: result.problems.map((problem) => problem.message) };
   }
   const run = result.value;
-  const record = run.steps.find((step) => step.key === call.step.task.place.stepKey);
-  if (run.state.status === "waiting" && run.state.waiting.reason === "skill" && record?.status === "started") {
-    const task = run.state.waiting.task;
-    const place = { runId: run.id, stepKey: run.state.waiting.stepKey, round: task.round };
-    const token = await issueTaskToken(call.kernel.runs.agentTools.store, place, call.kernel.ports.clock.now());
-    return {
-      ok: true,
-      value: { accepted: false, round: task.round, feedback: [...task.feedback], stepKey: place.stepKey, token },
-    };
+  const waiting = run.state.status === "waiting" ? run.state.waiting : undefined;
+  if (waiting?.reason === "skill" && waiting.task.token !== undefined) {
+    const { round, feedback, token } = waiting.task;
+    return { accepted: false, round, feedback: [...feedback], stepKey: waiting.stepKey, token };
   }
-  return { ok: true, value: settledSubmission(run, record) };
+  return settledSubmission(
+    run,
+    run.steps.find((step) => step.key === call.task.place.stepKey),
+  );
 }
 
 async function submit(call: ToolCall): Promise<Outcome<Json>> {
@@ -215,9 +158,8 @@ async function submit(call: ToolCall): Promise<Outcome<Json>> {
     return refused([tokens, usd].filter((entry) => typeof entry === "string").join(" "));
   }
   const spent = { items: 0, usd, tokens, minutes: 0 };
-  const place = call.step.task.place;
-  const result = await call.kernel.runs.agentTools.engine.submit(place.runId, call.step.waitingKey, { output, spent });
-  return submittedResult(call, result);
+  const result = await call.kernel.runs.submit(call.token, { output, spent });
+  return { ok: true, value: submittedResult(call, result) };
 }
 
 const handlers: { readonly [Name in ToolName]: ToolHandler } = {
@@ -228,21 +170,6 @@ const handlers: { readonly [Name in ToolName]: ToolHandler } = {
   call_action: callAction,
   submit,
 };
-
-async function stepOfToken(kernel: Kernel, token: string): Promise<SkillStepAt | string> {
-  const checked = await checkTaskToken(
-    { tokens: kernel.runs.agentTools.store, runs: kernel.runs.agentTools.store },
-    token,
-  );
-  if (!checked.ok) {
-    return problemText(checked.problems);
-  }
-  const run = await kernel.runs.agentTools.store.readRun(checked.value.runId);
-  if (run === undefined) {
-    return `There is no run ${checked.value.runId}.`;
-  }
-  return skillStepAt(kernel, run, checked.value.stepKey);
-}
 
 function redactedProblem(kernel: Kernel, problem: Problem): Problem {
   const fix = problem.fix === undefined ? {} : { fix: kernel.secrets.redact(problem.fix) };
@@ -263,50 +190,24 @@ function capped(kernel: Kernel, result: Outcome<Json>): Outcome<Json> {
   );
 }
 
-async function recordCall(kernel: Kernel, step: SkillStepAt, entry: { name: ToolName; ok: boolean }): Promise<void> {
-  await kernel.runs.agentTools.store.append({
-    at: kernel.ports.clock.now().toISOString(),
-    runId: step.task.place.runId,
-    kind: "tool.called",
-    detail: { tool: entry.name, stepKey: step.waitingKey, ok: entry.ok },
-  });
-}
-
-async function callsThisRound(kernel: Kernel, step: SkillStepAt): Promise<number> {
-  const events = await kernel.runs.agentTools.store.readEvents(step.task.place.runId);
-  return events.filter(
-    (event) => event.kind === "tool.called" && textField(event.detail, "stepKey") === step.waitingKey,
-  ).length;
-}
-
-async function overLimit(kernel: Kernel, name: ToolName, step: SkillStepAt): Promise<Outcome<Json> | undefined> {
-  if (name === "submit" || (await callsThisRound(kernel, step)) < kernel.limits.toolCallsPerRound) {
-    return undefined;
-  }
-  return refused(
-    `This round of step ${step.waitingKey} has used its ${String(kernel.limits.toolCallsPerRound)} tool calls. ` +
-      "Submit your output now with submit; only submit still works in this round.",
-  );
-}
-
 async function performed(
   kernel: Kernel,
-  request: { name: ToolName; input: Json; step: SkillStepAt },
+  request: { name: ToolName; token: string; input: Json },
 ): Promise<Outcome<Json>> {
-  const { name, input, step } = request;
-  const limited = await overLimit(kernel, name, step);
-  if (limited !== undefined) {
-    return limited;
+  const { name, token, input } = request;
+  const task = await kernel.runs.task(token, name);
+  if (!task.ok) {
+    return task;
   }
-  const tools = await skillToolsOf(kernel.ports.files, step.skillFile);
+  const tools = await skillToolsOf(kernel.ports.files, task.value.files.skill);
   if (!tools.kernelTools.includes(name)) {
     const named = tools.kernelTools.join(", ");
     return refused(
-      `The skill ${step.task.skill} of mode ${step.task.place.mode} does not name the tool ${name} in its Tools ` +
+      `The skill ${task.value.skill} of mode ${task.value.place.mode} does not name the tool ${name} in its Tools ` +
         `section; it may use: ${named}.`,
     );
   }
-  return handlers[name]({ kernel, step, tools, input });
+  return handlers[name]({ kernel, token, task: task.value, tools, input });
 }
 
 export async function callKernelTool(kernel: Kernel, name: string, input: Json): Promise<Outcome<Json>> {
@@ -328,11 +229,5 @@ async function checkedToolCall(kernel: Kernel, name: string, input: Json): Promi
   if (token === undefined) {
     return refused("Every tool call needs token: the token of your task, exactly as the task gave it.");
   }
-  const step = await stepOfToken(kernel, token);
-  if (typeof step === "string") {
-    return refused(step);
-  }
-  const result = capped(kernel, await performed(kernel, { name, input, step }));
-  await recordCall(kernel, step, { name, ok: result.ok });
-  return result;
+  return capped(kernel, await performed(kernel, { name, token, input }));
 }

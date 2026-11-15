@@ -19,7 +19,7 @@ test("the kernel loads a project and holds its system, policy, store and engine"
   assert.equal(kernel.policyOf("writer").databaseFile, join(opened.project.root, ".agentbay/data/writer.db"));
   assert.ok(existsSync(join(opened.project.root, ".agentbay/kernel.db")));
   assert.equal(kernel.limits.toolCallsPerRound, 200);
-  const result = await kernel.runs.agentTools.engine.startAction("greeter.fetch", { name: "Ada" });
+  const result = await kernel.runs.start({ action: "greeter.fetch" }, { name: "Ada" });
   assert.ok(result.ok && result.value.state.status === "done");
   assert.deepEqual(result.value.state.output, { greeting: "Hello, Ada" });
   await opened.close();
@@ -60,7 +60,7 @@ test("a mode's database is made when first used, with its migrations applied bef
   const { kernel } = opened;
   const grants = kernel.policyOf("writer");
   const permissions = { grants, actionEffects: ["read" as const, "write" as const] };
-  const started = await kernel.runs.agentTools.engine.startAction("writer.compose", { name: "Ada" });
+  const started = await kernel.runs.start({ action: "writer.compose" }, { name: "Ada" });
   assert.ok(started.ok && started.value.state.status === "waiting", JSON.stringify(started));
   assert.ok(!existsSync(grants.databaseFile), "a script that never used context.db made the database");
   const place = { runId: "none", mode: "writer", action: "compose", stepKey: "0" };

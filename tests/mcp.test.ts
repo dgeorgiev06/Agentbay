@@ -6,9 +6,8 @@ import { test } from "node:test";
 import type { Json } from "../bay/contracts.ts";
 import { fieldOf, parseJson, textField } from "../bay/json.ts";
 import { replyTo, type ToolServer } from "../bay/mcp-server.ts";
-import { issueTaskToken } from "../bay/runs/task-tokens.ts";
 import { toolDefinitions } from "../bay/tool-definitions.ts";
-import { openKernel, testEnvironment } from "./kernel-fixture.ts";
+import { openKernel, startedTask, testEnvironment } from "./kernel-fixture.ts";
 import { kit, makeProject } from "./project-fixture.ts";
 import { listOf } from "./cli-fixture.ts";
 
@@ -115,10 +114,8 @@ test("the MCP server answers initialize, lists six tools that each need a token,
 test("the MCP server accepts a submit with a real token on a real project", async () => {
   const project = await makeProject();
   const kernel = await openKernel(project);
-  const started = await kernel.runs.agentTools.engine.startAction("writer.compose", { name: "Ada" });
-  assert.ok(started.ok && started.value.state.status === "waiting" && started.value.state.waiting.reason === "skill");
-  const place = { runId: started.value.id, stepKey: started.value.state.waiting.stepKey, round: 1 };
-  const token = await issueTaskToken(kernel.runs.agentTools.store, place, new Date());
+  const place = await startedTask(kernel, "writer.compose", { name: "Ada" });
+  const token = place.token;
   kernel.close();
   const server = startServer(project.root);
   await server.request("initialize", { protocolVersion: "2024-11-05", capabilities: {} });

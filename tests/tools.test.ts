@@ -1,30 +1,27 @@
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import { test } from "node:test";
 import type { Json } from "../bay/contracts.ts";
 import { fieldOf, textField } from "../bay/json.ts";
 import type { Kernel } from "../bay/kernel.ts";
-import type { StoredRun } from "../bay/runs/run-store.ts";
-import { issueTaskToken } from "../bay/runs/task-tokens.ts";
+import { kernelDatabaseFile, type RunWithSteps } from "../bay/runs/run-store.ts";
+import type { Run } from "../bay/runs/runs.ts";
+import { SqliteRunStore } from "../bay/runs/sqlite-run-store.ts";
 import { callKernelTool } from "../bay/tools.ts";
 import { problemText, type Outcome } from "../bay/outcome.ts";
-import { openKernel, openProject, type Opened } from "./kernel-fixture.ts";
+import { openKernel, openProject, startedTask, type Opened, type StartedTask } from "./kernel-fixture.ts";
 import { makeProject, skillText } from "./project-fixture.ts";
 
 const toolResultBytes = 256 * 1024;
 
-type Waiting = {
-  readonly runId: string;
-  readonly stepKey: string;
-  readonly token: string;
-};
+function waitingCompose(kernel: Kernel): Promise<StartedTask> {
+  return startedTask(kernel, "writer.compose", { name: "Ada" });
+}
 
-async function waitingCompose(kernel: Kernel): Promise<Waiting> {
-  const result = await kernel.runs.agentTools.engine.startAction("writer.compose", { name: "Ada" });
-  assert.ok(result.ok && result.value.state.status === "waiting", JSON.stringify(result));
-  const waiting = result.value.state.waiting;
-  assert.equal(waiting.reason, "skill");
-  const place = { runId: result.value.id, stepKey: waiting.stepKey, round: 1 };
-  return { ...place, token: await issueTaskToken(kernel.runs.agentTools.store, place, new Date()) };
+async function shownRun(kernel: Kernel, runId: string): Promise<Run> {
+  const shown = await kernel.runs.show(runId);
+  assert.ok(shown.ok, shown.ok ? "" : problemText(shown.problems));
+  return shown.value;
 }
 
 function valueOf(result: Outcome<Json>): Json {
@@ -37,7 +34,7 @@ function refusalOf(result: Outcome<Json>): string {
   return problemText(result.problems);
 }
 
-async function withWaiting(body: (opened: Opened, waiting: Waiting) => Promise<void>): Promise<void> {
+async function withWaiting(body: (opened: Opened, waiting: StartedTask) => Promise<void>): Promise<void> {
   const opened = await openProject({}, { environment: { AGENTBAY_SECRET_NOTE_KEY: "s3cr3t-note-value-42" } });
   try {
     await body(opened, await waitingCompose(opened.kernel));
@@ -52,11 +49,11 @@ test("db_query runs one select on the mode's own database, migrated first, and r
     assert.deepEqual(valueOf(result), { columns: ["text"], rows: [["The first note."]] });
     const refused = await callKernelTool(kernel, "db_query", { token: waiting.token, sql: "delete from notes" });
     assert.match(refusalOf(refused), /refused|read-only|select/i);
-    const events = await kernel.runs.agentTools.store.readEvents(waiting.runId);
+    const { events } = await shownRun(kernel, waiting.runId);
     const calls = events.filter((event) => event.kind === "tool.called").map((event) => event.detail);
     assert.deepEqual(calls, [
-      { tool: "db_query", stepKey: waiting.stepKey, ok: true },
-      { tool: "db_query", stepKey: waiting.stepKey, ok: false },
+      { tool: "db_query", stepKey: waiting.stepKey },
+      { tool: "db_query", stepKey: waiting.stepKey },
     ]);
   });
 });
@@ -124,7 +121,7 @@ test("call_action runs a listed read-only action through the engine and refuses 
     });
     const childRun = textField(valueOf(fetched), "run") ?? "";
     assert.deepEqual(valueOf(fetched), { output: { greeting: "Hello, Bo" }, run: childRun });
-    const childEvents = await kernel.runs.agentTools.store.readEvents(childRun);
+    const childEvents = (await shownRun(kernel, childRun)).events;
     const askedBy = childEvents.find((event) => event.kind === "run.asked-by");
     assert.deepEqual(askedBy?.detail, { runId: waiting.runId, stepKey: waiting.stepKey });
     const writing = await callKernelTool(kernel, "call_action", { token, action: "compose", input: { name: "Bo" } });
@@ -136,10 +133,15 @@ test("call_action runs a listed read-only action through the engine and refuses 
   });
 });
 
-async function storedRun(kernel: Kernel, runId: string): Promise<StoredRun> {
-  const run = await kernel.runs.agentTools.store.readRun(runId);
-  assert.ok(run !== undefined, runId);
-  return run;
+async function storedRun(kernel: Kernel, runId: string): Promise<RunWithSteps> {
+  const store = await SqliteRunStore.open(kernel.ports.folders, join(kernel.layout.project, kernelDatabaseFile));
+  try {
+    const run = await store.readRun(runId);
+    assert.ok(run !== undefined, runId);
+    return run;
+  } finally {
+    store.close();
+  }
 }
 
 test("an action a skill starts through call_action is charged to the calling run and held to what it has left", async () => {
@@ -149,7 +151,7 @@ test("an action a skill starts through call_action is charged to the calling run
   const kernel = await openKernel(project);
   try {
     const waiting = await waitingCompose(kernel);
-    const before = await kernel.runs.agentTools.store.readRun(waiting.runId);
+    const before = await storedRun(kernel, waiting.runId);
     const fetched = await callKernelTool(kernel, "call_action", {
       token: waiting.token,
       action: "greeting-source.fetch",
@@ -163,7 +165,6 @@ test("an action a skill starts through call_action is charged to the calling run
     const child = await storedRun(kernel, textField(valueOf(fetched), "run") ?? "");
     const second = await storedRun(kernel, textField(valueOf(again), "run") ?? "");
     const after = await storedRun(kernel, waiting.runId);
-    assert.ok(before !== undefined);
     assert.ok(child.spent.minutes > 0 && second.spent.minutes > 0);
     assert.equal(child.limit.minutes, 30 - before.spent.minutes);
     assert.ok((second.limit.minutes ?? 30) < (child.limit.minutes ?? 0));
@@ -173,8 +174,8 @@ test("an action a skill starts through call_action is charged to the calling run
     const output = { text: "Hello, Ada, and welcome back." };
     const accepted = valueOf(await callKernelTool(kernel, "submit", { token: waiting.token, output }));
     assert.equal(fieldOf(accepted, "accepted"), true);
-    const done = await kernel.runs.agentTools.store.readRun(waiting.runId);
-    const skillStep = done?.steps.find((step) => step.key === "1");
+    const done = await storedRun(kernel, waiting.runId);
+    const skillStep = done.steps.find((step) => step.key === "1");
     assert.ok(skillStep !== undefined && skillStep.status !== "started");
     assert.ok(skillStep.spent.minutes >= child.spent.minutes + second.spent.minutes);
   } finally {
@@ -225,8 +226,8 @@ test("submit returns schema problems, then check feedback with a new token, then
     const good = { token: next, output: { text: "Hello, Ada, and welcome back." }, tokens: 300 };
     const accepted = valueOf(await callKernelTool(kernel, "submit", good));
     assert.deepEqual(accepted, { accepted: true, run: { id: waiting.runId, status: "done" } });
-    const run = await kernel.runs.agentTools.store.readRun(waiting.runId);
-    assert.equal(run?.spent.tokens, 300);
+    const run = await shownRun(kernel, waiting.runId);
+    assert.equal(run.spent.tokens, 300);
     const after = await callKernelTool(kernel, "db_query", { token: next, sql: "select 1" });
     assert.match(refusalOf(after), /no longer waiting for it \(the run is done\)/);
   });
@@ -236,14 +237,12 @@ test("submit never returns the token of the next skill step, and says how the co
   const opened = await openProject();
   try {
     const { kernel } = opened;
-    const started = await kernel.runs.agentTools.engine.startWorkflow(
-      { mode: "writer", path: "workflows/twice.yaml" },
-      {},
-    );
+    const started = await kernel.runs.start({ workflow: { mode: "writer", path: "workflows/twice.yaml" } }, {});
     assert.ok(started.ok && started.value.state.status === "waiting", JSON.stringify(started));
     const place = { runId: started.value.id, stepKey: started.value.state.waiting.stepKey, round: 1 };
     assert.equal(place.stepKey, "first/1#1");
-    const token = await issueTaskToken(kernel.runs.agentTools.store, place, new Date());
+    assert.ok(started.value.state.waiting.reason === "skill");
+    const token = started.value.state.waiting.task.token ?? "";
     const output = { text: "Hello, Ada, and welcome back." };
     const submitted = valueOf(await callKernelTool(kernel, "submit", { token, output }));
     assert.deepEqual(submitted, {
@@ -304,8 +303,8 @@ test("call_action starts an interface action for the skill's mode, which the cal
       action: "greeting-source.fetch",
       input: { name: "Bo" },
     });
-    const childRun = await kernel.runs.agentTools.store.readRun(textField(valueOf(fetched), "run") ?? "");
-    assert.deepEqual(childRun?.target, { kind: "action", mode: "greeter", name: "fetch", caller: "writer" });
+    const childRun = await storedRun(kernel, textField(valueOf(fetched), "run") ?? "");
+    assert.deepEqual(childRun.target, { kind: "action", mode: "greeter", name: "fetch", caller: "writer" });
   });
 });
 
@@ -319,4 +318,50 @@ test("a tool's refusal is redacted by the tool layer itself, even when nothing e
     assert.doesNotMatch(refusal, new RegExp(secret));
     assert.match(refusal, /The skill does not list \[redacted:NOTE_KEY\] under Tools/);
   });
+});
+
+test("call_action refuses a read-only action that stops to wait, and names the run it left", async () => {
+  const project = await makeProject();
+  const manifest = await project.read("components/modes/writer/mode.yaml");
+  await project.write(
+    "components/modes/writer/mode.yaml",
+    manifest.replace("      - read\n      - write\n", "      - read\n"),
+  );
+  const kernel = await openKernel(project);
+  try {
+    const waiting = await waitingCompose(kernel);
+    const called = await callKernelTool(kernel, "call_action", {
+      token: waiting.token,
+      action: "compose",
+      input: { name: "Bo" },
+    });
+    assert.match(
+      refusalOf(called),
+      /The action compose stopped to wait for skill \(run [^)]+\); an action called from a skill must finish/,
+    );
+  } finally {
+    kernel.close();
+    await project.remove();
+  }
+});
+
+test("submit whose check cannot run is not accepted and gives the step's reason", async () => {
+  const project = await makeProject();
+  await project.write(
+    "components/modes/writer/scripts/long-enough.ts",
+    'import { defineScript } from "agentbay/sdk";\n' +
+      'export const run = defineScript(async () => {\n  throw new Error("the check broke");\n});\n',
+  );
+  const kernel = await openKernel(project);
+  try {
+    const waiting = await waitingCompose(kernel);
+    const output = { text: "Hello, Ada, and welcome back." };
+    const submitted = valueOf(await callKernelTool(kernel, "submit", { token: waiting.token, output }));
+    assert.equal(fieldOf(submitted, "accepted"), false);
+    assert.deepEqual(fieldOf(submitted, "run"), { id: waiting.runId, status: "failed" });
+    assert.match(textField(submitted, "reason") ?? "", /the check broke/);
+  } finally {
+    kernel.close();
+    await project.remove();
+  }
 });

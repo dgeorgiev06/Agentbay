@@ -1,4 +1,3 @@
-import { join } from "node:path/posix";
 import type { PolicyOf, SkillTask } from "../contracts.ts";
 import { hashOf } from "../json.ts";
 import type { System } from "../registry.ts";
@@ -7,13 +6,6 @@ import type { Waiting } from "./run-state.ts";
 import { skillTaskOf, startedSkillOf } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
 import { resolveCall, resolveOwnAction, type ActionTarget } from "../targets.ts";
-
-export type SkillStepAt = {
-  readonly waitingKey: string;
-  readonly task: SkillTask;
-  readonly target: ActionTarget;
-  readonly skillFile: string;
-};
 
 export type WaitingContext = {
   readonly system: System;
@@ -24,20 +16,19 @@ function recordOf(run: RunWithSteps, key: string): StepRecord | undefined {
   return run.steps.find((step) => step.key === key);
 }
 
-export function skillStepAt(context: WaitingContext, run: RunWithSteps, waitingKey: string): SkillStepAt | string {
+function skillTaskAt(context: WaitingContext, run: RunWithSteps, waitingKey: string): SkillTask | undefined {
   const round = skillRoundOf(waitingKey);
   const record = startedSkillOf(round === undefined ? undefined : recordOf(run, round.step));
   if (record === undefined) {
-    return `Run ${run.id} has no skill step ${waitingKey}.`;
+    return undefined;
   }
   const { detail } = record;
   const target = resolveOwnAction(context.system, detail.mode, detail.action);
   if (typeof target === "string") {
-    return target;
+    return undefined;
   }
   const permissions = { grants: context.policyOf(detail.mode), actionEffects: target.action.effects };
-  const task = skillTaskOf({ runId: run.id, key: record.key, input: record.input, detail }, permissions);
-  return { waitingKey, task, target, skillFile: join(target.mode.folder, detail.skill, "SKILL.md") };
+  return skillTaskOf({ runId: run.id, key: record.key, input: record.input, detail }, permissions);
 }
 
 export function calledTarget(system: System, modeName: string, action: string): ActionTarget | string {
@@ -76,8 +67,8 @@ export function storedWaiting(context: WaitingContext, run: RunWithSteps): Waiti
   }
   switch (state.reason) {
     case "skill": {
-      const found = skillStepAt(context, run, state.stepKey);
-      return typeof found === "string" ? undefined : { reason: "skill", stepKey: state.stepKey, task: found.task };
+      const task = skillTaskAt(context, run, state.stepKey);
+      return task === undefined ? undefined : { reason: "skill", stepKey: state.stepKey, task };
     }
     case "approval":
       return approvalWaiting(run, state.stepKey);

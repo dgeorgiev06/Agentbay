@@ -8,7 +8,12 @@ import type { Json, StepPlace } from "../bay/contracts.ts";
 import type { Config } from "../bay/generated/config.ts";
 import { layoutOf } from "../bay/layout.ts";
 import { loadKernel, nodeKernelPorts, type Kernel } from "../bay/kernel.ts";
+import { Engine } from "../bay/runs/engine.ts";
+import { kernelDatabaseFile } from "../bay/runs/run-store.ts";
 import type { RunView } from "../bay/runs/run-state.ts";
+import { scrubbedStore } from "../bay/runs/scrubbed-store.ts";
+import { SqliteRunStore } from "../bay/runs/sqlite-run-store.ts";
+import { createScriptRunner } from "../bay/script-runner.ts";
 import type { Outcome } from "../bay/outcome.ts";
 import type { Clock } from "../bay/ports.ts";
 import type { DatabasePartition } from "../bay/sdk.ts";
@@ -40,6 +45,7 @@ function settableClock(startAt: string | undefined): SettableClock {
 export type ModeProject = {
   readonly root: string;
   readonly kernel: Kernel;
+  readonly engine: Engine;
   readonly run: (reference: string, input: Json, options?: CallOptions) => Promise<RunView>;
   readonly output: (reference: string, input: Json, options?: CallOptions) => Promise<Json>;
   readonly failure: (reference: string, input: Json, options?: CallOptions) => Promise<string>;
@@ -95,6 +101,14 @@ export async function openModeProject(config: Config, options: ProjectOptions = 
   return projectIn(root, { config, clock: settableClock(options.startAt) }, 0);
 }
 
+function engineOf(kernel: Kernel, store: SqliteRunStore): Engine {
+  const { ports, layout, system, policyOf, secrets } = kernel;
+  const { files, inspector, http, childProcesses, clock } = ports;
+  const events = { append: scrubbedStore(store, secrets).append };
+  const runner = createScriptRunner({ layout, files, inspector, http, secrets, events, clock, childProcesses });
+  return new Engine({ system, store, runner, policyOf, clock, files, scrubber: secrets });
+}
+
 type Opening = {
   readonly config: Config;
   readonly clock: SettableClock;
@@ -112,21 +126,24 @@ async function projectIn(root: string, opening: Opening, firstRun: number): Prom
   });
   assert.ok(loaded.ok, loaded.ok ? "" : JSON.stringify(loaded.problems, null, 2));
   const kernel = loaded.value;
+  const store = await SqliteRunStore.open(ports.folders, join(root, kernelDatabaseFile));
+  const engine = engineOf(kernel, store);
   let runs = firstRun;
   const run = async (reference: string, input: Json, options: CallOptions = {}): Promise<RunView> => {
     runs += 1;
     const id = `harness-${String(runs)}`;
     const caller = options.caller === undefined ? {} : { caller: options.caller };
-    return runOf(await kernel.runs.agentTools.engine.startAction(reference, input, { id, ...caller }));
+    return runOf(await engine.startAction(reference, input, { id, ...caller }));
   };
   return {
     root,
     kernel,
+    engine,
     run,
     output: async (reference, input, options) => outputOf(await run(reference, input, options)),
     failure: async (reference, input, options) => reasonOf(await run(reference, input, options)),
     refusal: async (reference, input) => {
-      const result = await kernel.runs.agentTools.engine.startAction(reference, input, {
+      const result = await engine.startAction(reference, input, {
         id: `refused-${String(runs)}`,
       });
       assert.ok(!result.ok, `expected ${reference} to be refused, got ${JSON.stringify(result)}`);
@@ -136,10 +153,12 @@ async function projectIn(root: string, opening: Opening, firstRun: number): Prom
     setTime: clock.set,
     reopen: async (changed) => {
       kernel.close();
+      store.close();
       return projectIn(root, { config: changed, clock }, runs + 1000);
     },
     close: async () => {
       kernel.close();
+      store.close();
       await rm(root, { recursive: true, force: true });
     },
   };

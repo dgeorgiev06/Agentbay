@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { Json } from "../bay/contracts.ts";
 import { layoutOf } from "../bay/layout.ts";
 import { loadKernel, nodeKernelPorts, type Kernel, type KernelLimits, type KernelPorts } from "../bay/kernel.ts";
 import { kit, makeProject, type Project, type ProjectOptions } from "./project-fixture.ts";
@@ -22,6 +23,20 @@ export async function openKernel(project: Project, setup: KernelSetup = {}): Pro
   });
   assert.ok(loaded.ok, loaded.ok ? "" : JSON.stringify(loaded.problems, null, 2));
   return loaded.value;
+}
+
+export type StartedTask = {
+  readonly runId: string;
+  readonly stepKey: string;
+  readonly token: string;
+};
+
+export async function startedTask(kernel: Kernel, action: string, input: Json): Promise<StartedTask> {
+  const started = await kernel.runs.start({ action }, input);
+  assert.ok(started.ok && started.value.state.status === "waiting", JSON.stringify(started));
+  const waiting = started.value.state.waiting;
+  assert.ok(waiting.reason === "skill" && waiting.task.token !== undefined, JSON.stringify(waiting));
+  return { runId: started.value.id, stepKey: waiting.stepKey, token: waiting.task.token };
 }
 
 export type Opened = {

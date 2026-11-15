@@ -319,3 +319,49 @@ test("a tool's refusal is redacted by the tool layer itself, even when nothing e
     assert.match(refusal, /The skill does not list \[redacted:NOTE_KEY\] under Tools/);
   });
 });
+
+test("call_action refuses a read-only action that stops to wait, and names the run it left", async () => {
+  const project = await makeProject();
+  const manifest = await project.read("components/modes/writer/mode.yaml");
+  await project.write(
+    "components/modes/writer/mode.yaml",
+    manifest.replace("      - read\n      - write\n", "      - read\n"),
+  );
+  const kernel = await openKernel(project);
+  try {
+    const waiting = await waitingCompose(kernel);
+    const called = await callKernelTool(kernel, "call_action", {
+      token: waiting.token,
+      action: "compose",
+      input: { name: "Bo" },
+    });
+    assert.match(
+      refusalOf(called),
+      /The action compose stopped to wait for skill \(run [^)]+\); an action called from a skill must finish/,
+    );
+  } finally {
+    kernel.close();
+    await project.remove();
+  }
+});
+
+test("submit whose check cannot run is not accepted and gives the step's reason", async () => {
+  const project = await makeProject();
+  await project.write(
+    "components/modes/writer/scripts/long-enough.ts",
+    'import { defineScript } from "agentbay/sdk";\n' +
+      'export const run = defineScript(async () => {\n  throw new Error("the check broke");\n});\n',
+  );
+  const kernel = await openKernel(project);
+  try {
+    const waiting = await waitingCompose(kernel);
+    const output = { text: "Hello, Ada, and welcome back." };
+    const submitted = valueOf(await callKernelTool(kernel, "submit", { token: waiting.token, output }));
+    assert.equal(fieldOf(submitted, "accepted"), false);
+    assert.deepEqual(fieldOf(submitted, "run"), { id: waiting.runId, status: "failed" });
+    assert.match(textField(submitted, "reason") ?? "", /the check broke/);
+  } finally {
+    kernel.close();
+    await project.remove();
+  }
+});

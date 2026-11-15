@@ -288,11 +288,9 @@ test("a dependency cycle between modes through bindings is reported and named", 
 });
 
 test("a mode that depends on itself through a binding is reported as a cycle", async () => {
-  const files = {
-    ...validFiles(),
-    [paths.store]: withMode(storeMode, { requires: { interfaces: ["items-store@1"] } }),
-  };
-  const problems = await problemsOf(files);
+  const selfDependent = withMode(storeMode, { requires: { interfaces: ["items-store@1"] } });
+  const onlyStore = without({ ...validFiles(), [paths.store]: selfDependent }, paths.briefing, paths.notes);
+  const problems = await problemsOf(onlyStore);
   const cycles = problems.filter((problem) => problem.message.includes("cycle"));
   assert.deepEqual(
     cycles.map((problem) => problem.message),

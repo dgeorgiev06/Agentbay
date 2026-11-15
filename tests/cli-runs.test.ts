@@ -142,7 +142,10 @@ test("call refuses a wrong command line with exit 2 and an engine refusal with e
     assert.match(unknown.output, /Mode writer has no action erase; it has: compose\./);
     const badInput = await bay(["call", "writer.compose", '{"nom":"x"}', ...root]);
     assert.equal(badInput.exitCode, 1);
-    assert.match(badInput.output, /missing the required field name/);
+    assert.match(
+      badInput.output,
+      /^components\/modes\/writer\/schemas\/compose-input\.json: .*missing the required field name/m,
+    );
     const noWorkflow = await bay(["call", "--workflow", "writer:workflows/none.yaml", ...root]);
     assert.equal(noWorkflow.exitCode, 1);
     assert.match(noWorkflow.output, /Mode writer has no workflow workflows\/none\.yaml/);

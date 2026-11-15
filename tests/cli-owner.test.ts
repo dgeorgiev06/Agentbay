@@ -187,3 +187,63 @@ test("secret check says whether a value can be found and never prints it", async
   assert.equal(tooShort.exitCode, 1);
   assert.ok(!tooShort.output.includes("abc"));
 });
+
+const madeUpSecret = "made-up-notes-token-4d1e9b";
+
+const secretEnvironment = { AGENTBAY_SECRET_NOTES_TOKEN: madeUpSecret };
+
+const signatureReview = [
+  "name: review",
+  "trigger:",
+  "  manual: true",
+  "steps:",
+  "  - id: fetch",
+  "    action: greeting-source.fetch",
+  "  - id: keep",
+  "    approval: Keep this signature?",
+  "    show: $settings.signature",
+  "",
+].join("\n");
+
+const fetchReadingSecret = [
+  'import { defineScript, fail } from "agentbay/sdk";',
+  "",
+  "export const run = defineScript(async (input, context) => {",
+  '  const secret = await context.secrets.get("NOTES_TOKEN");',
+  "  return secret.ok ? { greeting: `Hello, ${secret.value}` } : fail(secret.message);",
+  "});",
+  "",
+].join("\n");
+
+async function projectShowingSecret(): Promise<Project> {
+  const project = await makeProject();
+  const greeter = await project.read("components/modes/greeter/mode.yaml");
+  await project.write("components/modes/greeter/mode.yaml", `${greeter}resources:\n  secrets:\n    - NOTES_TOKEN\n`);
+  await project.write("components/modes/greeter/scripts/fetch.ts", fetchReadingSecret);
+  await project.write("components/modes/writer/workflows/review.yaml", signatureReview);
+  const config = await project.read("agentbay.config.yaml");
+  await project.write("agentbay.config.yaml", config.replace("Yours, the writer", `Yours, ${madeUpSecret}`));
+  return project;
+}
+
+test("call and runs of a workflow whose approval shows a secret print no secret text", async () => {
+  const project = await projectShowingSecret();
+  try {
+    const call = ["call", "--workflow", "writer:workflows/review.yaml", '{"name":"Cy"}', "--project", project.root];
+    const text = await bay(call, { environment: secretEnvironment });
+    assert.equal(text.exitCode, 0, text.output);
+    assert.match(text.output, /"Yours, \[redacted:NOTES_TOKEN\]"/);
+    assert.ok(!text.output.includes(madeUpSecret), text.output);
+    const json = await bay([...call, "--json"], { environment: secretEnvironment });
+    assert.ok(!json.output.includes(madeUpSecret), json.output);
+    const run = fieldOf(toJson(json.json), "run") ?? null;
+    const waiting = fieldOf(run, "waiting") ?? null;
+    assert.equal(fieldOf(waiting, "content"), "Yours, [redacted:NOTES_TOKEN]");
+    const runId = textField(run, "id") ?? "";
+    const shown = await bay(["runs", runId, "--project", project.root], { environment: secretEnvironment });
+    assert.match(shown.output, /"Yours, \[redacted:NOTES_TOKEN\]"/);
+    assert.ok(!shown.output.includes(madeUpSecret), shown.output);
+  } finally {
+    await project.remove();
+  }
+});

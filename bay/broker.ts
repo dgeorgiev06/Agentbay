@@ -3,19 +3,13 @@ import { type AgentQueryResult, runAgentQuery } from "./agent-query.ts";
 import { type Answer, failed, granted, listed, manifestOf, refused } from "./answers.ts";
 import type { ChildProcesses, FileInspector } from "./broker-ports.ts";
 import type { EventSink, Json, Permissions, StepPlace } from "./contracts.ts";
-import {
-  type Connection,
-  type DatabaseResult,
-  type ExecuteResult,
-  type Migration,
-  ModeDatabase,
-  type Row,
-  type SqlParameters,
-} from "./database.ts";
+import type { DatabaseResult, ExecuteResult, Migration, Row, SqlParameters } from "./database.ts";
+import { DatabaseProcess } from "./database-process.ts";
 import { checkPath, isInsideOrEqual, type PathCheck, type Purpose } from "./file-access.ts";
 import { checkUrl, type Hop, loggedHeaders, nextRequest, redirectTarget, type UrlCheck } from "./http-access.ts";
 import type { Clock, FileSystem, Http, HttpRequest, HttpResponse } from "./ports.ts";
 import type { SecretStore } from "./secrets.ts";
+import { isJsonRecord } from "./json.ts";
 import { leadingKeyword, readKeywords, writeKeywords } from "./sql-statements.ts";
 
 export type BrokerLimits = {
@@ -26,6 +20,7 @@ export type BrokerLimits = {
   readonly httpRequestBytes: number;
   readonly httpResponseBytes: number;
   readonly httpRedirects: number;
+  readonly databaseMilliseconds: number;
 };
 
 export type BrokerOptions = {
@@ -42,7 +37,7 @@ export type BrokerOptions = {
   readonly limits?: Partial<BrokerLimits>;
 };
 
-export const defaultBrokerLimits: BrokerLimits = {
+const defaultBrokerLimits: BrokerLimits = {
   agentQueryRows: 200,
   agentQueryCellCharacters: 4000,
   agentQueryResultBytes: 1_000_000,
@@ -50,6 +45,7 @@ export const defaultBrokerLimits: BrokerLimits = {
   httpRequestBytes: 1024 * 1024,
   httpResponseBytes: 10 * 1024 * 1024,
   httpRedirects: 5,
+  databaseMilliseconds: 10 * 60 * 1000,
 };
 
 const migrationName = /^\d{4}-[^/]+\.sql$/;
@@ -58,17 +54,35 @@ const brokerKinds: readonly string[] = ["refused", "http"];
 
 const asking = "The step asked";
 
+const isRows = (value: Json): value is readonly Row[] =>
+  Array.isArray(value) && value.every((row: Json) => isJsonRecord(row));
+
+const isExecuteResult = (value: Json): value is ExecuteResult =>
+  isJsonRecord(value) && typeof value.changes === "number" && typeof value.lastInsertRowid === "number";
+
+const isNames = (value: Json): value is readonly string[] =>
+  Array.isArray(value) && value.every((name: Json) => typeof name === "string");
+
+type Expected<T> = {
+  readonly keyword: string;
+  readonly fits: (value: Json) => value is Json & T;
+};
+
 export class Broker {
   readonly #options: BrokerOptions;
   readonly #permissions: Permissions;
   readonly #limits: BrokerLimits;
-  readonly #database: ModeDatabase;
+  readonly #database: DatabaseProcess;
 
   constructor(options: BrokerOptions) {
     this.#options = options;
     this.#permissions = options.permissions;
     this.#limits = { ...defaultBrokerLimits, ...options.limits };
-    this.#database = new ModeDatabase(options.permissions.databaseFile);
+    this.#database = new DatabaseProcess({
+      childProcesses: options.childProcesses,
+      databaseFile: options.permissions.databaseFile,
+      lifetimeMilliseconds: this.#limits.databaseMilliseconds,
+    });
   }
 
   async migrate(folder: string): Promise<Answer<readonly string[]>> {
@@ -93,24 +107,27 @@ export class Broker {
       ordered.push({ name, sql: (await this.#options.files.readText(`${migrations}/${name}`)) ?? "" });
     }
     const appliedAt = this.#options.clock.now().toISOString();
-    return this.#settle(this.#databaseAnswer(this.#database.applyMigrations(ordered, appliedAt), "migrate"));
+    const result = await this.#database.request({ method: "migrate", migrations: ordered, appliedAt });
+    return this.#settle(this.#databaseAnswer(result, { keyword: "migrate", fits: isNames }));
   }
 
-  execute(sql: string, parameters: SqlParameters = []): Promise<Answer<ExecuteResult>> {
+  async execute(sql: string, parameters: SqlParameters = []): Promise<Answer<ExecuteResult>> {
     const keyword = leadingKeyword(sql);
     if (![...readKeywords, ...writeKeywords].includes(keyword)) {
       return this.#settle(this.#statementRefusal(keyword, [...readKeywords, ...writeKeywords]));
     }
-    const connection: Connection = this.#permissions.effects.includes("write") ? "writable" : "read-only";
-    return this.#settle(this.#databaseAnswer(this.#database.execute(sql, parameters, connection), keyword));
+    const writable = this.#permissions.effects.includes("write");
+    const result = await this.#database.request({ method: "execute", sql, parameters, writable });
+    return this.#settle(this.#databaseAnswer(result, { keyword, fits: isExecuteResult }));
   }
 
-  query(sql: string, parameters: SqlParameters = []): Promise<Answer<readonly Row[]>> {
+  async query(sql: string, parameters: SqlParameters = []): Promise<Answer<readonly Row[]>> {
     const keyword = leadingKeyword(sql);
     if (!readKeywords.includes(keyword)) {
       return this.#settle(this.#statementRefusal(keyword, readKeywords));
     }
-    return this.#settle(this.#databaseAnswer(this.#database.query(sql, parameters), keyword));
+    const result = await this.#database.request({ method: "query", sql, parameters });
+    return this.#settle(this.#databaseAnswer(result, { keyword, fits: isRows }));
   }
 
   async agentQuery(sql: string): Promise<Answer<AgentQueryResult>> {
@@ -236,6 +253,10 @@ export class Broker {
     return granted(null);
   }
 
+  report<T>(answer: Answer<T>): Promise<Answer<T>> {
+    return this.#settle(answer);
+  }
+
   close(): void {
     this.#database.close();
   }
@@ -283,11 +304,14 @@ export class Broker {
     });
   }
 
-  #databaseAnswer<T>(result: DatabaseResult<T>, keyword: string): Answer<T> {
+  #databaseAnswer<T>(result: DatabaseResult<Json>, expected: Expected<T>): Answer<T> {
     const place = this.#options.place;
+    const keyword = expected.keyword;
     switch (result.status) {
       case "done":
-        return granted(result.value);
+        return expected.fits(result.value)
+          ? granted(result.value)
+          : failed("The database process gave an answer of the wrong shape.");
       case "missing":
         return failed(`The mode ${this.#permissions.mode} has no database yet; run its migrations first.`);
       case "writes-on-read-only":

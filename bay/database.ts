@@ -191,7 +191,7 @@ export class ModeDatabase {
   #prepared<T>(statement: Statement, use: (bound: Bound) => T): DatabaseResult<T> {
     const database = this.#open(statement.connection);
     if (database === undefined) {
-      return { status: "missing" };
+      return this.#classifiedWithoutFile(statement.sql);
     }
     const bound = bindings(statement.parameters);
     if (typeof bound === "string") {
@@ -208,6 +208,19 @@ export class ModeDatabase {
         return { status: "writes-on-read-only" };
       }
       return { status: "error", message: errorMessage(error) };
+    }
+  }
+
+  #classifiedWithoutFile(sql: string): DatabaseResult<never> {
+    const empty = new DatabaseSync(":memory:");
+    try {
+      empty.exec("pragma query_only = on");
+      empty.prepare(sql).run();
+      return { status: "missing" };
+    } catch (error) {
+      return isReadOnlyError(error) ? { status: "writes-on-read-only" } : { status: "missing" };
+    } finally {
+      empty.close();
     }
   }
 }

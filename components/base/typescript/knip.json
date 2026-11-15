@@ -5,7 +5,8 @@
     "bay/check.ts",
     "bay/new.ts",
     "bay/engine.ts",
-    "bay/run-store.ts"
+    "bay/run-store.ts",
+    "tests/race-driver.ts"
   ],
   "project": ["{bay,adapters,components,tests}/**/*.ts"],
   "ignoreExportsUsedInFile": {

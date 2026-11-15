@@ -424,6 +424,11 @@ export class Engine {
     switch (lock.status) {
       case "missing":
         return refusal(runId, { message: `There is no run ${runId}.` });
+      case "busy":
+        return refusal(runId, {
+          message: `Another engine is writing run ${runId}; try again.`,
+          fix: "Try again in a moment.",
+        });
       case "held":
         return refusal(runId, {
           message:

@@ -10,6 +10,8 @@ export const kernelDatabaseFile = ".agentbay/kernel.db";
 
 export const lockStaleMilliseconds = 10 * 60 * 1000;
 
+const defaultBusyMilliseconds = 3000;
+
 export const runStatuses = ["running", "waiting", "done", "failed", "undone"] as const;
 
 export type RunStatusName = (typeof runStatuses)[number];
@@ -121,7 +123,12 @@ export type RunPatch = {
 export type LockResult =
   | { readonly status: "acquired"; readonly writer: Writer }
   | { readonly status: "held"; readonly owner: string; readonly heartbeatAt: string }
-  | { readonly status: "missing" };
+  | { readonly status: "missing" }
+  | { readonly status: "busy" };
+
+export type SqliteOptions = {
+  readonly busyMilliseconds?: number;
+};
 
 export type RunStore = EventSink & {
   readonly createRun: (run: NewRun, owner: string, events: readonly RunEvent[]) => Promise<Writer>;
@@ -309,6 +316,14 @@ function stateColumns(state: StoredState): readonly SQLInputValue[] {
   }
 }
 
+function isBusy(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const code = "errcode" in error ? error.errcode : undefined;
+  return code === 5 || code === 6 || /database (table )?is (locked|busy)/.test(error.message);
+}
+
 function isStale(heartbeatAt: string, now: Date): boolean {
   return now.getTime() - new Date(heartbeatAt).getTime() > lockStaleMilliseconds;
 }
@@ -321,8 +336,8 @@ export class SqliteRunStore implements RunStore {
     return new SqliteRunStore(file);
   }
 
-  constructor(file: string) {
-    this.#database = new DatabaseSync(file, { timeout: 5000 });
+  constructor(file: string, options: SqliteOptions = {}) {
+    this.#database = new DatabaseSync(file, { timeout: options.busyMilliseconds ?? defaultBusyMilliseconds });
     this.#database.exec("pragma journal_mode = wal; pragma foreign_keys = on;");
     this.#migrate();
   }
@@ -446,7 +461,18 @@ export class SqliteRunStore implements RunStore {
       this.#insertEvents([event]);
     });
 
-  readonly acquire = (runId: string, owner: string, now: Date): Promise<LockResult> =>
+  readonly acquire = (runId: string, owner: string, now: Date): Promise<LockResult> => {
+    try {
+      return this.#takeLock(runId, owner, now);
+    } catch (error) {
+      if (isBusy(error)) {
+        return Promise.resolve({ status: "busy" });
+      }
+      throw error;
+    }
+  };
+
+  readonly #takeLock = (runId: string, owner: string, now: Date): Promise<LockResult> =>
     this.#write((): LockResult => {
       const row = this.#database.prepare("select lock_owner, lock_heartbeat from runs where id = ?").get(runId);
       if (row === undefined) {

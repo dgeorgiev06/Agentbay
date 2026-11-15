@@ -40,6 +40,12 @@ export type Changes = {
   readonly config?: Partial<Config>;
 };
 
+type FreshEngine = {
+  readonly system?: System;
+  readonly store?: RunStore;
+  readonly owner?: string;
+};
+
 export type Harness = {
   readonly engine: Engine;
   readonly store: RunStore;
@@ -47,7 +53,7 @@ export type Harness = {
   readonly clock: ReturnType<typeof fakeClock>;
   readonly files: FakeFileSystem;
   readonly system: System;
-  readonly freshEngine: (options?: { readonly system?: System; readonly store?: RunStore }) => Engine;
+  readonly freshEngine: (options?: FreshEngine) => Engine;
   readonly close: () => void;
 };
 
@@ -329,7 +335,7 @@ export async function harness(
   const runner = fakeRunner(options.scripts);
   const clock = fakeClock(startTime);
   let engines = 0;
-  const freshEngine = (fresh: { readonly system?: System; readonly store?: RunStore } = {}): Engine => {
+  const freshEngine = (fresh: FreshEngine = {}): Engine => {
     engines += 1;
     return new Engine({
       system: fresh.system ?? system,
@@ -340,7 +346,7 @@ export async function harness(
       files,
       root,
       scrubber: fakeScrubber,
-      owner: `engine-${String(engines)}`,
+      owner: fresh.owner ?? `engine-${String(engines)}`,
       newId: () => `run-${String(engines)}`,
     });
   };

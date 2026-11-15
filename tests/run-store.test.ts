@@ -345,3 +345,19 @@ test("opening a SQLite store makes its folder through the Folders port first", a
   store.close();
   rmSync(folder, { recursive: true, force: true });
 });
+
+test("a SQLite store that cannot get the database within its busy timeout answers busy instead of throwing", async () => {
+  const { file, remove } = temporaryFile();
+  const setup = new SqliteRunStore(file);
+  await created(setup);
+  setup.close();
+  const blocker = new DatabaseSync(file);
+  blocker.exec("begin immediate");
+  const store = new SqliteRunStore(file, { busyMilliseconds: 50 });
+  assert.deepEqual(await store.acquire("run-1", "engine-b", minutesLater(30)), { status: "busy" });
+  blocker.exec("rollback");
+  assert.equal((await store.acquire("run-1", "engine-b", minutesLater(30))).status, "acquired");
+  blocker.close();
+  store.close();
+  remove();
+});

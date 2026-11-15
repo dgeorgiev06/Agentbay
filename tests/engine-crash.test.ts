@@ -365,3 +365,14 @@ test("a live engine whose steps each take seven minutes is never taken over; a s
   assert.equal(holder.takeover.run.state.status, "done");
   assert.ok((await eventKinds(store, "silent")).includes("lock.taken-over"));
 });
+
+test("a database that stays busy is a refusal to try again, not an exception", async () => {
+  const inner = new MemoryRunStore();
+  const { engine } = await harness({ store: inner, changes: { config: { budget: { items: 1 } } } });
+  const id = runOf(await engine.startAction("notes.spend", { measure: "items" })).id;
+  const busy: RunStore = { ...crashingStore(inner, undefined), acquire: () => Promise.resolve({ status: "busy" }) };
+  const { freshEngine } = await harness({ store: busy });
+  assert.deepEqual(problemsOf(await freshEngine().extendBudget(id, { items: 5 })), [
+    `Another engine is writing run ${id}; try again.`,
+  ]);
+});

@@ -1,5 +1,5 @@
 import type { Json, RunEvent, Scrubber } from "../contracts.ts";
-import { toJson, isRecord } from "../json.ts";
+import { hashOf, toJson, isRecord } from "../json.ts";
 import type { RunPatch, RunStore, StepEnd, StoredState } from "./run-store.ts";
 import { decodedStepDetail, stepDetailJson, type StepDetail } from "./step-detail.ts";
 
@@ -18,6 +18,16 @@ function redactJson(value: Json, scrubber: Scrubber): Json {
     return Object.fromEntries(entries);
   }
   return value;
+}
+
+export type ApprovalContent = {
+  readonly content: Json;
+  readonly hash: string;
+};
+
+export function approvalContentOf(shown: Json, scrubber: Scrubber): ApprovalContent {
+  const content = redactJson(shown, scrubber);
+  return { content, hash: hashOf(content) };
 }
 
 function redactEvents(events: readonly RunEvent[], scrubber: Scrubber): readonly RunEvent[] {

@@ -1,8 +1,8 @@
-import type { PolicyOf, SkillTask } from "../contracts.ts";
-import { hashOf } from "../json.ts";
+import type { PolicyOf, Scrubber, SkillTask } from "../contracts.ts";
 import type { System } from "../registry.ts";
 import type { RunWithSteps, StepRecord } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
+import { approvalContentOf } from "./scrubbed-store.ts";
 import { skillTaskOf, startedSkillOf } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
 import { resolveCall, resolveOwnAction, type ActionTarget } from "../targets.ts";
@@ -10,6 +10,7 @@ import { resolveCall, resolveOwnAction, type ActionTarget } from "../targets.ts"
 type WaitingContext = {
   readonly system: System;
   readonly policyOf: PolicyOf;
+  readonly scrubber: Scrubber;
 };
 
 function recordOf(run: RunWithSteps, key: string): StepRecord | undefined {
@@ -39,19 +40,19 @@ export function calledTarget(system: System, modeName: string, action: string): 
   return action.includes(".") ? resolveCall(system, mode, action) : resolveOwnAction(system, modeName, action);
 }
 
-function approvalWaiting(run: RunWithSteps, stepKey: string): Waiting | undefined {
+function approvalWaiting(context: WaitingContext, run: RunWithSteps, stepKey: string): Waiting | undefined {
   const record = recordOf(run, stepKey);
   const detail = record?.kind === "approval" ? record.detail : null;
   if (record === undefined || detail === null) {
     return undefined;
   }
-  const shown = detail.shown ?? record.input;
+  const shown = approvalContentOf(detail.shown ?? record.input, context.scrubber);
   return {
     reason: "approval",
     stepKey,
     question: detail.question,
     hash: detail.hash,
-    content: hashOf(shown) === detail.hash ? shown : null,
+    content: shown.hash === detail.hash ? shown.content : null,
     ...(detail.previousHash === undefined ? {} : { previousHash: detail.previousHash }),
   };
 }
@@ -71,7 +72,7 @@ export function storedWaiting(context: WaitingContext, run: RunWithSteps): Waiti
       return task === undefined ? undefined : { reason: "skill", stepKey: state.stepKey, task };
     }
     case "approval":
-      return approvalWaiting(run, state.stepKey);
+      return approvalWaiting(context, run, state.stepKey);
     case "time":
       return { reason: "time", stepKey: state.stepKey, until: state.until ?? "" };
     case "budget":

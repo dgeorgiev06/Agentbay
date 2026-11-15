@@ -9,6 +9,7 @@ import {
   type Finding,
   type LoadedModeFolder,
 } from "./check-context.ts";
+import { checkLayout } from "./check-layout.ts";
 import { checkLimits } from "./check-limits.ts";
 import { checkSkills } from "./check-skills.ts";
 import type { FileSystem } from "./ports.ts";
@@ -71,6 +72,7 @@ export async function checkSystem(ports: CheckPorts, layout: SystemLayout): Prom
   const findings = [
     ...(await registryFindings(ports, layout)),
     ...(await checkSkills(context)),
+    ...(await checkLayout(context)),
     ...checkCommands(context),
     ...(await checkLimits(context)),
   ];

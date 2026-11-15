@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { summarizeCheck, type CheckReport } from "../bay/check.ts";
-import { assertClean, check, cleanFiles, findFinding } from "./check-fixture.ts";
+import {
+  assertClean,
+  check,
+  cleanFiles,
+  findFinding,
+  notesSkillFile,
+  skillSections,
+  skillText,
+} from "./check-fixture.ts";
 import { notesMode, paths, storeMode, yamlText } from "./system-fixture.ts";
 
 test("a valid system with complete skills, examples and limits passes with no findings", async () => {
@@ -9,6 +17,19 @@ test("a valid system with complete skills, examples and limits passes with no fi
   assertClean(report);
   assert.equal(report.errors, 0);
   assert.equal(report.warnings, 0);
+});
+
+test("registry problems, skill problems and layout problems are all reported at once", async () => {
+  const report = await check({
+    ...cleanFiles(),
+    [paths.notes]: `${yamlText(notesMode)}colour: blue\n`,
+    [notesSkillFile]: skillText([skillSections.input]),
+    "components/base/store/playbook.md": "old",
+  });
+  const registry = findFinding(report, paths.notes, "has the field colour, which is not allowed here");
+  assert.equal(registry.severity, "error");
+  findFinding(report, "components/base/store/playbook.md", "holds playbook.md");
+  assert.ok(report.errors >= 2);
 });
 
 test("a listed command in a base mode is a warning", async () => {

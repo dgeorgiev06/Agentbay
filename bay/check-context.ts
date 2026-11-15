@@ -25,7 +25,7 @@ export type CheckContext = {
 
 const modeTiers = ["components/base", "components/modes"] as const;
 
-const interfacesFolder = "components/base/interfaces";
+export const interfacesFolder = "components/base/interfaces";
 
 export function errors(problems: readonly Problem[]): readonly Finding[] {
   return problems.map((problem) => ({ ...problem, severity: "error" }));
@@ -48,7 +48,7 @@ export function isLoaded(mode: ModeFolder): mode is LoadedModeFolder {
   return mode.manifest !== undefined;
 }
 
-function filesUnder(paths: readonly string[], folder: string): readonly string[] {
+export function filesUnder(paths: readonly string[], folder: string): readonly string[] {
   const prefix = `${folder}/`;
   return paths.filter((path) => path.startsWith(prefix)).map((path) => path.slice(prefix.length));
 }

@@ -519,3 +519,13 @@ Bad: ...
 **What stays language-neutral in forge:** the stages, ownership of files, the kept, changed and dropped list, evidence over claims, the review and evaluation skills, the mutation loop (apply a mutant, run the tests, expect a failure), the first-session check (a script the project names), approvals and release.
 
 **Kernel addition for this:** a binding may be a list for one requirer, `context.call` takes the server's name when it is, and `context.bound(interface)` lists the names.
+
+### Direct mode: the kernel starts the agent itself (owner decision, 2026-11-15)
+
+Measured on 2026-11-15: a `bay` command takes about 0.4 s to start; an action that is all scripts costs one coordinator turn and no model work; an action with one skill step costs about three coordinator turns (call, hand the task to a subagent, read the run) plus the subagent's own. The relay exists because, inside a Claude Code session, only the session can start a subagent. It is not needed when the kernel can start an agent itself, which is also how the cloud version works. Built with the forge mode, which has the most skill steps per run.
+
+1. **The adapter gains an optional `run`.** `Adapter.run(task, options)` starts an agent for one skill task, waits, and answers with what the agent submitted or why it did not. An adapter without `run` supports relay only.
+2. **`how` in the project config.** `agents: relay | direct` (default `relay`). In direct mode `bay call`, `submit`, `approve` and `resume` do not stop at a waiting skill: the kernel calls the adapter's `run`, the agent submits through the kernel tools with its task token exactly as in relay mode, and the command goes on until the run is done, failed, or waiting for the owner (an approval, a budget, an unfinished writing step). One coordinator turn per run.
+3. **The Claude Code adapter's `run`** starts Claude Code without a terminal for that one agent, with the project's settings so the hook applies, the agent's own tool list, and the task as its prompt; a time limit from the run's remaining budget; its usage reported as the step's spend where the harness gives it. What must be confirmed on the owner's machine before direct mode is recommended: that the hook fires for such a run, that the agent file's tool list applies, and how that usage is billed against the owner's plan (it may be counted apart from interactive use).
+4. **Nothing else changes.** The engine still only waits for a submission; tokens, checks, rounds, budgets and events are the same in both modes; `runs` shows which mode ran each step.
+5. **The same shape serves the cloud version:** its adapter's `run` starts a hosted agent session.

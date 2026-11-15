@@ -63,9 +63,12 @@ function itemOf(shape: Shape): Json {
 }
 
 before(async () => {
-  project = await openModeProject({ bindings: {}, adapter: "claude-code", modes: ["store"] });
+  project = await openModeProject(
+    { bindings: { "items-store": "store" }, adapter: "claude-code", modes: ["store"] },
+    { callers: [caller] },
+  );
   const put = { source: "fake", kinds: ["post", "repost"], items: shapes.map(itemOf) };
-  assert.equal(fieldsOf(await project.output("store.put", put, { caller })).added, 6);
+  assert.equal(fieldsOf(await project.output("items-store.put", put, { caller })).added, 6);
 });
 
 after(async () => {
@@ -77,7 +80,7 @@ function idsOf(output: Json): readonly string[] {
 }
 
 async function queried(request: Json): Promise<readonly string[]> {
-  return idsOf(await project.output("store.query", request, { caller }));
+  return idsOf(await project.output("items-store.query", request, { caller }));
 }
 
 function sorted(ids: readonly string[]): readonly string[] {
@@ -130,10 +133,10 @@ test("the shared selector matcher, field by field and combined", async () => {
 test("query returns the newest first by default, the oldest first on request, and says when more matched", async () => {
   assert.deepEqual(await queried({}), [...all].reverse());
   assert.deepEqual(await queried({ order: "oldest" }), all);
-  const limited = await project.output("store.query", { selector: { limit: 2 } }, { caller });
+  const limited = await project.output("items-store.query", { selector: { limit: 2 } }, { caller });
   assert.deepEqual(idsOf(limited), ["fake:6", "fake:5"]);
   assert.equal(fieldsOf(limited).more, true);
-  const exact = await project.output("store.query", { selector: { limit: 6 } }, { caller });
+  const exact = await project.output("items-store.query", { selector: { limit: 6 } }, { caller });
   assert.equal(fieldsOf(exact).more, false);
 });
 
@@ -167,7 +170,7 @@ test("punctuation, quotes and search operators in a search are plain text, never
 
 test("a search with no letters or digits is refused with a sentence that says what to give", async () => {
   for (const search of ['"', "***", "(", " - "]) {
-    const reason = await project.failure("store.query", { search }, { caller });
+    const reason = await project.failure("items-store.query", { search }, { caller });
     assert.match(reason, /has no letters or digits to look for; give at least one word/, search);
     assert.doesNotMatch(reason, /fts5|syntax error/i, search);
   }

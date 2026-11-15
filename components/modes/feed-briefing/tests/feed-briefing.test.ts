@@ -36,13 +36,23 @@ async function withBriefing(options: Options, body: (project: ModeProject) => Pr
 
 const since = "2026-11-01T00:00:00Z";
 
+async function briefingRows(project: ModeProject, sql: string): Promise<readonly Json[]> {
+  const rows = await project.partition("store", "feed-briefing").query(sql);
+  assert.ok(rows.ok, rows.ok ? "" : rows.message);
+  return rows.value;
+}
+
 async function storedCount(project: ModeProject): Promise<Json> {
-  return fieldsOf(await project.output("store.status", {}, { caller: "feed-briefing" })).items ?? null;
+  const [row] = await briefingRows(project, "select count(*) as count from items");
+  return fieldsOf(row ?? null).count ?? null;
+}
+
+async function spentByMonth(project: ModeProject): Promise<readonly Json[]> {
+  return briefingRows(project, "select month, items, usd from spend_by_month where source = 'fake'");
 }
 
 type WaitingSkill = {
-  readonly runId: string;
-  readonly stepKey: string;
+  readonly token: string;
   readonly input: Json;
   readonly round: number;
   readonly feedback: readonly string[];
@@ -53,9 +63,9 @@ function waitingSkillOf(run: Awaited<ReturnType<ModeProject["run"]>>): WaitingSk
     assert.fail(`expected the run to wait for a skill, got ${JSON.stringify(run.state)}`);
   }
   const task = run.state.waiting.task;
+  assert.ok(task.token !== undefined, "the task carries no token");
   return {
-    runId: run.id,
-    stepKey: run.state.waiting.stepKey,
+    token: task.token,
     input: task.input,
     round: task.round,
     feedback: task.feedback,
@@ -64,7 +74,7 @@ function waitingSkillOf(run: Awaited<ReturnType<ModeProject["run"]>>): WaitingSk
 
 async function submitted(project: ModeProject, waiting: WaitingSkill, output: Json): ReturnType<ModeProject["run"]> {
   const spent = { items: 0, usd: 0, tokens: 0, minutes: 0 };
-  return runOf(await project.engine.submit(waiting.runId, waiting.stepKey, { output, spent }));
+  return runOf(await project.kernel.runs.submit(waiting.token, { output, spent }));
 }
 
 function outputOf(run: Awaited<ReturnType<ModeProject["run"]>>): Json {
@@ -113,9 +123,8 @@ test("sync fills the store from the fake source page by page and reports the cos
     });
     assert.equal(run.spent.usd, 0.03);
     assert.equal(await storedCount(project), 30);
-    const status = fieldsOf(await project.output("store.status", {}, { caller: "feed-briefing" }));
-    const source = fieldsOf(listOf(status.sources)[0]);
-    assert.deepEqual(source.spent, [{ month: new Date().toISOString().slice(0, 7), items: 30, usd: 0.03 }]);
+    const month = new Date().toISOString().slice(0, 7);
+    assert.deepEqual(await spentByMonth(project), [{ month, items: 30, usd: 0.03 }]);
   });
 });
 
@@ -144,8 +153,8 @@ test("sync applies the selector: the source's native fields, then the store's ma
     const output = fieldsOf(await project.output("feed-briefing.sync", { since }));
     assert.deepEqual([output.fetched, output.added, output.skipped], [8, 4, 4]);
     assert.deepEqual(output.cost, { items: 8, usd: 0.008 });
-    const stored = await project.output("store.query", { order: "oldest" }, { caller: "feed-briefing" });
-    const ids = listOf(fieldsOf(stored).items).map((item) => textOf(fieldsOf(item).id) ?? "");
+    const stored = await briefingRows(project, "select id from items order by at_ms, id");
+    const ids = stored.map((item) => textOf(fieldsOf(item).id) ?? "");
     assert.deepEqual(ids, ["fake:1003", "fake:1011", "fake:1022", "fake:1030"]);
   });
 });
@@ -158,13 +167,12 @@ test("with a budget smaller than one page the run waits for budget and stores no
     }
     assert.equal(run.state.waiting.reason, "budget");
     assert.equal(await storedCount(project), 0);
-    const resumed = runOf(await project.engine.extendBudget(run.id, { usd: 1 }));
+    const resumed = runOf(await project.kernel.runs.extend(run.id, { usd: 1 }));
     assert.equal(fieldsOf(outputOf(resumed)).added, 30);
     assert.equal(resumed.spent.usd, 0.03);
-    const status = fieldsOf(await project.output("store.status", {}, { caller: "feed-briefing" }));
-    assert.equal(status.items, 30);
-    const spent = listOf(fieldsOf(listOf(status.sources)[0]).spent);
-    assert.equal(fieldsOf(spent[0]).usd, 0.03);
+    assert.equal(await storedCount(project), 30);
+    const spent = await spentByMonth(project);
+    assert.equal(fieldsOf(spent[0] ?? null).usd, 0.03);
   });
 });
 
@@ -218,7 +226,7 @@ test("the check refuses no citations, long summaries, copied text and changed co
       { title: "Too long", summary: Array.from({ length: 61 }, () => "word").join(" "), cites: ["fake:1001"] },
     ];
     const draft = { ...fieldsOf(draftFor(waiting.input, themes)), selectorChanged: true };
-    const run = await project.engine.submit(waiting.runId, waiting.stepKey, {
+    const run = await project.kernel.runs.submit(waiting.token, {
       output: draft,
       spent: { items: 0, usd: 0, tokens: 0, minutes: 0 },
     });
@@ -291,8 +299,8 @@ test("ask answers from the store and its check refuses an id the store does not 
 
 test("the daily workflow syncs, waits for the digest skill, then for approval of the digest", async () => {
   await withBriefing({}, async (project) => {
-    const engine = project.engine;
-    const started = runOf(await engine.startWorkflow({ mode: "feed-briefing", path: "workflows/daily.yaml" }, {}));
+    const runs = project.kernel.runs;
+    const started = runOf(await runs.start({ workflow: { mode: "feed-briefing", path: "workflows/daily.yaml" } }, {}));
     const waiting = waitingSkillOf(started);
     const selection = waiting.input;
     const ids = new Set(itemIdsOf(selection));
@@ -311,8 +319,8 @@ test("the daily workflow syncs, waits for the digest skill, then for approval of
       "selectorChanged",
       "themes",
     ]);
-    const decision = { hash: shown.hash, decision: "approve" as const, by: "the owner" };
-    const done = runOf(await engine.approve(approval.id, shown.stepKey, decision));
+    const decision = { stepKey: shown.stepKey, hash: shown.hash, verdict: "approve" as const, by: "the owner" };
+    const done = runOf(await runs.approve(approval.id, decision));
     assert.deepEqual(done.state, { status: "done", output: shown.content });
   });
 });

@@ -541,3 +541,25 @@ Agents come in two kinds. A WORKER does one skill step and is started fresh ever
 5. **Workers are never resumed.**
 6. **What this costs, to be measured in M5:** the tokens of the loaded memory per turn; how often the load step misses a relevant note (a small fixed set of questions with known answers, run as a check); the difference in turns and tokens between a reused session and a fresh one.
 7. **Channels.** Locally the channel is the owner's Claude Code session; in the cloud version it is Telegram. A turn records its channel, and memory is shared across channels.
+
+## Features are deep modules (owner requirement, 2026-11-15)
+
+The owner asked for smaller, vertical slices, checked boundaries, and deep modules. The vocabulary and tests below come from the codebase-design skill in `mattpocock/skills` (`DEEPENING.md`), which the owner named as the reference.
+
+**Terms.** A module is anything with an interface and an implementation. The interface is everything a caller must know: types, ordering, error modes, config. A module is deep when a small interface hides a lot of behaviour, and shallow when the interface is nearly as large as what is behind it. A seam is where an interface sits. An adapter is a thing that satisfies an interface at a seam.
+
+**What this changes in agentbay.**
+
+- A feature is one deep module: a folder with one entry file. Files outside the feature import only the entry file. Everything else in the folder is private.
+- The feature map (`framework/features.yaml`) names, for each feature: its entry file, its private files, the features it may import, and each seam with the adapters that exist for it.
+- The interface is the test surface. A feature's tests import its entry file and assert what a caller can observe. A test that breaks when only the inside changes is testing past the interface.
+- Replace, do not layer. When files are merged behind one interface, the old tests of the shallow parts are rewritten at the interface and then deleted. DOD-3 ("every exported function has a test") now reads: every behaviour at a feature's interface has a test. Bug injection stays: a flipped line inside a feature must fail a test at its interface.
+- Seam discipline. A port exists only when two adapters exist, usually the real one and the test one. A port with one adapter is removed. Seams a feature needs only for its own tests stay private to it.
+- The deletion test is a review question for every module: if deleting it makes complexity vanish, it was a pass-through and goes; if the complexity reappears in its callers, it stays.
+- `bay/contracts.ts` is split. Each feature owns the types of its own interface. What is left is the small vocabulary every feature shares.
+- Dependencies are classified before a feature is deepened: in-process (merge and test directly), local stand-in (in-memory database or file system, seam stays private), owned remote and true external (a port with an injected adapter).
+- For the widest features (engine with run store first), the interface is designed twice or more: three builders each propose a different interface under a different constraint, and the reviewer compares them by depth, locality and seam placement before anything is built. This becomes forge's Plan and Challenge stage.
+
+**Order.** The map first, written by the reviewer. Then one slice adds the tests that enforce it. Then one feature per slice, widest surface first. A slice's write scope is its feature's folder plus any contract change it declares.
+
+**A tension to watch.** The lint limits (complexity 10, three parameters) and "split a growing file" push toward many small files. That is fine inside a feature. It is a problem only when the small files become things other features import.

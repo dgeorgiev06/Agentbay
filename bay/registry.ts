@@ -577,9 +577,9 @@ function notBoundProblem(context: Context, config: Loaded<Config>, requirement: 
       fix: `Add ${name}: <mode> under bindings; modes that implement ${reference}: ${candidates}.`,
     });
   }
+  const missing = `bindings.${name} has no entry for ${requirer} and no default`;
   return problemAt(config, ["bindings", name], {
-    message:
-      `Mode ${requirer} requires ${reference}, ` + `but bindings.${name} has no entry for ${requirer} and no default.`,
+    message: `Mode ${requirer} requires ${reference}, but ${missing}.`,
     fix:
       `Add ${requirer}: <mode> or default: <mode> under bindings.${name}; ` +
       `modes that implement ${reference}: ${candidates}.`,

@@ -290,8 +290,8 @@ async function startSkill(walk: Walk, frame: ActionFrame, skill: SkillStep): Pro
     earlierSpent: noSpend,
     calledSpent: noSpend,
   };
-  await startRecord(walk, { key: skill.key, kind: "skill", input: skill.input, detail });
-  return skillWaiting(walk, frame, { runId: walk.writer.runId, key: skill.key, input: skill.input, detail });
+  const started = await startRecord(walk, { key: skill.key, kind: "skill", input: skill.input, detail });
+  return skillWaiting(walk, frame, { runId: walk.writer.runId, key: skill.key, input: started.input, detail });
 }
 
 function chargeEarlierRounds(walk: Walk, frame: ActionFrame, at: { skill: SkillStep; round: number }): void {

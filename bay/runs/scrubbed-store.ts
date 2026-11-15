@@ -12,7 +12,7 @@ function redactJson(value: Json, scrubber: Scrubber): Json {
   }
   if (isRecord(value)) {
     const entries = Object.entries(value).map(([key, element]): [string, Json] => [
-      key,
+      scrubber.redact(key),
       redactJson(toJson(element), scrubber),
     ]);
     return Object.fromEntries(entries);

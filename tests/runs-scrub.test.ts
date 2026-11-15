@@ -13,6 +13,7 @@ import {
   secretValue,
   tokenOf,
   waitingOf,
+  waitingTask,
   withFlow,
 } from "./runs-fixture.ts";
 
@@ -121,6 +122,18 @@ function assertRedactedApproval(result: Awaited<ReturnType<Runs["show"]>>): void
 }
 
 describe("every call that brings a run to an approval returns its content redacted", () => {
+  test("start, where the secret is in a key of the content", async () => {
+    const steps = [{ id: "keep", approval: "Send?", show: "$trigger" }];
+    const { runs, reopen, close } = await openedRuns({ changes: withFlow(steps) });
+    const started = await runs.start(flow, { [`key ${secretValue}`]: 1 });
+    const waiting = waitingOf(started);
+    assert.ok(waiting.reason === "approval");
+    assert.deepEqual(waiting.content, { [`key ${redacted}`]: 1 });
+    assert.ok(!JSON.stringify(runOf(started)).includes(secretValue), JSON.stringify(started));
+    assert.deepEqual(waitingOf(await (await reopen()).show(runOf(started).id)), waiting);
+    close();
+  });
+
   test("resume after a crash before the approval", async () => {
     const scripts = { "notes:scripts/double.ts": crashingOnce((request) => finished(request.input)) };
     const steps = [{ id: "first", action: "copy", input: { count: 1 } }, keepStep];
@@ -169,6 +182,29 @@ describe("every call that brings a run to an approval returns its content redact
     const started = await runs.start(flow, null);
     assert.equal(waitingOf(started).reason, "budget");
     assertRedactedApproval(await runs.extend(runOf(started).id, { items: 5 }));
+    close();
+  });
+});
+
+describe("a skill task returned with a run holds no secret text", () => {
+  test("the task's input, from start", async () => {
+    const steps = [{ id: "draft", action: "draft", input: { topic: "$settings.greeting" } }];
+    const { runs, close } = await openedRuns({ changes: { ...withFlow(steps), config: greetingWithSecret } });
+    const started = runOf(await runs.start(flow, null));
+    assert.deepEqual(waitingTask(started).input, { topic: `hi ${redacted}` });
+    assert.ok(!JSON.stringify(started).includes(secretValue), JSON.stringify(started));
+    close();
+  });
+
+  test("the task's feedback, from a submit whose output fails its check", async () => {
+    const scripts = {
+      "notes:scripts/long-enough.ts": () => finished({ passed: false, feedback: `uses ${secretValue}` }),
+    };
+    const { runs, close } = await openedRuns({ scripts });
+    const started = runOf(await runs.start({ action: "notes.draft" }, {}));
+    const next = runOf(await runs.submit(tokenOf(started), answer({ text: "a long enough draft" })));
+    assert.deepEqual(waitingTask(next).feedback, [`uses ${redacted}`]);
+    assert.ok(!JSON.stringify(next).includes(secretValue), JSON.stringify(next));
     close();
   });
 });

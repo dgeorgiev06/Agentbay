@@ -13,8 +13,8 @@ Every test function in the old adapter and guard test files (`git show main:<pat
 | `test_hook_never_fails` | **Changed**: the recording hook (`hook.py`) is gone. The only hook now fails closed ("the hook process denies invalid, empty and oversized input") |
 | `test_hook_records_spawn_and_result` | **Dropped**: spawns are no longer recorded by a hook. Runs, steps and task tokens live in `kernel.db` (proposal, Concepts: ledger becomes the `runs` and `events` tables) |
 | `test_project_flag_accepted_before_or_after_subcommand` | **Not K6**: command-line parsing belongs to K5 |
-| `test_build_twice_then_clean_leaves_an_empty_project_empty` | **Changed**: no files are left ("a build into an empty project..."), but empty folders such as `.claude/agents/` remain, because the file port cannot delete folders. Comes back to the reviewer with the port gap |
-| `test_gitignore_is_stable_across_builds_and_kept_while_runtime_data_exists` | **Dropped**: the adapter writes no `.gitignore`, and runtime data under `.agentbay/` is the kernel's. The proposal does not name this drop, so it comes back to the owner (R-5) |
+| `test_build_twice_then_clean_leaves_an_empty_project_empty` | **Kept**: the record lists the folders a build created, and clean removes them once they are empty through the `Removal` port ("the record lists the folders the build created..."; `end-to-end.test.ts` leaves only the user's folders on disk) |
+| `test_gitignore_is_stable_across_builds_and_kept_while_runtime_data_exists` | **Dropped by reviewer decision of 2026-11-15**: the adapter writes no `.gitignore`. The kit's own `.gitignore` covers the kit, and a project's `.gitignore` is the owner's |
 | `test_adapters_are_discovered_by_folder_with_no_registry` | **Dropped here**: an adapter is a TypeScript module exporting `adapter`, and the command line chooses it from `config.adapter` (K5). The proposal replaces `adapter.yaml` and `bay/adapter.py` with the `bay/adapter.ts` contract |
 | `test_lint_checks_adapter_manifests_f12` | **Dropped**: there is no `adapter.yaml` (deleted in this slice). `tsc` and eslint check the module against `Adapter` |
 | `test_a_bad_adapter_entry_is_reported_and_never_imported_f12` | **Dropped**: no manifests, and adapters use static imports only (lint rule) |
@@ -22,7 +22,7 @@ Every test function in the old adapter and guard test files (`git show main:<pat
 | `test_cli_build_and_clean_report_a_broken_other_runtime_f12` | **Dropped here**: one adapter per project config (K5) |
 | `test_rename_skill_parses_front_matter_as_yaml_and_normalises_crlf_f15` | **Dropped**: skills are no longer copied and renamed into `.claude/skills/`. Skill front matter is parsed by K1's `parseSkill` |
 | `test_lint_reports_a_skill_md_whose_front_matter_never_closes_f15` | **Not K6**: skill checks are `bay check` (K1, K2) |
-| `test_building_the_kit_into_itself_leaves_git_status_clean` | **Changed, not tested here**: it needs git and the command line. The kit's `.gitignore` ignores `.agentbay/`, `/.claude/` and `/CLAUDE.md` but not `/.mcp.json`, so a build into the kit leaves `.mcp.json` untracked. The fix is outside this slice |
+| `test_building_the_kit_into_itself_leaves_git_status_clean` | **Changed, not tested here**: it needs git and the command line. The kit's `.gitignore` now ignores `.agentbay/`, `/.claude/`, `/CLAUDE.md` and `/.mcp.json`, everything the build writes |
 
 ## tests/test_guard_matrix.py
 
@@ -37,7 +37,7 @@ Every test function in the old adapter and guard test files (`git show main:<pat
 |---|---|
 | `test_f2_unparseable_or_quoted_commands_naming_the_config_are_denied_for_a_generic_subagent` | **Changed**: there is no de-quoting. A subagent outside the policy is denied everything ("a subagent that is not in the policy..."). A step can run only listed prefixes, and any quote, backslash, `>` or other character outside the plain set is denied ("every character outside the plain set..."). The main thread's `ls src` still passes |
 | `test_f2_a_non_dict_ledger_line_does_not_break_the_plan_check` | **Dropped**: the plan check and the ledger are gone. Approvals are engine steps bound to a hash (proposal, Workflows) |
-| `test_f7_adapter_asks_before_bay_approve_variants_and_denies_edits_of_the_owners_config` | **Changed**: no `ask` rules. An approval needs `--hash`, and from chat it also needs `--quote` and `approvals.from` listing `chat` (K5, stage 3 contract). The CLAUDE.md block tells the coordinator to approve only after the owner answers. `agentbay.config.yaml` is closed to every step, but the main thread may now edit it, because the spec's main-thread list omits it. Comes back to the owner |
+| `test_f7_adapter_asks_before_bay_approve_variants_and_denies_edits_of_the_owners_config` | **Changed**: no `ask` rules. An approval needs `--hash`, and from chat it also needs `--quote` and `approvals.from` listing `chat` (K5, stage 3 contract). The CLAUDE.md block tells the coordinator to approve only after the owner answers. `agentbay.config.yaml` is closed to every step. The main thread may edit it, by reviewer decision of 2026-11-15 (the owner changes settings through the coordinator). The CLAUDE.md block limits `approvals` changes to the owner's own request |
 
 ## tests/test_guard_mainthread.py
 

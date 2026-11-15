@@ -1,0 +1,21 @@
+name: fake-source
+version: 1.0.0
+description: Serves thirty made-up posts as an items-source, for tests and the demo; it touches no network.
+
+implements: [items-source@1]
+
+settings: schemas/settings.json
+
+actions:
+  fetch:
+    input: schemas/fetch-request.json
+    output: schemas/fetch-response.json
+    effects: [read, network, spend]
+    run:
+      - script: scripts/fetch.ts
+  describe:
+    input: schemas/describe-request.json
+    output: schemas/describe-response.json
+    effects: [read]
+    run:
+      - script: scripts/describe.ts

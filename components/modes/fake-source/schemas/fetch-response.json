@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FetchResponse",
+  "description": "One page of items, where to continue, and what the page cost.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source",
+    "kinds",
+    "items",
+    "cursor",
+    "more",
+    "cost"
+  ],
+  "properties": {
+    "source": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "maxLength": 64,
+      "description": "The source's name, the prefix of every item id it returns."
+    },
+    "kinds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+        "maxLength": 64,
+        "description": "A kind, such as post."
+      },
+      "maxItems": 20,
+      "uniqueItems": true,
+      "description": "Every kind this source produces; the store refuses an item of another kind from it.",
+      "minItems": 1
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/item"
+      },
+      "maxItems": 500,
+      "description": "One page of items, oldest first, each with an id that starts with the source's name."
+    },
+    "cursor": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 2000,
+      "description": "Pass it back to continue after these items, now or on a later sync; null when the source has nothing to continue from."
+    },
+    "more": {
+      "type": "boolean",
+      "description": "Whether another page is ready now; a sync fetches again while it is true."
+    },
+    "cost": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/cost"
+        }
+      ],
+      "description": "What this page cost to fetch, billed items and dollars."
+    }
+  },
+  "$defs": {
+    "item": {
+      "type": "object",
+      "description": "One item in the envelope every source produces and the store keeps.",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "source",
+        "at",
+        "title",
+        "text",
+        "url",
+        "author",
+        "labels",
+        "data"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*:\\S",
+          "maxLength": 300,
+          "description": "<source>:<external id>: unique in the store, the same on every sync, and what digests and answers cite."
+        },
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+          "maxLength": 64,
+          "description": "What the item is, such as post or email; data holds what only this kind has, and the store refuses a kind the item's source does not produce."
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+          "maxLength": 64,
+          "description": "The source that produced the item, the same as the prefix of its id; local for items the owner wrote."
+        },
+        "at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]{1,3})?)?(Z|[+-][0-9]{2}:[0-9]{2})$",
+          "description": "When the item was created at its source, an ISO 8601 time with a zone; since, until, lookback windows and prune compare it."
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1000,
+          "description": "A subject or heading, or null when the kind has none, as a post has none."
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 100000,
+          "description": "The body as plain text; full-text search and the selector's text terms look here."
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^https?://",
+          "maxLength": 2000,
+          "description": "Where the owner can open the item, or null when there is no such page."
+        },
+        "author": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 300,
+          "description": "Who wrote the item as its source names them, a handle or an address, or null; the selector's authors match it."
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "One label, list, folder or channel name."
+          },
+          "maxItems": 50,
+          "uniqueItems": true,
+          "description": "The lists, labels, folders or channels the item is in; the selector's labels match them."
+        },
+        "data": {
+          "type": "object",
+          "description": "Fields only this kind has, such as the counts of likes on a post; stored as JSON and never matched by the selector."
+        }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "description": "What fetching cost.",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "usd"
+      ],
+      "properties": {
+        "items": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Items the provider billed for, which may be more than were returned."
+        },
+        "usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "US dollars it cost."
+        }
+      }
+    }
+  }
+}

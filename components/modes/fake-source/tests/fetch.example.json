@@ -1,0 +1,58 @@
+{
+  "input": {
+    "selector": {
+      "authors": [
+        "@Vitalik"
+      ],
+      "since": "2026-11-01T00:00:00Z"
+    },
+    "cursor": null
+  },
+  "output": {
+    "source": "fake",
+    "kinds": [
+      "post"
+    ],
+    "items": [
+      {
+        "id": "fake:1003",
+        "kind": "post",
+        "source": "fake",
+        "at": "2026-11-03T00:00:00.000Z",
+        "title": null,
+        "text": "Operator diversity matters more than client count for staking decentralization.",
+        "url": null,
+        "author": "vitalik",
+        "labels": [
+          "eth",
+          "staking"
+        ],
+        "data": {
+          "likes": 980
+        }
+      },
+      {
+        "id": "fake:1013",
+        "kind": "post",
+        "source": "fake",
+        "at": "2026-11-08T20:00:00.000Z",
+        "title": null,
+        "text": "Blob fees stayed low all week; the next step for data availability is sampling on mainnet.",
+        "url": null,
+        "author": "vitalik",
+        "labels": [
+          "eth"
+        ],
+        "data": {
+          "likes": 1500
+        }
+      }
+    ],
+    "cursor": "2026-11-08T20:00:00.000Z|fake:1013",
+    "more": true,
+    "cost": {
+      "items": 2,
+      "usd": 0.002
+    }
+  }
+}

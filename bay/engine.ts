@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { errorLine } from "./answers.ts";
 import { runActionFrame, skillStepKey, submissionProblems } from "./action-steps.ts";
 import {
   addBudgets,
@@ -281,10 +282,12 @@ export class Engine {
   readonly #services: Services;
   readonly #owner: string;
   readonly #newId: () => string;
+  readonly #scrubber: Scrubber;
 
   constructor(options: EngineOptions) {
     const { owner, newId, scrubber, store, ...collaborators } = options;
     this.#services = { ...collaborators, store: scrubbedStore(store, scrubber) };
+    this.#scrubber = scrubber;
     this.#owner = owner ?? `engine-${randomUUID()}`;
     this.#newId = newId ?? randomUUID;
   }
@@ -462,6 +465,11 @@ export class Engine {
   async #holding(writer: Writer, body: () => Promise<EngineResult>): Promise<EngineResult> {
     try {
       return await body();
+    } catch (error) {
+      return refusal(writer.runId, {
+        message: this.#scrubber.redact(`Run ${writer.runId} stopped at an unexpected error: ${errorLine(error)}`),
+        fix: `Fix the cause, then continue it with bay resume ${writer.runId}.`,
+      });
     } finally {
       await this.#services.store.release(writer);
     }

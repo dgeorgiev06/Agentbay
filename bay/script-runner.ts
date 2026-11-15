@@ -1,6 +1,6 @@
 import { resolve } from "node:path/posix";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { type Answer, failed, granted, manifestOf, refused } from "./answers.ts";
+import { type Answer, errorLine, failed, granted, manifestOf, refused } from "./answers.ts";
 import { Broker, type BrokerLimits } from "./broker.ts";
 import type { ChildEnd, ChildProcesses, ChildRequest, Clock, FileInspector, FileSystem, Http } from "./ports.ts";
 import type { EventSink, Json, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "./contracts.ts";
@@ -157,15 +157,29 @@ function brokerAnswer(broker: Broker, request: Exclude<ResourceRequest, { resour
   }
 }
 
-async function answerFor(started: Started, request: ResourceRequest): Promise<Answer<Json>> {
-  if (request.resource === "call") {
+async function calledAnswer(started: Started, request: { reference: string; input: Json }): Promise<Answer<Json>> {
+  try {
     const outcome = await started.request.call(request.reference, request.input);
     return outcome.status === "done" ? granted(outcome.output) : failed(outcome.reason);
+  } catch (error) {
+    return started.broker.report(
+      failed(`The call to ${request.reference} stopped at an unexpected error: ${errorLine(error)}`),
+    );
+  }
+}
+
+async function answerFor(started: Started, request: ResourceRequest): Promise<Answer<Json>> {
+  if (request.resource === "call") {
+    return calledAnswer(started, request);
   }
   if (request.resource === "spend") {
     return started.broker.report(spendingAnswer(request.spending, started.state.spent));
   }
   return brokerAnswer(started.broker, request);
+}
+
+function unexpectedReason(request: ResourceRequest, error: unknown): string {
+  return `The request ${request.resource} stopped at an unexpected error: ${errorLine(error)}`;
 }
 
 function endReason(end: ChildEnd, limits: { readonly milliseconds: number; readonly outputBytes: number }): string {
@@ -259,9 +273,11 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
         state.malformed = true;
         child.kill();
       } else if (message.type === "request") {
-        const answered = answerFor(started, message.request).then((answer) => {
-          child.send(JSON.stringify({ type: "answer", id: message.id, answer }));
-        });
+        const answered = answerFor(started, message.request)
+          .catch((error: unknown) => failed(options.secrets.redact(unexpectedReason(message.request, error))))
+          .then((answer) => {
+            child.send(JSON.stringify({ type: "answer", id: message.id, answer }));
+          });
         state.inFlight.push(answered);
       } else {
         state.final = message;

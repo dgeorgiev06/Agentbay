@@ -1,6 +1,8 @@
 import { resolve } from "node:path";
 import { layoutOf } from "./layout.ts";
+import { errorLine } from "./answers.ts";
 import {
+  refusedResult,
   usageResult,
   type CommandContext,
   type CommandResult,
@@ -190,6 +192,10 @@ export async function runCommandLine(
   }
   const project = resolve(context.workingDirectory, parsed.values.get("project") ?? ".");
   const layout = layoutOf({ kit: context.kit, project });
-  const result = await command.handler({ context, layout, ...parsed });
+  const result = await command.handler({ context, layout, ...parsed }).catch(unexpectedResult);
   return rendered(result, asJson);
+}
+
+function unexpectedResult(error: unknown): CommandResult {
+  return refusedResult(`bay stopped at an unexpected error: ${errorLine(error)}`, "Fix the cause and run it again.");
 }

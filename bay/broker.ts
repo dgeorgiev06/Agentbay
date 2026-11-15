@@ -1,6 +1,6 @@
 import { basename, dirname, join, resolve } from "node:path/posix";
-import { type AgentQueryResult, runAgentQuery } from "./agent-query.ts";
-import { type Answer, failed, granted, listed, manifestOf, refused } from "./answers.ts";
+import { type AgentQueryOutcome, type AgentQueryResult, runAgentQuery } from "./agent-query.ts";
+import { type Answer, errorLine, failed, granted, listed, manifestOf, refused } from "./answers.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, Http, HttpRequest, HttpResponse } from "./ports.ts";
 import type { EventSink, Json, Permissions, StepPlace } from "./contracts.ts";
 import type { DatabaseResult, ExecuteResult, Migration, Row, SqlParameters } from "./database.ts";
@@ -109,214 +109,129 @@ export class Broker {
     return granted(join(dirname(databaseFile), `${this.#permissions.mode}--${partition}.db`));
   }
 
-  async migrate(partition?: string): Promise<Answer<readonly string[]>> {
-    const file = this.#partitionFile(partition);
-    if (!file.ok) {
-      return this.#settle(file);
-    }
-    const migrations = resolve(this.#permissions.modeFolder, this.#permissions.migrationsFolder);
-    if (!isInsideOrEqual(migrations, this.#permissions.modeFolder)) {
-      return this.#settle(
-        refused({
-          resource: "db",
-          asked: `${this.#asking} to run the migrations in ${migrations}`,
-          declared: `migrations must lie inside the mode's folder ${this.#permissions.modeFolder}`,
-          change: `Point resources.db.migrations in ${manifestOf(this.#permissions)} at a folder of the mode.`,
-        }),
-      );
-    }
-    const names = (await this.#options.files.list(migrations)).filter((name) => name.endsWith(".sql"));
-    const misnamed = names.filter((name) => !migrationName.test(name));
-    if (misnamed.length > 0) {
-      return this.#settle(failed(`Migration files are named NNNN-name.sql; rename ${misnamed.join(", ")}.`));
-    }
-    const ordered: Migration[] = [];
-    for (const name of names.sort()) {
-      ordered.push({ name, sql: (await this.#options.files.readText(`${migrations}/${name}`)) ?? "" });
-    }
-    if (ordered.length === 0 && !(await this.#options.files.exists(file.value))) {
-      return granted([]);
-    }
-    const appliedAt = this.#options.clock.now().toISOString();
-    const order = { method: "migrate" as const, migrations: ordered, appliedAt };
-    const result = await this.#databaseOf(file.value).request(order);
-    return this.#settle(this.#databaseAnswer(result, { keyword: "migrate", fits: isNames }));
+  migrate(partition?: string): Promise<Answer<readonly string[]>> {
+    return this.#guarded("run the migrations", () => this.#migrateNow(partition));
   }
 
-  async execute(sql: string, parameters: SqlParameters = [], partition?: string): Promise<Answer<ExecuteResult>> {
-    const file = this.#partitionFile(partition);
-    if (!file.ok) {
-      return this.#settle(file);
-    }
-    const keyword = leadingKeyword(sql);
-    if (![...readKeywords, ...writeKeywords].includes(keyword)) {
-      return this.#settle(this.#statementRefusal(keyword, [...readKeywords, ...writeKeywords]));
-    }
-    const migrated = await this.#migratedFirst(partition);
-    if (!migrated.ok) {
-      return migrated;
-    }
-    const writable = this.#permissions.effects.includes("write");
-    const stored = await this.#storedParameters(parameters);
-    const result = await this.#databaseOf(file.value).request({ method: "execute", sql, parameters: stored, writable });
-    return this.#settle(this.#databaseAnswer(result, { keyword, fits: isExecuteResult }));
-  }
-
-  async query(sql: string, parameters: SqlParameters = [], partition?: string): Promise<Answer<readonly Row[]>> {
-    const file = this.#partitionFile(partition);
-    if (!file.ok) {
-      return this.#settle(file);
-    }
-    const keyword = leadingKeyword(sql);
-    if (!readKeywords.includes(keyword)) {
-      return this.#settle(this.#statementRefusal(keyword, readKeywords));
-    }
-    const migrated = await this.#migratedFirst(partition);
-    if (!migrated.ok) {
-      return migrated;
-    }
-    const result = await this.#databaseOf(file.value).request({ method: "query", sql, parameters });
-    return this.#settle(this.#databaseAnswer(result, { keyword, fits: isRows }));
-  }
-
-  async agentQuery(sql: string, partition?: string): Promise<Answer<AgentQueryResult>> {
-    const file = this.#partitionFile(partition);
-    if (!file.ok) {
-      return this.#settle(file);
-    }
-    const databaseFile = file.value;
-    const migrated = await this.#migratedFirst(partition);
-    if (!migrated.ok) {
-      return migrated;
-    }
-    if (!(await this.#options.files.exists(databaseFile))) {
-      return this.#settle(failed(`The mode ${this.#permissions.mode} has no database yet; run its migrations first.`));
-    }
-    const limits = this.#limits;
-    const outcome = await runAgentQuery(this.#options.childProcesses, {
-      databaseFile,
-      sql,
-      limits: {
-        rows: limits.agentQueryRows,
-        resultBytes: limits.agentQueryResultBytes,
-        milliseconds: limits.agentQueryMilliseconds,
-      },
+  execute(sql: string, parameters: SqlParameters = [], partition?: string): Promise<Answer<ExecuteResult>> {
+    return this.#guarded("run a statement", async () => {
+      const file = this.#partitionFile(partition);
+      if (!file.ok) {
+        return file;
+      }
+      const keyword = leadingKeyword(sql);
+      if (![...readKeywords, ...writeKeywords].includes(keyword)) {
+        return this.#statementRefusal(keyword, [...readKeywords, ...writeKeywords]);
+      }
+      const migrated = await this.#migratedFirst(partition);
+      if (!migrated.ok) {
+        return migrated;
+      }
+      const writable = this.#permissions.effects.includes("write");
+      const stored = await this.#storedParameters(parameters);
+      const order = { method: "execute" as const, sql, parameters: stored, writable };
+      const result = await this.#databaseOf(file.value).request(order);
+      return this.#databaseAnswer(result, { keyword, fits: isExecuteResult });
     });
-    const rows = String(limits.agentQueryRows);
-    const milliseconds = String(limits.agentQueryMilliseconds);
-    const rules =
-      "agent queries run one read-only select over the mode's own database, where every table is readable, " +
-      `return at most ${rows} rows and stop at the time limit of ${milliseconds} ms`;
-    const change = "Send one select statement, narrowed with where, limit or an aggregate.";
-    switch (outcome.status) {
-      case "done":
-        return this.#settle(granted(this.#redactedResult(outcome.value)));
-      case "refused":
-        return this.#settle(
-          refused({
-            resource: "db",
-            asked: `An agent's query was refused (${outcome.reason})`,
-            declared: rules,
-            change,
-          }),
-        );
-      case "timed-out":
-        return this.#settle(
-          refused({
-            resource: "db",
-            asked: "An agent's query was still running and was killed",
-            declared: rules,
-            change,
-          }),
-        );
-      case "failed":
-        return this.#settle(failed(outcome.message));
-    }
   }
 
-  async readFile(path: string): Promise<Answer<string>> {
-    const checked = await this.#checkedPath(path, "read");
-    if (!checked.ok) {
-      return this.#settle(checked);
-    }
-    const text = await this.#options.files.readText(checked.value);
-    return this.#settle(text === undefined ? failed(`The file ${checked.value} does not exist.`) : granted(text));
-  }
-
-  async writeFile(path: string, text: string): Promise<Answer<null>> {
-    const checked = await this.#checkedPath(path, "write");
-    if (!checked.ok) {
-      return this.#settle(checked);
-    }
-    const redacted = this.#options.secrets.redactHandedOut(text);
-    if (redacted !== text) {
-      await this.#append("redacted", {
-        step: this.#options.place.stepKey,
-        file: checked.value,
-        message: "A secret value handed out to this step was removed from the text before the file was written.",
-      });
-    }
-    await this.#options.files.writeAtomic(checked.value, redacted);
-    return this.#settle(granted(null));
-  }
-
-  async listFiles(path: string): Promise<Answer<readonly string[]>> {
-    const checked = await this.#checkedPath(path, "read");
-    if (!checked.ok) {
-      return this.#settle(checked);
-    }
-    return this.#settle(granted(await this.#options.files.list(checked.value)));
-  }
-
-  async secret(name: string): Promise<Answer<string>> {
-    return this.#settle(await this.#options.secrets.get(name, this.#permissions));
-  }
-
-  async request(request: HttpRequest): Promise<Answer<HttpResponse>> {
-    const size = Buffer.byteLength(request.body ?? "");
-    if (size > this.#limits.httpRequestBytes) {
-      return this.#settle(
-        refused({
-          resource: "http",
-          asked: `${this.#asking} to send a request body of ${String(size)} bytes`,
-          declared: `the broker sends at most ${String(this.#limits.httpRequestBytes)} bytes`,
-          change: "Send a smaller body; no manifest line raises this cap.",
-        }),
-      );
-    }
-    let current = request;
-    for (let hops = 0; hops <= this.#limits.httpRedirects; hops += 1) {
-      const check = checkUrl(current.url, this.#permissions.hosts);
-      if (check.status !== "allowed") {
-        return this.#settle(this.#urlRefusal(check, hops > 0));
+  query(sql: string, parameters: SqlParameters = [], partition?: string): Promise<Answer<readonly Row[]>> {
+    return this.#guarded("run a query", async () => {
+      const file = this.#partitionFile(partition);
+      if (!file.ok) {
+        return file;
       }
-      const response = await this.#sendOnce(current);
-      if (!response.ok) {
-        return this.#settle(response);
+      const keyword = leadingKeyword(sql);
+      if (!readKeywords.includes(keyword)) {
+        return this.#statementRefusal(keyword, readKeywords);
       }
-      const hop: Hop = { request: current, response: response.value };
-      const target = redirectTarget(hop);
-      if (target === undefined) {
-        return this.#settle(this.#cappedResponse(response.value));
+      const migrated = await this.#migratedFirst(partition);
+      if (!migrated.ok) {
+        return migrated;
       }
-      current = nextRequest(hop, target);
-    }
-    return this.#settle(failed(`The request was redirected more than ${String(this.#limits.httpRedirects)} times.`));
+      const result = await this.#databaseOf(file.value).request({ method: "query", sql, parameters });
+      return this.#databaseAnswer(result, { keyword, fits: isRows });
+    });
   }
 
-  async emit(kind: string, detail: Json): Promise<Answer<null>> {
-    if (brokerKinds.includes(kind)) {
-      return this.#settle(
-        refused({
+  agentQuery(sql: string, partition?: string): Promise<Answer<AgentQueryResult>> {
+    return this.#guarded("run an agent's query", async () => {
+      const file = this.#partitionFile(partition);
+      if (!file.ok) {
+        return file;
+      }
+      const migrated = await this.#migratedFirst(partition);
+      if (!migrated.ok) {
+        return migrated;
+      }
+      if (!(await this.#options.files.exists(file.value))) {
+        return failed(`The mode ${this.#permissions.mode} has no database yet; run its migrations first.`);
+      }
+      return this.#agentQueryAnswer(await this.#runAgentQuery(file.value, sql));
+    });
+  }
+
+  readFile(path: string): Promise<Answer<string>> {
+    return this.#guarded(`read ${this.#shown(path)}`, async () => {
+      const checked = await this.#checkedPath(path, "read");
+      if (!checked.ok) {
+        return checked;
+      }
+      const text = await this.#options.files.readText(checked.value);
+      return text === undefined ? failed(`The file ${checked.value} does not exist.`) : granted(text);
+    });
+  }
+
+  writeFile(path: string, text: string): Promise<Answer<null>> {
+    return this.#guarded(`write ${this.#shown(path)}`, async () => {
+      const checked = await this.#checkedPath(path, "write");
+      if (!checked.ok) {
+        return checked;
+      }
+      const redacted = this.#options.secrets.redactHandedOut(text);
+      if (redacted !== text) {
+        await this.#append("redacted", {
+          step: this.#options.place.stepKey,
+          file: checked.value,
+          message: "A secret value handed out to this step was removed from the text before the file was written.",
+        });
+      }
+      await this.#options.files.writeAtomic(checked.value, redacted);
+      return granted(null);
+    });
+  }
+
+  listFiles(path: string): Promise<Answer<readonly string[]>> {
+    return this.#guarded(`list ${this.#shown(path)}`, async () => {
+      const checked = await this.#checkedPath(path, "read");
+      if (!checked.ok) {
+        return checked;
+      }
+      return granted(await this.#options.files.list(checked.value));
+    });
+  }
+
+  secret(name: string): Promise<Answer<string>> {
+    return this.#guarded(`get the secret ${name}`, () => this.#options.secrets.get(name, this.#permissions));
+  }
+
+  request(request: HttpRequest): Promise<Answer<HttpResponse>> {
+    return this.#guarded(`send a request to ${request.url}`, () => this.#sendFollowingRedirects(request));
+  }
+
+  emit(kind: string, detail: Json): Promise<Answer<null>> {
+    return this.#guarded(`emit an event of the kind ${kind}`, async () => {
+      if (brokerKinds.includes(kind)) {
+        return refused({
           resource: "events",
           asked: `${this.#asking} to emit an event of the kind ${kind}`,
           declared: `the kinds ${brokerKinds.join(" and ")} are written only by the broker`,
           change: "Choose another kind for the event.",
-        }),
-      );
-    }
-    await this.#append(kind, detail);
-    return granted(null);
+        });
+      }
+      await this.#append(kind, detail);
+      return granted(null);
+    });
   }
 
   report<T>(answer: Answer<T>): Promise<Answer<T>> {
@@ -325,6 +240,135 @@ export class Broker {
 
   get #asking(): string {
     return `The step ${this.#options.place.stepKey} asked`;
+  }
+
+  async #guarded<T>(doing: string, body: () => Promise<Answer<T>>): Promise<Answer<T>> {
+    try {
+      return await this.#settle(await body());
+    } catch (error) {
+      return this.#settle(failed(`The step ${this.#options.place.stepKey} could not ${doing}: ${errorLine(error)}`));
+    }
+  }
+
+  #shown(path: string): string {
+    return shownPath(this.#options.layout, resolve(this.#options.layout.project, path));
+  }
+
+  async #migrateNow(partition: string | undefined): Promise<Answer<readonly string[]>> {
+    const file = this.#partitionFile(partition);
+    if (!file.ok) {
+      return file;
+    }
+    const migrations = resolve(this.#permissions.modeFolder, this.#permissions.migrationsFolder);
+    if (!isInsideOrEqual(migrations, this.#permissions.modeFolder)) {
+      return refused({
+        resource: "db",
+        asked: `${this.#asking} to run the migrations in ${migrations}`,
+        declared: `migrations must lie inside the mode's folder ${this.#permissions.modeFolder}`,
+        change: `Point resources.db.migrations in ${manifestOf(this.#permissions)} at a folder of the mode.`,
+      });
+    }
+    const ordered = await this.#migrationsIn(migrations);
+    if (!ordered.ok) {
+      return ordered;
+    }
+    if (ordered.value.length === 0 && !(await this.#options.files.exists(file.value))) {
+      return granted([]);
+    }
+    const appliedAt = this.#options.clock.now().toISOString();
+    const order = { method: "migrate" as const, migrations: ordered.value, appliedAt };
+    const result = await this.#databaseOf(file.value).request(order);
+    return this.#databaseAnswer(result, { keyword: "migrate", fits: isNames });
+  }
+
+  async #migrationsIn(migrations: string): Promise<Answer<readonly Migration[]>> {
+    const shown = shownPath(this.#options.layout, migrations);
+    try {
+      const names = (await this.#options.files.list(migrations)).filter((name) => name.endsWith(".sql"));
+      const misnamed = names.filter((name) => !migrationName.test(name));
+      if (misnamed.length > 0) {
+        return failed(`Migration files are named NNNN-name.sql; rename ${misnamed.join(", ")}.`);
+      }
+      const ordered: Migration[] = [];
+      for (const name of names.sort()) {
+        ordered.push({ name, sql: (await this.#options.files.readText(`${migrations}/${name}`)) ?? "" });
+      }
+      return granted(ordered);
+    } catch (error) {
+      return failed(`The broker could not read the migrations in ${shown}: ${errorLine(error)}`);
+    }
+  }
+
+  #runAgentQuery(databaseFile: string, sql: string): Promise<AgentQueryOutcome> {
+    const limits = this.#limits;
+    return runAgentQuery(this.#options.childProcesses, {
+      databaseFile,
+      sql,
+      limits: {
+        rows: limits.agentQueryRows,
+        resultBytes: limits.agentQueryResultBytes,
+        milliseconds: limits.agentQueryMilliseconds,
+      },
+    });
+  }
+
+  #agentQueryAnswer(outcome: AgentQueryOutcome): Answer<AgentQueryResult> {
+    const rows = String(this.#limits.agentQueryRows);
+    const milliseconds = String(this.#limits.agentQueryMilliseconds);
+    const rules =
+      "agent queries run one read-only select over the mode's own database, where every table is readable, " +
+      `return at most ${rows} rows and stop at the time limit of ${milliseconds} ms`;
+    const change = "Send one select statement, narrowed with where, limit or an aggregate.";
+    switch (outcome.status) {
+      case "done":
+        return granted(this.#redactedResult(outcome.value));
+      case "refused":
+        return refused({
+          resource: "db",
+          asked: `An agent's query was refused (${outcome.reason})`,
+          declared: rules,
+          change,
+        });
+      case "timed-out":
+        return refused({
+          resource: "db",
+          asked: "An agent's query was still running and was killed",
+          declared: rules,
+          change,
+        });
+      case "failed":
+        return failed(outcome.message);
+    }
+  }
+
+  async #sendFollowingRedirects(request: HttpRequest): Promise<Answer<HttpResponse>> {
+    const size = Buffer.byteLength(request.body ?? "");
+    if (size > this.#limits.httpRequestBytes) {
+      return refused({
+        resource: "http",
+        asked: `${this.#asking} to send a request body of ${String(size)} bytes`,
+        declared: `the broker sends at most ${String(this.#limits.httpRequestBytes)} bytes`,
+        change: "Send a smaller body; no manifest line raises this cap.",
+      });
+    }
+    let current = request;
+    for (let hops = 0; hops <= this.#limits.httpRedirects; hops += 1) {
+      const check = checkUrl(current.url, this.#permissions.hosts);
+      if (check.status !== "allowed") {
+        return this.#urlRefusal(check, hops > 0);
+      }
+      const response = await this.#sendOnce(current);
+      if (!response.ok) {
+        return response;
+      }
+      const hop: Hop = { request: current, response: response.value };
+      const target = redirectTarget(hop);
+      if (target === undefined) {
+        return this.#cappedResponse(response.value);
+      }
+      current = nextRequest(hop, target);
+    }
+    return failed(`The request was redirected more than ${String(this.#limits.httpRedirects)} times.`);
   }
 
   close(): void {
@@ -338,7 +382,7 @@ export class Broker {
     if (partition !== undefined) {
       return Promise.resolve(granted([]));
     }
-    this.#unnamedMigration ??= this.migrate();
+    this.#unnamedMigration ??= this.#migrateNow(undefined);
     return this.#unnamedMigration;
   }
 

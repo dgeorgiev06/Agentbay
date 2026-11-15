@@ -1,5 +1,6 @@
 import { join } from "node:path/posix";
 import type { Permissions } from "./contracts.ts";
+import { scrubSecretPatterns } from "./secret-patterns.ts";
 
 export type Resource = "db" | "files" | "secrets" | "http" | "events" | "call" | "spend" | "script";
 
@@ -51,4 +52,9 @@ export function listed(values: readonly string[], noneWording: string): string {
 
 export function manifestOf(permissions: Permissions): string {
   return join(permissions.modeFolder, "mode.yaml");
+}
+
+export function errorLine(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return scrubSecretPatterns(message.split("\n")[0] ?? "");
 }

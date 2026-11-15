@@ -1,3 +1,4 @@
+import { errorLine } from "./answers.ts";
 import type { Json } from "./contracts.ts";
 import { loadKernel, type Environment, type Kernel, type KernelPorts } from "./kernel.ts";
 import { parseJson } from "./json.ts";
@@ -89,10 +90,14 @@ export async function withKernel(
   if (!loaded.ok) {
     return problemsResult(loaded.problems);
   }
+  const kernel = loaded.value;
   try {
-    return await body(loaded.value);
+    return await body(kernel);
+  } catch (error) {
+    const reason = kernel.secrets.redact(`bay stopped at an unexpected error: ${errorLine(error)}`);
+    return refusedResult(reason, "Fix the cause and run it again; a run it was advancing can be resumed.");
   } finally {
-    loaded.value.close();
+    kernel.close();
   }
 }
 

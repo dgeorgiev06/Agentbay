@@ -28,7 +28,18 @@ export const serverName = "agentbay";
 
 const protocolVersions: readonly string[] = ["2025-06-18", "2025-03-26", "2024-11-05"];
 
-const errorCodes = { parse: -32700, invalidRequest: -32600, methodNotFound: -32601, invalidParams: -32602 } as const;
+const errorCodes = {
+  parse: -32700,
+  invalidRequest: -32600,
+  methodNotFound: -32601,
+  invalidParams: -32602,
+  internal: -32603,
+} as const;
+
+const internalFailure = protocolFailure(
+  errorCodes.internal,
+  "agentbay stopped at an unexpected error while answering; the call was not carried out. Try again, or tell the owner.",
+);
 
 function protocolFailure(code: number, message: string): ProtocolFailure {
   return { failure: true, code, message };
@@ -103,7 +114,7 @@ async function answer(server: ToolServer, request: Request): Promise<string | un
   if (handler === undefined) {
     return errorReply(request.id, protocolFailure(errorCodes.methodNotFound, `There is no method ${request.method}.`));
   }
-  const result = await handler(server, request);
+  const result = await handler(server, request).catch(() => internalFailure);
   return isFailure(result)
     ? errorReply(request.id, result)
     : JSON.stringify({ jsonrpc: "2.0", id: request.id, result });

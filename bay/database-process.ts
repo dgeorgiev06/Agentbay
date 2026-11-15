@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { errorLine } from "./answers.ts";
 import type { Child, ChildEnd, ChildProcesses } from "./ports.ts";
 import type { Json } from "./contracts.ts";
 import type { DatabaseResult, Migration, SqlParameters } from "./database.ts";
@@ -93,18 +94,30 @@ export class DatabaseProcess {
       },
     );
     this.#child = child;
-    void child.ended.then((end) => {
-      if (this.#child === child) {
-        this.#child = undefined;
-      }
-      for (const [id, waiting] of this.#waiting) {
-        if (waiting.child === child) {
-          this.#waiting.delete(id);
-          waiting.resolve(stopped(end));
-        }
-      }
-    });
+    child.ended.then(
+      (end) => {
+        this.#ended(child, stopped(end));
+      },
+      (error: unknown) => {
+        this.#ended(child, {
+          status: "error",
+          message: `The database process could not be watched: ${errorLine(error)}`,
+        });
+      },
+    );
     return child;
+  }
+
+  #ended(child: Child, result: DatabaseResult<never>): void {
+    if (this.#child === child) {
+      this.#child = undefined;
+    }
+    for (const [id, waiting] of this.#waiting) {
+      if (waiting.child === child) {
+        this.#waiting.delete(id);
+        waiting.resolve(result);
+      }
+    }
   }
 
   #received(line: string): void {

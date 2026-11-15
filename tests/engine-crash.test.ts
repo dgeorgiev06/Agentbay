@@ -359,8 +359,8 @@ test("a live engine whose steps each take seven minutes is never taken over; a s
   assert.ok(!(await eventKinds(store, "long")).includes("lock.taken-over"));
   holder.silentAt = 3;
   tries = 0;
-  const lost = engine.startAction("notes.long", {}, { id: "silent" });
-  await assert.rejects(lost, /no longer holds the lock/);
+  const lost = await engine.startAction("notes.long", {}, { id: "silent" });
+  assert.match(problemsOf(lost).join(" "), /stopped at an unexpected error: .*no longer holds the lock/);
   assert.ok(holder.takeover?.ok);
   assert.equal(holder.takeover.run.state.status, "done");
   assert.ok((await eventKinds(store, "silent")).includes("lock.taken-over"));

@@ -1,4 +1,4 @@
-import type { Answer } from "./answers.ts";
+import { errorLine, type Answer } from "./answers.ts";
 import type { Broker } from "./broker.ts";
 import type { Json } from "./contracts.ts";
 import { byteSize, fieldOf, numberField, textField } from "./json.ts";
@@ -306,6 +306,14 @@ async function performed(
 }
 
 export async function callKernelTool(kernel: Kernel, name: string, input: Json): Promise<ToolResult> {
+  try {
+    return await checkedToolCall(kernel, name, input);
+  } catch (error) {
+    return refused(kernel.secrets.redact(`The tool ${name} stopped at an unexpected error: ${errorLine(error)}`));
+  }
+}
+
+async function checkedToolCall(kernel: Kernel, name: string, input: Json): Promise<ToolResult> {
   if (!isToolName(name)) {
     return refused(
       `There is no kernel tool ${name}; the tools are db_query, files_read, files_list, ` +

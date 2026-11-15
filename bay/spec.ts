@@ -36,6 +36,15 @@ export type Loaded<T> = {
 export type Outcome<T> =
   { readonly ok: true; readonly value: T } | { readonly ok: false; readonly problems: readonly Problem[] };
 
+export type ValuePlace = {
+  readonly loaded: Loaded<unknown>;
+  readonly path: PathSegments;
+};
+
+export type ValueCheck =
+  | { readonly kind: "unusable-schema"; readonly reason: string }
+  | { readonly kind: "checked"; readonly problems: readonly Problem[] };
+
 export type Skill = {
   readonly frontMatter: SkillFrontMatter;
   readonly headings: readonly string[];
@@ -92,8 +101,8 @@ function failed(problems: readonly Problem[]): { readonly ok: false; readonly pr
   return { ok: false, problems };
 }
 
-function placeName(path: readonly string[]): string {
-  return path.length === 0 ? "The document" : path.join(".");
+function placeName(location: PathSegments): string {
+  return location.length === 0 ? "This file" : location.join(".");
 }
 
 function parameter(error: ErrorObject, name: string): unknown {
@@ -140,43 +149,158 @@ function hiddenBy(choice: ErrorObject, error: ErrorObject): boolean {
 
 function relevantErrors(errors: readonly ErrorObject[]): readonly ErrorObject[] {
   const choices = errors.filter((error) => error.keyword === "oneOf");
-  return errors.filter((error) => !choices.some((choice) => hiddenBy(choice, error)));
+  return errors
+    .filter((error) => error.keyword !== "propertyNames")
+    .filter((error) => !choices.some((choice) => hiddenBy(choice, error)));
 }
 
-function describeError(error: ErrorObject): Wording {
-  const place = placeName(segmentsOf(error.instancePath));
-  switch (error.keyword) {
-    case "required": {
-      const field = String(parameter(error, "missingProperty"));
-      return { message: `${place} is missing the required field ${field}.`, fix: `Add ${field}.` };
-    }
-    case "additionalProperties": {
-      const field = String(parameter(error, "additionalProperty"));
-      return {
-        message: `${place} has the field ${field}, which is not allowed here.`,
-        fix: `Remove ${field} or correct its spelling.`,
-      };
-    }
-    case "enum": {
-      const allowed = parameter(error, "allowedValues");
-      const values = Array.isArray(allowed) ? allowed.map((value: unknown) => JSON.stringify(value)) : [];
-      return { message: `${place} must be one of ${values.join(", ")}.` };
-    }
-    case "pattern": {
-      const description: unknown = error.parentSchema?.description;
-      return { message: `${place} is not in the expected form. Expected: ${String(description)}` };
-    }
-    case "oneOf":
-      return { message: `${place} must have exactly one of the fields ${branchDiscriminators(error).join(", ")}.` };
-    default:
-      return { message: `${place} ${error.message ?? "is not valid"}.` };
+const typeWords: ReadonlyMap<string, string> = new Map([
+  ["object", "a YAML mapping (key: value pairs)"],
+  ["array", "a list"],
+  ["string", "text"],
+  ["integer", "a whole number"],
+  ["number", "a number"],
+  ["boolean", "true or false"],
+  ["null", "empty"],
+]);
+
+function describeValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "empty";
+  }
+  if (Array.isArray(value)) {
+    return "a list";
+  }
+  if (typeof value === "object") {
+    return "a mapping";
+  }
+  return JSON.stringify(value);
+}
+
+function numberParameter(error: ErrorObject, name: string): number {
+  const value = parameter(error, name);
+  return typeof value === "number" ? value : 0;
+}
+
+function describeType(error: ErrorObject, place: string): Wording {
+  const expected = String(parameter(error, "type"))
+    .split(",")
+    .map((type) => typeWords.get(type) ?? type)
+    .join(" or ");
+  return { message: `${place} must be ${expected}, but it is ${describeValue(error.data)}.` };
+}
+
+function describeRequired(error: ErrorObject, place: string): Wording {
+  const field = String(parameter(error, "missingProperty"));
+  return { message: `${place} is missing the required field ${field}.`, fix: `Add ${field}.` };
+}
+
+function describeAdditionalProperty(error: ErrorObject, place: string): Wording {
+  const field = String(parameter(error, "additionalProperty"));
+  return {
+    message: `${place} has the field ${field}, which is not allowed here.`,
+    fix: `Remove ${field} or correct its spelling.`,
+  };
+}
+
+function describeEnum(error: ErrorObject, place: string): Wording {
+  const allowed = parameter(error, "allowedValues");
+  const values = Array.isArray(allowed) ? allowed.map((value: unknown) => JSON.stringify(value)) : [];
+  return { message: `${place} must be one of ${values.join(", ")}, but it is ${describeValue(error.data)}.` };
+}
+
+function describePattern(error: ErrorObject, place: string): Wording {
+  const description: unknown = error.parentSchema?.description;
+  const expected = `Expected: ${String(description)}`;
+  if (error.propertyName !== undefined) {
+    return { message: `${place} has the key ${error.propertyName}, which is not in the expected form. ${expected}` };
+  }
+  return { message: `${place} is not in the expected form. ${expected}` };
+}
+
+function describeOneOf(error: ErrorObject, place: string): Wording {
+  return { message: `${place} must have exactly one of the fields ${branchDiscriminators(error).join(", ")}.` };
+}
+
+function describeMinItems(error: ErrorObject, place: string): Wording {
+  const limit = numberParameter(error, "limit");
+  const entries = limit === 1 ? "entry" : "entries";
+  return { message: `${place} must list at least ${String(limit)} ${entries}, but it lists fewer.` };
+}
+
+function describeMinLength(error: ErrorObject, place: string): Wording {
+  const limit = numberParameter(error, "limit");
+  if (limit === 1) {
+    return { message: `${place} must not be empty.` };
+  }
+  return { message: `${place} must be at least ${String(limit)} characters long.` };
+}
+
+function describeMinimum(error: ErrorObject, place: string): Wording {
+  const limit = numberParameter(error, "limit");
+  return { message: `${place} must be at least ${String(limit)}, but it is ${describeValue(error.data)}.` };
+}
+
+function describeConst(error: ErrorObject, place: string): Wording {
+  const allowed = JSON.stringify(parameter(error, "allowedValue"));
+  return { message: `${place} must be ${allowed}, but it is ${describeValue(error.data)}.` };
+}
+
+function describeUniqueItems(_error: ErrorObject, place: string): Wording {
+  return { message: `${place} lists the same entry twice.`, fix: "Remove the repeated entry." };
+}
+
+function describeOther(error: ErrorObject, place: string): Wording {
+  return { message: `${place} is not valid (${error.message ?? "no reason given"}).` };
+}
+
+const describers: ReadonlyMap<string, (error: ErrorObject, place: string) => Wording> = new Map([
+  ["type", describeType],
+  ["required", describeRequired],
+  ["additionalProperties", describeAdditionalProperty],
+  ["enum", describeEnum],
+  ["pattern", describePattern],
+  ["oneOf", describeOneOf],
+  ["minItems", describeMinItems],
+  ["minLength", describeMinLength],
+  ["minimum", describeMinimum],
+  ["const", describeConst],
+  ["uniqueItems", describeUniqueItems],
+]);
+
+function extraSegment(error: ErrorObject): readonly string[] {
+  const extra = parameter(error, "additionalProperty");
+  if (error.keyword === "additionalProperties" && typeof extra === "string") {
+    return [extra];
+  }
+  return error.propertyName === undefined ? [] : [error.propertyName];
+}
+
+function errorProblems(errors: readonly ErrorObject[], place: ValuePlace): readonly Problem[] {
+  return relevantErrors(errors).map((error) => {
+    const location = [...place.path, ...segmentsOf(error.instancePath)];
+    const describe = describers.get(error.keyword) ?? describeOther;
+    return problemAt(place.loaded, [...location, ...extraSegment(error)], describe(error, placeName(location)));
+  });
+}
+
+function compileSchema(schema: unknown): ValidateFunction | string {
+  if (!isRecord(schema) && typeof schema !== "boolean") {
+    return "a JSON Schema must be a mapping, true or false";
+  }
+  try {
+    return new Ajv2020({ allErrors: true, strict: false, verbose: true, logger: false }).compile(schema);
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
   }
 }
 
-function errorPath(error: ErrorObject): readonly string[] {
-  const path = segmentsOf(error.instancePath);
-  const extra = parameter(error, "additionalProperty");
-  return error.keyword === "additionalProperties" && typeof extra === "string" ? [...path, extra] : path;
+export function checkValue(schema: unknown, value: unknown, place: ValuePlace): ValueCheck {
+  const validate = compileSchema(schema);
+  if (typeof validate === "string") {
+    return { kind: "unusable-schema", reason: validate };
+  }
+  return { kind: "checked", problems: validate(value) ? [] : errorProblems(validate.errors ?? [], place) };
 }
 
 function parseSpec<Kind extends keyof Kinds>(source: Source, kind: Kind): Outcome<Loaded<Kinds[Kind]>> {
@@ -204,8 +328,7 @@ function parseSpec<Kind extends keyof Kinds>(source: Source, kind: Kind): Outcom
     return { ok: true, value: { file: source.file, value, lineOf } };
   }
   const loaded: Loaded<unknown> = { file: source.file, value, lineOf };
-  const errors = relevantErrors(validate.errors ?? []);
-  return failed(errors.map((error) => problemAt(loaded, errorPath(error), describeError(error))));
+  return failed(errorProblems(validate.errors ?? [], { loaded, path: [] }));
 }
 
 function missingFile(file: string): Problem {

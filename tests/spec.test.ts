@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isRecord, loadSpec, parseSkill, pointer, problemAt, type Loaded, type Problem } from "../bay/spec.ts";
+import {
+  checkValue,
+  isRecord,
+  loadSpec,
+  parseSkill,
+  pointer,
+  problemAt,
+  type Loaded,
+  type Problem,
+} from "../bay/spec.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import { config, itemsStore, notesMode, yamlText } from "./system-fixture.ts";
 
@@ -32,7 +41,7 @@ test("an interface, a workflow and a config each load against their own schema",
   const workflow = {
     name: "daily",
     trigger: { manual: true },
-    steps: [{ foreach: "/items", steps: [{ action: "add" }] }],
+    steps: [{ id: "each", foreach: "/items", steps: [{ id: "add", action: "add" }] }],
   };
   const files = fakeFileSystem({
     "/i.yaml": yamlText(itemsStore),
@@ -66,7 +75,7 @@ test("a missing required field names the field and the fix", async () => {
       file: "/x.yaml",
       path: "",
       line: 1,
-      message: "The document is missing the required field adapter.",
+      message: "This file is missing the required field adapter.",
       fix: "Add adapter.",
     },
   ]);
@@ -78,7 +87,7 @@ test("a value outside a closed set lists the allowed values", async () => {
   const mode = { ...notesMode, actions: { add: { ...add, effects: ["read", "erase"] } } };
   const problems = await problemsOf("mode", yamlText(mode));
   assert.deepEqual(messages(problems), [
-    'actions.add.effects.1 must be one of "read", "write", "network", "spend", "delete".',
+    'actions.add.effects.1 must be one of "read", "write", "network", "spend", "delete", but it is "erase".',
   ]);
   assert.equal(problems.at(0)?.path, "/actions/add/effects/1");
 });
@@ -86,8 +95,8 @@ test("a value outside a closed set lists the allowed values", async () => {
 test("a name that is not kebab-case says what form is expected", async () => {
   const problems = await problemsOf("mode", yamlText({ ...notesMode, name: "Notes_Mode" }));
   assert.deepEqual(messages(problems), [
-    "name is not in the expected form. Expected: A kebab-case name: lowercase letters, digits and single hyphens, " +
-      "starting with a letter.",
+    "name is not in the expected form. Expected: Kebab-case, starting with a letter; " +
+      "not constructor, a name every JavaScript object has.",
   ]);
 });
 
@@ -108,7 +117,7 @@ test("a step of no known kind lists the kinds there are", async () => {
 });
 
 test("a step with two kinds is told which field does not belong", async () => {
-  const workflow = { name: "daily", steps: [{ action: "add", wait: "2d" }] };
+  const workflow = { name: "daily", steps: [{ id: "add", action: "add", wait: "2d" }] };
   const problems = await problemsOf("workflow", yamlText(workflow));
   assert.deepEqual(messages(problems), ["steps.0 has the field wait, which is not allowed here."]);
 });
@@ -116,7 +125,7 @@ test("a step with two kinds is told which field does not belong", async () => {
 test("every schema problem in a file is reported at once", async () => {
   const problems = await problemsOf("mode", yamlText({ ...notesMode, version: "one", colour: "blue" }));
   assert.equal(problems.length, 2);
-  assert.ok(messages(problems).includes("The document has the field colour, which is not allowed here."));
+  assert.ok(messages(problems).includes("This file has the field colour, which is not allowed here."));
   assert.ok(messages(problems).some((message) => message.startsWith("version is not in the expected form.")));
 });
 
@@ -187,7 +196,7 @@ test("a problem in skill front matter carries the line in SKILL.md", async () =>
   const text = "---\nname: digest\ndescription: Writes.\nauthor: me\n---\n## Input\n";
   const outcome = await parseSkill(fakeFileSystem({ "/s/SKILL.md": text }), "/s/SKILL.md");
   assert.ok(!outcome.ok);
-  assert.equal(outcome.problems.at(0)?.message, "The document has the field author, which is not allowed here.");
+  assert.equal(outcome.problems.at(0)?.message, "This file has the field author, which is not allowed here.");
   assert.equal(outcome.problems.at(0)?.line, 4);
 });
 
@@ -199,7 +208,7 @@ test("a missing SKILL.md is a problem", async () => {
 
 test("a config key of agentbay 4, such as offline, is refused by name", async () => {
   const problems = await problemsOf("config", yamlText({ ...config, offline: true }));
-  assert.deepEqual(messages(problems), ["The document has the field offline, which is not allowed here."]);
+  assert.deepEqual(messages(problems), ["This file has the field offline, which is not allowed here."]);
 });
 
 test("an interface reference without its major version is refused", async () => {
@@ -208,4 +217,72 @@ test("an interface reference without its major version is refused", async () => 
     "requires.interfaces.0 is not in the expected form. Expected: An interface name and its major version, " +
       "as name@major, for example items-store@1.",
   ]);
+});
+
+test("an empty file or a list where a mapping belongs is described in a plain sentence", async () => {
+  assert.deepEqual(messages(await problemsOf("config", "")), [
+    "This file must be a YAML mapping (key: value pairs), but it is empty.",
+  ]);
+  assert.deepEqual(messages(await problemsOf("config", "- a\n- b\n")), [
+    "This file must be a YAML mapping (key: value pairs), but it is a list.",
+  ]);
+});
+
+test("a field of the wrong type is named with what it must be and what it is", async () => {
+  const problems = await problemsOf("mode", yamlText({ ...notesMode, description: ["a"], actions: [] }));
+  assert.deepEqual(messages(problems), [
+    "description must be text, but it is a list.",
+    "actions must be a YAML mapping (key: value pairs), but it is a list.",
+  ]);
+});
+
+test("limits on lists, text, numbers and constants are described in plain sentences", async () => {
+  const add = notesMode.actions.add;
+  assert.ok(add);
+  const mode = {
+    ...notesMode,
+    description: "",
+    implements: ["notes@1", "notes@1"],
+    actions: { add: { ...add, run: [], budget: { usd: -1 } } },
+  };
+  assert.deepEqual(messages(await problemsOf("mode", yamlText(mode))), [
+    "description must not be empty.",
+    "implements lists the same entry twice.",
+    "actions.add.run must list at least 1 entry, but it lists fewer.",
+    "actions.add.budget.usd must be at least 0, but it is -1.",
+  ]);
+  const workflow = { name: "daily", trigger: { manual: false }, steps: [{ id: "pause", wait: "1d" }] };
+  assert.deepEqual(messages(await problemsOf("workflow", yamlText(workflow))), [
+    "trigger.manual must be true, but it is false.",
+  ]);
+});
+
+test("a key that is not kebab-case is named and placed at the key", async () => {
+  const add = notesMode.actions.add;
+  assert.ok(add);
+  const problems = await problemsOf("mode", yamlText({ ...notesMode, actions: { Add_Note: add } }));
+  assert.equal(problems.length, 1);
+  assert.match(problems.at(0)?.message ?? "", /^actions has the key Add_Note, which is not in the expected form\./);
+  assert.equal(problems.at(0)?.path, "/actions/Add_Note");
+});
+
+test("checkValue validates a value against a schema given at run time, with paths under a prefix", () => {
+  const loaded: Loaded<null> = { file: "agentbay.config.yaml", value: null, lineOf: () => undefined };
+  const place = { loaded, path: ["settings", "briefing"] };
+  const schema = { type: "object", required: ["lookback"], properties: { lookback: { type: "string" } } };
+  assert.deepEqual(checkValue(schema, { lookback: "3d" }, place), { kind: "checked", problems: [] });
+  assert.deepEqual(checkValue(schema, {}, place), {
+    kind: "checked",
+    problems: [
+      {
+        file: "agentbay.config.yaml",
+        path: "/settings/briefing",
+        message: "settings.briefing is missing the required field lookback.",
+        fix: "Add lookback.",
+      },
+    ],
+  });
+  const unusable = checkValue({ type: "mapping" }, {}, place);
+  assert.equal(unusable.kind, "unusable-schema");
+  assert.equal(checkValue("not a schema", {}, place).kind, "unusable-schema");
 });

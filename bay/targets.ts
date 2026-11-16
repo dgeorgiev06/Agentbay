@@ -59,6 +59,10 @@ export function resolveCall(system: System, caller: LoadedMode, call: string): A
   return resolveOwnAction(system, boundMode, actionName);
 }
 
-export function resolveWorkflowAction(system: System, mode: LoadedMode, name: string): ActionTarget | string {
-  return name.includes(".") ? resolveCall(system, mode, name) : resolveOwnAction(system, mode.manifest.name, name);
+export function resolveNamedAction(system: System, modeName: string, name: string): ActionTarget | string {
+  const mode = system.modes.get(modeName);
+  if (mode === undefined || !name.includes(".")) {
+    return resolveOwnAction(system, modeName, name);
+  }
+  return resolveCall(system, mode, name);
 }

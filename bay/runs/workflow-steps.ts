@@ -10,7 +10,7 @@ import type { StepRecord } from "./run-store.ts";
 import { approvalContentOf, type ApprovalContent } from "./scrubbed-store.ts";
 import type { ApprovalDetail } from "./step-detail.ts";
 import { foreachItemKey, workflowStepKey } from "./step-key.ts";
-import { resolveWorkflowAction } from "../targets.ts";
+import { resolveNamedAction } from "../targets.ts";
 import {
   changeDetail,
   concludeComposite,
@@ -90,7 +90,7 @@ async function runWorkflowAction(walk: Walk, scope: WorkflowScope, at: Unsettled
   if (!input.ok) {
     return refuse(walk, start, `Step ${at.step.id} cannot start: ${problemText(input.problems)}`);
   }
-  const target = resolveWorkflowAction(walk.services.system, scope.mode, at.step.action);
+  const target = resolveNamedAction(walk.services.system, scope.mode.manifest.name, at.step.action);
   if (typeof target === "string") {
     return refuse(walk, start, target);
   }

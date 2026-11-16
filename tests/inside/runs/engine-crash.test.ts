@@ -33,15 +33,15 @@ function executionsByStep(runner: FakeRunner): readonly number[] {
 async function cleanWrites(action: string): Promise<readonly string[]> {
   const { store, freshEngine, close } = await harness();
   const counting = faultInjector(store);
-  runOf(await freshEngine({ store: counting }).startAction(`notes.${action}`, { count: 1 }, { id: "clean" }));
+  runOf(await freshEngine({ store: counting, runId: "clean" }).startAction(`notes.${action}`, { count: 1 }));
   close();
   return counting.writes;
 }
 
 async function resumedAfterCrash(action: string, point: FaultPoint): Promise<void> {
   const { store, runner, clock, freshEngine, reopen, close } = await harness();
-  const crashing = freshEngine({ store: faultInjector(store, point) });
-  await assert.rejects(crashing.startAction(`notes.${action}`, { count: 1 }, { id: "crash" }), /simulated crash/);
+  const crashing = freshEngine({ store: faultInjector(store, point), runId: "crash" });
+  await assert.rejects(crashing.startAction(`notes.${action}`, { count: 1 }), /simulated crash/);
   const fresh = reopen();
   const afterCrash = await fresh.readRun("crash");
   if (afterCrash === undefined) {
@@ -99,8 +99,8 @@ async function rowsAfterFault(
 ): Promise<{ readonly writes: readonly string[]; readonly rows: DatabaseRows }> {
   const { store, file, freshEngine, close } = await harness();
   const faulty = faultInjector(store, point);
-  const crashing = freshEngine({ store: faulty, owner: "engine-1" });
-  await assert.rejects(crashing.startAction("notes.copy", { count: 1 }, { id: "crash" }), /simulated crash/);
+  const crashing = freshEngine({ store: faulty, owner: "engine-1", runId: "crash" });
+  await assert.rejects(crashing.startAction("notes.copy", { count: 1 }), /simulated crash/);
   const rows = databaseRows(file);
   close();
   return { writes: faulty.writes, rows };
@@ -137,8 +137,8 @@ test("a fault at write 5 stops the run there, and kernel.db holds exactly the wr
 test("a lock left by a dead engine is taken over after ten minutes, and the takeover is an event", async () => {
   const { store, clock, freshEngine, reopen, close } = await harness();
   const dying = faultInjector(store, { at: 4, when: "before" });
-  const dead = freshEngine({ store: dying, owner: "engine-1" });
-  await assert.rejects(dead.startAction("notes.save", { count: 1 }, { id: "dead" }), /simulated crash/);
+  const dead = freshEngine({ store: dying, owner: "engine-1", runId: "dead" });
+  await assert.rejects(dead.startAction("notes.save", { count: 1 }), /simulated crash/);
   assert.deepEqual(dying.writes, ["createRun", "saveStepInput", "heartbeat", "saveStepOutput"]);
   const fresh = reopen();
   const resumer = freshEngine({ store: fresh, owner: "engine-2" });
@@ -165,7 +165,7 @@ test("a lock left by a dead engine is taken over after ten minutes, and the take
 
 test("a crash right after a submission is saved runs its checks on resume and refuses it a second time", async () => {
   const { engine, store, runner, clock, freshEngine, reopen, close } = await harness();
-  const id = runOf(await engine.startAction("notes.draft", {}, { id: "draft" })).id;
+  const id = runOf(await engine.startAction("notes.draft", {})).id;
   const crashing = faultInjector(store, { at: 2, when: "after" });
   await assert.rejects(
     freshEngine({ store: crashing }).submit(id, "0#1", answer({ text: "long enough text" })),

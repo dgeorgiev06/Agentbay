@@ -24,6 +24,7 @@ type FreshEngine = {
   readonly system?: System;
   readonly store?: RunStore;
   readonly owner?: string;
+  readonly runId?: string;
 };
 
 export type Harness = FixtureSystem & {
@@ -74,7 +75,7 @@ export async function harness(
       files,
       scrubber,
       owner: fresh.owner ?? `engine-${String(engines)}`,
-      newId: () => `run-${String(engines)}`,
+      newId: () => fresh.runId ?? `run-${String(engines)}`,
     });
   };
   const close = (): void => {

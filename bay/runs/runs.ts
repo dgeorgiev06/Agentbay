@@ -32,7 +32,7 @@ import { scrubbedStore } from "./scrubbed-store.ts";
 import { SqliteRunStore } from "./sqlite-run-store.ts";
 import { skillRoundOf } from "./step-key.ts";
 import { checkTaskToken, issueTaskToken, type TaskPlace } from "./task-tokens.ts";
-import { calledTarget, storedWaiting } from "./waiting.ts";
+import { storedWaiting } from "./waiting.ts";
 
 type RunsNeeds = {
   readonly project: string;
@@ -406,32 +406,12 @@ async function calledAction(
   if (!found.ok) {
     return found;
   }
+  const { runId, stepKey, place: taskPlace } = found.value;
   const { action, input } = call;
-  const task = found.value;
-  const target = calledTarget(opened.needs.system, task.place.mode, action);
-  if (typeof target === "string") {
-    return refusal(target);
-  }
-  const effects = target.action.effects;
-  if (effects.some((effect) => effect !== "read")) {
-    return refusal(
-      `The action ${action} has the effects ${effects.join(", ")}; a skill may call only actions whose effects ` +
-        "are read only.",
-    );
-  }
-  const caller = action.includes(".") ? { caller: task.place.mode } : {};
-  const reference = `${target.mode.manifest.name}.${target.name}`;
-  const result = await opened.engine.startForSkill({
-    runId: task.runId,
-    stepKey: task.stepKey,
-    reference,
-    input,
-    ...caller,
-  });
+  const result = await opened.engine.startForSkill({ runId, stepKey, mode: taskPlace.mode, action, input });
   if (result.ok) {
     const at = opened.needs.clock.now().toISOString();
-    const detail = { runId: task.runId, stepKey: task.stepKey };
-    await opened.events.append({ at, runId: result.value.id, kind: askedByKind, detail });
+    await opened.events.append({ at, runId: result.value.id, kind: askedByKind, detail: { runId, stepKey } });
   }
   return calledOf(result, action);
 }

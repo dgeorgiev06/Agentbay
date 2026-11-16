@@ -5,7 +5,7 @@ import type { Waiting } from "./run-state.ts";
 import { approvalContentOf } from "./scrubbed-store.ts";
 import { skillTaskOf, startedSkillOf } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
-import { resolveCall, resolveOwnAction, type ActionTarget } from "../targets.ts";
+import { resolveOwnAction } from "../targets.ts";
 
 type WaitingContext = {
   readonly system: System;
@@ -30,14 +30,6 @@ function skillTaskAt(context: WaitingContext, run: RunWithSteps, waitingKey: str
   }
   const permissions = { grants: context.policyOf(detail.mode), actionEffects: target.action.effects };
   return skillTaskOf({ runId: run.id, key: record.key, input: record.input, detail }, permissions);
-}
-
-export function calledTarget(system: System, modeName: string, action: string): ActionTarget | string {
-  const mode = system.modes.get(modeName);
-  if (mode === undefined) {
-    return `There is no mode ${modeName}.`;
-  }
-  return action.includes(".") ? resolveCall(system, mode, action) : resolveOwnAction(system, modeName, action);
 }
 
 function approvalWaiting(context: WaitingContext, run: RunWithSteps, stepKey: string): Waiting | undefined {

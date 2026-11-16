@@ -70,6 +70,19 @@ test("a prefix matches argument by argument, not as text", async () => {
   });
 });
 
+test("a prefix matches each argument exactly, case included", async () => {
+  await withCommandKernel({ commands: ["git status"] }, async (kernel, kit) => {
+    const ran = await ranCommands(kernel, [{ command: ["GIT", "status"] }, { command: ["git", "STATUS"] }]);
+    assert.deepEqual(
+      ran.answers.map((answer) => refusalMessage(answer)),
+      [
+        unlistedSentence('["GIT","status"]', "git status", kit.manifest),
+        unlistedSentence('["git","STATUS"]', "git status", kit.manifest),
+      ],
+    );
+  });
+});
+
 test("an action that lacks one of the five effects may not run a command", async () => {
   const effects: readonly Effect[] = ["read", "write", "network", "spend"];
   await withCommandKernel({ commands: ["node --version"], effects }, async (kernel, kit) => {

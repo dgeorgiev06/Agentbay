@@ -5,4 +5,4 @@ node_modules/
 /.mcp.json
 __pycache__/
 *.pyc
-/throwaway/
+/.forge/

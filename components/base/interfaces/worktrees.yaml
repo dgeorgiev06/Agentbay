@@ -1,0 +1,27 @@
+name: worktrees
+version: 1
+actions:
+  cut:
+    input: worktrees/cut-request.json
+    output: worktrees/cut-response.json
+    effects: [read, write, network, spend, delete]
+  status:
+    input: worktrees/status-request.json
+    output: worktrees/status-response.json
+    effects: [read, write, network, spend, delete]
+  changed:
+    input: worktrees/changed-request.json
+    output: worktrees/changed-response.json
+    effects: [read, write, network, spend, delete]
+  copy:
+    input: worktrees/copy-request.json
+    output: worktrees/copy-response.json
+    effects: [read, write, network, spend, delete]
+  overlay:
+    input: worktrees/overlay-request.json
+    output: worktrees/overlay-response.json
+    effects: [read, write, network, spend, delete]
+  remove:
+    input: worktrees/remove-request.json
+    output: worktrees/remove-response.json
+    effects: [read, write, network, spend, delete]

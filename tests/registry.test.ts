@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Action, Mode } from "../bay/generated/mode.ts";
-import { bindingUses, loadSystemReport, servingMode, type System } from "../bay/manifests/registry.ts";
+import { bindingUses, loadSystemReport, type System } from "../bay/manifests/manifests.ts";
 import type { Problem } from "../bay/outcome.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import {
@@ -18,6 +18,11 @@ import {
   validFiles,
   yamlText,
 } from "./system-fixture.ts";
+
+function servingModeOf(system: System, caller: string, call: string): string | undefined {
+  const answer = system.action(call, caller);
+  return answer.ok ? answer.value.mode.manifest.name : undefined;
+}
 
 async function systemOf(files: Readonly<Record<string, string>>): Promise<System> {
   const outcome = (await loadSystemReport(fakeFileSystem(rooted(files)), layout)).outcome;
@@ -53,8 +58,8 @@ test("a valid three-mode system resolves with every required interface bound", a
     { interfaceName: "items-store", requirers: ["notes"], servedBy: "store" },
     { interfaceName: "notes", requirers: ["briefing"], servedBy: "notes" },
   ]);
-  assert.equal(servingMode(system, "notes", "items-store@1"), "store");
-  assert.equal(servingMode(system, "briefing", "notes@1"), "notes");
+  assert.equal(servingModeOf(system, "notes", "items-store.put"), "store");
+  assert.equal(servingModeOf(system, "briefing", "notes.add"), "notes");
   assert.equal(system.config.adapter, "local");
   const notes = system.modes.get("notes");
   assert.ok(notes);

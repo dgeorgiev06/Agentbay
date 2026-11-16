@@ -1,13 +1,12 @@
 import { problemsResult, succeeded, type CommandResult, type Invocation } from "../command-context.ts";
 import type { Command } from "../command-line.ts";
 import {
-  actionsListing,
   loadSystemReport,
   type ActionListed,
   type ActionsListing,
   type ListingQuestion,
   type ModeListed,
-} from "../manifests/registry.ts";
+} from "../manifests/manifests.ts";
 
 const modeHint = "bay actions <mode> lists the actions of one mode.";
 
@@ -50,7 +49,7 @@ async function runActions(invocation: Invocation): Promise<CommandResult> {
     return problemsResult(report.outcome.problems);
   }
   const question = questionOf(invocation);
-  const listing = actionsListing(report.outcome.value, question);
+  const listing = report.outcome.value.listing(question);
   if (!listing.ok) {
     return problemsResult(listing.problems);
   }

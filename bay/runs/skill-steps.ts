@@ -3,8 +3,8 @@ import { refused } from "../answers.ts";
 import type { Json, Permissions, RunEvent, Submission } from "../contracts.ts";
 import { effectRefusal } from "../effect-rule.ts";
 import { textField } from "../json.ts";
-import { problemText, unplacedProblem, type Problem } from "../outcome.ts";
-import type { ActiveMode } from "../manifests/registry.ts";
+import { problemText, type Problem } from "../outcome.ts";
+import type { ActionTarget, ActiveMode } from "../manifests/manifests.ts";
 import type { StepRecord } from "./run-store.ts";
 import type { SkillTask } from "./run-state.ts";
 import { parseSkill } from "../manifests/spec.ts";
@@ -77,10 +77,14 @@ export async function skillSchemas(
   return [...new Set(outputs)];
 }
 
-function submittedSpendProblems(mode: ActiveMode, record: StartedSkill, submission: Submission): readonly Problem[] {
+function submittedSpendProblems(
+  target: ActionTarget,
+  record: StartedSkill,
+  submission: Submission,
+): readonly Problem[] {
   const { action, round } = record.detail;
-  const effects = mode.manifest.actions[action]?.effects ?? [];
-  const manifest = join(mode.folder, "mode.yaml");
+  const effects = target.action.effects;
+  const manifest = join(target.mode.folder, "mode.yaml");
   const at = { stepKey: skillRoundKey(record.key, round), action, manifest };
   const wording = effectRefusal({ kind: "skill.submit", usd: submission.spent.usd }, effects, at);
   return wording === undefined ? [] : [{ file: manifest, path: "", message: refused(wording).message }];
@@ -91,11 +95,12 @@ export async function submissionProblems(
   record: StartedSkill,
   submission: Submission,
 ): Promise<readonly Problem[]> {
-  const mode = services.system.modes.get(record.detail.mode);
-  if (mode === undefined) {
-    return [unplacedProblem(`The skill step ${record.key} belongs to mode ${record.detail.mode}, which is gone.`)];
+  const target = services.system.action(`${record.detail.mode}.${record.detail.action}`);
+  if (!target.ok) {
+    return target.problems;
   }
-  const problems: Problem[] = [...submittedSpendProblems(mode, record, submission)];
+  const mode = target.value.mode;
+  const problems: Problem[] = [...submittedSpendProblems(target.value, record, submission)];
   for (const schema of record.detail.schemas) {
     const check = { mode, schema, value: submission.output, label: "output" };
     problems.push(...(await schemaProblems(services, check)));

@@ -107,11 +107,14 @@ export const buildAgent = skillAgent({
 export const allAgents = [digestAgent, scanAgent, buildAgent];
 
 export function buildRequest(files: FilesWithRemoval, agents: readonly SkillAgent[] = allAgents): BuildRequest {
-  const system = {
+  const system: BuildRequest["system"] = {
     modes: new Map(),
     inactive: new Set<string>(),
     interfaces: new Map(),
     config: { bindings: {}, adapter: "claude-code" },
+    action: () => ({ ok: false, problems: [] }),
+    workflow: () => ({ ok: false, problems: [] }),
+    listing: () => ({ ok: false, problems: [] }),
   };
   return { system, layout, agents, files, removal: files.removal };
 }

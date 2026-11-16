@@ -1,16 +1,15 @@
-import { runNestedAction } from "./action-steps.ts";
+import { nestedTarget, runNestedAction } from "./action-steps.ts";
 import { noSpend, subtractSpend, type BudgetFrame } from "./budget.ts";
 import type { Json } from "../contracts.ts";
 import type { Step as WorkflowStep } from "../generated/workflow.ts";
 import { toJson } from "../json.ts";
 import { problemText, succeededWith } from "../outcome.ts";
 import { resolveInput, resolveValue, type ReferenceScope } from "../manifests/references.ts";
-import type { ActiveMode } from "../manifests/registry.ts";
+import type { ActiveMode } from "../manifests/manifests.ts";
 import type { StepRecord } from "./run-store.ts";
 import { approvalContentOf, type ApprovalContent } from "./scrubbed-store.ts";
 import type { ApprovalDetail } from "./step-detail.ts";
 import { foreachItemKey, workflowStepKey } from "./step-key.ts";
-import { resolveNamedAction } from "../manifests/targets.ts";
 import {
   changeDetail,
   concludeComposite,
@@ -90,11 +89,11 @@ async function runWorkflowAction(walk: Walk, scope: WorkflowScope, at: Unsettled
   if (!input.ok) {
     return refuse(walk, start, `Step ${at.step.id} cannot start: ${problemText(input.problems)}`);
   }
-  const target = resolveNamedAction(walk.services.system, scope.mode.manifest.name, at.step.action);
+  const target = nestedTarget(walk, scope.mode, at.step.action);
   if (typeof target === "string") {
     return refuse(walk, start, target);
   }
-  const caller = at.step.action.includes(".") ? scope.mode.manifest.name : undefined;
+  const caller = target.caller;
   return runNestedAction(walk, scope.budget, { key: at.key, kind: "action", target, input: input.value, caller });
 }
 

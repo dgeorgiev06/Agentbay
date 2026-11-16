@@ -24,9 +24,22 @@ export type ActiveMode = {
   readonly grants: ModeGrants;
 };
 
-export type LoadedInterface = {
+type LoadedInterface = {
   readonly file: string;
   readonly definition: Interface;
+};
+
+export type ActionTarget = {
+  readonly mode: ActiveMode;
+  readonly name: string;
+  readonly action: Action;
+  readonly caller: string | undefined;
+};
+
+type WorkflowTarget = {
+  readonly mode: ActiveMode;
+  readonly path: string;
+  readonly workflow: Workflow;
 };
 
 export type System = {
@@ -34,6 +47,9 @@ export type System = {
   readonly inactive: ReadonlySet<string>;
   readonly interfaces: ReadonlyMap<string, LoadedInterface>;
   readonly config: Config;
+  readonly action: (reference: string, caller?: string) => Outcome<ActionTarget>;
+  readonly workflow: (mode: string, path: string) => Outcome<WorkflowTarget>;
+  readonly listing: (question: ListingQuestion) => Outcome<ActionsListing>;
 };
 
 export type BindingUse = {
@@ -42,7 +58,7 @@ export type BindingUse = {
   readonly servedBy: string;
 };
 
-export type SystemReport = {
+type SystemReport = {
   readonly outcome: Outcome<System>;
   readonly active: ReadonlySet<string>;
   readonly notices: readonly Problem[];
@@ -253,7 +269,7 @@ function bindingFor(bindings: Config["bindings"], requirer: string, reference: s
   return mode === undefined ? undefined : { mode, path: ["bindings", name, key], label: `${name} for ${requirer}` };
 }
 
-export function servingMode(system: System, requirer: string, reference: string): string | undefined {
+function servingMode(system: System, requirer: string, reference: string): string | undefined {
   const bound = bindingFor(system.config.bindings, requirer, reference)?.mode;
   return bound !== undefined && system.modes.has(bound) ? bound : undefined;
 }
@@ -1243,6 +1259,111 @@ function grantsOfActiveModes(context: Context): Outcome<ReadonlyMap<string, Mode
   return problems.length > 0 ? failedWith(problems) : succeededWith(granted);
 }
 
+function splitReference(reference: string): readonly [string, string] | undefined {
+  const separator = reference.indexOf(".");
+  if (separator <= 0 || separator === reference.length - 1) {
+    return undefined;
+  }
+  return [reference.slice(0, separator), reference.slice(separator + 1)];
+}
+
+function refused(message: string): Outcome<never> {
+  return failedWith([unplacedProblem(message)]);
+}
+
+function notActiveRefusal(name: string): Outcome<never> {
+  return failedWith([
+    unplacedProblem(
+      `Mode ${name} is not active in this project, so nothing of it runs here.`,
+      `Add ${name} to modes: in agentbay.config.yaml, or bind an interface it implements.`,
+    ),
+  ]);
+}
+
+function activeModeNamed(system: System, name: string): Outcome<ActiveMode> {
+  if (system.inactive.has(name)) {
+    return notActiveRefusal(name);
+  }
+  const mode = system.modes.get(name);
+  return mode === undefined ? refused(`There is no mode ${name}.`) : succeededWith(mode);
+}
+
+function ownAction(mode: ActiveMode, name: string): Outcome<ActionTarget> {
+  const action = Object.hasOwn(mode.manifest.actions, name) ? mode.manifest.actions[name] : undefined;
+  if (action === undefined) {
+    const known = Object.keys(mode.manifest.actions).join(", ");
+    return refused(`Mode ${mode.manifest.name} has no action ${name}; it has: ${known}.`);
+  }
+  return succeededWith({ mode, name, action, caller: undefined });
+}
+
+function boundAction(system: System, caller: ActiveMode, call: string): Outcome<ActionTarget> {
+  const parts = splitReference(call);
+  if (parts === undefined) {
+    return refused(`${call} does not name an action of an interface; write <interface>.<action>.`);
+  }
+  const [name, actionName] = parts;
+  const callerName = caller.manifest.name;
+  const required = requiredReferences(caller.manifest).find((reference) => interfaceName(reference) === name);
+  if (required === undefined) {
+    return refused(`Mode ${callerName} calls ${call}, but it does not require the interface ${name}.`);
+  }
+  const served = servingMode(system, callerName, required);
+  const mode = served === undefined ? undefined : system.modes.get(served);
+  if (mode === undefined) {
+    return refused(`Mode ${callerName} calls ${call}, but no mode is bound to ${required} for it.`);
+  }
+  const target = ownAction(mode, actionName);
+  return target.ok ? succeededWith({ ...target.value, caller: callerName }) : target;
+}
+
+function actionAnswer(system: System, reference: string, caller: string | undefined): Outcome<ActionTarget> {
+  if (caller !== undefined) {
+    const callerMode = activeModeNamed(system, caller);
+    if (!callerMode.ok) {
+      return callerMode;
+    }
+    return reference.includes(".")
+      ? boundAction(system, callerMode.value, reference)
+      : ownAction(callerMode.value, reference);
+  }
+  const parts = splitReference(reference);
+  if (parts === undefined) {
+    return refused(`${reference} does not name an action; write <mode>.<action>.`);
+  }
+  const mode = activeModeNamed(system, parts[0]);
+  return mode.ok ? ownAction(mode.value, parts[1]) : mode;
+}
+
+function workflowAnswer(system: System, modeName: string, path: string): Outcome<WorkflowTarget> {
+  if (system.inactive.has(modeName)) {
+    return notActiveRefusal(modeName);
+  }
+  const mode = system.modes.get(modeName);
+  const workflow = mode?.workflows.get(path);
+  if (mode === undefined || workflow === undefined) {
+    return refused(`Mode ${modeName} has no workflow ${path}.`);
+  }
+  return succeededWith({ mode, path, workflow });
+}
+
+type SystemData = Pick<System, "modes" | "inactive" | "interfaces" | "config">;
+
+function answering(data: SystemData): System {
+  return {
+    ...data,
+    action(reference, caller) {
+      return actionAnswer(this, reference, caller);
+    },
+    workflow(mode, path) {
+      return workflowAnswer(this, mode, path);
+    },
+    listing(question) {
+      return actionsListing(this, question);
+    },
+  };
+}
+
 type SystemParts = {
   readonly config: Config;
   readonly workflows: readonly ModeWorkflow[];
@@ -1276,7 +1397,7 @@ async function buildSystem(context: Context, parts: SystemParts): Promise<System
   for (const [reference, loaded] of context.interfaces) {
     interfaces.set(reference, { file: loaded.file, definition: loaded.value });
   }
-  return { modes, inactive, interfaces, config: parts.config };
+  return answering({ modes, inactive, interfaces, config: parts.config });
 }
 
 function loadProblems(context: Context, modes: LoadedModes): Collected<UnloadedMode> {
@@ -1375,14 +1496,7 @@ function listedActions(mode: ActiveMode, words: readonly string[]): Outcome<Acti
   return succeededWith({ mode: mode.manifest.name, actions: actions.filter((entry) => holdsEveryWord(words, entry)) });
 }
 
-export function inactiveModeWording(modeName: string): Wording {
-  return {
-    message: `Mode ${modeName} is not active in this project, so nothing of it runs here.`,
-    fix: `Add ${modeName} to modes: in agentbay.config.yaml, or bind an interface it implements.`,
-  };
-}
-
-export function actionsListing(system: System, question: ListingQuestion): Outcome<ActionsListing> {
+function actionsListing(system: System, question: ListingQuestion): Outcome<ActionsListing> {
   const words = wordsOf(question.find);
   if (question.mode === undefined) {
     return succeededWith(listedModes(system, words));

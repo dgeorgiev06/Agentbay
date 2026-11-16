@@ -1,12 +1,11 @@
 import { measures, type RunEvent, type Scrubber } from "../contracts.ts";
 import { numberField, textField } from "../json.ts";
-import type { System } from "../manifests/registry.ts";
+import type { System } from "../manifests/manifests.ts";
 import type { RunWithSteps, StepRecord } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
 import { approvalContentOf } from "./scrubbed-store.ts";
 import { skillTaskOf, startedSkillOf } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
-import { resolveOwnAction } from "../manifests/targets.ts";
 
 type WaitingContext = {
   readonly system: System;
@@ -30,10 +29,11 @@ function skillWaiting(context: WaitingContext, stored: Stored, waitingKey: strin
     return undefined;
   }
   const { detail } = record;
-  const target = resolveOwnAction(context.system, detail.mode, detail.action);
-  if (typeof target === "string") {
+  const answer = context.system.action(`${detail.mode}.${detail.action}`);
+  if (!answer.ok) {
     return undefined;
   }
+  const target = answer.value;
   const permissions = { grants: target.mode.grants, actionEffects: target.action.effects };
   const at = { runId: run.id, key: record.key, input: record.input, detail };
   const task = skillTaskOf(at, { folder: target.mode.folder, permissions, events });

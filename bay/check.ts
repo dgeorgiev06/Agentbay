@@ -14,7 +14,7 @@ import { checkLimits } from "./check-limits.ts";
 import { checkSkills } from "./check-skills.ts";
 import { isInsideOrEqual, isProjectTheKit, pathIn, shownPath, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
-import { loadSystemReport } from "./manifests/registry.ts";
+import { loadSystemReport } from "./manifests/manifests.ts";
 import { problemAt } from "./manifests/spec.ts";
 import type { Problem } from "./outcome.ts";
 

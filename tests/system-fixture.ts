@@ -6,9 +6,11 @@ import type { Interface } from "../bay/generated/interface.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
 import { layoutOf } from "../bay/layout.ts";
-import type { System } from "../bay/manifests/registry.ts";
+import type { System } from "../bay/manifests/manifests.ts";
 
 export const layout = layoutOf({ kit: "/kit", project: "/kit" });
+
+export const separateLayout = layoutOf({ kit: "/kit", project: "/project" });
 
 export const paths = {
   itemsStore: "components/base/interfaces/items-store.yaml",

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { loadSystemReport } from "../bay/manifests/registry.ts";
+import { loadSystemReport } from "../bay/manifests/manifests.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import { config, layout, paths, rooted, validFiles, yamlText } from "./system-fixture.ts";
 

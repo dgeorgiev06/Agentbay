@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import type { ScriptRequest } from "../bay/contracts.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
-import type { System } from "../bay/manifests/registry.ts";
+import type { System } from "../bay/manifests/manifests.ts";
 import { hashOf, textField } from "../bay/json.ts";
 import {
   answer,

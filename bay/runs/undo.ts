@@ -2,11 +2,11 @@ import { runNestedAction } from "./action-steps.ts";
 import { noSpend, rootFrame, type BudgetFrame } from "./budget.ts";
 import type { Json, Spend } from "../contracts.ts";
 import type { Action } from "../generated/mode.ts";
-import type { System } from "../manifests/registry.ts";
+import type { ActionTarget, System } from "../manifests/manifests.ts";
 import type { StepRecord } from "./run-store.ts";
 import type { RunStatus, UndoEntry, UndoReport } from "./run-state.ts";
 import { isInsideFrame, isUndoKey, undoStepKey } from "./step-key.ts";
-import { resolveOwnAction, type ActionTarget } from "../manifests/targets.ts";
+import { failedWith, problemText, unplacedProblem, type Outcome } from "../outcome.ts";
 import { eventOf, type Progress, type Walk } from "./walk.ts";
 
 type FinishedAction = {
@@ -16,7 +16,7 @@ type FinishedAction = {
   readonly output: Json;
   readonly finishOrder: number;
   readonly action: Action | undefined;
-  readonly target: ActionTarget | string;
+  readonly target: Outcome<ActionTarget>;
 };
 
 type UndoPlan = {
@@ -32,11 +32,11 @@ type UndoOutcome = {
   readonly spent: Spend;
 };
 
-function undoTargetOf(system: System, mode: string, action: Action | undefined): ActionTarget | string {
+function undoTargetOf(system: System, mode: string, action: Action | undefined): Outcome<ActionTarget> {
   if (action?.undo === undefined) {
-    return `The action has no undo.`;
+    return failedWith([unplacedProblem("The action has no undo.")]);
   }
-  return resolveOwnAction(system, mode, action.undo);
+  return system.action(`${mode}.${action.undo}`);
 }
 
 function finishedActionOf(system: System, record: StepRecord): FinishedAction | undefined {
@@ -45,8 +45,8 @@ function finishedActionOf(system: System, record: StepRecord): FinishedAction | 
     return undefined;
   }
   const { mode: modeName, action: actionName, caller } = record.detail;
-  const target = resolveOwnAction(system, modeName, actionName);
-  const action = typeof target === "string" ? undefined : target.action;
+  const target = system.action(`${modeName}.${actionName}`);
+  const action = target.ok ? target.value.action : undefined;
   return {
     entry: { stepKey: record.key, action: `${modeName}.${actionName}` },
     caller,
@@ -124,11 +124,11 @@ export async function runUndo(walk: Walk, reason: string): Promise<UndoOutcome> 
   const undone: UndoEntry[] = [];
   const failedUndos: (UndoEntry & { readonly reason: string })[] = [];
   for (const [index, finished] of plan.toUndo.entries()) {
-    if (typeof finished.target === "string") {
-      failedUndos.push({ ...finished.entry, reason: finished.target });
+    if (!finished.target.ok) {
+      failedUndos.push({ ...finished.entry, reason: problemText(finished.target.problems) });
       continue;
     }
-    const at = { index, target: finished.target, input: finished.output, caller: finished.caller };
+    const at = { index, target: finished.target.value, input: finished.output, caller: finished.caller };
     const progress = await undoOne(undoWalk, budget, at);
     switch (progress.status) {
       case "waiting":

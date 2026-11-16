@@ -4,13 +4,12 @@ import type { Json, RunEvent, Scrubber, ScriptRunner, Settled, Spend, StepOutcom
 import type { Budget } from "../generated/mode.ts";
 import { byteSize } from "../json.ts";
 import type { Clock, FileSystem } from "../ports.ts";
-import type { ActiveMode, System } from "../manifests/registry.ts";
+import type { ActionTarget, ActiveMode, System } from "../manifests/manifests.ts";
 import { settledOf, type RunStore, type StepRecord, type Writer } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
 import type { StepDetail, StepKind } from "./step-detail.ts";
 import { checkValue } from "../manifests/spec.ts";
 import type { Problem } from "../outcome.ts";
-import type { ActionTarget } from "../manifests/targets.ts";
 
 export type Services = {
   readonly system: System;

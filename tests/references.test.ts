@@ -9,7 +9,7 @@ import {
   resolveValue,
   workflowReferenceIssues,
   type ReferenceScope,
-} from "../bay/references.ts";
+} from "../bay/manifests/references.ts";
 import { problemText } from "../bay/outcome.ts";
 
 const scope: ReferenceScope = {

@@ -15,5 +15,5 @@
     "noEmit": true,
     "skipLibCheck": false
   },
-  "include": ["bay/**/*.ts", "adapters/**/*.ts", "components/**/*.ts", "tests/**/*.ts"]
+  "include": ["bay/**/*.ts", "adapters/**/*.ts", "components/**/*.ts", "tests/**/*.ts", "schemas/**/*.ts"]
 }

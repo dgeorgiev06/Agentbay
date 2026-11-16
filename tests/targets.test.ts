@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { resolveActionReference, resolveCall, resolveNamedAction, resolveOwnAction } from "../bay/targets.ts";
+import { resolveActionReference, resolveCall, resolveNamedAction, resolveOwnAction } from "../bay/manifests/targets.ts";
 import { fixtureSystem } from "./runs-fixture.ts";
 
 test("targets resolve own actions, interface calls through bindings, and say plainly what is missing", async () => {

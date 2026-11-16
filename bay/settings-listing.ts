@@ -3,7 +3,7 @@ import configSchema from "../schemas/config.schema.json" with { type: "json" };
 import type { Json } from "./contracts.ts";
 import { toJson, isRecord } from "./json.ts";
 import type { Kernel } from "./kernel.ts";
-import type { BindingUse } from "./registry.ts";
+import type { BindingUse } from "./manifests/registry.ts";
 
 export type Setting = {
   readonly name: string;

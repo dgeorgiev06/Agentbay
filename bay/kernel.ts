@@ -15,7 +15,7 @@ import {
 } from "./node-ports.ts";
 import { loadPolicedSystem } from "./policy.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, Folders, Http, Processes, Removal } from "./ports.ts";
-import type { System } from "./registry.ts";
+import type { System } from "./manifests/registry.ts";
 import { openRuns, type Runs } from "./runs/runs.ts";
 import { createScriptRunner } from "./script-runner.ts";
 import { SecretStore, type SecretStoreOptions } from "./secrets.ts";

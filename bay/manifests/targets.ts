@@ -1,4 +1,4 @@
-import type { Action } from "./generated/mode.ts";
+import type { Action } from "../generated/mode.ts";
 import { servingMode, type LoadedMode, type System } from "./registry.ts";
 
 export type ActionTarget = {

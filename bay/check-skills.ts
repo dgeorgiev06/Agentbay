@@ -2,7 +2,7 @@ import { basename, join, normalize } from "node:path/posix";
 import type { Mode } from "./generated/mode.ts";
 import { errors, isLoaded, type CheckContext, type Finding, type LoadedModeFolder } from "./check-context.ts";
 import { pathIn } from "./layout.ts";
-import { parseSkill, type Wording } from "./spec.ts";
+import { parseSkill, type Wording } from "./manifests/spec.ts";
 import type { Problem } from "./outcome.ts";
 
 type BodyLine = {

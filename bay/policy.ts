@@ -11,8 +11,8 @@ import {
   type Home,
   type Layout,
 } from "./layout.ts";
-import { loadSystemReport, type LoadedMode, type System, type SystemReport } from "./registry.ts";
-import { problemAt, type Loaded, type PathSegments, type Wording } from "./spec.ts";
+import { loadSystemReport, type LoadedMode, type System, type SystemReport } from "./manifests/registry.ts";
+import { problemAt, type Loaded, type PathSegments, type Wording } from "./manifests/spec.ts";
 import type { Outcome, Problem } from "./outcome.ts";
 
 type ProtectedArea = {

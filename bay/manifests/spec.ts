@@ -1,18 +1,18 @@
 import { Ajv2020, type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
 import { isNode, LineCounter, parseDocument } from "yaml";
-import configSchema from "../schemas/config.schema.json" with { type: "json" };
-import interfaceSchema from "../schemas/interface.schema.json" with { type: "json" };
-import modeSchema from "../schemas/mode.schema.json" with { type: "json" };
-import skillSchema from "../schemas/skill.schema.json" with { type: "json" };
-import workflowSchema from "../schemas/workflow.schema.json" with { type: "json" };
-import type { Config } from "./generated/config.ts";
-import type { Interface } from "./generated/interface.ts";
-import type { Mode } from "./generated/mode.ts";
-import type { SkillFrontMatter } from "./generated/skill.ts";
-import type { Workflow } from "./generated/workflow.ts";
-import { isRecord } from "./json.ts";
-import { failedWith, type Outcome, type Problem } from "./outcome.ts";
-import type { FileSystem } from "./ports.ts";
+import configSchema from "../../schemas/config.schema.json" with { type: "json" };
+import interfaceSchema from "../../schemas/interface.schema.json" with { type: "json" };
+import modeSchema from "../../schemas/mode.schema.json" with { type: "json" };
+import skillSchema from "../../schemas/skill.schema.json" with { type: "json" };
+import workflowSchema from "../../schemas/workflow.schema.json" with { type: "json" };
+import type { Config } from "../generated/config.ts";
+import type { Interface } from "../generated/interface.ts";
+import type { Mode } from "../generated/mode.ts";
+import type { SkillFrontMatter } from "../generated/skill.ts";
+import type { Workflow } from "../generated/workflow.ts";
+import { isRecord } from "../json.ts";
+import { failedWith, type Outcome, type Problem } from "../outcome.ts";
+import type { FileSystem } from "../ports.ts";
 
 export type Wording = {
   readonly message: string;

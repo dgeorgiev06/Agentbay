@@ -35,12 +35,11 @@ features:
   manifests:
     purpose: Reads modes, interfaces, skills, workflows and the config into one checked system.
     entry:
-      - bay/registry.ts
+      - bay/manifests/registry.ts
     private:
-      - bay/spec.ts
-      - bay/references.ts
-      - bay/targets.ts
-      - bay/generate-types.ts
+      - bay/manifests/spec.ts
+      - bay/manifests/references.ts
+      - bay/manifests/targets.ts
     may_import:
       - vocabulary
   safety:

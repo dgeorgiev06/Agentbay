@@ -1,0 +1,11 @@
+{
+  "input": { "from": "main", "to": "forge/mail-source" },
+  "output": {
+    "paths": [
+      { "path": "components/modes/mail-source/mode.yaml", "how": "added" },
+      { "path": "framework/features.yaml", "how": "modified" },
+      { "path": "docs/old-notes.md", "how": "deleted" },
+      { "path": "docs/mail.md", "how": "renamed", "from": "docs/mail-notes.md" }
+    ]
+  }
+}

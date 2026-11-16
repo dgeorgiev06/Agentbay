@@ -38,3 +38,10 @@ actions:
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/status.ts
+  changed:
+    description: When a mode or a skill needs each path that differs between two commits, and whether it was added, changed, deleted or renamed.
+    input: schemas/changed-request.json
+    output: schemas/changed-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/changed.ts

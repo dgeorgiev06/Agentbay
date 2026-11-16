@@ -91,15 +91,15 @@ test("neither the tool nor the command shows a secret, a setting value or stored
 test("the answer of the tool actions passes through the scrubber like every tool result", async () => {
   const opened = await openProject({}, { environment: { AGENTBAY_SECRET_NOTE_KEY: madeUpSecret } });
   try {
-    const { kernel } = opened;
+    const { kernel, project } = opened;
     const permissions = { ...kernel.policyOf("writer"), secrets: ["NOTE_KEY"] };
     assert.ok((await kernel.secrets.get("NOTE_KEY", permissions)).ok);
-    const writer = kernel.system.modes.get("writer");
-    assert.ok(writer !== undefined);
-    const leaking = { ...writer, manifest: { ...writer.manifest, description: `Holds ${madeUpSecret}.` } };
-    const modes = new Map([...kernel.system.modes, ["writer", leaking]]);
-    const leakingKernel = { ...kernel, system: { ...kernel.system, modes } };
-    const answer = JSON.stringify(valueOf(await callKernelTool(leakingKernel, "actions", {})));
+    const manifestPath = "components/modes/writer/mode.yaml";
+    const manifest = await project.read(manifestPath);
+    const leaking = manifest.replace("Drafts a note from a greeting and keeps it.", `Holds ${madeUpSecret}.`);
+    assert.notEqual(leaking, manifest);
+    await project.write(manifestPath, leaking);
+    const answer = JSON.stringify(valueOf(await callKernelTool(kernel, "actions", {})));
     assert.ok(!answer.includes(madeUpSecret), answer);
     assert.match(answer, /Holds \[redacted:NOTE_KEY\]\./);
   } finally {

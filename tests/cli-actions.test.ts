@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { stringify } from "yaml";
 import { bay } from "./cli-fixture.ts";
-import { makeProject, type Project } from "./project-fixture.ts";
+import { kit, makeProject, type Project } from "./project-fixture.ts";
 
 async function withProject(body: (project: Project) => Promise<void>): Promise<void> {
   const project = await makeProject();
@@ -210,4 +210,27 @@ test("bay call --tool actions takes no token and gives the same answers as bay a
         "  fix: Name one of them, or leave the mode out to list them.",
     );
   });
+});
+
+test("the instructions bay build writes for Claude Code say to ask bay actions, and name no mode and no action", async () => {
+  const project = await makeProject({ adapter: "claude-code" });
+  try {
+    const built = await bay(["build", "--project", project.root]);
+    assert.equal(built.exitCode, 0, built.output);
+    const instructions = (await project.read("CLAUDE.md")).replace(/\s+/g, " ");
+    const bayCommand = `${kit}/bay.sh --project ${project.root}`;
+    assert.ok(
+      instructions.includes(
+        `When you do not know which action fits what the owner asks, run \`${bayCommand} actions --json\` ` +
+          `for the active modes, then \`${bayCommand} actions <mode> --json\` for that mode's actions.`,
+      ),
+      instructions,
+    );
+    const withoutPaths = instructions.replaceAll(kit, "").replaceAll(project.root, "");
+    for (const name of ["greeter", "writer", "fetch", "tally", "compose"]) {
+      assert.doesNotMatch(withoutPaths, new RegExp(`\\b${name}\\b`), name);
+    }
+  } finally {
+    await project.remove();
+  }
 });

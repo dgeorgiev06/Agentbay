@@ -10,6 +10,8 @@ import type { System } from "../bay/manifests/manifests.ts";
 
 export const layout = layoutOf({ kit: "/kit", project: "/kit" });
 
+export const separateLayout = layoutOf({ kit: "/kit", project: "/project" });
+
 export const paths = {
   itemsStore: "components/base/interfaces/items-store.yaml",
   notesInterface: "components/base/interfaces/notes.yaml",

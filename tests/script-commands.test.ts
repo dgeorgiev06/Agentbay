@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,7 +8,15 @@ import type { Effect, Json } from "../bay/contracts.ts";
 import { fieldOf, textField } from "../bay/json.ts";
 import { loadKernel, nodeKernelPorts } from "../bay/kernel.ts";
 import { layoutOf } from "../bay/layout.ts";
-import { makeCommandKit, ranCommands, withCommandKernel } from "./commands-fixture.ts";
+import {
+  eventsOfKind,
+  isRunning,
+  makeCommandKit,
+  ranCommands,
+  secretName,
+  secretValue,
+  withCommandKernel,
+} from "./commands-fixture.ts";
 import { testEnvironment } from "./kernel-fixture.ts";
 
 test("a script of a base mode runs a command its mode lists and gets the exit code and output", async () => {
@@ -131,4 +140,125 @@ test("a mode outside components/base/ that lists a command does not load", async
   } finally {
     await kit.remove();
   }
+});
+
+function valueOf(answer: Json): Json {
+  assert.equal(fieldOf(answer, "ok"), true, JSON.stringify(answer));
+  return fieldOf(answer, "value") ?? null;
+}
+
+function stdoutOf(answer: Json): Json {
+  return fieldOf(valueOf(answer), "stdout") ?? null;
+}
+
+function hashOfText(text: string): string {
+  return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+test("a command runs with no shell: its arguments reach the program as written", async () => {
+  await withCommandKernel({ commands: ["node -e"] }, async (kernel) => {
+    const printing = "process.stdout.write(JSON.stringify(process.argv.slice(1)))";
+    const ran = await ranCommands(kernel, [
+      { command: ["node", "-e", printing, "; echo injected", "$(echo injected)"] },
+    ]);
+    assert.deepEqual(stdoutOf(ran.answers[0] ?? null), { text: '["; echo injected","$(echo injected)"]', cut: false });
+  });
+});
+
+test("a command past its time limit is stopped with what it started, and the script goes on", async () => {
+  await withCommandKernel({ commands: ["node"] }, async (kernel) => {
+    const lingering =
+      "const sleeper = require('node:child_process').spawn('sleep', ['60'], { stdio: 'ignore' });" +
+      "console.log(process.pid, sleeper.pid); setInterval(() => {}, 1000);";
+    const ran = await ranCommands(kernel, [
+      { command: ["node", "-e", lingering], timeLimitSeconds: 1 },
+      { command: ["node", "--version"] },
+    ]);
+    const stopped = valueOf(ran.answers[0] ?? null);
+    assert.deepEqual(fieldOf(stopped, "end"), { how: "timed-out" });
+    const pids = (textField(fieldOf(stopped, "stdout") ?? null, "text") ?? "").trim().split(" ").map(Number);
+    assert.equal(pids.length, 2);
+    assert.deepEqual(
+      pids.map((pid) => isRunning(pid)),
+      [false, false],
+    );
+    assert.deepEqual(fieldOf(valueOf(ran.answers[1] ?? null), "end"), { how: "exited", exitCode: 0 });
+    assert.equal(ran.after, "the script went on");
+    const took = fieldOf(eventsOfKind(ran.run, "command")[0]?.detail ?? null, "milliseconds");
+    assert.ok(typeof took === "number" && took >= 1000 && took < 5000, JSON.stringify(took));
+  });
+});
+
+test("a command's environment holds PATH and nothing else of the kernel's", async () => {
+  const environment = { AGENTBAY_MADE_UP: "made-up-value", [`AGENTBAY_SECRET_${secretName}`]: secretValue };
+  await withCommandKernel(
+    { commands: ["node -e"] },
+    async (kernel) => {
+      const printing = "process.stdout.write(JSON.stringify(Object.keys(process.env)))";
+      const ran = await ranCommands(kernel, [{ command: ["node", "-e", printing] }]);
+      assert.deepEqual(stdoutOf(ran.answers[0] ?? null), { text: '["PATH"]', cut: false });
+    },
+    environment,
+  );
+});
+
+test("a secret a command prints reaches the script redacted, and a secret argument is redacted in the event", async () => {
+  const environment = { [`AGENTBAY_SECRET_${secretName}`]: secretValue };
+  await withCommandKernel(
+    { commands: ["node -e"] },
+    async (kernel) => {
+      const printing = "process.stdout.write(`token: ${process.argv[1]}`)";
+      const ran = await ranCommands(kernel, [{ command: ["node", "-e", printing, "{secret}"] }], { withSecret: true });
+      assert.deepEqual(ran.leaks, [false]);
+      assert.deepEqual(stdoutOf(ran.answers[0] ?? null), { text: `token: [redacted:${secretName}]`, cut: false });
+      const ranEvent = eventsOfKind(ran.run, "command")[0]?.detail ?? null;
+      assert.deepEqual(fieldOf(ranEvent, "command"), ["node", "-e", printing, `[redacted:${secretName}]`]);
+      assert.equal(JSON.stringify(ran.run.events).includes(secretValue), false);
+    },
+    environment,
+  );
+});
+
+test("a command that writes more than the limit gives the end, says it was cut, and the event hashes all of it", async () => {
+  await withCommandKernel({ commands: ["node -e"] }, async (kernel) => {
+    const written = `${"a".repeat(100_000)}the end`;
+    const ran = await ranCommands(kernel, [
+      { command: ["node", "-e", 'process.stdout.write("a".repeat(100000) + "the end")'] },
+    ]);
+    assert.deepEqual(stdoutOf(ran.answers[0] ?? null), { text: written.slice(-65_536), cut: true });
+    const ranEvent = eventsOfKind(ran.run, "command")[0]?.detail ?? null;
+    assert.equal(fieldOf(ranEvent, "stdoutHash"), hashOfText(written));
+  });
+});
+
+test("each command that ran and each that was refused is an event of the run", async () => {
+  await withCommandKernel({ commands: ["node --version"] }, async (kernel, kit) => {
+    const ran = await ranCommands(kernel, [{ command: ["node", "--version"] }, { command: ["git", "log"] }]);
+    const ranEvents = eventsOfKind(ran.run, "command");
+    assert.equal(ranEvents.length, 1);
+    const detail = ranEvents[0]?.detail ?? null;
+    const milliseconds = fieldOf(detail, "milliseconds");
+    assert.ok(typeof milliseconds === "number" && milliseconds >= 0, JSON.stringify(detail));
+    assert.deepEqual(detail, {
+      step: "0",
+      command: ["node", "--version"],
+      folder: ".",
+      end: { how: "exited", exitCode: 0 },
+      milliseconds,
+      stdoutHash: hashOfText(`${process.version}\n`),
+      stderrHash: hashOfText(""),
+    });
+    assert.deepEqual(
+      eventsOfKind(ran.run, "refused").map((event) => event.detail),
+      [
+        {
+          resource: "commands",
+          step: "0",
+          message: unlistedSentence('["git","log"]', "node --version", kit.manifest),
+          command: ["git", "log"],
+          folder: ".",
+        },
+      ],
+    );
+  });
 });

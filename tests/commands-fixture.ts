@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { stringify } from "yaml";
-import type { Effect, Json } from "../bay/contracts.ts";
+import type { Effect, Json, RunEvent } from "../bay/contracts.ts";
 import { fieldOf } from "../bay/json.ts";
 import { loadKernel, nodeKernelPorts, type Kernel } from "../bay/kernel.ts";
 import { layoutOf } from "../bay/layout.ts";
@@ -14,7 +14,9 @@ import { testEnvironment } from "./kernel-fixture.ts";
 
 const everyEffect: readonly Effect[] = ["read", "write", "network", "spend", "delete"];
 
-const secretName = "PROBE_TOKEN";
+export const secretName = "PROBE_TOKEN";
+
+export const secretValue = "probe-token-5d1e8b7c4a";
 
 const anything = `${JSON.stringify({ type: "object" })}\n`;
 
@@ -29,7 +31,8 @@ const commandScript = [
   "    const command = Array.isArray(request.command) ? request.command.map(filled) : request.command;",
   "    answers.push(await context.commands.run({ ...request, command }));",
   "  }",
-  '  return { answers, after: "the script went on" };',
+  "  const leaks = answers.map((answer) => secret?.ok === true && JSON.stringify(answer).includes(secret.value));",
+  '  return { answers, leaks, after: "the script went on" };',
   "});",
   "",
 ].join("\n");
@@ -104,6 +107,7 @@ export type CommandAsked = {
 export type Ran = {
   readonly run: Run;
   readonly answers: readonly Json[];
+  readonly leaks: readonly Json[];
   readonly after: Json;
 };
 
@@ -119,7 +123,12 @@ export async function ranCommands(
   const run = started.value;
   assert.ok(run.state.status === "done", JSON.stringify(run.state));
   const output = run.state.output;
-  return { run, answers: listOf(fieldOf(output, "answers")), after: fieldOf(output, "after") ?? null };
+  return {
+    run,
+    answers: listOf(fieldOf(output, "answers")),
+    leaks: listOf(fieldOf(output, "leaks")),
+    after: fieldOf(output, "after") ?? null,
+  };
 }
 
 export async function withCommandKernel(
@@ -138,6 +147,10 @@ export async function withCommandKernel(
   } finally {
     await kit.remove();
   }
+}
+
+export function eventsOfKind(run: Run, kind: string): readonly RunEvent[] {
+  return run.events.filter((event) => event.kind === kind);
 }
 
 export function isRunning(pid: number): boolean {

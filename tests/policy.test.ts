@@ -98,6 +98,7 @@ test("a mode's grants hold its folder, database, migrations, paths, secrets, hos
         "/project/out/digests",
       ],
       writePaths: ["/project/out/digests"],
+      throwawayPaths: [],
       secrets: ["MAIL_TOKEN"],
       hosts: ["api.example.com", "*.cdn.example.com"],
       commands: [],

@@ -87,6 +87,16 @@ const defaultBrokerLimits: BrokerLimits = {
 
 const dataFolder = ".agentbay";
 
+type ThrowawayOperation = Extract<
+  BrokerOperation,
+  { readonly kind: "files.makeFolder" | "files.link" | "files.remove" }
+>;
+
+type ThrowawayPlace = {
+  readonly path: string;
+  readonly checked: "itself" | "folder";
+};
+
 const migrationName = /^\d{4}-[^/]+\.sql$/;
 
 const partitionName = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
@@ -277,6 +287,52 @@ export class Broker {
         return checked;
       }
       return granted(await this.#options.files.list(checked.value));
+    });
+  }
+
+  makeFolder(path: string): Promise<Answer<null>> {
+    const operation = { kind: "files.makeFolder" as const, path: this.#shown(path) };
+    return this.#guarded(operation, async () => {
+      const checked = await this.#throwawayPlace(operation, { path, checked: "itself" });
+      if (!checked.ok) {
+        return checked;
+      }
+      if (await this.#isTaken(checked.value)) {
+        return failed(`The folder ${operation.path} already exists.`);
+      }
+      await this.#options.files.makeFolder(checked.value);
+      return granted(null);
+    });
+  }
+
+  link(path: string, target: string): Promise<Answer<null>> {
+    const operation = { kind: "files.link" as const, path: this.#shown(path), target: this.#shown(target) };
+    return this.#guarded(operation, async () => {
+      const checked = await this.#throwawayPlace(operation, { path, checked: "folder" });
+      if (!checked.ok) {
+        return checked;
+      }
+      const leadsTo = this.#linkTarget(operation, target);
+      if (!leadsTo.ok) {
+        return leadsTo;
+      }
+      if (await this.#isTaken(checked.value)) {
+        return failed(`The path ${operation.path} already exists.`);
+      }
+      await this.#options.files.link(checked.value, leadsTo.value);
+      return granted(null);
+    });
+  }
+
+  remove(path: string): Promise<Answer<null>> {
+    const operation = { kind: "files.remove" as const, path: this.#shown(path) };
+    return this.#guarded(operation, async () => {
+      const checked = await this.#throwawayPlace(operation, { path, checked: "folder" });
+      if (!checked.ok) {
+        return checked;
+      }
+      await this.#options.files.removeAll(checked.value);
+      return granted(null);
     });
   }
 
@@ -680,6 +736,70 @@ export class Broker {
         });
       case "error":
         return failed(`The statement failed: ${result.message}`);
+    }
+  }
+
+  async #isTaken(path: string): Promise<boolean> {
+    const inspector = this.#options.inspector;
+    return (await inspector.realPath(path)) !== undefined || (await inspector.isLink(path));
+  }
+
+  #linkTarget(operation: ThrowawayOperation, target: string): Answer<string> {
+    const layout = this.#options.layout;
+    const full = resolve(layout.project, target);
+    const data = pathIn(layout, "project", dataFolder);
+    if (isInsideOrEqual(full, layout.project) && !isInsideOrEqual(full, data)) {
+      return granted(full);
+    }
+    return refused({
+      resource: "files",
+      asked: `${this.#asking} to ${describedOperation(operation)}`,
+      declared: `a link may lead only to a path of the project outside ${dataFolder}/`,
+      change: "Link to a file or folder of the project instead.",
+    });
+  }
+
+  #outsideThrowaway(asked: string): Answer<never> {
+    const shown = this.#grants.throwawayPaths.map((folder) => shownPath(this.#options.layout, folder));
+    return refused({
+      resource: "files",
+      asked,
+      declared:
+        `the mode ${this.#grants.mode} keeps throwaway folders only in: ${listed(shown, "nothing")}, ` +
+        "and never removes one of them whole",
+      change: `To allow it, name a folder that holds the path under resources.files.throwaway in ${manifestOf(this.#grants)}.`,
+    });
+  }
+
+  async #throwawayPlace(operation: ThrowawayOperation, place: ThrowawayPlace): Promise<Answer<string>> {
+    const layout = this.#options.layout;
+    const full = resolve(layout.project, place.path);
+    const permitted = this.#grants.throwawayPaths;
+    const asked = `${this.#asking} to ${describedOperation(operation)}`;
+    if (!permitted.some((folder) => full !== folder && isInsideOrEqual(full, folder))) {
+      return this.#outsideThrowaway(asked);
+    }
+    const checked = place.checked === "itself" ? full : dirname(full);
+    const check = await checkPath(this.#options.inspector, { layout, path: checked, permitted, purpose: "write" });
+    switch (check.status) {
+      case "allowed":
+        return granted(full);
+      case "outside":
+        return this.#outsideThrowaway(asked);
+      case "through-link":
+        return refused({
+          resource: "files",
+          asked,
+          declared: `a link on that path leads to ${check.realPath}, outside the throwaway folders`,
+          change: "Remove the link: the broker makes and removes nothing through a link.",
+        });
+      case "linked-component":
+        return refused({
+          resource: "files",
+          asked,
+          declared: `${basename(check.link)} on that path is a link, and the broker makes and removes nothing through a link`,
+          change: `Replace the link ${check.link} with a real folder.`,
+        });
     }
   }
 

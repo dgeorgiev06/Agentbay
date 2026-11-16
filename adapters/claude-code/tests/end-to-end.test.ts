@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { adapter } from "../adapter.ts";
-import { buildRequest, skillAgent, type FilesWithRemoval } from "./build-fixture.ts";
+import { buildRequest, neverUsedByTheAdapter, skillAgent, type FilesWithRemoval } from "./build-fixture.ts";
 
 const kit = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
 const scratch = mkdtempSync(join(tmpdir(), "agentbay adapter "));
@@ -27,6 +27,9 @@ const diskFiles: FilesWithRemoval = {
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, text);
   },
+  makeFolder: neverUsedByTheAdapter,
+  link: neverUsedByTheAdapter,
+  removeAll: neverUsedByTheAdapter,
   removal: {
     remove: async (path) => {
       await rm(path, { recursive: false }).catch(async () => rmdir(path).catch(() => undefined));

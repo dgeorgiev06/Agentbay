@@ -22,6 +22,7 @@ export type ModeGrants = {
   readonly migrationsFolder: string;
   readonly readPaths: readonly string[];
   readonly writePaths: readonly string[];
+  readonly throwawayPaths: readonly string[];
   readonly secrets: readonly string[];
   readonly hosts: readonly string[];
   readonly commands: readonly string[];

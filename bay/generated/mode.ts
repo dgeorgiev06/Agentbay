@@ -28,7 +28,11 @@ export type Budget = {
 
 export type Resources = {
   readonly db?: { readonly migrations: RelativePath };
-  readonly files?: { readonly read?: ReadonlyArray<string>; readonly write?: ReadonlyArray<string> };
+  readonly files?: {
+    readonly read?: ReadonlyArray<string>;
+    readonly write?: ReadonlyArray<string>;
+    readonly throwaway?: ReadonlyArray<string>;
+  };
   readonly secrets?: ReadonlyArray<string>;
   readonly network?: ReadonlyArray<string>;
   readonly commands?: ReadonlyArray<string>;

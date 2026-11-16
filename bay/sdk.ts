@@ -36,6 +36,9 @@ export type ScriptContext = {
     readonly read: (path: string) => Promise<Answer<string>>;
     readonly write: (path: string, text: string) => Promise<Answer<null>>;
     readonly list: (path: string) => Promise<Answer<readonly string[]>>;
+    readonly makeFolder: (path: string) => Promise<Answer<null>>;
+    readonly link: (path: string, target: string) => Promise<Answer<null>>;
+    readonly remove: (path: string) => Promise<Answer<null>>;
   };
   readonly secrets: {
     readonly get: (name: string) => Promise<Answer<string>>;

@@ -16,6 +16,7 @@ function lookupGrants(invocation: Invocation, name: string): ModeGrants {
     migrationsFolder: "",
     readPaths: [],
     writePaths: [],
+    throwawayPaths: [],
     secrets: [name],
     hosts: [],
     commands: [],

@@ -3,6 +3,9 @@ export type FileSystem = {
   readonly list: (directory: string) => Promise<readonly string[]>;
   readonly exists: (path: string) => Promise<boolean>;
   readonly writeAtomic: (path: string, text: string) => Promise<void>;
+  readonly makeFolder: (path: string) => Promise<void>;
+  readonly link: (path: string, target: string) => Promise<void>;
+  readonly removeAll: (path: string) => Promise<void>;
 };
 
 export type Folders = {

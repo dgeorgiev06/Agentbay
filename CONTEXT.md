@@ -19,6 +19,7 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | **Binding** | The project's choice of which mode serves an interface for a requiring mode. | wiring, injection |
 | **Effect** | What an action may do to the world: `read`, `write`, `network`, `spend`, `delete`. Declared per action. | permission (see Grant) |
 | **Grant** | What a mode may reach: its database, paths, secrets, hosts, commands. Declared in `resources:`. | permission, capability |
+| **Throwaway folder** | A folder named under a mode's `resources.files.throwaway`. The kernel makes folders and links in it and removes files and folders from it for that mode; the mode's scripts never read or write its files, and its commands fill it. | scratch, temp folder |
 | **Approval** | A workflow step that waits for the owner and is bound to the content shown. | gate |
 | **Budget** | A limit on a run: items, dollars, tokens, minutes. | quota |
 | **Toolbox** | `bay/sdk.ts`. The only kernel file mode code may import. | SDK internals, helpers |

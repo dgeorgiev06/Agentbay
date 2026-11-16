@@ -123,10 +123,9 @@ function isDatabaseRequest(request: ResourceRequest): request is DatabaseRequest
   return request.resource.startsWith("db.");
 }
 
-function brokerAnswer(broker: Broker, request: Exclude<ResourceRequest, { resource: "call" | "spend" }>) {
-  if (isDatabaseRequest(request)) {
-    return databaseAnswer(broker, request);
-  }
+type FileRequest = Extract<ResourceRequest, { resource: `files.${string}` }>;
+
+function fileAnswer(broker: Broker, request: FileRequest) {
   switch (request.resource) {
     case "files.read":
       return broker.readFile(request.path);
@@ -134,6 +133,27 @@ function brokerAnswer(broker: Broker, request: Exclude<ResourceRequest, { resour
       return broker.writeFile(request.path, request.text);
     case "files.list":
       return broker.listFiles(request.path);
+    case "files.makeFolder":
+      return broker.makeFolder(request.path);
+    case "files.link":
+      return broker.link(request.path, request.target);
+    case "files.remove":
+      return broker.remove(request.path);
+  }
+}
+
+function isFileRequest(request: ResourceRequest): request is FileRequest {
+  return request.resource.startsWith("files.");
+}
+
+function brokerAnswer(broker: Broker, request: Exclude<ResourceRequest, { resource: "call" | "spend" }>) {
+  if (isDatabaseRequest(request)) {
+    return databaseAnswer(broker, request);
+  }
+  if (isFileRequest(request)) {
+    return fileAnswer(broker, request);
+  }
+  switch (request.resource) {
     case "secrets.get":
       return broker.secret(request.name);
     case "http.request":

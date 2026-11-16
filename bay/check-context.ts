@@ -60,6 +60,9 @@ function rootedFileSystem(files: FileSystem, root: string): FileSystem {
     list: (directory) => files.list(join(root, directory)),
     exists: (path) => files.exists(join(root, path)),
     writeAtomic: (path, text) => files.writeAtomic(join(root, path), text),
+    makeFolder: (path) => files.makeFolder(join(root, path)),
+    link: (path, target) => files.link(join(root, path), target),
+    removeAll: (path) => files.removeAll(join(root, path)),
   };
 }
 

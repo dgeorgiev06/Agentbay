@@ -32,7 +32,7 @@ type ProtectedArea = {
   readonly rule: string;
 };
 
-type Direction = "read" | "write";
+type Direction = "read" | "write" | "throwaway";
 
 type NamedFolder = {
   readonly path: string;
@@ -126,25 +126,31 @@ function protectedAreas(own: GrantRequest, direction: Direction): readonly Prote
     name: `the folder of the mode ${mode.name}`,
     rule: onlyForge,
   }));
-  const code = direction === "write" ? ownCodeAreas(own) : [];
+  const code = direction === "read" ? [] : ownCodeAreas(own);
   return [...stateAreas(layout), ...kernelAreas(layout), ...kitArea(layout), ...otherModes, ...code];
 }
 
 type DeclaredResources = {
   readonly read: readonly string[];
   readonly write: readonly string[];
+  readonly throwaway: readonly string[];
   readonly secrets: readonly string[];
   readonly hosts: readonly string[];
   readonly commands: readonly string[];
   readonly migrations: string;
 };
 
+type DeclaredFiles = Pick<DeclaredResources, "read" | "write" | "throwaway">;
+
+function declaredFiles(manifest: Mode): DeclaredFiles {
+  const files = manifest.resources?.files ?? {};
+  return { read: files.read ?? [], write: files.write ?? [], throwaway: files.throwaway ?? [] };
+}
+
 function declaredResources(manifest: Mode): DeclaredResources {
   const resources = manifest.resources ?? {};
-  const files = resources.files ?? {};
   return {
-    read: files.read ?? [],
-    write: files.write ?? [],
+    ...declaredFiles(manifest),
     secrets: resources.secrets ?? [],
     hosts: resources.network ?? [],
     commands: resources.commands ?? [],
@@ -156,7 +162,8 @@ function declaredPaths(manifest: Mode): readonly DeclaredPath[] {
   const declared = declaredResources(manifest);
   const read = declared.read.map((path, index) => ({ direction: "read" as const, index, path }));
   const write = declared.write.map((path, index) => ({ direction: "write" as const, index, path }));
-  return [...read, ...write];
+  const throwaway = declared.throwaway.map((path, index) => ({ direction: "throwaway" as const, index, path }));
+  return [...read, ...write, ...throwaway];
 }
 
 function normalized(path: string): string {
@@ -263,6 +270,7 @@ function grantsOfMode(request: GrantRequest): ModeGrants {
     migrationsFolder: join(folder, normalized(declared.migrations)),
     readPaths: [folder, ...projectPaths(layout, declared.read), ...writePaths],
     writePaths,
+    throwawayPaths: projectPaths(layout, declared.throwaway),
     secrets: [...declared.secrets],
     hosts: [...declared.hosts],
     commands: [...declared.commands],

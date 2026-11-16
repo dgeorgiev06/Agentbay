@@ -34,6 +34,7 @@ function permissionsOf(layout: Layout, modeFolder: string): Permissions {
     migrationsFolder: join(modeFolder, "migrations"),
     readPaths: [modeFolder, writable],
     writePaths: [writable],
+    throwawayPaths: [],
     secrets: [],
     hosts: [],
     commands: [],

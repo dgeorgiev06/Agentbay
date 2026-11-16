@@ -12,6 +12,7 @@ import {
   eventsOfKind,
   isRunning,
   makeCommandKit,
+  openCommandKernel,
   ranCommands,
   secretName,
   secretValue,
@@ -261,4 +262,58 @@ test("each command that ran and each that was refused is an event of the run", a
       ],
     );
   });
+});
+
+test("a listed prefix of only spaces matches no command", async () => {
+  await withCommandKernel({ commands: [" "] }, async (kernel, kit) => {
+    const ran = await ranCommands(kernel, [{ command: ["node", "--version"] }]);
+    assert.equal(refusalMessage(ran.answers[0] ?? null), unlistedSentence('["node","--version"]', " ", kit.manifest));
+  });
+});
+
+test("a time limit that is not above 0 seconds is refused", async () => {
+  await withCommandKernel({ commands: ["node --version"] }, async (kernel) => {
+    const ran = await ranCommands(kernel, [{ command: ["node", "--version"], timeLimitSeconds: 0 }]);
+    assert.equal(
+      refusalMessage(ran.answers[0] ?? null),
+      'The step 0 of action go asked to run the command ["node","--version"] in . with a time limit of 0 seconds, ' +
+        "but a command's time limit is a number of seconds above 0. Give timeLimitSeconds as a number above 0 in " +
+        "the call to context.commands.run.",
+    );
+  });
+});
+
+test("a listed program that cannot start fails, and the attempt is an event", async () => {
+  await withCommandKernel({ commands: ["agentbay-no-such-program"] }, async (kernel) => {
+    const ran = await ranCommands(kernel, [{ command: ["agentbay-no-such-program"] }]);
+    assert.deepEqual(ran.answers, [
+      {
+        ok: false,
+        kind: "failed",
+        message: 'The command ["agentbay-no-such-program"] could not start: spawn agentbay-no-such-program ENOENT',
+      },
+    ]);
+    const detail = eventsOfKind(ran.run, "command")[0]?.detail ?? null;
+    assert.deepEqual(fieldOf(detail, "end"), { how: "not-started", reason: "spawn agentbay-no-such-program ENOENT" });
+  });
+});
+
+test("a request whose command is not a list of texts stops the script", async () => {
+  const kit = await makeCommandKit({ commands: ["node"] });
+  try {
+    const kernel = await openCommandKernel(kit);
+    try {
+      const input = { requests: [{ command: ["node", 1], folder: ".", timeLimitSeconds: 30 }] };
+      const started = await kernel.runs.start({ action: "command-prober.go" }, input);
+      assert.ok(started.ok, JSON.stringify(started));
+      assert.deepEqual(started.value.state, {
+        status: "failed",
+        reason: "The script sent a line that is not a valid message.",
+      });
+    } finally {
+      kernel.close();
+    }
+  } finally {
+    await kit.remove();
+  }
 });

@@ -19,7 +19,7 @@ import type { StepRecord } from "./run-store.ts";
 import { skillSchemas, skillTaskOf, startedSkillOf, type SkillAt } from "./skill-steps.ts";
 import type { ScriptDetail, SkillDetail } from "./step-detail.ts";
 import { actionEndKey, actionStepKey, checkStepKey, scriptCallKey } from "./step-key.ts";
-import { resolveCall, type ActionTarget } from "../manifests/targets.ts";
+import type { ActionTarget } from "../manifests/manifests.ts";
 import {
   changeDetail,
   concludeComposite,
@@ -439,10 +439,11 @@ async function runCall(walk: Walk, frame: ActionFrame, call: CallStep): Promise<
     return replay;
   }
   const start = { key: call.key, kind: "call" as const, input: call.input };
-  const target = resolveCall(walk.services.system, frame.mode, call.call);
-  if (typeof target === "string") {
-    return refuse(walk, start, target);
+  const answer = walk.services.system.action(call.call, frame.mode.manifest.name);
+  if (!answer.ok) {
+    return refuse(walk, start, problemText(answer.problems));
   }
+  const target = answer.value;
   const missing = target.action.effects.filter((effect) => !frame.action.effects.includes(effect));
   if (missing.length > 0) {
     const reason =
@@ -450,7 +451,7 @@ async function runCall(walk: Walk, frame: ActionFrame, call: CallStep): Promise<
       `that ${frame.name} does not declare; the call is refused.`;
     return refuse(walk, start, reason);
   }
-  const caller = frame.mode.manifest.name;
+  const caller = target.caller;
   return runNestedAction(walk, frame.budget, { key: call.key, kind: "call", target, input: call.input, caller });
 }
 

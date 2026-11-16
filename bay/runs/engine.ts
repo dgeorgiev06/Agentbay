@@ -24,18 +24,11 @@ import {
   type Writer,
 } from "./run-store.ts";
 import type { ApprovalDecision, RunStatus } from "./run-state.ts";
-import { failedWith, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
+import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
 import { scrubbedStore } from "./scrubbed-store.ts";
 import { startedSkillOf, submissionProblems, type StartedSkill } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
-import { inactiveModeWording } from "../manifests/manifests.ts";
-import {
-  resolveActionReference,
-  resolveNamedAction,
-  resolveOwnAction,
-  splitReference,
-  type ActionTarget,
-} from "../manifests/targets.ts";
+import type { ActionTarget } from "../manifests/manifests.ts";
 import { hasUndoRecords, runUndo } from "./undo.ts";
 import { eventOf, failed, schemaProblems, type Progress, type Services, type Walk } from "./walk.ts";
 import { runWorkflowSteps } from "./workflow-steps.ts";
@@ -57,7 +50,6 @@ export type AdvancedRun = {
 };
 
 type CalledFrom = {
-  readonly caller?: string;
   readonly within: Budget;
 };
 
@@ -106,6 +98,17 @@ const staleMinutes = String(lockStaleMilliseconds / 60_000);
 function refusal(runId: string, wording: { readonly message: string; readonly fix?: string }): Outcome<never> {
   const problem: Problem = { file: kernelDatabaseFile, path: `/runs/${runId}`, ...wording };
   return failedWith([problem]);
+}
+
+function refusalOf(runId: string, problems: readonly Problem[]): Outcome<never> {
+  return failedWith(
+    problems.map(({ message, fix }) => ({
+      file: kernelDatabaseFile,
+      path: `/runs/${runId}`,
+      message,
+      ...(fix === undefined ? {} : { fix }),
+    })),
+  );
 }
 
 function describeState(state: StoredState): string {
@@ -237,18 +240,18 @@ function mainProgress(walk: Walk, run: RunWithSteps, budget: BudgetFrame): Promi
   const system = walk.services.system;
   switch (run.target.kind) {
     case "action": {
-      const target = resolveOwnAction(system, run.target.mode, run.target.name);
-      if (typeof target === "string") {
-        return Promise.resolve(failed(target));
+      const target = system.action(`${run.target.mode}.${run.target.name}`);
+      if (!target.ok) {
+        return Promise.resolve(failed(problemText(target.problems)));
       }
-      return runActionFrame(walk, { ...target, key: "", budget, caller: run.target.caller }, run.input);
+      return runActionFrame(walk, { ...target.value, key: "", budget, caller: run.target.caller }, run.input);
     }
     case "workflow": {
-      const mode = system.modes.get(run.target.mode);
-      const workflow = mode?.workflows.get(run.target.name);
-      if (mode === undefined || workflow === undefined) {
-        return Promise.resolve(failed(`Mode ${run.target.mode} has no workflow ${run.target.name}.`));
+      const found = system.workflow(run.target.mode, run.target.name);
+      if (!found.ok) {
+        return Promise.resolve(failed(problemText(found.problems)));
       }
+      const { mode, workflow } = found.value;
       const scope = { mode, budget, within: "", trigger: run.input, outputs: new Map<string, Json>(), item: undefined };
       return runWorkflowSteps(walk, scope, { steps: workflow.steps, start: run.input });
     }
@@ -298,27 +301,19 @@ export class Engine {
   }
 
   startAction(reference: string, input: Json): Promise<Outcome<AdvancedRun>> {
-    const [mode] = splitReference(reference) ?? [];
-    const inactive = mode === undefined ? undefined : this.#inactiveRefusal("new", mode);
-    if (inactive !== undefined) {
-      return Promise.resolve(inactive);
+    const target = this.#services.system.action(reference);
+    if (!target.ok) {
+      return Promise.resolve(refusalOf("new", target.problems));
     }
-    const target = resolveActionReference(this.#services.system, reference);
-    if (typeof target === "string") {
-      return Promise.resolve(refusal("new", { message: target }));
-    }
-    return this.#startTarget(target, input);
+    return this.#startTarget(target.value, input);
   }
 
   async startForSkill(call: SkillCall): Promise<Outcome<AdvancedRun>> {
-    const inactive = this.#inactiveRefusal("new", call.mode);
-    if (inactive !== undefined) {
-      return inactive;
+    const answer = this.#services.system.action(call.action, call.mode);
+    if (!answer.ok) {
+      return answer;
     }
-    const target = resolveNamedAction(this.#services.system, call.mode, call.action);
-    if (typeof target === "string") {
-      return failedWith([unplacedProblem(target)]);
-    }
+    const target = answer.value;
     const notReadOnly = notReadOnlyRefusal(target, call.action);
     if (notReadOnly !== undefined) {
       return notReadOnly;
@@ -328,8 +323,7 @@ export class Engine {
       return refusal(call.runId, { message: `There is no run ${call.runId}.` });
     }
     const within = remainingBudget(extendedBudget(calling.limit, calling.extra), calling.spent);
-    const caller = call.action.includes(".") ? { caller: call.mode } : {};
-    const called = await this.#startTarget(target, call.input, { ...caller, within });
+    const called = await this.#startTarget(target, call.input, { within });
     if (!called.ok) {
       return called;
     }
@@ -339,14 +333,11 @@ export class Engine {
 
   startWorkflow(reference: WorkflowReference, triggerInput: Json): Promise<Outcome<AdvancedRun>> {
     const { mode, path } = reference;
-    const inactive = this.#inactiveRefusal("new", mode);
-    if (inactive !== undefined) {
-      return Promise.resolve(inactive);
+    const found = this.#services.system.workflow(mode, path);
+    if (!found.ok) {
+      return Promise.resolve(refusalOf("new", found.problems));
     }
-    const workflow = this.#services.system.modes.get(mode)?.workflows.get(path);
-    if (workflow === undefined) {
-      return Promise.resolve(refusal("new", { message: `Mode ${mode} has no workflow ${path}.` }));
-    }
+    const workflow = found.value.workflow;
     const limit = smallestBudget([workflow.budget, this.#services.system.config.budget]);
     return this.#start({ target: { kind: "workflow", mode, name: path }, input: triggerInput, limit });
   }
@@ -433,7 +424,7 @@ export class Engine {
     if (problems.length > 0) {
       return failedWith(problems);
     }
-    const caller = from?.caller === undefined ? {} : { caller: from.caller };
+    const caller = target.caller === undefined ? {} : { caller: target.caller };
     const runTarget: RunTarget = { kind: "action", mode: target.mode.manifest.name, name: target.name, ...caller };
     const limit = smallestBudget([target.action.budget, this.#services.system.config.budget, from?.within]);
     return this.#start({ target: runTarget, input, limit });
@@ -498,14 +489,16 @@ export class Engine {
       case "acquired":
         return this.#holding(lock.writer, async () => {
           const run = await this.#read(runId);
-          return this.#inactiveRefusal(run.id, run.target.mode) ?? body(run, lock.writer, now);
+          return this.#targetRefusal(run) ?? body(run, lock.writer, now);
         });
     }
   }
 
-  #inactiveRefusal(runId: string, mode: string): Outcome<AdvancedRun> | undefined {
+  #targetRefusal(run: RunWithSteps): Outcome<AdvancedRun> | undefined {
     const system = this.#services.system;
-    return system.inactive.has(mode) ? refusal(runId, inactiveModeWording(mode)) : undefined;
+    const { kind, mode, name } = run.target;
+    const answer = kind === "action" ? system.action(`${mode}.${name}`) : system.workflow(mode, name);
+    return answer.ok ? undefined : refusalOf(run.id, answer.problems);
   }
 
   async #holding(writer: Writer, body: () => Promise<Outcome<AdvancedRun>>): Promise<Outcome<AdvancedRun>> {

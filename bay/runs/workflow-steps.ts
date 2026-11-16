@@ -10,7 +10,6 @@ import type { StepRecord } from "./run-store.ts";
 import { approvalContentOf, type ApprovalContent } from "./scrubbed-store.ts";
 import type { ApprovalDetail } from "./step-detail.ts";
 import { foreachItemKey, workflowStepKey } from "./step-key.ts";
-import { resolveNamedAction } from "../manifests/targets.ts";
 import {
   changeDetail,
   concludeComposite,
@@ -90,11 +89,12 @@ async function runWorkflowAction(walk: Walk, scope: WorkflowScope, at: Unsettled
   if (!input.ok) {
     return refuse(walk, start, `Step ${at.step.id} cannot start: ${problemText(input.problems)}`);
   }
-  const target = resolveNamedAction(walk.services.system, scope.mode.manifest.name, at.step.action);
-  if (typeof target === "string") {
-    return refuse(walk, start, target);
+  const answer = walk.services.system.action(at.step.action, scope.mode.manifest.name);
+  if (!answer.ok) {
+    return refuse(walk, start, problemText(answer.problems));
   }
-  const caller = at.step.action.includes(".") ? scope.mode.manifest.name : undefined;
+  const target = answer.value;
+  const caller = target.caller;
   return runNestedAction(walk, scope.budget, { key: at.key, kind: "action", target, input: input.value, caller });
 }
 

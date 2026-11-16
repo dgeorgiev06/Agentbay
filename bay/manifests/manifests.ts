@@ -33,7 +33,7 @@ export type ActionTarget = {
   readonly mode: ActiveMode;
   readonly name: string;
   readonly action: Action;
-  readonly caller?: string;
+  readonly caller: string | undefined;
 };
 
 type WorkflowTarget = {
@@ -1297,7 +1297,7 @@ function ownAction(mode: ActiveMode, name: string): Outcome<ActionTarget> {
     const known = Object.keys(mode.manifest.actions).join(", ");
     return refused(`Mode ${mode.manifest.name} has no action ${name}; it has: ${known}.`);
   }
-  return succeededWith({ mode, name, action });
+  return succeededWith({ mode, name, action, caller: undefined });
 }
 
 function boundAction(system: System, caller: ActiveMode, call: string): Outcome<ActionTarget> {

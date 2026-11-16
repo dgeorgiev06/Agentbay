@@ -27,16 +27,16 @@ export type Loaded<T> = {
   readonly lineOf: (path: PathSegments) => number | undefined;
 };
 
-export type ValuePlace = {
+type ValuePlace = {
   readonly loaded: Loaded<unknown>;
   readonly path: PathSegments;
 };
 
-export type ValueCheck =
+type ValueCheck =
   | { readonly kind: "unusable-schema"; readonly reason: string }
   | { readonly kind: "checked"; readonly problems: readonly Problem[] };
 
-export type Skill = {
+type Skill = {
   readonly frontMatter: SkillFrontMatter;
   readonly headings: readonly string[];
   readonly tools: readonly string[];

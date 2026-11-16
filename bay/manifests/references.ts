@@ -4,20 +4,20 @@ import { toJson, isRecord } from "../json.ts";
 import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
 import type { PathSegments, Wording } from "./spec.ts";
 
-export type Reference =
+type Reference =
   | { readonly kind: "trigger"; readonly text: string }
   | { readonly kind: "item"; readonly text: string }
   | { readonly kind: "settings"; readonly text: string; readonly key: string }
   | { readonly kind: "steps"; readonly text: string; readonly id: string; readonly path: readonly string[] };
 
-export type ReferenceScope = {
+type ReferenceScope = {
   readonly trigger: Json;
   readonly outputs: ReadonlyMap<string, Json>;
   readonly item?: Json;
   readonly settings: Readonly<Record<string, unknown>>;
 };
 
-export type ReferenceIssue = Wording & { readonly path: PathSegments };
+type ReferenceIssue = Wording & { readonly path: PathSegments };
 
 type ReferencePlace = {
   readonly text: string;
@@ -36,11 +36,11 @@ const settingsPattern = /^\$settings\.([A-Za-z0-9_-]+)$/;
 const grammar =
   "write $trigger, $item, $settings.<key> or $steps.<id>.output with an optional dotted path such as .items.0";
 
-export function isReferenceText(value: unknown): value is string {
+function isReferenceText(value: unknown): value is string {
   return typeof value === "string" && value.startsWith("$");
 }
 
-export function parseReference(text: string): Outcome<Reference> {
+function parseReference(text: string): Outcome<Reference> {
   if (text === "$trigger") {
     return succeededWith({ kind: "trigger", text });
   }
@@ -124,7 +124,7 @@ function resolveSettings(reference: Reference & { readonly kind: "settings" }, s
   return { ok: true, value: toJson(scope.settings[reference.key]) };
 }
 
-export function resolveReference(reference: Reference, scope: ReferenceScope): Outcome<Json> {
+function resolveReference(reference: Reference, scope: ReferenceScope): Outcome<Json> {
   switch (reference.kind) {
     case "trigger":
       return { ok: true, value: scope.trigger };

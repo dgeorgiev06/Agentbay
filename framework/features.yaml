@@ -46,6 +46,7 @@ features:
       - bay/manifests/bindings.ts
       - bay/manifests/activation.ts
       - bay/manifests/naming.ts
+      - bay/manifests/binding-problems.ts
     may_import:
       - vocabulary
       - safety

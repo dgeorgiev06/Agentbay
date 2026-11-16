@@ -52,8 +52,8 @@ function without(files: Readonly<Record<string, string>>, ...removed: readonly s
 
 test("a valid three-mode system resolves with every required interface bound", async () => {
   const system = await systemOf(validFiles());
-  assert.deepEqual([...system.modes.keys()].sort(), ["briefing", "notes", "store"]);
-  assert.deepEqual([...system.interfaces.keys()].sort(), ["items-store@1", "notes@1"]);
+  assert.deepEqual(Array.from(system.modes.keys()).sort(), ["briefing", "notes", "store"]);
+  assert.deepEqual(Array.from(system.interfaces.keys()).sort(), ["items-store@1", "notes@1"]);
   assert.deepEqual(bindingUses(system), [
     { interfaceName: "items-store", requirers: ["notes"], servedBy: "store" },
     { interfaceName: "notes", requirers: ["briefing"], servedBy: "notes" },

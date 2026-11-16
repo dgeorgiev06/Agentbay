@@ -252,7 +252,7 @@ test("the base mode forge in the kit's own folder may name a kernel folder", asy
 });
 
 function grantsOfEveryMode(system: System): ReadonlyMap<string, ModeGrants> {
-  return new Map([...system.modes].map(([name, mode]) => [name, mode.grants]));
+  return new Map(Array.from(system.modes).map(([name, mode]) => [name, mode.grants]));
 }
 
 async function loadedSystem(files: Readonly<Record<string, string>>, within: Layout): Promise<System> {
@@ -285,7 +285,7 @@ test("every mode of a loaded system is active and carries its own grants", async
       ["briefing", noResources("briefing", "/kit/components/modes/briefing")],
     ]),
   );
-  assert.deepEqual([...system.inactive], []);
+  assert.deepEqual(Array.from(system.inactive), []);
 });
 
 test("a mode that is not active is named as inactive and is not a mode of the system", async () => {
@@ -309,5 +309,5 @@ test("a mode that is not active is named as inactive and is not a mode of the sy
       ],
     ]),
   );
-  assert.deepEqual([...system.inactive].sort(), ["briefing", "notes", "store"]);
+  assert.deepEqual(Array.from(system.inactive).sort(), ["briefing", "notes", "store"]);
 });

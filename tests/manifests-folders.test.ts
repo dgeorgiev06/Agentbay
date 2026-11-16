@@ -78,13 +78,18 @@ test("a kit mode and a project mode are loaded together, each knowing its home a
   const report = await reportOf({ ...kitFiles(), ...projectFiles() });
   assert.ok(report.outcome.ok, report.outcome.ok ? "" : messages(report.outcome.problems));
   const system = report.outcome.value;
-  assert.deepEqual([...system.modes.keys()].sort(), ["journal", "notes", "store"]);
-  assert.deepEqual([...system.inactive], ["briefing"]);
-  assert.deepEqual([...system.modes.values()].map((mode) => [mode.manifest.name, mode.home, mode.folder]).sort(), [
-    ["journal", "project", "/project/components/modes/journal"],
-    ["notes", "kit", "/kit/components/modes/notes"],
-    ["store", "kit", "/kit/components/base/store"],
-  ]);
+  assert.deepEqual(Array.from(system.modes.keys()).sort(), ["journal", "notes", "store"]);
+  assert.deepEqual(Array.from(system.inactive), ["briefing"]);
+  assert.deepEqual(
+    Array.from(system.modes.values())
+      .map((mode) => [mode.manifest.name, mode.home, mode.folder])
+      .sort(),
+    [
+      ["journal", "project", "/project/components/modes/journal"],
+      ["notes", "kit", "/kit/components/modes/notes"],
+      ["store", "kit", "/kit/components/base/store"],
+    ],
+  );
   assert.equal(servingModeOf(system, "journal", "notes.add"), "notes");
   assert.equal(system.interfaces.get("notes@1")?.file, "/kit/components/base/interfaces/notes.yaml");
 });

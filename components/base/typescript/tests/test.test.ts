@@ -7,6 +7,7 @@ import {
   openToolchainProject,
   packageWith,
   printing,
+  secondsOf,
   withoutSeconds,
   writeCheckout,
   type Fields,
@@ -96,7 +97,10 @@ test("named test files are the only ones run", async () => {
 
 test("a test run that does not finish within its time limit is stopped and inconclusive", async () => {
   const folder = await checkoutWith("hangs", { "tests/sums.test.ts": sums, "tests/waits.test.ts": hangingTest });
-  assert.deepEqual(await tested({ folder, timeLimitSeconds: 3 }), {
+  const output = await project.output("typescript.test", { folder, timeLimitSeconds: 3 });
+  const seconds = secondsOf(output);
+  assert.ok(seconds >= 3 && seconds < 10, String(seconds));
+  assert.deepEqual(shownResult(output), {
     verdict: "inconclusive",
     reason: "The test run did not finish within 3 seconds and was stopped.",
   });

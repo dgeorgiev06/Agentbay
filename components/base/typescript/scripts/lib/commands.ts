@@ -19,22 +19,19 @@ export type Timed = {
   readonly timeLimitSeconds: number;
 };
 
-const tenthsPerSecond = 10;
+const millisecondsPerTenth = 100;
 
-function secondsSince(context: ScriptContext, started: number): number {
-  const tenths = Math.round((context.now().getTime() - started) / (1000 / tenthsPerSecond));
-  return tenths / tenthsPerSecond;
+function secondsOf(milliseconds: number): number {
+  return Math.round(milliseconds / millisecondsPerTenth) / 10;
 }
 
 export async function runTimed(context: ScriptContext, timed: Timed): Promise<Finished> {
-  const started = context.now().getTime();
   const answer = await context.commands.run(timed);
-  const seconds = secondsSince(context, started);
   if (!answer.ok) {
-    return { ending: { how: "not-started", reason: answer.message }, seconds, stdout: "", stderr: "" };
+    return { ending: { how: "not-started", reason: answer.message }, seconds: 0, stdout: "", stderr: "" };
   }
-  const { end, stdout, stderr } = answer.value;
-  return { ending: end, seconds, stdout: stdout.text, stderr: stderr.text };
+  const { end, milliseconds, stdout, stderr } = answer.value;
+  return { ending: end, seconds: secondsOf(milliseconds), stdout: stdout.text, stderr: stderr.text };
 }
 
 export function npmRun(script: string): readonly string[] {

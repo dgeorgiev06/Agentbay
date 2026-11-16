@@ -10,6 +10,7 @@ import {
   openToolchainProject,
   packageWith,
   printing,
+  secondsOf,
   withoutSeconds,
   writeCheckout,
   type Fields,
@@ -92,7 +93,11 @@ test("a check that ends with an exit code the mode does not recognise is inconcl
 
 test("a check that runs past its time limit is stopped and inconclusive, and the others still report", async () => {
   const folder = await checkoutWith("typecheck-hangs", { ...passingScripts(), typecheck: hanging });
-  assert.deepEqual(await verdicts({ folder, checks: ["typecheck", "lint"], timeLimitSeconds: 2 }), [
+  const input = { folder, checks: ["typecheck", "lint"], timeLimitSeconds: 2 };
+  const ran = listed(await project.output("typescript.check", input), "verdicts");
+  const seconds = secondsOf(ran[0] ?? null);
+  assert.ok(seconds >= 2 && seconds < 10, String(seconds));
+  assert.deepEqual(ran.map(withoutSeconds), [
     {
       name: "typecheck",
       verdict: "inconclusive",

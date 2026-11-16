@@ -46,6 +46,11 @@ function isFields(value: Json): value is Fields {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+export function secondsOf(value: Json): number {
+  assert.ok(isFields(value) && typeof value.seconds === "number", JSON.stringify(value));
+  return value.seconds;
+}
+
 export function withoutSeconds(value: Json): Fields {
   assert.ok(isFields(value), JSON.stringify(value));
   const { seconds, ...rest } = value;

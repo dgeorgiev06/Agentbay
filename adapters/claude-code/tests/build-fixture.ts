@@ -109,7 +109,7 @@ export const allAgents = [digestAgent, scanAgent, buildAgent];
 export function buildRequest(files: FilesWithRemoval, agents: readonly SkillAgent[] = allAgents): BuildRequest {
   const system = {
     modes: new Map(),
-    active: new Set<string>(),
+    inactive: new Set<string>(),
     interfaces: new Map(),
     config: { bindings: {}, adapter: "claude-code" },
   };

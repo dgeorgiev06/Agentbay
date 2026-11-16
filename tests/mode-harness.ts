@@ -15,6 +15,7 @@ import type { Run } from "../bay/runs/runs.ts";
 import type { DatabasePartition } from "../bay/sdk.ts";
 import { testEnvironment } from "./kernel-fixture.ts";
 import { kit } from "./project-fixture.ts";
+import { activeModeGrants } from "./system-fixture.ts";
 
 export type CallOptions = {
   readonly caller?: string;
@@ -75,7 +76,10 @@ function reasonOf(run: Run): string {
 
 function partitionOf(kernel: Kernel, mode: string, name: string): DatabasePartition {
   const place: StepPlace = { runId: "harness", mode, action: "harness", stepKey: "harness" };
-  const permissions = { grants: kernel.policyOf(mode), actionEffects: ["read" as const, "write" as const] };
+  const permissions = {
+    grants: activeModeGrants(kernel.system, mode),
+    actionEffects: ["read" as const, "write" as const],
+  };
   const broker = (): ReturnType<Kernel["brokerFor"]> => kernel.brokerFor(place, permissions);
   const closing = async <T>(use: (opened: ReturnType<Kernel["brokerFor"]>) => Promise<T>): Promise<T> => {
     const opened = broker();

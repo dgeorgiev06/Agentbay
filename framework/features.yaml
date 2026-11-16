@@ -42,6 +42,7 @@ features:
       - bay/manifests/targets.ts
     may_import:
       - vocabulary
+      - safety
   safety:
     purpose: Turns a mode's grants and an action's effects into what is allowed, by one rule.
     entry:
@@ -51,7 +52,6 @@ features:
       - bay/sql-statements.ts
     may_import:
       - vocabulary
-      - manifests
   secrets:
     purpose: Stores the owner's secrets and scrubs them from anything that is written or shown.
     entry:
@@ -238,3 +238,8 @@ outside:
     purpose: Syncs a source into the store, writes a digest and answers questions about it.
     imports_kernel_through:
       - bay/sdk.ts
+  schemas:
+    purpose: The type generator, a development tool. It writes bay/generated/ from the schemas; it is not kernel code.
+    imports_kernel_through:
+      - bay/node-ports.ts
+      - bay/ports.ts

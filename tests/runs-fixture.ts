@@ -2,30 +2,20 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type {
-  EventSink,
-  Json,
-  PolicyOf,
-  ScriptRequest,
-  ScriptRunner,
-  Spend,
-  StepOutcome,
-  Submission,
-} from "../bay/contracts.ts";
+import type { EventSink, Json, ScriptRequest, ScriptRunner, Spend, StepOutcome, Submission } from "../bay/contracts.ts";
 import type { Config } from "../bay/generated/config.ts";
 import type { Interface } from "../bay/generated/interface.ts";
 import type { Action, Mode } from "../bay/generated/mode.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
 import { fieldOf, numberField, textField } from "../bay/json.ts";
 import { layoutOf } from "../bay/layout.ts";
-import { loadPolicedSystem, policyFor } from "../bay/policy.ts";
-import type { System } from "../bay/manifests/registry.ts";
+import { loadSystemReport, type System } from "../bay/manifests/registry.ts";
 import type { Outcome } from "../bay/outcome.ts";
 import { openRuns, type Run, type Runs, type Task } from "../bay/runs/runs.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import { noProcesses } from "./broker-fixture.ts";
 import { fakeClock, fakeFileSystem, fakeFolders, type FakeFileSystem } from "./fakes.ts";
-import { yamlText } from "./system-fixture.ts";
+import { activeModeGrants, yamlText } from "./system-fixture.ts";
 
 export type Script = (request: ScriptRequest) => StepOutcome | Promise<StepOutcome>;
 
@@ -42,7 +32,6 @@ export type Changes = {
 
 export type FixtureSystem = {
   readonly system: System;
-  readonly policyOf: PolicyOf;
   readonly files: FakeFileSystem;
 };
 
@@ -319,15 +308,9 @@ function fixtureFiles(changes: Changes): Record<string, string> {
 
 export async function fixtureSystem(changes: Changes = {}): Promise<FixtureSystem> {
   const files = fakeFileSystem(fixtureFiles(changes));
-  const outcome = (await loadPolicedSystem(files, layout)).outcome;
+  const outcome = (await loadSystemReport(files, layout)).outcome;
   assert.ok(outcome.ok, outcome.ok ? "" : JSON.stringify(outcome.problems, null, 2));
-  return { ...outcome.value, files };
-}
-
-export function policyOfSystem(system: System): PolicyOf {
-  const policy = policyFor(system, layout);
-  assert.ok(policy.ok, policy.ok ? "" : JSON.stringify(policy.problems, null, 2));
-  return policy.value;
+  return { system: outcome.value, files };
 }
 
 function secretStore(): SecretStore {
@@ -335,14 +318,14 @@ function secretStore(): SecretStore {
   return new SecretStore({ environment, processes: noProcesses, platform: "linux" });
 }
 
-async function handOut(scrubber: SecretStore, policyOf: PolicyOf): Promise<void> {
-  const handedOut = await scrubber.get(secretName, policyOf("notes"));
+async function handOut(scrubber: SecretStore, system: System): Promise<void> {
+  const handedOut = await scrubber.get(secretName, activeModeGrants(system, "notes"));
   assert.ok(handedOut.ok);
 }
 
-export async function fixtureScrubber(policyOf: PolicyOf): Promise<SecretStore> {
+export async function fixtureScrubber(system: System): Promise<SecretStore> {
   const scrubber = secretStore();
-  await handOut(scrubber, policyOf);
+  await handOut(scrubber, system);
   return scrubber;
 }
 
@@ -371,9 +354,9 @@ function projectFolder(): { readonly project: string; readonly remove: () => voi
 export async function openedRuns(opening: Opening = {}): Promise<OpenedRuns> {
   const { project, remove } = projectFolder();
   const fixture = await fixtureSystem(opening.changes);
-  const { policyOf, files } = fixture;
+  const { files } = fixture;
   const scrubber = secretStore();
-  const handOutSecret = (): Promise<void> => handOut(scrubber, policyOf);
+  const handOutSecret = (): Promise<void> => handOut(scrubber, fixture.system);
   if (opening.secretHandedOut !== "later") {
     await handOutSecret();
   }
@@ -390,7 +373,6 @@ export async function openedRuns(opening: Opening = {}): Promise<OpenedRuns> {
       files,
       clock,
       system,
-      policyOf: system === fixture.system ? policyOf : policyOfSystem(system),
       scrubber,
       toolCallsPerRound: opening.toolCallsPerRound ?? 200,
       runner: (events) => {

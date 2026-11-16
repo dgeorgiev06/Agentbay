@@ -1,6 +1,6 @@
 import { basename, dirname, join } from "node:path/posix";
 import { isDeepStrictEqual } from "node:util";
-import type { Json } from "../contracts.ts";
+import type { Json, ModeGrants } from "../contracts.ts";
 import type { Config } from "../generated/config.ts";
 import type { Interface, Signature } from "../generated/interface.ts";
 import type { Action, Effect, Mode, Step } from "../generated/mode.ts";
@@ -8,11 +8,12 @@ import type { Workflow, Step as WorkflowStep } from "../generated/workflow.ts";
 import { isProjectTheKit, pathIn, shownPath, shownProblems, type Home, type Layout } from "../layout.ts";
 import { toJson } from "../json.ts";
 import type { FileSystem } from "../ports.ts";
+import { grantsOf, type GrantProblem } from "../policy.ts";
 import { workflowReferenceIssues } from "./references.ts";
 import { checkValue, loadSpec, problemAt, type Loaded, type PathSegments, type Wording } from "./spec.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
 
-export type LoadedMode = {
+export type ActiveMode = {
   readonly home: Home;
   readonly folder: string;
   readonly manifest: Mode;
@@ -20,6 +21,7 @@ export type LoadedMode = {
   readonly workflows: ReadonlyMap<string, Workflow>;
   readonly settings: Readonly<Record<string, unknown>>;
   readonly inputSchemas: ReadonlyMap<string, Json>;
+  readonly grants: ModeGrants;
 };
 
 export type LoadedInterface = {
@@ -28,8 +30,8 @@ export type LoadedInterface = {
 };
 
 export type System = {
-  readonly modes: ReadonlyMap<string, LoadedMode>;
-  readonly active: ReadonlySet<string>;
+  readonly modes: ReadonlyMap<string, ActiveMode>;
+  readonly inactive: ReadonlySet<string>;
   readonly interfaces: ReadonlyMap<string, LoadedInterface>;
   readonly config: Config;
 };
@@ -267,7 +269,7 @@ function servedReferences(system: System, requirer: string): readonly (readonly 
 
 export function bindingUses(system: System): readonly BindingUse[] {
   const uses = new Map<string, BindingUse>();
-  for (const requirer of [...system.active].sort()) {
+  for (const requirer of [...system.modes.keys()].sort()) {
     for (const [name, servedBy] of servedReferences(system, requirer)) {
       const key = `${name} ${servedBy}`;
       const requirers = uses.get(key)?.requirers ?? [];
@@ -1214,10 +1216,49 @@ async function inputSchemasOf(files: FileSystem, mode: ModeSource): Promise<Read
   return schemas;
 }
 
-async function buildSystem(context: Context, config: Config, workflows: readonly ModeWorkflow[]): Promise<System> {
-  const modes = new Map<string, LoadedMode>();
+function placedGrantProblem(mode: ModeSource, problem: GrantProblem): Problem {
+  return problemAt(mode, problem.at, { message: problem.message, fix: problem.fix });
+}
+
+function grantsOfActiveModes(context: Context): Outcome<ReadonlyMap<string, ModeGrants>> {
+  const granted = new Map<string, ModeGrants>();
+  const problems: Problem[] = [];
+  for (const mode of [...context.active].flatMap((name) => context.modes.get(name) ?? [])) {
+    const otherModes = [...context.modes.values()]
+      .filter((other) => other !== mode)
+      .map((other) => ({ name: other.value.name, folder: other.folder }));
+    const ruling = grantsOf({
+      manifest: mode.value,
+      home: mode.home,
+      folder: mode.folder,
+      layout: context.layout,
+      otherModes,
+    });
+    if (ruling.ok) {
+      granted.set(mode.value.name, ruling.value);
+    } else {
+      problems.push(...ruling.problems.map((problem) => placedGrantProblem(mode, problem)));
+    }
+  }
+  return problems.length > 0 ? failedWith(problems) : succeededWith(granted);
+}
+
+type SystemParts = {
+  readonly config: Config;
+  readonly workflows: readonly ModeWorkflow[];
+  readonly granted: ReadonlyMap<string, ModeGrants>;
+};
+
+async function buildSystem(context: Context, parts: SystemParts): Promise<System> {
+  const modes = new Map<string, ActiveMode>();
+  const inactive = new Set<string>();
   for (const [name, mode] of context.modes) {
-    const own = workflows
+    const grants = parts.granted.get(name);
+    if (grants === undefined) {
+      inactive.add(name);
+      continue;
+    }
+    const own = parts.workflows
       .filter((entry) => entry.mode.value.name === name)
       .map((entry) => [entry.path, entry.loaded.value] as const);
     modes.set(name, {
@@ -1226,15 +1267,16 @@ async function buildSystem(context: Context, config: Config, workflows: readonly
       manifest: mode.value,
       lineOf: mode.lineOf,
       workflows: new Map(own),
-      settings: settingsOf(config, name),
+      settings: settingsOf(parts.config, name),
       inputSchemas: await inputSchemasOf(context.files, mode),
+      grants,
     });
   }
   const interfaces = new Map<string, LoadedInterface>();
   for (const [reference, loaded] of context.interfaces) {
     interfaces.set(reference, { file: loaded.file, definition: loaded.value });
   }
-  return { modes, active: context.active, interfaces, config };
+  return { modes, inactive, interfaces, config: parts.config };
 }
 
 function loadProblems(context: Context, modes: LoadedModes): Collected<UnloadedMode> {
@@ -1282,7 +1324,12 @@ export async function loadSystemReport(files: FileSystem, layout: Layout): Promi
   if (problems.length > 0 || !config.ok) {
     return { ...report, outcome: { ok: false, problems: shownProblems(layout, problems) } };
   }
-  const system = await buildSystem(context, config.value.value, workflows.values);
+  const granted = grantsOfActiveModes(context);
+  if (!granted.ok) {
+    return { ...report, outcome: { ok: false, problems: shownProblems(layout, granted.problems) } };
+  }
+  const parts = { config: config.value.value, workflows: workflows.values, granted: granted.value };
+  const system = await buildSystem(context, parts);
   return { ...report, outcome: { ok: true, value: system } };
 }
 
@@ -1298,8 +1345,8 @@ function holdsEveryWord(words: readonly string[], entry: ModeListed | ActionList
   return words.every((word) => text.includes(word));
 }
 
-function activeModesByName(system: System): readonly LoadedMode[] {
-  return [...system.active].sort().flatMap((name) => system.modes.get(name) ?? []);
+function activeModesByName(system: System): readonly ActiveMode[] {
+  return [...system.modes.keys()].sort().flatMap((name) => system.modes.get(name) ?? []);
 }
 
 function listedModes(system: System, words: readonly string[]): ActionsListing {
@@ -1310,7 +1357,7 @@ function listedModes(system: System, words: readonly string[]): ActionsListing {
   return { modes: modes.filter((mode) => holdsEveryWord(words, mode)) };
 }
 
-function listedActions(mode: LoadedMode, words: readonly string[]): Outcome<ActionsListing> {
+function listedActions(mode: ActiveMode, words: readonly string[]): Outcome<ActionsListing> {
   const actions: ActionListed[] = [];
   const problems: Problem[] = [];
   for (const [name, action] of Object.entries(mode.manifest.actions)) {
@@ -1328,12 +1375,19 @@ function listedActions(mode: LoadedMode, words: readonly string[]): Outcome<Acti
   return succeededWith({ mode: mode.manifest.name, actions: actions.filter((entry) => holdsEveryWord(words, entry)) });
 }
 
+export function inactiveModeWording(modeName: string): Wording {
+  return {
+    message: `Mode ${modeName} is not active in this project, so nothing of it runs here.`,
+    fix: `Add ${modeName} to modes: in agentbay.config.yaml, or bind an interface it implements.`,
+  };
+}
+
 export function actionsListing(system: System, question: ListingQuestion): Outcome<ActionsListing> {
   const words = wordsOf(question.find);
   if (question.mode === undefined) {
     return succeededWith(listedModes(system, words));
   }
-  const mode = system.active.has(question.mode) ? system.modes.get(question.mode) : undefined;
+  const mode = system.modes.get(question.mode);
   if (mode === undefined) {
     const active = activeModesByName(system).map((entry) => entry.manifest.name);
     return failedWith([

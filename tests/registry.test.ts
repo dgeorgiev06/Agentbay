@@ -62,7 +62,6 @@ test("a valid three-mode system resolves with every required interface bound", a
   assert.equal(notes.home, "kit");
   assert.equal(notes.workflows.get("workflows/daily.yaml")?.name, "daily");
   assert.equal(system.interfaces.get("notes@1")?.file, `/kit/${paths.notesInterface}`);
-  assert.deepEqual([...system.active].sort(), ["briefing", "notes", "store"]);
   assert.deepEqual(system.modes.get("briefing")?.settings, { lookback: "3d" });
   assert.deepEqual(system.modes.get("store")?.settings, {});
 });

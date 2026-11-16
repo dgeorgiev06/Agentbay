@@ -83,5 +83,3 @@ export type RunEvent = {
 export type EventSink = {
   readonly append: (event: RunEvent) => Promise<void>;
 };
-
-export type PolicyOf = (mode: string) => ModeGrants;

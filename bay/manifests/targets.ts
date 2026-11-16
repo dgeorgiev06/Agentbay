@@ -1,17 +1,17 @@
 import type { Action } from "../generated/mode.ts";
-import { servingMode, type LoadedMode, type System } from "./registry.ts";
+import { servingMode, type ActiveMode, type System } from "./registry.ts";
 
 export type ActionTarget = {
-  readonly mode: LoadedMode;
+  readonly mode: ActiveMode;
   readonly name: string;
   readonly action: Action;
 };
 
-function actionOf(mode: LoadedMode, name: string): Action | undefined {
+function actionOf(mode: ActiveMode, name: string): Action | undefined {
   return Object.hasOwn(mode.manifest.actions, name) ? mode.manifest.actions[name] : undefined;
 }
 
-function splitReference(reference: string): readonly [string, string] | undefined {
+export function splitReference(reference: string): readonly [string, string] | undefined {
   const separator = reference.indexOf(".");
   if (separator <= 0 || separator === reference.length - 1) {
     return undefined;
@@ -40,7 +40,7 @@ export function resolveActionReference(system: System, reference: string): Actio
   return resolveOwnAction(system, parts[0], parts[1]);
 }
 
-export function resolveCall(system: System, caller: LoadedMode, call: string): ActionTarget | string {
+export function resolveCall(system: System, caller: ActiveMode, call: string): ActionTarget | string {
   const parts = splitReference(call);
   if (parts === undefined) {
     return `${call} does not name an action of an interface; write <interface>.<action>.`;

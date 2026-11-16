@@ -7,9 +7,7 @@ import type { Answer, Failure, Refusal } from "../bay/answers.ts";
 import type { Effect, EventSink, ModeGrants, Permissions, RunEvent, StepPlace } from "../bay/contracts.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import type { Http, HttpRequest, HttpResponse, ProcessRequest, ProcessResult, Processes } from "../bay/ports.ts";
-import { layoutOf, type Home, type Layout } from "../bay/layout.ts";
-import type { LoadedMode, System } from "../bay/manifests/registry.ts";
-import type { Outcome, Problem } from "../bay/outcome.ts";
+import { layoutOf, type Layout } from "../bay/layout.ts";
 
 export const kitFolder = fileURLToPath(new URL("..", import.meta.url));
 
@@ -34,30 +32,6 @@ export function modeNamed(name: string, resources: Mode["resources"], actions?: 
         run: [{ script: "a.ts" }],
       },
     },
-  };
-}
-
-type ModeEntry = { readonly folder: string; readonly manifest: Mode; readonly home?: Home };
-
-export function systemOf(modes: readonly ModeEntry[]): System {
-  const loaded = new Map<string, LoadedMode>();
-  for (const { folder, manifest, home } of modes) {
-    const mode = {
-      home: home ?? "kit",
-      folder,
-      manifest,
-      lineOf: () => undefined,
-      workflows: new Map(),
-      settings: {},
-      inputSchemas: new Map(),
-    };
-    loaded.set(manifest.name, mode);
-  }
-  return {
-    modes: loaded,
-    active: new Set(loaded.keys()),
-    interfaces: new Map(),
-    config: { bindings: {}, adapter: "local" },
   };
 }
 
@@ -166,18 +140,4 @@ export function failureOf<T>(answer: Answer<T>): Failure {
     assert.fail(`expected a failure, got ${JSON.stringify(answer)}`);
   }
   return answer;
-}
-
-export function accepted<T>(outcome: Outcome<T>): T {
-  if (!outcome.ok) {
-    assert.fail(`expected no problems, got ${JSON.stringify(outcome.problems)}`);
-  }
-  return outcome.value;
-}
-
-export function problemsOf<T>(outcome: Outcome<T>): readonly Problem[] {
-  if (outcome.ok) {
-    assert.fail("expected problems, got none");
-  }
-  return outcome.problems;
 }

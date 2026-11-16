@@ -1,9 +1,12 @@
+import assert from "node:assert/strict";
 import { stringify } from "yaml";
+import type { ModeGrants } from "../bay/contracts.ts";
 import type { Config } from "../bay/generated/config.ts";
 import type { Interface } from "../bay/generated/interface.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
 import { layoutOf } from "../bay/layout.ts";
+import type { System } from "../bay/manifests/registry.ts";
 
 export const layout = layoutOf({ kit: "/kit", project: "/kit" });
 
@@ -169,4 +172,10 @@ export function validFiles(): Record<string, string> {
 
 export function rooted(files: Readonly<Record<string, string>>): Record<string, string> {
   return Object.fromEntries(Object.entries(files).map(([path, text]) => [`${layout.project}/${path}`, text]));
+}
+
+export function activeModeGrants(system: System, name: string): ModeGrants {
+  const mode = system.modes.get(name);
+  assert.ok(mode, `${name} is not an active mode of the system`);
+  return mode.grants;
 }

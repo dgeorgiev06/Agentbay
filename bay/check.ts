@@ -14,7 +14,7 @@ import { checkLimits } from "./check-limits.ts";
 import { checkSkills } from "./check-skills.ts";
 import { isInsideOrEqual, isProjectTheKit, pathIn, shownPath, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
-import { loadPolicedSystem } from "./policy.ts";
+import { loadSystemReport } from "./manifests/registry.ts";
 import { problemAt } from "./manifests/spec.ts";
 import type { Problem } from "./outcome.ts";
 
@@ -67,7 +67,7 @@ function shownFindings(layout: Layout, findings: readonly Finding[]): readonly F
 }
 
 export async function checkSystem(ports: CheckPorts, layout: Layout): Promise<CheckReport> {
-  const report = await loadPolicedSystem(ports.files, layout);
+  const report = await loadSystemReport(ports.files, layout);
   const context = await loadCheckContext({ ...ports, layout, active: report.active });
   const registryFindings = report.outcome.ok ? [] : errors(report.outcome.problems);
   const findings = shownFindings(layout, [

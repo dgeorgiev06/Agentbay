@@ -1,7 +1,7 @@
 import { Broker } from "./broker.ts";
 import type { FileListing } from "./check-context.ts";
 import type { Layout } from "./layout.ts";
-import type { Permissions, PolicyOf, StepPlace } from "./contracts.ts";
+import type { Permissions, StepPlace } from "./contracts.ts";
 import {
   createNodeHttp,
   createProjectFileListing,
@@ -13,9 +13,8 @@ import {
   nodeRemoval,
   systemClock,
 } from "./node-ports.ts";
-import { loadPolicedSystem } from "./policy.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, Folders, Http, Processes, Removal } from "./ports.ts";
-import type { System } from "./manifests/registry.ts";
+import { loadSystemReport, type System } from "./manifests/registry.ts";
 import { openRuns, type Runs } from "./runs/runs.ts";
 import { createScriptRunner } from "./script-runner.ts";
 import { SecretStore, type SecretStoreOptions } from "./secrets.ts";
@@ -54,7 +53,6 @@ export type Kernel = {
   readonly layout: Layout;
   readonly ports: KernelPorts;
   readonly system: System;
-  readonly policyOf: PolicyOf;
   readonly secrets: SecretStore;
   readonly runs: Runs;
   readonly brokerFor: (place: StepPlace, permissions: Permissions) => Broker;
@@ -87,12 +85,12 @@ export function secretStoreOf(options: Omit<KernelOptions, "layout">): SecretSto
 
 export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel>> {
   const { ports, layout } = options;
-  const loaded = (await loadPolicedSystem(ports.files, layout)).outcome;
+  const loaded = (await loadSystemReport(ports.files, layout)).outcome;
   if (!loaded.ok) {
     return loaded;
   }
-  const { system, policyOf } = loaded.value;
-  const declaredBy = [...system.active].map(policyOf);
+  const system = loaded.value;
+  const declaredBy = [...system.modes.values()].map((mode) => mode.grants);
   const secrets = await SecretStore.open({ ...storeOptionsOf(options), declaredBy });
   const limits = { toolCallsPerRound: maximumToolCallsPerRound, ...options.limits };
   const services = { layout, files: ports.files, inspector: ports.inspector, http: ports.http, secrets };
@@ -103,7 +101,6 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
     files: ports.files,
     clock: ports.clock,
     system,
-    policyOf,
     scrubber: secrets,
     toolCallsPerRound: limits.toolCallsPerRound,
     runner: (events) => createScriptRunner({ ...services, ...processes, events }),
@@ -115,7 +112,6 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
     layout,
     ports,
     system,
-    policyOf,
     secrets,
     runs,
     brokerFor,

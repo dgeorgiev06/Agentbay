@@ -1,9 +1,9 @@
 import { join } from "node:path/posix";
 import { pathToFileURL } from "node:url";
 import { agentName, type Adapter, type SkillAgent } from "./adapter.ts";
-import type { Effect, PolicyOf, Tier } from "./contracts.ts";
+import type { Effect, ModeGrants, Tier } from "./contracts.ts";
 import type { FileSystem } from "./ports.ts";
-import type { LoadedMode, System } from "./manifests/registry.ts";
+import type { ActiveMode, System } from "./manifests/registry.ts";
 import { skillNameOf, skillToolsOf } from "./skill-tools.ts";
 import { parseSkill } from "./manifests/spec.ts";
 import { isRecord } from "./json.ts";
@@ -11,7 +11,6 @@ import type { Outcome, Problem } from "./outcome.ts";
 
 export type AgentPlanning = {
   readonly system: System;
-  readonly policyOf: PolicyOf;
   readonly files: FileSystem;
 };
 
@@ -19,6 +18,7 @@ type SkillUse = {
   readonly mode: string;
   readonly folder: string;
   readonly skill: string;
+  readonly grants: ModeGrants;
   tier: Tier;
   readonly effects: Set<Effect>;
 };
@@ -37,7 +37,7 @@ function higherTier(first: Tier, second: Tier): Tier {
   return tierOrder.indexOf(second) > tierOrder.indexOf(first) ? second : first;
 }
 
-function skillSteps(mode: LoadedMode): readonly SkillStepUse[] {
+function skillSteps(mode: ActiveMode): readonly SkillStepUse[] {
   return Object.values(mode.manifest.actions).flatMap((action) =>
     action.run.flatMap((step) =>
       "skill" in step ? [{ skill: step.skill, tier: step.tier, effects: action.effects }] : [],
@@ -48,15 +48,13 @@ function skillSteps(mode: LoadedMode): readonly SkillStepUse[] {
 function skillUses(system: System): readonly SkillUse[] {
   const uses = new Map<string, SkillUse>();
   for (const [mode, loaded] of system.modes) {
-    if (!system.active.has(mode)) {
-      continue;
-    }
     for (const step of skillSteps(loaded)) {
       const key = `${mode}/${skillNameOf(step.skill)}`;
       const use = uses.get(key) ?? {
         mode,
         folder: loaded.folder,
         skill: step.skill,
+        grants: loaded.grants,
         tier: step.tier,
         effects: new Set(),
       };
@@ -86,7 +84,7 @@ async function agentOf(planning: AgentPlanning, use: SkillUse): Promise<Outcome<
     description: parsed.value.frontMatter.description,
     tier: use.tier,
     kernelTools: tools.kernelTools,
-    grants: planning.policyOf(use.mode),
+    grants: use.grants,
     effects: [...use.effects],
   };
   return { ok: true, value: agent };

@@ -476,6 +476,7 @@ test("a settings schema that is missing or not usable is reported in the mode's 
 
 test("a skill step's check script that does not exist is reported", async () => {
   const add: Action = {
+    description: "When the owner wants a note written.",
     input: "schemas/add-input.json",
     output: "schemas/add-output.json",
     effects: ["read", "write"],

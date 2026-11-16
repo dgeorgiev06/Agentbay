@@ -114,6 +114,7 @@ function journalFiles(script: string): Record<string, string> {
     description: "Keeps a journal.",
     actions: {
       write: {
+        description: "When the owner writes an entry.",
         input: "schemas/in.json",
         output: "schemas/out.json",
         effects: ["read"],
@@ -197,4 +198,64 @@ test("a project script imports the SDK only as agentbay/sdk, never by a path to 
     const finding = findFinding(await checkFake(files, separate), `${journalFolder}/scripts/write.ts`, words);
     assert.match(finding.message + (finding.fix ?? ""), /agentbay\/sdk/);
   }
+});
+
+function journalManifest(descriptionLines: readonly string[]): string {
+  return [
+    "name: journal",
+    "version: 1.0.0",
+    "description: Keeps a journal.",
+    "actions:",
+    "  write:",
+    ...descriptionLines,
+    "    input: schemas/in.json",
+    "    output: schemas/out.json",
+    "    effects: [read]",
+    "    run:",
+    "      - script: scripts/write.ts",
+    "",
+  ].join("\n");
+}
+
+function journalWith(descriptionLines: readonly string[]): FakeFileSystem {
+  return separateFiles({
+    "agentbay.config.yaml": yamlText(config),
+    ...journalFiles(sdkScript),
+    [`${journalFolder}/mode.yaml`]: journalManifest(descriptionLines),
+  });
+}
+
+const descriptionWanted = "One sentence saying when an owner or a mode would use the action.";
+
+test("bay check refuses an action with no description, naming the action, the file, the line and what to write", async () => {
+  const report = await checkFake(journalWith([]), separate);
+  assert.deepEqual(report.findings, [
+    {
+      severity: "error",
+      file: `${journalFolder}/mode.yaml`,
+      path: "/actions/write",
+      line: 6,
+      message: "actions.write is missing the required field description.",
+      fix: `Add description. Expected: ${descriptionWanted}`,
+    },
+  ]);
+});
+
+test("bay check refuses an action whose description is empty or only spaces, and says what to write", async () => {
+  for (const blank of ['""', '"   "']) {
+    const report = await checkFake(journalWith([`    description: ${blank}`]), separate);
+    assert.deepEqual(report.findings, [
+      {
+        severity: "error",
+        file: `${journalFolder}/mode.yaml`,
+        path: "/actions/write/description",
+        line: 6,
+        message: `actions.write.description is not in the expected form. Expected: ${descriptionWanted}`,
+      },
+    ]);
+  }
+});
+
+test("bay check accepts an action whose description is one sentence", async () => {
+  assertClean(await checkFake(journalWith(["    description: When the owner writes an entry."]), separate));
 });

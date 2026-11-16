@@ -110,6 +110,7 @@ test("newAction writes schemas, a script and an example, and adds the action to 
   const actions = member(yamlValue(text(files, "components/modes/notes/mode.yaml")), "actions");
   assert.deepEqual(isRecord(actions) ? Object.keys(actions) : [], ["add", "tidy"]);
   assert.deepEqual(member(actions, "tidy"), {
+    description: "Replace this line with one sentence on when to use tidy.",
     input: "schemas/tidy-input.json",
     output: "schemas/tidy-output.json",
     effects: ["read"],
@@ -144,7 +145,10 @@ test("newAction keeps the comments and the key order of mode.yaml", async () => 
     .filter((line) => /^[a-z]+:/.test(line))
     .map((line) => line.slice(0, line.indexOf(":")));
   assert.deepEqual(keys, ["name", "version", "description", "actions", "workflows"]);
-  assert.match(result, /actions:\n {2}tidy:\n {4}input: schemas\/tidy-input.json/);
+  assert.match(
+    result,
+    /actions:\n {2}tidy:\n {4}description: Replace this line [^\n]*\n {4}input: schemas\/tidy-input.json/,
+  );
 });
 
 test("newAction refuses an unknown mode, an existing action, a bad name and an existing file", async () => {

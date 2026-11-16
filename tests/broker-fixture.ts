@@ -26,7 +26,13 @@ export function modeNamed(name: string, resources: Mode["resources"], actions?: 
     description: `The ${name} mode.`,
     ...(resources === undefined ? {} : { resources }),
     actions: actions ?? {
-      look: { input: "schemas/in.json", output: "schemas/out.json", effects: ["read"], run: [{ script: "a.ts" }] },
+      look: {
+        description: "When a test looks.",
+        input: "schemas/in.json",
+        output: "schemas/out.json",
+        effects: ["read"],
+        run: [{ script: "a.ts" }],
+      },
     },
   };
 }

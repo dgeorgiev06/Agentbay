@@ -66,6 +66,7 @@ function makeTheActionScriptSkillScript(): void {
   const manifest: unknown = parse(readFileSync(join(mode, "mode.yaml"), "utf8"));
   assert.ok(isRecord(manifest));
   const tidy = {
+    description: "When the owner wants the notes tidied.",
     input: "schemas/tidy-input.json",
     output: "schemas/tidy-output.json",
     effects: ["read", "write"],

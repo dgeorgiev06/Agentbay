@@ -517,6 +517,7 @@ test("a call or workflow action whose binding vanished before resume fails the s
 
 test("an undo runs to its end even when its own budget is spent", async () => {
   const keep = {
+    description: "When a test keeps something.",
     input: "schemas/anything.json",
     output: "schemas/anything.json",
     effects: ["write" as const],
@@ -524,6 +525,7 @@ test("an undo runs to its end even when its own budget is spent", async () => {
     undo: "unkeep",
   };
   const unkeep = {
+    description: "When a test takes back what it kept.",
     input: "schemas/anything.json",
     output: "schemas/anything.json",
     effects: ["write" as const, "spend" as const],

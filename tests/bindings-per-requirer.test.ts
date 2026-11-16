@@ -22,7 +22,12 @@ const greetingSchema = {
 const draftSchema = { type: "object", required: ["text"], properties: { text: { type: "string" } } };
 
 function requirerManifest(name: string): Json {
-  const greet = { input: "schemas/name.json", output: "schemas/greeting.json", effects: ["read"] };
+  const greet = {
+    description: "When a test asks for a greeting.",
+    input: "schemas/name.json",
+    output: "schemas/greeting.json",
+    effects: ["read"],
+  };
   return {
     name,
     version: "1.0.0",
@@ -76,6 +81,7 @@ async function writeRequirer(project: Project, name: string): Promise<void> {
 async function writeEchoer(project: Project): Promise<void> {
   const folder = "components/modes/echoer";
   const fetch = {
+    description: "When a mode needs a greeting for a name.",
     input: "schemas/fetch-input.json",
     output: "schemas/fetch-output.json",
     effects: ["read"],

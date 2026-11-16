@@ -41,6 +41,7 @@ async function addProber(project: Project, scriptBody: readonly string[]): Promi
     resources: { files: { read: ["data/"] } },
     actions: {
       probe: {
+        description: "When a test probes a file.",
         input: "schemas/anything.json",
         output: "schemas/anything.json",
         effects: ["read"],

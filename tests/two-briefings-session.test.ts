@@ -120,8 +120,14 @@ function writeNotesBriefing(): void {
     description: "Fetches one page from its bound source and keeps it in its own part of the store.",
     requires: { interfaces: ["items-source@1", "items-store@1"] },
     actions: {
-      sync: { input: "schemas/sync-input.json", output: "schemas/sync-output.json", ...syncSteps },
+      sync: {
+        description: "When the owner wants one page from the bound source kept.",
+        input: "schemas/sync-input.json",
+        output: "schemas/sync-output.json",
+        ...syncSteps,
+      },
       status: {
+        description: "When the owner wants the store's counts.",
         input: "schemas/status-request.json",
         output: "schemas/status-response.json",
         effects: ["read"],
@@ -164,12 +170,14 @@ function writeFakeTwo(): void {
     implements: ["items-source@1"],
     actions: {
       fetch: {
+        description: "When a mode needs the made-up notes.",
         input: "schemas/fetch-request.json",
         output: "schemas/fetch-response.json",
         effects: ["read", "network", "spend"],
         run: [{ script: "scripts/fetch.ts" }],
       },
       describe: {
+        description: "When a mode needs the source's name and kinds.",
         input: "schemas/describe-request.json",
         output: "schemas/describe-response.json",
         effects: ["read"],

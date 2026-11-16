@@ -184,6 +184,7 @@ const itemsStore: Interface = {
 
 function scriptAction(effects: Action["effects"], scripts: readonly string[], schema = "anything.json"): Action {
   return {
+    description: "When a test runs scripts.",
     input: `schemas/${schema}`,
     output: `schemas/${schema}`,
     effects,
@@ -198,6 +199,7 @@ const storeMode: Mode = {
   implements: ["items-store@1"],
   actions: {
     put: {
+      description: "When a mode keeps an item.",
       input: "schemas/item.json",
       output: "schemas/receipt.json",
       effects: ["write"],
@@ -223,12 +225,14 @@ const notesActions: Readonly<Record<string, Action>> = {
   spend: scriptAction(["read", "spend"], ["spend.ts", "spend.ts", "spend.ts"]),
   long: scriptAction(["read"], ["slow.ts", "slow.ts", "slow.ts", "slow.ts", "slow.ts", "slow.ts"]),
   "store-one": {
+    description: "When a test stores one item.",
     input: "schemas/item.json",
     output: "schemas/receipt.json",
     effects: ["read", "write"],
     run: [{ call: "items-store.put" }],
   },
   "store-then-fail": {
+    description: "When a test stores an item and then fails.",
     input: "schemas/item.json",
     output: "schemas/anything.json",
     effects: ["read", "write"],
@@ -236,6 +240,7 @@ const notesActions: Readonly<Record<string, Action>> = {
   },
   peek: { ...scriptAction(["read"], []), run: [{ call: "items-store.get" }] },
   budgeted: {
+    description: "When a test spends from a budget.",
     input: "schemas/anything.json",
     output: "schemas/anything.json",
     effects: ["read", "write", "spend"],
@@ -243,12 +248,14 @@ const notesActions: Readonly<Record<string, Action>> = {
     budget: { items: 5 },
   },
   draft: {
+    description: "When a test drafts a text.",
     input: "schemas/anything.json",
     output: "schemas/draft.json",
     effects: ["read"],
     run: [{ skill: "skills/draft", tier: "balanced", checks: ["scripts/long-enough.ts"] }],
   },
   "draft-and-store": {
+    description: "When a test drafts a text and stores it.",
     input: "schemas/anything.json",
     output: "schemas/receipt.json",
     effects: ["read", "write"],

@@ -77,12 +77,14 @@ const greeterMode = {
   implements: ["greeting-source@1"],
   actions: {
     fetch: {
+      description: "When a mode needs a greeting for a name.",
       input: "schemas/fetch-input.json",
       output: "schemas/fetch-output.json",
       effects: ["read"],
       run: [{ script: "scripts/fetch.ts" }],
     },
     tally: {
+      description: "When a test spends tokens before it greets.",
       input: "schemas/fetch-input.json",
       output: "schemas/fetch-output.json",
       effects: ["read", "spend"],
@@ -101,6 +103,7 @@ const writerMode = {
   settings: "schemas/settings.json",
   actions: {
     compose: {
+      description: "When the owner wants a note drafted from a greeting.",
       input: "schemas/compose-input.json",
       output: "schemas/compose-output.json",
       effects: ["read", "write"],

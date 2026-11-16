@@ -256,6 +256,7 @@ function addActionEntry(name: string): ManifestEdit {
     }
     blockMapAt(document, "actions");
     const action = document.createNode({
+      description: `Replace this line with one sentence on when to use ${name}.`,
       input: `schemas/${name}-input.json`,
       output: `schemas/${name}-output.json`,
       effects: ["read"],

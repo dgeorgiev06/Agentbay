@@ -1,24 +1,16 @@
 import { join } from "node:path/posix";
 import { pathToFileURL } from "node:url";
 import { agentName, type Adapter, type SkillAgent } from "./adapter.ts";
-import type { Effect, ModeGrants, Tier } from "./contracts.ts";
+import type { Effect, Tier } from "./contracts.ts";
 import type { FileSystem } from "./ports.ts";
 import type { ActiveMode, System } from "./manifests/manifests.ts";
 import { skillNameOf, skillToolsOf } from "./skill-tools.ts";
-import { parseSkill } from "./manifests/spec.ts";
 import { isRecord } from "./json.ts";
 import type { Outcome, Problem } from "./outcome.ts";
 
-export type AgentPlanning = {
-  readonly system: System;
-  readonly files: FileSystem;
-};
-
-type SkillUse = {
-  readonly mode: string;
-  readonly folder: string;
+type AgentUse = {
+  readonly mode: ActiveMode;
   readonly skill: string;
-  readonly grants: ModeGrants;
   tier: Tier;
   readonly effects: Set<Effect>;
 };
@@ -45,19 +37,12 @@ function skillSteps(mode: ActiveMode): readonly SkillStepUse[] {
   );
 }
 
-function skillUses(system: System): readonly SkillUse[] {
-  const uses = new Map<string, SkillUse>();
-  for (const [mode, loaded] of system.modes) {
-    for (const step of skillSteps(loaded)) {
-      const key = `${mode}/${skillNameOf(step.skill)}`;
-      const use = uses.get(key) ?? {
-        mode,
-        folder: loaded.folder,
-        skill: step.skill,
-        grants: loaded.grants,
-        tier: step.tier,
-        effects: new Set(),
-      };
+function agentUses(system: System): readonly AgentUse[] {
+  const uses = new Map<string, AgentUse>();
+  for (const [name, mode] of system.modes) {
+    for (const step of skillSteps(mode)) {
+      const key = `${name}/${skillNameOf(step.skill)}`;
+      const use = uses.get(key) ?? { mode, skill: step.skill, tier: step.tier, effects: new Set() };
       use.tier = higherTier(use.tier, step.tier);
       for (const effect of step.effects) {
         use.effects.add(effect);
@@ -68,33 +53,32 @@ function skillUses(system: System): readonly SkillUse[] {
   return [...uses.values()];
 }
 
-async function agentOf(planning: AgentPlanning, use: SkillUse): Promise<Outcome<SkillAgent>> {
-  const skillFile = join(use.folder, use.skill, "SKILL.md");
-  const parsed = await parseSkill(planning.files, skillFile);
-  if (!parsed.ok) {
-    return parsed;
+async function agentOf(use: AgentUse): Promise<Outcome<SkillAgent>> {
+  const found = await use.mode.skill(use.skill);
+  if (!found.ok) {
+    return found;
   }
-  const tools = await skillToolsOf(planning.files, skillFile);
+  const mode = use.mode.manifest.name;
   const skill = skillNameOf(use.skill);
   const agent: SkillAgent = {
-    agent: agentName(use.mode, skill),
-    mode: use.mode,
+    agent: agentName(mode, skill),
+    mode,
     skill,
-    skillFile,
-    description: parsed.value.frontMatter.description,
+    skillFile: found.value.file,
+    description: found.value.frontMatter.description,
     tier: use.tier,
-    kernelTools: tools.kernelTools,
-    grants: use.grants,
+    kernelTools: skillToolsOf(found.value.tools).kernelTools,
+    grants: use.mode.grants,
     effects: [...use.effects],
   };
   return { ok: true, value: agent };
 }
 
-export async function planAgents(planning: AgentPlanning): Promise<Outcome<readonly SkillAgent[]>> {
+export async function planAgents(system: System): Promise<Outcome<readonly SkillAgent[]>> {
   const agents: SkillAgent[] = [];
   const problems: Problem[] = [];
-  for (const use of skillUses(planning.system)) {
-    const outcome = await agentOf(planning, use);
+  for (const use of agentUses(system)) {
+    const outcome = await agentOf(use);
     if (outcome.ok) {
       agents.push(outcome.value);
     } else {

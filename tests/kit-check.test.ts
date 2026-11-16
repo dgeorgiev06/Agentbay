@@ -33,7 +33,7 @@ test("the real bay check on the kit itself reports no errors, the two size warni
   const listedGit = listedBy("git-worktrees");
   const git =
     "git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false " +
-    "--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs";
+    "--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904";
   assert.deepEqual(findings, [
     listedGit(11, `${git} rev-parse --verify --quiet --end-of-options`),
     listedGit(12, `${git} config --show-scope --name-only --get-regexp ^filter\\.`),

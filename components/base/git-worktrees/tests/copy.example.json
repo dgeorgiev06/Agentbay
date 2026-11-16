@@ -1,0 +1,4 @@
+{
+  "input": { "commit": "forge/mail-source", "name": "mail-source-check", "links": ["node_modules"] },
+  "output": { "folder": ".forge/copies/mail-source-check" }
+}

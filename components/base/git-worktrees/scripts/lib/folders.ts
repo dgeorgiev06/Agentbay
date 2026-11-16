@@ -6,6 +6,10 @@ export function worktreeFolder(slice: string): string {
   return `.forge/worktrees/${slice}`;
 }
 
+export function copyFolder(name: string): string {
+  return `.forge/copies/${name}`;
+}
+
 export function sliceBranch(slice: string): string {
   return `forge/${slice}`;
 }

@@ -8,20 +8,20 @@ resources:
   files:
     throwaway: [.forge/copies/]
   commands:
-    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs rev-parse --verify --quiet --end-of-options
-    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs config --show-scope --name-only --get-regexp ^filter\.
-    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs worktree add --detach --end-of-options
-    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs branch --end-of-options
-    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs switch --end-of-options
-    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs status --porcelain=v1 -z --untracked-files=all --ignore-submodules=all --
-    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs log -z --reverse --no-show-signature --no-color --format=%H%x20%s --end-of-options
-    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs diff --name-status -z -M --no-ext-diff --no-textconv --no-color --no-relative --end-of-options
-    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs check-ignore --quiet --end-of-options
-    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs ls-tree -z --name-only --end-of-options
-    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs --work-tree=. restore --worktree --source
-    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs merge-base --is-ancestor --end-of-options
-    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs worktree remove --end-of-options
-    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs branch -d --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 rev-parse --verify --quiet --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 config --show-scope --name-only --get-regexp ^filter\.
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 worktree add --detach --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 branch --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 switch --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 status --porcelain=v1 -z --untracked-files=all --ignore-submodules=all --
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 log -z --reverse --no-show-signature --no-color --format=%H%x20%s --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 diff --name-status -z -M --no-ext-diff --no-textconv --no-color --no-relative --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 check-ignore --quiet --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 ls-tree -z --name-only --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --work-tree=. restore --worktree --source
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 merge-base --is-ancestor --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 worktree remove --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 branch -d --end-of-options
 
 actions:
   cut:
@@ -45,3 +45,10 @@ actions:
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/changed.ts
+  copy:
+    description: When a mode needs a throwaway copy of a commit's files under .forge/copies/, with links to ignored folders of the project such as installed packages.
+    input: schemas/copy-request.json
+    output: schemas/copy-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/copy.ts

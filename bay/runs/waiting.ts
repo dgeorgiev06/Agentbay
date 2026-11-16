@@ -1,4 +1,5 @@
-import type { PolicyOf, Scrubber, SkillTask } from "../contracts.ts";
+import { measures, type PolicyOf, type RunEvent, type Scrubber } from "../contracts.ts";
+import { numberField, textField } from "../json.ts";
 import type { System } from "../registry.ts";
 import type { RunWithSteps, StepRecord } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
@@ -13,11 +14,17 @@ type WaitingContext = {
   readonly scrubber: Scrubber;
 };
 
+type Stored = {
+  readonly run: RunWithSteps;
+  readonly events: readonly RunEvent[];
+};
+
 function recordOf(run: RunWithSteps, key: string): StepRecord | undefined {
   return run.steps.find((step) => step.key === key);
 }
 
-function skillTaskAt(context: WaitingContext, run: RunWithSteps, waitingKey: string): SkillTask | undefined {
+function skillWaiting(context: WaitingContext, stored: Stored, waitingKey: string): Waiting | undefined {
+  const { run, events } = stored;
   const round = skillRoundOf(waitingKey);
   const record = startedSkillOf(round === undefined ? undefined : recordOf(run, round.step));
   if (record === undefined) {
@@ -29,7 +36,9 @@ function skillTaskAt(context: WaitingContext, run: RunWithSteps, waitingKey: str
     return undefined;
   }
   const permissions = { grants: context.policyOf(detail.mode), actionEffects: target.action.effects };
-  return skillTaskOf({ runId: run.id, key: record.key, input: record.input, detail }, permissions);
+  const at = { runId: run.id, key: record.key, input: record.input, detail };
+  const task = skillTaskOf(at, { folder: target.mode.folder, permissions, events });
+  return { reason: "skill", stepKey: waitingKey, task };
 }
 
 function approvalWaiting(context: WaitingContext, run: RunWithSteps, stepKey: string): Waiting | undefined {
@@ -49,26 +58,38 @@ function approvalWaiting(context: WaitingContext, run: RunWithSteps, stepKey: st
   };
 }
 
+function budgetWaiting(events: readonly RunEvent[], stepKey: string): Waiting | undefined {
+  const exceeded = events.findLast(
+    (event) => event.kind === "budget.exceeded" && textField(event.detail, "stepKey") === stepKey,
+  );
+  const detail = exceeded?.detail ?? null;
+  const measure = measures.find((known) => known === textField(detail, "measure"));
+  const limit = numberField(detail, "limit");
+  const spent = numberField(detail, "spent");
+  if (measure === undefined || limit === undefined || spent === undefined) {
+    return undefined;
+  }
+  return { reason: "budget", stepKey, overrun: { measure, limit, spent } };
+}
+
 const ownerQuestion =
   "The step started and did not finish, and its action has effects other than read, so running it again could " +
   "repeat them. Resume with --rerun to run it again.";
 
-export function storedWaiting(context: WaitingContext, run: RunWithSteps): Waiting | undefined {
-  const state = run.state;
+export function storedWaiting(context: WaitingContext, stored: Stored): Waiting | undefined {
+  const state = stored.run.state;
   if (state.status !== "waiting") {
     return undefined;
   }
   switch (state.reason) {
-    case "skill": {
-      const task = skillTaskAt(context, run, state.stepKey);
-      return task === undefined ? undefined : { reason: "skill", stepKey: state.stepKey, task };
-    }
+    case "skill":
+      return skillWaiting(context, stored, state.stepKey);
     case "approval":
-      return approvalWaiting(context, run, state.stepKey);
+      return approvalWaiting(context, stored.run, state.stepKey);
     case "time":
       return { reason: "time", stepKey: state.stepKey, until: state.until ?? "" };
     case "budget":
-      return undefined;
+      return budgetWaiting(stored.events, state.stepKey);
     case "owner":
       return { reason: "owner", stepKey: state.stepKey, question: ownerQuestion };
   }

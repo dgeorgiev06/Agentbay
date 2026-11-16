@@ -1,5 +1,6 @@
 import type { EventSink, Json, RunEvent, Settled, Spend } from "../contracts.ts";
 import type { Budget } from "../generated/mode.ts";
+import type { RunState } from "./run-state.ts";
 import type { RefusedDetail, StepDetail, StepKind } from "./step-detail.ts";
 
 export const kernelDatabaseFile = ".agentbay/kernel.db";
@@ -19,10 +20,8 @@ export type RunTarget =
   | { readonly kind: "workflow"; readonly mode: string; readonly name: string };
 
 export type StoredState =
-  | { readonly status: "running" }
+  | Extract<RunState, { readonly status: "running" | "done" | "failed" }>
   | { readonly status: "waiting"; readonly reason: WaitingReason; readonly stepKey: string; readonly until?: string }
-  | { readonly status: "done"; readonly output: Json }
-  | { readonly status: "failed"; readonly reason: string }
   | { readonly status: "undone"; readonly reason: string; readonly undo: Json };
 
 type StepStartFields = {

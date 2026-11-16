@@ -1,9 +1,22 @@
 import type { Overrun } from "./budget.ts";
-import type { Json, SkillTask, Spend } from "../contracts.ts";
-import type { RunTarget, StepRecord } from "./run-store.ts";
+import type { Json, Permissions, StepPlace, Tier } from "../contracts.ts";
 
-export type Waiting =
-  | { readonly reason: "skill"; readonly stepKey: string; readonly task: SkillTask }
+export type SkillTask = {
+  readonly runId: string;
+  readonly stepKey: string;
+  readonly round: number;
+  readonly feedback: readonly string[];
+  readonly skill: string;
+  readonly tier: Tier;
+  readonly input: Json;
+  readonly files: { readonly skill: string; readonly outputSchema: string; readonly alsoMatches: readonly string[] };
+  readonly place: StepPlace;
+  readonly permissions: Permissions;
+  readonly toolCalls: number;
+};
+
+export type Waiting<HandedTask extends SkillTask = SkillTask> =
+  | { readonly reason: "skill"; readonly stepKey: string; readonly task: HandedTask }
   | {
       readonly reason: "approval";
       readonly stepKey: string;
@@ -28,19 +41,14 @@ export type UndoReport = {
   readonly deleteNotUndone: readonly UndoEntry[];
 };
 
-export type RunStatus =
-  | { readonly status: "waiting"; readonly waiting: Waiting }
+export type RunState<HandedTask extends SkillTask = SkillTask> =
+  | { readonly status: "running" }
+  | { readonly status: "waiting"; readonly waiting: Waiting<HandedTask> }
   | { readonly status: "done"; readonly output: Json }
   | { readonly status: "failed"; readonly reason: string }
   | { readonly status: "undone"; readonly reason: string; readonly undo: UndoReport };
 
-export type RunView = {
-  readonly id: string;
-  readonly target: RunTarget;
-  readonly state: RunStatus;
-  readonly spent: Spend;
-  readonly steps: readonly StepRecord[];
-};
+export type RunStatus = Exclude<RunState, { readonly status: "running" }>;
 
 export type ApprovalDecision = {
   readonly hash: string;

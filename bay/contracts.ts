@@ -63,18 +63,6 @@ export type ScriptRunner = {
   readonly run: (request: ScriptRequest) => Promise<StepOutcome>;
 };
 
-export type SkillTask = {
-  readonly place: StepPlace;
-  readonly skill: string;
-  readonly tier: Tier;
-  readonly input: Json;
-  readonly outputSchema: string;
-  readonly alsoMatches: readonly string[];
-  readonly permissions: Permissions;
-  readonly round: number;
-  readonly feedback: readonly string[];
-};
-
 export type Submission = {
   readonly output: Json;
   readonly spent: Spend;

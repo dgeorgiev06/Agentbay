@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { Engine } from "../../../bay/runs/engine.ts";
+import { Engine, type AdvancedRun } from "../../../bay/runs/engine.ts";
 import type { System } from "../../../bay/registry.ts";
 import type { RunStore } from "../../../bay/runs/run-store.ts";
 import { SqliteRunStore } from "../../../bay/runs/sqlite-run-store.ts";
-import type { RunView, Waiting } from "../../../bay/runs/run-state.ts";
+import type { Waiting } from "../../../bay/runs/run-state.ts";
 import type { Outcome } from "../../../bay/outcome.ts";
 import type { SecretStore } from "../../../bay/secrets.ts";
 import { fakeClock } from "../../fakes.ts";
@@ -98,18 +98,18 @@ export async function harness(
   };
 }
 
-export function runOf(result: Outcome<RunView>): RunView {
+export function runOf<T>(result: Outcome<T>): T {
   assert.ok(result.ok, result.ok ? "" : JSON.stringify(result.problems, null, 2));
   return result.value;
 }
 
-export function waitingOf(result: Outcome<RunView>): Waiting {
+export function waitingOf(result: Outcome<AdvancedRun>): Waiting {
   const run = runOf(result);
   assert.equal(run.state.status, "waiting", JSON.stringify(run.state));
   return run.state.waiting;
 }
 
-export function problemsOf(result: Outcome<RunView>): readonly string[] {
+export function problemsOf(result: Outcome<unknown>): readonly string[] {
   assert.ok(!result.ok, `expected a refusal, got ${JSON.stringify(result)}`);
   return result.problems.map((problem) => problem.message);
 }

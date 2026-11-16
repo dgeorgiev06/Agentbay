@@ -287,3 +287,25 @@ test("call, runs and approve each in its own kernel print no secret text when no
     await project.remove();
   }
 });
+
+test("a declared secret that is not set does not stop a call, and secret check reports it as before", async () => {
+  const project = await projectDeclaringSecretNoScriptAsksFor();
+  try {
+    const call = ["call", "--workflow", "writer:workflows/review.yaml", '{"name":"Cy"}', "--project", project.root];
+    const called = await bay([...call, "--json"]);
+    assert.equal(called.exitCode, 0, called.output);
+    assert.equal(textField(fieldOf(toJson(called.json), "run") ?? null, "status"), "waiting");
+    const checked = await bay(["secret", "check", "NOTES_TOKEN", "--project", project.root, "--json"]);
+    assert.equal(checked.exitCode, 1);
+    assert.deepEqual(checked.json, {
+      ok: false,
+      name: "NOTES_TOKEN",
+      found: false,
+      message:
+        "The secret NOTES_TOKEN is not set. Set AGENTBAY_SECRET_NOTES_TOKEN in the environment, or on macOS store " +
+        "it with `security add-generic-password -s agentbay -a NOTES_TOKEN -w`.",
+    });
+  } finally {
+    await project.remove();
+  }
+});

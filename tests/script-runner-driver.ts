@@ -14,6 +14,8 @@ async function main(root: string): Promise<void> {
     events: recordingSink(),
     clock: systemClock,
     childProcesses: nodeChildProcesses,
+    processes: noProcesses,
+    commandSearchPath: "/usr/bin:/bin",
   });
   const outcome = await runner.run({
     place,

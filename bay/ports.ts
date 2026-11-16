@@ -26,10 +26,22 @@ export type ProcessRequest = {
   readonly input?: string;
 };
 
+export type ProcessEnd =
+  | { readonly how: "exited"; readonly exitCode: number }
+  | { readonly how: "signalled"; readonly signal: string }
+  | { readonly how: "timed-out" }
+  | { readonly how: "not-started"; readonly reason: string };
+
+export type ProcessOutput = {
+  readonly text: string;
+  readonly characters: number;
+  readonly hash: string;
+};
+
 export type ProcessResult = {
-  readonly exitCode: number | undefined;
-  readonly stdout: string;
-  readonly stderr: string;
+  readonly end: ProcessEnd;
+  readonly stdout: ProcessOutput;
+  readonly stderr: ProcessOutput;
 };
 
 export type Processes = {

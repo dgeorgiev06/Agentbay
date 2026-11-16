@@ -118,6 +118,8 @@ test("a script whose call to another action throws gets a failed answer and the 
       events: recordingSink(),
       clock: systemClock,
       childProcesses: nodeChildProcesses,
+      processes: noProcesses,
+      commandSearchPath: "/usr/bin:/bin",
     });
     const outcome = await runner.run({
       place,

@@ -61,6 +61,10 @@ export type Kernel = {
 
 const httpLimits = { maximumResponseBytes: 10 * 1024 * 1024, timeoutMilliseconds: 60_000 };
 
+function searchPathOf(environment: Environment): string {
+  return environment.PATH ?? "/usr/bin:/bin";
+}
+
 export function nodeKernelPorts(environment: Environment): KernelPorts {
   return {
     files: nodeFileSystem,
@@ -71,7 +75,7 @@ export function nodeKernelPorts(environment: Environment): KernelPorts {
     processes: nodeProcesses,
     childProcesses: nodeChildProcesses,
     clock: systemClock,
-    listing: createProjectFileListing({ PATH: environment.PATH ?? "/usr/bin:/bin" }, nodeFileInspector),
+    listing: createProjectFileListing({ PATH: searchPathOf(environment) }, nodeFileInspector),
   };
 }
 
@@ -94,7 +98,12 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
   const secrets = await SecretStore.open({ ...storeOptionsOf(options), declaredBy });
   const limits = { toolCallsPerRound: maximumToolCallsPerRound, ...options.limits };
   const services = { layout, files: ports.files, inspector: ports.inspector, http: ports.http, secrets };
-  const processes = { clock: ports.clock, childProcesses: ports.childProcesses };
+  const processes = {
+    clock: ports.clock,
+    childProcesses: ports.childProcesses,
+    processes: ports.processes,
+    commandSearchPath: searchPathOf(options.environment),
+  };
   const runs = await openRuns({
     project: layout.project,
     folders: ports.folders,

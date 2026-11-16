@@ -1,6 +1,6 @@
 import { pathToFileURL } from "node:url";
 import type { Answer } from "./answers.ts";
-import type { Json } from "./contracts.ts";
+import type { CommandRan, Json } from "./contracts.ts";
 import type { ExecuteResult, Row } from "./database.ts";
 import { isJson, isJsonRecord } from "./protocol-json.ts";
 import type { HttpResponse } from "./ports.ts";
@@ -95,6 +95,16 @@ const isAnything = (value: Json): value is Json => isJson(value);
 
 const isCells = (value: Json): value is readonly Json[] => Array.isArray(value);
 
+const isCommandOutput = (value: Json | undefined): boolean =>
+  isJsonRecord(value) && typeof value.text === "string" && typeof value.cut === "boolean";
+
+const isCommandRan = (value: Json): value is CommandRan & Json =>
+  isJsonRecord(value) &&
+  isJsonRecord(value.end) &&
+  typeof value.end.how === "string" &&
+  isCommandOutput(value.stdout) &&
+  isCommandOutput(value.stderr);
+
 const isAgentQueryResult = (value: Json): value is AgentQueryResult & Json =>
   isJsonRecord(value) && isTexts(value.columns ?? null) && Array.isArray(value.rows) && value.rows.every(isCells);
 
@@ -127,6 +137,9 @@ function contextFor(order: Start): ScriptContext {
     http: { request: async (request) => narrowed(await ask({ resource: "http.request", request }), isResponse) },
     events: {
       emit: async (kind, detail) => narrowed(await ask({ resource: "events.emit", kind, detail }), isNothing),
+    },
+    commands: {
+      run: async (request) => narrowed(await ask({ resource: "commands.run", request }), isCommandRan),
     },
     call: async (reference, input) => narrowed(await ask({ resource: "call", reference, input }), isAnything),
     settings,

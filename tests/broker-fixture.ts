@@ -6,7 +6,15 @@ import assert from "node:assert/strict";
 import type { Answer, Failure, Refusal } from "../bay/answers.ts";
 import type { Effect, EventSink, ModeGrants, Permissions, RunEvent, StepPlace } from "../bay/contracts.ts";
 import type { Mode } from "../bay/generated/mode.ts";
-import type { Http, HttpRequest, HttpResponse, ProcessRequest, ProcessResult, Processes } from "../bay/ports.ts";
+import type {
+  Http,
+  HttpRequest,
+  HttpResponse,
+  ProcessOutput,
+  ProcessRequest,
+  ProcessResult,
+  Processes,
+} from "../bay/ports.ts";
 import { layoutOf, type Layout } from "../bay/layout.ts";
 
 export const kitFolder = fileURLToPath(new URL("..", import.meta.url));
@@ -72,6 +80,14 @@ export function recordingProcesses(answer: (request: ProcessRequest) => ProcessR
       return Promise.resolve(answer(request));
     },
   };
+}
+
+function processOutput(text: string): ProcessOutput {
+  return { text, characters: text.length, hash: "" };
+}
+
+export function exitedProcess(exitCode: number, stdout: string, stderr: string): ProcessResult {
+  return { end: { how: "exited", exitCode }, stdout: processOutput(stdout), stderr: processOutput(stderr) };
 }
 
 export const noProcesses: Processes = {

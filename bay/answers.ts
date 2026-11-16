@@ -2,7 +2,7 @@ import { join } from "node:path/posix";
 import type { ModeGrants } from "./contracts.ts";
 import { scrubSecretPatterns } from "./secret-patterns.ts";
 
-export type Resource = "db" | "files" | "secrets" | "http" | "events" | "call" | "spend" | "script";
+export type Resource = "db" | "files" | "secrets" | "http" | "events" | "call" | "spend" | "script" | "commands";
 
 export type Refusal = {
   readonly ok: false;

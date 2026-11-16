@@ -51,6 +51,8 @@ function setup(answer: (request: HttpRequest) => HttpResponse, limits: Partial<B
     events,
     clock: fakeClock(new Date("2026-11-14T08:00:00Z")),
     childProcesses: nodeChildProcesses,
+    processes: noProcesses,
+    commandSearchPath: "/usr/bin:/bin",
     limits,
   });
   return { broker, http, events, secrets };

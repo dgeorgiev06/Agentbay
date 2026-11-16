@@ -142,10 +142,10 @@
           "items": { "type": "string", "minLength": 1, "description": "A host name." }
         },
         "commands": {
-          "description": "Exact command prefixes the mode's skill steps may run.",
+          "description": "Command prefixes the mode's scripts and skill steps may run, compared argument by argument. Only a mode under the kit's components/base/ may list them, and only an action that declares all five effects may run them.",
           "type": "array",
           "uniqueItems": true,
-          "items": { "type": "string", "minLength": 1, "description": "A command prefix." }
+          "items": { "type": "string", "minLength": 1, "description": "A command prefix: the program, then any leading arguments, separated by spaces." }
         }
       }
     },

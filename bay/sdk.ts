@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { AgentQueryResult } from "./agent-query.ts";
 import type { Answer } from "./answers.ts";
-import type { Json } from "./contracts.ts";
+import type { CommandRan, CommandRequest, Json } from "./contracts.ts";
 import type { ExecuteResult, Row, SqlParameters } from "./database.ts";
 import type { HttpRequest, HttpResponse } from "./ports.ts";
 
@@ -45,6 +45,9 @@ export type ScriptContext = {
   };
   readonly events: {
     readonly emit: (kind: string, detail: Json) => Promise<Answer<null>>;
+  };
+  readonly commands: {
+    readonly run: (request: CommandRequest) => Promise<Answer<CommandRan>>;
   };
   readonly call: (reference: string, input: Json) => Promise<Answer<Json>>;
   readonly settings: Readonly<Record<string, Json>>;

@@ -39,6 +39,8 @@ async function withFilesBroker(run: (setup: Setup) => Promise<void>): Promise<vo
       events,
       clock: systemClock,
       childProcesses: nodeChildProcesses,
+      processes: noProcesses,
+      commandSearchPath: "/usr/bin:/bin",
     });
     try {
       await run({ root, broker, events });
@@ -142,6 +144,8 @@ test("a granted path that is itself a link to another folder of the project is r
       events: recordingSink(),
       clock: systemClock,
       childProcesses: nodeChildProcesses,
+      processes: noProcesses,
+      commandSearchPath: "/usr/bin:/bin",
     });
     try {
       assert.match(refusalOf(await broker.readFile("notes-in/store.db")), /link/);

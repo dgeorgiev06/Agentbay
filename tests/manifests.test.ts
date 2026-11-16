@@ -202,13 +202,22 @@ describe("system.action", () => {
     ]);
   });
 
-  test("an interface that is not bound for the caller is refused", async () => {
-    const system = await projectSystem();
-    const unbound = { ...system, config: { ...system.config, bindings: { "items-store": { journal: "shelf" } } } };
-    assert.deepEqual(refusal(unbound.action("items-store.put", "notes")), [
-      sentence("Mode notes calls items-store.put, but no mode is bound to items-store@1 for it."),
+  test("an interface that is not bound for the caller cannot be loaded, so it is never asked", async () => {
+    const bindings = { "items-store": { journal: "shelf" }, notes: "notes" };
+    const files = {
+      ...projectFiles(),
+      "/project/agentbay.config.yaml": yamlText({ ...config, bindings, modes: ["notes"] }),
+    };
+    const outcome = await loadSystem(fakeFileSystem(files), separateLayout);
+    assert.deepEqual(refusal(outcome), [
+      {
+        file: "agentbay.config.yaml",
+        path: "/bindings/items-store",
+        line: 3,
+        message: "Mode notes requires items-store@1, but bindings.items-store has no entry for notes and no default.",
+        fix: "Add notes: <mode> or default: <mode> under bindings.items-store; modes that implement items-store@1: store, shelf.",
+      },
     ]);
-    assert.deepEqual(reached(unbound.action("items-store.put", "journal")).slice(0, 2), ["shelf", "put"]);
   });
 
   test("without a caller, a name that is not mode.action is refused", async () => {
@@ -348,7 +357,7 @@ describe("system.listing", () => {
 
   test("a mode that is loaded but not active is neither listed nor answered for", async () => {
     const system = await loadedSystem(separateProject(), separateLayout);
-    assert.deepEqual([...system.inactive], ["briefing"]);
+    assert.deepEqual(Array.from(system.inactive), ["briefing"]);
     assert.deepEqual(listed(system.listing({})), {
       modes: [
         { name: "notes", description: "Writes notes into the store." },
@@ -459,16 +468,20 @@ describe("system.listing", () => {
     });
   });
 
-  test("an action whose input schema could not be read gives a problem instead of a listing without it", async () => {
-    const system = await kitSystem();
-    const store = system.modes.get("store");
-    assert.ok(store);
-    const withoutSchemas = { ...store, actionSchemas: new Map() };
-    const changed = { ...system, modes: new Map([...system.modes, ["store", withoutSchemas]]) };
-    assert.deepEqual(listingRefusal(changed.listing({ mode: "store" })), [
-      { file: "", path: "", message: "The input schema of store.put could not be read.", fix: "Run bay check." },
-      { file: "", path: "", message: "The input schema of store.get could not be read.", fix: "Run bay check." },
-      { file: "", path: "", message: "The input schema of store.remove could not be read.", fix: "Run bay check." },
+  test("an action whose input schema could not be read cannot be loaded, so it is never listed", async () => {
+    const files = { ...validFiles(), "components/base/store/schemas/put-input.json": "{ not json" };
+    const outcome = await loadSystem(fakeFileSystem(rooted(files)), layout);
+    assert.deepEqual(refusal(outcome), [
+      {
+        file: "components/base/store/mode.yaml",
+        path: "/actions/put/input",
+        line: 9,
+        message:
+          "Action put of mode store names the input schema schemas/put-input.json, " +
+          "but components/base/store/schemas/put-input.json is not valid JSON: " +
+          "Expected property name or '}' in JSON at position 2 (line 1 column 3).",
+        fix: "Correct the JSON in components/base/store/schemas/put-input.json.",
+      },
     ]);
   });
 });

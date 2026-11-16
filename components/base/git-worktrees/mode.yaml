@@ -3,6 +3,8 @@ version: 1.0.0
 description: Makes a worktree and branch for each slice, says where it stands, and makes throwaway copies of commits, running git so that no code from the repository runs.
 
 
+implements: [worktrees@1]
+
 resources:
   db: { migrations: migrations }
   files:
@@ -59,3 +61,10 @@ actions:
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/overlay.ts
+  remove:
+    description: When a copy is no longer needed, or a slice's worktree is clean and merged; the worktree goes with its branch, and anything else is refused.
+    input: schemas/remove-request.json
+    output: schemas/remove-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/remove.ts

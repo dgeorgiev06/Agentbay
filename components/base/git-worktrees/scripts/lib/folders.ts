@@ -66,3 +66,7 @@ export async function recordFolder(context: ScriptContext, folder: string, made:
     branch,
   ]);
 }
+
+export async function forgetFolder(context: ScriptContext, folder: string): Promise<void> {
+  await executed(context, "delete from folders where folder = ?", [folder]);
+}

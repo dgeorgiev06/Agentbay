@@ -269,7 +269,7 @@ function bindingFor(bindings: Config["bindings"], requirer: string, reference: s
   return mode === undefined ? undefined : { mode, path: ["bindings", name, key], label: `${name} for ${requirer}` };
 }
 
-export function servingMode(system: System, requirer: string, reference: string): string | undefined {
+function servingMode(system: System, requirer: string, reference: string): string | undefined {
   const bound = bindingFor(system.config.bindings, requirer, reference)?.mode;
   return bound !== undefined && system.modes.has(bound) ? bound : undefined;
 }
@@ -1271,16 +1271,13 @@ function refused(message: string): Outcome<never> {
   return failedWith([unplacedProblem(message)]);
 }
 
-export function inactiveModeWording(modeName: string): Wording {
-  return {
-    message: `Mode ${modeName} is not active in this project, so nothing of it runs here.`,
-    fix: `Add ${modeName} to modes: in agentbay.config.yaml, or bind an interface it implements.`,
-  };
-}
-
 function notActiveRefusal(name: string): Outcome<never> {
-  const wording = inactiveModeWording(name);
-  return failedWith([unplacedProblem(wording.message, wording.fix)]);
+  return failedWith([
+    unplacedProblem(
+      `Mode ${name} is not active in this project, so nothing of it runs here.`,
+      `Add ${name} to modes: in agentbay.config.yaml, or bind an interface it implements.`,
+    ),
+  ]);
 }
 
 function activeModeNamed(system: System, name: string): Outcome<ActiveMode> {
@@ -1499,7 +1496,7 @@ function listedActions(mode: ActiveMode, words: readonly string[]): Outcome<Acti
   return succeededWith({ mode: mode.manifest.name, actions: actions.filter((entry) => holdsEveryWord(words, entry)) });
 }
 
-export function actionsListing(system: System, question: ListingQuestion): Outcome<ActionsListing> {
+function actionsListing(system: System, question: ListingQuestion): Outcome<ActionsListing> {
   const words = wordsOf(question.find);
   if (question.mode === undefined) {
     return succeededWith(listedModes(system, words));

@@ -3,10 +3,15 @@ import { test } from "node:test";
 import type { Config } from "../bay/generated/config.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import { layoutOf } from "../bay/layout.ts";
-import { bindingUses, loadSystemReport, servingMode, type SystemReport } from "../bay/manifests/manifests.ts";
+import { bindingUses, loadSystemReport, type System, type SystemReport } from "../bay/manifests/manifests.ts";
 import type { Problem } from "../bay/outcome.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import { paths, schemaText, storeMode, validFiles, yamlText } from "./system-fixture.ts";
+
+function servingModeOf(system: System, caller: string, call: string): string | undefined {
+  const answer = system.action(call, caller);
+  return answer.ok ? answer.value.mode.manifest.name : undefined;
+}
 
 const layout = layoutOf({ kit: "/kit", project: "/project" });
 
@@ -99,9 +104,9 @@ test("a map binds one interface to a different mode for each requiring mode", as
   const report = await reportOf({ itemsStore: { notes: "store", ledger: "vault" } });
   assert.ok(report.outcome.ok, report.outcome.ok ? "" : JSON.stringify(report.outcome.problems, null, 2));
   const system = report.outcome.value;
-  assert.equal(servingMode(system, "notes", "items-store@1"), "store");
-  assert.equal(servingMode(system, "ledger", "items-store@1"), "vault");
-  assert.equal(servingMode(system, "journal", "items-store@1"), undefined);
+  assert.equal(servingModeOf(system, "notes", "items-store.put"), "store");
+  assert.equal(servingModeOf(system, "ledger", "items-store.put"), "vault");
+  assert.equal(servingModeOf(system, "journal", "items-store.put"), undefined);
   assert.deepEqual(bindingUses(system), [
     { interfaceName: "items-store", requirers: ["ledger"], servedBy: "vault" },
     { interfaceName: "items-store", requirers: ["notes"], servedBy: "store" },
@@ -113,8 +118,8 @@ test("a map binds one interface to a different mode for each requiring mode", as
 test("default serves every requiring mode the map does not name", async () => {
   const report = await reportOf({ itemsStore: { ledger: "vault", default: "store" } });
   assert.ok(report.outcome.ok, report.outcome.ok ? "" : JSON.stringify(report.outcome.problems, null, 2));
-  assert.equal(servingMode(report.outcome.value, "notes", "items-store@1"), "store");
-  assert.equal(servingMode(report.outcome.value, "ledger", "items-store@1"), "vault");
+  assert.equal(servingModeOf(report.outcome.value, "notes", "items-store.put"), "store");
+  assert.equal(servingModeOf(report.outcome.value, "ledger", "items-store.put"), "vault");
 });
 
 test("a requiring mode with no entry and no default is not bound, and the problem names it", async () => {

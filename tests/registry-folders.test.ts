@@ -3,10 +3,15 @@ import { test } from "node:test";
 import type { Config } from "../bay/generated/config.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import { layoutOf } from "../bay/layout.ts";
-import { loadSystemReport, servingMode, type SystemReport } from "../bay/manifests/manifests.ts";
+import { loadSystemReport, type System, type SystemReport } from "../bay/manifests/manifests.ts";
 import type { Problem } from "../bay/outcome.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import { briefingMode, config, paths, schemaText, validFiles, yamlText } from "./system-fixture.ts";
+
+function servingModeOf(system: System, caller: string, call: string): string | undefined {
+  const answer = system.action(call, caller);
+  return answer.ok ? answer.value.mode.manifest.name : undefined;
+}
 
 const layout = layoutOf({ kit: "/kit", project: "/project" });
 
@@ -71,7 +76,7 @@ test("a kit mode and a project mode are loaded together, each knowing its home a
     ["notes", "kit", "/kit/components/modes/notes"],
     ["store", "kit", "/kit/components/base/store"],
   ]);
-  assert.equal(servingMode(system, "briefing", "notes@1"), "notes");
+  assert.equal(servingModeOf(system, "journal", "notes.add"), "notes");
   assert.equal(system.interfaces.get("notes@1")?.file, "/kit/components/base/interfaces/notes.yaml");
 });
 

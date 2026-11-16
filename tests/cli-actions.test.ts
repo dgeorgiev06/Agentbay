@@ -234,3 +234,16 @@ test("the instructions bay build writes for Claude Code say to ask bay actions, 
     await project.remove();
   }
 });
+
+test("bay actions on a project that does not load exits 1 with the problems", async () => {
+  await withProject(async (project) => {
+    await project.write("agentbay.config.yaml", "adapter: fake\n");
+    const ran = await bay(["actions", "--project", project.root]);
+    assert.equal(ran.exitCode, 1);
+    assert.equal(
+      ran.output,
+      "agentbay.config.yaml:1: This file is missing the required field bindings.\n" +
+        "  fix: Add bindings. Expected: Which mode serves each interface, as interface name: binding; one major per project in 5.0.0.",
+    );
+  });
+});

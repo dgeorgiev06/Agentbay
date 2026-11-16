@@ -37,6 +37,7 @@ Held by: **check** (fails `npm run check`), **review** (the reviewer verifies it
 | P-17 | The builder writes the test first and sees it fail. | review: the report says how it failed |
 | P-18 | The reviewer injects bugs of their own, in code the builder's injections did not reach. | review |
 | P-31 | Bugs are injected in a throwaway copy of the tree, never in the working tree, and each test run has a time limit. A run that dies leaves nothing behind. Whoever picks up a worktree checks it is clean first. | review |
+| P-32 | A step that needs no judgement is a script, not a skill. A skill holds only what a model must decide, in as few words as say it. When a skill step can be replaced by a script that gives the same output, replace it. | design, review |
 | P-19 | Done means proven on the real thing: the command run, the demo walked, the harness session held. A passing type check is not proof. Each brief names the real thing. | review |
 
 ## Work

@@ -21,7 +21,18 @@ export type ActiveMode = {
   readonly workflows: ReadonlyMap<string, Workflow>;
   readonly settings: Readonly<Record<string, unknown>>;
   readonly inputSchemas: ReadonlyMap<string, Json>;
+  readonly actionSchemas: ReadonlyMap<string, ActionSchemas>;
   readonly grants: ModeGrants;
+};
+
+export type Schema = {
+  readonly file: string;
+  readonly check: (value: Json) => Outcome<Json>;
+};
+
+type ActionSchemas = {
+  readonly input: Schema;
+  readonly output: Schema;
 };
 
 type LoadedInterface = {
@@ -34,6 +45,8 @@ export type ActionTarget = {
   readonly name: string;
   readonly action: Action;
   readonly caller: string | undefined;
+  readonly input: Schema;
+  readonly output: Schema;
 };
 
 type WorkflowTarget = {
@@ -111,8 +124,11 @@ type Indexed<T> = {
   readonly problems: readonly Problem[];
 };
 
+type SchemaReader = (file: string) => Promise<SchemaFile>;
+
 type Context = {
   readonly files: FileSystem;
+  readonly readSchema: SchemaReader;
   readonly layout: Layout;
   readonly modes: ReadonlyMap<string, ModeSource>;
   readonly interfaces: ReadonlyMap<string, Loaded<Interface>>;
@@ -172,6 +188,14 @@ type SchemaFile =
   | { readonly state: "missing" }
   | { readonly state: "invalid"; readonly reason: string }
   | { readonly state: "valid"; readonly schema: unknown };
+
+type SchemaLabel = "input" | "output";
+
+type SchemaSource = {
+  readonly file: string;
+  readonly schemaFile: SchemaFile;
+  readonly label: SchemaLabel;
+};
 
 type ModeWorkflow = {
   readonly mode: ModeSource;
@@ -725,6 +749,43 @@ async function readSchemaFile(files: FileSystem, file: string): Promise<SchemaFi
   }
 }
 
+function schemaReader(files: FileSystem): SchemaReader {
+  const read = new Map<string, Promise<SchemaFile>>();
+  return (file) => {
+    const reading = read.get(file) ?? readSchemaFile(files, file);
+    read.set(file, reading);
+    return reading;
+  };
+}
+
+function valueProblems(source: SchemaSource, value: Json): readonly Problem[] {
+  const { file, schemaFile, label } = source;
+  switch (schemaFile.state) {
+    case "missing":
+      return [{ file, path: "", message: `The schema file ${file} does not exist, so the ${label} is not checked.` }];
+    case "invalid":
+      return [{ file, path: "", message: `The schema file ${file} is not valid JSON: ${schemaFile.reason}.` }];
+    case "valid": {
+      const loaded = { file, value, lineOf: () => undefined };
+      const result = checkValue(schemaFile.schema, value, { loaded, path: [label] });
+      if (result.kind === "unusable-schema") {
+        return [{ file, path: "", message: `The schema file ${file} is not a usable JSON Schema: ${result.reason}.` }];
+      }
+      return result.problems;
+    }
+  }
+}
+
+function schemaOf(source: SchemaSource): Schema {
+  return {
+    file: source.file,
+    check: (value) => {
+      const problems = valueProblems(source, value);
+      return problems.length === 0 ? succeededWith(value) : failedWith(problems);
+    },
+  };
+}
+
 function extraEffectProblems(place: ActionPlace, implemented: ImplementedSignature): readonly Problem[] {
   const { reference, signature } = implemented;
   const allowed = signature.effects.length === 0 ? "none" : signature.effects.join(", ");
@@ -739,7 +800,7 @@ function extraEffectProblems(place: ActionPlace, implemented: ImplementedSignatu
 }
 
 async function shapeProblems(
-  files: FileSystem,
+  readSchema: SchemaReader,
   place: ActionPlace,
   implemented: ImplementedSignature,
 ): Promise<readonly Problem[]> {
@@ -747,8 +808,8 @@ async function shapeProblems(
   for (const direction of schemaDirections) {
     const ownPath = place.action[direction];
     const declaredPath = implemented.signature[direction];
-    const own = await readSchemaFile(files, join(place.mode.folder, ownPath));
-    const declared = await readSchemaFile(files, join(implemented.folder, declaredPath));
+    const own = await readSchema(join(place.mode.folder, ownPath));
+    const declared = await readSchema(join(implemented.folder, declaredPath));
     if (own.state !== "valid" || declared.state !== "valid" || isDeepStrictEqual(own.schema, declared.schema)) {
       continue;
     }
@@ -765,7 +826,7 @@ async function shapeProblems(
 }
 
 async function signatureProblems(
-  files: FileSystem,
+  readSchema: SchemaReader,
   mode: ModeSource,
   definition: Loaded<Interface>,
 ): Promise<readonly Problem[]> {
@@ -785,7 +846,7 @@ async function signatureProblems(
     }
     const place = { mode, name, action };
     problems.push(...extraEffectProblems(place, { reference, signature, folder }));
-    problems.push(...(await shapeProblems(files, place, { reference, signature, folder })));
+    problems.push(...(await shapeProblems(readSchema, place, { reference, signature, folder })));
   }
   return problems;
 }
@@ -799,7 +860,7 @@ async function implementsProblems(context: Context, mode: ModeSource): Promise<r
       problems.push(problemAt(mode, ["implements", index], unknownInterface(context, subject, reference)));
       continue;
     }
-    problems.push(...(await signatureProblems(context.files, mode, definition)));
+    problems.push(...(await signatureProblems(context.readSchema, mode, definition)));
   }
   return problems;
 }
@@ -985,7 +1046,7 @@ async function fileReferenceProblem(context: Context, reference: FileReference):
     const exists = await context.files.exists(reference.file);
     return exists ? undefined : problemAt(reference.owner, reference.path, missing);
   }
-  const schemaFile = await readSchemaFile(context.files, reference.file);
+  const schemaFile = await context.readSchema(reference.file);
   switch (schemaFile.state) {
     case "missing":
       return problemAt(reference.owner, reference.path, missing);
@@ -1157,7 +1218,7 @@ async function modeSettingsProblems(context: Context, mode: ModeSource): Promise
   if (config === undefined || settingsPath === undefined) {
     return [];
   }
-  const schemaFile = await readSchemaFile(context.files, join(mode.folder, settingsPath));
+  const schemaFile = await context.readSchema(join(mode.folder, settingsPath));
   if (schemaFile.state !== "valid") {
     return [];
   }
@@ -1221,15 +1282,27 @@ async function consistencyProblems(context: Context): Promise<readonly Problem[]
   return problems;
 }
 
-async function inputSchemasOf(files: FileSystem, mode: ModeSource): Promise<ReadonlyMap<string, Json>> {
-  const schemas = new Map<string, Json>();
+type ModeSchemas = {
+  readonly inputSchemas: ReadonlyMap<string, Json>;
+  readonly actionSchemas: ReadonlyMap<string, ActionSchemas>;
+};
+
+async function schemasOf(readSchema: SchemaReader, mode: ModeSource): Promise<ModeSchemas> {
+  const inputSchemas = new Map<string, Json>();
+  const actionSchemas = new Map<string, ActionSchemas>();
   for (const place of actionsOf(mode)) {
-    const schemaFile = await readSchemaFile(files, join(mode.folder, place.action.input));
-    if (schemaFile.state === "valid") {
-      schemas.set(place.name, toJson(schemaFile.schema));
+    const inputFile = join(mode.folder, place.action.input);
+    const outputFile = join(mode.folder, place.action.output);
+    const input = await readSchema(inputFile);
+    if (input.state === "valid") {
+      inputSchemas.set(place.name, toJson(input.schema));
     }
+    actionSchemas.set(place.name, {
+      input: schemaOf({ file: inputFile, schemaFile: input, label: "input" }),
+      output: schemaOf({ file: outputFile, schemaFile: await readSchema(outputFile), label: "output" }),
+    });
   }
-  return schemas;
+  return { inputSchemas, actionSchemas };
 }
 
 function placedGrantProblem(mode: ModeSource, problem: GrantProblem): Problem {
@@ -1290,11 +1363,12 @@ function activeModeNamed(system: System, name: string): Outcome<ActiveMode> {
 
 function ownAction(mode: ActiveMode, name: string): Outcome<ActionTarget> {
   const action = Object.hasOwn(mode.manifest.actions, name) ? mode.manifest.actions[name] : undefined;
-  if (action === undefined) {
+  const schemas = mode.actionSchemas.get(name);
+  if (action === undefined || schemas === undefined) {
     const known = Object.keys(mode.manifest.actions).join(", ");
     return refused(`Mode ${mode.manifest.name} has no action ${name}; it has: ${known}.`);
   }
-  return succeededWith({ mode, name, action, caller: undefined });
+  return succeededWith({ mode, name, action, caller: undefined, input: schemas.input, output: schemas.output });
 }
 
 function boundAction(system: System, caller: ActiveMode, call: string): Outcome<ActionTarget> {
@@ -1389,7 +1463,7 @@ async function buildSystem(context: Context, parts: SystemParts): Promise<System
       lineOf: mode.lineOf,
       workflows: new Map(own),
       settings: settingsOf(parts.config, name),
-      inputSchemas: await inputSchemasOf(context.files, mode),
+      ...(await schemasOf(context.readSchema, mode)),
       grants,
     });
   }
@@ -1414,6 +1488,7 @@ export async function loadSystemReport(files: FileSystem, layout: Layout): Promi
   const interfaceIndex = indexInterfaces(interfaces.values, layout);
   const loaded = {
     files,
+    readSchema: schemaReader(files),
     layout,
     modes: modeIndex.index,
     interfaces: interfaceIndex.index,

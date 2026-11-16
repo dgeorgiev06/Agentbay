@@ -30,7 +30,6 @@ import {
   gate,
   refuse,
   replayed,
-  schemaProblems,
   startRecord,
   stopGate,
   waiting,
@@ -485,24 +484,22 @@ function runActionStep(walk: Walk, frame: ActionFrame, at: ActionStepAt): Promis
   }
 }
 
-async function frameOutput(walk: Walk, frame: ActionFrame, output: Json): Promise<Progress> {
+function frameOutput(walk: Walk, frame: ActionFrame, output: Json): Progress {
   const blocked = gate(walk, frame.budget, actionEndKey(frame.key));
   if (blocked !== undefined) {
     return blocked;
   }
-  const check = { mode: frame.mode, schema: frame.action.output, value: output, label: "output" };
-  const problems = await schemaProblems(walk.services, check);
-  if (problems.length === 0) {
+  const checked = frame.output.check(output);
+  if (checked.ok) {
     return done(output);
   }
-  return failed(`The output of ${frameLabel(frame)} does not match its schema: ${problemText(problems)}`);
+  return failed(`The output of ${frameLabel(frame)} does not match its schema: ${problemText(checked.problems)}`);
 }
 
 export async function runActionFrame(walk: Walk, frame: ActionFrame, input: Json): Promise<Progress> {
-  const check = { mode: frame.mode, schema: frame.action.input, value: input, label: "input" };
-  const problems = await schemaProblems(walk.services, check);
-  if (problems.length > 0) {
-    return failed(`The input of ${frameLabel(frame)} does not match its schema: ${problemText(problems)}`);
+  const checked = frame.input.check(input);
+  if (!checked.ok) {
+    return failed(`The input of ${frameLabel(frame)} does not match its schema: ${problemText(checked.problems)}`);
   }
   let value = input;
   for (const [index, step] of frame.action.run.entries()) {

@@ -30,7 +30,7 @@ import { startedSkillOf, submissionProblems, type StartedSkill } from "./skill-s
 import { skillRoundOf } from "./step-key.ts";
 import type { ActionTarget } from "../manifests/manifests.ts";
 import { hasUndoRecords, runUndo } from "./undo.ts";
-import { eventOf, failed, schemaProblems, type Progress, type Services, type Walk } from "./walk.ts";
+import { eventOf, failed, type Progress, type Services, type Walk } from "./walk.ts";
 import { runWorkflowSteps } from "./workflow-steps.ts";
 
 type EngineOptions = Services & {
@@ -419,10 +419,9 @@ export class Engine {
   }
 
   async #startTarget(target: ActionTarget, input: Json, from?: CalledFrom): Promise<Outcome<AdvancedRun>> {
-    const check = { mode: target.mode, schema: target.action.input, value: input, label: "input" };
-    const problems = await schemaProblems(this.#services, check);
-    if (problems.length > 0) {
-      return failedWith(problems);
+    const checked = target.input.check(input);
+    if (!checked.ok) {
+      return checked;
     }
     const caller = target.caller === undefined ? {} : { caller: target.caller };
     const runTarget: RunTarget = { kind: "action", mode: target.mode.manifest.name, name: target.name, ...caller };

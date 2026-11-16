@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { loadSystemReport, type ActionsListing, type System } from "../bay/manifests/manifests.ts";
+import { loadSystemReport, type ActionTarget, type ActionsListing, type System } from "../bay/manifests/manifests.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import { config, layout, paths, rooted, schemaText, separateLayout, validFiles, yamlText } from "./system-fixture.ts";
 
@@ -440,5 +440,113 @@ describe("system.listing", () => {
       { file: "", path: "", message: "The input schema of store.get could not be read.", fix: "Run bay check." },
       { file: "", path: "", message: "The input schema of store.remove could not be read.", fix: "Run bay check." },
     ]);
+  });
+});
+
+async function briefingDigest(files: Readonly<Record<string, string>> = validFiles()): Promise<ActionTarget> {
+  const system = await loadedSystem(fakeFileSystem(rooted(files)));
+  const target = system.action("briefing.digest");
+  assert.ok(target.ok, target.ok ? "" : JSON.stringify(target.problems));
+  return target.value;
+}
+
+const digestInput = "/kit/components/modes/briefing/schemas/digest-input.json";
+
+const digestOutput = "/kit/components/modes/briefing/schemas/digest-output.json";
+
+describe("an action target's schemas", () => {
+  test("a value that fits the input or output schema comes back", async () => {
+    const target = await briefingDigest();
+    assert.deepEqual(target.input.check({ title: "Tea" }), { ok: true, value: { title: "Tea" } });
+    assert.deepEqual(target.output.check({ id: 1 }), { ok: true, value: { id: 1 } });
+  });
+
+  test("a value that does not fit gives the problem at /input or /output, in the schema file", async () => {
+    const target = await briefingDigest();
+    assert.deepEqual(target.input.check(42), {
+      ok: false,
+      problems: [
+        {
+          file: digestInput,
+          path: "/input",
+          message: "input must be a YAML mapping (key: value pairs), but it is 42.",
+        },
+      ],
+    });
+    assert.deepEqual(target.output.check(["a"]), {
+      ok: false,
+      problems: [
+        {
+          file: digestOutput,
+          path: "/output",
+          message: "output must be a YAML mapping (key: value pairs), but it is a list.",
+        },
+      ],
+    });
+  });
+
+  test("the input is checked against the input schema and the output against the output schema", async () => {
+    const files = {
+      ...validFiles(),
+      "components/modes/briefing/schemas/digest-input.json": JSON.stringify({ type: "object", required: ["title"] }),
+      "components/modes/briefing/schemas/digest-output.json": JSON.stringify({ type: "object", required: ["id"] }),
+    };
+    const target = await briefingDigest(files);
+    assert.deepEqual(target.input.check({ id: 1 }), {
+      ok: false,
+      problems: [
+        {
+          file: digestInput,
+          path: "/input",
+          message: "input is missing the required field title.",
+          fix: "Add title.",
+        },
+      ],
+    });
+    assert.deepEqual(target.output.check({ title: "Tea" }), {
+      ok: false,
+      problems: [
+        { file: digestOutput, path: "/output", message: "output is missing the required field id.", fix: "Add id." },
+      ],
+    });
+  });
+
+  test("a schema file that is not a usable schema gives a problem, not an exception", async () => {
+    const files = { ...validFiles(), "components/modes/briefing/schemas/digest-input.json": '{ "type": "mapping" }' };
+    const target = await briefingDigest(files);
+    assert.deepEqual(target.input.check({}), {
+      ok: false,
+      problems: [
+        {
+          file: digestInput,
+          path: "",
+          message:
+            `The schema file ${digestInput} is not a usable JSON Schema: ` +
+            "schema is invalid: data/type must be equal to one of the allowed values, " +
+            "data/type must be array, data/type must match a schema in anyOf.",
+        },
+      ],
+    });
+  });
+
+  test("a schema file that is missing or not JSON stops the load with a problem, not an exception", async () => {
+    const missing = Object.fromEntries(
+      Object.entries(validFiles()).filter(([path]) => path !== "components/modes/briefing/schemas/digest-input.json"),
+    );
+    const notJson = { ...validFiles(), "components/modes/briefing/schemas/digest-input.json": "{ not json" };
+    for (const files of [missing, notJson]) {
+      const outcome = (await loadSystemReport(fakeFileSystem(rooted(files)), layout)).outcome;
+      assert.ok(!outcome.ok);
+      assert.deepEqual(
+        outcome.problems.map((problem) => [problem.file, problem.path, problem.message.split(", but ")[0]]),
+        [
+          [
+            paths.briefing,
+            "/actions/digest/input",
+            "Action digest of mode briefing names the input schema schemas/digest-input.json",
+          ],
+        ],
+      );
+    }
   });
 });

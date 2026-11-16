@@ -268,11 +268,44 @@ function extraSegment(error: ErrorObject): readonly string[] {
   return error.propertyName === undefined ? [] : [error.propertyName];
 }
 
-function errorProblems(errors: readonly ErrorObject[], place: ValuePlace): readonly Problem[] {
+function withoutEmptyFields(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(withoutEmptyFields);
+  }
+  if (!isRecord(value)) {
+    return value;
+  }
+  const filled = Object.entries(value).filter(([, field]) => field !== null);
+  return Object.fromEntries(filled.map(([key, field]) => [key, withoutEmptyFields(field)]));
+}
+
+function emptiedRequiredFields(validate: ValidateFunction, value: unknown): readonly ErrorObject[] {
+  validate(withoutEmptyFields(value));
+  return (validate.errors ?? []).filter((error) => error.keyword === "required");
+}
+
+function fieldPointer(required: ErrorObject): string {
+  return `${required.instancePath}${pointer([String(parameter(required, "missingProperty"))])}`;
+}
+
+function wording(error: ErrorObject, place: ValuePlace, emptied: readonly ErrorObject[]): Wording {
+  const required =
+    error.data === null ? emptied.find((entry) => fieldPointer(entry) === error.instancePath) : undefined;
+  if (required !== undefined) {
+    return describeRequired(required, placeName([...place.path, ...segmentsOf(required.instancePath)]));
+  }
+  const describe = describers.get(error.keyword) ?? describeOther;
+  return describe(error, placeName([...place.path, ...segmentsOf(error.instancePath)]));
+}
+
+function errorProblems(
+  errors: readonly ErrorObject[],
+  place: ValuePlace,
+  emptied: readonly ErrorObject[],
+): readonly Problem[] {
   return relevantErrors(errors).map((error) => {
-    const location = [...place.path, ...segmentsOf(error.instancePath)];
-    const describe = describers.get(error.keyword) ?? describeOther;
-    return problemAt(place.loaded, [...location, ...extraSegment(error)], describe(error, placeName(location)));
+    const location = [...place.path, ...segmentsOf(error.instancePath), ...extraSegment(error)];
+    return problemAt(place.loaded, location, wording(error, place, emptied));
   });
 }
 
@@ -292,7 +325,11 @@ export function checkValue(schema: unknown, value: unknown, place: ValuePlace): 
   if (typeof validate === "string") {
     return { kind: "unusable-schema", reason: validate };
   }
-  return { kind: "checked", problems: validate(value) ? [] : errorProblems(validate.errors ?? [], place) };
+  if (validate(value)) {
+    return { kind: "checked", problems: [] };
+  }
+  const errors = validate.errors ?? [];
+  return { kind: "checked", problems: errorProblems(errors, place, emptiedRequiredFields(validate, value)) };
 }
 
 function parseSpec<Kind extends keyof Kinds>(source: Source, kind: Kind): Outcome<Loaded<Kinds[Kind]>> {
@@ -320,7 +357,8 @@ function parseSpec<Kind extends keyof Kinds>(source: Source, kind: Kind): Outcom
     return { ok: true, value: { file: source.file, value, lineOf } };
   }
   const loaded: Loaded<unknown> = { file: source.file, value, lineOf };
-  return failedWith(errorProblems(validate.errors ?? [], { loaded, path: [] }));
+  const errors = validate.errors ?? [];
+  return failedWith(errorProblems(errors, { loaded, path: [] }, emptiedRequiredFields(validate, value)));
 }
 
 function missingFile(file: string): Problem {

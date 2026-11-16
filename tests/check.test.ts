@@ -256,6 +256,34 @@ test("bay check refuses an action whose description is empty or only spaces, and
   }
 });
 
+test("bay check refuses a description key with nothing after it in the words it uses for a missing one", async () => {
+  const report = await checkFake(journalWith(["    description:"]), separate);
+  assert.deepEqual(report.findings, [
+    {
+      severity: "error",
+      file: `${journalFolder}/mode.yaml`,
+      path: "/actions/write/description",
+      line: 6,
+      message: "actions.write is missing the required field description.",
+      fix: `Add description. Expected: ${descriptionWanted}`,
+    },
+  ]);
+});
+
+test("bay check still calls an optional key with nothing after it empty, not missing", async () => {
+  const lines = ["    description: When the owner writes an entry.", "    budget:"];
+  const report = await checkFake(journalWith(lines), separate);
+  assert.deepEqual(report.findings, [
+    {
+      severity: "error",
+      file: `${journalFolder}/mode.yaml`,
+      path: "/actions/write/budget",
+      line: 7,
+      message: "actions.write.budget must be a YAML mapping (key: value pairs), but it is empty.",
+    },
+  ]);
+});
+
 test("bay check accepts an action whose description is one sentence", async () => {
   assertClean(await checkFake(journalWith(["    description: When the owner writes an entry."]), separate));
 });

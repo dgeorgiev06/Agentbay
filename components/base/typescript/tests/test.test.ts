@@ -133,8 +133,8 @@ test("a checkout without a test script cannot be started and is inconclusive", a
 });
 
 const summaryPrinter = [
-  "const [tests, pass, cancelled, exitCode] = process.argv.slice(2).map(Number);",
-  "const lines = [`tests ${tests}`, `pass ${pass}`, 'fail 0', `cancelled ${cancelled}`];",
+  "const [tests, pass, fail, cancelled, exitCode] = process.argv.slice(2).map(Number);",
+  "const lines = [`tests ${tests}`, `pass ${pass}`, `fail ${fail}`, `cancelled ${cancelled}`];",
   "console.log(lines.map((line) => `# ${line}`).join('\\n'));",
   "process.exitCode = exitCode;",
   "",
@@ -148,7 +148,7 @@ async function summaryCheckout(name: string, printed: string): Promise<string> {
 }
 
 test("a run whose summary says every test passed but whose exit code is not 0 is inconclusive", async () => {
-  const folder = await summaryCheckout("passed-but-exit-3", "2 2 0 3");
+  const folder = await summaryCheckout("passed-but-exit-3", "2 2 0 0 3");
   assert.deepEqual(await tested({ folder }), {
     verdict: "inconclusive",
     reason:
@@ -158,11 +158,21 @@ test("a run whose summary says every test passed but whose exit code is not 0 is
 });
 
 test("a run that ends with exit code 0 but reports a cancelled test is inconclusive", async () => {
-  const folder = await summaryCheckout("cancelled-exit-0", "2 1 1 0");
+  const folder = await summaryCheckout("cancelled-exit-0", "2 1 0 1 0");
   assert.deepEqual(await tested({ folder }), {
     verdict: "inconclusive",
     reason:
       "The test run ended with exit code 0, 1 passed, 0 failed and 1 cancelled, " +
+      "which the mode does not read as passed or failed.",
+  });
+});
+
+test("a run that ends with exit code 0 but reports a failed test is inconclusive, not passed", async () => {
+  const folder = await summaryCheckout("failed-exit-0", "2 1 1 0 0");
+  assert.deepEqual(await tested({ folder }), {
+    verdict: "inconclusive",
+    reason:
+      "The test run ended with exit code 0, 1 passed, 1 failed and 0 cancelled, " +
       "which the mode does not read as passed or failed.",
   });
 });

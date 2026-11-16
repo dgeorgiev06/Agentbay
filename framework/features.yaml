@@ -41,6 +41,7 @@ features:
       - bay/manifests/references.ts
       - bay/manifests/folders.ts
       - bay/manifests/schemas.ts
+      - bay/manifests/loaded.ts
     may_import:
       - vocabulary
       - safety

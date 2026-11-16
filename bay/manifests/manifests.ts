@@ -12,7 +12,6 @@ import { grantsOf, type GrantProblem } from "../policy.ts";
 import { resolveInput, resolveValue, workflowReferenceIssues } from "./references.ts";
 import {
   checkValue,
-  loadSpec,
   parseSkill,
   problemAt,
   readSkill,
@@ -35,10 +34,28 @@ import {
   kitLayoutOf,
   manifestFileOf,
   findModeFolders,
-  findInterfaceFiles,
   modeInInterfacesProblems,
 } from "./folders.ts";
 import { type ActionSchemas, type SchemaReader, schemaDirections, schemaReader, schemaOf } from "./schemas.ts";
+import {
+  type ModeRead,
+  type ModeSource,
+  type UnloadedMode,
+  type Collected,
+  type LoadedModes,
+  type Context,
+  type ActionPlace,
+  type ModeWorkflow,
+  shown,
+  actionsOf,
+  actionLabel,
+  settingsOf,
+  activeModesOf,
+  loadModes,
+  loadInterfaces,
+  loadConfig,
+  loadWorkflows,
+} from "./loaded.ts";
 
 export type ActiveMode = {
   readonly home: Home;
@@ -178,54 +195,14 @@ type NewMode = Extract<NewPart, { readonly mode: string }>;
 
 type NewModePart = Extract<NewPart, { readonly inMode: string }>;
 
-type ModeRead = {
-  readonly found: TierFolder;
-  readonly outcome: Outcome<Loaded<Mode>>;
-};
-
-type ModeSource = Loaded<Mode> & ModeFolder;
-
-type UnloadedMode = ModeFolder & {
-  readonly name: string;
-  readonly problems: readonly Problem[];
-};
-
-type Collected<T> = {
-  readonly values: readonly T[];
-  readonly problems: readonly Problem[];
-};
-
-type LoadedModes = {
-  readonly read: readonly ModeRead[];
-  readonly values: readonly ModeSource[];
-  readonly unloaded: readonly UnloadedMode[];
-};
-
 type Indexed<T> = {
   readonly index: ReadonlyMap<string, T>;
   readonly problems: readonly Problem[];
 };
 
-type Context = {
-  readonly files: FileSystem;
-  readonly readSchema: SchemaReader;
-  readonly layout: Layout;
-  readonly modes: ReadonlyMap<string, ModeSource>;
-  readonly interfaces: ReadonlyMap<string, Loaded<Interface>>;
-  readonly config: Loaded<Config> | undefined;
-  readonly unloadedModes: ReadonlySet<string>;
-  readonly active: ReadonlySet<string>;
-};
-
 type Activation = {
   readonly active: ReadonlySet<string>;
   readonly problems: readonly Problem[];
-};
-
-type ActionPlace = {
-  readonly mode: ModeSource;
-  readonly name: string;
-  readonly action: Action;
 };
 
 type CallStep = {
@@ -264,12 +241,6 @@ type FileReference = {
   readonly subject: string;
 };
 
-type ModeWorkflow = {
-  readonly mode: ModeSource;
-  readonly path: string;
-  readonly loaded: Loaded<Workflow>;
-};
-
 type WorkflowStepPlace = {
   readonly step: WorkflowStep;
   readonly path: PathSegments;
@@ -280,10 +251,6 @@ const namePattern = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 const forge = "forge";
 
 const defaultKey = "default";
-
-function shown(context: Context, path: string): string {
-  return shownPath(context.layout, path);
-}
 
 function interfaceName(reference: string): string {
   return reference.slice(0, reference.indexOf("@"));
@@ -297,22 +264,10 @@ function requiredReferences(mode: Mode): readonly string[] {
   return mode.requires?.interfaces ?? [];
 }
 
-function actionsOf(mode: ModeSource): readonly ActionPlace[] {
-  return Object.entries(mode.value.actions).map(([name, action]) => ({ mode, name, action }));
-}
-
-function actionLabel(place: ActionPlace): string {
-  return `Action ${place.name} of mode ${place.mode.value.name}`;
-}
-
 function implementersOf(context: Context, reference: string): readonly string[] {
   return [...context.modes.values()]
     .filter((mode) => mode.value.implements?.includes(reference) === true)
     .map((mode) => mode.value.name);
-}
-
-function settingsOf(config: Config, modeName: string): Readonly<Record<string, unknown>> {
-  return config.settings?.[modeName] ?? {};
 }
 
 function bindingFor(bindings: Config["bindings"], requirer: string, reference: string): BoundMode | undefined {
@@ -358,86 +313,6 @@ export function bindingUses(system: System): readonly BindingUse[] {
 function boundModeOf(context: Context, requirer: string, reference: string): BoundMode | undefined {
   const config = context.config;
   return config === undefined ? undefined : bindingFor(config.value.bindings, requirer, reference);
-}
-
-function activeModesOf(context: Context): readonly ModeSource[] {
-  return [...context.modes.values()].filter((mode) => context.active.has(mode.value.name));
-}
-
-async function loadEach<T>(
-  paths: readonly string[],
-  load: (path: string) => Promise<Outcome<T>>,
-): Promise<Collected<T>> {
-  const values: T[] = [];
-  const problems: Problem[] = [];
-  for (const path of paths) {
-    const outcome = await load(path);
-    if (outcome.ok) {
-      values.push(outcome.value);
-    } else {
-      problems.push(...outcome.problems);
-    }
-  }
-  return { values, problems };
-}
-
-async function loadModes(files: FileSystem, layout: Layout): Promise<LoadedModes> {
-  const read: ModeRead[] = [];
-  const values: ModeSource[] = [];
-  const unloaded: UnloadedMode[] = [];
-  for (const found of await findModeFolders(files, layout)) {
-    const outcome = await loadSpec(files, manifestFileOf(found), "mode");
-    read.push({ found, outcome });
-    if (outcome.ok) {
-      values.push({ ...outcome.value, home: found.home, folder: found.folder });
-    } else {
-      unloaded.push({
-        home: found.home,
-        folder: found.folder,
-        name: basename(found.folder),
-        problems: outcome.problems,
-      });
-    }
-  }
-  return { read, values, unloaded };
-}
-
-async function loadInterfaces(files: FileSystem, layout: Layout): Promise<Collected<Loaded<Interface>>> {
-  return loadEach(await findInterfaceFiles(files, layout), (file) => loadSpec(files, file, "interface"));
-}
-
-async function loadConfig(files: FileSystem, layout: Layout): Promise<Outcome<Loaded<Config>>> {
-  const configFile = layout.configFile;
-  if (await files.exists(configFile)) {
-    return loadSpec(files, configFile, "config");
-  }
-  const problem = {
-    file: configFile,
-    path: "",
-    message: `The project config ${shownPath(layout, configFile)} does not exist.`,
-    fix: "Create it with bindings: (interface name: mode name) and adapter:.",
-  };
-  return { ok: false, problems: [problem] };
-}
-
-async function loadWorkflows(context: Context): Promise<Collected<ModeWorkflow>> {
-  const values: ModeWorkflow[] = [];
-  const problems: Problem[] = [];
-  for (const mode of context.modes.values()) {
-    for (const path of mode.value.workflows ?? []) {
-      const file = join(mode.folder, path);
-      if (!(await context.files.exists(file))) {
-        continue;
-      }
-      const outcome = await loadSpec(context.files, file, "workflow");
-      if (outcome.ok) {
-        values.push({ mode, path, loaded: outcome.value });
-      } else if (context.active.has(mode.value.name)) {
-        problems.push(...outcome.problems);
-      }
-    }
-  }
-  return { values, problems };
 }
 
 function homesOf(modes: LoadedModes): ReadonlyMap<string, ModeFolder> {

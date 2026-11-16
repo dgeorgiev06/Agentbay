@@ -89,6 +89,12 @@ function isList(value: Json): value is readonly Json[] {
   return Array.isArray(value);
 }
 
+export type JsonFields = { readonly [key: string]: Json };
+
+export function fieldsOf(value: Json): JsonFields {
+  return typeof value === "object" && value !== null && !isList(value) ? value : {};
+}
+
 export function canonicalJson(value: Json): string {
   if (typeof value === "number" && !Number.isFinite(value)) {
     throw new Error(`${String(value)} is not a finite number, so it has no JSON form.`);

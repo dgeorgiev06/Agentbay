@@ -1,6 +1,11 @@
-import { defineScript, fail, type DefinedScript, type Json, type ScriptContext } from "../../../../../bay/sdk.ts";
-
-type Fields = { readonly [key: string]: Json };
+import {
+  defineScript,
+  fail,
+  fieldsOf,
+  type DefinedScript,
+  type Json,
+  type ScriptContext,
+} from "../../../../../bay/sdk.ts";
 
 export type Request = {
   readonly text: (name: string) => string;
@@ -8,12 +13,8 @@ export type Request = {
   readonly texts: (name: string) => readonly string[];
 };
 
-function isFields(value: Json): value is Fields {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function requestOf(input: Json): Request {
-  const fields = isFields(input) ? input : {};
+  const fields = fieldsOf(input);
   const optionalText = (name: string): string | undefined => {
     const value = fields[name];
     return typeof value === "string" ? value : undefined;

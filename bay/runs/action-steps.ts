@@ -274,8 +274,7 @@ function skillWaiting(walk: Walk, frame: ActionFrame, at: SkillAt): Progress {
 }
 
 async function startSkill(walk: Walk, frame: ActionFrame, skill: SkillStep): Promise<Progress> {
-  const actionOutput = skill.last ? frame.action.output : undefined;
-  const schemas = await skillSchemas(walk.services, frame.mode, { skill: skill.skill, actionOutput });
+  const schemas = await skillSchemas(frame, { skill: skill.skill, last: skill.last });
   if (typeof schemas === "string") {
     return refuse(walk, { key: skill.key, kind: "skill", input: skill.input }, schemas);
   }

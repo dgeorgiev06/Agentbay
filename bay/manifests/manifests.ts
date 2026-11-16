@@ -4,13 +4,14 @@ import type { Json, ModeGrants } from "../contracts.ts";
 import type { Config } from "../generated/config.ts";
 import type { Interface, Signature } from "../generated/interface.ts";
 import type { Action, Effect, Mode, Step } from "../generated/mode.ts";
+import type { SkillFrontMatter } from "../generated/skill.ts";
 import type { Workflow, Step as WorkflowStep } from "../generated/workflow.ts";
 import { isProjectTheKit, pathIn, shownPath, shownProblems, type Home, type Layout } from "../layout.ts";
 import { toJson } from "../json.ts";
 import type { FileSystem } from "../ports.ts";
 import { grantsOf, type GrantProblem } from "../policy.ts";
 import { resolveInput, resolveValue, workflowReferenceIssues } from "./references.ts";
-import { checkValue, loadSpec, problemAt, type Loaded, type PathSegments, type Wording } from "./spec.ts";
+import { checkValue, loadSpec, parseSkill, problemAt, type Loaded, type PathSegments, type Wording } from "./spec.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
 
 export type ActiveMode = {
@@ -23,6 +24,15 @@ export type ActiveMode = {
   readonly inputSchemas: ReadonlyMap<string, Json>;
   readonly actionSchemas: ReadonlyMap<string, ActionSchemas>;
   readonly grants: ModeGrants;
+  readonly skill: (name: string) => Promise<Outcome<SkillUse>>;
+};
+
+export type SkillUse = {
+  readonly name: string;
+  readonly file: string;
+  readonly frontMatter: SkillFrontMatter;
+  readonly tools: readonly string[];
+  readonly output: Schema | undefined;
 };
 
 export type Schema = {
@@ -1432,6 +1442,30 @@ function workflowAnswer(system: System, modeName: string, path: string): Outcome
   return succeededWith({ mode, path, workflow, resolve });
 }
 
+function skillNamesOf(manifest: Mode): readonly string[] {
+  const steps = Object.values(manifest.actions).flatMap((action) => action.run);
+  return [...new Set(steps.flatMap((step) => ("skill" in step ? [step.skill] : [])))];
+}
+
+async function skillAnswer(context: Context, mode: ModeSource, name: string): Promise<Outcome<SkillUse>> {
+  if (!skillNamesOf(mode.value).includes(name)) {
+    return refused(`Mode ${mode.value.name} has no skill ${name}.`);
+  }
+  const file = join(mode.folder, name, "SKILL.md");
+  const parsed = await parseSkill(context.files, file);
+  if (!parsed.ok) {
+    return parsed;
+  }
+  const { frontMatter, tools } = parsed.value;
+  const outputPath = frontMatter.metadata?.output;
+  const outputFile = outputPath === undefined ? undefined : join(mode.folder, outputPath);
+  const output =
+    outputFile === undefined
+      ? undefined
+      : schemaOf({ file: outputFile, schemaFile: await context.readSchema(outputFile), label: "output" });
+  return succeededWith({ name, file, frontMatter, tools, output });
+}
+
 type SystemData = Pick<System, "modes" | "inactive" | "interfaces" | "config">;
 
 function answering(data: SystemData): System {
@@ -1476,6 +1510,7 @@ async function buildSystem(context: Context, parts: SystemParts): Promise<System
       settings: settingsOf(parts.config, name),
       ...(await schemasOf(context.readSchema, mode)),
       grants,
+      skill: (skillName) => skillAnswer(context, mode, skillName),
     });
   }
   const interfaces = new Map<string, LoadedInterface>();

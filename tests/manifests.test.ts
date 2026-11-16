@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import {
   loadSystemReport,
   type ActionTarget,
+  type ActiveMode,
   type ActionsListing,
   type System,
   type WorkflowTarget,
@@ -677,5 +678,118 @@ describe("a workflow target's resolve", () => {
         ),
       ],
     });
+  });
+});
+
+const draftSkill = [
+  "---",
+  "name: write-note",
+  "description: Writes one note from the input.",
+  "metadata:",
+  "  output: schemas/note-draft.json",
+  "---",
+  "",
+  "## Input",
+  "",
+  "- db",
+  "",
+  "## Tools",
+  "",
+  "1. `files`: to read the drafts",
+  "- items-store.get",
+  "- http,",
+  "```",
+  "- db",
+  "```",
+  "",
+  "## Resources",
+  "",
+  "- secrets",
+  "",
+].join("\n");
+
+const skillFile = "/kit/components/modes/notes/skills/write-note/SKILL.md";
+
+const noteDraft = "/kit/components/modes/notes/schemas/note-draft.json";
+
+function filesWithSkill(text: string): ReturnType<typeof fakeFileSystem> {
+  return fakeFileSystem(
+    rooted({
+      ...validFiles(),
+      "components/modes/notes/skills/write-note/SKILL.md": text,
+      "components/modes/notes/schemas/note-draft.json": JSON.stringify({ type: "object", required: ["text"] }),
+    }),
+  );
+}
+
+async function notesMode(files: ReturnType<typeof fakeFileSystem>): Promise<ActiveMode> {
+  const mode = (await loadedSystem(files)).modes.get("notes");
+  assert.ok(mode);
+  return mode;
+}
+
+describe("a mode's skill by name", () => {
+  test("a skill is found with its file, front matter, tools and output schema", async () => {
+    const skill = await (await notesMode(filesWithSkill(draftSkill))).skill("skills/write-note");
+    assert.ok(skill.ok, skill.ok ? "" : JSON.stringify(skill.problems));
+    const { name, file, frontMatter, tools, output } = skill.value;
+    assert.deepEqual([name, file, tools], ["skills/write-note", skillFile, ["files", "items-store.get", "http"]]);
+    assert.deepEqual(frontMatter, {
+      name: "write-note",
+      description: "Writes one note from the input.",
+      metadata: { output: "schemas/note-draft.json" },
+    });
+    assert.ok(output);
+    assert.equal(output.file, noteDraft);
+    assert.deepEqual(output.check({ text: "Tea" }), { ok: true, value: { text: "Tea" } });
+    assert.deepEqual(output.check({}), {
+      ok: false,
+      problems: [
+        { file: noteDraft, path: "/output", message: "output is missing the required field text.", fix: "Add text." },
+      ],
+    });
+  });
+
+  test("a skill whose front matter names no output schema has none, and a Tools section it lacks lists nothing", async () => {
+    const skill = await (await notesMode(fakeFileSystem(rooted(validFiles())))).skill("skills/write-note");
+    assert.ok(skill.ok, skill.ok ? "" : JSON.stringify(skill.problems));
+    assert.deepEqual([skill.value.output, skill.value.tools], [undefined, []]);
+  });
+
+  test("an output schema file that is missing gives a problem when a value is checked", async () => {
+    const files = filesWithSkill(draftSkill.replace("note-draft.json", "gone.json"));
+    const skill = await (await notesMode(files)).skill("skills/write-note");
+    assert.ok(skill.ok);
+    const gone = "/kit/components/modes/notes/schemas/gone.json";
+    assert.deepEqual(skill.value.output?.check({ text: "Tea" }), {
+      ok: false,
+      problems: [
+        { file: gone, path: "", message: `The schema file ${gone} does not exist, so the output is not checked.` },
+      ],
+    });
+  });
+
+  test("a skill the mode's steps do not run is not found", async () => {
+    const mode = await notesMode(filesWithSkill(draftSkill));
+    assert.deepEqual(refusal(await mode.skill("skills/none")), [sentence("Mode notes has no skill skills/none.")]);
+    assert.deepEqual(refusal(await mode.skill("write-note")), [sentence("Mode notes has no skill write-note.")]);
+  });
+
+  test("a skill file that cannot be read gives its problems", async () => {
+    const files = filesWithSkill("# Draft\n");
+    const mode = await notesMode(files);
+    assert.deepEqual(refusal(await mode.skill("skills/write-note")), [
+      {
+        file: skillFile,
+        path: "",
+        line: 1,
+        message: "The skill has no front matter between two --- lines at its top.",
+        fix: "Start the file with a --- line, then name: and description:, then another --- line.",
+      },
+    ]);
+    await files.removal.remove(skillFile);
+    assert.deepEqual(refusal(await mode.skill("skills/write-note")), [
+      { file: skillFile, path: "", message: `The file ${skillFile} does not exist.` },
+    ]);
   });
 });

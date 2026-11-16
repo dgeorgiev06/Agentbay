@@ -3,7 +3,7 @@ import type { EventSink, Json, RunEvent, Scrubber, ScriptRunner, Spend, Submissi
 import type { Budget } from "../generated/mode.ts";
 import { fieldOf, textField, toJson } from "../json.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
-import type { Clock, FileSystem, Folders } from "../ports.ts";
+import type { Clock, Folders } from "../ports.ts";
 import type { System } from "../manifests/manifests.ts";
 import { Engine, type AdvancedRun } from "./engine.ts";
 import {
@@ -24,7 +24,6 @@ import { storedWaiting } from "./waiting.ts";
 type RunsNeeds = {
   readonly project: string;
   readonly folders: Folders;
-  readonly files: FileSystem;
   readonly clock: Clock;
   readonly system: System;
   readonly scrubber: Scrubber;
@@ -394,8 +393,8 @@ export async function openRuns(needs: RunsNeeds): Promise<Runs> {
   const store = await SqliteRunStore.open(needs.folders, join(needs.project, kernelDatabaseFile));
   const scrubbed = scrubbedStore(store, needs.scrubber);
   const events: EventSink = { append: scrubbed.append };
-  const { system, clock, files, scrubber } = needs;
+  const { system, clock, scrubber } = needs;
   const runner = needs.runner(events);
-  const engine = new Engine({ system, store, runner, clock, files, scrubber });
+  const engine = new Engine({ system, store, runner, clock, scrubber });
   return runsOf({ needs, store, engine, events });
 }

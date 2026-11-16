@@ -191,3 +191,43 @@ describe("system.action", () => {
     ]);
   });
 });
+
+function found(answer: ReturnType<System["workflow"]>): readonly unknown[] {
+  assert.ok(answer.ok, answer.ok ? "" : JSON.stringify(answer.problems));
+  const { mode, path, workflow } = answer.value;
+  return [mode.manifest.name, path, workflow.name, workflow.steps.map((step) => step.id)];
+}
+
+describe("system.workflow", () => {
+  test("a workflow of an active mode is found with its mode", async () => {
+    const system = await projectSystem();
+    assert.deepEqual(found(system.workflow("notes", "workflows/daily.yaml")), [
+      "notes",
+      "workflows/daily.yaml",
+      "daily",
+      ["write", "check", "keep"],
+    ]);
+  });
+
+  test("a mode that does not exist is refused", async () => {
+    const system = await projectSystem();
+    assert.deepEqual(refusal(system.workflow("ghost", "workflows/daily.yaml")), [
+      sentence("Mode ghost has no workflow workflows/daily.yaml."),
+    ]);
+  });
+
+  test("a mode that is not active is refused", async () => {
+    const system = await projectSystem();
+    assert.deepEqual(refusal(system.workflow("briefing", "workflows/daily.yaml")), [notActive]);
+  });
+
+  test("a workflow file the mode does not list is refused", async () => {
+    const system = await projectSystem();
+    assert.deepEqual(refusal(system.workflow("notes", "workflows/none.yaml")), [
+      sentence("Mode notes has no workflow workflows/none.yaml."),
+    ]);
+    assert.deepEqual(refusal(system.workflow("journal", "workflows/daily.yaml")), [
+      sentence("Mode journal has no workflow workflows/daily.yaml."),
+    ]);
+  });
+});

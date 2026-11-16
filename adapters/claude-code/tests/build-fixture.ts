@@ -113,6 +113,7 @@ export function buildRequest(files: FilesWithRemoval, agents: readonly SkillAgen
     interfaces: new Map(),
     config: { bindings: {}, adapter: "claude-code" },
     action: () => ({ ok: false, problems: [] }),
+    workflow: () => ({ ok: false, problems: [] }),
   };
   return { system, layout, agents, files, removal: files.removal };
 }

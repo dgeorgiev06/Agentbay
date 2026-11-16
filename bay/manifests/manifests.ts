@@ -36,12 +36,19 @@ export type ActionTarget = {
   readonly caller?: string;
 };
 
+type WorkflowTarget = {
+  readonly mode: ActiveMode;
+  readonly path: string;
+  readonly workflow: Workflow;
+};
+
 export type System = {
   readonly modes: ReadonlyMap<string, ActiveMode>;
   readonly inactive: ReadonlySet<string>;
   readonly interfaces: ReadonlyMap<string, LoadedInterface>;
   readonly config: Config;
   readonly action: (reference: string, caller?: string) => Outcome<ActionTarget>;
+  readonly workflow: (mode: string, path: string) => Outcome<WorkflowTarget>;
 };
 
 export type BindingUse = {
@@ -1270,10 +1277,14 @@ export function inactiveModeWording(modeName: string): Wording {
   };
 }
 
+function notActiveRefusal(name: string): Outcome<never> {
+  const wording = inactiveModeWording(name);
+  return failedWith([unplacedProblem(wording.message, wording.fix)]);
+}
+
 function activeModeNamed(system: System, name: string): Outcome<ActiveMode> {
   if (system.inactive.has(name)) {
-    const wording = inactiveModeWording(name);
-    return failedWith([unplacedProblem(wording.message, wording.fix)]);
+    return notActiveRefusal(name);
   }
   const mode = system.modes.get(name);
   return mode === undefined ? refused(`There is no mode ${name}.`) : succeededWith(mode);
@@ -1326,6 +1337,18 @@ function actionAnswer(system: System, reference: string, caller: string | undefi
   return mode.ok ? ownAction(mode.value, parts[1]) : mode;
 }
 
+function workflowAnswer(system: System, modeName: string, path: string): Outcome<WorkflowTarget> {
+  if (system.inactive.has(modeName)) {
+    return notActiveRefusal(modeName);
+  }
+  const mode = system.modes.get(modeName);
+  const workflow = mode?.workflows.get(path);
+  if (mode === undefined || workflow === undefined) {
+    return refused(`Mode ${modeName} has no workflow ${path}.`);
+  }
+  return succeededWith({ mode, path, workflow });
+}
+
 type SystemData = Pick<System, "modes" | "inactive" | "interfaces" | "config">;
 
 function answering(data: SystemData): System {
@@ -1333,6 +1356,9 @@ function answering(data: SystemData): System {
     ...data,
     action(reference, caller) {
       return actionAnswer(this, reference, caller);
+    },
+    workflow(mode, path) {
+      return workflowAnswer(this, mode, path);
     },
   };
 }

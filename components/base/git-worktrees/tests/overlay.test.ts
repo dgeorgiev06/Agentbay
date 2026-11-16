@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
-import { commitFiles, git, openRepositoryProject } from "./repository.ts";
+import { commitFiles, git, openRepositoryProject, writeFiles } from "./repository.ts";
 import type { ModeProject } from "../../../../tests/mode-harness.ts";
 
 const folder = ".forge/copies/later";
@@ -43,6 +43,20 @@ test("a named path takes its content at the other commit, a folder whole", async
     assert.equal(await exists(join(copy, "dir/only-later.txt")), false);
     assert.equal(await readFile(join(copy, "new.txt"), "utf8"), "new\n");
     assert.equal(git(project, ".", ["status", "--porcelain"]), "");
+  } finally {
+    await project.close();
+  }
+});
+
+test("a folder taken from the other commit loses a file the copy gained that no commit holds", async () => {
+  const project = await openRepositoryProject();
+  try {
+    const earlier = await twoCommits(project);
+    await writeFiles(project, folder, { "dir/stray.txt": "made in the copy\n" });
+    await project.output("git-worktrees.overlay", { folder, commit: earlier, paths: ["dir"] });
+    const copy = join(project.root, folder);
+    assert.equal(await exists(join(copy, "dir/stray.txt")), false);
+    assert.equal(await readFile(join(copy, "dir/a.txt"), "utf8"), "a\n");
   } finally {
     await project.close();
   }

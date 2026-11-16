@@ -190,6 +190,7 @@ features:
       - bay/command-line.ts
       - bay/command-context.ts
       - bay/commands.ts
+      - bay/commands/actions.ts
       - bay/commands/approve.ts
       - bay/commands/build.ts
       - bay/commands/call.ts

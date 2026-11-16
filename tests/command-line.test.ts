@@ -4,9 +4,10 @@ import { runCommandLine, type Command } from "../bay/command-line.ts";
 import { commands } from "../bay/commands.ts";
 import { bay, contextFor } from "./cli-fixture.ts";
 
-const twelve = [
+const thirteen = [
   "check",
   "new",
+  "actions",
   "call",
   "submit",
   "runs",
@@ -21,10 +22,10 @@ const twelve = [
 
 const dropped = ["describe", "catalog", "note", "plan", "show", "status", "clean", "validate", "lint", "tool", "help"];
 
-test("the command table holds the twelve commands, and --help lists exactly them", async () => {
+test("the command table holds the thirteen commands, and --help lists exactly them", async () => {
   assert.deepEqual(
     commands.map((command) => command.name),
-    twelve,
+    thirteen,
   );
   const help = await bay(["--help"]);
   assert.equal(help.exitCode, 0);
@@ -32,7 +33,7 @@ test("the command table holds the twelve commands, and --help lists exactly them
     .split("\n")
     .filter((line) => /^ {2}\S/.test(line))
     .map((line) => line.trim().split(/\s+/)[0]);
-  assert.deepEqual(listed, twelve);
+  assert.deepEqual(listed, thirteen);
 });
 
 test("an old or unknown command name is a wrong command line, exit 2", async () => {

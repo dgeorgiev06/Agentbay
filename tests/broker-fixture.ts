@@ -42,7 +42,15 @@ type ModeEntry = { readonly folder: string; readonly manifest: Mode; readonly ho
 export function systemOf(modes: readonly ModeEntry[]): System {
   const loaded = new Map<string, LoadedMode>();
   for (const { folder, manifest, home } of modes) {
-    const mode = { home: home ?? "kit", folder, manifest, lineOf: () => undefined, workflows: new Map(), settings: {} };
+    const mode = {
+      home: home ?? "kit",
+      folder,
+      manifest,
+      lineOf: () => undefined,
+      workflows: new Map(),
+      settings: {},
+      inputSchemas: new Map(),
+    };
     loaded.set(manifest.name, mode);
   }
   return {

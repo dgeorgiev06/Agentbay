@@ -246,3 +246,14 @@ test("a fresh store redacts two declared secrets in text, a JSON value and a JSO
     "[redacted:NOTES_TOKEN]": "[redacted:MAIL_TOKEN]",
   });
 });
+
+test("a declared value of exactly 8 characters is learned at open", async () => {
+  const environment = { AGENTBAY_SECRET_MAIL_TOKEN: "abcd1234" };
+  const store = await SecretStore.open({
+    environment,
+    processes: noProcesses,
+    platform: "linux",
+    declaredBy: [permissions],
+  });
+  assert.equal(store.redact("x abcd1234 y"), "x [redacted:MAIL_TOKEN] y");
+});

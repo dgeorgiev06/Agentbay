@@ -14,7 +14,7 @@ import {
   withoutFinding,
 } from "./check-fixture.ts";
 import { fakeFileSystem, type FakeFileSystem } from "./fakes.ts";
-import { config, notesMode, paths, schemaText, storeMode, yamlText } from "./system-fixture.ts";
+import { config, notesMode, paths, rooted, schemaText, storeMode, yamlText } from "./system-fixture.ts";
 
 test("a valid system with complete skills, examples and limits passes with no findings", async () => {
   const report = await check(cleanFiles());
@@ -286,4 +286,28 @@ test("bay check still calls an optional key with nothing after it empty, not mis
 
 test("bay check accepts an action whose description is one sentence", async () => {
   assertClean(await checkFake(journalWith(["    description: When the owner writes an entry."]), separate));
+});
+
+test("bay check reads each mode.yaml once", async () => {
+  const files = fakeFileSystem(rooted(cleanFiles()));
+  const reads: string[] = [];
+  const recording: FakeFileSystem = {
+    ...files,
+    readText: (path) => {
+      reads.push(path);
+      return files.readText(path);
+    },
+  };
+  await checkFake(recording);
+  assert.equal(reads.filter((path) => path === `/kit/${paths.notes}`).length, 1);
+});
+
+test("a listed command in a kit mode outside components/base is an error and not also a warning", async () => {
+  const manifest = yamlText({ ...notesMode, resources: { commands: ["git status"] } });
+  const report = await check({ ...cleanFiles(), [paths.notes]: manifest });
+  const notesFindings = report.findings.filter((finding) => finding.file === paths.notes);
+  assert.deepEqual(
+    notesFindings.map((finding) => [finding.severity, finding.path]),
+    [["error", "/resources/commands/0"]],
+  );
 });

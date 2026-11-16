@@ -14,21 +14,9 @@ breaks:
   - from: bay/build.ts
     to: bay/skill-tools.ts
     rule: may-not-import
-  - from: bay/check-context.ts
-    to: bay/manifests/spec.ts
-    rule: private-file
   - from: bay/check-imports.ts
     to: bay/script-protocol.ts
     rule: may-not-import
-  - from: bay/check-layout.ts
-    to: bay/manifests/spec.ts
-    rule: private-file
-  - from: bay/check-skills.ts
-    to: bay/manifests/spec.ts
-    rule: private-file
-  - from: bay/check.ts
-    to: bay/manifests/spec.ts
-    rule: private-file
   - from: bay/database.ts
     to: bay/owner-only.ts
     rule: may-not-import
@@ -116,9 +104,6 @@ test_breaks:
     rule: test-reaches-in
   - from: tests/build.test.ts
     to: bay/terminal.ts
-    rule: test-reaches-in
-  - from: tests/check-context.test.ts
-    to: bay/check-context.ts
     rule: test-reaches-in
   - from: tests/check-fixture.ts
     to: bay/check-context.ts

@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
-  loadSystemReport,
+  inspectSystem,
+  loadSystem,
+  placeToWrite,
   type ActionTarget,
-  type ActiveMode,
   type ActionsListing,
+  type ActiveMode,
+  type InspectedFolder,
+  type Inspection,
+  type NewPart,
   type System,
   type WorkflowTarget,
 } from "../bay/manifests/manifests.ts";
@@ -85,7 +90,7 @@ function projectFiles(): Record<string, string> {
 }
 
 async function projectSystem(): Promise<System> {
-  const outcome = (await loadSystemReport(fakeFileSystem(projectFiles()), separateLayout)).outcome;
+  const outcome = await loadSystem(fakeFileSystem(projectFiles()), separateLayout);
   assert.ok(outcome.ok, outcome.ok ? "" : JSON.stringify(outcome.problems, null, 2));
   return outcome.value;
 }
@@ -261,7 +266,7 @@ async function loadedSystem(
   files: ReturnType<typeof fakeFileSystem>,
   loadedLayout: typeof layout = layout,
 ): Promise<System> {
-  const outcome = (await loadSystemReport(files, loadedLayout)).outcome;
+  const outcome = await loadSystem(files, loadedLayout);
   assert.ok(outcome.ok, outcome.ok ? "" : JSON.stringify(outcome.problems, null, 2));
   return outcome.value;
 }
@@ -560,7 +565,7 @@ describe("an action target's schemas", () => {
     );
     const notJson = { ...validFiles(), "components/modes/briefing/schemas/digest-input.json": "{ not json" };
     for (const files of [missing, notJson]) {
-      const outcome = (await loadSystemReport(fakeFileSystem(rooted(files)), layout)).outcome;
+      const outcome = await loadSystem(fakeFileSystem(rooted(files)), layout);
       assert.ok(!outcome.ok);
       assert.deepEqual(
         outcome.problems.map((problem) => [problem.file, problem.path, problem.message.split(", but ")[0]]),
@@ -777,6 +782,25 @@ describe("a mode's skill by name", () => {
     });
   });
 
+  test("an output schema file that is not JSON gives a problem when a value is checked, though the load passed", async () => {
+    const files = filesWithSkill(draftSkill);
+    await files.writeAtomic(noteDraft, "{ not json");
+    const skill = await (await notesMode(files)).skill("skills/write-note");
+    assert.ok(skill.ok);
+    assert.deepEqual(skill.value.output?.check({ text: "Tea" }), {
+      ok: false,
+      problems: [
+        {
+          file: noteDraft,
+          path: "",
+          message:
+            `The schema file ${noteDraft} is not valid JSON: ` +
+            "Expected property name or '}' in JSON at position 2 (line 1 column 3).",
+        },
+      ],
+    });
+  });
+
   test("a skill the mode's steps do not run is not found", async () => {
     const mode = await notesMode(filesWithSkill(draftSkill));
     assert.deepEqual(refusal(await mode.skill("skills/none")), [sentence("Mode notes has no skill skills/none.")]);
@@ -822,5 +846,500 @@ describe("a mode's skill by name", () => {
     };
     assert.deepEqual(await tools("skills/write-note"), ["files", "items-store.get", "http"]);
     assert.deepEqual(await tools("skills/tidy"), ["db"]);
+  });
+});
+
+type Fixture = {
+  readonly files: Readonly<Record<string, string>>;
+  readonly layout: typeof layout;
+};
+
+const tidyMode = [
+  "name: tidy",
+  "version: 1.0.0",
+  "description: Tidies the notes.",
+  "actions:",
+  "  sweep:",
+  "    input: schemas/sweep.json",
+  "    output: schemas/sweep.json",
+  "    effects: [read]",
+  "    run:",
+  "      - script: scripts/sweep.ts",
+  "",
+].join("\n");
+
+const grabbingJournal = [
+  "name: journal",
+  "version: 1.0.0",
+  "description: Keeps a journal on the shelf.",
+  "requires:",
+  "  interfaces: [items-store@1]",
+  "resources:",
+  "  files:",
+  "    write:",
+  "      - .agentbay/data/",
+  "actions:",
+  "  write:",
+  "    description: When the owner writes an entry.",
+  "    input: schemas/write-input.json",
+  "    output: schemas/write-output.json",
+  "    effects: [read, write]",
+  "    run:",
+  "      - call: items-store.put",
+  "",
+].join("\n");
+
+const fixtures = {
+  soundKit: { files: rooted(validFiles()), layout },
+  soundProject: { files: projectFiles(), layout: separateLayout },
+  unreadableManifest: {
+    files: rooted({ ...validFiles(), "components/modes/broken/mode.yaml": "name: broken\nversion: [\n" }),
+    layout,
+  },
+  schemaRule: { files: rooted({ ...validFiles(), "components/modes/tidy/mode.yaml": tidyMode }), layout },
+  grantRule: {
+    files: { ...projectFiles(), "/project/components/modes/journal/mode.yaml": grabbingJournal },
+    layout: separateLayout,
+  },
+  unreadableSkill: {
+    files: rooted(
+      Object.fromEntries(
+        Object.entries(validFiles()).filter(([path]) => path !== "components/modes/notes/skills/write-note/SKILL.md"),
+      ),
+    ),
+    layout,
+  },
+} satisfies Readonly<Record<string, Fixture>>;
+
+async function inspectionOf(fixture: Fixture): Promise<Inspection> {
+  return inspectSystem(fakeFileSystem(fixture.files), fixture.layout);
+}
+
+function foldersOf(inspection: Inspection): readonly unknown[] {
+  return inspection.folders.map((folder) => [
+    folder.home,
+    folder.tier,
+    folder.folder,
+    folder.active,
+    folder.manifest?.name,
+  ]);
+}
+
+function readFolder(inspection: Inspection, folder: string): Extract<InspectedFolder, { readonly manifest: object }> {
+  const found = inspection.folders.find((entry) => entry.folder === folder);
+  assert.ok(found?.manifest !== undefined, `${folder} was not read`);
+  return found;
+}
+
+describe("inspectSystem", () => {
+  test("in a sound kit every mode folder is found, read and active, with the interfaces and no problem", async () => {
+    const inspection = await inspectionOf(fixtures.soundKit);
+    assert.deepEqual([inspection.problems, inspection.notices], [[], []]);
+    assert.deepEqual(foldersOf(inspection), [
+      ["kit", "base", "/kit/components/base/store", true, "store"],
+      ["kit", "modes", "/kit/components/modes/briefing", true, "briefing"],
+      ["kit", "modes", "/kit/components/modes/notes", true, "notes"],
+    ]);
+    assert.deepEqual([...inspection.interfaces.keys()].sort(), ["items-store@1", "notes@1"]);
+    assert.deepEqual(inspection.interfaces.get("notes@1")?.actions.add?.effects, ["read", "write"]);
+    assert.deepEqual(inspection.kitLayout, {
+      components: "components",
+      tiers: ["components/base", "components/modes"],
+      interfaces: "components/base/interfaces",
+    });
+  });
+
+  test("in a sound project the kit's modes come first, and a kit mode nothing reaches is not active", async () => {
+    const inspection = await inspectionOf(fixtures.soundProject);
+    assert.deepEqual([inspection.problems, inspection.notices], [[], []]);
+    assert.deepEqual(foldersOf(inspection), [
+      ["kit", "base", "/kit/components/base/store", true, "store"],
+      ["kit", "modes", "/kit/components/modes/briefing", false, "briefing"],
+      ["kit", "modes", "/kit/components/modes/notes", true, "notes"],
+      ["project", "modes", "/project/components/modes/journal", true, "journal"],
+      ["project", "modes", "/project/components/modes/shelf", true, "shelf"],
+    ]);
+  });
+
+  test("a folder is active by the name in its manifest, not by the name of its folder", async () => {
+    const renamed = Object.entries(projectFiles()).map(([path, text]): readonly [string, string] => [
+      path.replace("/kit/components/modes/briefing/", "/kit/components/modes/daily/"),
+      text,
+    ]);
+    const projectConfig = yamlText({ ...config, modes: ["notes", "briefing"] });
+    const files = { ...Object.fromEntries(renamed), "/project/agentbay.config.yaml": projectConfig };
+    const inspection = await inspectionOf({ files, layout: separateLayout });
+    assert.deepEqual(foldersOf(inspection)[1], ["kit", "modes", "/kit/components/modes/daily", true, "briefing"]);
+  });
+
+  test("the interfaces folder is not a mode folder, and other files in it are not interfaces", async () => {
+    const files = {
+      ...validFiles(),
+      "components/base/interfaces/mode.yaml": "name: stray\n",
+      "components/base/interfaces/notes.md": "not an interface",
+      "components/base/typescript/README.md": "configs, not a mode",
+    };
+    const inspection = await inspectionOf({ files: rooted(files), layout });
+    assert.deepEqual(
+      inspection.folders.map((folder) => folder.folder),
+      ["/kit/components/base/store", "/kit/components/modes/briefing", "/kit/components/modes/notes"],
+    );
+    assert.deepEqual([...inspection.interfaces.keys()].sort(), ["items-store@1", "notes@1"]);
+    assert.deepEqual(inspection.problems, [
+      {
+        file: "components/base/interfaces/mode.yaml",
+        path: "",
+        message: "components/base/interfaces holds interface files only, but it has a mode.yaml.",
+        fix: "Move the mode to a folder of its own, such as components/modes/<mode>/mode.yaml.",
+      },
+    ]);
+  });
+
+  test("a mode whose mode.yaml cannot be read is found without a manifest, and its problem has the line", async () => {
+    const inspection = await inspectionOf(fixtures.unreadableManifest);
+    assert.deepEqual(foldersOf(inspection)[2], ["kit", "modes", "/kit/components/modes/broken", true, undefined]);
+    assert.deepEqual(inspection.problems, [
+      {
+        file: "components/modes/broken/mode.yaml",
+        path: "",
+        line: 3,
+        message:
+          "The YAML cannot be read: Flow sequence in block collection must be sufficiently indented and end with a ].",
+        fix: "Correct the YAML syntax at this line.",
+      },
+    ]);
+  });
+
+  test("a mode that breaks a schema rule is found without a manifest, and its problem is on the line", async () => {
+    const inspection = await inspectionOf(fixtures.schemaRule);
+    assert.deepEqual(foldersOf(inspection)[3], ["kit", "modes", "/kit/components/modes/tidy", true, undefined]);
+    assert.deepEqual(inspection.problems, [
+      {
+        file: "components/modes/tidy/mode.yaml",
+        path: "/actions/sweep",
+        line: 6,
+        message: "actions.sweep is missing the required field description.",
+        fix: "Add description. Expected: One sentence saying when an owner or a mode would use the action.",
+      },
+    ]);
+  });
+
+  test("a mode that breaks a grant rule is read, and its problem is on the line of the path", async () => {
+    const inspection = await inspectionOf(fixtures.grantRule);
+    assert.equal(readFolder(inspection, "/project/components/modes/journal").manifest.name, "journal");
+    assert.deepEqual(inspection.problems, [
+      {
+        file: "components/modes/journal/mode.yaml",
+        path: "/resources/files/write/0",
+        line: 9,
+        message: "The path .agentbay/data/ points into the kernel's state folder .agentbay/, which no mode may name.",
+        fix: "Name a folder outside the kernel, state and other modes' folders, and outside the mode's own code.",
+      },
+    ]);
+  });
+
+  test("a skill whose file cannot be read is a problem of the step, and is given without its text", async () => {
+    const inspection = await inspectionOf(fixtures.unreadableSkill);
+    assert.deepEqual(inspection.problems, [
+      {
+        file: "components/modes/notes/mode.yaml",
+        path: "/actions/add/run/0/skill",
+        line: 18,
+        message:
+          "Action add of mode notes runs the skill skills/write-note, " +
+          "but components/modes/notes/skills/write-note/SKILL.md does not exist.",
+        fix: "Create components/modes/notes/skills/write-note/SKILL.md, or correct the path.",
+      },
+    ]);
+    const notes = readFolder(inspection, "/kit/components/modes/notes");
+    assert.deepEqual(await notes.skill("skills/write-note"), {
+      file: "/kit/components/modes/notes/skills/write-note/SKILL.md",
+      text: undefined,
+    });
+  });
+
+  test("a skill is given with its front matter, the line of its name and its sections with their list items", async () => {
+    const text = [
+      "---",
+      "name: write-note",
+      "description: Writes one note from the input.",
+      "---",
+      "",
+      "## Tools",
+      "",
+      "- `items-store.put`: stores the note",
+      "```",
+      "- fenced",
+      "```",
+      "1. db",
+      "",
+    ].join("\n");
+    const files = rooted({ ...validFiles(), "components/modes/notes/skills/write-note/SKILL.md": text });
+    const notes = readFolder(await inspectionOf({ files, layout }), "/kit/components/modes/notes");
+    assert.deepEqual(await notes.skill("skills/write-note"), {
+      file: "/kit/components/modes/notes/skills/write-note/SKILL.md",
+      text: {
+        frontMatter: {
+          ok: true,
+          value: { name: "write-note", description: "Writes one note from the input." },
+        },
+        nameLine: 2,
+        sections: [
+          {
+            heading: "Tools",
+            line: 6,
+            lines: [
+              { line: 7, text: "" },
+              { line: 8, text: "- `items-store.put`: stores the note" },
+              { line: 9, text: "```" },
+              { line: 10, text: "- fenced" },
+              { line: 11, text: "```" },
+              { line: 12, text: "1. db" },
+              { line: 13, text: "" },
+            ],
+            items: [
+              { line: 8, text: "- `items-store.put`: stores the note", entry: "items-store.put" },
+              { line: 12, text: "1. db", entry: "db" },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  test("a read folder places a problem at a path of its manifest, with the line", async () => {
+    const notes = readFolder(await inspectionOf(fixtures.soundKit), "/kit/components/modes/notes");
+    assert.deepEqual(notes.at(["requires", "interfaces", 0], { message: "Look here.", fix: "Fix it." }), {
+      file: "/kit/components/modes/notes/mode.yaml",
+      path: "/requires/interfaces/0",
+      line: 6,
+      message: "Look here.",
+      fix: "Fix it.",
+    });
+  });
+
+  test("a read folder checks a value against a schema of its mode, and says nothing of a schema it cannot use", async () => {
+    const files = rooted({
+      ...validFiles(),
+      "components/modes/notes/schemas/strict.json": JSON.stringify({ type: "object", required: ["text"] }),
+      "components/modes/notes/schemas/unusable.json": JSON.stringify({ type: "mapping" }),
+      "components/modes/notes/schemas/broken.json": "{ not json",
+    });
+    const notes = readFolder(await inspectionOf({ files, layout }), "/kit/components/modes/notes");
+    const example = "/kit/components/modes/notes/tests/add.example.json";
+    const against = (schema: string): { readonly schema: string; readonly file: string; readonly under: string } => ({
+      schema,
+      file: example,
+      under: "input",
+    });
+    assert.deepEqual(await notes.schemaProblems({ text: "Tea" }, against("schemas/strict.json")), []);
+    assert.deepEqual(await notes.schemaProblems({}, against("schemas/strict.json")), [
+      { file: example, path: "/input", message: "input is missing the required field text.", fix: "Add text." },
+    ]);
+    for (const schema of ["schemas/unusable.json", "schemas/broken.json", "schemas/gone.json"]) {
+      assert.deepEqual(await notes.schemaProblems({}, against(schema)), []);
+    }
+  });
+
+  test("a kit mode that does not load is a notice while it is not active in the project", async () => {
+    const files = { ...projectFiles(), "/kit/components/modes/todo/mode.yaml": "name: todo\n" };
+    const inspection = await inspectionOf({ files, layout: separateLayout });
+    assert.deepEqual(inspection.problems, []);
+    assert.deepEqual(
+      inspection.notices.map((notice) => [notice.file, notice.message.split(" (")[0]]),
+      [["kit:components/modes/todo/mode.yaml", "Mode todo of the kit does not load"]],
+    );
+  });
+});
+
+describe("a load and an inspection agree", () => {
+  test("for each fixture, a load gives a system exactly when the inspection reports no problem", async () => {
+    for (const [name, fixture] of Object.entries(fixtures)) {
+      const files = fakeFileSystem(fixture.files);
+      const inspection = await inspectSystem(files, fixture.layout);
+      const loaded = await loadSystem(files, fixture.layout);
+      assert.equal(loaded.ok, inspection.problems.length === 0, name);
+      assert.deepEqual(loaded.ok ? [] : loaded.problems, inspection.problems, name);
+    }
+  });
+});
+
+const kebabFix =
+  "Start with a lowercase letter and use only lowercase letters, digits and single dashes, such as daily-digest.";
+
+const takenName = { path: "", fix: "Choose another name." };
+
+async function placed(fixture: Fixture, part: NewPart): ReturnType<typeof placeToWrite> {
+  return placeToWrite(fakeFileSystem(fixture.files), fixture.layout, part);
+}
+
+describe("placeToWrite", () => {
+  test("in a project, a new mode, a part of a project mode and a new interface go into the project", async () => {
+    const project = fixtures.soundProject;
+    assert.deepEqual(await placed(project, { mode: "diary", tier: "modes" }), {
+      ok: true,
+      value: "components/modes/diary",
+    });
+    assert.deepEqual(await placed(project, { inMode: "journal", kind: "action", name: "log" }), {
+      ok: true,
+      value: "components/modes/journal",
+    });
+    assert.deepEqual(await placed(project, { interface: "diary" }), {
+      ok: true,
+      value: "components/interfaces/diary.yaml",
+    });
+  });
+
+  test("in the kit, a new base mode, a part of a kit mode and a new interface go into the kit", async () => {
+    const kit = fixtures.soundKit;
+    assert.deepEqual(await placed(kit, { mode: "diary", tier: "base" }), {
+      ok: true,
+      value: "components/base/diary",
+    });
+    assert.deepEqual(await placed(kit, { mode: "diary", tier: "modes" }), {
+      ok: true,
+      value: "components/modes/diary",
+    });
+    assert.deepEqual(await placed(kit, { inMode: "store", kind: "workflow", name: "nightly" }), {
+      ok: true,
+      value: "components/base/store",
+    });
+    assert.deepEqual(await placed(kit, { interface: "diary" }), {
+      ok: true,
+      value: "components/base/interfaces/diary.yaml",
+    });
+  });
+
+  test("a base mode is refused outside the kit, together with a name that is not kebab-case", async () => {
+    const tier = {
+      path: "",
+      message:
+        "Tier base is for the base modes of the kit itself, and this project is not the kit; " +
+        "bay new writes only into the project.",
+      fix: "Make the mode in this project with --tier modes, or run bay new in the kit's own folder.",
+    };
+    assert.deepEqual(await placed(fixtures.soundProject, { mode: "diary", tier: "base" }), {
+      ok: false,
+      problems: [{ file: "components/base/diary", ...tier }],
+    });
+    assert.deepEqual(await placed(fixtures.soundProject, { mode: "Bad_Name", tier: "base" }), {
+      ok: false,
+      problems: [
+        { file: "components/base/Bad_Name", ...tier },
+        {
+          file: "components/base/Bad_Name",
+          path: "",
+          message: 'The mode name "Bad_Name" is not kebab-case.',
+          fix: kebabFix,
+        },
+      ],
+    });
+  });
+
+  test("a name that is not kebab-case or is reserved is refused for each kind of part", async () => {
+    const project = fixtures.soundProject;
+    assert.deepEqual(await placed(project, { mode: "constructor", tier: "modes" }), {
+      ok: false,
+      problems: [
+        {
+          file: "components/modes/constructor",
+          path: "",
+          message: "The mode name constructor is reserved, because every JavaScript object has it.",
+          fix: "Choose another name.",
+        },
+      ],
+    });
+    assert.deepEqual(await placed(project, { inMode: "journal", kind: "action", name: "Bad" }), {
+      ok: false,
+      problems: [
+        {
+          file: "components/modes/journal",
+          path: "",
+          message: 'The action name "Bad" is not kebab-case.',
+          fix: kebabFix,
+        },
+      ],
+    });
+    assert.deepEqual(await placed(project, { interface: "Bad" }), {
+      ok: false,
+      problems: [
+        {
+          file: "components/interfaces/Bad.yaml",
+          path: "",
+          message: 'The interface name "Bad" is not kebab-case.',
+          fix: kebabFix,
+        },
+      ],
+    });
+  });
+
+  test("a new mode whose name is taken, in the kit or in the project, is refused", async () => {
+    assert.deepEqual(await placed(fixtures.soundProject, { mode: "store", tier: "modes" }), {
+      ok: false,
+      problems: [
+        {
+          file: "kit:components/base/store",
+          message: "kit:components/base/store already exists; every mode needs its own name.",
+          ...takenName,
+        },
+      ],
+    });
+    assert.deepEqual(await placed(fixtures.soundProject, { mode: "journal", tier: "modes" }), {
+      ok: false,
+      problems: [
+        {
+          file: "components/modes/journal",
+          message: "components/modes/journal already exists; every mode needs its own name.",
+          ...takenName,
+        },
+      ],
+    });
+    assert.deepEqual(await placed(fixtures.soundKit, { mode: "store", tier: "modes" }), {
+      ok: false,
+      problems: [
+        {
+          file: "components/base/store",
+          message: "components/base/store already exists; every mode needs its own name.",
+          ...takenName,
+        },
+      ],
+    });
+  });
+
+  test("a part of a mode that does not exist is refused, naming where it was looked for", async () => {
+    const missing = { file: "components", path: "", fix: "Name an existing mode, or create it with bay new mode." };
+    assert.deepEqual(await placed(fixtures.soundProject, { inMode: "nosuch", kind: "workflow", name: "Bad" }), {
+      ok: false,
+      problems: [
+        { ...missing, message: "There is no mode nosuch: neither components/modes/nosuch has a mode.yaml." },
+        { file: "nosuch", path: "", message: 'The workflow name "Bad" is not kebab-case.', fix: kebabFix },
+      ],
+    });
+    assert.deepEqual(await placed(fixtures.soundKit, { inMode: "nosuch", kind: "skill", name: "tidy" }), {
+      ok: false,
+      problems: [
+        {
+          ...missing,
+          message:
+            "There is no mode nosuch: neither components/base/nosuch or components/modes/nosuch has a mode.yaml.",
+        },
+      ],
+    });
+  });
+
+  test("a part of a kit mode is refused outside the kit", async () => {
+    assert.deepEqual(await placed(fixtures.soundProject, { inMode: "notes", kind: "skill", name: "tidy" }), {
+      ok: false,
+      problems: [
+        {
+          file: "kit:components/modes/notes",
+          path: "",
+          message:
+            "Mode notes lives in the kit (kit:components/modes/notes), " +
+            "and bay new writes only into the project, never into the kit.",
+          fix: "Make a mode of your own with bay new mode, or change the kit's mode in the kit's own folder.",
+        },
+      ],
+    });
   });
 });

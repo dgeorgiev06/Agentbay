@@ -1,33 +1,34 @@
-import { basename, join, relative } from "node:path/posix";
+import { join, relative } from "node:path/posix";
 import type { Interface } from "./generated/interface.ts";
 import type { Mode } from "./generated/mode.ts";
 import { homeFolder, isProjectTheKit, shownPath, type Home, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
-import { findInterfaceFiles, findModeFolders } from "./manifests/manifests.ts";
-import { loadSpec, type Loaded } from "./manifests/spec.ts";
+import type { InspectedFolder, Inspection } from "./manifests/manifests.ts";
 import type { Problem } from "./outcome.ts";
 
 export type Severity = "error" | "warning";
 
 export type Finding = Problem & { readonly severity: Severity };
 
+export type Wording = Pick<Problem, "message" | "fix">;
+
 export type FileListing = {
   readonly projectFiles: (folder: string) => Promise<readonly string[]>;
 };
 
-export type ModeFolder = {
-  readonly home: Home;
-  readonly folder: string;
+type FolderFiles = {
   readonly label: string;
   readonly files: readonly string[];
-  readonly manifest: Loaded<Mode> | undefined;
 };
 
-export type LoadedModeFolder = ModeFolder & { readonly manifest: Loaded<Mode> };
+export type ModeFolder = InspectedFolder & FolderFiles;
+
+export type LoadedModeFolder = Extract<InspectedFolder, { readonly manifest: Mode }> & FolderFiles;
 
 export type KitTree = {
   readonly files: FileSystem;
   readonly paths: readonly string[];
+  readonly layout: Inspection["kitLayout"];
 };
 
 export type CheckContext = {
@@ -42,10 +43,8 @@ export type CheckSources = {
   readonly files: FileSystem;
   readonly listing: FileListing;
   readonly layout: Layout;
-  readonly active: ReadonlySet<string>;
+  readonly inspection: Inspection;
 };
-
-export const kitInterfacesFolder = "components/base/interfaces";
 
 export function errors(problems: readonly Problem[]): readonly Finding[] {
   return problems.map((problem) => ({ ...problem, severity: "error" }));
@@ -83,47 +82,29 @@ function listingsOf(sources: CheckSources): (home: Home) => Promise<readonly str
   };
 }
 
-function isChecked(sources: CheckSources, home: Home, name: string): boolean {
-  return home === "project" || isProjectTheKit(sources.layout) || sources.active.has(name);
+function isChecked(layout: Layout, folder: InspectedFolder): boolean {
+  return folder.home === "project" || isProjectTheKit(layout) || folder.active;
 }
 
-async function loadModeFolders(
+async function modeFoldersOf(
   sources: CheckSources,
   listing: (home: Home) => Promise<readonly string[]>,
 ): Promise<readonly ModeFolder[]> {
-  const { files, layout } = sources;
+  const { layout } = sources;
   const modes: ModeFolder[] = [];
-  for (const found of await findModeFolders(files, layout)) {
-    const outcome = await loadSpec(files, join(found.folder, "mode.yaml"), "mode");
-    const manifest = outcome.ok ? outcome.value : undefined;
-    if (!isChecked(sources, found.home, manifest?.value.name ?? basename(found.folder))) {
-      continue;
-    }
+  for (const found of sources.inspection.folders.filter((folder) => isChecked(layout, folder))) {
     const below = relative(homeFolder(layout, found.home), found.folder);
     const modeFiles = filesUnder(await listing(found.home), below);
-    modes.push({ ...found, label: shownPath(layout, found.folder), files: modeFiles, manifest });
+    modes.push({ ...found, label: shownPath(layout, found.folder), files: modeFiles });
   }
   return modes;
 }
 
-async function loadInterfaceDefinitions(files: FileSystem, layout: Layout): Promise<ReadonlyMap<string, Interface>> {
-  const definitions = new Map<string, Interface>();
-  for (const file of await findInterfaceFiles(files, layout)) {
-    const outcome = await loadSpec(files, file, "interface");
-    if (outcome.ok) {
-      const definition = outcome.value.value;
-      definitions.set(`${definition.name}@${String(definition.version)}`, definition);
-    }
-  }
-  return definitions;
-}
-
-export async function loadCheckContext(sources: CheckSources): Promise<CheckContext> {
-  const { files, layout } = sources;
+export async function checkContextOf(sources: CheckSources): Promise<CheckContext> {
+  const { files, layout, inspection } = sources;
   const listing = listingsOf(sources);
   const kitPaths = isProjectTheKit(layout) ? await listing("kit") : [];
-  const modes = await loadModeFolders(sources, listing);
-  const interfaces = await loadInterfaceDefinitions(files, layout);
-  const kit = { files: rootedFileSystem(files, layout.kit), paths: kitPaths };
-  return { layout, files, kit, modes, interfaces };
+  const modes = await modeFoldersOf(sources, listing);
+  const kit = { files: rootedFileSystem(files, layout.kit), paths: kitPaths, layout: inspection.kitLayout };
+  return { layout, files, kit, modes, interfaces: inspection.interfaces };
 }

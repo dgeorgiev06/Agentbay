@@ -9,7 +9,7 @@ import type { Action, Mode } from "../bay/generated/mode.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
 import { fieldOf, numberField, textField } from "../bay/json.ts";
 import { layoutOf } from "../bay/layout.ts";
-import { loadSystemReport, type System } from "../bay/manifests/manifests.ts";
+import { loadSystem, type System } from "../bay/manifests/manifests.ts";
 import type { Outcome } from "../bay/outcome.ts";
 import { openRuns, type Run, type Runs, type Task } from "../bay/runs/runs.ts";
 import { SecretStore } from "../bay/secrets.ts";
@@ -308,7 +308,7 @@ function fixtureFiles(changes: Changes): Record<string, string> {
 
 export async function fixtureSystem(changes: Changes = {}): Promise<FixtureSystem> {
   const files = fakeFileSystem(fixtureFiles(changes));
-  const outcome = (await loadSystemReport(files, layout)).outcome;
+  const outcome = await loadSystem(files, layout);
   assert.ok(outcome.ok, outcome.ok ? "" : JSON.stringify(outcome.problems, null, 2));
   return { system: outcome.value, files };
 }

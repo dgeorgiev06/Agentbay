@@ -3,12 +3,19 @@ import { test } from "node:test";
 import type { Config } from "../bay/generated/config.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import { layoutOf } from "../bay/layout.ts";
-import { loadSystemReport, type System } from "../bay/manifests/manifests.ts";
+import type { System } from "../bay/manifests/manifests.ts";
 import type { Problem } from "../bay/outcome.ts";
 import { fakeFileSystem } from "./fakes.ts";
-import { briefingMode, config, paths, schemaText, validFiles, yamlText } from "./system-fixture.ts";
-
-type SystemReport = Awaited<ReturnType<typeof loadSystemReport>>;
+import {
+  briefingMode,
+  config,
+  paths,
+  schemaText,
+  systemReport,
+  validFiles,
+  yamlText,
+  type SystemReport,
+} from "./system-fixture.ts";
 
 function servingModeOf(system: System, caller: string, call: string): string | undefined {
   const answer = system.action(call, caller);
@@ -55,7 +62,7 @@ function projectFiles(changes: Partial<Config> = {}): Record<string, string> {
 }
 
 async function reportOf(files: Readonly<Record<string, string>>): Promise<SystemReport> {
-  return loadSystemReport(fakeFileSystem(files), layout);
+  return systemReport(fakeFileSystem(files), layout);
 }
 
 function problemsIn(report: SystemReport): readonly Problem[] {
@@ -147,7 +154,7 @@ test("with no project modes and nothing listed, no mode is active", async () => 
 test("in the kit itself every mode is active", async () => {
   const kitAsProject = layoutOf({ kit: "/kit", project: "/kit" });
   const files = { ...kitFiles(), "/kit/agentbay.config.yaml": yamlText(config) };
-  const report = await loadSystemReport(fakeFileSystem(files), kitAsProject);
+  const report = await systemReport(fakeFileSystem(files), kitAsProject);
   assert.deepEqual([...report.active].sort(), ["briefing", "notes", "store"]);
 });
 
@@ -180,7 +187,7 @@ test("forge outside the kit can be neither listed nor reached through a binding"
   );
   const inKit = layoutOf({ kit: "/kit", project: "/kit" });
   const kitConfig = { "/kit/agentbay.config.yaml": yamlText({ ...config, modes: ["forge"] }) };
-  const kitReport = await loadSystemReport(fakeFileSystem({ ...kitFiles(), ...forgeFiles, ...kitConfig }), inKit);
+  const kitReport = await systemReport(fakeFileSystem({ ...kitFiles(), ...forgeFiles, ...kitConfig }), inKit);
   assert.ok(kitReport.active.has("forge"));
 });
 

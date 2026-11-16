@@ -42,9 +42,26 @@ export type Skill = {
   readonly tools: readonly string[];
 };
 
+type SkillLine = {
+  readonly line: number;
+  readonly text: string;
+};
+
+type ListItem = SkillLine & {
+  readonly entry: string;
+};
+
 type SkillSection = {
   readonly heading: string;
-  readonly lines: readonly string[];
+  readonly line: number;
+  readonly lines: readonly SkillLine[];
+  readonly items: readonly ListItem[];
+};
+
+export type SkillText = {
+  readonly frontMatter: Outcome<SkillFrontMatter>;
+  readonly nameLine: number | undefined;
+  readonly sections: readonly SkillSection[];
 };
 
 type Kinds = {
@@ -389,54 +406,91 @@ function isFence(line: string): boolean {
 
 const listItemPattern = /^\s*([-*+]|[0-9]+[.)])\s+/;
 
-function levelTwoSections(lines: readonly string[]): readonly SkillSection[] {
-  const sections: { readonly heading: string; readonly lines: string[] }[] = [];
+function entryOf(item: string): string {
+  const firstWord = item.replace(listItemPattern, "").trim().split(/\s+/)[0] ?? "";
+  return firstWord.replaceAll("`", "").replace(/[:,;.]$/, "");
+}
+
+function frontMatterEnd(lines: readonly string[]): number | undefined {
+  if (lines[0]?.trim() !== "---") {
+    return undefined;
+  }
+  const closing = lines.findIndex((line, index) => index > 0 && line.trim() === "---");
+  return closing < 0 ? undefined : closing;
+}
+
+function nameLineOf(lines: readonly string[], end: number): number | undefined {
+  const index = lines.slice(0, end).findIndex((line) => line.startsWith("name:"));
+  return index < 0 ? undefined : index + 1;
+}
+
+function levelTwoSections(lines: readonly string[], start: number): readonly SkillSection[] {
+  const sections: { heading: string; line: number; lines: SkillLine[]; items: ListItem[] }[] = [];
   let insideFence = false;
-  for (const line of lines) {
-    if (isFence(line)) {
+  for (const [index, text] of lines.entries()) {
+    if (index < start) {
+      continue;
+    }
+    const line = index + 1;
+    if (!insideFence && text.startsWith("## ")) {
+      sections.push({ heading: text.slice(3).trim(), line, lines: [], items: [] });
+      continue;
+    }
+    if (isFence(text)) {
       insideFence = !insideFence;
-    } else if (!insideFence && line.startsWith("## ")) {
-      sections.push({ heading: line.slice(3).trim(), lines: [] });
-    } else if (!insideFence) {
-      sections.at(-1)?.lines.push(line);
+    }
+    const section = sections.at(-1);
+    section?.lines.push({ line, text });
+    if (!insideFence && listItemPattern.test(text)) {
+      section?.items.push({ line, text, entry: entryOf(text) });
     }
   }
   return sections;
 }
 
-function listedTools(sections: readonly SkillSection[]): readonly string[] {
+const noFrontMatter = {
+  path: "",
+  line: 1,
+  message: "The skill has no front matter between two --- lines at its top.",
+  fix: "Start the file with a --- line, then name: and description:, then another --- line.",
+};
+
+function skillFrontMatter(file: string, lines: readonly string[], end: number | undefined): Outcome<SkillFrontMatter> {
+  if (end === undefined) {
+    return failedWith([{ file, ...noFrontMatter }]);
+  }
+  const frontMatter = parseSpec({ file, text: lines.slice(1, end).join("\n"), firstLine: 2 }, "skill");
+  return frontMatter.ok ? { ok: true, value: frontMatter.value.value } : frontMatter;
+}
+
+export async function readSkill(files: FileSystem, file: string): Promise<SkillText | undefined> {
+  const text = await files.readText(file);
+  if (text === undefined) {
+    return undefined;
+  }
+  const lines = text.split(/\r?\n/);
+  const end = frontMatterEnd(lines);
+  const start = end === undefined ? 0 : end + 1;
+  return {
+    frontMatter: skillFrontMatter(file, lines, end),
+    nameLine: nameLineOf(lines, start),
+    sections: levelTwoSections(lines, start),
+  };
+}
+
+function toolsOf(sections: readonly SkillSection[]): readonly string[] {
   const tools = sections.find((section) => section.heading === "Tools");
-  const items = (tools?.lines ?? []).filter((line) => listItemPattern.test(line));
-  return items.flatMap((item) => {
-    const firstWord = item.replace(listItemPattern, "").trim().split(/\s+/)[0] ?? "";
-    const tool = firstWord.replaceAll("`", "").replace(/[:,;.]$/, "");
-    return tool === "" ? [] : [tool];
-  });
+  return (tools?.items ?? []).flatMap((item) => (item.entry === "" ? [] : [item.entry]));
 }
 
 export async function parseSkill(files: FileSystem, file: string): Promise<Outcome<Skill>> {
-  const text = await files.readText(file);
+  const text = await readSkill(files, file);
   if (text === undefined) {
     return failedWith([missingFile(file)]);
   }
-  const lines = text.split(/\r?\n/);
-  const closing = lines.findIndex((line, index) => index > 0 && line.trim() === "---");
-  if (lines[0]?.trim() !== "---" || closing < 0) {
-    return failedWith([
-      {
-        file,
-        path: "",
-        line: 1,
-        message: "The skill has no front matter between two --- lines at its top.",
-        fix: "Start the file with a --- line, then name: and description:, then another --- line.",
-      },
-    ]);
+  if (!text.frontMatter.ok) {
+    return text.frontMatter;
   }
-  const frontMatter = parseSpec({ file, text: lines.slice(1, closing).join("\n"), firstLine: 2 }, "skill");
-  if (!frontMatter.ok) {
-    return frontMatter;
-  }
-  const sections = levelTwoSections(lines.slice(closing + 1));
-  const headings = sections.map((section) => section.heading);
-  return { ok: true, value: { frontMatter: frontMatter.value.value, headings, tools: listedTools(sections) } };
+  const headings = text.sections.map((section) => section.heading);
+  return { ok: true, value: { frontMatter: text.frontMatter.value, headings, tools: toolsOf(text.sections) } };
 }

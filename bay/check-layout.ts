@@ -1,16 +1,15 @@
-import { join } from "node:path/posix";
+import { basename, join } from "node:path/posix";
 import {
   errors,
   filesUnder,
   isLoaded,
-  kitInterfacesFolder,
   type CheckContext,
   type Finding,
   type KitTree,
   type LoadedModeFolder,
   type ModeFolder,
+  type Wording,
 } from "./check-context.ts";
-import { checkValue, type Wording } from "./manifests/spec.ts";
 import { isRecord } from "./json.ts";
 import type { Problem } from "./outcome.ts";
 
@@ -33,8 +32,6 @@ const topLevelFolders = ["skills", "scripts", "workflows", "schemas", "migration
 const allowedTopLevel = [...topLevelFiles, ...topLevelFolders.map((folder) => `${folder}/`)].join(", ");
 
 const migrationPattern = /^([0-9]{4})-[a-z0-9]+(-[a-z0-9]+)*\.sql$/;
-
-const componentTiers = ["base", "modes"] as const;
 
 function fileProblem(file: string, wording: Wording): Problem {
   return { file, path: "", ...wording };
@@ -161,23 +158,17 @@ function exampleShapeProblems(place: ExamplePlace, value: unknown): readonly Pro
 }
 
 async function exampleSchemaProblems(
-  context: CheckContext,
   place: ExamplePlace,
   example: Readonly<Record<string, unknown>>,
 ): Promise<readonly Problem[]> {
-  const action = place.mode.manifest.value.actions[place.action];
+  const action = place.mode.manifest.actions[place.action];
   if (action === undefined) {
     return [];
   }
-  const loaded = { file: place.file, value: example, lineOf: () => undefined };
   const problems: Problem[] = [];
   for (const key of ["input", "output"] as const) {
-    const schema = await readJson(context, join(place.mode.folder, action[key]));
-    if (schema.state !== "read") {
-      continue;
-    }
-    const check = checkValue(schema.value, example[key], { loaded, path: [key] });
-    problems.push(...(check.kind === "checked" ? check.problems : []));
+    const against = { schema: action[key], file: place.file, under: key };
+    problems.push(...(await place.mode.schemaProblems(example[key], against)));
   }
   return problems;
 }
@@ -189,7 +180,7 @@ async function exampleProblems(context: CheckContext, place: ExamplePlace): Prom
       return [
         fileProblem(place.file, {
           message:
-            `Action ${place.action} of mode ${place.mode.manifest.value.name} has no example: ` +
+            `Action ${place.action} of mode ${place.mode.manifest.name} has no example: ` +
             `${place.label} does not exist.`,
           fix: 'Add it as { "input": ..., "output": ... }: one input and the output it should give.',
         }),
@@ -206,14 +197,14 @@ async function exampleProblems(context: CheckContext, place: ExamplePlace): Prom
       if (shape.length > 0 || !isRecord(example.value)) {
         return shape;
       }
-      return exampleSchemaProblems(context, place, example.value);
+      return exampleSchemaProblems(place, example.value);
     }
   }
 }
 
 async function modeExampleProblems(context: CheckContext, mode: LoadedModeFolder): Promise<readonly Problem[]> {
   const problems: Problem[] = [];
-  for (const action of Object.keys(mode.manifest.value.actions)) {
+  for (const action of Object.keys(mode.manifest.actions)) {
     const example = join("tests", `${action}.example.json`);
     const place = { mode, action, file: join(mode.folder, example), label: join(mode.label, example) };
     problems.push(...(await exampleProblems(context, place)));
@@ -221,51 +212,54 @@ async function modeExampleProblems(context: CheckContext, mode: LoadedModeFolder
   return problems;
 }
 
-function componentsProblems(paths: readonly string[]): readonly Problem[] {
+function componentsProblems(kit: KitTree): readonly Problem[] {
+  const { components, tiers } = kit.layout;
+  const tierNames = tiers.map((tier) => basename(tier));
   const strays = new Set(
-    filesUnder(paths, "components")
+    filesUnder(kit.paths, components)
       .map((file) => file.split("/")[0] ?? "")
-      .filter((entry) => !componentTiers.some((tier) => tier === entry)),
+      .filter((entry) => !tierNames.includes(entry)),
   );
   return [...strays].map((entry) =>
-    fileProblem(join("components", entry), {
-      message: `components/ holds ${entry}, but only base/ and modes/ belong there.`,
-      fix: `Move ${entry} into components/base/ or components/modes/, or out of components/.`,
+    fileProblem(join(components, entry), {
+      message: `${components}/ holds ${entry}, but only ${tierNames.map((name) => `${name}/`).join(" and ")} belong there.`,
+      fix: `Move ${entry} into ${tiers.map((tier) => `${tier}/`).join(" or ")}, or out of ${components}/.`,
     }),
   );
 }
 
-function interfaceEntryProblem(file: string, interfaceNames: readonly string[]): Problem | undefined {
+function interfaceEntryProblem(folder: string, file: string, interfaceNames: readonly string[]): Problem | undefined {
   const [first = "", ...rest] = file.split("/");
-  const path = join(kitInterfacesFolder, file);
+  const path = join(folder, file);
   if (rest.length === 0) {
     return first.endsWith(".yaml")
       ? undefined
       : fileProblem(path, {
-          message: `${kitInterfacesFolder} holds ${first}, which is not an interface .yaml file.`,
-          fix: `Move it out of ${kitInterfacesFolder}; the folder holds interface files and their schema folders only.`,
+          message: `${folder} holds ${first}, which is not an interface .yaml file.`,
+          fix: `Move it out of ${folder}; the folder holds interface files and their schema folders only.`,
         });
   }
   if (!interfaceNames.includes(first)) {
     return fileProblem(path, {
-      message: `${kitInterfacesFolder} has the folder ${first}/, but no interface file ${first}.yaml beside it.`,
+      message: `${folder} has the folder ${first}/, but no interface file ${first}.yaml beside it.`,
       fix: `A schema folder is named after its interface file; rename the folder or add ${first}.yaml.`,
     });
   }
   return file.endsWith(".json")
     ? undefined
     : fileProblem(path, {
-        message: `The schema folder ${kitInterfacesFolder}/${first} holds ${rest.join("/")}, which is not a .json schema.`,
+        message: `The schema folder ${folder}/${first} holds ${rest.join("/")}, which is not a .json schema.`,
         fix: "Keep only JSON Schema files in an interface's schema folder.",
       });
 }
 
-function interfacesFolderProblems(paths: readonly string[]): readonly Problem[] {
-  const entries = filesUnder(paths, kitInterfacesFolder);
+function interfacesFolderProblems(kit: KitTree): readonly Problem[] {
+  const folder = kit.layout.interfaces;
+  const entries = filesUnder(kit.paths, folder);
   const interfaceNames = entries
     .filter((file) => !file.includes("/") && file.endsWith(".yaml"))
     .map((file) => file.slice(0, -".yaml".length));
-  const problems = entries.flatMap((file) => interfaceEntryProblem(file, interfaceNames) ?? []);
+  const problems = entries.flatMap((file) => interfaceEntryProblem(folder, file, interfaceNames) ?? []);
   return [...new Map(problems.map((problem) => [problem.message, problem])).values()];
 }
 
@@ -285,5 +279,5 @@ export async function checkLayout(context: CheckContext): Promise<readonly Findi
 }
 
 export function checkKitLayout(kit: KitTree): readonly Finding[] {
-  return errors([...componentsProblems(kit.paths), ...interfacesFolderProblems(kit.paths)]);
+  return errors([...componentsProblems(kit), ...interfacesFolderProblems(kit)]);
 }

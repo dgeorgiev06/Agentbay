@@ -1,4 +1,4 @@
-import { basename, dirname, join } from "node:path/posix";
+import { basename, dirname, join, relative } from "node:path/posix";
 import { isDeepStrictEqual } from "node:util";
 import type { Json, ModeGrants } from "../contracts.ts";
 import type { Config } from "../generated/config.ts";
@@ -6,12 +6,22 @@ import type { Interface, Signature } from "../generated/interface.ts";
 import type { Action, Effect, Mode, Step } from "../generated/mode.ts";
 import type { SkillFrontMatter } from "../generated/skill.ts";
 import type { Workflow, Step as WorkflowStep } from "../generated/workflow.ts";
-import { isProjectTheKit, pathIn, shownPath, shownProblems, type Home, type Layout } from "../layout.ts";
+import { homeFolder, isProjectTheKit, pathIn, shownPath, shownProblems, type Home, type Layout } from "../layout.ts";
 import { toJson } from "../json.ts";
 import type { FileSystem } from "../ports.ts";
 import { grantsOf, type GrantProblem } from "../policy.ts";
 import { resolveInput, resolveValue, workflowReferenceIssues } from "./references.ts";
-import { checkValue, loadSpec, parseSkill, problemAt, type Loaded, type PathSegments, type Wording } from "./spec.ts";
+import {
+  checkValue,
+  loadSpec,
+  parseSkill,
+  problemAt,
+  readSkill,
+  type Loaded,
+  type PathSegments,
+  type SkillText,
+  type Wording,
+} from "./spec.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
 
 export type ActiveMode = {
@@ -88,10 +98,55 @@ export type BindingUse = {
   readonly servedBy: string;
 };
 
-type SystemReport = {
-  readonly outcome: Outcome<System>;
-  readonly active: ReadonlySet<string>;
+export type Inspection = {
+  readonly problems: readonly Problem[];
   readonly notices: readonly Problem[];
+  readonly folders: readonly InspectedFolder[];
+  readonly interfaces: ReadonlyMap<string, Interface>;
+  readonly kitLayout: KitLayout;
+};
+
+type KitLayout = {
+  readonly components: string;
+  readonly tiers: readonly string[];
+  readonly interfaces: string;
+};
+
+type FolderPlace = {
+  readonly home: Home;
+  readonly tier: ModeTier;
+  readonly folder: string;
+  readonly active: boolean;
+};
+
+export type InspectedFolder =
+  | (FolderPlace & { readonly manifest: undefined })
+  | (FolderPlace & {
+      readonly manifest: Mode;
+      readonly at: (path: PathSegments, wording: Wording) => Problem;
+      readonly schemaProblems: (value: unknown, against: SchemaAgainst) => Promise<readonly Problem[]>;
+      readonly skill: (folder: string) => Promise<InspectedSkill>;
+    });
+
+type SchemaAgainst = {
+  readonly schema: string;
+  readonly file: string;
+  readonly under: string;
+};
+
+export type InspectedSkill = {
+  readonly file: string;
+  readonly text: SkillText | undefined;
+};
+
+export type NewPart =
+  | { readonly mode: string; readonly tier: ModeTier }
+  | { readonly inMode: string; readonly kind: "action" | "skill" | "workflow"; readonly name: string }
+  | { readonly interface: string };
+
+type Pass = {
+  readonly inspection: Inspection;
+  readonly build: (() => Promise<System>) | undefined;
 };
 
 export type ModeListed = {
@@ -114,9 +169,33 @@ export type ListingQuestion = {
   readonly find?: string;
 };
 
-export type ModeFolder = {
+type ModeFolder = {
   readonly home: Home;
   readonly folder: string;
+};
+
+type ModeTier = "base" | "modes";
+
+type TierFolder = ModeFolder & {
+  readonly tier: ModeTier;
+};
+
+type FolderRules = {
+  readonly kitComponents: string;
+  readonly base: TierFolder;
+  readonly kitModes: TierFolder;
+  readonly projectModes: TierFolder | undefined;
+  readonly kitInterfaces: string;
+  readonly projectInterfaces: string | undefined;
+};
+
+type NewMode = Extract<NewPart, { readonly mode: string }>;
+
+type NewModePart = Extract<NewPart, { readonly inMode: string }>;
+
+type ModeRead = {
+  readonly found: TierFolder;
+  readonly outcome: Outcome<Loaded<Mode>>;
 };
 
 type ModeSource = Loaded<Mode> & ModeFolder;
@@ -132,6 +211,7 @@ type Collected<T> = {
 };
 
 type LoadedModes = {
+  readonly read: readonly ModeRead[];
   readonly values: readonly ModeSource[];
   readonly unloaded: readonly UnloadedMode[];
 };
@@ -225,13 +305,7 @@ type WorkflowStepPlace = {
   readonly path: PathSegments;
 };
 
-const kitModeTiers = ["components/base", "components/modes"] as const;
-
-const projectModeTier = "components/modes";
-
-const kitInterfacesFolder = "components/base/interfaces";
-
-const projectInterfacesFolder = "components/interfaces";
+const namePattern = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 
 const forge = "forge";
 
@@ -239,23 +313,51 @@ const defaultKey = "default";
 
 const schemaDirections = ["input", "output"] as const;
 
-function modeTierFolders(layout: Layout): readonly ModeFolder[] {
-  const kitTiers = kitModeTiers.map((tier) => ({ home: "kit" as const, folder: pathIn(layout, "kit", tier) }));
+function folderRules(layout: Layout): FolderRules {
+  const kitComponents = pathIn(layout, "kit", "components");
+  const base: TierFolder = { home: "kit", tier: "base", folder: join(kitComponents, "base") };
+  const kitModes: TierFolder = { home: "kit", tier: "modes", folder: join(kitComponents, "modes") };
+  const kitInterfaces = join(base.folder, "interfaces");
   if (isProjectTheKit(layout)) {
-    return kitTiers;
+    return { kitComponents, base, kitModes, projectModes: undefined, kitInterfaces, projectInterfaces: undefined };
   }
-  return [...kitTiers, { home: "project", folder: pathIn(layout, "project", projectModeTier) }];
+  return {
+    kitComponents,
+    base,
+    kitModes,
+    projectModes: { home: "project", tier: "modes", folder: pathIn(layout, "project", "components/modes") },
+    kitInterfaces,
+    projectInterfaces: pathIn(layout, "project", "components/interfaces"),
+  };
 }
 
-export function ownInterfacesFolder(layout: Layout): string {
-  return isProjectTheKit(layout)
-    ? pathIn(layout, "kit", kitInterfacesFolder)
-    : pathIn(layout, "project", projectInterfacesFolder);
+function modeTiers(rules: FolderRules): readonly TierFolder[] {
+  return rules.projectModes === undefined
+    ? [rules.base, rules.kitModes]
+    : [rules.base, rules.kitModes, rules.projectModes];
+}
+
+function ownModeTiers(rules: FolderRules): readonly TierFolder[] {
+  return rules.projectModes === undefined ? [rules.base, rules.kitModes] : [rules.projectModes];
 }
 
 function interfaceFolders(layout: Layout): readonly string[] {
-  const kitFolder = pathIn(layout, "kit", kitInterfacesFolder);
-  return isProjectTheKit(layout) ? [kitFolder] : [kitFolder, ownInterfacesFolder(layout)];
+  const rules = folderRules(layout);
+  return rules.projectInterfaces === undefined ? [rules.kitInterfaces] : [rules.kitInterfaces, rules.projectInterfaces];
+}
+
+function ownInterfacesFolder(layout: Layout): string {
+  const rules = folderRules(layout);
+  return rules.projectInterfaces ?? rules.kitInterfaces;
+}
+
+function kitLayoutOf(layout: Layout): KitLayout {
+  const rules = folderRules(layout);
+  return {
+    components: relative(layout.kit, rules.kitComponents),
+    tiers: [rules.base, rules.kitModes].map((tier) => relative(layout.kit, tier.folder)),
+    interfaces: relative(layout.kit, rules.kitInterfaces),
+  };
 }
 
 function shown(context: Context, path: string): string {
@@ -362,21 +464,21 @@ async function loadEach<T>(
   return { values, problems };
 }
 
-export async function findModeFolders(files: FileSystem, layout: Layout): Promise<readonly ModeFolder[]> {
-  const interfacesFolders = interfaceFolders(layout);
-  const found: ModeFolder[] = [];
-  for (const tier of modeTierFolders(layout)) {
+async function findModeFolders(files: FileSystem, layout: Layout): Promise<readonly TierFolder[]> {
+  const interfaces = interfaceFolders(layout);
+  const found: TierFolder[] = [];
+  for (const tier of modeTiers(folderRules(layout))) {
     for (const name of await files.list(tier.folder)) {
       const folder = join(tier.folder, name);
-      if (!interfacesFolders.includes(folder) && (await files.exists(join(folder, "mode.yaml")))) {
-        found.push({ home: tier.home, folder });
+      if (!interfaces.includes(folder) && (await files.exists(join(folder, "mode.yaml")))) {
+        found.push({ ...tier, folder });
       }
     }
   }
   return found;
 }
 
-export async function findInterfaceFiles(files: FileSystem, layout: Layout): Promise<readonly string[]> {
+async function findInterfaceFiles(files: FileSystem, layout: Layout): Promise<readonly string[]> {
   const found: string[] = [];
   for (const folder of interfaceFolders(layout)) {
     const names = await files.list(folder);
@@ -404,17 +506,24 @@ async function modeInInterfacesProblems(files: FileSystem, layout: Layout): Prom
 }
 
 async function loadModes(files: FileSystem, layout: Layout): Promise<LoadedModes> {
+  const read: ModeRead[] = [];
   const values: ModeSource[] = [];
   const unloaded: UnloadedMode[] = [];
   for (const found of await findModeFolders(files, layout)) {
     const outcome = await loadSpec(files, manifestFileOf(found), "mode");
+    read.push({ found, outcome });
     if (outcome.ok) {
-      values.push({ ...outcome.value, ...found });
+      values.push({ ...outcome.value, home: found.home, folder: found.folder });
     } else {
-      unloaded.push({ ...found, name: basename(found.folder), problems: outcome.problems });
+      unloaded.push({
+        home: found.home,
+        folder: found.folder,
+        name: basename(found.folder),
+        problems: outcome.problems,
+      });
     }
   }
-  return { values, unloaded };
+  return { read, values, unloaded };
 }
 
 async function loadInterfaces(files: FileSystem, layout: Layout): Promise<Collected<Loaded<Interface>>> {
@@ -1521,7 +1630,50 @@ function loadProblems(context: Context, modes: LoadedModes): Collected<UnloadedM
   return { values: inactive, problems: active.flatMap((mode) => mode.problems) };
 }
 
-export async function loadSystemReport(files: FileSystem, layout: Layout): Promise<SystemReport> {
+function inspectedSkill(context: Context, mode: ModeSource): (folder: string) => Promise<InspectedSkill> {
+  return async (folder) => {
+    const file = join(mode.folder, folder, "SKILL.md");
+    return { file, text: await readSkill(context.files, file) };
+  };
+}
+
+function schemaProblemsOf(
+  context: Context,
+  mode: ModeSource,
+): (value: unknown, against: SchemaAgainst) => Promise<readonly Problem[]> {
+  return async (value, against) => {
+    const schemaFile = await context.readSchema(join(mode.folder, against.schema));
+    if (schemaFile.state !== "valid") {
+      return [];
+    }
+    const loaded = { file: against.file, value, lineOf: () => undefined };
+    const check = checkValue(schemaFile.schema, value, { loaded, path: [against.under] });
+    return check.kind === "checked" ? check.problems : [];
+  };
+}
+
+function inspectedFolder(context: Context, read: ModeRead): InspectedFolder {
+  const { found, outcome } = read;
+  const name = outcome.ok ? outcome.value.value.name : basename(found.folder);
+  const place = { home: found.home, tier: found.tier, folder: found.folder, active: context.active.has(name) };
+  if (!outcome.ok) {
+    return { ...place, manifest: undefined };
+  }
+  const mode = { ...outcome.value, home: found.home, folder: found.folder };
+  return {
+    ...place,
+    manifest: mode.value,
+    at: (path, wording) => problemAt(mode, path, wording),
+    schemaProblems: schemaProblemsOf(context, mode),
+    skill: inspectedSkill(context, mode),
+  };
+}
+
+function interfaceDefinitions(context: Context): ReadonlyMap<string, Interface> {
+  return new Map([...context.interfaces].map(([reference, loaded]) => [reference, loaded.value]));
+}
+
+async function inspect(files: FileSystem, layout: Layout): Promise<Pass> {
   const modes = await loadModes(files, layout);
   const interfaces = await loadInterfaces(files, layout);
   const config = await loadConfig(files, layout);
@@ -1553,21 +1705,153 @@ export async function loadSystemReport(files: FileSystem, layout: Layout): Promi
     ...workflows.problems,
     ...workflowProblems(context, workflows.values),
   ];
-  const notices = shownProblems(
-    layout,
-    unloaded.values.map((mode) => inactiveNotice(layout, mode)),
-  );
-  const report = { active: context.active, notices };
+  const found = {
+    notices: shownProblems(
+      layout,
+      unloaded.values.map((mode) => inactiveNotice(layout, mode)),
+    ),
+    folders: modes.read.map((read) => inspectedFolder(context, read)),
+    interfaces: interfaceDefinitions(context),
+    kitLayout: kitLayoutOf(layout),
+  };
   if (problems.length > 0 || !config.ok) {
-    return { ...report, outcome: { ok: false, problems: shownProblems(layout, problems) } };
+    return { inspection: { ...found, problems: shownProblems(layout, problems) }, build: undefined };
   }
   const granted = grantsOfActiveModes(context);
   if (!granted.ok) {
-    return { ...report, outcome: { ok: false, problems: shownProblems(layout, granted.problems) } };
+    return { inspection: { ...found, problems: shownProblems(layout, granted.problems) }, build: undefined };
   }
   const parts = { config: config.value.value, workflows: workflows.values, granted: granted.value };
-  const system = await buildSystem(context, parts);
-  return { ...report, outcome: { ok: true, value: system } };
+  return { inspection: { ...found, problems: [] }, build: () => buildSystem(context, parts) };
+}
+
+export async function inspectSystem(files: FileSystem, layout: Layout): Promise<Inspection> {
+  return (await inspect(files, layout)).inspection;
+}
+
+export async function loadSystem(files: FileSystem, layout: Layout): Promise<Outcome<System>> {
+  const { inspection, build } = await inspect(files, layout);
+  return build === undefined ? failedWith(inspection.problems) : succeededWith(await build());
+}
+
+function partProblem(file: string, message: string, fix: string): Problem {
+  return { file, path: "", message, fix };
+}
+
+function nameProblems(kind: string, name: string, file: string): readonly Problem[] {
+  if (name === "constructor") {
+    return [
+      partProblem(
+        file,
+        `The ${kind} name constructor is reserved, because every JavaScript object has it.`,
+        "Choose another name.",
+      ),
+    ];
+  }
+  if (namePattern.test(name)) {
+    return [];
+  }
+  return [
+    partProblem(
+      file,
+      `The ${kind} name ${JSON.stringify(name)} is not kebab-case.`,
+      "Start with a lowercase letter and use only lowercase letters, digits and single dashes, such as daily-digest.",
+    ),
+  ];
+}
+
+function folderInHome(layout: Layout, tier: TierFolder, name: string): string {
+  return relative(homeFolder(layout, tier.home), join(tier.folder, name));
+}
+
+function tierRefusals(layout: Layout, part: NewMode, folder: string): readonly Problem[] {
+  if (part.tier === "modes" || isProjectTheKit(layout)) {
+    return [];
+  }
+  return [
+    partProblem(
+      folder,
+      "Tier base is for the base modes of the kit itself, and this project is not the kit; " +
+        "bay new writes only into the project.",
+      `Make the mode in this project with --tier modes, or run bay new in the kit's own folder.`,
+    ),
+  ];
+}
+
+async function takenModeProblems(files: FileSystem, layout: Layout, name: string): Promise<readonly Problem[]> {
+  const problems: Problem[] = [];
+  for (const tier of modeTiers(folderRules(layout))) {
+    const folder = join(tier.folder, name);
+    if (await files.exists(folder)) {
+      const shown = shownPath(layout, folder);
+      problems.push(
+        partProblem(shown, `${shown} already exists; every mode needs its own name.`, "Choose another name."),
+      );
+    }
+  }
+  return problems;
+}
+
+async function placeMode(files: FileSystem, layout: Layout, part: NewMode): Promise<Outcome<string>> {
+  const rules = folderRules(layout);
+  const tier = part.tier === "base" ? rules.base : (rules.projectModes ?? rules.kitModes);
+  const folder = folderInHome(layout, tier, part.mode);
+  const refusals = [...tierRefusals(layout, part, folder), ...nameProblems("mode", part.mode, folder)];
+  if (refusals.length > 0) {
+    return failedWith(refusals);
+  }
+  const taken = await takenModeProblems(files, layout, part.mode);
+  return taken.length > 0 ? failedWith(taken) : succeededWith(folder);
+}
+
+async function modeToWriteIn(files: FileSystem, layout: Layout, mode: string): Promise<Outcome<string>> {
+  const found = (await findModeFolders(files, layout)).find((entry) => basename(entry.folder) === mode);
+  if (found === undefined) {
+    const where = ownModeTiers(folderRules(layout)).map((tier) => folderInHome(layout, tier, mode));
+    return failedWith([
+      partProblem(
+        "components",
+        `There is no mode ${mode}: neither ${where.join(" or ")} has a mode.yaml.`,
+        "Name an existing mode, or create it with bay new mode.",
+      ),
+    ]);
+  }
+  if (found.home === "kit" && !isProjectTheKit(layout)) {
+    const shown = shownPath(layout, found.folder);
+    return failedWith([
+      partProblem(
+        shown,
+        `Mode ${mode} lives in the kit (${shown}), and bay new writes only into the project, never into the kit.`,
+        "Make a mode of your own with bay new mode, or change the kit's mode in the kit's own folder.",
+      ),
+    ]);
+  }
+  return succeededWith(relative(layout.project, found.folder));
+}
+
+async function placeModePart(files: FileSystem, layout: Layout, part: NewModePart): Promise<Outcome<string>> {
+  const target = await modeToWriteIn(files, layout, part.inMode);
+  const refusals = nameProblems(part.kind, part.name, target.ok ? target.value : part.inMode);
+  if (!target.ok || refusals.length > 0) {
+    return failedWith([...(target.ok ? [] : target.problems), ...refusals]);
+  }
+  return target;
+}
+
+function placeInterface(layout: Layout, name: string): Outcome<string> {
+  const file = join(relative(layout.project, ownInterfacesFolder(layout)), `${name}.yaml`);
+  const refusals = nameProblems("interface", name, file);
+  return refusals.length > 0 ? failedWith(refusals) : succeededWith(file);
+}
+
+export async function placeToWrite(files: FileSystem, layout: Layout, part: NewPart): Promise<Outcome<string>> {
+  if ("mode" in part) {
+    return placeMode(files, layout, part);
+  }
+  if ("inMode" in part) {
+    return placeModePart(files, layout, part);
+  }
+  return placeInterface(layout, part.interface);
 }
 
 function wordsOf(find: string | undefined): readonly string[] {

@@ -1,36 +1,27 @@
-import { basename, join, normalize } from "node:path/posix";
+import { basename, normalize } from "node:path/posix";
 import type { Mode } from "./generated/mode.ts";
-import { errors, isLoaded, type CheckContext, type Finding, type LoadedModeFolder } from "./check-context.ts";
+import {
+  errors,
+  isLoaded,
+  type CheckContext,
+  type Finding,
+  type LoadedModeFolder,
+  type Wording,
+} from "./check-context.ts";
 import { pathIn } from "./layout.ts";
-import { parseSkill, type Wording } from "./manifests/spec.ts";
+import type { InspectedSkill } from "./manifests/manifests.ts";
 import type { Problem } from "./outcome.ts";
 
-type BodyLine = {
-  readonly line: number;
-  readonly text: string;
-  readonly fenced: boolean;
-};
+type SkillText = Exclude<InspectedSkill["text"], undefined>;
 
-type Section = {
-  readonly heading: string;
-  readonly line: number;
-  readonly body: readonly BodyLine[];
-};
+type Section = SkillText["sections"][number];
 
-type SkillText = {
-  readonly nameLine: number | undefined;
-  readonly sections: readonly Section[];
-};
+type ListItem = Section["items"][number];
 
 type SkillPlace = {
   readonly mode: LoadedModeFolder;
   readonly folder: string;
   readonly file: string;
-};
-
-type ListEntry = {
-  readonly line: number;
-  readonly entry: string;
 };
 
 type AllowedTools = {
@@ -56,48 +47,7 @@ const instructionsCap = 150;
 
 const brokerResources = ["db", "files", "secrets", "http", "events"] as const;
 
-const listItemPattern = /^\s*([-*+]|[0-9]+[.)])\s+/;
-
 const definitionOfDonePattern = /^- \[DOD-([1-9][0-9]*)\] \((must|should|must_not)\) \S/;
-
-function isFence(text: string): boolean {
-  return text.startsWith("```") || text.startsWith("~~~");
-}
-
-function frontMatterEnd(lines: readonly string[]): number {
-  if (lines[0]?.trim() !== "---") {
-    return 0;
-  }
-  const closing = lines.findIndex((text, index) => index > 0 && text.trim() === "---");
-  return closing < 0 ? 0 : closing + 1;
-}
-
-function nameLineOf(lines: readonly string[], end: number): number | undefined {
-  const index = lines.slice(0, end).findIndex((text) => text.startsWith("name:"));
-  return index < 0 ? undefined : index + 1;
-}
-
-function splitSections(text: string): SkillText {
-  const lines = text.split(/\r?\n/);
-  const start = frontMatterEnd(lines);
-  const sections: { heading: string; line: number; body: BodyLine[] }[] = [];
-  let fenced = false;
-  for (const [index, content] of lines.entries()) {
-    if (index < start) {
-      continue;
-    }
-    const line = index + 1;
-    if (!fenced && content.startsWith("## ")) {
-      sections.push({ heading: content.slice(3).trim(), line, body: [] });
-      continue;
-    }
-    if (isFence(content)) {
-      fenced = !fenced;
-    }
-    sections.at(-1)?.body.push({ line, text: content, fenced });
-  }
-  return { nameLine: nameLineOf(lines, start), sections };
-}
 
 function isKnownSection(heading: string): boolean {
   return sectionOrder.some((known) => known === heading);
@@ -116,7 +66,7 @@ function at(place: SkillPlace, line: number | undefined, wording: Wording): Prob
 }
 
 function skillLabel(place: SkillPlace): string {
-  return `Skill ${basename(place.folder)} of mode ${place.mode.manifest.value.name}`;
+  return `Skill ${basename(place.folder)} of mode ${place.mode.manifest.name}`;
 }
 
 function missingSectionProblems(place: SkillPlace, skill: SkillText): readonly Problem[] {
@@ -173,7 +123,7 @@ function outOfOrderProblems(place: SkillPlace, skill: SkillText): readonly Probl
 }
 
 function hasText(section: Section): boolean {
-  return section.body.some((line) => line.text.trim() !== "");
+  return section.lines.some((line) => line.text.trim() !== "");
 }
 
 function emptyRulesProblems(place: SkillPlace, skill: SkillText): readonly Problem[] {
@@ -189,16 +139,12 @@ function emptyRulesProblems(place: SkillPlace, skill: SkillText): readonly Probl
   ];
 }
 
-function listItems(section: Section): readonly BodyLine[] {
-  return section.body.filter((line) => !line.fenced && listItemPattern.test(line.text));
-}
-
 function definitionOfDoneProblems(place: SkillPlace, skill: SkillText): readonly Problem[] {
   const section = sectionNamed(skill, "Definition of done");
   if (section === undefined) {
     return [];
   }
-  const items = listItems(section);
+  const items = section.items;
   if (items.length === 0) {
     return [
       at(place, section.line, {
@@ -210,7 +156,7 @@ function definitionOfDoneProblems(place: SkillPlace, skill: SkillText): readonly
   return definitionOfDoneItemProblems(place, items);
 }
 
-function definitionOfDoneItemProblems(place: SkillPlace, items: readonly BodyLine[]): readonly Problem[] {
+function definitionOfDoneItemProblems(place: SkillPlace, items: readonly ListItem[]): readonly Problem[] {
   const problems: Problem[] = [];
   const firstLines = new Map<string, number>();
   for (const item of items) {
@@ -244,7 +190,7 @@ function definitionOfDoneItemProblems(place: SkillPlace, items: readonly BodyLin
 }
 
 function trimmedLength(section: Section): number {
-  const filled = section.body.filter((line) => line.text.trim() !== "");
+  const filled = section.lines.filter((line) => line.text.trim() !== "");
   const first = filled[0];
   const last = filled.at(-1);
   return first === undefined || last === undefined ? 0 : last.line - first.line + 1;
@@ -271,16 +217,8 @@ function instructionsProblems(place: SkillPlace, skill: SkillText): readonly Pro
   ];
 }
 
-function entriesOf(skill: SkillText, heading: string): readonly ListEntry[] {
-  const section = sectionNamed(skill, heading);
-  if (section === undefined) {
-    return [];
-  }
-  return listItems(section).flatMap((item) => {
-    const words = item.text.replace(listItemPattern, "").trim().split(/\s+/);
-    const entry = (words[0] ?? "").replaceAll("`", "").replace(/[:,;.]$/, "");
-    return entry === "" ? [] : [{ line: item.line, entry }];
-  });
+function entriesOf(skill: SkillText, heading: string): readonly ListItem[] {
+  return (sectionNamed(skill, heading)?.items ?? []).filter((item) => item.entry !== "");
 }
 
 function declaredResources(mode: Mode): readonly string[] {
@@ -326,8 +264,8 @@ function resourceDeclaration(entry: string): string {
   return entry === "http" ? "resources.network (its hosts)" : `resources.${entry}`;
 }
 
-function toolProblem(place: SkillPlace, allowed: AllowedTools, item: ListEntry): Problem {
-  const modeName = place.mode.manifest.value.name;
+function toolProblem(place: SkillPlace, allowed: AllowedTools, item: ListItem): Problem {
+  const modeName = place.mode.manifest.name;
   if (brokerResources.some((resource) => resource === item.entry)) {
     const declaration = resourceDeclaration(item.entry);
     return at(place, item.line, {
@@ -347,7 +285,7 @@ function toolProblem(place: SkillPlace, allowed: AllowedTools, item: ListEntry):
 }
 
 function toolsProblems(context: CheckContext, place: SkillPlace, skill: SkillText): readonly Problem[] {
-  const allowed = allowedTools(context, place.mode.manifest.value);
+  const allowed = allowedTools(context, place.mode.manifest);
   return entriesOf(skill, "Tools")
     .filter((item) => !isAllowedTool(allowed, item.entry))
     .map((item) => toolProblem(place, allowed, item));
@@ -380,13 +318,13 @@ function isAllowedResource(context: CheckContext, mode: LoadedModeFolder, entry:
     return false;
   }
   const path = withoutTrailingSlash(entry);
-  const declared = declaredPaths(mode.manifest.value);
+  const declared = declaredPaths(mode.manifest);
   return isInsideMode(context, mode, path) || declared.some((folder) => isUnder(path, folder));
 }
 
 function resourcesProblems(context: CheckContext, place: SkillPlace, skill: SkillText): readonly Problem[] {
-  const modeName = place.mode.manifest.value.name;
-  const declared = declaredPaths(place.mode.manifest.value);
+  const modeName = place.mode.manifest.name;
+  const declared = declaredPaths(place.mode.manifest);
   const declaredText = declared.length === 0 ? "none" : declared.join(", ");
   return entriesOf(skill, "Resources")
     .filter((item) => !isAllowedResource(context, place.mode, item.entry))
@@ -427,19 +365,15 @@ function contentProblems(context: CheckContext, place: SkillPlace, skill: SkillT
   ];
 }
 
-async function skillProblems(context: CheckContext, place: SkillPlace): Promise<readonly Problem[]> {
-  const text = await context.files.readText(place.file);
-  if (text === undefined) {
-    return [];
-  }
-  const parsed = await parseSkill(context.files, place.file);
-  const skill = splitSections(text);
-  const frontMatter = parsed.ok ? nameProblems(place, skill, parsed.value.frontMatter.name) : parsed.problems;
+function skillProblems(context: CheckContext, place: SkillPlace, skill: SkillText): readonly Problem[] {
+  const frontMatter = skill.frontMatter.ok
+    ? nameProblems(place, skill, skill.frontMatter.value.name)
+    : skill.frontMatter.problems;
   return [...frontMatter, ...contentProblems(context, place, skill)];
 }
 
 function skillFolders(mode: LoadedModeFolder): readonly string[] {
-  const fromSteps = Object.values(mode.manifest.value.actions).flatMap((action) =>
+  const fromSteps = Object.values(mode.manifest.actions).flatMap((action) =>
     action.run.flatMap((step) => ("skill" in step ? [withoutTrailingSlash(step.skill)] : [])),
   );
   const fromFolder = mode.files.flatMap((file) => {
@@ -449,15 +383,14 @@ function skillFolders(mode: LoadedModeFolder): readonly string[] {
   return [...new Set([...fromSteps, ...fromFolder])].sort();
 }
 
-function skillPlaces(mode: LoadedModeFolder): readonly SkillPlace[] {
-  return skillFolders(mode).map((folder) => ({ mode, folder, file: join(mode.folder, folder, "SKILL.md") }));
-}
-
 export async function checkSkills(context: CheckContext): Promise<readonly Finding[]> {
   const problems: Problem[] = [];
   for (const mode of context.modes.filter(isLoaded)) {
-    for (const place of skillPlaces(mode)) {
-      problems.push(...(await skillProblems(context, place)));
+    for (const folder of skillFolders(mode)) {
+      const skill = await mode.skill(folder);
+      if (skill.text !== undefined) {
+        problems.push(...skillProblems(context, { mode, folder, file: skill.file }, skill.text));
+      }
     }
   }
   return errors(problems);

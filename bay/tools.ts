@@ -3,7 +3,7 @@ import type { Broker } from "./broker.ts";
 import type { Json } from "./contracts.ts";
 import { byteSize, fieldOf, numberField, textField, isRecord } from "./json.ts";
 import type { Kernel } from "./kernel.ts";
-import { loadSystemReport, type ListingQuestion, type SkillUse, type System } from "./manifests/manifests.ts";
+import { loadSystem, type ListingQuestion, type SkillUse, type System } from "./manifests/manifests.ts";
 import type { Run, Task } from "./runs/runs.ts";
 import { failedWith, unplacedProblem, type Outcome, type Problem } from "./outcome.ts";
 import { isToolName, skillToolsOf, type SkillTools, type ToolName } from "./skill-tools.ts";
@@ -203,7 +203,7 @@ async function listActions(loadSystem: SystemLoader, input: Json): Promise<Outco
 }
 
 function systemLoaderOf(kernel: Kernel): SystemLoader {
-  return async () => (await loadSystemReport(kernel.ports.files, kernel.layout)).outcome;
+  return () => loadSystem(kernel.ports.files, kernel.layout);
 }
 
 function redactedProblem(kernel: Kernel, problem: Problem): Problem {

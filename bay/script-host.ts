@@ -102,6 +102,7 @@ const isCommandRan = (value: Json): value is CommandRan & Json =>
   isJsonRecord(value) &&
   isJsonRecord(value.end) &&
   typeof value.end.how === "string" &&
+  typeof value.milliseconds === "number" &&
   isCommandOutput(value.stdout) &&
   isCommandOutput(value.stderr);
 

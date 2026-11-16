@@ -200,6 +200,7 @@ test("a command past its time limit is stopped with what it started, and the scr
     assert.equal(ran.after, "the script went on");
     const took = fieldOf(eventsOfKind(ran.run, "command")[0]?.detail ?? null, "milliseconds");
     assert.ok(typeof took === "number" && took >= 1000 && took < 5000, JSON.stringify(took));
+    assert.equal(fieldOf(stopped, "milliseconds"), took);
   });
 });
 

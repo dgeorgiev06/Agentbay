@@ -14,7 +14,8 @@ import { checkLimits } from "./check-limits.ts";
 import { checkSkills } from "./check-skills.ts";
 import { isInsideOrEqual, isProjectTheKit, pathIn, shownPath, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
-import { loadSystemReport } from "./manifests/manifests.ts";
+import { basename } from "node:path/posix";
+import { inspectSystem } from "./manifests/manifests.ts";
 import { problemAt } from "./manifests/spec.ts";
 import type { Problem } from "./outcome.ts";
 
@@ -67,12 +68,14 @@ function shownFindings(layout: Layout, findings: readonly Finding[]): readonly F
 }
 
 export async function checkSystem(ports: CheckPorts, layout: Layout): Promise<CheckReport> {
-  const report = await loadSystemReport(ports.files, layout);
-  const context = await loadCheckContext({ ...ports, layout, active: report.active });
-  const registryFindings = report.outcome.ok ? [] : errors(report.outcome.problems);
+  const inspection = await inspectSystem(ports.files, layout);
+  const active = inspection.folders
+    .filter((folder) => folder.active)
+    .map((folder) => folder.manifest?.name ?? basename(folder.folder));
+  const context = await loadCheckContext({ ...ports, layout, active: new Set(active) });
   const findings = shownFindings(layout, [
-    ...registryFindings,
-    ...warnings(report.notices),
+    ...errors(inspection.problems),
+    ...warnings(inspection.notices),
     ...(await checkSkills(context)),
     ...(await checkLayout(context)),
     ...(await checkImports(context)),

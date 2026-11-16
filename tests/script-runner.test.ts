@@ -83,6 +83,8 @@ async function runScript(root: string, options: RunOptions): Promise<Run> {
     events,
     clock: options.clock ?? systemClock,
     childProcesses: nodeChildProcesses,
+    processes: noProcesses,
+    commandSearchPath: "/usr/bin:/bin",
     limits: { outputBytes: options.outputBytes ?? 1_000_000 },
   });
   const request: ScriptRequest = {

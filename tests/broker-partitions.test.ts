@@ -35,6 +35,8 @@ function brokerFor(root: string, effects: readonly Effect[]): Setup {
     events,
     clock: systemClock,
     childProcesses: nodeChildProcesses,
+    processes: noProcesses,
+    commandSearchPath: "/usr/bin:/bin",
     limits: { agentQueryMilliseconds: 1500 },
   });
   return { root, broker, events };

@@ -1,5 +1,5 @@
 import type { Answer, Resource } from "./answers.ts";
-import type { Json } from "./contracts.ts";
+import type { CommandRequest, Json } from "./contracts.ts";
 import type { SqlParameters } from "./database.ts";
 import { isJsonRecord, parsedLine } from "./protocol-json.ts";
 import type { HttpRequest } from "./ports.ts";
@@ -23,7 +23,8 @@ export type ResourceRequest =
   | { readonly resource: "http.request"; readonly request: HttpRequest }
   | { readonly resource: "events.emit"; readonly kind: string; readonly detail: Json }
   | { readonly resource: "call"; readonly reference: string; readonly input: Json }
-  | { readonly resource: "spend"; readonly spending: Json };
+  | { readonly resource: "spend"; readonly spending: Json }
+  | { readonly resource: "commands.run"; readonly request: CommandRequest };
 
 export type ChildMessage =
   | { readonly type: "request"; readonly id: number; readonly request: ResourceRequest }
@@ -47,7 +48,17 @@ type Fields = { readonly [key: string]: Json };
 
 const methods: readonly string[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
-const resources: readonly string[] = ["db", "files", "secrets", "http", "events", "call", "spend", "script"];
+const resources: readonly string[] = [
+  "db",
+  "files",
+  "secrets",
+  "http",
+  "events",
+  "call",
+  "spend",
+  "script",
+  "commands",
+];
 
 function isResource(value: Json | undefined): value is Resource {
   return typeof value === "string" && resources.includes(value);
@@ -78,6 +89,20 @@ function httpRequestOf(value: Json | undefined): HttpRequest | undefined {
   }
   return isText(value.body)
     ? { method: value.method, url: value.url, headers: value.headers, body: value.body }
+    : undefined;
+}
+
+function isTexts(value: Json | undefined): value is readonly string[] {
+  return Array.isArray(value) && value.every((item: Json) => typeof item === "string");
+}
+
+function commandRequestOf(value: Json | undefined): CommandRequest | undefined {
+  if (!isJsonRecord(value) || !isTexts(value.command) || !isText(value.folder)) {
+    return undefined;
+  }
+  const timeLimitSeconds = value.timeLimitSeconds;
+  return typeof timeLimitSeconds === "number"
+    ? { command: value.command, folder: value.folder, timeLimitSeconds }
     : undefined;
 }
 
@@ -145,6 +170,10 @@ function resourceRequestOf(value: Json | undefined): ResourceRequest | undefined
   if (value.resource === "http.request") {
     const request = httpRequestOf(value.request);
     return request === undefined ? undefined : { resource: "http.request", request };
+  }
+  if (value.resource === "commands.run") {
+    const request = commandRequestOf(value.request);
+    return request === undefined ? undefined : { resource: "commands.run", request };
   }
   return (
     databaseRequestOf(value) ?? fileRequestOf(value) ?? secretOrEventRequestOf(value) ?? callOrSpendRequestOf(value)

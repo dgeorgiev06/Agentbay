@@ -51,6 +51,8 @@ async function run(layout: Layout, modeFolder: string): Promise<StepOutcome> {
     events: recordingSink(),
     clock: systemClock,
     childProcesses: nodeChildProcesses,
+    processes: noProcesses,
+    commandSearchPath: "/usr/bin:/bin",
   });
   return runner.run({
     place,

@@ -2,7 +2,16 @@ import { resolve } from "node:path/posix";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { type Answer, errorLine, failed, granted, manifestOf, refused } from "./answers.ts";
 import { Broker, type BrokerLimits } from "./broker.ts";
-import type { ChildEnd, ChildProcesses, ChildRequest, Clock, FileInspector, FileSystem, Http } from "./ports.ts";
+import type {
+  ChildEnd,
+  ChildProcesses,
+  ChildRequest,
+  Clock,
+  FileInspector,
+  FileSystem,
+  Http,
+  Processes,
+} from "./ports.ts";
 import type { EventSink, Json, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "./contracts.ts";
 import { mayRemoveFiles, writableFolders } from "./effect-rule.ts";
 import { escapingLinks } from "./folder-links.ts";
@@ -23,6 +32,8 @@ export type ScriptRunnerOptions = {
   readonly events: EventSink;
   readonly clock: Clock;
   readonly childProcesses: ChildProcesses;
+  readonly processes: Processes;
+  readonly commandSearchPath: string;
   readonly limits?: Partial<ScriptRunnerLimits>;
   readonly brokerLimits?: Partial<BrokerLimits>;
 };
@@ -129,6 +140,8 @@ function brokerAnswer(broker: Broker, request: Exclude<ResourceRequest, { resour
       return broker.request(request.request);
     case "events.emit":
       return broker.emit(request.kind, request.detail);
+    case "commands.run":
+      return broker.runCommand(request.request);
   }
 }
 
@@ -293,7 +306,9 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
       events: options.events,
       clock: options.clock,
       childProcesses: options.childProcesses,
-      limits: { databaseMilliseconds: milliseconds, ...options.brokerLimits },
+      processes: options.processes,
+      commandSearchPath: options.commandSearchPath,
+      limits: { databaseMilliseconds: milliseconds, commandMilliseconds: milliseconds, ...options.brokerLimits },
     });
     try {
       const refusal = await refusedBeforeStart(request, broker);

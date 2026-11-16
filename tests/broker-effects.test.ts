@@ -6,8 +6,14 @@ import type { Answer } from "../bay/answers.ts";
 import { Broker } from "../bay/broker.ts";
 import type { Effect } from "../bay/contracts.ts";
 import { effectRefusal, type BrokerOperation } from "../bay/effect-rule.ts";
-import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
-import type { ChildProcesses, FileInspector, FileSystem, Http } from "../bay/ports.ts";
+import {
+  nodeChildProcesses,
+  nodeFileInspector,
+  nodeFileSystem,
+  nodeProcesses,
+  systemClock,
+} from "../bay/node-ports.ts";
+import type { ChildProcesses, FileInspector, FileSystem, Http, Processes } from "../bay/ports.ts";
 import { scriptCommand } from "../bay/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import {
@@ -27,6 +33,7 @@ type Ports = {
   readonly inspector: FileInspector;
   readonly http: Http;
   readonly childProcesses: ChildProcesses;
+  readonly processes: Processes;
   readonly secrets: SecretStore;
   readonly events: RecordingSink;
 };
@@ -42,6 +49,7 @@ const brokenPorts = (): Ports => ({
       throw new Error("no process can start");
     },
   },
+  processes: { run: broken },
   secrets: new SecretStore({ environment: {}, processes: { run: broken }, platform: "darwin" }),
   events: { events: [], append: broken },
 });
@@ -51,6 +59,7 @@ const workingPorts = (): Ports => ({
   inspector: nodeFileInspector,
   http: scriptedHttp(() => ({ status: 200, headers: {}, body: "fine" })),
   childProcesses: nodeChildProcesses,
+  processes: nodeProcesses,
   secrets: new SecretStore({
     environment: { AGENTBAY_SECRET_API_TOKEN: "made-up-token-for-effects" },
     processes: noProcesses,
@@ -62,9 +71,15 @@ const workingPorts = (): Ports => ({
 function brokerWith(root: string, effects: readonly Effect[], ports: Ports): Broker {
   return new Broker({
     layout: projectLayout(root),
-    permissions: permissionsIn(root, { effects, secrets: ["API_TOKEN"], hosts: ["api.example.com"] }),
+    permissions: permissionsIn(root, {
+      effects,
+      secrets: ["API_TOKEN"],
+      hosts: ["api.example.com"],
+      commands: ["node --version"],
+    }),
     place,
     clock: systemClock,
+    commandSearchPath: process.env.PATH ?? "/usr/bin:/bin",
     limits: { agentQueryMilliseconds: 1500 },
     ...ports,
   });
@@ -93,7 +108,8 @@ function messageOf<T>(answer: Answer<T>): string {
 
 function assertRefusedFor<T>(answer: Answer<T>, effect: Effect): void {
   assert.ok(!answer.ok && answer.kind === "refused", JSON.stringify(answer));
-  assert.match(answer.message, new RegExp(`needs the ${effect} effect; to allow it, add ${effect} to actions.look`));
+  const needs = `(needs the ${effect} effect|needs all five effects)`;
+  assert.match(answer.message, new RegExp(`${needs}; to allow it, add ${effect} to actions.look`));
 }
 
 function assertNotRefusedForEffects<T>(answer: Answer<T>): void {
@@ -208,26 +224,33 @@ test("a refusal by the effect rule is logged as a refused event, once", async ()
 
 type MethodRow = {
   readonly call: (broker: Broker) => Promise<Answer<unknown>>;
-  readonly needs: Effect | undefined;
+  readonly needs: readonly Effect[];
   readonly usesPorts: boolean;
 };
 
+const everyEffect: readonly Effect[] = ["read", "write", "network", "spend", "delete"];
+
 const brokerMethods: Readonly<Record<string, MethodRow>> = {
-  migrate: { call: (broker) => broker.migrate(), needs: undefined, usesPorts: true },
-  execute: { call: (broker) => broker.execute("insert into notes values (1)"), needs: "write", usesPorts: true },
-  query: { call: (broker) => broker.query("select 1"), needs: undefined, usesPorts: true },
-  agentQuery: { call: (broker) => broker.agentQuery("select 1"), needs: undefined, usesPorts: true },
-  readFile: { call: (broker) => broker.readFile("notes-in/today.md"), needs: undefined, usesPorts: true },
-  writeFile: { call: (broker) => broker.writeFile("notes-out/a.txt", "x"), needs: "write", usesPorts: true },
-  listFiles: { call: (broker) => broker.listFiles("notes-in"), needs: undefined, usesPorts: true },
-  secret: { call: (broker) => broker.secret("API_TOKEN"), needs: undefined, usesPorts: true },
+  migrate: { call: (broker) => broker.migrate(), needs: [], usesPorts: true },
+  execute: { call: (broker) => broker.execute("insert into notes values (1)"), needs: ["write"], usesPorts: true },
+  query: { call: (broker) => broker.query("select 1"), needs: [], usesPorts: true },
+  agentQuery: { call: (broker) => broker.agentQuery("select 1"), needs: [], usesPorts: true },
+  readFile: { call: (broker) => broker.readFile("notes-in/today.md"), needs: [], usesPorts: true },
+  writeFile: { call: (broker) => broker.writeFile("notes-out/a.txt", "x"), needs: ["write"], usesPorts: true },
+  listFiles: { call: (broker) => broker.listFiles("notes-in"), needs: [], usesPorts: true },
+  secret: { call: (broker) => broker.secret("API_TOKEN"), needs: [], usesPorts: true },
   request: {
     call: (broker) => broker.request({ method: "GET", url: "https://api.example.com/x", headers: {} }),
-    needs: "network",
+    needs: ["network"],
     usesPorts: true,
   },
-  emit: { call: (broker) => broker.emit("noted", {}), needs: undefined, usesPorts: true },
-  spend: { call: (broker) => broker.spend({ usd: 1 }), needs: "spend", usesPorts: false },
+  emit: { call: (broker) => broker.emit("noted", {}), needs: [], usesPorts: true },
+  spend: { call: (broker) => broker.spend({ usd: 1 }), needs: ["spend"], usesPorts: false },
+  runCommand: {
+    call: (broker) => broker.runCommand({ command: ["node", "--version"], folder: ".", timeLimitSeconds: 30 }),
+    needs: everyEffect,
+    usesPorts: true,
+  },
 };
 
 const notResourceMethods: readonly string[] = ["constructor", "close", "report"];
@@ -241,13 +264,14 @@ test("every broker method passes through the one rule: refused without its effec
   for (const row of Object.values(brokerMethods)) {
     await withBroker([], async (broker) => {
       const answer = await row.call(broker);
-      if (row.needs === undefined) {
+      const first = row.needs[0];
+      if (first === undefined) {
         assertNotRefusedForEffects(answer);
       } else {
-        assertRefusedFor(answer, row.needs);
+        assertRefusedFor(answer, first);
       }
     });
-    const allowing: readonly Effect[] = row.needs === undefined ? [] : ["write", row.needs];
+    const allowing: readonly Effect[] = row.needs.length === 0 ? [] : ["write", ...row.needs];
     await withBroker(allowing, async (broker) => {
       assertNotRefusedForEffects(await row.call(broker));
     });
@@ -286,6 +310,7 @@ const operations: readonly (readonly [BrokerOperation, Effect | undefined])[] = 
   [{ kind: "events.emit", eventKind: "noted" }, undefined],
   [{ kind: "spend", amounts: { items: 0, usd: 0, tokens: 0 } }, undefined],
   [{ kind: "spend", amounts: { items: 0, usd: 0, tokens: 3 } }, "spend"],
+  [{ kind: "commands.run", command: ["git", "status"], folder: "." }, "read"],
 ];
 
 test("the rule names the first missing effect for each kind of operation", () => {

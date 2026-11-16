@@ -1,4 +1,4 @@
-import type { Resource, RefusalWording } from "./answers.ts";
+import { listed, type Resource, type RefusalWording } from "./answers.ts";
 import type { Effect, Permissions } from "./contracts.ts";
 import type { HttpRequest } from "./ports.ts";
 import { leadingKeyword, statementWords, writeKeywords } from "./sql-statements.ts";
@@ -21,7 +21,8 @@ export type BrokerOperation =
   | { readonly kind: "http.request"; readonly method: HttpRequest["method"]; readonly url: string }
   | { readonly kind: "events.emit"; readonly eventKind: string }
   | { readonly kind: "spend"; readonly amounts: SpendAmounts }
-  | { readonly kind: "skill.submit"; readonly usd: number };
+  | { readonly kind: "skill.submit"; readonly usd: number }
+  | { readonly kind: "commands.run"; readonly command: readonly string[]; readonly folder: string };
 
 export type ActionAt = {
   readonly stepKey: string;
@@ -49,6 +50,11 @@ const usesNetwork: Need = { effect: "network", because: "A request over the netw
 const spends: Need = { effect: "spend", because: "Spending more than nothing needs the spend effect" };
 
 const reportsDollars: Need = { effect: "spend", because: "Reporting dollars an agent spent needs the spend effect" };
+
+const runsCommands: readonly Need[] = everyEffect.map((effect) => ({
+  effect,
+  because: "A command can do anything its program can, so running one needs all five effects",
+}));
 
 function deletes(sql: string): boolean {
   return statementWords(sql).some((word) => deletingWords.includes(word));
@@ -83,6 +89,7 @@ const operationRules: { readonly [Kind in BrokerOperation["kind"]]: OperationRul
   "events.emit": { resource: "events", needs: [] },
   spend: { resource: "spend", needs: [] },
   "skill.submit": { resource: "spend", needs: [] },
+  "commands.run": { resource: "commands", needs: runsCommands },
 };
 
 function contentNeeds(operation: BrokerOperation): readonly Need[] {
@@ -120,9 +127,24 @@ function describedDatabaseOperation(operation: DatabaseOperation): string {
   }
 }
 
+type SpendingOperation = Extract<BrokerOperation, { readonly kind: "spend" | "skill.submit" }>;
+
+function isSpendingOperation(operation: BrokerOperation): operation is SpendingOperation {
+  return operationRules[operation.kind].resource === "spend";
+}
+
+function describedSpending(operation: SpendingOperation): string {
+  return operation.kind === "spend"
+    ? `report spending ${JSON.stringify(operation.amounts)}`
+    : `report spending ${String(operation.usd)} US dollars`;
+}
+
 export function describedOperation(operation: BrokerOperation): string {
   if (isDatabaseOperation(operation)) {
     return describedDatabaseOperation(operation);
+  }
+  if (isSpendingOperation(operation)) {
+    return describedSpending(operation);
   }
   switch (operation.kind) {
     case "files.read":
@@ -135,10 +157,8 @@ export function describedOperation(operation: BrokerOperation): string {
       return `send a ${operation.method} request to ${operation.url}`;
     case "events.emit":
       return `emit an event of the kind ${operation.eventKind}`;
-    case "spend":
-      return `report spending ${JSON.stringify(operation.amounts)}`;
-    case "skill.submit":
-      return `report spending ${String(operation.usd)} US dollars`;
+    case "commands.run":
+      return `run the command ${JSON.stringify(operation.command)} in ${operation.folder}`;
   }
 }
 
@@ -165,8 +185,37 @@ export function writableFolders(permissions: Permissions): readonly string[] {
 }
 
 export function grantedCommands(permissions: Permissions): readonly string[] {
-  const declaresEvery = everyEffect.every((effect) => permissions.actionEffects.includes(effect));
+  const declaresEvery = runsCommands.every((need) => permissions.actionEffects.includes(need.effect));
   return declaresEvery ? permissions.grants.commands : [];
+}
+
+function argumentsOf(prefix: string): readonly string[] {
+  return prefix.split(/\s+/).filter((argument) => argument !== "");
+}
+
+function startsWithPrefix(command: readonly string[], prefix: string): boolean {
+  const leading = argumentsOf(prefix);
+  return leading.length > 0 && leading.every((argument, index) => command[index] === argument);
+}
+
+export function commandRefusal(
+  operation: Extract<BrokerOperation, { readonly kind: "commands.run" }>,
+  prefixes: readonly string[],
+  at: ActionAt,
+): RefusalWording | undefined {
+  if (prefixes.some((prefix) => startsWithPrefix(operation.command, prefix))) {
+    return undefined;
+  }
+  return {
+    resource: "commands",
+    asked: `The step ${at.stepKey} of action ${at.action} asked to ${describedOperation(operation)}`,
+    declared:
+      `its mode lists the commands: ${listed(prefixes, "none")}, ` +
+      "and a command must start with one of them, argument by argument",
+    change:
+      `To allow it, add the command's leading arguments under resources.commands in ${at.manifest}; ` +
+      "only a mode under the kit's components/base/ may list commands.",
+  };
 }
 
 export function mayRemoveFiles(permissions: Permissions): boolean {

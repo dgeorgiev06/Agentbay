@@ -495,6 +495,24 @@ test("a skill step's check script that does not exist is reported", async () => 
   );
   assert.equal(problem.path, "/actions/add/run/0/checks/0");
   await systemOf({ ...files, "components/modes/notes/scripts/length.ts": "" });
+  const second: Action = {
+    ...add,
+    run: [
+      { call: "items-store.put" },
+      { skill: "skills/write-note", tier: "fast", checks: ["scripts/length.ts", "scripts/fit.ts"] },
+    ],
+  };
+  const secondFiles = {
+    ...files,
+    [paths.notes]: withMode(notesMode, { actions: { add: second } }),
+    "components/modes/notes/scripts/fit.ts": "",
+  };
+  const placed = findProblem(
+    await problemsOf(secondFiles),
+    paths.notes,
+    "checks its skill step with the script scripts/length.ts",
+  );
+  assert.equal(placed.path, "/actions/add/run/1/checks/0");
 });
 
 test("well-formed workflow references to earlier steps, the trigger, the item and settings are accepted", async () => {

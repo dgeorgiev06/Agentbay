@@ -174,7 +174,9 @@ test("a listed mode that does not exist is reported in the config", async () => 
 test("forge outside the kit can be neither listed nor reached through a binding", async () => {
   const forgeMode: Mode = { name: "forge", version: "1.0.0", description: "Changes the kit.", actions: {} };
   const forgeFiles = { "/kit/components/base/forge/mode.yaml": yamlText({ ...forgeMode, implements: ["notes@1"] }) };
-  const listed = problemsIn(await reportOf({ ...kitFiles(), ...forgeFiles, ...projectFiles({ modes: ["forge"] }) }));
+  const listedReport = await reportOf({ ...kitFiles(), ...forgeFiles, ...projectFiles({ modes: ["forge"] }) });
+  assert.ok(!listedReport.active.has("forge"));
+  const listed = problemsIn(listedReport);
   assert.ok(
     listed.some(
       (problem) =>

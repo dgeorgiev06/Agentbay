@@ -769,6 +769,9 @@ describe("a workflow target's resolve", () => {
     assert.deepEqual(problemsOf("$steps.fetch.output.items.7"), [
       "$steps.fetch.output.items.7 resolves to nothing: output.items of step fetch has no 7; it is a list of 2 elements.",
     ]);
+    assert.deepEqual(problemsOf("$steps.fetch.output.items.2"), [
+      "$steps.fetch.output.items.2 resolves to nothing: output.items of step fetch has no 2; it is a list of 2 elements.",
+    ]);
     assert.deepEqual(problemsOf("$steps.fetch.output.size"), [
       "$steps.fetch.output.size resolves to nothing: output of step fetch has no size; " +
         "it is a mapping with the keys items, total.",

@@ -30,8 +30,10 @@ export async function commitFiles(
   return git(project, folder, ["rev-parse", "HEAD"]).trim();
 }
 
-export async function openRepositoryProject(): Promise<ModeProject & { readonly base: string }> {
-  const project = await openModeProject({ bindings: {}, adapter: "claude-code", modes: ["git-worktrees"] });
+export async function openRepositoryProject(
+  modes: readonly string[] = ["git-worktrees"],
+): Promise<ModeProject & { readonly base: string }> {
+  const project = await openModeProject({ bindings: {}, adapter: "claude-code", modes: [...modes] });
   git(project, ".", ["symbolic-ref", "HEAD", "refs/heads/main"]);
   const base = await commitFiles(project, {
     files: { ".gitignore": ".agentbay/\n.forge/\n", "README.md": "A small repository.\n" },

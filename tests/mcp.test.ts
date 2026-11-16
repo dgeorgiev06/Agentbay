@@ -213,6 +213,12 @@ test("the tool actions on a running server lists a mode added during the session
   const project = await makeProject();
   const server = startServer(project.root);
   await server.request("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+  const tools = listOf(fieldOf(resultOf(await server.request("tools/list")), "tools"));
+  const description = textField(tools.find((tool) => textField(tool, "name") === "actions") ?? {}, "description");
+  assert.match(
+    description ?? "",
+    /^Find out what agentbay can do, from the project as it is at the moment of the call\. /,
+  );
   assert.deepEqual(await listedModes(server), { modes: startingModes });
   await project.write(`${tellerFolder}/mode.yaml`, tellerManifest);
   assert.deepEqual(await listedModes(server), { modes: modesWithTeller });

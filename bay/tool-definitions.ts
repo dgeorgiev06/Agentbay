@@ -29,10 +29,10 @@ export const toolDefinitions: readonly ToolDefinition[] = [
   {
     name: actionsToolName,
     description:
-      "Find out what agentbay can do, from the project as it was loaded. With no mode, it lists each active mode " +
-      "with its description. With a mode, it lists that mode's actions as mode.action, each with its description, " +
-      "effects and input schema. find keeps the entries whose name or description holds every given word, " +
-      "whatever the case. It needs no token.",
+      "Find out what agentbay can do, from the project as it is at the moment of the call. With no mode, it lists " +
+      "each active mode with its description. With a mode, it lists that mode's actions as mode.action, each with " +
+      "its description, effects and input schema. find keeps the entries whose name or description holds every " +
+      "given word, whatever the case. It needs no token.",
     inputSchema: {
       type: "object",
       additionalProperties: false,

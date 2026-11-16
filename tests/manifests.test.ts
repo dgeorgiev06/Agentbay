@@ -457,7 +457,7 @@ describe("system.listing", () => {
     const system = await kitSystem();
     const store = system.modes.get("store");
     assert.ok(store);
-    const withoutSchemas = { ...store, inputSchemas: new Map() };
+    const withoutSchemas = { ...store, actionSchemas: new Map() };
     const changed = { ...system, modes: new Map([...system.modes, ["store", withoutSchemas]]) };
     assert.deepEqual(listingRefusal(changed.listing({ mode: "store" })), [
       { file: "", path: "", message: "The input schema of store.put could not be read.", fix: "Run bay check." },

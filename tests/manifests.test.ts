@@ -4,9 +4,11 @@ import {
   inspectSystem,
   loadSystem,
   loadSystemReport,
+  placeToWrite,
   type ActionTarget,
   type InspectedFolder,
   type Inspection,
+  type NewPart,
   type ActiveMode,
   type ActionsListing,
   type System,
@@ -1130,5 +1132,185 @@ describe("a load and an inspection agree", () => {
       assert.equal(loaded.ok, inspection.problems.length === 0, name);
       assert.deepEqual(loaded.ok ? [] : loaded.problems, inspection.problems, name);
     }
+  });
+});
+
+const kebabFix =
+  "Start with a lowercase letter and use only lowercase letters, digits and single dashes, such as daily-digest.";
+
+const takenName = { path: "", fix: "Choose another name." };
+
+async function placed(fixture: Fixture, part: NewPart): ReturnType<typeof placeToWrite> {
+  return placeToWrite(fakeFileSystem(fixture.files), fixture.layout, part);
+}
+
+describe("placeToWrite", () => {
+  test("in a project, a new mode, a part of a project mode and a new interface go into the project", async () => {
+    const project = fixtures.soundProject;
+    assert.deepEqual(await placed(project, { mode: "diary", tier: "modes" }), {
+      ok: true,
+      value: "components/modes/diary",
+    });
+    assert.deepEqual(await placed(project, { inMode: "journal", kind: "action", name: "log" }), {
+      ok: true,
+      value: "components/modes/journal",
+    });
+    assert.deepEqual(await placed(project, { interface: "diary" }), {
+      ok: true,
+      value: "components/interfaces/diary.yaml",
+    });
+  });
+
+  test("in the kit, a new base mode, a part of a kit mode and a new interface go into the kit", async () => {
+    const kit = fixtures.soundKit;
+    assert.deepEqual(await placed(kit, { mode: "diary", tier: "base" }), {
+      ok: true,
+      value: "components/base/diary",
+    });
+    assert.deepEqual(await placed(kit, { mode: "diary", tier: "modes" }), {
+      ok: true,
+      value: "components/modes/diary",
+    });
+    assert.deepEqual(await placed(kit, { inMode: "store", kind: "workflow", name: "nightly" }), {
+      ok: true,
+      value: "components/base/store",
+    });
+    assert.deepEqual(await placed(kit, { interface: "diary" }), {
+      ok: true,
+      value: "components/base/interfaces/diary.yaml",
+    });
+  });
+
+  test("a base mode is refused outside the kit, together with a name that is not kebab-case", async () => {
+    const tier = {
+      path: "",
+      message:
+        "Tier base is for the base modes of the kit itself, and this project is not the kit; " +
+        "bay new writes only into the project.",
+      fix: "Make the mode in this project with --tier modes, or run bay new in the kit's own folder.",
+    };
+    assert.deepEqual(await placed(fixtures.soundProject, { mode: "diary", tier: "base" }), {
+      ok: false,
+      problems: [{ file: "components/base/diary", ...tier }],
+    });
+    assert.deepEqual(await placed(fixtures.soundProject, { mode: "Bad_Name", tier: "base" }), {
+      ok: false,
+      problems: [
+        { file: "components/base/Bad_Name", ...tier },
+        {
+          file: "components/base/Bad_Name",
+          path: "",
+          message: 'The mode name "Bad_Name" is not kebab-case.',
+          fix: kebabFix,
+        },
+      ],
+    });
+  });
+
+  test("a name that is not kebab-case or is reserved is refused for each kind of part", async () => {
+    const project = fixtures.soundProject;
+    assert.deepEqual(await placed(project, { mode: "constructor", tier: "modes" }), {
+      ok: false,
+      problems: [
+        {
+          file: "components/modes/constructor",
+          path: "",
+          message: "The mode name constructor is reserved, because every JavaScript object has it.",
+          fix: "Choose another name.",
+        },
+      ],
+    });
+    assert.deepEqual(await placed(project, { inMode: "journal", kind: "action", name: "Bad" }), {
+      ok: false,
+      problems: [
+        {
+          file: "components/modes/journal",
+          path: "",
+          message: 'The action name "Bad" is not kebab-case.',
+          fix: kebabFix,
+        },
+      ],
+    });
+    assert.deepEqual(await placed(project, { interface: "Bad" }), {
+      ok: false,
+      problems: [
+        {
+          file: "components/interfaces/Bad.yaml",
+          path: "",
+          message: 'The interface name "Bad" is not kebab-case.',
+          fix: kebabFix,
+        },
+      ],
+    });
+  });
+
+  test("a new mode whose name is taken, in the kit or in the project, is refused", async () => {
+    assert.deepEqual(await placed(fixtures.soundProject, { mode: "store", tier: "modes" }), {
+      ok: false,
+      problems: [
+        {
+          file: "kit:components/base/store",
+          message: "kit:components/base/store already exists; every mode needs its own name.",
+          ...takenName,
+        },
+      ],
+    });
+    assert.deepEqual(await placed(fixtures.soundProject, { mode: "journal", tier: "modes" }), {
+      ok: false,
+      problems: [
+        {
+          file: "components/modes/journal",
+          message: "components/modes/journal already exists; every mode needs its own name.",
+          ...takenName,
+        },
+      ],
+    });
+    assert.deepEqual(await placed(fixtures.soundKit, { mode: "store", tier: "modes" }), {
+      ok: false,
+      problems: [
+        {
+          file: "components/base/store",
+          message: "components/base/store already exists; every mode needs its own name.",
+          ...takenName,
+        },
+      ],
+    });
+  });
+
+  test("a part of a mode that does not exist is refused, naming where it was looked for", async () => {
+    const missing = { file: "components", path: "", fix: "Name an existing mode, or create it with bay new mode." };
+    assert.deepEqual(await placed(fixtures.soundProject, { inMode: "nosuch", kind: "workflow", name: "Bad" }), {
+      ok: false,
+      problems: [
+        { ...missing, message: "There is no mode nosuch: neither components/modes/nosuch has a mode.yaml." },
+        { file: "nosuch", path: "", message: 'The workflow name "Bad" is not kebab-case.', fix: kebabFix },
+      ],
+    });
+    assert.deepEqual(await placed(fixtures.soundKit, { inMode: "nosuch", kind: "skill", name: "tidy" }), {
+      ok: false,
+      problems: [
+        {
+          ...missing,
+          message:
+            "There is no mode nosuch: neither components/base/nosuch or components/modes/nosuch has a mode.yaml.",
+        },
+      ],
+    });
+  });
+
+  test("a part of a kit mode is refused outside the kit", async () => {
+    assert.deepEqual(await placed(fixtures.soundProject, { inMode: "notes", kind: "skill", name: "tidy" }), {
+      ok: false,
+      problems: [
+        {
+          file: "kit:components/modes/notes",
+          path: "",
+          message:
+            "Mode notes lives in the kit (kit:components/modes/notes), " +
+            "and bay new writes only into the project, never into the kit.",
+          fix: "Make a mode of your own with bay new mode, or change the kit's mode in the kit's own folder.",
+        },
+      ],
+    });
   });
 });

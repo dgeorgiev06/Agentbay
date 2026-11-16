@@ -19,7 +19,7 @@ import type { StepRecord } from "./run-store.ts";
 import { skillSchemas, skillTaskOf, startedSkillOf, type SkillAt } from "./skill-steps.ts";
 import type { ScriptDetail, SkillDetail } from "./step-detail.ts";
 import { actionEndKey, actionStepKey, checkStepKey, scriptCallKey } from "./step-key.ts";
-import type { ActionTarget } from "../manifests/manifests.ts";
+import type { ActionTarget, ActiveMode } from "../manifests/manifests.ts";
 import {
   changeDetail,
   concludeComposite,
@@ -433,17 +433,21 @@ export async function runNestedAction(walk: Walk, parent: BudgetFrame, nested: N
   return concludeComposite(walk, { key: nested.key, progress: progress, spent: subtractSpend(parent.spent, before) });
 }
 
+export function nestedTarget(walk: Walk, from: ActiveMode, name: string): ActionTarget | string {
+  const answer = walk.services.system.action(name, from.manifest.name);
+  return answer.ok ? answer.value : problemText(answer.problems);
+}
+
 async function runCall(walk: Walk, frame: ActionFrame, call: CallStep): Promise<Progress> {
   const replay = replayed(frame.budget, walk.records.get(call.key));
   if (replay !== undefined) {
     return replay;
   }
   const start = { key: call.key, kind: "call" as const, input: call.input };
-  const answer = walk.services.system.action(call.call, frame.mode.manifest.name);
-  if (!answer.ok) {
-    return refuse(walk, start, problemText(answer.problems));
+  const target = nestedTarget(walk, frame.mode, call.call);
+  if (typeof target === "string") {
+    return refuse(walk, start, target);
   }
-  const target = answer.value;
   const missing = target.action.effects.filter((effect) => !frame.action.effects.includes(effect));
   if (missing.length > 0) {
     const reason =

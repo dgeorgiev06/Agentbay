@@ -1,4 +1,4 @@
-import { runNestedAction } from "./action-steps.ts";
+import { nestedTarget, runNestedAction } from "./action-steps.ts";
 import { noSpend, subtractSpend, type BudgetFrame } from "./budget.ts";
 import type { Json } from "../contracts.ts";
 import type { Step as WorkflowStep } from "../generated/workflow.ts";
@@ -89,11 +89,10 @@ async function runWorkflowAction(walk: Walk, scope: WorkflowScope, at: Unsettled
   if (!input.ok) {
     return refuse(walk, start, `Step ${at.step.id} cannot start: ${problemText(input.problems)}`);
   }
-  const answer = walk.services.system.action(at.step.action, scope.mode.manifest.name);
-  if (!answer.ok) {
-    return refuse(walk, start, problemText(answer.problems));
+  const target = nestedTarget(walk, scope.mode, at.step.action);
+  if (typeof target === "string") {
+    return refuse(walk, start, target);
   }
-  const target = answer.value;
   const caller = target.caller;
   return runNestedAction(walk, scope.budget, { key: at.key, kind: "action", target, input: input.value, caller });
 }

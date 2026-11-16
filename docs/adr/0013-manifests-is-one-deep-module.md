@@ -9,7 +9,7 @@ Three designs were written under different constraints and compared (`docs/desig
 - The manifests feature is one module in `bay/manifests/` with one entry file, `bay/manifests/manifests.ts`.
 - `loadSystem(files, layout)` is the only way to get a system, and it returns one only when every manifest, binding and grant is sound. There is no unpoliced system to hold. `loadPolicedSystem`, `PolicedSystem` and `PolicyOf` are deleted.
 - The dependency between safety and manifests flips. Safety's grant rule takes one mode's manifest and folders as plain data and returns grants or placed wordings. Manifests calls it while loading. Safety no longer imports manifests.
-- The type generator is a development tool. It moves to `scripts/` and is not kernel code.
+- The type generator is a development tool. It moves next to the schemas it reads, to `schemas/generate-types.ts`, and is not kernel code. (No new top-level folder: the kit limits them.)
 - Seams are design C's. Reading one file against its schema, and wording its problems with lines, is private to the feature. Files are the only port. The YAML parser and the schema checker are not ports.
 - The system answers questions (designs A and B): `system.action(reference)`, `system.workflow(mode, path)`, `system.listing(question)`. Resolving `mode.action` and `interface.action` is a question to the system; `bay/targets.ts` is deleted.
 - What a question returns carries what the caller needs next (design B). An action target holds its input and output schemas, each with a `check` that returns problems. A workflow target holds `resolve`, which evaluates `$trigger`, `$steps.x.output`, `$item` and `$settings.k` against a scope the caller supplies. Callers no longer read schema files or pick references apart themselves.
@@ -23,7 +23,7 @@ Three designs were written under different constraints and compared (`docs/desig
 
 **Slices, each green on its own.**
 
-1. M1: move the files into `bay/manifests/` and the generator into `scripts/`. Nothing else changes.
+1. M1: move the files into `bay/manifests/` and the generator into `schemas/`. Nothing else changes.
 2. M2: the flip. Safety's grant rule takes plain data; `loadSystem` applies it; every caller of `loadPolicedSystem` moves; it is deleted.
 3. M3: the entry file with the questions. Runs asks `system.action` and `system.workflow`; `bay/targets.ts` is deleted.
 4. M4: targets carry schemas and `resolve`. Runs, harness and check stop reading schemas and references themselves; `spec.ts` and `references.ts` become private.

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { test } from "node:test";
@@ -183,6 +184,83 @@ test("the MCP server still starts on a broken project and says why every tool is
   assert.match(refused.text, /The project cannot be loaded/);
   assert.equal(await server.stop(), 0);
   assert.match(server.stderr(), /the project cannot be loaded/);
+  await project.remove();
+});
+
+const tellerFolder = "components/modes/teller";
+
+const tellerManifest = "name: teller\nversion: 1.0.0\ndescription: Tells the time.\nactions: {}\n";
+
+const brokenTellerManifest = "name: teller\nversion: [\n";
+
+const brokenTellerProblem =
+  "The YAML cannot be read: Flow sequence in block collection must be sufficiently indented and end with a ].";
+
+const startingModes = [
+  { name: "greeter", description: "Gives a greeting for a name." },
+  { name: "writer", description: "Drafts a note from a greeting and keeps it." },
+];
+
+const modesWithTeller = [startingModes[0], { name: "teller", description: "Tells the time." }, startingModes[1]];
+
+async function listedModes(server: Session): Promise<Json> {
+  const answer = toolText(await server.request("tools/call", { name: "actions", arguments: {} }));
+  assert.equal(answer.isError, false, answer.text);
+  return parseJson(answer.text);
+}
+
+test("the tool actions on a running server lists a mode added during the session and drops one removed", async () => {
+  const project = await makeProject();
+  const server = startServer(project.root);
+  await server.request("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+  const tools = listOf(fieldOf(resultOf(await server.request("tools/list")), "tools"));
+  const description = textField(tools.find((tool) => textField(tool, "name") === "actions") ?? {}, "description");
+  assert.match(
+    description ?? "",
+    /^Find out what agentbay can do, from the project as it is at the moment of the call\. /,
+  );
+  assert.deepEqual(await listedModes(server), { modes: startingModes });
+  await project.write(`${tellerFolder}/mode.yaml`, tellerManifest);
+  assert.deepEqual(await listedModes(server), { modes: modesWithTeller });
+  await rm(join(project.root, tellerFolder), { recursive: true });
+  assert.deepEqual(await listedModes(server), { modes: startingModes });
+  assert.equal(await server.stop(), 0);
+  await project.remove();
+});
+
+test("the tool actions refuses with the load problems while a mode is broken and answers again once it is fixed", async () => {
+  const project = await makeProject();
+  const server = startServer(project.root);
+  await server.request("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+  await project.write(`${tellerFolder}/mode.yaml`, brokenTellerManifest);
+  const refused = toolText(await server.request("tools/call", { name: "actions", arguments: {} }));
+  assert.deepEqual(refused, { isError: true, text: brokenTellerProblem });
+  assert.deepEqual(resultOf(await server.request("ping")), {});
+  await project.write(`${tellerFolder}/mode.yaml`, tellerManifest);
+  assert.deepEqual(await listedModes(server), { modes: modesWithTeller });
+  assert.equal(await server.stop(), 0);
+  await project.remove();
+});
+
+test("a step in progress is not disturbed by modes added during the session; submit uses the system of the start", async () => {
+  const project = await makeProject();
+  const kernel = await openKernel(project);
+  const place = await startedTask(kernel, "writer.compose", { name: "Ada" });
+  kernel.close();
+  const server = startServer(project.root);
+  await server.request("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+  await project.write(`${tellerFolder}/mode.yaml`, tellerManifest);
+  assert.deepEqual(await listedModes(server), { modes: modesWithTeller });
+  await project.write("components/modes/broken/mode.yaml", brokenTellerManifest);
+  const refused = toolText(await server.request("tools/call", { name: "actions", arguments: {} }));
+  assert.deepEqual(refused, { isError: true, text: brokenTellerProblem });
+  const output = { text: "Hello, Ada, and welcome back." };
+  const submission = { token: place.token, output };
+  const submitted = toolText(await server.request("tools/call", { name: "submit", arguments: submission }));
+  assert.equal(submitted.isError, false, submitted.text);
+  assert.deepEqual(parseJson(submitted.text), { accepted: true, run: { id: place.runId, status: "done" } });
+  assert.equal(await server.stop(), 0);
+  assert.equal(await project.read("out/notes/note.txt"), output.text);
   await project.remove();
 });
 

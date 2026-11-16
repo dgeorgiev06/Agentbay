@@ -3,9 +3,12 @@ import { test } from "node:test";
 import type { Layout } from "../../../bay/adapter.ts";
 import { agentFileText, toolsFor } from "../agent-file.ts";
 import { bayCommand, coordinatorBlock } from "../coordinator.ts";
+import { decide, type Decision } from "../guard-decide.ts";
+import { readPolicy } from "../guard-input.ts";
 import { guardEntry } from "../settings.ts";
 import { stepsFileText } from "../steps-file.ts";
 import { buildAgent, digestAgent, kit, layout, project, scanAgent, skillAgent } from "./build-fixture.ts";
+import { world } from "./guard-world.ts";
 
 const everyEffect = ["read", "write", "network", "spend", "delete"] as const;
 
@@ -185,6 +188,39 @@ test("the step policy holds each agent's tools, absolute roots and commands", ()
       },
     },
   });
+});
+
+const askingAgent = skillAgent({
+  mode: "todo",
+  skill: "plan",
+  tier: "fast",
+  kernelTools: ["actions"],
+  read: [],
+  write: [],
+  commands: [],
+});
+
+const quietAgent = { ...askingAgent, agent: "agentbay-todo-sort", skill: "sort", kernelTools: [] };
+
+function actionsDecision(agent: string): Decision {
+  const policy = readPolicy(stepsFileText(layout, [askingAgent, quietAgent]), project);
+  const payload = { cwd: project, tool_name: "mcp__agentbay__actions", tool_input: {} };
+  return decide({ project, kit, policy }, { ...payload, agent_id: "agent-1", agent_type: agent }, world);
+}
+
+test("a step whose skill does not list actions has no actions tool and the guard denies it", () => {
+  assert.equal(frontMatter(agentFileText(quietAgent, project)).tools, "mcp__agentbay__submit");
+  assert.deepEqual(actionsDecision("agentbay-todo-sort"), {
+    verdict: "deny",
+    reason:
+      "agentbay denied mcp__agentbay__actions for step agentbay-todo-sort: the step may use only the tools " +
+      "mcp__agentbay__submit; naming actions in the Tools section of skill sort would allow it.",
+  });
+});
+
+test("a step whose skill lists actions has the actions tool and the guard allows it", () => {
+  assert.equal(frontMatter(agentFileText(askingAgent, project)).tools, "mcp__agentbay__submit, mcp__agentbay__actions");
+  assert.deepEqual(actionsDecision("agentbay-todo-plan"), { verdict: "allow" });
 });
 
 test("the coordinator block states the protocol between its markers in under 40 lines", () => {

@@ -7,7 +7,7 @@ import { listOf } from "./cli-fixture.ts";
 import { testEnvironment } from "./kernel-fixture.ts";
 import { kit } from "./project-fixture.ts";
 
-test("the real bay check on the kit itself reports no errors and only the three size warnings", () => {
+test("the real bay check on the kit itself reports no errors and only the two size warnings", () => {
   const result = spawnSync(process.execPath, [join(kit, "bay", "cli.ts"), "check", "--json"], {
     cwd: kit,
     env: testEnvironment,
@@ -24,7 +24,6 @@ test("the real bay check on the kit itself reports no errors and only the three 
   assert.deepEqual(findings, [
     ["warning", "framework/limits.yaml", 1, "kernel_lines is N, over its ceiling of 4000."],
     ["warning", "framework/limits.yaml", 2, "adapter_lines is N, over its ceiling of 800."],
-    ["warning", "framework/limits.yaml", 4, "cli_commands is N, over its ceiling of 12."],
   ]);
   assert.equal(numberField(report, "errors"), 0);
   assert.equal(result.status, 0, result.stderr);

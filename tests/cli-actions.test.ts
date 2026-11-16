@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { stringify } from "yaml";
 import { bay } from "./cli-fixture.ts";
@@ -246,4 +249,48 @@ test("bay actions on a project that does not load exits 1 with the problems", as
         "  fix: Add bindings. Expected: Which mode serves each interface, as interface name: binding; one major per project in 5.0.0.",
     );
   });
+});
+
+test("bay actions says when no mode is active, when a mode has no actions, and when an action has no effects", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "agentbay-actions-")));
+  const write = async (path: string, text: string): Promise<void> => {
+    await mkdir(join(root, path, ".."), { recursive: true });
+    await writeFile(join(root, path), text, "utf8");
+  };
+  try {
+    await write("agentbay.config.yaml", "bindings: {}\nadapter: fake\n");
+    const none = await bay(["actions", "--project", root]);
+    assert.equal(none.exitCode, 0, none.output);
+    assert.equal(none.output, "No mode is active in this project.");
+    await write(
+      "components/modes/quiet/mode.yaml",
+      "name: quiet\nversion: 0.1.0\ndescription: Does nothing yet.\nactions: {}\n",
+    );
+    assert.equal((await bay(["actions", "quiet", "--project", root])).output, "Mode quiet has no actions.");
+    const idle = {
+      name: "idle",
+      version: "0.1.0",
+      description: "Waits.",
+      actions: {
+        wait: {
+          description: "When the owner wants nothing to happen.",
+          input: "schemas/empty.json",
+          output: "schemas/empty.json",
+          effects: [],
+          run: [{ script: "scripts/wait.ts" }],
+        },
+      },
+    };
+    await write("components/modes/idle/mode.yaml", stringify(idle));
+    await write("components/modes/idle/schemas/empty.json", '{"type":"object"}\n');
+    await write("components/modes/idle/scripts/wait.ts", "");
+    assert.equal(
+      (await bay(["actions", "idle", "--project", root])).output,
+      ["idle.wait", "  When the owner wants nothing to happen.", "  effects: none", '  input: {"type":"object"}'].join(
+        "\n",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

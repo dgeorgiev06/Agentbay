@@ -561,6 +561,24 @@ test("$item outside a foreach is reported, and inside one it is accepted", async
   );
 });
 
+test("workflow reference issues name the path of each bad reference", async () => {
+  const problems = await problemsOf(
+    withWorkflowSteps([
+      { id: "a", action: "add", input: { v: "$steps.b.output" } },
+      { id: "b", foreach: "$steps.a.output", steps: [{ id: "c", approval: "ok?", show: "$item" }] },
+      { id: "d", wait: "1h" },
+      { id: "e", approval: "ok?", show: "$item" },
+    ]),
+  );
+  assert.deepEqual(
+    problems.map((problem) => [problem.file, problem.path]),
+    [
+      [workflowFile, "/steps/0/input/v"],
+      [workflowFile, "/steps/3/show"],
+    ],
+  );
+});
+
 test("a when condition on a workflow step is refused; steps have no conditions", async () => {
   const problems = await problemsOf(withWorkflowSteps([{ id: "keep", approval: "Keep it?", when: "$trigger" }]));
   findProblem(problems, workflowFile, "steps.0 has the field when, which is not allowed here.");

@@ -13,6 +13,7 @@ import {
   type System,
   type WorkflowTarget,
 } from "../bay/manifests/manifests.ts";
+import type { Json } from "../bay/contracts.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import {
   briefingMode,
@@ -701,6 +702,94 @@ describe("a workflow target's resolve", () => {
         sentence(
           "$steps.write.output.count resolves to nothing: output of step write has no count; " +
             "it is a mapping with the keys items.",
+        ),
+      ],
+    });
+  });
+
+  test("only a string that starts with $ is a reference", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    assert.deepEqual(target.resolve("price $5", afterWrite), { ok: true, value: "price $5" });
+    assert.deepEqual(target.resolve({ price: 5, nested: { value: "$trigger" } }, afterWrite), {
+      ok: true,
+      value: { price: 5, nested: { value: "$trigger" } },
+    });
+  });
+
+  test("the four reference forms resolve, and nothing else is a reference", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    const withItem = { ...afterWrite, item: "x" };
+    assert.deepEqual(target.resolve("$trigger", withItem), { ok: true, value: { topic: "tea" } });
+    assert.deepEqual(target.resolve("$item", withItem), { ok: true, value: "x" });
+    assert.deepEqual(target.resolve("$settings.lookback", withItem), { ok: true, value: "3d" });
+    assert.deepEqual(target.resolve("$steps.write.output.items.0.id", withItem), { ok: true, value: "a" });
+    for (const text of ["$", "$trigger.topic", "$item.id", "$steps.write", "$steps.write.input", "$settings", "$x"]) {
+      const resolved = target.resolve(text, withItem);
+      assert.ok(!resolved.ok, text);
+      assert.deepEqual(
+        resolved.problems.map((problem) => problem.message),
+        [
+          `${text} is not a reference: write $trigger, $item, $settings.<key> or $steps.<id>.output with an optional ` +
+            "dotted path such as .items.0. Every value that starts with $ is read as a reference.",
+        ],
+      );
+    }
+  });
+
+  test("references resolve whole against the trigger, step outputs, the item and settings", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    const outputs = new Map<string, Json>([
+      ["fetch", { items: [{ id: "a" }, { id: "b" }], total: null }],
+      ["count", 2],
+    ]);
+    const scope = { trigger: { topic: "staking" }, outputs };
+    assert.deepEqual(target.resolve("$steps.fetch.output.items.1.id", scope), { ok: true, value: "b" });
+    assert.deepEqual(target.resolve("$steps.fetch.output.total", scope), { ok: true, value: null });
+    assert.deepEqual(target.resolve("$steps.count.output", scope), { ok: true, value: 2 });
+    assert.deepEqual(target.resolve("plain text with $trigger inside", scope), {
+      ok: true,
+      value: "plain text with $trigger inside",
+    });
+  });
+
+  test("a reference that resolves to nothing is a problem naming it and what was available", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    const outputs = new Map<string, Json>([
+      ["fetch", { items: [{ id: "a" }, { id: "b" }], total: null }],
+      ["count", 2],
+    ]);
+    const problemsOf = (text: string): readonly string[] => {
+      const resolution = target.resolve(text, { trigger: null, outputs });
+      assert.ok(!resolution.ok, text);
+      return resolution.problems.map((problem) => problem.message);
+    };
+    assert.deepEqual(problemsOf("$steps.later.output"), [
+      "$steps.later.output resolves to nothing: no step later has finished before it (available: fetch, count).",
+    ]);
+    assert.deepEqual(problemsOf("$steps.fetch.output.items.7"), [
+      "$steps.fetch.output.items.7 resolves to nothing: output.items of step fetch has no 7; it is a list of 2 elements.",
+    ]);
+    assert.deepEqual(problemsOf("$steps.fetch.output.size"), [
+      "$steps.fetch.output.size resolves to nothing: output of step fetch has no size; " +
+        "it is a mapping with the keys items, total.",
+    ]);
+    assert.deepEqual(problemsOf("$steps.count.output.x"), [
+      "$steps.count.output.x resolves to nothing: output of step count has no x; it is the value 2.",
+    ]);
+  });
+
+  test("an input mapping resolves each top-level value and reports every problem at once", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    const failed = target.resolve({ first: "$steps.nope.output", second: "$bad", fine: "$trigger" }, afterWrite);
+    assert.deepEqual(failed, {
+      ok: false,
+      problems: [
+        sentence(
+          "input.first: $steps.nope.output resolves to nothing: no step nope has finished before it (available: write).",
+        ),
+        sentence(
+          "input.second: $bad is not a reference: write $trigger, $item, $settings.<key> or $steps.<id>.output " +
+            "with an optional dotted path such as .items.0. Every value that starts with $ is read as a reference.",
         ),
       ],
     });

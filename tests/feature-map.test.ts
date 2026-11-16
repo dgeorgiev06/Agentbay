@@ -69,7 +69,7 @@ const testFolder = "tests";
 
 const debtKeys = { kit: "breaks", tests: "test_breaks" } as const;
 
-const featuresTestedAtTheirEntry: readonly string[] = ["runs"];
+const featuresTestedAtTheirEntry: readonly string[] = ["manifests", "runs"];
 
 const featuresSealedInTheirFolder: readonly string[] = ["manifests", "runs"];
 

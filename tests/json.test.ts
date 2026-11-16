@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { byteSize, fieldOf, hashOf, numberField, parseJson, textField, textsField, toJson } from "../bay/json.ts";
+import {
+  byteSize,
+  fieldOf,
+  hashOf,
+  isRecord,
+  numberField,
+  parseJson,
+  textField,
+  textsField,
+  toJson,
+} from "../bay/json.ts";
 
 test("toJson copies JSON values and refuses anything that is not JSON", () => {
   assert.deepEqual(toJson({ a: [1, "x", null, true, { b: 2 }] }), { a: [1, "x", null, true, { b: 2 }] });
@@ -33,4 +43,11 @@ test("field readers return a field only when it has the asked type", () => {
   assert.equal(textField(value, "round"), undefined);
   assert.deepEqual(textsField(value, "feedback"), ["short"]);
   assert.deepEqual(textsField(value, "round"), []);
+});
+
+test("isRecord accepts plain objects only", () => {
+  assert.equal(isRecord({ a: 1 }), true);
+  assert.equal(isRecord([]), false);
+  assert.equal(isRecord(null), false);
+  assert.equal(isRecord("text"), false);
 });

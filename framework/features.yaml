@@ -57,6 +57,7 @@ features:
       - bay/manifests/questions.ts
       - bay/manifests/skills.ts
       - bay/manifests/system.ts
+      - bay/manifests/inspection.ts
     may_import:
       - vocabulary
       - safety

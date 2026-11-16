@@ -1,6 +1,5 @@
 import type { Config } from "../generated/config.ts";
 import type { PathSegments } from "./spec.ts";
-import type { System } from "./manifests.ts";
 import type { Context } from "./loaded.ts";
 import { interfaceName, requiredReferences } from "./interfaces.ts";
 
@@ -17,7 +16,7 @@ type BoundMode = {
 
 export const defaultKey = "default";
 
-function bindingFor(bindings: Config["bindings"], requirer: string, reference: string): BoundMode | undefined {
+export function bindingFor(bindings: Config["bindings"], requirer: string, reference: string): BoundMode | undefined {
   const name = interfaceName(reference);
   const binding = Object.hasOwn(bindings, name) ? bindings[name] : undefined;
   if (binding === undefined) {
@@ -29,20 +28,6 @@ function bindingFor(bindings: Config["bindings"], requirer: string, reference: s
   const key = Object.hasOwn(binding, requirer) ? requirer : defaultKey;
   const mode = Object.hasOwn(binding, key) ? binding[key] : undefined;
   return mode === undefined ? undefined : { mode, path: ["bindings", name, key], label: `${name} for ${requirer}` };
-}
-
-export function servingMode(system: System, requirer: string, reference: string): string | undefined {
-  const bound = bindingFor(system.config.bindings, requirer, reference)?.mode;
-  return bound !== undefined && system.modes.has(bound) ? bound : undefined;
-}
-
-export function servedReferences(system: System, requirer: string): readonly (readonly [string, string])[] {
-  const mode = system.modes.get(requirer);
-  const references = mode === undefined ? [] : requiredReferences(mode.manifest);
-  return references.flatMap((reference) => {
-    const servedBy = servingMode(system, requirer, reference);
-    return servedBy === undefined ? [] : [[interfaceName(reference), servedBy] as const];
-  });
 }
 
 export function boundModeOf(context: Context, requirer: string, reference: string): BoundMode | undefined {

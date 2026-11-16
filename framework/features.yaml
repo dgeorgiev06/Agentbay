@@ -53,10 +53,6 @@ features:
       - bay/manifests/workflow-problems.ts
       - bay/manifests/settings-problems.ts
       - bay/manifests/grants.ts
-      - bay/manifests/listing.ts
-      - bay/manifests/questions.ts
-      - bay/manifests/skills.ts
-      - bay/manifests/system.ts
       - bay/manifests/inspection.ts
       - bay/manifests/placement.ts
     may_import:

@@ -2,7 +2,6 @@ import { basename, join, relative } from "node:path/posix";
 import { homeFolder, isProjectTheKit, shownPath, type Layout } from "../layout.ts";
 import type { FileSystem } from "../ports.ts";
 import { failedWith, succeededWith, type Outcome, type Problem } from "../outcome.ts";
-import type { NewPart } from "./manifests.ts";
 import {
   type TierFolder,
   folderRules,
@@ -12,17 +11,13 @@ import {
   findModeFolders,
 } from "./folders.ts";
 
-type NewMode = Extract<NewPart, { readonly mode: string }>;
-
-type NewModePart = Extract<NewPart, { readonly inMode: string }>;
-
 const namePattern = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 
-function partProblem(file: string, message: string, fix: string): Problem {
+export function partProblem(file: string, message: string, fix: string): Problem {
   return { file, path: "", message, fix };
 }
 
-function nameProblems(kind: string, name: string, file: string): readonly Problem[] {
+export function nameProblems(kind: string, name: string, file: string): readonly Problem[] {
   if (name === "constructor") {
     return [
       partProblem(
@@ -44,25 +39,11 @@ function nameProblems(kind: string, name: string, file: string): readonly Proble
   ];
 }
 
-function folderInHome(layout: Layout, tier: TierFolder, name: string): string {
+export function folderInHome(layout: Layout, tier: TierFolder, name: string): string {
   return relative(homeFolder(layout, tier.home), join(tier.folder, name));
 }
 
-function tierRefusals(layout: Layout, part: NewMode, folder: string): readonly Problem[] {
-  if (part.tier === "modes" || isProjectTheKit(layout)) {
-    return [];
-  }
-  return [
-    partProblem(
-      folder,
-      "Tier base is for the base modes of the kit itself, and this project is not the kit; " +
-        "bay new writes only into the project.",
-      `Make the mode in this project with --tier modes, or run bay new in the kit's own folder.`,
-    ),
-  ];
-}
-
-async function takenModeProblems(files: FileSystem, layout: Layout, name: string): Promise<readonly Problem[]> {
+export async function takenModeProblems(files: FileSystem, layout: Layout, name: string): Promise<readonly Problem[]> {
   const problems: Problem[] = [];
   for (const tier of modeTiers(folderRules(layout))) {
     const folder = join(tier.folder, name);
@@ -76,19 +57,7 @@ async function takenModeProblems(files: FileSystem, layout: Layout, name: string
   return problems;
 }
 
-export async function placeMode(files: FileSystem, layout: Layout, part: NewMode): Promise<Outcome<string>> {
-  const rules = folderRules(layout);
-  const tier = part.tier === "base" ? rules.base : (rules.projectModes ?? rules.kitModes);
-  const folder = folderInHome(layout, tier, part.mode);
-  const refusals = [...tierRefusals(layout, part, folder), ...nameProblems("mode", part.mode, folder)];
-  if (refusals.length > 0) {
-    return failedWith(refusals);
-  }
-  const taken = await takenModeProblems(files, layout, part.mode);
-  return taken.length > 0 ? failedWith(taken) : succeededWith(folder);
-}
-
-async function modeToWriteIn(files: FileSystem, layout: Layout, mode: string): Promise<Outcome<string>> {
+export async function modeToWriteIn(files: FileSystem, layout: Layout, mode: string): Promise<Outcome<string>> {
   const found = (await findModeFolders(files, layout)).find((entry) => basename(entry.folder) === mode);
   if (found === undefined) {
     const where = ownModeTiers(folderRules(layout)).map((tier) => folderInHome(layout, tier, mode));
@@ -111,15 +80,6 @@ async function modeToWriteIn(files: FileSystem, layout: Layout, mode: string): P
     ]);
   }
   return succeededWith(relative(layout.project, found.folder));
-}
-
-export async function placeModePart(files: FileSystem, layout: Layout, part: NewModePart): Promise<Outcome<string>> {
-  const target = await modeToWriteIn(files, layout, part.inMode);
-  const refusals = nameProblems(part.kind, part.name, target.ok ? target.value : part.inMode);
-  if (!target.ok || refusals.length > 0) {
-    return failedWith([...(target.ok ? [] : target.problems), ...refusals]);
-  }
-  return target;
 }
 
 export function placeInterface(layout: Layout, name: string): Outcome<string> {

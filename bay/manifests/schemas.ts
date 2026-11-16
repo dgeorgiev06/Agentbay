@@ -1,14 +1,7 @@
 import type { Json } from "../contracts.ts";
-import { toJson } from "../json.ts";
 import type { FileSystem } from "../ports.ts";
 import { checkValue } from "./spec.ts";
-import { failedWith, succeededWith, type Problem } from "../outcome.ts";
-import type { Schema } from "./manifests.ts";
-
-export type ActionSchemas = {
-  readonly input: Schema;
-  readonly output: Schema;
-};
+import type { Problem } from "../outcome.ts";
 
 export type SchemaReader = (file: string) => Promise<SchemaFile>;
 
@@ -19,7 +12,7 @@ type SchemaFile =
 
 type SchemaLabel = "input" | "output";
 
-type SchemaSource = {
+export type SchemaSource = {
   readonly file: string;
   readonly schemaFile: SchemaFile;
   readonly label: SchemaLabel;
@@ -49,7 +42,7 @@ export function schemaReader(files: FileSystem): SchemaReader {
   };
 }
 
-function valueProblems(source: SchemaSource, value: Json): readonly Problem[] {
+export function valueProblems(source: SchemaSource, value: Json): readonly Problem[] {
   const { file, schemaFile, label } = source;
   switch (schemaFile.state) {
     case "missing":
@@ -65,16 +58,4 @@ function valueProblems(source: SchemaSource, value: Json): readonly Problem[] {
       return result.problems;
     }
   }
-}
-
-export function schemaOf(source: SchemaSource): Schema {
-  const { file, schemaFile } = source;
-  return {
-    file,
-    json: schemaFile.state === "valid" ? toJson(schemaFile.schema) : undefined,
-    check: (value) => {
-      const problems = valueProblems(source, value);
-      return problems.length === 0 ? succeededWith(value) : failedWith(problems);
-    },
-  };
 }

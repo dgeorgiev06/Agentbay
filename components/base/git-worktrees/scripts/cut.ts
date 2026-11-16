@@ -1,15 +1,13 @@
-import { defineScript, fail } from "../../../../bay/sdk.ts";
+import { fail } from "../../../../bay/sdk.ts";
 import { recordFolder, sliceBranch, worktreeFolder } from "./lib/folders.ts";
-import { branchExists, commitOf, git, gitSucceeded, refuseRepositoryFilters } from "./lib/git.ts";
-import { requestOf } from "./lib/request.ts";
+import { branchExists, git, gitSucceeded, safeCommitOf } from "./lib/git.ts";
+import { defineRequestScript } from "./lib/request.ts";
 
-export const run = defineScript(async (input, context) => {
-  const request = requestOf(input);
+export const run = defineRequestScript(async (request, context) => {
   const slice = request.text("slice");
   const branch = sliceBranch(slice);
   const folder = worktreeFolder(slice);
-  await refuseRepositoryFilters(context, ".");
-  const commit = await commitOf(context, ".", request.text("base"));
+  const commit = await safeCommitOf(context, ".", request.text("base"));
   if (await branchExists(context, branch)) {
     fail(`The branch ${branch} already exists, so the slice ${slice} is not cut again.`);
   }

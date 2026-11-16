@@ -1,4 +1,4 @@
-import { fail, type Json } from "../../../../../bay/sdk.ts";
+import { defineScript, fail, type DefinedScript, type Json, type ScriptContext } from "../../../../../bay/sdk.ts";
 
 type Fields = { readonly [key: string]: Json };
 
@@ -12,7 +12,7 @@ function isFields(value: Json): value is Fields {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function requestOf(input: Json): Request {
+function requestOf(input: Json): Request {
   const fields = isFields(input) ? input : {};
   const optionalText = (name: string): string | undefined => {
     const value = fields[name];
@@ -26,4 +26,10 @@ export function requestOf(input: Json): Request {
       return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
     },
   };
+}
+
+export function defineRequestScript(
+  handler: (request: Request, context: ScriptContext) => Promise<Json>,
+): DefinedScript {
+  return defineScript((input, context) => handler(requestOf(input), context));
 }

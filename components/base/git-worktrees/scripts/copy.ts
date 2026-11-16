@@ -1,8 +1,8 @@
-import { defineScript, fail, type ScriptContext } from "../../../../bay/sdk.ts";
+import { fail, type ScriptContext } from "../../../../bay/sdk.ts";
 import { restoreInto, throwawayChanged } from "./lib/copies.ts";
 import { copyFolder, madeFolder, recordFolder } from "./lib/folders.ts";
-import { commitOf, git, refuseRepositoryFilters } from "./lib/git.ts";
-import { requestOf } from "./lib/request.ts";
+import { git, safeCommitOf } from "./lib/git.ts";
+import { defineRequestScript } from "./lib/request.ts";
 
 async function refuseUnignored(context: ScriptContext, links: readonly string[]): Promise<void> {
   for (const link of links) {
@@ -16,8 +16,7 @@ async function refuseUnignored(context: ScriptContext, links: readonly string[])
   }
 }
 
-export const run = defineScript(async (input, context) => {
-  const request = requestOf(input);
+export const run = defineRequestScript(async (request, context) => {
   const name = request.text("name");
   const links = request.texts("links");
   const folder = copyFolder(name);
@@ -25,8 +24,7 @@ export const run = defineScript(async (input, context) => {
     fail(`The name ${name} is already in use by the copy ${folder}.`);
   }
   await refuseUnignored(context, links);
-  await refuseRepositoryFilters(context, ".");
-  const commit = await commitOf(context, ".", request.text("commit"));
+  const commit = await safeCommitOf(context, ".", request.text("commit"));
   await throwawayChanged(context.files.makeFolder(folder));
   await recordFolder(context, folder, { kind: "copy" });
   await restoreInto(context, { folder, commit, paths: ["."] });

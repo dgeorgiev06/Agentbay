@@ -59,6 +59,10 @@ export async function gitSucceeded(
   return ended.stdout;
 }
 
+export function nulFields(output: string): readonly string[] {
+  return output.split("\0").filter((field) => field !== "");
+}
+
 export async function commitOf(context: ScriptContext, folder: string, commit: string): Promise<string> {
   const ended = await git(context, folder, [
     "rev-parse",
@@ -86,7 +90,7 @@ export async function branchExists(context: ScriptContext, branch: string): Prom
 
 const repositoryScopes: readonly string[] = ["local", "worktree"];
 
-export async function refuseRepositoryFilters(context: ScriptContext, folder: string): Promise<void> {
+async function refuseRepositoryFilters(context: ScriptContext, folder: string): Promise<void> {
   const ended = await git(context, folder, ["config", "--show-scope", "--name-only", "--get-regexp", "^filter\\."]);
   if (ended.exitCode !== 0 && ended.exitCode !== 1) {
     fail(`git config failed: ${firstLine(ended.stderr)}`);
@@ -102,4 +106,9 @@ export async function refuseRepositoryFilters(context: ScriptContext, folder: st
         "git could run such a filter's command, so the mode does nothing in this repository until it is removed.",
     );
   }
+}
+
+export async function safeCommitOf(context: ScriptContext, folder: string, commit: string): Promise<string> {
+  await refuseRepositoryFilters(context, folder);
+  return commitOf(context, folder, commit);
 }

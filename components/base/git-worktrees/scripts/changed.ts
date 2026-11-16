@@ -1,6 +1,6 @@
-import { defineScript, fail } from "../../../../bay/sdk.ts";
-import { commitOf, gitSucceeded } from "./lib/git.ts";
-import { requestOf } from "./lib/request.ts";
+import { fail } from "../../../../bay/sdk.ts";
+import { commitOf, gitSucceeded, nulFields } from "./lib/git.ts";
+import { defineRequestScript } from "./lib/request.ts";
 
 type Change =
   | { readonly path: string; readonly how: "added" }
@@ -34,7 +34,7 @@ function readChange(fields: readonly string[], index: number): Read {
 }
 
 function changesOf(output: string): readonly Change[] {
-  const fields = output.split("\0").filter((entry) => entry !== "");
+  const fields = nulFields(output);
   const changes: Change[] = [];
   for (let index = 0; index < fields.length;) {
     const read = readChange(fields, index);
@@ -56,8 +56,7 @@ const diff = [
   "--end-of-options",
 ];
 
-export const run = defineScript(async (input, context) => {
-  const request = requestOf(input);
+export const run = defineRequestScript(async (request, context) => {
   const from = await commitOf(context, ".", request.text("from"));
   const to = await commitOf(context, ".", request.text("to"));
   return { paths: changesOf(await gitSucceeded(context, ".", [...diff, from, to])) };

@@ -1,9 +1,9 @@
-import { defineScript, fail, type ScriptContext } from "../../../../bay/sdk.ts";
+import { fail, type ScriptContext } from "../../../../bay/sdk.ts";
 import { changesIn } from "./lib/changes.ts";
 import { throwawayChanged } from "./lib/copies.ts";
 import { forgetFolder, madeFolder } from "./lib/folders.ts";
-import { commitOf, git, gitSucceeded, refuseRepositoryFilters } from "./lib/git.ts";
-import { requestOf } from "./lib/request.ts";
+import { git, gitSucceeded, safeCommitOf } from "./lib/git.ts";
+import { defineRequestScript } from "./lib/request.ts";
 
 type Worktree = {
   readonly folder: string;
@@ -35,8 +35,7 @@ function keptReason(worktree: Worktree, found: { readonly dirty: boolean; readon
 
 async function refuseUnlessRemovable(context: ScriptContext, worktree: Worktree): Promise<void> {
   const { folder, branch, into } = worktree;
-  await commitOf(context, ".", into);
-  await refuseRepositoryFilters(context, folder);
+  await safeCommitOf(context, folder, into);
   const { changed, untracked } = await changesIn(context, folder);
   const dirty = changed.length > 0 || untracked.length > 0;
   const merged = await isMerged(context, branch, into);
@@ -58,8 +57,7 @@ async function removeWorktree(context: ScriptContext, worktree: Worktree): Promi
   await gitSucceeded(context, ".", ["branch", "-d", "--end-of-options", worktree.branch]);
 }
 
-export const run = defineScript(async (input, context) => {
-  const request = requestOf(input);
+export const run = defineRequestScript(async (request, context) => {
   const folder = request.text("folder");
   const made = await madeFolder(context, folder);
   if (made === undefined) {

@@ -292,15 +292,11 @@ export class Broker {
 
   makeFolder(path: string): Promise<Answer<null>> {
     const operation = { kind: "files.makeFolder" as const, path: this.#shown(path) };
-    return this.#guarded(operation, async () => {
-      const checked = await this.#throwawayPlace(operation, { path, checked: "itself" });
-      if (!checked.ok) {
-        return checked;
-      }
-      if (await this.#isTaken(checked.value)) {
+    return this.#throwawayChange(operation, { path, checked: "itself" }, async (full) => {
+      if (await this.#isTaken(full)) {
         return failed(`The folder ${operation.path} already exists.`);
       }
-      await this.#options.files.makeFolder(checked.value);
+      await this.#options.files.makeFolder(full);
       await this.#recordThrowaway({ did: "made the folder", path: operation.path });
       return granted(null);
     });
@@ -308,19 +304,15 @@ export class Broker {
 
   link(path: string, target: string): Promise<Answer<null>> {
     const operation = { kind: "files.link" as const, path: this.#shown(path), target: this.#shown(target) };
-    return this.#guarded(operation, async () => {
-      const checked = await this.#throwawayPlace(operation, { path, checked: "folder" });
-      if (!checked.ok) {
-        return checked;
-      }
+    return this.#throwawayChange(operation, { path, checked: "folder" }, async (full) => {
       const leadsTo = this.#linkTarget(operation, target);
       if (!leadsTo.ok) {
         return leadsTo;
       }
-      if (await this.#isTaken(checked.value)) {
+      if (await this.#isTaken(full)) {
         return failed(`The path ${operation.path} already exists.`);
       }
-      await this.#options.files.link(checked.value, leadsTo.value);
+      await this.#options.files.link(full, leadsTo.value);
       await this.#recordThrowaway({ did: "made a link", path: operation.path, target: operation.target });
       return granted(null);
     });
@@ -328,12 +320,8 @@ export class Broker {
 
   remove(path: string): Promise<Answer<null>> {
     const operation = { kind: "files.remove" as const, path: this.#shown(path) };
-    return this.#guarded(operation, async () => {
-      const checked = await this.#throwawayPlace(operation, { path, checked: "folder" });
-      if (!checked.ok) {
-        return checked;
-      }
-      await this.#options.files.removeAll(checked.value);
+    return this.#throwawayChange(operation, { path, checked: "folder" }, async (full) => {
+      await this.#options.files.removeAll(full);
       await this.#recordThrowaway({ did: "removed", path: operation.path });
       return granted(null);
     });
@@ -740,6 +728,17 @@ export class Broker {
       case "error":
         return failed(`The statement failed: ${result.message}`);
     }
+  }
+
+  #throwawayChange(
+    operation: ThrowawayOperation,
+    place: ThrowawayPlace,
+    change: (full: string) => Promise<Answer<null>>,
+  ): Promise<Answer<null>> {
+    return this.#guarded(operation, async () => {
+      const checked = await this.#throwawayPlace(operation, place);
+      return checked.ok ? change(checked.value) : checked;
+    });
   }
 
   async #recordThrowaway(detail: { readonly did: string; readonly path: string; readonly target?: string }) {

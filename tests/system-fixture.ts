@@ -5,8 +5,11 @@ import type { Config } from "../bay/generated/config.ts";
 import type { Interface } from "../bay/generated/interface.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
-import { layoutOf } from "../bay/layout.ts";
-import type { System } from "../bay/manifests/manifests.ts";
+import { basename } from "node:path/posix";
+import { layoutOf, type Layout } from "../bay/layout.ts";
+import { inspectSystem, loadSystem, type System } from "../bay/manifests/manifests.ts";
+import type { Outcome, Problem } from "../bay/outcome.ts";
+import type { FileSystem } from "../bay/ports.ts";
 
 export const layout = layoutOf({ kit: "/kit", project: "/kit" });
 
@@ -180,4 +183,18 @@ export function activeModeGrants(system: System, name: string): ModeGrants {
   const mode = system.modes.get(name);
   assert.ok(mode, `${name} is not an active mode of the system`);
   return mode.grants;
+}
+
+export type SystemReport = {
+  readonly outcome: Outcome<System>;
+  readonly active: ReadonlySet<string>;
+  readonly notices: readonly Problem[];
+};
+
+export async function systemReport(files: FileSystem, reportLayout: Layout): Promise<SystemReport> {
+  const inspection = await inspectSystem(files, reportLayout);
+  const active = inspection.folders
+    .filter((folder) => folder.active)
+    .map((folder) => folder.manifest?.name ?? basename(folder.folder));
+  return { outcome: await loadSystem(files, reportLayout), active: new Set(active), notices: inspection.notices };
 }

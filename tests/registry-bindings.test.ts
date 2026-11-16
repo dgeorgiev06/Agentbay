@@ -3,12 +3,18 @@ import { test } from "node:test";
 import type { Config } from "../bay/generated/config.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import { layoutOf } from "../bay/layout.ts";
-import { bindingUses, loadSystemReport, type System } from "../bay/manifests/manifests.ts";
+import { bindingUses, type System } from "../bay/manifests/manifests.ts";
 import type { Problem } from "../bay/outcome.ts";
 import { fakeFileSystem } from "./fakes.ts";
-import { paths, schemaText, storeMode, validFiles, yamlText } from "./system-fixture.ts";
-
-type SystemReport = Awaited<ReturnType<typeof loadSystemReport>>;
+import {
+  paths,
+  schemaText,
+  storeMode,
+  systemReport,
+  validFiles,
+  yamlText,
+  type SystemReport,
+} from "./system-fixture.ts";
 
 function servingModeOf(system: System, caller: string, call: string): string | undefined {
   const answer = system.action(call, caller);
@@ -86,7 +92,7 @@ async function reportOf(setup: Setup): Promise<SystemReport> {
     ...(setup.withJournal === false ? {} : projectMode(journalMode)),
     "/project/agentbay.config.yaml": yamlText(config),
   };
-  return loadSystemReport(fakeFileSystem(files), layout);
+  return systemReport(fakeFileSystem(files), layout);
 }
 
 function problemsOf(report: SystemReport): readonly Problem[] {

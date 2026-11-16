@@ -2,10 +2,19 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ModeGrants } from "../bay/contracts.ts";
 import { layoutOf, type Layout } from "../bay/layout.ts";
-import { loadSystemReport, type System } from "../bay/manifests/manifests.ts";
+import type { System } from "../bay/manifests/manifests.ts";
 import type { Problem } from "../bay/outcome.ts";
 import { fakeFileSystem } from "./fakes.ts";
-import { briefingMode, layout, paths, rooted, schemaText, validFiles, yamlText } from "./system-fixture.ts";
+import {
+  briefingMode,
+  layout,
+  paths,
+  rooted,
+  schemaText,
+  systemReport,
+  validFiles,
+  yamlText,
+} from "./system-fixture.ts";
 
 type Broken = {
   readonly rule: string;
@@ -232,13 +241,13 @@ const brokenProjects: readonly Broken[] = [
 
 for (const broken of brokenProjects) {
   test(`loading gives no system for ${broken.rule}, and says where and how to fix it`, async () => {
-    const report = await loadSystemReport(fakeFileSystem(broken.files), broken.layout);
+    const report = await systemReport(fakeFileSystem(broken.files), broken.layout);
     assert.deepEqual(report.outcome, { ok: false, problems: [broken.problem] });
   });
 }
 
 test("the base mode forge in the kit's own folder may name a kernel folder", async () => {
-  const report = await loadSystemReport(fakeFileSystem(kitWithForge("components/base/forge", ["bay/"])), layout);
+  const report = await systemReport(fakeFileSystem(kitWithForge("components/base/forge", ["bay/"])), layout);
   assert.equal(report.outcome.ok, true);
 });
 
@@ -247,7 +256,7 @@ function grantsOfEveryMode(system: System): ReadonlyMap<string, ModeGrants> {
 }
 
 async function loadedSystem(files: Readonly<Record<string, string>>, within: Layout): Promise<System> {
-  const report = await loadSystemReport(fakeFileSystem(files), within);
+  const report = await systemReport(fakeFileSystem(files), within);
   assert.ok(report.outcome.ok, report.outcome.ok ? "" : JSON.stringify(report.outcome.problems, null, 2));
   return report.outcome.value;
 }

@@ -3,14 +3,13 @@ import { describe, test } from "node:test";
 import {
   inspectSystem,
   loadSystem,
-  loadSystemReport,
   placeToWrite,
   type ActionTarget,
+  type ActionsListing,
+  type ActiveMode,
   type InspectedFolder,
   type Inspection,
   type NewPart,
-  type ActiveMode,
-  type ActionsListing,
   type System,
   type WorkflowTarget,
 } from "../bay/manifests/manifests.ts";
@@ -91,7 +90,7 @@ function projectFiles(): Record<string, string> {
 }
 
 async function projectSystem(): Promise<System> {
-  const outcome = (await loadSystemReport(fakeFileSystem(projectFiles()), separateLayout)).outcome;
+  const outcome = await loadSystem(fakeFileSystem(projectFiles()), separateLayout);
   assert.ok(outcome.ok, outcome.ok ? "" : JSON.stringify(outcome.problems, null, 2));
   return outcome.value;
 }
@@ -267,7 +266,7 @@ async function loadedSystem(
   files: ReturnType<typeof fakeFileSystem>,
   loadedLayout: typeof layout = layout,
 ): Promise<System> {
-  const outcome = (await loadSystemReport(files, loadedLayout)).outcome;
+  const outcome = await loadSystem(files, loadedLayout);
   assert.ok(outcome.ok, outcome.ok ? "" : JSON.stringify(outcome.problems, null, 2));
   return outcome.value;
 }
@@ -566,7 +565,7 @@ describe("an action target's schemas", () => {
     );
     const notJson = { ...validFiles(), "components/modes/briefing/schemas/digest-input.json": "{ not json" };
     for (const files of [missing, notJson]) {
-      const outcome = (await loadSystemReport(fakeFileSystem(rooted(files)), layout)).outcome;
+      const outcome = await loadSystem(fakeFileSystem(rooted(files)), layout);
       assert.ok(!outcome.ok);
       assert.deepEqual(
         outcome.problems.map((problem) => [problem.file, problem.path, problem.message.split(", but ")[0]]),

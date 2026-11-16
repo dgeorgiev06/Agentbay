@@ -169,7 +169,7 @@ export type ListingQuestion = {
   readonly find?: string;
 };
 
-export type ModeFolder = {
+type ModeFolder = {
   readonly home: Home;
   readonly folder: string;
 };
@@ -346,7 +346,7 @@ function interfaceFolders(layout: Layout): readonly string[] {
   return rules.projectInterfaces === undefined ? [rules.kitInterfaces] : [rules.kitInterfaces, rules.projectInterfaces];
 }
 
-export function ownInterfacesFolder(layout: Layout): string {
+function ownInterfacesFolder(layout: Layout): string {
   const rules = folderRules(layout);
   return rules.projectInterfaces ?? rules.kitInterfaces;
 }
@@ -464,7 +464,7 @@ async function loadEach<T>(
   return { values, problems };
 }
 
-export async function findModeFolders(files: FileSystem, layout: Layout): Promise<readonly TierFolder[]> {
+async function findModeFolders(files: FileSystem, layout: Layout): Promise<readonly TierFolder[]> {
   const interfaces = interfaceFolders(layout);
   const found: TierFolder[] = [];
   for (const tier of modeTiers(folderRules(layout))) {
@@ -478,7 +478,7 @@ export async function findModeFolders(files: FileSystem, layout: Layout): Promis
   return found;
 }
 
-export async function findInterfaceFiles(files: FileSystem, layout: Layout): Promise<readonly string[]> {
+async function findInterfaceFiles(files: FileSystem, layout: Layout): Promise<readonly string[]> {
   const found: string[] = [];
   for (const folder of interfaceFolders(layout)) {
     const names = await files.list(folder);
@@ -1727,21 +1727,6 @@ async function inspect(files: FileSystem, layout: Layout): Promise<Pass> {
 
 export async function inspectSystem(files: FileSystem, layout: Layout): Promise<Inspection> {
   return (await inspect(files, layout)).inspection;
-}
-
-export async function loadSystemReport(
-  files: FileSystem,
-  layout: Layout,
-): Promise<{
-  readonly outcome: Outcome<System>;
-  readonly active: ReadonlySet<string>;
-  readonly notices: readonly Problem[];
-}> {
-  const { inspection } = await inspect(files, layout);
-  const active = inspection.folders
-    .filter((folder) => folder.active)
-    .map((folder) => folder.manifest?.name ?? basename(folder.folder));
-  return { outcome: await loadSystem(files, layout), active: new Set(active), notices: inspection.notices };
 }
 
 export async function loadSystem(files: FileSystem, layout: Layout): Promise<Outcome<System>> {

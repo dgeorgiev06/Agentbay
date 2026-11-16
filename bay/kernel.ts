@@ -14,7 +14,7 @@ import {
   systemClock,
 } from "./node-ports.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, Folders, Http, Processes, Removal } from "./ports.ts";
-import { loadSystemReport, type System } from "./manifests/manifests.ts";
+import { loadSystem, type System } from "./manifests/manifests.ts";
 import { openRuns, type Runs } from "./runs/runs.ts";
 import { createScriptRunner } from "./script-runner.ts";
 import { SecretStore, type SecretStoreOptions } from "./secrets.ts";
@@ -85,7 +85,7 @@ export function secretStoreOf(options: Omit<KernelOptions, "layout">): SecretSto
 
 export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel>> {
   const { ports, layout } = options;
-  const loaded = (await loadSystemReport(ports.files, layout)).outcome;
+  const loaded = await loadSystem(ports.files, layout);
   if (!loaded.ok) {
     return loaded;
   }

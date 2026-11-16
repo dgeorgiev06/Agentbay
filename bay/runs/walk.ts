@@ -26,6 +26,7 @@ export type Walk = {
   readonly services: Services;
   readonly writer: Writer;
   readonly records: Map<string, StepRecord>;
+  readonly events: readonly RunEvent[];
   readonly now: Date;
   readonly rerunUnfinished: boolean;
   readonly stopReason: string | undefined;

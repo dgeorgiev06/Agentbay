@@ -1,10 +1,12 @@
 import { join } from "node:path/posix";
 import { refused } from "../answers.ts";
-import type { Json, Permissions, SkillTask, Submission } from "../contracts.ts";
+import type { Json, Permissions, RunEvent, Submission } from "../contracts.ts";
 import { effectRefusal } from "../effect-rule.ts";
+import { textField } from "../json.ts";
 import { problemText, unplacedProblem, type Problem } from "../outcome.ts";
 import type { LoadedMode } from "../registry.ts";
 import type { StepRecord } from "./run-store.ts";
+import type { SkillTask } from "./run-state.ts";
 import { parseSkill } from "../spec.ts";
 import type { SkillDetail } from "./step-detail.ts";
 import { skillRoundKey } from "./step-key.ts";
@@ -19,22 +21,44 @@ export type SkillAt = {
   readonly detail: SkillDetail;
 };
 
+type TaskContext = {
+  readonly folder: string;
+  readonly permissions: Permissions;
+  readonly events: readonly RunEvent[];
+};
+
 export function startedSkillOf(record: StepRecord | undefined): StartedSkill | undefined {
   return record?.kind === "skill" && record.status === "started" ? record : undefined;
 }
 
-export function skillTaskOf(at: SkillAt, permissions: Permissions): SkillTask {
+export const toolCalledKind = "tool.called";
+
+export function toolCallsAt(events: readonly RunEvent[], waitingKey: string): number {
+  return events.filter((event) => event.kind === toolCalledKind && textField(event.detail, "stepKey") === waitingKey)
+    .length;
+}
+
+export function skillTaskOf(at: SkillAt, context: TaskContext): SkillTask {
   const { detail } = at;
+  const { folder } = context;
+  const stepKey = skillRoundKey(at.key, detail.round);
+  const outputSchema = detail.schemas[0] ?? "";
   return {
-    place: { runId: at.runId, mode: detail.mode, action: detail.action, stepKey: at.key },
+    runId: at.runId,
+    stepKey,
+    round: detail.round,
+    feedback: detail.feedback,
     skill: detail.skill,
     tier: detail.tier,
     input: at.input,
-    outputSchema: detail.schemas[0] ?? "",
-    alsoMatches: detail.schemas.slice(1),
-    permissions,
-    round: detail.round,
-    feedback: detail.feedback,
+    files: {
+      skill: join(folder, detail.skill, "SKILL.md"),
+      outputSchema: outputSchema === "" ? "" : join(folder, outputSchema),
+      alsoMatches: detail.schemas.slice(1).map((schema) => join(folder, schema)),
+    },
+    place: { runId: at.runId, mode: detail.mode, action: detail.action, stepKey: at.key },
+    permissions: context.permissions,
+    toolCalls: toolCallsAt(context.events, stepKey),
   };
 }
 

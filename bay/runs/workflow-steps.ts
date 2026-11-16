@@ -10,7 +10,7 @@ import type { StepRecord } from "./run-store.ts";
 import { approvalContentOf, type ApprovalContent } from "./scrubbed-store.ts";
 import type { ApprovalDetail } from "./step-detail.ts";
 import { foreachItemKey, workflowStepKey } from "./step-key.ts";
-import { resolveWorkflowAction } from "../targets.ts";
+import { resolveNamedAction } from "../targets.ts";
 import {
   changeDetail,
   concludeComposite,
@@ -56,6 +56,10 @@ type StepAt<T> = {
   readonly previous: Json;
 };
 
+type UnsettledStep<T> = StepAt<T> & {
+  readonly record: StepRecord | undefined;
+};
+
 type Shown = ApprovalContent & {
   readonly detail: ApprovalDetail;
 };
@@ -76,22 +80,17 @@ function durationMilliseconds(text: string): number {
   return Number(text.slice(0, -1)) * unit;
 }
 
-async function runWorkflowAction(walk: Walk, scope: WorkflowScope, at: StepAt<ActionStep>): Promise<Progress> {
-  const record = walk.records.get(at.key);
-  const replay = replayed(scope.budget, record);
-  if (replay !== undefined) {
-    return replay;
-  }
+async function runWorkflowAction(walk: Walk, scope: WorkflowScope, at: UnsettledStep<ActionStep>): Promise<Progress> {
   const start = { key: at.key, kind: "action" as const, input: at.previous };
   const stepInput = at.step.input;
   const input =
-    record !== undefined || stepInput === undefined
+    at.record !== undefined || stepInput === undefined
       ? succeededWith(at.previous)
       : resolveInput(stepInput, referenceScope(scope));
   if (!input.ok) {
     return refuse(walk, start, `Step ${at.step.id} cannot start: ${problemText(input.problems)}`);
   }
-  const target = resolveWorkflowAction(walk.services.system, scope.mode, at.step.action);
+  const target = resolveNamedAction(walk.services.system, scope.mode.manifest.name, at.step.action);
   if (typeof target === "string") {
     return refuse(walk, start, target);
   }
@@ -134,12 +133,7 @@ async function settleApproval(walk: Walk, at: StepAt<ApprovalStep>, shown: Shown
   return endRecord(walk, { ...settled, key: at.key, spent: noSpend }, [recorded]);
 }
 
-async function runApproval(walk: Walk, scope: WorkflowScope, at: StepAt<ApprovalStep>): Promise<Progress> {
-  const record = walk.records.get(at.key);
-  const replay = replayed(scope.budget, record);
-  if (replay !== undefined) {
-    return replay;
-  }
+async function runApproval(walk: Walk, scope: WorkflowScope, at: UnsettledStep<ApprovalStep>): Promise<Progress> {
   const show = at.step.show;
   const content = show === undefined ? succeededWith(at.previous) : resolveValue(show, referenceScope(scope));
   if (!content.ok) {
@@ -151,7 +145,7 @@ async function runApproval(walk: Walk, scope: WorkflowScope, at: StepAt<Approval
     return stopped;
   }
   const shown = approvalContentOf(content.value, walk.services.scrubber);
-  const detail = record === undefined ? undefined : approvalDetailOf(record);
+  const detail = at.record === undefined ? undefined : approvalDetailOf(at.record);
   if (detail === undefined) {
     const started = { question: at.step.approval, hash: shown.hash };
     await startRecord(walk, { key: at.key, kind: "approval", input: shown.content, detail: started });
@@ -160,19 +154,14 @@ async function runApproval(walk: Walk, scope: WorkflowScope, at: StepAt<Approval
   return settleApproval(walk, at, { ...shown, detail });
 }
 
-async function runWait(walk: Walk, scope: WorkflowScope, at: StepAt<WaitStep>): Promise<Progress> {
-  const record = walk.records.get(at.key);
-  const replay = replayed(scope.budget, record);
-  if (replay !== undefined) {
-    return replay;
-  }
+async function runWait(walk: Walk, at: UnsettledStep<WaitStep>): Promise<Progress> {
   const stopped = stopGate(walk);
   if (stopped !== undefined) {
     return stopped;
   }
   const until = new Date(walk.now.getTime() + durationMilliseconds(at.step.wait)).toISOString();
   const started =
-    record ?? (await startRecord(walk, { key: at.key, kind: "wait", input: at.previous, detail: { until } }));
+    at.record ?? (await startRecord(walk, { key: at.key, kind: "wait", input: at.previous, detail: { until } }));
   const due = started.kind === "wait" && started.detail !== null ? started.detail.until : until;
   if (walk.now.getTime() >= new Date(due).getTime()) {
     return endRecord(walk, { key: at.key, status: "done", output: started.input, spent: noSpend });
@@ -187,12 +176,8 @@ function describeValue(value: Json): string {
   return "a mapping";
 }
 
-async function runForeach(walk: Walk, scope: WorkflowScope, at: StepAt<ForeachStep>): Promise<Progress> {
-  const record = walk.records.get(at.key);
-  const replay = replayed(scope.budget, record);
-  if (replay !== undefined) {
-    return replay;
-  }
+async function runForeach(walk: Walk, scope: WorkflowScope, at: UnsettledStep<ForeachStep>): Promise<Progress> {
+  const { record } = at;
   const start = { key: at.key, kind: "foreach" as const, input: at.previous };
   const list =
     record === undefined ? resolveValue(at.step.foreach, referenceScope(scope)) : succeededWith(record.input);
@@ -251,7 +236,7 @@ function workflowStepOf(step: WorkflowStep): WorkflowStepOf {
   return { kind: "foreach", step };
 }
 
-function runWorkflowStep(walk: Walk, scope: WorkflowScope, at: StepAt<WorkflowStep>): Promise<Progress> {
+function runUnsettledStep(walk: Walk, scope: WorkflowScope, at: UnsettledStep<WorkflowStep>): Promise<Progress> {
   const of = workflowStepOf(at.step);
   switch (of.kind) {
     case "action":
@@ -259,10 +244,15 @@ function runWorkflowStep(walk: Walk, scope: WorkflowScope, at: StepAt<WorkflowSt
     case "approval":
       return runApproval(walk, scope, { ...at, step: of.step });
     case "wait":
-      return runWait(walk, scope, { ...at, step: of.step });
+      return runWait(walk, { ...at, step: of.step });
     case "foreach":
       return runForeach(walk, scope, { ...at, step: of.step });
   }
+}
+
+async function runWorkflowStep(walk: Walk, scope: WorkflowScope, at: StepAt<WorkflowStep>): Promise<Progress> {
+  const record = walk.records.get(at.key);
+  return replayed(scope.budget, record) ?? runUnsettledStep(walk, scope, { ...at, record });
 }
 
 export async function runWorkflowSteps(

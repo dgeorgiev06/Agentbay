@@ -98,6 +98,24 @@ describe("workflows", () => {
     close();
   });
 
+  test("a foreach that waits inside is started once, however often the run is resumed", async () => {
+    const changes = withFlow([{ id: "each", foreach: "$trigger", steps: [{ id: "pause", wait: "2h" }] }]);
+    const { runs, clock, close } = await openedRuns({ changes });
+    const id = runOf(await runs.start(flow, ["a", "b"])).id;
+    assert.equal(waitingOf(await runs.resume(id)).stepKey, "each[0].pause");
+    clock.advance(2 * hour);
+    assert.equal(waitingOf(await runs.resume(id)).stepKey, "each[1].pause");
+    clock.advance(2 * hour);
+    const run = runOf(await runs.resume(id));
+    assert.deepEqual(run.state, { status: "done", output: ["a", "b"] });
+    const started = run.events.filter((event) => event.kind === "step.started");
+    assert.deepEqual(
+      started.map((event) => textField(event.detail, "stepKey")),
+      ["each", "each[0].pause", "each[1].pause"],
+    );
+    close();
+  });
+
   test("foreach over something that is not a list fails the run with a problem", async () => {
     const changes = withFlow([{ id: "each", foreach: "$trigger", steps: [{ id: "put", action: "log" }] }]);
     const { runs, runner, close } = await openedRuns({ changes });

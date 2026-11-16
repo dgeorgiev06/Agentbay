@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { resolveActionReference, resolveCall, resolveOwnAction, resolveWorkflowAction } from "../bay/targets.ts";
+import { resolveActionReference, resolveCall, resolveNamedAction, resolveOwnAction } from "../bay/targets.ts";
 import { fixtureSystem } from "./runs-fixture.ts";
 
 test("targets resolve own actions, interface calls through bindings, and say plainly what is missing", async () => {
@@ -11,7 +11,7 @@ test("targets resolve own actions, interface calls through bindings, and say pla
   assert.ok(typeof call !== "string");
   assert.equal(call.mode.manifest.name, "store");
   assert.equal(call.name, "put");
-  const own = resolveWorkflowAction(system, notes, "copy");
+  const own = resolveNamedAction(system, "notes", "copy");
   assert.ok(typeof own !== "string");
   assert.equal(own.mode.manifest.name, "notes");
   assert.equal(

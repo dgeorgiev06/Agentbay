@@ -1,25 +1,11 @@
 import { join } from "node:path/posix";
-import {
-  measures,
-  type EventSink,
-  type Json,
-  type Permissions,
-  type PolicyOf,
-  type RunEvent,
-  type Scrubber,
-  type ScriptRunner,
-  type SkillTask,
-  type Spend,
-  type StepPlace,
-  type Submission,
-  type Tier,
-} from "../contracts.ts";
+import type { EventSink, Json, PolicyOf, RunEvent, Scrubber, ScriptRunner, Spend, Submission } from "../contracts.ts";
 import type { Budget } from "../generated/mode.ts";
-import { fieldOf, numberField, textField, toJson } from "../json.ts";
+import { fieldOf, textField, toJson } from "../json.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
 import type { Clock, FileSystem, Folders } from "../ports.ts";
 import type { System } from "../registry.ts";
-import { Engine } from "./engine.ts";
+import { Engine, type AdvancedRun } from "./engine.ts";
 import {
   kernelDatabaseFile,
   runStatuses,
@@ -27,12 +13,13 @@ import {
   type StepRecord,
   type WaitingReason,
 } from "./run-store.ts";
-import type { RunView, UndoEntry, UndoReport, Waiting } from "./run-state.ts";
+import type { RunState, SkillTask, UndoEntry, UndoReport, Waiting } from "./run-state.ts";
 import { scrubbedStore } from "./scrubbed-store.ts";
+import { toolCalledKind, toolCallsAt } from "./skill-steps.ts";
 import { SqliteRunStore } from "./sqlite-run-store.ts";
 import { skillRoundOf } from "./step-key.ts";
 import { checkTaskToken, issueTaskToken, type TaskPlace } from "./task-tokens.ts";
-import { calledTarget, storedWaiting } from "./waiting.ts";
+import { storedWaiting } from "./waiting.ts";
 
 type RunsNeeds = {
   readonly project: string;
@@ -46,24 +33,9 @@ type RunsNeeds = {
   readonly toolCallsPerRound: number;
 };
 
-export type Task = {
-  readonly runId: string;
-  readonly stepKey: string;
-  readonly round: number;
-  readonly feedback: readonly string[];
-  readonly skill: string;
-  readonly tier: Tier;
-  readonly input: Json;
-  readonly files: { readonly skill: string; readonly outputSchema: string; readonly alsoMatches: readonly string[] };
-  readonly place: StepPlace;
-  readonly permissions: Permissions;
-  readonly toolCalls: number;
+export type Task = SkillTask & {
   readonly token?: string;
 };
-
-type RunWaiting =
-  | Exclude<Waiting, { readonly reason: "skill" }>
-  | { readonly reason: "skill"; readonly stepKey: string; readonly task: Task };
 
 type RunStep = {
   readonly key: string;
@@ -80,12 +52,7 @@ type RunStep = {
 export type Run = {
   readonly id: string;
   readonly target: { readonly kind: "action" | "workflow"; readonly mode: string; readonly name: string };
-  readonly state:
-    | { readonly status: "running" }
-    | { readonly status: "waiting"; readonly waiting: RunWaiting }
-    | { readonly status: "done"; readonly output: Json }
-    | { readonly status: "failed"; readonly reason: string }
-    | { readonly status: "undone"; readonly reason: string; readonly undo: UndoReport };
+  readonly state: RunState<Task>;
   readonly spent: Spend;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -147,8 +114,6 @@ type Stored = {
 
 const askedByKind = "run.asked-by";
 
-const toolCalledKind = "tool.called";
-
 const toolsCountedWhereMade: readonly string[] = ["call_action", "submit"];
 
 const shownOnly: Showing = { waiting: undefined, issue: () => false };
@@ -195,68 +160,22 @@ function undoReportOf(undo: Json): UndoReport {
   };
 }
 
-function budgetWaitingOf(events: readonly RunEvent[], stepKey: string): Waiting | undefined {
-  const exceeded = events.findLast(
-    (event) => event.kind === "budget.exceeded" && textField(event.detail, "stepKey") === stepKey,
-  );
-  const detail = exceeded?.detail ?? null;
-  const measure = measures.find((known) => known === textField(detail, "measure"));
-  const limit = numberField(detail, "limit");
-  const spent = numberField(detail, "spent");
-  if (measure === undefined || limit === undefined || spent === undefined) {
-    return undefined;
-  }
-  return { reason: "budget", stepKey, overrun: { measure, limit, spent } };
-}
-
-function toolCallsAt(events: readonly RunEvent[], waitingKey: string): number {
-  return events.filter((event) => event.kind === toolCalledKind && textField(event.detail, "stepKey") === waitingKey)
-    .length;
-}
-
-function taskOf(opened: Opened, stored: Stored, waiting: { readonly stepKey: string; readonly task: SkillTask }): Task {
-  const { task, stepKey } = waiting;
-  const folder = opened.needs.system.modes.get(task.place.mode)?.folder ?? "";
-  return {
-    runId: task.place.runId,
-    stepKey,
-    round: task.round,
-    feedback: task.feedback,
-    skill: task.skill,
-    tier: task.tier,
-    input: task.input,
-    files: {
-      skill: join(folder, task.skill, "SKILL.md"),
-      outputSchema: task.outputSchema === "" ? "" : join(folder, task.outputSchema),
-      alsoMatches: task.alsoMatches.map((schema) => join(folder, schema)),
-    },
-    place: task.place,
-    permissions: task.permissions,
-    toolCalls: toolCallsAt(stored.events, stepKey),
-  };
-}
-
-async function waitingOf(opened: Opened, stored: Stored, showing: Showing): Promise<RunWaiting | string> {
-  const { run, events } = stored;
-  const state = run.state;
-  const stepKey = state.status === "waiting" ? state.stepKey : "";
-  const waiting = showing.waiting ?? storedWaiting(opened.needs, run) ?? budgetWaitingOf(events, stepKey);
+async function waitingOf(opened: Opened, stored: Stored, showing: Showing): Promise<Waiting<Task> | string> {
+  const { run } = stored;
+  const waiting = showing.waiting ?? storedWaiting(opened.needs, stored);
   if (waiting === undefined) {
+    const stepKey = run.state.status === "waiting" ? run.state.stepKey : "";
     return `Run ${run.id} waits at step ${stepKey}, but kernel.db does not hold what the step waits for.`;
   }
-  if (waiting.reason !== "skill") {
+  if (waiting.reason !== "skill" || !showing.issue(waiting.stepKey)) {
     return waiting;
   }
-  const task = taskOf(opened, stored, waiting);
-  if (!showing.issue(waiting.stepKey)) {
-    return { ...waiting, task };
-  }
-  const place = { runId: run.id, stepKey: waiting.stepKey, round: task.round };
+  const place = { runId: run.id, stepKey: waiting.stepKey, round: waiting.task.round };
   const token = await issueTaskToken(opened.store, place, opened.needs.clock.now());
-  return { ...waiting, task: { ...task, token } };
+  return { ...waiting, task: { ...waiting.task, token } };
 }
 
-async function stateOf(opened: Opened, stored: Stored, showing: Showing): Promise<Run["state"] | string> {
+async function stateOf(opened: Opened, stored: Stored, showing: Showing): Promise<RunState<Task> | string> {
   const state = stored.run.state;
   switch (state.status) {
     case "running":
@@ -303,7 +222,7 @@ async function shownRun(opened: Opened, runId: string, showing: Showing): Promis
   });
 }
 
-function resultOf(opened: Opened, result: Outcome<RunView>, issue: Showing["issue"]): Promise<Outcome<Run>> {
+function resultOf(opened: Opened, result: Outcome<AdvancedRun>, issue: Showing["issue"]): Promise<Outcome<Run>> {
   if (!result.ok) {
     return Promise.resolve(result);
   }
@@ -312,7 +231,11 @@ function resultOf(opened: Opened, result: Outcome<RunView>, issue: Showing["issu
   return shownRun(opened, result.value.id, { waiting, issue });
 }
 
-async function changed(opened: Opened, runId: string, change: () => Promise<Outcome<RunView>>): Promise<Outcome<Run>> {
+async function changed(
+  opened: Opened,
+  runId: string,
+  change: () => Promise<Outcome<AdvancedRun>>,
+): Promise<Outcome<Run>> {
   const state = (await opened.store.readRun(runId))?.state;
   const before = state?.status === "waiting" && state.reason === "skill" ? state.stepKey : undefined;
   return resultOf(opened, await change(), (waitingKey) => waitingKey !== before);
@@ -374,7 +297,7 @@ async function toolTask(opened: Opened, token: string, tool: string): Promise<Ou
   return place.ok ? taskAt(opened, place.value) : place;
 }
 
-function calledOf(result: Outcome<RunView>, action: string): Outcome<Called> {
+function calledOf(result: Outcome<AdvancedRun>, action: string): Outcome<Called> {
   if (!result.ok) {
     return result;
   }
@@ -406,32 +329,12 @@ async function calledAction(
   if (!found.ok) {
     return found;
   }
+  const { runId, stepKey, place: taskPlace } = found.value;
   const { action, input } = call;
-  const task = found.value;
-  const target = calledTarget(opened.needs.system, task.place.mode, action);
-  if (typeof target === "string") {
-    return refusal(target);
-  }
-  const effects = target.action.effects;
-  if (effects.some((effect) => effect !== "read")) {
-    return refusal(
-      `The action ${action} has the effects ${effects.join(", ")}; a skill may call only actions whose effects ` +
-        "are read only.",
-    );
-  }
-  const caller = action.includes(".") ? { caller: task.place.mode } : {};
-  const reference = `${target.mode.manifest.name}.${target.name}`;
-  const result = await opened.engine.startForSkill({
-    runId: task.runId,
-    stepKey: task.stepKey,
-    reference,
-    input,
-    ...caller,
-  });
+  const result = await opened.engine.startForSkill({ runId, stepKey, mode: taskPlace.mode, action, input });
   if (result.ok) {
     const at = opened.needs.clock.now().toISOString();
-    const detail = { runId: task.runId, stepKey: task.stepKey };
-    await opened.events.append({ at, runId: result.value.id, kind: askedByKind, detail });
+    await opened.events.append({ at, runId: result.value.id, kind: askedByKind, detail: { runId, stepKey } });
   }
   return calledOf(result, action);
 }
@@ -452,7 +355,7 @@ async function summaries(store: SqliteRunStore): Promise<readonly RunSummary[]> 
   });
 }
 
-function started(opened: Opened, what: Start, input: Json): Promise<Outcome<RunView>> {
+function started(opened: Opened, what: Start, input: Json): Promise<Outcome<AdvancedRun>> {
   return "action" in what
     ? opened.engine.startAction(what.action, input)
     : opened.engine.startWorkflow(what.workflow, input);

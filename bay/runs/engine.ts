@@ -24,12 +24,12 @@ import {
   type StoredState,
   type Writer,
 } from "./run-store.ts";
-import type { ApprovalDecision, RunView, RunStatus } from "./run-state.ts";
-import { failedWith, succeededWith, type Outcome, type Problem } from "../outcome.ts";
+import type { ApprovalDecision, RunStatus } from "./run-state.ts";
+import { failedWith, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
 import { scrubbedStore } from "./scrubbed-store.ts";
 import { startedSkillOf, submissionProblems, type StartedSkill } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
-import { resolveActionReference, resolveOwnAction } from "../targets.ts";
+import { resolveActionReference, resolveNamedAction, resolveOwnAction, type ActionTarget } from "../targets.ts";
 import { hasUndoRecords, runUndo } from "./undo.ts";
 import { eventOf, failed, schemaProblems, type Progress, type Services, type Walk } from "./walk.ts";
 import { runWorkflowSteps } from "./workflow-steps.ts";
@@ -44,18 +44,23 @@ type WorkflowReference = {
   readonly path: string;
 };
 
-type StartOptions = {
-  readonly id?: string;
+export type AdvancedRun = {
+  readonly id: string;
+  readonly spent: Spend;
+  readonly state: RunStatus;
+};
+
+type CalledFrom = {
   readonly caller?: string;
-  readonly within?: Budget;
+  readonly within: Budget;
 };
 
 type SkillCall = {
   readonly runId: string;
   readonly stepKey: string;
-  readonly reference: string;
+  readonly mode: string;
+  readonly action: string;
   readonly input: Json;
-  readonly caller?: string;
 };
 
 type ResumeOptions = {
@@ -254,6 +259,17 @@ async function driveRun(walk: Walk, run: RunWithSteps): Promise<Ending> {
   return { status: undo.status, spent: addSpend(budget.spent, undo.spent) };
 }
 
+function notReadOnlyRefusal(target: ActionTarget, action: string): Outcome<never> | undefined {
+  const effects = target.action.effects;
+  if (effects.every((effect) => effect === "read")) {
+    return undefined;
+  }
+  const message =
+    `The action ${action} has the effects ${effects.join(", ")}; a skill may call only actions whose effects ` +
+    "are read only.";
+  return failedWith([unplacedProblem(message)]);
+}
+
 function isDueAt(state: StoredState, now: Date): boolean {
   return (
     state.status === "waiting" &&
@@ -275,35 +291,30 @@ export class Engine {
     this.#newId = newId ?? randomUUID;
   }
 
-  async startAction(reference: string, input: Json, options: StartOptions = {}): Promise<Outcome<RunView>> {
-    const system = this.#services.system;
-    const target = resolveActionReference(system, reference);
+  startAction(reference: string, input: Json): Promise<Outcome<AdvancedRun>> {
+    const target = resolveActionReference(this.#services.system, reference);
     if (typeof target === "string") {
-      return refusal(options.id ?? "new", { message: target });
+      return Promise.resolve(refusal("new", { message: target }));
     }
-    const inactive = this.#inactiveRefusal(options.id ?? "new", target.mode.manifest.name);
-    if (inactive !== undefined) {
-      return inactive;
-    }
-    const check = { mode: target.mode, schema: target.action.input, value: input, label: "input" };
-    const problems = await schemaProblems(this.#services, check);
-    if (problems.length > 0) {
-      return failedWith(problems);
-    }
-    const caller = options.caller === undefined ? {} : { caller: options.caller };
-    const runTarget: RunTarget = { kind: "action", mode: target.mode.manifest.name, name: target.name, ...caller };
-    const limit = smallestBudget([target.action.budget, system.config.budget, options.within]);
-    return this.#start({ target: runTarget, input, limit }, options);
+    return this.#startTarget(target, input);
   }
 
-  async startForSkill(call: SkillCall): Promise<Outcome<RunView>> {
+  async startForSkill(call: SkillCall): Promise<Outcome<AdvancedRun>> {
+    const target = resolveNamedAction(this.#services.system, call.mode, call.action);
+    if (typeof target === "string") {
+      return failedWith([unplacedProblem(target)]);
+    }
+    const notReadOnly = notReadOnlyRefusal(target, call.action);
+    if (notReadOnly !== undefined) {
+      return notReadOnly;
+    }
     const calling = await this.#services.store.readRun(call.runId);
     if (calling === undefined) {
       return refusal(call.runId, { message: `There is no run ${call.runId}.` });
     }
     const within = remainingBudget(extendedBudget(calling.limit, calling.extra), calling.spent);
-    const caller = call.caller === undefined ? {} : { caller: call.caller };
-    const called = await this.startAction(call.reference, call.input, { ...caller, within });
+    const caller = call.action.includes(".") ? { caller: call.mode } : {};
+    const called = await this.#startTarget(target, call.input, { ...caller, within });
     if (!called.ok) {
       return called;
     }
@@ -311,25 +322,21 @@ export class Engine {
     return charged.ok ? called : charged;
   }
 
-  async startWorkflow(
-    reference: WorkflowReference,
-    triggerInput: Json,
-    options: StartOptions = {},
-  ): Promise<Outcome<RunView>> {
+  startWorkflow(reference: WorkflowReference, triggerInput: Json): Promise<Outcome<AdvancedRun>> {
     const { mode, path } = reference;
-    const inactive = this.#inactiveRefusal(options.id ?? "new", mode);
+    const inactive = this.#inactiveRefusal("new", mode);
     if (inactive !== undefined) {
-      return inactive;
+      return Promise.resolve(inactive);
     }
     const workflow = this.#services.system.modes.get(mode)?.workflows.get(path);
     if (workflow === undefined) {
-      return refusal(options.id ?? "new", { message: `Mode ${mode} has no workflow ${path}.` });
+      return Promise.resolve(refusal("new", { message: `Mode ${mode} has no workflow ${path}.` }));
     }
     const limit = smallestBudget([workflow.budget, this.#services.system.config.budget]);
-    return this.#start({ target: { kind: "workflow", mode, name: path }, input: triggerInput, limit }, options);
+    return this.#start({ target: { kind: "workflow", mode, name: path }, input: triggerInput, limit });
   }
 
-  submit(runId: string, stepKey: string, submission: Submission): Promise<Outcome<RunView>> {
+  submit(runId: string, stepKey: string, submission: Submission): Promise<Outcome<AdvancedRun>> {
     return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
       const found = waitingSkill(run, stepKey);
       if (!found.ok) {
@@ -350,7 +357,7 @@ export class Engine {
     });
   }
 
-  approve(runId: string, stepKey: string, decision: ApprovalDecision): Promise<Outcome<RunView>> {
+  approve(runId: string, stepKey: string, decision: ApprovalDecision): Promise<Outcome<AdvancedRun>> {
     return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
       const found = waitingApproval(run, stepKey, decision.hash);
       if (!found.ok) {
@@ -363,16 +370,16 @@ export class Engine {
     });
   }
 
-  resume(runId: string, options: ResumeOptions = {}): Promise<Outcome<RunView>> {
+  resume(runId: string, options: ResumeOptions = {}): Promise<Outcome<AdvancedRun>> {
     return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
       const rerunUnfinished = options.rerunUnfinished ?? false;
       return endedRefusal(run) ?? this.#continue(writer, { now, cause: "resume", rerunUnfinished }, {});
     });
   }
 
-  async tick(now: Date): Promise<readonly Outcome<RunView>[]> {
+  async tick(now: Date): Promise<readonly Outcome<AdvancedRun>[]> {
     const waitingRuns = await this.#services.store.listRuns("waiting");
-    const results: Outcome<RunView>[] = [];
+    const results: Outcome<AdvancedRun>[] = [];
     for (const run of waitingRuns.filter((candidate) => isDueAt(candidate.state, now))) {
       const result = await this.#withRun(run.id, now, (current, writer) =>
         isDueAt(current.state, now)
@@ -384,7 +391,7 @@ export class Engine {
     return results;
   }
 
-  extendBudget(runId: string, extra: Budget): Promise<Outcome<RunView>> {
+  extendBudget(runId: string, extra: Budget): Promise<Outcome<AdvancedRun>> {
     return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
       const problems = budgetProblems(extra);
       if (problems.length > 0) {
@@ -397,7 +404,7 @@ export class Engine {
     });
   }
 
-  stop(runId: string): Promise<Outcome<RunView>> {
+  stop(runId: string): Promise<Outcome<AdvancedRun>> {
     return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
       return (
         endedRefusal(run) ?? this.#continue(writer, { now, cause: "stop", rerunUnfinished: false }, { stopReason })
@@ -405,7 +412,23 @@ export class Engine {
     });
   }
 
-  #chargeSkill(call: SkillCall, spent: Spend): Promise<Outcome<RunView>> {
+  async #startTarget(target: ActionTarget, input: Json, from?: CalledFrom): Promise<Outcome<AdvancedRun>> {
+    const inactive = this.#inactiveRefusal("new", target.mode.manifest.name);
+    if (inactive !== undefined) {
+      return inactive;
+    }
+    const check = { mode: target.mode, schema: target.action.input, value: input, label: "input" };
+    const problems = await schemaProblems(this.#services, check);
+    if (problems.length > 0) {
+      return failedWith(problems);
+    }
+    const caller = from?.caller === undefined ? {} : { caller: from.caller };
+    const runTarget: RunTarget = { kind: "action", mode: target.mode.manifest.name, name: target.name, ...caller };
+    const limit = smallestBudget([target.action.budget, this.#services.system.config.budget, from?.within]);
+    return this.#start({ target: runTarget, input, limit });
+  }
+
+  #chargeSkill(call: SkillCall, spent: Spend): Promise<Outcome<AdvancedRun>> {
     return this.#withRun(call.runId, this.#services.clock.now(), async (run, writer, now) => {
       const found = waitingSkill(run, call.stepKey);
       if (!found.ok) {
@@ -418,8 +441,8 @@ export class Engine {
     });
   }
 
-  async #start(plan: NewRunPlan, options: StartOptions): Promise<Outcome<RunView>> {
-    const id = options.id ?? this.#newId();
+  async #start(plan: NewRunPlan): Promise<Outcome<AdvancedRun>> {
+    const id = this.#newId();
     if ((await this.#services.store.readRun(id)) !== undefined) {
       return refusal(id, { message: `A run with the id ${id} already exists.` });
     }
@@ -443,8 +466,8 @@ export class Engine {
   async #withRun(
     runId: string,
     now: Date,
-    body: (run: RunWithSteps, writer: Writer, now: Date) => Promise<Outcome<RunView>>,
-  ): Promise<Outcome<RunView>> {
+    body: (run: RunWithSteps, writer: Writer, now: Date) => Promise<Outcome<AdvancedRun>>,
+  ): Promise<Outcome<AdvancedRun>> {
     const lock = await this.#services.store.acquire(runId, this.#owner, now);
     switch (lock.status) {
       case "missing":
@@ -469,12 +492,12 @@ export class Engine {
     }
   }
 
-  #inactiveRefusal(runId: string, mode: string): Outcome<RunView> | undefined {
+  #inactiveRefusal(runId: string, mode: string): Outcome<AdvancedRun> | undefined {
     const system = this.#services.system;
     return system.modes.has(mode) && !system.active.has(mode) ? refusal(runId, inactiveModeWording(mode)) : undefined;
   }
 
-  async #holding(writer: Writer, body: () => Promise<Outcome<RunView>>): Promise<Outcome<RunView>> {
+  async #holding(writer: Writer, body: () => Promise<Outcome<AdvancedRun>>): Promise<Outcome<AdvancedRun>> {
     try {
       return await body();
     } catch (error) {
@@ -497,7 +520,7 @@ export class Engine {
     return run;
   }
 
-  async #continue(writer: Writer, advance: Advance, patch: ControlPatch): Promise<Outcome<RunView>> {
+  async #continue(writer: Writer, advance: Advance, patch: ControlPatch): Promise<Outcome<AdvancedRun>> {
     const resumed: RunEvent = {
       at: advance.now.toISOString(),
       runId: writer.runId,
@@ -509,12 +532,13 @@ export class Engine {
     return this.#advance(writer, advance);
   }
 
-  async #advance(writer: Writer, advance: Advance): Promise<Outcome<RunView>> {
+  async #advance(writer: Writer, advance: Advance): Promise<Outcome<AdvancedRun>> {
     const run = await this.#read(writer.runId);
     const walk: Walk = {
       services: this.#services,
       writer,
       records: new Map(run.steps.map((step) => [step.key, step])),
+      events: await this.#services.store.readEvents(run.id),
       now: advance.now,
       rerunUnfinished: advance.rerunUnfinished,
       stopReason: run.stopReason,
@@ -524,13 +548,6 @@ export class Engine {
     const ending = await driveRun(walk, run);
     const update = { state: storedStateOf(ending.status), spent: ending.spent, at: advance.now.toISOString() };
     await this.#services.store.updateRun(writer, update, endingEvents(walk, ending.status));
-    const view: RunView = {
-      id: run.id,
-      target: run.target,
-      state: ending.status,
-      spent: ending.spent,
-      steps: [...walk.records.values()],
-    };
-    return succeededWith(view);
+    return succeededWith({ id: run.id, state: ending.status, spent: ending.spent });
   }
 }

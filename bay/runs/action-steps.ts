@@ -18,7 +18,7 @@ import { problemText } from "../outcome.ts";
 import type { StepRecord } from "./run-store.ts";
 import { skillSchemas, skillTaskOf, startedSkillOf, type SkillAt } from "./skill-steps.ts";
 import type { ScriptDetail, SkillDetail } from "./step-detail.ts";
-import { actionEndKey, actionStepKey, checkStepKey, scriptCallKey, skillRoundKey } from "./step-key.ts";
+import { actionEndKey, actionStepKey, checkStepKey, scriptCallKey } from "./step-key.ts";
 import { resolveCall, type ActionTarget } from "../targets.ts";
 import {
   changeDetail,
@@ -269,8 +269,9 @@ async function attemptScript(
 }
 
 function skillWaiting(walk: Walk, frame: ActionFrame, at: SkillAt): Progress {
-  const task = skillTaskOf(at, actionPermissions(walk, frame));
-  return waiting({ reason: "skill", stepKey: skillRoundKey(at.key, at.detail.round), task });
+  const context = { folder: frame.mode.folder, permissions: actionPermissions(walk, frame), events: walk.events };
+  const task = skillTaskOf(at, context);
+  return waiting({ reason: "skill", stepKey: task.stepKey, task });
 }
 
 async function startSkill(walk: Walk, frame: ActionFrame, skill: SkillStep): Promise<Progress> {

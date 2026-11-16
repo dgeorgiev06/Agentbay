@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { openModeProject, type ModeProject } from "../../../../tests/mode-harness.ts";
+import type { ModeProject } from "../../../../tests/mode-harness.ts";
+import { openToolchainProject } from "./checkouts.ts";
 
 let project: ModeProject;
 
 before(async () => {
-  project = await openModeProject({ bindings: {}, adapter: "claude-code", modes: ["typescript"] });
+  project = await openToolchainProject();
 });
 
 after(async () => {

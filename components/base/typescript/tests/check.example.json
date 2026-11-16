@@ -1,0 +1,21 @@
+{
+  "input": { "folder": "work/checkout", "checks": ["typecheck", "lint"] },
+  "output": {
+    "verdicts": [
+      {
+        "name": "typecheck",
+        "verdict": "passed",
+        "seconds": 5.4,
+        "stdout": "\n> agentbay@5.0.0-dev typecheck\n> tsc --noEmit\n\n",
+        "stderr": ""
+      },
+      {
+        "name": "lint",
+        "verdict": "failed",
+        "seconds": 13.9,
+        "stdout": "\n> agentbay@5.0.0-dev lint\n> eslint --config components/base/typescript/eslint.config.js --max-warnings 0 .\n\n/work/checkout/bay/sdk.ts\n  12:3  error  Unexpected any  @typescript-eslint/no-explicit-any\n\n1 problem (1 error, 0 warnings)\n",
+        "stderr": ""
+      }
+    ]
+  }
+}

@@ -6,6 +6,7 @@ import {
   answer,
   crashingOnce,
   finished,
+  fixtureSystem,
   messagesOf,
   notesFlow,
   openedRuns,
@@ -294,6 +295,25 @@ test("callAction counts against the round's limit with no task before it, and su
   assert.match(messagesOf(await runs.task(next, "files_read")), /0#2 has used its 2 tool calls/);
   const done = runOf(await runs.submit(next, good));
   assert.equal(done.state.status, "done");
+  close();
+});
+
+test("a submission is refused when the skill and the action no longer name the schema its task was given", async () => {
+  const { system, runs, reopen, close } = await openedRuns();
+  const started = runOf(await runs.start({ action: "notes.draft" }, {}));
+  const original = system.modes.get("notes")?.manifest.actions.draft;
+  assert.ok(original);
+  const draft = { ...original, output: "schemas/anything.json" };
+  const changed = await fixtureSystem({ notesActions: { draft } });
+  const skillFile = "/kit/components/modes/notes/skills/draft/SKILL.md";
+  const skillText = changed.files.contents.get(skillFile) ?? "";
+  await changed.files.writeAtomic(skillFile, skillText.replace("metadata:\n  output: schemas/draft.json\n", ""));
+  const later = await reopen(changed.system);
+  assert.equal(
+    messagesOf(await later.submit(tokenOf(started), good)),
+    "The schema file /kit/components/modes/notes/schemas/draft.json is no longer named by the skill " +
+      "skills/draft or the action notes.draft, so the output is not checked.",
+  );
   close();
 });
 

@@ -1,22 +1,18 @@
-import { join } from "node:path/posix";
 import { charge, frameOverrun, noSpend, type BudgetFrame } from "./budget.ts";
 import type { Json, RunEvent, Scrubber, ScriptRunner, Settled, Spend, StepOutcome } from "../contracts.ts";
 import type { Budget } from "../generated/mode.ts";
 import { byteSize } from "../json.ts";
-import type { Clock, FileSystem } from "../ports.ts";
-import type { ActionTarget, ActiveMode, System } from "../manifests/manifests.ts";
+import type { Clock } from "../ports.ts";
+import type { ActionTarget, System } from "../manifests/manifests.ts";
 import { settledOf, type RunStore, type StepRecord, type Writer } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
 import type { StepDetail, StepKind } from "./step-detail.ts";
-import { checkValue } from "../manifests/spec.ts";
-import type { Problem } from "../outcome.ts";
 
 export type Services = {
   readonly system: System;
   readonly store: RunStore;
   readonly runner: ScriptRunner;
   readonly clock: Clock;
-  readonly files: FileSystem;
   readonly scrubber: Scrubber;
 };
 
@@ -66,13 +62,6 @@ type RefusedStart = {
   readonly key: string;
   readonly kind: StepKind;
   readonly input: Json;
-};
-
-type SchemaCheck = {
-  readonly mode: ActiveMode;
-  readonly schema: string;
-  readonly value: Json;
-  readonly label: string;
 };
 
 export function done(output: Json): Settled {
@@ -187,33 +176,4 @@ export async function refuse(walk: Walk, start: RefusedStart, reason: string): P
   ];
   const record = await walk.services.store.saveRefusal(walk.writer, { ...start, reason, at }, events);
   return settledOf(keep(walk, record)) ?? failed(reason);
-}
-
-function parsedSchema(text: string): { readonly schema: unknown } | { readonly reason: string } {
-  try {
-    const schema: unknown = JSON.parse(text);
-    return { schema };
-  } catch (error) {
-    return { reason: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-export async function schemaProblems(services: Services, check: SchemaCheck): Promise<readonly Problem[]> {
-  const file = join(check.mode.folder, check.schema);
-  const text = await services.files.readText(file);
-  if (text === undefined) {
-    return [
-      { file, path: "", message: `The schema file ${file} does not exist, so the ${check.label} is not checked.` },
-    ];
-  }
-  const parsed = parsedSchema(text);
-  if ("reason" in parsed) {
-    return [{ file, path: "", message: `The schema file ${file} is not valid JSON: ${parsed.reason}.` }];
-  }
-  const loaded = { file, value: check.value, lineOf: () => undefined };
-  const result = checkValue(parsed.schema, check.value, { loaded, path: [check.label] });
-  if (result.kind === "unusable-schema") {
-    return [{ file, path: "", message: `The schema file ${file} is not a usable JSON Schema: ${result.reason}.` }];
-  }
-  return result.problems;
 }

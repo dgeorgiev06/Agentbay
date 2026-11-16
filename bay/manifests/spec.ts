@@ -39,6 +39,12 @@ export type ValueCheck =
 export type Skill = {
   readonly frontMatter: SkillFrontMatter;
   readonly headings: readonly string[];
+  readonly tools: readonly string[];
+};
+
+type SkillSection = {
+  readonly heading: string;
+  readonly lines: readonly string[];
 };
 
 type Kinds = {
@@ -381,17 +387,31 @@ function isFence(line: string): boolean {
   return line.startsWith("```") || line.startsWith("~~~");
 }
 
-function levelTwoHeadings(lines: readonly string[]): readonly string[] {
-  const headings: string[] = [];
+const listItemPattern = /^\s*([-*+]|[0-9]+[.)])\s+/;
+
+function levelTwoSections(lines: readonly string[]): readonly SkillSection[] {
+  const sections: { readonly heading: string; readonly lines: string[] }[] = [];
   let insideFence = false;
   for (const line of lines) {
     if (isFence(line)) {
       insideFence = !insideFence;
     } else if (!insideFence && line.startsWith("## ")) {
-      headings.push(line.slice(3).trim());
+      sections.push({ heading: line.slice(3).trim(), lines: [] });
+    } else if (!insideFence) {
+      sections.at(-1)?.lines.push(line);
     }
   }
-  return headings;
+  return sections;
+}
+
+function listedTools(sections: readonly SkillSection[]): readonly string[] {
+  const tools = sections.find((section) => section.heading === "Tools");
+  const items = (tools?.lines ?? []).filter((line) => listItemPattern.test(line));
+  return items.flatMap((item) => {
+    const firstWord = item.replace(listItemPattern, "").trim().split(/\s+/)[0] ?? "";
+    const tool = firstWord.replaceAll("`", "").replace(/[:,;.]$/, "");
+    return tool === "" ? [] : [tool];
+  });
 }
 
 export async function parseSkill(files: FileSystem, file: string): Promise<Outcome<Skill>> {
@@ -416,8 +436,7 @@ export async function parseSkill(files: FileSystem, file: string): Promise<Outco
   if (!frontMatter.ok) {
     return frontMatter;
   }
-  return {
-    ok: true,
-    value: { frontMatter: frontMatter.value.value, headings: levelTwoHeadings(lines.slice(closing + 1)) },
-  };
+  const sections = levelTwoSections(lines.slice(closing + 1));
+  const headings = sections.map((section) => section.heading);
+  return { ok: true, value: { frontMatter: frontMatter.value.value, headings, tools: listedTools(sections) } };
 }

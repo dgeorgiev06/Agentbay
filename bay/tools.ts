@@ -3,7 +3,7 @@ import type { Broker } from "./broker.ts";
 import type { Json } from "./contracts.ts";
 import { byteSize, fieldOf, numberField, textField, isRecord } from "./json.ts";
 import type { Kernel } from "./kernel.ts";
-import { loadSystemReport, type ListingQuestion, type System } from "./manifests/manifests.ts";
+import { loadSystemReport, type ListingQuestion, type SkillUse, type System } from "./manifests/manifests.ts";
 import type { Run, Task } from "./runs/runs.ts";
 import { failedWith, unplacedProblem, type Outcome, type Problem } from "./outcome.ts";
 import { isToolName, skillToolsOf, type SkillTools, type ToolName } from "./skill-tools.ts";
@@ -225,6 +225,11 @@ function capped(kernel: Kernel, result: Outcome<Json>): Outcome<Json> {
   );
 }
 
+async function skillOfTask(kernel: Kernel, task: Task): Promise<Outcome<SkillUse>> {
+  const target = kernel.system.action(`${task.place.mode}.${task.place.action}`);
+  return target.ok ? target.value.mode.skill(task.skill) : target;
+}
+
 async function performed(
   kernel: Kernel,
   request: { name: ToolName; token: string; input: Json },
@@ -234,7 +239,11 @@ async function performed(
   if (!task.ok) {
     return task;
   }
-  const tools = await skillToolsOf(kernel.ports.files, task.value.files.skill);
+  const skill = await skillOfTask(kernel, task.value);
+  if (!skill.ok) {
+    return skill;
+  }
+  const tools = skillToolsOf(skill.value.tools);
   if (!tools.kernelTools.includes(name)) {
     const named = tools.kernelTools.join(", ");
     return refused(

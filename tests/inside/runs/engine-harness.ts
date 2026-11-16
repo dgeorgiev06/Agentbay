@@ -50,7 +50,7 @@ export async function harness(
   } = {},
 ): Promise<Harness> {
   const fixture = await fixtureSystem(options.changes);
-  const { system, files } = fixture;
+  const { system } = fixture;
   const kernelDb = kernelFile(options.file);
   const opened: SqliteRunStore[] = [];
   const reopen = (): SqliteRunStore => {
@@ -70,7 +70,6 @@ export async function harness(
       store: fresh.store ?? store,
       runner,
       clock,
-      files,
       scrubber,
       owner: fresh.owner ?? `engine-${String(engines)}`,
       newId: () => fresh.runId ?? `run-${String(engines)}`,

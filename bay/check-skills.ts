@@ -77,7 +77,7 @@ function nameLineOf(lines: readonly string[], end: number): number | undefined {
   return index < 0 ? undefined : index + 1;
 }
 
-export function splitSections(text: string): SkillText {
+function splitSections(text: string): SkillText {
   const lines = text.split(/\r?\n/);
   const start = frontMatterEnd(lines);
   const sections: { heading: string; line: number; body: BodyLine[] }[] = [];
@@ -271,7 +271,7 @@ function instructionsProblems(place: SkillPlace, skill: SkillText): readonly Pro
   ];
 }
 
-export function entriesOf(skill: SkillText, heading: string): readonly ListEntry[] {
+function entriesOf(skill: SkillText, heading: string): readonly ListEntry[] {
   const section = sectionNamed(skill, heading);
   if (section === undefined) {
     return [];

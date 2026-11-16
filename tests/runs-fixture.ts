@@ -354,7 +354,6 @@ function projectFolder(): { readonly project: string; readonly remove: () => voi
 export async function openedRuns(opening: Opening = {}): Promise<OpenedRuns> {
   const { project, remove } = projectFolder();
   const fixture = await fixtureSystem(opening.changes);
-  const { files } = fixture;
   const scrubber = secretStore();
   const handOutSecret = (): Promise<void> => handOut(scrubber, fixture.system);
   if (opening.secretHandedOut !== "later") {
@@ -370,7 +369,6 @@ export async function openedRuns(opening: Opening = {}): Promise<OpenedRuns> {
     const runs = await openRuns({
       project,
       folders,
-      files,
       clock,
       system,
       scrubber,

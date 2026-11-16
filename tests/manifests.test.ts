@@ -1,8 +1,26 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { loadSystemReport, type ActionsListing, type System } from "../bay/manifests/manifests.ts";
+import {
+  loadSystemReport,
+  type ActionTarget,
+  type ActiveMode,
+  type ActionsListing,
+  type System,
+  type WorkflowTarget,
+} from "../bay/manifests/manifests.ts";
 import { fakeFileSystem } from "./fakes.ts";
-import { config, layout, paths, rooted, schemaText, separateLayout, validFiles, yamlText } from "./system-fixture.ts";
+import {
+  briefingMode,
+  config,
+  notesMode as notesManifest,
+  layout,
+  paths,
+  rooted,
+  schemaText,
+  separateLayout,
+  validFiles,
+  yamlText,
+} from "./system-fixture.ts";
 
 const shelfMode = {
   name: "shelf",
@@ -133,6 +151,13 @@ describe("system.action", () => {
     const system = await projectSystem();
     assert.deepEqual(refusal(system.action("ghost.add")), [sentence("There is no mode ghost.")]);
     assert.deepEqual(refusal(system.action("add", "ghost")), [sentence("There is no mode ghost.")]);
+  });
+
+  test("a mode name is matched exactly", async () => {
+    const system = await projectSystem();
+    assert.deepEqual(refusal(system.action("Store.put")), [sentence("There is no mode Store.")]);
+    assert.deepEqual(refusal(system.action("STORE.put")), [sentence("There is no mode STORE.")]);
+    assert.deepEqual(refusal(system.action("put", "Store")), [sentence("There is no mode Store.")]);
   });
 
   test("a mode that is not active is refused, as the one asked for and as the caller", async () => {
@@ -433,12 +458,369 @@ describe("system.listing", () => {
     const system = await kitSystem();
     const store = system.modes.get("store");
     assert.ok(store);
-    const withoutSchemas = { ...store, inputSchemas: new Map() };
+    const withoutSchemas = { ...store, actionSchemas: new Map() };
     const changed = { ...system, modes: new Map([...system.modes, ["store", withoutSchemas]]) };
     assert.deepEqual(listingRefusal(changed.listing({ mode: "store" })), [
       { file: "", path: "", message: "The input schema of store.put could not be read.", fix: "Run bay check." },
       { file: "", path: "", message: "The input schema of store.get could not be read.", fix: "Run bay check." },
       { file: "", path: "", message: "The input schema of store.remove could not be read.", fix: "Run bay check." },
     ]);
+  });
+});
+
+async function briefingDigest(files: Readonly<Record<string, string>> = validFiles()): Promise<ActionTarget> {
+  const system = await loadedSystem(fakeFileSystem(rooted(files)));
+  const target = system.action("briefing.digest");
+  assert.ok(target.ok, target.ok ? "" : JSON.stringify(target.problems));
+  return target.value;
+}
+
+const digestInput = "/kit/components/modes/briefing/schemas/digest-input.json";
+
+const digestOutput = "/kit/components/modes/briefing/schemas/digest-output.json";
+
+describe("an action target's schemas", () => {
+  test("a value that fits the input or output schema comes back", async () => {
+    const target = await briefingDigest();
+    assert.deepEqual(target.input.check({ title: "Tea" }), { ok: true, value: { title: "Tea" } });
+    assert.deepEqual(target.output.check({ id: 1 }), { ok: true, value: { id: 1 } });
+  });
+
+  test("a value that does not fit gives the problem at /input or /output, in the schema file", async () => {
+    const target = await briefingDigest();
+    assert.deepEqual(target.input.check(42), {
+      ok: false,
+      problems: [
+        {
+          file: digestInput,
+          path: "/input",
+          message: "input must be a YAML mapping (key: value pairs), but it is 42.",
+        },
+      ],
+    });
+    assert.deepEqual(target.output.check(["a"]), {
+      ok: false,
+      problems: [
+        {
+          file: digestOutput,
+          path: "/output",
+          message: "output must be a YAML mapping (key: value pairs), but it is a list.",
+        },
+      ],
+    });
+  });
+
+  test("the input is checked against the input schema and the output against the output schema", async () => {
+    const files = {
+      ...validFiles(),
+      "components/modes/briefing/schemas/digest-input.json": JSON.stringify({ type: "object", required: ["title"] }),
+      "components/modes/briefing/schemas/digest-output.json": JSON.stringify({ type: "object", required: ["id"] }),
+    };
+    const target = await briefingDigest(files);
+    assert.deepEqual(target.input.check({ id: 1 }), {
+      ok: false,
+      problems: [
+        {
+          file: digestInput,
+          path: "/input",
+          message: "input is missing the required field title.",
+          fix: "Add title.",
+        },
+      ],
+    });
+    assert.deepEqual(target.output.check({ title: "Tea" }), {
+      ok: false,
+      problems: [
+        { file: digestOutput, path: "/output", message: "output is missing the required field id.", fix: "Add id." },
+      ],
+    });
+  });
+
+  test("a schema file that is not a usable schema gives a problem, not an exception", async () => {
+    const files = { ...validFiles(), "components/modes/briefing/schemas/digest-input.json": '{ "type": "mapping" }' };
+    const target = await briefingDigest(files);
+    assert.deepEqual(target.input.check({}), {
+      ok: false,
+      problems: [
+        {
+          file: digestInput,
+          path: "",
+          message:
+            `The schema file ${digestInput} is not a usable JSON Schema: ` +
+            "schema is invalid: data/type must be equal to one of the allowed values, " +
+            "data/type must be array, data/type must match a schema in anyOf.",
+        },
+      ],
+    });
+  });
+
+  test("a schema file that is missing or not JSON stops the load with a problem, not an exception", async () => {
+    const missing = Object.fromEntries(
+      Object.entries(validFiles()).filter(([path]) => path !== "components/modes/briefing/schemas/digest-input.json"),
+    );
+    const notJson = { ...validFiles(), "components/modes/briefing/schemas/digest-input.json": "{ not json" };
+    for (const files of [missing, notJson]) {
+      const outcome = (await loadSystemReport(fakeFileSystem(rooted(files)), layout)).outcome;
+      assert.ok(!outcome.ok);
+      assert.deepEqual(
+        outcome.problems.map((problem) => [problem.file, problem.path, problem.message.split(", but ")[0]]),
+        [
+          [
+            paths.briefing,
+            "/actions/digest/input",
+            "Action digest of mode briefing names the input schema schemas/digest-input.json",
+          ],
+        ],
+      );
+    }
+  });
+});
+
+function briefingWithWorkflow(): Record<string, string> {
+  const briefing = { ...briefingMode, workflows: ["workflows/morning.yaml"] };
+  const morning = { name: "morning", trigger: { manual: true }, steps: [{ id: "write", action: "digest" }] };
+  return {
+    ...validFiles(),
+    [paths.briefing]: yamlText(briefing),
+    "components/modes/briefing/workflows/morning.yaml": yamlText(morning),
+  };
+}
+
+async function workflowTarget(mode: string, path: string): Promise<WorkflowTarget> {
+  const system = await loadedSystem(fakeFileSystem(rooted(briefingWithWorkflow())));
+  const target = system.workflow(mode, path);
+  assert.ok(target.ok, target.ok ? "" : JSON.stringify(target.problems));
+  return target.value;
+}
+
+const written = { items: [{ id: "a" }, { id: "b" }] };
+
+const afterWrite = { trigger: { topic: "tea" }, outputs: new Map([["write", written]]) };
+
+describe("a workflow target's resolve", () => {
+  test("$trigger resolves to the trigger", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    assert.deepEqual(target.resolve("$trigger", afterWrite), { ok: true, value: { topic: "tea" } });
+  });
+
+  test("$steps.<id>.output resolves to that step's output, along a dotted path", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    assert.deepEqual(target.resolve("$steps.write.output", afterWrite), { ok: true, value: written });
+    assert.deepEqual(target.resolve("$steps.write.output.items.1", afterWrite), { ok: true, value: { id: "b" } });
+  });
+
+  test("$item resolves to the item of the foreach, and to nothing outside one", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    assert.deepEqual(target.resolve("$item", { ...afterWrite, item: { id: "a" } }), { ok: true, value: { id: "a" } });
+    assert.deepEqual(target.resolve("$item", afterWrite), {
+      ok: false,
+      problems: [sentence("$item resolves to nothing: it is used outside a foreach.")],
+    });
+  });
+
+  test("$settings.<key> resolves to a setting of the workflow's own mode", async () => {
+    const briefing = await workflowTarget("briefing", "workflows/morning.yaml");
+    assert.deepEqual(briefing.resolve("$settings.lookback", afterWrite), { ok: true, value: "3d" });
+    assert.deepEqual(briefing.resolve("$settings.size", afterWrite), {
+      ok: false,
+      problems: [
+        sentence("$settings.size resolves to nothing: the mode's settings have no size (available: lookback)."),
+      ],
+    });
+    const notes = await workflowTarget("notes", "workflows/daily.yaml");
+    assert.deepEqual(notes.resolve("$settings.lookback", afterWrite), {
+      ok: false,
+      problems: [
+        sentence("$settings.lookback resolves to nothing: the mode's settings have no lookback (available: none)."),
+      ],
+    });
+  });
+
+  test("a value with no reference comes back as it is, and a mapping resolves each field", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    assert.deepEqual(target.resolve("plain words", afterWrite), { ok: true, value: "plain words" });
+    assert.deepEqual(
+      target.resolve({ limit: 5, topic: "$trigger", first: "$steps.write.output.items.0" }, afterWrite),
+      {
+        ok: true,
+        value: { limit: 5, topic: { topic: "tea" }, first: { id: "a" } },
+      },
+    );
+  });
+
+  test("a reference to a step that has no output yet resolves to nothing", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    assert.deepEqual(target.resolve("$steps.later.output", afterWrite), {
+      ok: false,
+      problems: [
+        sentence("$steps.later.output resolves to nothing: no step later has finished before it (available: write)."),
+      ],
+    });
+    assert.deepEqual(target.resolve({ topic: "$steps.later.output" }, afterWrite), {
+      ok: false,
+      problems: [
+        sentence(
+          "input.topic: $steps.later.output resolves to nothing: no step later has finished before it (available: write).",
+        ),
+      ],
+    });
+  });
+
+  test("a reference that names nothing gives the grammar, and a path that leads nowhere says what is there", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    assert.deepEqual(target.resolve("$nothing", afterWrite), {
+      ok: false,
+      problems: [
+        sentence(
+          "$nothing is not a reference: write $trigger, $item, $settings.<key> or $steps.<id>.output with an optional " +
+            "dotted path such as .items.0. Every value that starts with $ is read as a reference.",
+        ),
+      ],
+    });
+    assert.deepEqual(target.resolve("$steps.write.output.count", afterWrite), {
+      ok: false,
+      problems: [
+        sentence(
+          "$steps.write.output.count resolves to nothing: output of step write has no count; " +
+            "it is a mapping with the keys items.",
+        ),
+      ],
+    });
+  });
+});
+
+const draftSkill = [
+  "---",
+  "name: write-note",
+  "description: Writes one note from the input.",
+  "metadata:",
+  "  output: schemas/note-draft.json",
+  "---",
+  "",
+  "## Input",
+  "",
+  "- db",
+  "",
+  "## Tools",
+  "",
+  "1. `files`: to read the drafts",
+  "- items-store.get",
+  "- http,",
+  "```",
+  "- db",
+  "```",
+  "",
+  "## Resources",
+  "",
+  "- secrets",
+  "",
+].join("\n");
+
+const skillFile = "/kit/components/modes/notes/skills/write-note/SKILL.md";
+
+const noteDraft = "/kit/components/modes/notes/schemas/note-draft.json";
+
+function filesWithSkill(text: string): ReturnType<typeof fakeFileSystem> {
+  return fakeFileSystem(
+    rooted({
+      ...validFiles(),
+      "components/modes/notes/skills/write-note/SKILL.md": text,
+      "components/modes/notes/schemas/note-draft.json": JSON.stringify({ type: "object", required: ["text"] }),
+    }),
+  );
+}
+
+async function notesMode(files: ReturnType<typeof fakeFileSystem>): Promise<ActiveMode> {
+  const mode = (await loadedSystem(files)).modes.get("notes");
+  assert.ok(mode);
+  return mode;
+}
+
+describe("a mode's skill by name", () => {
+  test("a skill is found with its file, front matter, tools and output schema", async () => {
+    const skill = await (await notesMode(filesWithSkill(draftSkill))).skill("skills/write-note");
+    assert.ok(skill.ok, skill.ok ? "" : JSON.stringify(skill.problems));
+    const { name, file, frontMatter, tools, output } = skill.value;
+    assert.deepEqual([name, file, tools], ["skills/write-note", skillFile, ["files", "items-store.get", "http"]]);
+    assert.deepEqual(frontMatter, {
+      name: "write-note",
+      description: "Writes one note from the input.",
+      metadata: { output: "schemas/note-draft.json" },
+    });
+    assert.ok(output);
+    assert.equal(output.file, noteDraft);
+    assert.deepEqual(output.check({ text: "Tea" }), { ok: true, value: { text: "Tea" } });
+    assert.deepEqual(output.check({}), {
+      ok: false,
+      problems: [
+        { file: noteDraft, path: "/output", message: "output is missing the required field text.", fix: "Add text." },
+      ],
+    });
+  });
+
+  test("a skill whose front matter names no output schema has none, and a Tools section it lacks lists nothing", async () => {
+    const skill = await (await notesMode(fakeFileSystem(rooted(validFiles())))).skill("skills/write-note");
+    assert.ok(skill.ok, skill.ok ? "" : JSON.stringify(skill.problems));
+    assert.deepEqual([skill.value.output, skill.value.tools], [undefined, []]);
+  });
+
+  test("an output schema file that is missing gives a problem when a value is checked", async () => {
+    const files = filesWithSkill(draftSkill.replace("note-draft.json", "gone.json"));
+    const skill = await (await notesMode(files)).skill("skills/write-note");
+    assert.ok(skill.ok);
+    const gone = "/kit/components/modes/notes/schemas/gone.json";
+    assert.deepEqual(skill.value.output?.check({ text: "Tea" }), {
+      ok: false,
+      problems: [
+        { file: gone, path: "", message: `The schema file ${gone} does not exist, so the output is not checked.` },
+      ],
+    });
+  });
+
+  test("a skill the mode's steps do not run is not found", async () => {
+    const mode = await notesMode(filesWithSkill(draftSkill));
+    assert.deepEqual(refusal(await mode.skill("skills/none")), [sentence("Mode notes has no skill skills/none.")]);
+    assert.deepEqual(refusal(await mode.skill("write-note")), [sentence("Mode notes has no skill write-note.")]);
+  });
+
+  test("a skill file that cannot be read gives its problems", async () => {
+    const files = filesWithSkill("# Draft\n");
+    const mode = await notesMode(files);
+    assert.deepEqual(refusal(await mode.skill("skills/write-note")), [
+      {
+        file: skillFile,
+        path: "",
+        line: 1,
+        message: "The skill has no front matter between two --- lines at its top.",
+        fix: "Start the file with a --- line, then name: and description:, then another --- line.",
+      },
+    ]);
+    await files.removal.remove(skillFile);
+    assert.deepEqual(refusal(await mode.skill("skills/write-note")), [
+      { file: skillFile, path: "", message: `The file ${skillFile} does not exist.` },
+    ]);
+  });
+
+  test("each skill of a mode answers with its own tools", async () => {
+    const tidy = {
+      description: "When the owner wants the notes tidied.",
+      input: "schemas/add-input.json",
+      output: "schemas/add-output.json",
+      effects: ["read"],
+      run: [{ skill: "skills/tidy", tier: "fast" }],
+    };
+    const manifest = { ...notesManifest, actions: { ...notesManifest.actions, tidy } };
+    const tidySkill = "---\nname: tidy\ndescription: Tidies the notes.\n---\n\n## Tools\n\n- db\n";
+    const files = filesWithSkill(draftSkill);
+    await files.writeAtomic(`/kit/${paths.notes}`, yamlText(manifest));
+    await files.writeAtomic("/kit/components/modes/notes/skills/tidy/SKILL.md", tidySkill);
+    const mode = await notesMode(files);
+    const tools = async (name: string): Promise<readonly string[]> => {
+      const skill = await mode.skill(name);
+      assert.ok(skill.ok, skill.ok ? "" : JSON.stringify(skill.problems));
+      return skill.value.tools;
+    };
+    assert.deepEqual(await tools("skills/write-note"), ["files", "items-store.get", "http"]);
+    assert.deepEqual(await tools("skills/tidy"), ["db"]);
   });
 });

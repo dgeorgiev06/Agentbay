@@ -3,14 +3,13 @@ import { refused } from "../answers.ts";
 import type { Json, Permissions, RunEvent, Submission } from "../contracts.ts";
 import { effectRefusal } from "../effect-rule.ts";
 import { textField } from "../json.ts";
-import { problemText, type Problem } from "../outcome.ts";
-import type { ActionTarget, ActiveMode } from "../manifests/manifests.ts";
+import { failedWith, problemText, type Outcome, type Problem } from "../outcome.ts";
+import type { ActionTarget, Schema, SkillUse } from "../manifests/manifests.ts";
 import type { StepRecord } from "./run-store.ts";
 import type { SkillTask } from "./run-state.ts";
-import { parseSkill } from "../manifests/spec.ts";
 import type { SkillDetail } from "./step-detail.ts";
 import { skillRoundKey } from "./step-key.ts";
-import { schemaProblems, type Services } from "./walk.ts";
+import type { Services } from "./walk.ts";
 
 export type StartedSkill = Extract<StepRecord, { readonly kind: "skill"; readonly status: "started" }>;
 
@@ -62,18 +61,22 @@ export function skillTaskOf(at: SkillAt, context: TaskContext): SkillTask {
   };
 }
 
+function outputSchemasOf(skill: SkillUse, target: ActionTarget): ReadonlyMap<string, Schema> {
+  const own = skill.frontMatter.metadata?.output;
+  const schemas = new Map([[target.action.output, target.output]]);
+  return own === undefined || skill.output === undefined ? schemas : new Map([[own, skill.output], ...schemas]);
+}
+
 export async function skillSchemas(
-  services: Services,
-  mode: ActiveMode,
-  at: { readonly skill: string; readonly actionOutput: string | undefined },
+  target: ActionTarget,
+  at: { readonly skill: string; readonly last: boolean },
 ): Promise<readonly string[] | string> {
-  const file = join(mode.folder, at.skill, "SKILL.md");
-  const parsed = await parseSkill(services.files, file);
-  if (!parsed.ok) {
-    return `The skill ${file} cannot be read: ${problemText(parsed.problems)}`;
+  const skill = await target.mode.skill(at.skill);
+  if (!skill.ok) {
+    return `The skill ${join(target.mode.folder, at.skill, "SKILL.md")} cannot be read: ${problemText(skill.problems)}`;
   }
-  const own = parsed.value.frontMatter.metadata?.output;
-  const outputs = [...(own === undefined ? [] : [own]), ...(at.actionOutput === undefined ? [] : [at.actionOutput])];
+  const own = skill.value.frontMatter.metadata?.output;
+  const outputs = [...(own === undefined ? [] : [own]), ...(at.last ? [target.action.output] : [])];
   return [...new Set(outputs)];
 }
 
@@ -90,6 +93,15 @@ function submittedSpendProblems(
   return wording === undefined ? [] : [{ file: manifest, path: "", message: refused(wording).message }];
 }
 
+function unnamedSchema(target: ActionTarget, record: StartedSkill, path: string): Outcome<Json> {
+  const file = join(target.mode.folder, path);
+  const { skill, mode, action } = record.detail;
+  const message =
+    `The schema file ${file} is no longer named by the skill ${skill} or the action ${mode}.${action}, ` +
+    "so the output is not checked.";
+  return failedWith([{ file, path: "", message }]);
+}
+
 export async function submissionProblems(
   services: Services,
   record: StartedSkill,
@@ -99,11 +111,15 @@ export async function submissionProblems(
   if (!target.ok) {
     return target.problems;
   }
-  const mode = target.value.mode;
+  const skill = await target.value.mode.skill(record.detail.skill);
+  if (!skill.ok) {
+    return skill.problems;
+  }
+  const schemas = outputSchemasOf(skill.value, target.value);
   const problems: Problem[] = [...submittedSpendProblems(target.value, record, submission)];
-  for (const schema of record.detail.schemas) {
-    const check = { mode, schema, value: submission.output, label: "output" };
-    problems.push(...(await schemaProblems(services, check)));
+  for (const path of record.detail.schemas) {
+    const checked = schemas.get(path)?.check(submission.output) ?? unnamedSchema(target.value, record, path);
+    problems.push(...(checked.ok ? [] : checked.problems));
   }
   return problems;
 }

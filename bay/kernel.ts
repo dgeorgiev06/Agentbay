@@ -98,7 +98,6 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
   const runs = await openRuns({
     project: layout.project,
     folders: ports.folders,
-    files: ports.files,
     clock: ports.clock,
     system,
     scrubber: secrets,

@@ -24,6 +24,8 @@ export type BrokerOperation =
   | { readonly kind: "skill.submit"; readonly usd: number }
   | { readonly kind: "commands.run"; readonly command: readonly string[]; readonly folder: string };
 
+export type CommandOperation = Extract<BrokerOperation, { readonly kind: "commands.run" }>;
+
 export type ActionAt = {
   readonly stepKey: string;
   readonly action: string;
@@ -162,6 +164,10 @@ export function describedOperation(operation: BrokerOperation): string {
   }
 }
 
+export function askedSentence(operation: BrokerOperation, at: ActionAt): string {
+  return `The step ${at.stepKey} of action ${at.action} asked to ${describedOperation(operation)}`;
+}
+
 export function effectRefusal(
   operation: BrokerOperation,
   effects: readonly Effect[],
@@ -174,7 +180,7 @@ export function effectRefusal(
   const declared = effects.length === 0 ? "none" : effects.join(", ");
   return {
     resource: operationRules[operation.kind].resource,
-    asked: `The step ${at.stepKey} of action ${at.action} asked to ${describedOperation(operation)}`,
+    asked: askedSentence(operation, at),
     declared: `the action ${at.action} declares the effects: ${declared}`,
     change: `${missing.because}; to allow it, add ${missing.effect} to actions.${at.action}.effects in ${at.manifest}.`,
   };
@@ -199,7 +205,7 @@ function startsWithPrefix(command: readonly string[], prefix: string): boolean {
 }
 
 export function commandRefusal(
-  operation: Extract<BrokerOperation, { readonly kind: "commands.run" }>,
+  operation: CommandOperation,
   prefixes: readonly string[],
   at: ActionAt,
 ): RefusalWording | undefined {
@@ -208,7 +214,7 @@ export function commandRefusal(
   }
   return {
     resource: "commands",
-    asked: `The step ${at.stepKey} of action ${at.action} asked to ${describedOperation(operation)}`,
+    asked: askedSentence(operation, at),
     declared:
       `its mode lists the commands: ${listed(prefixes, "none")}, ` +
       "and a command must start with one of them, argument by argument",

@@ -27,6 +27,8 @@ import type { DatabaseResult, ExecuteResult, Migration, Row, SqlParameters } fro
 import { DatabaseProcess } from "./database-process.ts";
 import {
   type ActionAt,
+  askedSentence,
+  type CommandOperation,
   describedOperation,
   commandRefusal,
   effectRefusal,
@@ -316,11 +318,11 @@ export class Broker {
       if (unlisted !== undefined) {
         return refused(unlisted);
       }
-      const milliseconds = this.#commandMilliseconds(request.timeLimitSeconds);
+      const milliseconds = this.#commandMilliseconds(operation, request.timeLimitSeconds);
       if (!milliseconds.ok) {
         return milliseconds;
       }
-      const folder = await this.#commandFolder(request.folder);
+      const folder = await this.#commandFolder(operation);
       if (!folder.ok) {
         return folder;
       }
@@ -352,22 +354,23 @@ export class Broker {
     }
   }
 
-  #commandMilliseconds(seconds: number): Answer<number> {
+  #commandMilliseconds(operation: CommandOperation, seconds: number): Answer<number> {
     if (Number.isFinite(seconds) && seconds > 0) {
       return granted(Math.min(seconds * 1000, this.#limits.commandMilliseconds));
     }
     return refused({
       resource: "commands",
-      asked: `${this.#asking} to run a command with a time limit of ${String(seconds)} seconds`,
+      asked: `${askedSentence(operation, this.#at)} with a time limit of ${String(seconds)} seconds`,
       declared: "a command's time limit is a number of seconds above 0",
       change: "Give timeLimitSeconds as a number above 0 in the call to context.commands.run.",
     });
   }
 
-  async #commandFolder(folder: string): Promise<Answer<string>> {
+  async #commandFolder(operation: CommandOperation): Promise<Answer<string>> {
     const { layout, inspector } = this.#options;
-    const check = await checkPath(inspector, { layout, path: folder, permitted: [layout.project], purpose: "read" });
-    const asked = `${this.#asking} to run a command in ${check.path}`;
+    const permitted = [layout.project];
+    const check = await checkPath(inspector, { layout, path: operation.folder, permitted, purpose: "read" });
+    const asked = askedSentence(operation, this.#at);
     const change =
       'Give a folder of the project in the call to context.commands.run, such as "."; no manifest line allows another.';
     if (check.status !== "allowed") {

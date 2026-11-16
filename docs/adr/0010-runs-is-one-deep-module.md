@@ -25,3 +25,11 @@ Three designs were written under different constraints and compared (`docs/desig
 3. R3: add the entry file with the interface above over the existing engine; move every caller to it; no other feature imports a runs file but the entry.
 4. R4: tests move to the entry file; real policy and scrubber; the fault injector; delete the in-memory store and the test-only exports.
 5. R5: delete and merge inside the feature until the deletion test finds nothing. Size is reported, not targeted.
+
+**State after slices R1 to R5b (reviewer, 2026-11-15).** The feature is in `bay/runs/` behind `bay/runs/runs.ts`, which exports five names. No other feature imports a private runs file, and tests reach it through the entry file or live in `tests/inside/runs/`. A run's state has one shape. The copy-paste detector finds nothing in the folder.
+
+Left open, on purpose:
+
+- The `Engine` class and `runs.ts` are still two layers with one caller between them. The builder's deletion test judged the seam real (advancing a run and handing out its tasks are different ideas) but wide and partly pass-through. Merging them is its own slice and is not scheduled; it is taken up when a change next needs both.
+- Three leftovers go with the next slice that touches runs: `AdvancedRun.spent` and `TaskPlace.round` are written and never read, and a task has two type names (`SkillTask`, `Task`) where the glossary has one.
+- A waiting is built twice, by the walk and from the store. Tests hold the two to the same answer.

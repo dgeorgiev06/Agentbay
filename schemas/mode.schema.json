@@ -40,6 +40,12 @@
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/interfaceReference" }
     },
+    "extraFiles": {
+      "description": "Files at the top of the mode folder beyond the layout's own, such as a tool's configuration or a practices file; the layout check accepts these and no others.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*$", "maxLength": 100 }
+    },
     "resources": {
       "description": "Everything a run of this mode may use; anything not declared here is denied.",
       "$ref": "#/$defs/resources"

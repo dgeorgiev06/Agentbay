@@ -4,8 +4,7 @@ import type { Json } from "../contracts.ts";
 import type { Step as WorkflowStep } from "../generated/workflow.ts";
 import { toJson } from "../json.ts";
 import { problemText, succeededWith } from "../outcome.ts";
-import { resolveInput, resolveValue, type ReferenceScope } from "../manifests/references.ts";
-import type { ActiveMode } from "../manifests/manifests.ts";
+import type { ReferenceScope, WorkflowTarget } from "../manifests/manifests.ts";
 import type { StepRecord } from "./run-store.ts";
 import { approvalContentOf, type ApprovalContent } from "./scrubbed-store.ts";
 import type { ApprovalDetail } from "./step-detail.ts";
@@ -27,7 +26,7 @@ import {
 } from "./walk.ts";
 
 type WorkflowScope = {
-  readonly mode: ActiveMode;
+  readonly workflow: WorkflowTarget;
   readonly budget: BudgetFrame;
   readonly within: string;
   readonly trigger: Json;
@@ -70,7 +69,7 @@ const unitMilliseconds: ReadonlyMap<string, number> = new Map([
 ]);
 
 function referenceScope(scope: WorkflowScope): ReferenceScope {
-  const base = { trigger: scope.trigger, outputs: scope.outputs, settings: scope.mode.settings };
+  const base = { trigger: scope.trigger, outputs: scope.outputs };
   return scope.item === undefined ? base : { ...base, item: scope.item };
 }
 
@@ -85,11 +84,11 @@ async function runWorkflowAction(walk: Walk, scope: WorkflowScope, at: Unsettled
   const input =
     at.record !== undefined || stepInput === undefined
       ? succeededWith(at.previous)
-      : resolveInput(stepInput, referenceScope(scope));
+      : scope.workflow.resolve(stepInput, referenceScope(scope));
   if (!input.ok) {
     return refuse(walk, start, `Step ${at.step.id} cannot start: ${problemText(input.problems)}`);
   }
-  const target = nestedTarget(walk, scope.mode, at.step.action);
+  const target = nestedTarget(walk, scope.workflow.mode, at.step.action);
   if (typeof target === "string") {
     return refuse(walk, start, target);
   }
@@ -134,7 +133,7 @@ async function settleApproval(walk: Walk, at: StepAt<ApprovalStep>, shown: Shown
 
 async function runApproval(walk: Walk, scope: WorkflowScope, at: UnsettledStep<ApprovalStep>): Promise<Progress> {
   const show = at.step.show;
-  const content = show === undefined ? succeededWith(at.previous) : resolveValue(show, referenceScope(scope));
+  const content = show === undefined ? succeededWith(at.previous) : scope.workflow.resolve(show, referenceScope(scope));
   if (!content.ok) {
     const start = { key: at.key, kind: "approval" as const, input: at.previous };
     return refuse(walk, start, `Step ${at.step.id} cannot show anything: ${problemText(content.problems)}`);
@@ -179,7 +178,7 @@ async function runForeach(walk: Walk, scope: WorkflowScope, at: UnsettledStep<Fo
   const { record } = at;
   const start = { key: at.key, kind: "foreach" as const, input: at.previous };
   const list =
-    record === undefined ? resolveValue(at.step.foreach, referenceScope(scope)) : succeededWith(record.input);
+    record === undefined ? scope.workflow.resolve(at.step.foreach, referenceScope(scope)) : succeededWith(record.input);
   if (!list.ok) {
     return refuse(walk, start, `Step ${at.step.id} has no list: ${problemText(list.problems)}`);
   }

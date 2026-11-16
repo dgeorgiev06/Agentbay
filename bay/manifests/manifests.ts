@@ -9,7 +9,7 @@ import { isProjectTheKit, pathIn, shownPath, shownProblems, type Home, type Layo
 import { toJson } from "../json.ts";
 import type { FileSystem } from "../ports.ts";
 import { grantsOf, type GrantProblem } from "../policy.ts";
-import { workflowReferenceIssues } from "./references.ts";
+import { resolveInput, resolveValue, workflowReferenceIssues } from "./references.ts";
 import { checkValue, loadSpec, problemAt, type Loaded, type PathSegments, type Wording } from "./spec.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
 
@@ -49,10 +49,17 @@ export type ActionTarget = {
   readonly output: Schema;
 };
 
-type WorkflowTarget = {
+export type WorkflowTarget = {
   readonly mode: ActiveMode;
   readonly path: string;
   readonly workflow: Workflow;
+  readonly resolve: (value: Readonly<Record<string, unknown>> | string, scope: ReferenceScope) => Outcome<Json>;
+};
+
+export type ReferenceScope = {
+  readonly trigger: Json;
+  readonly outputs: ReadonlyMap<string, Json>;
+  readonly item?: Json;
 };
 
 export type System = {
@@ -1418,7 +1425,11 @@ function workflowAnswer(system: System, modeName: string, path: string): Outcome
   if (mode === undefined || workflow === undefined) {
     return refused(`Mode ${modeName} has no workflow ${path}.`);
   }
-  return succeededWith({ mode, path, workflow });
+  const resolve: WorkflowTarget["resolve"] = (value, scope) => {
+    const withSettings = { ...scope, settings: mode.settings };
+    return typeof value === "string" ? resolveValue(value, withSettings) : resolveInput(value, withSettings);
+  };
+  return succeededWith({ mode, path, workflow, resolve });
 }
 
 type SystemData = Pick<System, "modes" | "inactive" | "interfaces" | "config">;

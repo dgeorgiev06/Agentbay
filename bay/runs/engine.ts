@@ -251,9 +251,16 @@ function mainProgress(walk: Walk, run: RunWithSteps, budget: BudgetFrame): Promi
       if (!found.ok) {
         return Promise.resolve(failed(problemText(found.problems)));
       }
-      const { mode, workflow } = found.value;
-      const scope = { mode, budget, within: "", trigger: run.input, outputs: new Map<string, Json>(), item: undefined };
-      return runWorkflowSteps(walk, scope, { steps: workflow.steps, start: run.input });
+      const workflow = found.value;
+      const scope = {
+        workflow,
+        budget,
+        within: "",
+        trigger: run.input,
+        outputs: new Map<string, Json>(),
+        item: undefined,
+      };
+      return runWorkflowSteps(walk, scope, { steps: workflow.workflow.steps, start: run.input });
     }
   }
 }

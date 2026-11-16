@@ -1,8 +1,24 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { loadSystemReport, type ActionTarget, type ActionsListing, type System } from "../bay/manifests/manifests.ts";
+import {
+  loadSystemReport,
+  type ActionTarget,
+  type ActionsListing,
+  type System,
+  type WorkflowTarget,
+} from "../bay/manifests/manifests.ts";
 import { fakeFileSystem } from "./fakes.ts";
-import { config, layout, paths, rooted, schemaText, separateLayout, validFiles, yamlText } from "./system-fixture.ts";
+import {
+  briefingMode,
+  config,
+  layout,
+  paths,
+  rooted,
+  schemaText,
+  separateLayout,
+  validFiles,
+  yamlText,
+} from "./system-fixture.ts";
 
 const shelfMode = {
   name: "shelf",
@@ -548,5 +564,118 @@ describe("an action target's schemas", () => {
         ],
       );
     }
+  });
+});
+
+function briefingWithWorkflow(): Record<string, string> {
+  const briefing = { ...briefingMode, workflows: ["workflows/morning.yaml"] };
+  const morning = { name: "morning", trigger: { manual: true }, steps: [{ id: "write", action: "digest" }] };
+  return {
+    ...validFiles(),
+    [paths.briefing]: yamlText(briefing),
+    "components/modes/briefing/workflows/morning.yaml": yamlText(morning),
+  };
+}
+
+async function workflowTarget(mode: string, path: string): Promise<WorkflowTarget> {
+  const system = await loadedSystem(fakeFileSystem(rooted(briefingWithWorkflow())));
+  const target = system.workflow(mode, path);
+  assert.ok(target.ok, target.ok ? "" : JSON.stringify(target.problems));
+  return target.value;
+}
+
+const written = { items: [{ id: "a" }, { id: "b" }] };
+
+const afterWrite = { trigger: { topic: "tea" }, outputs: new Map([["write", written]]) };
+
+describe("a workflow target's resolve", () => {
+  test("$trigger resolves to the trigger", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    assert.deepEqual(target.resolve("$trigger", afterWrite), { ok: true, value: { topic: "tea" } });
+  });
+
+  test("$steps.<id>.output resolves to that step's output, along a dotted path", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    assert.deepEqual(target.resolve("$steps.write.output", afterWrite), { ok: true, value: written });
+    assert.deepEqual(target.resolve("$steps.write.output.items.1", afterWrite), { ok: true, value: { id: "b" } });
+  });
+
+  test("$item resolves to the item of the foreach, and to nothing outside one", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    assert.deepEqual(target.resolve("$item", { ...afterWrite, item: { id: "a" } }), { ok: true, value: { id: "a" } });
+    assert.deepEqual(target.resolve("$item", afterWrite), {
+      ok: false,
+      problems: [sentence("$item resolves to nothing: it is used outside a foreach.")],
+    });
+  });
+
+  test("$settings.<key> resolves to a setting of the workflow's own mode", async () => {
+    const briefing = await workflowTarget("briefing", "workflows/morning.yaml");
+    assert.deepEqual(briefing.resolve("$settings.lookback", afterWrite), { ok: true, value: "3d" });
+    assert.deepEqual(briefing.resolve("$settings.size", afterWrite), {
+      ok: false,
+      problems: [
+        sentence("$settings.size resolves to nothing: the mode's settings have no size (available: lookback)."),
+      ],
+    });
+    const notes = await workflowTarget("notes", "workflows/daily.yaml");
+    assert.deepEqual(notes.resolve("$settings.lookback", afterWrite), {
+      ok: false,
+      problems: [
+        sentence("$settings.lookback resolves to nothing: the mode's settings have no lookback (available: none)."),
+      ],
+    });
+  });
+
+  test("a value with no reference comes back as it is, and a mapping resolves each field", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    assert.deepEqual(target.resolve("plain words", afterWrite), { ok: true, value: "plain words" });
+    assert.deepEqual(
+      target.resolve({ limit: 5, topic: "$trigger", first: "$steps.write.output.items.0" }, afterWrite),
+      {
+        ok: true,
+        value: { limit: 5, topic: { topic: "tea" }, first: { id: "a" } },
+      },
+    );
+  });
+
+  test("a reference to a step that has no output yet resolves to nothing", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    assert.deepEqual(target.resolve("$steps.later.output", afterWrite), {
+      ok: false,
+      problems: [
+        sentence("$steps.later.output resolves to nothing: no step later has finished before it (available: write)."),
+      ],
+    });
+    assert.deepEqual(target.resolve({ topic: "$steps.later.output" }, afterWrite), {
+      ok: false,
+      problems: [
+        sentence(
+          "input.topic: $steps.later.output resolves to nothing: no step later has finished before it (available: write).",
+        ),
+      ],
+    });
+  });
+
+  test("a reference that names nothing gives the grammar, and a path that leads nowhere says what is there", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    assert.deepEqual(target.resolve("$nothing", afterWrite), {
+      ok: false,
+      problems: [
+        sentence(
+          "$nothing is not a reference: write $trigger, $item, $settings.<key> or $steps.<id>.output with an optional " +
+            "dotted path such as .items.0. Every value that starts with $ is read as a reference.",
+        ),
+      ],
+    });
+    assert.deepEqual(target.resolve("$steps.write.output.count", afterWrite), {
+      ok: false,
+      problems: [
+        sentence(
+          "$steps.write.output.count resolves to nothing: output of step write has no count; " +
+            "it is a mapping with the keys items.",
+        ),
+      ],
+    });
   });
 });

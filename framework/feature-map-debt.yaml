@@ -56,9 +56,6 @@ breaks:
   - from: bay/node-ports.ts
     to: bay/check-context.ts
     rule: may-not-import
-  - from: bay/policy.ts
-    to: bay/manifests/spec.ts
-    rule: private-file
   - from: bay/run-report.ts
     to: bay/skill-tools.ts
     rule: private-file

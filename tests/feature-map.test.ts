@@ -57,7 +57,7 @@ const rules: readonly Rule[] = [
   "inside-reaches-across",
 ];
 
-const scannedFolders = ["bay", "adapters", "components"] as const;
+const scannedFolders = ["bay", "adapters", "components", "schemas"] as const;
 
 const testFolder = "tests";
 
@@ -307,6 +307,30 @@ test("outside the kernel only the files named in imports_kernel_through may be i
   ]);
 });
 
+test("a file of the type generator in schemas/ may import only the kernel files listed for schemas", () => {
+  const map = parsedMap(`
+features:
+  words:
+    entry: [bay/words.ts]
+    private: [bay/spelling.ts]
+    may_import: []
+outside:
+  schemas:
+    imports_kernel_through: [bay/words.ts]
+`);
+  const generator = scanned(
+    "schemas/generate-types.ts",
+    `${relative("../bay/words.ts")}\n${relative("../bay/spelling.ts")}`,
+  );
+  const unlisted = scanned("schemas/other.ts", relative("../bay/words.ts"));
+  assert.deepEqual(mapBreaks(map, [generator]), [
+    { from: "schemas/generate-types.ts", to: "bay/spelling.ts", rule: "outside-reaches-in" },
+  ]);
+  assert.deepEqual(mapBreaks(smallMap, [unlisted]), [
+    { from: "schemas/other.ts", to: "bay/words.ts", rule: "outside-reaches-in" },
+  ]);
+});
+
 test("a kernel file that imports from adapters/ or components/ breaks kernel-reaches-out", () => {
   const sources = [
     scanned("bay/engine.ts", `export { a } from "../adapters/harness/adapter.ts";`),
@@ -383,6 +407,15 @@ test("the scan of the kit reads files in the kernel and in every folder the map 
       folder,
     );
   }
+});
+
+test("the scan of the kit reads the type generator, which the map lists under outside with the kernel files it imports", () => {
+  const map = parsedMap(readFileSync(mapFile, "utf8"));
+  assert.ok(kitFiles().includes("schemas/generate-types.ts"));
+  assert.deepEqual(map.outside.find((outside) => outside.folder === "schemas")?.importsKernelThrough, [
+    "bay/node-ports.ts",
+    "bay/ports.ts",
+  ]);
 });
 
 test("every kernel file of the kit is in exactly one feature", () => {

@@ -22,7 +22,7 @@ import {
   findModeFolders,
   modeInInterfacesProblems,
 } from "./folders.ts";
-import { type ActionSchemas, type SchemaReader, schemaReader, schemaOf } from "./schemas.ts";
+import { type ActionSchemas, schemaReader } from "./schemas.ts";
 import {
   type ModeRead,
   type ModeSource,
@@ -30,9 +30,7 @@ import {
   type Collected,
   type LoadedModes,
   type Context,
-  type ModeWorkflow,
   actionsOf,
-  settingsOf,
   activeModesOf,
   loadModes,
   loadInterfaces,
@@ -49,8 +47,8 @@ import { referenceProblems } from "./file-references.ts";
 import { workflowProblems } from "./workflow-problems.ts";
 import { modeSettingsProblems, straySettingsProblems } from "./settings-problems.ts";
 import { grantsOfActiveModes } from "./grants.ts";
-import { answering } from "./questions.ts";
-import { skillAnswer, inspectedSkill } from "./skills.ts";
+import { inspectedSkill } from "./skills.ts";
+import { type LoadedInterface, buildSystem } from "./system.ts";
 
 export type ActiveMode = {
   readonly home: Home;
@@ -76,11 +74,6 @@ export type Schema = {
   readonly file: string;
   readonly json: Json | undefined;
   readonly check: (value: Json) => Outcome<Json>;
-};
-
-type LoadedInterface = {
-  readonly file: string;
-  readonly definition: Interface;
 };
 
 export type ActionTarget = {
@@ -230,59 +223,6 @@ async function consistencyProblems(context: Context): Promise<readonly Problem[]
   problems.push(...(await referenceProblems(context)));
   problems.push(...cycleProblems(context));
   return problems;
-}
-
-async function actionSchemasOf(
-  readSchema: SchemaReader,
-  mode: ModeSource,
-): Promise<ReadonlyMap<string, ActionSchemas>> {
-  const actionSchemas = new Map<string, ActionSchemas>();
-  for (const place of actionsOf(mode)) {
-    const inputFile = join(mode.folder, place.action.input);
-    const outputFile = join(mode.folder, place.action.output);
-    actionSchemas.set(place.name, {
-      input: schemaOf({ file: inputFile, schemaFile: await readSchema(inputFile), label: "input" }),
-      output: schemaOf({ file: outputFile, schemaFile: await readSchema(outputFile), label: "output" }),
-    });
-  }
-  return actionSchemas;
-}
-
-type SystemParts = {
-  readonly config: Config;
-  readonly workflows: readonly ModeWorkflow[];
-  readonly granted: ReadonlyMap<string, ModeGrants>;
-};
-
-async function buildSystem(context: Context, parts: SystemParts): Promise<System> {
-  const modes = new Map<string, ActiveMode>();
-  const inactive = new Set<string>();
-  for (const [name, mode] of context.modes) {
-    const grants = parts.granted.get(name);
-    if (grants === undefined) {
-      inactive.add(name);
-      continue;
-    }
-    const own = parts.workflows
-      .filter((entry) => entry.mode.value.name === name)
-      .map((entry) => [entry.path, entry.loaded.value] as const);
-    modes.set(name, {
-      home: mode.home,
-      folder: mode.folder,
-      manifest: mode.value,
-      lineOf: mode.lineOf,
-      workflows: new Map(own),
-      settings: settingsOf(parts.config, name),
-      actionSchemas: await actionSchemasOf(context.readSchema, mode),
-      grants,
-      skill: (skillName) => skillAnswer(context, mode, skillName),
-    });
-  }
-  const interfaces = new Map<string, LoadedInterface>();
-  for (const [reference, loaded] of context.interfaces) {
-    interfaces.set(reference, { file: loaded.file, definition: loaded.value });
-  }
-  return answering({ modes, inactive, interfaces, config: parts.config });
 }
 
 function loadProblems(context: Context, modes: LoadedModes): Collected<UnloadedMode> {

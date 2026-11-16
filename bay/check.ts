@@ -1,7 +1,7 @@
 import {
+  checkContextOf,
   errors,
   isLoaded,
-  loadCheckContext,
   warnings,
   type CheckContext,
   type FileListing,
@@ -12,11 +12,9 @@ import { checkImports, checkKernelImports } from "./check-imports.ts";
 import { checkKitLayout, checkLayout } from "./check-layout.ts";
 import { checkLimits } from "./check-limits.ts";
 import { checkSkills } from "./check-skills.ts";
-import { isInsideOrEqual, isProjectTheKit, pathIn, shownPath, type Layout } from "./layout.ts";
+import { isProjectTheKit, shownPath, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
-import { basename } from "node:path/posix";
 import { inspectSystem } from "./manifests/manifests.ts";
-import { problemAt } from "./manifests/spec.ts";
 import type { Problem } from "./outcome.ts";
 
 export type CheckPorts = {
@@ -30,25 +28,21 @@ export type CheckReport = {
   readonly warnings: number;
 };
 
-const baseTier = "components/base";
-
 function commandProblems(mode: LoadedModeFolder): readonly Problem[] {
-  const commands = mode.manifest.value.resources?.commands ?? [];
+  const commands = mode.manifest.resources?.commands ?? [];
   return commands.map((command, index) =>
-    problemAt(mode.manifest, ["resources", "commands", index], {
+    mode.at(["resources", "commands", index], {
       message:
-        `Mode ${mode.manifest.value.name} lists the command ${command}; ` +
-        "a listed command can run code the agent wrote.",
+        `Mode ${mode.manifest.name} lists the command ${command}; ` + "a listed command can run code the agent wrote.",
       fix: "Remove the command unless the mode's skills cannot work without it, and review it if it stays.",
     }),
   );
 }
 
 function checkBaseCommands(context: CheckContext): readonly Finding[] {
-  const base = pathIn(context.layout, "kit", baseTier);
   return context.modes
     .filter(isLoaded)
-    .filter((mode) => mode.home === "kit" && isInsideOrEqual(mode.folder, base))
+    .filter((mode) => mode.tier === "base")
     .flatMap((mode) => warnings(commandProblems(mode)));
 }
 
@@ -69,10 +63,7 @@ function shownFindings(layout: Layout, findings: readonly Finding[]): readonly F
 
 export async function checkSystem(ports: CheckPorts, layout: Layout): Promise<CheckReport> {
   const inspection = await inspectSystem(ports.files, layout);
-  const active = inspection.folders
-    .filter((folder) => folder.active)
-    .map((folder) => folder.manifest?.name ?? basename(folder.folder));
-  const context = await loadCheckContext({ ...ports, layout, active: new Set(active) });
+  const context = await checkContextOf({ ...ports, layout, inspection });
   const findings = shownFindings(layout, [
     ...errors(inspection.problems),
     ...warnings(inspection.notices),

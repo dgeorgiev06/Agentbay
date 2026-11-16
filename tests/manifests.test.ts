@@ -923,6 +923,7 @@ describe("inspectSystem", () => {
     assert.deepEqual([...inspection.interfaces.keys()].sort(), ["items-store@1", "notes@1"]);
     assert.deepEqual(inspection.interfaces.get("notes@1")?.actions.add?.effects, ["read", "write"]);
     assert.deepEqual(inspection.kitLayout, {
+      components: "components",
       tiers: ["components/base", "components/modes"],
       interfaces: "components/base/interfaces",
     });

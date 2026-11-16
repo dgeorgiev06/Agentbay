@@ -107,6 +107,7 @@ export type Inspection = {
 };
 
 type KitLayout = {
+  readonly components: string;
   readonly tiers: readonly string[];
   readonly interfaces: string;
 };
@@ -175,6 +176,7 @@ type TierFolder = ModeFolder & {
 };
 
 type FolderRules = {
+  readonly kitComponents: string;
   readonly modes: readonly TierFolder[];
   readonly kitInterfaces: string;
   readonly interfaces: readonly string[];
@@ -300,11 +302,13 @@ const defaultKey = "default";
 const schemaDirections = ["input", "output"] as const;
 
 function folderRules(layout: Layout): FolderRules {
-  const base: TierFolder = { home: "kit", tier: "base", folder: pathIn(layout, "kit", "components/base") };
-  const kitModes: TierFolder = { home: "kit", tier: "modes", folder: pathIn(layout, "kit", "components/modes") };
-  const kitInterfaces = pathIn(layout, "kit", "components/base/interfaces");
+  const kitComponents = pathIn(layout, "kit", "components");
+  const base: TierFolder = { home: "kit", tier: "base", folder: join(kitComponents, "base") };
+  const kitModes: TierFolder = { home: "kit", tier: "modes", folder: join(kitComponents, "modes") };
+  const kitInterfaces = join(base.folder, "interfaces");
   if (isProjectTheKit(layout)) {
-    return { modes: [base, kitModes], kitInterfaces, interfaces: [kitInterfaces], ownInterfaces: kitInterfaces };
+    const interfaces = [kitInterfaces];
+    return { kitComponents, modes: [base, kitModes], kitInterfaces, interfaces, ownInterfaces: kitInterfaces };
   }
   const projectModes: TierFolder = {
     home: "project",
@@ -313,6 +317,7 @@ function folderRules(layout: Layout): FolderRules {
   };
   const projectInterfaces = pathIn(layout, "project", "components/interfaces");
   return {
+    kitComponents,
     modes: [base, kitModes, projectModes],
     kitInterfaces,
     interfaces: [kitInterfaces, projectInterfaces],
@@ -332,6 +337,7 @@ function kitLayoutOf(layout: Layout): KitLayout {
   const rules = folderRules(layout);
   const kitFolders = rules.modes.filter((tier) => tier.home === "kit");
   return {
+    components: relative(layout.kit, rules.kitComponents),
     tiers: kitFolders.map((tier) => relative(layout.kit, tier.folder)),
     interfaces: relative(layout.kit, rules.kitInterfaces),
   };

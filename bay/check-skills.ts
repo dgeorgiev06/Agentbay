@@ -116,7 +116,7 @@ function at(place: SkillPlace, line: number | undefined, wording: Wording): Prob
 }
 
 function skillLabel(place: SkillPlace): string {
-  return `Skill ${basename(place.folder)} of mode ${place.mode.manifest.value.name}`;
+  return `Skill ${basename(place.folder)} of mode ${place.mode.manifest.name}`;
 }
 
 function missingSectionProblems(place: SkillPlace, skill: SkillText): readonly Problem[] {
@@ -327,7 +327,7 @@ function resourceDeclaration(entry: string): string {
 }
 
 function toolProblem(place: SkillPlace, allowed: AllowedTools, item: ListEntry): Problem {
-  const modeName = place.mode.manifest.value.name;
+  const modeName = place.mode.manifest.name;
   if (brokerResources.some((resource) => resource === item.entry)) {
     const declaration = resourceDeclaration(item.entry);
     return at(place, item.line, {
@@ -347,7 +347,7 @@ function toolProblem(place: SkillPlace, allowed: AllowedTools, item: ListEntry):
 }
 
 function toolsProblems(context: CheckContext, place: SkillPlace, skill: SkillText): readonly Problem[] {
-  const allowed = allowedTools(context, place.mode.manifest.value);
+  const allowed = allowedTools(context, place.mode.manifest);
   return entriesOf(skill, "Tools")
     .filter((item) => !isAllowedTool(allowed, item.entry))
     .map((item) => toolProblem(place, allowed, item));
@@ -380,13 +380,13 @@ function isAllowedResource(context: CheckContext, mode: LoadedModeFolder, entry:
     return false;
   }
   const path = withoutTrailingSlash(entry);
-  const declared = declaredPaths(mode.manifest.value);
+  const declared = declaredPaths(mode.manifest);
   return isInsideMode(context, mode, path) || declared.some((folder) => isUnder(path, folder));
 }
 
 function resourcesProblems(context: CheckContext, place: SkillPlace, skill: SkillText): readonly Problem[] {
-  const modeName = place.mode.manifest.value.name;
-  const declared = declaredPaths(place.mode.manifest.value);
+  const modeName = place.mode.manifest.name;
+  const declared = declaredPaths(place.mode.manifest);
   const declaredText = declared.length === 0 ? "none" : declared.join(", ");
   return entriesOf(skill, "Resources")
     .filter((item) => !isAllowedResource(context, place.mode, item.entry))
@@ -439,7 +439,7 @@ async function skillProblems(context: CheckContext, place: SkillPlace): Promise<
 }
 
 function skillFolders(mode: LoadedModeFolder): readonly string[] {
-  const fromSteps = Object.values(mode.manifest.value.actions).flatMap((action) =>
+  const fromSteps = Object.values(mode.manifest.actions).flatMap((action) =>
     action.run.flatMap((step) => ("skill" in step ? [withoutTrailingSlash(step.skill)] : [])),
   );
   const fromFolder = mode.files.flatMap((file) => {

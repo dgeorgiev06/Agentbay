@@ -128,6 +128,18 @@ test("resume at the same skill wait issues no token and the old one still works"
   close();
 });
 
+test("resume at the same skill wait counts the tool calls the round has already made, as show does", async () => {
+  const { runs, close } = await openedRuns();
+  const started = runOf(await runs.start({ action: "notes.draft" }, {}));
+  const token = tokenOf(started);
+  assert.ok((await runs.task(token, "db_query")).ok);
+  assert.ok((await runs.task(token, "files_read")).ok);
+  const resumed = runOf(await runs.resume(started.id));
+  assert.equal(waitingTask(resumed).toolCalls, 2);
+  assert.equal(waitingTask(runOf(await runs.show(started.id))).toolCalls, 2);
+  close();
+});
+
 test("resume that brings a run into a skill wait it was not in issues a token", async () => {
   const prepared = {
     input: "schemas/anything.json",
@@ -171,6 +183,24 @@ test("extend continues a run that waits for budget, and show gives the same over
   assert.equal(little.state.status, "waiting");
   const extended = runOf(await runs.extend(started.id, { items: 10 }));
   assert.equal(extended.state.status, "done");
+  close();
+});
+
+test("an extend too small for the step waits again there, and show gives the new overrun, not the first", async () => {
+  const { runs, close } = await openedRuns({ changes: { config: { budget: { usd: 1.5 } } } });
+  const started = runOf(await runs.start({ action: "notes.spend" }, { measure: "usd" }));
+  const first = {
+    status: "waiting",
+    waiting: { reason: "budget", stepKey: "2", overrun: { measure: "usd", limit: 1.5, spent: 2 } },
+  };
+  assert.deepEqual(started.state, first);
+  const little = runOf(await runs.extend(started.id, { usd: 0.25 }));
+  const again = {
+    status: "waiting",
+    waiting: { reason: "budget", stepKey: "2", overrun: { measure: "usd", limit: 1.75, spent: 2 } },
+  };
+  assert.deepEqual(little.state, again);
+  assert.deepEqual(runOf(await runs.show(started.id)).state, again);
   close();
 });
 

@@ -152,6 +152,13 @@ describe("system.action", () => {
     assert.deepEqual(refusal(system.action("add", "ghost")), [sentence("There is no mode ghost.")]);
   });
 
+  test("a mode name is matched exactly", async () => {
+    const system = await projectSystem();
+    assert.deepEqual(refusal(system.action("Store.put")), [sentence("There is no mode Store.")]);
+    assert.deepEqual(refusal(system.action("STORE.put")), [sentence("There is no mode STORE.")]);
+    assert.deepEqual(refusal(system.action("put", "Store")), [sentence("There is no mode Store.")]);
+  });
+
   test("a mode that is not active is refused, as the one asked for and as the caller", async () => {
     const system = await projectSystem();
     assert.deepEqual(refusal(system.action("briefing.digest")), [notActive]);

@@ -2,11 +2,11 @@ import { runNestedAction } from "./action-steps.ts";
 import { noSpend, rootFrame, type BudgetFrame } from "./budget.ts";
 import type { Json, Spend } from "../contracts.ts";
 import type { Action } from "../generated/mode.ts";
-import type { System } from "../registry.ts";
+import type { System } from "../manifests/registry.ts";
 import type { StepRecord } from "./run-store.ts";
 import type { RunStatus, UndoEntry, UndoReport } from "./run-state.ts";
 import { isInsideFrame, isUndoKey, undoStepKey } from "./step-key.ts";
-import { resolveOwnAction, type ActionTarget } from "../targets.ts";
+import { resolveOwnAction, type ActionTarget } from "../manifests/targets.ts";
 import { eventOf, type Progress, type Walk } from "./walk.ts";
 
 type FinishedAction = {

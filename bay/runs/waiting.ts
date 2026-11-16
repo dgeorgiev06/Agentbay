@@ -1,12 +1,12 @@
 import { measures, type PolicyOf, type RunEvent, type Scrubber } from "../contracts.ts";
 import { numberField, textField } from "../json.ts";
-import type { System } from "../registry.ts";
+import type { System } from "../manifests/registry.ts";
 import type { RunWithSteps, StepRecord } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
 import { approvalContentOf } from "./scrubbed-store.ts";
 import { skillTaskOf, startedSkillOf } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
-import { resolveOwnAction } from "../targets.ts";
+import { resolveOwnAction } from "../manifests/targets.ts";
 
 type WaitingContext = {
   readonly system: System;

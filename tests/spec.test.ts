@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checkValue, loadSpec, parseSkill, problemAt, type Loaded } from "../bay/spec.ts";
+import { checkValue, loadSpec, parseSkill, problemAt, type Loaded } from "../bay/manifests/spec.ts";
 import { isRecord } from "../bay/json.ts";
 import type { Problem } from "../bay/outcome.ts";
 import { fakeFileSystem } from "./fakes.ts";

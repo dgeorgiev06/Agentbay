@@ -1,16 +1,16 @@
 import { basename, dirname, join } from "node:path/posix";
 import { isDeepStrictEqual } from "node:util";
-import type { Json } from "./contracts.ts";
-import type { Config } from "./generated/config.ts";
-import type { Interface, Signature } from "./generated/interface.ts";
-import type { Action, Effect, Mode, Step } from "./generated/mode.ts";
-import type { Workflow, Step as WorkflowStep } from "./generated/workflow.ts";
-import { isProjectTheKit, pathIn, shownPath, shownProblems, type Home, type Layout } from "./layout.ts";
-import { toJson } from "./json.ts";
-import type { FileSystem } from "./ports.ts";
+import type { Json } from "../contracts.ts";
+import type { Config } from "../generated/config.ts";
+import type { Interface, Signature } from "../generated/interface.ts";
+import type { Action, Effect, Mode, Step } from "../generated/mode.ts";
+import type { Workflow, Step as WorkflowStep } from "../generated/workflow.ts";
+import { isProjectTheKit, pathIn, shownPath, shownProblems, type Home, type Layout } from "../layout.ts";
+import { toJson } from "../json.ts";
+import type { FileSystem } from "../ports.ts";
 import { workflowReferenceIssues } from "./references.ts";
 import { checkValue, loadSpec, problemAt, type Loaded, type PathSegments, type Wording } from "./spec.ts";
-import { failedWith, succeededWith, unplacedProblem, type Outcome, type Problem } from "./outcome.ts";
+import { failedWith, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
 
 export type LoadedMode = {
   readonly home: Home;

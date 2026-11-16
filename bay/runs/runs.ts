@@ -4,7 +4,7 @@ import type { Budget } from "../generated/mode.ts";
 import { fieldOf, textField, toJson } from "../json.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
 import type { Clock, FileSystem, Folders } from "../ports.ts";
-import type { System } from "../registry.ts";
+import type { System } from "../manifests/registry.ts";
 import { Engine, type AdvancedRun } from "./engine.ts";
 import {
   kernelDatabaseFile,

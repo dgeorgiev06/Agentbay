@@ -12,25 +12,25 @@ breaks:
     to: bay/sql-statements.ts
     rule: private-file
   - from: bay/build.ts
+    to: bay/manifests/spec.ts
+    rule: private-file
+  - from: bay/build.ts
     to: bay/skill-tools.ts
     rule: may-not-import
-  - from: bay/build.ts
-    to: bay/spec.ts
-    rule: private-file
   - from: bay/check-context.ts
-    to: bay/spec.ts
+    to: bay/manifests/spec.ts
     rule: private-file
   - from: bay/check-imports.ts
     to: bay/script-protocol.ts
     rule: may-not-import
   - from: bay/check-layout.ts
-    to: bay/spec.ts
+    to: bay/manifests/spec.ts
     rule: private-file
   - from: bay/check-skills.ts
-    to: bay/spec.ts
+    to: bay/manifests/spec.ts
     rule: private-file
   - from: bay/check.ts
-    to: bay/spec.ts
+    to: bay/manifests/spec.ts
     rule: private-file
   - from: bay/database.ts
     to: bay/owner-only.ts
@@ -40,9 +40,6 @@ breaks:
     rule: private-file
   - from: bay/folder-links.ts
     to: bay/file-access.ts
-    rule: may-not-import
-  - from: bay/generate-types.ts
-    to: bay/node-ports.ts
     rule: may-not-import
   - from: bay/kernel.ts
     to: bay/check-context.ts
@@ -60,43 +57,43 @@ breaks:
     to: bay/check-context.ts
     rule: may-not-import
   - from: bay/policy.ts
-    to: bay/spec.ts
+    to: bay/manifests/spec.ts
     rule: private-file
   - from: bay/run-report.ts
     to: bay/skill-tools.ts
     rule: private-file
   - from: bay/runs/action-steps.ts
-    to: bay/targets.ts
+    to: bay/manifests/targets.ts
     rule: private-file
   - from: bay/runs/engine.ts
-    to: bay/targets.ts
+    to: bay/manifests/targets.ts
     rule: private-file
   - from: bay/runs/skill-steps.ts
     to: bay/effect-rule.ts
     rule: private-file
   - from: bay/runs/skill-steps.ts
-    to: bay/spec.ts
+    to: bay/manifests/spec.ts
     rule: private-file
   - from: bay/runs/sqlite-run-store.ts
     to: bay/owner-only.ts
     rule: may-not-import
   - from: bay/runs/undo.ts
-    to: bay/targets.ts
+    to: bay/manifests/targets.ts
     rule: private-file
   - from: bay/runs/waiting.ts
-    to: bay/targets.ts
+    to: bay/manifests/targets.ts
     rule: private-file
   - from: bay/runs/walk.ts
-    to: bay/spec.ts
+    to: bay/manifests/spec.ts
     rule: private-file
   - from: bay/runs/walk.ts
-    to: bay/targets.ts
+    to: bay/manifests/targets.ts
     rule: private-file
   - from: bay/runs/workflow-steps.ts
-    to: bay/references.ts
+    to: bay/manifests/references.ts
     rule: private-file
   - from: bay/runs/workflow-steps.ts
-    to: bay/targets.ts
+    to: bay/manifests/targets.ts
     rule: private-file
   - from: bay/script-host.ts
     to: bay/agent-query.ts
@@ -180,9 +177,6 @@ test_breaks:
   - from: tests/feature-map.test.ts
     to: bay/import-scanner.ts
     rule: test-reaches-in
-  - from: tests/generate-types.test.ts
-    to: bay/generate-types.ts
-    rule: test-reaches-in
   - from: tests/import-scanner.test.ts
     to: bay/import-scanner.ts
     rule: test-reaches-in
@@ -193,16 +187,16 @@ test_breaks:
     to: bay/tool-definitions.ts
     rule: test-reaches-in
   - from: tests/references.test.ts
-    to: bay/references.ts
+    to: bay/manifests/references.ts
     rule: test-reaches-in
   - from: tests/run-report.test.ts
     to: bay/run-report.ts
     rule: test-reaches-in
   - from: tests/spec.test.ts
-    to: bay/spec.ts
+    to: bay/manifests/spec.ts
     rule: test-reaches-in
   - from: tests/targets.test.ts
-    to: bay/targets.ts
+    to: bay/manifests/targets.ts
     rule: test-reaches-in
   - from: tests/unexpected-errors.test.ts
     to: bay/database-process.ts

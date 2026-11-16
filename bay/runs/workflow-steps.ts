@@ -4,13 +4,13 @@ import type { Json } from "../contracts.ts";
 import type { Step as WorkflowStep } from "../generated/workflow.ts";
 import { toJson } from "../json.ts";
 import { problemText, succeededWith } from "../outcome.ts";
-import { resolveInput, resolveValue, type ReferenceScope } from "../references.ts";
-import type { LoadedMode } from "../registry.ts";
+import { resolveInput, resolveValue, type ReferenceScope } from "../manifests/references.ts";
+import type { LoadedMode } from "../manifests/registry.ts";
 import type { StepRecord } from "./run-store.ts";
 import { approvalContentOf, type ApprovalContent } from "./scrubbed-store.ts";
 import type { ApprovalDetail } from "./step-detail.ts";
 import { foreachItemKey, workflowStepKey } from "./step-key.ts";
-import { resolveNamedAction } from "../targets.ts";
+import { resolveNamedAction } from "../manifests/targets.ts";
 import {
   changeDetail,
   concludeComposite,

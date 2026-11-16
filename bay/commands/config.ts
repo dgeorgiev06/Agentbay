@@ -1,6 +1,6 @@
 import { succeeded, withKernel, type CommandResult, type Invocation } from "../command-context.ts";
 import type { Command } from "../command-line.ts";
-import { bindingUses } from "../registry.ts";
+import { bindingUses } from "../manifests/registry.ts";
 import { bindingLines, listSettings, settingLines } from "../settings-listing.ts";
 
 function runConfig(invocation: Invocation): Promise<CommandResult> {

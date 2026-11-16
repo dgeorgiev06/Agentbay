@@ -10,7 +10,7 @@ import {
   type LoadedModeFolder,
   type ModeFolder,
 } from "./check-context.ts";
-import { checkValue, type Wording } from "./spec.ts";
+import { checkValue, type Wording } from "./manifests/spec.ts";
 import { isRecord } from "./json.ts";
 import type { Problem } from "./outcome.ts";
 

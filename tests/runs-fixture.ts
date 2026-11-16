@@ -19,7 +19,7 @@ import type { Workflow } from "../bay/generated/workflow.ts";
 import { fieldOf, numberField, textField } from "../bay/json.ts";
 import { layoutOf } from "../bay/layout.ts";
 import { loadPolicedSystem, policyFor } from "../bay/policy.ts";
-import type { System } from "../bay/registry.ts";
+import type { System } from "../bay/manifests/registry.ts";
 import type { Outcome } from "../bay/outcome.ts";
 import { openRuns, type Run, type Runs, type Task } from "../bay/runs/runs.ts";
 import { SecretStore } from "../bay/secrets.ts";

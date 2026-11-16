@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { format } from "prettier";
-import { nodeFileSystem } from "./node-ports.ts";
-import type { FileSystem } from "./ports.ts";
+import { nodeFileSystem } from "../bay/node-ports.ts";
+import type { FileSystem } from "../bay/ports.ts";
 
 type JsonObject = Readonly<Record<string, unknown>>;
 

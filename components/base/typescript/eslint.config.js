@@ -143,7 +143,7 @@ export default defineConfig(
     },
   },
   {
-    files: ["bay/**/*.ts", "adapters/**/*.ts", "components/**/*.ts"],
+    files: ["bay/**/*.ts", "adapters/**/*.ts", "components/**/*.ts", "schemas/**/*.ts"],
     plugins: { agentbay: agentbayPlugin },
     rules: { "agentbay/no-comments": "error" },
   },

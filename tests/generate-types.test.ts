@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { generatedTypeFiles, staleTypeFiles, typeDeclarations } from "../bay/generate-types.ts";
+import { generatedTypeFiles, staleTypeFiles, typeDeclarations } from "../schemas/generate-types.ts";
 import { nodeFileSystem } from "../bay/node-ports.ts";
 import { fakeFileSystem } from "./fakes.ts";
 

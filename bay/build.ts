@@ -3,9 +3,9 @@ import { pathToFileURL } from "node:url";
 import { agentName, type Adapter, type SkillAgent } from "./adapter.ts";
 import type { Effect, PolicyOf, Tier } from "./contracts.ts";
 import type { FileSystem } from "./ports.ts";
-import type { LoadedMode, System } from "./registry.ts";
+import type { LoadedMode, System } from "./manifests/registry.ts";
 import { skillNameOf, skillToolsOf } from "./skill-tools.ts";
-import { parseSkill } from "./spec.ts";
+import { parseSkill } from "./manifests/spec.ts";
 import { isRecord } from "./json.ts";
 import type { Outcome, Problem } from "./outcome.ts";
 

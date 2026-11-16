@@ -29,7 +29,12 @@ import { failedWith, succeededWith, unplacedProblem, type Outcome, type Problem 
 import { scrubbedStore } from "./scrubbed-store.ts";
 import { startedSkillOf, submissionProblems, type StartedSkill } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
-import { resolveActionReference, resolveNamedAction, resolveOwnAction, type ActionTarget } from "../targets.ts";
+import {
+  resolveActionReference,
+  resolveNamedAction,
+  resolveOwnAction,
+  type ActionTarget,
+} from "../manifests/targets.ts";
 import { hasUndoRecords, runUndo } from "./undo.ts";
 import { eventOf, failed, schemaProblems, type Progress, type Services, type Walk } from "./walk.ts";
 import { runWorkflowSteps } from "./workflow-steps.ts";

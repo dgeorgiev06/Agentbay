@@ -19,7 +19,7 @@ import type { StepRecord } from "./run-store.ts";
 import { skillSchemas, skillTaskOf, startedSkillOf, type SkillAt } from "./skill-steps.ts";
 import type { ScriptDetail, SkillDetail } from "./step-detail.ts";
 import { actionEndKey, actionStepKey, checkStepKey, scriptCallKey } from "./step-key.ts";
-import { resolveCall, type ActionTarget } from "../targets.ts";
+import { resolveCall, type ActionTarget } from "../manifests/targets.ts";
 import {
   changeDetail,
   concludeComposite,

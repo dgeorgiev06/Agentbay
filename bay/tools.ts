@@ -4,7 +4,7 @@ import type { Json } from "./contracts.ts";
 import { byteSize, fieldOf, numberField, textField, isRecord } from "./json.ts";
 import type { Kernel } from "./kernel.ts";
 import { loadPolicedSystem } from "./policy.ts";
-import { actionsListing, type ListingQuestion, type System } from "./registry.ts";
+import { actionsListing, type ListingQuestion, type System } from "./manifests/registry.ts";
 import type { Run, Task } from "./runs/runs.ts";
 import { failedWith, unplacedProblem, type Outcome, type Problem } from "./outcome.ts";
 import { isToolName, skillToolsOf, type SkillTools, type ToolName } from "./skill-tools.ts";

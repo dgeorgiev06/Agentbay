@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { Engine, type AdvancedRun } from "../../../bay/runs/engine.ts";
-import type { System } from "../../../bay/registry.ts";
+import type { System } from "../../../bay/manifests/registry.ts";
 import type { RunStore } from "../../../bay/runs/run-store.ts";
 import { SqliteRunStore } from "../../../bay/runs/sqlite-run-store.ts";
 import type { Waiting } from "../../../bay/runs/run-state.ts";

@@ -1,7 +1,7 @@
-import type { Json } from "./contracts.ts";
-import type { Step as WorkflowStep } from "./generated/workflow.ts";
-import { toJson, isRecord } from "./json.ts";
-import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome, type Problem } from "./outcome.ts";
+import type { Json } from "../contracts.ts";
+import type { Step as WorkflowStep } from "../generated/workflow.ts";
+import { toJson, isRecord } from "../json.ts";
+import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
 import type { PathSegments, Wording } from "./spec.ts";
 
 export type Reference =

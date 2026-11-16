@@ -9,7 +9,6 @@ import {
   type LoadedModeFolder,
   type ModeFolder,
 } from "./check-context.ts";
-import { checkValue, type Wording } from "./manifests/spec.ts";
 import { isRecord } from "./json.ts";
 import type { Problem } from "./outcome.ts";
 
@@ -17,6 +16,8 @@ type JsonFile =
   | { readonly state: "missing" }
   | { readonly state: "read"; readonly value: unknown }
   | { readonly state: "invalid"; readonly reason: string };
+
+type Wording = Pick<Problem, "message" | "fix">;
 
 type ExamplePlace = {
   readonly mode: LoadedModeFolder;
@@ -158,7 +159,6 @@ function exampleShapeProblems(place: ExamplePlace, value: unknown): readonly Pro
 }
 
 async function exampleSchemaProblems(
-  context: CheckContext,
   place: ExamplePlace,
   example: Readonly<Record<string, unknown>>,
 ): Promise<readonly Problem[]> {
@@ -166,15 +166,10 @@ async function exampleSchemaProblems(
   if (action === undefined) {
     return [];
   }
-  const loaded = { file: place.file, value: example, lineOf: () => undefined };
   const problems: Problem[] = [];
   for (const key of ["input", "output"] as const) {
-    const schema = await readJson(context, join(place.mode.folder, action[key]));
-    if (schema.state !== "read") {
-      continue;
-    }
-    const check = checkValue(schema.value, example[key], { loaded, path: [key] });
-    problems.push(...(check.kind === "checked" ? check.problems : []));
+    const against = { schema: action[key], file: place.file, under: key };
+    problems.push(...(await place.mode.schemaProblems(example[key], against)));
   }
   return problems;
 }
@@ -203,7 +198,7 @@ async function exampleProblems(context: CheckContext, place: ExamplePlace): Prom
       if (shape.length > 0 || !isRecord(example.value)) {
         return shape;
       }
-      return exampleSchemaProblems(context, place, example.value);
+      return exampleSchemaProblems(place, example.value);
     }
   }
 }

@@ -9,7 +9,6 @@ import type { Mode } from "../bay/generated/mode.ts";
 import type { Http, HttpRequest, HttpResponse, ProcessRequest, ProcessResult, Processes } from "../bay/ports.ts";
 import { layoutOf, type Home, type Layout } from "../bay/layout.ts";
 import type { LoadedMode, System } from "../bay/manifests/registry.ts";
-import type { Outcome, Problem } from "../bay/outcome.ts";
 
 export const kitFolder = fileURLToPath(new URL("..", import.meta.url));
 
@@ -166,18 +165,4 @@ export function failureOf<T>(answer: Answer<T>): Failure {
     assert.fail(`expected a failure, got ${JSON.stringify(answer)}`);
   }
   return answer;
-}
-
-export function accepted<T>(outcome: Outcome<T>): T {
-  if (!outcome.ok) {
-    assert.fail(`expected no problems, got ${JSON.stringify(outcome.problems)}`);
-  }
-  return outcome.value;
-}
-
-export function problemsOf<T>(outcome: Outcome<T>): readonly Problem[] {
-  if (outcome.ok) {
-    assert.fail("expected problems, got none");
-  }
-  return outcome.problems;
 }

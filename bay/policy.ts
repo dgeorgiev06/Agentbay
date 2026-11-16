@@ -12,8 +12,31 @@ import {
   type Layout,
 } from "./layout.ts";
 import { loadSystemReport, type LoadedMode, type System, type SystemReport } from "./manifests/registry.ts";
-import { problemAt, type Loaded, type PathSegments, type Wording } from "./manifests/spec.ts";
+import { problemAt } from "./manifests/spec.ts";
 import type { Outcome, Problem } from "./outcome.ts";
+
+export type OtherMode = {
+  readonly name: string;
+  readonly folder: string;
+};
+
+export type GrantRequest = {
+  readonly manifest: Mode;
+  readonly home: Home;
+  readonly folder: string;
+  readonly layout: Layout;
+  readonly otherModes: readonly OtherMode[];
+};
+
+export type GrantProblem = {
+  readonly at: readonly (string | number)[];
+  readonly message: string;
+  readonly fix: string;
+};
+
+export type GrantRuling =
+  | { readonly ok: true; readonly value: ModeGrants }
+  | { readonly ok: false; readonly problems: readonly GrantProblem[] };
 
 type ProtectedArea = {
   readonly path: string;
@@ -26,11 +49,6 @@ type Direction = "read" | "write";
 type NamedFolder = {
   readonly path: string;
   readonly name: string;
-};
-
-type PolicyContext = {
-  readonly system: System;
-  readonly layout: Layout;
 };
 
 type DeclaredPath = {
@@ -67,22 +85,16 @@ export const secretNamePattern = /^[A-Z][A-Z0-9_]*$/;
 
 const hostPattern = /^(\*\.)?([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)*[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
-function manifestFile(mode: LoadedMode): string {
-  return join(mode.folder, "mode.yaml");
+function manifestFile(request: GrantRequest): string {
+  return join(request.folder, "mode.yaml");
 }
 
-function manifestProblem(mode: LoadedMode, path: PathSegments, wording: Wording): Problem {
-  const loaded: Loaded<Mode> = { file: manifestFile(mode), value: mode.manifest, lineOf: mode.lineOf };
-  return problemAt(loaded, path, wording);
+function isForge(request: GrantRequest): boolean {
+  const { manifest, folder, layout } = request;
+  return manifest.name === "forge" && isProjectTheKit(layout) && folder === pathIn(layout, "kit", forgeFolder);
 }
 
-function isForge(mode: LoadedMode, layout: Layout): boolean {
-  return (
-    mode.manifest.name === "forge" && isProjectTheKit(layout) && mode.folder === pathIn(layout, "kit", forgeFolder)
-  );
-}
-
-function ownCodeAreas(own: LoadedMode): readonly ProtectedArea[] {
+function ownCodeAreas(own: GrantRequest): readonly ProtectedArea[] {
   return [
     { path: join(own.folder, "mode.yaml"), name: "the mode's own mode.yaml", rule: ownCode },
     { path: join(own.folder, "scripts"), name: "the mode's own scripts/ folder", rule: ownCode },
@@ -116,14 +128,16 @@ function kitArea(layout: Layout): readonly ProtectedArea[] {
   return [{ path: layout.kit, name: `the agentbay kit ${layout.kit}`, rule: kitRule }];
 }
 
-function protectedAreas(context: PolicyContext, own: LoadedMode, direction: Direction): readonly ProtectedArea[] {
-  const { system, layout } = context;
-  if (isForge(own, layout)) {
+function protectedAreas(own: GrantRequest, direction: Direction): readonly ProtectedArea[] {
+  const { layout } = own;
+  if (isForge(own)) {
     return stateAreas(layout);
   }
-  const otherModes = [...system.modes.values()]
-    .filter((mode) => mode !== own)
-    .map((mode) => ({ path: mode.folder, name: `the folder of the mode ${mode.manifest.name}`, rule: onlyForge }));
+  const otherModes = own.otherModes.map((mode) => ({
+    path: mode.folder,
+    name: `the folder of the mode ${mode.name}`,
+    rule: onlyForge,
+  }));
   const code = direction === "write" ? ownCodeAreas(own) : [];
   return [...stateAreas(layout), ...kernelAreas(layout), ...kitArea(layout), ...otherModes, ...code];
 }
@@ -183,88 +197,110 @@ function pathWording(layout: Layout, declared: DeclaredPath, areas: readonly Pro
   return undefined;
 }
 
-function pathProblems(context: PolicyContext, mode: LoadedMode): readonly Problem[] {
-  return declaredPaths(mode.manifest).flatMap((declared) => {
-    const areas = protectedAreas(context, mode, declared.direction);
-    const message = pathWording(context.layout, declared, areas);
+function pathProblems(request: GrantRequest): readonly GrantProblem[] {
+  return declaredPaths(request.manifest).flatMap((declared) => {
+    const areas = protectedAreas(request, declared.direction);
+    const message = pathWording(request.layout, declared, areas);
     if (message === undefined) {
       return [];
     }
     return [
-      manifestProblem(mode, ["resources", "files", declared.direction, declared.index], {
+      {
+        at: ["resources", "files", declared.direction, declared.index],
         message,
         fix: "Name a folder outside the kernel, state and other modes' folders, and outside the mode's own code.",
-      }),
+      },
     ];
   });
 }
 
-function secretProblems(mode: LoadedMode): readonly Problem[] {
-  return declaredResources(mode.manifest).secrets.flatMap((name, index) =>
+function secretProblems(manifest: Mode): readonly GrantProblem[] {
+  return declaredResources(manifest).secrets.flatMap((name, index) =>
     secretNamePattern.test(name)
       ? []
       : [
-          manifestProblem(mode, ["resources", "secrets", index], {
+          {
+            at: ["resources", "secrets", index],
             message: `The secret name ${name} is not made of upper-case letters, digits and underscores.`,
             fix: `Rename it, for example to ${name.toUpperCase().replace(/[^A-Z0-9_]/g, "_")}.`,
-          }),
+          },
         ],
   );
 }
 
-function hostProblems(mode: LoadedMode): readonly Problem[] {
-  return declaredResources(mode.manifest).hosts.flatMap((host, index) =>
+function hostProblems(manifest: Mode): readonly GrantProblem[] {
+  return declaredResources(manifest).hosts.flatMap((host, index) =>
     hostPattern.test(host)
       ? []
       : [
-          manifestProblem(mode, ["resources", "network", index], {
+          {
+            at: ["resources", "network", index],
             message: `The host ${host} is not a lower-case host name, or a host name after a leading *.`,
             fix: "Write the host alone, such as api.example.com or *.example.com, with no scheme, port or path.",
-          }),
+          },
         ],
   );
 }
 
-function isBaseMode(mode: LoadedMode, layout: Layout): boolean {
-  return mode.home === "kit" && isInsideOrEqual(mode.folder, pathIn(layout, "kit", baseTier));
+function isBaseMode(request: GrantRequest): boolean {
+  return request.home === "kit" && isInsideOrEqual(request.folder, pathIn(request.layout, "kit", baseTier));
 }
 
-function commandProblems(mode: LoadedMode, layout: Layout): readonly Problem[] {
-  if (isBaseMode(mode, layout)) {
+function commandProblems(request: GrantRequest): readonly GrantProblem[] {
+  if (isBaseMode(request)) {
     return [];
   }
-  return declaredResources(mode.manifest).commands.map((command, index) =>
-    manifestProblem(mode, ["resources", "commands", index], {
-      message:
-        `Mode ${mode.manifest.name} lists the command ${command}; a listed command can run code the agent wrote. ` +
-        `Only a mode under the kit's ${baseTier}/ may list commands.`,
-      fix: `Remove the command from ${shownPath(layout, manifestFile(mode))}; a skill step's checks belong in script steps.`,
-    }),
-  );
+  const { manifest, layout } = request;
+  return declaredResources(manifest).commands.map((command, index) => ({
+    at: ["resources", "commands", index],
+    message:
+      `Mode ${manifest.name} lists the command ${command}; a listed command can run code the agent wrote. ` +
+      `Only a mode under the kit's ${baseTier}/ may list commands.`,
+    fix: `Remove the command from ${shownPath(layout, manifestFile(request))}; a skill step's checks belong in script steps.`,
+  }));
 }
 
 function projectPaths(layout: Layout, paths: readonly string[]): readonly string[] {
   return paths.map((path) => pathIn(layout, "project", normalized(path)));
 }
 
-function refusedMode(wording: { readonly message: string; readonly fix: string }): Outcome<ModeGrants> {
-  return { ok: false, problems: [{ file: "", path: "", ...wording }] };
-}
-
-function grantsOfMode(mode: LoadedMode, layout: Layout): ModeGrants {
-  const declared = declaredResources(mode.manifest);
+function grantsOfMode(request: GrantRequest): ModeGrants {
+  const { manifest, folder, layout } = request;
+  const declared = declaredResources(manifest);
   const writePaths = projectPaths(layout, declared.write);
   return {
-    mode: mode.manifest.name,
-    modeFolder: mode.folder,
-    databaseFile: pathIn(layout, "project", join(".agentbay", "data", `${mode.manifest.name}.db`)),
-    migrationsFolder: join(mode.folder, normalized(declared.migrations)),
-    readPaths: [mode.folder, ...projectPaths(layout, declared.read), ...writePaths],
+    mode: manifest.name,
+    modeFolder: folder,
+    databaseFile: pathIn(layout, "project", join(".agentbay", "data", `${manifest.name}.db`)),
+    migrationsFolder: join(folder, normalized(declared.migrations)),
+    readPaths: [folder, ...projectPaths(layout, declared.read), ...writePaths],
     writePaths,
     secrets: [...declared.secrets],
     hosts: [...declared.hosts],
     commands: [...declared.commands],
   };
+}
+
+export function grantsOf(request: GrantRequest): GrantRuling {
+  const problems = [
+    ...pathProblems(request),
+    ...secretProblems(request.manifest),
+    ...hostProblems(request.manifest),
+    ...commandProblems(request),
+  ];
+  if (problems.length > 0) {
+    return { ok: false, problems };
+  }
+  return { ok: true, value: grantsOfMode(request) };
+}
+
+function refusedMode(wording: { readonly message: string; readonly fix: string }): Outcome<ModeGrants> {
+  return { ok: false, problems: [{ file: "", path: "", ...wording }] };
+}
+
+function placedProblem(mode: LoadedMode, problem: GrantProblem): Problem {
+  const loaded = { file: join(mode.folder, "mode.yaml"), value: mode.manifest, lineOf: mode.lineOf };
+  return problemAt(loaded, problem.at, { message: problem.message, fix: problem.fix });
 }
 
 export function permissionsFor(system: System, modeName: string, layout: Layout): Outcome<ModeGrants> {
@@ -275,17 +311,20 @@ export function permissionsFor(system: System, modeName: string, layout: Layout)
   if (!system.active.has(modeName)) {
     return refusedMode(inactiveModeWording(modeName));
   }
-  const context = { system, layout };
-  const problems = [
-    ...pathProblems(context, mode),
-    ...secretProblems(mode),
-    ...hostProblems(mode),
-    ...commandProblems(mode, layout),
-  ];
-  if (problems.length > 0) {
-    return { ok: false, problems: shownProblems(layout, problems) };
+  const otherModes = [...system.modes.values()]
+    .filter((other) => other !== mode)
+    .map((other) => ({ name: other.manifest.name, folder: other.folder }));
+  const ruling = grantsOf({ manifest: mode.manifest, home: mode.home, folder: mode.folder, layout, otherModes });
+  if (!ruling.ok) {
+    return {
+      ok: false,
+      problems: shownProblems(
+        layout,
+        ruling.problems.map((problem) => placedProblem(mode, problem)),
+      ),
+    };
   }
-  return { ok: true, value: grantsOfMode(mode, layout) };
+  return ruling;
 }
 
 export function inactiveModeWording(modeName: string): { readonly message: string; readonly fix: string } {

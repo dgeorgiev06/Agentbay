@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CheckResponse",
+  "description": "One verdict for each check that was asked for.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdicts"],
+  "properties": {
+    "verdicts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/verdict"
+      },
+      "maxItems": 50,
+      "description": "One verdict per check, in the order describe lists the checks."
+    }
+  },
+  "$defs": {
+    "verdict": {
+      "description": "What one check found: passed, failed, or inconclusive when it could not be run to its end or ended in a way the toolchain does not recognise.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/passed"
+        },
+        {
+          "$ref": "#/$defs/failed"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
+        }
+      ]
+    },
+    "passed": {
+      "type": "object",
+      "description": "The check ran to its end and found nothing.",
+      "additionalProperties": false,
+      "required": ["name", "verdict", "seconds", "stdout", "stderr"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "verdict": {
+          "const": "passed",
+          "description": "The check found nothing."
+        },
+        "seconds": {
+          "$ref": "#/$defs/seconds"
+        },
+        "stdout": {
+          "$ref": "#/$defs/stdout"
+        },
+        "stderr": {
+          "$ref": "#/$defs/stderr"
+        }
+      }
+    },
+    "failed": {
+      "type": "object",
+      "description": "The check ran to its end and found something wrong.",
+      "additionalProperties": false,
+      "required": ["name", "verdict", "seconds", "stdout", "stderr"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "verdict": {
+          "const": "failed",
+          "description": "The check found something wrong; its output says what."
+        },
+        "seconds": {
+          "$ref": "#/$defs/seconds"
+        },
+        "stdout": {
+          "$ref": "#/$defs/stdout"
+        },
+        "stderr": {
+          "$ref": "#/$defs/stderr"
+        }
+      }
+    },
+    "inconclusive": {
+      "type": "object",
+      "description": "The check could not be started, did not finish in time, or ended in a way the toolchain does not recognise, so nothing is known.",
+      "additionalProperties": false,
+      "required": ["name", "verdict", "reason", "seconds", "stdout", "stderr"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "verdict": {
+          "const": "inconclusive",
+          "description": "Nothing is known; never read it as passed."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "One sentence saying why nothing is known."
+        },
+        "seconds": {
+          "$ref": "#/$defs/seconds"
+        },
+        "stdout": {
+          "$ref": "#/$defs/stdout"
+        },
+        "stderr": {
+          "$ref": "#/$defs/stderr"
+        }
+      }
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*([:-][a-z0-9]+)*$",
+      "maxLength": 64,
+      "description": "The check's name, as describe lists it."
+    },
+    "seconds": {
+      "type": "number",
+      "minimum": 0,
+      "description": "How long the check took, in seconds."
+    },
+    "stdout": {
+      "type": "string",
+      "maxLength": 100000,
+      "description": "The end of what the check wrote to its standard output, with known secrets removed."
+    },
+    "stderr": {
+      "type": "string",
+      "maxLength": 100000,
+      "description": "The end of what the check wrote to its standard error, with known secrets removed."
+    }
+  }
+}

@@ -1,0 +1,14 @@
+name: typescript
+version: 1.0.0
+description: Checks and tests TypeScript code in a checkout, running the same scripts of its package.json that npm run check runs.
+
+extraFiles: [eslint.config.js, knip.json, prettier.json, practices.md]
+
+actions:
+  describe:
+    description: When a mode or a skill needs to know the language, which files are source and tests, where its practices are, and which checks it has.
+    input: schemas/describe-request.json
+    output: schemas/describe-response.json
+    effects: []
+    run:
+      - script: scripts/describe.ts

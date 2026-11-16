@@ -12,6 +12,7 @@ import { fakeFileSystem } from "./fakes.ts";
 import {
   briefingMode,
   config,
+  notesMode as notesManifest,
   layout,
   paths,
   rooted,
@@ -798,5 +799,28 @@ describe("a mode's skill by name", () => {
     assert.deepEqual(refusal(await mode.skill("skills/write-note")), [
       { file: skillFile, path: "", message: `The file ${skillFile} does not exist.` },
     ]);
+  });
+
+  test("each skill of a mode answers with its own tools", async () => {
+    const tidy = {
+      description: "When the owner wants the notes tidied.",
+      input: "schemas/add-input.json",
+      output: "schemas/add-output.json",
+      effects: ["read"],
+      run: [{ skill: "skills/tidy", tier: "fast" }],
+    };
+    const manifest = { ...notesManifest, actions: { ...notesManifest.actions, tidy } };
+    const tidySkill = "---\nname: tidy\ndescription: Tidies the notes.\n---\n\n## Tools\n\n- db\n";
+    const files = filesWithSkill(draftSkill);
+    await files.writeAtomic(`/kit/${paths.notes}`, yamlText(manifest));
+    await files.writeAtomic("/kit/components/modes/notes/skills/tidy/SKILL.md", tidySkill);
+    const mode = await notesMode(files);
+    const tools = async (name: string): Promise<readonly string[]> => {
+      const skill = await mode.skill(name);
+      assert.ok(skill.ok, skill.ok ? "" : JSON.stringify(skill.problems));
+      return skill.value.tools;
+    };
+    assert.deepEqual(await tools("skills/write-note"), ["files", "items-store.get", "http"]);
+    assert.deepEqual(await tools("skills/tidy"), ["db"]);
   });
 });

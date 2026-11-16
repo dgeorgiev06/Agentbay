@@ -24,7 +24,7 @@ export type ActiveMode = {
   readonly grants: ModeGrants;
 };
 
-export type LoadedInterface = {
+type LoadedInterface = {
   readonly file: string;
   readonly definition: Interface;
 };
@@ -58,7 +58,7 @@ export type BindingUse = {
   readonly servedBy: string;
 };
 
-export type SystemReport = {
+type SystemReport = {
   readonly outcome: Outcome<System>;
   readonly active: ReadonlySet<string>;
   readonly notices: readonly Problem[];

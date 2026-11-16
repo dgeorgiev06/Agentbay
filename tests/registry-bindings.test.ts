@@ -3,10 +3,12 @@ import { test } from "node:test";
 import type { Config } from "../bay/generated/config.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import { layoutOf } from "../bay/layout.ts";
-import { bindingUses, loadSystemReport, type System, type SystemReport } from "../bay/manifests/manifests.ts";
+import { bindingUses, loadSystemReport, type System } from "../bay/manifests/manifests.ts";
 import type { Problem } from "../bay/outcome.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import { paths, schemaText, storeMode, validFiles, yamlText } from "./system-fixture.ts";
+
+type SystemReport = Awaited<ReturnType<typeof loadSystemReport>>;
 
 function servingModeOf(system: System, caller: string, call: string): string | undefined {
   const answer = system.action(call, caller);

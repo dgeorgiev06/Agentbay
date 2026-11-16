@@ -114,6 +114,7 @@ export function buildRequest(files: FilesWithRemoval, agents: readonly SkillAgen
     config: { bindings: {}, adapter: "claude-code" },
     action: () => ({ ok: false, problems: [] }),
     workflow: () => ({ ok: false, problems: [] }),
+    listing: () => ({ ok: false, problems: [] }),
   };
   return { system, layout, agents, files, removal: files.removal };
 }

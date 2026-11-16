@@ -49,6 +49,7 @@ export type System = {
   readonly config: Config;
   readonly action: (reference: string, caller?: string) => Outcome<ActionTarget>;
   readonly workflow: (mode: string, path: string) => Outcome<WorkflowTarget>;
+  readonly listing: (question: ListingQuestion) => Outcome<ActionsListing>;
 };
 
 export type BindingUse = {
@@ -1359,6 +1360,9 @@ function answering(data: SystemData): System {
     },
     workflow(mode, path) {
       return workflowAnswer(this, mode, path);
+    },
+    listing(question) {
+      return actionsListing(this, question);
     },
   };
 }

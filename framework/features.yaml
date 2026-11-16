@@ -54,6 +54,7 @@ features:
       - bay/manifests/settings-problems.ts
       - bay/manifests/grants.ts
       - bay/manifests/listing.ts
+      - bay/manifests/questions.ts
     may_import:
       - vocabulary
       - safety

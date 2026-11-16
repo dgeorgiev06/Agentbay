@@ -64,6 +64,14 @@ import {
   candidatesOf,
   requirersOf,
 } from "./interfaces.ts";
+import {
+  type RequiredBinding,
+  defaultKey,
+  servingMode,
+  servedReferences,
+  boundModeOf,
+  bindingsFrom,
+} from "./bindings.ts";
 
 export type ActiveMode = {
   readonly home: Home;
@@ -224,17 +232,6 @@ type CallTarget = {
   readonly known: readonly string[];
 };
 
-type RequiredBinding = {
-  readonly reference: string;
-  readonly bound: BoundMode;
-};
-
-type BoundMode = {
-  readonly mode: string;
-  readonly path: PathSegments;
-  readonly label: string;
-};
-
 type ImplementedSignature = {
   readonly reference: string;
   readonly signature: Signature;
@@ -258,36 +255,6 @@ const namePattern = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 
 const forge = "forge";
 
-const defaultKey = "default";
-
-function bindingFor(bindings: Config["bindings"], requirer: string, reference: string): BoundMode | undefined {
-  const name = interfaceName(reference);
-  const binding = Object.hasOwn(bindings, name) ? bindings[name] : undefined;
-  if (binding === undefined) {
-    return undefined;
-  }
-  if (typeof binding === "string") {
-    return { mode: binding, path: ["bindings", name], label: name };
-  }
-  const key = Object.hasOwn(binding, requirer) ? requirer : defaultKey;
-  const mode = Object.hasOwn(binding, key) ? binding[key] : undefined;
-  return mode === undefined ? undefined : { mode, path: ["bindings", name, key], label: `${name} for ${requirer}` };
-}
-
-function servingMode(system: System, requirer: string, reference: string): string | undefined {
-  const bound = bindingFor(system.config.bindings, requirer, reference)?.mode;
-  return bound !== undefined && system.modes.has(bound) ? bound : undefined;
-}
-
-function servedReferences(system: System, requirer: string): readonly (readonly [string, string])[] {
-  const mode = system.modes.get(requirer);
-  const references = mode === undefined ? [] : requiredReferences(mode.manifest);
-  return references.flatMap((reference) => {
-    const servedBy = servingMode(system, requirer, reference);
-    return servedBy === undefined ? [] : [[interfaceName(reference), servedBy] as const];
-  });
-}
-
 export function bindingUses(system: System): readonly BindingUse[] {
   const uses = new Map<string, BindingUse>();
   for (const requirer of [...system.modes.keys()].sort()) {
@@ -298,11 +265,6 @@ export function bindingUses(system: System): readonly BindingUse[] {
     }
   }
   return [...uses.values()].sort((first, second) => first.interfaceName.localeCompare(second.interfaceName));
-}
-
-function boundModeOf(context: Context, requirer: string, reference: string): BoundMode | undefined {
-  const config = context.config;
-  return config === undefined ? undefined : bindingFor(config.value.bindings, requirer, reference);
 }
 
 function homesOf(modes: LoadedModes): ReadonlyMap<string, ModeFolder> {
@@ -358,15 +320,6 @@ function boundForgeProblems(context: Context, binding: RequiredBinding): readonl
     fix: `Bind ${interfaceName(reference)} to another mode that implements ${reference}.`,
   });
   return [problem];
-}
-
-function bindingsFrom(context: Context, name: string): readonly RequiredBinding[] {
-  const mode = context.modes.get(name);
-  const references = mode === undefined ? [] : requiredReferences(mode.value);
-  return references.flatMap((reference) => {
-    const bound = boundModeOf(context, name, reference);
-    return bound === undefined ? [] : [{ reference, bound }];
-  });
 }
 
 function activation(context: Context, homes: ReadonlyMap<string, ModeFolder>): Activation {

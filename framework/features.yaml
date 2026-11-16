@@ -43,6 +43,7 @@ features:
       - bay/manifests/schemas.ts
       - bay/manifests/loaded.ts
       - bay/manifests/interfaces.ts
+      - bay/manifests/bindings.ts
     may_import:
       - vocabulary
       - safety

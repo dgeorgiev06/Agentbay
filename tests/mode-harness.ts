@@ -100,7 +100,16 @@ async function callingManifest(name: string): Promise<Json> {
   const actions = Object.entries(isRecord(listed) ? listed : {}).map(([action, signature]) => {
     const effects = fieldOf(toJson(signature), "effects") ?? [];
     const run = [{ call: `${calledInterface}.${action}` }];
-    return [action, { input: "schemas/any.json", output: "schemas/any.json", effects, run }] as const;
+    return [
+      action,
+      {
+        description: `When a test calls ${action}.`,
+        input: "schemas/any.json",
+        output: "schemas/any.json",
+        effects,
+        run,
+      },
+    ] as const;
   });
   return {
     name,

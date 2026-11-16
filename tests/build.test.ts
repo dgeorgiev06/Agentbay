@@ -16,6 +16,7 @@ test("planAgents gives one agent per mode and skill, at the highest tier asked, 
   const manifest: unknown = parse(await project.read(manifestFile));
   assert.ok(isRecord(manifest) && isRecord(manifest.actions));
   const redraft = {
+    description: "When the owner wants a note drafted again.",
     input: "schemas/compose-input.json",
     output: "schemas/draft-output.json",
     effects: ["read", "spend"],

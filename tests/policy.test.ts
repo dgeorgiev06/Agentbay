@@ -18,8 +18,20 @@ const briefing: Mode = modeNamed(
     network: ["api.example.com", "*.cdn.example.com"],
   },
   {
-    digest: { input: "a.json", output: "b.json", effects: ["read"], run: [{ script: "scripts/a.ts" }] },
-    sync: { input: "a.json", output: "b.json", effects: ["read", "write", "network"], run: [{ script: "s.ts" }] },
+    digest: {
+      description: "When a digest is due.",
+      input: "a.json",
+      output: "b.json",
+      effects: ["read"],
+      run: [{ script: "scripts/a.ts" }],
+    },
+    sync: {
+      description: "When new items are due.",
+      input: "a.json",
+      output: "b.json",
+      effects: ["read", "write", "network"],
+      run: [{ script: "s.ts" }],
+    },
   },
 );
 

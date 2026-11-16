@@ -273,6 +273,7 @@ describe("actions", () => {
 
   test("a last skill step shows the agent every schema its output is checked against", async () => {
     const finale = {
+      description: "When a test ends with a skill.",
       input: "schemas/anything.json",
       output: "schemas/item.json",
       effects: ["read" as const],
@@ -440,7 +441,12 @@ test("the spend of every round of a skill counts, and a negative spend is refuse
 });
 
 test("a submission that reports dollars is refused when the skill's action does not declare spend", async () => {
-  const paid = { input: "schemas/anything.json", output: "schemas/draft.json", effects: ["read", "spend"] as const };
+  const paid = {
+    description: "When a test drafts for money.",
+    input: "schemas/anything.json",
+    output: "schemas/draft.json",
+    effects: ["read", "spend"] as const,
+  };
   const notesActions = { "paid-draft": { ...paid, run: [{ skill: "skills/draft", tier: "fast" as const }] } };
   const { runs, close } = await openedRuns({ changes: { notesActions } });
   const started = runOf(await runs.start(draftAction, {}));

@@ -1,4 +1,5 @@
 import type { Command } from "./command-line.ts";
+import { actionsCommand } from "./commands/actions.ts";
 import { approveCommand } from "./commands/approve.ts";
 import { buildCommand } from "./commands/build.ts";
 import { callCommand } from "./commands/call.ts";
@@ -14,6 +15,7 @@ import { submitCommand } from "./commands/submit.ts";
 export const commands: readonly Command[] = [
   checkCommand,
   newCommand,
+  actionsCommand,
   callCommand,
   submitCommand,
   runsCommand,

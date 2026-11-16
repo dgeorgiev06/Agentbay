@@ -17,6 +17,7 @@ const journalMode: Mode = {
   requires: { interfaces: ["notes@1"] },
   actions: {
     write: {
+      description: "When the owner writes an entry.",
       input: "schemas/write-input.json",
       output: "schemas/write-output.json",
       effects: ["read", "write"],

@@ -9,12 +9,14 @@ settings: schemas/settings.json
 
 actions:
   sync:
+    description: When the owner wants the newest posts from the bound source brought into the store, within the budget and the monthly cap.
     input: schemas/sync-request.json
     output: schemas/sync-result.json
     effects: [read, write, network, spend]
     run:
       - script: scripts/sync.ts
   digest:
+    description: When the owner wants the themes of recent posts summed up, each claim citing the posts it rests on.
     input: schemas/digest-request.json
     output: schemas/digest.json
     effects: [read]
@@ -25,6 +27,7 @@ actions:
         checks: [scripts/check-citations.ts]
       - script: scripts/format.ts
   ask:
+    description: When the owner has a question that the stored posts can answer, with every answer citing them.
     input: schemas/ask-request.json
     output: schemas/answer.json
     effects: [read]

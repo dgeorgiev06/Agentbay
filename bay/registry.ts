@@ -1,14 +1,16 @@
 import { basename, dirname, join } from "node:path/posix";
 import { isDeepStrictEqual } from "node:util";
+import type { Json } from "./contracts.ts";
 import type { Config } from "./generated/config.ts";
 import type { Interface, Signature } from "./generated/interface.ts";
-import type { Action, Mode, Step } from "./generated/mode.ts";
+import type { Action, Effect, Mode, Step } from "./generated/mode.ts";
 import type { Workflow, Step as WorkflowStep } from "./generated/workflow.ts";
 import { isProjectTheKit, pathIn, shownPath, shownProblems, type Home, type Layout } from "./layout.ts";
+import { toJson } from "./json.ts";
 import type { FileSystem } from "./ports.ts";
 import { workflowReferenceIssues } from "./references.ts";
 import { checkValue, loadSpec, problemAt, type Loaded, type PathSegments, type Wording } from "./spec.ts";
-import type { Outcome, Problem } from "./outcome.ts";
+import { failedWith, succeededWith, unplacedProblem, type Outcome, type Problem } from "./outcome.ts";
 
 export type LoadedMode = {
   readonly home: Home;
@@ -17,6 +19,7 @@ export type LoadedMode = {
   readonly lineOf: Loaded<Mode>["lineOf"];
   readonly workflows: ReadonlyMap<string, Workflow>;
   readonly settings: Readonly<Record<string, unknown>>;
+  readonly inputSchemas: ReadonlyMap<string, Json>;
 };
 
 export type LoadedInterface = {
@@ -41,6 +44,26 @@ export type SystemReport = {
   readonly outcome: Outcome<System>;
   readonly active: ReadonlySet<string>;
   readonly notices: readonly Problem[];
+};
+
+export type ModeListed = {
+  readonly name: string;
+  readonly description: string;
+};
+
+export type ActionListed = {
+  readonly name: string;
+  readonly description: string;
+  readonly effects: readonly Effect[];
+  readonly input: Json;
+};
+
+export type ActionsListing =
+  { readonly modes: readonly ModeListed[] } | { readonly mode: string; readonly actions: readonly ActionListed[] };
+
+export type ListingQuestion = {
+  readonly mode?: string;
+  readonly find?: string;
 };
 
 export type ModeFolder = {
@@ -1180,7 +1203,18 @@ async function consistencyProblems(context: Context): Promise<readonly Problem[]
   return problems;
 }
 
-function buildSystem(context: Context, config: Config, workflows: readonly ModeWorkflow[]): System {
+async function inputSchemasOf(files: FileSystem, mode: ModeSource): Promise<ReadonlyMap<string, Json>> {
+  const schemas = new Map<string, Json>();
+  for (const place of actionsOf(mode)) {
+    const schemaFile = await readSchemaFile(files, join(mode.folder, place.action.input));
+    if (schemaFile.state === "valid") {
+      schemas.set(place.name, toJson(schemaFile.schema));
+    }
+  }
+  return schemas;
+}
+
+async function buildSystem(context: Context, config: Config, workflows: readonly ModeWorkflow[]): Promise<System> {
   const modes = new Map<string, LoadedMode>();
   for (const [name, mode] of context.modes) {
     const own = workflows
@@ -1193,6 +1227,7 @@ function buildSystem(context: Context, config: Config, workflows: readonly ModeW
       lineOf: mode.lineOf,
       workflows: new Map(own),
       settings: settingsOf(config, name),
+      inputSchemas: await inputSchemasOf(context.files, mode),
     });
   }
   const interfaces = new Map<string, LoadedInterface>();
@@ -1247,5 +1282,66 @@ export async function loadSystemReport(files: FileSystem, layout: Layout): Promi
   if (problems.length > 0 || !config.ok) {
     return { ...report, outcome: { ok: false, problems: shownProblems(layout, problems) } };
   }
-  return { ...report, outcome: { ok: true, value: buildSystem(context, config.value.value, workflows.values) } };
+  const system = await buildSystem(context, config.value.value, workflows.values);
+  return { ...report, outcome: { ok: true, value: system } };
+}
+
+function wordsOf(find: string | undefined): readonly string[] {
+  return (find ?? "")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((word) => word !== "");
+}
+
+function holdsEveryWord(words: readonly string[], entry: ModeListed | ActionListed): boolean {
+  const text = `${entry.name} ${entry.description}`.toLowerCase();
+  return words.every((word) => text.includes(word));
+}
+
+function activeModesByName(system: System): readonly LoadedMode[] {
+  return [...system.active].sort().flatMap((name) => system.modes.get(name) ?? []);
+}
+
+function listedModes(system: System, words: readonly string[]): ActionsListing {
+  const modes = activeModesByName(system).map((mode) => ({
+    name: mode.manifest.name,
+    description: mode.manifest.description,
+  }));
+  return { modes: modes.filter((mode) => holdsEveryWord(words, mode)) };
+}
+
+function listedActions(mode: LoadedMode, words: readonly string[]): Outcome<ActionsListing> {
+  const actions: ActionListed[] = [];
+  const problems: Problem[] = [];
+  for (const [name, action] of Object.entries(mode.manifest.actions)) {
+    const reference = `${mode.manifest.name}.${name}`;
+    const input = mode.inputSchemas.get(name);
+    if (input === undefined) {
+      problems.push(unplacedProblem(`The input schema of ${reference} could not be read.`, "Run bay check."));
+      continue;
+    }
+    actions.push({ name: reference, description: action.description, effects: action.effects, input });
+  }
+  if (problems.length > 0) {
+    return failedWith(problems);
+  }
+  return succeededWith({ mode: mode.manifest.name, actions: actions.filter((entry) => holdsEveryWord(words, entry)) });
+}
+
+export function actionsListing(system: System, question: ListingQuestion): Outcome<ActionsListing> {
+  const words = wordsOf(question.find);
+  if (question.mode === undefined) {
+    return succeededWith(listedModes(system, words));
+  }
+  const mode = system.active.has(question.mode) ? system.modes.get(question.mode) : undefined;
+  if (mode === undefined) {
+    const active = activeModesByName(system).map((entry) => entry.manifest.name);
+    return failedWith([
+      unplacedProblem(
+        `There is no active mode ${question.mode}. The active modes are ${active.join(", ")}.`,
+        "Name one of them, or leave the mode out to list them.",
+      ),
+    ]);
+  }
+  return listedActions(mode, words);
 }

@@ -142,6 +142,7 @@ test("resume at the same skill wait counts the tool calls the round has already 
 
 test("resume that brings a run into a skill wait it was not in issues a token", async () => {
   const prepared = {
+    description: "When a test prepares and then drafts.",
     input: "schemas/anything.json",
     output: "schemas/draft.json",
     effects: ["read" as const],

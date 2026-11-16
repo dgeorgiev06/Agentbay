@@ -40,6 +40,7 @@ export const storeMode: Mode = {
   implements: ["items-store@1"],
   actions: {
     put: {
+      description: "When a mode keeps an item.",
       input: "schemas/put-input.json",
       output: "schemas/put-output.json",
       effects: ["write"],
@@ -47,12 +48,14 @@ export const storeMode: Mode = {
       undo: "remove",
     },
     get: {
+      description: "When a mode reads an item back.",
       input: "schemas/get-input.json",
       output: "schemas/get-output.json",
       effects: ["read"],
       run: [{ script: "scripts/get.ts" }],
     },
     remove: {
+      description: "When a kept item must go.",
       input: "schemas/put-output.json",
       output: "schemas/get-output.json",
       effects: ["delete"],
@@ -69,6 +72,7 @@ export const notesMode: Mode = {
   implements: ["notes@1"],
   actions: {
     add: {
+      description: "When the owner wants a note written.",
       input: "schemas/add-input.json",
       output: "schemas/add-output.json",
       effects: ["read", "write"],
@@ -86,6 +90,7 @@ export const briefingMode: Mode = {
   settings: "schemas/settings.json",
   actions: {
     digest: {
+      description: "When the owner wants the daily briefing.",
       input: "schemas/digest-input.json",
       output: "schemas/digest-output.json",
       effects: ["read", "write"],

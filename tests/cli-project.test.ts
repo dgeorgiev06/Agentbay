@@ -21,7 +21,15 @@ test("check prints the summary and exits 0 on a clean project, 1 with every erro
     const asKit = { kit: project.root };
     const clean = await bay(["check", "--project", project.root], asKit);
     assert.equal(clean.exitCode, 0, clean.output);
-    assert.equal(clean.output, "bay check: 0 errors, 0 warnings.");
+    assert.equal(
+      clean.output,
+      [
+        "framework/limits.yaml:4: warning: cli_commands is 13, over its ceiling of 12.",
+        "  fix: Review whether the growth is needed. A line budget never outranks readability: being over is a " +
+          "signal for review, not a failure.",
+        "bay check: 0 errors, 1 warning.",
+      ].join("\n"),
+    );
     await project.write("components/modes/writer/skills/draft/SKILL.md", skillText.replace("## Tools", "## Tooling"));
     const broken = await bay(["check", "--project", project.root, "--json"], asKit);
     assert.equal(broken.exitCode, 1);

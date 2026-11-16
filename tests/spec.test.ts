@@ -69,7 +69,7 @@ test("a missing required field names the field and the fix", async () => {
       path: "",
       line: 1,
       message: "This file is missing the required field adapter.",
-      fix: "Add adapter.",
+      fix: "Add adapter. Expected: The adapter that runs skill steps.",
     },
   ]);
 });

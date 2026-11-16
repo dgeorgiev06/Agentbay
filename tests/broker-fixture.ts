@@ -26,7 +26,13 @@ export function modeNamed(name: string, resources: Mode["resources"], actions?: 
     description: `The ${name} mode.`,
     ...(resources === undefined ? {} : { resources }),
     actions: actions ?? {
-      look: { input: "schemas/in.json", output: "schemas/out.json", effects: ["read"], run: [{ script: "a.ts" }] },
+      look: {
+        description: "When a test looks.",
+        input: "schemas/in.json",
+        output: "schemas/out.json",
+        effects: ["read"],
+        run: [{ script: "a.ts" }],
+      },
     },
   };
 }
@@ -36,7 +42,15 @@ type ModeEntry = { readonly folder: string; readonly manifest: Mode; readonly ho
 export function systemOf(modes: readonly ModeEntry[]): System {
   const loaded = new Map<string, LoadedMode>();
   for (const { folder, manifest, home } of modes) {
-    const mode = { home: home ?? "kit", folder, manifest, lineOf: () => undefined, workflows: new Map(), settings: {} };
+    const mode = {
+      home: home ?? "kit",
+      folder,
+      manifest,
+      lineOf: () => undefined,
+      workflows: new Map(),
+      settings: {},
+      inputSchemas: new Map(),
+    };
     loaded.set(manifest.name, mode);
   }
   return {

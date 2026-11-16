@@ -75,6 +75,7 @@ async function writeProbe(project: Project, resources: Resources): Promise<void>
     resources,
     actions: {
       look: {
+        description: "When a test looks.",
         input: "schemas/anything.json",
         output: "schemas/anything.json",
         effects: ["read"],

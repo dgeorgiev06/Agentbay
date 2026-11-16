@@ -3,9 +3,11 @@ import type { Broker } from "./broker.ts";
 import type { Json } from "./contracts.ts";
 import { byteSize, fieldOf, numberField, textField, isRecord } from "./json.ts";
 import type { Kernel } from "./kernel.ts";
+import { actionsListing, type ListingQuestion, type System } from "./registry.ts";
 import type { Run, Task } from "./runs/runs.ts";
 import { failedWith, unplacedProblem, type Outcome, type Problem } from "./outcome.ts";
 import { isToolName, skillToolsOf, type SkillTools, type ToolName } from "./skill-tools.ts";
+import { actionsToolName } from "./tool-definitions.ts";
 
 type ToolCall = {
   readonly kernel: Kernel;
@@ -171,6 +173,29 @@ const handlers: { readonly [Name in ToolName]: ToolHandler } = {
   submit,
 };
 
+const listingFields: readonly string[] = ["mode", "find"];
+
+function listingQuestion(input: Json): ListingQuestion | undefined {
+  if (!isRecord(input) || Object.keys(input).some((key) => !listingFields.includes(key))) {
+    return undefined;
+  }
+  const mode = fieldOf(input, "mode");
+  const find = fieldOf(input, "find");
+  if ((mode !== undefined && typeof mode !== "string") || (find !== undefined && typeof find !== "string")) {
+    return undefined;
+  }
+  return { ...(mode === undefined ? {} : { mode }), ...(find === undefined ? {} : { find }) };
+}
+
+function listActions(system: System, input: Json): Outcome<Json> {
+  const question = listingQuestion(input);
+  if (question === undefined) {
+    return refused("The tool actions takes only mode and find, both optional text; it needs no token.");
+  }
+  const listing = actionsListing(system, question);
+  return listing.ok ? { ok: true, value: { ...listing.value } } : listing;
+}
+
 function redactedProblem(kernel: Kernel, problem: Problem): Problem {
   const fix = problem.fix === undefined ? {} : { fix: kernel.secrets.redact(problem.fix) };
   return { ...problem, message: kernel.secrets.redact(problem.message), ...fix };
@@ -219,9 +244,12 @@ export async function callKernelTool(kernel: Kernel, name: string, input: Json):
 }
 
 async function checkedToolCall(kernel: Kernel, name: string, input: Json): Promise<Outcome<Json>> {
+  if (name === actionsToolName) {
+    return capped(kernel, listActions(kernel.system, input));
+  }
   if (!isToolName(name)) {
     return refused(
-      `There is no kernel tool ${name}; the tools are db_query, files_read, files_list, ` +
+      `There is no kernel tool ${name}; the tools are actions, db_query, files_read, files_list, ` +
         "files_write, call_action and submit.",
     );
   }

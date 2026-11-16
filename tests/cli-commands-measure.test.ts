@@ -13,11 +13,11 @@ async function realCommandTable(): Promise<string> {
 
 test("cli_commands counts the entries of the command table in bay/commands.ts", async () => {
   const table = await realCommandTable();
-  const lowered = limitsText.replace(/cli_commands: \d+/, "cli_commands: 11");
+  const lowered = limitsText.replace(/cli_commands: \d+/, "cli_commands: 12");
   const over = await check({ ...cleanFiles(), "bay/commands.ts": table, [limitsFile]: lowered });
-  const finding = findFinding(over, limitsFile, "cli_commands is 12, over its ceiling of 11.");
+  const finding = findFinding(over, limitsFile, "cli_commands is 13, over its ceiling of 12.");
   assert.equal(finding.severity, "warning");
-  const atCeiling = limitsText.replace(/cli_commands: \d+/, "cli_commands: 12");
+  const atCeiling = limitsText.replace(/cli_commands: \d+/, "cli_commands: 13");
   withoutFinding(await check({ ...cleanFiles(), "bay/commands.ts": table, [limitsFile]: atCeiling }), "cli_commands");
 });
 

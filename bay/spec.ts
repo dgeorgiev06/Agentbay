@@ -173,9 +173,18 @@ function describeType(error: ErrorObject, place: string): Wording {
   return { message: `${place} must be ${expected}, but it is ${describeValue(error.data)}.` };
 }
 
+function fieldDescription(error: ErrorObject, field: string): string | undefined {
+  const properties: unknown = error.parentSchema?.properties;
+  const property: unknown = isRecord(properties) ? properties[field] : undefined;
+  const description: unknown = isRecord(property) ? property.description : undefined;
+  return typeof description === "string" ? description : undefined;
+}
+
 function describeRequired(error: ErrorObject, place: string): Wording {
   const field = String(parameter(error, "missingProperty"));
-  return { message: `${place} is missing the required field ${field}.`, fix: `Add ${field}.` };
+  const description = fieldDescription(error, field);
+  const expected = description === undefined ? "" : ` Expected: ${description}`;
+  return { message: `${place} is missing the required field ${field}.`, fix: `Add ${field}.${expected}` };
 }
 
 function describeAdditionalProperty(error: ErrorObject, place: string): Wording {

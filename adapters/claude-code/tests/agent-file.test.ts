@@ -194,6 +194,8 @@ test("the coordinator block states the protocol between its markers in under 40 
   assert.equal(blockLines.at(-1), "<!-- agentbay:end -->");
   assert.ok(blockLines.length < 40, String(blockLines.length));
   for (const phrase of [
+    "When you do not know which action fits what the owner asks, run\n`./bay.sh actions --json` for the active modes",
+    "then `./bay.sh actions <mode> --json` for that mode's actions.",
     "`./bay.sh call <mode.action> '<json input>' --json`",
     "the output carries a `task`",
     "Start the subagent named `task.agent`",

@@ -40,6 +40,7 @@ async function addOverreachingMode(project: Project): Promise<string> {
     resources: { files: { write: ["out/probe/"] }, network: ["api.example.com"] },
     actions: {
       probe: {
+        description: "When a test probes the effects.",
         input: "schemas/anything.json",
         output: "schemas/anything.json",
         effects: ["read"],

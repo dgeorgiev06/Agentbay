@@ -6,6 +6,7 @@ import { isInsideOrEqual, isProjectTheKit, pathIn, shownPath, type Home, type La
 export type OtherMode = {
   readonly name: string;
   readonly folder: string;
+  readonly manifest: Mode;
 };
 
 export type GrantRequest = {
@@ -255,6 +256,58 @@ function commandProblems(request: GrantRequest): readonly GrantProblem[] {
   }));
 }
 
+function throwawayPlaceProblems(request: GrantRequest): readonly GrantProblem[] {
+  if (isBaseMode(request)) {
+    return [];
+  }
+  const { manifest, layout } = request;
+  return declaredFiles(manifest).throwaway.map((path, index) => ({
+    at: ["resources", "files", "throwaway", index],
+    message:
+      `Mode ${manifest.name} names the throwaway folder ${path}; the kernel removes whole folders and makes links ` +
+      `there for it. Only a mode under the kit's ${baseTier}/ may name throwaway folders.`,
+    fix: `Remove resources.files.throwaway from ${shownPath(layout, manifestFile(request))}.`,
+  }));
+}
+
+type GrantedPath = {
+  readonly mode: string;
+  readonly access: "read" | "write";
+  readonly path: string;
+};
+
+function grantedPaths(manifest: Mode): readonly GrantedPath[] {
+  const files = declaredFiles(manifest);
+  return [
+    ...files.read.map((path) => ({ mode: manifest.name, access: "read" as const, path })),
+    ...files.write.map((path) => ({ mode: manifest.name, access: "write" as const, path })),
+  ];
+}
+
+function throwawayOverlapProblems(request: GrantRequest): readonly GrantProblem[] {
+  const { manifest, layout } = request;
+  const granted = [manifest, ...request.otherModes.map((other) => other.manifest)].flatMap(grantedPaths);
+  const inProject = (path: string): string => pathIn(layout, "project", normalized(path));
+  return declaredFiles(manifest).throwaway.flatMap((path, index) => {
+    const folder = inProject(path);
+    const overlapping = granted.find(
+      (other) => isInsideOrEqual(inProject(other.path), folder) || isInsideOrEqual(folder, inProject(other.path)),
+    );
+    if (overlapping === undefined) {
+      return [];
+    }
+    return [
+      {
+        at: ["resources", "files", "throwaway", index],
+        message:
+          `The throwaway folder ${path} overlaps ${overlapping.path}, which the mode ${overlapping.mode} may ` +
+          `${overlapping.access}; the kernel removes whole folders in a throwaway folder.`,
+        fix: "Name a throwaway folder that neither holds nor sits inside a path any mode may read or write.",
+      },
+    ];
+  });
+}
+
 function projectPaths(layout: Layout, paths: readonly string[]): readonly string[] {
   return paths.map((path) => pathIn(layout, "project", normalized(path)));
 }
@@ -283,6 +336,8 @@ export function grantsOf(request: GrantRequest): GrantRuling {
     ...secretProblems(request.manifest),
     ...hostProblems(request.manifest),
     ...commandProblems(request),
+    ...throwawayPlaceProblems(request),
+    ...throwawayOverlapProblems(request),
   ];
   if (problems.length > 0) {
     return { ok: false, problems };

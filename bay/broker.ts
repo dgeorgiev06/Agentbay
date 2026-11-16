@@ -103,7 +103,7 @@ const partitionName = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 
 const longestPartitionName = 64;
 
-const brokerKinds: readonly string[] = ["refused", "http", "redacted", "command"];
+const brokerKinds: readonly string[] = ["refused", "http", "redacted", "command", "throwaway"];
 
 const isRows = (value: Json): value is readonly Row[] =>
   Array.isArray(value) && value.every((row: Json) => isJsonRecord(row));
@@ -301,6 +301,7 @@ export class Broker {
         return failed(`The folder ${operation.path} already exists.`);
       }
       await this.#options.files.makeFolder(checked.value);
+      await this.#recordThrowaway({ did: "made the folder", path: operation.path });
       return granted(null);
     });
   }
@@ -320,6 +321,7 @@ export class Broker {
         return failed(`The path ${operation.path} already exists.`);
       }
       await this.#options.files.link(checked.value, leadsTo.value);
+      await this.#recordThrowaway({ did: "made a link", path: operation.path, target: operation.target });
       return granted(null);
     });
   }
@@ -332,6 +334,7 @@ export class Broker {
         return checked;
       }
       await this.#options.files.removeAll(checked.value);
+      await this.#recordThrowaway({ did: "removed", path: operation.path });
       return granted(null);
     });
   }
@@ -737,6 +740,10 @@ export class Broker {
       case "error":
         return failed(`The statement failed: ${result.message}`);
     }
+  }
+
+  async #recordThrowaway(detail: { readonly did: string; readonly path: string; readonly target?: string }) {
+    await this.#append("throwaway", { step: this.#options.place.stepKey, ...detail });
   }
 
   async #isTaken(path: string): Promise<boolean> {

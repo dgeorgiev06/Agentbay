@@ -57,6 +57,15 @@ test("a listed command in a mode outside components/base is an error", async () 
   assert.match(finding.message, /Only a mode under the kit's components\/base\/ may list commands\./);
 });
 
+test("a throwaway folder in a mode outside components/base is an error", async () => {
+  const manifest = yamlText({ ...notesMode, resources: { files: { throwaway: ["scratch/"] } } });
+  const report = await check({ ...cleanFiles(), [paths.notes]: manifest });
+  const finding = findFinding(report, paths.notes, "Mode notes names the throwaway folder scratch/");
+  assert.equal(finding.severity, "error");
+  assert.equal(finding.path, "/resources/files/throwaway/0");
+  assert.match(finding.message, /Only a mode under the kit's components\/base\/ may name throwaway folders\./);
+});
+
 test("the summary groups findings by file, errors first, each with its fix, and ends with the counts", () => {
   const report: CheckReport = {
     findings: [

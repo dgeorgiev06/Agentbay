@@ -14,7 +14,7 @@ export function grantsOfActiveModes(context: Context): Outcome<ReadonlyMap<strin
   for (const mode of [...context.active].flatMap((name) => context.modes.get(name) ?? [])) {
     const otherModes = [...context.modes.values()]
       .filter((other) => other !== mode)
-      .map((other) => ({ name: other.value.name, folder: other.folder }));
+      .map((other) => ({ name: other.value.name, folder: other.folder, manifest: other.value }));
     const ruling = grantsOf({
       manifest: mode.value,
       home: mode.home,

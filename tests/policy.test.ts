@@ -47,7 +47,7 @@ function rulingFor(modes: Modes, name: string, within: Layout): ReturnType<typeo
   assert.ok(own, `no mode ${name} in the test`);
   const otherModes = modes
     .filter((mode) => mode !== own)
-    .map((mode) => ({ name: mode.manifest.name, folder: mode.folder }));
+    .map((mode) => ({ name: mode.manifest.name, folder: mode.folder, manifest: mode.manifest }));
   return grantsOf({ manifest: own.manifest, home: own.home ?? "kit", folder: own.folder, layout: within, otherModes });
 }
 
@@ -406,4 +406,72 @@ test("only a mode under the kit's components/base may list commands", () => {
   assert.deepEqual(grantsFor(base, "briefing").commands, ["node --test"]);
   const projectBase: Modes = [{ folder: "/project/components/base/briefing", manifest: withCommand, home: "project" }];
   assert.equal(problemsFor(projectBase, "briefing").length, 1);
+});
+
+test("only a mode under the kit's components/base may name throwaway folders", () => {
+  const withThrowaway = { ...briefing, resources: { files: { throwaway: ["scratch/"] } } };
+  const outside: Modes = [{ folder: "/project/components/modes/briefing", manifest: withThrowaway }];
+  assert.deepEqual(problemsFor(outside, "briefing"), [
+    {
+      at: ["resources", "files", "throwaway", 0],
+      message:
+        "Mode briefing names the throwaway folder scratch/; the kernel removes whole folders and makes links " +
+        "there for it. Only a mode under the kit's components/base/ may name throwaway folders.",
+      fix: "Remove resources.files.throwaway from components/modes/briefing/mode.yaml.",
+    },
+  ]);
+  const base: Modes = [{ folder: "/project/components/base/briefing", manifest: withThrowaway }];
+  assert.deepEqual(grantsFor(base, "briefing").throwawayPaths, ["/project/scratch"]);
+  const projectBase: Modes = [
+    { folder: "/project/components/base/briefing", manifest: withThrowaway, home: "project" },
+  ];
+  assert.equal(problemsFor(projectBase, "briefing").length, 1);
+});
+
+test("a throwaway folder may not be the project root, nor be or sit inside .agentbay/", () => {
+  const named = (throwaway: readonly string[]): Modes => [
+    { folder: "/project/components/base/briefing", manifest: { ...briefing, resources: { files: { throwaway } } } },
+  ];
+  assert.deepEqual(
+    problemsFor(named([".", ".agentbay", ".agentbay/scratch"]), "briefing").map((problem) => problem.message),
+    [
+      "The path . contains the kernel's state folder .agentbay/, which no mode may name.",
+      "The path .agentbay points into the kernel's state folder .agentbay/, which no mode may name.",
+      "The path .agentbay/scratch points into the kernel's state folder .agentbay/, which no mode may name.",
+    ],
+  );
+});
+
+test("a throwaway folder may not hold, or sit inside, a path that any mode may read or write", () => {
+  const forger = modeNamed("forger", {
+    files: { write: ["work/out"], throwaway: ["work/", "notes/", "out/digests/copies"] },
+  });
+  const modes: Modes = [
+    { folder: "/project/components/base/forger", manifest: forger },
+    { folder: "/project/components/modes/briefing", manifest: briefing },
+  ];
+  const fix = "Name a throwaway folder that neither holds nor sits inside a path any mode may read or write.";
+  assert.deepEqual(problemsFor(modes, "forger"), [
+    {
+      at: ["resources", "files", "throwaway", 0],
+      message:
+        "The throwaway folder work/ overlaps work/out, which the mode forger may write; " +
+        "the kernel removes whole folders in a throwaway folder.",
+      fix,
+    },
+    {
+      at: ["resources", "files", "throwaway", 1],
+      message:
+        "The throwaway folder notes/ overlaps notes/in/, which the mode briefing may read; " +
+        "the kernel removes whole folders in a throwaway folder.",
+      fix,
+    },
+    {
+      at: ["resources", "files", "throwaway", 2],
+      message:
+        "The throwaway folder out/digests/copies overlaps out/digests/, which the mode briefing may write; " +
+        "the kernel removes whole folders in a throwaway folder.",
+      fix,
+    },
+  ]);
 });

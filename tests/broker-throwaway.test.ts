@@ -14,19 +14,21 @@ import {
   place,
   projectLayout,
   recordingSink,
+  type RecordingSink,
   refusalOf,
   scriptedHttp,
   withProject,
   writeProjectFile,
 } from "./broker-fixture.ts";
 
-type Setup = { readonly root: string; readonly broker: Broker };
+type Setup = { readonly root: string; readonly broker: Broker; readonly events: RecordingSink };
 
 const everyEffect: readonly Effect[] = ["read", "write", "network", "spend", "delete"];
 
 async function withThrowawayBroker(effects: readonly Effect[], run: (setup: Setup) => Promise<void>): Promise<void> {
   await withProject(async (root) => {
     await writeProjectFile(root, "shared/kept.txt", "kept");
+    const events = recordingSink();
     const broker = new Broker({
       layout: projectLayout(root),
       permissions: permissionsIn(root, { effects, throwawayPaths: [join(root, "scratch/copies")] }),
@@ -35,14 +37,14 @@ async function withThrowawayBroker(effects: readonly Effect[], run: (setup: Setu
       inspector: nodeFileInspector,
       http: scriptedHttp(() => ({ status: 500, headers: {}, body: "" })),
       secrets: new SecretStore({ environment: {}, processes: noProcesses, platform: "linux" }),
-      events: recordingSink(),
+      events,
       clock: systemClock,
       childProcesses: nodeChildProcesses,
       processes: noProcesses,
       commandSearchPath: "/usr/bin:/bin",
     });
     try {
-      await run({ root, broker });
+      await run({ root, broker, events });
     } finally {
       broker.close();
     }
@@ -231,6 +233,22 @@ test("making a folder or a link needs the write effect, and removing needs the d
       [
         `The step look.0 of action look asked to make the folder scratch/copies/one, ${declared}`,
         `The step look.0 of action look asked to link scratch/copies/l to x, ${declared}`,
+      ],
+    );
+  });
+});
+
+test("each folder made, link made and path removed is recorded as an event of the run", async () => {
+  await withThrowawayBroker(everyEffect, async ({ broker, events }) => {
+    await broker.makeFolder("scratch/copies/one");
+    await broker.link("scratch/copies/one/shared", "shared");
+    await broker.remove("scratch/copies/one");
+    assert.deepEqual(
+      events.events.filter((event) => event.kind === "throwaway").map((event) => event.detail),
+      [
+        { step: "look.0", did: "made the folder", path: "scratch/copies/one" },
+        { step: "look.0", did: "made a link", path: "scratch/copies/one/shared", target: "shared" },
+        { step: "look.0", did: "removed", path: "scratch/copies/one" },
       ],
     );
   });

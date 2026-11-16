@@ -1,5 +1,5 @@
 import type { Action } from "../generated/mode.ts";
-import { servingMode, type ActiveMode, type System } from "./registry.ts";
+import { servingMode, type ActiveMode, type System } from "./manifests.ts";
 
 export type ActionTarget = {
   readonly mode: ActiveMode;

@@ -3,7 +3,7 @@ import { pathToFileURL } from "node:url";
 import { agentName, type Adapter, type SkillAgent } from "./adapter.ts";
 import type { Effect, ModeGrants, Tier } from "./contracts.ts";
 import type { FileSystem } from "./ports.ts";
-import type { ActiveMode, System } from "./manifests/registry.ts";
+import type { ActiveMode, System } from "./manifests/manifests.ts";
 import { skillNameOf, skillToolsOf } from "./skill-tools.ts";
 import { parseSkill } from "./manifests/spec.ts";
 import { isRecord } from "./json.ts";

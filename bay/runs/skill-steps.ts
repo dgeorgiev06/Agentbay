@@ -4,7 +4,7 @@ import type { Json, Permissions, RunEvent, Submission } from "../contracts.ts";
 import { effectRefusal } from "../effect-rule.ts";
 import { textField } from "../json.ts";
 import { problemText, unplacedProblem, type Problem } from "../outcome.ts";
-import type { ActiveMode } from "../manifests/registry.ts";
+import type { ActiveMode } from "../manifests/manifests.ts";
 import type { StepRecord } from "./run-store.ts";
 import type { SkillTask } from "./run-state.ts";
 import { parseSkill } from "../manifests/spec.ts";

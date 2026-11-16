@@ -1,6 +1,6 @@
 import { measures, type RunEvent, type Scrubber } from "../contracts.ts";
 import { numberField, textField } from "../json.ts";
-import type { System } from "../manifests/registry.ts";
+import type { System } from "../manifests/manifests.ts";
 import type { RunWithSteps, StepRecord } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
 import { approvalContentOf } from "./scrubbed-store.ts";

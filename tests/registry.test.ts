@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Action, Mode } from "../bay/generated/mode.ts";
-import { bindingUses, loadSystemReport, servingMode, type System } from "../bay/manifests/registry.ts";
+import { bindingUses, loadSystemReport, servingMode, type System } from "../bay/manifests/manifests.ts";
 import type { Problem } from "../bay/outcome.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import {

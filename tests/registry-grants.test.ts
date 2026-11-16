@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ModeGrants } from "../bay/contracts.ts";
 import { layoutOf, type Layout } from "../bay/layout.ts";
-import { loadSystemReport, type System } from "../bay/manifests/registry.ts";
+import { loadSystemReport, type System } from "../bay/manifests/manifests.ts";
 import type { Problem } from "../bay/outcome.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import { briefingMode, layout, paths, rooted, schemaText, validFiles, yamlText } from "./system-fixture.ts";

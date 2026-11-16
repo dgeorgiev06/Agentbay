@@ -2,7 +2,7 @@ import { basename, dirname, join, relative } from "node:path/posix";
 import { isMap, isScalar, isSeq, parseDocument, type Document } from "yaml";
 import { isProjectTheKit, pathIn, shownPath, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
-import { findModeFolders, ownInterfacesFolder, type ModeFolder } from "./manifests/registry.ts";
+import { findModeFolders, ownInterfacesFolder, type ModeFolder } from "./manifests/manifests.ts";
 import { sdkSpecifier } from "./script-protocol.ts";
 import { failedWith, type Outcome, type Problem } from "./outcome.ts";
 

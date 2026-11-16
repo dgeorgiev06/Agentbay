@@ -9,7 +9,7 @@ import type { Action, Mode } from "../bay/generated/mode.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
 import { fieldOf, numberField, textField } from "../bay/json.ts";
 import { layoutOf } from "../bay/layout.ts";
-import { loadSystemReport, type System } from "../bay/manifests/registry.ts";
+import { loadSystemReport, type System } from "../bay/manifests/manifests.ts";
 import type { Outcome } from "../bay/outcome.ts";
 import { openRuns, type Run, type Runs, type Task } from "../bay/runs/runs.ts";
 import { SecretStore } from "../bay/secrets.ts";

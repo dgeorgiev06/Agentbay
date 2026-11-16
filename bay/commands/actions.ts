@@ -7,7 +7,7 @@ import {
   type ActionsListing,
   type ListingQuestion,
   type ModeListed,
-} from "../manifests/registry.ts";
+} from "../manifests/manifests.ts";
 
 const modeHint = "bay actions <mode> lists the actions of one mode.";
 

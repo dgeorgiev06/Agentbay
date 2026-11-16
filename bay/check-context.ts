@@ -3,7 +3,7 @@ import type { Interface } from "./generated/interface.ts";
 import type { Mode } from "./generated/mode.ts";
 import { homeFolder, isProjectTheKit, shownPath, type Home, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
-import { findInterfaceFiles, findModeFolders } from "./manifests/registry.ts";
+import { findInterfaceFiles, findModeFolders } from "./manifests/manifests.ts";
 import { loadSpec, type Loaded } from "./manifests/spec.ts";
 import type { Problem } from "./outcome.ts";
 

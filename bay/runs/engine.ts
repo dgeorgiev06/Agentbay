@@ -28,7 +28,7 @@ import { failedWith, succeededWith, unplacedProblem, type Outcome, type Problem 
 import { scrubbedStore } from "./scrubbed-store.ts";
 import { startedSkillOf, submissionProblems, type StartedSkill } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
-import { inactiveModeWording } from "../manifests/registry.ts";
+import { inactiveModeWording } from "../manifests/manifests.ts";
 import {
   resolveActionReference,
   resolveNamedAction,

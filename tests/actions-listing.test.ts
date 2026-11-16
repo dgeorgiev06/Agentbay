@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { layoutOf, type Layout } from "../bay/layout.ts";
 import type { Problem } from "../bay/outcome.ts";
 import type { FileSystem } from "../bay/ports.ts";
-import { actionsListing, loadSystemReport, type ActionsListing, type System } from "../bay/manifests/registry.ts";
+import { actionsListing, loadSystemReport, type ActionsListing, type System } from "../bay/manifests/manifests.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import { config, layout, rooted, schemaText, validFiles, yamlText } from "./system-fixture.ts";
 

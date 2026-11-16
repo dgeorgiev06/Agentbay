@@ -82,7 +82,9 @@ async function runCall(invocation: Invocation): Promise<CommandResult> {
 
 export const callCommand: Command = {
   name: "call",
-  summary: "Start an action or a workflow and print the run; or call a kernel tool with a task token.",
+  summary:
+    "Start an action or a workflow and print the run; or call a kernel tool, which needs a task token " +
+    "unless it is actions.",
   usage,
   options: [
     { name: "workflow", takesValue: true },

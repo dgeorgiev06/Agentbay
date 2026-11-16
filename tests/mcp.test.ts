@@ -83,7 +83,7 @@ function toolText(reply: Json): { readonly isError: Json | undefined; readonly t
   return { isError: fieldOf(result, "isError"), text: first === undefined ? "" : (textField(first, "text") ?? "") };
 }
 
-test("the MCP server answers initialize, lists six tools that each need a token, and refuses a bad token", async () => {
+test("the MCP server answers initialize, lists actions and six tools that each need a token, and refuses a bad token", async () => {
   const project = await makeProject();
   const server = startServer(project.root);
   const initialized = resultOf(await server.request("initialize", { protocolVersion: "2025-06-18", capabilities: {} }));
@@ -95,11 +95,12 @@ test("the MCP server answers initialize, lists six tools that each need a token,
   const listed = listOf(fieldOf(resultOf(await server.request("tools/list")), "tools"));
   assert.deepEqual(
     listed.map((tool) => textField(tool, "name")),
-    ["db_query", "files_read", "files_list", "files_write", "call_action", "submit"],
+    ["actions", "db_query", "files_read", "files_list", "files_write", "call_action", "submit"],
   );
   for (const tool of listed) {
     const schema = fieldOf(tool, "inputSchema") ?? null;
-    assert.ok(JSON.stringify(fieldOf(schema, "required")).includes('"token"'));
+    const needsToken = JSON.stringify(fieldOf(schema, "required") ?? []).includes('"token"');
+    assert.equal(needsToken, textField(tool, "name") !== "actions");
     assert.ok((textField(tool, "description") ?? "").length > 40);
   }
   const refused = toolText(
@@ -107,6 +108,33 @@ test("the MCP server answers initialize, lists six tools that each need a token,
   );
   assert.equal(refused.isError, true);
   assert.match(refused.text, /The token is not valid/);
+  assert.equal(await server.stop(), 0);
+  await project.remove();
+});
+
+test("the MCP server answers actions without a token and refuses every other tool without one, by name", async () => {
+  const project = await makeProject();
+  const server = startServer(project.root);
+  await server.request("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+  const modes = toolText(await server.request("tools/call", { name: "actions", arguments: {} }));
+  assert.equal(modes.isError, false);
+  assert.deepEqual(parseJson(modes.text), {
+    modes: [
+      { name: "greeter", description: "Gives a greeting for a name." },
+      { name: "writer", description: "Drafts a note from a greeting and keeps it." },
+    ],
+  });
+  const writer = toolText(await server.request("tools/call", { name: "actions", arguments: { mode: "writer" } }));
+  assert.equal(writer.isError, false);
+  assert.deepEqual(
+    listOf(fieldOf(parseJson(writer.text), "actions")).map((action) => textField(action, "name")),
+    ["writer.compose"],
+  );
+  for (const name of ["db_query", "files_read", "files_list", "files_write", "call_action", "submit"]) {
+    const refused = toolText(await server.request("tools/call", { name, arguments: {} }));
+    assert.equal(refused.isError, true, name);
+    assert.equal(refused.text, "Every tool call needs token: the token of your task, exactly as the task gave it.");
+  }
   assert.equal(await server.stop(), 0);
   await project.remove();
 });

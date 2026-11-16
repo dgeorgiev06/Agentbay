@@ -7,7 +7,6 @@ import type { Action, Effect, Mode, Step } from "../generated/mode.ts";
 import type { SkillFrontMatter } from "../generated/skill.ts";
 import type { Workflow, Step as WorkflowStep } from "../generated/workflow.ts";
 import { homeFolder, isProjectTheKit, shownPath, shownProblems, type Home, type Layout } from "../layout.ts";
-import { toJson } from "../json.ts";
 import type { FileSystem } from "../ports.ts";
 import { grantsOf, type GrantProblem } from "../policy.ts";
 import { resolveInput, resolveValue, workflowReferenceIssues } from "./references.ts";
@@ -39,6 +38,7 @@ import {
   findInterfaceFiles,
   modeInInterfacesProblems,
 } from "./folders.ts";
+import { type ActionSchemas, type SchemaReader, schemaDirections, schemaReader, schemaOf } from "./schemas.ts";
 
 export type ActiveMode = {
   readonly home: Home;
@@ -64,11 +64,6 @@ export type Schema = {
   readonly file: string;
   readonly json: Json | undefined;
   readonly check: (value: Json) => Outcome<Json>;
-};
-
-type ActionSchemas = {
-  readonly input: Schema;
-  readonly output: Schema;
 };
 
 type LoadedInterface = {
@@ -211,8 +206,6 @@ type Indexed<T> = {
   readonly problems: readonly Problem[];
 };
 
-type SchemaReader = (file: string) => Promise<SchemaFile>;
-
 type Context = {
   readonly files: FileSystem;
   readonly readSchema: SchemaReader;
@@ -271,19 +264,6 @@ type FileReference = {
   readonly subject: string;
 };
 
-type SchemaFile =
-  | { readonly state: "missing" }
-  | { readonly state: "invalid"; readonly reason: string }
-  | { readonly state: "valid"; readonly schema: unknown };
-
-type SchemaLabel = "input" | "output";
-
-type SchemaSource = {
-  readonly file: string;
-  readonly schemaFile: SchemaFile;
-  readonly label: SchemaLabel;
-};
-
 type ModeWorkflow = {
   readonly mode: ModeSource;
   readonly path: string;
@@ -300,8 +280,6 @@ const namePattern = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 const forge = "forge";
 
 const defaultKey = "default";
-
-const schemaDirections = ["input", "output"] as const;
 
 function shown(context: Context, path: string): string {
   return shownPath(context.layout, path);
@@ -758,58 +736,6 @@ function requiresProblems(context: Context, mode: ModeSource): readonly Problem[
     }
     return boundModeProblem(context, mode.value.name, reference) ?? [];
   });
-}
-
-async function readSchemaFile(files: FileSystem, file: string): Promise<SchemaFile> {
-  const text = await files.readText(file);
-  if (text === undefined) {
-    return { state: "missing" };
-  }
-  try {
-    const schema: unknown = JSON.parse(text);
-    return { state: "valid", schema };
-  } catch (error) {
-    return { state: "invalid", reason: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-function schemaReader(files: FileSystem): SchemaReader {
-  const read = new Map<string, Promise<SchemaFile>>();
-  return (file) => {
-    const reading = read.get(file) ?? readSchemaFile(files, file);
-    read.set(file, reading);
-    return reading;
-  };
-}
-
-function valueProblems(source: SchemaSource, value: Json): readonly Problem[] {
-  const { file, schemaFile, label } = source;
-  switch (schemaFile.state) {
-    case "missing":
-      return [{ file, path: "", message: `The schema file ${file} does not exist, so the ${label} is not checked.` }];
-    case "invalid":
-      return [{ file, path: "", message: `The schema file ${file} is not valid JSON: ${schemaFile.reason}.` }];
-    case "valid": {
-      const loaded = { file, value, lineOf: () => undefined };
-      const result = checkValue(schemaFile.schema, value, { loaded, path: [label] });
-      if (result.kind === "unusable-schema") {
-        return [{ file, path: "", message: `The schema file ${file} is not a usable JSON Schema: ${result.reason}.` }];
-      }
-      return result.problems;
-    }
-  }
-}
-
-function schemaOf(source: SchemaSource): Schema {
-  const { file, schemaFile } = source;
-  return {
-    file,
-    json: schemaFile.state === "valid" ? toJson(schemaFile.schema) : undefined,
-    check: (value) => {
-      const problems = valueProblems(source, value);
-      return problems.length === 0 ? succeededWith(value) : failedWith(problems);
-    },
-  };
 }
 
 function extraEffectProblems(place: ActionPlace, implemented: ImplementedSignature): readonly Problem[] {

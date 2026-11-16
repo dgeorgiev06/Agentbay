@@ -2,6 +2,8 @@ name: typescript
 version: 1.0.0
 description: Checks and tests TypeScript code in a checkout, running the same scripts of its package.json that npm run check runs.
 
+implements: [toolchain@1]
+
 resources:
   commands:
     - npm run generate:check --
@@ -9,6 +11,7 @@ resources:
     - npm run lint --
     - npm run format:check --
     - npm run deadcode --
+    - npm test -- --test-reporter=tap
 
 extraFiles: [eslint.config.js, knip.json, prettier.json, practices.md]
 
@@ -27,3 +30,10 @@ actions:
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/check.ts
+  test:
+    description: When a mode or a skill needs to know whether the tests of a checkout pass, all of them or the named test files.
+    input: schemas/test-request.json
+    output: schemas/test-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/run-tests.ts

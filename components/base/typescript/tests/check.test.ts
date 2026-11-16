@@ -114,7 +114,7 @@ test("a check whose script the checkout does not have cannot be started and is i
     {
       name: "lint",
       verdict: "inconclusive",
-      reason: "The checkout's package.json has no script lint, so the check could not be started.",
+      reason: "The checkout's package.json has no script lint, so it could not be started.",
       stdout: "",
       stderr: "npm's message",
     },

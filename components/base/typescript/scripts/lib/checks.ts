@@ -1,5 +1,4 @@
-import type { Finished } from "./commands.ts";
-import { isMissingScript } from "./commands.ts";
+import { endedOf, type Finished } from "./commands.ts";
 
 export type Check = {
   readonly name: string;
@@ -26,33 +25,24 @@ export type CheckVerdict =
   | (Shown & { readonly verdict: "failed" })
   | (Shown & { readonly verdict: "inconclusive"; readonly reason: string });
 
-function inconclusiveReason(check: Check, finished: Finished, timeLimitSeconds: number): string | undefined {
-  const { name } = check;
-  const ending = finished.ending;
-  switch (ending.how) {
-    case "not-started":
-      return `${name} could not be started: ${ending.reason}`;
-    case "timed-out":
-      return `${name} did not finish within ${String(timeLimitSeconds)} seconds and was stopped.`;
-    case "signalled":
-      return `${name} was stopped by the signal ${ending.signal}.`;
-    case "exited":
-      if (isMissingScript(finished, name)) {
-        return `The checkout's package.json has no script ${name}, so the check could not be started.`;
-      }
-      if (ending.exitCode === 0 || check.failedExitCodes.includes(ending.exitCode)) {
-        return undefined;
-      }
-      return `${name} ended with exit code ${String(ending.exitCode)}, which the mode does not read as passed or failed.`;
+function exitVerdict(check: Check, exitCode: number): CheckVerdict["verdict"] {
+  if (exitCode === 0) {
+    return "passed";
   }
+  return check.failedExitCodes.includes(exitCode) ? "failed" : "inconclusive";
 }
 
 export function checkVerdict(check: Check, finished: Finished, timeLimitSeconds: number): CheckVerdict {
   const shown = { name: check.name, seconds: finished.seconds, stdout: finished.stdout, stderr: finished.stderr };
-  const reason = inconclusiveReason(check, finished, timeLimitSeconds);
-  if (reason !== undefined) {
-    return { ...shown, verdict: "inconclusive", reason };
+  const ended = endedOf({ subject: check.name, script: check.name }, finished, timeLimitSeconds);
+  if (ended.kind === "unfinished") {
+    return { ...shown, verdict: "inconclusive", reason: ended.reason };
   }
-  const exitedWithZero = finished.ending.how === "exited" && finished.ending.exitCode === 0;
-  return { ...shown, verdict: exitedWithZero ? "passed" : "failed" };
+  const verdict = exitVerdict(check, ended.exitCode);
+  if (verdict === "inconclusive") {
+    const code = String(ended.exitCode);
+    const reason = `${check.name} ended with exit code ${code}, which the mode does not read as passed or failed.`;
+    return { ...shown, verdict, reason };
+  }
+  return { ...shown, verdict };
 }

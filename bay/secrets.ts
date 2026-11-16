@@ -10,6 +10,10 @@ export type SecretStoreOptions = {
   readonly platform: string;
 };
 
+export type OpenSecretStoreOptions = SecretStoreOptions & {
+  readonly declaredBy: readonly ModeGrants[];
+};
+
 type Form = {
   readonly text: string;
   readonly name: string;
@@ -57,6 +61,15 @@ export class SecretStore {
     this.#platform = options.platform;
   }
 
+  static async open(options: OpenSecretStoreOptions): Promise<SecretStore> {
+    const store = new SecretStore(options);
+    const declared = new Set(options.declaredBy.flatMap((grants) => grants.secrets));
+    for (const name of [...declared].sort()) {
+      await store.#learn(name);
+    }
+    return store;
+  }
+
   async get(name: string, grants: ModeGrants): Promise<Answer<string>> {
     const asked = `The step asked for the secret ${name}`;
     if (!secretNamePattern.test(name)) {
@@ -95,10 +108,10 @@ export class SecretStore {
   }
 
   redact(text: string): string {
-    return scrubSecretPatterns(this.redactHandedOut(text));
+    return scrubSecretPatterns(this.redactKnownValues(text));
   }
 
-  redactHandedOut(text: string): string {
+  redactKnownValues(text: string): string {
     let redacted = text;
     for (const form of this.#formsLongestFirst()) {
       redacted = redacted.replaceAll(form.text, `[redacted:${form.name}]`);
@@ -136,6 +149,13 @@ export class SecretStore {
     });
     const value = result.stdout.replace(/\r?\n$/, "");
     return result.exitCode === 0 && value !== "" ? value : undefined;
+  }
+
+  async #learn(name: string): Promise<void> {
+    const value = await this.#lookUp(name);
+    if (value !== undefined && value.length >= shortestValue) {
+      this.#remember(name, value);
+    }
   }
 
   #remember(name: string, value: string): void {

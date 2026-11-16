@@ -170,3 +170,22 @@ test("each pattern still catches a plausible secret value", () => {
     assert.match(store.redact(`see ${text}`), new RegExp(`^see \\[redacted:${kind}\\]`), text);
   }
 });
+
+const otherMadeUpToken = "other-made-up-value-9090";
+
+test("a fresh store redacts two declared secrets in text, a JSON value and a JSON key, with no hand-out", async () => {
+  const store = await SecretStore.open({
+    environment: { AGENTBAY_SECRET_MAIL_TOKEN: madeUpToken, AGENTBAY_SECRET_NOTES_TOKEN: otherMadeUpToken },
+    processes: noProcesses,
+    platform: "linux",
+    declaredBy: [grantsIn("/project", { secrets: ["MAIL_TOKEN"] }), grantsIn("/other", { secrets: ["NOTES_TOKEN"] })],
+  });
+  assert.equal(
+    store.redact(`mail ${madeUpToken} notes ${otherMadeUpToken}`),
+    "mail [redacted:MAIL_TOKEN] notes [redacted:NOTES_TOKEN]",
+  );
+  assert.deepEqual(store.redactJson({ [madeUpToken]: [`note ${otherMadeUpToken}`], [otherMadeUpToken]: madeUpToken }), {
+    "[redacted:MAIL_TOKEN]": ["note [redacted:NOTES_TOKEN]"],
+    "[redacted:NOTES_TOKEN]": "[redacted:MAIL_TOKEN]",
+  });
+});

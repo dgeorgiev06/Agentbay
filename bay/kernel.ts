@@ -18,7 +18,7 @@ import type { ChildProcesses, Clock, FileInspector, FileSystem, Folders, Http, P
 import type { System } from "./registry.ts";
 import { openRuns, type Runs } from "./runs/runs.ts";
 import { createScriptRunner } from "./script-runner.ts";
-import { SecretStore } from "./secrets.ts";
+import { SecretStore, type SecretStoreOptions } from "./secrets.ts";
 import type { Outcome } from "./outcome.ts";
 
 export type KernelPorts = {
@@ -77,12 +77,12 @@ export function nodeKernelPorts(environment: Environment): KernelPorts {
   };
 }
 
+function storeOptionsOf(options: Omit<KernelOptions, "layout">): SecretStoreOptions {
+  return { environment: options.environment, processes: options.ports.processes, platform: options.platform };
+}
+
 export function secretStoreOf(options: Omit<KernelOptions, "layout">): SecretStore {
-  return new SecretStore({
-    environment: options.environment,
-    processes: options.ports.processes,
-    platform: options.platform,
-  });
+  return new SecretStore(storeOptionsOf(options));
 }
 
 export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel>> {
@@ -92,7 +92,8 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
     return loaded;
   }
   const { system, policyOf } = loaded.value;
-  const secrets = secretStoreOf(options);
+  const declaredBy = [...system.active].map(policyOf);
+  const secrets = await SecretStore.open({ ...storeOptionsOf(options), declaredBy });
   const limits = { toolCallsPerRound: maximumToolCallsPerRound, ...options.limits };
   const services = { layout, files: ports.files, inspector: ports.inspector, http: ports.http, secrets };
   const processes = { clock: ports.clock, childProcesses: ports.childProcesses };

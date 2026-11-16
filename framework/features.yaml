@@ -52,6 +52,7 @@ features:
       - bay/manifests/file-references.ts
       - bay/manifests/workflow-problems.ts
       - bay/manifests/settings-problems.ts
+      - bay/manifests/grants.ts
     may_import:
       - vocabulary
       - safety

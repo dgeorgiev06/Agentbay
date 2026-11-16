@@ -7,7 +7,6 @@ import type { SkillFrontMatter } from "../generated/skill.ts";
 import type { Workflow } from "../generated/workflow.ts";
 import { homeFolder, isProjectTheKit, shownPath, shownProblems, type Home, type Layout } from "../layout.ts";
 import type { FileSystem } from "../ports.ts";
-import { grantsOf, type GrantProblem } from "../policy.ts";
 import { resolveInput, resolveValue } from "./references.ts";
 import {
   checkValue,
@@ -60,6 +59,7 @@ import { actionProblems } from "./action-problems.ts";
 import { referenceProblems } from "./file-references.ts";
 import { workflowProblems } from "./workflow-problems.ts";
 import { modeSettingsProblems, straySettingsProblems } from "./settings-problems.ts";
+import { grantsOfActiveModes } from "./grants.ts";
 
 export type ActiveMode = {
   readonly home: Home;
@@ -255,33 +255,6 @@ async function actionSchemasOf(
     });
   }
   return actionSchemas;
-}
-
-function placedGrantProblem(mode: ModeSource, problem: GrantProblem): Problem {
-  return problemAt(mode, problem.at, { message: problem.message, fix: problem.fix });
-}
-
-function grantsOfActiveModes(context: Context): Outcome<ReadonlyMap<string, ModeGrants>> {
-  const granted = new Map<string, ModeGrants>();
-  const problems: Problem[] = [];
-  for (const mode of [...context.active].flatMap((name) => context.modes.get(name) ?? [])) {
-    const otherModes = [...context.modes.values()]
-      .filter((other) => other !== mode)
-      .map((other) => ({ name: other.value.name, folder: other.folder }));
-    const ruling = grantsOf({
-      manifest: mode.value,
-      home: mode.home,
-      folder: mode.folder,
-      layout: context.layout,
-      otherModes,
-    });
-    if (ruling.ok) {
-      granted.set(mode.value.name, ruling.value);
-    } else {
-      problems.push(...ruling.problems.map((problem) => placedGrantProblem(mode, problem)));
-    }
-  }
-  return problems.length > 0 ? failedWith(problems) : succeededWith(granted);
 }
 
 function splitReference(reference: string): readonly [string, string] | undefined {

@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import type { ScriptRequest } from "../bay/contracts.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
-import type { System } from "../bay/manifests/manifests.ts";
 import { hashOf, textField } from "../bay/json.ts";
 import {
   answer,
   eventKinds,
   failure,
   finished,
+  fixtureRefusal,
   fixtureSystem,
   messagesOf,
   notesFlow,
@@ -30,12 +30,6 @@ const reviewSteps: Workflow["steps"] = [
 ];
 
 const hour = 3_600_000;
-
-function withOnlyStoreActive(system: System): System {
-  const modes = new Map([...system.modes].filter(([name]) => name === "store"));
-  const inactive = new Set([...system.modes.keys()].filter((name) => name !== "store"));
-  return { ...system, modes, inactive };
-}
 
 describe("workflows", () => {
   test("action steps take literal and referenced input, and later steps see earlier outputs", async () => {
@@ -417,8 +411,9 @@ test("an approval event written into the log by anyone but the engine passes not
 });
 
 test("runs refuse to start an action or a workflow of a mode that is not active in the project", async () => {
-  const { runs, system, reopen, runner, close } = await openedRuns({ changes: withFlow(reviewSteps) });
-  const inactive = await reopen(withOnlyStoreActive(system));
+  const { runs, reopen, runner, close } = await openedRuns({ changes: withFlow(reviewSteps) });
+  const onlyStore = await fixtureSystem({ ...withFlow(reviewSteps), activeModes: ["store"] });
+  const inactive = await reopen(onlyStore.system);
   const sentence = "Mode notes is not active in this project, so nothing of it runs here.";
   const fix = "Add notes to modes: in agentbay.config.yaml, or bind an interface it implements.";
   for (const result of [await inactive.start({ action: "notes.copy" }, { count: 1 }), await inactive.start(flow, 1)]) {
@@ -435,10 +430,11 @@ test("runs refuse to start an action or a workflow of a mode that is not active 
 });
 
 test("a run of a mode that is no longer active is refused when it would advance, and left as it was", async () => {
-  const { runs, system, reopen, close } = await openedRuns({ changes: withFlow(reviewSteps) });
+  const { runs, reopen, close } = await openedRuns({ changes: withFlow(reviewSteps) });
   const waiting = runOf(await runs.start(flow, 1));
   assert.equal(waiting.state.status, "waiting");
-  const inactive = await reopen(withOnlyStoreActive(system));
+  const onlyStore = await fixtureSystem({ ...withFlow(reviewSteps), activeModes: ["store"] });
+  const inactive = await reopen(onlyStore.system);
   for (const result of [await inactive.resume(waiting.id), await inactive.stop(waiting.id)]) {
     assert.deepEqual(problemsOf(result), ["Mode notes is not active in this project, so nothing of it runs here."]);
   }
@@ -503,23 +499,14 @@ test("one representative run emits every event kind, in order, with ids and size
   close();
 });
 
-test("a call or workflow action whose binding vanished before resume fails the step with a plain reason", async () => {
+test("a binding that vanished cannot be loaded, so no run resumes over a call or workflow action without it", async () => {
   const changes = withFlow([
     { id: "keep", approval: "Go?" },
     { id: "put", action: "items-store.put", input: { id: "a" } },
   ]);
-  const { runs, system, reopen, close } = await openedRuns({ changes });
-  const unbound = await reopen({ ...system, config: { ...system.config, bindings: {} } });
-  const reason = "Mode notes calls items-store.put, but no mode is bound to items-store@1 for it.";
-  const drafting = runOf(await runs.start({ action: "notes.draft-and-store" }, {}));
-  const submitted = runOf(await unbound.submit(tokenOf(drafting), answer({ id: "d1", text: "draft" })));
-  assert.deepEqual(submitted.state, { status: "failed", reason });
-  const started = await runs.start(flow, null);
-  const waiting = waitingOf(started);
-  assert.ok(waiting.reason === "approval");
-  const decision = { stepKey: "keep", hash: waiting.hash, verdict: "approve", by: "owner" } as const;
-  assert.deepEqual(runOf(await unbound.approve(runOf(started).id, decision)).state, { status: "failed", reason });
-  close();
+  assert.deepEqual(await fixtureRefusal({ ...changes, config: { bindings: {} } }), [
+    "Mode notes requires items-store@1, but bindings names no mode for items-store.",
+  ]);
 });
 
 test("an undo runs to its end even when its own budget is spent", async () => {

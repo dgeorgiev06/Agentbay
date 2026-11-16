@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Scrubber } from "../bay/contracts.ts";
 import { SecretStore } from "../bay/secrets.ts";
-import { failureOf, noProcesses, grantsIn, recordingProcesses, refusalOf } from "./broker-fixture.ts";
+import { exitedProcess, failureOf, noProcesses, grantsIn, recordingProcesses, refusalOf } from "./broker-fixture.ts";
 
 const permissions = grantsIn("/project", { secrets: ["MAIL_TOKEN", "SHORT_ONE", "MISSING_ONE"] });
 
@@ -40,7 +40,7 @@ test("a secret shorter than 8 characters is refused, without printing it", async
 });
 
 test("on macOS a secret missing from the environment comes from the keychain, and nothing else", async () => {
-  const processes = recordingProcesses(() => ({ exitCode: 0, stdout: `${madeUpToken}\n`, stderr: "" }));
+  const processes = recordingProcesses(() => exitedProcess(0, `${madeUpToken}\n`, ""));
   const store = new SecretStore({ environment: {}, processes, platform: "darwin" });
   assert.deepEqual(await store.get("MAIL_TOKEN", permissions), { ok: true, value: madeUpToken });
   assert.equal(processes.requests.length, 1);
@@ -57,7 +57,7 @@ test("on macOS a secret missing from the environment comes from the keychain, an
 });
 
 test("a secret in neither place fails with how to set it", async () => {
-  const processes = recordingProcesses(() => ({ exitCode: 44, stdout: "", stderr: "not found" }));
+  const processes = recordingProcesses(() => exitedProcess(44, "", "not found"));
   const store = new SecretStore({ environment: {}, processes, platform: "darwin" });
   const message = failureOf(await store.get("MISSING_ONE", permissions)).message;
   assert.match(message, /security add-generic-password -s agentbay -a MISSING_ONE -w/);
@@ -109,7 +109,7 @@ function readsRecorded(environment: Readonly<Record<string, string>>): {
 
 test("a fresh store asks the environment and the keychain only for declared names", async () => {
   const { environment, read } = readsRecorded({ AGENTBAY_SECRET_OTHER_TOKEN: madeUpToken });
-  const processes = recordingProcesses(() => ({ exitCode: 44, stdout: "", stderr: "not found" }));
+  const processes = recordingProcesses(() => exitedProcess(44, "", "not found"));
   const declaredBy = [grantsIn("/project", { secrets: ["MAIL_TOKEN", "NOTES_TOKEN"] })];
   const store = await SecretStore.open({ environment, processes, platform: "darwin", declaredBy });
   assert.deepEqual(read, ["AGENTBAY_SECRET_MAIL_TOKEN", "AGENTBAY_SECRET_NOTES_TOKEN"]);
@@ -124,7 +124,7 @@ test("a fresh store asks the environment and the keychain only for declared name
 });
 
 test("a fresh store opens when a declared secret is not set, and hand-out still says how to set it", async () => {
-  const processes = recordingProcesses(() => ({ exitCode: 44, stdout: "", stderr: "not found" }));
+  const processes = recordingProcesses(() => exitedProcess(44, "", "not found"));
   const declaredBy = [permissions];
   const store = await SecretStore.open({ environment: {}, processes, platform: "darwin", declaredBy });
   assert.equal(store.redact("nothing to hide here"), "nothing to hide here");

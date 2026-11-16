@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { test } from "node:test";
+import { setTimeout as sleep } from "node:timers/promises";
 import type { ChildEnd } from "../bay/ports.ts";
 import { createNodeHttp, nodeChildProcesses, nodeFileInspector, nodeProcesses } from "../bay/node-ports.ts";
 import { withProject } from "./broker-fixture.ts";
+import { isRunning } from "./commands-fixture.ts";
 
 test("the file inspector resolves real paths, tells links apart and lists entries by kind", async () => {
   await withProject(async (root) => {
@@ -26,6 +29,14 @@ test("the file inspector resolves real paths, tells links apart and lists entrie
   });
 });
 
+function fingerprint(text: string): string {
+  return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+function outputOf(text: string): { readonly text: string; readonly characters: number; readonly hash: string } {
+  return { text, characters: text.length, hash: fingerprint(text) };
+}
+
 test("processes run with only the given environment and report the exit code", async () => {
   const result = await nodeProcesses.run({
     command: process.execPath,
@@ -34,7 +45,11 @@ test("processes run with only the given environment and report the exit code", a
     environment: { ONLY_THIS: "1" },
     timeoutMilliseconds: 10_000,
   });
-  assert.deepEqual(result, { exitCode: 3, stdout: '["ONLY_THIS"]', stderr: "" });
+  assert.deepEqual(result, {
+    end: { how: "exited", exitCode: 3 },
+    stdout: outputOf('["ONLY_THIS"]'),
+    stderr: outputOf(""),
+  });
 });
 
 test("a process past its time limit is killed, and a missing command is not an exception", async () => {
@@ -45,7 +60,7 @@ test("a process past its time limit is killed, and a missing command is not an e
     environment: {},
     timeoutMilliseconds: 300,
   });
-  assert.equal(slow.exitCode, undefined);
+  assert.deepEqual(slow.end, { how: "timed-out" });
   const missing = await nodeProcesses.run({
     command: "agentbay-no-such-command",
     arguments: [],
@@ -53,8 +68,59 @@ test("a process past its time limit is killed, and a missing command is not an e
     environment: {},
     timeoutMilliseconds: 1000,
   });
-  assert.equal(missing.exitCode, undefined);
-  assert.match(missing.stderr, /ENOENT/);
+  assert.ok(missing.end.how === "not-started", JSON.stringify(missing.end));
+  assert.match(missing.end.reason, /ENOENT/);
+});
+
+test("a process keeps the end of its output and a hash of all of it", async () => {
+  const written = `${"a".repeat(1024 * 1024)}the end`;
+  const result = await nodeProcesses.run({
+    command: process.execPath,
+    arguments: ["-e", `process.stdout.write("a".repeat(${String(1024 * 1024)}) + "the end")`],
+    directory: process.cwd(),
+    environment: {},
+    timeoutMilliseconds: 10_000,
+  });
+  assert.equal(result.stdout.text, written.slice(-1024 * 1024));
+  assert.equal(result.stdout.characters, 1024 * 1024 + 7);
+  assert.equal(result.stdout.hash, fingerprint(written));
+});
+
+test("a process past its time limit is stopped with every process it started", async () => {
+  const source =
+    "const sleeper = require('node:child_process').spawn('sleep', ['60'], { stdio: 'ignore' });" +
+    "console.log(process.pid, sleeper.pid); setInterval(() => {}, 1000);";
+  const result = await nodeProcesses.run({
+    command: process.execPath,
+    arguments: ["-e", source],
+    directory: process.cwd(),
+    environment: { PATH: process.env.PATH ?? "/usr/bin:/bin" },
+    timeoutMilliseconds: 1000,
+  });
+  assert.deepEqual(result.end, { how: "timed-out" });
+  const pids = result.stdout.text.trim().split(" ").map(Number);
+  assert.equal(pids.length, 2, result.stdout.text);
+  await sleep(200);
+  assert.deepEqual(
+    pids.map((pid) => isRunning(pid)),
+    [false, false],
+  );
+});
+
+test("a process that ends leaves none of the processes it started running", async () => {
+  const source =
+    "const sleeper = require('node:child_process').spawn('sleep', ['60'], { stdio: 'ignore' });" +
+    "sleeper.unref(); console.log(sleeper.pid);";
+  const result = await nodeProcesses.run({
+    command: process.execPath,
+    arguments: ["-e", source],
+    directory: process.cwd(),
+    environment: { PATH: process.env.PATH ?? "/usr/bin:/bin" },
+    timeoutMilliseconds: 10_000,
+  });
+  assert.deepEqual(result.end, { how: "exited", exitCode: 0 });
+  await sleep(200);
+  assert.equal(isRunning(Number(result.stdout.text.trim())), false);
 });
 
 function startNode(

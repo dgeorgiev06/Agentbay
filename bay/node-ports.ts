@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { access, lstat, mkdir, readdir, readFile, realpath, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import type { Readable } from "node:stream";
 import type { FileListing } from "./check-context.ts";
 import { createOwnerOnlyFile } from "./owner-only.ts";
 import type {
@@ -19,7 +20,9 @@ import type {
   Http,
   HttpRequest,
   HttpResponse,
+  ProcessEnd,
   Processes,
+  ProcessOutput,
   ProcessRequest,
   ProcessResult,
   Removal,
@@ -155,9 +158,43 @@ async function entries(directory: string): Promise<readonly DirectoryEntry[]> {
 
 export const nodeFileInspector: FileInspector = { realPath, isLink, entries };
 
-const processOutputBytes = 1024 * 1024;
+const keptOutputCharacters = 1024 * 1024;
 
 const errorOutputTail = 8 * 1024;
+
+function collectedOutput(stream: Readable): () => ProcessOutput {
+  const hash = createHash("sha256");
+  let text = "";
+  let characters = 0;
+  stream.setEncoding("utf8");
+  stream.on("data", (chunk: string) => {
+    hash.update(chunk, "utf8");
+    characters += chunk.length;
+    text = (text + chunk).slice(-keptOutputCharacters);
+  });
+  return () => ({ text, characters, hash: hash.digest("hex") });
+}
+
+function stopGroup(leader: number | undefined): void {
+  if (leader === undefined) {
+    return;
+  }
+  try {
+    process.kill(-leader, "SIGKILL");
+  } catch {
+    return;
+  }
+}
+
+function endOfProcess(timedOut: boolean, exitCode: number | null, signal: string | null): ProcessEnd {
+  if (timedOut) {
+    return { how: "timed-out" };
+  }
+  if (exitCode !== null) {
+    return { how: "exited", exitCode };
+  }
+  return { how: "signalled", signal: signal ?? "unknown" };
+}
 
 function runProcess(request: ProcessRequest): Promise<ProcessResult> {
   return new Promise((resolve) => {
@@ -165,25 +202,32 @@ function runProcess(request: ProcessRequest): Promise<ProcessResult> {
       cwd: request.directory,
       env: { ...request.environment },
       stdio: ["pipe", "pipe", "pipe"],
-      timeout: request.timeoutMilliseconds,
-      killSignal: "SIGKILL",
+      shell: false,
+      detached: true,
     });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout = (stdout + chunk).slice(0, processOutputBytes);
-    });
-    child.stderr.on("data", (chunk: string) => {
-      stderr = (stderr + chunk).slice(0, processOutputBytes);
-    });
+    const stdout = collectedOutput(child.stdout);
+    const stderr = collectedOutput(child.stderr);
+    let timedOut = false;
+    let settled = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      stopGroup(child.pid);
+    }, request.timeoutMilliseconds);
+    const settle = (end: ProcessEnd): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      stopGroup(child.pid);
+      resolve({ end, stdout: stdout(), stderr: stderr() });
+    };
     child.stdin.on("error", () => undefined);
     child.on("error", (error) => {
-      resolve({ exitCode: undefined, stdout, stderr: error.message });
+      settle({ how: "not-started", reason: error.message });
     });
-    child.on("close", (exitCode) => {
-      resolve({ exitCode: exitCode ?? undefined, stdout, stderr });
+    child.on("close", (exitCode, signal) => {
+      settle(endOfProcess(timedOut, exitCode, signal));
     });
     child.stdin.end(request.input ?? "");
   });
@@ -353,10 +397,10 @@ export function createProjectFileListing(
         environment,
         timeoutMilliseconds: listingMilliseconds,
       });
-      if (result.exitCode !== 0) {
+      if (result.end.how !== "exited" || result.end.exitCode !== 0) {
         return [...(await walkedFiles(inspector, root))].sort();
       }
-      return [...new Set(result.stdout.split("\0").filter((path) => path !== ""))].sort();
+      return [...new Set(result.stdout.text.split("\0").filter((path) => path !== ""))].sort();
     },
   };
 }

@@ -147,8 +147,9 @@ export class SecretStore {
       environment: {},
       timeoutMilliseconds: keychainMilliseconds,
     });
-    const value = result.stdout.replace(/\r?\n$/, "");
-    return result.exitCode === 0 && value !== "" ? value : undefined;
+    const value = result.stdout.text.replace(/\r?\n$/, "");
+    const succeeded = result.end.how === "exited" && result.end.exitCode === 0;
+    return succeeded && value !== "" ? value : undefined;
   }
 
   async #learn(name: string): Promise<void> {

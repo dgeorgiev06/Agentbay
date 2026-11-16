@@ -1,0 +1,10 @@
+{
+  "input": { "folder": ".forge/worktrees/mail-source", "base": "main" },
+  "output": {
+    "head": "5b1f3c2d4e6a8b0c1d3e5f7a9b1c3d5e7f9a1b3c",
+    "commits": [{ "hash": "5b1f3c2d4e6a8b0c1d3e5f7a9b1c3d5e7f9a1b3c", "subject": "Add the mail source mode" }],
+    "clean": false,
+    "changed": ["components/modes/mail-source/mode.yaml"],
+    "untracked": ["components/modes/mail-source/tests/read.test.ts"]
+  }
+}

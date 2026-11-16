@@ -31,3 +31,10 @@ actions:
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/cut.ts
+  status:
+    description: When a mode or a skill needs to know where a slice's worktree stands, its head, its commits since the base, and its changed and untracked files.
+    input: schemas/status-request.json
+    output: schemas/status-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/status.ts

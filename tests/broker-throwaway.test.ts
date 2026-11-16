@@ -172,6 +172,7 @@ test("a path outside the throwaway folders, or a throwaway folder itself, is ref
         messageOf(await broker.link("shared/again", "shared")),
         messageOf(await broker.remove("shared")),
         messageOf(await broker.remove("scratch/copies")),
+        messageOf(await broker.makeFolder("scratch/copies")),
         messageOf(await broker.remove("scratch/copies/../../shared")),
       ],
       [
@@ -179,6 +180,7 @@ test("a path outside the throwaway folders, or a throwaway folder itself, is ref
         outsideSentence(root, "link shared/again to shared"),
         outsideSentence(root, "remove shared"),
         outsideSentence(root, "remove scratch/copies"),
+        outsideSentence(root, "make the folder scratch/copies"),
         outsideSentence(root, "remove shared"),
       ],
     );

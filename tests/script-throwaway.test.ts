@@ -25,8 +25,8 @@ const proberScript = [
   "export const run = defineScript(async (input, context) => {",
   "  const made = await context.files.makeFolder('scratch/copy');",
   "  const linked = await context.files.link('scratch/copy/shared', 'shared');",
-  "  const byScript = written('scratch/copy/own.txt');",
-  "  const throughLink = written('scratch/copy/shared/through.txt');",
+  "  const byScript = written(`${input.root}/scratch/copy/own.txt`);",
+  "  const throughLink = written(`${input.root}/scratch/copy/shared/through.txt`);",
   "  const removed = input.remove === true ? await context.files.remove('scratch/copy') : null;",
   "  return { made, linked, byScript, throughLink, removed };",
   "});",
@@ -104,7 +104,7 @@ async function exists(path: string): Promise<boolean> {
 test("a script makes a folder and a link in its throwaway folder, and its own file calls cannot write there", async () => {
   const kit = await makeProberKit(["scratch"]);
   try {
-    assert.deepEqual(await proberOutput(kit.root, { remove: false }), {
+    assert.deepEqual(await proberOutput(kit.root, { remove: false, root: kit.root }), {
       made: { ok: true, value: null },
       linked: { ok: true, value: null },
       byScript: "ERR_ACCESS_DENIED",
@@ -123,7 +123,7 @@ test("a link in a throwaway folder that leaves it does not stop the mode's scrip
   try {
     await mkdir(join(kit.root, "scratch/older"), { recursive: true });
     await symlink(join(kit.root, "shared"), join(kit.root, "scratch/older/shared"));
-    assert.deepEqual(await proberOutput(kit.root, { remove: true }), {
+    assert.deepEqual(await proberOutput(kit.root, { remove: true, root: kit.root }), {
       made: { ok: true, value: null },
       linked: { ok: true, value: null },
       byScript: "ERR_ACCESS_DENIED",

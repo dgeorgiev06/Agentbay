@@ -82,6 +82,7 @@ export type Submission = {
 
 export type Scrubber = {
   readonly redact: (text: string) => string;
+  readonly redactJson: (value: Json) => Json;
 };
 
 export type RunEvent = {

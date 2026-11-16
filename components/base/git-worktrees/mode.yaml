@@ -1,0 +1,33 @@
+name: git-worktrees
+version: 1.0.0
+description: Makes a worktree and branch for each slice, says where it stands, and makes throwaway copies of commits, running git so that no code from the repository runs.
+
+
+resources:
+  db: { migrations: migrations }
+  files:
+    throwaway: [.forge/copies/]
+  commands:
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs rev-parse --verify --quiet --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs config --show-scope --name-only --get-regexp ^filter\.
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs worktree add --detach --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs branch --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs switch --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs status --porcelain=v1 -z --untracked-files=all --ignore-submodules=all --
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs log -z --reverse --no-show-signature --no-color --format=%H%x20%s --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs diff --name-status -z -M --no-ext-diff --no-textconv --no-color --no-relative --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs check-ignore --quiet --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs ls-tree -z --name-only --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs --work-tree=. restore --worktree --source
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs merge-base --is-ancestor --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs worktree remove --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs branch -d --end-of-options
+
+actions:
+  cut:
+    description: When a slice needs its own branch and worktree, cut from a commit, under .forge/worktrees/ in the project.
+    input: schemas/cut-request.json
+    output: schemas/cut-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/cut.ts

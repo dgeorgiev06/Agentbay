@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OverlayResponse",
+  "description": "What changed in the copy.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["folder", "placed", "removed"],
+  "properties": {
+    "folder": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "The copy's folder, relative to the project."
+    },
+    "placed": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "string",
+        "maxLength": 1000,
+        "description": "A path relative to the copy."
+      },
+      "description": "The paths now as they are at the commit."
+    },
+    "removed": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "string",
+        "maxLength": 1000,
+        "description": "A path relative to the copy."
+      },
+      "description": "The paths absent at the commit, now removed from the copy."
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CopyResponse",
+  "description": "The copy that was made.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["folder"],
+  "properties": {
+    "folder": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "The copy's folder, relative to the project."
+    }
+  }
+}

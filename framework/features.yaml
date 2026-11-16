@@ -245,6 +245,10 @@ outside:
     purpose: The store mode. Implements items-store.
     imports_kernel_through:
       - bay/sdk.ts
+  components/base/git-worktrees:
+    purpose: The git-worktrees mode. Implements worktrees; the only mode that runs git.
+    imports_kernel_through:
+      - bay/sdk.ts
   components/base/typescript:
     purpose: The typescript mode. Implements toolchain; checks and tests TypeScript code in a checkout.
     imports_kernel_through:

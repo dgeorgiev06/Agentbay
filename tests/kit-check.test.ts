@@ -7,7 +7,7 @@ import { listOf } from "./cli-fixture.ts";
 import { testEnvironment } from "./kernel-fixture.ts";
 import { kit } from "./project-fixture.ts";
 
-test("the real bay check on the kit itself reports no errors, the two size warnings and one per listed command", () => {
+test("the real bay check on the kit itself reports no errors, the two size warnings and one per listed command of each mode", () => {
   const result = spawnSync(process.execPath, [join(kit, "bay", "cli.ts"), "check", "--json"], {
     cwd: kit,
     env: testEnvironment,
@@ -21,13 +21,37 @@ test("the real bay check on the kit itself reports no errors, the two size warni
     numberField(finding, "line"),
     (textField(finding, "message") ?? "").replace(/ is \d+,/, " is N,"),
   ]);
-  const listed = (line: number, command: string): readonly unknown[] => [
-    "warning",
-    "components/base/typescript/mode.yaml",
-    line,
-    `Mode typescript lists the command ${command}; a listed command can run code the agent wrote.`,
-  ];
+  const listedBy =
+    (mode: string) =>
+    (line: number, command: string): readonly unknown[] => [
+      "warning",
+      `components/base/${mode}/mode.yaml`,
+      line,
+      `Mode ${mode} lists the command ${command}; a listed command can run code the agent wrote.`,
+    ];
+  const listed = listedBy("typescript");
+  const listedGit = listedBy("git-worktrees");
+  const git =
+    "git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false " +
+    "--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --literal-pathspecs";
   assert.deepEqual(findings, [
+    listedGit(11, `${git} rev-parse --verify --quiet --end-of-options`),
+    listedGit(12, `${git} config --show-scope --name-only --get-regexp ^filter\\.`),
+    listedGit(13, `${git} worktree add --detach --end-of-options`),
+    listedGit(14, `${git} branch --end-of-options`),
+    listedGit(15, `${git} switch --end-of-options`),
+    listedGit(16, `${git} status --porcelain=v1 -z --untracked-files=all --ignore-submodules=all --`),
+    listedGit(17, `${git} log -z --reverse --no-show-signature --no-color --format=%H%x20%s --end-of-options`),
+    listedGit(
+      18,
+      `${git} diff --name-status -z -M --no-ext-diff --no-textconv --no-color --no-relative --end-of-options`,
+    ),
+    listedGit(19, `${git} check-ignore --quiet --end-of-options`),
+    listedGit(20, `${git} ls-tree -z --name-only --end-of-options`),
+    listedGit(21, `${git} --work-tree=. restore --worktree --source`),
+    listedGit(22, `${git} merge-base --is-ancestor --end-of-options`),
+    listedGit(23, `${git} worktree remove --end-of-options`),
+    listedGit(24, `${git} branch -d --end-of-options`),
     listed(9, "npm run generate:check --"),
     listed(10, "npm run typecheck --"),
     listed(11, "npm run lint --"),

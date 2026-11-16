@@ -39,6 +39,7 @@ features:
     private:
       - bay/manifests/spec.ts
       - bay/manifests/references.ts
+      - bay/manifests/folders.ts
     may_import:
       - vocabulary
       - safety

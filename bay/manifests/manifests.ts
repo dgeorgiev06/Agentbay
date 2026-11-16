@@ -6,7 +6,7 @@ import type { Interface, Signature } from "../generated/interface.ts";
 import type { Action, Effect, Mode, Step } from "../generated/mode.ts";
 import type { SkillFrontMatter } from "../generated/skill.ts";
 import type { Workflow, Step as WorkflowStep } from "../generated/workflow.ts";
-import { homeFolder, isProjectTheKit, pathIn, shownPath, shownProblems, type Home, type Layout } from "../layout.ts";
+import { homeFolder, isProjectTheKit, shownPath, shownProblems, type Home, type Layout } from "../layout.ts";
 import { toJson } from "../json.ts";
 import type { FileSystem } from "../ports.ts";
 import { grantsOf, type GrantProblem } from "../policy.ts";
@@ -23,6 +23,22 @@ import {
   type Wording,
 } from "./spec.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
+import {
+  type KitLayout,
+  type ModeFolder,
+  type ModeTier,
+  type TierFolder,
+  folderRules,
+  modeTiers,
+  ownModeTiers,
+  interfaceFolders,
+  ownInterfacesFolder,
+  kitLayoutOf,
+  manifestFileOf,
+  findModeFolders,
+  findInterfaceFiles,
+  modeInInterfacesProblems,
+} from "./folders.ts";
 
 export type ActiveMode = {
   readonly home: Home;
@@ -106,12 +122,6 @@ export type Inspection = {
   readonly kitLayout: KitLayout;
 };
 
-type KitLayout = {
-  readonly components: string;
-  readonly tiers: readonly string[];
-  readonly interfaces: string;
-};
-
 type FolderPlace = {
   readonly home: Home;
   readonly tier: ModeTier;
@@ -167,26 +177,6 @@ export type ActionsListing =
 export type ListingQuestion = {
   readonly mode?: string;
   readonly find?: string;
-};
-
-type ModeFolder = {
-  readonly home: Home;
-  readonly folder: string;
-};
-
-type ModeTier = "base" | "modes";
-
-type TierFolder = ModeFolder & {
-  readonly tier: ModeTier;
-};
-
-type FolderRules = {
-  readonly kitComponents: string;
-  readonly base: TierFolder;
-  readonly kitModes: TierFolder;
-  readonly projectModes: TierFolder | undefined;
-  readonly kitInterfaces: string;
-  readonly projectInterfaces: string | undefined;
 };
 
 type NewMode = Extract<NewPart, { readonly mode: string }>;
@@ -313,59 +303,8 @@ const defaultKey = "default";
 
 const schemaDirections = ["input", "output"] as const;
 
-function folderRules(layout: Layout): FolderRules {
-  const kitComponents = pathIn(layout, "kit", "components");
-  const base: TierFolder = { home: "kit", tier: "base", folder: join(kitComponents, "base") };
-  const kitModes: TierFolder = { home: "kit", tier: "modes", folder: join(kitComponents, "modes") };
-  const kitInterfaces = join(base.folder, "interfaces");
-  if (isProjectTheKit(layout)) {
-    return { kitComponents, base, kitModes, projectModes: undefined, kitInterfaces, projectInterfaces: undefined };
-  }
-  return {
-    kitComponents,
-    base,
-    kitModes,
-    projectModes: { home: "project", tier: "modes", folder: pathIn(layout, "project", "components/modes") },
-    kitInterfaces,
-    projectInterfaces: pathIn(layout, "project", "components/interfaces"),
-  };
-}
-
-function modeTiers(rules: FolderRules): readonly TierFolder[] {
-  return rules.projectModes === undefined
-    ? [rules.base, rules.kitModes]
-    : [rules.base, rules.kitModes, rules.projectModes];
-}
-
-function ownModeTiers(rules: FolderRules): readonly TierFolder[] {
-  return rules.projectModes === undefined ? [rules.base, rules.kitModes] : [rules.projectModes];
-}
-
-function interfaceFolders(layout: Layout): readonly string[] {
-  const rules = folderRules(layout);
-  return rules.projectInterfaces === undefined ? [rules.kitInterfaces] : [rules.kitInterfaces, rules.projectInterfaces];
-}
-
-function ownInterfacesFolder(layout: Layout): string {
-  const rules = folderRules(layout);
-  return rules.projectInterfaces ?? rules.kitInterfaces;
-}
-
-function kitLayoutOf(layout: Layout): KitLayout {
-  const rules = folderRules(layout);
-  return {
-    components: relative(layout.kit, rules.kitComponents),
-    tiers: [rules.base, rules.kitModes].map((tier) => relative(layout.kit, tier.folder)),
-    interfaces: relative(layout.kit, rules.kitInterfaces),
-  };
-}
-
 function shown(context: Context, path: string): string {
   return shownPath(context.layout, path);
-}
-
-function manifestFileOf(mode: ModeFolder): string {
-  return join(mode.folder, "mode.yaml");
 }
 
 function interfaceName(reference: string): string {
@@ -462,47 +401,6 @@ async function loadEach<T>(
     }
   }
   return { values, problems };
-}
-
-async function findModeFolders(files: FileSystem, layout: Layout): Promise<readonly TierFolder[]> {
-  const interfaces = interfaceFolders(layout);
-  const found: TierFolder[] = [];
-  for (const tier of modeTiers(folderRules(layout))) {
-    for (const name of await files.list(tier.folder)) {
-      const folder = join(tier.folder, name);
-      if (!interfaces.includes(folder) && (await files.exists(join(folder, "mode.yaml")))) {
-        found.push({ ...tier, folder });
-      }
-    }
-  }
-  return found;
-}
-
-async function findInterfaceFiles(files: FileSystem, layout: Layout): Promise<readonly string[]> {
-  const found: string[] = [];
-  for (const folder of interfaceFolders(layout)) {
-    const names = await files.list(folder);
-    found.push(
-      ...names.filter((name) => name.endsWith(".yaml") && name !== "mode.yaml").map((name) => join(folder, name)),
-    );
-  }
-  return found;
-}
-
-async function modeInInterfacesProblems(files: FileSystem, layout: Layout): Promise<readonly Problem[]> {
-  const problems: Problem[] = [];
-  for (const folder of interfaceFolders(layout)) {
-    const file = join(folder, "mode.yaml");
-    if (await files.exists(file)) {
-      problems.push({
-        file,
-        path: "",
-        message: `${shownPath(layout, folder)} holds interface files only, but it has a mode.yaml.`,
-        fix: "Move the mode to a folder of its own, such as components/modes/<mode>/mode.yaml.",
-      });
-    }
-  }
-  return problems;
 }
 
 async function loadModes(files: FileSystem, layout: Layout): Promise<LoadedModes> {

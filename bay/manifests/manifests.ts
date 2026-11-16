@@ -29,7 +29,6 @@ import {
   folderRules,
   modeTiers,
   ownModeTiers,
-  interfaceFolders,
   ownInterfacesFolder,
   kitLayoutOf,
   manifestFileOf,
@@ -56,6 +55,15 @@ import {
   loadConfig,
   loadWorkflows,
 } from "./loaded.ts";
+import {
+  interfaceName,
+  interfaceReference,
+  requiredReferences,
+  implementersOf,
+  unknownInterface,
+  candidatesOf,
+  requirersOf,
+} from "./interfaces.ts";
 
 export type ActiveMode = {
   readonly home: Home;
@@ -251,24 +259,6 @@ const namePattern = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 const forge = "forge";
 
 const defaultKey = "default";
-
-function interfaceName(reference: string): string {
-  return reference.slice(0, reference.indexOf("@"));
-}
-
-function interfaceReference(definition: Interface): string {
-  return `${definition.name}@${String(definition.version)}`;
-}
-
-function requiredReferences(mode: Mode): readonly string[] {
-  return mode.requires?.interfaces ?? [];
-}
-
-function implementersOf(context: Context, reference: string): readonly string[] {
-  return [...context.modes.values()]
-    .filter((mode) => mode.value.implements?.includes(reference) === true)
-    .map((mode) => mode.value.name);
-}
 
 function bindingFor(bindings: Config["bindings"], requirer: string, reference: string): BoundMode | undefined {
   const name = interfaceName(reference);
@@ -482,21 +472,6 @@ function indexInterfaces(interfaces: readonly Loaded<Interface>[], layout: Layou
   return { index, problems };
 }
 
-function unknownInterface(context: Context, subject: string, reference: string): Wording {
-  const otherVersions = [...context.interfaces.keys()].filter((key) => interfaceName(key) === interfaceName(reference));
-  const found = otherVersions.length === 0 ? "" : ` (found: ${otherVersions.join(", ")})`;
-  const folders = interfaceFolders(context.layout).map((folder) => shown(context, folder));
-  return {
-    message: `${subject} ${reference}, but no interface file in ${folders.join(" or ")} defines it${found}.`,
-    fix: `Correct the name or major version, or add the interface to ${folders.at(-1) ?? ""}.`,
-  };
-}
-
-function candidatesOf(context: Context, reference: string): string {
-  const implementers = implementersOf(context, reference);
-  return implementers.length === 0 ? "none yet" : implementers.join(", ");
-}
-
 type Requirement = {
   readonly requirer: string;
   readonly reference: string;
@@ -555,12 +530,6 @@ function boundModeProblem(context: Context, requirer: string, reference: string)
     });
   }
   return undefined;
-}
-
-function requirersOf(context: Context, name: string): readonly string[] {
-  return [...context.modes.values()]
-    .filter((mode) => requiredReferences(mode.value).some((reference) => interfaceName(reference) === name))
-    .map((mode) => mode.value.name);
 }
 
 function mapEntryProblem(

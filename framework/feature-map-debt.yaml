@@ -12,9 +12,6 @@ breaks:
     to: bay/sql-statements.ts
     rule: private-file
   - from: bay/build.ts
-    to: bay/manifests/spec.ts
-    rule: private-file
-  - from: bay/build.ts
     to: bay/skill-tools.ts
     rule: may-not-import
   - from: bay/check-context.ts
@@ -62,18 +59,9 @@ breaks:
   - from: bay/runs/skill-steps.ts
     to: bay/effect-rule.ts
     rule: private-file
-  - from: bay/runs/skill-steps.ts
-    to: bay/manifests/spec.ts
-    rule: private-file
   - from: bay/runs/sqlite-run-store.ts
     to: bay/owner-only.ts
     rule: may-not-import
-  - from: bay/runs/walk.ts
-    to: bay/manifests/spec.ts
-    rule: private-file
-  - from: bay/runs/workflow-steps.ts
-    to: bay/manifests/references.ts
-    rule: private-file
   - from: bay/script-host.ts
     to: bay/agent-query.ts
     rule: private-file
@@ -98,9 +86,6 @@ breaks:
   - from: bay/sdk.ts
     to: bay/database.ts
     rule: private-file
-  - from: bay/skill-tools.ts
-    to: bay/check-skills.ts
-    rule: may-not-import
   - from: bay/tools.ts
     to: bay/kernel.ts
     rule: may-not-import

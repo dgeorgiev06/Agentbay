@@ -53,6 +53,7 @@ features:
       - bay/manifests/workflow-problems.ts
       - bay/manifests/settings-problems.ts
       - bay/manifests/grants.ts
+      - bay/manifests/listing.ts
     may_import:
       - vocabulary
       - safety

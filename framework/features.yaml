@@ -55,6 +55,7 @@ features:
       - bay/manifests/grants.ts
       - bay/manifests/listing.ts
       - bay/manifests/questions.ts
+      - bay/manifests/skills.ts
     may_import:
       - vocabulary
       - safety

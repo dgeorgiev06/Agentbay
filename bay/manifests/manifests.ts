@@ -7,16 +7,7 @@ import type { SkillFrontMatter } from "../generated/skill.ts";
 import type { Workflow } from "../generated/workflow.ts";
 import { homeFolder, isProjectTheKit, shownPath, shownProblems, type Home, type Layout } from "../layout.ts";
 import type { FileSystem } from "../ports.ts";
-import {
-  checkValue,
-  parseSkill,
-  problemAt,
-  readSkill,
-  type Loaded,
-  type PathSegments,
-  type SkillText,
-  type Wording,
-} from "./spec.ts";
+import { checkValue, problemAt, type Loaded, type PathSegments, type SkillText, type Wording } from "./spec.ts";
 import { failedWith, succeededWith, type Outcome, type Problem } from "../outcome.ts";
 import {
   type KitLayout,
@@ -58,7 +49,8 @@ import { referenceProblems } from "./file-references.ts";
 import { workflowProblems } from "./workflow-problems.ts";
 import { modeSettingsProblems, straySettingsProblems } from "./settings-problems.ts";
 import { grantsOfActiveModes } from "./grants.ts";
-import { refused, answering } from "./questions.ts";
+import { answering } from "./questions.ts";
+import { skillAnswer, inspectedSkill } from "./skills.ts";
 
 export type ActiveMode = {
   readonly home: Home;
@@ -256,30 +248,6 @@ async function actionSchemasOf(
   return actionSchemas;
 }
 
-function skillNamesOf(manifest: Mode): readonly string[] {
-  const steps = Object.values(manifest.actions).flatMap((action) => action.run);
-  return [...new Set(steps.flatMap((step) => ("skill" in step ? [step.skill] : [])))];
-}
-
-async function skillAnswer(context: Context, mode: ModeSource, name: string): Promise<Outcome<SkillUse>> {
-  if (!skillNamesOf(mode.value).includes(name)) {
-    return refused(`Mode ${mode.value.name} has no skill ${name}.`);
-  }
-  const file = join(mode.folder, name, "SKILL.md");
-  const parsed = await parseSkill(context.files, file);
-  if (!parsed.ok) {
-    return parsed;
-  }
-  const { frontMatter, tools } = parsed.value;
-  const outputPath = frontMatter.metadata?.output;
-  const outputFile = outputPath === undefined ? undefined : join(mode.folder, outputPath);
-  const output =
-    outputFile === undefined
-      ? undefined
-      : schemaOf({ file: outputFile, schemaFile: await context.readSchema(outputFile), label: "output" });
-  return succeededWith({ name, file, frontMatter, tools, output });
-}
-
 type SystemParts = {
   readonly config: Config;
   readonly workflows: readonly ModeWorkflow[];
@@ -321,13 +289,6 @@ function loadProblems(context: Context, modes: LoadedModes): Collected<UnloadedM
   const inactive = modes.unloaded.filter((mode) => !context.active.has(mode.name));
   const active = modes.unloaded.filter((mode) => context.active.has(mode.name));
   return { values: inactive, problems: active.flatMap((mode) => mode.problems) };
-}
-
-function inspectedSkill(context: Context, mode: ModeSource): (folder: string) => Promise<InspectedSkill> {
-  return async (folder) => {
-    const file = join(mode.folder, folder, "SKILL.md");
-    return { file, text: await readSkill(context.files, file) };
-  };
 }
 
 function schemaProblemsOf(

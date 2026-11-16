@@ -962,7 +962,7 @@ describe("inspectSystem", () => {
   });
 
   test("a folder is active by the name in its manifest, not by the name of its folder", async () => {
-    const renamed = Object.entries(projectFiles()).map(([path, text]) => [
+    const renamed = Object.entries(projectFiles()).map(([path, text]): readonly [string, string] => [
       path.replace("/kit/components/modes/briefing/", "/kit/components/modes/daily/"),
       text,
     ]);

@@ -1,0 +1,39 @@
+name: typescript
+version: 1.0.0
+description: Checks and tests TypeScript code in a checkout, running the same scripts of its package.json that npm run check runs.
+
+implements: [toolchain@1]
+
+resources:
+  commands:
+    - npm run generate:check --
+    - npm run typecheck --
+    - npm run lint --
+    - npm run format:check --
+    - npm run deadcode --
+    - npm test -- --test-reporter=tap
+
+extraFiles: [eslint.config.js, knip.json, prettier.json, practices.md]
+
+actions:
+  describe:
+    description: When a mode or a skill needs to know the language, which files are source and tests, where its practices are, and which checks it has.
+    input: schemas/describe-request.json
+    output: schemas/describe-response.json
+    effects: []
+    run:
+      - script: scripts/describe.ts
+  check:
+    description: When a mode or a skill needs to know whether a checkout passes the type check, lint, format and dead-code checks, or a named few of them.
+    input: schemas/check-request.json
+    output: schemas/check-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/check.ts
+  test:
+    description: When a mode or a skill needs to know whether the tests of a checkout pass, all of them or the named test files.
+    input: schemas/test-request.json
+    output: schemas/test-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/run-tests.ts

@@ -4,6 +4,7 @@ export type Mode = {
   readonly description: string;
   readonly requires?: { readonly interfaces: ReadonlyArray<InterfaceReference> };
   readonly implements?: ReadonlyArray<InterfaceReference>;
+  readonly extraFiles?: ReadonlyArray<string>;
   readonly resources?: Resources;
   readonly actions: Readonly<Record<string, Action>>;
   readonly settings?: RelativePath;

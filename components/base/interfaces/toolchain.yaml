@@ -1,0 +1,15 @@
+name: toolchain
+version: 1
+actions:
+  describe:
+    input: toolchain/describe-request.json
+    output: toolchain/describe-response.json
+    effects: [read]
+  check:
+    input: toolchain/check-request.json
+    output: toolchain/check-response.json
+    effects: [read, write, network, spend, delete]
+  test:
+    input: toolchain/test-request.json
+    output: toolchain/test-response.json
+    effects: [read, write, network, spend, delete]

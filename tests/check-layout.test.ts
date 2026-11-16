@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { check, cleanFiles, findFinding, withoutFinding } from "./check-fixture.ts";
+import { notesMode, paths, yamlText } from "./system-fixture.ts";
 
 const notesFolder = "components/modes/notes";
 
@@ -28,6 +29,29 @@ test("an entry the mode-folder layout does not name is reported once per entry",
   findFinding(report, `${notesFolder}/playbook.md`, "holds playbook.md");
   assert.equal(report.findings.filter((entry) => entry.message.includes("holds features/")).length, 1);
   withoutFinding(report, "holds README.md");
+});
+
+test("a mode folder may hold the top-level files its manifest lists under extraFiles, and no others", async () => {
+  const report = await check({
+    ...cleanFiles(),
+    [paths.notes]: yamlText({ ...notesMode, extraFiles: ["lint.json", "practices.md", "config"] }),
+    [`${notesFolder}/lint.json`]: "{}",
+    [`${notesFolder}/practices.md`]: "# Practices\n",
+    [`${notesFolder}/other.json`]: "{}",
+    [`${notesFolder}/config/rules.json`]: "{}",
+  });
+  withoutFinding(report, "holds lint.json");
+  withoutFinding(report, "holds practices.md");
+  findFinding(
+    report,
+    `${notesFolder}/other.json`,
+    `The mode folder ${notesFolder} holds other.json, which the mode-folder layout does not name.`,
+  );
+  findFinding(
+    report,
+    `${notesFolder}/config`,
+    `The mode folder ${notesFolder} holds config/, which the mode-folder layout does not name.`,
+  );
 });
 
 test("a skill folder without SKILL.md is reported", async () => {

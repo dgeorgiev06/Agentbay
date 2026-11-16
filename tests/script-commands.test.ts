@@ -70,6 +70,19 @@ test("a prefix matches argument by argument, not as text", async () => {
   });
 });
 
+test("a prefix matches each argument exactly, case included", async () => {
+  await withCommandKernel({ commands: ["git status"] }, async (kernel, kit) => {
+    const ran = await ranCommands(kernel, [{ command: ["GIT", "status"] }, { command: ["git", "STATUS"] }]);
+    assert.deepEqual(
+      ran.answers.map((answer) => refusalMessage(answer)),
+      [
+        unlistedSentence('["GIT","status"]', "git status", kit.manifest),
+        unlistedSentence('["git","STATUS"]', "git status", kit.manifest),
+      ],
+    );
+  });
+});
+
 test("an action that lacks one of the five effects may not run a command", async () => {
   const effects: readonly Effect[] = ["read", "write", "network", "spend"];
   await withCommandKernel({ commands: ["node --version"], effects }, async (kernel, kit) => {
@@ -187,6 +200,7 @@ test("a command past its time limit is stopped with what it started, and the scr
     assert.equal(ran.after, "the script went on");
     const took = fieldOf(eventsOfKind(ran.run, "command")[0]?.detail ?? null, "milliseconds");
     assert.ok(typeof took === "number" && took >= 1000 && took < 5000, JSON.stringify(took));
+    assert.equal(fieldOf(stopped, "milliseconds"), took);
   });
 });
 

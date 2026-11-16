@@ -1,0 +1,12 @@
+{
+  "input": { "folder": "work/checkout", "files": ["tests/json.test.ts"] },
+  "output": {
+    "verdict": "failed",
+    "passed": 11,
+    "failed": 1,
+    "failedTests": ["a field that is missing reads as undefined"],
+    "seconds": 1.2,
+    "stdout": "...\nnot ok 4 - a field that is missing reads as undefined\n...\n# tests 12\n# suites 0\n# pass 11\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n",
+    "stderr": ""
+  }
+}

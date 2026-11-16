@@ -245,6 +245,10 @@ outside:
     purpose: The store mode. Implements items-store.
     imports_kernel_through:
       - bay/sdk.ts
+  components/base/typescript:
+    purpose: The typescript mode. Implements toolchain; checks and tests TypeScript code in a checkout.
+    imports_kernel_through:
+      - bay/sdk.ts
   components/modes/fake-source:
     purpose: A source of made-up items for tests and the demo. Implements items-source.
     imports_kernel_through:

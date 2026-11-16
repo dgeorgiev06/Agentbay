@@ -50,6 +50,7 @@ export type CommandOutput = {
 
 export type CommandRan = {
   readonly end: CommandEnd;
+  readonly milliseconds: number;
   readonly stdout: CommandOutput;
   readonly stderr: CommandOutput;
 };

@@ -22,6 +22,8 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | **Approval** | A workflow step that waits for the owner and is bound to the content shown. | gate |
 | **Budget** | A limit on a run: items, dollars, tokens, minutes. | quota |
 | **Toolbox** | `bay/sdk.ts`. The only kernel file mode code may import. | SDK internals, helpers |
+| **Toolchain** | A mode that implements `toolchain@1` for one language: it names the language's files and practices, runs its checks in a checkout, and runs its tests there. | language mode, linter |
+| **Verdict** | What a toolchain says of one check or one test run: `passed`, `failed` or `inconclusive`. Inconclusive means nothing is known, and it is never a pass. | result, status |
 
 ## What a builder of the kit sees
 

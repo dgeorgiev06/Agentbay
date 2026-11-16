@@ -408,12 +408,13 @@ export class Broker {
       environment: { PATH: this.#options.commandSearchPath },
       timeoutMilliseconds: milliseconds,
     });
+    const took = clock.now().getTime() - startedAt;
     await this.#append("command", {
       step: this.#options.place.stepKey,
       command,
       folder: shownPath(this.#options.layout, folder),
       end: result.end,
-      milliseconds: clock.now().getTime() - startedAt,
+      milliseconds: took,
       stdoutHash: result.stdout.hash,
       stderrHash: result.stderr.hash,
     });
@@ -422,6 +423,7 @@ export class Broker {
     }
     return granted({
       end: result.end,
+      milliseconds: took,
       stdout: this.#shownOutput(result.stdout),
       stderr: this.#shownOutput(result.stderr),
     });

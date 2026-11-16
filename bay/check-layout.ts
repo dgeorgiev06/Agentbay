@@ -37,17 +37,18 @@ function fileProblem(file: string, wording: Wording): Problem {
   return { file, path: "", ...wording };
 }
 
-function isAllowedTopLevel(file: string): boolean {
+function isAllowedTopLevel(file: string, extraFiles: readonly string[]): boolean {
   const [first = "", ...rest] = file.split("/");
   if (rest.length === 0) {
-    return topLevelFiles.some((name) => name === first);
+    return topLevelFiles.some((name) => name === first) || extraFiles.includes(first);
   }
   return topLevelFolders.some((name) => name === first);
 }
 
 function topLevelProblems(mode: ModeFolder): readonly Problem[] {
+  const extraFiles = isLoaded(mode) ? (mode.manifest.extraFiles ?? []) : [];
   const strays = new Map<string, string>();
-  for (const file of mode.files.filter((entry) => !isAllowedTopLevel(entry))) {
+  for (const file of mode.files.filter((entry) => !isAllowedTopLevel(entry, extraFiles))) {
     const [first = "", ...rest] = file.split("/");
     const entry = rest.length === 0 ? first : `${first}/`;
     strays.set(entry, join(mode.folder, first));

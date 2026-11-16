@@ -1,0 +1,10 @@
+{
+  "input": {},
+  "output": {
+    "language": "TypeScript",
+    "sourceFiles": ["**/*.ts"],
+    "testFiles": ["**/*.test.ts"],
+    "practices": "components/base/typescript/practices.md",
+    "checks": ["generate:check", "typecheck", "lint", "format:check", "deadcode"]
+  }
+}

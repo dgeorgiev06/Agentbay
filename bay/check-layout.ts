@@ -8,6 +8,7 @@ import {
   type KitTree,
   type LoadedModeFolder,
   type ModeFolder,
+  type Wording,
 } from "./check-context.ts";
 import { isRecord } from "./json.ts";
 import type { Problem } from "./outcome.ts";
@@ -16,8 +17,6 @@ type JsonFile =
   | { readonly state: "missing" }
   | { readonly state: "read"; readonly value: unknown }
   | { readonly state: "invalid"; readonly reason: string };
-
-type Wording = Pick<Problem, "message" | "fix">;
 
 type ExamplePlace = {
   readonly mode: LoadedModeFolder;

@@ -10,6 +10,8 @@ export type Severity = "error" | "warning";
 
 export type Finding = Problem & { readonly severity: Severity };
 
+export type Wording = Pick<Problem, "message" | "fix">;
+
 export type FileListing = {
   readonly projectFiles: (folder: string) => Promise<readonly string[]>;
 };

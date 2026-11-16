@@ -1,11 +1,16 @@
 import { basename, normalize } from "node:path/posix";
 import type { Mode } from "./generated/mode.ts";
-import { errors, isLoaded, type CheckContext, type Finding, type LoadedModeFolder } from "./check-context.ts";
+import {
+  errors,
+  isLoaded,
+  type CheckContext,
+  type Finding,
+  type LoadedModeFolder,
+  type Wording,
+} from "./check-context.ts";
 import { pathIn } from "./layout.ts";
 import type { InspectedSkill } from "./manifests/manifests.ts";
 import type { Problem } from "./outcome.ts";
-
-type Wording = Pick<Problem, "message" | "fix">;
 
 type SkillText = Exclude<InspectedSkill["text"], undefined>;
 

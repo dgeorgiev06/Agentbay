@@ -1,4 +1,4 @@
-modes: [feed-briefing]
+modes: [feed-briefing, typescript]
 bindings:
   items-source: fake-source
   items-store: store

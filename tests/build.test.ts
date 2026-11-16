@@ -90,7 +90,7 @@ test("planAgents plans agents only for the active modes, each pointing at its sk
     active.value.map((agent) => agent.skillFile),
     [`${project.root}/components/modes/writer/skills/draft/SKILL.md`],
   );
-  assert.deepEqual(Array.from(kernel.system.inactive).sort(), ["fake-source", "feed-briefing", "store"]);
+  assert.deepEqual(Array.from(kernel.system.inactive).sort(), ["fake-source", "feed-briefing", "store", "typescript"]);
   kernel.close();
   await project.remove();
 });

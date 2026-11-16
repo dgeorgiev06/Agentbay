@@ -1,11 +1,45 @@
-# TypeScript standards
+# typescript
 
-The configs that hold agentbay code to the code standards of proposal 0022. The scripts in the root `package.json` pass these files with `--config`, so no copy sits at the repository root. `tsconfig.json` stays at the root because the compiler and the type-checked lint rules look for it there.
+The mode `typescript` implements `toolchain@1`. It checks and tests TypeScript code in a checkout, and it holds the configuration that holds agentbay code to its code standards.
+
+## Actions
+
+| Action | What it does |
+|---|---|
+| `describe` | Names the language, the patterns of its source and test files, its practices file and its checks. It runs nothing. |
+| `check` | Runs each check, or the named ones, in a checkout, one after another, and gives each a verdict. |
+| `test` | Runs `npm test` in a checkout with the TAP reporter, on every test or on named files, and gives one verdict with the counts. |
+
+A check is the checkout's own `package.json` script of the same name: `generate:check`, `typecheck`, `lint`, `format:check`, `deadcode`. The mode runs `npm run <name> --`. To change what a check does, change that script in `package.json`; `npm run check` runs the same scripts, so a person and the mode run the same thing. The mode's list of names is in `scripts/lib/checks.ts`.
+
+A verdict is `passed`, `failed` or `inconclusive`:
+
+- `passed`: the check ended with exit code 0. For `test`, the run also ended with exit code 0, reported at least one test, and no test failed or was cancelled.
+- `failed`: the check ended with an exit code its tool uses for a finding (1; for `typecheck` also 2, which `tsc` uses for a type error). For `test`, exit code 1 with at least one failed test.
+- `inconclusive`: anything else. The script is missing, the folder does not exist, the time limit was hit, a signal stopped it, the exit code is one the mode does not know, or the test run printed no summary or reported no tests. An inconclusive verdict is never a pass.
+
+## Commands
+
+The mode lists exactly the commands its scripts run, in `resources.commands`. Each runs code from the checkout it is given; that is its purpose.
+
+| Prefix | Run by |
+|---|---|
+| `npm run generate:check --` and the four other checks | `check` |
+| `npm test -- --test-reporter=tap` | `test`, followed by the named test files |
+
+## Configuration
+
+`mode.yaml` lists these files under `extraFiles`, so the mode-folder layout accepts them at the top of the folder. The scripts in the root `package.json` pass them with `--config`, so no copy sits at the repository root. `tsconfig.json` stays at the root because the compiler and the type-checked lint rules look for it there.
 
 | File | Used by | Enforces |
 |---|---|---|
 | `eslint.config.js` | `npm run lint` | typescript-eslint `strictTypeChecked`; no `any`; no non-null `!`; private members never reassigned are `readonly`; no type assertion except `as const`; every `switch` over a union is exhaustive; exported functions state their parameter and return types; at most three parameters; complexity at most 10; no nested ternary; no reassigned parameter; no default export; no `enum`; no class `extends`; no `@ts-ignore`, `@ts-expect-error` or `@ts-nocheck`; inline `eslint-disable` comments have no effect and are reported, and `--max-warnings 0` fails on them; files under `components/` import from `bay/` only `bay/sdk.ts`, import no file of another mode folder (`components/<tier>/<mode>/`, checked to six folder levels inside a mode) and use no dynamic `import()`; files under `adapters/` import from `bay/` only `bay/sdk.ts` and `bay/adapter.ts`; files under `bay/` other than `cli.ts` and `mcp.ts` import neither `cli.ts`, `mcp.ts` nor anything under `adapters/` |
 | `prettier.json` | `npm run format:check` | Prettier with a line width of 120 |
 | `knip.json` | `npm run deadcode` | No unused file, export or dependency. Test files are the entry points until `bay/cli.ts` exists. Exported types used in their own file are allowed; unused exported types are allowed in `bay/generated/` and in `bay/ports.ts`, whose git, process and HTTP ports later slices use |
+| `practices.md` | builders and reviewers; `describe` names it | The TypeScript practices TS-01 to TS-17 |
 
 Not enforced here: import cycles and files that only re-export (they need an eslint plugin, so `bay check` will do it), and comment lines in kit code (a `bay check` measure).
+
+## Limits
+
+The folder given to `check` and `test` must be a checkout of the kit, or of a project that is the kit: its `package.json` must have the five check scripts and `test`. A project beside the kit has none of them, so every check is inconclusive there.

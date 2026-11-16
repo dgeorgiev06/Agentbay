@@ -29,3 +29,13 @@ Three designs were written under different constraints and compared (`docs/desig
 4. M4: targets carry schemas and `resolve`. Runs, harness and check stop reading schemas and references themselves; `spec.ts` and `references.ts` become private.
 5. M5: `inspectSystem` and `placeToWrite`. Check's second loader and scaffold's folder rules are deleted.
 6. M6: tests move to the entry file; fixtures load from fake files; names exported only for tests stop being exported.
+
+**State after slices M1 to M6 (reviewer, 2026-11-16).** The feature is `bay/manifests/`: an entry file of 603 lines that defines the interface, and eighteen private files, each doing one thing, importing one another in one direction. Other features use 20 names from the one entry file; they used 30 from four files. No file outside the folder imports a private file, and a test enforces that for manifests and for runs. Every system a test uses comes from a load over fake files. `bay check` and a load are derived from one inspection. What `bay check` and `bay new` print and write was captured before slice M5 and is byte for byte the same after M6.
+
+Left open, on purpose:
+
+- `BuildRequest.system` hands a harness adapter the whole system, which the Claude Code adapter never reads, and lets an adapter test write a system out by hand. It is removed with the next slice that touches the harness feature.
+- Finding a cycle is written twice, in `bay/manifests/binding-problems.ts` and in `bay/check-imports.ts`. The copy-paste detector reports it now that the files are small enough for it to read. It becomes one function with the next slice that touches check.
+- Two refusals in the entry file cannot be reached, because a load already refuses what they guard against. They are deleted with the next change to the questions.
+- `bay new` reads and edits `mode.yaml` itself when it adds an action or a workflow. Writing manifests is scaffold's job; manifests has no writing call.
+- The dead-code setting still hides one production function, `scriptCommand`, and one test helper.

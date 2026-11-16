@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { canonicalJson, defineScript, fail, isWithinWindow, parseIsoTime, shortHash } from "../bay/sdk.ts";
+import { canonicalJson, defineScript, fail, fieldsOf, isWithinWindow, parseIsoTime, shortHash } from "../bay/sdk.ts";
 
 test("canonical JSON sorts keys by UTF-16 code units at every level and has no whitespace", () => {
   assert.equal(canonicalJson({ b: 1, a: [true, null, "x"], é: 2, Z: 0 }), '{"Z":0,"a":[true,null,"x"],"b":1,"é":2}');
@@ -67,4 +67,12 @@ test("fail throws an Error that carries a tagged script error with the reason", 
       error.message === "the input names no day" &&
       JSON.stringify(error.cause) === '{"kind":"script-error","reason":"the input names no day"}',
   );
+});
+
+test("the fields of a request are its object's own fields, and anything else has none", () => {
+  assert.deepEqual(fieldsOf({ folder: "work", checks: ["lint"] }), { folder: "work", checks: ["lint"] });
+  assert.deepEqual(fieldsOf(["folder"]), {});
+  assert.deepEqual(fieldsOf("folder"), {});
+  assert.deepEqual(fieldsOf(null), {});
+  assert.deepEqual(fieldsOf(3), {});
 });

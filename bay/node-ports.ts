@@ -1,7 +1,19 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import type { Dirent } from "node:fs";
-import { access, lstat, mkdir, readdir, readFile, realpath, rename, rm, rmdir, writeFile } from "node:fs/promises";
+import {
+  access,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  rmdir,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Readable } from "node:stream";
 import type { FileListing } from "./check-context.ts";
@@ -86,7 +98,19 @@ async function writeAtomic(path: string, text: string): Promise<void> {
   }
 }
 
-export const nodeFileSystem: FileSystem = { readText, list, exists, writeAtomic };
+async function makeFolder(path: string): Promise<void> {
+  await mkdir(path, { recursive: true });
+}
+
+async function link(path: string, target: string): Promise<void> {
+  await symlink(target, path);
+}
+
+async function removeAll(path: string): Promise<void> {
+  await rm(path, { recursive: true, force: true });
+}
+
+export const nodeFileSystem: FileSystem = { readText, list, exists, writeAtomic, makeFolder, link, removeAll };
 
 export const systemClock: Clock = { now: () => new Date() };
 

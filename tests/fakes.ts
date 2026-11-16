@@ -32,6 +32,18 @@ export function fakeFileSystem(initial: Readonly<Record<string, string>> = {}): 
       contents.set(normalize(path), text);
       return Promise.resolve();
     },
+    makeFolder: () => Promise.resolve(),
+    link: (path, target) => {
+      contents.set(normalize(path), `link to ${target}`);
+      return Promise.resolve();
+    },
+    removeAll: (path) => {
+      const folder = `${normalize(path)}/`;
+      for (const key of [...contents.keys()].filter((key) => key === normalize(path) || key.startsWith(folder))) {
+        contents.delete(key);
+      }
+      return Promise.resolve();
+    },
     removal: {
       remove: (path) => {
         contents.delete(normalize(path));

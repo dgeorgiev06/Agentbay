@@ -36,6 +36,9 @@ export type ScriptContext = {
     readonly read: (path: string) => Promise<Answer<string>>;
     readonly write: (path: string, text: string) => Promise<Answer<null>>;
     readonly list: (path: string) => Promise<Answer<readonly string[]>>;
+    readonly makeFolder: (path: string) => Promise<Answer<null>>;
+    readonly link: (path: string, target: string) => Promise<Answer<null>>;
+    readonly remove: (path: string) => Promise<Answer<null>>;
   };
   readonly secrets: {
     readonly get: (name: string) => Promise<Answer<string>>;
@@ -84,6 +87,12 @@ export function fail(reason: string): never {
 
 function isList(value: Json): value is readonly Json[] {
   return Array.isArray(value);
+}
+
+export type JsonFields = { readonly [key: string]: Json };
+
+export function fieldsOf(value: Json): JsonFields {
+  return typeof value === "object" && value !== null && !isList(value) ? value : {};
 }
 
 export function canonicalJson(value: Json): string {

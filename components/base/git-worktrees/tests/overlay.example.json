@@ -1,0 +1,4 @@
+{
+  "input": { "folder": ".forge/copies/mail-source-check", "commit": "main", "paths": ["bay/sdk.ts", "docs/draft.md"] },
+  "output": { "folder": ".forge/copies/mail-source-check", "placed": ["bay/sdk.ts"], "removed": ["docs/draft.md"] }
+}

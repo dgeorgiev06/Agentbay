@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChangedRequest",
+  "description": "Two commits to compare.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["from", "to"],
+  "properties": {
+    "from": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The earlier commit. A commit: a full or short hash, or a branch name. It has no .. and does not start with a dash."
+    },
+    "to": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The later commit. A commit: a full or short hash, or a branch name. It has no .. and does not start with a dash."
+    }
+  }
+}

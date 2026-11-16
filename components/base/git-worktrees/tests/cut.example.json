@@ -1,0 +1,8 @@
+{
+  "input": { "slice": "mail-source", "base": "main" },
+  "output": {
+    "folder": ".forge/worktrees/mail-source",
+    "branch": "forge/mail-source",
+    "commit": "79fe81d1c4a6b0e2f3d5a7c9e1b3d5f7a9c1e3b5"
+  }
+}

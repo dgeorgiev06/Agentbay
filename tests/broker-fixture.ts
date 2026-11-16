@@ -107,6 +107,7 @@ export function grantsIn(root: string, overrides: Partial<ModeGrants> = {}): Mod
     migrationsFolder: join(modeFolder, "migrations"),
     readPaths: [modeFolder, join(root, "notes-in"), join(root, "notes-out")],
     writePaths: [join(root, "notes-out")],
+    throwawayPaths: [],
     secrets: [],
     hosts: [],
     commands: [],

@@ -1,0 +1,4 @@
+{
+  "input": { "folder": ".forge/worktrees/mail-source", "into": "main" },
+  "output": { "folder": ".forge/worktrees/mail-source", "kind": "worktree", "branch": "forge/mail-source" }
+}

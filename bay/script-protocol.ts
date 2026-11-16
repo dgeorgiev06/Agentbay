@@ -19,6 +19,8 @@ export type ResourceRequest =
   | { readonly resource: "db.agentQuery"; readonly sql: string; readonly partition: string }
   | { readonly resource: "files.read" | "files.list"; readonly path: string }
   | { readonly resource: "files.write"; readonly path: string; readonly text: string }
+  | { readonly resource: "files.makeFolder" | "files.remove"; readonly path: string }
+  | { readonly resource: "files.link"; readonly path: string; readonly target: string }
   | { readonly resource: "secrets.get"; readonly name: string }
   | { readonly resource: "http.request"; readonly request: HttpRequest }
   | { readonly resource: "events.emit"; readonly kind: string; readonly detail: Json }
@@ -137,8 +139,14 @@ function fileRequestOf(fields: Fields): ResourceRequest | undefined {
   if (resource === "files.read" || resource === "files.list") {
     return { resource, path: fields.path };
   }
+  if (resource === "files.makeFolder" || resource === "files.remove") {
+    return { resource, path: fields.path };
+  }
   if (resource === "files.write" && isText(fields.text)) {
     return { resource, path: fields.path, text: fields.text };
+  }
+  if (resource === "files.link" && isText(fields.target)) {
+    return { resource, path: fields.path, target: fields.target };
   }
   return undefined;
 }

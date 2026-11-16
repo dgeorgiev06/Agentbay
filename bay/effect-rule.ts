@@ -17,6 +17,9 @@ export type BrokerOperation =
   | { readonly kind: "files.read"; readonly path: string }
   | { readonly kind: "files.list"; readonly path: string }
   | { readonly kind: "files.write"; readonly path: string }
+  | { readonly kind: "files.makeFolder"; readonly path: string }
+  | { readonly kind: "files.link"; readonly path: string; readonly target: string }
+  | { readonly kind: "files.remove"; readonly path: string }
   | { readonly kind: "secrets.get"; readonly name: string }
   | { readonly kind: "http.request"; readonly method: HttpRequest["method"]; readonly url: string }
   | { readonly kind: "events.emit"; readonly eventKind: string }
@@ -46,6 +49,8 @@ const changesData: Need = { effect: "write", because: "A statement that changes 
 const deletesData: Need = { effect: "delete", because: "A statement that deletes needs the delete effect" };
 
 const writesFiles: Need = { effect: "write", because: "Writing a file needs the write effect" };
+
+const removesFiles: Need = { effect: "delete", because: "Removing a file or folder needs the delete effect" };
 
 const usesNetwork: Need = { effect: "network", because: "A request over the network needs the network effect" };
 
@@ -86,6 +91,9 @@ const operationRules: { readonly [Kind in BrokerOperation["kind"]]: OperationRul
   "files.read": { resource: "files", needs: [] },
   "files.list": { resource: "files", needs: [] },
   "files.write": { resource: "files", needs: [writesFiles] },
+  "files.makeFolder": { resource: "files", needs: [writesFiles] },
+  "files.link": { resource: "files", needs: [writesFiles] },
+  "files.remove": { resource: "files", needs: [writesFiles, removesFiles] },
   "secrets.get": { resource: "secrets", needs: [] },
   "http.request": { resource: "http", needs: [usesNetwork] },
   "events.emit": { resource: "events", needs: [] },
@@ -141,6 +149,27 @@ function describedSpending(operation: SpendingOperation): string {
     : `report spending ${String(operation.usd)} US dollars`;
 }
 
+type FileOperation = Extract<BrokerOperation, { readonly kind: `files.${string}` }>;
+
+function isFileOperation(operation: BrokerOperation): operation is FileOperation {
+  return operationRules[operation.kind].resource === "files";
+}
+
+function describedFileOperation(operation: FileOperation): string {
+  switch (operation.kind) {
+    case "files.read":
+    case "files.list":
+    case "files.write":
+      return `${operation.kind.slice("files.".length)} ${operation.path}`;
+    case "files.makeFolder":
+      return `make the folder ${operation.path}`;
+    case "files.link":
+      return `link ${operation.path} to ${operation.target}`;
+    case "files.remove":
+      return `remove ${operation.path}`;
+  }
+}
+
 export function describedOperation(operation: BrokerOperation): string {
   if (isDatabaseOperation(operation)) {
     return describedDatabaseOperation(operation);
@@ -148,11 +177,10 @@ export function describedOperation(operation: BrokerOperation): string {
   if (isSpendingOperation(operation)) {
     return describedSpending(operation);
   }
+  if (isFileOperation(operation)) {
+    return describedFileOperation(operation);
+  }
   switch (operation.kind) {
-    case "files.read":
-    case "files.list":
-    case "files.write":
-      return `${operation.kind.slice("files.".length)} ${operation.path}`;
     case "secrets.get":
       return `get the secret ${operation.name}`;
     case "http.request":

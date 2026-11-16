@@ -1,4 +1,4 @@
-modes: [feed-briefing, typescript]
+modes: [feed-briefing, typescript, git-worktrees]
 bindings:
   items-source: fake-source
   items-store: store

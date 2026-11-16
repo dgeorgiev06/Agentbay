@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "StatusRequest",
+  "description": "Which worktree to look at, and the commit its slice started from.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["folder", "base"],
+  "properties": {
+    "folder": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*(/\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+      "maxLength": 1000,
+      "description": "A folder this mode made, relative to the project, such as .forge/worktrees/my-slice."
+    },
+    "base": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The commit to count new commits from. A commit: a full or short hash, or a branch name. It has no .. and does not start with a dash."
+    }
+  }
+}

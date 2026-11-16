@@ -41,7 +41,15 @@ type Ports = {
 const broken = (): Promise<never> => Promise.reject(new Error("the port is broken"));
 
 const brokenPorts = (): Ports => ({
-  files: { readText: broken, list: broken, exists: broken, writeAtomic: broken },
+  files: {
+    readText: broken,
+    list: broken,
+    exists: broken,
+    writeAtomic: broken,
+    makeFolder: broken,
+    link: broken,
+    removeAll: broken,
+  },
   inspector: { realPath: broken, isLink: broken, entries: broken },
   http: { request: broken },
   childProcesses: {
@@ -76,6 +84,7 @@ function brokerWith(root: string, effects: readonly Effect[], ports: Ports): Bro
       secrets: ["API_TOKEN"],
       hosts: ["api.example.com"],
       commands: ["node --version"],
+      throwawayPaths: [join(root, "scratch")],
     }),
     place,
     clock: systemClock,
@@ -238,6 +247,9 @@ const brokerMethods: Readonly<Record<string, MethodRow>> = {
   readFile: { call: (broker) => broker.readFile("notes-in/today.md"), needs: [], usesPorts: true },
   writeFile: { call: (broker) => broker.writeFile("notes-out/a.txt", "x"), needs: ["write"], usesPorts: true },
   listFiles: { call: (broker) => broker.listFiles("notes-in"), needs: [], usesPorts: true },
+  makeFolder: { call: (broker) => broker.makeFolder("scratch/one"), needs: ["write"], usesPorts: true },
+  link: { call: (broker) => broker.link("scratch/notes", "notes-in"), needs: ["write"], usesPorts: true },
+  remove: { call: (broker) => broker.remove("scratch/one"), needs: ["write", "delete"], usesPorts: true },
   secret: { call: (broker) => broker.secret("API_TOKEN"), needs: [], usesPorts: true },
   request: {
     call: (broker) => broker.request({ method: "GET", url: "https://api.example.com/x", headers: {} }),

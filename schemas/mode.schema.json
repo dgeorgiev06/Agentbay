@@ -117,7 +117,7 @@
           }
         },
         "files": {
-          "description": "Project paths the mode may read and write.",
+          "description": "Project paths the mode may read and write, and the folders it keeps throwaway folders in.",
           "type": "object",
           "additionalProperties": false,
           "properties": {
@@ -132,6 +132,12 @@
               "type": "array",
               "uniqueItems": true,
               "items": { "type": "string", "minLength": 1, "description": "A file or folder path." }
+            },
+            "throwaway": {
+              "description": "Folders in which the kernel makes folders and links and removes files and folders for the mode. The mode's scripts never read or write files there; its commands fill them.",
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1, "description": "A folder path." }
             }
           }
         },

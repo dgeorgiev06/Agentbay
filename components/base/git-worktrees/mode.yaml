@@ -1,0 +1,69 @@
+name: git-worktrees
+version: 1.0.0
+description: Makes a worktree and branch for each slice, says where it stands, and makes throwaway copies of commits, running git so that no code from the repository runs.
+
+implements: [worktrees@1]
+
+resources:
+  db: { migrations: migrations }
+  files:
+    throwaway: [.forge/copies/]
+  commands:
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 rev-parse --verify --quiet --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 config --show-scope --name-only --get-regexp ^filter\.
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 worktree add --detach --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 branch --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 switch --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 status --porcelain=v1 -z --untracked-files=all --ignore-submodules=all --
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 log -z --reverse --no-show-signature --no-color --format=%H%x20%s --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 diff --name-status -z -M --no-ext-diff --no-textconv --no-color --no-relative --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 check-ignore --quiet --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 ls-tree -z --name-only --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --work-tree=. restore --worktree --source
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 merge-base --is-ancestor --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 worktree remove --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 branch -d --end-of-options
+
+actions:
+  cut:
+    description: When a slice needs its own branch and worktree, cut from a commit, under .forge/worktrees/ in the project.
+    input: schemas/cut-request.json
+    output: schemas/cut-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/cut.ts
+  status:
+    description: When a mode or a skill needs to know where a slice's worktree stands, its head, its commits since the base, and its changed and untracked files.
+    input: schemas/status-request.json
+    output: schemas/status-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/status.ts
+  changed:
+    description: When a mode or a skill needs each path that differs between two commits, and whether it was added, changed, deleted or renamed.
+    input: schemas/changed-request.json
+    output: schemas/changed-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/changed.ts
+  copy:
+    description: When a mode needs a throwaway copy of a commit's files under .forge/copies/, with links to ignored folders of the project such as installed packages.
+    input: schemas/copy-request.json
+    output: schemas/copy-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/copy.ts
+  overlay:
+    description: When a copy needs some of its paths as they are at another commit; a path absent there is removed. It never changes a worktree.
+    input: schemas/overlay-request.json
+    output: schemas/overlay-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/overlay.ts
+  remove:
+    description: When a copy is no longer needed, or a slice's worktree is clean and merged; the worktree goes with its branch, and anything else is refused.
+    input: schemas/remove-request.json
+    output: schemas/remove-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/remove.ts

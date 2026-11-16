@@ -15,7 +15,7 @@ async function built(invocation: Invocation, kernel: Kernel): Promise<Outcome<re
   if (invocation.flags.has("clean")) {
     return adapter.value.clean({ layout, files, removal });
   }
-  const agents = await planAgents({ system: kernel.system, policyOf: kernel.policyOf, files });
+  const agents = await planAgents({ system: kernel.system, files });
   if (!agents.ok) {
     return agents;
   }

@@ -1,8 +1,8 @@
 import { problemsResult, succeeded, type CommandResult, type Invocation } from "../command-context.ts";
 import type { Command } from "../command-line.ts";
-import { loadPolicedSystem } from "../policy.ts";
 import {
   actionsListing,
+  loadSystemReport,
   type ActionListed,
   type ActionsListing,
   type ListingQuestion,
@@ -45,12 +45,12 @@ function questionOf(invocation: Invocation): ListingQuestion {
 }
 
 async function runActions(invocation: Invocation): Promise<CommandResult> {
-  const report = await loadPolicedSystem(invocation.context.ports.files, invocation.layout);
+  const report = await loadSystemReport(invocation.context.ports.files, invocation.layout);
   if (!report.outcome.ok) {
     return problemsResult(report.outcome.problems);
   }
   const question = questionOf(invocation);
-  const listing = actionsListing(report.outcome.value.system, question);
+  const listing = actionsListing(report.outcome.value, question);
   if (!listing.ok) {
     return problemsResult(listing.problems);
   }

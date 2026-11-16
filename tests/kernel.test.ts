@@ -10,13 +10,16 @@ import { loadKernel, nodeKernelPorts } from "../bay/kernel.ts";
 import { createProjectFileListing, nodeFileInspector } from "../bay/node-ports.ts";
 import { openProject, testEnvironment } from "./kernel-fixture.ts";
 import { kit, makeProject } from "./project-fixture.ts";
+import { activeModeGrants } from "./system-fixture.ts";
 
 test("the kernel loads a project and holds its system, policy, store and engine", async () => {
   const opened = await openProject();
   const { kernel } = opened;
-  assert.deepEqual([...kernel.system.active].sort(), ["greeter", "writer"]);
-  assert.ok(kernel.system.modes.has("greeter") && kernel.system.modes.has("writer"));
-  assert.equal(kernel.policyOf("writer").databaseFile, join(opened.project.root, ".agentbay/data/writer.db"));
+  assert.deepEqual([...kernel.system.modes.keys()].sort(), ["greeter", "writer"]);
+  assert.equal(
+    activeModeGrants(kernel.system, "writer").databaseFile,
+    join(opened.project.root, ".agentbay/data/writer.db"),
+  );
   assert.ok(existsSync(join(opened.project.root, ".agentbay/kernel.db")));
   assert.equal(kernel.limits.toolCallsPerRound, 200);
   const result = await kernel.runs.start({ action: "greeter.fetch" }, { name: "Ada" });
@@ -58,7 +61,7 @@ test("the kernel returns the policy's problems when a mode declares a kernel pat
 test("a mode's database is made when first used, with its migrations applied before the first statement", async () => {
   const opened = await openProject();
   const { kernel } = opened;
-  const grants = kernel.policyOf("writer");
+  const grants = activeModeGrants(kernel.system, "writer");
   const permissions = { grants, actionEffects: ["read" as const, "write" as const] };
   const started = await kernel.runs.start({ action: "writer.compose" }, { name: "Ada" });
   assert.ok(started.ok && started.value.state.status === "waiting", JSON.stringify(started));

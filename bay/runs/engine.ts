@@ -14,7 +14,6 @@ import {
 import type { Json, RunEvent, Spend, Submission } from "../contracts.ts";
 import type { Budget } from "../generated/mode.ts";
 import { byteSize, toJson } from "../json.ts";
-import { inactiveModeWording } from "../policy.ts";
 import {
   kernelDatabaseFile,
   lockStaleMilliseconds,
@@ -29,10 +28,12 @@ import { failedWith, succeededWith, unplacedProblem, type Outcome, type Problem 
 import { scrubbedStore } from "./scrubbed-store.ts";
 import { startedSkillOf, submissionProblems, type StartedSkill } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
+import { inactiveModeWording } from "../manifests/registry.ts";
 import {
   resolveActionReference,
   resolveNamedAction,
   resolveOwnAction,
+  splitReference,
   type ActionTarget,
 } from "../manifests/targets.ts";
 import { hasUndoRecords, runUndo } from "./undo.ts";
@@ -297,6 +298,11 @@ export class Engine {
   }
 
   startAction(reference: string, input: Json): Promise<Outcome<AdvancedRun>> {
+    const [mode] = splitReference(reference) ?? [];
+    const inactive = mode === undefined ? undefined : this.#inactiveRefusal("new", mode);
+    if (inactive !== undefined) {
+      return Promise.resolve(inactive);
+    }
     const target = resolveActionReference(this.#services.system, reference);
     if (typeof target === "string") {
       return Promise.resolve(refusal("new", { message: target }));
@@ -305,6 +311,10 @@ export class Engine {
   }
 
   async startForSkill(call: SkillCall): Promise<Outcome<AdvancedRun>> {
+    const inactive = this.#inactiveRefusal("new", call.mode);
+    if (inactive !== undefined) {
+      return inactive;
+    }
     const target = resolveNamedAction(this.#services.system, call.mode, call.action);
     if (typeof target === "string") {
       return failedWith([unplacedProblem(target)]);
@@ -418,10 +428,6 @@ export class Engine {
   }
 
   async #startTarget(target: ActionTarget, input: Json, from?: CalledFrom): Promise<Outcome<AdvancedRun>> {
-    const inactive = this.#inactiveRefusal("new", target.mode.manifest.name);
-    if (inactive !== undefined) {
-      return inactive;
-    }
     const check = { mode: target.mode, schema: target.action.input, value: input, label: "input" };
     const problems = await schemaProblems(this.#services, check);
     if (problems.length > 0) {
@@ -499,7 +505,7 @@ export class Engine {
 
   #inactiveRefusal(runId: string, mode: string): Outcome<AdvancedRun> | undefined {
     const system = this.#services.system;
-    return system.modes.has(mode) && !system.active.has(mode) ? refusal(runId, inactiveModeWording(mode)) : undefined;
+    return system.inactive.has(mode) ? refusal(runId, inactiveModeWording(mode)) : undefined;
   }
 
   async #holding(writer: Writer, body: () => Promise<Outcome<AdvancedRun>>): Promise<Outcome<AdvancedRun>> {

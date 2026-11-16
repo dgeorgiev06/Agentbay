@@ -11,7 +11,6 @@ import {
   fakeRunner,
   fixtureScrubber,
   fixtureSystem,
-  policyOfSystem,
   startTime,
   type Changes,
   type FakeRunner,
@@ -51,7 +50,7 @@ export async function harness(
   } = {},
 ): Promise<Harness> {
   const fixture = await fixtureSystem(options.changes);
-  const { system, policyOf, files } = fixture;
+  const { system, files } = fixture;
   const kernelDb = kernelFile(options.file);
   const opened: SqliteRunStore[] = [];
   const reopen = (): SqliteRunStore => {
@@ -60,7 +59,7 @@ export async function harness(
     return store;
   };
   const store = reopen();
-  const scrubber = await fixtureScrubber(policyOf);
+  const scrubber = await fixtureScrubber(system);
   const runner = fakeRunner(options.scripts);
   const clock = fakeClock(startTime);
   let engines = 0;
@@ -70,7 +69,6 @@ export async function harness(
       system: fresh.system ?? system,
       store: fresh.store ?? store,
       runner,
-      policyOf: fresh.system === undefined ? policyOf : policyOfSystem(fresh.system),
       clock,
       files,
       scrubber,

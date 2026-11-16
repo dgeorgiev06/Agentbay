@@ -1,10 +1,10 @@
 import { join } from "node:path/posix";
 import { charge, frameOverrun, noSpend, type BudgetFrame } from "./budget.ts";
-import type { Json, PolicyOf, RunEvent, Scrubber, ScriptRunner, Settled, Spend, StepOutcome } from "../contracts.ts";
+import type { Json, RunEvent, Scrubber, ScriptRunner, Settled, Spend, StepOutcome } from "../contracts.ts";
 import type { Budget } from "../generated/mode.ts";
 import { byteSize } from "../json.ts";
 import type { Clock, FileSystem } from "../ports.ts";
-import type { LoadedMode, System } from "../manifests/registry.ts";
+import type { ActiveMode, System } from "../manifests/registry.ts";
 import { settledOf, type RunStore, type StepRecord, type Writer } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
 import type { StepDetail, StepKind } from "./step-detail.ts";
@@ -16,7 +16,6 @@ export type Services = {
   readonly system: System;
   readonly store: RunStore;
   readonly runner: ScriptRunner;
-  readonly policyOf: PolicyOf;
   readonly clock: Clock;
   readonly files: FileSystem;
   readonly scrubber: Scrubber;
@@ -71,7 +70,7 @@ type RefusedStart = {
 };
 
 type SchemaCheck = {
-  readonly mode: LoadedMode;
+  readonly mode: ActiveMode;
   readonly schema: string;
   readonly value: Json;
   readonly label: string;

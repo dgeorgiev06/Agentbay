@@ -8,6 +8,7 @@ import { callKernelTool } from "../bay/tools.ts";
 import { problemText, type Outcome } from "../bay/outcome.ts";
 import { openKernel, openProject, startedTask, type Opened, type StartedTask } from "./kernel-fixture.ts";
 import { makeProject, skillText } from "./project-fixture.ts";
+import { activeModeGrants } from "./system-fixture.ts";
 
 const toolResultBytes = 256 * 1024;
 
@@ -189,7 +190,7 @@ test("an action a skill starts through call_action is charged to the calling run
 
 test("tool results pass through the scrubber and are capped in size", async () => {
   await withWaiting(async ({ kernel, project }, waiting) => {
-    const permissions = { ...kernel.policyOf("writer"), secrets: ["NOTE_KEY"] };
+    const permissions = { ...activeModeGrants(kernel.system, "writer"), secrets: ["NOTE_KEY"] };
     assert.ok((await kernel.secrets.get("NOTE_KEY", permissions)).ok);
     await project.write("out/notes/leak.txt", "key s3cr3t-note-value-42 and ghp_abcdefghijklmnopqrstuvwxyz0123456789");
     const read = await callKernelTool(kernel, "files_read", { token: waiting.token, path: "out/notes/leak.txt" });
@@ -302,7 +303,10 @@ test("a skill step round gets a bounded number of tool calls; then only submit w
 test("a tool's refusal is redacted by the tool layer itself, even when nothing else redacted it", async () => {
   await withWaiting(async ({ kernel }, waiting) => {
     const secret = "s3cr3t-note-value-42";
-    const handedOut = await kernel.secrets.get("NOTE_KEY", { ...kernel.policyOf("writer"), secrets: ["NOTE_KEY"] });
+    const handedOut = await kernel.secrets.get("NOTE_KEY", {
+      ...activeModeGrants(kernel.system, "writer"),
+      secrets: ["NOTE_KEY"],
+    });
     assert.ok(handedOut.ok);
     const refused = await callKernelTool(kernel, "call_action", { token: waiting.token, action: secret });
     const refusal = refusalOf(refused);

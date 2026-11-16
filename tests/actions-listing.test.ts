@@ -4,7 +4,6 @@ import { layoutOf, type Layout } from "../bay/layout.ts";
 import type { Problem } from "../bay/outcome.ts";
 import type { FileSystem } from "../bay/ports.ts";
 import { actionsListing, loadSystemReport, type ActionsListing, type System } from "../bay/manifests/registry.ts";
-import { modeNamed, systemOf } from "./broker-fixture.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import { config, layout, rooted, schemaText, validFiles, yamlText } from "./system-fixture.ts";
 
@@ -90,7 +89,7 @@ function separateProject(): FileSystem {
 
 test("a mode that is loaded but not active is neither listed nor answered for", async () => {
   const system = await loadedSystem(separateProject(), separate);
-  assert.ok(system.modes.has("briefing"));
+  assert.deepEqual([...system.inactive], ["briefing"]);
   assert.deepEqual(listed(actionsListing(system, {})), {
     modes: [
       { name: "notes", description: "Writes notes into the store." },
@@ -201,9 +200,15 @@ test("the listing is live: a mode folder added to the project is listed on the n
   });
 });
 
-test("an action whose input schema could not be read gives a problem instead of a listing without it", () => {
-  const system = systemOf([{ folder: "/kit/components/modes/probe", manifest: modeNamed("probe", undefined) }]);
-  assert.deepEqual(refusedWith(actionsListing(system, { mode: "probe" })), [
-    { file: "", path: "", message: "The input schema of probe.look could not be read.", fix: "Run bay check." },
+test("an action whose input schema could not be read gives a problem instead of a listing without it", async () => {
+  const system = await kitSystem();
+  const store = system.modes.get("store");
+  assert.ok(store);
+  const withoutSchemas = { ...store, inputSchemas: new Map() };
+  const changed = { ...system, modes: new Map([...system.modes, ["store", withoutSchemas]]) };
+  assert.deepEqual(refusedWith(actionsListing(changed, { mode: "store" })), [
+    { file: "", path: "", message: "The input schema of store.put could not be read.", fix: "Run bay check." },
+    { file: "", path: "", message: "The input schema of store.get could not be read.", fix: "Run bay check." },
+    { file: "", path: "", message: "The input schema of store.remove could not be read.", fix: "Run bay check." },
   ]);
 });

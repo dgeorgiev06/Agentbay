@@ -5,7 +5,7 @@ import type { Step as WorkflowStep } from "../generated/workflow.ts";
 import { toJson } from "../json.ts";
 import { problemText, succeededWith } from "../outcome.ts";
 import { resolveInput, resolveValue, type ReferenceScope } from "../manifests/references.ts";
-import type { LoadedMode } from "../manifests/registry.ts";
+import type { ActiveMode } from "../manifests/registry.ts";
 import type { StepRecord } from "./run-store.ts";
 import { approvalContentOf, type ApprovalContent } from "./scrubbed-store.ts";
 import type { ApprovalDetail } from "./step-detail.ts";
@@ -28,7 +28,7 @@ import {
 } from "./walk.ts";
 
 type WorkflowScope = {
-  readonly mode: LoadedMode;
+  readonly mode: ActiveMode;
   readonly budget: BudgetFrame;
   readonly within: string;
   readonly trigger: Json;

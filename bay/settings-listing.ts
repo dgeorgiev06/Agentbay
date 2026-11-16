@@ -83,7 +83,7 @@ async function modeSettings(kernel: Kernel): Promise<readonly Setting[]> {
   const settings: Setting[] = [];
   for (const [name, mode] of kernel.system.modes) {
     const file = mode.manifest.settings;
-    if (file === undefined || !kernel.system.active.has(name)) {
+    if (file === undefined) {
       continue;
     }
     const text = await kernel.ports.files.readText(join(mode.folder, file));

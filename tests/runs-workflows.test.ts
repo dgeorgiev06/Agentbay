@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import type { ScriptRequest } from "../bay/contracts.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
+import type { System } from "../bay/manifests/registry.ts";
 import { hashOf, textField } from "../bay/json.ts";
 import {
   answer,
@@ -29,6 +30,12 @@ const reviewSteps: Workflow["steps"] = [
 ];
 
 const hour = 3_600_000;
+
+function withOnlyStoreActive(system: System): System {
+  const modes = new Map([...system.modes].filter(([name]) => name === "store"));
+  const inactive = new Set([...system.modes.keys()].filter((name) => name !== "store"));
+  return { ...system, modes, inactive };
+}
 
 describe("workflows", () => {
   test("action steps take literal and referenced input, and later steps see earlier outputs", async () => {
@@ -411,7 +418,7 @@ test("an approval event written into the log by anyone but the engine passes not
 
 test("runs refuse to start an action or a workflow of a mode that is not active in the project", async () => {
   const { runs, system, reopen, runner, close } = await openedRuns({ changes: withFlow(reviewSteps) });
-  const inactive = await reopen({ ...system, active: new Set(["store"]) });
+  const inactive = await reopen(withOnlyStoreActive(system));
   const sentence = "Mode notes is not active in this project, so nothing of it runs here.";
   const fix = "Add notes to modes: in agentbay.config.yaml, or bind an interface it implements.";
   for (const result of [await inactive.start({ action: "notes.copy" }, { count: 1 }), await inactive.start(flow, 1)]) {
@@ -431,7 +438,7 @@ test("a run of a mode that is no longer active is refused when it would advance,
   const { runs, system, reopen, close } = await openedRuns({ changes: withFlow(reviewSteps) });
   const waiting = runOf(await runs.start(flow, 1));
   assert.equal(waiting.state.status, "waiting");
-  const inactive = await reopen({ ...system, active: new Set(["store"]) });
+  const inactive = await reopen(withOnlyStoreActive(system));
   for (const result of [await inactive.resume(waiting.id), await inactive.stop(waiting.id)]) {
     assert.deepEqual(problemsOf(result), ["Mode notes is not active in this project, so nothing of it runs here."]);
   }

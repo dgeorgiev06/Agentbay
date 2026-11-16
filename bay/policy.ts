@@ -1,19 +1,7 @@
 import { isAbsolute, join, normalize } from "node:path/posix";
-import type { ModeGrants, PolicyOf } from "./contracts.ts";
+import type { ModeGrants } from "./contracts.ts";
 import type { Mode } from "./generated/mode.ts";
-import type { FileSystem } from "./ports.ts";
-import {
-  isInsideOrEqual,
-  isProjectTheKit,
-  pathIn,
-  shownPath,
-  shownProblems,
-  type Home,
-  type Layout,
-} from "./layout.ts";
-import { loadSystemReport, type LoadedMode, type System, type SystemReport } from "./manifests/registry.ts";
-import { problemAt } from "./manifests/spec.ts";
-import type { Outcome, Problem } from "./outcome.ts";
+import { isInsideOrEqual, isProjectTheKit, pathIn, shownPath, type Home, type Layout } from "./layout.ts";
 
 export type OtherMode = {
   readonly name: string;
@@ -292,87 +280,4 @@ export function grantsOf(request: GrantRequest): GrantRuling {
     return { ok: false, problems };
   }
   return { ok: true, value: grantsOfMode(request) };
-}
-
-function refusedMode(wording: { readonly message: string; readonly fix: string }): Outcome<ModeGrants> {
-  return { ok: false, problems: [{ file: "", path: "", ...wording }] };
-}
-
-function placedProblem(mode: LoadedMode, problem: GrantProblem): Problem {
-  const loaded = { file: join(mode.folder, "mode.yaml"), value: mode.manifest, lineOf: mode.lineOf };
-  return problemAt(loaded, problem.at, { message: problem.message, fix: problem.fix });
-}
-
-export function permissionsFor(system: System, modeName: string, layout: Layout): Outcome<ModeGrants> {
-  const mode = system.modes.get(modeName);
-  if (mode === undefined) {
-    return refusedMode({ message: `There is no mode named ${modeName}.`, fix: "Name a mode the registry loaded." });
-  }
-  if (!system.active.has(modeName)) {
-    return refusedMode(inactiveModeWording(modeName));
-  }
-  const otherModes = [...system.modes.values()]
-    .filter((other) => other !== mode)
-    .map((other) => ({ name: other.manifest.name, folder: other.folder }));
-  const ruling = grantsOf({ manifest: mode.manifest, home: mode.home, folder: mode.folder, layout, otherModes });
-  if (!ruling.ok) {
-    return {
-      ok: false,
-      problems: shownProblems(
-        layout,
-        ruling.problems.map((problem) => placedProblem(mode, problem)),
-      ),
-    };
-  }
-  return ruling;
-}
-
-export function inactiveModeWording(modeName: string): { readonly message: string; readonly fix: string } {
-  return {
-    message: `Mode ${modeName} is not active in this project, so nothing of it runs here.`,
-    fix: `Add ${modeName} to modes: in agentbay.config.yaml, or bind an interface it implements.`,
-  };
-}
-
-export function policyFor(system: System, layout: Layout): Outcome<PolicyOf> {
-  const permissions = new Map<string, ModeGrants>();
-  const problems: Problem[] = [];
-  for (const name of system.active) {
-    const outcome = permissionsFor(system, name, layout);
-    if (outcome.ok) {
-      permissions.set(name, outcome.value);
-    } else {
-      problems.push(...outcome.problems);
-    }
-  }
-  if (problems.length > 0) {
-    return { ok: false, problems };
-  }
-  return {
-    ok: true,
-    value: (mode) => {
-      const found = permissions.get(mode);
-      if (found === undefined) {
-        throw new Error(`The policy was asked for the mode ${mode}, which is not active in the system.`);
-      }
-      return found;
-    },
-  };
-}
-
-export type PolicedSystem = {
-  readonly system: System;
-  readonly policyOf: PolicyOf;
-};
-
-export type PolicedReport = Omit<SystemReport, "outcome"> & { readonly outcome: Outcome<PolicedSystem> };
-
-export async function loadPolicedSystem(files: FileSystem, layout: Layout): Promise<PolicedReport> {
-  const report = await loadSystemReport(files, layout);
-  if (!report.outcome.ok) {
-    return { ...report, outcome: report.outcome };
-  }
-  const system = report.outcome.value;
-  const policy = policyFor(system, layout);
-  return { ...report, outcome: policy.ok ? { ok: true, value: { system, policyOf: policy.value } } : policy };
 }

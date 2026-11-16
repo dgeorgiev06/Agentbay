@@ -4,7 +4,7 @@ import type { Json, Permissions, RunEvent, Submission } from "../contracts.ts";
 import { effectRefusal } from "../effect-rule.ts";
 import { textField } from "../json.ts";
 import { problemText, unplacedProblem, type Problem } from "../outcome.ts";
-import type { LoadedMode } from "../manifests/registry.ts";
+import type { ActiveMode } from "../manifests/registry.ts";
 import type { StepRecord } from "./run-store.ts";
 import type { SkillTask } from "./run-state.ts";
 import { parseSkill } from "../manifests/spec.ts";
@@ -64,7 +64,7 @@ export function skillTaskOf(at: SkillAt, context: TaskContext): SkillTask {
 
 export async function skillSchemas(
   services: Services,
-  mode: LoadedMode,
+  mode: ActiveMode,
   at: { readonly skill: string; readonly actionOutput: string | undefined },
 ): Promise<readonly string[] | string> {
   const file = join(mode.folder, at.skill, "SKILL.md");
@@ -77,7 +77,7 @@ export async function skillSchemas(
   return [...new Set(outputs)];
 }
 
-function submittedSpendProblems(mode: LoadedMode, record: StartedSkill, submission: Submission): readonly Problem[] {
+function submittedSpendProblems(mode: ActiveMode, record: StartedSkill, submission: Submission): readonly Problem[] {
   const { action, round } = record.detail;
   const effects = mode.manifest.actions[action]?.effects ?? [];
   const manifest = join(mode.folder, "mode.yaml");

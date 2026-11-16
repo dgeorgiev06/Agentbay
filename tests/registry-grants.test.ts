@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { ModeGrants } from "../bay/contracts.ts";
 import { layoutOf, type Layout } from "../bay/layout.ts";
-import { loadSystemReport } from "../bay/manifests/registry.ts";
+import { loadSystemReport, type System } from "../bay/manifests/registry.ts";
 import type { Problem } from "../bay/outcome.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import { briefingMode, layout, paths, rooted, schemaText, validFiles, yamlText } from "./system-fixture.ts";
@@ -239,4 +240,65 @@ for (const broken of brokenProjects) {
 test("the base mode forge in the kit's own folder may name a kernel folder", async () => {
   const report = await loadSystemReport(fakeFileSystem(kitWithForge("components/base/forge", ["bay/"])), layout);
   assert.equal(report.outcome.ok, true);
+});
+
+function grantsOfEveryMode(system: System): ReadonlyMap<string, ModeGrants> {
+  return new Map([...system.modes].map(([name, mode]) => [name, mode.grants]));
+}
+
+async function loadedSystem(files: Readonly<Record<string, string>>, within: Layout): Promise<System> {
+  const report = await loadSystemReport(fakeFileSystem(files), within);
+  assert.ok(report.outcome.ok, report.outcome.ok ? "" : JSON.stringify(report.outcome.problems, null, 2));
+  return report.outcome.value;
+}
+
+function noResources(name: string, folder: string): ModeGrants {
+  return {
+    mode: name,
+    modeFolder: folder,
+    databaseFile: `/kit/.agentbay/data/${name}.db`,
+    migrationsFolder: `${folder}/migrations`,
+    readPaths: [folder],
+    writePaths: [],
+    secrets: [],
+    hosts: [],
+    commands: [],
+  };
+}
+
+test("every mode of a loaded system is active and carries its own grants", async () => {
+  const system = await loadedSystem(rooted(validFiles()), layout);
+  assert.deepEqual(
+    grantsOfEveryMode(system),
+    new Map([
+      ["store", noResources("store", "/kit/components/base/store")],
+      ["notes", noResources("notes", "/kit/components/modes/notes")],
+      ["briefing", noResources("briefing", "/kit/components/modes/briefing")],
+    ]),
+  );
+  assert.deepEqual([...system.inactive], []);
+});
+
+test("a mode that is not active is named as inactive and is not a mode of the system", async () => {
+  const system = await loadedSystem(projectWithJournal(["out/journal"]), kitInside);
+  assert.deepEqual(
+    grantsOfEveryMode(system),
+    new Map([
+      [
+        "journal",
+        {
+          mode: "journal",
+          modeFolder: "/project/components/modes/journal",
+          databaseFile: "/project/.agentbay/data/journal.db",
+          migrationsFolder: "/project/components/modes/journal/migrations",
+          readPaths: ["/project/components/modes/journal", "/project/out/journal"],
+          writePaths: ["/project/out/journal"],
+          secrets: [],
+          hosts: [],
+          commands: [],
+        },
+      ],
+    ]),
+  );
+  assert.deepEqual([...system.inactive].sort(), ["briefing", "notes", "store"]);
 });

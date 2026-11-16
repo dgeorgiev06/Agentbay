@@ -1,5 +1,5 @@
 import { join } from "node:path/posix";
-import type { EventSink, Json, PolicyOf, RunEvent, Scrubber, ScriptRunner, Spend, Submission } from "../contracts.ts";
+import type { EventSink, Json, RunEvent, Scrubber, ScriptRunner, Spend, Submission } from "../contracts.ts";
 import type { Budget } from "../generated/mode.ts";
 import { fieldOf, textField, toJson } from "../json.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
@@ -27,7 +27,6 @@ type RunsNeeds = {
   readonly files: FileSystem;
   readonly clock: Clock;
   readonly system: System;
-  readonly policyOf: PolicyOf;
   readonly scrubber: Scrubber;
   readonly runner: (events: EventSink) => ScriptRunner;
   readonly toolCallsPerRound: number;
@@ -395,8 +394,8 @@ export async function openRuns(needs: RunsNeeds): Promise<Runs> {
   const store = await SqliteRunStore.open(needs.folders, join(needs.project, kernelDatabaseFile));
   const scrubbed = scrubbedStore(store, needs.scrubber);
   const events: EventSink = { append: scrubbed.append };
-  const { system, policyOf, clock, files, scrubber } = needs;
+  const { system, clock, files, scrubber } = needs;
   const runner = needs.runner(events);
-  const engine = new Engine({ system, store, runner, policyOf, clock, files, scrubber });
+  const engine = new Engine({ system, store, runner, clock, files, scrubber });
   return runsOf({ needs, store, engine, events });
 }

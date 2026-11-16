@@ -64,9 +64,9 @@ test("a kit mode and a project mode are loaded together, each knowing its home a
   const report = await reportOf({ ...kitFiles(), ...projectFiles() });
   assert.ok(report.outcome.ok, report.outcome.ok ? "" : messages(report.outcome.problems));
   const system = report.outcome.value;
-  assert.deepEqual([...system.modes.keys()].sort(), ["briefing", "journal", "notes", "store"]);
+  assert.deepEqual([...system.modes.keys()].sort(), ["journal", "notes", "store"]);
+  assert.deepEqual([...system.inactive], ["briefing"]);
   assert.deepEqual([...system.modes.values()].map((mode) => [mode.manifest.name, mode.home, mode.folder]).sort(), [
-    ["briefing", "kit", "/kit/components/modes/briefing"],
     ["journal", "project", "/project/components/modes/journal"],
     ["notes", "kit", "/kit/components/modes/notes"],
     ["store", "kit", "/kit/components/base/store"],
@@ -118,7 +118,7 @@ test("the active set holds the project's modes and the modes their bindings reac
   const report = await reportOf({ ...kitFiles(), ...projectFiles() });
   assert.deepEqual([...report.active].sort(), ["journal", "notes", "store"]);
   assert.ok(report.outcome.ok);
-  assert.deepEqual([...report.outcome.value.active].sort(), ["journal", "notes", "store"]);
+  assert.deepEqual([...report.outcome.value.modes.keys()].sort(), ["journal", "notes", "store"]);
 });
 
 test("a kit mode listed under modes is active, and so is what it reaches", async () => {
@@ -133,7 +133,8 @@ test("with no project modes and nothing listed, no mode is active", async () => 
   const report = await reportOf(files);
   assert.ok(report.outcome.ok, report.outcome.ok ? "" : messages(report.outcome.problems));
   assert.deepEqual([...report.active], []);
-  assert.equal(report.outcome.value.modes.size, 3);
+  assert.equal(report.outcome.value.modes.size, 0);
+  assert.deepEqual([...report.outcome.value.inactive].sort(), ["briefing", "notes", "store"]);
 });
 
 test("in the kit itself every mode is active", async () => {

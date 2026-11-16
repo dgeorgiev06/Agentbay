@@ -38,7 +38,6 @@ type ValueCheck =
 
 type Skill = {
   readonly frontMatter: SkillFrontMatter;
-  readonly headings: readonly string[];
   readonly tools: readonly string[];
 };
 
@@ -491,6 +490,5 @@ export async function parseSkill(files: FileSystem, file: string): Promise<Outco
   if (!text.frontMatter.ok) {
     return text.frontMatter;
   }
-  const headings = text.sections.map((section) => section.heading);
-  return { ok: true, value: { frontMatter: text.frontMatter.value, headings, tools: toolsOf(text.sections) } };
+  return { ok: true, value: { frontMatter: text.frontMatter.value, tools: toolsOf(text.sections) } };
 }

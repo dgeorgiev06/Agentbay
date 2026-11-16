@@ -52,3 +52,10 @@ actions:
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/copy.ts
+  overlay:
+    description: When a copy needs some of its paths as they are at another commit; a path absent there is removed. It never changes a worktree.
+    input: schemas/overlay-request.json
+    output: schemas/overlay-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/overlay.ts

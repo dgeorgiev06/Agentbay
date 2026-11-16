@@ -41,6 +41,16 @@ export async function madeWorktree(context: ScriptContext, folder: string, doing
   return made.branch;
 }
 
+export async function madeCopy(context: ScriptContext, folder: string, doing: string): Promise<void> {
+  const made = await madeFolder(context, folder);
+  if (made === undefined) {
+    fail(`The folder ${folder} was not made by this mode, so the mode does not ${doing} it.`);
+  }
+  if (made.kind === "worktree") {
+    fail(`The folder ${folder} is a worktree, not a copy, so the mode does not ${doing} it.`);
+  }
+}
+
 async function executed(context: ScriptContext, sql: string, parameters: readonly (string | null)[]): Promise<void> {
   const answer = await context.db.execute(sql, [...parameters]);
   if (!answer.ok) {

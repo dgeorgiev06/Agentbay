@@ -27,7 +27,7 @@
         "type": "string",
         "pattern": "^(?!.*\\.\\.)\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*(/\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
         "maxLength": 1000,
-        "description": "A path relative to the copy. A path relative to the project's root. It has no .. and does not start with a dash."
+        "description": "A path relative to the copy, the same as relative to the repository's root. It has no .. and does not start with a dash."
       },
       "description": "The paths to put into the copy."
     }

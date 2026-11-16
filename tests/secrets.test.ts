@@ -90,9 +90,66 @@ test("a value handed out is redacted raw, in base64, URL-safe base64, URL-encode
   assert.match(redacted, /^\[redacted:MAIL_TOKEN\] \| \[redacted:MAIL_TOKEN\]/);
 });
 
-test("a value never handed out is not remembered", () => {
-  const store = storeWith({ AGENTBAY_SECRET_MAIL_TOKEN: madeUpToken });
+function readsRecorded(environment: Readonly<Record<string, string>>): {
+  readonly environment: Readonly<Record<string, string | undefined>>;
+  readonly read: string[];
+} {
+  const read: string[] = [];
+  const recorded = new Proxy(environment, {
+    get: (target, key): string | undefined => {
+      if (typeof key !== "string") {
+        return undefined;
+      }
+      read.push(key);
+      return target[key];
+    },
+  });
+  return { environment: recorded, read };
+}
+
+test("a fresh store asks the environment and the keychain only for declared names", async () => {
+  const { environment, read } = readsRecorded({ AGENTBAY_SECRET_OTHER_TOKEN: madeUpToken });
+  const processes = recordingProcesses(() => ({ exitCode: 44, stdout: "", stderr: "not found" }));
+  const declaredBy = [grantsIn("/project", { secrets: ["MAIL_TOKEN", "NOTES_TOKEN"] })];
+  const store = await SecretStore.open({ environment, processes, platform: "darwin", declaredBy });
+  assert.deepEqual(read, ["AGENTBAY_SECRET_MAIL_TOKEN", "AGENTBAY_SECRET_NOTES_TOKEN"]);
+  assert.deepEqual(
+    processes.requests.map((request) => request.arguments),
+    [
+      ["find-generic-password", "-s", "agentbay", "-a", "MAIL_TOKEN", "-w"],
+      ["find-generic-password", "-s", "agentbay", "-a", "NOTES_TOKEN", "-w"],
+    ],
+  );
   assert.equal(store.redact(`x ${madeUpToken}`), `x ${madeUpToken}`);
+});
+
+test("a fresh store opens when a declared secret is not set, and hand-out still says how to set it", async () => {
+  const processes = recordingProcesses(() => ({ exitCode: 44, stdout: "", stderr: "not found" }));
+  const declaredBy = [permissions];
+  const store = await SecretStore.open({ environment: {}, processes, platform: "darwin", declaredBy });
+  assert.equal(store.redact("nothing to hide here"), "nothing to hide here");
+  assert.equal(
+    failureOf(await store.get("MISSING_ONE", permissions)).message,
+    "The secret MISSING_ONE is not set. Set AGENTBAY_SECRET_MISSING_ONE in the environment, or on macOS store it " +
+      "with `security add-generic-password -s agentbay -a MISSING_ONE -w`.",
+  );
+});
+
+test("a declared value too short to redact is not learned at open and is refused at hand-out", async () => {
+  const environment = { AGENTBAY_SECRET_SHORT_ONE: "abc1234" };
+  const store = await SecretStore.open({
+    environment,
+    processes: noProcesses,
+    platform: "linux",
+    declaredBy: [permissions],
+  });
+  assert.equal(store.redact("x abc1234 y"), "x abc1234 y");
+  assert.equal(
+    refusalOf(await store.get("SHORT_ONE", permissions)).message,
+    "The step asked for the secret SHORT_ONE, but its value is shorter than 8 characters, too short to redact " +
+      "safely. Store a value of at least 8 characters for SHORT_ONE.",
+  );
+  assert.equal(store.redact("x abc1234 y"), "x abc1234 y");
 });
 
 test("text that looks like a secret is scrubbed by pattern even when no value was handed out", () => {
@@ -169,4 +226,34 @@ test("each pattern still catches a plausible secret value", () => {
   for (const [text, kind] of caught) {
     assert.match(store.redact(`see ${text}`), new RegExp(`^see \\[redacted:${kind}\\]`), text);
   }
+});
+
+const otherMadeUpToken = "other-made-up-value-9090";
+
+test("a fresh store redacts two declared secrets in text, a JSON value and a JSON key, with no hand-out", async () => {
+  const store = await SecretStore.open({
+    environment: { AGENTBAY_SECRET_MAIL_TOKEN: madeUpToken, AGENTBAY_SECRET_NOTES_TOKEN: otherMadeUpToken },
+    processes: noProcesses,
+    platform: "linux",
+    declaredBy: [grantsIn("/project", { secrets: ["MAIL_TOKEN"] }), grantsIn("/other", { secrets: ["NOTES_TOKEN"] })],
+  });
+  assert.equal(
+    store.redact(`mail ${madeUpToken} notes ${otherMadeUpToken}`),
+    "mail [redacted:MAIL_TOKEN] notes [redacted:NOTES_TOKEN]",
+  );
+  assert.deepEqual(store.redactJson({ [madeUpToken]: [`note ${otherMadeUpToken}`], [otherMadeUpToken]: madeUpToken }), {
+    "[redacted:MAIL_TOKEN]": ["note [redacted:NOTES_TOKEN]"],
+    "[redacted:NOTES_TOKEN]": "[redacted:MAIL_TOKEN]",
+  });
+});
+
+test("a declared value of exactly 8 characters is learned at open", async () => {
+  const environment = { AGENTBAY_SECRET_MAIL_TOKEN: "abcd1234" };
+  const store = await SecretStore.open({
+    environment,
+    processes: noProcesses,
+    platform: "linux",
+    declaredBy: [permissions],
+  });
+  assert.equal(store.redact("x abcd1234 y"), "x [redacted:MAIL_TOKEN] y");
 });

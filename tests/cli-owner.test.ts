@@ -247,3 +247,65 @@ test("call and runs of a workflow whose approval shows a secret print no secret 
     await project.remove();
   }
 });
+
+async function projectDeclaringSecretNoScriptAsksFor(): Promise<Project> {
+  const project = await makeProject();
+  const greeter = await project.read("components/modes/greeter/mode.yaml");
+  await project.write("components/modes/greeter/mode.yaml", `${greeter}resources:\n  secrets:\n    - NOTES_TOKEN\n`);
+  await project.write("components/modes/writer/workflows/review.yaml", signatureReview);
+  const config = await project.read("agentbay.config.yaml");
+  await project.write("agentbay.config.yaml", config.replace("Yours, the writer", `Yours, ${madeUpSecret}`));
+  return project;
+}
+
+test("call, runs and approve each in its own kernel print no secret text when no script asked for it", async () => {
+  const project = await projectDeclaringSecretNoScriptAsksFor();
+  try {
+    const call = ["call", "--workflow", "writer:workflows/review.yaml", '{"name":"Cy"}', "--project", project.root];
+    const called = await bay([...call, "--json"], { environment: secretEnvironment });
+    assert.equal(called.exitCode, 0, called.output);
+    assert.ok(!called.output.includes(madeUpSecret), called.output);
+    const run = fieldOf(toJson(called.json), "run") ?? null;
+    const waiting = fieldOf(run, "waiting") ?? null;
+    assert.equal(fieldOf(waiting, "content"), "Yours, [redacted:NOTES_TOKEN]");
+    const runId = textField(run, "id") ?? "";
+    const shown = await bay(["runs", runId, "--project", project.root], { environment: secretEnvironment });
+    assert.match(shown.output, /"Yours, \[redacted:NOTES_TOKEN\]"/);
+    assert.ok(!shown.output.includes(madeUpSecret), shown.output);
+    const terminal = fakeTerminal({ interactive: true, answer: "yes" });
+    const hash = textField(waiting, "hash") ?? "";
+    const approve = ["approve", runId, "keep", "--hash", hash, "--project", project.root];
+    const approved = await bay(approve, { environment: secretEnvironment, terminal });
+    assert.equal(approved.exitCode, 0, approved.output);
+    assert.match(approved.output, /\): done/);
+    assert.ok(!approved.output.includes(madeUpSecret), approved.output);
+    assert.match(terminal.asked[0] ?? "", /"Yours, \[redacted:NOTES_TOKEN\]"/);
+    assert.ok(!terminal.asked.join("\n").includes(madeUpSecret), terminal.asked.join("\n"));
+    const events = await bay(["runs", runId, "--events", "--project", project.root], { environment: {} });
+    assert.ok(!events.output.includes(madeUpSecret), events.output);
+  } finally {
+    await project.remove();
+  }
+});
+
+test("a declared secret that is not set does not stop a call, and secret check reports it as before", async () => {
+  const project = await projectDeclaringSecretNoScriptAsksFor();
+  try {
+    const call = ["call", "--workflow", "writer:workflows/review.yaml", '{"name":"Cy"}', "--project", project.root];
+    const called = await bay([...call, "--json"]);
+    assert.equal(called.exitCode, 0, called.output);
+    assert.equal(textField(fieldOf(toJson(called.json), "run") ?? null, "status"), "waiting");
+    const checked = await bay(["secret", "check", "NOTES_TOKEN", "--project", project.root, "--json"]);
+    assert.equal(checked.exitCode, 1);
+    assert.deepEqual(checked.json, {
+      ok: false,
+      name: "NOTES_TOKEN",
+      found: false,
+      message:
+        "The secret NOTES_TOKEN is not set. Set AGENTBAY_SECRET_NOTES_TOKEN in the environment, or on macOS store " +
+        "it with `security add-generic-password -s agentbay -a NOTES_TOKEN -w`.",
+    });
+  } finally {
+    await project.remove();
+  }
+});

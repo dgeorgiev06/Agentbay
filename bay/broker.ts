@@ -225,12 +225,12 @@ export class Broker {
       if (!checked.ok) {
         return checked;
       }
-      const redacted = this.#options.secrets.redactHandedOut(text);
+      const redacted = this.#options.secrets.redactKnownValues(text);
       if (redacted !== text) {
         await this.#append("redacted", {
           step: this.#options.place.stepKey,
           file: checked.value,
-          message: "A secret value handed out to this step was removed from the text before the file was written.",
+          message: "A secret's value was removed from the text before the file was written.",
         });
       }
       await this.#options.files.writeAtomic(checked.value, redacted);

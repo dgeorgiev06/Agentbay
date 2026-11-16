@@ -961,6 +961,17 @@ describe("inspectSystem", () => {
     ]);
   });
 
+  test("a folder is active by the name in its manifest, not by the name of its folder", async () => {
+    const renamed = Object.entries(projectFiles()).map(([path, text]) => [
+      path.replace("/kit/components/modes/briefing/", "/kit/components/modes/daily/"),
+      text,
+    ]);
+    const projectConfig = yamlText({ ...config, modes: ["notes", "briefing"] });
+    const files = { ...Object.fromEntries(renamed), "/project/agentbay.config.yaml": projectConfig };
+    const inspection = await inspectionOf({ files, layout: separateLayout });
+    assert.deepEqual(foldersOf(inspection)[1], ["kit", "modes", "/kit/components/modes/daily", true, "briefing"]);
+  });
+
   test("the interfaces folder is not a mode folder, and other files in it are not interfaces", async () => {
     const files = {
       ...validFiles(),

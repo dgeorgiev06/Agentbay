@@ -301,3 +301,13 @@ test("bay check reads each mode.yaml once", async () => {
   await checkFake(recording);
   assert.equal(reads.filter((path) => path === `/kit/${paths.notes}`).length, 1);
 });
+
+test("a listed command in a kit mode outside components/base is an error and not also a warning", async () => {
+  const manifest = yamlText({ ...notesMode, resources: { commands: ["git status"] } });
+  const report = await check({ ...cleanFiles(), [paths.notes]: manifest });
+  const notesFindings = report.findings.filter((finding) => finding.file === paths.notes);
+  assert.deepEqual(
+    notesFindings.map((finding) => [finding.severity, finding.path]),
+    [["error", "/resources/commands/0"]],
+  );
+});

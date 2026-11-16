@@ -15,7 +15,7 @@ import { activeModeGrants } from "./system-fixture.ts";
 test("the kernel loads a project and holds its system, policy, store and engine", async () => {
   const opened = await openProject();
   const { kernel } = opened;
-  assert.deepEqual([...kernel.system.modes.keys()].sort(), ["greeter", "writer"]);
+  assert.deepEqual(Array.from(kernel.system.modes.keys()).sort(), ["greeter", "writer"]);
   assert.equal(
     activeModeGrants(kernel.system, "writer").databaseFile,
     join(opened.project.root, ".agentbay/data/writer.db"),

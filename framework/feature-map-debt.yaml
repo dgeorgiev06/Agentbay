@@ -135,14 +135,8 @@ test_breaks:
   - from: tests/mcp.test.ts
     to: bay/tool-definitions.ts
     rule: test-reaches-in
-  - from: tests/references.test.ts
-    to: bay/manifests/references.ts
-    rule: test-reaches-in
   - from: tests/run-report.test.ts
     to: bay/run-report.ts
-    rule: test-reaches-in
-  - from: tests/spec.test.ts
-    to: bay/manifests/spec.ts
     rule: test-reaches-in
   - from: tests/unexpected-errors.test.ts
     to: bay/database-process.ts

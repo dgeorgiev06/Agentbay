@@ -27,18 +27,17 @@ export type Loaded<T> = {
   readonly lineOf: (path: PathSegments) => number | undefined;
 };
 
-export type ValuePlace = {
+type ValuePlace = {
   readonly loaded: Loaded<unknown>;
   readonly path: PathSegments;
 };
 
-export type ValueCheck =
+type ValueCheck =
   | { readonly kind: "unusable-schema"; readonly reason: string }
   | { readonly kind: "checked"; readonly problems: readonly Problem[] };
 
-export type Skill = {
+type Skill = {
   readonly frontMatter: SkillFrontMatter;
-  readonly headings: readonly string[];
   readonly tools: readonly string[];
 };
 
@@ -491,6 +490,5 @@ export async function parseSkill(files: FileSystem, file: string): Promise<Outco
   if (!text.frontMatter.ok) {
     return text.frontMatter;
   }
-  const headings = text.sections.map((section) => section.heading);
-  return { ok: true, value: { frontMatter: text.frontMatter.value, headings, tools: toolsOf(text.sections) } };
+  return { ok: true, value: { frontMatter: text.frontMatter.value, tools: toolsOf(text.sections) } };
 }

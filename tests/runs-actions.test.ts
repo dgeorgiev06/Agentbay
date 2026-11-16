@@ -7,6 +7,7 @@ import {
   eventKinds,
   failure,
   finished,
+  fixtureRefusal,
   messagesOf,
   openedRuns,
   problemsOf,
@@ -112,24 +113,17 @@ describe("actions", () => {
     close();
   });
 
-  test("a call to an action with an effect the caller lacks is refused at run time, before it runs", async () => {
-    const { system, runner, reopen, close } = await openedRuns();
-    const store = system.modes.get("store");
-    assert.ok(store);
-    const original = store.manifest.actions.get;
-    assert.ok(original);
-    const get: Action = { ...original, effects: ["read", "write"] };
-    const changedStore = { ...store, manifest: { ...store.manifest, actions: { ...store.manifest.actions, get } } };
-    const changed = { ...system, modes: new Map([...system.modes, ["store", changedStore]]) };
-    const run = runOf(await (await reopen(changed)).start({ action: "notes.peek" }, {}));
-    assert.equal(run.state.status, "failed");
-    assert.equal(
-      run.state.reason,
-      "The action peek of mode notes calls items-store.get, which has the effects write that peek does not " +
-        "declare; the call is refused.",
-    );
-    assert.deepEqual(runner.calls, []);
-    close();
+  test("a called action with an effect the caller lacks cannot be loaded, so no run makes the call", async () => {
+    const get: Action = {
+      description: "When a test runs scripts.",
+      input: "schemas/anything.json",
+      output: "schemas/anything.json",
+      effects: ["read", "write"],
+      run: [{ script: "scripts/get.ts" }],
+    };
+    assert.deepEqual(await fixtureRefusal({ storeActions: { get } }), [
+      "Action get of mode store has the effect write, which items-store@1 does not allow for get.",
+    ]);
   });
 
   test("nested calls draw from the caller's remaining budget", async () => {

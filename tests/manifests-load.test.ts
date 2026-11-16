@@ -52,8 +52,8 @@ function without(files: Readonly<Record<string, string>>, ...removed: readonly s
 
 test("a valid three-mode system resolves with every required interface bound", async () => {
   const system = await systemOf(validFiles());
-  assert.deepEqual([...system.modes.keys()].sort(), ["briefing", "notes", "store"]);
-  assert.deepEqual([...system.interfaces.keys()].sort(), ["items-store@1", "notes@1"]);
+  assert.deepEqual(Array.from(system.modes.keys()).sort(), ["briefing", "notes", "store"]);
+  assert.deepEqual(Array.from(system.interfaces.keys()).sort(), ["items-store@1", "notes@1"]);
   assert.deepEqual(bindingUses(system), [
     { interfaceName: "items-store", requirers: ["notes"], servedBy: "store" },
     { interfaceName: "notes", requirers: ["briefing"], servedBy: "notes" },
@@ -495,6 +495,24 @@ test("a skill step's check script that does not exist is reported", async () => 
   );
   assert.equal(problem.path, "/actions/add/run/0/checks/0");
   await systemOf({ ...files, "components/modes/notes/scripts/length.ts": "" });
+  const second: Action = {
+    ...add,
+    run: [
+      { call: "items-store.put" },
+      { skill: "skills/write-note", tier: "fast", checks: ["scripts/length.ts", "scripts/fit.ts"] },
+    ],
+  };
+  const secondFiles = {
+    ...files,
+    [paths.notes]: withMode(notesMode, { actions: { add: second } }),
+    "components/modes/notes/scripts/fit.ts": "",
+  };
+  const placed = findProblem(
+    await problemsOf(secondFiles),
+    paths.notes,
+    "checks its skill step with the script scripts/length.ts",
+  );
+  assert.equal(placed.path, "/actions/add/run/1/checks/0");
 });
 
 test("well-formed workflow references to earlier steps, the trigger, the item and settings are accepted", async () => {
@@ -558,6 +576,24 @@ test("$item outside a foreach is reported, and inside one it is accepted", async
   assert.deepEqual(
     outside.map((problem) => problem.path),
     ["/steps/0/input/text", "/steps/1/foreach"],
+  );
+});
+
+test("workflow reference issues name the path of each bad reference", async () => {
+  const problems = await problemsOf(
+    withWorkflowSteps([
+      { id: "a", action: "add", input: { v: "$steps.b.output" } },
+      { id: "b", foreach: "$steps.a.output", steps: [{ id: "c", approval: "ok?", show: "$item" }] },
+      { id: "d", wait: "1h" },
+      { id: "e", approval: "ok?", show: "$item" },
+    ]),
+  );
+  assert.deepEqual(
+    problems.map((problem) => [problem.file, problem.path]),
+    [
+      [workflowFile, "/steps/0/input/v"],
+      [workflowFile, "/steps/3/show"],
+    ],
   );
 });
 

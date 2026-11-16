@@ -43,6 +43,12 @@ type Break = {
   readonly rule: Rule;
 };
 
+type SealedFolder = {
+  readonly feature: string;
+  readonly folder: string;
+  readonly entry: string;
+};
+
 type Debt = {
   readonly unlisted: readonly Break[];
   readonly stale: readonly Break[];
@@ -63,7 +69,9 @@ const testFolder = "tests";
 
 const debtKeys = { kit: "breaks", tests: "test_breaks" } as const;
 
-const featuresTestedAtTheirEntry: readonly string[] = ["runs"];
+const featuresTestedAtTheirEntry: readonly string[] = ["manifests", "runs"];
+
+const featuresSealedInTheirFolder: readonly string[] = ["manifests", "runs"];
 
 const mapFile = "framework/features.yaml";
 
@@ -168,6 +176,30 @@ function ruleOf(map: FeatureMap, from: string, to: string): Rule | undefined {
     return testImportRule(map, from, to);
   }
   return isKernelFile(from) ? kernelImportRule(map, from, to) : outsideImportRule(map, from, to);
+}
+
+function sealedFolderOf(feature: Feature): SealedFolder | undefined {
+  const [entry, ...others] = feature.entry;
+  if (entry === undefined || others.length > 0) {
+    return undefined;
+  }
+  return { feature: feature.name, folder: dirname(entry), entry };
+}
+
+function reachesIntoFolder(sealed: SealedFolder, sources: readonly SourceFile[]): readonly string[] {
+  const inside = `${testFolder}/inside/${sealed.feature}`;
+  return sources.flatMap((source) => {
+    if (isInside(source.file, sealed.folder) || isInside(source.file, inside)) {
+      return [];
+    }
+    return source.imports
+      .filter((to) => isInside(to, sealed.folder) && to !== sealed.entry)
+      .map((to) => `${source.file} -> ${to}`);
+  });
+}
+
+function reExportsIn(text: string): readonly string[] {
+  return text.match(/^export\b[^;]*?\bfrom\s*["']/gm) ?? [];
 }
 
 function mapBreaks(map: FeatureMap, sources: readonly SourceFile[]): readonly Break[] {
@@ -373,6 +405,52 @@ test("a file in tests/inside/<feature>/ may import its own feature's private fil
   ]);
 });
 
+test("a sealed feature's private files are imported only from inside its folder and from tests/inside/<feature>/", () => {
+  const runs = smallMap.features.find((feature) => feature.name === "runs");
+  assert.ok(runs);
+  assert.deepEqual(sealedFolderOf(runs), { feature: "runs", folder: "bay", entry: "bay/engine.ts" });
+  const folder = { feature: "runs", folder: "bay/runs", entry: "bay/runs/runs.ts" };
+  const sources = [
+    scanned("bay/runs/walk.ts", relative("./engine.ts")),
+    scanned("bay/runs/runs.ts", relative("./walk.ts")),
+    scanned("bay/broker.ts", `${relative("./runs/runs.ts")}\n${relative("./runs/walk.ts")}`),
+    scanned("tests/runs.test.ts", relative("../bay/runs/engine.ts")),
+    scanned("tests/inside/runs/crash.test.ts", relative("../../../bay/runs/engine.ts")),
+    scanned("tests/inside/words/walk.test.ts", relative("../../../bay/runs/walk.ts")),
+    scanned("adapters/harness/tests/x.test.ts", relative("../../../bay/runs/walk.ts")),
+  ];
+  assert.deepEqual(reachesIntoFolder(folder, sources), [
+    "bay/broker.ts -> bay/runs/walk.ts",
+    "tests/runs.test.ts -> bay/runs/engine.ts",
+    "tests/inside/words/walk.test.ts -> bay/runs/walk.ts",
+    "adapters/harness/tests/x.test.ts -> bay/runs/walk.ts",
+  ]);
+});
+
+test("a feature with more than one entry file is not sealed in a folder", () => {
+  const map = parsedMap(stringify({ features: { words: { entry: ["bay/a.ts", "bay/b.ts"] } } }));
+  const [words] = map.features;
+  assert.ok(words);
+  assert.equal(sealedFolderOf(words), undefined);
+});
+
+test("an entry file's export ... from lines are found, over one line or several, and nothing else is", () => {
+  const text = [
+    'import { a } from "./a.ts";',
+    "export type { B } from './b.ts';",
+    'export * from "./c.ts";',
+    "export {",
+    "  d,",
+    '} from "./d.ts";',
+    "export function from(text: string): string {",
+    "  return text;",
+    "}",
+    "export type Shape = { readonly from: string };",
+    'export const e = "x";',
+  ].join("\n");
+  assert.deepEqual(reExportsIn(text), ["export type { B } from '", 'export * from "', 'export {\n  d,\n} from "']);
+});
+
 test("a break listed in the debt passes, an unlisted break fails, and a listed entry with no break is stale", () => {
   const listed: Break = { from: "bay/words.ts", to: "bay/engine.ts", rule: "may-not-import" };
   const unlisted: Break = { from: "bay/walk.ts", to: "bay/spelling.ts", rule: "private-file" };
@@ -454,4 +532,22 @@ test("no test reaches into a feature whose tests have moved to its entry file, a
     [],
   );
   assert.deepEqual(listed.filter(reachesMoved).map(keyOf), []);
+});
+
+test("no file outside a sealed feature's folder imports its private files, and its entry file re-exports nothing", () => {
+  const map = parsedMap(readFileSync(mapFile, "utf8"));
+  const sealed = map.features
+    .filter((feature) => featuresSealedInTheirFolder.includes(feature.name))
+    .flatMap((feature) => sealedFolderOf(feature) ?? []);
+  assert.deepEqual(
+    sealed.map((folder) => folder.feature),
+    featuresSealedInTheirFolder,
+  );
+  const sources = [...kitFiles(), ...typeScriptFiles([testFolder])].map((file) =>
+    scanned(file, readFileSync(file, "utf8")),
+  );
+  for (const folder of sealed) {
+    assert.deepEqual(reachesIntoFolder(folder, sources), [], folder.feature);
+    assert.deepEqual(reExportsIn(readFileSync(folder.entry, "utf8")), [], folder.entry);
+  }
 });

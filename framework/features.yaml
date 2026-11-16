@@ -39,6 +39,22 @@ features:
     private:
       - bay/manifests/spec.ts
       - bay/manifests/references.ts
+      - bay/manifests/folders.ts
+      - bay/manifests/schemas.ts
+      - bay/manifests/loaded.ts
+      - bay/manifests/interfaces.ts
+      - bay/manifests/bindings.ts
+      - bay/manifests/activation.ts
+      - bay/manifests/naming.ts
+      - bay/manifests/binding-problems.ts
+      - bay/manifests/implements-problems.ts
+      - bay/manifests/action-problems.ts
+      - bay/manifests/file-references.ts
+      - bay/manifests/workflow-problems.ts
+      - bay/manifests/settings-problems.ts
+      - bay/manifests/grants.ts
+      - bay/manifests/inspection.ts
+      - bay/manifests/placement.ts
     may_import:
       - vocabulary
       - safety

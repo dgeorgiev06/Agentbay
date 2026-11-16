@@ -27,7 +27,9 @@ export type FakeRunner = ScriptRunner & {
 export type Changes = {
   readonly workflows?: Readonly<Record<string, Workflow>>;
   readonly notesActions?: Readonly<Record<string, Action>>;
+  readonly storeActions?: Readonly<Record<string, Action>>;
   readonly config?: Partial<Config>;
+  readonly activeModes?: readonly string[];
 };
 
 export type FixtureSystem = {
@@ -59,6 +61,10 @@ export const startTime = new Date("2026-11-14T09:00:00.000Z");
 const root = "/kit";
 
 const layout = layoutOf({ kit: root, project: root });
+
+const projectRoot = "/project";
+
+const projectLayout = layoutOf({ kit: root, project: projectRoot });
 
 const secretName = "NOTES_TOKEN";
 
@@ -186,24 +192,26 @@ const storeMode: Mode = {
   version: "1.0.0",
   description: "Keeps items.",
   implements: ["items-store@1"],
-  actions: {
-    put: {
-      description: "When a mode keeps an item.",
-      input: "schemas/item.json",
-      output: "schemas/receipt.json",
-      effects: ["write"],
-      run: [{ script: "scripts/put.ts" }],
-      undo: "remove",
-      budget: { items: 10 },
-    },
-    get: scriptAction(["read"], ["get.ts"]),
-    erase: {
-      ...scriptAction(["write", "delete"], ["erase.ts"]),
-      input: "schemas/item.json",
-      output: "schemas/receipt.json",
-    },
-    remove: scriptAction(["delete"], ["remove.ts"]),
+  actions: {},
+};
+
+const storeActions: Readonly<Record<string, Action>> = {
+  put: {
+    description: "When a mode keeps an item.",
+    input: "schemas/item.json",
+    output: "schemas/receipt.json",
+    effects: ["write"],
+    run: [{ script: "scripts/put.ts" }],
+    undo: "remove",
+    budget: { items: 10 },
   },
+  get: scriptAction(["read"], ["get.ts"]),
+  erase: {
+    ...scriptAction(["write", "delete"], ["erase.ts"]),
+    input: "schemas/item.json",
+    output: "schemas/receipt.json",
+  },
+  remove: scriptAction(["delete"], ["remove.ts"]),
 };
 
 const notesActions: Readonly<Record<string, Action>> = {
@@ -266,6 +274,18 @@ const draftSkill = [
 
 const scriptNames = ["add-one", "double", "stringify", "log", "fail", "spend", "long-enough", "slow"];
 
+function fixtureConfig(changes: Changes): Readonly<Record<string, string>> {
+  const config: Config = {
+    bindings: { "items-store": "store" },
+    adapter: "local",
+    settings: { notes: { greeting: "hello" } },
+    ...(changes.activeModes === undefined ? {} : { modes: changes.activeModes }),
+    ...(changes.config ?? {}),
+  };
+  const folder = changes.activeModes === undefined ? root : projectRoot;
+  return { [`${folder}/agentbay.config.yaml`]: yamlText(config) };
+}
+
 function fixtureFiles(changes: Changes): Record<string, string> {
   const workflows = changes.workflows ?? {};
   const notesMode: Mode = {
@@ -278,21 +298,15 @@ function fixtureFiles(changes: Changes): Record<string, string> {
     actions: { ...notesActions, ...(changes.notesActions ?? {}) },
     ...(Object.keys(workflows).length === 0 ? {} : { workflows: Object.keys(workflows) }),
   };
-  const config: Config = {
-    bindings: { "items-store": "store" },
-    adapter: "local",
-    settings: { notes: { greeting: "hello" } },
-    ...(changes.config ?? {}),
-  };
+  const store: Mode = { ...storeMode, actions: { ...storeActions, ...(changes.storeActions ?? {}) } };
   const files: Record<string, string> = {
     "components/base/interfaces/items-store.yaml": yamlText(itemsStore),
     ...schemaFiles("components/base/interfaces/items-store", ["anything.json", "item.json", "receipt.json"]),
-    "components/base/store/mode.yaml": yamlText(storeMode),
+    "components/base/store/mode.yaml": yamlText(store),
     ...schemaFiles("components/base/store/schemas", ["anything.json", "item.json", "receipt.json"]),
     "components/modes/notes/mode.yaml": yamlText(notesMode),
     ...schemaFiles("components/modes/notes/schemas", Object.keys(schemas)),
     "components/modes/notes/skills/draft/SKILL.md": draftSkill,
-    "agentbay.config.yaml": yamlText(config),
   };
   for (const name of ["put", "get", "erase", "remove"]) {
     files[`components/base/store/scripts/${name}.ts`] = "";
@@ -303,14 +317,26 @@ function fixtureFiles(changes: Changes): Record<string, string> {
   for (const [path, workflow] of Object.entries(workflows)) {
     files[`components/modes/notes/${path}`] = yamlText(workflow);
   }
-  return Object.fromEntries(Object.entries(files).map(([path, text]) => [`${root}/${path}`, text]));
+  const kitFiles = Object.entries(files).map(([path, text]): readonly [string, string] => [`${root}/${path}`, text]);
+  return { ...Object.fromEntries(kitFiles), ...fixtureConfig(changes) };
+}
+
+function fixtureLoad(changes: Changes): { readonly files: FakeFileSystem; readonly loaded: Promise<Outcome<System>> } {
+  const files = fakeFileSystem(fixtureFiles(changes));
+  return { files, loaded: loadSystem(files, changes.activeModes === undefined ? layout : projectLayout) };
 }
 
 export async function fixtureSystem(changes: Changes = {}): Promise<FixtureSystem> {
-  const files = fakeFileSystem(fixtureFiles(changes));
-  const outcome = await loadSystem(files, layout);
+  const { files, loaded } = fixtureLoad(changes);
+  const outcome = await loaded;
   assert.ok(outcome.ok, outcome.ok ? "" : JSON.stringify(outcome.problems, null, 2));
   return { system: outcome.value, files };
+}
+
+export async function fixtureRefusal(changes: Changes): Promise<readonly string[]> {
+  const outcome = await fixtureLoad(changes).loaded;
+  assert.ok(!outcome.ok, "expected the load to be refused");
+  return outcome.problems.map((problem) => problem.message);
 }
 
 function secretStore(): SecretStore {

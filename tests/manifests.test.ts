@@ -783,6 +783,25 @@ describe("a mode's skill by name", () => {
     });
   });
 
+  test("an output schema file that is not JSON gives a problem when a value is checked, though the load passed", async () => {
+    const files = filesWithSkill(draftSkill);
+    await files.writeAtomic(noteDraft, "{ not json");
+    const skill = await (await notesMode(files)).skill("skills/write-note");
+    assert.ok(skill.ok);
+    assert.deepEqual(skill.value.output?.check({ text: "Tea" }), {
+      ok: false,
+      problems: [
+        {
+          file: noteDraft,
+          path: "",
+          message:
+            `The schema file ${noteDraft} is not valid JSON: ` +
+            "Expected property name or '}' in JSON at position 2 (line 1 column 3).",
+        },
+      ],
+    });
+  });
+
   test("a skill the mode's steps do not run is not found", async () => {
     const mode = await notesMode(filesWithSkill(draftSkill));
     assert.deepEqual(refusal(await mode.skill("skills/none")), [sentence("Mode notes has no skill skills/none.")]);

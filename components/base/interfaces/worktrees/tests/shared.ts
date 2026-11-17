@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { lstat, mkdir, readdir, readFile, readlink, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import type { ModeProject, ProjectFolder } from "../../../../../tests/test-toolbox.ts";
+import type { ModeProject, TestProject } from "../../../../../tests/test-toolbox.ts";
 
 export type Files = Readonly<Record<string, string>>;
 
@@ -15,7 +15,7 @@ export type Change = {
   readonly message: string;
 };
 
-export type Start = ProjectFolder & {
+export type Start = TestProject & {
   readonly branch: string;
   readonly files: Files;
   readonly ignored: readonly string[];
@@ -961,12 +961,12 @@ function worldOf(repository: Repository, underTest: WorktreesUnderTest): World {
   };
 }
 
-export function testWorktrees(underTest: WorktreesUnderTest, projectFolder: ProjectFolder = {}): void {
+export function testWorktrees(underTest: WorktreesUnderTest, testProject: TestProject = {}): void {
   const { mode } = underTest;
   for (const entry of cases) {
     test(`${interfaceName}@1, ${mode}: ${entry.name}`, async () => {
       const repository = await underTest.start({
-        ...projectFolder,
+        ...testProject,
         branch: ownersBranch,
         files: startFiles,
         ignored: ignoredPaths,

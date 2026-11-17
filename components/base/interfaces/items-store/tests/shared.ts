@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { openModeProject, type ModeProject, type ProjectFolder } from "../../../../../tests/test-toolbox.ts";
+import { openModeProject, type ModeProject, type TestProject } from "../../../../../tests/test-toolbox.ts";
 
 export type ItemsStoreUnderTest = {
   readonly mode: string;
@@ -541,7 +541,7 @@ function storeFor(project: ModeProject, mode: string, caller: string): Store {
   };
 }
 
-export function testItemsStore(underTest: ItemsStoreUnderTest, projectFolder: ProjectFolder = {}): void {
+export function testItemsStore(underTest: ItemsStoreUnderTest, testProject: TestProject = {}): void {
   const { mode } = underTest;
   let project: ModeProject;
   before(async () => {
@@ -552,7 +552,7 @@ export function testItemsStore(underTest: ItemsStoreUnderTest, projectFolder: Pr
       settings: { [mode]: { monthlyUsd: { fake: 1 } } },
     };
     const callers = [...cases.map((_, index) => callerOf(index)), ...otherCallers];
-    project = await openModeProject(config, { ...projectFolder, startAt, callers });
+    project = await openModeProject(config, { ...testProject, startAt, callers });
   });
   after(async () => {
     await project.close();

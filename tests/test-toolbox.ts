@@ -5,15 +5,17 @@ import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/p
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { parse, stringify } from "yaml";
-import type { Json, RunEvent, Spend, StepPlace } from "../bay/contracts.ts";
+import type { Json, ModeList, RunEvent, Spend, StepPlace } from "../bay/contracts.ts";
 import type { Config } from "../bay/generated/config.ts";
 import type { Budget } from "../bay/generated/mode.ts";
 import { fieldOf, isRecord, numberField, toJson } from "../bay/json.ts";
 import { layoutOf } from "../bay/layout.ts";
 import { loadKernel, nodeKernelPorts, type Kernel } from "../bay/kernel.ts";
 import type { Outcome } from "../bay/outcome.ts";
+import { listOf } from "../bay/policy.ts";
 import type { Clock } from "../bay/ports.ts";
 import type { DatabasePartition } from "../bay/sdk.ts";
+import { readTrustRecord, recordWithTrust, scriptFilesOf, writeTrustRecord } from "../bay/trust.ts";
 import { testEnvironment } from "./kernel-fixture.ts";
 import { kit } from "./project-fixture.ts";
 import { activeModeGrants } from "./system-fixture.ts";
@@ -22,11 +24,12 @@ export type CallOptions = {
   readonly caller?: string;
 };
 
-export type ProjectFolder = {
+export type TestProject = {
   readonly project?: string;
+  readonly trusted?: readonly string[];
 };
 
-export type ProjectOptions = ProjectFolder & {
+export type ProjectOptions = TestProject & {
   readonly startAt?: string;
   readonly callers?: readonly string[];
 };
@@ -107,11 +110,18 @@ type Opening = {
   readonly clock: SettableClock;
 };
 
+type ListToTrust = {
+  readonly list: ModeList;
+  readonly folder: string;
+};
+
 const calledInterface = "items-store";
 
 const configFile = "agentbay.config.yaml";
 
 const nothingSpent: Spend = { items: 0, usd: 0, tokens: 0, minutes: 0 };
+
+const trustedBy = "a test";
 
 function settableClock(startAt: string | undefined): SettableClock {
   let fixed = startAt === undefined ? undefined : Date.parse(startAt);
@@ -133,9 +143,17 @@ function refusalOf<Value>(result: Outcome<Value>, what: string): string {
   return result.problems.map((problem) => problem.message).join(" ");
 }
 
-function outputOf(run: Run): Json {
+function trustSentence(untrusted: ReadonlySet<string>, reference: string): string {
+  const mode = reference.split(".")[0] ?? "";
+  return untrusted.has(mode)
+    ? " A test runs the commands of a mode outside the kit's components/base/ only when it trusts the mode. " +
+        `Name it where the test opens the project: { project: import.meta.dirname, trusted: ["${mode}"] }.`
+    : "";
+}
+
+function outputOf(run: Run, untrusted: ReadonlySet<string>, reference: string): Json {
   if (run.state.status !== "done") {
-    assert.fail(`expected the run to be done, got ${JSON.stringify(run.state)}`);
+    assert.fail(`expected the run to be done, got ${JSON.stringify(run.state)}.${trustSentence(untrusted, reference)}`);
   }
   return run.state.output;
 }
@@ -263,10 +281,20 @@ export async function openModeProject(config: Config, options: ProjectOptions = 
     await writeCallingMode(root, caller);
   }
   const projectConfig = project === undefined ? undefined : await configOf(project);
-  return projectIn(root, { config, projectConfig, clock: settableClock(options.startAt) });
+  const opening = { config, projectConfig, clock: settableClock(options.startAt) };
+  const trusted = options.trusted ?? [];
+  if (trusted.length > 0) {
+    try {
+      await trustIn(root, opening, trusted);
+    } catch (error) {
+      await rm(root, { recursive: true, force: true });
+      throw error;
+    }
+  }
+  return projectIn(root, opening);
 }
 
-async function projectIn(root: string, opening: Opening): Promise<ModeProject> {
+async function kernelIn(root: string, opening: Opening): Promise<Kernel> {
   const { config, projectConfig, clock } = opening;
   const written = projectConfig === undefined ? config : configOver(projectConfig, config);
   await writeFile(join(root, configFile), stringify(written), "utf8");
@@ -277,7 +305,56 @@ async function projectIn(root: string, opening: Opening): Promise<ModeProject> {
     platform: "linux",
   });
   assert.ok(loaded.ok, loaded.ok ? "" : JSON.stringify(loaded.problems, null, 2));
-  const kernel = loaded.value;
+  return loaded.value;
+}
+
+function listToTrust(kernel: Kernel, name: string): ListToTrust {
+  const found = kernel.system.modes.get(name);
+  if (found === undefined) {
+    assert.fail(`trusted names ${name}, but the project the test opened has no active mode ${name}.`);
+  }
+  const list = listOf(found.manifest);
+  if (list.commands.length === 0 && list.throwaway.length === 0) {
+    assert.fail(`trusted names ${name}, but ${name} lists no command and no throwaway folder, so it needs no trust.`);
+  }
+  if (found.grants.listTrust.state === "not needed") {
+    assert.fail(
+      `trusted names ${name}, but ${name} is a mode of the kit's components/base/, whose list is granted with no trust.`,
+    );
+  }
+  return { list, folder: found.grants.modeFolder };
+}
+
+async function giveTrust(kernel: Kernel, toTrust: ListToTrust): Promise<void> {
+  const { files, folders, listing, clock } = kernel.ports;
+  const record = accepted(await readTrustRecord(files, kernel.layout));
+  const scripts = await scriptFilesOf(files, toTrust.folder, await listing.projectFiles(toTrust.folder));
+  const giving = { scripts, at: clock.now().toISOString(), by: trustedBy };
+  await writeTrustRecord({ files, folders }, kernel.layout, recordWithTrust(record, toTrust.list, giving));
+}
+
+async function trustIn(root: string, opening: Opening, trusted: readonly string[]): Promise<void> {
+  const kernel = await kernelIn(root, opening);
+  try {
+    const lists = trusted.map((name) => listToTrust(kernel, name));
+    for (const toTrust of lists) {
+      await giveTrust(kernel, toTrust);
+    }
+  } finally {
+    kernel.close();
+  }
+}
+
+function untrustedModes(kernel: Kernel): ReadonlySet<string> {
+  const modes = [...kernel.system.modes.values()];
+  const untrusted = modes.filter((mode) => mode.grants.listTrust.state === "never trusted");
+  return new Set(untrusted.map((mode) => mode.manifest.name));
+}
+
+async function projectIn(root: string, opening: Opening): Promise<ModeProject> {
+  const kernel = await kernelIn(root, opening);
+  const { projectConfig, clock } = opening;
+  const untrusted = untrustedModes(kernel);
   const runs = kernel.runs;
   const started = (reference: string, input: Json, options: CallOptions = {}): Promise<Outcome<Run>> => {
     const action = options.caller === undefined ? reference : calledAs(reference, options.caller);
@@ -288,7 +365,7 @@ async function projectIn(root: string, opening: Opening): Promise<ModeProject> {
   return {
     root,
     run,
-    output: async (reference, input, options) => outputOf(await run(reference, input, options)),
+    output: async (reference, input, options) => outputOf(await run(reference, input, options), untrusted, reference),
     failure: async (reference, input, options) => reasonOf(await run(reference, input, options)),
     refusal: async (reference, input) => refusalOf(await started(reference, input), reference),
     runWorkflow: async (mode, path, input) => accepted(await runs.start({ workflow: { mode, path } }, input)),

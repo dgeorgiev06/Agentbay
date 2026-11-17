@@ -3,7 +3,7 @@ import { after, before, test } from "node:test";
 import {
   openModeProject,
   type ModeProject,
-  type ProjectFolder,
+  type TestProject,
   type ProjectOptions,
   type Run,
 } from "../../../../../tests/test-toolbox.ts";
@@ -559,14 +559,14 @@ function configOf(underTest: ItemsSourceUnderTest, started: Started): Parameters
   return { bindings: {}, adapter: "claude-code", modes: [mode], settings: { [mode]: started.settings } };
 }
 
-export function testItemsSource(underTest: ItemsSourceUnderTest, projectFolder: ProjectFolder = {}): void {
+export function testItemsSource(underTest: ItemsSourceUnderTest, testProject: TestProject = {}): void {
   const { mode } = underTest;
   let started: Started;
   let opening: Opening;
   let project: ModeProject;
   before(async () => {
     started = await underTest.start();
-    opening = { config: configOf(underTest, started), options: { ...projectFolder, startAt: started.startAt } };
+    opening = { config: configOf(underTest, started), options: { ...testProject, startAt: started.startAt } };
     project = await openModeProject(opening.config, opening.options);
   });
   after(async () => {

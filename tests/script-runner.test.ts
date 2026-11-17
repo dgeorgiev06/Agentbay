@@ -4,7 +4,7 @@ import { mkdir, readdir, readFile, symlink } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
 import { join, relative } from "node:path";
 import { test } from "node:test";
-import type { ActionCaller, Effect, Json, ScriptRequest, StepOutcome } from "../bay/contracts.ts";
+import type { ActionCaller, Effect, Json, RunEvent, ScriptRequest, StepOutcome } from "../bay/contracts.ts";
 import { fieldOf } from "../bay/json.ts";
 import {
   nodeChildProcesses,
@@ -49,6 +49,7 @@ type RunOptions = {
   readonly caller?: string;
   readonly skillInput?: Json;
   readonly clock?: Clock;
+  readonly events?: ReturnType<typeof recordingSink>;
 };
 
 function scriptSource(body: string): string {
@@ -68,7 +69,7 @@ async function attempt(root: string, body: string, options: RunOptions = {}): Pr
 }
 
 async function runScript(root: string, options: RunOptions): Promise<Run> {
-  const events = recordingSink();
+  const events = options.events ?? recordingSink();
   const calls: (readonly [string, Json])[] = [];
   const secrets = new SecretStore({
     environment: { AGENTBAY_SECRET_API_TOKEN: madeUpToken },
@@ -929,6 +930,35 @@ test("an answer its operation's guard refuses gives the script today's sentence,
         problem: "The value is not a response with a status, headers and a body.",
       },
     ]);
+  });
+});
+
+function slowSink(): ReturnType<typeof recordingSink> {
+  const events: RunEvent[] = [];
+  return {
+    events,
+    append: (event) =>
+      new Promise((resolve) => {
+        setTimeout(() => {
+          events.push(event);
+          resolve();
+        }, 200);
+      }),
+  };
+}
+
+test("the run ends only after the events of a refused request and an unread answer are stored", async () => {
+  await withScriptProject(async (root) => {
+    const permissions: PermissionChanges = { effects: ["read", "network"] };
+    const unread = await attempt(
+      root,
+      "return await context.http.request({ method: 'GET', url: 'https://api.example.com/not-a-number', headers: {} });",
+      { permissions, events: slowSink() },
+    );
+    const storedWhenUnreadEnded = refusedDetails(unread).map((detail) => fieldOf(detail, "operation"));
+    const refused = await attempt(root, "await context.files.read(42);", { permissions, events: slowSink() });
+    const storedWhenRefusedEnded = refusedDetails(refused).map((detail) => fieldOf(detail, "operation"));
+    assert.deepEqual([storedWhenUnreadEnded, storedWhenRefusedEnded], [["http.request"], ["files.read"]]);
   });
 });
 

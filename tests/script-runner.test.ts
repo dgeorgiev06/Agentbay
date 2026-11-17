@@ -84,6 +84,9 @@ async function runScript(root: string, options: RunOptions): Promise<Run> {
       if (request.url.endsWith("/redirect")) {
         return { status: 302, headers: { location: "https://evil.example/collect" }, body: "" };
       }
+      if (request.url.endsWith("/not-a-number")) {
+        return { status: Number.NaN, headers: {}, body: "" };
+      }
       return { status: 200, headers: {}, body: "remote text" };
     }),
     secrets,
@@ -858,6 +861,74 @@ test("a script that sends a forged final message with a value that is not JSON f
       ].join("\n"),
     );
     assert.match(reasonOf(run), /not a valid message/);
+  });
+});
+
+function refusedDetails(run: Run): readonly Json[] {
+  return run.events.events.filter((event) => event.kind === "refused").map((event) => event.detail);
+}
+
+test("a request that its operation's guard refuses ends the script, and the guard's sentence is an event", async () => {
+  const cases = [
+    {
+      body: "await context.files.read(42);",
+      detail: { resource: "files", operation: "files.read", problem: "The field path is missing or is not text." },
+    },
+    {
+      body: "await context.http.request({ method: 'TRACE', url: 'https://api.example.com/x', headers: {} });",
+      detail: {
+        resource: "http",
+        operation: "http.request",
+        problem: "The field method is missing or is not one of GET, POST, PUT, PATCH, DELETE.",
+      },
+    },
+    {
+      body: "await context.events.emit('noted');",
+      detail: {
+        resource: "events",
+        operation: "events.emit",
+        problem: "The field detail is missing or is not a JSON value.",
+      },
+    },
+  ];
+  await withScriptProject(async (root) => {
+    for (const { body, detail } of cases) {
+      const run = await attempt(root, `${body}\nreturn 'went on';`, { permissions: { effects: ["read", "network"] } });
+      assert.equal(reasonOf(run), "The script sent a line that is not a valid message.", detail.operation);
+      assert.deepEqual(refusedDetails(run), [
+        {
+          resource: detail.resource,
+          step: "look.0",
+          operation: detail.operation,
+          message: "The script sent a line that is not a valid message.",
+          problem: detail.problem,
+        },
+      ]);
+    }
+  });
+});
+
+test("an answer its operation's guard refuses gives the script today's sentence, and the guard's sentence is an event", async () => {
+  await withScriptProject(async (root) => {
+    const run = await attempt(
+      root,
+      "return await context.http.request({ method: 'GET', url: 'https://api.example.com/not-a-number', headers: {} });",
+      { permissions: { effects: ["read", "network"] } },
+    );
+    assert.deepEqual(outputOf(run), {
+      ok: false,
+      kind: "failed",
+      message: "The broker's answer did not have the expected shape.",
+    });
+    assert.deepEqual(refusedDetails(run), [
+      {
+        resource: "http",
+        step: "look.0",
+        operation: "http.request",
+        message: "The broker's answer did not have the expected shape.",
+        problem: "The value is not a response with a status, headers and a body.",
+      },
+    ]);
   });
 });
 

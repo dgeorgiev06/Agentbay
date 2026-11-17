@@ -1,12 +1,10 @@
 import { pathToFileURL } from "node:url";
 import type { Answer } from "../answers.ts";
 import type { Json } from "../contracts.ts";
-import { isJson, isJsonRecord } from "../protocol-json.ts";
+import { isJson } from "../protocol-json.ts";
 import { contextOver, type OperationName } from "./operations.ts";
-import { type ChildMessage, type ParentMessage, parentMessageOf } from "./script-protocol.ts";
+import { type ChildLine, parentMessageOf, type StartMessage } from "./script-protocol.ts";
 import type { DefinedScript, ScriptError } from "../sdk.ts";
-
-type Start = Extract<ParentMessage, { readonly type: "start" }>;
 
 const protocolWrite = process.stdout.write.bind(process.stdout);
 
@@ -16,13 +14,13 @@ const waiting = new Map<number, (answer: Answer<Json>) => void>();
 
 let nextRequestId = 1;
 
-let started: ((start: Start) => void) | undefined;
+let started: ((start: StartMessage) => void) | undefined;
 
-const start = new Promise<Start>((resolve) => {
+const start = new Promise<StartMessage>((resolve) => {
   started = resolve;
 });
 
-function finish(message: ChildMessage): void {
+function finish(message: ChildLine): void {
   process.stderr.write("", () => {
     protocolWrite(`${JSON.stringify(message)}\n`, () => {
       process.exit(0);
@@ -50,24 +48,21 @@ process.stdin.on("data", (chunk: string) => {
   }
 });
 
+function send(line: ChildLine): void {
+  protocolWrite(`${JSON.stringify(line)}\n`);
+}
+
 function ask(operation: OperationName, request: Json): Promise<Answer<Json>> {
   const id = nextRequestId;
   nextRequestId += 1;
-  const fields = operation === "http.request" || operation === "commands.run" ? { request } : request;
   return new Promise((resolve) => {
     waiting.set(id, resolve);
-    protocolWrite(
-      `${JSON.stringify({ type: "request", id, request: { resource: operation, ...fieldsOf(fields) } })}\n`,
-    );
+    send({ type: "request", id, operation, request });
   });
 }
 
-function fieldsOf(value: Json): { readonly [key: string]: Json } {
-  return isJsonRecord(value) ? value : {};
-}
-
-function reportUnreadAnswer(): void {
-  return undefined;
+function reportUnreadAnswer(operation: OperationName, value: Json): void {
+  send({ type: "unread-answer", operation, value });
 }
 
 function isDefinedScript(value: unknown): value is DefinedScript {
@@ -106,7 +101,7 @@ async function loadScript(file: string): Promise<DefinedScript | string> {
   }
 }
 
-async function runScript(file: string): Promise<ChildMessage> {
+async function runScript(file: string): Promise<ChildLine> {
   const order = await start;
   const script = await loadScript(file);
   if (typeof script === "string") {

@@ -5,7 +5,6 @@ import { checkPath } from "../bay/broker/file-access.ts";
 import { isInsideOrEqual, layoutOf } from "../bay/layout.ts";
 import { checkUrl, loggedHeaders, nextRequest, redirectTarget } from "../bay/broker/http-access.ts";
 import { isJson, isJsonRecord, parsedLine } from "../bay/protocol-json.ts";
-import { childMessageOf, parentMessageOf } from "../bay/broker/script-protocol.ts";
 import { scrubSecretPatterns } from "../bay/secret-patterns.ts";
 import { isOneStatement, leadingKeyword } from "../bay/broker/sql-statements.ts";
 import type { FileInspector } from "../bay/ports.ts";
@@ -95,37 +94,6 @@ test("JSON guards accept JSON values only", () => {
   assert.equal(isJsonRecord({ a: 1 }), true);
   assert.equal(parsedLine("{oops"), undefined);
   assert.deepEqual(parsedLine('{"a":1}'), { a: 1 });
-});
-
-test("the script protocol accepts well-formed messages only", () => {
-  assert.deepEqual(childMessageOf('{"type":"done","output":[1]}'), { type: "done", output: [1] });
-  assert.deepEqual(childMessageOf('{"type":"request","id":1,"request":{"resource":"files.read","path":"a"}}'), {
-    type: "request",
-    id: 1,
-    request: { resource: "files.read", path: "a" },
-  });
-  for (const line of [
-    "not json",
-    '{"type":"done"}',
-    '{"type":"request","id":"1","request":{"resource":"files.read","path":"a"}}',
-    '{"type":"request","id":1,"request":{"resource":"shell","command":"id"}}',
-    JSON.stringify({
-      type: "request",
-      id: 1,
-      request: { resource: "http.request", request: { method: "TRACE", url: "x", headers: {} } },
-    }),
-    '{"type":"failed","reason":3}',
-  ]) {
-    assert.equal(childMessageOf(line), undefined, line);
-  }
-  assert.deepEqual(parentMessageOf('{"type":"start","input":null,"settings":{},"now":"2026-11-15T00:00:00.000Z"}'), {
-    type: "start",
-    input: null,
-    settings: {},
-    now: "2026-11-15T00:00:00.000Z",
-  });
-  assert.equal(parentMessageOf('{"type":"start","input":null,"settings":{}}'), undefined);
-  assert.equal(parentMessageOf('{"type":"answer","id":1,"answer":{"ok":false,"kind":"refused"}}'), undefined);
 });
 
 test("the pattern scrub replaces each kind of secret-shaped text", () => {

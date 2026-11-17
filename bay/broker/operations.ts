@@ -1,7 +1,6 @@
 import type { Answer, Resource } from "../answers.ts";
 import type { Json } from "../contracts.ts";
 import { isJson, isJsonRecord } from "../protocol-json.ts";
-import { httpMethods, isHttpMethod, isParameters, isStringRecord, isText, isTexts } from "./script-protocol.ts";
 import type { StartMessage } from "./script-protocol.ts";
 import type {
   AgentQueryResult,
@@ -63,6 +62,28 @@ export type Results = {
 };
 
 export type OperationName = keyof Requests;
+
+const httpMethods: readonly string[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+
+export function isText(value: Json | undefined): value is string {
+  return typeof value === "string";
+}
+
+function isTexts(value: Json | undefined): value is readonly string[] {
+  return Array.isArray(value) && value.every((item: Json) => typeof item === "string");
+}
+
+function isStringRecord(value: Json | undefined): value is { readonly [key: string]: string } {
+  return isJsonRecord(value) && Object.values(value).every((item) => typeof item === "string");
+}
+
+function isParameters(value: Json | undefined): value is SqlParameters {
+  return Array.isArray(value) || isJsonRecord(value);
+}
+
+function isHttpMethod(value: Json | undefined): value is HttpRequest["method"] {
+  return typeof value === "string" && httpMethods.includes(value);
+}
 
 export type Reading<Value> =
   { readonly ok: true; readonly value: Value } | { readonly ok: false; readonly problem: string };
@@ -336,6 +357,10 @@ export const shapes: { readonly [Name in OperationName]: Shape<Name> } = {
   spend: { resource: "spend", request: spendRequestOf, result: nothingOf },
   "commands.run": { resource: "commands", request: commandRequestOf, result: commandRanOf },
 };
+
+export function isOperationName(value: Json | undefined): value is OperationName {
+  return typeof value === "string" && Object.hasOwn(shapes, value);
+}
 
 export type Misreading = { readonly side: "request" | "result"; readonly problem: string };
 

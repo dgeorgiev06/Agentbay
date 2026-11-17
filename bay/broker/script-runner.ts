@@ -3,6 +3,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { type Answer, errorLine, failed, granted, manifestOf, refused } from "../answers.ts";
 import { Broker, type BrokerLimits } from "./broker.ts";
 import type {
+  Child,
   ChildEnd,
   ChildProcesses,
   ChildRequest,
@@ -13,12 +14,19 @@ import type {
   Processes,
   ThrowawayFolders,
 } from "../ports.ts";
-import type { EventSink, Json, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "../contracts.ts";
+import type { EventSink, Json, RunEvent, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "../contracts.ts";
 import { mayRemoveFiles, writableFolders } from "./effect-rule.ts";
 import { escapingLinks } from "./folder-links.ts";
-import { notAValidMessage } from "./operations.ts";
+import {
+  notAValidMessage,
+  type OperationName,
+  type Requests,
+  type Results,
+  shapes,
+  shownToAuthor,
+} from "./operations.ts";
 import { isInsideOrEqual, shownPath, type Layout } from "../layout.ts";
-import { type ChildMessage, childMessageOf, removalAllowedArgument, type ResourceRequest } from "./script-protocol.ts";
+import { type AskedFor, type ChildMessage, childMessageOf, removalAllowedArgument } from "./script-protocol.ts";
 import type { SecretStore } from "../secrets.ts";
 
 export type ScriptRunnerLimits = {
@@ -43,11 +51,13 @@ export type ScriptRunnerOptions = {
 
 type Spent = { items: number; usd: number; tokens: number };
 
-type Final = Exclude<ChildMessage, { readonly type: "request" }>;
+type Final = Extract<ChildMessage, { readonly type: "done" | "failed" | "crashed" }>;
+
+type Misread = Extract<ChildMessage, { readonly type: "unreadable-request" | "unread-answer" }>;
 
 type RunState = {
   final: Final | undefined;
-  malformed: boolean;
+  stopped: string | undefined;
   readonly spent: Spent;
   readonly inFlight: Promise<void>[];
 };
@@ -108,68 +118,30 @@ function seconds(milliseconds: number): string {
   return String(Number((milliseconds / 1000).toFixed(3)));
 }
 
-type DatabaseRequest = Extract<ResourceRequest, { resource: `db.${string}` }>;
+type Answering = {
+  readonly [Name in OperationName]: (request: Requests[Name], started: Started) => Promise<Answer<Results[Name]>>;
+};
 
-function databaseAnswer(broker: Broker, request: DatabaseRequest) {
-  switch (request.resource) {
-    case "db.execute":
-      return broker.execute(request.sql, request.parameters, request.partition);
-    case "db.query":
-      return broker.query(request.sql, request.parameters, request.partition);
-    case "db.migrate":
-      return broker.migrate(request.partition);
-    case "db.agentQuery":
-      return broker.agentQuery(request.sql, request.partition);
-  }
-}
+const answering: Answering = {
+  "db.execute": (request, { broker }) => broker.execute(request.sql, request.parameters, request.partition),
+  "db.query": (request, { broker }) => broker.query(request.sql, request.parameters, request.partition),
+  "db.migrate": (request, { broker }) => broker.migrate(request.partition),
+  "db.agentQuery": (request, { broker }) => broker.agentQuery(request.sql, request.partition),
+  "files.read": (request, { broker }) => broker.readFile(request.path),
+  "files.list": (request, { broker }) => broker.listFiles(request.path),
+  "files.write": (request, { broker }) => broker.writeFile(request.path, request.text),
+  "files.makeFolder": (request, { broker }) => broker.makeFolder(request.path),
+  "files.link": (request, { broker }) => broker.link(request.path, request.target),
+  "files.remove": (request, { broker }) => broker.remove(request.path),
+  "secrets.get": (request, { broker }) => broker.secret(request.name),
+  "http.request": (request, { broker }) => broker.request(request),
+  "events.emit": (request, { broker }) => broker.emit(request.kind, request.detail),
+  call: (request, started) => calledAnswer(started, request),
+  spend: (request, started) => spentAnswer(started, request.spending),
+  "commands.run": (request, { broker }) => broker.runCommand(request),
+};
 
-function isDatabaseRequest(request: ResourceRequest): request is DatabaseRequest {
-  return request.resource.startsWith("db.");
-}
-
-type FileRequest = Extract<ResourceRequest, { resource: `files.${string}` }>;
-
-function fileAnswer(broker: Broker, request: FileRequest) {
-  switch (request.resource) {
-    case "files.read":
-      return broker.readFile(request.path);
-    case "files.write":
-      return broker.writeFile(request.path, request.text);
-    case "files.list":
-      return broker.listFiles(request.path);
-    case "files.makeFolder":
-      return broker.makeFolder(request.path);
-    case "files.link":
-      return broker.link(request.path, request.target);
-    case "files.remove":
-      return broker.remove(request.path);
-  }
-}
-
-function isFileRequest(request: ResourceRequest): request is FileRequest {
-  return request.resource.startsWith("files.");
-}
-
-function brokerAnswer(broker: Broker, request: Exclude<ResourceRequest, { resource: "call" | "spend" }>) {
-  if (isDatabaseRequest(request)) {
-    return databaseAnswer(broker, request);
-  }
-  if (isFileRequest(request)) {
-    return fileAnswer(broker, request);
-  }
-  switch (request.resource) {
-    case "secrets.get":
-      return broker.secret(request.name);
-    case "http.request":
-      return broker.request(request.request);
-    case "events.emit":
-      return broker.emit(request.kind, request.detail);
-    case "commands.run":
-      return broker.runCommand(request.request);
-  }
-}
-
-async function calledAnswer(started: Started, request: { reference: string; input: Json }): Promise<Answer<Json>> {
+async function calledAnswer(started: Started, request: Requests["call"]): Promise<Answer<Json>> {
   try {
     const outcome = await started.request.call(request.reference, request.input);
     return outcome.status === "done" ? granted(outcome.output) : failed(outcome.reason);
@@ -180,7 +152,7 @@ async function calledAnswer(started: Started, request: { reference: string; inpu
   }
 }
 
-async function spentAnswer(started: Started, spending: Json): Promise<Answer<Json>> {
+async function spentAnswer(started: Started, spending: Json): Promise<Answer<null>> {
   const answer = await started.broker.spend(spending);
   if (!answer.ok) {
     return answer;
@@ -192,14 +164,11 @@ async function spentAnswer(started: Started, spending: Json): Promise<Answer<Jso
   return granted(null);
 }
 
-async function answerFor(started: Started, request: ResourceRequest): Promise<Answer<Json>> {
-  if (request.resource === "call") {
-    return calledAnswer(started, request);
-  }
-  if (request.resource === "spend") {
-    return spentAnswer(started, request.spending);
-  }
-  return brokerAnswer(started.broker, request);
+function answerFor<Name extends OperationName>(
+  started: Started,
+  asked: AskedFor<Name>,
+): Promise<Answer<Results[Name]>> {
+  return answering[asked.operation](asked.request, started);
 }
 
 function endReason(end: ChildEnd, limits: { readonly milliseconds: number; readonly outputBytes: number }): string {
@@ -222,8 +191,8 @@ function outcomeOf(
   end: ChildEnd,
   limits: { readonly milliseconds: number; readonly outputBytes: number },
 ) {
-  if (state.malformed) {
-    return { status: "failed" as const, reason: notAValidMessage };
+  if (state.stopped !== undefined) {
+    return { status: "failed" as const, reason: state.stopped };
   }
   const final = state.final;
   if (end.how !== "exited" || final === undefined) {
@@ -275,6 +244,56 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     return answer.ok ? undefined : answer.message;
   }
 
+  function misreadingEvent(started: Started, misread: Misread): RunEvent {
+    const side = misread.type === "unreadable-request" ? "request" : "result";
+    const detail = {
+      resource: shapes[misread.operation].resource,
+      step: started.request.place.stepKey,
+      operation: misread.operation,
+      message: shownToAuthor({ side, problem: misread.problem }),
+      problem: misread.problem,
+    };
+    return {
+      at: options.clock.now().toISOString(),
+      runId: started.request.place.runId,
+      kind: "refused",
+      detail: options.secrets.redactJson(detail),
+    };
+  }
+
+  function heard(started: Started, child: Child, line: string): void {
+    const { state } = started;
+    const message = childMessageOf(line);
+    const stop = (reason: string): void => {
+      state.stopped ??= reason;
+      child.kill();
+    };
+    if (message === undefined || (message.type !== "request" && state.final !== undefined)) {
+      stop(notAValidMessage);
+      return;
+    }
+    switch (message.type) {
+      case "request":
+        state.inFlight.push(
+          answerFor(started, message.asked).then((answer) => {
+            child.send(JSON.stringify({ type: "answer", id: message.id, answer }));
+          }),
+        );
+        return;
+      case "unreadable-request":
+        state.inFlight.push(options.events.append(misreadingEvent(started, message)));
+        stop(shownToAuthor({ side: "request", problem: message.problem }));
+        return;
+      case "unread-answer":
+        state.inFlight.push(options.events.append(misreadingEvent(started, message)));
+        return;
+      case "done":
+      case "failed":
+      case "crashed":
+        state.final = message;
+    }
+  }
+
   async function runChild(started: Started, milliseconds: number): Promise<StepOutcome> {
     const { request, state, broker } = started;
     const startTime = options.clock.now();
@@ -288,18 +307,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
       maximumOutputBytes: limits.outputBytes,
     };
     const child = options.childProcesses.start(childRequest, (line) => {
-      const message = childMessageOf(line);
-      if (message === undefined || (message.type !== "request" && state.final !== undefined)) {
-        state.malformed = true;
-        child.kill();
-      } else if (message.type === "request") {
-        const answered = answerFor(started, message.request).then((answer) => {
-          child.send(JSON.stringify({ type: "answer", id: message.id, answer }));
-        });
-        state.inFlight.push(answered);
-      } else {
-        state.final = message;
-      }
+      heard(started, child, line);
     });
     child.send(JSON.stringify(startMessage(request, startTime)));
     const end = await child.ended;
@@ -342,7 +350,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
       }
       const state: RunState = {
         final: undefined,
-        malformed: false,
+        stopped: undefined,
         spent: { items: 0, usd: 0, tokens: 0 },
         inFlight: [],
       };

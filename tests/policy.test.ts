@@ -178,7 +178,11 @@ test("every problem names the field of the manifest to change, all at once", () 
 test("every problem of a mode is given at once, across paths, secrets, hosts and commands", () => {
   const manifest = {
     ...briefing,
-    resources: { files: { read: ["bay/"], write: [".git/hooks"] }, secrets: ["x"], commands: ["make"] },
+    resources: {
+      files: { read: ["bay/"], write: [".git/hooks"] },
+      secrets: ["x"],
+      commands: { build: { run: "make", effects: ["read" as const] } },
+    },
   };
   const problems = problemsFor([{ folder: "/project/components/modes/briefing", manifest }], "briefing");
   assert.deepEqual(
@@ -187,7 +191,7 @@ test("every problem of a mode is given at once, across paths, secrets, hosts and
       ["resources", "files", "read", 0],
       ["resources", "files", "write", 0],
       ["resources", "secrets", 0],
-      ["resources", "commands", 0],
+      ["resources", "commands", "build"],
     ],
   );
 });
@@ -390,21 +394,43 @@ test("forge gets no forge rights when the project is not the kit", () => {
 });
 
 test("only a mode under the kit's components/base may list commands", () => {
-  const withCommand = { ...briefing, resources: { commands: ["node --test"] } };
+  const withCommand: Mode = {
+    ...briefing,
+    resources: { commands: { tests: { run: "node  --test", effects: ["read", "write"] } } },
+  };
   const outside: Modes = [{ folder: "/project/components/modes/briefing", manifest: withCommand }];
   assert.deepEqual(problemsFor(outside, "briefing"), [
     {
-      at: ["resources", "commands", 0],
+      at: ["resources", "commands", "tests"],
       message:
-        "Mode briefing lists the command node --test; a listed command can run code the agent wrote. " +
-        "Only a mode under the kit's components/base/ may list commands.",
+        "Mode briefing lists the command tests, which runs node  --test; a listed command can run code the agent " +
+        "wrote. Only a mode under the kit's components/base/ may list commands.",
       fix: "Remove the command from components/modes/briefing/mode.yaml; a skill step's checks belong in script steps.",
     },
   ]);
   const base: Modes = [{ folder: "/project/components/base/briefing", manifest: withCommand }];
-  assert.deepEqual(grantsFor(base, "briefing").commands, ["node --test"]);
+  assert.deepEqual(grantsFor(base, "briefing").commands, [
+    { name: "tests", words: ["node", "--test"], effects: ["read", "write"] },
+  ]);
   const projectBase: Modes = [{ folder: "/project/components/base/briefing", manifest: withCommand, home: "project" }];
   assert.equal(problemsFor(projectBase, "briefing").length, 1);
+});
+
+test("a listed command with no effects is refused with a fix, in any mode", () => {
+  const withCommand: Mode = {
+    ...briefing,
+    resources: { commands: { tests: { run: "node --test", effects: [] } } },
+  };
+  const base: Modes = [{ folder: "/project/components/base/briefing", manifest: withCommand }];
+  assert.deepEqual(problemsFor(base, "briefing"), [
+    {
+      at: ["resources", "commands", "tests", "effects"],
+      message: "The command tests of mode briefing lists no effects, and a command has at least one.",
+      fix:
+        "List under resources.commands.tests.effects in components/base/briefing/mode.yaml each effect the command " +
+        "can have: read, write, network, spend or delete. The kernel believes the list and cannot check it.",
+    },
+  ]);
 });
 
 test("only a mode under the kit's components/base may name throwaway folders", () => {

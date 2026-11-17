@@ -4,8 +4,6 @@ import { madeWorktree } from "./lib/folders.ts";
 import { branchExists, commitOf, gitFed, gitSucceeded, safeCommitOf, succeededOutput } from "./lib/git.ts";
 import { defineRequestScript } from "./lib/request.ts";
 
-const commit = ["commit", "--quiet", "--no-verify", "--no-gpg-sign", "--file=-", "--end-of-options"];
-
 async function unusedWipBranch(context: ScriptContext, branch: string): Promise<string> {
   const prefix = `forge/wip/${branch.slice("forge/".length)}`;
   let number = 1;
@@ -23,11 +21,11 @@ export const run = defineRequestScript(async (request, context) => {
     return { how: "nothing-changed", folder };
   }
   const wip = await unusedWipBranch(context, branch);
-  await gitSucceeded(context, ".", ["branch", "--end-of-options", wip, head]);
-  await gitSucceeded(context, folder, ["switch", "--end-of-options", wip]);
-  await gitSucceeded(context, folder, ["add", "--all", "--"]);
+  await gitSucceeded(context, ".", ["make-branch", wip, head]);
+  await gitSucceeded(context, folder, ["switch-branch", wip]);
+  await gitSucceeded(context, folder, ["stage-everything"]);
   const input = `Set aside the changed and untracked files of ${branch}.\n`;
-  succeededOutput(await gitFed(context, folder, { gitArguments: commit, input }), commit);
-  await gitSucceeded(context, folder, ["switch", "--end-of-options", branch]);
+  succeededOutput(await gitFed(context, folder, { call: ["commit-staged"], input }), "commit-staged");
+  await gitSucceeded(context, folder, ["switch-branch", branch]);
   return { how: "set-aside", folder, branch: wip, commit: await commitOf(context, ".", wip) };
 });

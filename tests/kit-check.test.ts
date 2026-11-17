@@ -69,7 +69,8 @@ function kitCheck(): { readonly status: number | null; readonly stderr: string; 
 test("a finding is a size warning, or a listed command of the mode whose mode.yaml it names, and nothing else is", () => {
   const listed = (file: string, message: string): Finding => ({ severity: "warning", file, line: 9, message });
   const sentence = (mode: string): string =>
-    `Mode ${mode} lists the command npm test --; a listed command can run code the agent wrote.`;
+    `Mode ${mode} lists the command tests, which runs npm test -- and which the mode says has the effects: read; ` +
+    "a listed command can run code the agent wrote.";
   assert.equal(
     listingModeFolder(listed("components/base/notes/mode.yaml", sentence("notes"))),
     "components/base/notes",

@@ -43,7 +43,8 @@ export type HttpResponse = {
 };
 
 export type CommandRequest = {
-  readonly command: readonly string[];
+  readonly name: string;
+  readonly arguments: readonly string[];
   readonly folder: string;
   readonly timeLimitSeconds: number;
   readonly input?: string;

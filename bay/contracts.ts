@@ -15,6 +15,12 @@ export type Spend = {
   readonly minutes: number;
 };
 
+export type GrantedCommand = {
+  readonly name: string;
+  readonly words: readonly string[];
+  readonly effects: readonly Effect[];
+};
+
 export type ModeGrants = {
   readonly mode: string;
   readonly modeFolder: string;
@@ -25,7 +31,7 @@ export type ModeGrants = {
   readonly throwawayPaths: readonly string[];
   readonly secrets: readonly string[];
   readonly hosts: readonly string[];
-  readonly commands: readonly string[];
+  readonly commands: readonly GrantedCommand[];
 };
 
 export type Permissions = {

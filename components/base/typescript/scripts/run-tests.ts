@@ -5,11 +5,8 @@ import { testResult } from "./lib/results.ts";
 
 const defaultSeconds = 420;
 
-const npmTestWithTap = ["npm", "test", "--", "--test-reporter=tap"];
-
 export const run = defineScript(async (input, context) => {
   const request = checkoutRequestOf(input, { namesField: "files", defaultSeconds });
-  const command = [...npmTestWithTap, ...(request.names ?? [])];
-  const finished = await runTimed(context, { ...request, command });
+  const finished = await runTimed(context, { ...request, name: "run-tests", arguments: request.names ?? [] });
   return testResult(finished, request.timeLimitSeconds);
 });

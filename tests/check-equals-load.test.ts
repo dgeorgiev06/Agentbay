@@ -42,8 +42,8 @@ const twins: readonly Twin[] = [
   },
   {
     rule: "a command in a project mode",
-    broken: { commands: ["node --test"] },
-    valid: { commands: [] },
+    broken: { commands: { tests: { run: "node --test", effects: ["read"] } } },
+    valid: { commands: {} },
   },
   {
     rule: "a kit folder from a mode that is not forge",

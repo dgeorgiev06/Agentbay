@@ -1,6 +1,6 @@
 import { defineScript, fail } from "../../../../bay/sdk.ts";
 import { checks, checkVerdict, type Check, type CheckVerdict } from "./lib/checks.ts";
-import { npmRun, runTimed } from "./lib/commands.ts";
+import { runTimed } from "./lib/commands.ts";
 import { checkoutRequestOf } from "./lib/request.ts";
 
 const defaultSeconds = 90;
@@ -21,8 +21,7 @@ export const run = defineScript(async (input, context) => {
   const request = checkoutRequestOf(input, { namesField: "checks", defaultSeconds });
   const verdicts: CheckVerdict[] = [];
   for (const check of chosenChecks(request.names)) {
-    const command = npmRun(check.name);
-    const finished = await runTimed(context, { ...request, command });
+    const finished = await runTimed(context, { ...request, name: check.command, arguments: [] });
     verdicts.push(checkVerdict(check, finished, request.timeLimitSeconds));
   }
   return { verdicts };

@@ -23,6 +23,7 @@ import {
   withProject,
   type RecordingSink,
 } from "./broker-fixture.ts";
+import { grantedCommand } from "./grants-fixture.ts";
 
 type Limits = NonNullable<Parameters<typeof createBroker>[0]["limits"]>;
 
@@ -54,7 +55,14 @@ async function withCommandBroker(
       processes: nodeProcesses,
       commandSearchPath: process.env.PATH ?? "/usr/bin:/bin",
       limits,
-    }).forStep(place, permissionsIn(root, { effects: everyEffect, commands: ["node -e"], secrets: ["BROKER_TOKEN"] }));
+    }).forStep(
+      place,
+      permissionsIn(root, {
+        effects: everyEffect,
+        commands: [grantedCommand("evaluate", "node -e")],
+        secrets: ["BROKER_TOKEN"],
+      }),
+    );
     try {
       await run(broker, events);
     } finally {
@@ -66,8 +74,8 @@ async function withCommandBroker(
 test("a command's time limit is cut to the broker's own limit", async () => {
   await withCommandBroker({ commandMilliseconds: 500 }, async (broker) => {
     const startedAt = Date.now();
-    const command = ["node", "-e", "setInterval(() => {}, 1000)"];
-    const ran = valueOf(await broker.ask("commands.run", { command, folder: ".", timeLimitSeconds: 30 }));
+    const asked = { name: "evaluate", arguments: ["setInterval(() => {}, 1000)"] };
+    const ran = valueOf(await broker.ask("commands.run", { ...asked, folder: ".", timeLimitSeconds: 30 }));
     assert.deepEqual(ran.end, { how: "timed-out" });
     assert.ok(Date.now() - startedAt < 5000);
   });
@@ -75,8 +83,8 @@ test("a command's time limit is cut to the broker's own limit", async () => {
 
 test("the broker records a command's secret arguments redacted", async () => {
   await withCommandBroker({}, async (broker, events) => {
-    const command = ["node", "-e", "process.exit(0)", madeUpSecret];
-    valueOf(await broker.ask("commands.run", { command, folder: ".", timeLimitSeconds: 30 }));
+    const asked = { name: "evaluate", arguments: ["process.exit(0)", madeUpSecret] };
+    valueOf(await broker.ask("commands.run", { ...asked, folder: ".", timeLimitSeconds: 30 }));
     const recorded = events.events.find((event) => event.kind === "command")?.detail ?? null;
     assert.deepEqual(fieldOf(recorded, "command"), ["node", "-e", "process.exit(0)", "[redacted:BROKER_TOKEN]"]);
   });

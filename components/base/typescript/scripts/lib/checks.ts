@@ -2,15 +2,16 @@ import { endedOf, type Finished } from "./commands.ts";
 
 export type Check = {
   readonly name: string;
+  readonly command: string;
   readonly failedExitCodes: readonly number[];
 };
 
 export const checks: readonly Check[] = [
-  { name: "generate:check", failedExitCodes: [1] },
-  { name: "typecheck", failedExitCodes: [1, 2] },
-  { name: "lint", failedExitCodes: [1] },
-  { name: "format:check", failedExitCodes: [1] },
-  { name: "deadcode", failedExitCodes: [1] },
+  { name: "generate:check", command: "check-generated-types", failedExitCodes: [1] },
+  { name: "typecheck", command: "check-types", failedExitCodes: [1, 2] },
+  { name: "lint", command: "lint", failedExitCodes: [1] },
+  { name: "format:check", command: "check-format", failedExitCodes: [1] },
+  { name: "deadcode", command: "find-dead-code", failedExitCodes: [1] },
 ];
 
 type Shown = {

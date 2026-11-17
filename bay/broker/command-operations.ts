@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { failed, granted, listed, manifestOf } from "../answers.ts";
+import type { Effect, GrantedCommand } from "../contracts.ts";
 import type { ProcessOutput, ProcessResult } from "../ports.ts";
 import type { CommandOutput, CommandRequest } from "../sdk.ts";
 import { checkPath } from "./file-access.ts";
@@ -11,12 +12,12 @@ import {
   answered,
   askedTo,
   type Asking,
+  declaredEffects,
   type Definition,
   type Doing,
   type Entries,
   refusedWith,
   type Ruling,
-  runsCommands,
   type Step,
 } from "./rule.ts";
 
@@ -24,6 +25,7 @@ type CommandOperationName = Extract<OperationName, "commands.run">;
 
 type CommandToRun = {
   readonly found: "folder";
+  readonly name: string;
   readonly command: readonly string[];
   readonly input?: string;
   readonly directory: string;
@@ -34,36 +36,44 @@ type CommandToRun = {
 type NoFolder = { readonly found: "no folder"; readonly failure: string };
 
 function describedCommand(request: CommandRequest): string {
-  return `run the command ${JSON.stringify(request.command)} in ${request.folder}`;
+  return `run the listed command ${request.name} with ${JSON.stringify(request.arguments)} in ${request.folder}`;
 }
 
 function askedToRun(request: CommandRequest, asking: Asking): string {
   return askedTo(describedCommand(request), asking.at);
 }
 
-function argumentsOf(prefix: string): readonly string[] {
-  return prefix.split(/\s+/).filter((argument) => argument !== "");
+export function lackedEffect(command: GrantedCommand, effects: readonly Effect[]): Effect | undefined {
+  return command.effects.find((effect) => !effects.includes(effect));
 }
 
-function startsWithPrefix(command: readonly string[], prefix: string): boolean {
-  const leading = argumentsOf(prefix);
-  return leading.length > 0 && leading.every((argument, index) => command[index] === argument);
-}
-
-function listedCommand(request: CommandRequest, asking: Asking): Ruling<null> {
-  const prefixes = asking.grants.commands;
-  if (prefixes.some((prefix) => startsWithPrefix(request.command, prefix))) {
-    return allowedWith(null);
+function listedCommand(request: CommandRequest, asking: Asking): Ruling<GrantedCommand> {
+  const commands = asking.grants.commands;
+  const command = commands.find((listedAs) => listedAs.name === request.name);
+  if (command === undefined) {
+    return refusedWith({
+      resource: "commands",
+      asked: askedToRun(request, asking),
+      declared: `its mode lists the commands: ${listed(
+        commands.map((listedAs) => listedAs.name),
+        "none",
+      )}`,
+      change:
+        `To allow it, list ${request.name} under resources.commands in ${manifestOf(asking.grants)} ` +
+        "with the words it runs and its effects; only a mode under the kit's components/base/ may list commands.",
+    });
+  }
+  const missing = lackedEffect(command, asking.effects);
+  if (missing === undefined) {
+    return allowedWith(command);
   }
   return refusedWith({
     resource: "commands",
     asked: askedToRun(request, asking),
     declared:
-      `its mode lists the commands: ${listed(prefixes, "none")}, ` +
-      "and a command must start with one of them, argument by argument",
-    change:
-      `To allow it, add the command's leading arguments under resources.commands in ${manifestOf(asking.grants)}; ` +
-      "only a mode under the kit's components/base/ may list commands.",
+      `${declaredEffects(asking.effects, asking.at)}, ` +
+      `and ${command.name} is listed with: ${command.effects.join(", ")}`,
+    change: `To allow it, add ${missing} to actions.${asking.at.action}.effects in ${asking.at.manifest}.`,
   });
 }
 
@@ -121,10 +131,11 @@ async function recordCommand(
   ran: { readonly result: ProcessResult; readonly took: number },
   doing: Doing,
 ): Promise<void> {
-  const { command, input } = toRun;
+  const { name, command, input } = toRun;
   const { result, took } = ran;
   await doing.record("command", {
     step: doing.stepKey,
+    name,
     command,
     folder: toRun.shownDirectory,
     end: result.end,
@@ -137,12 +148,12 @@ async function recordCommand(
 
 const commandsRun: Definition<"commands.run", CommandToRun | NoFolder> = {
   operation: "commands.run",
-  needs: () => runsCommands,
+  needs: () => [],
   described: describedCommand,
   rule: async (request, asking) => {
-    const listedAs = listedCommand(request, asking);
-    if (!listedAs.allowed) {
-      return listedAs;
+    const command = listedCommand(request, asking);
+    if (!command.allowed) {
+      return command;
     }
     const milliseconds = commandMilliseconds(request, asking);
     if (!milliseconds.allowed) {
@@ -155,11 +166,12 @@ const commandsRun: Definition<"commands.run", CommandToRun | NoFolder> = {
     if (typeof folder.value !== "string") {
       return allowedWith(folder.value);
     }
-    const { command, input } = request;
+    const { input } = request;
     const directory = folder.value;
     return allowedWith({
       found: "folder",
-      command,
+      name: command.value.name,
+      command: [...command.value.words, ...request.arguments],
       ...(input === undefined ? {} : { input }),
       directory,
       shownDirectory: shownPath(asking.layout, directory),
@@ -195,7 +207,7 @@ const commandsRun: Definition<"commands.run", CommandToRun | NoFolder> = {
       stderr: shownOutput(result.stderr, doing),
     });
   },
-  refusalDetail: (request) => ({ command: request.command, folder: request.folder }),
+  refusalDetail: (request) => ({ name: request.name, arguments: request.arguments, folder: request.folder }),
 };
 
 export function commandEntries(step: Step): Entries<CommandOperationName> {

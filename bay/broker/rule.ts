@@ -1,4 +1,4 @@
-import { type Answer, errorLine, failed, type RefusalWording, refused, type Resource } from "../answers.ts";
+import { type Answer, errorLine, failed, listed, type RefusalWording, refused, type Resource } from "../answers.ts";
 import type { ActionCaller, Effect, Json, ModeGrants, Permissions } from "../contracts.ts";
 import type { Layout } from "../layout.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, Http, Processes, ThrowawayFolders } from "../ports.ts";
@@ -29,16 +29,9 @@ export type Needing = {
   readonly needs: readonly Need[];
 };
 
-const everyEffect: readonly Effect[] = ["read", "write", "network", "spend", "delete"];
-
 export const writesFiles: Need = { effect: "write", because: "Writing a file needs the write effect" };
 
 export const removesFiles: Need = { effect: "delete", because: "Removing a file or folder needs the delete effect" };
-
-export const runsCommands: readonly Need[] = everyEffect.map((effect) => ({
-  effect,
-  because: "A command can do anything its program can, so running one needs all five effects",
-}));
 
 export type EntryRequests = Omit<Requests, "db.migrate"> & {
   readonly "db.migrate": { readonly partition?: string };
@@ -129,6 +122,10 @@ export function askedTo(doing: string, at: ActionAt): string {
   return `The step ${at.stepKey} of action ${at.action} asked to ${doing}`;
 }
 
+export function declaredEffects(effects: readonly Effect[], at: ActionAt): string {
+  return `the action ${at.action} declares the effects: ${listed(effects, "none")}`;
+}
+
 export function missingEffectRefusal(
   needing: Needing,
   effects: readonly Effect[],
@@ -138,11 +135,10 @@ export function missingEffectRefusal(
   if (missing === undefined) {
     return undefined;
   }
-  const declared = effects.length === 0 ? "none" : effects.join(", ");
   return {
     resource: needing.resource,
     asked: askedTo(needing.doing, at),
-    declared: `the action ${at.action} declares the effects: ${declared}`,
+    declared: declaredEffects(effects, at),
     change: `${missing.because}; to allow it, add ${missing.effect} to actions.${at.action}.effects in ${at.manifest}.`,
   };
 }

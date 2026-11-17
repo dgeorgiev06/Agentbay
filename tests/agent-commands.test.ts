@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { agentCommands, type SkillAgent } from "../bay/adapter.ts";
 import type { Effect } from "../bay/contracts.ts";
 import { grantsIn } from "./broker-fixture.ts";
+import { grantedCommand } from "./grants-fixture.ts";
 
 function agentWith(effects: readonly Effect[]): SkillAgent {
   return {
@@ -13,7 +14,7 @@ function agentWith(effects: readonly Effect[]): SkillAgent {
     description: "Drafts a note.",
     tier: "fast",
     kernelTools: [],
-    grants: grantsIn("/project", { commands: ["git status"] }),
+    grants: grantsIn("/project", { commands: [grantedCommand("changes", "git status")] }),
     effects,
   };
 }

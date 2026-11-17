@@ -12,19 +12,6 @@ type Merging = {
 
 type Merged = { readonly how: "merged"; readonly commit: string } | { readonly how: "undone"; readonly reason: string };
 
-const merge = [
-  "merge",
-  "--no-ff",
-  "--no-edit",
-  "--no-stat",
-  "--no-verify",
-  "--no-gpg-sign",
-  "--no-verify-signatures",
-  "--no-autostash",
-  "--no-rerere-autoupdate",
-  "--end-of-options",
-];
-
 async function refuseUnmergeable(context: ScriptContext, folder: string, merging: Merging): Promise<void> {
   const { branch, into, target } = merging;
   await safeCommitOf(context, folder, "HEAD");
@@ -46,7 +33,7 @@ async function refuseUnmergeable(context: ScriptContext, folder: string, merging
 
 async function checkOutTarget(context: ScriptContext, merging: Merging): Promise<void> {
   const { branch, into, target } = merging;
-  const added = await git(context, ".", ["worktree", "add", "--end-of-options", target, into]);
+  const added = await git(context, ".", ["add-worktree", target, into]);
   if (added.exitCode === 0) {
     return;
   }
@@ -62,9 +49,9 @@ async function checkOutTarget(context: ScriptContext, merging: Merging): Promise
 async function undone(context: ScriptContext, merging: Merging, stderr: string): Promise<Merged> {
   const { branch, into, target } = merging;
   const { conflicted } = await changesIn(context, target);
-  const inProgress = await git(context, target, ["rev-parse", "--verify", "--quiet", "--end-of-options", "MERGE_HEAD"]);
+  const inProgress = await git(context, target, ["commit-of", "MERGE_HEAD"]);
   if (inProgress.exitCode === 0) {
-    await gitSucceeded(context, target, ["merge", "--abort"]);
+    await gitSucceeded(context, target, ["abort-merge"]);
   }
   if (conflicted.length === 0) {
     return { how: "undone", reason: `git merge failed: ${firstLine(stderr)}` };
@@ -78,7 +65,7 @@ async function undone(context: ScriptContext, merging: Merging, stderr: string):
 }
 
 async function mergedInTarget(context: ScriptContext, merging: Merging): Promise<Merged> {
-  const ended = await git(context, merging.target, [...merge, merging.branch]);
+  const ended = await git(context, merging.target, ["merge-branch", merging.branch]);
   if (ended.exitCode !== 0) {
     return undone(context, merging, ended.stderr);
   }
@@ -96,7 +83,7 @@ export const run = defineRequestScript(async (request, context) => {
   }
   await checkOutTarget(context, merging);
   const merged = await mergedInTarget(context, merging);
-  await gitSucceeded(context, ".", ["worktree", "remove", "--end-of-options", merging.target]);
+  await gitSucceeded(context, ".", ["remove-worktree", merging.target]);
   if (merged.how === "undone") {
     return fail(merged.reason);
   }

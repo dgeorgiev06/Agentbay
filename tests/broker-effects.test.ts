@@ -26,6 +26,7 @@ import {
   writeProjectFile,
   type RecordingSink,
 } from "./broker-fixture.ts";
+import { grantedCommand } from "./grants-fixture.ts";
 
 type Ports = {
   readonly files: FileSystem;
@@ -88,7 +89,7 @@ function brokerWith(root: string, effects: readonly Effect[], ports: Ports): Ste
       effects,
       secrets: ["API_TOKEN"],
       hosts: ["api.example.com"],
-      commands: ["node --version"],
+      commands: [grantedCommand("version", "node --version")],
       throwawayPaths: [join(root, "scratch")],
     }),
   );
@@ -117,12 +118,12 @@ function messageOf<T>(answer: Answer<T>): string {
 
 function assertRefusedFor<T>(answer: Answer<T>, effect: Effect): void {
   assert.ok(!answer.ok && answer.kind === "refused", JSON.stringify(answer));
-  const needs = `(needs the ${effect} effect|needs all five effects)`;
-  assert.match(answer.message, new RegExp(`${needs}; to allow it, add ${effect} to actions.look`));
+  const needs = `(needs the ${effect} effect; to allow it|is listed with: [a-z, ]+\\. To allow it)`;
+  assert.match(answer.message, new RegExp(`${needs}, add ${effect} to actions.look`));
 }
 
 function assertNotRefusedForEffects<T>(answer: Answer<T>): void {
-  assert.doesNotMatch(messageOf(answer), /effect; to allow it/);
+  assert.doesNotMatch(messageOf(answer), /effect; to allow it|is listed with: /);
 }
 
 test("files: a write needs write", async () => {
@@ -322,7 +323,7 @@ const brokerMethods: { readonly [Name in Parameters<StepBroker["ask"]>[0]]: Meth
     usesPorts: false,
   },
   "commands.run": {
-    call: (broker) => broker.ask("commands.run", { command: ["node", "--version"], folder: ".", timeLimitSeconds: 30 }),
+    call: (broker) => broker.ask("commands.run", { name: "version", arguments: [], folder: ".", timeLimitSeconds: 30 }),
     needs: everyEffect,
     usesPorts: true,
   },
@@ -390,7 +391,7 @@ const operationsOfEntries: readonly (readonly [string, Asked, Effect | undefined
   ["spend", (broker) => broker.ask("spend", { spending: { items: 0, usd: 0, tokens: 3 } }), "spend"],
   [
     "commands.run",
-    (broker) => broker.ask("commands.run", { command: ["git", "status"], folder: ".", timeLimitSeconds: 30 }),
+    (broker) => broker.ask("commands.run", { name: "version", arguments: [], folder: ".", timeLimitSeconds: 30 }),
     "read",
   ],
 ];
@@ -399,7 +400,9 @@ function effectNamedBy<T>(answer: Answer<T>): string | undefined {
   if (answer.ok || answer.kind !== "refused") {
     return undefined;
   }
-  return /effects?; to allow it, add (\w+) to/.exec(answer.change)?.[1];
+  const needed = /effects?; to allow it, add (\w+) to/.exec(answer.change)?.[1];
+  const listedWith = answer.declared.includes(" is listed with: ");
+  return needed ?? (listedWith ? /^To allow it, add (\w+) to/.exec(answer.change)?.[1] : undefined);
 }
 
 test("the rule names the first missing effect for each kind of operation", async () => {

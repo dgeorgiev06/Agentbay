@@ -239,9 +239,13 @@ function commandRequestOf(value: Json): Reading<CommandRequest> {
   if (!isJsonRecord(value)) {
     return notAMapping;
   }
-  const { command, folder, timeLimitSeconds, input } = value;
-  if (!isTexts(command)) {
-    return lacking("command", "a list of text");
+  const { name, folder, timeLimitSeconds, input } = value;
+  const given = value.arguments;
+  if (!isText(name)) {
+    return lacking("name", "text");
+  }
+  if (!isTexts(given)) {
+    return lacking("arguments", "a list of text");
   }
   if (!isText(folder)) {
     return lacking("folder", "text");
@@ -249,10 +253,11 @@ function commandRequestOf(value: Json): Reading<CommandRequest> {
   if (typeof timeLimitSeconds !== "number") {
     return lacking("timeLimitSeconds", "a number");
   }
+  const request = { name, arguments: given, folder, timeLimitSeconds };
   if (input === undefined) {
-    return read({ command, folder, timeLimitSeconds });
+    return read(request);
   }
-  return isText(input) ? read({ command, folder, timeLimitSeconds, input }) : misgiven("input", "text");
+  return isText(input) ? read({ ...request, input }) : misgiven("input", "text");
 }
 
 function isExecuteResult(value: Json): value is ExecuteResult {

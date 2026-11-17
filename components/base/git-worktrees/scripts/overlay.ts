@@ -8,15 +8,7 @@ export const run = defineRequestScript(async (request, context) => {
   const paths = request.texts("paths");
   await madeCopy(context, folder, "change");
   const commit = await safeCommitOf(context, ".", request.text("commit"));
-  const listed = await gitSucceeded(context, ".", [
-    "ls-tree",
-    "-z",
-    "--name-only",
-    "--end-of-options",
-    commit,
-    "--",
-    ...paths,
-  ]);
+  const listed = await gitSucceeded(context, ".", ["paths-at-commit", commit, "--", ...paths]);
   const atCommit = nulFields(listed);
   const placed = paths.filter((path) => atCommit.includes(path));
   for (const path of paths) {

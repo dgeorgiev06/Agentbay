@@ -44,20 +44,8 @@ function changesOf(output: string): readonly Change[] {
   return changes;
 }
 
-const diff = [
-  "diff",
-  "--name-status",
-  "-z",
-  "-M",
-  "--no-ext-diff",
-  "--no-textconv",
-  "--no-color",
-  "--no-relative",
-  "--end-of-options",
-];
-
 export const run = defineRequestScript(async (request, context) => {
   const from = await commitOf(context, ".", request.text("from"));
   const to = await commitOf(context, ".", request.text("to"));
-  return { paths: changesOf(await gitSucceeded(context, ".", [...diff, from, to])) };
+  return { paths: changesOf(await gitSucceeded(context, ".", ["changed-paths", from, to])) };
 });

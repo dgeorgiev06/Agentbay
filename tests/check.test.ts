@@ -36,23 +36,41 @@ test("registry problems, skill problems and layout problems are all reported at 
   assert.ok(report.errors >= 2);
 });
 
-test("a listed command in a base mode is a warning", async () => {
-  const manifest = yamlText({ ...storeMode, resources: { commands: ["node --test"] } });
+test("a listed command in a base mode is a warning that names the command and its effects", async () => {
+  const commands = { tests: { run: "node --test", effects: ["read", "write"] } };
+  const manifest = yamlText({ ...storeMode, resources: { commands } });
   const report = await check({ ...cleanFiles(), [paths.store]: manifest });
   const finding = findFinding(
     report,
     paths.store,
-    "Mode store lists the command node --test; a listed command can run code the agent wrote.",
+    "Mode store lists the command tests, which runs node --test and which the mode says has the effects: " +
+      "read, write; a listed command can run code the agent wrote.",
   );
   assert.equal(finding.severity, "warning");
-  assert.equal(finding.path, "/resources/commands/0");
+  assert.equal(finding.path, "/resources/commands/tests");
+  assert.equal(
+    finding.fix,
+    "Remove the command unless the mode cannot work without it. If it stays, review its words and its effects: " +
+      "the kernel believes the effects a mode lists and cannot check them.",
+  );
   assert.equal(report.errors, 0);
 });
 
+test("a listed command with no effects in a base mode is an error with a fix", async () => {
+  const commands = { tests: { run: "node --test", effects: [] } };
+  const manifest = yamlText({ ...storeMode, resources: { commands } });
+  const report = await check({ ...cleanFiles(), [paths.store]: manifest });
+  const finding = findFinding(report, paths.store, "The command tests of mode store lists no effects");
+  assert.equal(finding.severity, "error");
+  assert.equal(finding.path, "/resources/commands/tests/effects");
+  assert.match(finding.fix ?? "", /^List under resources\.commands\.tests\.effects in /);
+});
+
 test("a listed command in a mode outside components/base is an error", async () => {
-  const manifest = yamlText({ ...notesMode, resources: { commands: ["git status"] } });
+  const commands = { changes: { run: "git status", effects: ["read"] } };
+  const manifest = yamlText({ ...notesMode, resources: { commands } });
   const report = await check({ ...cleanFiles(), [paths.notes]: manifest });
-  const finding = findFinding(report, paths.notes, "Mode notes lists the command git status");
+  const finding = findFinding(report, paths.notes, "Mode notes lists the command changes, which runs git status");
   assert.equal(finding.severity, "error");
   assert.match(finding.message, /Only a mode under the kit's components\/base\/ may list commands\./);
 });
@@ -329,11 +347,12 @@ test("bay check reads each mode.yaml once", async () => {
 });
 
 test("a listed command in a kit mode outside components/base is an error and not also a warning", async () => {
-  const manifest = yamlText({ ...notesMode, resources: { commands: ["git status"] } });
+  const commands = { changes: { run: "git status", effects: ["read"] } };
+  const manifest = yamlText({ ...notesMode, resources: { commands } });
   const report = await check({ ...cleanFiles(), [paths.notes]: manifest });
   const notesFindings = report.findings.filter((finding) => finding.file === paths.notes);
   assert.deepEqual(
     notesFindings.map((finding) => [finding.severity, finding.path]),
-    [["error", "/resources/commands/0"]],
+    [["error", "/resources/commands/changes"]],
   );
 });

@@ -8,6 +8,7 @@ import {
   type Finding,
   type LoadedModeFolder,
 } from "./check-context.ts";
+import { listed } from "./answers.ts";
 import { checkImports, checkKernelImports } from "./check-imports.ts";
 import { checkKitLayout, checkLayout } from "./check-layout.ts";
 import { checkLimits } from "./check-limits.ts";
@@ -29,12 +30,15 @@ export type CheckReport = {
 };
 
 function commandProblems(mode: LoadedModeFolder): readonly Problem[] {
-  const commands = mode.manifest.resources?.commands ?? [];
-  return commands.map((command, index) =>
-    mode.at(["resources", "commands", index], {
+  const commands = Object.entries(mode.manifest.resources?.commands ?? {});
+  return commands.map(([name, command]) =>
+    mode.at(["resources", "commands", name], {
       message:
-        `Mode ${mode.manifest.name} lists the command ${command}; ` + "a listed command can run code the agent wrote.",
-      fix: "Remove the command unless the mode's skills cannot work without it, and review it if it stays.",
+        `Mode ${mode.manifest.name} lists the command ${name}, which runs ${command.run} and which the mode says ` +
+        `has the effects: ${listed(command.effects, "none")}; a listed command can run code the agent wrote.`,
+      fix:
+        "Remove the command unless the mode cannot work without it. If it stays, review its words and its effects: " +
+        "the kernel believes the effects a mode lists and cannot check them.",
     }),
   );
 }

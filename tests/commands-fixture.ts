@@ -28,8 +28,8 @@ const commandScript = [
   "  const filled = (text) => (secret?.ok === true ? text.replaceAll('{secret}', secret.value) : text);",
   "  const answers = [];",
   "  for (const request of input.requests) {",
-  "    const command = Array.isArray(request.command) ? request.command.map(filled) : request.command;",
-  "    answers.push(await context.commands.run({ ...request, command }));",
+  "    const given = Array.isArray(request.arguments) ? request.arguments.map(filled) : request.arguments;",
+  "    answers.push(await context.commands.run({ ...request, arguments: given }));",
   "  }",
   "  const leaks = answers.map((answer) => secret?.ok === true && JSON.stringify(answer).includes(secret.value));",
   '  return { answers, leaks, after: "the script went on" };',
@@ -37,8 +37,13 @@ const commandScript = [
   "",
 ].join("\n");
 
+export type Listed = {
+  readonly run: string;
+  readonly effects?: readonly Effect[];
+};
+
 export type CommandMode = {
-  readonly commands: readonly string[];
+  readonly commands: Readonly<Record<string, Listed>>;
   readonly effects?: readonly Effect[];
   readonly tier?: "base" | "modes";
 };
@@ -54,6 +59,15 @@ async function written(root: string, path: string, text: string): Promise<void> 
   await writeFile(join(root, path), text, "utf8");
 }
 
+function listedCommands(commands: Readonly<Record<string, Listed>>): Json {
+  return Object.fromEntries(
+    Object.entries(commands).map(([name, listed]) => [
+      name,
+      { run: listed.run, effects: [...(listed.effects ?? everyEffect)] },
+    ]),
+  );
+}
+
 export async function makeCommandKit(mode: CommandMode): Promise<CommandKit> {
   const root = await realpath(await mkdtemp(join(tmpdir(), "agentbay-commands-")));
   const folder = `components/${mode.tier ?? "base"}/command-prober`;
@@ -61,7 +75,7 @@ export async function makeCommandKit(mode: CommandMode): Promise<CommandKit> {
     name: "command-prober",
     version: "1.0.0",
     description: "Runs the commands a test asks for.",
-    resources: { commands: [...mode.commands], secrets: [secretName] },
+    resources: { commands: listedCommands(mode.commands), secrets: [secretName] },
     actions: {
       go: {
         description: "When a test runs commands.",
@@ -99,7 +113,8 @@ export async function openCommandKernel(
 }
 
 export type CommandAsked = {
-  readonly command: Json;
+  readonly name: Json;
+  readonly arguments?: Json;
   readonly folder?: Json;
   readonly timeLimitSeconds?: Json;
   readonly input?: Json;
@@ -117,7 +132,7 @@ export async function ranCommands(
   requests: readonly CommandAsked[],
   options: { readonly withSecret?: boolean } = {},
 ): Promise<Ran> {
-  const filled = requests.map((request) => ({ folder: ".", timeLimitSeconds: 30, ...request }));
+  const filled = requests.map((request) => ({ arguments: [], folder: ".", timeLimitSeconds: 30, ...request }));
   const input = { requests: filled, withSecret: options.withSecret === true, secretName };
   const started = await kernel.runs.start({ action: "command-prober.go" }, input);
   assert.ok(started.ok, JSON.stringify(started));

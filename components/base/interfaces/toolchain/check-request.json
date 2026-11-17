@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CheckRequest",
-  "description": "Which checkout to check, which checks to run there, and how long each may take.",
+  "description": "Which throwaway copy of the code to check, which checks to run there, and how long each may take. The checks may write inside the copy and nowhere else.",
   "type": "object",
   "additionalProperties": false,
   "required": ["folder"],
@@ -10,7 +10,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 1000,
-      "description": "The folder that holds a checkout of the code: inside the project, and given relative to it or in full."
+      "description": "A throwaway copy of the code that the caller made for this call and will remove afterwards; never a worktree a builder works in. It is inside the project, and given relative to it or in full. The toolchain's tools may write inside it, such as a build output or a cache, and write nothing outside it. A verdict is about the code as the caller gave it, so a second call on the same folder gives the same verdicts."
     },
     "checks": {
       "type": "array",

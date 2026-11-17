@@ -1082,7 +1082,7 @@ describe("inspectSystem", () => {
       ...validFiles(),
       "components/base/interfaces/mode.yaml": "name: stray\n",
       "components/base/interfaces/notes.md": "not an interface",
-      "components/base/typescript/README.md": "configs, not a mode",
+      "components/base/lint/README.md": "configs, not a mode",
     };
     const inspection = await inspectionOf({ files: rooted(files), layout });
     assert.deepEqual(

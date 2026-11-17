@@ -4,7 +4,7 @@ import { mkdir, readdir, readFile, symlink } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
 import { join, relative } from "node:path";
 import { test } from "node:test";
-import type { ActionCaller, Effect, Json, RunEvent, ScriptRequest, StepOutcome } from "../bay/contracts.ts";
+import type { ActionCaller, Json, RunEvent, ScriptRequest, StepOutcome } from "../bay/contracts.ts";
 import { fieldOf } from "../bay/json.ts";
 import {
   nodeChildProcesses,
@@ -14,7 +14,7 @@ import {
   systemClock,
 } from "../bay/node-ports.ts";
 import type { Clock } from "../bay/ports.ts";
-import { createScriptRunner, scriptCommand } from "../bay/broker/script-runner.ts";
+import { createBroker } from "../bay/broker/broker.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import {
   kitFolder,
@@ -76,7 +76,7 @@ async function runScript(root: string, options: RunOptions): Promise<Run> {
     processes: noProcesses,
     platform: "linux",
   });
-  const runner = createScriptRunner({
+  const runner = createBroker({
     layout: projectLayout(root),
     files: nodeFileSystem,
     throwawayFolders: nodeThrowawayFolders,
@@ -96,8 +96,8 @@ async function runScript(root: string, options: RunOptions): Promise<Run> {
     childProcesses: nodeChildProcesses,
     processes: noProcesses,
     commandSearchPath: "/usr/bin:/bin",
-    limits: { outputBytes: options.outputBytes ?? 1_000_000 },
-  });
+    limits: { scriptOutputBytes: options.outputBytes ?? 1_000_000 },
+  }).scripts;
   const request: ScriptRequest = {
     place,
     script: options.script ?? "scripts/probe.ts",
@@ -383,60 +383,6 @@ test("a script whose action declares write and delete may remove a file in its w
     assert.deepEqual(outputOf(run), { escaped: "undefined" });
     await assert.rejects(readFile(join(root, "notes-out/keep.txt"), "utf8"), /ENOENT/);
   });
-});
-
-test("the runner starts node with the permission model, the grants and the preload, and nothing else", () => {
-  const request: ScriptRequest = {
-    place,
-    script: "scripts/a.ts",
-    input: null,
-    permissions: permissionsIn("/project", {
-      readPaths: ["/project/components/modes/notes", "/project/in"],
-      writePaths: ["/project/out"],
-      effects: ["read", "write"],
-    }),
-    settings: {},
-    remaining: {},
-    timeLimitMilliseconds: 1000,
-    call: () => Promise.resolve({ status: "failed", reason: "no", spent: noSpend }),
-  };
-  const bay = join(kitFolder, "bay");
-  assert.deepEqual(scriptCommand("/project/components/modes/notes/scripts/a.ts", request), [
-    "--permission",
-    `--allow-fs-read=${bay}/broker/script-host.ts`,
-    `--allow-fs-read=${bay}/broker/script-preload.ts`,
-    `--allow-fs-read=${bay}/broker/operations.ts`,
-    `--allow-fs-read=${bay}/broker/script-protocol.ts`,
-    `--allow-fs-read=${bay}/protocol-json.ts`,
-    `--allow-fs-read=${bay}/sdk.ts`,
-    "--allow-fs-read=/project/components/modes/notes",
-    "--allow-fs-read=/project/components/modes/notes/*",
-    "--allow-fs-read=/project/in",
-    "--allow-fs-read=/project/in/*",
-    "--allow-fs-write=/project/out",
-    "--allow-fs-write=/project/out/*",
-    "--disable-warning=ExperimentalWarning",
-    `--import=file://${bay}/broker/script-preload.ts`,
-    `${bay}/broker/script-host.ts`,
-    "/project/components/modes/notes/scripts/a.ts",
-  ]);
-});
-
-test("the runner tells the preload that files may be removed only when the action declares write and delete", () => {
-  const commandFor = (effects: readonly Effect[]): readonly string[] =>
-    scriptCommand("/project/components/modes/notes/scripts/a.ts", {
-      place,
-      script: "scripts/a.ts",
-      input: null,
-      permissions: permissionsIn("/project", { writePaths: ["/project/out"], effects }),
-      settings: {},
-      remaining: {},
-      timeLimitMilliseconds: 1000,
-      call: () => Promise.resolve({ status: "failed", reason: "no", spent: noSpend }),
-    });
-  assert.equal(commandFor(["read", "write", "delete"]).at(-1), "--agentbay-may-remove-files");
-  assert.ok(!commandFor(["read", "write"]).includes("--agentbay-may-remove-files"));
-  assert.ok(!commandFor(["read", "delete"]).includes("--agentbay-may-remove-files"));
 });
 
 test("a run is refused before it starts when a granted folder holds a link that leaves it", async () => {

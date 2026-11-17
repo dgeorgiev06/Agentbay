@@ -77,13 +77,14 @@ features:
       - safety
   broker:
     purpose:
-      Every request for a database, file, secret, host or event passes through here, and it applies grants and
-      effects. Runs a mode's script in a confined child process and gives it the toolbox.
+      Runs a mode's script confined in a child process and gives it the toolbox, and does every operation a script
+      or an agent's tool asks for, by one rule of grants and effects.
     entry:
       - bay/broker/broker.ts
-      - bay/broker/script-runner.ts
       - bay/sdk.ts
     private:
+      - bay/broker/script-runner.ts
+      - bay/broker/step-broker.ts
       - bay/broker/file-access.ts
       - bay/broker/http-access.ts
       - bay/broker/database.ts

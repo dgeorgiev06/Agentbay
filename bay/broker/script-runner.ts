@@ -1,20 +1,9 @@
 import { resolve } from "node:path/posix";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { type Answer, manifestOf, refused } from "../answers.ts";
-import { type BrokerLimits, brokerForStep, type StepBroker } from "./broker.ts";
-import type {
-  Child,
-  ChildEnd,
-  ChildProcesses,
-  ChildRequest,
-  Clock,
-  FileInspector,
-  FileSystem,
-  Http,
-  Processes,
-  ThrowawayFolders,
-} from "../ports.ts";
-import type { EventSink, RunEvent, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "../contracts.ts";
+import { openStep, type OpenStep, type StepBrokerLimits, type StepServices } from "./step-broker.ts";
+import type { Child, ChildEnd, ChildRequest } from "../ports.ts";
+import type { RunEvent, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "../contracts.ts";
 import { mayRemoveFiles, writableFolders } from "./rule.ts";
 import { escapingLinks } from "./folder-links.ts";
 import {
@@ -25,28 +14,15 @@ import {
   shapes,
   shownToAuthor,
 } from "./operations.ts";
-import { isInsideOrEqual, shownPath, type Layout } from "../layout.ts";
+import { isInsideOrEqual, shownPath } from "../layout.ts";
 import { type AskedFor, type ChildMessage, childMessageOf, removalAllowedArgument } from "./script-protocol.ts";
-import type { SecretStore } from "../secrets.ts";
 
-export type ScriptRunnerLimits = {
-  readonly outputBytes: number;
+type ScriptRunnerLimits = StepBrokerLimits & {
+  readonly scriptOutputBytes: number;
 };
 
-export type ScriptRunnerOptions = {
-  readonly layout: Layout;
-  readonly files: FileSystem;
-  readonly throwawayFolders: ThrowawayFolders;
-  readonly inspector: FileInspector;
-  readonly http: Http;
-  readonly secrets: SecretStore;
-  readonly events: EventSink;
-  readonly clock: Clock;
-  readonly childProcesses: ChildProcesses;
-  readonly processes: Processes;
-  readonly commandSearchPath: string;
+export type ScriptRunnerOptions = StepServices & {
   readonly limits?: Partial<ScriptRunnerLimits>;
-  readonly brokerLimits?: Partial<BrokerLimits>;
 };
 
 type Final = Extract<ChildMessage, { readonly type: "done" | "failed" | "crashed" }>;
@@ -60,14 +36,14 @@ type RunState = {
 };
 
 type Started = {
-  readonly broker: StepBroker;
+  readonly broker: OpenStep;
   readonly request: ScriptRequest;
   readonly state: RunState;
 };
 
 type Running = Started & { readonly answering: Answering };
 
-const defaultScriptRunnerLimits: ScriptRunnerLimits = { outputBytes: 4 * 1024 * 1024 };
+const defaultScriptOutputBytes = 4 * 1024 * 1024;
 
 const bayFolder = fileURLToPath(new URL("..", import.meta.url));
 
@@ -172,7 +148,7 @@ function outcomeOf(
 }
 
 export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
-  const limits = { ...defaultScriptRunnerLimits, ...options.limits };
+  const limits = { outputBytes: options.limits?.scriptOutputBytes ?? defaultScriptOutputBytes };
   const zero = { items: 0, usd: 0, tokens: 0, minutes: 0 };
   const failure = (reason: string): StepOutcome => ({
     status: "failed",
@@ -180,7 +156,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     spent: zero,
   });
 
-  async function refusedBeforeStart(request: ScriptRequest, broker: StepBroker): Promise<string | undefined> {
+  async function refusedBeforeStart(request: ScriptRequest, broker: OpenStep): Promise<string | undefined> {
     const permissions = request.permissions.grants;
     const scriptFile = resolve(permissions.modeFolder, request.script);
     if (!isInsideOrEqual(scriptFile, permissions.modeFolder)) {
@@ -289,7 +265,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     if (milliseconds <= 0) {
       return failure("The step has no time left, so the script was not started.");
     }
-    const broker = brokerForStep({
+    const broker = openStep({
       layout: options.layout,
       permissions: request.permissions,
       place: request.place,
@@ -304,7 +280,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
       processes: options.processes,
       commandSearchPath: options.commandSearchPath,
       call: request.call,
-      limits: { databaseMilliseconds: milliseconds, commandMilliseconds: milliseconds, ...options.brokerLimits },
+      limits: { databaseMilliseconds: milliseconds, commandMilliseconds: milliseconds, ...options.limits },
     });
     try {
       const refusal = await refusedBeforeStart(request, broker);

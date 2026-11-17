@@ -1,6 +1,7 @@
 import { isBuiltin, registerHooks, syncBuiltinESMExports } from "node:module";
 import { Socket } from "node:net";
-import { removalAllowedArgument, sdkSpecifier } from "./script-protocol.ts";
+import { sdkSpecifier } from "../protocol-json.ts";
+import { removalAllowedArgument } from "./script-protocol.ts";
 
 const availableBuiltins: ReadonlySet<string> = new Set([
   "assert",

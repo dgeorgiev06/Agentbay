@@ -1,5 +1,7 @@
 import type { Json } from "./contracts.ts";
 
+export const sdkSpecifier = "agentbay/sdk";
+
 const deepestNesting = 64;
 
 function isRecordValue(value: unknown): value is Readonly<Record<string, unknown>> {

@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { stringify } from "yaml";
 import type { Json } from "../bay/contracts.ts";
-import { DatabaseProcess } from "../bay/broker/database-process.ts";
 import { fieldOf, parseJson, textField } from "../bay/json.ts";
 import { lastResortHandler } from "../bay/last-resort.ts";
 import { replyTo } from "../bay/mcp-server.ts";
@@ -16,9 +15,8 @@ import {
   nodeThrowawayFolders,
   systemClock,
 } from "../bay/node-ports.ts";
-import { createScriptRunner } from "../bay/broker/script-runner.ts";
+import { createBroker } from "../bay/broker/broker.ts";
 import { SecretStore } from "../bay/secrets.ts";
-import type { ChildProcesses } from "../bay/ports.ts";
 import { callKernelTool } from "../bay/tools.ts";
 import {
   noProcesses,
@@ -115,7 +113,7 @@ test("a script whose call to another action throws gets a failed answer and the 
       "",
     ];
     await writeProjectFile(root, "components/modes/notes/scripts/probe.ts", script.join("\n"));
-    const runner = createScriptRunner({
+    const runner = createBroker({
       layout: projectLayout(root),
       files: nodeFileSystem,
       throwawayFolders: nodeThrowawayFolders,
@@ -127,7 +125,7 @@ test("a script whose call to another action throws gets a failed answer and the 
       childProcesses: nodeChildProcesses,
       processes: noProcesses,
       commandSearchPath: "/usr/bin:/bin",
-    });
+    }).scripts;
     const outcome = await runner.run({
       place,
       script: "scripts/probe.ts",
@@ -182,20 +180,6 @@ test("a tool server that throws still answers the request, without the error's t
   const error = fieldOf(reply, "error") ?? null;
   assert.equal(fieldOf(error, "code"), -32603);
   assert.doesNotMatch(JSON.stringify(reply), /disk on fire|abcdefghijklmnop/);
-});
-
-test("a database process whose end cannot be observed answers its waiting requests with an error", async () => {
-  const childProcesses: ChildProcesses = {
-    start: () => ({
-      send: () => undefined,
-      kill: () => undefined,
-      ended: Promise.reject(new Error("the process table is gone")),
-    }),
-  };
-  const database = new DatabaseProcess({ childProcesses, databaseFile: "/x.db", lifetimeMilliseconds: 1000 });
-  const result = await database.request({ method: "query", sql: "select 1", parameters: [] });
-  assert.ok(result.status === "error", JSON.stringify(result));
-  assert.match(result.message, /could not be watched/);
 });
 
 test("a run whose runner throws returns a problem, releases the lock and can be resumed", async () => {

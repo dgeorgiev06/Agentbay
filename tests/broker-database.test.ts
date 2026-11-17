@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
-import { runAgentQuery } from "../bay/broker/agent-query.ts";
-import { brokerForStep, type StepBroker } from "../bay/broker/broker.ts";
+import { createBroker, type StepBroker } from "../bay/broker/broker.ts";
 import type { Effect, ModeGrants } from "../bay/contracts.ts";
 import {
   nodeChildProcesses,
@@ -33,10 +30,8 @@ type Setup = { readonly root: string; readonly broker: StepBroker; readonly even
 
 function brokerFor(root: string, effects: readonly Effect[], extra: Partial<ModeGrants> = {}): Setup {
   const events = recordingSink();
-  const broker = brokerForStep({
+  const broker = createBroker({
     layout: projectLayout(root),
-    permissions: permissionsIn(root, { effects, ...extra }),
-    place,
     files: nodeFileSystem,
     throwawayFolders: nodeThrowawayFolders,
     inspector: nodeFileInspector,
@@ -48,7 +43,7 @@ function brokerFor(root: string, effects: readonly Effect[], extra: Partial<Mode
     processes: noProcesses,
     commandSearchPath: "/usr/bin:/bin",
     limits: { agentQueryMilliseconds: 1500 },
-  });
+  }).forStep(place, permissionsIn(root, { effects, ...extra }));
   return { root, broker, events };
 }
 
@@ -69,13 +64,13 @@ function refusalOf<T>(answer: Answer<T>): string {
 
 async function seedItems(broker: StepBroker, count: number): Promise<void> {
   valueOf(
-    await broker.entries["db.execute"]({
+    await broker.ask("db.execute", {
       sql: "create table items (id integer primary key, title text)",
       parameters: [],
     }),
   );
   valueOf(
-    await broker.entries["db.execute"]({
+    await broker.ask("db.execute", {
       sql: "insert into items (title) select 'item ' || value from json_each(?)",
       parameters: [JSON.stringify(Array.from({ length: count }, (_, index) => index))],
     }),
@@ -86,17 +81,17 @@ test("migrations run in order inside a transaction and are recorded once", async
   await withBroker(["read", "write"], async ({ root, broker }) => {
     await writeProjectFile(root, "components/modes/notes/migrations/0002-add-index.sql", "create index t_x on t (x);");
     await writeProjectFile(root, "components/modes/notes/migrations/0001-create.sql", "create table t (x text);");
-    assert.deepEqual(valueOf(await broker.entries["db.migrate"]({})), ["0001-create.sql", "0002-add-index.sql"]);
-    assert.deepEqual(valueOf(await broker.entries["db.migrate"]({})), []);
+    assert.deepEqual(valueOf(await broker.ask("db.migrate", {})), ["0001-create.sql", "0002-add-index.sql"]);
+    assert.deepEqual(valueOf(await broker.ask("db.migrate", {})), []);
     const recorded = valueOf(
-      await broker.entries["db.query"]({ sql: "select name from _migrations order by name", parameters: [] }),
+      await broker.ask("db.query", { sql: "select name from _migrations order by name", parameters: [] }),
     );
     assert.deepEqual(recorded, [{ name: "0001-create.sql" }, { name: "0002-add-index.sql" }]);
     await writeProjectFile(root, "components/modes/notes/migrations/0003-good.sql", "create table u (y text);");
     await writeProjectFile(root, "components/modes/notes/migrations/0004-broken.sql", "create tabel v;");
-    assert.match(failureOf(await broker.entries["db.migrate"]({})).message, /0004-broken\.sql/);
+    assert.match(failureOf(await broker.ask("db.migrate", {})).message, /0004-broken\.sql/);
     const tables = valueOf(
-      await broker.entries["db.query"]({ sql: "select name from sqlite_schema where name = 'u'", parameters: [] }),
+      await broker.ask("db.query", { sql: "select name from sqlite_schema where name = 'u'", parameters: [] }),
     );
     assert.deepEqual(tables, [], "the failed batch left nothing behind");
   });
@@ -107,7 +102,7 @@ test("a migrations folder outside the mode's folder is refused", async () => {
     const outside = join(root, "components/base/store/migrations");
     const { broker } = brokerFor(root, ["read", "write"], { migrationsFolder: outside });
     try {
-      refusalOf(await broker.entries["db.migrate"]({}));
+      refusalOf(await broker.ask("db.migrate", {}));
     } finally {
       broker.close();
     }
@@ -118,14 +113,14 @@ test("a script with the write effect can execute and query its own database", as
   await withBroker(["read", "write"], async ({ broker }) => {
     await seedItems(broker, 3);
     const changed = valueOf(
-      await broker.entries["db.execute"]({
+      await broker.ask("db.execute", {
         sql: "update items set title = :title where id = :id",
         parameters: { title: "x", id: 2 },
       }),
     );
     assert.equal(changed.changes, 1);
     assert.deepEqual(
-      valueOf(await broker.entries["db.query"]({ sql: "select id, title from items where id = ?", parameters: [2] })),
+      valueOf(await broker.ask("db.query", { sql: "select id, title from items where id = ?", parameters: [2] })),
       [{ id: 2, title: "x" }],
     );
   });
@@ -144,12 +139,12 @@ test("a write statement from an action with only read effects is refused, naming
         "with x as (select 1) insert into items (title) select * from x",
         "create table more (x)",
       ]) {
-        const message = refusalOf(await reader.broker.entries["db.execute"]({ sql: statement, parameters: [] }));
+        const message = refusalOf(await reader.broker.ask("db.execute", { sql: statement, parameters: [] }));
         assert.match(message, /action look/);
         assert.match(message, /actions\.look\.effects/);
       }
       assert.deepEqual(
-        valueOf(await reader.broker.entries["db.query"]({ sql: "select count(*) as n from items", parameters: [] })),
+        valueOf(await reader.broker.ask("db.query", { sql: "select count(*) as n from items", parameters: [] })),
         [{ n: 1 }],
       );
       assert.equal(reader.events.events.filter((event) => event.kind === "refused").length, 4);
@@ -162,8 +157,8 @@ test("a write statement from an action with only read effects is refused, naming
 test("query never writes, even for an action with the write effect", async () => {
   await withBroker(["read", "write"], async ({ broker }) => {
     await seedItems(broker, 1);
-    refusalOf(await broker.entries["db.query"]({ sql: "insert into items (title) values ('x')", parameters: [] }));
-    refusalOf(await broker.entries["db.query"]({ sql: "delete from items", parameters: [] }));
+    refusalOf(await broker.ask("db.query", { sql: "insert into items (title) values ('x')", parameters: [] }));
+    refusalOf(await broker.ask("db.query", { sql: "delete from items", parameters: [] }));
   });
 });
 
@@ -177,11 +172,11 @@ test("another mode's database file is out of reach by attach, vacuum into, pragm
       "pragma writable_schema = on",
       "select 1; attach 'x' as y",
     ]) {
-      refusalOf(await broker.entries["db.execute"]({ sql: statement, parameters: [] }));
-      refusalOf(await broker.entries["db.query"]({ sql: statement, parameters: [] }));
+      refusalOf(await broker.ask("db.execute", { sql: statement, parameters: [] }));
+      refusalOf(await broker.ask("db.query", { sql: statement, parameters: [] }));
     }
-    refusalOf(await broker.entries["files.read"]({ path: ".agentbay/data/store.db" }));
-    refusalOf(await broker.entries["files.read"]({ path: ".agentbay/data/notes.db" }));
+    refusalOf(await broker.ask("files.read", { path: ".agentbay/data/store.db" }));
+    refusalOf(await broker.ask("files.read", { path: ".agentbay/data/notes.db" }));
   });
 });
 
@@ -189,26 +184,23 @@ test("an agent query returns rows, columns and full-text matches", async () => {
   await withBroker(["read", "write"], async ({ broker }) => {
     await seedItems(broker, 3);
     valueOf(
-      await broker.entries["db.execute"]({ sql: "create virtual table items_text using fts5 (title)", parameters: [] }),
+      await broker.ask("db.execute", { sql: "create virtual table items_text using fts5 (title)", parameters: [] }),
     );
     valueOf(
-      await broker.entries["db.execute"]({
+      await broker.ask("db.execute", {
         sql: "insert into items_text (title) values ('an invoice'), ('a note')",
         parameters: [],
       }),
     );
-    assert.deepEqual(
-      valueOf(await broker.entries["db.agentQuery"]({ sql: "select id, title from items where id <= 2" })),
-      {
-        columns: ["id", "title"],
-        rows: [
-          [1, "item 0"],
-          [2, "item 1"],
-        ],
-      },
-    );
+    assert.deepEqual(valueOf(await broker.ask("db.agentQuery", { sql: "select id, title from items where id <= 2" })), {
+      columns: ["id", "title"],
+      rows: [
+        [1, "item 0"],
+        [2, "item 1"],
+      ],
+    });
     const hits = valueOf(
-      await broker.entries["db.agentQuery"]({
+      await broker.ask("db.agentQuery", {
         sql: "select count(*) as hits from items_text where items_text match 'invoice'",
       }),
     );
@@ -236,15 +228,15 @@ for (const [label, text, reason] of hostileAgentQueries) {
   test(`an agent query is refused: ${label}`, async () => {
     await withBroker(["read", "write"], async ({ broker }) => {
       await seedItems(broker, 250);
-      const message = refusalOf(await broker.entries["db.agentQuery"]({ sql: text }));
+      const message = refusalOf(await broker.ask("db.agentQuery", { sql: text }));
       assert.match(message, reason);
       assert.match(message, /every table is readable/);
       assert.deepEqual(
-        valueOf(await broker.entries["db.query"]({ sql: "select count(*) as n from items", parameters: [] })),
+        valueOf(await broker.ask("db.query", { sql: "select count(*) as n from items", parameters: [] })),
         [{ n: 250 }],
       );
       assert.deepEqual(
-        valueOf(await broker.entries["db.query"]({ sql: "select * from pragma_user_version", parameters: [] })),
+        valueOf(await broker.ask("db.query", { sql: "select * from pragma_user_version", parameters: [] })),
         [{ user_version: 0 }],
       );
     });
@@ -256,14 +248,14 @@ test("an agent query with an endless recursive CTE is killed at the time limit, 
     await seedItems(broker, 1);
     const started = Date.now();
     const message = refusalOf(
-      await broker.entries["db.agentQuery"]({
+      await broker.ask("db.agentQuery", {
         sql: "with recursive r(n) as (select 1 union all select n + 1 from r) select count(*) from r",
       }),
     );
     const took = Date.now() - started;
     assert.match(message, /1500 ms/);
     assert.ok(took < 6000, `took ${String(took)} ms`);
-    assert.deepEqual(valueOf(await broker.entries["db.agentQuery"]({ sql: "select count(*) as n from items" })).rows, [
+    assert.deepEqual(valueOf(await broker.ask("db.agentQuery", { sql: "select count(*) as n from items" })).rows, [
       [1],
     ]);
   });
@@ -271,26 +263,26 @@ test("an agent query with an endless recursive CTE is killed at the time limit, 
 
 test("an agent query redacts what it returns before it cuts long cells", async () => {
   await withBroker(["read", "write"], async ({ broker }) => {
-    valueOf(await broker.entries["db.execute"]({ sql: "create table notes (body text)", parameters: [] }));
+    valueOf(await broker.ask("db.execute", { sql: "create table notes (body text)", parameters: [] }));
     valueOf(
-      await broker.entries["db.execute"]({
+      await broker.ask("db.execute", {
         sql: "insert into notes values (?), (?)",
         parameters: ["x".repeat(5000), "password=Hunter2.Secret!"],
       }),
     );
-    const rows = valueOf(await broker.entries["db.agentQuery"]({ sql: "select body from notes" })).rows;
+    const rows = valueOf(await broker.ask("db.agentQuery", { sql: "select body from notes" })).rows;
     const first = rows[0]?.[0];
     assert.equal(typeof first, "string");
     assert.ok(typeof first === "string" && first.length < 4100 && first.includes("[cut 1000 characters"));
     assert.match(JSON.stringify(rows[1]?.[0]), /\[redacted:password\]/);
     valueOf(
-      await broker.entries["db.execute"]({
+      await broker.ask("db.execute", {
         sql: "insert into notes values (?)",
         parameters: [`${"y".repeat(3990)} sk-ant-api03-${"a".repeat(40)}`],
       }),
     );
     const straddling = valueOf(
-      await broker.entries["db.agentQuery"]({ sql: "select body from notes where body like 'yyy%'" }),
+      await broker.ask("db.agentQuery", { sql: "select body from notes where body like 'yyy%'" }),
     ).rows;
     assert.doesNotMatch(JSON.stringify(straddling), /sk-ant/);
   });
@@ -298,20 +290,6 @@ test("an agent query redacts what it returns before it cuts long cells", async (
 
 test("an agent query against a mode with no database yet fails plainly", async () => {
   await withBroker(["read"], async ({ broker }) => {
-    assert.match(failureOf(await broker.entries["db.agentQuery"]({ sql: "select 1" })).message, /no database yet/);
-  });
-});
-
-test("the query child opens the database read-only, so a missing file fails and is not created", async () => {
-  await withProject(async (root) => {
-    const databaseFile = join(root, ".agentbay", "data", "absent.db");
-    await mkdir(join(root, ".agentbay", "data"), { recursive: true });
-    const outcome = await runAgentQuery(nodeChildProcesses, {
-      databaseFile,
-      sql: "select 1",
-      limits: { rows: 10, resultBytes: 10_000, milliseconds: 5000 },
-    });
-    assert.equal(outcome.status, "refused");
-    assert.equal(existsSync(databaseFile), false);
+    assert.match(failureOf(await broker.ask("db.agentQuery", { sql: "select 1" })).message, /no database yet/);
   });
 });

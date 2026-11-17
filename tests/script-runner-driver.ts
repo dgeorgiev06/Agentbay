@@ -6,12 +6,12 @@ import {
   nodeThrowawayFolders,
   systemClock,
 } from "../bay/node-ports.ts";
-import { createScriptRunner } from "../bay/broker/script-runner.ts";
+import { createBroker } from "../bay/broker/broker.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import { noProcesses, permissionsIn, place, projectLayout, recordingSink, scriptedHttp } from "./broker-fixture.ts";
 
 async function main(root: string): Promise<void> {
-  const runner = createScriptRunner({
+  const runner = createBroker({
     layout: projectLayout(root),
     files: nodeFileSystem,
     throwawayFolders: nodeThrowawayFolders,
@@ -23,7 +23,7 @@ async function main(root: string): Promise<void> {
     childProcesses: nodeChildProcesses,
     processes: noProcesses,
     commandSearchPath: "/usr/bin:/bin",
-  });
+  }).scripts;
   const outcome = await runner.run({
     place,
     script: join("scripts", "probe.ts"),

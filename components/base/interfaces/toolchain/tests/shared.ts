@@ -51,6 +51,7 @@ type Toolchain = {
   readonly check: (input: Fields) => Promise<Value>;
   readonly test: (input: Fields) => Promise<Value>;
   readonly failure: (action: string, input: Fields) => Promise<string>;
+  readonly whyInconclusive: (outputs: readonly Value[]) => string;
   readonly write: (label: string, wanted: Wanted) => Promise<string>;
   readonly filesIn: (folder: string) => Promise<Files>;
   readonly projectOutsideTheFolders: () => Promise<Files>;
@@ -185,6 +186,37 @@ function verdictsOf(output: Value): readonly Value[] {
   return verdicts;
 }
 
+function reasonsGiven(outputs: readonly Value[]): readonly string[] {
+  return outputs.flatMap((output) => {
+    const { name, verdict, reason } = fieldsOf(output);
+    if (verdict !== "inconclusive" || typeof reason !== "string") {
+      return [];
+    }
+    return [typeof name === "string" ? `${name}: ${reason}` : reason];
+  });
+}
+
+function assertShown(shown: unknown, expected: unknown, whyInconclusive: string): void {
+  try {
+    assert.deepEqual(shown, expected);
+  } catch (error) {
+    if (whyInconclusive === "" || !(error instanceof assert.AssertionError)) {
+      throw error;
+    }
+    const message = `${error.message}\n${whyInconclusive}`;
+    throw new assert.AssertionError({ message, actual: shown, expected, operator: "deepStrictEqual" });
+  }
+}
+
+function assertVerdicts(toolchain: Toolchain, output: Value, expected: readonly Fields[]): void {
+  const verdicts = verdictsOf(output);
+  assertShown(verdicts.map(shownVerdict), expected, toolchain.whyInconclusive(verdicts));
+}
+
+function assertTestResult(toolchain: Toolchain, output: Value, expected: Fields): void {
+  assertShown(shownTestResult(output), expected, toolchain.whyInconclusive([output]));
+}
+
 function lineOf(check: string): string {
   return `${check} wrote this line`;
 }
@@ -272,8 +304,7 @@ const cases: readonly Case[] = [
     run: async (toolchain) => {
       const description = await toolchain.describe();
       const folder = await toolchain.write("all-pass", allPassing(description, [sums]));
-      const verdicts = verdictsOf(await toolchain.check({ folder }));
-      assert.deepEqual(verdicts.map(shownVerdict), description.checks.map(passed));
+      assertVerdicts(toolchain, await toolchain.check({ folder }), description.checks.map(passed));
     },
   },
   {
@@ -283,8 +314,7 @@ const cases: readonly Case[] = [
       const [first = ""] = description.checks;
       const wanted = { checks: wantedChecks(description.checks, { [first]: "fails" }), testFiles: [sums] };
       const folder = await toolchain.write("first-fails", wanted);
-      const verdicts = verdictsOf(await toolchain.check({ folder }));
-      assert.deepEqual(verdicts.map(shownVerdict), [
+      assertVerdicts(toolchain, await toolchain.check({ folder }), [
         { name: first, verdict: "failed", lastLine: lineOf(first) },
         ...description.checks.slice(1).map(passed),
       ]);
@@ -307,7 +337,7 @@ const cases: readonly Case[] = [
         toolchain.check({ folder, checks: asked, timeLimitSeconds: waitedSeconds }),
       );
       assert.ok(seconds < waitedSeconds, String(seconds));
-      assert.deepEqual(verdictsOf(result).map(shownVerdict), [...asked].reverse().map(passed));
+      assertVerdicts(toolchain, result, [...asked].reverse().map(passed));
     },
   },
   {
@@ -336,18 +366,17 @@ const cases: readonly Case[] = [
       const [first = ""] = description.checks;
       const wanted = { checks: wantedChecks(description.checks, { [first]: "does not end" }), testFiles: [] };
       const folder = await toolchain.write("first-does-not-end", wanted);
-      const verdicts = verdictsOf(await toolchain.check({ folder, timeLimitSeconds: stopAfterSeconds }));
-      const seconds = secondsOf(verdicts[0] ?? null);
+      const output = await toolchain.check({ folder, timeLimitSeconds: stopAfterSeconds });
+      const seconds = secondsOf(verdictsOf(output)[0] ?? null);
       assert.ok(seconds >= stopAfterSeconds && seconds < stopAfterSeconds + waitedSeconds, String(seconds));
-      assert.deepEqual(verdicts.map(shownVerdict), [inconclusive(first), ...description.checks.slice(1).map(passed)]);
+      assertVerdicts(toolchain, output, [inconclusive(first), ...description.checks.slice(1).map(passed)]);
     },
   },
   {
     name: "in a folder that does not exist every check could not be run, so each is inconclusive",
     run: async (toolchain) => {
       const description = await toolchain.describe();
-      const verdicts = verdictsOf(await toolchain.check({ folder: missingFolder }));
-      assert.deepEqual(verdicts.map(shownVerdict), description.checks.map(inconclusive));
+      assertVerdicts(toolchain, await toolchain.check({ folder: missingFolder }), description.checks.map(inconclusive));
     },
   },
   {
@@ -355,7 +384,7 @@ const cases: readonly Case[] = [
     run: async (toolchain) => {
       const description = await toolchain.describe();
       const folder = await toolchain.write("tests-pass", allPassing(description, [sums, words]));
-      assert.deepEqual(shownTestResult(await toolchain.test({ folder })), {
+      assertTestResult(toolchain, await toolchain.test({ folder }), {
         verdict: "passed",
         passed: 3,
         failed: 0,
@@ -368,7 +397,7 @@ const cases: readonly Case[] = [
     run: async (toolchain) => {
       const description = await toolchain.describe();
       const folder = await toolchain.write("one-test-fails", allPassing(description, [sums, wrongSum]));
-      assert.deepEqual(shownTestResult(await toolchain.test({ folder })), {
+      assertTestResult(toolchain, await toolchain.test({ folder }), {
         verdict: "failed",
         passed: 2,
         failed: 1,
@@ -381,17 +410,18 @@ const cases: readonly Case[] = [
     run: async (toolchain) => {
       const description = await toolchain.describe();
       const folder = await toolchain.write("named-files", allPassing(description, [sums, wrongSum]));
-      const results: Fields[] = [];
+      const outputs: Value[] = [];
       for (const file of testFilesOf(description, await toolchain.filesIn(folder))) {
-        results.push(shownTestResult(await toolchain.test({ folder, files: [file] })));
+        outputs.push(await toolchain.test({ folder, files: [file] }));
       }
-      const byVerdict = [...results].sort((left, right) =>
-        JSON.stringify(left.verdict).localeCompare(JSON.stringify(right.verdict)),
-      );
-      assert.deepEqual(byVerdict, [
+      const byVerdict = outputs
+        .map(shownTestResult)
+        .sort((left, right) => JSON.stringify(left.verdict).localeCompare(JSON.stringify(right.verdict)));
+      const expected = [
         { verdict: "failed", passed: 0, failed: 1, failedTests: ["a sum that is wrong"] },
         { verdict: "passed", passed: 2, failed: 0, failedTests: [] },
-      ]);
+      ];
+      assertShown(byVerdict, expected, toolchain.whyInconclusive(outputs));
     },
   },
   {
@@ -402,7 +432,7 @@ const cases: readonly Case[] = [
       const output = await toolchain.test({ folder, timeLimitSeconds: stopAfterSeconds });
       const seconds = secondsOf(output);
       assert.ok(seconds >= stopAfterSeconds && seconds < stopAfterSeconds + waitedSeconds, String(seconds));
-      assert.deepEqual(shownTestResult(output), { verdict: "inconclusive", reason: givenReason });
+      assertTestResult(toolchain, output, { verdict: "inconclusive", reason: givenReason });
     },
   },
   {
@@ -410,7 +440,7 @@ const cases: readonly Case[] = [
     run: async (toolchain) => {
       const description = await toolchain.describe();
       const folder = await toolchain.write("no-tests", allPassing(description, []));
-      assert.deepEqual(shownTestResult(await toolchain.test({ folder })), {
+      assertTestResult(toolchain, await toolchain.test({ folder }), {
         verdict: "inconclusive",
         reason: givenReason,
       });
@@ -419,7 +449,7 @@ const cases: readonly Case[] = [
   {
     name: "a test run in a folder that does not exist could not be run, so it is inconclusive",
     run: async (toolchain) => {
-      assert.deepEqual(shownTestResult(await toolchain.test({ folder: missingFolder })), {
+      assertTestResult(toolchain, await toolchain.test({ folder: missingFolder }), {
         verdict: "inconclusive",
         reason: givenReason,
       });
@@ -450,9 +480,10 @@ const cases: readonly Case[] = [
         test: { verdict: "failed", passed: 2, failed: 1, failedTests: ["a sum that is wrong"] },
       };
       for (const call of ["first", "second"]) {
-        const verdicts = verdictsOf(await toolchain.check({ folder })).map(shownVerdict);
-        const test = shownTestResult(await toolchain.test({ folder }));
-        assert.deepEqual({ call, verdicts, test }, { call, ...expected });
+        const verdicts = verdictsOf(await toolchain.check({ folder }));
+        const test = await toolchain.test({ folder });
+        const shown = { call, verdicts: verdicts.map(shownVerdict), test: shownTestResult(test) };
+        assertShown(shown, { call, ...expected }, toolchain.whyInconclusive([...verdicts, test]));
       }
     },
   },
@@ -513,6 +544,15 @@ function toolchainFor(project: ModeProject, underTest: ToolchainUnderTest, setti
     check: (input) => project.output(reference("check"), { timeLimitSeconds: checkSeconds, ...given(input) }),
     test: (input) => project.output(reference("test"), { timeLimitSeconds: testSeconds, ...given(input) }),
     failure: (action, input) => project.failure(reference(action), given(input)),
+    whyInconclusive: (outputs) => {
+      const reasons = reasonsGiven(outputs);
+      if (reasons.length === 0) {
+        return "";
+      }
+      const lines = ["The toolchain gave these reasons for its inconclusive verdicts:", ...reasons];
+      const untrusted = project.untrustedSentence(reference("check"));
+      return [...lines, ...(untrusted === "" ? [] : [untrusted])].join("\n");
+    },
     write: async (label, wanted) => {
       const folder = join(checkoutsFolder, `case-${String(setting.index + 1)}-${label}`);
       setting.foldersSetAside.add(join(project.root, folder));

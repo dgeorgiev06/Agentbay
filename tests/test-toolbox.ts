@@ -86,6 +86,7 @@ export type ModeProject = {
   readonly output: (reference: string, input: Json, options?: CallOptions) => Promise<Json>;
   readonly failure: (reference: string, input: Json, options?: CallOptions) => Promise<string>;
   readonly refusal: (reference: string, input: Json) => Promise<string>;
+  readonly untrustedSentence: (reference: string) => string;
   readonly runWorkflow: (mode: string, path: string, input: Json) => Promise<Run>;
   readonly answer: (token: string, output: Json) => Promise<Run>;
   readonly answerRefusal: (token: string, output: Json) => Promise<string>;
@@ -143,17 +144,18 @@ function refusalOf<Value>(result: Outcome<Value>, what: string): string {
   return result.problems.map((problem) => problem.message).join(" ");
 }
 
-function trustSentence(untrusted: ReadonlySet<string>, reference: string): string {
+function untrustedSentenceOf(untrusted: ReadonlySet<string>, reference: string): string {
   const mode = reference.split(".")[0] ?? "";
   return untrusted.has(mode)
-    ? " A test runs the commands of a mode outside the kit's components/base/ only when it trusts the mode. " +
+    ? "A test runs the commands of a mode outside the kit's components/base/ only when it trusts the mode. " +
         `Name it where the test opens the project: { project: import.meta.dirname, trusted: ["${mode}"] }.`
     : "";
 }
 
-function outputOf(run: Run, untrusted: ReadonlySet<string>, reference: string): Json {
+function outputOf(run: Run, untrustedSentence: string): Json {
   if (run.state.status !== "done") {
-    assert.fail(`expected the run to be done, got ${JSON.stringify(run.state)}.${trustSentence(untrusted, reference)}`);
+    const sentences = [`expected the run to be done, got ${JSON.stringify(run.state)}.`, untrustedSentence];
+    assert.fail(sentences.filter((sentence) => sentence !== "").join(" "));
   }
   return run.state.output;
 }
@@ -365,9 +367,11 @@ async function projectIn(root: string, opening: Opening): Promise<ModeProject> {
   return {
     root,
     run,
-    output: async (reference, input, options) => outputOf(await run(reference, input, options), untrusted, reference),
+    output: async (reference, input, options) =>
+      outputOf(await run(reference, input, options), untrustedSentenceOf(untrusted, reference)),
     failure: async (reference, input, options) => reasonOf(await run(reference, input, options)),
     refusal: async (reference, input) => refusalOf(await started(reference, input), reference),
+    untrustedSentence: (reference) => untrustedSentenceOf(untrusted, reference),
     runWorkflow: async (mode, path, input) => accepted(await runs.start({ workflow: { mode, path } }, input)),
     answer: async (token, output) => accepted(await runs.submit(token, { output, spent: nothingSpent })),
     answerRefusal: async (token, output) =>

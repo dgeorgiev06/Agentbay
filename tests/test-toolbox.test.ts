@@ -79,6 +79,7 @@ test("a project opened with the modes of a project beside the kit offers these o
       "runWorkflow",
       "runs",
       "setTime",
+      "untrustedSentence",
     ]);
     assert.deepEqual(await project.output("greeter.fetch", { name: "Ada" }), { greeting: "Hello, Ada" });
   });
@@ -318,6 +319,13 @@ async function filesUnder(folder: string): Promise<Readonly<Record<string, strin
   }
 }
 
+function untrustedSentence(mode: string): string {
+  return (
+    "A test runs the commands of a mode outside the kit's components/base/ only when it trusts the mode. " +
+    `Name it where the test opens the project: { project: import.meta.dirname, trusted: ["${mode}"] }.`
+  );
+}
+
 async function kernelFolders(beside: Project): Promise<unknown> {
   return [await filesUnder(join(kit, ".agentbay")), await filesUnder(join(beside.root, ".agentbay"))];
 }
@@ -329,6 +337,9 @@ test("a project's mode the test trusts runs its listed command and one it does n
   try {
     assert.deepEqual(await project.output("echoer.say", {}), { said: "said by echoer\n" });
     assert.equal(await project.failure("chimer.say", {}), refusedSay("chimer"));
+    assert.equal(project.untrustedSentence("echoer.say"), "");
+    assert.equal(project.untrustedSentence("chimer.say"), untrustedSentence("chimer"));
+    assert.equal(project.untrustedSentence("greeter.fetch"), "");
     const record: unknown = JSON.parse(await readFile(join(project.root, ".agentbay/trust.json"), "utf8"));
     const given = isRecord(record) && isRecord(record.modes) ? record.modes.echoer : undefined;
     assert.ok(isRecord(given), JSON.stringify(record));
@@ -368,13 +379,7 @@ test("without trusted, a project's mode loads and its listed command is refused 
     await assert.rejects(project.output("echoer.say", {}), (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.ok(error.message.includes(refusedSay("echoer")), error.message);
-      assert.ok(
-        error.message.endsWith(
-          "A test runs the commands of a mode outside the kit's components/base/ only when it trusts the mode. " +
-            'Name it where the test opens the project: { project: import.meta.dirname, trusted: ["echoer"] }.',
-        ),
-        error.message,
-      );
+      assert.ok(error.message.endsWith(` ${untrustedSentence("echoer")}`), error.message);
       return true;
     });
     await assert.rejects(readFile(join(project.root, ".agentbay/trust.json"), "utf8"), { code: "ENOENT" });

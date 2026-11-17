@@ -27,7 +27,7 @@ export type Requests = {
   readonly "db.execute": StatementRequest;
   readonly "db.query": StatementRequest;
   readonly "db.migrate": { readonly partition: string };
-  readonly "db.agentQuery": { readonly sql: string; readonly partition: string };
+  readonly "db.agentQuery": { readonly sql: string; readonly partition?: string };
   readonly "files.read": PathRequest;
   readonly "files.list": PathRequest;
   readonly "files.write": { readonly path: string; readonly text: string };
@@ -144,7 +144,10 @@ function agentQueryRequestOf(value: Json): Reading<Requests["db.agentQuery"]> {
   if (!isText(sql)) {
     return lacking("sql", "text");
   }
-  return isText(partition) ? read({ sql, partition }) : lacking("partition", "text");
+  if (partition === undefined) {
+    return read({ sql });
+  }
+  return isText(partition) ? read({ sql, partition }) : misgiven("partition", "text");
 }
 
 function pathRequestOf(value: Json): Reading<PathRequest> {

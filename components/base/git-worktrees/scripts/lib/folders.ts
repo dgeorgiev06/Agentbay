@@ -11,6 +11,10 @@ export function copyFolder(name: string): string {
   return `.forge/copies/${name}`;
 }
 
+export function targetFolder(into: string): string {
+  return `.forge/targets/${into}`;
+}
+
 export function sliceBranch(slice: string): string {
   return `forge/${slice}`;
 }

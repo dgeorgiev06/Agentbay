@@ -1,0 +1,9 @@
+{
+  "input": { "folder": ".forge/worktrees/mail-source", "into": "integration" },
+  "output": {
+    "how": "merged",
+    "branch": "forge/mail-source",
+    "into": "integration",
+    "commit": "3c5e7a9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c"
+  }
+}

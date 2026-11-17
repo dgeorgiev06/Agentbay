@@ -82,3 +82,17 @@ test("remove forgets a copy whose folder no longer exists, and says so", async (
     await project.close();
   }
 });
+
+test("merge says plainly that a worktree it made no longer exists", async () => {
+  const project = await openRepositoryProject();
+  try {
+    await cutAndLose(project);
+    git(project, ".", ["branch", "integration", "main"]);
+    assert.equal(
+      await project.failure("git-worktrees.merge", { folder: worktree, into: "integration" }),
+      "The folder .forge/worktrees/lost was made by this mode but no longer exists, so the mode does not merge it.",
+    );
+  } finally {
+    await project.close();
+  }
+});

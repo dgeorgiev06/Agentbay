@@ -34,6 +34,7 @@ test("the real bay check on the kit itself reports no errors, the two size warni
   const git =
     "git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false " +
     "--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+  const committing = `${git} -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0`;
   assert.deepEqual(findings, [
     listedGit(12, `${git} rev-parse --verify --quiet --end-of-options`),
     listedGit(13, `${git} config --show-scope --name-only --get-regexp ^filter\\.`),
@@ -53,6 +54,13 @@ test("the real bay check on the kit itself reports no errors, the two size warni
     listedGit(24, `${git} merge-base --is-ancestor --end-of-options`),
     listedGit(25, `${git} worktree remove --end-of-options`),
     listedGit(26, `${git} branch -d --end-of-options`),
+    listedGit(27, `${git} worktree add --end-of-options`),
+    listedGit(
+      28,
+      `${committing} merge --no-ff --no-edit --no-stat --no-verify --no-gpg-sign --no-verify-signatures ` +
+        "--no-autostash --no-rerere-autoupdate --end-of-options",
+    ),
+    listedGit(29, `${committing} merge --abort`),
     listed(9, "npm run generate:check --"),
     listed(10, "npm run typecheck --"),
     listed(11, "npm run lint --"),

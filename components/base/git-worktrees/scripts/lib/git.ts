@@ -7,8 +7,20 @@ const protections: readonly string[] = [
   "core.fsmonitor=false",
   "-c",
   "submodule.recurse=false",
-  "--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904",
 ];
+
+const emptyAttributes: readonly string[] = ["--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904"];
+
+const committer: readonly string[] = [
+  "-c",
+  "user.name=agentbay-git-worktrees",
+  "-c",
+  "user.email=git-worktrees@agentbay.invalid",
+  "-c",
+  "gc.auto=0",
+];
+
+const makesCommits: readonly string[] = ["merge", "commit"];
 
 const timeLimitSeconds = 300;
 
@@ -37,15 +49,20 @@ function refuseInOwnersCheckout(folder: string, subcommand: string): void {
   }
 }
 
+function optionsFor(subcommand: string): readonly string[] {
+  return [...protections, ...emptyAttributes, ...(makesCommits.includes(subcommand) ? committer : [])];
+}
+
 export async function git(context: ScriptContext, folder: string, gitArguments: readonly string[]): Promise<GitEnd> {
-  refuseInOwnersCheckout(folder, subcommandOf(gitArguments));
-  const command = ["git", ...protections, ...gitArguments];
+  const subcommand = subcommandOf(gitArguments);
+  refuseInOwnersCheckout(folder, subcommand);
+  const command = ["git", ...optionsFor(subcommand), ...gitArguments];
   const answer = await context.commands.run({ command, folder, timeLimitSeconds });
   if (!answer.ok) {
     return fail(answer.message);
   }
   const { end, stdout, stderr } = answer.value;
-  const named = `git ${subcommandOf(gitArguments)}`;
+  const named = `git ${subcommand}`;
   switch (end.how) {
     case "timed-out":
       return fail(`${named} did not finish within ${String(timeLimitSeconds)} seconds and was stopped.`);
@@ -59,7 +76,7 @@ export async function git(context: ScriptContext, folder: string, gitArguments: 
   }
 }
 
-function firstLine(text: string): string {
+export function firstLine(text: string): string {
   return text.split("\n").find((line) => line.trim() !== "") ?? "it gave no reason";
 }
 
@@ -91,6 +108,14 @@ export async function commitOf(context: ScriptContext, folder: string, commit: s
     return fail(`There is no commit ${commit} in the repository.`);
   }
   return ended.stdout.trim();
+}
+
+export async function isMerged(context: ScriptContext, branch: string, into: string): Promise<boolean> {
+  const ended = await git(context, ".", ["merge-base", "--is-ancestor", "--end-of-options", branch, into]);
+  if (ended.exitCode !== 0 && ended.exitCode !== 1) {
+    fail(`git merge-base failed: ${firstLine(ended.stderr)}`);
+  }
+  return ended.exitCode === 0;
 }
 
 export async function branchExists(context: ScriptContext, branch: string): Promise<boolean> {

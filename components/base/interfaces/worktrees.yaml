@@ -25,3 +25,7 @@ actions:
     input: worktrees/remove-request.json
     output: worktrees/remove-response.json
     effects: [read, write, network, spend, delete]
+  merge:
+    input: worktrees/merge-request.json
+    output: worktrees/merge-response.json
+    effects: [read, write, network, spend, delete]

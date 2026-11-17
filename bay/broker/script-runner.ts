@@ -49,8 +49,6 @@ export type ScriptRunnerOptions = {
   readonly brokerLimits?: Partial<BrokerLimits>;
 };
 
-type Spent = { items: number; usd: number; tokens: number };
-
 type Final = Extract<ChildMessage, { readonly type: "done" | "failed" | "crashed" }>;
 
 type Misread = Extract<ChildMessage, { readonly type: "unreadable-request" | "unread-answer" }>;
@@ -58,7 +56,6 @@ type Misread = Extract<ChildMessage, { readonly type: "unreadable-request" | "un
 type RunState = {
   final: Final | undefined;
   stopped: string | undefined;
-  readonly spent: Spent;
   readonly inFlight: Promise<void>[];
 };
 
@@ -131,7 +128,6 @@ function answeredByTheClass(started: Started): AnsweredByTheClass {
   return {
     "http.request": (request) => broker.request(request),
     call: (request) => calledAnswer(started, request),
-    spend: (request) => spentAnswer(started, request.spending),
     "commands.run": (request) => broker.runCommand(request),
   };
 }
@@ -149,18 +145,6 @@ async function calledAnswer(started: Started, request: Requests["call"]): Promis
       failed(`The call to ${request.reference} stopped at an unexpected error: ${errorLine(error)}`),
     );
   }
-}
-
-async function spentAnswer(started: Started, spending: Json): Promise<Answer<null>> {
-  const answer = await started.broker.spend(spending);
-  if (!answer.ok) {
-    return answer;
-  }
-  const spent = started.state.spent;
-  spent.items += answer.value.items;
-  spent.usd += answer.value.usd;
-  spent.tokens += answer.value.tokens;
-  return granted(null);
 }
 
 function answerFor<Name extends OperationName>(
@@ -315,7 +299,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     await Promise.all(state.inFlight);
     const minutes = (options.clock.now().getTime() - startedAt) / 60_000;
     const outcome = outcomeOf(state, end, { milliseconds, outputBytes: limits.outputBytes });
-    const spent: Spend = { ...state.spent, minutes };
+    const spent: Spend = { ...broker.spent(), minutes };
     if (outcome.status === "done") {
       return { status: "done", output: options.secrets.redactJson(outcome.output), spent };
     }
@@ -351,7 +335,6 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
       const state: RunState = {
         final: undefined,
         stopped: undefined,
-        spent: { items: 0, usd: 0, tokens: 0 },
         inFlight: [],
       };
       return await runChild({ broker, request, state }, milliseconds);

@@ -1,5 +1,7 @@
 import { granted, listed, manifestOf } from "../answers.ts";
 import type { Json } from "../contracts.ts";
+import { isJsonRecord } from "../protocol-json.ts";
+import type { Need, SpendAmounts } from "./effect-rule.ts";
 import { secretNamePattern } from "../policy.ts";
 import type { OperationName } from "./operations.ts";
 import {
@@ -13,13 +15,19 @@ import {
   type Step,
 } from "./rule.ts";
 
-export type OtherOperationName = Extract<OperationName, "secrets.get" | "events.emit">;
+export type OtherOperationName = Extract<OperationName, "secrets.get" | "events.emit" | "spend">;
 
 type DeclaredSecret = { readonly secret: string };
 
 type ScriptEvent = { readonly eventKind: string; readonly detail: Json };
 
 const brokerKinds: readonly string[] = ["refused", "http", "redacted", "command", "throwaway"];
+
+const noAmounts: SpendAmounts = { items: 0, usd: 0, tokens: 0 };
+
+const spendMeasures = ["items", "usd", "tokens"] as const;
+
+const spends: Need = { effect: "spend", because: "Spending more than nothing needs the spend effect" };
 
 function askedForSecret(name: string): string {
   return `The step asked for the secret ${name}`;
@@ -81,9 +89,54 @@ const eventsEmit: Definition<"events.emit", ScriptEvent> = {
   refusalDetail: noRefusalDetail,
 };
 
+function isAmount(value: Json | undefined): boolean {
+  return value === undefined || (typeof value === "number" && Number.isFinite(value) && value >= 0);
+}
+
+function amountOf(value: Json | undefined): number {
+  return typeof value === "number" ? value : 0;
+}
+
+function spendAmountsOf(spending: Json): SpendAmounts | undefined {
+  if (!isJsonRecord(spending) || !spendMeasures.every((measure) => isAmount(spending[measure]))) {
+    return undefined;
+  }
+  return { items: amountOf(spending.items), usd: amountOf(spending.usd), tokens: amountOf(spending.tokens) };
+}
+
+function isSpending(amounts: SpendAmounts): boolean {
+  return amounts.items > 0 || amounts.usd > 0 || amounts.tokens > 0;
+}
+
+const spend: Definition<"spend", SpendAmounts> = {
+  operation: "spend",
+  needs: (request) => (isSpending(spendAmountsOf(request.spending) ?? noAmounts) ? [spends] : []),
+  described: (request) => `report spending ${JSON.stringify(spendAmountsOf(request.spending) ?? noAmounts)}`,
+  rule: (request) => {
+    const amounts = spendAmountsOf(request.spending);
+    if (amounts === undefined) {
+      return Promise.resolve(
+        refusedWith({
+          resource: "spend",
+          asked: `The step reported the spending ${JSON.stringify(request.spending)}`,
+          declared: "spending is given as items, usd and tokens, each a number of at least 0",
+          change: "Report spending as { items, usd, tokens } with numbers of at least 0.",
+        }),
+      );
+    }
+    return Promise.resolve(allowedWith(amounts));
+  },
+  handler: (amounts, doing) => {
+    doing.addSpending(amounts);
+    return Promise.resolve(granted(null));
+  },
+  refusalDetail: noRefusalDetail,
+};
+
 export function otherEntries(step: Step): Entries<OtherOperationName> {
   return {
     "secrets.get": (request) => answered(secretsGet, request, step),
     "events.emit": (request) => answered(eventsEmit, request, step),
+    spend: (request) => answered(spend, request, step),
   };
 }

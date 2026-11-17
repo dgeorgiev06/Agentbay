@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
 import { Broker } from "../bay/broker/broker.ts";
-import type { Effect } from "../bay/contracts.ts";
+import type { Effect, Json } from "../bay/contracts.ts";
 import { effectRefusal, type BrokerOperation } from "../bay/broker/effect-rule.ts";
 import {
   nodeChildProcesses,
@@ -110,6 +110,11 @@ async function withBroker(
       broker.close();
     }
   });
+}
+
+async function spentThrough(broker: Broker, spending: Json): Promise<Answer<Json>> {
+  const answer = await broker.entries.spend({ spending });
+  return answer.ok ? { ok: true, value: broker.spent() } : answer;
 }
 
 function messageOf<T>(answer: Answer<T>): string {
@@ -227,12 +232,15 @@ test("http: a request needs network", async () => {
 
 test("spend: a report of more than nothing needs spend; a report of nothing needs no effect", async () => {
   await withBroker(["read"], async (broker) => {
-    assertRefusedFor(await broker.spend({ usd: 0.5 }), "spend");
-    assertRefusedFor(await broker.spend({ items: 1 }), "spend");
-    assert.deepEqual(await broker.spend({ items: 0, usd: 0 }), { ok: true, value: { items: 0, usd: 0, tokens: 0 } });
+    assertRefusedFor(await spentThrough(broker, { usd: 0.5 }), "spend");
+    assertRefusedFor(await spentThrough(broker, { items: 1 }), "spend");
+    assert.deepEqual(await spentThrough(broker, { items: 0, usd: 0 }), {
+      ok: true,
+      value: { items: 0, usd: 0, tokens: 0 },
+    });
   });
   await withBroker(["read", "spend"], async (broker) => {
-    assert.deepEqual(await broker.spend({ usd: 0.5 }), { ok: true, value: { items: 0, usd: 0.5, tokens: 0 } });
+    assert.deepEqual(await spentThrough(broker, { usd: 0.5 }), { ok: true, value: { items: 0, usd: 0.5, tokens: 0 } });
   });
 });
 
@@ -321,7 +329,7 @@ const brokerMethods: Readonly<Record<string, MethodRow>> = {
     needs: [],
     usesPorts: true,
   },
-  spend: { call: (broker) => broker.spend({ usd: 1 }), needs: ["spend"], usesPorts: false },
+  spend: { call: (broker) => broker.entries.spend({ spending: { usd: 1 } }), needs: ["spend"], usesPorts: false },
   runCommand: {
     call: (broker) => broker.runCommand({ command: ["node", "--version"], folder: ".", timeLimitSeconds: 30 }),
     needs: everyEffect,
@@ -329,7 +337,7 @@ const brokerMethods: Readonly<Record<string, MethodRow>> = {
   },
 };
 
-const notResourceMethods: readonly string[] = ["constructor", "close", "report"];
+const notResourceMethods: readonly string[] = ["constructor", "close", "report", "spent"];
 
 test("every broker method that serves a resource is in the table of the one rule", () => {
   const methods = Object.getOwnPropertyNames(Broker.prototype).filter((name) => !notResourceMethods.includes(name));

@@ -22,7 +22,7 @@ import {
   writeProjectFile,
 } from "./broker-fixture.ts";
 
-type Moved = keyof Broker["entries"] | "http.request" | "spend" | "commands.run";
+type Moved = keyof Broker["entries"] | "http.request" | "commands.run";
 
 type Asking = {
   readonly ask: (broker: Broker) => Promise<Answer<Json>>;
@@ -32,7 +32,7 @@ type Asking = {
 
 type Refusing = Asking & { readonly change: string; readonly detail?: { readonly [key: string]: Json } };
 
-type Allowed = Asking & { readonly value: Json; readonly recorded: readonly Json[] };
+type Allowed = Asking & { readonly value: Json; readonly recorded: readonly Json[]; readonly spent?: Json };
 
 type Two<T> = readonly [T, T];
 
@@ -81,6 +81,8 @@ const projectFolderOnly =
   'Give a folder of the project in the call to context.commands.run, such as "."; no manifest line allows another.';
 
 const allFive: readonly Effect[] = ["read", "write", "network", "spend", "delete"];
+
+const nothingSpent: Json = { items: 0, usd: 0, tokens: 0 };
 
 const fine: HttpResponse = { status: 200, headers: {}, body: "fine" };
 
@@ -622,25 +624,27 @@ const proofs: Proofs = {
   },
   spend: {
     withoutEffect: [
-      { ask: (broker) => broker.spend({ usd: 0.5 }), effects: [], change: spendNeeded },
-      { ask: (broker) => broker.spend({ items: 1 }), effects: every, change: spendNeeded },
+      { ask: (broker) => broker.entries.spend({ spending: { usd: 0.5 } }), effects: [], change: spendNeeded },
+      { ask: (broker) => broker.entries.spend({ spending: { items: 1 } }), effects: every, change: spendNeeded },
     ],
     outsideGrant: [
-      { ask: (broker) => broker.spend({ items: -1 }), effects: allFive, change: spendingShape },
-      { ask: (broker) => broker.spend({ usd: "x" }), effects: allFive, change: spendingShape },
+      { ask: (broker) => broker.entries.spend({ spending: { items: -1 } }), effects: allFive, change: spendingShape },
+      { ask: (broker) => broker.entries.spend({ spending: { usd: "x" } }), effects: allFive, change: spendingShape },
     ],
     allowed: [
       {
-        ask: (broker) => broker.spend({ usd: 0.5 }),
+        ask: (broker) => broker.entries.spend({ spending: { usd: 0.5 } }),
         effects: ["spend"],
-        value: { items: 0, usd: 0.5, tokens: 0 },
+        value: null,
         recorded: [],
+        spent: { items: 0, usd: 0.5, tokens: 0 },
       },
       {
-        ask: (broker) => broker.spend({ items: 2, tokens: 100 }),
+        ask: (broker) => broker.entries.spend({ spending: { items: 2, tokens: 100 } }),
         effects: ["spend"],
-        value: { items: 2, usd: 0, tokens: 100 },
+        value: null,
         recorded: [],
+        spent: { items: 2, usd: 0, tokens: 100 },
       },
     ],
   },
@@ -736,6 +740,7 @@ type Asked = {
   readonly before: string;
   readonly after: string;
   readonly sent: number;
+  readonly spent: Json;
 };
 
 async function treeOf(root: string, folder = root): Promise<readonly string[]> {
@@ -832,7 +837,7 @@ async function asked(asking: Asking): Promise<Asked> {
       const recorded = events.events.map((event) => shownJson({ kind: event.kind, detail: event.detail }, root));
       const after = (await treeOf(root)).join("\n");
       const sent = http.requests.length + processes.requests.length;
-      result = { answer: shownAnswer(answer, root), recorded, before, after, sent };
+      result = { answer: shownAnswer(answer, root), recorded, before, after, sent, spent: broker.spent() };
     } finally {
       broker.close();
     }
@@ -877,9 +882,10 @@ test("an operation outside its grant is refused and does nothing", async () => {
 test("an allowed operation answers and is recorded where it was before the move", async () => {
   for (const [name, proof] of Object.entries(proofs)) {
     for (const allowed of proof.allowed) {
-      const { answer, recorded } = await asked(allowed);
+      const { answer, recorded, spent } = await asked(allowed);
       assert.deepEqual(answer, { ok: true, value: allowed.value }, name);
       assert.deepEqual(recorded, allowed.recorded, name);
+      assert.deepEqual(spent, allowed.spent ?? nothingSpent, name);
     }
   }
 });

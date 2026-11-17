@@ -4,7 +4,7 @@ import type { Layout } from "../layout.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, ThrowawayFolders } from "../ports.ts";
 import type { SecretStore } from "../secrets.ts";
 import type { DatabaseProcess } from "./database-process.ts";
-import { type ActionAt, missingEffectRefusal, type Need } from "./effect-rule.ts";
+import { type ActionAt, missingEffectRefusal, type Need, type SpendAmounts } from "./effect-rule.ts";
 import { type OperationName, type Requests, type Results, shapes } from "./operations.ts";
 
 export type EntryRequests = Omit<Requests, "db.migrate"> & {
@@ -42,6 +42,7 @@ export type Doing = {
   readonly childProcesses: ChildProcesses;
   readonly limits: AgentQueryLimits;
   readonly record: (kind: string, detail: Json) => Promise<void>;
+  readonly addSpending: (amounts: SpendAmounts) => void;
   readonly databaseOf: (file: string) => DatabaseProcess;
   readonly migratedOnce: (migrate: () => Promise<Answer<readonly string[]>>) => Promise<Answer<readonly string[]>>;
 };

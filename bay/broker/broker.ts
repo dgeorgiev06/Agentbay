@@ -31,7 +31,6 @@ import { otherEntries, type OtherOperationName } from "./other-operations.ts";
 import { checkUrl, type Hop, loggedHeaders, nextRequest, redirectTarget, type UrlCheck } from "./http-access.ts";
 import { isInsideOrEqual, pathIn, shownPath, type Layout } from "../layout.ts";
 import type { SecretStore } from "../secrets.ts";
-import { isJsonRecord } from "../protocol-json.ts";
 import type { AgentQueryLimits, Entries, Step } from "./rule.ts";
 import type { CommandOutput, CommandRan, CommandRequest } from "../sdk.ts";
 
@@ -74,34 +73,6 @@ const defaultBrokerLimits: BrokerLimits = {
   commandOutputCharacters: 64 * 1024,
 };
 
-const noAmounts: SpendAmounts = { items: 0, usd: 0, tokens: 0 };
-
-const spendMeasures = ["items", "usd", "tokens"] as const;
-
-function isAmount(value: Json | undefined): boolean {
-  return value === undefined || (typeof value === "number" && Number.isFinite(value) && value >= 0);
-}
-
-function amountOf(value: Json | undefined): number {
-  return typeof value === "number" ? value : 0;
-}
-
-function spendAmountsOf(spending: Json): SpendAmounts | undefined {
-  if (!isJsonRecord(spending) || !spendMeasures.every((measure) => isAmount(spending[measure]))) {
-    return undefined;
-  }
-  return { items: amountOf(spending.items), usd: amountOf(spending.usd), tokens: amountOf(spending.tokens) };
-}
-
-function spendingRefusal(spending: Json): Answer<never> {
-  return refused({
-    resource: "spend",
-    asked: `The step reported the spending ${JSON.stringify(spending)}`,
-    declared: "spending is given as items, usd and tokens, each a number of at least 0",
-    change: "Report spending as { items, usd, tokens } with numbers of at least 0.",
-  });
-}
-
 type EntryName = FileOperationName | DatabaseOperationName | OtherOperationName;
 
 export class Broker {
@@ -111,6 +82,7 @@ export class Broker {
   readonly #limits: BrokerLimits;
   readonly #databases = new Map<string, DatabaseProcess>();
   #unnamedMigration: Promise<Answer<readonly string[]>> | undefined;
+  readonly #spent = { items: 0, usd: 0, tokens: 0 };
   readonly entries: Entries<EntryName>;
 
   constructor(options: BrokerOptions) {
@@ -138,6 +110,11 @@ export class Broker {
         childProcesses: options.childProcesses,
         limits: this.#limits,
         record: (kind, detail) => this.#append(kind, detail),
+        addSpending: (amounts) => {
+          this.#spent.items += amounts.items;
+          this.#spent.usd += amounts.usd;
+          this.#spent.tokens += amounts.tokens;
+        },
         databaseOf: (file) => this.#databaseOf(file),
         migratedOnce: (migrate) => {
           this.#unnamedMigration ??= migrate();
@@ -151,13 +128,6 @@ export class Broker {
   request(request: HttpRequest): Promise<Answer<HttpResponse>> {
     const operation = { kind: "http.request" as const, method: request.method, url: request.url };
     return this.#guarded(operation, () => this.#sendFollowingRedirects(request));
-  }
-
-  spend(spending: Json): Promise<Answer<SpendAmounts>> {
-    const amounts = spendAmountsOf(spending);
-    return this.#guarded({ kind: "spend", amounts: amounts ?? noAmounts }, () =>
-      Promise.resolve(amounts === undefined ? spendingRefusal(spending) : granted(amounts)),
-    );
   }
 
   runCommand(request: CommandRequest): Promise<Answer<CommandRan>> {
@@ -177,6 +147,10 @@ export class Broker {
       }
       return this.#ranCommand(request, folder.value, milliseconds.value);
     });
+  }
+
+  spent(): SpendAmounts {
+    return { ...this.#spent };
   }
 
   report<T>(answer: Answer<T>): Promise<Answer<T>> {

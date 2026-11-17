@@ -1,4 +1,4 @@
-import { granted, listed, manifestOf } from "../answers.ts";
+import { errorLine, failed, granted, listed, manifestOf } from "../answers.ts";
 import type { Json } from "../contracts.ts";
 import { isJsonRecord } from "../protocol-json.ts";
 import type { Need, SpendAmounts } from "./effect-rule.ts";
@@ -15,11 +15,13 @@ import {
   type Step,
 } from "./rule.ts";
 
-export type OtherOperationName = Extract<OperationName, "secrets.get" | "events.emit" | "spend">;
+export type OtherOperationName = Extract<OperationName, "secrets.get" | "events.emit" | "spend" | "call">;
 
 type DeclaredSecret = { readonly secret: string };
 
 type ScriptEvent = { readonly eventKind: string; readonly detail: Json };
+
+type CallToMake = { readonly target: string; readonly input: Json };
 
 const brokerKinds: readonly string[] = ["refused", "http", "redacted", "command", "throwaway"];
 
@@ -133,10 +135,27 @@ const spend: Definition<"spend", SpendAmounts> = {
   refusalDetail: noRefusalDetail,
 };
 
+const call: Definition<"call", CallToMake> = {
+  operation: "call",
+  needs: () => [],
+  described: (request) => `call ${request.reference}`,
+  rule: (request) => Promise.resolve(allowedWith({ target: request.reference, input: request.input })),
+  handler: async (called, doing) => {
+    try {
+      const outcome = await doing.call(called.target, called.input);
+      return outcome.status === "done" ? granted(outcome.output) : failed(outcome.reason);
+    } catch (error) {
+      return failed(`The call to ${called.target} stopped at an unexpected error: ${errorLine(error)}`);
+    }
+  },
+  refusalDetail: noRefusalDetail,
+};
+
 export function otherEntries(step: Step): Entries<OtherOperationName> {
   return {
     "secrets.get": (request) => answered(secretsGet, request, step),
     "events.emit": (request) => answered(eventsEmit, request, step),
     spend: (request) => answered(spend, request, step),
+    call: (request) => answered(call, request, step),
   };
 }

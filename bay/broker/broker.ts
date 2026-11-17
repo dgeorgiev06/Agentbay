@@ -12,7 +12,7 @@ import type {
   Processes,
   ThrowawayFolders,
 } from "../ports.ts";
-import type { Effect, EventSink, Json, ModeGrants, Permissions, StepPlace } from "../contracts.ts";
+import type { ActionCaller, Effect, EventSink, Json, ModeGrants, Permissions, StepPlace } from "../contracts.ts";
 import { DatabaseProcess } from "./database-process.ts";
 import {
   type ActionAt,
@@ -58,6 +58,7 @@ export type BrokerOptions = {
   readonly processes: Processes;
   readonly commandSearchPath: string;
   readonly limits?: Partial<BrokerLimits>;
+  readonly call?: ActionCaller;
 };
 
 const defaultBrokerLimits: BrokerLimits = {
@@ -72,6 +73,15 @@ const defaultBrokerLimits: BrokerLimits = {
   commandMilliseconds: 10 * 60 * 1000,
   commandOutputCharacters: 64 * 1024,
 };
+
+function noCaller(stepKey: string): ActionCaller {
+  return () =>
+    Promise.resolve({
+      status: "failed",
+      reason: `The step ${stepKey} cannot call an action: only a script's step calls actions.`,
+      spent: { items: 0, usd: 0, tokens: 0, minutes: 0 },
+    });
+}
 
 type EntryName = FileOperationName | DatabaseOperationName | OtherOperationName;
 
@@ -110,6 +120,7 @@ export class Broker {
         childProcesses: options.childProcesses,
         limits: this.#limits,
         record: (kind, detail) => this.#append(kind, detail),
+        call: options.call ?? noCaller(options.place.stepKey),
         addSpending: (amounts) => {
           this.#spent.items += amounts.items;
           this.#spent.usd += amounts.usd;

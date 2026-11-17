@@ -330,6 +330,11 @@ const brokerMethods: Readonly<Record<string, MethodRow>> = {
     usesPorts: true,
   },
   spend: { call: (broker) => broker.entries.spend({ spending: { usd: 1 } }), needs: ["spend"], usesPorts: false },
+  call: {
+    call: (broker) => broker.entries.call({ reference: "items-store.put", input: {} }),
+    needs: [],
+    usesPorts: false,
+  },
   runCommand: {
     call: (broker) => broker.runCommand({ command: ["node", "--version"], folder: ".", timeLimitSeconds: 30 }),
     needs: everyEffect,

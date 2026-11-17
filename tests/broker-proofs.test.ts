@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
 import { Broker } from "../bay/broker/broker.ts";
-import type { Effect, Json, ModeGrants } from "../bay/contracts.ts";
+import type { ActionCaller, Effect, Json, ModeGrants } from "../bay/contracts.ts";
 import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, nodeThrowawayFolders } from "../bay/node-ports.ts";
 import type { HttpRequest, HttpResponse } from "../bay/ports.ts";
 import { SecretStore } from "../bay/secrets.ts";
@@ -28,9 +28,12 @@ type Asking = {
   readonly ask: (broker: Broker) => Promise<Answer<Json>>;
   readonly effects: readonly Effect[];
   readonly grants?: (root: string) => Partial<ModeGrants>;
+  readonly call?: ActionCaller;
 };
 
 type Refusing = Asking & { readonly change: string; readonly detail?: { readonly [key: string]: Json } };
+
+type Failing = Asking & { readonly message: string };
 
 type Allowed = Asking & { readonly value: Json; readonly recorded: readonly Json[]; readonly spent?: Json };
 
@@ -39,7 +42,7 @@ type Two<T> = readonly [T, T];
 type Proofs = {
   readonly [Name in Moved]: {
     readonly withoutEffect: Two<Refusing> | "needs no effect";
-    readonly outsideGrant: Two<Refusing>;
+    readonly outsideGrant: Two<Refusing> | { readonly refusedByTheCaller: Two<Failing> };
     readonly allowed: Two<Allowed>;
   };
 };
@@ -83,6 +86,15 @@ const projectFolderOnly =
 const allFive: readonly Effect[] = ["read", "write", "network", "spend", "delete"];
 
 const nothingSpent: Json = { items: 0, usd: 0, tokens: 0 };
+
+const noSpend = { items: 0, usd: 0, tokens: 0, minutes: 0 };
+
+const callerAnswering =
+  (output: Json): ActionCaller =>
+  () =>
+    Promise.resolve({ status: "done", output, spent: noSpend });
+
+const unbound = "The binding of notes does not allow items-store.put.";
 
 const fine: HttpResponse = { status: 200, headers: {}, body: "fine" };
 
@@ -648,6 +660,41 @@ const proofs: Proofs = {
       },
     ],
   },
+  call: {
+    withoutEffect: "needs no effect",
+    outsideGrant: {
+      refusedByTheCaller: [
+        {
+          ask: (broker) => broker.entries.call({ reference: "items-store.put", input: { day: "2026-11-17" } }),
+          effects: allFive,
+          call: () => Promise.resolve({ status: "failed", reason: unbound, spent: noSpend }),
+          message: unbound,
+        },
+        {
+          ask: (broker) => broker.entries.call({ reference: "items-store.put", input: { day: "2026-11-17" } }),
+          effects: allFive,
+          call: () => Promise.reject(new Error(`broken with ${secretValue}`)),
+          message: "The call to items-store.put stopped at an unexpected error: broken with [redacted:API_TOKEN]",
+        },
+      ],
+    },
+    allowed: [
+      {
+        ask: (broker) => broker.entries.call({ reference: "items-store.put", input: { day: "2026-11-17" } }),
+        effects: [],
+        call: callerAnswering({ stored: "2026-11-17" }),
+        value: { stored: "2026-11-17" },
+        recorded: [],
+      },
+      {
+        ask: (broker) => broker.entries.call({ reference: "items-store.list", input: {} }),
+        effects: [],
+        call: callerAnswering([1, 2]),
+        value: [1, 2],
+        recorded: [],
+      },
+    ],
+  },
   "commands.run": {
     withoutEffect: [
       {
@@ -830,6 +877,7 @@ async function asked(asking: Asking): Promise<Asked> {
       childProcesses: nodeChildProcesses,
       processes,
       commandSearchPath: "/usr/bin:/bin",
+      ...(asking.call === undefined ? {} : { call: asking.call }),
     });
     const before = (await treeOf(root)).join("\n");
     try {
@@ -871,8 +919,22 @@ test("an operation without its needed effect is refused and does nothing", async
   }
 });
 
+async function assertFailedAndNothingDone(name: string, failing: Failing): Promise<void> {
+  const { answer, recorded, before, after, sent } = await asked(failing);
+  assert.deepEqual(answer, { ok: false, kind: "failed", message: failing.message }, name);
+  assert.deepEqual(recorded, [], name);
+  assert.equal(after, before, `${name}: the project changed`);
+  assert.equal(sent, 0, `${name}: a request was sent or a command was run`);
+}
+
 test("an operation outside its grant is refused and does nothing", async () => {
   for (const [name, proof] of Object.entries(proofs)) {
+    if ("refusedByTheCaller" in proof.outsideGrant) {
+      for (const failing of proof.outsideGrant.refusedByTheCaller) {
+        await assertFailedAndNothingDone(name, failing);
+      }
+      continue;
+    }
     for (const refusing of proof.outsideGrant) {
       await assertRefusedAndNothingDone(name, refusing);
     }

@@ -1,5 +1,5 @@
 import { type Answer, errorLine, failed, type RefusalWording, refused } from "../answers.ts";
-import type { Effect, Json, ModeGrants } from "../contracts.ts";
+import type { ActionCaller, Effect, Json, ModeGrants } from "../contracts.ts";
 import type { Layout } from "../layout.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, ThrowawayFolders } from "../ports.ts";
 import type { SecretStore } from "../secrets.ts";
@@ -43,6 +43,7 @@ export type Doing = {
   readonly limits: AgentQueryLimits;
   readonly record: (kind: string, detail: Json) => Promise<void>;
   readonly addSpending: (amounts: SpendAmounts) => void;
+  readonly call: ActionCaller;
   readonly databaseOf: (file: string) => DatabaseProcess;
   readonly migratedOnce: (migrate: () => Promise<Answer<readonly string[]>>) => Promise<Answer<readonly string[]>>;
 };

@@ -1,6 +1,6 @@
 import { resolve } from "node:path/posix";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { type Answer, errorLine, failed, granted, manifestOf, refused } from "../answers.ts";
+import { type Answer, manifestOf, refused } from "../answers.ts";
 import { Broker, type BrokerLimits } from "./broker.ts";
 import type {
   Child,
@@ -14,7 +14,7 @@ import type {
   Processes,
   ThrowawayFolders,
 } from "../ports.ts";
-import type { EventSink, Json, RunEvent, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "../contracts.ts";
+import type { EventSink, RunEvent, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "../contracts.ts";
 import { mayRemoveFiles, writableFolders } from "./effect-rule.ts";
 import { escapingLinks } from "./folder-links.ts";
 import {
@@ -127,24 +127,12 @@ function answeredByTheClass(started: Started): AnsweredByTheClass {
   const { broker } = started;
   return {
     "http.request": (request) => broker.request(request),
-    call: (request) => calledAnswer(started, request),
     "commands.run": (request) => broker.runCommand(request),
   };
 }
 
 function answeringFor(started: Started): Answering {
   return { ...started.broker.entries, ...answeredByTheClass(started) };
-}
-
-async function calledAnswer(started: Started, request: Requests["call"]): Promise<Answer<Json>> {
-  try {
-    const outcome = await started.request.call(request.reference, request.input);
-    return outcome.status === "done" ? granted(outcome.output) : failed(outcome.reason);
-  } catch (error) {
-    return started.broker.report(
-      failed(`The call to ${request.reference} stopped at an unexpected error: ${errorLine(error)}`),
-    );
-  }
 }
 
 function answerFor<Name extends OperationName>(
@@ -325,6 +313,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
       childProcesses: options.childProcesses,
       processes: options.processes,
       commandSearchPath: options.commandSearchPath,
+      call: request.call,
       limits: { databaseMilliseconds: milliseconds, commandMilliseconds: milliseconds, ...options.brokerLimits },
     });
     try {

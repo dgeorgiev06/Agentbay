@@ -5,11 +5,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { after, test } from "node:test";
-import { stringify } from "yaml";
-import type { Json } from "../bay/contracts.ts";
-import { fieldOf, parseJson } from "../bay/json.ts";
-import { testEnvironment } from "./kernel-fixture.ts";
-import { kit } from "./project-fixture.ts";
+import type { Json } from "../../../../bay/sdk.ts";
+import { fieldsOf } from "../scripts/lib/json.ts";
+import { bayIn, kit } from "./bay-command.ts";
 
 const project = realpathSync(mkdtempSync(join(tmpdir(), "agentbay-two-briefings-")));
 
@@ -17,30 +15,12 @@ after(() => {
   rmSync(project, { recursive: true, force: true });
 });
 
-type Ran = { readonly status: number | null; readonly json: Json; readonly output: string };
-
-function bay(argv: readonly string[]): Ran {
-  const result = spawnSync(process.execPath, [join(kit, "bay", "cli.ts"), ...argv, "--json"], {
-    cwd: project,
-    env: testEnvironment,
-    input: "",
-    encoding: "utf8",
-  });
-  const lines = result.stdout.split("\n").filter((line) => line !== "");
-  assert.equal(lines.length, 1, `bay ${argv.join(" ")} printed:\n${result.stdout}\n${result.stderr}`);
-  return { status: result.status, json: parseJson(lines[0] ?? ""), output: result.stdout };
-}
-
-function succeeded(argv: readonly string[]): Json {
-  const ran = bay(argv);
-  assert.equal(ran.status, 0, `bay ${argv.join(" ")}: ${ran.output}`);
-  return ran.json;
-}
+const { ran: bay, succeeded } = bayIn(project);
 
 function outputOf(argv: readonly string[]): Json {
-  const run = fieldOf(succeeded(argv), "run") ?? null;
-  assert.equal(fieldOf(run, "status"), "done", JSON.stringify(run));
-  return fieldOf(run, "output") ?? null;
+  const run = fieldsOf(fieldsOf(succeeded(argv)).run ?? null);
+  assert.equal(run.status, "done", JSON.stringify(run));
+  return run.output ?? null;
 }
 
 function write(path: string, text: string): void {
@@ -62,7 +42,7 @@ function writeConfig(itemsSource: Json): void {
       "fake-source": { baseDate: "2026-11-15T12:00:00Z", pageSize: 10, costPerItemUsd: 0.001 },
     },
   };
-  write("agentbay.config.yaml", stringify(config));
+  writeJson("agentbay.config.yaml", config);
 }
 
 const notesSync = [
@@ -135,7 +115,7 @@ function writeNotesBriefing(): void {
       },
     },
   };
-  write(`${folder}/mode.yaml`, stringify(manifest));
+  writeJson(`${folder}/mode.yaml`, manifest);
   write(`${folder}/scripts/sync.ts`, notesSync);
   writeJson(`${folder}/schemas/sync-input.json`, { type: "object", additionalProperties: false, properties: {} });
   writeJson(`${folder}/schemas/sync-output.json`, {
@@ -185,7 +165,7 @@ function writeFakeTwo(): void {
       },
     },
   };
-  write(`${folder}/mode.yaml`, stringify(manifest));
+  writeJson(`${folder}/mode.yaml`, manifest);
   write(`${folder}/scripts/fetch.ts`, sourceScript(fetched));
   write(`${folder}/scripts/describe.ts`, sourceScript(described));
   writeJson(`${folder}/tests/fetch.example.json`, { input: { selector: {}, cursor: null }, output: fetched });
@@ -212,24 +192,24 @@ test("two briefings bound to two sources through bay: each partition holds only 
   succeeded(["new", "mode", "notes-briefing"]);
   succeeded(["new", "action", "sync", "--mode", "notes-briefing"]);
   writeNotesBriefing();
-  assert.equal(fieldOf(succeeded(["check"]), "errors"), 0);
-  assert.equal(fieldOf(outputOf(["call", "notes-briefing.sync", "{}"]), "source"), "fake");
+  assert.equal(fieldsOf(succeeded(["check"])).errors, 0);
+  assert.equal(fieldsOf(outputOf(["call", "notes-briefing.sync", "{}"])).source, "fake");
   succeeded(["new", "mode", "fake-two"]);
   writeFakeTwo();
   writeConfig({ "feed-briefing": "fake-source", "notes-briefing": "fake-two" });
   rmSync(join(project, ".agentbay"), { recursive: true, force: true });
-  assert.equal(fieldOf(succeeded(["check"]), "errors"), 0);
+  assert.equal(fieldsOf(succeeded(["check"])).errors, 0);
   const config = succeeded(["config"]);
-  assert.deepEqual(fieldOf(config, "bindings"), [
+  assert.deepEqual(fieldsOf(config).bindings, [
     { interfaceName: "items-source", requirers: ["feed-briefing"], servedBy: "fake-source" },
     { interfaceName: "items-source", requirers: ["notes-briefing"], servedBy: "fake-two" },
     { interfaceName: "items-store", requirers: ["feed-briefing", "notes-briefing"], servedBy: "store" },
   ]);
   const feed = outputOf(["call", "feed-briefing.sync", '{"since":"2026-11-01T00:00:00Z"}']);
-  assert.deepEqual([fieldOf(feed, "source"), fieldOf(feed, "added")], ["fake", 30]);
+  assert.deepEqual([fieldsOf(feed).source, fieldsOf(feed).added], ["fake", 30]);
   assert.deepEqual(outputOf(["call", "notes-briefing.sync", "{}"]), { source: "two", added: 2 });
   const status = outputOf(["call", "notes-briefing.status", "{}"]);
-  assert.equal(fieldOf(status, "items"), 2);
+  assert.equal(fieldsOf(status).items, 2);
   assert.deepEqual(sourcesIn("notes-briefing"), ["two: 2"]);
   assert.deepEqual(sourcesIn("feed-briefing"), ["fake: 30"]);
 });

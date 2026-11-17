@@ -24,7 +24,7 @@ type Summary = {
 type Ended = {
   readonly name: string;
   readonly file?: string;
-  readonly details: { readonly type?: "suite"; readonly passed?: boolean; readonly duration_ms: number };
+  readonly details: { readonly passed?: boolean; readonly duration_ms: number };
 };
 
 const root = process.cwd();
@@ -35,13 +35,18 @@ const tallies = new Map<string, Tally>();
 
 const times: FileTime[] = [];
 
+let suite = noTests;
+
 function isWholeFile(name: string, file: string): boolean {
   return resolve(root, name) === file;
 }
 
 function tallied(summary: Summary): void {
-  if (summary.file !== undefined) {
-    tallies.set(summary.file, { tests: summary.counts.tests, failed: summary.counts.failed });
+  const tally = { tests: summary.counts.tests, failed: summary.counts.failed };
+  if (summary.file === undefined) {
+    suite = tally;
+  } else {
+    tallies.set(summary.file, tally);
   }
 }
 
@@ -80,17 +85,13 @@ await finished(stream.resume());
 
 const wall = (performance.now() - started) / 1000;
 
-const tests = times.reduce((sum, time) => sum + time.tests, 0);
-
-const failedTests = times.reduce((sum, time) => sum + time.failed, 0);
-
 const failedFiles = times.filter((time) => !time.passed).length;
 
 console.log("");
 console.log(tableOf(times));
 console.log("");
 console.log(
-  `${String(times.length)} files, ${String(tests)} tests, ${String(failedTests)} failed in ${String(failedFiles)} files.`,
+  `${String(times.length)} files, ${String(suite.tests)} tests, ${String(suite.failed)} failed in ${String(failedFiles)} files.`,
 );
 console.log(`Wall time, one file at a time: ${wall.toFixed(1)} s.`);
 

@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { after, test } from "node:test";
 import type { Json } from "../../../../bay/sdk.ts";
@@ -32,14 +42,20 @@ function writeJson(path: string, value: Json): void {
   write(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-function writeConfig(itemsSource: Json): void {
+const sourceSettings: Readonly<Record<string, Json>> = {
+  "fake-source": { baseDate: "2026-11-15T12:00:00Z", pageSize: 10, costPerItemUsd: 0.001 },
+  "fake-two": { baseDate: "2026-11-15T12:00:00Z", pageSize: 2, costPerItemUsd: 0.001 },
+};
+
+function writeConfig(itemsSource: Readonly<Record<string, string>>): void {
+  const bound = Object.values(itemsSource);
   const config = {
     modes: ["feed-briefing"],
     adapter: "claude-code",
     bindings: { "items-store": "store", "items-source": itemsSource },
     settings: {
       "feed-briefing": { selector: {}, lookback: "14d", maxItems: 100 },
-      "fake-source": { baseDate: "2026-11-15T12:00:00Z", pageSize: 10, costPerItemUsd: 0.001 },
+      ...Object.fromEntries(Object.entries(sourceSettings).filter(([mode]) => bound.includes(mode))),
     },
   };
   writeJson("agentbay.config.yaml", config);
@@ -66,29 +82,6 @@ const notesSync = [
   "});",
   "",
 ].join("\n");
-
-const twoItems = [0, 1].map((index) => ({
-  id: `two:${String(index + 1)}`,
-  kind: "note",
-  source: "two",
-  at: `2026-11-14T0${String(8 + index)}:00:00Z`,
-  title: `Note ${String(index + 1)}`,
-  text: `Note ${String(index + 1)} of fake-two.`,
-  url: null,
-  author: "two",
-  labels: [],
-  data: {},
-}));
-
-function sourceScript(output: Json): string {
-  const value = JSON.stringify(output);
-  const lines = [
-    'import { defineScript } from "agentbay/sdk";',
-    "",
-    `export const run = defineScript(() => Promise.resolve(${value}));`,
-  ];
-  return `${lines.join("\n")}\n`;
-}
 
 function writeNotesBriefing(): void {
   const folder = "components/modes/notes-briefing";
@@ -131,40 +124,50 @@ function writeNotesBriefing(): void {
   }
 }
 
+const fakeSource = join(kit, "components/modes/fake-source");
+
+const fakeSourceOwnTest = "tests/fake-source.test.ts";
+
+type Replacement = readonly [string | RegExp, string];
+
+function filesUnder(folder: string): readonly string[] {
+  return readdirSync(folder, { recursive: true, encoding: "utf8" })
+    .filter((path) => statSync(join(folder, path)).isFile())
+    .sort();
+}
+
+function replaced(path: string, text: string, replacements: readonly Replacement[]): string {
+  return replacements.reduce((changed, [from, to]) => {
+    assert.ok(
+      typeof from !== "string" || changed.includes(from),
+      `${path} of fake-source no longer holds ${String(from)}`,
+    );
+    return changed.replaceAll(from, to);
+  }, text);
+}
+
+function fakeTwoReplacements(path: string, folder: string): readonly Replacement[] {
+  const everyFile: readonly Replacement[] = [
+    [/"(\.\.\/)+bay\/sdk\.ts"/g, '"agentbay/sdk"'],
+    [/\bfake(?=[:"])/g, "two"],
+  ];
+  const shared = join(kit, "components/base/interfaces/items-source/tests/shared.ts");
+  const byFile: Readonly<Record<string, readonly Replacement[]>> = {
+    "mode.yaml": [["name: fake-source", "name: fake-two"]],
+    "tests/items-source.test.ts": [
+      ['mode: "fake-source"', 'mode: "fake-two"'],
+      ["../../../base/interfaces/items-source/tests/shared.ts", relative(join(project, folder, "tests"), shared)],
+    ],
+  };
+  return [...everyFile, ...(byFile[path] ?? [])];
+}
+
 function writeFakeTwo(): void {
   const folder = "components/modes/fake-two";
-  const fetched = {
-    source: "two",
-    kinds: ["note"],
-    items: twoItems,
-    cursor: null,
-    more: false,
-    cost: { items: 0, usd: 0 },
-  };
-  const described = { source: "two", kinds: ["note"], nativeFields: [] };
-  const manifest = {
-    name: "fake-two",
-    version: "0.1.0",
-    description: "Serves two made-up notes as an items-source.",
-    implements: ["items-source@1"],
-    actions: {
-      fetch: {
-        description: "When a mode needs the made-up notes.",
-        effects: ["read", "network", "spend"],
-        run: [{ script: "scripts/fetch.ts" }],
-      },
-      describe: {
-        description: "When a mode needs the source's name and kinds.",
-        effects: ["read"],
-        run: [{ script: "scripts/describe.ts" }],
-      },
-    },
-  };
-  writeJson(`${folder}/mode.yaml`, manifest);
-  write(`${folder}/scripts/fetch.ts`, sourceScript(fetched));
-  write(`${folder}/scripts/describe.ts`, sourceScript(described));
-  writeJson(`${folder}/tests/fetch.example.json`, { input: { selector: {}, cursor: null }, output: fetched });
-  writeJson(`${folder}/tests/describe.example.json`, { input: {}, output: described });
+  for (const path of filesUnder(fakeSource).filter((file) => file !== fakeSourceOwnTest)) {
+    const text = readFileSync(join(fakeSource, path), "utf8");
+    write(`${folder}/${path}`, replaced(path, text, fakeTwoReplacements(path, folder)));
+  }
 }
 
 function sourcesIn(partition: string): readonly string[] {

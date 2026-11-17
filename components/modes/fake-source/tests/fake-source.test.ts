@@ -59,34 +59,16 @@ test("the fixture has about thirty varied posts spread over the two weeks before
   assert.ok(fixturePosts.every((post) => post.hoursBefore > 0 && post.hoursBefore < 14 * 24));
 });
 
-test("fetch pages through every post oldest first with a cursor, and reports each page's cost", async () => {
-  const seen: string[] = [];
-  let cursor: Json = null;
-  for (let page = 1; page <= 3; page += 1) {
-    const result = await fetched({}, cursor);
-    assert.equal(result.ids.length, 10);
-    assert.equal(fieldOf(result.output, "more"), page < 3);
-    assert.deepEqual(fieldOf(result.output, "cost"), { items: 10, usd: 0.02 });
-    seen.push(...result.ids);
-    cursor = fieldOf(result.output, "cursor");
-  }
-  assert.equal(new Set(seen).size, 30);
-  const times = seen.map((id) => fixturePosts.find((post) => `fake:${String(post.number)}` === id)?.hoursBefore ?? 0);
-  assert.deepEqual(
-    times,
-    [...times].sort((first, second) => second - first),
-  );
-  const after = await fetched({}, cursor);
-  assert.deepEqual(after.ids, []);
-  assert.equal(fieldOf(after.output, "more"), false);
-  assert.equal(fieldOf(after.output, "cursor"), cursor);
-  assert.deepEqual(fieldOf(after.output, "cost"), { items: 0, usd: 0 });
-});
-
-test("the cost of a page is charged to the run's budget", async () => {
+test("a page costs costPerItemUsd for each post it holds, so the page after the last costs nothing and keeps the cursor", async () => {
   const run = await project.run("fake-source.fetch", { selector: { limit: 3 }, cursor: null });
-  assert.equal(run.spent.items, 3);
-  assert.equal(run.spent.usd, 0.006);
+  assert.deepEqual({ items: run.spent.items, usd: run.spent.usd }, { items: 3, usd: 0.006 });
+  const last = "2026-11-15T10:00:00.000Z|fake:1030";
+  const after = await fetched({}, last);
+  assert.deepEqual(
+    { ids: after.ids, more: fieldOf(after.output, "more"), cursor: fieldOf(after.output, "cursor") },
+    { ids: [], more: false, cursor: last },
+  );
+  assert.deepEqual(fieldOf(after.output, "cost"), { items: 0, usd: 0 });
 });
 
 test("fetch applies authors, since, until and limit itself and leaves the other fields to the store", async () => {

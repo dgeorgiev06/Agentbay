@@ -20,6 +20,7 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | **Effect** | What an action may do to the world: `read`, `write`, `network`, `spend`, `delete`. Declared per action. | permission (see Grant) |
 | **Grant** | What a mode may reach: its database, paths, secrets, hosts, commands. Declared in `resources:`. | permission, capability |
 | **Throwaway folder** | A folder named under a mode's `resources.files.throwaway`. The kernel makes folders and links in it and removes files and folders from it for that mode; the mode's scripts never read or write its files, and its commands fill it. | scratch, temp folder |
+| **Throwaway copy** | The folder a caller makes for a toolchain's check or test, holding a copy of the code, and removes afterwards (the worktrees interface's `copy`). The check or test may write inside it and nowhere else. It is not a throwaway folder, which a mode names in its manifest, and not a worktree a builder works in. | scratch copy, temporary copy, sandbox, clone |
 | **Approval** | A workflow step that waits for the owner and is bound to the content shown. | gate |
 | **Budget** | A limit on a run: items, dollars, tokens, minutes. | quota |
 | **Toolbox** | `bay/sdk.ts`. The only kernel file mode code may import. | SDK internals, helpers |

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Broker, type BrokerLimits } from "../bay/broker/broker.ts";
+import { brokerForStep, type BrokerLimits, type StepBroker } from "../bay/broker/broker.ts";
 import type { Effect } from "../bay/contracts.ts";
 import { fieldOf } from "../bay/json.ts";
 import {
@@ -30,11 +30,11 @@ const madeUpSecret = "broker-secret-3c9f1a7e";
 
 async function withCommandBroker(
   limits: Partial<BrokerLimits>,
-  run: (broker: Broker, events: RecordingSink) => Promise<void>,
+  run: (broker: StepBroker, events: RecordingSink) => Promise<void>,
 ): Promise<void> {
   await withProject(async (root) => {
     const events = recordingSink();
-    const broker = new Broker({
+    const broker = brokerForStep({
       layout: projectLayout(root),
       permissions: permissionsIn(root, { effects: everyEffect, commands: ["node -e"], secrets: ["BROKER_TOKEN"] }),
       place,

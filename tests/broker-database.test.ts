@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
 import { runAgentQuery } from "../bay/broker/agent-query.ts";
-import { Broker } from "../bay/broker/broker.ts";
+import { brokerForStep, type StepBroker } from "../bay/broker/broker.ts";
 import type { Effect, ModeGrants } from "../bay/contracts.ts";
 import {
   nodeChildProcesses,
@@ -29,11 +29,11 @@ import {
   projectLayout,
 } from "./broker-fixture.ts";
 
-type Setup = { readonly root: string; readonly broker: Broker; readonly events: ReturnType<typeof recordingSink> };
+type Setup = { readonly root: string; readonly broker: StepBroker; readonly events: ReturnType<typeof recordingSink> };
 
 function brokerFor(root: string, effects: readonly Effect[], extra: Partial<ModeGrants> = {}): Setup {
   const events = recordingSink();
-  const broker = new Broker({
+  const broker = brokerForStep({
     layout: projectLayout(root),
     permissions: permissionsIn(root, { effects, ...extra }),
     place,
@@ -67,7 +67,7 @@ function refusalOf<T>(answer: Answer<T>): string {
   return refusal(answer).message;
 }
 
-async function seedItems(broker: Broker, count: number): Promise<void> {
+async function seedItems(broker: StepBroker, count: number): Promise<void> {
   valueOf(
     await broker.entries["db.execute"]({
       sql: "create table items (id integer primary key, title text)",

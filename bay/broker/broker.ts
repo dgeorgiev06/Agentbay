@@ -1,16 +1,16 @@
 import { type Answer, failed, manifestOf } from "../answers.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, Http, Processes, ThrowawayFolders } from "../ports.ts";
-import type { ActionCaller, Effect, EventSink, Json, ModeGrants, Permissions, StepPlace } from "../contracts.ts";
+import type { ActionCaller, EventSink, Json, Permissions, StepPlace } from "../contracts.ts";
 import { DatabaseProcess } from "./database-process.ts";
-import type { ActionAt, SpendAmounts } from "./effect-rule.ts";
-import { databaseEntries, type DatabaseOperationName } from "./database-operations.ts";
-import { fileEntries, type FileOperationName } from "./file-operations.ts";
-import { httpEntries, type HttpOperationName } from "./http-operations.ts";
-import { otherEntries, type OtherOperationName } from "./other-operations.ts";
-import { commandEntries, type CommandOperationName } from "./command-operations.ts";
+import { databaseEntries } from "./database-operations.ts";
+import { fileEntries } from "./file-operations.ts";
+import { httpEntries } from "./http-operations.ts";
+import { otherEntries } from "./other-operations.ts";
+import { commandEntries } from "./command-operations.ts";
 import type { Layout } from "../layout.ts";
 import type { SecretStore } from "../secrets.ts";
-import type { Entries, Step, StepLimits } from "./rule.ts";
+import type { OperationName } from "./operations.ts";
+import type { Asking, Doing, Entries, RefusalDetail, SpendAmounts, Step, StepLimits } from "./rule.ts";
 
 export type BrokerLimits = StepLimits & {
   readonly databaseMilliseconds: number;
@@ -47,6 +47,20 @@ const defaultBrokerLimits: BrokerLimits = {
   commandOutputCharacters: 64 * 1024,
 };
 
+export type StepBroker = {
+  readonly entries: Entries<OperationName>;
+  readonly settled: <T>(answer: Answer<T>) => Promise<Answer<T>>;
+  readonly spent: () => SpendAmounts;
+  readonly close: () => void;
+};
+
+type Recorder = (kind: string, detail: Json) => Promise<void>;
+
+type Databases = {
+  readonly databaseOf: (file: string) => DatabaseProcess;
+  readonly close: () => void;
+};
+
 function noCaller(stepKey: string): ActionCaller {
   return () =>
     Promise.resolve({
@@ -56,134 +70,126 @@ function noCaller(stepKey: string): ActionCaller {
     });
 }
 
-type EntryName =
-  FileOperationName | DatabaseOperationName | OtherOperationName | HttpOperationName | CommandOperationName;
+function recorderOf(options: BrokerOptions): Recorder {
+  return async (kind, detail) => {
+    await options.events.append({
+      at: options.clock.now().toISOString(),
+      runId: options.place.runId,
+      kind,
+      detail: options.secrets.redactJson(detail),
+    });
+  };
+}
 
-export class Broker {
-  readonly #options: BrokerOptions;
-  readonly #grants: ModeGrants;
-  readonly #effects: readonly Effect[];
-  readonly #limits: BrokerLimits;
-  readonly #databases = new Map<string, DatabaseProcess>();
-  #unnamedMigration: Promise<Answer<readonly string[]>> | undefined;
-  readonly #spent = { items: 0, usd: 0, tokens: 0 };
-  readonly entries: Entries<EntryName>;
+function settlerOf(options: BrokerOptions, record: Recorder): Step["settled"] {
+  const { secrets } = options;
+  return async <T>(answer: Answer<T>, detail: RefusalDetail): Promise<Answer<T>> => {
+    if (answer.ok) {
+      return answer;
+    }
+    const message = secrets.redact(answer.message);
+    if (answer.kind === "failed") {
+      return failed(message);
+    }
+    await record("refused", { resource: answer.resource, step: options.place.stepKey, message, ...detail });
+    return {
+      ...answer,
+      asked: secrets.redact(answer.asked),
+      declared: secrets.redact(answer.declared),
+      change: secrets.redact(answer.change),
+      message,
+    };
+  };
+}
 
-  constructor(options: BrokerOptions) {
-    this.#options = options;
-    this.#grants = options.permissions.grants;
-    this.#effects = options.permissions.actionEffects;
-    this.#limits = { ...defaultBrokerLimits, ...options.limits };
-    const step = this.#step();
-    this.entries = {
+function databasesOf(options: BrokerOptions, lifetimeMilliseconds: number): Databases {
+  const open = new Map<string, DatabaseProcess>();
+  return {
+    databaseOf: (file) => {
+      const known = open.get(file);
+      if (known !== undefined) {
+        return known;
+      }
+      const database = new DatabaseProcess({
+        childProcesses: options.childProcesses,
+        databaseFile: file,
+        lifetimeMilliseconds,
+      });
+      open.set(file, database);
+      return database;
+    },
+    close: () => {
+      for (const database of open.values()) {
+        database.close();
+      }
+      open.clear();
+    },
+  };
+}
+
+function askingOf(options: BrokerOptions, limits: StepLimits): Asking {
+  const { grants, actionEffects } = options.permissions;
+  const { place, layout, inspector } = options;
+  const at = { stepKey: place.stepKey, action: place.action, manifest: manifestOf(grants) };
+  return { grants, effects: actionEffects, at, layout, inspector, limits };
+}
+
+type StepState = {
+  readonly limits: StepLimits;
+  readonly record: Recorder;
+  readonly databases: Databases;
+  readonly spent: { items: number; usd: number; tokens: number };
+};
+
+function doingOf(options: BrokerOptions, state: StepState): Doing {
+  const { spent } = state;
+  let unnamedMigration: Promise<Answer<readonly string[]>> | undefined;
+  return {
+    stepKey: options.place.stepKey,
+    files: options.files,
+    throwawayFolders: options.throwawayFolders,
+    inspector: options.inspector,
+    scrubber: options.secrets,
+    secrets: options.secrets,
+    clock: options.clock,
+    http: options.http,
+    processes: options.processes,
+    commandSearchPath: options.commandSearchPath,
+    childProcesses: options.childProcesses,
+    limits: state.limits,
+    record: state.record,
+    call: options.call ?? noCaller(options.place.stepKey),
+    addSpending: (amounts) => {
+      spent.items += amounts.items;
+      spent.usd += amounts.usd;
+      spent.tokens += amounts.tokens;
+    },
+    databaseOf: state.databases.databaseOf,
+    migratedOnce: (migrate) => {
+      unnamedMigration ??= migrate();
+      return unnamedMigration;
+    },
+  };
+}
+
+export function brokerForStep(options: BrokerOptions): StepBroker {
+  const limits = { ...defaultBrokerLimits, ...options.limits };
+  const record = recorderOf(options);
+  const settled = settlerOf(options, record);
+  const databases = databasesOf(options, limits.databaseMilliseconds);
+  const spent = { items: 0, usd: 0, tokens: 0 };
+  const doing = doingOf(options, { limits, record, databases, spent });
+  const step: Step = { asking: askingOf(options, limits), doing, settled };
+  return {
+    entries: {
       ...fileEntries(step),
       ...databaseEntries(step),
       ...otherEntries(step),
       ...httpEntries(step),
       ...commandEntries(step),
-    };
-  }
-
-  #step(): Step {
-    const options = this.#options;
-    const { layout, inspector } = options;
-    return {
-      asking: { grants: this.#grants, effects: this.#effects, at: this.#at, layout, inspector, limits: this.#limits },
-      doing: {
-        stepKey: options.place.stepKey,
-        files: options.files,
-        throwawayFolders: options.throwawayFolders,
-        inspector,
-        scrubber: options.secrets,
-        secrets: options.secrets,
-        clock: options.clock,
-        http: options.http,
-        processes: options.processes,
-        commandSearchPath: options.commandSearchPath,
-        childProcesses: options.childProcesses,
-        limits: this.#limits,
-        record: (kind, detail) => this.#append(kind, detail),
-        call: options.call ?? noCaller(options.place.stepKey),
-        addSpending: (amounts) => {
-          this.#spent.items += amounts.items;
-          this.#spent.usd += amounts.usd;
-          this.#spent.tokens += amounts.tokens;
-        },
-        databaseOf: (file) => this.#databaseOf(file),
-        migratedOnce: (migrate) => {
-          this.#unnamedMigration ??= migrate();
-          return this.#unnamedMigration;
-        },
-      },
-      settled: (answer, detail) => this.#settle(answer, detail),
-    };
-  }
-
-  spent(): SpendAmounts {
-    return { ...this.#spent };
-  }
-
-  report<T>(answer: Answer<T>): Promise<Answer<T>> {
-    return this.#settle(answer);
-  }
-
-  get #at(): ActionAt {
-    const place = this.#options.place;
-    return { stepKey: place.stepKey, action: place.action, manifest: manifestOf(this.#grants) };
-  }
-
-  close(): void {
-    for (const database of this.#databases.values()) {
-      database.close();
-    }
-    this.#databases.clear();
-  }
-
-  #databaseOf(file: string): DatabaseProcess {
-    const known = this.#databases.get(file);
-    if (known !== undefined) {
-      return known;
-    }
-    const database = new DatabaseProcess({
-      childProcesses: this.#options.childProcesses,
-      databaseFile: file,
-      lifetimeMilliseconds: this.#limits.databaseMilliseconds,
-    });
-    this.#databases.set(file, database);
-    return database;
-  }
-
-  async #append(kind: string, detail: Json): Promise<void> {
-    await this.#options.events.append({
-      at: this.#options.clock.now().toISOString(),
-      runId: this.#options.place.runId,
-      kind,
-      detail: this.#options.secrets.redactJson(detail),
-    });
-  }
-
-  async #settle<T>(answer: Answer<T>, recorded: { readonly [key: string]: Json } = {}): Promise<Answer<T>> {
-    if (answer.ok) {
-      return answer;
-    }
-    const secrets = this.#options.secrets;
-    const message = secrets.redact(answer.message);
-    if (answer.kind === "failed") {
-      return failed(message);
-    }
-    await this.#append("refused", {
-      resource: answer.resource,
-      step: this.#options.place.stepKey,
-      message,
-      ...recorded,
-    });
-    const asked = secrets.redact(answer.asked);
-    return {
-      ...answer,
-      asked,
-      declared: secrets.redact(answer.declared),
-      change: secrets.redact(answer.change),
-      message,
-    };
-  }
+    },
+    settled: (answer) => settled(answer, {}),
+    spent: () => ({ ...spent }),
+    close: databases.close,
+  };
 }

@@ -3,7 +3,7 @@ import { lstat, readdir, readFile, readlink, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
-import { Broker } from "../bay/broker/broker.ts";
+import { brokerForStep, type StepBroker } from "../bay/broker/broker.ts";
 import type { ActionCaller, Effect, Json, ModeGrants } from "../bay/contracts.ts";
 import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, nodeThrowawayFolders } from "../bay/node-ports.ts";
 import type { HttpRequest, HttpResponse } from "../bay/ports.ts";
@@ -22,10 +22,10 @@ import {
   writeProjectFile,
 } from "./broker-fixture.ts";
 
-type Moved = keyof Broker["entries"];
+type Moved = keyof StepBroker["entries"];
 
 type Asking = {
-  readonly ask: (broker: Broker) => Promise<Answer<Json>>;
+  readonly ask: (broker: StepBroker) => Promise<Answer<Json>>;
   readonly effects: readonly Effect[];
   readonly grants?: (root: string) => Partial<ModeGrants>;
   readonly call?: ActionCaller;
@@ -880,7 +880,7 @@ async function asked(asking: Asking): Promise<Asked> {
       commands: ["node --version", "node -e"],
       ...asking.grants?.(root),
     };
-    const broker = new Broker({
+    const broker = brokerForStep({
       layout: projectLayout(root),
       permissions: permissionsIn(root, { effects: asking.effects, ...grants }),
       place,

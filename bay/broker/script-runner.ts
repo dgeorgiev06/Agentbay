@@ -1,7 +1,7 @@
 import { resolve } from "node:path/posix";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { type Answer, manifestOf, refused } from "../answers.ts";
-import { Broker, type BrokerLimits } from "./broker.ts";
+import { type BrokerLimits, brokerForStep, type StepBroker } from "./broker.ts";
 import type {
   Child,
   ChildEnd,
@@ -15,7 +15,7 @@ import type {
   ThrowawayFolders,
 } from "../ports.ts";
 import type { EventSink, RunEvent, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "../contracts.ts";
-import { mayRemoveFiles, writableFolders } from "./effect-rule.ts";
+import { mayRemoveFiles, writableFolders } from "./rule.ts";
 import { escapingLinks } from "./folder-links.ts";
 import {
   notAValidMessage,
@@ -60,7 +60,7 @@ type RunState = {
 };
 
 type Started = {
-  readonly broker: Broker;
+  readonly broker: StepBroker;
   readonly request: ScriptRequest;
   readonly state: RunState;
 };
@@ -180,7 +180,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     spent: zero,
   });
 
-  async function refusedBeforeStart(request: ScriptRequest, broker: Broker): Promise<string | undefined> {
+  async function refusedBeforeStart(request: ScriptRequest, broker: StepBroker): Promise<string | undefined> {
     const permissions = request.permissions.grants;
     const scriptFile = resolve(permissions.modeFolder, request.script);
     if (!isInsideOrEqual(scriptFile, permissions.modeFolder)) {
@@ -194,7 +194,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     const described = links.map(
       (found) => `${shownPath(options.layout, found.link)} points to ${found.target ?? "nothing"}`,
     );
-    const answer = await broker.report(
+    const answer = await broker.settled(
       refused({
         resource: "script",
         asked: `The script ${request.script} was to run with links that leave their folders (${described.join("; ")})`,
@@ -289,7 +289,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     if (milliseconds <= 0) {
       return failure("The step has no time left, so the script was not started.");
     }
-    const broker = new Broker({
+    const broker = brokerForStep({
       layout: options.layout,
       permissions: request.permissions,
       place: request.place,

@@ -1,7 +1,7 @@
 import { join } from "node:path/posix";
 import { refused } from "../answers.ts";
 import type { Json, Permissions, RunEvent, Submission } from "../contracts.ts";
-import { effectRefusal } from "../broker/effect-rule.ts";
+import { submissionRefusal } from "../broker/rule.ts";
 import { textField } from "../json.ts";
 import { failedWith, problemText, type Outcome, type Problem } from "../outcome.ts";
 import type { ActionTarget, Schema, SkillUse } from "../manifests/manifests.ts";
@@ -89,7 +89,7 @@ function submittedSpendProblems(
   const effects = target.action.effects;
   const manifest = join(target.mode.folder, "mode.yaml");
   const at = { stepKey: skillRoundKey(record.key, round), action, manifest };
-  const wording = effectRefusal({ kind: "skill.submit", usd: submission.spent.usd }, effects, at);
+  const wording = submissionRefusal(submission.spent.usd, effects, at);
   return wording === undefined ? [] : [{ file: manifest, path: "", message: refused(wording).message }];
 }
 

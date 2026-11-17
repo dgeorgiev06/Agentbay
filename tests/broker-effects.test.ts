@@ -3,9 +3,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
-import { Broker } from "../bay/broker/broker.ts";
+import { brokerForStep, type StepBroker } from "../bay/broker/broker.ts";
 import type { Effect, Json } from "../bay/contracts.ts";
-import { effectRefusal, type BrokerOperation } from "../bay/broker/effect-rule.ts";
 import {
   nodeChildProcesses,
   nodeFileInspector,
@@ -77,8 +76,8 @@ const workingPorts = (): Ports => ({
   events: recordingSink(),
 });
 
-function brokerWith(root: string, effects: readonly Effect[], ports: Ports): Broker {
-  return new Broker({
+function brokerWith(root: string, effects: readonly Effect[], ports: Ports): StepBroker {
+  return brokerForStep({
     layout: projectLayout(root),
     permissions: permissionsIn(root, {
       effects,
@@ -97,7 +96,7 @@ function brokerWith(root: string, effects: readonly Effect[], ports: Ports): Bro
 
 async function withBroker(
   effects: readonly Effect[],
-  run: (broker: Broker, root: string, events: RecordingSink) => Promise<void>,
+  run: (broker: StepBroker, root: string, events: RecordingSink) => Promise<void>,
 ): Promise<void> {
   await withProject(async (root) => {
     await writeProjectFile(root, "components/modes/notes/migrations/0001-notes.sql", "create table notes (x text);\n");
@@ -112,7 +111,7 @@ async function withBroker(
   });
 }
 
-async function spentThrough(broker: Broker, spending: Json): Promise<Answer<Json>> {
+async function spentThrough(broker: StepBroker, spending: Json): Promise<Answer<Json>> {
   const answer = await broker.entries.spend({ spending });
   return answer.ok ? { ok: true, value: broker.spent() } : answer;
 }
@@ -275,7 +274,7 @@ test("a refusal by the effect rule is logged as a refused event, once", async ()
 });
 
 type MethodRow = {
-  readonly call: (broker: Broker) => Promise<Answer<unknown>>;
+  readonly call: (broker: StepBroker) => Promise<Answer<unknown>>;
   readonly needs: readonly Effect[];
   readonly usesPorts: boolean;
 };
@@ -350,12 +349,9 @@ const brokerMethods: Readonly<Record<string, MethodRow>> = {
   },
 };
 
-const notResourceMethods: readonly string[] = ["constructor", "close", "report", "spent"];
-
 test("every broker method that serves a resource is in the table of the one rule", () => {
-  const methods = Object.getOwnPropertyNames(Broker.prototype).filter((name) => !notResourceMethods.includes(name));
   const broker = brokerWith("/project", [], brokenPorts());
-  const served = [...methods, ...Object.keys(broker.entries)];
+  const served = Object.keys(broker.entries);
   broker.close();
   assert.deepEqual(served.sort(), Object.keys(brokerMethods).sort());
 });
@@ -395,7 +391,7 @@ test("every broker method answers when every port throws, and never rejects", as
   });
 });
 
-type Asked = (broker: Broker) => Promise<Answer<unknown>>;
+type Asked = (broker: StepBroker) => Promise<Answer<unknown>>;
 
 const operationsOfEntries: readonly (readonly [string, Asked, Effect | undefined])[] = [
   ["db.migrate", (broker) => broker.entries["db.migrate"]({}), undefined],
@@ -411,31 +407,30 @@ const operationsOfEntries: readonly (readonly [string, Asked, Effect | undefined
   ["files.read", (broker) => broker.entries["files.read"]({ path: "a" }), undefined],
   ["files.list", (broker) => broker.entries["files.list"]({ path: "a" }), undefined],
   ["files.write", (broker) => broker.entries["files.write"]({ path: "a", text: "" }), "write"],
+  ["secrets.get", (broker) => broker.entries["secrets.get"]({ name: "A" }), undefined],
+  [
+    "http.request",
+    (broker) => broker.entries["http.request"]({ method: "GET", url: "https://a.example", headers: {} }),
+    "network",
+  ],
+  ["events.emit", (broker) => broker.entries["events.emit"]({ kind: "noted", detail: {} }), undefined],
+  ["spend", (broker) => broker.entries.spend({ spending: { items: 0, usd: 0, tokens: 0 } }), undefined],
+  ["spend", (broker) => broker.entries.spend({ spending: { items: 0, usd: 0, tokens: 3 } }), "spend"],
+  [
+    "commands.run",
+    (broker) => broker.entries["commands.run"]({ command: ["git", "status"], folder: ".", timeLimitSeconds: 30 }),
+    "read",
+  ],
 ];
 
 function effectNamedBy<T>(answer: Answer<T>): string | undefined {
   if (answer.ok || answer.kind !== "refused") {
     return undefined;
   }
-  return /effect; to allow it, add (\w+) to/.exec(answer.change)?.[1];
+  return /effects?; to allow it, add (\w+) to/.exec(answer.change)?.[1];
 }
 
-const operations: readonly (readonly [BrokerOperation, Effect | undefined])[] = [
-  [{ kind: "secrets.get", name: "A" }, undefined],
-  [{ kind: "http.request", method: "GET", url: "https://a.example" }, "network"],
-  [{ kind: "events.emit", eventKind: "noted" }, undefined],
-  [{ kind: "spend", amounts: { items: 0, usd: 0, tokens: 0 } }, undefined],
-  [{ kind: "spend", amounts: { items: 0, usd: 0, tokens: 3 } }, "spend"],
-  [{ kind: "commands.run", command: ["git", "status"], folder: "." }, "read"],
-];
-
 test("the rule names the first missing effect for each kind of operation", async () => {
-  const at = { stepKey: "0", action: "look", manifest: "/m/mode.yaml" };
-  for (const [operation, needed] of operations) {
-    const refusal = effectRefusal(operation, [], at);
-    assert.equal(refusal === undefined ? undefined : /add (\w+) to/.exec(refusal.change)?.[1], needed, operation.kind);
-    assert.equal(effectRefusal(operation, ["read", "write", "delete", "network", "spend"], at), undefined);
-  }
   for (const [name, asked, needed] of operationsOfEntries) {
     await withBroker([], async (broker) => {
       assert.equal(effectNamedBy(await asked(broker)), needed, name);

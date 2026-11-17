@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
-import { Broker } from "../bay/broker/broker.ts";
+import { brokerForStep, type StepBroker } from "../bay/broker/broker.ts";
 import {
   nodeChildProcesses,
   nodeFileInspector,
@@ -25,7 +25,7 @@ import {
   projectLayout,
 } from "./broker-fixture.ts";
 
-type Setup = { readonly root: string; readonly broker: Broker; readonly events: ReturnType<typeof recordingSink> };
+type Setup = { readonly root: string; readonly broker: StepBroker; readonly events: ReturnType<typeof recordingSink> };
 
 async function withFilesBroker(run: (setup: Setup) => Promise<void>): Promise<void> {
   await withProject(async (root) => {
@@ -34,7 +34,7 @@ async function withFilesBroker(run: (setup: Setup) => Promise<void>): Promise<vo
     await writeProjectFile(root, "outside/secret.txt", "made-up outside text");
     await mkdir(join(root, "notes-out"), { recursive: true });
     const events = recordingSink();
-    const broker = new Broker({
+    const broker = brokerForStep({
       layout: projectLayout(root),
       permissions: permissionsIn(root, { effects: ["read", "write"] }),
       place,
@@ -158,7 +158,7 @@ test("a granted path that is itself a link to another folder of the project is r
   await withProject(async (root) => {
     await writeProjectFile(root, ".agentbay/data/store.db", "made-up database bytes");
     await symlink(join(root, ".agentbay/data"), join(root, "notes-in"));
-    const broker = new Broker({
+    const broker = brokerForStep({
       layout: projectLayout(root),
       permissions: permissionsIn(root),
       place,

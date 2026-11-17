@@ -1,5 +1,5 @@
 import type { Effect, ModeGrants, Tier } from "./contracts.ts";
-import { grantedCommands, writableFolders } from "./broker/effect-rule.ts";
+import { grantedCommands, writableFolders } from "./broker/rule.ts";
 import type { Layout } from "./layout.ts";
 import type { FileSystem, Removal } from "./ports.ts";
 import type { System } from "./manifests/manifests.ts";

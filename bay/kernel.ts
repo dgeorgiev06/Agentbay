@@ -1,4 +1,4 @@
-import { Broker } from "./broker/broker.ts";
+import { brokerForStep, type StepBroker } from "./broker/broker.ts";
 import type { FileListing } from "./check-context.ts";
 import type { Layout } from "./layout.ts";
 import type { Permissions, StepPlace } from "./contracts.ts";
@@ -67,7 +67,7 @@ export type Kernel = {
   readonly system: System;
   readonly secrets: SecretStore;
   readonly runs: Runs;
-  readonly brokerFor: (place: StepPlace, permissions: Permissions) => Broker;
+  readonly brokerFor: (place: StepPlace, permissions: Permissions) => StepBroker;
   readonly close: () => void;
 };
 
@@ -133,8 +133,8 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
     toolCallsPerRound: limits.toolCallsPerRound,
     runner: (events) => createScriptRunner({ ...services, ...processes, events }),
   });
-  const brokerFor = (place: StepPlace, permissions: Permissions): Broker =>
-    new Broker({ ...services, ...processes, events: runs.events, place, permissions });
+  const brokerFor = (place: StepPlace, permissions: Permissions): StepBroker =>
+    brokerForStep({ ...services, ...processes, events: runs.events, place, permissions });
   const kernel: Kernel = {
     limits,
     layout,

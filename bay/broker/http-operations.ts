@@ -1,6 +1,5 @@
 import { type Answer, failed, granted, listed, manifestOf, type RefusalWording, refused } from "../answers.ts";
 import type { HttpRequest, HttpResponse } from "../ports.ts";
-import type { Need } from "./effect-rule.ts";
 import { checkUrl, type Hop, loggedHeaders, nextRequest, redirectTarget, type UrlCheck } from "./http-access.ts";
 import type { OperationName } from "./operations.ts";
 import {
@@ -11,13 +10,14 @@ import {
   type Definition,
   type Doing,
   type Entries,
+  type Need,
   noRefusalDetail,
   refusedWith,
   type Ruling,
   type Step,
 } from "./rule.ts";
 
-export type HttpOperationName = Extract<OperationName, "http.request">;
+type HttpOperationName = Extract<OperationName, "http.request">;
 
 type RefusedUrl = Exclude<UrlCheck, { readonly status: "allowed" }>;
 

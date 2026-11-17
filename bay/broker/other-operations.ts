@@ -1,7 +1,6 @@
 import { errorLine, failed, granted, listed, manifestOf } from "../answers.ts";
 import type { Json } from "../contracts.ts";
 import { isJsonRecord } from "../protocol-json.ts";
-import type { Need, SpendAmounts } from "./effect-rule.ts";
 import { secretNamePattern } from "../policy.ts";
 import type { OperationName } from "./operations.ts";
 import {
@@ -10,12 +9,14 @@ import {
   askingSentence,
   type Definition,
   type Entries,
+  type Need,
   noRefusalDetail,
   refusedWith,
+  type SpendAmounts,
   type Step,
 } from "./rule.ts";
 
-export type OtherOperationName = Extract<OperationName, "secrets.get" | "events.emit" | "spend" | "call">;
+type OtherOperationName = Extract<OperationName, "secrets.get" | "events.emit" | "spend" | "call">;
 
 type DeclaredSecret = { readonly secret: string };
 

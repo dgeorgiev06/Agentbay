@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
-import { Broker, type BrokerLimits } from "../bay/broker/broker.ts";
+import { brokerForStep, type BrokerLimits, type StepBroker } from "../bay/broker/broker.ts";
 import type { HttpRequest, HttpResponse } from "../bay/ports.ts";
 import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, nodeThrowawayFolders } from "../bay/node-ports.ts";
 import { SecretStore } from "../bay/secrets.ts";
@@ -21,7 +21,7 @@ import {
 const madeUpToken = "made-up-bearer-value-9876";
 
 type Setup = {
-  readonly broker: Broker;
+  readonly broker: StepBroker;
   readonly http: ScriptedHttp;
   readonly events: ReturnType<typeof recordingSink>;
   readonly secrets: SecretStore;
@@ -35,7 +35,7 @@ function setup(answer: (request: HttpRequest) => HttpResponse, limits: Partial<B
     processes: noProcesses,
     platform: "linux",
   });
-  const broker = new Broker({
+  const broker = brokerForStep({
     layout: projectLayout("/project"),
     permissions: permissionsIn("/project", {
       hosts: ["api.example.com", "*.files.example.com"],

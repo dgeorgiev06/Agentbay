@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { failed, granted, listed, manifestOf } from "../answers.ts";
 import type { ProcessOutput, ProcessResult } from "../ports.ts";
 import type { CommandOutput, CommandRequest } from "../sdk.ts";
-import { runsCommands } from "./effect-rule.ts";
 import { checkPath } from "./file-access.ts";
 import { dataFolder } from "./file-operations.ts";
 import { isInsideOrEqual, pathIn, shownPath } from "../layout.ts";
@@ -10,16 +9,18 @@ import type { OperationName } from "./operations.ts";
 import {
   allowedWith,
   answered,
+  askedTo,
   type Asking,
   type Definition,
   type Doing,
   type Entries,
   refusedWith,
   type Ruling,
+  runsCommands,
   type Step,
 } from "./rule.ts";
 
-export type CommandOperationName = Extract<OperationName, "commands.run">;
+type CommandOperationName = Extract<OperationName, "commands.run">;
 
 type CommandToRun = {
   readonly found: "folder";
@@ -37,7 +38,7 @@ function describedCommand(request: CommandRequest): string {
 }
 
 function askedToRun(request: CommandRequest, asking: Asking): string {
-  return `The step ${asking.at.stepKey} of action ${asking.at.action} asked to ${describedCommand(request)}`;
+  return askedTo(describedCommand(request), asking.at);
 }
 
 function argumentsOf(prefix: string): readonly string[] {

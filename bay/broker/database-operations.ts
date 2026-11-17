@@ -12,7 +12,6 @@ import {
 } from "../answers.ts";
 import type { Json } from "../contracts.ts";
 import type { DatabaseResult, Migration } from "./database.ts";
-import { changesDataAllowed, statementNeeds } from "./effect-rule.ts";
 import { isInsideOrEqual, shownPath } from "../layout.ts";
 import { type OperationName, type Reading, shapes } from "./operations.ts";
 import {
@@ -24,15 +23,22 @@ import {
   type Doing,
   type Entries,
   type EntryRequests,
+  type Need,
   noRefusalDetail,
   refusedWith,
   type Ruling,
   type Step,
 } from "./rule.ts";
 import type { AgentQueryResult, SqlParameters } from "../sdk.ts";
-import { leadingKeyword, readKeywords, writeKeywords } from "./sql-statements.ts";
+import { leadingKeyword, readKeywords, statementWords, writeKeywords } from "./sql-statements.ts";
 
-export type DatabaseOperationName = Extract<OperationName, `db.${string}`>;
+type DatabaseOperationName = Extract<OperationName, `db.${string}`>;
+
+const deletingWords: readonly string[] = ["delete", "drop", "truncate"];
+
+const changesData: Need = { effect: "write", because: "A statement that changes data needs the write effect" };
+
+const deletesData: Need = { effect: "delete", because: "A statement that deletes needs the delete effect" };
 
 const migrationName = /^\d{4}-[^/]+\.sql$/;
 
@@ -69,6 +75,17 @@ type AgentQueryToRun = {
   readonly migrateFirst: MigrationPlan | undefined;
   readonly missing: string;
 };
+
+function deletes(sql: string): boolean {
+  return statementWords(sql).some((word) => deletingWords.includes(word));
+}
+
+function statementNeeds(sql: string): readonly Need[] {
+  if (deletes(sql)) {
+    return [changesData, deletesData];
+  }
+  return writeKeywords.includes(leadingKeyword(sql)) ? [changesData] : [];
+}
 
 function partitionFile(partition: string | undefined, asking: Asking): Ruling<string> {
   const databaseFile = asking.grants.databaseFile;
@@ -295,7 +312,7 @@ const dbExecute: Definition<"db.execute", ChangeToRun> = {
   described: statementDescribed,
   rule: (request, asking) => {
     const statement = statementRule(request, [...readKeywords, ...writeKeywords], asking);
-    const writable = changesDataAllowed(asking.effects);
+    const writable = asking.effects.includes(changesData.effect);
     return Promise.resolve(statement.allowed ? allowedWith({ ...statement.value, writable }) : statement);
   },
   handler: async (change, doing) => {

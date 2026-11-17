@@ -1,5 +1,5 @@
 import { errorLine, type Answer } from "./answers.ts";
-import type { Broker } from "./broker/broker.ts";
+import type { StepBroker } from "./broker/broker.ts";
 import type { Json } from "./contracts.ts";
 import { byteSize, fieldOf, numberField, textField, isRecord } from "./json.ts";
 import type { Kernel } from "./kernel.ts";
@@ -29,7 +29,7 @@ function answered<T extends Json>(answer: Answer<T>, shape: (value: T) => Json):
   return answer.ok ? { ok: true, value: shape(answer.value) } : refused(answer.message);
 }
 
-async function withBroker(call: ToolCall, use: (broker: Broker) => Promise<Outcome<Json>>): Promise<Outcome<Json>> {
+async function withBroker(call: ToolCall, use: (broker: StepBroker) => Promise<Outcome<Json>>): Promise<Outcome<Json>> {
   const broker = call.kernel.brokerFor(call.task.place, call.task.permissions);
   try {
     return await use(broker);

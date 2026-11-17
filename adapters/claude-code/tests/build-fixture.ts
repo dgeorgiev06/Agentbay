@@ -1,5 +1,6 @@
 import { normalize } from "node:path";
 import type { BuildRequest, Layout, SkillAgent } from "../../../bay/adapter.ts";
+import { grantsWith } from "../../../tests/grants-fixture.ts";
 import type { Files, Removal } from "../adapter-types.ts";
 
 export type FilesWithRemoval = Files & { readonly removal: Removal };
@@ -64,18 +65,15 @@ export function skillAgent(shape: AgentShape): SkillAgent {
     description: `Writes the ${shape.skill}\nfor the "${shape.mode}" mode: briefly.`,
     tier: shape.tier,
     kernelTools: shape.kernelTools,
-    grants: {
+    grants: grantsWith({
       mode: shape.mode,
       modeFolder,
       databaseFile: `${project}/.agentbay/data/${shape.mode}.db`,
       migrationsFolder: `${modeFolder}/migrations`,
       readPaths: shape.read,
       writePaths: shape.write,
-      throwawayPaths: [],
-      secrets: [],
-      hosts: [],
       commands: shape.commands,
-    },
+    }),
     effects: shape.effects ?? (shape.write.length > 0 ? ["read", "write"] : ["read"]),
   };
 }

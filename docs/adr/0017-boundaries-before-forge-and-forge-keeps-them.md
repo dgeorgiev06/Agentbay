@@ -1,6 +1,6 @@
 # 17. Boundaries are fixed before forge continues, and forge is built to keep them
 
-Date: 2026-11-16. Status: accepted by the owner, both parts. The owner added item 8.
+Date: 2026-11-16. Status: accepted by the owner, both parts. The owner added item 8 and accepted items 9 to 12.
 
 The owner saw that slices which each added one mode also changed many shared files, and asked for an audit (`docs/research/2026-11-16-boundary-audit.md`). It confirmed it: runs and manifests are real boundaries, mode source is clean, and the area every mode leans on (toolbox, script protocol, script runner, broker, effect rule, shared types, ports) is not a module. A new mode also edits three lists by hand and copies its interface's schemas.
 
@@ -46,5 +46,12 @@ Then G4 onward as `0015` orders them.
    - the interface it builds against, when it runs beside the slice that implements the other side. The interface is agreed and merged first, as a slice of its own, so that both sides can be built at once.
 
    From these a script works out waves: slices in the same wave have disjoint write scopes and no order between them. The plan shows the waves, the longest chain, and how many builders a wave can use. A plan in which every slice waits for the one before is sent back unless it says why no other order exists. A slice that cannot be given a write scope smaller than a whole kernel feature is a sign the feature needs an entry file first, and the plan says so.
+
+9. **A builder declares what it will change before it edits.** Beyond its write scope: the files, and the names an entry will gain, lose or change. Proof compares the finished slice with the declaration and reports anything changed that was not declared, and anything declared that did not change. A wrong declaration faithfully carried out still passes this, which is why the challenge stage and a test that fails on the base stay.
+10. **Limits on tries are kept by the kernel.** Two rounds for a slice, and the number of times a builder may ask for tests, are counted by the workflow and the broker, never left to an instruction in a skill.
+11. **Tests are run for the verdict once, by proof, at the end.** A builder may run the tests of the files it is working on while it works; the whole suite is proof's to run. The builder's skill says so and the count of item 10 holds it.
+12. **The merge card shows what a slice cost after its first edit:** tokens and tool calls before and after, since the part after is where a builder with no stated intent spends most.
+
+Items 9 to 12 come from a write-up of the FlowPlan paper (`andreasrau.tech`, 2026-11-11): state the intended change in a form a tool can check, then verify by comparison. Its graph of control flow is not taken; the module map and the plan's waves are the graphs here.
 
 **Cost.** Items 1, 5 and 6 are scripts on top of what G4 and G5 already plan. Items 3, 4 and 7 are new, about one slice together. Item 2 makes some jobs take two slices where one would have done, which is the point.

@@ -2,7 +2,8 @@ import { fileURLToPath } from "node:url";
 import { errorLine } from "../answers.ts";
 import type { Child, ChildEnd, ChildProcesses } from "../ports.ts";
 import type { Json } from "../contracts.ts";
-import type { DatabaseResult, Migration, SqlParameters } from "./database.ts";
+import type { DatabaseResult, Migration } from "./database.ts";
+import type { SqlParameters } from "../sdk.ts";
 import { isJsonRecord, parsedLine } from "../protocol-json.ts";
 
 export type DatabaseOrder =

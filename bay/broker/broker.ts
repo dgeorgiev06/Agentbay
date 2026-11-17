@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path/posix";
-import { type AgentQueryOutcome, type AgentQueryResult, runAgentQuery } from "./agent-query.ts";
+import { type AgentQueryOutcome, runAgentQuery } from "./agent-query.ts";
 import { type Answer, errorLine, failed, granted, listed, manifestOf, refused } from "../answers.ts";
 import type {
   ChildProcesses,
@@ -14,18 +14,8 @@ import type {
   Processes,
   ThrowawayFolders,
 } from "../ports.ts";
-import type {
-  CommandOutput,
-  CommandRan,
-  CommandRequest,
-  Effect,
-  EventSink,
-  Json,
-  ModeGrants,
-  Permissions,
-  StepPlace,
-} from "../contracts.ts";
-import type { DatabaseResult, ExecuteResult, Migration, Row, SqlParameters } from "./database.ts";
+import type { Effect, EventSink, Json, ModeGrants, Permissions, StepPlace } from "../contracts.ts";
+import type { DatabaseResult, Migration } from "./database.ts";
 import { DatabaseProcess } from "./database-process.ts";
 import {
   type ActionAt,
@@ -44,6 +34,16 @@ import { isInsideOrEqual, pathIn, shownPath, type Layout } from "../layout.ts";
 import type { SecretStore } from "../secrets.ts";
 import { isJsonRecord } from "../protocol-json.ts";
 import { leadingKeyword, readKeywords, writeKeywords } from "./sql-statements.ts";
+import { type Reading, shapes } from "./operations.ts";
+import type {
+  AgentQueryResult,
+  CommandOutput,
+  CommandRan,
+  CommandRequest,
+  ExecuteResult,
+  Row,
+  SqlParameters,
+} from "../sdk.ts";
 
 export type BrokerLimits = {
   readonly agentQueryRows: number;
@@ -108,18 +108,9 @@ const longestPartitionName = 64;
 
 const brokerKinds: readonly string[] = ["refused", "http", "redacted", "command", "throwaway"];
 
-const isRows = (value: Json): value is readonly Row[] =>
-  Array.isArray(value) && value.every((row: Json) => isJsonRecord(row));
-
-const isExecuteResult = (value: Json): value is ExecuteResult =>
-  isJsonRecord(value) && typeof value.changes === "number" && typeof value.lastInsertRowid === "number";
-
-const isNames = (value: Json): value is readonly string[] =>
-  Array.isArray(value) && value.every((name: Json) => typeof name === "string");
-
 type Expected<T> = {
   readonly keyword: string;
-  readonly fits: (value: Json) => value is Json & T;
+  readonly reads: (value: Json) => Reading<T>;
 };
 
 function redactedParameters(parameters: SqlParameters, redact: (text: string) => string): SqlParameters {
@@ -213,7 +204,7 @@ export class Broker {
       const stored = await this.#storedParameters(parameters);
       const order = { method: "execute" as const, sql, parameters: stored, writable };
       const result = await this.#databaseOf(file.value).request(order);
-      return this.#databaseAnswer(result, { keyword, fits: isExecuteResult });
+      return this.#databaseAnswer(result, { keyword, reads: shapes["db.execute"].result });
     });
   }
 
@@ -232,7 +223,7 @@ export class Broker {
         return migrated;
       }
       const result = await this.#databaseOf(file.value).request({ method: "query", sql, parameters });
-      return this.#databaseAnswer(result, { keyword, fits: isRows });
+      return this.#databaseAnswer(result, { keyword, reads: shapes["db.query"].result });
     });
   }
 
@@ -517,7 +508,7 @@ export class Broker {
     const appliedAt = this.#options.clock.now().toISOString();
     const order = { method: "migrate" as const, migrations: ordered.value, appliedAt };
     const result = await this.#databaseOf(file.value).request(order);
-    return this.#databaseAnswer(result, { keyword: "migrate", fits: isNames });
+    return this.#databaseAnswer(result, { keyword: "migrate", reads: shapes["db.migrate"].result });
   }
 
   async #migrationsIn(migrations: string): Promise<Answer<readonly Migration[]>> {
@@ -711,10 +702,10 @@ export class Broker {
     const place = this.#options.place;
     const keyword = expected.keyword;
     switch (result.status) {
-      case "done":
-        return expected.fits(result.value)
-          ? granted(result.value)
-          : failed("The database process gave an answer of the wrong shape.");
+      case "done": {
+        const value = expected.reads(result.value);
+        return value.ok ? granted(value.value) : failed("The database process gave an answer of the wrong shape.");
+      }
       case "missing":
         return failed(`The mode ${this.#grants.mode} has no database yet; run its migrations first.`);
       case "writes-on-read-only":

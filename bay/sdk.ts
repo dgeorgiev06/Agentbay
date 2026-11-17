@@ -1,9 +1,6 @@
 import { createHash } from "node:crypto";
-import type { AgentQueryResult } from "./broker/agent-query.ts";
 import type { Answer } from "./answers.ts";
-import type { CommandRan, CommandRequest, Json } from "./contracts.ts";
-import type { ExecuteResult, Row, SqlParameters } from "./broker/database.ts";
-import type { HttpRequest, HttpResponse } from "./ports.ts";
+import type { Json } from "./contracts.ts";
 
 export type { Json } from "./contracts.ts";
 
@@ -16,6 +13,57 @@ export type Spending = {
   readonly items?: number;
   readonly usd?: number;
   readonly tokens?: number;
+};
+
+export type SqlParameters = readonly Json[] | Readonly<Record<string, Json>>;
+
+export type Row = Readonly<Record<string, Json>>;
+
+export type ExecuteResult = {
+  readonly changes: number;
+  readonly lastInsertRowid: number;
+};
+
+export type AgentQueryResult = {
+  readonly columns: readonly string[];
+  readonly rows: readonly (readonly Json[])[];
+};
+
+export type HttpRequest = {
+  readonly method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  readonly url: string;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body?: string;
+};
+
+export type HttpResponse = {
+  readonly status: number;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body: string;
+};
+
+export type CommandRequest = {
+  readonly command: readonly string[];
+  readonly folder: string;
+  readonly timeLimitSeconds: number;
+  readonly input?: string;
+};
+
+export type CommandEnd =
+  | { readonly how: "exited"; readonly exitCode: number }
+  | { readonly how: "signalled"; readonly signal: string }
+  | { readonly how: "timed-out" };
+
+export type CommandOutput = {
+  readonly text: string;
+  readonly cut: boolean;
+};
+
+export type CommandRan = {
+  readonly end: CommandEnd;
+  readonly milliseconds: number;
+  readonly stdout: CommandOutput;
+  readonly stderr: CommandOutput;
 };
 
 export type DatabaseStatements = {

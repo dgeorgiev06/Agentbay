@@ -33,30 +33,6 @@ export type Permissions = {
   readonly actionEffects: readonly Effect[];
 };
 
-export type CommandRequest = {
-  readonly command: readonly string[];
-  readonly folder: string;
-  readonly timeLimitSeconds: number;
-  readonly input?: string;
-};
-
-export type CommandEnd =
-  | { readonly how: "exited"; readonly exitCode: number }
-  | { readonly how: "signalled"; readonly signal: string }
-  | { readonly how: "timed-out" };
-
-export type CommandOutput = {
-  readonly text: string;
-  readonly cut: boolean;
-};
-
-export type CommandRan = {
-  readonly end: CommandEnd;
-  readonly milliseconds: number;
-  readonly stdout: CommandOutput;
-  readonly stderr: CommandOutput;
-};
-
 export type StepPlace = {
   readonly runId: string;
   readonly mode: string;

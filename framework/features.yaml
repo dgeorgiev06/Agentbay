@@ -97,6 +97,7 @@ features:
       - bay/broker/effect-rule.ts
       - bay/broker/sql-statements.ts
       - bay/broker/folder-links.ts
+      - bay/broker/operations.ts
     may_import:
       - vocabulary
       - safety

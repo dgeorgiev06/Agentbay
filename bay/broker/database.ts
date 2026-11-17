@@ -2,16 +2,8 @@ import { existsSync } from "node:fs";
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue, type StatementSync } from "node:sqlite";
 import type { Json } from "../contracts.ts";
 import { createOwnerOnlyFile, narrowSideFiles } from "../owner-only.ts";
+import type { ExecuteResult, Row, SqlParameters } from "../sdk.ts";
 import { isOneStatement } from "./sql-statements.ts";
-
-export type SqlParameters = readonly Json[] | Readonly<Record<string, Json>>;
-
-export type Row = Readonly<Record<string, Json>>;
-
-export type ExecuteResult = {
-  readonly changes: number;
-  readonly lastInsertRowid: number;
-};
 
 export type Migration = {
   readonly name: string;

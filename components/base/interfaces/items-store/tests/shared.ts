@@ -430,6 +430,14 @@ const cases: readonly Case[] = [
     },
   },
   {
+    name: "query's selector keeps an item at exactly since and leaves out one at exactly until",
+    run: async (store) => {
+      await store.output("put", queriedPut);
+      const window = { since: "2026-11-03T10:00:00Z", until: "2026-11-05T10:00:00Z" };
+      assert.deepEqual(idsOf(await store.output("query", { selector: window, order: "oldest" })), ["fake:2"]);
+    },
+  },
+  {
     name: "query returns at most 100 items when the selector gives no limit",
     run: async (store) => {
       await store.output("put", manyPosts(101));

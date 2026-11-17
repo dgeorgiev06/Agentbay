@@ -1,5 +1,5 @@
 import { isAbsolute, join, normalize } from "node:path/posix";
-import type { GrantedCommand, ModeGrants } from "./contracts.ts";
+import type { GrantedCommand, ModeGrants, ModeList } from "./contracts.ts";
 import type { Mode } from "./generated/mode.ts";
 import { isInsideOrEqual, isProjectTheKit, pathIn, shownPath, type Home, type Layout } from "./layout.ts";
 
@@ -170,6 +170,16 @@ function declaredResources(manifest: Mode): DeclaredResources {
     hosts: resources.network ?? [],
     commands: listedCommandsOf(manifest),
     migrations: resources.db?.migrations ?? "migrations",
+  };
+}
+
+export function listOf(manifest: Mode): ModeList {
+  const declared = declaredResources(manifest);
+  return {
+    mode: manifest.name,
+    commands: declared.commands,
+    commandsStartWith: wordsOf(manifest.resources?.commandsStartWith ?? ""),
+    throwaway: declared.throwaway.map(normalized),
   };
 }
 
@@ -396,6 +406,7 @@ function grantsOfMode(request: GrantRequest): ModeGrants {
     secrets: [...declared.secrets],
     hosts: [...declared.hosts],
     commands: declared.commands,
+    listTrust: { state: "not needed" },
   };
 }
 

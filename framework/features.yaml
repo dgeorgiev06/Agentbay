@@ -59,9 +59,12 @@ features:
       - vocabulary
       - safety
   safety:
-    purpose: Turns a mode's manifest into its grants.
+    purpose:
+      Turns a mode's manifest into its grants, and keeps the record of the owner's trust in a mode's list that decides
+      whether a list outside the kit's components/base/ is granted.
     entry:
       - bay/policy.ts
+      - bay/trust.ts
     private: []
     may_import:
       - vocabulary

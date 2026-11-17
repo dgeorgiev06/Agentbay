@@ -1,4 +1,5 @@
 import type { Budget } from "./generated/mode.ts";
+import type { Problem } from "./outcome.ts";
 
 export type Json = null | boolean | number | string | readonly Json[] | { readonly [key: string]: Json };
 
@@ -21,6 +22,27 @@ export type GrantedCommand = {
   readonly effects: readonly Effect[];
 };
 
+export type ModeList = {
+  readonly mode: string;
+  readonly commands: readonly GrantedCommand[];
+  readonly commandsStartWith: readonly string[];
+  readonly throwaway: readonly string[];
+};
+
+export type TrustGiven = {
+  readonly list: ModeList;
+  readonly hash: string;
+  readonly at: string;
+  readonly by: string;
+};
+
+export type ListTrust =
+  | { readonly state: "not needed" }
+  | { readonly state: "trusted"; readonly given: TrustGiven }
+  | { readonly state: "never trusted"; readonly list: ModeList }
+  | { readonly state: "changed"; readonly list: ModeList; readonly given: TrustGiven }
+  | { readonly state: "unreadable record"; readonly list: ModeList; readonly problems: readonly Problem[] };
+
 export type ModeGrants = {
   readonly mode: string;
   readonly modeFolder: string;
@@ -32,6 +54,7 @@ export type ModeGrants = {
   readonly secrets: readonly string[];
   readonly hosts: readonly string[];
   readonly commands: readonly GrantedCommand[];
+  readonly listTrust: ListTrust;
 };
 
 export type Permissions = {

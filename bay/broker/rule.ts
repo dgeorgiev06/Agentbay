@@ -23,7 +23,7 @@ export type Need = {
   readonly because: string;
 };
 
-type Needing = {
+export type Needing = {
   readonly resource: Resource;
   readonly doing: string;
   readonly needs: readonly Need[];
@@ -39,8 +39,6 @@ export const runsCommands: readonly Need[] = everyEffect.map((effect) => ({
   effect,
   because: "A command can do anything its program can, so running one needs all five effects",
 }));
-
-const reportsDollars: Need = { effect: "spend", because: "Reporting dollars an agent spent needs the spend effect" };
 
 export type EntryRequests = Omit<Requests, "db.migrate"> & {
   readonly "db.migrate": { readonly partition?: string };
@@ -131,7 +129,11 @@ export function askedTo(doing: string, at: ActionAt): string {
   return `The step ${at.stepKey} of action ${at.action} asked to ${doing}`;
 }
 
-function missingEffectRefusal(needing: Needing, effects: readonly Effect[], at: ActionAt): RefusalWording | undefined {
+export function missingEffectRefusal(
+  needing: Needing,
+  effects: readonly Effect[],
+  at: ActionAt,
+): RefusalWording | undefined {
   const missing = needing.needs.find((need) => !effects.includes(need.effect));
   if (missing === undefined) {
     return undefined;
@@ -145,26 +147,8 @@ function missingEffectRefusal(needing: Needing, effects: readonly Effect[], at: 
   };
 }
 
-export function submissionRefusal(
-  spentUsd: number,
-  effects: readonly Effect[],
-  at: ActionAt,
-): RefusalWording | undefined {
-  const needing = {
-    resource: "spend" as const,
-    doing: `report spending ${String(spentUsd)} US dollars`,
-    needs: spentUsd > 0 ? [reportsDollars] : [],
-  };
-  return missingEffectRefusal(needing, effects, at);
-}
-
 export function writableFolders(permissions: Permissions): readonly string[] {
   return permissions.actionEffects.includes(writesFiles.effect) ? permissions.grants.writePaths : [];
-}
-
-export function grantedCommands(permissions: Permissions): readonly string[] {
-  const declaresEvery = runsCommands.every((need) => permissions.actionEffects.includes(need.effect));
-  return declaresEvery ? permissions.grants.commands : [];
 }
 
 export function mayRemoveFiles(permissions: Permissions): boolean {

@@ -1,0 +1,84 @@
+import assert from "node:assert/strict";
+import { join } from "node:path";
+import { test } from "node:test";
+import type { Effect, ScriptRequest } from "../../../bay/contracts.ts";
+import { scriptCommand } from "../../../bay/broker/script-runner.ts";
+import { kitFolder, permissionsIn, place } from "../../broker-fixture.ts";
+
+const noSpend = { items: 0, usd: 0, tokens: 0, minutes: 0 };
+
+test("the runner starts node with the permission model, the grants and the preload, and nothing else", () => {
+  const request: ScriptRequest = {
+    place,
+    script: "scripts/a.ts",
+    input: null,
+    permissions: permissionsIn("/project", {
+      readPaths: ["/project/components/modes/notes", "/project/in"],
+      writePaths: ["/project/out"],
+      effects: ["read", "write"],
+    }),
+    settings: {},
+    remaining: {},
+    timeLimitMilliseconds: 1000,
+    call: () => Promise.resolve({ status: "failed", reason: "no", spent: noSpend }),
+  };
+  const bay = join(kitFolder, "bay");
+  assert.deepEqual(scriptCommand("/project/components/modes/notes/scripts/a.ts", request), [
+    "--permission",
+    `--allow-fs-read=${bay}/broker/script-host.ts`,
+    `--allow-fs-read=${bay}/broker/script-preload.ts`,
+    `--allow-fs-read=${bay}/broker/operations.ts`,
+    `--allow-fs-read=${bay}/broker/script-protocol.ts`,
+    `--allow-fs-read=${bay}/protocol-json.ts`,
+    `--allow-fs-read=${bay}/sdk.ts`,
+    "--allow-fs-read=/project/components/modes/notes",
+    "--allow-fs-read=/project/components/modes/notes/*",
+    "--allow-fs-read=/project/in",
+    "--allow-fs-read=/project/in/*",
+    "--allow-fs-write=/project/out",
+    "--allow-fs-write=/project/out/*",
+    "--disable-warning=ExperimentalWarning",
+    `--import=file://${bay}/broker/script-preload.ts`,
+    `${bay}/broker/script-host.ts`,
+    "/project/components/modes/notes/scripts/a.ts",
+  ]);
+});
+
+test("the runner tells the preload that files may be removed only when the action declares write and delete", () => {
+  const commandFor = (effects: readonly Effect[]): readonly string[] =>
+    scriptCommand("/project/components/modes/notes/scripts/a.ts", {
+      place,
+      script: "scripts/a.ts",
+      input: null,
+      permissions: permissionsIn("/project", { writePaths: ["/project/out"], effects }),
+      settings: {},
+      remaining: {},
+      timeLimitMilliseconds: 1000,
+      call: () => Promise.resolve({ status: "failed", reason: "no", spent: noSpend }),
+    });
+  assert.equal(commandFor(["read", "write", "delete"]).at(-1), "--agentbay-may-remove-files");
+  assert.ok(!commandFor(["read", "write"]).includes("--agentbay-may-remove-files"));
+  assert.ok(!commandFor(["read", "delete"]).includes("--agentbay-may-remove-files"));
+});
+
+test("a script is granted direct file writes only when its action declares write", () => {
+  const request = (effects: readonly Effect[]) => ({
+    place,
+    script: "scripts/a.ts",
+    input: null,
+    permissions: permissionsIn("/project", { writePaths: ["/project/out"], effects }),
+    settings: {},
+    remaining: {},
+    timeLimitMilliseconds: 1000,
+    call: () => Promise.reject(new Error("no calls")),
+  });
+  const writeGrants = (effects: readonly Effect[]): readonly string[] =>
+    scriptCommand("/project/components/modes/notes/scripts/a.ts", request(effects)).filter((argument) =>
+      argument.startsWith("--allow-fs-write"),
+    );
+  assert.deepEqual(writeGrants(["read"]), []);
+  assert.deepEqual(writeGrants(["read", "write"]), [
+    "--allow-fs-write=/project/out",
+    "--allow-fs-write=/project/out/*",
+  ]);
+});

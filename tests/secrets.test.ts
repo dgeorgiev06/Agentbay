@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
-import { brokerForStep } from "../bay/broker/broker.ts";
+import { createBroker } from "../bay/broker/broker.ts";
 import type { ModeGrants, Scrubber } from "../bay/contracts.ts";
 import {
   nodeChildProcesses,
@@ -29,10 +29,8 @@ const permissions = grantsIn("/project", { secrets: ["MAIL_TOKEN", "SHORT_ONE", 
 const madeUpToken = "made-up-token-value-4242";
 
 async function askedThroughTheBroker(store: SecretStore, name: string, grants: ModeGrants): Promise<Answer<string>> {
-  const broker = brokerForStep({
+  const broker = createBroker({
     layout: projectLayout("/project"),
-    permissions: { grants, actionEffects: [] },
-    place,
     files: nodeFileSystem,
     throwawayFolders: nodeThrowawayFolders,
     inspector: nodeFileInspector,
@@ -43,9 +41,9 @@ async function askedThroughTheBroker(store: SecretStore, name: string, grants: M
     childProcesses: nodeChildProcesses,
     processes: noProcesses,
     commandSearchPath: "/usr/bin:/bin",
-  });
+  }).forStep(place, { grants, actionEffects: [] });
   try {
-    return await broker.entries["secrets.get"]({ name });
+    return await broker.ask("secrets.get", { name });
   } finally {
     broker.close();
   }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { brokerForStep, type BrokerLimits, type StepBroker } from "../bay/broker/broker.ts";
+import { createBroker, type StepBroker } from "../bay/broker/broker.ts";
 import type { Effect } from "../bay/contracts.ts";
 import { fieldOf } from "../bay/json.ts";
 import {
@@ -24,20 +24,20 @@ import {
   type RecordingSink,
 } from "./broker-fixture.ts";
 
+type Limits = NonNullable<Parameters<typeof createBroker>[0]["limits"]>;
+
 const everyEffect: readonly Effect[] = ["read", "write", "network", "spend", "delete"];
 
 const madeUpSecret = "broker-secret-3c9f1a7e";
 
 async function withCommandBroker(
-  limits: Partial<BrokerLimits>,
+  limits: Limits,
   run: (broker: StepBroker, events: RecordingSink) => Promise<void>,
 ): Promise<void> {
   await withProject(async (root) => {
     const events = recordingSink();
-    const broker = brokerForStep({
+    const broker = createBroker({
       layout: projectLayout(root),
-      permissions: permissionsIn(root, { effects: everyEffect, commands: ["node -e"], secrets: ["BROKER_TOKEN"] }),
-      place,
       files: nodeFileSystem,
       throwawayFolders: nodeThrowawayFolders,
       inspector: nodeFileInspector,
@@ -54,7 +54,7 @@ async function withCommandBroker(
       processes: nodeProcesses,
       commandSearchPath: process.env.PATH ?? "/usr/bin:/bin",
       limits,
-    });
+    }).forStep(place, permissionsIn(root, { effects: everyEffect, commands: ["node -e"], secrets: ["BROKER_TOKEN"] }));
     try {
       await run(broker, events);
     } finally {
@@ -67,7 +67,7 @@ test("a command's time limit is cut to the broker's own limit", async () => {
   await withCommandBroker({ commandMilliseconds: 500 }, async (broker) => {
     const startedAt = Date.now();
     const command = ["node", "-e", "setInterval(() => {}, 1000)"];
-    const ran = valueOf(await broker.entries["commands.run"]({ command, folder: ".", timeLimitSeconds: 30 }));
+    const ran = valueOf(await broker.ask("commands.run", { command, folder: ".", timeLimitSeconds: 30 }));
     assert.deepEqual(ran.end, { how: "timed-out" });
     assert.ok(Date.now() - startedAt < 5000);
   });
@@ -76,7 +76,7 @@ test("a command's time limit is cut to the broker's own limit", async () => {
 test("the broker records a command's secret arguments redacted", async () => {
   await withCommandBroker({}, async (broker, events) => {
     const command = ["node", "-e", "process.exit(0)", madeUpSecret];
-    valueOf(await broker.entries["commands.run"]({ command, folder: ".", timeLimitSeconds: 30 }));
+    valueOf(await broker.ask("commands.run", { command, folder: ".", timeLimitSeconds: 30 }));
     const recorded = events.events.find((event) => event.kind === "command")?.detail ?? null;
     assert.deepEqual(fieldOf(recorded, "command"), ["node", "-e", "process.exit(0)", "[redacted:BROKER_TOKEN]"]);
   });

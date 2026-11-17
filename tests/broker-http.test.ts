@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
-import { brokerForStep, type BrokerLimits, type StepBroker } from "../bay/broker/broker.ts";
+import { createBroker, type StepBroker } from "../bay/broker/broker.ts";
 import type { HttpRequest, HttpResponse } from "../bay/ports.ts";
 import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, nodeThrowawayFolders } from "../bay/node-ports.ts";
 import { SecretStore } from "../bay/secrets.ts";
@@ -18,6 +18,8 @@ import {
   projectLayout,
 } from "./broker-fixture.ts";
 
+type Limits = NonNullable<Parameters<typeof createBroker>[0]["limits"]>;
+
 const madeUpToken = "made-up-bearer-value-9876";
 
 type Setup = {
@@ -27,7 +29,7 @@ type Setup = {
   readonly secrets: SecretStore;
 };
 
-function setup(answer: (request: HttpRequest) => HttpResponse, limits: Partial<BrokerLimits> = {}): Setup {
+function setup(answer: (request: HttpRequest) => HttpResponse, limits: Limits = {}): Setup {
   const http = scriptedHttp(answer);
   const events = recordingSink();
   const secrets = new SecretStore({
@@ -35,14 +37,8 @@ function setup(answer: (request: HttpRequest) => HttpResponse, limits: Partial<B
     processes: noProcesses,
     platform: "linux",
   });
-  const broker = brokerForStep({
+  const broker = createBroker({
     layout: projectLayout("/project"),
-    permissions: permissionsIn("/project", {
-      hosts: ["api.example.com", "*.files.example.com"],
-      secrets: ["API_TOKEN"],
-      effects: ["read", "network"],
-    }),
-    place,
     files: nodeFileSystem,
     throwawayFolders: nodeThrowawayFolders,
     inspector: nodeFileInspector,
@@ -54,7 +50,14 @@ function setup(answer: (request: HttpRequest) => HttpResponse, limits: Partial<B
     processes: noProcesses,
     commandSearchPath: "/usr/bin:/bin",
     limits,
-  });
+  }).forStep(
+    place,
+    permissionsIn("/project", {
+      hosts: ["api.example.com", "*.files.example.com"],
+      secrets: ["API_TOKEN"],
+      effects: ["read", "network"],
+    }),
+  );
   return { broker, http, events, secrets };
 }
 
@@ -70,7 +73,7 @@ function refusalOf<T>(answer: Answer<T>): string {
 
 test("a request to a declared host over https goes through", async () => {
   const { broker, http } = setup(() => ok);
-  assert.deepEqual(await broker.entries["http.request"](get("https://api.example.com/v1/items?x=1")), {
+  assert.deepEqual(await broker.ask("http.request", get("https://api.example.com/v1/items?x=1")), {
     ok: true,
     value: ok,
   });
@@ -79,7 +82,7 @@ test("a request to a declared host over https goes through", async () => {
 
 test("an undeclared host is refused before any request, naming resources.network", async () => {
   const { broker, http, events } = setup(() => ok);
-  const message = refusalOf(await broker.entries["http.request"](get("https://evil.example/collect")));
+  const message = refusalOf(await broker.ask("http.request", get("https://evil.example/collect")));
   assert.match(message, /evil\.example/);
   assert.match(message, /api\.example\.com, \*\.files\.example\.com/);
   assert.match(message, /resources\.network in /);
@@ -89,27 +92,27 @@ test("an undeclared host is refused before any request, naming resources.network
 
 test("http instead of https is refused, even to a declared host", async () => {
   const { broker, http } = setup(() => ok);
-  refusalOf(await broker.entries["http.request"](get("http://api.example.com/v1")));
-  refusalOf(await broker.entries["http.request"](get("ftp://api.example.com/v1")));
-  refusalOf(await broker.entries["http.request"](get("not a url")));
+  refusalOf(await broker.ask("http.request", get("http://api.example.com/v1")));
+  refusalOf(await broker.ask("http.request", get("ftp://api.example.com/v1")));
+  refusalOf(await broker.ask("http.request", get("not a url")));
   assert.equal(http.requests.length, 0);
 });
 
 test("a wildcard entry matches subdomains only, and look-alike hosts are refused", async () => {
   const { broker, http } = setup(() => ok);
-  assert.equal((await broker.entries["http.request"](get("https://a.files.example.com/x"))).ok, true);
-  assert.equal((await broker.entries["http.request"](get("https://a.b.files.example.com/x"))).ok, true);
-  refusalOf(await broker.entries["http.request"](get("https://files.example.com/x")));
-  refusalOf(await broker.entries["http.request"](get("https://evilfiles.example.com/x")));
-  refusalOf(await broker.entries["http.request"](get("https://api.example.com.evil.example/x")));
-  refusalOf(await broker.entries["http.request"](get("https://API.example.com:8443/x")));
-  refusalOf(await broker.entries["http.request"](get("https://someone:pw@api.example.com/x")));
+  assert.equal((await broker.ask("http.request", get("https://a.files.example.com/x"))).ok, true);
+  assert.equal((await broker.ask("http.request", get("https://a.b.files.example.com/x"))).ok, true);
+  refusalOf(await broker.ask("http.request", get("https://files.example.com/x")));
+  refusalOf(await broker.ask("http.request", get("https://evilfiles.example.com/x")));
+  refusalOf(await broker.ask("http.request", get("https://api.example.com.evil.example/x")));
+  refusalOf(await broker.ask("http.request", get("https://API.example.com:8443/x")));
+  refusalOf(await broker.ask("http.request", get("https://someone:pw@api.example.com/x")));
   assert.equal(http.requests.length, 2);
 });
 
 test("a redirect to an undeclared host is refused and not followed", async () => {
   const { broker, http } = setup(() => ({ status: 302, headers: { location: "https://evil.example/x" }, body: "" }));
-  const message = refusalOf(await broker.entries["http.request"](get("https://api.example.com/start")));
+  const message = refusalOf(await broker.ask("http.request", get("https://api.example.com/start")));
   assert.match(message, /redirect/);
   assert.match(message, /evil\.example/);
   assert.equal(http.requests.length, 1);
@@ -117,7 +120,7 @@ test("a redirect to an undeclared host is refused and not followed", async () =>
 
 test("a redirect to http is refused", async () => {
   const { broker, http } = setup(() => ({ status: 301, headers: { location: "http://api.example.com/x" }, body: "" }));
-  refusalOf(await broker.entries["http.request"](get("https://api.example.com/start")));
+  refusalOf(await broker.ask("http.request", get("https://api.example.com/start")));
   assert.equal(http.requests.length, 1);
 });
 
@@ -131,7 +134,7 @@ test("redirects between declared hosts are followed hop by hop, dropping credent
     }
     return ok;
   });
-  const answer = await broker.entries["http.request"]({
+  const answer = await broker.ask("http.request", {
     method: "POST",
     url: "https://api.example.com/start",
     headers: { authorization: `Bearer ${madeUpToken}`, "content-type": "text/plain" },
@@ -152,7 +155,7 @@ test("redirects between declared hosts are followed hop by hop, dropping credent
 
 test("too many redirects fail", async () => {
   const { broker, http } = setup(() => ({ status: 302, headers: { location: "/again" }, body: "" }));
-  failureOf(await broker.entries["http.request"](get("https://api.example.com/again")));
+  failureOf(await broker.ask("http.request", get("https://api.example.com/again")));
   assert.equal(http.requests.length, 6);
 });
 
@@ -162,7 +165,7 @@ test("request and response bodies are capped", async () => {
     httpResponseBytes: 1000,
   });
   refusalOf(
-    await broker.entries["http.request"]({
+    await broker.ask("http.request", {
       method: "POST",
       url: "https://api.example.com/x",
       headers: {},
@@ -170,7 +173,7 @@ test("request and response bodies are capped", async () => {
     }),
   );
   assert.equal(http.requests.length, 0);
-  assert.match(failureOf(await broker.entries["http.request"](get("https://api.example.com/x"))).message, /1000 bytes/);
+  assert.match(failureOf(await broker.ask("http.request", get("https://api.example.com/x"))).message, /1000 bytes/);
 });
 
 test("a transport error is a failed answer with a redacted message, not an exception", async () => {
@@ -178,16 +181,17 @@ test("a transport error is a failed answer with a redacted message, not an excep
     throw new Error(`connection reset while sending ${madeUpToken}`);
   });
   await secrets.lookUp("API_TOKEN");
-  const message = failureOf(await broker.entries["http.request"](get("https://api.example.com/x"))).message;
+  const message = failureOf(await broker.ask("http.request", get("https://api.example.com/x"))).message;
   assert.doesNotMatch(message, new RegExp(madeUpToken));
   assert.match(message, /connection reset/);
 });
 
 test("every request is logged as an event with credentials redacted", async () => {
   const { broker, events, secrets } = setup(() => ok);
-  const token = await broker.entries["secrets.get"]({ name: "API_TOKEN" });
+  const token = await broker.ask("secrets.get", { name: "API_TOKEN" });
   assert.deepEqual(token, { ok: true, value: madeUpToken });
-  await broker.entries["http.request"](
+  await broker.ask(
+    "http.request",
     get(`https://api.example.com/x?key=${madeUpToken}`, {
       Authorization: `Bearer ${madeUpToken}`,
       "X-Api-Key": "another-made-up-key-1",
@@ -207,9 +211,9 @@ test("every request is logged as an event with credentials redacted", async () =
 
 test("an event a script emits is appended after redaction", async () => {
   const { broker, events } = setup(() => ok);
-  await broker.entries["secrets.get"]({ name: "API_TOKEN" });
+  await broker.ask("secrets.get", { name: "API_TOKEN" });
   assert.deepEqual(
-    await broker.entries["events.emit"]({ kind: "synced", detail: { note: `token ${madeUpToken}`, count: 3 } }),
+    await broker.ask("events.emit", { kind: "synced", detail: { note: `token ${madeUpToken}`, count: 3 } }),
     { ok: true, value: null },
   );
   assert.deepEqual(events.events.at(-1), {
@@ -222,7 +226,7 @@ test("an event a script emits is appended after redaction", async () => {
 
 test("a script may not emit an event that looks like a refusal", async () => {
   const { broker, events } = setup(() => ok);
-  refusalOf(await broker.entries["events.emit"]({ kind: "refused", detail: { forged: true } }));
+  refusalOf(await broker.ask("events.emit", { kind: "refused", detail: { forged: true } }));
   assert.equal(events.events.filter((event) => event.kind === "refused").length, 1);
   assert.match(
     JSON.stringify(events.events[0]?.detail),
@@ -233,7 +237,7 @@ test("a script may not emit an event that looks like a refusal", async () => {
 
 test("an undeclared secret through the broker is refused and recorded", async () => {
   const { broker, events } = setup(() => ok);
-  const message = refusalOf(await broker.entries["secrets.get"]({ name: "OTHER_TOKEN" }));
+  const message = refusalOf(await broker.ask("secrets.get", { name: "OTHER_TOKEN" }));
   assert.match(message, /OTHER_TOKEN/);
   assert.equal(events.events[0]?.kind, "refused");
 });
@@ -251,7 +255,7 @@ test("a redirect to a host that is not granted is refused at that hop, and nothi
   const asked = "A request was redirected to https://evil.example/collect";
   const declared = "the mode notes declares the hosts: api.example.com, *.files.example.com";
   const change = "To allow it, add evil.example under resources.network in /project/components/modes/notes/mode.yaml.";
-  assert.deepEqual(await broker.entries["http.request"](get("https://api.example.com/start")), {
+  assert.deepEqual(await broker.ask("http.request", get("https://api.example.com/start")), {
     ok: false,
     kind: "refused",
     resource: "http",

@@ -12,7 +12,7 @@ import {
   nodeThrowawayFolders,
   systemClock,
 } from "../bay/node-ports.ts";
-import { createScriptRunner } from "../bay/broker/script-runner.ts";
+import { createBroker } from "../bay/broker/broker.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import { kitFolder, noProcesses, place, recordingSink, scriptedHttp, writeProjectFile } from "./broker-fixture.ts";
 import { grantsWith } from "./grants-fixture.ts";
@@ -46,7 +46,7 @@ function permissionsOf(layout: Layout, modeFolder: string): Permissions {
 }
 
 async function run(layout: Layout, modeFolder: string): Promise<StepOutcome> {
-  const runner = createScriptRunner({
+  const runner = createBroker({
     layout,
     files: nodeFileSystem,
     throwawayFolders: nodeThrowawayFolders,
@@ -58,7 +58,7 @@ async function run(layout: Layout, modeFolder: string): Promise<StepOutcome> {
     childProcesses: nodeChildProcesses,
     processes: noProcesses,
     commandSearchPath: "/usr/bin:/bin",
-  });
+  }).scripts;
   return runner.run({
     place,
     script: "scripts/probe.ts",

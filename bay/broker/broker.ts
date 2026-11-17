@@ -1,195 +1,64 @@
-import { type Answer, failed, manifestOf } from "../answers.ts";
-import type { ChildProcesses, Clock, FileInspector, FileSystem, Http, Processes, ThrowawayFolders } from "../ports.ts";
-import type { ActionCaller, EventSink, Json, Permissions, StepPlace } from "../contracts.ts";
-import { DatabaseProcess } from "./database-process.ts";
-import { databaseEntries } from "./database-operations.ts";
-import { fileEntries } from "./file-operations.ts";
-import { httpEntries } from "./http-operations.ts";
-import { otherEntries } from "./other-operations.ts";
-import { commandEntries } from "./command-operations.ts";
-import type { Layout } from "../layout.ts";
-import type { SecretStore } from "../secrets.ts";
-import type { OperationName } from "./operations.ts";
-import type { Asking, Doing, Entries, RefusalDetail, SpendAmounts, Step, StepLimits } from "./rule.ts";
+import type { Answer, RefusalWording } from "../answers.ts";
+import type { Effect, Permissions, ScriptRunner, StepPlace } from "../contracts.ts";
+import type { OperationName, Results } from "./operations.ts";
+import {
+  type ActionAt,
+  type EntryRequests,
+  missingEffectRefusal,
+  type Need,
+  runsCommands,
+  writableFolders,
+} from "./rule.ts";
+import { createScriptRunner, type ScriptRunnerOptions } from "./script-runner.ts";
+import { openStep } from "./step-broker.ts";
 
-export type BrokerLimits = StepLimits & {
-  readonly databaseMilliseconds: number;
-};
-
-export type BrokerOptions = {
-  readonly layout: Layout;
-  readonly permissions: Permissions;
-  readonly place: StepPlace;
-  readonly files: FileSystem;
-  readonly throwawayFolders: ThrowawayFolders;
-  readonly inspector: FileInspector;
-  readonly http: Http;
-  readonly secrets: SecretStore;
-  readonly events: EventSink;
-  readonly clock: Clock;
-  readonly childProcesses: ChildProcesses;
-  readonly processes: Processes;
-  readonly commandSearchPath: string;
-  readonly limits?: Partial<BrokerLimits>;
-  readonly call?: ActionCaller;
-};
-
-const defaultBrokerLimits: BrokerLimits = {
-  agentQueryRows: 200,
-  agentQueryCellCharacters: 4000,
-  agentQueryResultBytes: 1_000_000,
-  agentQueryMilliseconds: 2000,
-  httpRequestBytes: 1024 * 1024,
-  httpResponseBytes: 10 * 1024 * 1024,
-  httpRedirects: 5,
-  databaseMilliseconds: 10 * 60 * 1000,
-  commandMilliseconds: 10 * 60 * 1000,
-  commandOutputCharacters: 64 * 1024,
+export type Broker = {
+  readonly scripts: ScriptRunner;
+  readonly forStep: (place: StepPlace, permissions: Permissions) => StepBroker;
 };
 
 export type StepBroker = {
-  readonly entries: Entries<OperationName>;
-  readonly settled: <T>(answer: Answer<T>) => Promise<Answer<T>>;
-  readonly spent: () => SpendAmounts;
+  readonly ask: <Name extends OperationName>(
+    name: Name,
+    request: EntryRequests[Name],
+  ) => Promise<Answer<Results[Name]>>;
   readonly close: () => void;
 };
 
-type Recorder = (kind: string, detail: Json) => Promise<void>;
-
-type Databases = {
-  readonly databaseOf: (file: string) => DatabaseProcess;
-  readonly close: () => void;
+export type Reach = {
+  readonly writableFolders: readonly string[];
+  readonly commands: readonly string[];
 };
 
-function noCaller(stepKey: string): ActionCaller {
-  return () =>
-    Promise.resolve({
-      status: "failed",
-      reason: `The step ${stepKey} cannot call an action: only a script's step calls actions.`,
-      spent: { items: 0, usd: 0, tokens: 0, minutes: 0 },
-    });
-}
+const reportsDollars: Need = { effect: "spend", because: "Reporting dollars an agent spent needs the spend effect" };
 
-function recorderOf(options: BrokerOptions): Recorder {
-  return async (kind, detail) => {
-    await options.events.append({
-      at: options.clock.now().toISOString(),
-      runId: options.place.runId,
-      kind,
-      detail: options.secrets.redactJson(detail),
-    });
-  };
-}
-
-function settlerOf(options: BrokerOptions, record: Recorder): Step["settled"] {
-  const { secrets } = options;
-  return async <T>(answer: Answer<T>, detail: RefusalDetail): Promise<Answer<T>> => {
-    if (answer.ok) {
-      return answer;
-    }
-    const message = secrets.redact(answer.message);
-    if (answer.kind === "failed") {
-      return failed(message);
-    }
-    await record("refused", { resource: answer.resource, step: options.place.stepKey, message, ...detail });
-    return {
-      ...answer,
-      asked: secrets.redact(answer.asked),
-      declared: secrets.redact(answer.declared),
-      change: secrets.redact(answer.change),
-      message,
-    };
-  };
-}
-
-function databasesOf(options: BrokerOptions, lifetimeMilliseconds: number): Databases {
-  const open = new Map<string, DatabaseProcess>();
+export function createBroker(services: ScriptRunnerOptions): Broker {
   return {
-    databaseOf: (file) => {
-      const known = open.get(file);
-      if (known !== undefined) {
-        return known;
-      }
-      const database = new DatabaseProcess({
-        childProcesses: options.childProcesses,
-        databaseFile: file,
-        lifetimeMilliseconds,
-      });
-      open.set(file, database);
-      return database;
-    },
-    close: () => {
-      for (const database of open.values()) {
-        database.close();
-      }
-      open.clear();
+    scripts: createScriptRunner(services),
+    forStep: (place, permissions) => {
+      const step = openStep({ ...services, place, permissions });
+      return { ask: (name, request) => step.entries[name](request), close: step.close };
     },
   };
 }
 
-function askingOf(options: BrokerOptions, limits: StepLimits): Asking {
-  const { grants, actionEffects } = options.permissions;
-  const { place, layout, inspector } = options;
-  const at = { stepKey: place.stepKey, action: place.action, manifest: manifestOf(grants) };
-  return { grants, effects: actionEffects, at, layout, inspector, limits };
-}
-
-type StepState = {
-  readonly limits: StepLimits;
-  readonly record: Recorder;
-  readonly databases: Databases;
-  readonly spent: { items: number; usd: number; tokens: number };
-};
-
-function doingOf(options: BrokerOptions, state: StepState): Doing {
-  const { spent } = state;
-  let unnamedMigration: Promise<Answer<readonly string[]>> | undefined;
+export function reachOf(permissions: Permissions): Reach {
+  const runsAnyCommand = runsCommands.every((need) => permissions.actionEffects.includes(need.effect));
   return {
-    stepKey: options.place.stepKey,
-    files: options.files,
-    throwawayFolders: options.throwawayFolders,
-    inspector: options.inspector,
-    scrubber: options.secrets,
-    secrets: options.secrets,
-    clock: options.clock,
-    http: options.http,
-    processes: options.processes,
-    commandSearchPath: options.commandSearchPath,
-    childProcesses: options.childProcesses,
-    limits: state.limits,
-    record: state.record,
-    call: options.call ?? noCaller(options.place.stepKey),
-    addSpending: (amounts) => {
-      spent.items += amounts.items;
-      spent.usd += amounts.usd;
-      spent.tokens += amounts.tokens;
-    },
-    databaseOf: state.databases.databaseOf,
-    migratedOnce: (migrate) => {
-      unnamedMigration ??= migrate();
-      return unnamedMigration;
-    },
+    writableFolders: writableFolders(permissions),
+    commands: runsAnyCommand ? permissions.grants.commands : [],
   };
 }
 
-export function brokerForStep(options: BrokerOptions): StepBroker {
-  const limits = { ...defaultBrokerLimits, ...options.limits };
-  const record = recorderOf(options);
-  const settled = settlerOf(options, record);
-  const databases = databasesOf(options, limits.databaseMilliseconds);
-  const spent = { items: 0, usd: 0, tokens: 0 };
-  const doing = doingOf(options, { limits, record, databases, spent });
-  const step: Step = { asking: askingOf(options, limits), doing, settled };
-  return {
-    entries: {
-      ...fileEntries(step),
-      ...databaseEntries(step),
-      ...otherEntries(step),
-      ...httpEntries(step),
-      ...commandEntries(step),
-    },
-    settled: (answer) => settled(answer, {}),
-    spent: () => ({ ...spent }),
-    close: databases.close,
+export function submissionRefusal(
+  spentUsd: number,
+  effects: readonly Effect[],
+  at: ActionAt,
+): RefusalWording | undefined {
+  const needing = {
+    resource: "spend" as const,
+    doing: `report spending ${String(spentUsd)} US dollars`,
+    needs: spentUsd > 0 ? [reportsDollars] : [],
   };
+  return missingEffectRefusal(needing, effects, at);
 }

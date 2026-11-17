@@ -153,12 +153,11 @@ function partitionOf(kernel: Kernel, mode: string, name: string): DatabasePartit
     }
   };
   return {
-    migrate: () => closing((opened) => opened.entries["db.migrate"]({ partition: name })),
+    migrate: () => closing((opened) => opened.ask("db.migrate", { partition: name })),
     execute: (sql, parameters = []) =>
-      closing((opened) => opened.entries["db.execute"]({ sql, parameters, partition: name })),
-    query: (sql, parameters = []) =>
-      closing((opened) => opened.entries["db.query"]({ sql, parameters, partition: name })),
-    agentQuery: (sql) => closing((opened) => opened.entries["db.agentQuery"]({ sql, partition: name })),
+      closing((opened) => opened.ask("db.execute", { sql, parameters, partition: name })),
+    query: (sql, parameters = []) => closing((opened) => opened.ask("db.query", { sql, parameters, partition: name })),
+    agentQuery: (sql) => closing((opened) => opened.ask("db.agentQuery", { sql, partition: name })),
   };
 }
 

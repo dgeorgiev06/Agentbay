@@ -93,9 +93,9 @@ const testFolder = "tests";
 
 const debtKeys = { kit: "breaks", tests: "test_breaks" } as const;
 
-const featuresTestedAtTheirEntry: readonly string[] = ["manifests", "runs"];
+const featuresTestedAtTheirEntry: readonly string[] = ["manifests", "broker", "runs"];
 
-const featuresSealedInTheirFolder: readonly string[] = ["manifests", "runs"];
+const featuresSealedInTheirFolder: readonly string[] = ["manifests", "broker", "runs"];
 
 const mapFile = "framework/features.yaml";
 

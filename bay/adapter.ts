@@ -1,5 +1,5 @@
 import type { Effect, ModeGrants, Tier } from "./contracts.ts";
-import { grantedCommands, writableFolders } from "./broker/rule.ts";
+import { reachOf } from "./broker/broker.ts";
 import type { Layout } from "./layout.ts";
 import type { FileSystem, Removal } from "./ports.ts";
 import type { System } from "./manifests/manifests.ts";
@@ -44,9 +44,9 @@ export function agentName(mode: string, skill: string): string {
 }
 
 export function agentWritableFolders(agent: SkillAgent): readonly string[] {
-  return writableFolders({ grants: agent.grants, actionEffects: agent.effects });
+  return reachOf({ grants: agent.grants, actionEffects: agent.effects }).writableFolders;
 }
 
 export function agentCommands(agent: SkillAgent): readonly string[] {
-  return grantedCommands({ grants: agent.grants, actionEffects: agent.effects });
+  return reachOf({ grants: agent.grants, actionEffects: agent.effects }).commands;
 }

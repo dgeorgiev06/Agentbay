@@ -1,4 +1,4 @@
-import { brokerForStep, type StepBroker } from "./broker/broker.ts";
+import { createBroker, type StepBroker } from "./broker/broker.ts";
 import type { FileListing } from "./check-context.ts";
 import type { Layout } from "./layout.ts";
 import type { Permissions, StepPlace } from "./contracts.ts";
@@ -27,7 +27,6 @@ import type {
 } from "./ports.ts";
 import { loadSystem, type System } from "./manifests/manifests.ts";
 import { openRuns, type Runs } from "./runs/runs.ts";
-import { createScriptRunner } from "./broker/script-runner.ts";
 import { SecretStore, type SecretStoreOptions } from "./secrets.ts";
 import type { Outcome } from "./outcome.ts";
 
@@ -131,10 +130,9 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
     system,
     scrubber: secrets,
     toolCallsPerRound: limits.toolCallsPerRound,
-    runner: (events) => createScriptRunner({ ...services, ...processes, events }),
+    runner: (events) => createBroker({ ...services, ...processes, events }).scripts,
   });
-  const brokerFor = (place: StepPlace, permissions: Permissions): StepBroker =>
-    brokerForStep({ ...services, ...processes, events: runs.events, place, permissions });
+  const brokerFor = createBroker({ ...services, ...processes, events: runs.events }).forStep;
   const kernel: Kernel = {
     limits,
     layout,

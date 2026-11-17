@@ -2,13 +2,18 @@ import assert from "node:assert/strict";
 import { lstat, readdir, readFile, readlink, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { Answer } from "../bay/answers.ts";
-import { brokerForStep, type StepBroker } from "../bay/broker/broker.ts";
-import type { ActionCaller, Effect, Json, ModeGrants } from "../bay/contracts.ts";
-import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, nodeThrowawayFolders } from "../bay/node-ports.ts";
-import type { HttpRequest, HttpResponse } from "../bay/ports.ts";
-import { SecretStore } from "../bay/secrets.ts";
-import { fakeClock } from "./fakes.ts";
+import type { Answer } from "../../../bay/answers.ts";
+import { openStep, type OpenStep } from "../../../bay/broker/step-broker.ts";
+import type { ActionCaller, Effect, Json, ModeGrants } from "../../../bay/contracts.ts";
+import {
+  nodeChildProcesses,
+  nodeFileInspector,
+  nodeFileSystem,
+  nodeThrowawayFolders,
+} from "../../../bay/node-ports.ts";
+import type { HttpRequest, HttpResponse } from "../../../bay/ports.ts";
+import { SecretStore } from "../../../bay/secrets.ts";
+import { fakeClock } from "../../fakes.ts";
 import {
   exitedProcess,
   noProcesses,
@@ -20,12 +25,12 @@ import {
   scriptedHttp,
   withProject,
   writeProjectFile,
-} from "./broker-fixture.ts";
+} from "../../broker-fixture.ts";
 
-type Moved = keyof StepBroker["entries"];
+type Moved = keyof OpenStep["entries"];
 
 type Asking = {
-  readonly ask: (broker: StepBroker) => Promise<Answer<Json>>;
+  readonly ask: (broker: OpenStep) => Promise<Answer<Json>>;
   readonly effects: readonly Effect[];
   readonly grants?: (root: string) => Partial<ModeGrants>;
   readonly call?: ActionCaller;
@@ -880,7 +885,7 @@ async function asked(asking: Asking): Promise<Asked> {
       commands: ["node --version", "node -e"],
       ...asking.grants?.(root),
     };
-    const broker = brokerForStep({
+    const broker = openStep({
       layout: projectLayout(root),
       permissions: permissionsIn(root, { effects: asking.effects, ...grants }),
       place,

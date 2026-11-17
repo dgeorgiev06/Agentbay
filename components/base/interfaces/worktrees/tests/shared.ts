@@ -338,6 +338,19 @@ const cases: readonly Case[] = [
     },
   },
   {
+    name: "a cut whose branch already exists is refused even when the slice has no worktree, and the branch is as it was",
+    restsOn: "cut-response (the worktree and branch that were made); README, cut: refused when the branch exists",
+    run: async (world) => {
+      await world.makeBranch("history", world.base);
+      const head = await world.commit(changeOn({ branch: "history" }, { "work.txt": "work\n" }, "Do the work"));
+      await world.makeBranch("forge/taken", head);
+      const before = await forgeTree(world);
+      assert.equal(sentenceOf(await world.failure("cut", { slice: "taken", base: ownersBranch })), givenReason);
+      assert.equal(await world.headOf("forge/taken"), head);
+      assert.deepEqual(await forgeTree(world), before);
+    },
+  },
+  {
     name: "status gives the worktree's head and the commits since the base, oldest first, with their subjects, and the commits are on the slice's branch",
     restsOn: placeStatus,
     run: async (world) => {

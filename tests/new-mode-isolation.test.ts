@@ -55,6 +55,7 @@ async function copyOfTheKit(): Promise<string> {
 }
 
 async function addMode(name: string, files: ModeFiles): Promise<void> {
+  assert.equal(existsSync(join(copy, modesFolder, name)), false, `the kit already holds ${modesFolder}/${name}`);
   for (const [path, text] of Object.entries(files)) {
     const file = join(copy, modesFolder, name, path);
     await mkdir(dirname(file), { recursive: true });

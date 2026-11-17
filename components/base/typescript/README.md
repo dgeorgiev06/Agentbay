@@ -7,8 +7,10 @@ The mode `typescript` implements `toolchain@1`. It checks and tests TypeScript c
 | Action | What it does |
 |---|---|
 | `describe` | Names the language, the patterns of its source and test files, its practices file and its checks. It runs nothing. |
-| `check` | Runs each check, or the named ones, in a checkout, one after another, and gives each a verdict. |
-| `test` | Runs `npm test` in a checkout with the TAP reporter, on every test or on named files, and gives one verdict with the counts. |
+| `check` | Runs each check, or the named ones, in the folder it is given, one after another, and gives each a verdict. |
+| `test` | Runs `npm test` in the folder it is given with the TAP reporter, on every test or on named files, and gives one verdict with the counts. |
+
+The folder given to `check` and `test` is a throwaway copy of the code. The caller makes it for the call and removes it afterwards; it is never a worktree a builder works in. The checkout's own scripts may write inside it, such as a cache or a build output, and must write nothing outside it. The mode cannot stop them: they run as listed commands, unconfined. A second call on the same folder gives the same verdicts.
 
 A check is the checkout's own `package.json` script of the same name: `generate:check`, `typecheck`, `lint`, `format:check`, `deadcode`. The mode runs `npm run <name> --`. To change what a check does, change that script in `package.json`; `npm run check` runs the same scripts, so a person and the mode run the same thing. The mode's list of names is in `scripts/lib/checks.ts`.
 

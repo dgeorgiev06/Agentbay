@@ -203,8 +203,7 @@ function assertShown(shown: unknown, expected: unknown, whyInconclusive: string)
     if (whyInconclusive === "" || !(error instanceof assert.AssertionError)) {
       throw error;
     }
-    const message = `${error.message}\n${whyInconclusive}`;
-    throw new assert.AssertionError({ message, actual: shown, expected, operator: "deepStrictEqual" });
+    throw new assert.AssertionError({ message: whyInconclusive, actual: shown, expected, operator: "deepStrictEqual" });
   }
 }
 

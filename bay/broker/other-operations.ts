@@ -107,6 +107,28 @@ function spendAmountsOf(spending: Json): SpendAmounts | undefined {
   return { items: amountOf(spending.items), usd: amountOf(spending.usd), tokens: amountOf(spending.tokens) };
 }
 
+function misfitsOf(spending: { readonly [key: string]: Json }): readonly string[] {
+  return spendMeasures.flatMap((measure) => {
+    const value = spending[measure];
+    if (isAmount(value)) {
+      return [];
+    }
+    return typeof value === "number"
+      ? [`the field ${measure} is ${String(value)}`]
+      : [`the field ${measure} is not a number`];
+  });
+}
+
+function spendingAsked(spending: Json): string {
+  if (!isJsonRecord(spending)) {
+    return "The step reported spending that is not a mapping";
+  }
+  const misfits = misfitsOf(spending);
+  const last = misfits.at(-1) ?? "";
+  const named = misfits.length < 2 ? last : `${misfits.slice(0, -1).join(", ")} and ${last}`;
+  return `The step reported spending in which ${named}`;
+}
+
 function isSpending(amounts: SpendAmounts): boolean {
   return amounts.items > 0 || amounts.usd > 0 || amounts.tokens > 0;
 }
@@ -121,7 +143,7 @@ const spend: Definition<"spend", SpendAmounts> = {
       return Promise.resolve(
         refusedWith({
           resource: "spend",
-          asked: `The step reported the spending ${JSON.stringify(request.spending)}`,
+          asked: spendingAsked(request.spending),
           declared: "spending is given as items, usd and tokens, each a number of at least 0",
           change: "Report spending as { items, usd, tokens } with numbers of at least 0.",
         }),

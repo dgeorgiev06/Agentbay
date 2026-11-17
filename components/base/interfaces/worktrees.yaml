@@ -4,15 +4,15 @@ actions:
   cut:
     input: worktrees/cut-request.json
     output: worktrees/cut-response.json
-    effects: [read, write, network, spend, delete]
+    effects: [read, write, delete]
   status:
     input: worktrees/status-request.json
     output: worktrees/status-response.json
-    effects: [read, write, network, spend, delete]
+    effects: [read]
   changed:
     input: worktrees/changed-request.json
     output: worktrees/changed-response.json
-    effects: [read, write, network, spend, delete]
+    effects: [read]
   copy:
     input: worktrees/copy-request.json
     output: worktrees/copy-response.json
@@ -24,16 +24,16 @@ actions:
   remove:
     input: worktrees/remove-request.json
     output: worktrees/remove-response.json
-    effects: [read, write, network, spend, delete]
+    effects: [read, write, delete]
   merge:
     input: worktrees/merge-request.json
     output: worktrees/merge-response.json
-    effects: [read, write, network, spend, delete]
+    effects: [read, write, delete]
   set-aside:
     input: worktrees/set-aside-request.json
     output: worktrees/set-aside-response.json
-    effects: [read, write, network, spend, delete]
+    effects: [read, write, delete]
   apply:
     input: worktrees/apply-request.json
     output: worktrees/apply-response.json
-    effects: [read, write, network, spend, delete]
+    effects: [read, write, delete]

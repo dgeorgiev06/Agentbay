@@ -9,8 +9,13 @@ export type TerminalStreams = {
 
 async function ask(streams: TerminalStreams, question: string): Promise<string> {
   const lines = createInterface({ input: streams.input, output: streams.output, terminal: false });
+  const inputEnded = new Promise<string>((resolve) => {
+    lines.once("close", () => {
+      resolve("");
+    });
+  });
   try {
-    return await lines.question(question);
+    return await Promise.race([lines.question(question), inputEnded]);
   } finally {
     lines.close();
   }

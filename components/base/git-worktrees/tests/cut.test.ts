@@ -86,3 +86,17 @@ test("a slice name with a slash, a space or a leading dash, or a base with a lea
     await project.close();
   }
 });
+
+test("the slice name wip is refused, since set-aside keeps forge/wip/ for its branches", async () => {
+  const project = await openRepositoryProject();
+  try {
+    const before = refsAndWorktrees(project);
+    assert.equal(
+      await project.failure("git-worktrees.cut", { slice: "wip", base: "main" }),
+      "The slice name wip is kept for the branches set-aside makes under forge/wip/, so no slice is cut with it.",
+    );
+    assert.equal(refsAndWorktrees(project), before);
+  } finally {
+    await project.close();
+  }
+});

@@ -1,6 +1,6 @@
 name: git-worktrees
 version: 1.0.0
-description: Makes a worktree and branch for each slice, says where it stands, and makes throwaway copies of commits, running git so that no code from the repository runs.
+description: Makes a worktree and branch for each slice, says where it stands, merges it and sets its work aside, and makes throwaway copies of commits and applies patches to them, running git so that no code from the repository runs.
 
 implements: [worktrees@1]
 

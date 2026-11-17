@@ -116,6 +116,35 @@ test("the parser refuses unknown, repeated, missing and misplaced option values,
   }
 });
 
+test("an option that needs a value takes the next word even when it starts with a dash", async () => {
+  const cases: readonly (readonly [readonly string[], Readonly<Record<string, string>>])[] = [
+    [["echo", "a", "--times", "-3", "--json"], { times: "-3" }],
+    [["echo", "a", "--times", "--3", "--json"], { times: "--3" }],
+    [["echo", "a", "--times", "-", "--json"], { times: "-" }],
+    [["echo", "a", "--times", "--quiet", "--json"], { times: "--quiet" }],
+  ];
+  for (const [argv, values] of cases) {
+    const ran = await echoed(argv);
+    assert.equal(ran.exitCode, 0, argv.join(" "));
+    assert.deepEqual(JSON.parse(ran.output), { project: "/work", positionals: ["a"], values, flags: ["json"] });
+  }
+});
+
+test("an option that needs a value refuses an option of the command in its place", async () => {
+  const cases: readonly (readonly [readonly string[], string])[] = [
+    [["echo", "a", "--times", "--json"], "The option --times needs a value."],
+    [["echo", "a", "--times", "--loud", "--json"], "The option --times needs a value."],
+    [["echo", "a", "--times", "--project=p", "--json"], "The option --times needs a value."],
+    [["echo", "a", "--times", "--", "b", "--json"], "The option --times needs a value."],
+    [["echo", "a", "--times", "--1", "--times", "--2", "--json"], "The option --times is given twice."],
+  ];
+  for (const [argv, usage] of cases) {
+    const ran = await echoed(argv);
+    assert.equal(ran.exitCode, 2, argv.join(" "));
+    assert.deepEqual(JSON.parse(ran.output), { ok: false, usage });
+  }
+});
+
 test("every command prints its usage with --help and exits 0", async () => {
   for (const command of commands) {
     const ran = await bay([command.name, "--help"]);

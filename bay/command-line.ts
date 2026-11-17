@@ -97,6 +97,17 @@ type OptionRead = {
   readonly next: number;
 };
 
+function valueAfterOption(word: string | undefined, allowed: readonly OptionSpec[]): string | undefined {
+  if (word === "--") {
+    return undefined;
+  }
+  if (word === undefined || !word.startsWith("--")) {
+    return word;
+  }
+  const [name] = word.slice(2).split("=");
+  return allowed.some((option) => option.name === name) ? undefined : word;
+}
+
 function readOption(tokens: readonly string[], index: number, allowed: readonly OptionSpec[]): Outcome<OptionRead> {
   const [name = "", ...valueParts] = (tokens[index] ?? "").slice(2).split("=");
   const spec = allowed.find((option) => option.name === name);
@@ -106,9 +117,8 @@ function readOption(tokens: readonly string[], index: number, allowed: readonly 
   if (valueParts.length > 0) {
     return succeededWith({ spec, value: valueParts.join("="), next: index + 1 });
   }
-  const next = tokens[index + 1];
   if (spec.takesValue) {
-    return succeededWith({ spec, value: next?.startsWith("--") === true ? undefined : next, next: index + 2 });
+    return succeededWith({ spec, value: valueAfterOption(tokens[index + 1], allowed), next: index + 2 });
   }
   return succeededWith({ spec, value: undefined, next: index + 1 });
 }

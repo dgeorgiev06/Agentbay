@@ -35,9 +35,15 @@ export type ActionAt = {
   readonly manifest: string;
 };
 
-type Need = {
+export type Need = {
   readonly effect: Effect;
   readonly because: string;
+};
+
+export type Needing = {
+  readonly resource: Resource;
+  readonly doing: string;
+  readonly needs: readonly Need[];
 };
 
 const deletingWords: readonly string[] = ["delete", "drop", "truncate"];
@@ -48,9 +54,9 @@ const changesData: Need = { effect: "write", because: "A statement that changes 
 
 const deletesData: Need = { effect: "delete", because: "A statement that deletes needs the delete effect" };
 
-const writesFiles: Need = { effect: "write", because: "Writing a file needs the write effect" };
+export const writesFiles: Need = { effect: "write", because: "Writing a file needs the write effect" };
 
-const removesFiles: Need = { effect: "delete", because: "Removing a file or folder needs the delete effect" };
+export const removesFiles: Need = { effect: "delete", because: "Removing a file or folder needs the delete effect" };
 
 const usesNetwork: Need = { effect: "network", because: "A request over the network needs the network effect" };
 
@@ -67,7 +73,7 @@ function deletes(sql: string): boolean {
   return statementWords(sql).some((word) => deletingWords.includes(word));
 }
 
-function statementNeeds(sql: string): readonly Need[] {
+export function statementNeeds(sql: string): readonly Need[] {
   if (deletes(sql)) {
     return [changesData, deletesData];
   }
@@ -192,8 +198,30 @@ export function describedOperation(operation: BrokerOperation): string {
   }
 }
 
+function askedTo(doing: string, at: ActionAt): string {
+  return `The step ${at.stepKey} of action ${at.action} asked to ${doing}`;
+}
+
 export function askedSentence(operation: BrokerOperation, at: ActionAt): string {
-  return `The step ${at.stepKey} of action ${at.action} asked to ${describedOperation(operation)}`;
+  return askedTo(describedOperation(operation), at);
+}
+
+export function missingEffectRefusal(
+  needing: Needing,
+  effects: readonly Effect[],
+  at: ActionAt,
+): RefusalWording | undefined {
+  const missing = needing.needs.find((need) => !effects.includes(need.effect));
+  if (missing === undefined) {
+    return undefined;
+  }
+  const declared = effects.length === 0 ? "none" : effects.join(", ");
+  return {
+    resource: needing.resource,
+    asked: askedTo(needing.doing, at),
+    declared: `the action ${at.action} declares the effects: ${declared}`,
+    change: `${missing.because}; to allow it, add ${missing.effect} to actions.${at.action}.effects in ${at.manifest}.`,
+  };
 }
 
 export function effectRefusal(
@@ -201,17 +229,12 @@ export function effectRefusal(
   effects: readonly Effect[],
   at: ActionAt,
 ): RefusalWording | undefined {
-  const missing = needsOf(operation).find((need) => !effects.includes(need.effect));
-  if (missing === undefined) {
-    return undefined;
-  }
-  const declared = effects.length === 0 ? "none" : effects.join(", ");
-  return {
+  const needing = {
     resource: operationRules[operation.kind].resource,
-    asked: askedSentence(operation, at),
-    declared: `the action ${at.action} declares the effects: ${declared}`,
-    change: `${missing.because}; to allow it, add ${missing.effect} to actions.${at.action}.effects in ${at.manifest}.`,
+    doing: describedOperation(operation),
+    needs: needsOf(operation),
   };
+  return missingEffectRefusal(needing, effects, at);
 }
 
 export function writableFolders(permissions: Permissions): readonly string[] {

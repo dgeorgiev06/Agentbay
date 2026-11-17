@@ -29,12 +29,14 @@ import {
   type SpendAmounts,
 } from "./effect-rule.ts";
 import { checkPath, type PathCheck, type Purpose } from "./file-access.ts";
+import { dataFolder, fileEntries, type FileOperationName } from "./file-operations.ts";
 import { checkUrl, type Hop, loggedHeaders, nextRequest, redirectTarget, type UrlCheck } from "./http-access.ts";
 import { isInsideOrEqual, pathIn, shownPath, type Layout } from "../layout.ts";
 import type { SecretStore } from "../secrets.ts";
 import { isJsonRecord } from "../protocol-json.ts";
 import { leadingKeyword, readKeywords, writeKeywords } from "./sql-statements.ts";
 import { type Reading, shapes } from "./operations.ts";
+import type { AgentQueryLimits, Entries, Step } from "./rule.ts";
 import type {
   AgentQueryResult,
   CommandOutput,
@@ -45,11 +47,7 @@ import type {
   SqlParameters,
 } from "../sdk.ts";
 
-export type BrokerLimits = {
-  readonly agentQueryRows: number;
-  readonly agentQueryCellCharacters: number;
-  readonly agentQueryResultBytes: number;
-  readonly agentQueryMilliseconds: number;
+export type BrokerLimits = AgentQueryLimits & {
   readonly httpRequestBytes: number;
   readonly httpResponseBytes: number;
   readonly httpRedirects: number;
@@ -87,8 +85,6 @@ const defaultBrokerLimits: BrokerLimits = {
   commandMilliseconds: 10 * 60 * 1000,
   commandOutputCharacters: 64 * 1024,
 };
-
-const dataFolder = ".agentbay";
 
 type ThrowawayOperation = Extract<
   BrokerOperation,
@@ -149,6 +145,8 @@ function spendingRefusal(spending: Json): Answer<never> {
   });
 }
 
+type EntryName = FileOperationName;
+
 export class Broker {
   readonly #options: BrokerOptions;
   readonly #grants: ModeGrants;
@@ -156,12 +154,40 @@ export class Broker {
   readonly #limits: BrokerLimits;
   readonly #databases = new Map<string, DatabaseProcess>();
   #unnamedMigration: Promise<Answer<readonly string[]>> | undefined;
+  readonly entries: Entries<EntryName>;
 
   constructor(options: BrokerOptions) {
     this.#options = options;
     this.#grants = options.permissions.grants;
     this.#effects = options.permissions.actionEffects;
     this.#limits = { ...defaultBrokerLimits, ...options.limits };
+    const step = this.#step();
+    this.entries = { ...fileEntries(step) };
+  }
+
+  #step(): Step {
+    const options = this.#options;
+    const { layout, inspector } = options;
+    return {
+      asking: { grants: this.#grants, effects: this.#effects, at: this.#at, layout, inspector },
+      doing: {
+        stepKey: options.place.stepKey,
+        files: options.files,
+        throwawayFolders: options.throwawayFolders,
+        inspector,
+        scrubber: options.secrets,
+        clock: options.clock,
+        childProcesses: options.childProcesses,
+        limits: this.#limits,
+        record: (kind, detail) => this.#append(kind, detail),
+        databaseOf: (file) => this.#databaseOf(file),
+        migratedOnce: (migrate) => {
+          this.#unnamedMigration ??= migrate();
+          return this.#unnamedMigration;
+        },
+      },
+      settled: (answer, detail) => this.#settle(answer, detail),
+    };
   }
 
   #partitionFile(partition: string | undefined): Answer<string> {

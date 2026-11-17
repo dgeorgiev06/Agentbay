@@ -26,6 +26,16 @@ type Owner = {
   readonly place: Place;
 };
 
+type FieldName = {
+  readonly owner: Owner;
+  readonly name: string;
+};
+
+type Elements<T> = {
+  readonly is: (value: unknown) => value is T;
+  readonly kind: string;
+};
+
 const recordPath = ".agentbay/trust.json";
 
 const effects: readonly string[] = ["read", "write", "network", "spend", "delete"] satisfies readonly Effect[];
@@ -137,33 +147,28 @@ function textAt(owner: Owner, name: string, problems: Problem[]): string | undef
   return undefined;
 }
 
-function textsAt(owner: Owner, name: string, problems: Problem[]): readonly string[] | undefined {
-  const field = fieldAt(owner, name, problems);
-  if (field === undefined) {
-    return undefined;
-  }
-  const { value } = field;
-  if (Array.isArray(value) && value.every((element) => typeof element === "string")) {
-    return value;
-  }
-  problems.push(wrongKind(field.place, "a list of texts"));
-  return undefined;
+function isText(value: unknown): value is string {
+  return typeof value === "string";
 }
 
 function isEffect(value: unknown): value is Effect {
   return typeof value === "string" && effects.includes(value);
 }
 
-function effectsAt(owner: Owner, name: string, problems: Problem[]): readonly Effect[] | undefined {
-  const field = fieldAt(owner, name, problems);
+const texts: Elements<string> = { is: isText, kind: "a list of texts" };
+
+const effectList: Elements<Effect> = { is: isEffect, kind: "a list of effects" };
+
+function elementsAt<T>(at: FieldName, elements: Elements<T>, problems: Problem[]): readonly T[] | undefined {
+  const field = fieldAt(at.owner, at.name, problems);
   if (field === undefined) {
     return undefined;
   }
   const { value } = field;
-  if (Array.isArray(value) && value.every(isEffect)) {
+  if (Array.isArray(value) && value.every(elements.is)) {
     return value;
   }
-  problems.push(wrongKind(field.place, "a list of effects"));
+  problems.push(wrongKind(field.place, elements.kind));
   return undefined;
 }
 
@@ -173,8 +178,8 @@ function commandOf(field: Field, problems: Problem[]): GrantedCommand | undefine
     return undefined;
   }
   const name = textAt(owner, "name", problems);
-  const words = textsAt(owner, "words", problems);
-  const commandEffects = effectsAt(owner, "effects", problems);
+  const words = elementsAt({ owner, name: "words" }, texts, problems);
+  const commandEffects = elementsAt({ owner, name: "effects" }, effectList, problems);
   if (name === undefined || words === undefined || commandEffects === undefined) {
     return undefined;
   }
@@ -203,8 +208,8 @@ function listAt(entry: Owner, problems: Problem[]): ModeList | undefined {
   }
   const mode = textAt(owner, "mode", problems);
   const commands = commandsAt(owner, "commands", problems);
-  const commandsStartWith = textsAt(owner, "commandsStartWith", problems);
-  const throwaway = textsAt(owner, "throwaway", problems);
+  const commandsStartWith = elementsAt({ owner, name: "commandsStartWith" }, texts, problems);
+  const throwaway = elementsAt({ owner, name: "throwaway" }, texts, problems);
   if (mode === undefined || commands === undefined || commandsStartWith === undefined || throwaway === undefined) {
     return undefined;
   }

@@ -55,9 +55,6 @@ test_breaks:
     to: bay/broker/http-access.ts
     rule: test-reaches-in
   - from: tests/broker-helpers.test.ts
-    to: bay/broker/script-protocol.ts
-    rule: test-reaches-in
-  - from: tests/broker-helpers.test.ts
     to: bay/broker/sql-statements.ts
     rule: test-reaches-in
   - from: tests/broker-helpers.test.ts

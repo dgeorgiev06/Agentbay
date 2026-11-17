@@ -252,12 +252,12 @@ test("a step whose skill lists actions has the actions tool and the guard allows
   assert.deepEqual(actionsDecision("agentbay-todo-plan"), { verdict: "allow" });
 });
 
-test("the coordinator block states the protocol between its markers in under 40 lines", () => {
+test("the coordinator block states the protocol between its markers in under 50 lines", () => {
   const block = coordinatorBlock("./bay.sh");
   const blockLines = block.split("\n");
   assert.equal(blockLines[0], "<!-- agentbay:start -->");
   assert.equal(blockLines.at(-1), "<!-- agentbay:end -->");
-  assert.ok(blockLines.length < 40, String(blockLines.length));
+  assert.ok(blockLines.length < 50, String(blockLines.length));
   for (const phrase of [
     "When you do not know which action fits what the owner asks, run\n`./bay.sh actions --json` for the active modes",
     "then `./bay.sh actions <mode> --json` for that mode's actions.",
@@ -269,7 +269,7 @@ test("the coordinator block states the protocol between its markers in under 40 
     "An approval is the owner's decision, never yours",
     "the content to approve and its hash",
     '`./bay.sh approve <runId> --hash <hash> --via chat --quote "<the owner\'s exact words>" --json`',
-    "approve on your own",
+    "approve or give trust on your own",
     "edit `.agentbay/`, `.claude/`, `.mcp.json`, or the agentbay kit",
     "do a skill step's work yourself",
     "At the start of a session, run `./bay.sh check`. If it reports that the agentbay hook is not registered,",

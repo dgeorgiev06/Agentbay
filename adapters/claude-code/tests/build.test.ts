@@ -104,6 +104,43 @@ test("a build keeps the user's settings, servers and CLAUDE.md, and clean restor
   assert.deepEqual(files.snapshot(), existingProject);
 });
 
+const trustBlock = [
+  "Trust in a mode is the owner's decision, never yours. When the check warns that a mode waits for trust,",
+  "tell the owner, then run `/kit/bay.sh --project /proj approve --trust <mode> --json`. It changes nothing",
+  "and exits 1; its output holds the card and the card's full hash. Show the owner every line of the card,",
+  "unchanged and whole, then wait. Only after the owner answers in words that name the mode, run",
+  '`/kit/bay.sh --project /proj approve --trust <mode> --hash <full hash> --via chat --quote "<the owner\'s exact words>" --json`.',
+  "To withdraw trust when the owner asks for it, add `--reject` to both commands.",
+].join("\n");
+
+const neverWithTrust = [
+  "- approve or give trust on your own, or quote words the owner did not write;",
+  "- show a summary in place of a card, or suggest the owner skip reading it;",
+  "- write the trust record `.agentbay/trust.json`, or edit a mode's list to match the list the owner trusted;",
+].join("\n");
+
+const neverBeforeTrust = "- approve on your own, or quote words the owner did not write;";
+
+test("the built coordinator text tells the coordinator how the owner gives trust", async () => {
+  const files = memoryFiles();
+  await built(files);
+  const claude = files.snapshot()[`${project}/CLAUDE.md`] ?? "";
+  assert.ok(claude.includes(`\n\n${trustBlock}\n\nNever:\n${neverWithTrust}\n`), claude);
+});
+
+test("a build on a project built before the coordinator knew of trust rewrites its block", async () => {
+  const files = memoryFiles({ [`${project}/CLAUDE.md`]: userClaude });
+  await built(files);
+  const claudePath = `${project}/CLAUDE.md`;
+  const current = files.snapshot()[claudePath] ?? "";
+  const before = current.replace(`${trustBlock}\n\n`, "").replace(neverWithTrust, neverBeforeTrust);
+  assert.ok(!before.includes("trust"), before);
+  await files.writeAtomic(claudePath, before);
+  const report = await built(files);
+  assert.equal(files.snapshot()[claudePath], current);
+  assert.ok(report.includes("CLAUDE.md: updated"), report.join("\n"));
+});
+
 test("building twice changes nothing and clean still restores the starting bytes", async () => {
   for (const start of [{}, existingProject]) {
     const files = memoryFiles(start);

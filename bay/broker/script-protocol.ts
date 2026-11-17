@@ -47,7 +47,7 @@ export type ParentMessage =
 
 type Fields = { readonly [key: string]: Json };
 
-const methods: readonly string[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+export const httpMethods: readonly string[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
 const resources: readonly string[] = [
   "db",
@@ -65,20 +65,20 @@ function isResource(value: Json | undefined): value is Resource {
   return typeof value === "string" && resources.includes(value);
 }
 
-function isText(value: Json | undefined): value is string {
+export function isText(value: Json | undefined): value is string {
   return typeof value === "string";
 }
 
-function isStringRecord(value: Json | undefined): value is { readonly [key: string]: string } {
+export function isStringRecord(value: Json | undefined): value is { readonly [key: string]: string } {
   return isJsonRecord(value) && Object.values(value).every((item) => typeof item === "string");
 }
 
-function isParameters(value: Json | undefined): value is SqlParameters {
+export function isParameters(value: Json | undefined): value is SqlParameters {
   return Array.isArray(value) || isJsonRecord(value);
 }
 
-function isHttpMethod(value: Json | undefined): value is HttpRequest["method"] {
-  return typeof value === "string" && methods.includes(value);
+export function isHttpMethod(value: Json | undefined): value is HttpRequest["method"] {
+  return typeof value === "string" && httpMethods.includes(value);
 }
 
 function httpRequestOf(value: Json | undefined): HttpRequest | undefined {
@@ -93,7 +93,7 @@ function httpRequestOf(value: Json | undefined): HttpRequest | undefined {
     : undefined;
 }
 
-function isTexts(value: Json | undefined): value is readonly string[] {
+export function isTexts(value: Json | undefined): value is readonly string[] {
   return Array.isArray(value) && value.every((item: Json) => typeof item === "string");
 }
 

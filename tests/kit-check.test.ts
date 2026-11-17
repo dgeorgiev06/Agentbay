@@ -37,7 +37,7 @@ test("the real bay check on the kit itself reports no errors, the two size warni
   const committing = `${git} -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0`;
   assert.deepEqual(findings, [
     listedGit(12, `${git} rev-parse --verify --quiet --end-of-options`),
-    listedGit(13, `${git} config --show-scope --name-only --get-regexp ^filter\\.`),
+    listedGit(13, `${git} config --show-scope --name-only --get-regexp ^(filter\\.|merge\\..*\\.driver$)`),
     listedGit(14, `${git} worktree add --detach --end-of-options`),
     listedGit(15, `${git} branch --end-of-options`),
     listedGit(16, `${git} switch --end-of-options`),

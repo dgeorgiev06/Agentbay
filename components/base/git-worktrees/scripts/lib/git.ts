@@ -132,7 +132,13 @@ export async function branchExists(context: ScriptContext, branch: string): Prom
 const repositoryScopes: readonly string[] = ["local", "worktree"];
 
 async function refuseRepositoryFilters(context: ScriptContext, folder: string): Promise<void> {
-  const ended = await git(context, folder, ["config", "--show-scope", "--name-only", "--get-regexp", "^filter\\."]);
+  const ended = await git(context, folder, [
+    "config",
+    "--show-scope",
+    "--name-only",
+    "--get-regexp",
+    "^(filter\\.|merge\\..*\\.driver$)",
+  ]);
   if (ended.exitCode !== 0 && ended.exitCode !== 1) {
     fail(`git config failed: ${firstLine(ended.stderr)}`);
   }
@@ -144,7 +150,8 @@ async function refuseRepositoryFilters(context: ScriptContext, folder: string): 
   if (named.length > 0) {
     fail(
       `The repository's own configuration names ${named.join(", ")}. ` +
-        "git could run such a filter's command, so the mode does nothing in this repository until it is removed.",
+        "git could run the command of such a filter or merge driver, so the mode does nothing in this repository " +
+        "until it is removed.",
     );
   }
 }

@@ -10,7 +10,7 @@ resources:
     throwaway: [.forge/copies/]
   commands:
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 rev-parse --verify --quiet --end-of-options
-    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 config --show-scope --name-only --get-regexp ^filter\.
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 config --show-scope --name-only --get-regexp ^(filter\.|merge\..*\.driver$)
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 worktree add --detach --end-of-options
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 branch --end-of-options
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 switch --end-of-options

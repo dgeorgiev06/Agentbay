@@ -11,70 +11,70 @@ resources:
   commands:
     commit-of:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 rev-parse --verify --quiet --end-of-options
-      effects: [read, write, network, spend, delete]
+      effects: [read]
     repository-filters:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 config --show-scope --name-only --get-regexp ^(filter\.|merge\..*\.driver$)
-      effects: [read, write, network, spend, delete]
+      effects: [read]
     add-detached-worktree:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 worktree add --detach --end-of-options
-      effects: [read, write, network, spend, delete]
+      effects: [read, write]
     make-branch:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 branch --end-of-options
-      effects: [read, write, network, spend, delete]
+      effects: [read, write]
     switch-branch:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 switch --end-of-options
-      effects: [read, write, network, spend, delete]
+      effects: [read, write, delete]
     changes:
-      run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 status --porcelain=v1 -z --untracked-files=all --ignore-submodules=all --
-      effects: [read, write, network, spend, delete]
+      run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --no-optional-locks status --porcelain=v1 -z --untracked-files=all --ignore-submodules=all --
+      effects: [read]
     commits-between:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 log -z --reverse --no-show-signature --no-color --format=%H%x20%s --end-of-options
-      effects: [read, write, network, spend, delete]
+      effects: [read]
     changed-paths:
-      run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 diff --name-status -z -M --no-ext-diff --no-textconv --no-color --no-relative --end-of-options
-      effects: [read, write, network, spend, delete]
+      run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 diff-tree -r --name-status -z -M --no-ext-diff --no-textconv --no-color --no-relative --end-of-options
+      effects: [read]
     is-ignored:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 check-ignore --quiet --end-of-options
-      effects: [read, write, network, spend, delete]
+      effects: [read]
     paths-at-commit:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 ls-tree -z --name-only --end-of-options
-      effects: [read, write, network, spend, delete]
+      effects: [read]
     untracked-paths:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 ls-files -z --others --directory --end-of-options
-      effects: [read, write, network, spend, delete]
+      effects: [read]
     restore-paths:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --work-tree=. restore --worktree --source
       effects: [read, write, network, spend, delete]
     is-ancestor:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 merge-base --is-ancestor --end-of-options
-      effects: [read, write, network, spend, delete]
+      effects: [read]
     remove-worktree:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 worktree remove --end-of-options
-      effects: [read, write, network, spend, delete]
+      effects: [read, write, delete]
     delete-branch:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 branch -d --end-of-options
-      effects: [read, write, network, spend, delete]
+      effects: [read, write, delete]
     add-worktree:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 worktree add --end-of-options
-      effects: [read, write, network, spend, delete]
+      effects: [read, write]
     merge-branch:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0 merge --no-ff --no-edit --no-stat --no-verify --no-gpg-sign --no-verify-signatures --no-autostash --no-rerere-autoupdate --end-of-options
-      effects: [read, write, network, spend, delete]
+      effects: [read, write, delete]
     abort-merge:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0 merge --abort
-      effects: [read, write, network, spend, delete]
+      effects: [read, write, delete]
     stage-everything:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 add --all --
-      effects: [read, write, network, spend, delete]
+      effects: [read, write, delete]
     commit-staged:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0 commit --quiet --no-verify --no-gpg-sign --file=- --end-of-options
-      effects: [read, write, network, spend, delete]
+      effects: [read, write, delete]
     filters-of-paths:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --work-tree=. check-attr -z filter --
-      effects: [read, write, network, spend, delete]
+      effects: [read]
     apply-patch:
       run: git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --work-tree=. apply --end-of-options
-      effects: [read, write, network, spend, delete]
+      effects: [read, write, delete]
 
 actions:
   cut:

@@ -11,7 +11,7 @@ type Change =
 type Read = { readonly change: Change; readonly fieldsUsed: number };
 
 function field(fields: readonly string[], index: number): string {
-  return fields[index] ?? fail("git diff ended in the middle of an entry, so the mode cannot read it.");
+  return fields[index] ?? fail("git diff-tree ended in the middle of an entry, so the mode cannot read it.");
 }
 
 function readChange(fields: readonly string[], index: number): Read {
@@ -29,7 +29,7 @@ function readChange(fields: readonly string[], index: number): Read {
     case "D":
       return { change: { path, how: "deleted" }, fieldsUsed: 2 };
     default:
-      return fail(`git diff gave the status ${status} for ${path}, which the mode does not read.`);
+      return fail(`git diff-tree gave the status ${status} for ${path}, which the mode does not read.`);
   }
 }
 

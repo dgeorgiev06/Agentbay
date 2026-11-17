@@ -8,6 +8,8 @@ import { stringify } from "yaml";
 import { failedTests, type ModeFiles } from "./kit-copy.ts";
 import { memoryStore, memoryStoreFiles } from "./made-up-modes.ts";
 import { almanac, almanacFiles, wrongAlmanac } from "./made-up-sources.ts";
+import { tally, tallyFiles } from "./made-up-toolchains.ts";
+import { shelf, shelfFiles } from "./made-up-worktrees.ts";
 import { kit } from "./project-fixture.ts";
 
 type Ran = {
@@ -18,13 +20,30 @@ type Ran = {
 
 type Replacement = readonly [string | RegExp, string];
 
+type MadeUpMode = {
+  readonly name: string;
+  readonly files: ModeFiles;
+  readonly kitFolder: string;
+  readonly ownLines?: readonly Replacement[];
+};
+
 const modesFolder = "components/modes";
+
+const baseFolder = "components/base";
 
 const digest = "digest";
 
 const environment = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
 
-const interfacesInTheKit = join(kit, "components/base/interfaces");
+const interfacesInTheKit = join(kit, baseFolder, "interfaces");
+
+const sdkInTheKit = join(kit, "bay", "sdk.ts");
+
+const relativeImport = /(from |import\()"(\.\.?\/[^"]+)"/g;
+
+const projectLine: Replacement = [/\}\);\n$/, "}, { project: import.meta.dirname });\n"];
+
+const startHandedOn: Replacement = [`modes: ["${shelf}"] })`, `modes: ["${shelf}"] }, start)`];
 
 const projectConfig = {
   adapter: "claude-code",
@@ -35,14 +54,22 @@ const projectConfig = {
   },
 };
 
+const refusingConfig = { adapter: "claude-code", bindings: {} };
+
 let project: string;
+
+let refusingProject: string;
 
 let projectModesRan: Ran;
 
 let wrongModeRan: Ran;
 
-function ran(parameters: readonly string[]): Promise<Ran> {
-  const child = spawn(process.execPath, parameters, { cwd: project, env: environment });
+let toolchainRan: Ran;
+
+let worktreesRan: Ran;
+
+function ran(folder: string, parameters: readonly string[]): Promise<Ran> {
+  const child = spawn(process.execPath, parameters, { cwd: folder, env: environment });
   let stdout = "";
   let stderr = "";
   child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
@@ -62,8 +89,8 @@ function sharedTestFile(mode: string): string {
   return join(modesFolder, mode, "tests", `${mode}.test.ts`);
 }
 
-function sharedTestsRan(modes: readonly string[]): Promise<Ran> {
-  return ran(["--test", "--test-reporter=tap", ...modes.map(sharedTestFile)]);
+function sharedTestsRan(folder: string, modes: readonly string[]): Promise<Ran> {
+  return ran(folder, ["--test", "--test-reporter=tap", ...modes.map(sharedTestFile)]);
 }
 
 function passedTests(output: string): readonly string[] {
@@ -79,6 +106,13 @@ function passedPerMode(output: string): Readonly<Record<string, number>> {
   return counts;
 }
 
+function refusals(output: string): readonly string[] {
+  const refused = output.matchAll(
+    /"Mode ([a-z-]+) [^"]*Only a mode under the kit's components\/base\/ may ([a-z ]+)\."/g,
+  );
+  return [...new Set([...refused].map(([, mode = "", rule = ""]) => `${mode} may not ${rule}`))].sort();
+}
+
 function replaced(path: string, text: string, replacements: readonly Replacement[]): string {
   return replacements.reduce((changed, [from, to]) => {
     const next = changed.replace(from, to);
@@ -87,19 +121,24 @@ function replaced(path: string, text: string, replacements: readonly Replacement
   }, text);
 }
 
-function placedInProject(mode: string, files: ModeFiles): ModeFiles {
-  const tests = join(project, modesFolder, mode, "tests");
-  const sharedTestLines: readonly Replacement[] = [
-    ['"../../../base/interfaces/', `"${relative(tests, interfacesInTheKit)}/`],
-    [/\}\);\n$/, "}, { project: import.meta.dirname });\n"],
-  ];
+function placedInProject(folder: string, mode: MadeUpMode): ModeFiles {
+  const inTheKit = join(kit, mode.kitFolder, mode.name);
+  const inTheProject = join(folder, modesFolder, mode.name);
+  const placedImport = (fileFolder: string, specifier: string): string => {
+    const target = join(inTheKit, fileFolder, specifier);
+    if (target.startsWith(`${inTheKit}/`)) {
+      return specifier;
+    }
+    return target === sdkInTheKit ? "agentbay/sdk" : relative(join(inTheProject, fileFolder), target);
+  };
   return Object.fromEntries(
-    Object.entries(files).map(([path, text]) => {
-      const scriptLines: readonly Replacement[] = path.startsWith("scripts/")
-        ? [[/"(\.\.\/)+bay\/sdk\.ts"/, '"agentbay/sdk"']]
-        : [];
-      const testLines = path === `tests/${mode}.test.ts` ? sharedTestLines : [];
-      return [path, replaced(path, text, [...scriptLines, ...testLines])];
+    Object.entries(mode.files).map(([path, text]) => {
+      const imports = text.replace(
+        relativeImport,
+        (_whole, before: string, specifier: string) => `${before}"${placedImport(dirname(path), specifier)}"`,
+      );
+      const ownLines = path === `tests/${mode.name}.test.ts` ? [...(mode.ownLines ?? []), projectLine] : [];
+      return [path, replaced(path, imports, ownLines)];
     }),
   );
 }
@@ -143,37 +182,55 @@ async function digestFiles(): Promise<ModeFiles> {
   };
 }
 
-async function writeMode(mode: string, files: ModeFiles): Promise<void> {
+async function writeMode(folder: string, mode: string, files: ModeFiles): Promise<void> {
   for (const [path, text] of Object.entries(files)) {
-    const file = join(project, modesFolder, mode, path);
+    const file = join(folder, modesFolder, mode, path);
     await mkdir(dirname(file), { recursive: true });
     await writeFile(file, text, "utf8");
   }
 }
 
+async function projectWith(config: object, modes: readonly MadeUpMode[]): Promise<string> {
+  const folder = await realpath(await mkdtemp(join(tmpdir(), "agentbay-project-modes-")));
+  execFileSync("git", ["init", "-q"], { cwd: folder });
+  await writeFile(join(folder, "agentbay.config.yaml"), stringify(config), "utf8");
+  for (const mode of modes) {
+    await writeMode(folder, mode.name, placedInProject(folder, mode));
+  }
+  return folder;
+}
+
 before(async () => {
-  project = await realpath(await mkdtemp(join(tmpdir(), "agentbay-project-modes-")));
-  execFileSync("git", ["init", "-q"], { cwd: project });
-  await writeFile(join(project, "agentbay.config.yaml"), stringify(projectConfig), "utf8");
-  await writeMode(almanac, placedInProject(almanac, almanacFiles(almanac, "continues after the cursor")));
-  await writeMode(
-    wrongAlmanac,
-    placedInProject(wrongAlmanac, almanacFiles(wrongAlmanac, "repeats the item at the cursor")),
-  );
-  await writeMode(memoryStore, placedInProject(memoryStore, memoryStoreFiles(memoryStore, "keeps every item")));
-  await writeMode(digest, await digestFiles());
-  [projectModesRan, wrongModeRan] = await Promise.all([
-    sharedTestsRan([almanac, memoryStore]),
-    sharedTestsRan([wrongAlmanac]),
+  project = await projectWith(projectConfig, [
+    { name: almanac, files: almanacFiles(almanac, "continues after the cursor"), kitFolder: modesFolder },
+    { name: wrongAlmanac, files: almanacFiles(wrongAlmanac, "repeats the item at the cursor"), kitFolder: modesFolder },
+    { name: memoryStore, files: memoryStoreFiles(memoryStore, "keeps every item"), kitFolder: modesFolder },
+  ]);
+  await writeMode(project, digest, await digestFiles());
+  refusingProject = await projectWith(refusingConfig, [
+    { name: tally, files: tallyFiles(tally, "stops a check at its limit"), kitFolder: baseFolder },
+    {
+      name: shelf,
+      files: shelfFiles(shelf, "keeps a changed worktree"),
+      kitFolder: baseFolder,
+      ownLines: [startHandedOn],
+    },
+  ]);
+  [projectModesRan, wrongModeRan, toolchainRan, worktreesRan] = await Promise.all([
+    sharedTestsRan(project, [almanac, memoryStore]),
+    sharedTestsRan(project, [wrongAlmanac]),
+    sharedTestsRan(refusingProject, [tally]),
+    sharedTestsRan(refusingProject, [shelf]),
   ]);
 });
 
 after(async () => {
   await rm(project, { recursive: true, force: true });
+  await rm(refusingProject, { recursive: true, force: true });
 });
 
 test("bay check in a project beside the kit, with its own source, its own store and a mode that needs the kit's store, finds no errors", async () => {
-  const checked = await ran([join(kit, "bay", "cli.ts"), "check", "--json"]);
+  const checked = await ran(project, [join(kit, "bay", "cli.ts"), "check", "--json"]);
   assert.equal(checked.status, 0, checked.output);
   const report: unknown = JSON.parse(checked.stdout);
   assert.equal(typeof report === "object" && report !== null ? Reflect.get(report, "errors") : undefined, 0);
@@ -201,4 +258,17 @@ test("a project's source that repeats the item at the cursor fails the shared te
     ].map((name) => `items-source@1, ${wrongAlmanac}: ${name}`),
   );
   assert.deepEqual(passedPerMode(tested.output), { [wrongAlmanac]: 9 });
+});
+
+test("a project's toolchain and worktrees modes are opened from the project by their shared tests, and refused there for what only a mode of the kit's base may name", () => {
+  const refused = [
+    "shelf may not list commands",
+    "shelf may not name throwaway folders",
+    "tally may not list commands",
+  ];
+  for (const tested of [toolchainRan, worktreesRan]) {
+    assert.equal(tested.status, 1, tested.output);
+    assert.deepEqual(passedPerMode(tested.output), {});
+    assert.deepEqual(refusals(tested.output), refused);
+  }
 });

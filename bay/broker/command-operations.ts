@@ -5,6 +5,7 @@ import type { ProcessOutput, ProcessResult } from "../ports.ts";
 import type { CommandOutput, CommandRequest } from "../sdk.ts";
 import { checkPath } from "./file-access.ts";
 import { dataFolder } from "./file-operations.ts";
+import { listInForce } from "./list-in-force.ts";
 import { isInsideOrEqual, pathIn, shownPath } from "../layout.ts";
 import type { OperationName } from "./operations.ts";
 import {
@@ -47,7 +48,11 @@ export function lackedEffect(command: GrantedCommand, effects: readonly Effect[]
   return command.effects.find((effect) => !effects.includes(effect));
 }
 
-function listedCommand(request: CommandRequest, asking: Asking): Ruling<GrantedCommand> {
+async function listedCommand(request: CommandRequest, asking: Asking): Promise<Ruling<GrantedCommand>> {
+  const list = await listInForce(asking);
+  if (!list.inForce) {
+    return refusedWith({ resource: "commands", asked: askedToRun(request, asking), ...list.refusal });
+  }
   const commands = asking.grants.commands;
   const command = commands.find((listedAs) => listedAs.name === request.name);
   if (command === undefined) {
@@ -152,7 +157,7 @@ const commandsRun: Definition<"commands.run", CommandToRun | NoFolder> = {
   needs: () => [],
   described: describedCommand,
   rule: async (request, asking) => {
-    const command = listedCommand(request, asking);
+    const command = await listedCommand(request, asking);
     if (!command.allowed) {
       return command;
     }

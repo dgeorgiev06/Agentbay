@@ -8,7 +8,9 @@ import { httpEntries } from "./http-operations.ts";
 import { otherEntries } from "./other-operations.ts";
 import { commandEntries } from "./command-operations.ts";
 import type { Layout } from "../layout.ts";
+import type { Outcome } from "../outcome.ts";
 import type { SecretStore } from "../secrets.ts";
+import { readTrustRecord, type TrustRecord } from "../trust.ts";
 import type { OperationName } from "./operations.ts";
 import type { Asking, Doing, Entries, RefusalDetail, SpendAmounts, Step, StepLimits } from "./rule.ts";
 
@@ -134,7 +136,8 @@ function askingOf(options: StepOptions, limits: StepLimits): Asking {
   const { grants, actionEffects } = options.permissions;
   const { place, layout, inspector } = options;
   const at = { stepKey: place.stepKey, action: place.action, manifest: manifestOf(grants) };
-  return { grants, effects: actionEffects, at, layout, inspector, limits };
+  const trustRecordNow = (): Promise<Outcome<TrustRecord>> => readTrustRecord(options.files, layout);
+  return { grants, effects: actionEffects, at, layout, inspector, limits, trustRecordNow };
 }
 
 type StepState = {

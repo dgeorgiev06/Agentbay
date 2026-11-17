@@ -172,6 +172,11 @@
           "uniqueItems": true,
           "items": { "type": "string", "minLength": 1, "description": "A host name." }
         },
+        "commandsStartWith": {
+          "description": "The words every command the mode lists starts with, separated by spaces, such as the program and the options each command needs. A command runs these words, then the words of its run, then the arguments a script gives. Only a mode under the kit's components/base/ may give them, and only with commands.",
+          "type": "string",
+          "pattern": "\\S"
+        },
         "commands": {
           "description": "Commands the mode's scripts and skill steps may run, each under a kebab-case name of the mode's own that says what the command is for. Only a mode under the kit's components/base/ may list them. The effects of a command are the mode author's claim of what it can do: the kernel believes them and cannot check them, and bay check shows each command and its effects to the owner.",
           "type": "object",

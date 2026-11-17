@@ -37,6 +37,7 @@ export type Resources = {
   };
   readonly secrets?: ReadonlyArray<string>;
   readonly network?: ReadonlyArray<string>;
+  readonly commandsStartWith?: string;
   readonly commands?: Readonly<Record<string, ListedCommand>>;
 };
 

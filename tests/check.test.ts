@@ -75,6 +75,91 @@ test("a listed command in a mode outside components/base is an error", async () 
   assert.match(finding.message, /Only a mode under the kit's components\/base\/ may list commands\./);
 });
 
+const startWithWanted =
+  "The words every command the mode lists starts with, separated by spaces, such as the program and the options " +
+  "each command needs. A command runs these words, then the words of its run, then the arguments a script gives. " +
+  "Only a mode under the kit's components/base/ may give them, and only with commands.";
+
+function findingsIn(report: CheckReport, file: string): readonly (readonly unknown[])[] {
+  return report.findings
+    .filter((finding) => finding.file === file)
+    .map((finding) => [finding.severity, finding.path, finding.message, finding.fix]);
+}
+
+const listedCommandFix =
+  "Remove the command unless the mode cannot work without it. If it stays, review its words and its effects: " +
+  "the kernel believes the effects a mode lists and cannot check them.";
+
+test("the warning for a listed command shows the words its mode's commands start with, then its own", async () => {
+  const resources = {
+    commandsStartWith: "git -c core.hooksPath=/dev/null",
+    commands: { changes: { run: "status --porcelain --", effects: ["read"] } },
+  };
+  const report = await check({ ...cleanFiles(), [paths.store]: yamlText({ ...storeMode, resources }) });
+  assert.deepEqual(findingsIn(report, paths.store), [
+    [
+      "warning",
+      "/resources/commands/changes",
+      "Mode store lists the command changes, which runs git -c core.hooksPath=/dev/null status --porcelain -- and " +
+        "which the mode says has the effects: read; a listed command can run code the agent wrote.",
+      listedCommandFix,
+    ],
+  ]);
+});
+
+test("empty words for a mode's commands to start with are refused, as are words that are only spaces", async () => {
+  for (const words of ["", "   "]) {
+    const resources = { commandsStartWith: words, commands: { changes: { run: "git status", effects: ["read"] } } };
+    const report = await check({ ...cleanFiles(), [paths.store]: yamlText({ ...storeMode, resources }) });
+    assert.deepEqual(findingsIn(report, paths.store), [
+      [
+        "error",
+        "/resources/commandsStartWith",
+        `resources.commandsStartWith is not in the expected form. Expected: ${startWithWanted}`,
+        undefined,
+      ],
+    ]);
+  }
+});
+
+test("words for a mode's commands to start with, in a mode that lists no command, are refused", async () => {
+  const resources = { commandsStartWith: "git -c core.hooksPath=/dev/null" };
+  const report = await check({ ...cleanFiles(), [paths.store]: yamlText({ ...storeMode, resources }) });
+  assert.deepEqual(findingsIn(report, paths.store), [
+    [
+      "error",
+      "/resources/commandsStartWith",
+      "Mode store gives git -c core.hooksPath=/dev/null as the words every command it lists starts with, " +
+        "and lists no command.",
+      "List the commands under resources.commands in components/base/store/mode.yaml, or remove commandsStartWith.",
+    ],
+  ]);
+});
+
+test("words for a mode's commands to start with, in a mode outside components/base, are refused", async () => {
+  const resources = {
+    commandsStartWith: "git -c core.hooksPath=/dev/null",
+    commands: { changes: { run: "status", effects: ["read"] } },
+  };
+  const report = await check({ ...cleanFiles(), [paths.notes]: yamlText({ ...notesMode, resources }) });
+  assert.deepEqual(findingsIn(report, paths.notes), [
+    [
+      "error",
+      "/resources/commandsStartWith",
+      "Mode notes gives git -c core.hooksPath=/dev/null as the words every command it lists starts with; " +
+        "a listed command can run code the agent wrote. Only a mode under the kit's components/base/ may list commands.",
+      "Remove commandsStartWith from components/modes/notes/mode.yaml; a skill step's checks belong in script steps.",
+    ],
+    [
+      "error",
+      "/resources/commands/changes",
+      "Mode notes lists the command changes, which runs git -c core.hooksPath=/dev/null status; " +
+        "a listed command can run code the agent wrote. Only a mode under the kit's components/base/ may list commands.",
+      "Remove the command from components/modes/notes/mode.yaml; a skill step's checks belong in script steps.",
+    ],
+  ]);
+});
+
 test("a throwaway folder in a mode outside components/base is an error", async () => {
   const manifest = yamlText({ ...notesMode, resources: { files: { throwaway: ["scratch/"] } } });
   const report = await check({ ...cleanFiles(), [paths.notes]: manifest });

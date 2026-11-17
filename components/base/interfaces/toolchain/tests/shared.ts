@@ -4,7 +4,7 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { openModeProject, type ModeProject } from "../../../../../tests/test-toolbox.ts";
+import { openModeProject, type ModeProject, type ProjectFolder } from "../../../../../tests/test-toolbox.ts";
 
 export type Files = Readonly<Record<string, string>>;
 
@@ -464,11 +464,11 @@ function toolchainFor(project: ModeProject, underTest: ToolchainUnderTest, index
   };
 }
 
-export function testToolchain(underTest: ToolchainUnderTest): void {
+export function testToolchain(underTest: ToolchainUnderTest, projectFolder: ProjectFolder = {}): void {
   const { mode } = underTest;
   let project: ModeProject;
   before(async () => {
-    project = await openModeProject({ bindings: {}, adapter: "claude-code", modes: [mode] });
+    project = await openModeProject({ bindings: {}, adapter: "claude-code", modes: [mode] }, projectFolder);
   });
   after(async () => {
     await project.close();

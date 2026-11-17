@@ -5,6 +5,7 @@ import { layoutOf, type Layout } from "../bay/layout.ts";
 import type { System } from "../bay/manifests/manifests.ts";
 import type { Problem } from "../bay/outcome.ts";
 import { fakeFileSystem } from "./fakes.ts";
+import { grantsWith } from "./grants-fixture.ts";
 import {
   briefingMode,
   layout,
@@ -262,18 +263,13 @@ async function loadedSystem(files: Readonly<Record<string, string>>, within: Lay
 }
 
 function noResources(name: string, folder: string): ModeGrants {
-  return {
+  return grantsWith({
     mode: name,
     modeFolder: folder,
     databaseFile: `/kit/.agentbay/data/${name}.db`,
     migrationsFolder: `${folder}/migrations`,
     readPaths: [folder],
-    writePaths: [],
-    throwawayPaths: [],
-    secrets: [],
-    hosts: [],
-    commands: [],
-  };
+  });
 }
 
 test("every mode of a loaded system is active and carries its own grants", async () => {
@@ -296,18 +292,14 @@ test("a mode that is not active is named as inactive and is not a mode of the sy
     new Map([
       [
         "journal",
-        {
+        grantsWith({
           mode: "journal",
           modeFolder: "/project/components/modes/journal",
           databaseFile: "/project/.agentbay/data/journal.db",
           migrationsFolder: "/project/components/modes/journal/migrations",
           readPaths: ["/project/components/modes/journal", "/project/out/journal"],
           writePaths: ["/project/out/journal"],
-          throwawayPaths: [],
-          secrets: [],
-          hosts: [],
-          commands: [],
-        },
+        }),
       ],
     ]),
   );

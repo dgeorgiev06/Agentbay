@@ -9,6 +9,7 @@ import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } fr
 import { createScriptRunner } from "../bay/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import { kitFolder, noProcesses, place, recordingSink, scriptedHttp, writeProjectFile } from "./broker-fixture.ts";
+import { grantsWith } from "./grants-fixture.ts";
 
 type Folders = { readonly layout: Layout };
 
@@ -27,18 +28,14 @@ async function withSeparateFolders(body: (folders: Folders) => Promise<void>): P
 
 function permissionsOf(layout: Layout, modeFolder: string): Permissions {
   const writable = join(layout.project, "notes-out");
-  const grants = {
+  const grants = grantsWith({
     mode: "notes",
     modeFolder,
     databaseFile: join(layout.project, ".agentbay", "data", "notes.db"),
     migrationsFolder: join(modeFolder, "migrations"),
     readPaths: [modeFolder, writable],
     writePaths: [writable],
-    throwawayPaths: [],
-    secrets: [],
-    hosts: [],
-    commands: [],
-  };
+  });
   return { grants, actionEffects: ["read", "write"] };
 }
 

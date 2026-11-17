@@ -269,7 +269,9 @@ test("the coordinator block states the protocol between its markers in under 50 
     "`./bay.sh runs <runId> --json`",
     "An approval is the owner's decision, never yours",
     "the content to approve and its hash",
-    '`./bay.sh approve <runId> --hash <hash> --via chat --quote "<the owner\'s exact words>" --json`',
+    '`./bay.sh approve <runId> <stepKey> --hash <hash> --via chat --quote "<the owner\'s exact words>" --json`',
+    "with `<runId>` the run's `id`, and `<stepKey>` and `<hash>` the `stepKey` and `hash` of its `waiting`,\n" +
+      "   as bay printed them when the run stopped for the approval.",
     "approve or give trust on your own",
     "edit `.agentbay/`, `.claude/`, `.mcp.json`, or the agentbay kit",
     "do a skill step's work yourself",

@@ -76,7 +76,7 @@ export const sdkSpecifier = "agentbay/sdk";
 ```
 
 The types `Transport`, `BrokerServices`, `BrokerLimits`, `Reach` and `ActionAt` are the other five.
-`BrokerServices` is today's `ScriptRunnerOptions` with `transport` in place of nothing: the kernel passes
+`BrokerServices` is today's `ScriptRunnerOptions` with a `transport` added: the kernel passes
 `childProcessTransport(ports.childProcesses)`. Agent tools call `step.ask("files.read", { path })`. The harness
 asks `reachOf`; runs asks `submissionRefusal`; check and scaffold read `sdkSpecifier`.
 
@@ -266,8 +266,8 @@ method, such as `read: (path) => asked("files.read", { path })`, checked by the 
 and `Requests`. Any transport's far end calls it with its own `ask`.
 
 Two pins. `tests/toolbox-surface.test.ts` writes `ScriptContext` out again as one literal type with every shape
-inline and requires it to equal the real one; the type check fails when they part. `tests/inside/broker/
-wire-examples.ts` holds, for each operation, one request line and one answer line as text; a test reads each
+inline and requires it to equal the real one; the type check fails when they part.
+`tests/inside/broker/wire-examples.ts` holds, for each operation, one request line and one answer line as text; a test reads each
 through its guard, compares with a typed example, and writes it back to the same text. A change to the toolbox is
 a diff of the first file. A change to the protocol is a diff of the second.
 

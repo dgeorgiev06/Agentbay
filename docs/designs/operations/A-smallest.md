@@ -238,7 +238,9 @@ export function contextOver(ask: Ask, start: Start): ScriptContext {
 ```
 
 (Shortened to three methods.) The return type is `ScriptContext`, so a method that is missing, misnamed or tied to
-the wrong operation does not compile. `script-host.ts` calls `contextOver` and holds no operation's name.
+the wrong operation does not compile. `script-host.ts` calls `contextOver` and holds no operation's name. One gap:
+`files.makeFolder` and `files.remove` take and give the same shapes, so their names could be swapped and still
+compile. The table test walks the context by each name's dots and checks the name that is asked.
 
 The surface is pinned by `tests/toolbox-surface.test.ts`. It writes the whole of `ScriptContext` out again as one
 type literal with no import but `Json`, every shape inline, and requires the two types to be the same:

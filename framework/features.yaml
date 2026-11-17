@@ -1,6 +1,6 @@
 # The kernel's features. Each is a deep module: other features import only its entry files.
 # Words are defined in CONTEXT.md; the rule is docs/adr/0006.
-# Status on 2026-11-15: a target, not yet enforced. Files have not moved into folders.
+# Enforced by tests/feature-map.test.ts. The breaks it still allows are listed in framework/feature-map-debt.yaml.
 
 features:
   vocabulary:
@@ -233,6 +233,11 @@ features:
       - scaffold
       - secrets
       - vocabulary
+modes:
+  purpose: Every folder under components/ that holds a mode.yaml is a mode. A mode is outside the kernel.
+  within: components
+  imports_kernel_through:
+    - bay/sdk.ts
 outside:
   adapters/claude-code:
     purpose: Fits Claude Code to the kernel - agent files, the step guard, settings, the tool server config.
@@ -241,26 +246,6 @@ outside:
       - adapters/claude-code/step-guard.ts
     imports_kernel_through:
       - bay/adapter.ts
-  components/base/store:
-    purpose: The store mode. Implements items-store.
-    imports_kernel_through:
-      - bay/sdk.ts
-  components/base/git-worktrees:
-    purpose: The git-worktrees mode. Implements worktrees; the only mode that runs git.
-    imports_kernel_through:
-      - bay/sdk.ts
-  components/base/typescript:
-    purpose: The typescript mode. Implements toolchain; checks and tests TypeScript code in a checkout.
-    imports_kernel_through:
-      - bay/sdk.ts
-  components/modes/fake-source:
-    purpose: A source of made-up items for tests and the demo. Implements items-source.
-    imports_kernel_through:
-      - bay/sdk.ts
-  components/modes/feed-briefing:
-    purpose: Syncs a source into the store, writes a digest and answers questions about it.
-    imports_kernel_through:
-      - bay/sdk.ts
   schemas:
     purpose: The type generator, a development tool. It writes bay/generated/ from the schemas; it is not kernel code.
     imports_kernel_through:

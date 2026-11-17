@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, normalize } from "node:path/posix";
+import { basename, dirname, join, normalize } from "node:path/posix";
 import { test } from "node:test";
 import { parse, stringify } from "yaml";
 import type { Json } from "../bay/contracts.ts";
@@ -19,9 +19,15 @@ type OutsideFolder = {
   readonly importsKernelThrough: readonly string[];
 };
 
+type ModesRule = {
+  readonly within: string;
+  readonly importsKernelThrough: readonly string[];
+};
+
 type FeatureMap = {
   readonly features: readonly Feature[];
   readonly outside: readonly OutsideFolder[];
+  readonly modes: ModesRule | undefined;
 };
 
 type SourceFile = {
@@ -75,6 +81,8 @@ const featuresSealedInTheirFolder: readonly string[] = ["manifests", "runs"];
 
 const mapFile = "framework/features.yaml";
 
+const modeManifest = "mode.yaml";
+
 const debtFile = "framework/feature-map-debt.yaml";
 
 const writeDebtVariable = "FEATURE_MAP_DEBT";
@@ -95,7 +103,28 @@ function parsedMap(text: string): FeatureMap {
     folder,
     importsKernelThrough: textsField(entry, "imports_kernel_through"),
   }));
-  return { features, outside };
+  return { features, outside, modes: modesRuleOf(fieldOf(map, "modes")) };
+}
+
+function modesRuleOf(value: Json | undefined): ModesRule | undefined {
+  const within = value === undefined ? undefined : textField(value, "within");
+  if (value === undefined || within === undefined) {
+    return undefined;
+  }
+  return { within, importsKernelThrough: textsField(value, "imports_kernel_through") };
+}
+
+function modeFoldersIn(map: FeatureMap, files: readonly string[]): readonly string[] {
+  const within = map.modes?.within;
+  if (within === undefined) {
+    return [];
+  }
+  return files.filter((file) => basename(file) === modeManifest && isInside(file, within)).map(dirname);
+}
+
+function withModeFolders(map: FeatureMap, folders: readonly string[]): FeatureMap {
+  const importsKernelThrough = map.modes?.importsKernelThrough ?? [];
+  return { ...map, outside: [...map.outside, ...folders.map((folder) => ({ folder, importsKernelThrough }))] };
 }
 
 function scanned(file: string, source: string): SourceFile {
@@ -256,6 +285,16 @@ function kitFiles(): readonly string[] {
   return typeScriptFiles(scannedFolders);
 }
 
+function kitMap(): FeatureMap {
+  const map = parsedMap(readFileSync(mapFile, "utf8"));
+  const within = map.modes?.within;
+  const files =
+    within === undefined
+      ? []
+      : readdirSync(within, { recursive: true, encoding: "utf8" }).map((file) => join(within, file));
+  return withModeFolders(map, modeFoldersIn(map, files));
+}
+
 function breaksIn(map: FeatureMap, files: readonly string[]): readonly Break[] {
   return sortedBreaks(
     mapBreaks(
@@ -336,6 +375,49 @@ test("outside the kernel only the files named in imports_kernel_through may be i
   assert.deepEqual(mapBreaks(smallMap, sources), [
     { from: "adapters/harness/tests/build.test.ts", to: "bay/walk.ts", rule: "outside-reaches-in" },
     { from: "components/modes/notes/scripts/add.ts", to: "bay/engine.ts", rule: "outside-reaches-in" },
+  ]);
+});
+
+const mapWithModes = parsedMap(`
+features:
+  words:
+    entry: [bay/words.ts]
+    private: [bay/spelling.ts]
+    may_import: []
+modes:
+  within: components
+  imports_kernel_through: [bay/words.ts]
+`);
+
+test("the modes rule is read with the folder it covers and the kernel files a mode may import", () => {
+  assert.deepEqual(mapWithModes.modes, { within: "components", importsKernelThrough: ["bay/words.ts"] });
+  assert.deepEqual(mapWithModes.outside, []);
+  assert.equal(smallMap.modes, undefined);
+});
+
+test("a folder that holds a mode.yaml under the modes rule's folder is a mode folder, and no other is", () => {
+  const manifests = [
+    "components/modes/notes/mode.yaml",
+    "components/base/keeper/mode.yaml",
+    "components/base/interfaces/notes.yaml",
+    "tests/fixtures/stray/mode.yaml",
+  ];
+  assert.deepEqual(modeFoldersIn(mapWithModes, manifests), ["components/modes/notes", "components/base/keeper"]);
+  assert.deepEqual(modeFoldersIn(smallMap, manifests), []);
+});
+
+test("a file of a mode folder may import only the kernel files the modes rule names, with no entry for the mode", () => {
+  const map = withModeFolders(mapWithModes, ["components/modes/notes", "components/base/keeper"]);
+  const sources = [
+    scanned("components/modes/notes/scripts/add.ts", relative("../../../../bay/words.ts")),
+    scanned("components/modes/notes/scripts/lib/rows.ts", relative("../../../../../bay/spelling.ts")),
+    scanned("components/base/keeper/tests/keep.test.ts", relative("../../../../bay/words.ts")),
+    scanned("components/base/keeper/scripts/keep.ts", relative("../../../../tests/mode-harness.ts")),
+    scanned("components/base/interfaces/notes.ts", relative("../../../bay/words.ts")),
+  ];
+  assert.deepEqual(mapBreaks(map, sources), [
+    { from: "components/modes/notes/scripts/lib/rows.ts", to: "bay/spelling.ts", rule: "outside-reaches-in" },
+    { from: "components/base/interfaces/notes.ts", to: "bay/words.ts", rule: "outside-reaches-in" },
   ]);
 });
 
@@ -476,10 +558,11 @@ test("the debt file is written only when FEATURE_MAP_DEBT is write", () => {
   assert.equal(writesDebt({ FEATURE_MAP_DEBT: "write" }), true);
 });
 
-test("the scan of the kit reads files in the kernel and in every folder the map lists outside it", () => {
+test("the scan of the kit reads files in the kernel, in the modes rule's folder and in every folder the map lists outside it", () => {
   const files = kitFiles();
   const map = parsedMap(readFileSync(mapFile, "utf8"));
-  for (const folder of ["bay", "bay/generated", ...map.outside.map((outside) => outside.folder)]) {
+  const folders = map.outside.map((outside) => outside.folder);
+  for (const folder of ["bay", "bay/generated", map.modes?.within ?? "", ...folders]) {
     assert.ok(
       files.some((file) => isInside(file, folder)),
       folder,
@@ -496,13 +579,24 @@ test("the scan of the kit reads the type generator, which the map lists under ou
   ]);
 });
 
+test("the kit's map names no folder under the modes rule's folder: the rule covers every mode", () => {
+  const map = parsedMap(readFileSync(mapFile, "utf8"));
+  const within = map.modes?.within ?? "";
+  assert.equal(within, "components");
+  assert.deepEqual(
+    map.outside.filter((outside) => isInside(outside.folder, within) || outside.folder === within),
+    [],
+  );
+  assert.ok(kitMap().outside.some((outside) => isInside(outside.folder, within)));
+});
+
 test("every kernel file of the kit is in exactly one feature", () => {
   const map = parsedMap(readFileSync(mapFile, "utf8"));
   assert.deepEqual(coverageProblems(map, kitFiles().filter(isKernelFile)), []);
 });
 
 test("the kit's imports and its tests' imports break the feature map only where the debt file says so", () => {
-  const map = parsedMap(readFileSync(mapFile, "utf8"));
+  const map = kitMap();
   const found = { kit: breaksIn(map, kitFiles()), tests: breaksIn(map, typeScriptFiles([testFolder])) };
   if (writesDebt(process.env)) {
     writeFileSync(debtFile, stringify({ [debtKeys.kit]: found.kit, [debtKeys.tests]: found.tests }));

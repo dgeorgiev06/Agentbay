@@ -7,7 +7,13 @@ import type { Answer } from "../bay/answers.ts";
 import { runAgentQuery } from "../bay/agent-query.ts";
 import { Broker } from "../bay/broker.ts";
 import type { Effect, ModeGrants } from "../bay/contracts.ts";
-import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
+import {
+  nodeChildProcesses,
+  nodeFileInspector,
+  nodeFileSystem,
+  nodeThrowawayFolders,
+  systemClock,
+} from "../bay/node-ports.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import {
   failureOf,
@@ -32,6 +38,7 @@ function brokerFor(root: string, effects: readonly Effect[], extra: Partial<Mode
     permissions: permissionsIn(root, { effects, ...extra }),
     place,
     files: nodeFileSystem,
+    throwawayFolders: nodeThrowawayFolders,
     inspector: nodeFileInspector,
     http: scriptedHttp(() => ({ status: 500, headers: {}, body: "" })),
     secrets: new SecretStore({ environment: {}, processes: noProcesses, platform: "linux" }),

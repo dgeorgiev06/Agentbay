@@ -6,7 +6,13 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { ActionCaller, Effect, Json, ScriptRequest, StepOutcome } from "../bay/contracts.ts";
 import { fieldOf } from "../bay/json.ts";
-import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
+import {
+  nodeChildProcesses,
+  nodeFileInspector,
+  nodeFileSystem,
+  nodeThrowawayFolders,
+  systemClock,
+} from "../bay/node-ports.ts";
 import type { Clock } from "../bay/ports.ts";
 import { createScriptRunner, scriptCommand } from "../bay/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
@@ -72,6 +78,7 @@ async function runScript(root: string, options: RunOptions): Promise<Run> {
   const runner = createScriptRunner({
     layout: projectLayout(root),
     files: nodeFileSystem,
+    throwawayFolders: nodeThrowawayFolders,
     inspector: nodeFileInspector,
     http: scriptedHttp((request) => {
       if (request.url.endsWith("/redirect")) {

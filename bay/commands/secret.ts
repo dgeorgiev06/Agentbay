@@ -1,27 +1,11 @@
 import { refusedResult, succeeded, usageResult, type CommandResult, type Invocation } from "../command-context.ts";
 import type { Command } from "../command-line.ts";
-import type { ModeGrants } from "../contracts.ts";
 import { secretStoreOf } from "../kernel.ts";
 import { secretNamePattern } from "../policy.ts";
 
 type Action = "set" | "check";
 
 const usage = "secret set <NAME> | secret check <NAME>";
-
-function lookupGrants(invocation: Invocation, name: string): ModeGrants {
-  return {
-    mode: "bay secret check",
-    modeFolder: invocation.layout.project,
-    databaseFile: "",
-    migrationsFolder: "",
-    readPaths: [],
-    writePaths: [],
-    throwawayPaths: [],
-    secrets: [name],
-    hosts: [],
-    commands: [],
-  };
-}
 
 function environmentHint(name: string): string {
   return `Set AGENTBAY_SECRET_${name} in the environment that runs bay, for example in your shell profile.`;
@@ -49,7 +33,7 @@ function setSecret(invocation: Invocation, name: string): Promise<CommandResult>
 async function checkSecret(invocation: Invocation, name: string): Promise<CommandResult> {
   const { context } = invocation;
   const secrets = secretStoreOf({ ports: context.ports, environment: context.environment, platform: context.platform });
-  const answer = await secrets.get(name, lookupGrants(invocation, name));
+  const answer = await secrets.lookUp(name);
   if (answer.ok) {
     return succeeded({ name, found: true }, `${name} is set.`);
   }

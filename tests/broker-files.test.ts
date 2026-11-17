@@ -4,7 +4,13 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
 import { Broker } from "../bay/broker.ts";
-import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
+import {
+  nodeChildProcesses,
+  nodeFileInspector,
+  nodeFileSystem,
+  nodeThrowawayFolders,
+  systemClock,
+} from "../bay/node-ports.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import {
   noProcesses,
@@ -33,6 +39,7 @@ async function withFilesBroker(run: (setup: Setup) => Promise<void>): Promise<vo
       permissions: permissionsIn(root, { effects: ["read", "write"] }),
       place,
       files: nodeFileSystem,
+      throwawayFolders: nodeThrowawayFolders,
       inspector: nodeFileInspector,
       http: scriptedHttp(() => ({ status: 500, headers: {}, body: "" })),
       secrets: new SecretStore({ environment: {}, processes: noProcesses, platform: "linux" }),
@@ -138,6 +145,7 @@ test("a granted path that is itself a link to another folder of the project is r
       permissions: permissionsIn(root),
       place,
       files: nodeFileSystem,
+      throwawayFolders: nodeThrowawayFolders,
       inspector: nodeFileInspector,
       http: scriptedHttp(() => ({ status: 500, headers: {}, body: "" })),
       secrets: new SecretStore({ environment: {}, processes: noProcesses, platform: "linux" }),

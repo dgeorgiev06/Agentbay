@@ -1,5 +1,11 @@
 import { join } from "node:path";
-import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
+import {
+  nodeChildProcesses,
+  nodeFileInspector,
+  nodeFileSystem,
+  nodeThrowawayFolders,
+  systemClock,
+} from "../bay/node-ports.ts";
 import { createScriptRunner } from "../bay/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import { noProcesses, permissionsIn, place, projectLayout, recordingSink, scriptedHttp } from "./broker-fixture.ts";
@@ -8,6 +14,7 @@ async function main(root: string): Promise<void> {
   const runner = createScriptRunner({
     layout: projectLayout(root),
     files: nodeFileSystem,
+    throwawayFolders: nodeThrowawayFolders,
     inspector: nodeFileInspector,
     http: scriptedHttp(() => ({ status: 500, headers: {}, body: "" })),
     secrets: new SecretStore({ environment: {}, processes: noProcesses, platform: "linux" }),

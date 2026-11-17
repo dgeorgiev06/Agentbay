@@ -5,6 +5,7 @@ import type { Mode } from "../bay/generated/mode.ts";
 import { layoutOf, type Home, type Layout } from "../bay/layout.ts";
 import { grantsOf, type GrantProblem } from "../bay/policy.ts";
 import { modeNamed } from "./broker-fixture.ts";
+import { grantsWith } from "./grants-fixture.ts";
 
 type DeclaredFiles = NonNullable<NonNullable<Mode["resources"]>["files"]>;
 
@@ -86,7 +87,7 @@ function pathProblems(files: DeclaredFiles): readonly string[] {
 test("a mode's grants hold its folder, database, migrations, paths, secrets, hosts and commands, not effects", () => {
   assert.deepEqual(rulingFor(system, "briefing", layout), {
     ok: true,
-    value: {
+    value: grantsWith({
       mode: "briefing",
       modeFolder: "/project/components/modes/briefing",
       databaseFile: "/project/.agentbay/data/briefing.db",
@@ -98,11 +99,9 @@ test("a mode's grants hold its folder, database, migrations, paths, secrets, hos
         "/project/out/digests",
       ],
       writePaths: ["/project/out/digests"],
-      throwawayPaths: [],
       secrets: ["MAIL_TOKEN"],
       hosts: ["api.example.com", "*.cdn.example.com"],
-      commands: [],
-    },
+    }),
   });
 });
 

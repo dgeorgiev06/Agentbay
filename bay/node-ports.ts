@@ -38,6 +38,7 @@ import type {
   ProcessRequest,
   ProcessResult,
   Removal,
+  ThrowawayFolders,
 } from "./ports.ts";
 
 function isMissingFile(error: unknown): boolean {
@@ -110,7 +111,9 @@ async function removeAll(path: string): Promise<void> {
   await rm(path, { recursive: true, force: true });
 }
 
-export const nodeFileSystem: FileSystem = { readText, list, exists, writeAtomic, makeFolder, link, removeAll };
+export const nodeFileSystem: FileSystem = { readText, list, exists, writeAtomic };
+
+export const nodeThrowawayFolders: ThrowawayFolders = { makeFolder, link, removeAll };
 
 export const systemClock: Clock = { now: () => new Date() };
 

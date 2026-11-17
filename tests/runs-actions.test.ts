@@ -18,32 +18,24 @@ import {
   waitingOf,
   waitingTask,
 } from "./runs-fixture.ts";
+import { grantsWith } from "./grants-fixture.ts";
 
-const storeGrants = {
+const storeGrants = grantsWith({
   mode: "store",
   modeFolder: "/kit/components/base/store",
   databaseFile: "/kit/.agentbay/data/store.db",
   migrationsFolder: "/kit/components/base/store/migrations",
   readPaths: ["/kit/components/base/store"],
-  writePaths: [],
-  throwawayPaths: [],
-  secrets: [],
-  hosts: [],
-  commands: [],
-};
+});
 
-const notesGrants = {
+const notesGrants = grantsWith({
   mode: "notes",
   modeFolder: "/kit/components/modes/notes",
   databaseFile: "/kit/.agentbay/data/notes.db",
   migrationsFolder: "/kit/components/modes/notes/migrations",
   readPaths: ["/kit/components/modes/notes"],
-  writePaths: [],
-  throwawayPaths: [],
   secrets: ["NOTES_TOKEN"],
-  hosts: [],
-  commands: [],
-};
+});
 
 const draftAction = { action: "notes.draft" };
 

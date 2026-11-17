@@ -1,13 +1,11 @@
 import { normalize } from "node:path";
 import type { BuildRequest, Layout, SkillAgent } from "../../../bay/adapter.ts";
+import { grantsWith } from "../../../tests/grants-fixture.ts";
 import type { Files, Removal } from "../adapter-types.ts";
 
 export type FilesWithRemoval = Files & { readonly removal: Removal };
 
 export type MemoryFiles = FilesWithRemoval & { readonly snapshot: () => Readonly<Record<string, string>> };
-
-export const neverUsedByTheAdapter = (): Promise<never> =>
-  Promise.reject(new Error("The adapter never makes folders or links, and never removes a folder whole."));
 
 export function memoryFiles(initial: Readonly<Record<string, string>> = {}): MemoryFiles {
   const contents = new Map(Object.entries(initial).map(([path, text]) => [normalize(path), text]));
@@ -24,9 +22,6 @@ export function memoryFiles(initial: Readonly<Record<string, string>> = {}): Mem
       contents.set(normalize(path), text);
       return Promise.resolve();
     },
-    makeFolder: neverUsedByTheAdapter,
-    link: neverUsedByTheAdapter,
-    removeAll: neverUsedByTheAdapter,
     removal: {
       remove: (path) => {
         contents.delete(normalize(path));
@@ -64,18 +59,15 @@ export function skillAgent(shape: AgentShape): SkillAgent {
     description: `Writes the ${shape.skill}\nfor the "${shape.mode}" mode: briefly.`,
     tier: shape.tier,
     kernelTools: shape.kernelTools,
-    grants: {
+    grants: grantsWith({
       mode: shape.mode,
       modeFolder,
       databaseFile: `${project}/.agentbay/data/${shape.mode}.db`,
       migrationsFolder: `${modeFolder}/migrations`,
       readPaths: shape.read,
       writePaths: shape.write,
-      throwawayPaths: [],
-      secrets: [],
-      hosts: [],
       commands: shape.commands,
-    },
+    }),
     effects: shape.effects ?? (shape.write.length > 0 ? ["read", "write"] : ["read"]),
   };
 }

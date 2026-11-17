@@ -49,6 +49,10 @@ function encodedForms(value: string): readonly string[] {
   return [value, encodeURIComponent(value), formEncoded, jsonEscaped, hex, hex.toUpperCase(), ...base64Cores(value)];
 }
 
+function askedFor(name: string): string {
+  return `The step asked for the secret ${name}`;
+}
+
 export class SecretStore {
   readonly #environment: Readonly<Record<string, string | undefined>>;
   readonly #processes: Processes;
@@ -71,7 +75,7 @@ export class SecretStore {
   }
 
   async get(name: string, grants: ModeGrants): Promise<Answer<string>> {
-    const asked = `The step asked for the secret ${name}`;
+    const asked = askedFor(name);
     if (!secretNamePattern.test(name)) {
       return refused({
         resource: "secrets",
@@ -88,7 +92,12 @@ export class SecretStore {
         change: `To allow it, add ${name} under resources.secrets in ${manifestOf(grants)}.`,
       });
     }
-    const value = await this.#lookUp(name);
+    return this.lookUp(name);
+  }
+
+  async lookUp(name: string): Promise<Answer<string>> {
+    const asked = askedFor(name);
+    const value = await this.#storedValue(name);
     if (value === undefined) {
       return failed(
         `The secret ${name} is not set. Set ${environmentPrefix}${name} in the environment, or on macOS store it ` +
@@ -132,7 +141,7 @@ export class SecretStore {
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [this.redact(key), this.redactJson(item)]));
   }
 
-  async #lookUp(name: string): Promise<string | undefined> {
+  async #storedValue(name: string): Promise<string | undefined> {
     const fromEnvironment = this.#environment[`${environmentPrefix}${name}`];
     if (fromEnvironment !== undefined && fromEnvironment !== "") {
       return fromEnvironment;
@@ -153,7 +162,7 @@ export class SecretStore {
   }
 
   async #learn(name: string): Promise<void> {
-    const value = await this.#lookUp(name);
+    const value = await this.#storedValue(name);
     if (value !== undefined && value.length >= shortestValue) {
       this.#remember(name, value);
     }

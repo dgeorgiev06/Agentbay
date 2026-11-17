@@ -94,13 +94,15 @@ features:
       - bay/broker/script-host.ts
       - bay/broker/script-preload.ts
       - bay/broker/script-protocol.ts
-      - bay/broker/effect-rule.ts
       - bay/broker/sql-statements.ts
       - bay/broker/folder-links.ts
       - bay/broker/operations.ts
       - bay/broker/rule.ts
       - bay/broker/file-operations.ts
       - bay/broker/database-operations.ts
+      - bay/broker/other-operations.ts
+      - bay/broker/http-operations.ts
+      - bay/broker/command-operations.ts
     may_import:
       - vocabulary
       - safety

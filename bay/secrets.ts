@@ -1,6 +1,5 @@
-import { type Answer, failed, granted, listed, manifestOf, refused } from "./answers.ts";
+import { type Answer, failed, granted, refused } from "./answers.ts";
 import type { Json, ModeGrants } from "./contracts.ts";
-import { secretNamePattern } from "./policy.ts";
 import type { Processes } from "./ports.ts";
 import { scrubSecretPatterns } from "./secret-patterns.ts";
 
@@ -72,27 +71,6 @@ export class SecretStore {
       await store.#learn(name);
     }
     return store;
-  }
-
-  async get(name: string, grants: ModeGrants): Promise<Answer<string>> {
-    const asked = askedFor(name);
-    if (!secretNamePattern.test(name)) {
-      return refused({
-        resource: "secrets",
-        asked,
-        declared: "secret names are made of upper-case letters, digits and underscores",
-        change: `Rename the secret in resources.secrets in ${manifestOf(grants)} and where it is stored.`,
-      });
-    }
-    if (!grants.secrets.includes(name)) {
-      return refused({
-        resource: "secrets",
-        asked,
-        declared: `the mode ${grants.mode} declares the secrets: ${listed(grants.secrets, "none")}`,
-        change: `To allow it, add ${name} under resources.secrets in ${manifestOf(grants)}.`,
-      });
-    }
-    return this.lookUp(name);
   }
 
   async lookUp(name: string): Promise<Answer<string>> {

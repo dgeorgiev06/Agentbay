@@ -1,6 +1,6 @@
 breaks:
   - from: bay/adapter.ts
-    to: bay/broker/effect-rule.ts
+    to: bay/broker/rule.ts
     rule: private-file
   - from: bay/answers.ts
     to: bay/secret-patterns.ts
@@ -33,7 +33,7 @@ breaks:
     to: bay/skill-tools.ts
     rule: private-file
   - from: bay/runs/skill-steps.ts
-    to: bay/broker/effect-rule.ts
+    to: bay/broker/rule.ts
     rule: private-file
   - from: bay/runs/sqlite-run-store.ts
     to: bay/owner-only.ts
@@ -44,9 +44,6 @@ breaks:
 test_breaks:
   - from: tests/broker-database.test.ts
     to: bay/broker/agent-query.ts
-    rule: test-reaches-in
-  - from: tests/broker-effects.test.ts
-    to: bay/broker/effect-rule.ts
     rule: test-reaches-in
   - from: tests/broker-helpers.test.ts
     to: bay/broker/file-access.ts

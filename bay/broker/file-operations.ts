@@ -1,6 +1,5 @@
 import { basename, dirname, resolve } from "node:path/posix";
 import { failed, granted, listed, manifestOf, type RefusalWording } from "../answers.ts";
-import { removesFiles, writesFiles } from "./effect-rule.ts";
 import { checkPath, type PathCheck, type Purpose } from "./file-access.ts";
 import { isInsideOrEqual, pathIn, shownPath } from "../layout.ts";
 import type { OperationName } from "./operations.ts";
@@ -14,11 +13,13 @@ import {
   type Entries,
   noRefusalDetail,
   refusedWith,
+  removesFiles,
   type Ruling,
   type Step,
+  writesFiles,
 } from "./rule.ts";
 
-export type FileOperationName = Extract<OperationName, `files.${string}`>;
+type FileOperationName = Extract<OperationName, `files.${string}`>;
 
 export const dataFolder = ".agentbay";
 

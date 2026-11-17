@@ -3,7 +3,7 @@ import { lstat, mkdir, readFile, readlink, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
-import { Broker } from "../bay/broker/broker.ts";
+import { brokerForStep, type StepBroker } from "../bay/broker/broker.ts";
 import type { Effect } from "../bay/contracts.ts";
 import {
   nodeChildProcesses,
@@ -27,7 +27,7 @@ import {
   writeProjectFile,
 } from "./broker-fixture.ts";
 
-type Setup = { readonly root: string; readonly broker: Broker; readonly events: RecordingSink };
+type Setup = { readonly root: string; readonly broker: StepBroker; readonly events: RecordingSink };
 
 const everyEffect: readonly Effect[] = ["read", "write", "network", "spend", "delete"];
 
@@ -35,7 +35,7 @@ async function withThrowawayBroker(effects: readonly Effect[], run: (setup: Setu
   await withProject(async (root) => {
     await writeProjectFile(root, "shared/kept.txt", "kept");
     const events = recordingSink();
-    const broker = new Broker({
+    const broker = brokerForStep({
       layout: projectLayout(root),
       permissions: permissionsIn(root, { effects, throwawayPaths: [join(root, "scratch/copies")] }),
       place,

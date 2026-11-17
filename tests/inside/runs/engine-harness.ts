@@ -59,7 +59,7 @@ export async function harness(
     return store;
   };
   const store = reopen();
-  const scrubber = await fixtureScrubber(system);
+  const scrubber = await fixtureScrubber();
   const runner = fakeRunner(options.scripts);
   const clock = fakeClock(startTime);
   let engines = 0;

@@ -1,7 +1,7 @@
 import { resolve } from "node:path/posix";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { type Answer, errorLine, failed, granted, manifestOf, refused } from "../answers.ts";
-import { Broker, type BrokerLimits } from "./broker.ts";
+import { type Answer, manifestOf, refused } from "../answers.ts";
+import { type BrokerLimits, brokerForStep, type StepBroker } from "./broker.ts";
 import type {
   Child,
   ChildEnd,
@@ -14,8 +14,8 @@ import type {
   Processes,
   ThrowawayFolders,
 } from "../ports.ts";
-import type { EventSink, Json, RunEvent, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "../contracts.ts";
-import { mayRemoveFiles, writableFolders } from "./effect-rule.ts";
+import type { EventSink, RunEvent, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "../contracts.ts";
+import { mayRemoveFiles, writableFolders } from "./rule.ts";
 import { escapingLinks } from "./folder-links.ts";
 import {
   notAValidMessage,
@@ -49,8 +49,6 @@ export type ScriptRunnerOptions = {
   readonly brokerLimits?: Partial<BrokerLimits>;
 };
 
-type Spent = { items: number; usd: number; tokens: number };
-
 type Final = Extract<ChildMessage, { readonly type: "done" | "failed" | "crashed" }>;
 
 type Misread = Extract<ChildMessage, { readonly type: "unreadable-request" | "unread-answer" }>;
@@ -58,12 +56,11 @@ type Misread = Extract<ChildMessage, { readonly type: "unreadable-request" | "un
 type RunState = {
   final: Final | undefined;
   stopped: string | undefined;
-  readonly spent: Spent;
   readonly inFlight: Promise<void>[];
 };
 
 type Started = {
-  readonly broker: Broker;
+  readonly broker: StepBroker;
   readonly request: ScriptRequest;
   readonly state: RunState;
 };
@@ -124,45 +121,8 @@ type Answering = {
   readonly [Name in OperationName]: (request: Requests[Name]) => Promise<Answer<Results[Name]>>;
 };
 
-type AnsweredByTheClass = Omit<Answering, keyof Broker["entries"]>;
-
-function answeredByTheClass(started: Started): AnsweredByTheClass {
-  const { broker } = started;
-  return {
-    "secrets.get": (request) => broker.secret(request.name),
-    "http.request": (request) => broker.request(request),
-    "events.emit": (request) => broker.emit(request.kind, request.detail),
-    call: (request) => calledAnswer(started, request),
-    spend: (request) => spentAnswer(started, request.spending),
-    "commands.run": (request) => broker.runCommand(request),
-  };
-}
-
 function answeringFor(started: Started): Answering {
-  return { ...started.broker.entries, ...answeredByTheClass(started) };
-}
-
-async function calledAnswer(started: Started, request: Requests["call"]): Promise<Answer<Json>> {
-  try {
-    const outcome = await started.request.call(request.reference, request.input);
-    return outcome.status === "done" ? granted(outcome.output) : failed(outcome.reason);
-  } catch (error) {
-    return started.broker.report(
-      failed(`The call to ${request.reference} stopped at an unexpected error: ${errorLine(error)}`),
-    );
-  }
-}
-
-async function spentAnswer(started: Started, spending: Json): Promise<Answer<null>> {
-  const answer = await started.broker.spend(spending);
-  if (!answer.ok) {
-    return answer;
-  }
-  const spent = started.state.spent;
-  spent.items += answer.value.items;
-  spent.usd += answer.value.usd;
-  spent.tokens += answer.value.tokens;
-  return granted(null);
+  return started.broker.entries;
 }
 
 function answerFor<Name extends OperationName>(
@@ -220,7 +180,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     spent: zero,
   });
 
-  async function refusedBeforeStart(request: ScriptRequest, broker: Broker): Promise<string | undefined> {
+  async function refusedBeforeStart(request: ScriptRequest, broker: StepBroker): Promise<string | undefined> {
     const permissions = request.permissions.grants;
     const scriptFile = resolve(permissions.modeFolder, request.script);
     if (!isInsideOrEqual(scriptFile, permissions.modeFolder)) {
@@ -234,7 +194,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     const described = links.map(
       (found) => `${shownPath(options.layout, found.link)} points to ${found.target ?? "nothing"}`,
     );
-    const answer = await broker.report(
+    const answer = await broker.settled(
       refused({
         resource: "script",
         asked: `The script ${request.script} was to run with links that leave their folders (${described.join("; ")})`,
@@ -317,7 +277,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     await Promise.all(state.inFlight);
     const minutes = (options.clock.now().getTime() - startedAt) / 60_000;
     const outcome = outcomeOf(state, end, { milliseconds, outputBytes: limits.outputBytes });
-    const spent: Spend = { ...state.spent, minutes };
+    const spent: Spend = { ...broker.spent(), minutes };
     if (outcome.status === "done") {
       return { status: "done", output: options.secrets.redactJson(outcome.output), spent };
     }
@@ -329,7 +289,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     if (milliseconds <= 0) {
       return failure("The step has no time left, so the script was not started.");
     }
-    const broker = new Broker({
+    const broker = brokerForStep({
       layout: options.layout,
       permissions: request.permissions,
       place: request.place,
@@ -343,6 +303,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
       childProcesses: options.childProcesses,
       processes: options.processes,
       commandSearchPath: options.commandSearchPath,
+      call: request.call,
       limits: { databaseMilliseconds: milliseconds, commandMilliseconds: milliseconds, ...options.brokerLimits },
     });
     try {
@@ -353,7 +314,6 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
       const state: RunState = {
         final: undefined,
         stopped: undefined,
-        spent: { items: 0, usd: 0, tokens: 0 },
         inFlight: [],
       };
       return await runChild({ broker, request, state }, milliseconds);

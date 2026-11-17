@@ -78,8 +78,6 @@ const greeterMode = {
   actions: {
     fetch: {
       description: "When a mode needs a greeting for a name.",
-      input: "schemas/fetch-input.json",
-      output: "schemas/fetch-output.json",
       effects: ["read"],
       run: [{ script: "scripts/fetch.ts" }],
     },

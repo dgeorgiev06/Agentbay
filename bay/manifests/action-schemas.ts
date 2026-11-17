@@ -24,19 +24,14 @@ export function namingSignatures(context: Context, place: ActionPlace): readonly
   });
 }
 
-function ownSchemaFiles(place: ActionPlace): SchemaFiles | undefined {
+export function schemaFilesOf(context: Context, place: ActionPlace): SchemaFiles | undefined {
+  const [named] = namingSignatures(context, place);
+  if (named !== undefined) {
+    return { input: join(named.folder, named.signature.input), output: join(named.folder, named.signature.output) };
+  }
   const { input, output } = place.action;
   if (input === undefined || output === undefined) {
     return undefined;
   }
   return { input: join(place.mode.folder, input), output: join(place.mode.folder, output) };
-}
-
-export function schemaFilesOf(context: Context, place: ActionPlace): SchemaFiles | undefined {
-  const own = ownSchemaFiles(place);
-  const [named] = namingSignatures(context, place);
-  if (own !== undefined || named === undefined) {
-    return own;
-  }
-  return { input: join(named.folder, named.signature.input), output: join(named.folder, named.signature.output) };
 }

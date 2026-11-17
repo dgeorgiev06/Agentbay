@@ -160,6 +160,29 @@ test("bay actions lists an action that its interface names with the interface's 
   });
 });
 
+test("an action that its interface names and that gives input or output is an error with a fix", async () => {
+  const greetWithSchemas = { ...greet, input: "schemas/wave-input.json", output: "schemas/wave-output.json" };
+  const problems = await problemsOf(withGreeter({ actions: { greet: greetWithSchemas, part, wave } }));
+  assert.deepEqual(problems, [
+    {
+      file: greeterFile,
+      path: "/actions/greet/input",
+      line: 14,
+      message:
+        "Action greet of mode greeter gives the input schema schemas/wave-input.json, but greeting@1 names greet.",
+      fix: "Remove input from greet; an action that an interface names takes its input and output from the interface.",
+    },
+    {
+      file: greeterFile,
+      path: "/actions/greet/output",
+      line: 15,
+      message:
+        "Action greet of mode greeter gives the output schema schemas/wave-output.json, but greeting@1 names greet.",
+      fix: "Remove output from greet; an action that an interface names takes its input and output from the interface.",
+    },
+  ]);
+});
+
 test("an action that no interface names keeps its own input and output", async () => {
   const system = await systemOf(kitFiles());
   const target = system.action("greeter.wave");

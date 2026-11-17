@@ -133,7 +133,6 @@ function writeNotesBriefing(): void {
 
 function writeFakeTwo(): void {
   const folder = "components/modes/fake-two";
-  const interfaces = join(kit, "components/base/interfaces/items-source");
   const fetched = {
     source: "two",
     kinds: ["note"],
@@ -151,15 +150,11 @@ function writeFakeTwo(): void {
     actions: {
       fetch: {
         description: "When a mode needs the made-up notes.",
-        input: "schemas/fetch-request.json",
-        output: "schemas/fetch-response.json",
         effects: ["read", "network", "spend"],
         run: [{ script: "scripts/fetch.ts" }],
       },
       describe: {
         description: "When a mode needs the source's name and kinds.",
-        input: "schemas/describe-request.json",
-        output: "schemas/describe-response.json",
         effects: ["read"],
         run: [{ script: "scripts/describe.ts" }],
       },
@@ -170,10 +165,6 @@ function writeFakeTwo(): void {
   write(`${folder}/scripts/describe.ts`, sourceScript(described));
   writeJson(`${folder}/tests/fetch.example.json`, { input: { selector: {}, cursor: null }, output: fetched });
   writeJson(`${folder}/tests/describe.example.json`, { input: {}, output: described });
-  mkdirSync(join(project, folder, "schemas"), { recursive: true });
-  for (const name of ["fetch-request", "fetch-response", "describe-request", "describe-response"]) {
-    copyFileSync(join(interfaces, `${name}.json`), join(project, folder, "schemas", `${name}.json`));
-  }
 }
 
 function sourcesIn(partition: string): readonly string[] {

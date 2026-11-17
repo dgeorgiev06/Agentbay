@@ -36,15 +36,11 @@ const shelfMode = {
   actions: {
     put: {
       description: "When a mode shelves an item.",
-      input: "schemas/put-input.json",
-      output: "schemas/put-output.json",
       effects: ["write"],
       run: [{ script: "scripts/put.ts" }],
     },
     get: {
       description: "When a mode takes an item off the shelf.",
-      input: "schemas/get-input.json",
-      output: "schemas/get-output.json",
       effects: ["read"],
       run: [{ script: "scripts/get.ts" }],
     },
@@ -84,7 +80,7 @@ function projectFiles(): Record<string, string> {
   return {
     ...Object.fromEntries(kit.map(([path, text]) => [`/kit/${path}`, text])),
     "/project/agentbay.config.yaml": yamlText({ ...config, bindings, modes: ["notes"], settings: {} }),
-    ...projectMode(shelfMode, ["put-input.json", "put-output.json", "get-input.json", "get-output.json", "put.ts"]),
+    ...projectMode(shelfMode, ["put.ts"]),
     ...projectMode(journalMode, ["write-input.json", "write-output.json"]),
     "/project/components/modes/shelf/scripts/get.ts": "",
   };
@@ -470,18 +466,18 @@ describe("system.listing", () => {
   });
 
   test("an action whose input schema could not be read cannot be loaded, so it is never listed", async () => {
-    const files = { ...validFiles(), "components/base/store/schemas/put-input.json": "{ not json" };
+    const files = { ...validFiles(), "components/modes/briefing/schemas/digest-input.json": "{ not json" };
     const outcome = await loadSystem(fakeFileSystem(rooted(files)), layout);
     assert.deepEqual(refusal(outcome), [
       {
-        file: "components/base/store/mode.yaml",
-        path: "/actions/put/input",
-        line: 9,
+        file: "components/modes/briefing/mode.yaml",
+        path: "/actions/digest/input",
+        line: 11,
         message:
-          "Action put of mode store names the input schema schemas/put-input.json, " +
-          "but components/base/store/schemas/put-input.json is not valid JSON: " +
+          "Action digest of mode briefing names the input schema schemas/digest-input.json, " +
+          "but components/modes/briefing/schemas/digest-input.json is not valid JSON: " +
           "Expected property name or '}' in JSON at position 2 (line 1 column 3).",
-        fix: "Correct the JSON in components/base/store/schemas/put-input.json.",
+        fix: "Correct the JSON in components/modes/briefing/schemas/digest-input.json.",
       },
     ]);
   });
@@ -933,8 +929,8 @@ describe("a mode's skill by name", () => {
   test("each skill of a mode answers with its own tools", async () => {
     const tidy = {
       description: "When the owner wants the notes tidied.",
-      input: "schemas/add-input.json",
-      output: "schemas/add-output.json",
+      input: "schemas/tidy-input.json",
+      output: "schemas/tidy-output.json",
       effects: ["read"],
       run: [{ skill: "skills/tidy", tier: "fast" }],
     };
@@ -943,6 +939,8 @@ describe("a mode's skill by name", () => {
     const files = filesWithSkill(draftSkill);
     await files.writeAtomic(`/kit/${paths.notes}`, yamlText(manifest));
     await files.writeAtomic("/kit/components/modes/notes/skills/tidy/SKILL.md", tidySkill);
+    await files.writeAtomic("/kit/components/modes/notes/schemas/tidy-input.json", schemaText("tidy-input"));
+    await files.writeAtomic("/kit/components/modes/notes/schemas/tidy-output.json", schemaText("tidy-output"));
     const mode = await notesMode(files);
     const tools = async (name: string): Promise<readonly string[]> => {
       const skill = await mode.skill(name);
@@ -1151,7 +1149,7 @@ describe("inspectSystem", () => {
       {
         file: "components/modes/notes/mode.yaml",
         path: "/actions/add/run/0/skill",
-        line: 18,
+        line: 16,
         message:
           "Action add of mode notes runs the skill skills/write-note, " +
           "but components/modes/notes/skills/write-note/SKILL.md does not exist.",

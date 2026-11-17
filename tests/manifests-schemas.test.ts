@@ -106,7 +106,7 @@ test("a value outside a closed set lists the allowed values", async () => {
     {
       file: paths.notes,
       path: "/actions/add/effects/1",
-      line: 16,
+      line: 14,
       message: 'actions.add.effects.1 must be one of "read", "write", "network", "spend", "delete", but it is "erase".',
     },
     notesBindingRefused,
@@ -133,7 +133,7 @@ test("a step is checked against the kind its first field names, without noise fr
     {
       file: paths.notes,
       path: "/actions/add/run/0",
-      line: 18,
+      line: 16,
       message: "actions.add.run.0 is missing the required field tier.",
       fix: "Add tier. Expected: How capable a model the skill needs.",
     },

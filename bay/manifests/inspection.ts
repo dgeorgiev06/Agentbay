@@ -50,7 +50,7 @@ export async function consistencyProblems(context: Context): Promise<readonly Pr
   const problems: Problem[] = [];
   for (const mode of activeModesOf(context)) {
     problems.push(...requiresProblems(context, mode));
-    problems.push(...(await implementsProblems(context, mode)));
+    problems.push(...implementsProblems(context, mode));
     problems.push(...actionsOf(mode).flatMap((place) => actionProblems(context, place)));
     problems.push(...(await modeSettingsProblems(context, mode)));
   }

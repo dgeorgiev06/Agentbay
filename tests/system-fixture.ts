@@ -49,16 +49,12 @@ export const storeMode: Mode = {
   actions: {
     put: {
       description: "When a mode keeps an item.",
-      input: "schemas/put-input.json",
-      output: "schemas/put-output.json",
       effects: ["write"],
       run: [{ script: "scripts/put.ts" }],
       undo: "remove",
     },
     get: {
       description: "When a mode reads an item back.",
-      input: "schemas/get-input.json",
-      output: "schemas/get-output.json",
       effects: ["read"],
       run: [{ script: "scripts/get.ts" }],
     },
@@ -81,8 +77,6 @@ export const notesMode: Mode = {
   actions: {
     add: {
       description: "When the owner wants a note written.",
-      input: "schemas/add-input.json",
-      output: "schemas/add-output.json",
       effects: ["read", "write"],
       run: [{ skill: "skills/write-note", tier: "fast" }, { call: "items-store.put" }],
     },
@@ -159,12 +153,11 @@ export function validFiles(): Record<string, string> {
     ...schemaFiles("components/base/interfaces/items-store", ["put-input", "put-output", "get-input", "get-output"]),
     ...schemaFiles("components/base/interfaces/notes", ["add-input", "add-output"]),
     [paths.store]: yamlText(storeMode),
-    ...schemaFiles("components/base/store/schemas", ["put-input", "put-output", "get-input", "get-output"]),
+    ...schemaFiles("components/base/store/schemas", ["put-output", "get-output"]),
     "components/base/store/scripts/put.ts": "",
     "components/base/store/scripts/get.ts": "",
     "components/base/store/scripts/remove.ts": "",
     [paths.notes]: yamlText(notesMode),
-    ...schemaFiles("components/modes/notes/schemas", ["add-input", "add-output"]),
     "components/modes/notes/skills/write-note/SKILL.md": writeNoteSkill,
     "components/modes/notes/workflows/daily.yaml": yamlText(dailyWorkflow),
     [paths.briefing]: yamlText(briefingMode),

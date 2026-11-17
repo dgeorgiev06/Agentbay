@@ -22,12 +22,14 @@ type OutsideFolder = {
 type ModesRule = {
   readonly within: string;
   readonly importsKernelThrough: readonly string[];
+  readonly testsImportKitThrough: readonly string[];
 };
 
 type FeatureMap = {
   readonly features: readonly Feature[];
   readonly outside: readonly OutsideFolder[];
   readonly modes: ModesRule | undefined;
+  readonly modeFolders: readonly string[];
 };
 
 type SourceFile = {
@@ -41,7 +43,8 @@ type Rule =
   | "outside-reaches-in"
   | "kernel-reaches-out"
   | "test-reaches-in"
-  | "inside-reaches-across";
+  | "inside-reaches-across"
+  | "mode-test-reaches-out";
 
 type Break = {
   readonly from: string;
@@ -67,6 +70,7 @@ const rules: readonly Rule[] = [
   "kernel-reaches-out",
   "test-reaches-in",
   "inside-reaches-across",
+  "mode-test-reaches-out",
 ];
 
 const scannedFolders = ["bay", "adapters", "components", "schemas"] as const;
@@ -103,7 +107,7 @@ function parsedMap(text: string): FeatureMap {
     folder,
     importsKernelThrough: textsField(entry, "imports_kernel_through"),
   }));
-  return { features, outside, modes: modesRuleOf(fieldOf(map, "modes")) };
+  return { features, outside, modes: modesRuleOf(fieldOf(map, "modes")), modeFolders: [] };
 }
 
 function modesRuleOf(value: Json | undefined): ModesRule | undefined {
@@ -111,7 +115,11 @@ function modesRuleOf(value: Json | undefined): ModesRule | undefined {
   if (value === undefined || within === undefined) {
     return undefined;
   }
-  return { within, importsKernelThrough: textsField(value, "imports_kernel_through") };
+  return {
+    within,
+    importsKernelThrough: textsField(value, "imports_kernel_through"),
+    testsImportKitThrough: textsField(value, "tests_import_kit_through"),
+  };
 }
 
 function modeFoldersIn(map: FeatureMap, files: readonly string[]): readonly string[] {
@@ -124,7 +132,11 @@ function modeFoldersIn(map: FeatureMap, files: readonly string[]): readonly stri
 
 function withModeFolders(map: FeatureMap, folders: readonly string[]): FeatureMap {
   const importsKernelThrough = map.modes?.importsKernelThrough ?? [];
-  return { ...map, outside: [...map.outside, ...folders.map((folder) => ({ folder, importsKernelThrough }))] };
+  return {
+    ...map,
+    outside: [...map.outside, ...folders.map((folder) => ({ folder, importsKernelThrough }))],
+    modeFolders: [...map.modeFolders, ...folders],
+  };
 }
 
 function scanned(file: string, source: string): SourceFile {
@@ -200,9 +212,22 @@ function testImportRule(map: FeatureMap, from: string, to: string): Rule | undef
   return inside === target.name ? undefined : "inside-reaches-across";
 }
 
+function modeOfTest(map: FeatureMap, file: string): string | undefined {
+  return map.modeFolders.find((folder) => isInside(file, join(folder, testFolder)));
+}
+
+function modeTestImportRule(map: FeatureMap, mode: string, to: string): Rule | undefined {
+  const allowed = [...(map.modes?.testsImportKitThrough ?? []), ...(map.modes?.importsKernelThrough ?? [])];
+  return allowed.includes(to) || isInside(to, mode) ? undefined : "mode-test-reaches-out";
+}
+
 function ruleOf(map: FeatureMap, from: string, to: string): Rule | undefined {
   if (isInside(from, testFolder)) {
     return testImportRule(map, from, to);
+  }
+  const mode = modeOfTest(map, from);
+  if (mode !== undefined) {
+    return modeTestImportRule(map, mode, to);
   }
   return isKernelFile(from) ? kernelImportRule(map, from, to) : outsideImportRule(map, from, to);
 }
@@ -387,10 +412,15 @@ features:
 modes:
   within: components
   imports_kernel_through: [bay/words.ts]
+  tests_import_kit_through: [tests/test-toolbox.ts]
 `);
 
-test("the modes rule is read with the folder it covers and the kernel files a mode may import", () => {
-  assert.deepEqual(mapWithModes.modes, { within: "components", importsKernelThrough: ["bay/words.ts"] });
+test("the modes rule is read with the folder it covers, the kernel files a mode may import and the kit files its tests may import", () => {
+  assert.deepEqual(mapWithModes.modes, {
+    within: "components",
+    importsKernelThrough: ["bay/words.ts"],
+    testsImportKitThrough: ["tests/test-toolbox.ts"],
+  });
   assert.deepEqual(mapWithModes.outside, []);
   assert.equal(smallMap.modes, undefined);
 });
@@ -412,12 +442,39 @@ test("a file of a mode folder may import only the kernel files the modes rule na
     scanned("components/modes/notes/scripts/add.ts", relative("../../../../bay/words.ts")),
     scanned("components/modes/notes/scripts/lib/rows.ts", relative("../../../../../bay/spelling.ts")),
     scanned("components/base/keeper/tests/keep.test.ts", relative("../../../../bay/words.ts")),
-    scanned("components/base/keeper/scripts/keep.ts", relative("../../../../tests/mode-harness.ts")),
+    scanned("components/base/keeper/scripts/keep.ts", relative("../../../../tests/test-toolbox.ts")),
     scanned("components/base/interfaces/notes.ts", relative("../../../bay/words.ts")),
   ];
   assert.deepEqual(mapBreaks(map, sources), [
     { from: "components/modes/notes/scripts/lib/rows.ts", to: "bay/spelling.ts", rule: "outside-reaches-in" },
     { from: "components/base/interfaces/notes.ts", to: "bay/words.ts", rule: "outside-reaches-in" },
+  ]);
+});
+
+test("a file under a mode's tests/ folder may import the test toolbox, the toolbox and its own mode's files, and nothing else", () => {
+  const map = withModeFolders(mapWithModes, ["components/modes/notes", "components/base/keeper"]);
+  const test = "components/modes/notes/tests/add.test.ts";
+  const sources = [
+    scanned(test, relative("../../../../tests/test-toolbox.ts")),
+    scanned(test, relative("../../../../bay/words.ts")),
+    scanned(test, relative("../scripts/lib/rows.ts")),
+    scanned("components/modes/notes/tests/rows.ts", relative("./add.test.ts")),
+    scanned("components/modes/notes/tests/helper.ts", relative("../../../../tests/project-fixture.ts")),
+    scanned("components/modes/notes/tests/kernel.test.ts", relative("../../../../bay/engine.ts")),
+    scanned("components/modes/notes/tests/keeper.test.ts", relative("../../../base/keeper/scripts/keep.ts")),
+  ];
+  assert.deepEqual(mapBreaks(map, sources), [
+    {
+      from: "components/modes/notes/tests/helper.ts",
+      to: "tests/project-fixture.ts",
+      rule: "mode-test-reaches-out",
+    },
+    { from: "components/modes/notes/tests/kernel.test.ts", to: "bay/engine.ts", rule: "mode-test-reaches-out" },
+    {
+      from: "components/modes/notes/tests/keeper.test.ts",
+      to: "components/base/keeper/scripts/keep.ts",
+      rule: "mode-test-reaches-out",
+    },
   ]);
 });
 

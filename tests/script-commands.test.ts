@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { symlink } from "node:fs/promises";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 import type { Effect, Json } from "../bay/contracts.ts";
 import { fieldOf, textField } from "../bay/json.ts";
@@ -19,8 +19,11 @@ import {
   withCommandKernel,
 } from "./commands-fixture.ts";
 import { testEnvironment } from "./kernel-fixture.ts";
+import { trustRecordFiles } from "./system-fixture.ts";
 
 const version = { version: { run: "node --version" } };
+
+const everyEffect: readonly Effect[] = ["read", "write", "network", "spend", "delete"];
 
 const evaluate = { evaluate: { run: "node -e" } };
 
@@ -61,7 +64,8 @@ function unknownSentence(asked: string, listed: string, manifest: string): strin
   return (
     `The step 0 of action go asked to run the listed command ${asked} in ., but its mode lists the commands: ` +
     `${listed}. To allow it, list ${name} under resources.commands in ${manifest} with the words it runs and its ` +
-    "effects; only a mode under the kit's components/base/ may list commands."
+    "effects; a mode outside the kit's components/base/ is granted the commands it lists only when the owner " +
+    "trusts its list."
   );
 }
 
@@ -189,23 +193,42 @@ test("a working folder inside .agentbay/ is refused, also through a link", async
   });
 });
 
-test("a mode outside components/base/ that lists a command does not load", async () => {
+test("a mode outside components/base/ that lists a command loads without it, and its script is refused as for a name it does not list", async () => {
   const kit = await makeCommandKit({ commands: version, tier: "modes" });
   try {
-    const loaded = await loadKernel({
-      layout: layoutOf({ kit: kit.root, project: kit.root }),
-      ports: nodeKernelPorts(testEnvironment),
-      environment: testEnvironment,
-      platform: "linux",
-    });
-    assert.ok(!loaded.ok);
-    assert.deepEqual(
-      loaded.problems.map((problem) => problem.message),
-      [
-        "Mode command-prober lists the command version, which runs node --version; a listed command can run code " +
-          "the agent wrote. Only a mode under the kit's components/base/ may list commands.",
-      ],
-    );
+    const kernel = await openCommandKernel(kit);
+    try {
+      const ran = await ranCommands(kernel, [{ name: "version" }]);
+      assert.equal(refusalMessage(ran.answers[0] ?? null), unknownSentence("version with []", "none", kit.manifest));
+      assert.deepEqual(eventsOfKind(ran.run, "command"), []);
+    } finally {
+      kernel.close();
+    }
+  } finally {
+    await kit.remove();
+  }
+});
+
+test("a mode outside components/base/ whose list the owner trusts runs its listed command", async () => {
+  const kit = await makeCommandKit({ commands: version, tier: "modes" });
+  try {
+    const list = {
+      mode: "command-prober",
+      commands: [{ name: "version", words: ["node", "--version"], effects: everyEffect }],
+      commandsStartWith: [],
+      throwaway: [],
+    };
+    for (const [path, text] of Object.entries(trustRecordFiles(list))) {
+      await mkdir(dirname(join(kit.root, path)), { recursive: true });
+      await writeFile(join(kit.root, path), text, "utf8");
+    }
+    const kernel = await openCommandKernel(kit);
+    try {
+      const ran = await ranCommands(kernel, [{ name: "version" }]);
+      assert.match(textField(stdoutOf(ran.answers[0] ?? null), "text") ?? "", /^v\d+\.\d+\.\d+\n$/);
+    } finally {
+      kernel.close();
+    }
   } finally {
     await kit.remove();
   }

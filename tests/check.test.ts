@@ -66,19 +66,19 @@ test("a listed command with no effects in a base mode is an error with a fix", a
   assert.match(finding.fix ?? "", /^List under resources\.commands\.tests\.effects in /);
 });
 
-test("a listed command in a mode outside components/base is an error", async () => {
+test("a listed command in a mode outside components/base is not an error, and has no finding of its own yet", async () => {
   const commands = { changes: { run: "git status", effects: ["read"] } };
   const manifest = yamlText({ ...notesMode, resources: { commands } });
   const report = await check({ ...cleanFiles(), [paths.notes]: manifest });
-  const finding = findFinding(report, paths.notes, "Mode notes lists the command changes, which runs git status");
-  assert.equal(finding.severity, "error");
-  assert.match(finding.message, /Only a mode under the kit's components\/base\/ may list commands\./);
+  assert.deepEqual(findingsIn(report, paths.notes), []);
+  assert.equal(report.errors, 0);
 });
 
 const startWithWanted =
   "The words every command the mode lists starts with, separated by spaces, such as the program and the options " +
   "each command needs. A command runs these words, then the words of its run, then the arguments a script gives. " +
-  "Only a mode under the kit's components/base/ may give them, and only with commands.";
+  "A mode gives them only with commands. A mode outside the kit's components/base/ is granted its commands only " +
+  "when the owner trusts its list.";
 
 function findingsIn(report: CheckReport, file: string): readonly (readonly unknown[])[] {
   return report.findings
@@ -136,37 +136,21 @@ test("words for a mode's commands to start with, in a mode that lists no command
   ]);
 });
 
-test("words for a mode's commands to start with, in a mode outside components/base, are refused", async () => {
+test("words for a mode's commands to start with, in a mode outside components/base, are not an error", async () => {
   const resources = {
     commandsStartWith: "git -c core.hooksPath=/dev/null",
     commands: { changes: { run: "status", effects: ["read"] } },
   };
   const report = await check({ ...cleanFiles(), [paths.notes]: yamlText({ ...notesMode, resources }) });
-  assert.deepEqual(findingsIn(report, paths.notes), [
-    [
-      "error",
-      "/resources/commandsStartWith",
-      "Mode notes gives git -c core.hooksPath=/dev/null as the words every command it lists starts with; " +
-        "a listed command can run code the agent wrote. Only a mode under the kit's components/base/ may list commands.",
-      "Remove commandsStartWith from components/modes/notes/mode.yaml; a skill step's checks belong in script steps.",
-    ],
-    [
-      "error",
-      "/resources/commands/changes",
-      "Mode notes lists the command changes, which runs git -c core.hooksPath=/dev/null status; " +
-        "a listed command can run code the agent wrote. Only a mode under the kit's components/base/ may list commands.",
-      "Remove the command from components/modes/notes/mode.yaml; a skill step's checks belong in script steps.",
-    ],
-  ]);
+  assert.deepEqual(findingsIn(report, paths.notes), []);
+  assert.equal(report.errors, 0);
 });
 
-test("a throwaway folder in a mode outside components/base is an error", async () => {
+test("a throwaway folder in a mode outside components/base is not an error", async () => {
   const manifest = yamlText({ ...notesMode, resources: { files: { throwaway: ["scratch/"] } } });
   const report = await check({ ...cleanFiles(), [paths.notes]: manifest });
-  const finding = findFinding(report, paths.notes, "Mode notes names the throwaway folder scratch/");
-  assert.equal(finding.severity, "error");
-  assert.equal(finding.path, "/resources/files/throwaway/0");
-  assert.match(finding.message, /Only a mode under the kit's components\/base\/ may name throwaway folders\./);
+  assert.deepEqual(findingsIn(report, paths.notes), []);
+  assert.equal(report.errors, 0);
 });
 
 test("the summary groups findings by file, errors first, each with its fix, and ends with the counts", () => {
@@ -429,15 +413,4 @@ test("bay check reads each mode.yaml once", async () => {
   };
   await checkFake(recording);
   assert.equal(reads.filter((path) => path === `/kit/${paths.notes}`).length, 1);
-});
-
-test("a listed command in a kit mode outside components/base is an error and not also a warning", async () => {
-  const commands = { changes: { run: "git status", effects: ["read"] } };
-  const manifest = yamlText({ ...notesMode, resources: { commands } });
-  const report = await check({ ...cleanFiles(), [paths.notes]: manifest });
-  const notesFindings = report.findings.filter((finding) => finding.file === paths.notes);
-  assert.deepEqual(
-    notesFindings.map((finding) => [finding.severity, finding.path]),
-    [["error", "/resources/commands/changes"]],
-  );
 });

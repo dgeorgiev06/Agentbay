@@ -3,7 +3,8 @@ import { test } from "node:test";
 import type { ModeGrants } from "../bay/contracts.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import { layoutOf, type Home, type Layout } from "../bay/layout.ts";
-import { grantsOf, type GrantProblem } from "../bay/policy.ts";
+import { grantsOf, listOf, type GrantProblem } from "../bay/policy.ts";
+import { listHashOf } from "../bay/trust.ts";
 import { modeNamed } from "./broker-fixture.ts";
 import { grantsWith } from "./grants-fixture.ts";
 
@@ -49,7 +50,14 @@ function rulingFor(modes: Modes, name: string, within: Layout): ReturnType<typeo
   const otherModes = modes
     .filter((mode) => mode !== own)
     .map((mode) => ({ name: mode.manifest.name, folder: mode.folder, manifest: mode.manifest }));
-  return grantsOf({ manifest: own.manifest, home: own.home ?? "kit", folder: own.folder, layout: within, otherModes });
+  return grantsOf({
+    manifest: own.manifest,
+    home: own.home ?? "kit",
+    folder: own.folder,
+    layout: within,
+    otherModes,
+    record: { ok: true, value: { version: 1, modes: {} } },
+  });
 }
 
 function grantsFor(modes: Modes, name: string, within: Layout = layout): ModeGrants {
@@ -181,7 +189,7 @@ test("every problem of a mode is given at once, across paths, secrets, hosts and
     resources: {
       files: { read: ["bay/"], write: [".git/hooks"] },
       secrets: ["x"],
-      commands: { build: { run: "make", effects: ["read" as const] } },
+      commands: { build: { run: "make", effects: [] } },
     },
   };
   const problems = problemsFor([{ folder: "/project/components/modes/briefing", manifest }], "briefing");
@@ -191,7 +199,7 @@ test("every problem of a mode is given at once, across paths, secrets, hosts and
       ["resources", "files", "read", 0],
       ["resources", "files", "write", 0],
       ["resources", "secrets", 0],
-      ["resources", "commands", "build"],
+      ["resources", "commands", "build", "effects"],
     ],
   );
 });
@@ -393,27 +401,36 @@ test("forge gets no forge rights when the project is not the kit", () => {
   }
 });
 
-test("only a mode under the kit's components/base may list commands", () => {
+function trustedRulingFor(entry: ModeEntry): ReturnType<typeof grantsOf> {
+  const list = listOf(entry.manifest);
+  const given = { list, hash: listHashOf(list), at: "2026-11-17T14:02:00.000Z", by: "a test" };
+  return grantsOf({
+    manifest: entry.manifest,
+    home: entry.home ?? "kit",
+    folder: entry.folder,
+    layout,
+    otherModes: [],
+    record: { ok: true, value: { version: 1, modes: { [list.mode]: given } } },
+  });
+}
+
+test("a mode outside the kit's components/base/ that lists commands is granted them only when the owner trusts its list", () => {
   const withCommand: Mode = {
     ...briefing,
     resources: { commands: { tests: { run: "node  --test", effects: ["read", "write"] } } },
   };
-  const outside: Modes = [{ folder: "/project/components/modes/briefing", manifest: withCommand }];
-  assert.deepEqual(problemsFor(outside, "briefing"), [
-    {
-      at: ["resources", "commands", "tests"],
-      message:
-        "Mode briefing lists the command tests, which runs node --test; a listed command can run code the agent " +
-        "wrote. Only a mode under the kit's components/base/ may list commands.",
-      fix: "Remove the command from components/modes/briefing/mode.yaml; a skill step's checks belong in script steps.",
-    },
-  ]);
-  const base: Modes = [{ folder: "/project/components/base/briefing", manifest: withCommand }];
-  assert.deepEqual(grantsFor(base, "briefing").commands, [
-    { name: "tests", words: ["node", "--test"], effects: ["read", "write"] },
-  ]);
+  const tests = { name: "tests", words: ["node", "--test"], effects: ["read", "write"] };
+  const list = { mode: "briefing", commands: [tests], commandsStartWith: [], throwaway: [] };
+  const outside: ModeEntry = { folder: "/project/components/modes/briefing", manifest: withCommand };
+  const waiting = grantsFor([outside], "briefing");
+  assert.deepEqual([waiting.commands, waiting.listTrust], [[], { state: "never trusted", list }]);
+  const trusted = trustedRulingFor(outside);
+  assert.ok(trusted.ok);
+  assert.deepEqual(trusted.value.commands, [tests]);
+  const base = grantsFor([{ folder: "/project/components/base/briefing", manifest: withCommand }], "briefing");
+  assert.deepEqual([base.commands, base.listTrust], [[tests], { state: "not needed" }]);
   const projectBase: Modes = [{ folder: "/project/components/base/briefing", manifest: withCommand, home: "project" }];
-  assert.equal(problemsFor(projectBase, "briefing").length, 1);
+  assert.deepEqual(grantsFor(projectBase, "briefing").commands, []);
 });
 
 test("a listed command with no effects is refused with a fix, in any mode", () => {
@@ -469,7 +486,7 @@ test("a mode's commands start with the words it gives once, and a mode that give
   ]);
 });
 
-test("a mode outside components/base that gives the words its commands start with is refused for each", () => {
+test("a mode outside components/base/ that gives the words its commands start with waits for trust in its whole list", () => {
   const sharing: Mode = {
     ...briefing,
     resources: {
@@ -477,23 +494,23 @@ test("a mode outside components/base that gives the words its commands start wit
       commands: { changes: { run: "status --porcelain --", effects: ["read"] } },
     },
   };
-  const outside: Modes = [{ folder: "/project/components/modes/briefing", manifest: sharing }];
-  assert.deepEqual(problemsFor(outside, "briefing"), [
-    {
-      at: ["resources", "commandsStartWith"],
-      message:
-        "Mode briefing gives git -c core.hooksPath=/dev/null as the words every command it lists starts with; " +
-        "a listed command can run code the agent wrote. Only a mode under the kit's components/base/ may list commands.",
-      fix: "Remove commandsStartWith from components/modes/briefing/mode.yaml; a skill step's checks belong in script steps.",
+  const grants = grantsFor([{ folder: "/project/components/modes/briefing", manifest: sharing }], "briefing");
+  assert.deepEqual(grants.commands, []);
+  assert.deepEqual(grants.listTrust, {
+    state: "never trusted",
+    list: {
+      mode: "briefing",
+      commands: [
+        {
+          name: "changes",
+          words: ["git", "-c", "core.hooksPath=/dev/null", "status", "--porcelain", "--"],
+          effects: ["read"],
+        },
+      ],
+      commandsStartWith: ["git", "-c", "core.hooksPath=/dev/null"],
+      throwaway: [],
     },
-    {
-      at: ["resources", "commands", "changes"],
-      message:
-        "Mode briefing lists the command changes, which runs git -c core.hooksPath=/dev/null status --porcelain --; " +
-        "a listed command can run code the agent wrote. Only a mode under the kit's components/base/ may list commands.",
-      fix: "Remove the command from components/modes/briefing/mode.yaml; a skill step's checks belong in script steps.",
-    },
-  ]);
+  });
 });
 
 test("a mode that gives the words its commands start with and lists no command is refused, in any mode", () => {
@@ -512,24 +529,21 @@ test("a mode that gives the words its commands start with and lists no command i
   ]);
 });
 
-test("only a mode under the kit's components/base may name throwaway folders", () => {
+test("a mode outside the kit's components/base/ that names throwaway folders is granted them only when the owner trusts its list", () => {
   const withThrowaway = { ...briefing, resources: { files: { throwaway: ["scratch/"] } } };
-  const outside: Modes = [{ folder: "/project/components/modes/briefing", manifest: withThrowaway }];
-  assert.deepEqual(problemsFor(outside, "briefing"), [
-    {
-      at: ["resources", "files", "throwaway", 0],
-      message:
-        "Mode briefing names the throwaway folder scratch/; the kernel removes whole folders and makes links " +
-        "there for it. Only a mode under the kit's components/base/ may name throwaway folders.",
-      fix: "Remove resources.files.throwaway from components/modes/briefing/mode.yaml.",
-    },
-  ]);
+  const outside: ModeEntry = { folder: "/project/components/modes/briefing", manifest: withThrowaway };
+  const waiting = grantsFor([outside], "briefing");
+  const list = { mode: "briefing", commands: [], commandsStartWith: [], throwaway: ["scratch"] };
+  assert.deepEqual([waiting.throwawayPaths, waiting.listTrust], [[], { state: "never trusted", list }]);
+  const trusted = trustedRulingFor(outside);
+  assert.ok(trusted.ok);
+  assert.deepEqual(trusted.value.throwawayPaths, ["/project/scratch"]);
   const base: Modes = [{ folder: "/project/components/base/briefing", manifest: withThrowaway }];
   assert.deepEqual(grantsFor(base, "briefing").throwawayPaths, ["/project/scratch"]);
   const projectBase: Modes = [
     { folder: "/project/components/base/briefing", manifest: withThrowaway, home: "project" },
   ];
-  assert.equal(problemsFor(projectBase, "briefing").length, 1);
+  assert.deepEqual(grantsFor(projectBase, "briefing").throwawayPaths, []);
 });
 
 test("a throwaway folder may not be the project root, nor be or sit inside .agentbay/", () => {

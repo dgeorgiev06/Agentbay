@@ -2,6 +2,7 @@ import type { Effect, GrantedCommand, ModeList, TrustGiven } from "./contracts.t
 import { hashOf, isRecord, parseJson } from "./json.ts";
 import { pathIn, type Layout } from "./layout.ts";
 import { failedWith, succeededWith, type Outcome, type Problem } from "./outcome.ts";
+import type { FileSystem } from "./ports.ts";
 
 export type TrustRecord = {
   readonly version: 1;
@@ -33,7 +34,7 @@ const noneGranted = "so no list it holds is granted";
 
 const fix = "Remove the file; then each mode outside the kit's components/base/ waits until the owner trusts it again.";
 
-export function trustRecordFile(layout: Layout): string {
+function trustRecordFile(layout: Layout): string {
   return pathIn(layout, "project", recordPath);
 }
 
@@ -277,7 +278,7 @@ function parsedRecord(text: string): Outcome<unknown> {
   }
 }
 
-export function trustRecordOf(text: string | undefined): Outcome<TrustRecord> {
+function trustRecordOf(text: string | undefined): Outcome<TrustRecord> {
   if (text === undefined) {
     return succeededWith({ version: 1, modes: {} });
   }
@@ -292,4 +293,17 @@ export function trustRecordOf(text: string | undefined): Outcome<TrustRecord> {
   const problems: Problem[] = [...versionProblems(root)];
   const modes = modesOf(root, problems);
   return problems.length > 0 ? failedWith(problems) : succeededWith({ version: 1, modes });
+}
+
+async function recordFileText(files: FileSystem, layout: Layout): Promise<Outcome<string | undefined>> {
+  try {
+    return succeededWith(await files.readText(trustRecordFile(layout)));
+  } catch {
+    return failedWith([problemAt([], `The trust record ${recordPath} cannot be read, ${noneGranted}.`)]);
+  }
+}
+
+export async function readTrustRecord(files: FileSystem, layout: Layout): Promise<Outcome<TrustRecord>> {
+  const text = await recordFileText(files, layout);
+  return text.ok ? trustRecordOf(text.value) : text;
 }

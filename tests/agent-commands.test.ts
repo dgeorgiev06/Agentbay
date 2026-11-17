@@ -49,6 +49,7 @@ function grantsOfManifest(resources: Parameters<typeof modeNamed>[1]): ModeGrant
     folder: "/project/components/base/notes",
     layout: layoutOf({ kit: "/project", project: "/project" }),
     otherModes: [],
+    record: { ok: true, value: { version: 1, modes: {} } },
   });
   assert.ok(ruling.ok, JSON.stringify(ruling));
   return ruling.value;

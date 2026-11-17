@@ -2,13 +2,17 @@ import type { ModeGrants } from "../contracts.ts";
 import { grantsOf, type GrantProblem } from "../policy.ts";
 import { problemAt } from "./spec.ts";
 import { failedWith, succeededWith, type Outcome, type Problem } from "../outcome.ts";
+import type { TrustRecord } from "../trust.ts";
 import type { ModeSource, Context } from "./loaded.ts";
 
 function placedGrantProblem(mode: ModeSource, problem: GrantProblem): Problem {
   return problemAt(mode, problem.at, { message: problem.message, fix: problem.fix });
 }
 
-export function grantsOfActiveModes(context: Context): Outcome<ReadonlyMap<string, ModeGrants>> {
+export function grantsOfActiveModes(
+  context: Context,
+  record: Outcome<TrustRecord>,
+): Outcome<ReadonlyMap<string, ModeGrants>> {
   const granted = new Map<string, ModeGrants>();
   const problems: Problem[] = [];
   for (const mode of [...context.active].flatMap((name) => context.modes.get(name) ?? [])) {
@@ -21,6 +25,7 @@ export function grantsOfActiveModes(context: Context): Outcome<ReadonlyMap<strin
       folder: mode.folder,
       layout: context.layout,
       otherModes,
+      record,
     });
     if (ruling.ok) {
       granted.set(mode.value.name, ruling.value);

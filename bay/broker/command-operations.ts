@@ -60,7 +60,8 @@ function listedCommand(request: CommandRequest, asking: Asking): Ruling<GrantedC
       )}`,
       change:
         `To allow it, list ${request.name} under resources.commands in ${manifestOf(asking.grants)} ` +
-        "with the words it runs and its effects; only a mode under the kit's components/base/ may list commands.",
+        "with the words it runs and its effects; a mode outside the kit's components/base/ is granted the commands " +
+        "it lists only when the owner trusts its list.",
     });
   }
   const missing = lackedEffect(command, asking.effects);

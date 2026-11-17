@@ -1,7 +1,9 @@
 import { isAbsolute, join, normalize } from "node:path/posix";
-import type { GrantedCommand, ModeGrants, ModeList } from "./contracts.ts";
+import type { GrantedCommand, ListTrust, ModeGrants, ModeList } from "./contracts.ts";
 import type { Mode } from "./generated/mode.ts";
 import { isInsideOrEqual, isProjectTheKit, pathIn, shownPath, type Home, type Layout } from "./layout.ts";
+import type { Outcome } from "./outcome.ts";
+import { listHashOf, type TrustRecord } from "./trust.ts";
 
 export type OtherMode = {
   readonly name: string;
@@ -15,6 +17,7 @@ export type GrantRequest = {
   readonly folder: string;
   readonly layout: Layout;
   readonly otherModes: readonly OtherMode[];
+  readonly record: Outcome<TrustRecord>;
 };
 
 export type GrantProblem = {
@@ -266,20 +269,6 @@ function isBaseMode(request: GrantRequest): boolean {
   return request.home === "kit" && isInsideOrEqual(request.folder, pathIn(request.layout, "kit", baseTier));
 }
 
-function commandProblems(request: GrantRequest): readonly GrantProblem[] {
-  if (isBaseMode(request)) {
-    return [];
-  }
-  const { manifest, layout } = request;
-  return declaredResources(manifest).commands.map(({ name, words }) => ({
-    at: ["resources", "commands", name],
-    message:
-      `Mode ${manifest.name} lists the command ${name}, which runs ${words.join(" ")}; ` +
-      `a listed command can run code the agent wrote. Only a mode under the kit's ${baseTier}/ may list commands.`,
-    fix: `Remove the command from ${shownPath(layout, manifestFile(request))}; a skill step's checks belong in script steps.`,
-  }));
-}
-
 function commandEffectProblems(request: GrantRequest): readonly GrantProblem[] {
   const { manifest, layout } = request;
   return declaredResources(manifest).commands.flatMap(({ name, effects }) =>
@@ -303,22 +292,6 @@ function startWordsGiven(manifest: Mode): string {
   return `Mode ${manifest.name} gives ${startWords} as the words every command it lists starts with`;
 }
 
-function startWordsPlaceProblems(request: GrantRequest): readonly GrantProblem[] {
-  const { manifest, layout } = request;
-  if (manifest.resources?.commandsStartWith === undefined || isBaseMode(request)) {
-    return [];
-  }
-  return [
-    {
-      at: ["resources", "commandsStartWith"],
-      message:
-        `${startWordsGiven(manifest)}; a listed command can run code the agent wrote. ` +
-        `Only a mode under the kit's ${baseTier}/ may list commands.`,
-      fix: `Remove commandsStartWith from ${shownPath(layout, manifestFile(request))}; a skill step's checks belong in script steps.`,
-    },
-  ];
-}
-
 function startWordsWithoutCommandsProblems(request: GrantRequest): readonly GrantProblem[] {
   const { manifest, layout } = request;
   if (manifest.resources?.commandsStartWith === undefined || declaredResources(manifest).commands.length > 0) {
@@ -333,20 +306,6 @@ function startWordsWithoutCommandsProblems(request: GrantRequest): readonly Gran
         "or remove commandsStartWith.",
     },
   ];
-}
-
-function throwawayPlaceProblems(request: GrantRequest): readonly GrantProblem[] {
-  if (isBaseMode(request)) {
-    return [];
-  }
-  const { manifest, layout } = request;
-  return declaredFiles(manifest).throwaway.map((path, index) => ({
-    at: ["resources", "files", "throwaway", index],
-    message:
-      `Mode ${manifest.name} names the throwaway folder ${path}; the kernel removes whole folders and makes links ` +
-      `there for it. Only a mode under the kit's ${baseTier}/ may name throwaway folders.`,
-    fix: `Remove resources.files.throwaway from ${shownPath(layout, manifestFile(request))}.`,
-  }));
 }
 
 type GrantedPath = {
@@ -391,10 +350,33 @@ function projectPaths(layout: Layout, paths: readonly string[]): readonly string
   return paths.map((path) => pathIn(layout, "project", normalized(path)));
 }
 
+function listTrustOf(request: GrantRequest): ListTrust {
+  const list = listOf(request.manifest);
+  const listsNothing = list.commands.length === 0 && list.throwaway.length === 0;
+  if (isBaseMode(request) || listsNothing) {
+    return { state: "not needed" };
+  }
+  if (!request.record.ok) {
+    return { state: "unreadable record", list, problems: request.record.problems };
+  }
+  const trusted = request.record.value.modes;
+  const given = Object.hasOwn(trusted, list.mode) ? trusted[list.mode] : undefined;
+  if (given === undefined) {
+    return { state: "never trusted", list };
+  }
+  return given.hash === listHashOf(list) ? { state: "trusted", given } : { state: "changed", list, given };
+}
+
+function isInForce(listTrust: ListTrust): boolean {
+  return listTrust.state === "not needed" || listTrust.state === "trusted";
+}
+
 function grantsOfMode(request: GrantRequest): ModeGrants {
   const { manifest, folder, layout } = request;
   const declared = declaredResources(manifest);
   const writePaths = projectPaths(layout, declared.write);
+  const listTrust = listTrustOf(request);
+  const inForce = isInForce(listTrust);
   return {
     mode: manifest.name,
     modeFolder: folder,
@@ -402,11 +384,11 @@ function grantsOfMode(request: GrantRequest): ModeGrants {
     migrationsFolder: join(folder, normalized(declared.migrations)),
     readPaths: [folder, ...projectPaths(layout, declared.read), ...writePaths],
     writePaths,
-    throwawayPaths: projectPaths(layout, declared.throwaway),
+    throwawayPaths: inForce ? projectPaths(layout, declared.throwaway) : [],
     secrets: [...declared.secrets],
     hosts: [...declared.hosts],
-    commands: declared.commands,
-    listTrust: { state: "not needed" },
+    commands: inForce ? declared.commands : [],
+    listTrust,
   };
 }
 
@@ -415,11 +397,8 @@ export function grantsOf(request: GrantRequest): GrantRuling {
     ...pathProblems(request),
     ...secretProblems(request.manifest),
     ...hostProblems(request.manifest),
-    ...startWordsPlaceProblems(request),
     ...startWordsWithoutCommandsProblems(request),
-    ...commandProblems(request),
     ...commandEffectProblems(request),
-    ...throwawayPlaceProblems(request),
     ...throwawayOverlapProblems(request),
   ];
   if (problems.length > 0) {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { stringify } from "yaml";
-import type { ModeGrants } from "../bay/contracts.ts";
+import type { ModeGrants, ModeList } from "../bay/contracts.ts";
 import type { Config } from "../bay/generated/config.ts";
 import type { Interface } from "../bay/generated/interface.ts";
 import type { Mode } from "../bay/generated/mode.ts";
@@ -10,6 +10,7 @@ import { layoutOf, type Layout } from "../bay/layout.ts";
 import { inspectSystem, loadSystem, type System } from "../bay/manifests/manifests.ts";
 import type { Outcome, Problem } from "../bay/outcome.ts";
 import type { FileSystem } from "../bay/ports.ts";
+import { recordWithTrust } from "../bay/trust.ts";
 
 export const layout = layoutOf({ kit: "/kit", project: "/kit" });
 
@@ -190,4 +191,10 @@ export async function systemReport(files: FileSystem, reportLayout: Layout): Pro
     .filter((folder) => folder.active)
     .map((folder) => folder.manifest?.name ?? basename(folder.folder));
   return { outcome: await loadSystem(files, reportLayout), active: new Set(active), notices: inspection.notices };
+}
+
+export const trustGiving = { at: "2026-11-17T14:02:00.000Z", by: "a test" } as const;
+
+export function trustRecordFiles(list: ModeList): Record<string, string> {
+  return { ".agentbay/trust.json": recordWithTrust({ version: 1, modes: {} }, list, trustGiving) };
 }

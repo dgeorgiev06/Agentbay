@@ -18,6 +18,9 @@
     "schemas/generate-types.ts!"
   ],
   "project": ["{bay,adapters,components,tests,schemas}/**/*.ts!", "!{tests,components/**/tests,adapters/**/tests}/**!"],
+  "ignoreIssues": {
+    "bay/trust.ts": ["exports"]
+  },
   "ignoreExportsUsedInFile": {
     "function": true,
     "type": true

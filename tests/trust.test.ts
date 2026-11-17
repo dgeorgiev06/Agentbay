@@ -3,16 +3,19 @@ import { test } from "node:test";
 import type { ModeList, TrustGiven } from "../bay/contracts.ts";
 import type { Mode } from "../bay/generated/mode.ts";
 import { layoutOf } from "../bay/layout.ts";
+import type { Outcome } from "../bay/outcome.ts";
+import type { FileSystem } from "../bay/ports.ts";
 import { listOf } from "../bay/policy.ts";
-import {
-  listHashOf,
-  recordWithTrust,
-  recordWithoutTrust,
-  trustRecordFile,
-  trustRecordOf,
-  type TrustRecord,
-} from "../bay/trust.ts";
+import { listHashOf, readTrustRecord, recordWithTrust, recordWithoutTrust, type TrustRecord } from "../bay/trust.ts";
 import { modeNamed } from "./broker-fixture.ts";
+import { fakeFileSystem } from "./fakes.ts";
+
+const project = layoutOf({ kit: "/kit", project: "/home/owner/realty" });
+
+function recordRead(text: string | undefined): Promise<Outcome<TrustRecord>> {
+  const files = text === undefined ? {} : { "/home/owner/realty/.agentbay/trust.json": text };
+  return readTrustRecord(fakeFileSystem(files), project);
+}
 
 const goToolchain: ModeList = {
   mode: "go-toolchain",
@@ -28,11 +31,7 @@ const goToolchainHash = "c8b83b7a4958f2eb1ae4a129c7893cc590d67052ce986aa144ba175
 
 const fix = "Remove the file; then each mode outside the kit's components/base/ waits until the owner trusts it again.";
 
-function emptyRecord(): TrustRecord {
-  const read = trustRecordOf(undefined);
-  assert.ok(read.ok, JSON.stringify(read));
-  return read.value;
-}
+const emptyRecord: TrustRecord = { version: 1, modes: {} };
 
 function changed(change: Partial<ModeList>): string {
   return listHashOf({ ...goToolchain, ...change });
@@ -96,11 +95,13 @@ test("the order of commands in the manifest does not change the hash of the list
   assert.equal(listHashOf(listOf(first)), listHashOf(listOf(second)));
 });
 
-test("the trust record is the file trust.json in the kernel's folder .agentbay/ of the project", () => {
-  assert.equal(
-    trustRecordFile(layoutOf({ kit: "/kit", project: "/home/owner/realty" })),
-    "/home/owner/realty/.agentbay/trust.json",
-  );
+test("the trust record is read from the file trust.json in the kernel's folder .agentbay/ of the project, and nowhere else", async () => {
+  const files = {
+    "/home/owner/realty/.agentbay/trust.json": '{ "version": 1, "modes": {} }',
+    "/home/owner/realty/trust.json": "not read",
+    "/kit/.agentbay/trust.json": "not read",
+  };
+  assert.deepEqual(await readTrustRecord(fakeFileSystem(files), project), { ok: true, value: emptyRecord });
 });
 
 const given: TrustGiven = {
@@ -149,7 +150,7 @@ const givenText = [
 const giving = { at: "2026-11-17T14:02:00.000Z", by: "a test" };
 
 test("adding trust to an empty record gives the file text with that one entry: the list whole, its hash, when and how", () => {
-  assert.equal(recordWithTrust(emptyRecord(), given.list, giving), givenText);
+  assert.equal(recordWithTrust(emptyRecord, given.list, giving), givenText);
 });
 
 test("removing the only entry gives the file text of an empty record, and removing a mode not there changes nothing", () => {
@@ -159,42 +160,42 @@ test("removing the only entry gives the file text of an empty record, and removi
   assert.equal(recordWithoutTrust(record, "rust-toolchain"), givenText);
 });
 
-test("adding trust replaces the mode's own entry and keeps the others, in the order of their modes' names", () => {
+test("adding trust replaces the mode's own entry and keeps the others, in the order of their modes' names", async () => {
   const record: TrustRecord = { version: 1, modes: { "go-toolchain": { ...given, by: "an older test" } } };
   assert.equal(recordWithTrust(record, given.list, giving), givenText);
-  const read = trustRecordOf(recordWithTrust(record, { ...given.list, mode: "a-mode" }, giving));
+  const read = await recordRead(recordWithTrust(record, { ...given.list, mode: "a-mode" }, giving));
   assert.ok(read.ok, JSON.stringify(read));
   assert.deepEqual(Object.keys(read.value.modes), ["a-mode", "go-toolchain"]);
   assert.equal(read.value.modes["a-mode"]?.hash, "e8019a6715216f9b91f097d6a64e514f625372faf24f846ba0f7e2913a355817");
   assert.equal(read.value.modes["go-toolchain"]?.by, "an older test");
 });
 
-test("the file text that adding trust gives is read back as the same record", () => {
-  assert.deepEqual(trustRecordOf(givenText), { ok: true, value: { version: 1, modes: { "go-toolchain": given } } });
+test("the file text that adding trust gives is read back as the same record", async () => {
+  assert.deepEqual(await recordRead(givenText), { ok: true, value: { version: 1, modes: { "go-toolchain": given } } });
 });
 
-test("no trust record is an empty record", () => {
-  assert.deepEqual(trustRecordOf(undefined), { ok: true, value: { version: 1, modes: {} } });
+test("no trust record is an empty record", async () => {
+  assert.deepEqual(await recordRead(undefined), { ok: true, value: { version: 1, modes: {} } });
 });
 
-function refusal(path: string, message: string): ReturnType<typeof trustRecordOf> {
+function refusal(path: string, message: string): Outcome<TrustRecord> {
   return { ok: false, problems: [{ file: ".agentbay/trust.json", path, message, fix }] };
 }
 
-test("a trust record that is not JSON is refused with its sentence", () => {
+test("a trust record that is not JSON is refused with its sentence", async () => {
   assert.deepEqual(
-    trustRecordOf("{ version: 1"),
+    await recordRead("{ version: 1"),
     refusal("", "The trust record .agentbay/trust.json is not JSON, so no list it holds is granted."),
   );
 });
 
-test("a trust record that lacks a field is refused with a sentence for each field it lacks", () => {
+test("a trust record that lacks a field is refused with a sentence for each field it lacks", async () => {
   const entry = {
     list: { ...given.list, commands: [{ name: "vet", words: ["go", "vet"] }] },
     at: given.at,
     by: given.by,
   };
-  assert.deepEqual(trustRecordOf(JSON.stringify({ version: 1, modes: { "go-toolchain": entry } })), {
+  assert.deepEqual(await recordRead(JSON.stringify({ version: 1, modes: { "go-toolchain": entry } })), {
     ok: false,
     problems: [
       {
@@ -214,7 +215,7 @@ test("a trust record that lacks a field is refused with a sentence for each fiel
       },
     ],
   });
-  assert.deepEqual(trustRecordOf("{}"), {
+  assert.deepEqual(await recordRead("{}"), {
     ok: false,
     problems: [
       {
@@ -233,12 +234,12 @@ test("a trust record that lacks a field is refused with a sentence for each fiel
   });
 });
 
-test("a trust record with a field of the wrong kind is refused with its sentence", () => {
+test("a trust record with a field of the wrong kind is refused with its sentence", async () => {
   const record = {
     version: 2,
     modes: { "go-toolchain": { ...given, by: 7, list: { ...given.list, throwaway: "x" } } },
   };
-  assert.deepEqual(trustRecordOf(JSON.stringify(record)), {
+  assert.deepEqual(await recordRead(JSON.stringify(record)), {
     ok: false,
     problems: [
       {
@@ -267,7 +268,7 @@ test("a trust record with a field of the wrong kind is refused with its sentence
   });
 });
 
-test("a trust record whose hash is not the hash of its list, or whose entry holds another mode's list, is refused", () => {
+test("a trust record whose hash is not the hash of its list, or whose entry holds another mode's list, is refused", async () => {
   const record = {
     version: 1,
     modes: {
@@ -275,7 +276,7 @@ test("a trust record whose hash is not the hash of its list, or whose entry hold
       "rust-toolchain": given,
     },
   };
-  assert.deepEqual(trustRecordOf(JSON.stringify(record)), {
+  assert.deepEqual(await recordRead(JSON.stringify(record)), {
     ok: false,
     problems: [
       {
@@ -296,4 +297,19 @@ test("a trust record whose hash is not the hash of its list, or whose entry hold
       },
     ],
   });
+});
+
+test("a trust record that is JSON but not an object is refused with its sentence", async () => {
+  assert.deepEqual(
+    await recordRead("[]"),
+    refusal("", "The trust record .agentbay/trust.json is not a JSON object, so no list it holds is granted."),
+  );
+});
+
+test("a trust record the file system cannot read is refused with its sentence", async () => {
+  const unreadable: FileSystem = { ...fakeFileSystem({}), readText: () => Promise.reject(new Error("EACCES")) };
+  assert.deepEqual(
+    await readTrustRecord(unreadable, project),
+    refusal("", "The trust record .agentbay/trust.json cannot be read, so no list it holds is granted."),
+  );
 });

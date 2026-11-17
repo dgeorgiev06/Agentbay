@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ModeGrants } from "../bay/contracts.ts";
+import type { ListTrust, ModeGrants, ModeList } from "../bay/contracts.ts";
 import { layoutOf, type Layout } from "../bay/layout.ts";
 import type { System } from "../bay/manifests/manifests.ts";
 import type { Problem } from "../bay/outcome.ts";
@@ -12,7 +12,10 @@ import {
   paths,
   rooted,
   schemaText,
+  storeMode,
   systemReport,
+  trustGiving,
+  trustRecordFiles,
   validFiles,
   yamlText,
 } from "./system-fixture.ts";
@@ -224,20 +227,6 @@ const brokenProjects: readonly Broken[] = [
       fix: "Write the host alone, such as api.example.com or *.example.com, with no scheme, port or path.",
     },
   },
-  {
-    rule: "a command in a mode outside the kit's components/base",
-    files: briefingWith({ commands: { tests: { run: "node --test", effects: ["read"] } } }),
-    layout,
-    problem: {
-      file: briefingFile,
-      path: "/resources/commands/tests",
-      line: 22,
-      message:
-        "Mode briefing lists the command tests, which runs node --test; a listed command can run code the agent " +
-        "wrote. Only a mode under the kit's components/base/ may list commands.",
-      fix: "Remove the command from components/modes/briefing/mode.yaml; a skill step's checks belong in script steps.",
-    },
-  },
 ];
 
 for (const broken of brokenProjects) {
@@ -304,4 +293,124 @@ test("a mode that is not active is named as inactive and is not a mode of the sy
     ]),
   );
   assert.deepEqual(Array.from(system.inactive).sort(), ["briefing", "notes", "store"]);
+});
+
+const briefingList: ModeList = {
+  mode: "briefing",
+  commands: [{ name: "tests", words: ["node", "--test"], effects: ["read"] }],
+  commandsStartWith: [],
+  throwaway: ["scratch"],
+};
+
+const olderBriefingList: ModeList = {
+  ...briefingList,
+  commands: [{ name: "tests", words: ["node", "--test", "--watch"], effects: ["read"] }],
+};
+
+const listedByBriefing = {
+  commands: [{ name: "tests", words: ["node", "--test"], effects: ["read" as const] }],
+  throwawayPaths: ["/kit/scratch"],
+};
+
+function projectWithLists(more: Readonly<Record<string, string>>): Readonly<Record<string, string>> {
+  return rooted({
+    ...validFiles(),
+    [paths.briefing]: yamlText({
+      ...briefingMode,
+      resources: { commands: { tests: { run: "node --test", effects: ["read"] } }, files: { throwaway: ["scratch/"] } },
+    }),
+    [paths.store]: yamlText({
+      ...storeMode,
+      resources: { commands: { changes: { run: "git status", effects: ["read"] } } },
+    }),
+    ...more,
+  });
+}
+
+function grantsWithBriefing(briefing: Partial<ModeGrants>): ReadonlyMap<string, ModeGrants> {
+  const store = noResources("store", "/kit/components/base/store");
+  return new Map([
+    ["store", { ...store, commands: [{ name: "changes", words: ["git", "status"], effects: ["read"] }] }],
+    ["notes", noResources("notes", "/kit/components/modes/notes")],
+    ["briefing", { ...noResources("briefing", "/kit/components/modes/briefing"), ...briefing }],
+  ]);
+}
+
+function listNotInForce(listTrust: ListTrust): ReadonlyMap<string, ModeGrants> {
+  return grantsWithBriefing({ listTrust });
+}
+
+const neverTrusted = listNotInForce({ state: "never trusted", list: briefingList });
+
+test("a mode outside the kit's components/base/ that the owner trusts for its list as it is now is granted its list", async () => {
+  const system = await loadedSystem(projectWithLists(trustRecordFiles(briefingList)), layout);
+  const given = {
+    list: briefingList,
+    hash: "aa1ecae5ee08abf4e2a3a473f8b42ee72583e1c4cda33fd6a1b0003cc0074c3a",
+    ...trustGiving,
+  };
+  assert.deepEqual(
+    grantsOfEveryMode(system),
+    grantsWithBriefing({ ...listedByBriefing, listTrust: { state: "trusted", given } }),
+  );
+});
+
+test("with no trust record, a mode outside the kit's components/base/ loads without its list, never trusted, and a base mode is granted its list", async () => {
+  const system = await loadedSystem(projectWithLists({}), layout);
+  assert.deepEqual(grantsOfEveryMode(system), neverTrusted);
+  assert.deepEqual(Array.from(system.inactive), []);
+});
+
+test("with a record for an older list, a mode loads without its list, and the reason says the list changed", async () => {
+  const system = await loadedSystem(projectWithLists(trustRecordFiles(olderBriefingList)), layout);
+  const given = {
+    list: olderBriefingList,
+    hash: "4bc162ba117358049a2758b606017292d9f896e30464f5f05b68fed7d2031aee",
+    ...trustGiving,
+  };
+  assert.deepEqual(grantsOfEveryMode(system), listNotInForce({ state: "changed", list: briefingList, given }));
+});
+
+test("a record for a mode that does not exist changes nothing and is not an error", async () => {
+  const ghost = { ...briefingList, mode: "ghost" };
+  const system = await loadedSystem(projectWithLists(trustRecordFiles(ghost)), layout);
+  assert.deepEqual(grantsOfEveryMode(system), neverTrusted);
+});
+
+test("a record that another mode's entry holds does not grant this mode its list", async () => {
+  const record = trustRecordFiles({ ...briefingList, mode: "notes" });
+  const system = await loadedSystem(projectWithLists(record), layout);
+  assert.deepEqual(grantsOfEveryMode(system), neverTrusted);
+});
+
+test("a trust record outside the kernel's folder .agentbay/ of the project is not read", async () => {
+  const [, text = ""] = Object.entries(trustRecordFiles(briefingList))[0] ?? [];
+  const elsewhere = {
+    "trust.json": text,
+    "scratch/.agentbay/trust.json": text,
+    "components/modes/briefing/.agentbay/trust.json": text,
+  };
+  const system = await loadedSystem(projectWithLists(elsewhere), layout);
+  assert.deepEqual(grantsOfEveryMode(system), neverTrusted);
+});
+
+test("an unreadable trust record grants no list outside the kit's components/base/, keeps the reason, and stops nothing else", async () => {
+  const system = await loadedSystem(projectWithLists({ ".agentbay/trust.json": "{" }), layout);
+  const problem = {
+    file: ".agentbay/trust.json",
+    path: "",
+    message: "The trust record .agentbay/trust.json is not JSON, so no list it holds is granted.",
+    fix: "Remove the file; then each mode outside the kit's components/base/ waits until the owner trusts it again.",
+  };
+  assert.deepEqual(
+    grantsOfEveryMode(system),
+    listNotInForce({ state: "unreadable record", list: briefingList, problems: [problem] }),
+  );
+});
+
+test("a change to a trusted mode's script does not change its trust", async () => {
+  const changedScript = { ...trustRecordFiles(briefingList), "components/modes/briefing/scripts/select.ts": "changed" };
+  const system = await loadedSystem(projectWithLists(changedScript), layout);
+  assert.equal(system.modes.get("briefing")?.grants.listTrust.state, "trusted");
+  assert.deepEqual(system.modes.get("briefing")?.grants.commands, listedByBriefing.commands);
 });

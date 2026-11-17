@@ -54,11 +54,11 @@ const projectConfig = {
   },
 };
 
-const refusingConfig = { adapter: "claude-code", bindings: {} };
+const untrustedConfig = { adapter: "claude-code", bindings: {} };
 
 let project: string;
 
-let refusingProject: string;
+let untrustedProject: string;
 
 let projectModesRan: Ran;
 
@@ -104,13 +104,6 @@ function passedPerMode(output: string): Readonly<Record<string, number>> {
     counts[mode] = (counts[mode] ?? 0) + 1;
   }
   return counts;
-}
-
-function refusals(output: string): readonly string[] {
-  const refused = output.matchAll(
-    /"Mode ([a-z-]+) [^"]*Only a mode under the kit's components\/base\/ may ([a-z ]+)\."/g,
-  );
-  return [...new Set([...refused].map(([, mode = "", rule = ""]) => `${mode} may not ${rule}`))].sort();
 }
 
 function replaced(path: string, text: string, replacements: readonly Replacement[]): string {
@@ -207,7 +200,7 @@ before(async () => {
     { name: memoryStore, files: memoryStoreFiles(memoryStore, "keeps every item"), kitFolder: modesFolder },
   ]);
   await writeMode(project, digest, await digestFiles());
-  refusingProject = await projectWith(refusingConfig, [
+  untrustedProject = await projectWith(untrustedConfig, [
     { name: tally, files: tallyFiles(tally, "stops a check at its limit"), kitFolder: baseFolder },
     {
       name: shelf,
@@ -219,14 +212,14 @@ before(async () => {
   [projectModesRan, wrongModeRan, toolchainRan, worktreesRan] = await Promise.all([
     sharedTestsRan(project, [almanac, memoryStore]),
     sharedTestsRan(project, [wrongAlmanac]),
-    sharedTestsRan(refusingProject, [tally]),
-    sharedTestsRan(refusingProject, [shelf]),
+    sharedTestsRan(untrustedProject, [tally]),
+    sharedTestsRan(untrustedProject, [shelf]),
   ]);
 });
 
 after(async () => {
   await rm(project, { recursive: true, force: true });
-  await rm(refusingProject, { recursive: true, force: true });
+  await rm(untrustedProject, { recursive: true, force: true });
 });
 
 test("bay check in a project beside the kit, with its own source, its own store and a mode that needs the kit's store, finds no errors", async () => {
@@ -260,15 +253,10 @@ test("a project's source that repeats the item at the cursor fails the shared te
   assert.deepEqual(passedPerMode(tested.output), { [wrongAlmanac]: 9 });
 });
 
-test("a project's toolchain and worktrees modes are opened from the project by their shared tests, and refused there for what only a mode of the kit's base may name", () => {
-  const refused = [
-    "shelf may not list commands",
-    "shelf may not name throwaway folders",
-    "tally may not list commands",
-  ];
-  for (const tested of [toolchainRan, worktreesRan]) {
-    assert.equal(tested.status, 1, tested.output);
-    assert.deepEqual(passedPerMode(tested.output), {});
-    assert.deepEqual(refusals(tested.output), refused);
-  }
+test("a project's toolchain and worktrees modes load from the project, and without the owner's trust only their cases that need no listed command or throwaway folder pass", () => {
+  assert.equal(toolchainRan.status, 1, toolchainRan.output);
+  assert.deepEqual(passedPerMode(toolchainRan.output), { [tally]: 6 });
+  assert.equal(worktreesRan.status, 1, worktreesRan.output);
+  assert.deepEqual(passedPerMode(worktreesRan.output), { [shelf]: 5 });
+  assert.match(worktreesRan.output, /but the mode shelf keeps throwaway folders only in: nothing/);
 });

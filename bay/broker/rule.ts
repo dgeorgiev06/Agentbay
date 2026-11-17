@@ -85,18 +85,6 @@ export function noRefusalDetail(): RefusalDetail {
   return {};
 }
 
-async function ruledThenHandled<Name extends OperationName, Allowed>(
-  definition: Definition<Name, Allowed>,
-  request: EntryRequests[Name],
-  step: Step,
-): Promise<Answer<Results[Name]>> {
-  const ruling = await definition.rule(request, step.asking);
-  if (!ruling.allowed) {
-    return refused(ruling.refusal);
-  }
-  return definition.handler(ruling.value, step.doing);
-}
-
 export async function answered<Name extends OperationName, Allowed>(
   definition: Definition<Name, Allowed>,
   request: EntryRequests[Name],
@@ -106,9 +94,14 @@ export async function answered<Name extends OperationName, Allowed>(
   const doing = definition.described(request, asking);
   const needing = { resource: shapes[definition.operation].resource, doing, needs: definition.needs(request) };
   const short = missingEffectRefusal(needing, asking.effects, asking.at);
+  const detail = definition.refusalDetail(request);
   try {
-    const answer = short === undefined ? await ruledThenHandled(definition, request, step) : refused(short);
-    return await step.settled(answer, definition.refusalDetail(request));
+    if (short !== undefined) {
+      return await step.settled(refused(short), detail);
+    }
+    const ruling = await definition.rule(request, asking);
+    const answer = ruling.allowed ? await definition.handler(ruling.value, step.doing) : refused(ruling.refusal);
+    return await step.settled(answer, detail);
   } catch (error) {
     return step.settled(failed(`The step ${asking.at.stepKey} could not ${doing}: ${errorLine(error)}`), {});
   }

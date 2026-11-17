@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { decide } from "../guard-decide.ts";
+import { decide, type Decision, type GuardSetup } from "../guard-decide.ts";
 import { readPolicy } from "../guard-input.ts";
 import type { FolderEntry, PathFacts } from "../guard-paths.ts";
 import { ask, askIn, assertAllowed, assertDenied, setup, stepsFile, world } from "./guard-world.ts";
@@ -39,6 +39,103 @@ test("the main thread may not write agentbay's own rules, however the path is sp
   assertAllowed(ask(undefined, "NotebookEdit", { notebook_path: "/p/src/x.ipynb" }));
   assertAllowed(ask(undefined, "Write", { file_path: "/p/.agentbay-notes/x.md" }));
   assertAllowed(ask(undefined, "Write", { file_path: "/k/components/mail/x.md" }));
+});
+
+const kitAsTheProject: GuardSetup = { ...setup, project: "/k" };
+
+function asOwner(where: GuardSetup, call: OwnerCall): Decision {
+  const payload = { cwd: call.cwd ?? where.project, tool_name: call.tool, tool_input: call.input };
+  return decide(where, payload, world);
+}
+
+type OwnerCall = {
+  readonly tool: string;
+  readonly input: Readonly<Record<string, unknown>>;
+  readonly cwd?: string;
+};
+
+const writesIntoTheBaseFolder: readonly (readonly [OwnerCall, string])[] = [
+  [{ tool: "Write", input: { file_path: "/k/components/base/notes/mode.yaml" } }, "/k/components/base/notes/mode.yaml"],
+  [{ tool: "Edit", input: { file_path: "/k/components/base/notes/mode.yaml" } }, "/k/components/base/notes/mode.yaml"],
+  [
+    { tool: "Edit", input: { file_path: "/k/components/base/forge/scripts/merge.ts" } },
+    "/k/components/base/forge/scripts/merge.ts",
+  ],
+  [
+    { tool: "MultiEdit", input: { file_path: "/k/components/base/forge/mode.yaml" } },
+    "/k/components/base/forge/mode.yaml",
+  ],
+  [
+    { tool: "NotebookEdit", input: { notebook_path: "/k/components/base/forge/x.ipynb" } },
+    "/k/components/base/forge/x.ipynb",
+  ],
+  [
+    { tool: "Write", input: { file_path: "base/notes/mode.yaml" }, cwd: "/k/components" },
+    "/k/components/base/notes/mode.yaml",
+  ],
+  [{ tool: "Write", input: { file_path: "/k/Components/BASE/notes/mode.yaml" } }, "/k/Components/BASE/notes/mode.yaml"],
+  [{ tool: "Write", input: { file_path: "/p/kit-base/notes/mode.yaml" } }, "/p/kit-base/notes/mode.yaml"],
+  [{ tool: "Edit", input: { file_path: "/p/kit-base/forge/scripts/merge.ts" } }, "/p/kit-base/forge/scripts/merge.ts"],
+];
+
+const climbsIntoTheBaseFolder: readonly (readonly [OwnerCall, string])[] = [
+  [
+    { tool: "Write", input: { file_path: "/p/../k/components/base/notes/mode.yaml" } },
+    "/k/components/base/notes/mode.yaml",
+  ],
+  [
+    { tool: "Edit", input: { file_path: "../k/components/base/forge/mode.yaml" } },
+    "/k/components/base/forge/mode.yaml",
+  ],
+];
+
+function baseFolderRefusal(tool: string, path: string): Decision {
+  return {
+    verdict: "deny",
+    reason:
+      `agentbay denied ${tool} of ${path}: a mode placed in the kit's components/base/ is granted its list with no ` +
+      "trust; make the mode in the project instead, and the owner decides whether to trust it.",
+  };
+}
+
+test("when the project is not the kit, the session agent may not write into the kit's components/base/", () => {
+  for (const [call, shown] of [...writesIntoTheBaseFolder, ...climbsIntoTheBaseFolder]) {
+    assert.deepEqual(asOwner(setup, call), baseFolderRefusal(call.tool, shown), JSON.stringify(call));
+  }
+});
+
+test("when the project is the kit, the session agent writes into components/base/ as before", () => {
+  for (const [call] of writesIntoTheBaseFolder) {
+    assert.deepEqual(asOwner(kitAsTheProject, call), { verdict: "allow" }, JSON.stringify(call));
+  }
+  for (const [call] of climbsIntoTheBaseFolder) {
+    const written = String(call.input["file_path"]);
+    assert.deepEqual(
+      asOwner(kitAsTheProject, call),
+      { verdict: "deny", reason: `agentbay denied ${call.tool} of ${written}: the path climbs with '..'.` },
+      written,
+    );
+  }
+  assert.deepEqual(asOwner(kitAsTheProject, { tool: "Write", input: { file_path: "/k/bay/x.ts" } }), {
+    verdict: "deny",
+    reason: `agentbay denied Write of /k/bay/x.ts: ${ownRules}.`,
+  });
+});
+
+test("the session agent reads and searches the kit's components/base/ as before, whatever the project", () => {
+  const reads: readonly OwnerCall[] = [
+    { tool: "Read", input: { file_path: "/k/components/base/forge/mode.yaml" } },
+    { tool: "Read", input: { file_path: "/p/kit-base/forge/scripts/merge.ts" } },
+    { tool: "Glob", input: { pattern: "**/mode.yaml", path: "/k/components/base" } },
+    { tool: "Grep", input: { pattern: "commands", path: "/k/components/base" } },
+    { tool: "Bash", input: { command: "ls /k/components/base" } },
+  ];
+  for (const call of reads) {
+    assert.deepEqual(asOwner(setup, call), { verdict: "allow" }, JSON.stringify(call));
+    assert.deepEqual(asOwner(kitAsTheProject, call), { verdict: "allow" }, JSON.stringify(call));
+  }
+  const beside = { tool: "Write", input: { file_path: "/k/components/base-notes/x.md" } };
+  assert.deepEqual(asOwner(setup, beside), { verdict: "allow" });
 });
 
 test("a main thread write that names no path text is denied", () => {

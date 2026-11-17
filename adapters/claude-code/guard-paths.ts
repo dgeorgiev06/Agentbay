@@ -1,5 +1,5 @@
 import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
-import { alwaysDeniedNames, kitFolders, searchBound } from "./guard-input.ts";
+import { alwaysDeniedNames, baseModesFolder, kitFolders, searchBound } from "./guard-input.ts";
 
 export type PathState =
   | { readonly kind: "exists"; readonly realPath: string }
@@ -36,6 +36,13 @@ function realPathOf(path: string, facts: PathFacts, missing: readonly string[] =
   }
 }
 
+export function writtenPathOf(raw: string, base: string): string | undefined {
+  if (isAbsolute(raw)) {
+    return normalize(raw);
+  }
+  return isAbsolute(base) ? resolve(base, raw) : undefined;
+}
+
 export function resolveTarget(raw: string, base: string, facts: PathFacts): Target {
   if (raw === "" || raw.includes("\0")) {
     return { kind: "refused", why: "the path is empty or holds a NUL character" };
@@ -46,10 +53,10 @@ export function resolveTarget(raw: string, base: string, facts: PathFacts): Targ
   if (raw.startsWith("~")) {
     return { kind: "refused", why: "the path starts with '~', which may name a home folder" };
   }
-  if (!isAbsolute(raw) && !isAbsolute(base)) {
+  const written = writtenPathOf(raw, base);
+  if (written === undefined) {
     return { kind: "refused", why: "the path is relative and the call has no absolute working folder" };
   }
-  const written = isAbsolute(raw) ? normalize(raw) : resolve(base, raw);
   const real = realPathOf(written, facts);
   if (real === undefined) {
     return { kind: "refused", why: "the path cannot be resolved (a broken link or an unreadable folder)" };
@@ -122,11 +129,21 @@ export function kitFoldersOf(places: Places, facts: PathFacts): readonly string[
   return bothForms(places.kit, facts).flatMap((kit) => kitFolders.map((folder) => join(kit, folder)));
 }
 
-function stepClosedKitFolders(places: Places, facts: PathFacts): readonly string[] {
-  const kits = bothForms(places.kit, facts);
+function isProjectTheKit(places: Places, facts: PathFacts): boolean {
   const projects = bothForms(places.project, facts);
-  const isProjectTheKit = kits.some((kit) => projects.includes(kit));
-  return isProjectTheKit ? kitFoldersOf(places, facts) : [...kitFoldersOf(places, facts), ...kits];
+  return bothForms(places.kit, facts).some((kit) => projects.includes(kit));
+}
+
+function stepClosedKitFolders(places: Places, facts: PathFacts): readonly string[] {
+  const folders = kitFoldersOf(places, facts);
+  return isProjectTheKit(places, facts) ? folders : [...folders, ...bothForms(places.kit, facts)];
+}
+
+export function baseModeFoldersOf(places: Places, facts: PathFacts): readonly string[] {
+  if (isProjectTheKit(places, facts)) {
+    return [];
+  }
+  return bothForms(places.kit, facts).flatMap((kit) => bothForms(join(kit, baseModesFolder), facts));
 }
 
 export function kitFolderHolding(paths: readonly string[], places: Places, facts: PathFacts): string | undefined {

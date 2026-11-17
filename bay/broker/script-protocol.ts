@@ -1,7 +1,15 @@
 import type { Answer, Resource } from "../answers.ts";
 import type { Json } from "../contracts.ts";
 import { isJsonRecord, parsedLine } from "../protocol-json.ts";
-import { isOperationName, isText, type OperationName, type Reading, type Requests, shapes } from "./operations.ts";
+import {
+  isOperationName,
+  isText,
+  type OperationName,
+  type Reading,
+  type Requests,
+  type ScriptStart,
+  shapes,
+} from "./operations.ts";
 
 export const sdkSpecifier = "agentbay/sdk";
 
@@ -25,14 +33,7 @@ export type ChildMessage =
   | { readonly type: "unread-answer"; readonly operation: OperationName; readonly problem: string }
   | Final;
 
-export type StartMessage = {
-  readonly type: "start";
-  readonly input: Json;
-  readonly settings: { readonly [key: string]: Json };
-  readonly now: string;
-  readonly caller?: string;
-  readonly skillInput?: Json;
-};
+export type StartMessage = { readonly type: "start"; readonly input: Json } & ScriptStart;
 
 export type ParentMessage =
   StartMessage | { readonly type: "answer"; readonly id: number; readonly answer: Answer<Json> };

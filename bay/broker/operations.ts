@@ -1,7 +1,6 @@
 import type { Answer, Resource } from "../answers.ts";
 import type { Json } from "../contracts.ts";
 import { isJson, isJsonRecord } from "../protocol-json.ts";
-import type { StartMessage } from "./script-protocol.ts";
 import type {
   AgentQueryResult,
   CommandRan,
@@ -375,12 +374,19 @@ export function shownToAuthor(misreading: Misreading): string {
   return misreading.side === "request" ? notAValidMessage : unexpectedAnswer;
 }
 
+export type ScriptStart = {
+  readonly settings: { readonly [key: string]: Json };
+  readonly now: string;
+  readonly caller?: string;
+  readonly skillInput?: Json;
+};
+
 export type Asking = {
   readonly ask: (operation: OperationName, request: Json) => Promise<Answer<Json>>;
   readonly reportUnreadAnswer: (operation: OperationName, value: Json) => void;
 };
 
-export function contextOver(asking: Asking, start: StartMessage): ScriptContext {
+export function contextOver(asking: Asking, start: ScriptStart): ScriptContext {
   const asked = async <Name extends OperationName>(
     operation: Name,
     request: Requests[Name] & Json,

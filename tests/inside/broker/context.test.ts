@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Answer } from "../../../bay/answers.ts";
 import type { Json } from "../../../bay/contracts.ts";
-import { contextOver, type OperationName } from "../../../bay/broker/operations.ts";
-import type { StartMessage } from "../../../bay/broker/script-protocol.ts";
+import { contextOver, type OperationName, type ScriptStart } from "../../../bay/broker/operations.ts";
 import type { ScriptContext } from "../../../bay/sdk.ts";
 
 type Asked = readonly [OperationName, Json];
@@ -40,9 +39,7 @@ const fitting: { readonly [Name in OperationName]: Json } = {
   "commands.run": ran,
 };
 
-const start: StartMessage = {
-  type: "start",
-  input: null,
+const start: ScriptStart = {
   settings: { lookback: "3d" },
   now: "2026-11-17T08:00:00.000Z",
   caller: "briefing",
@@ -221,7 +218,7 @@ test("the context carries the start's settings, time, caller and skill input", (
 test("a start with no caller and no skill input gives a context with neither", () => {
   const context = contextOver(
     { ask: () => Promise.resolve({ ok: true, value: null }), reportUnreadAnswer: () => undefined },
-    { type: "start", input: null, settings: {}, now: "2026-11-17T08:00:00.000Z" },
+    { settings: {}, now: "2026-11-17T08:00:00.000Z" },
   );
   assert.equal(context.caller, undefined);
   assert.equal(context.skillInput, undefined);
